@@ -179,23 +179,6 @@ void smp_send_app_cback(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
                 remote_lmp_version);
           }
 
-          if (!bluetooth::shim::is_gd_acl_enabled()) {
-            if (!p_cb->secure_connections_only_mode_required &&
-                (!(p_cb->loc_auth_req & SMP_SC_SUPPORT_BIT) ||
-                 remote_lmp_version < HCI_PROTO_VERSION_4_2 ||
-                 interop_match_addr(INTEROP_DISABLE_LE_SECURE_CONNECTIONS,
-                                    (const RawAddress*)&p_cb->pairing_bda))) {
-              p_cb->loc_auth_req &= ~SMP_SC_SUPPORT_BIT;
-              p_cb->loc_auth_req &= ~SMP_KP_SUPPORT_BIT;
-              p_cb->local_i_key &= ~SMP_SEC_KEY_TYPE_LK;
-              p_cb->local_r_key &= ~SMP_SEC_KEY_TYPE_LK;
-            }
-
-            if (remote_lmp_version < HCI_PROTO_VERSION_5_0) {
-              p_cb->loc_auth_req &= ~SMP_H7_SUPPORT_BIT;
-            }
-          }
-
           LOG_DEBUG(
               "Remote request IO capabilities postcondition auth_req: 0x%02x,"
               " local_i_key: 0x%02x, local_r_key: 0x%02x",
@@ -2024,9 +2007,10 @@ void smp_set_local_oob_random_commitment(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
 void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable) {
   tSMP_CB* p_cb = &smp_cb;
 
-  SMP_TRACE_DEBUG("%s: encr_enable=%d", __func__, encr_enable);
-
   if (smp_cb.pairing_bda == bda) {
+    LOG_DEBUG("SMP encryption enable:%hhu device:%s", encr_enable,
+              PRIVATE_ADDRESS(bda));
+
     /* encryption completed with STK, remember the key size now, could be
      * overwritten when key exchange happens                                 */
     if (p_cb->loc_enc_size != 0 && encr_enable) {
@@ -2040,6 +2024,10 @@ void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable) {
     };
 
     smp_sm_event(&smp_cb, SMP_ENCRYPTED_EVT, &smp_int_data);
+  } else {
+    LOG_WARN(
+        "SMP state machine busy so skipping encryption enable:%hhu device:%s",
+        encr_enable, PRIVATE_ADDRESS(bda));
   }
 }
 

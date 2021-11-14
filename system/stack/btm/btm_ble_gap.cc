@@ -730,10 +730,7 @@ bool BTM_BleConfigPrivacy(bool privacy_mode) {
 
   GAP_BleAttrDBUpdate(GATT_UUID_GAP_CENTRAL_ADDR_RESOL, &gap_ble_attr_value);
 
-  if (bluetooth::shim::is_gd_acl_enabled() ||
-      bluetooth::shim::is_gd_l2cap_enabled()) {
     bluetooth::shim::ACL_ConfigureLePrivacy(privacy_mode);
-  }
   return true;
 }
 
@@ -808,6 +805,13 @@ static uint8_t btm_set_conn_mode_adv_init_addr(
   }
 
   if (evt_type == BTM_BLE_CONNECT_EVT) {
+    CHECK(p_peer_addr_type != nullptr);
+    const tBLE_BD_ADDR ble_bd_addr = {
+        .bda = p_peer_addr_ptr,
+        .type = *p_peer_addr_type,
+    };
+    LOG_DEBUG("Received BLE connect event %s", PRIVATE_ADDRESS(ble_bd_addr));
+
     evt_type = p_cb->directed_conn;
 
     if (p_cb->directed_conn == BTM_BLE_CONNECT_DIR_EVT ||
@@ -2571,12 +2575,7 @@ void btm_ble_update_mode_operation(uint8_t link_role, const RawAddress* bd_addr,
   /* in case of disconnected, we must cancel bgconn and restart
      in order to add back device to acceptlist in order to reconnect */
   if (bd_addr != nullptr) {
-    const RawAddress bda(*bd_addr);
-    if (bluetooth::shim::is_gd_acl_enabled()) {
       LOG_DEBUG("gd_acl enabled so skip background connection logic");
-    } else {
-      btm_ble_bgconn_cancel_if_disconnected(bda);
-    }
   }
 
   /* when no connection is attempted, and controller is not rejecting last
