@@ -161,6 +161,7 @@ cc_defaults {
         "android.hardware.bluetooth.a2dp@1.0",
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
+        "android.hardware.bluetooth.audio@2.2",
         "libcrypto",
         "libflatbuffers-cpp",
         "libhidlbase",
@@ -223,6 +224,7 @@ cc_test {
         "android.hardware.bluetooth.a2dp@1.0",
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
+        "android.hardware.bluetooth.audio@2.2",
         "android.system.suspend.control-V1-ndk",
         "libbinder_ndk",
         "libfmq",
@@ -336,8 +338,10 @@ cc_test {
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
-        "liblog",
+        "libbinder_ndk",
+        "libcrypto",
         "libcutils",
+        "liblog",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -346,6 +350,13 @@ cc_test {
         "libc++fs",
     ],
     cflags: ["-DBUILDCFG"],
+    target: {
+        android: {
+            shared_libs: [
+                "android.system.suspend.control-V1-ndk",
+            ],
+        },
+    },
 }
 
 // btif hf client service tests for target
@@ -446,6 +457,7 @@ cc_test {
           "android.hardware.bluetooth.a2dp@1.0",
           "android.hardware.bluetooth.audio@2.0",
           "android.hardware.bluetooth.audio@2.1",
+          "android.hardware.bluetooth.audio@2.2",
           "libcrypto",
           "libcutils",
           "libflatbuffers-cpp",

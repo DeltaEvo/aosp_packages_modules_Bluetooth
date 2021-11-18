@@ -46,7 +46,8 @@ extern tBTM_CB btm_cb;
 
 bool BTM_ReadPowerMode(const RawAddress& remote_bda, tBTM_PM_MODE* p_mode);
 bool btm_dev_support_role_switch(const RawAddress& bd_addr);
-tBTM_STATUS btm_sec_disconnect(uint16_t handle, tHCI_STATUS reason);
+tBTM_STATUS btm_sec_disconnect(uint16_t handle, tHCI_STATUS reason,
+                               std::string);
 void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
                      uint8_t link_role, tBT_TRANSPORT transport);
 void btm_acl_removed(uint16_t handle);
@@ -497,7 +498,9 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
       bool start_timeout = true;
 
       LOG_WARN("TODO: Remove this callback into bcm_sec_disconnect");
-      rc = btm_sec_disconnect(p_lcb->Handle(), HCI_ERR_PEER_USER);
+      rc = btm_sec_disconnect(
+          p_lcb->Handle(), HCI_ERR_PEER_USER,
+          "stack::l2cap::l2c_link::l2c_link_timeout All channels closed");
 
       if (rc == BTM_CMD_STORED) {
         /* Security Manager will take care of disconnecting, state will be
@@ -516,7 +519,9 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
         /* BTM is still executing security process. Let lcb stay as connected */
         start_timeout = false;
       } else if (p_lcb->IsBonding()) {
-        acl_disconnect_from_handle(p_lcb->Handle(), HCI_ERR_PEER_USER);
+        acl_disconnect_from_handle(p_lcb->Handle(), HCI_ERR_PEER_USER,
+                                   "stack::l2cap::l2c_link::l2c_link_timeout "
+                                   "Timer expired while bonding");
         l2cu_process_fixed_disc_cback(p_lcb);
         p_lcb->link_state = LST_DISCONNECTING;
         timeout_ms = L2CAP_LINK_DISCONNECT_TIMEOUT_MS;
@@ -1046,15 +1051,10 @@ void l2c_OnHciModeChangeSendPendingPackets(RawAddress remote) {
  *
  ******************************************************************************/
 static void l2c_link_send_to_lower_br_edr(tL2C_LCB* p_lcb, BT_HDR* p_buf) {
-  const uint16_t acl_packet_size_classic =
-      controller_get_interface()->get_acl_packet_size_classic();
   const uint16_t acl_data_size_classic =
       controller_get_interface()->get_acl_data_size_classic();
   const uint16_t link_xmit_quota = p_lcb->link_xmit_quota;
-  const bool is_bdr_and_fits_in_buffer =
-      bluetooth::shim::is_gd_acl_enabled()
-          ? true
-          : (p_buf->len <= acl_packet_size_classic);
+  const bool is_bdr_and_fits_in_buffer = true;
 
   if (is_bdr_and_fits_in_buffer) {
     if (link_xmit_quota == 0) {

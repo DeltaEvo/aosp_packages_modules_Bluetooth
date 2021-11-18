@@ -505,10 +505,8 @@ static void bta_dm_wait_for_acl_to_drain_cback(void* data) {
     }
   } else {
     // No ACL links were up or is second pass at ACL closure
-    if (bluetooth::shim::is_gd_acl_enabled()) {
-      LOG_INFO("Ensuring all ACL connections have been properly flushed");
-      bluetooth::shim::ACL_Shutdown();
-    }
+    LOG_INFO("Ensuring all ACL connections have been properly flushed");
+    bluetooth::shim::ACL_Shutdown();
 
     bta_dm_cb.disabling = false;
 
@@ -1935,11 +1933,13 @@ static void bta_dm_remname_cback(void* p) {
   strlcpy((char*)bta_dm_search_cb.peer_name,
           (char*)p_remote_name->remote_bd_name, BD_NAME_LEN + 1);
 
-  if (bluetooth::shim::is_gd_security_enabled()) {
-    bluetooth::shim::BTM_SecDeleteRmtNameNotifyCallback(
-        &bta_dm_service_search_remname_cback);
-  } else {
-    BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+  if (bta_dm_search_cb.peer_bdaddr == p_remote_name->bd_addr) {
+    if (bluetooth::shim::is_gd_security_enabled()) {
+      bluetooth::shim::BTM_SecDeleteRmtNameNotifyCallback(
+          &bta_dm_service_search_remname_cback);
+    } else {
+      BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+    }
   }
 
   if (bta_dm_search_cb.transport == BT_TRANSPORT_LE) {

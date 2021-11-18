@@ -2,11 +2,7 @@ LOCAL_PATH := $(call my-dir)
 
 #LINT.IfChange
 LOCAL_cert_test_sources := \
-	$(call all-named-files-under,*.py,.) \
-	cert/all_cert_testcases \
-	cert/real_device_testcases \
-	hci/cert/le_extended_config.json \
-	hci/cert/le_legacy_config.json
+  setup.py
 LOCAL_cert_test_sources := \
 	$(filter-out gd_cert_venv% venv%, $(LOCAL_cert_test_sources))
 LOCAL_cert_test_sources := \
@@ -28,6 +24,7 @@ LOCAL_host_libraries := \
 	$(HOST_OUT_SHARED_LIBRARIES)/libc++.so \
 	$(HOST_OUT_SHARED_LIBRARIES)/libchrome.so \
 	$(HOST_OUT_SHARED_LIBRARIES)/libcrypto-host.so \
+	$(HOST_OUT_SHARED_LIBRARIES)/libcutils.so \
 	$(HOST_OUT_SHARED_LIBRARIES)/libevent-host.so \
 	$(HOST_OUT_SHARED_LIBRARIES)/libflatbuffers-cpp.so \
 	$(HOST_OUT_SHARED_LIBRARIES)/libgrpc++_unsecure.so \
