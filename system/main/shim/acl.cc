@@ -34,6 +34,7 @@
 #include "gd/common/bidi_queue.h"
 #include "gd/common/bind.h"
 #include "gd/common/strings.h"
+#include "gd/common/sync_map_count.h"
 #include "gd/hci/acl_manager.h"
 #include "gd/hci/acl_manager/acl_connection.h"
 #include "gd/hci/acl_manager/classic_acl_connection.h"
@@ -173,6 +174,8 @@ class ShadowAddressResolutionList {
     return address_resolution_set_.size() ==
            static_cast<size_t>(max_address_resolution_size_);
   }
+
+  size_t Size() const { return address_resolution_set_.size(); }
 
   void Clear() { address_resolution_set_.clear(); }
 
@@ -739,6 +742,9 @@ struct shim::legacy::Acl::impl {
   std::map<HciHandle, std::unique_ptr<LeShimAclConnection>>
       handle_to_le_connection_map_;
 
+  SyncMapCount<std::string> classic_acl_disconnect_reason_;
+  SyncMapCount<std::string> le_acl_disconnect_reason_;
+
   FixedQueue<std::unique_ptr<ConnectionDescriptor>> connection_history_ =
       FixedQueue<std::unique_ptr<ConnectionDescriptor>>(kConnectionHistorySize);
 
@@ -844,7 +850,8 @@ struct shim::legacy::Acl::impl {
     handle_to_classic_connection_map_[handle]->SetConnectionEncryption(enable);
   }
 
-  void disconnect_classic(uint16_t handle, tHCI_STATUS reason) {
+  void disconnect_classic(uint16_t handle, tHCI_STATUS reason,
+                          std::string comment) {
     auto connection = handle_to_classic_connection_map_.find(handle);
     if (connection != handle_to_classic_connection_map_.end()) {
       auto remote_address = connection->second->GetRemoteAddress();
@@ -854,15 +861,17 @@ struct shim::legacy::Acl::impl {
                 PRIVATE_ADDRESS(remote_address), handle);
       BTM_LogHistory(kBtmLogTag, ToRawAddress(remote_address),
                      "Disconnection initiated",
-                     base::StringPrintf("classic reason:%s",
-                                        hci_status_code_text(reason).c_str()));
+                     base::StringPrintf("classic reason:%s comment:%s",
+                                        hci_status_code_text(reason).c_str(),
+                                        comment.c_str()));
+      classic_acl_disconnect_reason_.Put(comment);
     } else {
       LOG_WARN("Unable to disconnect unknown classic connection handle:0x%04x",
                handle);
     }
   }
 
-  void disconnect_le(uint16_t handle, tHCI_STATUS reason) {
+  void disconnect_le(uint16_t handle, tHCI_STATUS reason, std::string comment) {
     auto connection = handle_to_le_connection_map_.find(handle);
     if (connection != handle_to_le_connection_map_.end()) {
       auto remote_address_with_type =
@@ -874,8 +883,10 @@ struct shim::legacy::Acl::impl {
       BTM_LogHistory(kBtmLogTag,
                      ToLegacyAddressWithType(remote_address_with_type),
                      "Disconnection initiated",
-                     base::StringPrintf("Le reason:%s",
-                                        hci_status_code_text(reason).c_str()));
+                     base::StringPrintf("Le reason:%s comment:%s",
+                                        hci_status_code_text(reason).c_str(),
+                                        comment.c_str()));
+      le_acl_disconnect_reason_.Put(comment);
     } else {
       LOG_WARN("Unable to disconnect unknown le connection handle:0x%04x",
                handle);
@@ -922,7 +933,8 @@ struct shim::legacy::Acl::impl {
                               const std::array<uint8_t, 16>& peer_irk,
                               const std::array<uint8_t, 16>& local_irk) {
     if (shadow_address_resolution_list_.IsFull()) {
-      LOG_WARN("Le Address Resolution list is full");
+      LOG_WARN("Le Address Resolution list is full size:%zu",
+               shadow_address_resolution_list_.Size());
       return;
     }
     // TODO This should really be added upon successful completion
@@ -969,6 +981,20 @@ struct shim::legacy::Acl::impl {
     for (auto& entry : history) {
       LOG_DUMPSYS(fd, "%s", entry.c_str());
     }
+    if (classic_acl_disconnect_reason_.Size() > 0) {
+      LOG_DUMPSYS(fd, "Classic sources of initiated disconnects");
+      for (const auto& item :
+           classic_acl_disconnect_reason_.GetSortedHighToLow()) {
+        LOG_DUMPSYS(fd, "  %s:%zu", item.item.c_str(), item.count);
+      }
+    }
+    if (le_acl_disconnect_reason_.Size() > 0) {
+      LOG_DUMPSYS(fd, "Le sources of initiated disconnects");
+      for (const auto& item : le_acl_disconnect_reason_.GetSortedHighToLow()) {
+        LOG_DUMPSYS(fd, "  %s:%zu", item.item.c_str(), item.count);
+      }
+    }
+
     auto acceptlist = shadow_acceptlist_.GetCopy();
     LOG_DUMPSYS(fd,
                 "Shadow le accept list              size:%-3zu "
@@ -1475,6 +1501,8 @@ void shim::legacy::Acl::OnLeConnectFail(hci::AddressWithType address_with_type,
   bool enhanced = true; /* TODO logging metrics only */
   tHCI_STATUS status = ToLegacyHciErrorCode(reason);
 
+  pimpl_->shadow_acceptlist_.Remove(address_with_type);
+
   TRY_POSTING_ON_MAIN(acl_interface_.connection.le.on_failed,
                       legacy_address_with_type, handle, enhanced, status);
   LOG_WARN("Connection failed le remote:%s",
@@ -1485,13 +1513,16 @@ void shim::legacy::Acl::OnLeConnectFail(hci::AddressWithType address_with_type,
       base::StringPrintf("le reason:%s", hci::ErrorCodeText(reason).c_str()));
 }
 
-void shim::legacy::Acl::DisconnectClassic(uint16_t handle, tHCI_STATUS reason) {
-  handler_->CallOn(pimpl_.get(), &Acl::impl::disconnect_classic, handle,
-                   reason);
+void shim::legacy::Acl::DisconnectClassic(uint16_t handle, tHCI_STATUS reason,
+                                          std::string comment) {
+  handler_->CallOn(pimpl_.get(), &Acl::impl::disconnect_classic, handle, reason,
+                   comment);
 }
 
-void shim::legacy::Acl::DisconnectLe(uint16_t handle, tHCI_STATUS reason) {
-  handler_->CallOn(pimpl_.get(), &Acl::impl::disconnect_le, handle, reason);
+void shim::legacy::Acl::DisconnectLe(uint16_t handle, tHCI_STATUS reason,
+                                     std::string comment) {
+  handler_->CallOn(pimpl_.get(), &Acl::impl::disconnect_le, handle, reason,
+                   comment);
 }
 
 bool shim::legacy::Acl::HoldMode(uint16_t hci_handle, uint16_t max_interval,

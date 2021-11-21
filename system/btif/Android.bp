@@ -244,6 +244,7 @@ cc_test {
         "libFraunhoferAAC",
         "libg722codec",
         "liblc3codec",
+        "liblc3encoder",
         "libbtdevice",
         "libbt-hci",
         "libudrv-uipc",
@@ -338,8 +339,10 @@ cc_test {
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
-        "liblog",
+        "libbinder_ndk",
+        "libcrypto",
         "libcutils",
+        "liblog",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -348,6 +351,13 @@ cc_test {
         "libc++fs",
     ],
     cflags: ["-DBUILDCFG"],
+    target: {
+        android: {
+            shared_libs: [
+                "android.system.suspend.control-V1-ndk",
+            ],
+        },
+    },
 }
 
 // btif hf client service tests for target
