@@ -79,13 +79,11 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
   }
 
   ~le_impl() {
-    for (auto subevent_code : LeConnectionManagementEvents) {
-      hci_layer_->UnregisterLeEventHandler(subevent_code);
-    }
     if (address_manager_registered) {
       le_address_manager_->Unregister(this);
     }
     delete le_address_manager_;
+    hci_layer_->PutLeAclConnectionInterface();
     le_acl_connections_.clear();
   }
 
@@ -397,6 +395,15 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     }
   }
 
+  void clear_connect_list() {
+    if (!address_manager_registered) {
+      le_address_manager_->Register(this);
+      address_manager_registered = true;
+    }
+    pause_connection = true;
+    le_address_manager_->ClearConnectList();
+  }
+
   void add_device_to_resolving_list(
       AddressWithType address_with_type,
       const std::array<uint8_t, 16>& peer_irk,
@@ -422,6 +429,11 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
   }
 
   void create_le_connection(AddressWithType address_with_type, bool add_to_connect_list, bool is_direct) {
+    if (le_client_callbacks_ == nullptr) {
+      LOG_ERROR("No callbacks to call");
+      return;
+    }
+
     // TODO: Configure default LE connection parameters?
     if (add_to_connect_list) {
       add_device_to_connect_list(address_with_type);
@@ -453,10 +465,6 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
 
     if (pause_connection) {
       canceled_connections_.insert(address_with_type);
-      return;
-    }
-    if (le_client_callbacks_ == nullptr) {
-      LOG_ERROR("No callbacks to call");
       return;
     }
 
@@ -714,6 +722,16 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     le_address_manager_->AckPause(this);
   }
 
+  void OnResume() override {
+    pause_connection = false;
+    if (!canceled_connections_.empty()) {
+      create_le_connection(*canceled_connections_.begin(), false, false);
+    }
+    canceled_connections_.clear();
+    le_address_manager_->AckResume(this);
+    check_for_unregister();
+  }
+
   void on_create_connection_cancel_complete(CommandCompleteView view) {
     auto complete_view = LeCreateConnectionCancelCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
@@ -732,16 +750,6 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       pause_connection = false;
       ready_to_unregister = false;
     }
-  }
-
-  void OnResume() override {
-    pause_connection = false;
-    if (!canceled_connections_.empty()) {
-      create_le_connection(*canceled_connections_.begin(), false, false);
-    }
-    canceled_connections_.clear();
-    le_address_manager_->AckResume(this);
-    check_for_unregister();
   }
 
   uint16_t HACK_get_handle(Address address) {
