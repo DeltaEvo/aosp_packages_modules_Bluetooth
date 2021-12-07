@@ -1,6 +1,6 @@
 //! Media service facade
 
-use bt_topshim::btif::BluetoothInterface;
+use bt_topshim::btif::{BluetoothInterface, RawAddress};
 use bt_topshim::profiles::a2dp::{
     A2dp, A2dpCallbacksDispatcher, A2dpSink, A2dpSinkCallbacksDispatcher,
 };
@@ -30,6 +30,7 @@ fn get_avrcp_dispatcher() -> AvrcpCallbacksDispatcher {
 /// Main object for Media facade service
 #[derive(Clone)]
 pub struct MediaServiceImpl {
+    #[allow(dead_code)]
     rt: Arc<Runtime>,
     pub btif_a2dp: Arc<Mutex<A2dp>>,
     btif_a2dp_sink: Arc<Mutex<A2dpSink>>,
@@ -81,9 +82,18 @@ impl MediaService for MediaServiceImpl {
     ) {
         let a2dp = self.btif_a2dp.clone();
         ctx.spawn(async move {
-            a2dp.lock().unwrap().connect(req.address.clone());
-            a2dp.lock().unwrap().set_active_device(req.address.clone());
-            sink.success(A2dpSourceConnectResponse::default()).await.unwrap();
+            if let Some(addr) = RawAddress::from_string(req.address.clone()) {
+                a2dp.lock().unwrap().connect(addr);
+                a2dp.lock().unwrap().set_active_device(addr);
+                sink.success(A2dpSourceConnectResponse::default()).await.unwrap();
+            } else {
+                sink.fail(RpcStatus::with_message(
+                    RpcStatusCode::INVALID_ARGUMENT,
+                    format!("Invalid Request Address: {}", req.address),
+                ))
+                .await
+                .unwrap();
+            }
         })
     }
 }

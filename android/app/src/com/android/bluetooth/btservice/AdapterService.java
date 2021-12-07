@@ -713,6 +713,23 @@ public class AdapterService extends Service {
         BluetoothAdapter.invalidateBluetoothGetStateCache();
     }
 
+    void updateLeAudioProfileServiceState(boolean isCisCentralSupported) {
+        if (isCisCentralSupported) {
+            return;
+        }
+
+        // Remove the Le audio unicast profiles from the supported list
+        // since the controller doesn't support
+        Config.removeLeAudioUnicastProfilesFromSupportedList();
+        HashSet<Class> leAudioUnicastProfiles = Config.geLeAudioUnicastProfiles();
+
+        for (Class profileService : leAudioUnicastProfiles) {
+            if (isStartedProfile(profileService.getSimpleName())){
+                setProfileServiceState(profileService, BluetoothAdapter.STATE_OFF);
+            }
+        }
+    }
+
     void updateAdapterState(int prevState, int newState) {
         mAdapterProperties.setState(newState);
         invalidateBluetoothGetStateCache();
@@ -2708,6 +2725,23 @@ public class AdapterService extends Service {
     @VisibleForTesting
     public DatabaseManager getDatabase() {
         return mDatabaseManager;
+    }
+
+    public byte[] getByteIdentityAddress(BluetoothDevice device) {
+        DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
+        if (deviceProp.isConsolidated()) {
+            return Utils.getBytesFromAddress(deviceProp.getIdentityAddress());
+        } else {
+            return Utils.getByteAddress(device);
+        }
+    }
+
+    public BluetoothDevice getDeviceFromByte(byte[] address) {
+        BluetoothDevice device = mRemoteDevices.getDevice(address);
+        if (device == null) {
+            device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        }
+        return device;
     }
 
     private class CallerInfo {
