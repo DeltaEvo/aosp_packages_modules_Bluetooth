@@ -71,6 +71,7 @@
 #include "device/include/controller.h"
 #include "device/include/interop.h"
 #include "internal_include/stack_config.h"
+#include "main/shim/dumpsys.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
@@ -93,6 +94,7 @@ const Uuid UUID_HEARING_AID = Uuid::FromString("FDF0");
 const Uuid UUID_VC = Uuid::FromString("1844");
 const Uuid UUID_CSIS = Uuid::FromString("1846");
 const Uuid UUID_LE_AUDIO = Uuid::FromString("184E");
+const Uuid UUID_LE_MIDI = Uuid::FromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
 
 #define COD_MASK 0x07FF
 
@@ -229,10 +231,6 @@ static void btif_dm_ble_passkey_req_evt(tBTA_DM_PIN_REQ* p_pin_req);
 static void btif_dm_ble_key_nc_req_evt(tBTA_DM_SP_KEY_NOTIF* p_notif_req);
 static void btif_dm_ble_oob_req_evt(tBTA_DM_SP_RMT_OOB* req_oob_type);
 static void btif_dm_ble_sc_oob_req_evt(tBTA_DM_SP_RMT_OOB* req_oob_type);
-
-static void bte_scan_filt_param_cfg_evt(uint8_t avbl_space,
-                                        tBTM_BLE_SCAN_COND_OP action_type,
-                                        tBTM_STATUS btm_status);
 
 static char* btif_get_default_local_name();
 
@@ -947,6 +945,7 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
   bt_status_t status = BT_STATUS_FAIL;
   bt_bond_state_t state = BT_BOND_STATE_NONE;
   bool skip_sdp = false;
+  bool enable_address_consolidate = false;  // TODO remove
 
   BTIF_TRACE_DEBUG("%s: bond state=%d, success=%d, key_present=%d", __func__,
                    pairing_cb.state, p_auth_cmpl->success,
@@ -1010,8 +1009,19 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
     } else {
       dev_type = p_auth_cmpl->dev_type;
     }
-    btif_update_remote_properties(p_auth_cmpl->bd_addr, p_auth_cmpl->bd_name,
-                                  NULL, dev_type);
+
+    bool is_crosskey = false;
+    if (pairing_cb.state == BT_BOND_STATE_BONDING &&
+        p_auth_cmpl->bd_addr != pairing_cb.bd_addr) {
+      LOG_INFO("bonding initiated due to cross key pairing");
+      is_crosskey = true;
+    }
+
+    if (!is_crosskey || !enable_address_consolidate) {
+      btif_update_remote_properties(p_auth_cmpl->bd_addr, p_auth_cmpl->bd_name,
+                                    NULL, dev_type);
+    }
+
     pairing_cb.timeout_retries = 0;
     status = BT_STATUS_SUCCESS;
     state = BT_BOND_STATE_BONDED;
@@ -1034,7 +1044,6 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
 
       invoke_remote_device_properties_cb(BT_STATUS_SUCCESS, bd_addr, 1, &prop);
     } else {
-      bool is_crosskey = false;
       /* If bonded due to cross-key, save the static address too*/
       if (pairing_cb.state == BT_BOND_STATE_BONDING &&
           p_auth_cmpl->bd_addr != pairing_cb.bd_addr) {
@@ -1042,7 +1051,6 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
             "%s: bonding initiated due to cross key, adding static address",
             __func__);
         pairing_cb.static_bdaddr = bd_addr;
-        is_crosskey = true;
       }
       if (!is_crosskey ||
           !(stack_config_get_interface()->get_pts_crosskey_sdp_disable())) {
@@ -1052,15 +1060,17 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
         /* Trigger SDP on the device */
         pairing_cb.sdp_attempts = 1;
 
-        if (is_crosskey) {
-          // If bonding occurred due to cross-key pairing, send bonding callback
-          // for static address now
-          LOG_INFO("%s: send bonding state update for static address %s",
-                   __func__, bd_addr.ToString().c_str());
+        if (is_crosskey && enable_address_consolidate) {
+          // If bonding occurred due to cross-key pairing, send address
+          // consolidate callback
+          invoke_address_consolidate_cb(pairing_cb.bd_addr, bd_addr);
+        } else if (is_crosskey && !enable_address_consolidate) {
+          // TODO remove
           bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDING);
+          bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDED);
+        } else {
+          bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDED);
         }
-        bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDED);
-
         btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_AUTO);
       }
     }
@@ -1298,9 +1308,7 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
     } break;
 
     case BTA_DM_INQ_CMPL_EVT: {
-      BTM_BleAdvFilterParamSetup(
-          BTM_BLE_SCAN_COND_DELETE, static_cast<tBTM_BLE_PF_FILT_INDEX>(0),
-          nullptr, base::Bind(&bte_scan_filt_param_cfg_evt));
+      /* do nothing */
     } break;
     case BTA_DM_DISC_CMPL_EVT: {
       invoke_discovery_state_changed_cb(BT_DISCOVERY_STOPPED);
@@ -1316,10 +1324,6 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
        *
        */
       if (!btif_dm_inquiry_in_progress) {
-        btgatt_filt_param_setup_t adv_filt_param;
-        memset(&adv_filt_param, 0, sizeof(btgatt_filt_param_setup_t));
-        BTM_BleAdvFilterParamSetup(BTM_BLE_SCAN_COND_DELETE, 0, nullptr,
-                                   base::Bind(&bte_scan_filt_param_cfg_evt));
         invoke_discovery_state_changed_cb(BT_DISCOVERY_STOPPED);
       }
     } break;
@@ -1329,7 +1333,8 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
 /* Returns true if |uuid| should be passed as device property */
 static bool btif_is_interesting_le_service(bluetooth::Uuid uuid) {
   return (uuid.As16Bit() == UUID_SERVCLASS_LE_HID || uuid == UUID_HEARING_AID ||
-          uuid == UUID_VC || uuid == UUID_CSIS || uuid == UUID_LE_AUDIO);
+          uuid == UUID_VC || uuid == UUID_CSIS || uuid == UUID_LE_AUDIO || 
+          uuid == UUID_LE_MIDI);
 }
 
 /*******************************************************************************
@@ -1837,19 +1842,6 @@ static void bta_energy_info_cb(tBTM_BLE_TX_TIME_MS tx_time,
   invoke_energy_info_cb(energy_info, data);
 }
 
-/* Scan filter param config event */
-static void bte_scan_filt_param_cfg_evt(uint8_t avbl_space, uint8_t action_type,
-                                        tBTM_STATUS btm_status) {
-  /* This event occurs on calling BTA_DmBleCfgFilterCondition internally,
-  ** and that is why there is no HAL callback
-  */
-  if (btm_status != btm_status_value(BTM_SUCCESS)) {
-    BTIF_TRACE_ERROR("%s, %d", __func__, btm_status);
-  } else {
-    BTIF_TRACE_DEBUG("%s", __func__);
-  }
-}
-
 /*****************************************************************************
  *
  *   btif api functions (no context switch)
@@ -1871,23 +1863,6 @@ void btif_dm_start_discovery(void) {
              __func__);
     return;
   }
-
-  /* Cleanup anything remaining on index 0 */
-  BTM_BleAdvFilterParamSetup(BTM_BLE_SCAN_COND_DELETE,
-                             static_cast<tBTM_BLE_PF_FILT_INDEX>(0), nullptr,
-                             base::Bind(&bte_scan_filt_param_cfg_evt));
-
-  auto adv_filt_param = std::make_unique<btgatt_filt_param_setup_t>();
-  /* Add an allow-all filter on index 0*/
-  adv_filt_param->dely_mode = IMMEDIATE_DELY_MODE;
-  adv_filt_param->feat_seln = ALLOW_ALL_FILTER;
-  adv_filt_param->filt_logic_type = BTA_DM_BLE_PF_FILT_LOGIC_OR;
-  adv_filt_param->list_logic_type = BTA_DM_BLE_PF_LIST_LOGIC_OR;
-  adv_filt_param->rssi_low_thres = LOWEST_RSSI_VALUE;
-  adv_filt_param->rssi_high_thres = LOWEST_RSSI_VALUE;
-  BTM_BleAdvFilterParamSetup(
-      BTM_BLE_SCAN_COND_ADD, static_cast<tBTM_BLE_PF_FILT_INDEX>(0),
-      std::move(adv_filt_param), base::Bind(&bte_scan_filt_param_cfg_evt));
 
   /* Will be enabled to true once inquiry busy level has been received */
   btif_dm_inquiry_in_progress = false;
@@ -3197,8 +3172,10 @@ bool btif_get_device_type(const RawAddress& bda, int* p_device_type) {
   const char* bd_addr_str = addrstr.c_str();
 
   if (!btif_config_get_int(bd_addr_str, "DevType", p_device_type)) return false;
+  tBT_DEVICE_TYPE device_type = static_cast<tBT_DEVICE_TYPE>(*p_device_type);
+  LOG_DEBUG(" bd_addr:%s device_type:%s", PRIVATE_ADDRESS(bda),
+            DeviceTypeText(device_type).c_str());
 
-  LOG_INFO("Device [%s] device type %d", bd_addr_str, *p_device_type);
   return true;
 }
 
@@ -3212,7 +3189,7 @@ bool btif_get_address_type(const RawAddress& bda, tBLE_ADDR_TYPE* p_addr_type) {
   if (!btif_config_get_int(bd_addr_str, "AddrType", &val)) return false;
   *p_addr_type = static_cast<tBLE_ADDR_TYPE>(val);
 
-  LOG_DEBUG("Device [%s] address type %s", bd_addr_str,
+  LOG_DEBUG(" bd_addr:%s[%s]", PRIVATE_ADDRESS(bda),
             AddressTypeText(*p_addr_type).c_str());
   return true;
 }

@@ -89,6 +89,8 @@ class BluetoothAudioPort {
            session_type_ == SessionType_2_1::A2DP_HARDWARE_OFFLOAD_DATAPATH;
   }
 
+  bool GetPreferredDataIntervalUs(size_t* interval_us) const;
+
  protected:
   uint16_t cookie_;
   BluetoothStreamState state_;
