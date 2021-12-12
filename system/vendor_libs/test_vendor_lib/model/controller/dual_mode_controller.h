@@ -172,6 +172,15 @@ class DualModeController : public Device {
   // 7.1.24
   void ReadClockOffset(CommandView args);
 
+  // 7.1.26
+  void SetupSynchronousConnection(CommandView command);
+
+  // 7.1.27
+  void AcceptSynchronousConnection(CommandView command);
+
+  // 7.1.28
+  void RejectSynchronousConnection(CommandView command);
+
   // 7.1.29
   void IoCapabilityRequestReply(CommandView args);
 
@@ -288,6 +297,12 @@ class DualModeController : public Device {
 
   // 7.3.28
   void WriteVoiceSetting(CommandView args);
+
+  // 7.3.36
+  void ReadSynchronousFlowControlEnable(CommandView args);
+
+  // 7.3.37
+  void WriteSynchronousFlowControlEnable(CommandView args);
 
   // 7.3.39
   void HostBufferSize(CommandView args);

@@ -40,6 +40,8 @@ enum class GroupStatus {
 enum class GroupStreamStatus {
   IDLE = 0,
   STREAMING,
+  RELEASING,
+  SUSPENDING,
   SUSPENDED,
   RECONFIGURED,
   DESTROYED,
@@ -49,6 +51,29 @@ enum class GroupNodeStatus {
   ADDED = 1,
   REMOVED,
 };
+
+typedef enum {
+  LE_AUDIO_CODEC_INDEX_SOURCE_LC3 = 0,
+  LE_AUDIO_CODEC_INDEX_SOURCE_MAX
+} btle_audio_codec_index_t;
+
+typedef struct {
+  btle_audio_codec_index_t codec_type;
+
+  std::string ToString() const {
+    std::string codec_name_str;
+
+    switch (codec_type) {
+      case LE_AUDIO_CODEC_INDEX_SOURCE_LC3:
+        codec_name_str = "LC3";
+        break;
+      default:
+        codec_name_str = "Unknown LE codec " + std::to_string(codec_type);
+        break;
+    }
+    return "codec: " + codec_name_str;
+  }
+} btle_audio_codec_config_t;
 
 class LeAudioClientCallbacks {
  public:
@@ -76,7 +101,9 @@ class LeAudioClientInterface {
   virtual ~LeAudioClientInterface() = default;
 
   /* Register the LeAudio callbacks */
-  virtual void Initialize(LeAudioClientCallbacks* callbacks) = 0;
+  virtual void Initialize(
+      LeAudioClientCallbacks* callbacks,
+      const std::vector<btle_audio_codec_config_t>& offloading_preference) = 0;
 
   /** Connect to LEAudio */
   virtual void Connect(const RawAddress& address) = 0;
