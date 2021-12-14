@@ -91,6 +91,7 @@ public class LeAudioService extends ProfileService {
     private HandlerThread mStateMachinesThread;
     private BluetoothDevice mActiveAudioOutDevice;
     private BluetoothDevice mActiveAudioInDevice;
+    private LeAudioCodecConfig mLeAudioCodecConfig;
     ServiceFactory mServiceFactory = new ServiceFactory();
 
     LeAudioNativeInterface mLeAudioNativeInterface;
@@ -131,36 +132,6 @@ public class LeAudioService extends ProfileService {
 
     private BroadcastReceiver mBondStateChangedReceiver;
     private BroadcastReceiver mConnectionStateChangedReceiver;
-
-    private volatile IBluetoothVolumeControl mVolumeControlProxy;
-    VolumeControlService mVolumeControlService = null;
-    private final ServiceConnection mVolumeControlProxyConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            if (DBG) {
-                Log.d(TAG, "mVolumeControlProxyConnection connected");
-            }
-            synchronized (LeAudioService.this) {
-
-                mVolumeControlProxy = IBluetoothVolumeControl.Stub.asInterface(service);
-                mVolumeControlService =
-                    VolumeControlService.getVolumeControlService();
-                if (mVolumeControlService == null) {
-                    Log.e(TAG, "VolumeControlService is null when LeAudioService starts");
-                }
-            }
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName className) {
-            if (DBG) {
-                Log.d(TAG, "mVolumeControlProxy disconnected");
-            }
-            synchronized (LeAudioService.this) {
-                mVolumeControlProxy = null;
-            }
-        }
-    };
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -208,14 +179,13 @@ public class LeAudioService extends ProfileService {
         mConnectionStateChangedReceiver = new ConnectionStateChangedReceiver();
         registerReceiver(mConnectionStateChangedReceiver, filter);
 
-
-        /* Bind Volume control service */
-        bindVolumeControlService();
-
         // Mark service as started
         setLeAudioService(this);
 
-        mLeAudioNativeInterface.init();
+        // Setup codec config
+        mLeAudioCodecConfig = new LeAudioCodecConfig(this);
+
+        mLeAudioNativeInterface.init(mLeAudioCodecConfig.getCodecConfigOffloading());
 
         return true;
     }
@@ -276,7 +246,6 @@ public class LeAudioService extends ProfileService {
         mAdapterService = null;
         mAudioManager = null;
 
-        unbindVolumeControlService();
         return true;
     }
 
@@ -302,30 +271,6 @@ public class LeAudioService extends ProfileService {
             Log.d(TAG, "setLeAudioService(): set to: " + instance);
         }
         sLeAudioService = instance;
-    }
-
-    private void bindVolumeControlService() {
-        synchronized (mVolumeControlProxyConnection) {
-            Intent intent = new Intent(IBluetoothVolumeControl.class.getName());
-            ComponentName comp = intent.resolveSystemService(getPackageManager(), 0);
-            intent.setComponent(comp);
-            if (comp == null || !bindService(intent, mVolumeControlProxyConnection, 0)) {
-                Log.wtf(TAG, "Could not bind to IBluetoothVolumeControl Service with " +
-                        intent);
-            }
-        }
-    }
-    private void unbindVolumeControlService() {
-        synchronized (mVolumeControlProxyConnection) {
-            if (mVolumeControlProxy != null) {
-                if (DBG) {
-                    Log.d(TAG, "Unbinding mVolumeControlProxyConnection");
-                }
-                mVolumeControlProxy = null;
-                // Synchronization should make sure unbind can be successful
-                unbindService(mVolumeControlProxyConnection);
-            }
-        }
     }
 
     public boolean connect(BluetoothDevice device) {
@@ -1274,16 +1219,9 @@ public class LeAudioService extends ProfileService {
             return;
         }
 
-        if (mVolumeControlService == null) {
-            Log.e(TAG, "VolumeControl no available ");
-            return;
-        }
-
-        try {
-            mVolumeControlProxy.setVolumeGroup(mActiveDeviceGroupId, volume,
-                                               this.getAttributionSource());
-        } catch (RemoteException e) {
-            Log.e(TAG, "Set Volume failed: " + e);
+        VolumeControlService service = mServiceFactory.getVolumeControlService();
+        if (service != null) {
+            service.setVolumeGroup(mActiveDeviceGroupId, volume);
         }
     }
 

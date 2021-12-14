@@ -32,7 +32,7 @@
 namespace bluetooth {
 namespace audio {
 
-using ::android::hardware::bluetooth::audio::V2_0::IBluetoothAudioPort;
+using ::android::hardware::bluetooth::audio::V2_2::IBluetoothAudioPort;
 using AudioCapabilities =
     ::android::hardware::bluetooth::audio::V2_0::AudioCapabilities;
 using AudioCapabilities_2_1 =
@@ -155,6 +155,7 @@ class IBluetoothTransportInstance {
                                        timespec* data_position) = 0;
 
   virtual void MetadataChanged(const source_metadata_t& source_metadata) = 0;
+  virtual void SinkMetadataChanged(const sink_metadata_t& sink_metadata) = 0;
 
   // Invoked when the transport is requested to reset presentation position
   virtual void ResetPresentationPosition() = 0;

@@ -128,7 +128,7 @@ public class BluetoothInCallService extends InCallService {
     public final HashMap<Integer, BluetoothCall> mBluetoothCallHashMap = new HashMap<>();
 
     // A map from Calls to indexes used to identify calls for CLCC (C* List Current Calls).
-    private final Map<BluetoothCall, Integer> mClccIndexMap = new HashMap<>();
+    private final Map<String, Integer> mClccIndexMap = new HashMap<>();
 
     private static BluetoothInCallService sInstance = null;
 
@@ -170,6 +170,8 @@ public class BluetoothInCallService extends InCallService {
                 Log.d(TAG, "Bluetooth Adapter state: " + state);
                 if (state == BluetoothAdapter.STATE_ON) {
                     queryPhoneState();
+                } else if (state == BluetoothAdapter.STATE_TURNING_OFF) {
+                    clear();
                 }
             }
         }
@@ -580,7 +582,7 @@ public class BluetoothInCallService extends InCallService {
             mBluetoothCallHashMap.remove(call.getId());
         }
 
-        mClccIndexMap.remove(call);
+        mClccIndexMap.remove(getClccMapKey(call));
         updateHeadsetWithCallState(false /* force */);
     }
 
@@ -620,6 +622,12 @@ public class BluetoothInCallService extends InCallService {
     @Override
     public void onDestroy() {
         Log.d(TAG, "onDestroy");
+        clear();
+        super.onDestroy();
+    }
+
+    private void clear() {
+        Log.d(TAG, "clear");
         if (mBluetoothOnModeChangedListener != null) {
             mAudioManager.removeOnModeChangedListener(mBluetoothOnModeChangedListener);
             mBluetoothOnModeChangedListener = null;
@@ -628,8 +636,15 @@ public class BluetoothInCallService extends InCallService {
             unregisterReceiver(mBluetoothAdapterReceiver);
             mBluetoothAdapterReceiver = null;
         }
+        if (mBluetoothHeadset != null) {
+            mBluetoothHeadset.closeBluetoothHeadsetProxy(this);
+            mBluetoothHeadset = null;
+        }
+        mProfileListener = null;
         sInstance = null;
-        super.onDestroy();
+        mCallbacks.clear();
+        mBluetoothCallHashMap.clear();
+        mClccIndexMap.clear();
     }
 
     private void sendListOfCalls(boolean shouldLog) {
@@ -756,13 +771,28 @@ public class BluetoothInCallService extends InCallService {
         }
     }
 
+    private String getClccMapKey(BluetoothCall call) {
+        if (mCallInfo.isNullCall(call) || call.getHandle() == null) {
+            return "";
+        }
+        Uri handle = call.getHandle();
+        String key;
+        if (call.hasProperty(Call.Details.PROPERTY_SELF_MANAGED)) {
+            key = handle.toString() + " self managed " + call.getId();
+        } else {
+            key = handle.toString();
+        }
+        return key;
+    }
+
     /**
      * Returns the caches index for the specified call.  If no such index exists, then an index is
      * given (smallest number starting from 1 that isn't already taken).
      */
     private int getIndexForCall(BluetoothCall call) {
-        if (mClccIndexMap.containsKey(call)) {
-            return mClccIndexMap.get(call);
+        String key = getClccMapKey(call);
+        if (mClccIndexMap.containsKey(key)) {
+            return mClccIndexMap.get(key);
         }
 
         int i = 1;  // Indexes for bluetooth clcc are 1-based.
@@ -771,7 +801,7 @@ public class BluetoothInCallService extends InCallService {
         }
 
         // NOTE: Indexes are removed in {@link #onCallRemoved}.
-        mClccIndexMap.put(call, i);
+        mClccIndexMap.put(key, i);
         return i;
     }
 

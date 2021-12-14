@@ -199,6 +199,9 @@ public class AdapterService extends Service {
             new ComponentName("com.android.bluetooth",
                     BluetoothInCallService.class.getCanonicalName());
 
+    public static final String ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS =
+            "no_active_device_address";
+
     // Report ID definition
     public enum BqrQualityReportId {
         QUALITY_REPORT_ID_MONITOR_MODE(0x01),
@@ -2422,13 +2425,17 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public int isCisCentralSupported() {
+        public int isLeAudioSupported() {
             AdapterService service = getService();
             if (service == null) {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
             }
 
-            if (service.mAdapterProperties.isLeConnectedIsochronousStreamCentralSupported()) {
+            HashSet<Class> supportedProfileServices =
+                    new HashSet<Class>(Arrays.asList(Config.getSupportedProfiles()));
+            HashSet<Class> leAudioUnicastProfiles = Config.geLeAudioUnicastProfiles();
+
+            if (supportedProfileServices.containsAll(leAudioUnicastProfiles)) {
                 return BluetoothStatusCodes.SUCCESS;
             }
 
@@ -3512,6 +3519,17 @@ public class AdapterService extends Service {
 
     public int getTotalNumOfTrackableAdvertisements() {
         return mAdapterProperties.getTotalNumOfTrackableAdvertisements();
+    }
+
+    /**
+     * Notify the UID and package name of the app, and the address of associated active device
+     *
+     * @param source The attribution source that starts the activity
+     * @param deviceAddress The address of the active device associated with the app
+     */
+    public void notifyActivityAttributionInfo(AttributionSource source, String deviceAddress) {
+        mActivityAttributionService.notifyActivityAttributionInfo(
+                source.getUid(), source.getPackageName(), deviceAddress);
     }
 
     private static int convertScanModeToHal(int mode) {
