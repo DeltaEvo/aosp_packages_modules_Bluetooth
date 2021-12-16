@@ -95,7 +95,7 @@ class LinkLayerController {
   ErrorCode Disconnect(uint16_t handle, uint8_t reason);
 
  private:
-  void DisconnectCleanup(uint16_t handle, uint8_t reason);
+  void SendDisconnectionCompleteEvent(uint16_t handle, uint8_t reason);
 
  public:
   void IncomingPacket(model::packets::LinkLayerPacketView incoming);
@@ -348,6 +348,26 @@ class LinkLayerController {
   void ReadLocalOobData();
   void ReadLocalOobExtendedData();
 
+  ErrorCode SetupSynchronousConnection(
+      uint16_t connection_handle,
+      uint32_t transmit_bandwidth,
+      uint32_t receive_bandwidth,
+      uint16_t max_latency,
+      uint16_t voice_setting,
+      uint8_t retransmission_effort,
+      uint16_t packet_types);
+  ErrorCode AcceptSynchronousConnection(
+      Address bd_addr,
+      uint32_t transmit_bandwidth,
+      uint32_t receive_bandwidth,
+      uint16_t max_latency,
+      uint16_t voice_setting,
+      uint8_t retransmission_effort,
+      uint16_t packet_types);
+  ErrorCode RejectSynchronousConnection(
+      Address bd_addr,
+      uint16_t reason);
+
   void HandleIso(bluetooth::hci::IsoView iso);
 
  protected:
@@ -421,6 +441,12 @@ class LinkLayerController {
   void IncomingRemoteNameRequest(model::packets::LinkLayerPacketView packet);
   void IncomingRemoteNameRequestResponse(
       model::packets::LinkLayerPacketView packet);
+
+  void IncomingEScoConnectionRequest(
+      model::packets::LinkLayerPacketView packet);
+  void IncomingEScoConnectionResponse(
+      model::packets::LinkLayerPacketView packet);
+  void IncomingEScoDisconnect(model::packets::LinkLayerPacketView packet);
 
  private:
   const DeviceProperties& properties_;
