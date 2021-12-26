@@ -71,7 +71,6 @@ public class HeadsetServiceTest {
 
     private Context mTargetContext;
     private HeadsetService mHeadsetService;
-    private IBluetoothHeadset.Stub mHeadsetServiceBinder;
     private BluetoothAdapter mAdapter;
     private HeadsetNativeInterface mNativeInterface;
     private BluetoothDevice mCurrentDevice;
@@ -145,11 +144,10 @@ public class HeadsetServiceTest {
         TestUtils.startService(mServiceRule, HeadsetService.class);
         mHeadsetService = HeadsetService.getHeadsetService();
         Assert.assertNotNull(mHeadsetService);
+        verify(mAdapterService).notifyActivityAttributionInfo(any(), any());
         verify(mObjectsFactory).makeSystemInterface(mHeadsetService);
         verify(mObjectsFactory).getNativeInterface();
-        mHeadsetServiceBinder = (IBluetoothHeadset.Stub) mHeadsetService.initBinder();
-        Assert.assertNotNull(mHeadsetServiceBinder);
-        mHeadsetServiceBinder.setForceScoAudio(true, mAdapter.getAttributionSource());
+        mHeadsetService.setForceScoAudio(true);
     }
 
     @After
@@ -701,9 +699,9 @@ public class HeadsetServiceTest {
         HeadsetCallState headsetCallState =
                 new HeadsetCallState(1, 0, HeadsetHalConstants.CALL_STATE_ALERTING,
                         TEST_PHONE_NUMBER, 128, "");
-        mHeadsetServiceBinder.phoneStateChanged(headsetCallState.mNumActive,
+        mHeadsetService.phoneStateChanged(headsetCallState.mNumActive,
                 headsetCallState.mNumHeld, headsetCallState.mCallState, headsetCallState.mNumber,
-                headsetCallState.mType, headsetCallState.mName, mAdapter.getAttributionSource());
+                headsetCallState.mType, headsetCallState.mName, false);
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
         verify(mAudioManager, never()).setA2dpSuspended(true);
@@ -758,9 +756,9 @@ public class HeadsetServiceTest {
         mHeadsetService.onConnectionStateChangedFromStateMachine(mCurrentDevice,
                 BluetoothProfile.STATE_CONNECTING, BluetoothProfile.STATE_CONNECTED);
         // Change phone state
-        mHeadsetServiceBinder.phoneStateChanged(headsetCallState.mNumActive,
+        mHeadsetService.phoneStateChanged(headsetCallState.mNumActive,
                 headsetCallState.mNumHeld, headsetCallState.mCallState, headsetCallState.mNumber,
-                headsetCallState.mType, headsetCallState.mName, mAdapter.getAttributionSource());
+                headsetCallState.mType, headsetCallState.mName, false);
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
 
@@ -777,9 +775,9 @@ public class HeadsetServiceTest {
         Assert.assertTrue(mHeadsetService.setActiveDevice(mCurrentDevice));
         // Change phone state
         headsetCallState.mCallState = HeadsetHalConstants.CALL_STATE_ALERTING;
-        mHeadsetServiceBinder.phoneStateChanged(headsetCallState.mNumActive,
+        mHeadsetService.phoneStateChanged(headsetCallState.mNumActive,
                 headsetCallState.mNumHeld, headsetCallState.mCallState, headsetCallState.mNumber,
-                headsetCallState.mType, headsetCallState.mName, mAdapter.getAttributionSource());
+                headsetCallState.mType, headsetCallState.mName, false);
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
         // Ask Audio HAL to suspend A2DP
@@ -843,9 +841,9 @@ public class HeadsetServiceTest {
             Assert.assertTrue(mHeadsetService.setActiveDevice(mCurrentDevice));
         }
         // Change phone state
-        mHeadsetServiceBinder.phoneStateChanged(headsetCallState.mNumActive,
+        mHeadsetService.phoneStateChanged(headsetCallState.mNumActive,
                 headsetCallState.mNumHeld, headsetCallState.mCallState, headsetCallState.mNumber,
-                headsetCallState.mType, headsetCallState.mName, mAdapter.getAttributionSource());
+                headsetCallState.mType, headsetCallState.mName, false);
         // Ask Audio HAL to suspend A2DP
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
         // Make sure we notify devices about this change

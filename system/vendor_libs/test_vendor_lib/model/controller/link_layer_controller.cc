@@ -195,6 +195,26 @@ ErrorCode LinkLayerController::SendAclToRemote(
   return ErrorCode::SUCCESS;
 }
 
+ErrorCode LinkLayerController::SendScoToRemote(
+    bluetooth::hci::ScoView sco_packet) {
+
+  uint16_t handle = sco_packet.GetHandle();
+  if (!connections_.HasScoHandle(handle)) {
+    return ErrorCode::UNKNOWN_CONNECTION;
+  }
+
+  // TODO: SCO flow control
+  Address source = properties_.GetAddress();
+  Address destination = connections_.GetScoAddress(handle);
+
+  auto sco_data = sco_packet.GetData();
+  std::vector<uint8_t> sco_data_bytes(sco_data.begin(), sco_data.end());
+
+  SendLinkLayerPacket(model::packets::ScoBuilder::Create(
+      source, destination, std::make_unique<bluetooth::packet::RawBuilder>(sco_data_bytes)));
+  return ErrorCode::SUCCESS;
+}
+
 void LinkLayerController::IncomingPacket(
     model::packets::LinkLayerPacketView incoming) {
   ASSERT(incoming.IsValid());
@@ -243,6 +263,9 @@ void LinkLayerController::IncomingPacket(
   switch (incoming.GetType()) {
     case model::packets::PacketType::ACL:
       IncomingAclPacket(incoming);
+      break;
+    case model::packets::PacketType::SCO:
+      IncomingScoPacket(incoming);
       break;
     case model::packets::PacketType::DISCONNECT:
       IncomingDisconnectPacket(incoming);
@@ -380,15 +403,14 @@ void LinkLayerController::IncomingPacket(
     case (model::packets::PacketType::READ_CLOCK_OFFSET_RESPONSE):
       IncomingReadClockOffsetResponse(incoming);
       break;
-
-    case model::packets::PacketType::SCO:
-      LOG_WARN("ignoring SCO packet");
+    case model::packets::PacketType::SCO_CONNECTION_REQUEST:
+      IncomingScoConnectionRequest(incoming);
       break;
-    case model::packets::PacketType::ESCO_CONNECTION_REQUEST:
-      IncomingEScoConnectionRequest(incoming);
+    case model::packets::PacketType::SCO_CONNECTION_RESPONSE:
+      IncomingScoConnectionResponse(incoming);
       break;
-    case model::packets::PacketType::ESCO_CONNECTION_RESPONSE:
-      IncomingEScoConnectionResponse(incoming);
+    case model::packets::PacketType::SCO_DISCONNECT:
+      IncomingScoDisconnect(incoming);
       break;
 
     default:
@@ -399,9 +421,6 @@ void LinkLayerController::IncomingPacket(
 
 void LinkLayerController::IncomingAclPacket(
     model::packets::LinkLayerPacketView incoming) {
-  LOG_INFO("Acl Packet %s -> %s",
-           incoming.GetSourceAddress().ToString().c_str(),
-           incoming.GetDestinationAddress().ToString().c_str());
 
   auto acl = model::packets::AclView::Create(incoming);
   ASSERT(acl.IsValid());
@@ -409,16 +428,18 @@ void LinkLayerController::IncomingAclPacket(
   std::shared_ptr<std::vector<uint8_t>> payload_bytes =
       std::make_shared<std::vector<uint8_t>>(payload.begin(), payload.end());
 
+  LOG_INFO("Acl Packet [%d] %s -> %s",
+           static_cast<int>(payload_bytes->size()),
+           incoming.GetSourceAddress().ToString().c_str(),
+           incoming.GetDestinationAddress().ToString().c_str());
+
   bluetooth::hci::PacketView<bluetooth::hci::kLittleEndian> raw_packet(
       payload_bytes);
   auto acl_view = bluetooth::hci::AclView::Create(raw_packet);
   ASSERT(acl_view.IsValid());
 
-  LOG_INFO("Remote handle 0x%x size %d", acl_view.GetHandle(),
-           static_cast<int>(acl_view.size()));
   uint16_t local_handle =
       connections_.GetHandleOnlyAddress(incoming.GetSourceAddress());
-  LOG_INFO("Local handle 0x%x", local_handle);
 
   std::vector<uint8_t> payload_data(acl_view.GetPayload().begin(),
                                     acl_view.GetPayload().end());
@@ -448,6 +469,32 @@ void LinkLayerController::IncomingAclPacket(
 
     send_acl_(std::move(acl_packet));
   }
+}
+
+void LinkLayerController::IncomingScoPacket(
+    model::packets::LinkLayerPacketView incoming) {
+
+
+  Address source = incoming.GetSourceAddress();
+  uint16_t sco_handle = connections_.GetScoHandle(source);
+  if (!connections_.HasScoHandle(sco_handle)) {
+      LOG_INFO("Spurious SCO packet from %s", source.ToString().c_str());
+      return;
+  }
+
+  auto sco = model::packets::ScoView::Create(incoming);
+  ASSERT(sco.IsValid());
+  auto sco_data = sco.GetPayload();
+  std::vector<uint8_t> sco_data_bytes(sco_data.begin(), sco_data.end());
+
+  LOG_INFO("Sco Packet [%d] %s -> %s",
+           static_cast<int>(sco_data_bytes.size()),
+           incoming.GetSourceAddress().ToString().c_str(),
+           incoming.GetDestinationAddress().ToString().c_str());
+
+  send_sco_(bluetooth::hci::ScoBuilder::Create(
+      sco_handle, bluetooth::hci::PacketStatusFlag::CORRECTLY_RECEIVED,
+      sco_data_bytes));
 }
 
 void LinkLayerController::IncomingRemoteNameRequest(
@@ -627,8 +674,7 @@ void LinkLayerController::IncomingDisconnectPacket(
              "GetHandle() returned invalid handle %hx", handle);
 
   uint8_t reason = disconnect.GetReason();
-  ScheduleTask(kShortDelayMs,
-               [this, handle, reason]() { DisconnectCleanup(handle, reason); });
+  SendDisconnectionCompleteEvent(handle, reason);
 }
 
 void LinkLayerController::IncomingEncryptConnection(
@@ -1365,63 +1411,127 @@ void LinkLayerController::IncomingLeAdvertisementPacket(
   }
 }
 
-void LinkLayerController::IncomingEScoConnectionRequest(
+void LinkLayerController::IncomingScoConnectionRequest(
     model::packets::LinkLayerPacketView incoming) {
 
   Address address = incoming.GetSourceAddress();
-  auto request = model::packets::EScoConnectionRequestView::Create(incoming);
+  auto request = model::packets::ScoConnectionRequestView::Create(incoming);
+  ASSERT(request.IsValid());
+
+  LOG_INFO("Received eSCO connection request from %s",
+           address.ToString().c_str());
 
   // Automatically reject if connection request was already sent
   // from the current device.
   if (connections_.HasPendingScoConnection(address)) {
-    auto packet = model::packets::EScoConnectionResponseBuilder::Create(
-      properties_.GetLeAddress(), address,
-      (uint8_t)ErrorCode::SYNCHRONOUS_CONNECTION_LIMIT_EXCEEDED, 0, 0, 0, 0, 0);
-    SendLinkLayerPacket(std::move(packet));
+    LOG_INFO("Rejecting eSCO connection request from %s, "
+             "an eSCO connection already exist with this device",
+             address.ToString().c_str());
+
+    SendLinkLayerPacket(model::packets::ScoConnectionResponseBuilder::Create(
+        properties_.GetAddress(), address,
+        (uint8_t)ErrorCode::SYNCHRONOUS_CONNECTION_LIMIT_EXCEEDED,
+        0, 0, 0, 0, 0, 0));
     return;
   }
 
-  // Send connection request event to use and wait for Accept or Reject
-  // command.
-  auto packet = bluetooth::hci::ConnectionRequestBuilder::Create(
+  // Create local connection context.
+  ScoConnectionParameters connection_parameters = {
+    request.GetTransmitBandwidth(), request.GetReceiveBandwidth(),
+    request.GetMaxLatency(), request.GetVoiceSetting(),
+    request.GetRetransmissionEffort(), request.GetPacketType()
+  };
+
+  bool extended = connection_parameters.IsExtended();
+  connections_.CreateScoConnection(address, connection_parameters,
+      extended ?
+        ScoState::SCO_STATE_SENT_ESCO_CONNECTION_REQUEST :
+        ScoState::SCO_STATE_SENT_SCO_CONNECTION_REQUEST);
+
+  // Send connection request event and wait for Accept or Reject command.
+  send_event_(bluetooth::hci::ConnectionRequestBuilder::Create(
       address, ClassOfDevice(),
-      bluetooth::hci::ConnectionRequestLinkType::ESCO);
-  send_event_(std::move(packet));
+      extended ?
+        bluetooth::hci::ConnectionRequestLinkType::ESCO :
+        bluetooth::hci::ConnectionRequestLinkType::SCO));
 }
 
-void LinkLayerController::IncomingEScoConnectionResponse(
+void LinkLayerController::IncomingScoConnectionResponse(
     model::packets::LinkLayerPacketView incoming) {
 
   Address address = incoming.GetSourceAddress();
-  auto response = model::packets::EScoConnectionResponseView::Create(incoming);
-  auto status = response.GetStatus();
+  auto response = model::packets::ScoConnectionResponseView::Create(incoming);
+  ASSERT(response.IsValid());
+  auto status = ErrorCode(response.GetStatus());
+  bool is_legacy = connections_.IsLegacyScoConnection(address);
 
-  if (status == (uint8_t)ErrorCode::SUCCESS) {
+  LOG_INFO("Received eSCO connection response with status 0x%02x from %s",
+           static_cast<unsigned>(status),
+           incoming.GetSourceAddress().ToString().c_str());
+
+  if (status == ErrorCode::SUCCESS) {
+    bool extended = response.GetExtended();
     ScoLinkParameters link_parameters = {
       response.GetTransmissionInterval(),
       response.GetRetransmissionWindow(),
       response.GetRxPacketLength(),
       response.GetTxPacketLength(),
       response.GetAirMode(),
+      extended,
     };
     connections_.AcceptPendingScoConnection(address, link_parameters);
-    auto packet = bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
-      ErrorCode(status), connections_.GetScoHandle(address), address,
-      bluetooth::hci::ScoLinkType::ESCO,
-      response.GetTransmissionInterval(),
-      response.GetRetransmissionWindow(),
-      response.GetRxPacketLength(),
-      response.GetTxPacketLength(),
-      bluetooth::hci::ScoAirMode(response.GetAirMode()));
-
-    send_event_(std::move(packet));
+    if (is_legacy) {
+      send_event_(bluetooth::hci::ConnectionCompleteBuilder::Create(
+          ErrorCode::SUCCESS, connections_.GetScoHandle(address), address,
+          bluetooth::hci::LinkType::SCO,
+          bluetooth::hci::Enable::DISABLED));
+    } else {
+      send_event_(bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
+          ErrorCode::SUCCESS, connections_.GetScoHandle(address), address,
+          extended ?
+            bluetooth::hci::ScoLinkType::ESCO :
+            bluetooth::hci::ScoLinkType::SCO,
+          extended ? response.GetTransmissionInterval() : 0,
+          extended ? response.GetRetransmissionWindow() : 0,
+          extended ? response.GetRxPacketLength() : 0,
+          extended ? response.GetTxPacketLength() : 0,
+          bluetooth::hci::ScoAirMode(response.GetAirMode())));
+    }
   } else {
     connections_.CancelPendingScoConnection(address);
-    auto packet = bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
-      ErrorCode(status), 0, address, bluetooth::hci::ScoLinkType::ESCO,
-      0, 0, 0, 0, bluetooth::hci::ScoAirMode::TRANSPARENT);
+    if (is_legacy) {
+      send_event_(bluetooth::hci::ConnectionCompleteBuilder::Create(
+          status, 0, address,
+          bluetooth::hci::LinkType::SCO,
+          bluetooth::hci::Enable::DISABLED));
+    } else {
+      send_event_(bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
+          status, 0, address,
+          response.GetExtended() ?
+            bluetooth::hci::ScoLinkType::ESCO :
+            bluetooth::hci::ScoLinkType::SCO,
+          0, 0, 0, 0, bluetooth::hci::ScoAirMode::TRANSPARENT));
+    }
+  }
+}
 
-    send_event_(std::move(packet));
+void LinkLayerController::IncomingScoDisconnect(
+    model::packets::LinkLayerPacketView incoming) {
+
+  Address address = incoming.GetSourceAddress();
+  auto request = model::packets::ScoDisconnectView::Create(incoming);
+  ASSERT(request.IsValid());
+  auto reason = request.GetReason();
+  uint16_t handle = connections_.GetScoHandle(address);
+
+  LOG_INFO("Received eSCO disconnection request with"
+           " reason 0x%02x from %s",
+           static_cast<unsigned>(reason),
+           incoming.GetSourceAddress().ToString().c_str());
+
+  if (handle != 0) {
+    connections_.Disconnect(handle);
+    SendDisconnectionCompleteEvent(handle, reason);
   }
 }
 
@@ -2546,37 +2656,65 @@ ErrorCode LinkLayerController::CreateConnectionCancel(const Address& addr) {
   return ErrorCode::SUCCESS;
 }
 
+void LinkLayerController::SendDisconnectionCompleteEvent(
+    uint16_t handle, uint8_t reason)
+{
+  if (properties_.IsUnmasked(EventCode::DISCONNECTION_COMPLETE)) {
+    ScheduleTask(kShortDelayMs, [this, handle, reason]() {
+      send_event_(bluetooth::hci::DisconnectionCompleteBuilder::Create(
+          ErrorCode::SUCCESS, handle, ErrorCode(reason)));
+    });
+  }
+}
+
 ErrorCode LinkLayerController::Disconnect(uint16_t handle, uint8_t reason) {
+  if (connections_.HasScoHandle(handle)) {
+    const Address remote = connections_.GetScoAddress(handle);
+    LOG_INFO("Disconnecting eSCO connection with %s",
+             remote.ToString().c_str());
+
+    SendLinkLayerPacket(model::packets::ScoDisconnectBuilder::Create(
+        properties_.GetAddress(), remote, reason));
+
+    connections_.Disconnect(handle);
+    SendDisconnectionCompleteEvent(handle, reason);
+    return ErrorCode::SUCCESS;
+  }
+
   if (!connections_.HasHandle(handle)) {
     return ErrorCode::UNKNOWN_CONNECTION;
   }
 
   const AddressWithType remote = connections_.GetAddress(handle);
+
   if (connections_.GetPhyType(handle) == Phy::Type::BR_EDR) {
+    LOG_INFO("Disconnecting ACL connection with %s",
+             remote.ToString().c_str());
+
+    uint16_t sco_handle = connections_.GetScoHandle(remote.GetAddress());
+    if (sco_handle != 0) {
+      SendLinkLayerPacket(model::packets::ScoDisconnectBuilder::Create(
+          properties_.GetAddress(), remote.GetAddress(), reason));
+
+      connections_.Disconnect(sco_handle);
+      SendDisconnectionCompleteEvent(sco_handle, reason);
+    }
+
     SendLinkLayerPacket(model::packets::DisconnectBuilder::Create(
         properties_.GetAddress(), remote.GetAddress(), reason));
+
   } else {
+    LOG_INFO("Disconnecting LE connection with %s",
+             remote.ToString().c_str());
+
     SendLeLinkLayerPacket(model::packets::DisconnectBuilder::Create(
         connections_.GetOwnAddress(handle).GetAddress(), remote.GetAddress(),
         reason));
   }
-  ASSERT_LOG(connections_.Disconnect(handle), "Disconnecting %hx", handle);
 
-  ScheduleTask(kShortDelayMs, [this, handle]() {
-    DisconnectCleanup(
-        handle,
-        static_cast<uint8_t>(ErrorCode::CONNECTION_TERMINATED_BY_LOCAL_HOST));
-  });
-
+  connections_.Disconnect(handle);
+  SendDisconnectionCompleteEvent(handle, reason);
   return ErrorCode::SUCCESS;
-}
-
-void LinkLayerController::DisconnectCleanup(uint16_t handle, uint8_t reason) {
-  // TODO: Clean up other connection state.
-  if (properties_.IsUnmasked(EventCode::DISCONNECTION_COMPLETE)) {
-    send_event_(bluetooth::hci::DisconnectionCompleteBuilder::Create(
-        ErrorCode::SUCCESS, handle, static_cast<ErrorCode>(reason)));
-  }
 }
 
 ErrorCode LinkLayerController::ChangeConnectionPacketType(uint16_t handle,
@@ -3503,6 +3641,43 @@ void LinkLayerController::SetPageScanEnable(bool enable) {
   page_scans_enabled_ = enable;
 }
 
+ErrorCode LinkLayerController::AddScoConnection(
+    uint16_t connection_handle,
+    uint16_t packet_type)
+{
+  if (!connections_.HasHandle(connection_handle)) {
+    return ErrorCode::UNKNOWN_CONNECTION;
+  }
+
+  Address bd_addr = connections_.GetAddress(connection_handle).GetAddress();
+  if (connections_.HasPendingScoConnection(bd_addr)) {
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  LOG_INFO("Creating SCO connection with %s", bd_addr.ToString().c_str());
+
+  // Save connection parameters.
+  ScoConnectionParameters connection_parameters = {
+    8000, 8000, 0xffff, 0x60 /* 16bit CVSD */,
+    (uint8_t)bluetooth::hci::RetransmissionEffort::NO_RETRANSMISSION,
+    (uint16_t)((packet_type >> 5) & 0x7u)
+  };
+  connections_.CreateScoConnection(
+      connections_.GetAddress(connection_handle).GetAddress(),
+      connection_parameters, SCO_STATE_PENDING, true);
+
+  // Send SCO connection request to peer.
+  SendLinkLayerPacket(model::packets::ScoConnectionRequestBuilder::Create(
+      properties_.GetAddress(), bd_addr,
+      connection_parameters.transmit_bandwidth,
+      connection_parameters.receive_bandwidth,
+      connection_parameters.max_latency,
+      connection_parameters.voice_setting,
+      connection_parameters.retransmission_effort,
+      connection_parameters.packet_type));
+  return ErrorCode::SUCCESS;
+}
+
 ErrorCode LinkLayerController::SetupSynchronousConnection(
     uint16_t connection_handle,
     uint32_t transmit_bandwidth,
@@ -3515,6 +3690,7 @@ ErrorCode LinkLayerController::SetupSynchronousConnection(
   if (!connections_.HasHandle(connection_handle)) {
     return ErrorCode::UNKNOWN_CONNECTION;
   }
+
   Address bd_addr = connections_.GetAddress(connection_handle).GetAddress();
   if (connections_.HasPendingScoConnection(bd_addr)) {
     // This command may be used to modify an exising eSCO link.
@@ -3523,21 +3699,22 @@ ErrorCode LinkLayerController::SetupSynchronousConnection(
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
+  LOG_INFO("Creating eSCO connection with %s", bd_addr.ToString().c_str());
+
   // Save connection parameters.
   ScoConnectionParameters connection_parameters = {
     transmit_bandwidth, receive_bandwidth, max_latency,
     voice_setting, retransmission_effort, packet_types
   };
-  connections_.CreatePendingScoConnection(
-    connections_.GetAddress(connection_handle).GetAddress(),
-    connection_parameters);
+  connections_.CreateScoConnection(
+      connections_.GetAddress(connection_handle).GetAddress(),
+      connection_parameters, SCO_STATE_PENDING);
 
   // Send eSCO connection request to peer.
-  auto packet = model::packets::EScoConnectionRequestBuilder::Create(
-    properties_.GetAddress(), bd_addr,
-    transmit_bandwidth, receive_bandwidth, max_latency,
-    voice_setting, retransmission_effort, packet_types);
-  SendLinkLayerPacket(std::move(packet));
+  SendLinkLayerPacket(model::packets::ScoConnectionRequestBuilder::Create(
+      properties_.GetAddress(), bd_addr,
+      transmit_bandwidth, receive_bandwidth, max_latency,
+      voice_setting, retransmission_effort, packet_types));
   return ErrorCode::SUCCESS;
 }
 
@@ -3550,7 +3727,12 @@ ErrorCode LinkLayerController::AcceptSynchronousConnection(
     uint8_t retransmission_effort,
     uint16_t packet_types) {
 
+  LOG_INFO("Accepting eSCO connection request from %s",
+           bd_addr.ToString().c_str());
+
   if (!connections_.HasPendingScoConnection(bd_addr)) {
+    LOG_INFO("No pending eSCO connection for %s",
+             bd_addr.ToString().c_str());
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -3571,27 +3753,33 @@ ErrorCode LinkLayerController::AcceptSynchronousConnection(
   }
 
   // Send eSCO connection response to peer.
-  auto packet = model::packets::EScoConnectionResponseBuilder::Create(
-    properties_.GetAddress(), bd_addr, (uint8_t)status,
-    link_parameters.transmission_interval,
-    link_parameters.retransmission_window,
-    link_parameters.rx_packet_length,
-    link_parameters.tx_packet_length,
-    link_parameters.air_mode);
-  SendLinkLayerPacket(std::move(packet));
+  SendLinkLayerPacket(model::packets::ScoConnectionResponseBuilder::Create(
+      properties_.GetAddress(), bd_addr, (uint8_t)status,
+      link_parameters.transmission_interval,
+      link_parameters.retransmission_window,
+      link_parameters.rx_packet_length,
+      link_parameters.tx_packet_length,
+      link_parameters.air_mode,
+      link_parameters.extended));
 
   // Schedule HCI Synchronous Connection Complete event.
   ScheduleTask(kShortDelayMs,
     [this, status, sco_handle, bd_addr, link_parameters]() {
-      auto packet = bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
-        ErrorCode(status), sco_handle, bd_addr,
-        bluetooth::hci::ScoLinkType::ESCO,
-        link_parameters.transmission_interval,
-        link_parameters.retransmission_window,
-        link_parameters.rx_packet_length,
-        link_parameters.tx_packet_length,
-        bluetooth::hci::ScoAirMode(link_parameters.air_mode));
-    send_event_(std::move(packet));
+      send_event_(
+          bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
+            ErrorCode(status), sco_handle, bd_addr,
+            link_parameters.extended ?
+              bluetooth::hci::ScoLinkType::ESCO :
+              bluetooth::hci::ScoLinkType::SCO,
+            link_parameters.extended ?
+              link_parameters.transmission_interval : 0,
+            link_parameters.extended ?
+              link_parameters.retransmission_window : 0,
+            link_parameters.extended ?
+              link_parameters.rx_packet_length : 0,
+            link_parameters.extended ?
+              link_parameters.tx_packet_length : 0,
+            bluetooth::hci::ScoAirMode(link_parameters.air_mode)));
   });
 
   return ErrorCode::SUCCESS;
@@ -3600,6 +3788,9 @@ ErrorCode LinkLayerController::AcceptSynchronousConnection(
 ErrorCode LinkLayerController::RejectSynchronousConnection(
     Address bd_addr,
     uint16_t reason) {
+
+  LOG_INFO("Rejecting eSCO connection request from %s",
+           bd_addr.ToString().c_str());
 
   if (reason == (uint8_t)ErrorCode::SUCCESS) {
     reason = (uint8_t)ErrorCode::REMOTE_USER_TERMINATED_CONNECTION;
@@ -3611,16 +3802,14 @@ ErrorCode LinkLayerController::RejectSynchronousConnection(
   connections_.CancelPendingScoConnection(bd_addr);
 
   // Send eSCO connection response to peer.
-  auto packet = model::packets::EScoConnectionResponseBuilder::Create(
-    properties_.GetAddress(), bd_addr, reason, 0, 0, 0, 0, 0);
-  SendLinkLayerPacket(std::move(packet));
+  SendLinkLayerPacket(model::packets::ScoConnectionResponseBuilder::Create(
+      properties_.GetAddress(), bd_addr, reason, 0, 0, 0, 0, 0, 0));
 
   // Schedule HCI Synchronous Connection Complete event.
   ScheduleTask(kShortDelayMs, [this, reason, bd_addr]() {
-    auto packet = bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
-      ErrorCode(reason), 0, bd_addr, bluetooth::hci::ScoLinkType::ESCO,
-      0, 0, 0, 0, bluetooth::hci::ScoAirMode::TRANSPARENT);
-    send_event_(std::move(packet));
+    send_event_(bluetooth::hci::SynchronousConnectionCompleteBuilder::Create(
+        ErrorCode(reason), 0, bd_addr, bluetooth::hci::ScoLinkType::ESCO,
+        0, 0, 0, 0, bluetooth::hci::ScoAirMode::TRANSPARENT));
   });
 
   return ErrorCode::SUCCESS;

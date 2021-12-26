@@ -88,6 +88,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.sysprop.BluetoothProperties;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.Log;
@@ -184,6 +185,7 @@ public class AdapterService extends Service {
 
     public static final String BLUETOOTH_PRIVILEGED =
             android.Manifest.permission.BLUETOOTH_PRIVILEGED;
+    static final String BLUETOOTH_PERM = android.Manifest.permission.BLUETOOTH;
     static final String LOCAL_MAC_ADDRESS_PERM = android.Manifest.permission.LOCAL_MAC_ADDRESS;
     static final String RECEIVE_MAP_PERM = android.Manifest.permission.RECEIVE_BLUETOOTH_MAP;
 
@@ -198,6 +200,9 @@ public class AdapterService extends Service {
     private static final ComponentName BLUETOOTH_INCALLSERVICE_COMPONENT =
             new ComponentName("com.android.bluetooth",
                     BluetoothInCallService.class.getCanonicalName());
+
+    public static final String ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS =
+            "no_active_device_address";
 
     // Report ID definition
     public enum BqrQualityReportId {
@@ -754,8 +759,14 @@ public class AdapterService extends Service {
             mDefaultSnoopLogSettingAtEnable =
                     Settings.Global.getString(getContentResolver(),
                             Settings.Global.BLUETOOTH_BTSNOOP_DEFAULT_MODE);
-            SystemProperties.set(BLUETOOTH_BTSNOOP_DEFAULT_MODE_PROPERTY,
-                    mDefaultSnoopLogSettingAtEnable);
+            BluetoothProperties.snoop_default_mode(
+                    BluetoothProperties.snoop_default_mode_values.DISABLED);
+            for (BluetoothProperties.snoop_default_mode_values value :
+                    BluetoothProperties.snoop_default_mode_values.values()) {
+                if (value.getPropValue().equals(mDefaultSnoopLogSettingAtEnable)) {
+                    BluetoothProperties.snoop_default_mode(value);
+                }
+            }
         } else if (newState == BluetoothAdapter.STATE_BLE_ON
                    && prevState != BluetoothAdapter.STATE_OFF) {
             String snoopLogSetting =
@@ -2748,6 +2759,16 @@ public class AdapterService extends Service {
         return device;
     }
 
+    public String getIdentityAddress(String address) {
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address.toUpperCase());
+        DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
+        if (deviceProp.isConsolidated()) {
+            return deviceProp.getIdentityAddress();
+        } else {
+            return address;
+        }
+    }
+
     private class CallerInfo {
         public String callerPackageName;
         public UserHandle user;
@@ -3516,6 +3537,17 @@ public class AdapterService extends Service {
 
     public int getTotalNumOfTrackableAdvertisements() {
         return mAdapterProperties.getTotalNumOfTrackableAdvertisements();
+    }
+
+    /**
+     * Notify the UID and package name of the app, and the address of associated active device
+     *
+     * @param source The attribution source that starts the activity
+     * @param deviceAddress The address of the active device associated with the app
+     */
+    public void notifyActivityAttributionInfo(AttributionSource source, String deviceAddress) {
+        mActivityAttributionService.notifyActivityAttributionInfo(
+                source.getUid(), source.getPackageName(), deviceAddress);
     }
 
     private static int convertScanModeToHal(int mode) {
