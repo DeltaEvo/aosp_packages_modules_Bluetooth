@@ -59,6 +59,18 @@ using bluetooth::Uuid;
 
 using namespace bluetooth::le_audio;
 
+namespace bluetooth {
+namespace audio {
+namespace le_audio {
+
+std::vector<::le_audio::set_configurations::AudioSetConfiguration>
+get_offload_capabilities() {
+  return std::vector<::le_audio::set_configurations::AudioSetConfiguration>(0);
+}
+}  // namespace le_audio
+}  // namespace audio
+}  // namespace bluetooth
+
 std::map<std::string, int> mock_function_count_map;
 
 // Disables most likely false-positives from base::SplitString()
@@ -365,22 +377,20 @@ class UnicastTestNoInit : public Test {
 
     // default action for WriteDescriptor function call
     ON_CALL(mock_gatt_queue_, WriteDescriptor(_, _, _, _, _, _))
-        .WillByDefault(
-            Invoke([](uint16_t conn_id, uint16_t handle,
-                      std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
-                      GATT_WRITE_OP_CB cb, void* cb_data) -> void {
-              if (cb)
-                do_in_main_thread(FROM_HERE,
-                                  base::BindOnce(
-                                      [](GATT_WRITE_OP_CB cb, uint16_t conn_id,
-                                         uint16_t handle, uint16_t len,
-                                         uint8_t* value, void* cb_data) {
-                                        cb(conn_id, GATT_SUCCESS, handle, len,
-                                           value, cb_data);
-                                      },
-                                      cb, conn_id, handle, value.size(),
-                                      value.data(), cb_data));
-            }));
+        .WillByDefault(Invoke([](uint16_t conn_id, uint16_t handle,
+                                 std::vector<uint8_t> value,
+                                 tGATT_WRITE_TYPE write_type,
+                                 GATT_WRITE_OP_CB cb, void* cb_data) -> void {
+          if (cb)
+            do_in_main_thread(
+                FROM_HERE,
+                base::BindOnce(
+                    [](GATT_WRITE_OP_CB cb, uint16_t conn_id, uint16_t handle,
+                       uint16_t len, uint8_t* value, void* cb_data) {
+                      cb(conn_id, GATT_SUCCESS, handle, len, value, cb_data);
+                    },
+                    cb, conn_id, handle, value.size(), value.data(), cb_data));
+        }));
 
     global_conn_id = 1;
     ON_CALL(mock_gatt_interface_, Open(_, _, _, _))
@@ -565,7 +575,8 @@ class UnicastTestNoInit : public Test {
                               LeAudioDevice* leAudioDevice) {
           if (!group) return;
           auto* stream_conf = &group->stream_conf;
-          if (stream_conf->valid) {
+          if (!stream_conf->sink_streams.empty() ||
+              !stream_conf->source_streams.empty()) {
             stream_conf->sink_streams.erase(
                 std::remove_if(stream_conf->sink_streams.begin(),
                                stream_conf->sink_streams.end(),
@@ -585,11 +596,6 @@ class UnicastTestNoInit : public Test {
                                  return ases.source;
                                }),
                 stream_conf->source_streams.end());
-
-            if (stream_conf->sink_streams.empty()) {
-              LOG(INFO) << __func__ << " stream stopped ";
-              stream_conf->valid = false;
-            }
           }
 
           if (group->IsEmpty()) {
@@ -615,7 +621,8 @@ class UnicastTestNoInit : public Test {
               }
               /* Invalidate stream configuration if needed */
               auto* stream_conf = &group->stream_conf;
-              if (stream_conf->valid) {
+              if (!stream_conf->sink_streams.empty() ||
+                  !stream_conf->source_streams.empty()) {
                 stream_conf->sink_streams.erase(
                     std::remove_if(
                         stream_conf->sink_streams.begin(),
@@ -645,11 +652,6 @@ class UnicastTestNoInit : public Test {
                           return ases.source;
                         }),
                     stream_conf->source_streams.end());
-
-                if (stream_conf->sink_streams.empty()) {
-                  LOG(INFO) << __func__ << " stream stopped ";
-                  stream_conf->valid = false;
-                }
               }
             });
 
