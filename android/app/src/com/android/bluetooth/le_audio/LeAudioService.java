@@ -27,20 +27,17 @@ import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothLeAudio;
-import android.bluetooth.IBluetoothVolumeControl;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.ServiceConnection;
 import android.media.AudioManager;
 import android.media.BtProfileConnectionInfo;
+import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.IBinder;
+import android.os.Looper;
 import android.os.ParcelUuid;
-import android.os.RemoteException;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -51,9 +48,10 @@ import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.mcp.McpService;
 import com.android.bluetooth.vc.VolumeControlService;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -109,11 +107,11 @@ public class LeAudioService extends ProfileService {
         public Integer mActiveContexts;
     }
 
-    private final Map<Integer, LeAudioGroupDescriptor> mGroupDescriptors = new HashMap<>();
-    private final Map<BluetoothDevice, LeAudioStateMachine> mStateMachines = new HashMap<>();
+    private final Map<Integer, LeAudioGroupDescriptor> mGroupDescriptors = new LinkedHashMap<>();
+    private final Map<BluetoothDevice, LeAudioStateMachine> mStateMachines = new LinkedHashMap<>();
 
     private final Map<BluetoothDevice, Integer> mDeviceGroupIdMap = new ConcurrentHashMap<>();
-    private int mActiveDeviceGroupId = LE_AUDIO_GROUP_ID_INVALID;
+
     private final int mContextSupportingInputAudio =
             BluetoothLeAudio.CONTEXT_TYPE_COMMUNICATION |
             BluetoothLeAudio.CONTEXT_TYPE_MAN_MACHINE;
@@ -132,6 +130,7 @@ public class LeAudioService extends ProfileService {
 
     private BroadcastReceiver mBondStateChangedReceiver;
     private BroadcastReceiver mConnectionStateChangedReceiver;
+    private Handler mHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -185,7 +184,10 @@ public class LeAudioService extends ProfileService {
         // Setup codec config
         mLeAudioCodecConfig = new LeAudioCodecConfig(this);
 
-        mLeAudioNativeInterface.init(mLeAudioCodecConfig.getCodecConfigOffloading());
+        // Delay the call to init by posting it. This ensures TBS and MCS are fully initialized
+        // before we start accepting connections
+        mHandler.post(() ->
+                mLeAudioNativeInterface.init(mLeAudioCodecConfig.getCodecConfigOffloading()));
 
         return true;
     }
@@ -362,6 +364,15 @@ public class LeAudioService extends ProfileService {
         }
     }
 
+    public List<BluetoothDevice> getConnectedGroupLeadDevices() {
+        List<BluetoothDevice> devices = new ArrayList<>();
+        for (Map.Entry<Integer, LeAudioGroupDescriptor> entry : mGroupDescriptors.entrySet()) {
+            Integer groupId = entry.getKey();
+            devices.add(getFirstDeviceFromGroup(groupId));
+        }
+        return devices;
+    }
+
     List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         ArrayList<BluetoothDevice> devices = new ArrayList<>();
         if (states == null) {
@@ -497,6 +508,16 @@ public class LeAudioService extends ProfileService {
         }
 
         return supportedAudioDirections;
+    }
+
+    private Integer getActiveGroupId() {
+        for (Map.Entry<Integer, LeAudioGroupDescriptor> entry : mGroupDescriptors.entrySet()) {
+            LeAudioGroupDescriptor descriptor = entry.getValue();
+            if (descriptor.mIsActive) {
+                return entry.getKey();
+            }
+        }
+        return LE_AUDIO_GROUP_ID_INVALID;
     }
 
     private BluetoothDevice getFirstDeviceFromGroup(Integer groupId) {
@@ -676,19 +697,19 @@ public class LeAudioService extends ProfileService {
             groupId = mDeviceGroupIdMap.getOrDefault(device, LE_AUDIO_GROUP_ID_INVALID);
         }
 
+        int currentlyActiveGroupId = getActiveGroupId();
         if (DBG) {
             Log.d(TAG, "setActiveDeviceGroup = " + groupId +
-                       ", mActiveDeviceGroupId = " + mActiveDeviceGroupId +
+                       ", currentlyActiveGroupId = " + currentlyActiveGroupId +
                        ", device: " + device);
         }
 
-        if (groupId == mActiveDeviceGroupId) {
+        if (groupId == currentlyActiveGroupId) {
             Log.w(TAG, "group is already active");
             return;
         }
 
         mLeAudioNativeInterface.groupSetActive(groupId);
-        mActiveDeviceGroupId = groupId;
     }
 
     /**
@@ -732,7 +753,8 @@ public class LeAudioService extends ProfileService {
         activeDevices.add(null);
         activeDevices.add(null);
         synchronized (mStateMachines) {
-            if (mActiveDeviceGroupId == LE_AUDIO_GROUP_ID_INVALID) {
+            int currentlyActiveGroupId = getActiveGroupId();
+            if (currentlyActiveGroupId == LE_AUDIO_GROUP_ID_INVALID) {
                 return activeDevices;
             }
                 activeDevices.add(0, mActiveAudioOutDevice);
@@ -1073,7 +1095,7 @@ public class LeAudioService extends ProfileService {
                 return;
             }
 
-            if (getConnectedDevices().isEmpty()){
+            if (getConnectedPeerDevices(myGroupId).isEmpty()){
                 descriptor.mIsConnected = false;
                 if (descriptor.mIsActive) {
                     /* Notify Native layer */
@@ -1214,14 +1236,15 @@ public class LeAudioService extends ProfileService {
             Log.d(TAG, "SetVolume " + volume);
         }
 
-        if (mActiveDeviceGroupId == LE_AUDIO_GROUP_ID_INVALID) {
+        int currentlyActiveGroupId = getActiveGroupId();
+        if (currentlyActiveGroupId == LE_AUDIO_GROUP_ID_INVALID) {
             Log.e(TAG, "There is no active group ");
             return;
         }
 
         VolumeControlService service = mServiceFactory.getVolumeControlService();
         if (service != null) {
-            service.setVolumeGroup(mActiveDeviceGroupId, volume);
+            service.setVolumeGroup(currentlyActiveGroupId, volume);
         }
     }
 
@@ -1253,134 +1276,235 @@ public class LeAudioService extends ProfileService {
         }
 
         @Override
-        public boolean connect(BluetoothDevice device, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return false;
+        public void connect(BluetoothDevice device, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                boolean defaultValue = false;
+                if (service != null) {
+                    defaultValue = service.connect(device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.connect(device);
         }
 
         @Override
-        public boolean disconnect(BluetoothDevice device, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return false;
+        public void disconnect(BluetoothDevice device, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                boolean defaultValue = false;
+                if (service != null) {
+                    defaultValue = service.disconnect(device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.disconnect(device);
         }
 
         @Override
-        public List<BluetoothDevice> getConnectedDevices(AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return new ArrayList<>(0);
+        public void getConnectedDevices(AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                List<BluetoothDevice> defaultValue = new ArrayList<>(0);
+                if (service != null) {
+                    defaultValue = service.getConnectedDevices();
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.getConnectedDevices();
         }
 
         @Override
-        public List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states,
-                AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return new ArrayList<>(0);
+        public void getConnectedGroupLeadDevices(AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                List<BluetoothDevice> defaultValue = new ArrayList<>(0);
+                if (service != null) {
+                    defaultValue = service.getConnectedGroupLeadDevices();
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.getDevicesMatchingConnectionStates(states);
         }
 
         @Override
-        public int getConnectionState(BluetoothDevice device, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return BluetoothProfile.STATE_DISCONNECTED;
+        public void getDevicesMatchingConnectionStates(int[] states,
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                List<BluetoothDevice> defaultValue = new ArrayList<>(0);
+                if (service != null) {
+                    defaultValue = service.getDevicesMatchingConnectionStates(states);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.getConnectionState(device);
         }
 
         @Override
-        public boolean setActiveDevice(BluetoothDevice device, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return false;
+        public void getConnectionState(BluetoothDevice device, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                int defaultValue = BluetoothProfile.STATE_DISCONNECTED;
+                if (service != null) {
+                    defaultValue = service.getConnectionState(device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.setActiveDevice(device);
         }
 
         @Override
-        public List<BluetoothDevice> getActiveDevices(AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return new ArrayList<>();
+        public void setActiveDevice(BluetoothDevice device, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                boolean defaultValue = false;
+                if (service != null) {
+                    defaultValue = service.setActiveDevice(device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.getActiveDevices();
         }
 
         @Override
-        public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy,
-                AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return false;
+        public void getActiveDevices(AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                List<BluetoothDevice> defaultValue = new ArrayList<>();
+                if (service != null) {
+                    defaultValue = service.getActiveDevices();
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.setConnectionPolicy(device, connectionPolicy);
         }
 
         @Override
-        public int getConnectionPolicy(BluetoothDevice device, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
+        public void setConnectionPolicy(BluetoothDevice device, int connectionPolicy,
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                boolean defaultValue = false;
+                if (service != null) {
+                    defaultValue = service.setConnectionPolicy(device, connectionPolicy);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.getConnectionPolicy(device);
         }
 
         @Override
-        public int getGroupId(BluetoothDevice device, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return LE_AUDIO_GROUP_ID_INVALID;
+        public void getConnectionPolicy(BluetoothDevice device, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                int defaultValue = BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
+                if (service != null) {
+                    defaultValue = service.getConnectionPolicy(device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-
-            return service.getGroupId(device);
         }
 
         @Override
-        public boolean groupAddNode(int group_id, BluetoothDevice device,
-                                    AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return false;
+        public void getGroupId(BluetoothDevice device, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                int defaultValue = LE_AUDIO_GROUP_ID_INVALID;
+                if (service != null) {
+
+                    defaultValue = service.getGroupId(device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.groupAddNode(group_id, device);
         }
 
         @Override
-        public boolean groupRemoveNode(int groupId, BluetoothDevice device,
-                                       AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return false;
+        public void groupAddNode(int group_id, BluetoothDevice device,
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                boolean defaultValue = false;
+                if (service != null) {
+                    defaultValue = service.groupAddNode(group_id, device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
-            return service.groupRemoveNode(groupId, device);
         }
 
         @Override
-        public void setVolume(int volume, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service == null) {
-                return;
+        public void groupRemoveNode(int groupId, BluetoothDevice device,
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                boolean defaultValue = false;
+                if (service != null) {
+                    defaultValue = service.groupRemoveNode(groupId, device);
+                }
+                receiver.send(defaultValue);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
+        }
 
-            service.setVolume(volume);
+        @Override
+        public void setVolume(int volume, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                if (service != null) {
+                    service.setVolume(volume);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
         }
     }
 
     @Override
     public void dump(StringBuilder sb) {
         super.dump(sb);
+        ProfileService.println(sb, "State machines: ");
         for (LeAudioStateMachine sm : mStateMachines.values()) {
             sm.dump(sb);
+        }
+        ProfileService.println(sb, "Active Groups information: ");
+        ProfileService.println(sb, "  currentlyActiveGroupId: " + getActiveGroupId());
+        ProfileService.println(sb, "  mActiveAudioOutDevice: " + mActiveAudioOutDevice);
+        ProfileService.println(sb, "  mActiveAudioInDevice: " + mActiveAudioInDevice);
+
+        for (Map.Entry<Integer, LeAudioGroupDescriptor> entry : mGroupDescriptors.entrySet()) {
+            LeAudioGroupDescriptor descriptor = entry.getValue();
+            Integer groupId = entry.getKey();
+            ProfileService.println(sb, "  Group: " + groupId);
+            ProfileService.println(sb, "    isActive: " + descriptor.mIsActive);
+            ProfileService.println(sb, "    isConnected: " + descriptor.mIsConnected);
+            ProfileService.println(sb, "    mActiveContexts: " + descriptor.mActiveContexts);
+            ProfileService.println(sb, "    group lead: " + getFirstDeviceFromGroup(groupId));
         }
     }
 }

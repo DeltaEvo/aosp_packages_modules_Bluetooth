@@ -51,7 +51,7 @@ typedef struct {
  * array of returned parameter bytes are included. This asynchronous event
  * is enabled/disabled by calling BTM_RegisterForVSEvents().
 */
-typedef void(tBTM_VS_EVT_CB)(uint8_t len, uint8_t* p);
+typedef void(tBTM_VS_EVT_CB)(uint8_t len, const uint8_t* p);
 
 /* General callback function for notifying an application that a synchronous
  * BTM function is complete. The pointer contains the address of any returned
@@ -132,6 +132,7 @@ typedef void(tBTM_VSC_CMPL_CB)(tBTM_VSC_CMPL* p1);
  * service class fields
  ***************************/
 #define BTM_COD_SERVICE_LMTD_DISCOVER 0x0020
+#define BTM_COD_SERVICE_LE_AUDIO 0x0040
 #define BTM_COD_SERVICE_POSITIONING 0x0100
 #define BTM_COD_SERVICE_NETWORKING 0x0200
 #define BTM_COD_SERVICE_RENDERING 0x0400

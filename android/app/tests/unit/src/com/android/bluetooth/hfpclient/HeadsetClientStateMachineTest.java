@@ -10,7 +10,6 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAssignedNumbers;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadsetClient;
-import android.bluetooth.BluetoothHeadsetClientCall;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
@@ -335,7 +334,7 @@ public class HeadsetClientStateMachineTest {
                 anyString(), any(Bundle.class));
         // Verify that the new call is being registered with the inBandRing flag set.
         Assert.assertEquals(true,
-                ((BluetoothHeadsetClientCall) intentArgument.getValue().getParcelableExtra(
+                ((HfpClientCall) intentArgument.getValue().getParcelableExtra(
                         BluetoothHeadsetClient.EXTRA_CALL)).isInBandRing());
 
         // Disable In Band Ring and verify state gets propagated.
@@ -401,7 +400,7 @@ public class HeadsetClientStateMachineTest {
         mHeadsetClientStateMachine.sendMessage(msg);
 
         verify(mNativeInterface, timeout(STANDARD_WAIT_MILLIS).times(1)).sendATCmd(
-                Utils.getBytesFromAddress(mTestDevice.getAddress()),
+                mTestDevice,
                 HeadsetClientHalConstants.HANDSFREECLIENT_AT_CMD_VENDOR_SPECIFIC_CMD,
                 0, 0, atCommand);
     }
@@ -584,8 +583,8 @@ public class HeadsetClientStateMachineTest {
         // Setup connection state machine to be in connected state
         when(mHeadsetClientService.getConnectionPolicy(any(BluetoothDevice.class))).thenReturn(
                 BluetoothProfile.CONNECTION_POLICY_ALLOWED);
-        when(mNativeInterface.startVoiceRecognition(any(byte[].class))).thenReturn(true);
-        when(mNativeInterface.stopVoiceRecognition(any(byte[].class))).thenReturn(true);
+        doReturn(true).when(mNativeInterface).startVoiceRecognition(any(BluetoothDevice.class));
+        doReturn(true).when(mNativeInterface).stopVoiceRecognition(any(BluetoothDevice.class));
 
         int expectedBroadcastIndex = 1;
         expectedBroadcastIndex = setUpHfpClientConnection(expectedBroadcastIndex);
@@ -653,7 +652,7 @@ public class HeadsetClientStateMachineTest {
 
         verify(mNativeInterface, timeout(STANDARD_WAIT_MILLIS).times(1))
                 .sendATCmd(
-                        Utils.getBytesFromAddress(mTestDevice.getAddress()),
+                        mTestDevice,
                         HeadsetClientHalConstants.HANDSFREECLIENT_AT_CMD_BIEV,
                         indicator_id,
                         indicator_value,

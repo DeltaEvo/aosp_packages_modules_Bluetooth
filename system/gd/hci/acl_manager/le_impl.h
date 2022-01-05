@@ -61,11 +61,9 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       bool crash_on_unknown_handle)
       : hci_layer_(hci_layer),
         controller_(controller),
+        handler_(handler),
         round_robin_scheduler_(round_robin_scheduler),
         crash_on_unknown_handle_(crash_on_unknown_handle) {
-    hci_layer_ = hci_layer;
-    controller_ = controller;
-    handler_ = handler;
     le_acl_connection_interface_ = hci_layer_->GetLeAclConnectionInterface(
         handler_->BindOn(this, &le_impl::on_le_event),
         handler_->BindOn(this, &le_impl::on_le_disconnect),
@@ -413,6 +411,16 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
         address_with_type.ToPeerAddressType(), address_with_type.GetAddress());
   }
 
+  void on_extended_create_connection(CommandStatusView status) {
+    ASSERT(status.IsValid());
+    ASSERT(status.GetCommandOpCode() == OpCode::LE_EXTENDED_CREATE_CONNECTION);
+  }
+
+  void on_create_connection(CommandStatusView status) {
+    ASSERT(status.IsValid());
+    ASSERT(status.GetCommandOpCode() == OpCode::LE_CREATE_CONNECTION);
+  }
+
   void create_le_connection(AddressWithType address_with_type, bool add_to_connect_list, bool is_direct) {
     if (le_client_callbacks_ == nullptr) {
       LOG_ERROR("No callbacks to call");
@@ -528,20 +536,23 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
               address_with_type.GetAddress(),
               initiating_phys,
               parameters),
-          handler_->BindOnce([](CommandStatusView status) {
-            ASSERT(status.IsValid());
-            ASSERT(status.GetCommandOpCode() == OpCode::LE_EXTENDED_CREATE_CONNECTION);
-          }));
+          handler_->BindOnce(&le_impl::on_extended_create_connection, common::Unretained(this)));
     } else {
       le_acl_connection_interface_->EnqueueCommand(
-          LeCreateConnectionBuilder::Create(le_scan_interval, le_scan_window, initiator_filter_policy,
-                                            address_with_type.GetAddressType(), address_with_type.GetAddress(),
-                                            own_address_type, conn_interval_min, conn_interval_max, conn_latency,
-                                            supervision_timeout, kMinimumCeLength, kMaximumCeLength),
-          handler_->BindOnce([](CommandStatusView status) {
-            ASSERT(status.IsValid());
-            ASSERT(status.GetCommandOpCode() == OpCode::LE_CREATE_CONNECTION);
-          }));
+          LeCreateConnectionBuilder::Create(
+              le_scan_interval,
+              le_scan_window,
+              initiator_filter_policy,
+              address_with_type.GetAddressType(),
+              address_with_type.GetAddress(),
+              own_address_type,
+              conn_interval_min,
+              conn_interval_max,
+              conn_latency,
+              supervision_timeout,
+              kMinimumCeLength,
+              kMaximumCeLength),
+          handler_->BindOnce(&le_impl::on_create_connection, common::Unretained(this)));
     }
   }
 
