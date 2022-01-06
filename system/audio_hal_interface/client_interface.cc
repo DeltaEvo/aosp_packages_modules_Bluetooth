@@ -17,14 +17,15 @@
 #define LOG_TAG "BTAudioClientIf"
 
 #include "client_interface.h"
-#include "hal_version_manager.h"
 
-#include <android/hardware/bluetooth/audio/2.0/IBluetoothAudioPort.h>
+#include <android/hardware/bluetooth/audio/2.2/IBluetoothAudioPort.h>
 #include <base/logging.h>
 #include <hidl/MQDescriptor.h>
+
 #include <future>
 
 #include "common/stop_watch_legacy.h"
+#include "hal_version_manager.h"
 #include "osi/include/log.h"
 
 namespace bluetooth {
@@ -33,8 +34,9 @@ namespace audio {
 using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
+using ::android::hardware::audio::common::V5_0::SinkMetadata;
 using ::android::hardware::audio::common::V5_0::SourceMetadata;
-using ::android::hardware::bluetooth::audio::V2_0::IBluetoothAudioPort;
+using ::android::hardware::bluetooth::audio::V2_2::IBluetoothAudioPort;
 using ::bluetooth::common::StopWatchLegacy;
 
 using DataMQ = ::android::hardware::MessageQueue<
@@ -74,7 +76,7 @@ class BluetoothAudioPortImpl : public IBluetoothAudioPort {
       : transport_instance_(transport_instance), provider_(provider) {}
 
   Return<void> startStream() override {
-    StopWatchLegacy(__func__);
+    StopWatchLegacy stop_watch(__func__);
     BluetoothAudioCtrlAck ack = transport_instance_->StartRequest();
     if (ack != BluetoothAudioCtrlAck::PENDING) {
       auto hidl_retval =
@@ -88,7 +90,7 @@ class BluetoothAudioPortImpl : public IBluetoothAudioPort {
   }
 
   Return<void> suspendStream() override {
-    StopWatchLegacy(__func__);
+    StopWatchLegacy stop_watch(__func__);
     BluetoothAudioCtrlAck ack = transport_instance_->SuspendRequest();
     if (ack != BluetoothAudioCtrlAck::PENDING) {
       auto hidl_retval =
@@ -102,14 +104,14 @@ class BluetoothAudioPortImpl : public IBluetoothAudioPort {
   }
 
   Return<void> stopStream() override {
-    StopWatchLegacy(__func__);
+    StopWatchLegacy stop_watch(__func__);
     transport_instance_->StopRequest();
     return Void();
   }
 
   Return<void> getPresentationPosition(
       getPresentationPosition_cb _hidl_cb) override {
-    StopWatchLegacy(__func__);
+    StopWatchLegacy stop_watch(__func__);
     uint64_t remote_delay_report_ns;
     uint64_t total_bytes_read;
     timespec data_position;
@@ -136,7 +138,7 @@ class BluetoothAudioPortImpl : public IBluetoothAudioPort {
   }
 
   Return<void> updateMetadata(const SourceMetadata& sourceMetadata) override {
-    StopWatchLegacy(__func__);
+    StopWatchLegacy stop_watch(__func__);
     LOG(INFO) << __func__ << ": " << sourceMetadata.tracks.size()
               << " track(s)";
     // refer to StreamOut.impl.h within Audio HAL (AUDIO_HAL_VERSION_5_0)
@@ -153,6 +155,24 @@ class BluetoothAudioPortImpl : public IBluetoothAudioPort {
     const source_metadata_t source_metadata = {
         .track_count = metadata_vec.size(), .tracks = metadata_vec.data()};
     transport_instance_->MetadataChanged(source_metadata);
+    return Void();
+  }
+
+  Return<void> updateSinkMetadata(const SinkMetadata& sinkMetadata) override {
+    StopWatchLegacy stop_watch(__func__);
+    LOG(INFO) << __func__ << ": " << sinkMetadata.tracks.size() << " track(s)";
+    // refer to StreamIn.impl.h within Audio HAL (AUDIO_HAL_VERSION_5_0)
+    std::vector<record_track_metadata> metadata_vec;
+    metadata_vec.reserve(sinkMetadata.tracks.size());
+    for (const auto& metadata : sinkMetadata.tracks) {
+      metadata_vec.push_back({
+          .source = static_cast<audio_source_t>(metadata.source),
+          .gain = metadata.gain,
+      });
+    }
+    const sink_metadata_t sink_metadata = {.track_count = metadata_vec.size(),
+                                           .tracks = metadata_vec.data()};
+    transport_instance_->SinkMetadataChanged(sink_metadata);
     return Void();
   }
 
@@ -282,35 +302,35 @@ BluetoothAudioClientInterface::GetAudioCapabilities_2_1(
   return capabilities_2_1;
 }
 
-std::vector<AudioCapabilities_2_1>
+std::vector<AudioCapabilities_2_2>
 BluetoothAudioClientInterface::GetAudioCapabilities_2_2(
     SessionType_2_1 session_type_2_1) {
-  if (HalVersionManager::GetHalVersion() ==
-      BluetoothAudioHalVersion::VERSION_2_1) {
-    return GetAudioCapabilities_2_1(session_type_2_1);
+  std::vector<AudioCapabilities_2_2> capabilities_2_2(0);
+  if (HalVersionManager::GetHalVersion() !=
+      BluetoothAudioHalVersion::VERSION_2_2) {
+    LOG(ERROR) << __func__ << ", can't get capability for HAL 2.2";
+    return capabilities_2_2;
   }
 
-  std::vector<AudioCapabilities_2_1> capabilities_2_1(0);
   android::sp<IBluetoothAudioProvidersFactory_2_2> providersFactory =
       HalVersionManager::GetProvidersFactory_2_2();
   CHECK(providersFactory != nullptr)
       << "IBluetoothAudioProvidersFactory::getService() failed";
-
   auto getProviderCapabilities_cb =
-      [&capabilities_2_1](
-          const hidl_vec<AudioCapabilities_2_1>& audioCapabilities_2_1) {
-        for (auto capability_2_1 : audioCapabilities_2_1) {
-          capabilities_2_1.push_back(capability_2_1);
+      [&capabilities_2_2](
+          const hidl_vec<AudioCapabilities_2_2>& audioCapabilities_2_2) {
+        for (auto capability_2_2 : audioCapabilities_2_2) {
+          capabilities_2_2.push_back(capability_2_2);
         }
       };
-  auto hidl_retval = providersFactory->getProviderCapabilities_2_1(
+  auto hidl_retval = providersFactory->getProviderCapabilities_2_2(
       session_type_2_1, getProviderCapabilities_cb);
   if (!hidl_retval.isOk()) {
     LOG(FATAL) << __func__
                << ": BluetoothAudioHal::getProviderCapabilities failure: "
                << hidl_retval.description();
   }
-  return capabilities_2_1;
+  return capabilities_2_2;
 }
 
 void BluetoothAudioClientInterface::FetchAudioProvider() {
@@ -685,22 +705,47 @@ bool BluetoothAudioClientInterface::UpdateAudioConfig_2_2(
            SessionType_2_1::LE_AUDIO_SOFTWARE_ENCODING_DATAPATH ||
        transport_->GetSessionType_2_1() ==
            SessionType_2_1::LE_AUDIO_SOFTWARE_DECODED_DATAPATH);
-  bool is_offload_session = (transport_->GetSessionType_2_1() ==
-                             SessionType_2_1::A2DP_HARDWARE_OFFLOAD_DATAPATH);
+  bool is_a2dp_offload_session =
+      (transport_->GetSessionType_2_1() ==
+       SessionType_2_1::A2DP_HARDWARE_OFFLOAD_DATAPATH);
+  bool is_leaudio_offload_session =
+      (transport_->GetSessionType_2_1() ==
+           SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
+       transport_->GetSessionType_2_1() ==
+           SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH);
   auto audio_config_discriminator = audio_config_2_2.getDiscriminator();
   bool is_software_audio_config =
       (is_software_session &&
        audio_config_discriminator ==
            AudioConfiguration_2_2::hidl_discriminator::pcmConfig);
-  bool is_offload_audio_config =
-      (is_offload_session &&
+  bool is_a2dp_offload_audio_config =
+      (is_a2dp_offload_session &&
        audio_config_discriminator ==
            AudioConfiguration_2_2::hidl_discriminator::codecConfig);
-  if (!is_software_audio_config && !is_offload_audio_config) {
+  bool is_leaudio_offload_audio_config =
+      (is_leaudio_offload_session &&
+       audio_config_discriminator ==
+           AudioConfiguration_2_2::hidl_discriminator::leAudioConfig);
+  if (!is_software_audio_config && !is_a2dp_offload_audio_config &&
+      !is_leaudio_offload_audio_config) {
     return false;
   }
 
   transport_->UpdateAudioConfiguration_2_2(audio_config_2_2);
+
+  if (provider_2_2_ == nullptr) {
+    LOG(INFO) << __func__
+              << ": BluetoothAudioHal nullptr, update it as session started";
+    return true;
+  }
+
+  ::android::hardware::Return<void> hidl_retval;
+  hidl_retval = provider_2_2_->updateAudioConfiguration(audio_config_2_2);
+
+  if (!hidl_retval.isOk()) {
+    LOG(ERROR) << __func__
+               << ": BluetoothAudioHal failure: " << hidl_retval.description();
+  }
   return true;
 }
 
@@ -865,9 +910,14 @@ int BluetoothAudioClientInterface::StartSession_2_2() {
 
   if (tempDataMQ && tempDataMQ->isValid()) {
     mDataMQ = std::move(tempDataMQ);
-  } else if (transport_->GetSessionType_2_1() ==
-                 SessionType_2_1::A2DP_HARDWARE_OFFLOAD_DATAPATH &&
-             session_status == BluetoothAudioStatus::SUCCESS) {
+  } else if (
+      (transport_->GetSessionType_2_1() ==
+           SessionType_2_1::A2DP_HARDWARE_OFFLOAD_DATAPATH ||
+       transport_->GetSessionType_2_1() ==
+           SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
+       transport_->GetSessionType_2_1() ==
+           SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) &&
+      session_status == BluetoothAudioStatus::SUCCESS) {
     transport_->ResetPresentationPosition();
     session_started_ = true;
     return 0;
@@ -886,11 +936,6 @@ int BluetoothAudioClientInterface::StartSession_2_2() {
 
 void BluetoothAudioClientInterface::StreamStarted(
     const BluetoothAudioCtrlAck& ack) {
-  if (provider_ == nullptr && provider_2_1_ == nullptr &&
-      provider_2_2_ == nullptr) {
-    LOG(ERROR) << __func__ << ": BluetoothAudioHal nullptr";
-    return;
-  }
   if (ack == BluetoothAudioCtrlAck::PENDING) {
     LOG(INFO) << __func__ << ": " << ack << " ignored";
     return;
@@ -898,12 +943,16 @@ void BluetoothAudioClientInterface::StreamStarted(
   BluetoothAudioStatus status = BluetoothAudioCtrlAckToHalStatus(ack);
 
   ::android::hardware::Return<void> hidl_retval;
-  if (provider_2_2_ != nullptr)
+  if (provider_2_2_ != nullptr) {
     hidl_retval = provider_2_2_->streamStarted(status);
-  else if (provider_2_1_ != nullptr)
+  } else if (provider_2_1_ != nullptr) {
     hidl_retval = provider_2_1_->streamStarted(status);
-  else
+  } else if (provider_ != nullptr) {
     hidl_retval = provider_->streamStarted(status);
+  } else {
+    LOG(ERROR) << __func__ << ": BluetoothAudioHal nullptr";
+    return;
+  }
 
   if (!hidl_retval.isOk()) {
     LOG(ERROR) << __func__
@@ -913,10 +962,6 @@ void BluetoothAudioClientInterface::StreamStarted(
 
 void BluetoothAudioClientInterface::StreamSuspended(
     const BluetoothAudioCtrlAck& ack) {
-  if (provider_ == nullptr) {
-    LOG(ERROR) << __func__ << ": BluetoothAudioHal nullptr";
-    return;
-  }
   if (ack == BluetoothAudioCtrlAck::PENDING) {
     LOG(INFO) << __func__ << ": " << ack << " ignored";
     return;
@@ -924,12 +969,16 @@ void BluetoothAudioClientInterface::StreamSuspended(
   BluetoothAudioStatus status = BluetoothAudioCtrlAckToHalStatus(ack);
 
   ::android::hardware::Return<void> hidl_retval;
-  if (provider_2_2_ != nullptr)
+  if (provider_2_2_ != nullptr) {
     hidl_retval = provider_2_2_->streamSuspended(status);
-  else if (provider_2_1_ != nullptr)
+  } else if (provider_2_1_ != nullptr) {
     hidl_retval = provider_2_1_->streamSuspended(status);
-  else
+  } else if (provider_ != nullptr) {
     hidl_retval = provider_->streamSuspended(status);
+  } else {
+    LOG(ERROR) << __func__ << ": BluetoothAudioHal nullptr";
+    return;
+  }
 
   if (!hidl_retval.isOk()) {
     LOG(ERROR) << __func__
@@ -945,20 +994,19 @@ int BluetoothAudioClientInterface::EndSession() {
   }
 
   session_started_ = false;
-  if (provider_2_2_ == nullptr && provider_2_1_ == nullptr &&
-      provider_ == nullptr) {
-    LOG(ERROR) << __func__ << ": BluetoothAudioHal nullptr";
-    return -EINVAL;
-  }
   mDataMQ = nullptr;
 
   ::android::hardware::Return<void> hidl_retval;
-  if (provider_2_2_ != nullptr)
+  if (provider_2_2_ != nullptr) {
     hidl_retval = provider_2_2_->endSession();
-  else if (provider_2_1_ != nullptr)
+  } else if (provider_2_1_ != nullptr) {
     hidl_retval = provider_2_1_->endSession();
-  else
+  } else if (provider_ != nullptr) {
     hidl_retval = provider_->endSession();
+  } else {
+    LOG(ERROR) << __func__ << ": BluetoothAudioHal nullptr";
+    return -EINVAL;
+  }
 
   if (!hidl_retval.isOk()) {
     LOG(ERROR) << __func__
@@ -969,6 +1017,14 @@ int BluetoothAudioClientInterface::EndSession() {
 }
 
 void BluetoothAudioClientInterface::FlushAudioData() {
+  if (transport_->GetSessionType_2_1() ==
+      SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH)
+    return;
+
+  if (mDataMQ == nullptr || !mDataMQ->isValid()) {
+    LOG(WARNING) << __func__ << ", mDataMQ invalid";
+    return;
+  }
   size_t size = mDataMQ->availableToRead();
   uint8_t p_buf[size];
 

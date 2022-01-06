@@ -113,6 +113,7 @@ enum OpCode : 16 {
   EXIT_PERIODIC_INQUIRY_MODE = 0x0404,
   CREATE_CONNECTION = 0x0405,
   DISCONNECT = 0x0406,
+  ADD_SCO_CONNECTION = 0x0407,
   CREATE_CONNECTION_CANCEL = 0x0408,
   ACCEPT_CONNECTION_REQUEST = 0x0409,
   REJECT_CONNECTION_REQUEST = 0x040A,
@@ -397,6 +398,7 @@ enum OpCodeIndex : 16 {
   EXIT_PERIODIC_INQUIRY_MODE = 3,
   CREATE_CONNECTION = 4,
   DISCONNECT = 5,
+  ADD_SCO_CONNECTION = 6,
   CREATE_CONNECTION_CANCEL = 7,
   ACCEPT_CONNECTION_REQUEST = 10,
   REJECT_CONNECTION_REQUEST = 11,
@@ -967,6 +969,15 @@ packet Disconnect : AclCommand (op_code = DISCONNECT) {
 packet DisconnectStatus : CommandStatus (command_op_code = DISCONNECT) {
 }
 
+packet AddScoConnection : ConnectionManagementCommand (op_code = ADD_SCO_CONNECTION) {
+  connection_handle : 12,
+  _reserved_ : 4,
+  packet_type : 16,
+}
+
+packet AddScoConnectionStatus : CommandStatus (command_op_code = ADD_SCO_CONNECTION) {
+}
+
 packet CreateConnectionCancel : ConnectionManagementCommand (op_code = CREATE_CONNECTION_CANCEL) {
   bd_addr : Address,
 }
@@ -1330,16 +1341,16 @@ enum ScoDataPath : 8 {
 }
 
 enum SynchronousPacketTypeBits : 16 {
-  HV1_ALLOWED = 0x0000,
-  HV2_ALLOWED = 0x0001,
-  HV3_ALLOWED = 0x0002,
-  EV3_ALLOWED = 0x0004,
-  EV4_ALLOWED = 0x0008,
-  EV5_ALLOWED = 0x0010,
-  NO_2_EV3_ALLOWED = 0x0020,
-  NO_3_EV3_ALLOWED = 0x0040,
-  NO_2_EV5_ALLOWED = 0x0080,
-  NO_3_EV5_ALLOWED = 0x0100,
+  HV1_ALLOWED = 0x0001,
+  HV2_ALLOWED = 0x0002,
+  HV3_ALLOWED = 0x0004,
+  EV3_ALLOWED = 0x0008,
+  EV4_ALLOWED = 0x0010,
+  EV5_ALLOWED = 0x0020,
+  NO_2_EV3_ALLOWED = 0x0040,
+  NO_3_EV3_ALLOWED = 0x0080,
+  NO_2_EV5_ALLOWED = 0x0100,
+  NO_3_EV5_ALLOWED = 0x0200,
 }
 
 enum RetransmissionEffort : 8 {

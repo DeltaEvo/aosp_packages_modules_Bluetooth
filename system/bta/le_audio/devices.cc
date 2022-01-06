@@ -349,11 +349,11 @@ uint16_t LeAudioDeviceGroup::GetMaxTransportLatencyMtos(void) {
   return find_max_transport_latency(this, types::kLeAudioDirectionSink);
 }
 
-uint16_t LeAudioDeviceGroup::GetTransportLatency(uint8_t direction) {
+uint32_t LeAudioDeviceGroup::GetTransportLatencyUs(uint8_t direction) {
   if (direction == types::kLeAudioDirectionSink) {
-    return transport_latency_mtos_;
+    return transport_latency_mtos_us_;
   } else if (direction == types::kLeAudioDirectionSource) {
-    return transport_latency_stom_;
+    return transport_latency_stom_us_ ;
   } else {
     LOG(ERROR) << __func__ << ", invalid direction";
     return 0;
@@ -361,33 +361,33 @@ uint16_t LeAudioDeviceGroup::GetTransportLatency(uint8_t direction) {
 }
 
 void LeAudioDeviceGroup::SetTransportLatency(uint8_t direction,
-                                             uint16_t new_transport_latency) {
-  uint16_t* transport_latency;
+                                             uint32_t new_transport_latency_us) {
+  uint32_t* transport_latency_us;
 
   if (direction == types::kLeAudioDirectionSink) {
-    transport_latency = &transport_latency_mtos_;
+    transport_latency_us = &transport_latency_mtos_us_;
   } else if (direction == types::kLeAudioDirectionSource) {
-    transport_latency = &transport_latency_stom_;
+    transport_latency_us = &transport_latency_stom_us_;
   } else {
     LOG(ERROR) << __func__ << ", invalid direction";
     return;
   }
 
-  if (*transport_latency == new_transport_latency) return;
+  if (*transport_latency_us == new_transport_latency_us) return;
 
-  if ((*transport_latency != 0) &&
-      (*transport_latency != new_transport_latency)) {
+  if ((*transport_latency_us != 0) &&
+      (*transport_latency_us != new_transport_latency_us)) {
     LOG(WARNING) << __func__ << ", Different transport latency for group: "
-                 << " old: " << static_cast<int>(*transport_latency)
-                 << " [ms], new: " << static_cast<int>(new_transport_latency)
-                 << " [ms]";
+                 << " old: " << static_cast<int>(*transport_latency_us)
+                 << " [us], new: " << static_cast<int>(new_transport_latency_us)
+                 << " [us]";
     return;
   }
 
   LOG(INFO) << __func__ << ", updated group " << static_cast<int>(group_id_)
-            << " transport latency: " << static_cast<int>(new_transport_latency)
-            << " [ms]";
-  *transport_latency = new_transport_latency;
+            << " transport latency: " << static_cast<int>(new_transport_latency_us)
+            << " [us]";
+  *transport_latency_us = new_transport_latency_us;
 }
 
 uint8_t LeAudioDeviceGroup::GetPhyBitmask(uint8_t direction) {
@@ -487,7 +487,7 @@ uint16_t LeAudioDeviceGroup::GetRemoteDelay(uint8_t direction) {
 
   /* us to ms */
   remote_delay_ms = presentation_delay / 1000;
-  remote_delay_ms += GetTransportLatency(direction) / 1000;
+  remote_delay_ms += GetTransportLatencyUs(direction) / 1000;
 
   return remote_delay_ms;
 }
@@ -726,7 +726,7 @@ bool LeAudioDeviceGroup::IsConfigurationSupported(
 
       if (device->ases_.empty()) continue;
 
-      if (!device->IsCodecConfigurationSupported(ent.direction, ent.codec))
+      if (!device->GetCodecConfigurationSupportedPac(ent.direction, ent.codec))
         continue;
 
       int needed_ase = std::min(static_cast<int>(max_required_ase_per_dev),
@@ -915,9 +915,8 @@ bool LeAudioDevice::ConfigureAses(
       ent.ase_cnt / ent.device_cnt + (ent.ase_cnt % ent.device_cnt);
   le_audio::types::LeAudioConfigurationStrategy strategy = ent.strategy;
 
-  bool is_codec_supported =
-      IsCodecConfigurationSupported(ent.direction, ent.codec);
-  if (!is_codec_supported) return false;
+  auto pac = GetCodecConfigurationSupportedPac(ent.direction, ent.codec);
+  if (!pac) return false;
 
   int needed_ase = std::min((int)(max_required_ase_per_dev),
                             (int)(ent.ase_cnt - active_ases));
@@ -948,9 +947,16 @@ bool LeAudioDevice::ConfigureAses(
     ase->codec_config.audio_channel_allocation =
         PickAudioLocation(strategy, audio_locations, group_audio_locations);
 
+    /* Get default value if no requirement for specific frame blocks per sdu */
+    if (!ase->codec_config.codec_frames_blocks_per_sdu) {
+      ase->codec_config.codec_frames_blocks_per_sdu =
+          GetMaxCodecFramesPerSduFromPac(pac);
+    }
     ase->max_sdu_size = codec_spec_caps::GetAudioChannelCounts(
-                            ase->codec_config.audio_channel_allocation) *
-                        ase->codec_config.octets_per_codec_frame;
+                            *ase->codec_config.audio_channel_allocation) *
+                        *ase->codec_config.octets_per_codec_frame *
+                        *ase->codec_config.codec_frames_blocks_per_sdu;
+
     ase->metadata = GetMetadata(context_type);
 
     DLOG(INFO) << __func__ << " device=" << address_
@@ -1156,6 +1162,11 @@ bool LeAudioDeviceGroup::Configure(LeAudioContextType context_type) {
                << ", is in mismatch with cached active contexts";
     return false;
   }
+
+  /* Store selected configuration at once it is chosen.
+   * It might happen it will get unavailable in some point of time
+   */
+  stream_conf.conf = conf;
   return true;
 }
 
@@ -1176,7 +1187,6 @@ void LeAudioDeviceGroup::Dump(int fd) {
          << "      active stream configuration name: "
          << (active_conf ? active_conf->name : " not set") << "\n"
          << "    Last used stream configuration: \n"
-         << "      valid: " << (stream_conf.valid ? " Yes " : " No") << "\n"
          << "      codec id : " << +(stream_conf.id.coding_format) << "\n"
          << "      name: "
          << (stream_conf.conf != nullptr ? stream_conf.conf->name : " null ")
@@ -1188,8 +1198,26 @@ void LeAudioDeviceGroup::Dump(int fd) {
          << "      number of sources in the configuration "
          << stream_conf.source_num_of_devices << "\n"
          << "      number of source_streams connected: "
-         << stream_conf.source_streams.size() << "\n"
-         << "      === devices: ===\n";
+         << stream_conf.source_streams.size() << "\n";
+
+  if (GetFirstActiveDevice() != nullptr) {
+    uint32_t sink_delay;
+    stream << "      presentation_delay for sink (speaker): ";
+    if (GetPresentationDelay(&sink_delay, le_audio::types::kLeAudioDirectionSink)) {
+      stream << sink_delay << " us";
+    }
+    stream << "\n      presentation_delay for source (microphone): ";
+    uint32_t source_delay;
+    if (GetPresentationDelay(&source_delay, le_audio::types::kLeAudioDirectionSource)) {
+      stream << source_delay << " us";
+    }
+    stream << "\n";
+  } else {
+    stream << "      presentation_delay for sink (speaker):\n"
+           << "      presentation_delay for source (microphone): \n";
+  }
+
+  stream << "      === devices: ===\n";
 
   dprintf(fd, "%s", stream.str().c_str());
 
@@ -1514,14 +1542,15 @@ uint8_t LeAudioDevice::GetLc3SupportedChannelCount(uint8_t direction) {
   return 0;
 }
 
-bool LeAudioDevice::IsCodecConfigurationSupported(
+const struct types::acs_ac_record*
+LeAudioDevice::GetCodecConfigurationSupportedPac(
     uint8_t direction, const CodecCapabilitySetting& codec_capability_setting) {
   auto& pacs =
       direction == types::kLeAudioDirectionSink ? snk_pacs_ : src_pacs_;
 
   if (pacs.size() == 0) {
     LOG(ERROR) << __func__ << " missing PAC for direction " << +direction;
-    return false;
+    return nullptr;
   }
 
   /* TODO: Validate channel locations */
@@ -1530,16 +1559,16 @@ bool LeAudioDevice::IsCodecConfigurationSupported(
     /* Get PAC records from tuple as second element from tuple */
     auto& pac_recs = std::get<1>(pac_tuple);
 
-    for (const auto pac : pac_recs) {
+    for (const auto& pac : pac_recs) {
       if (!IsCodecCapabilitySettingSupported(pac, codec_capability_setting))
         continue;
 
-      return true;
+      return &pac;
     };
   }
 
   /* Doesn't match required configuration with any PAC */
-  return false;
+  return nullptr;
 }
 
 /**
@@ -1562,20 +1591,19 @@ void LeAudioDevice::SetSupportedContexts(AudioContexts snk_contexts,
 
 void LeAudioDevice::Dump(int fd) {
   std::stringstream stream;
-  stream << "        address: " << address_ << "\n"
-         << (conn_id_ == GATT_INVALID_CONN_ID ? "          Not connected "
-                                              : "          Connected conn_id =")
+  stream << std::boolalpha;
+  stream << "\taddress: " << address_
+         << (conn_id_ == GATT_INVALID_CONN_ID ? "\n\t  Not connected "
+                                              : "\n\t  Connected conn_id =")
          << (conn_id_ == GATT_INVALID_CONN_ID ? "" : std::to_string(conn_id_))
-         << "\n"
-         << "          set member: " << (csis_member_ ? " Yes" : " No") << "\n"
-         << "          known_service_handles_: " << known_service_handles_
-         << "\n"
-         << "          notify_connected_after_read_: "
-         << notify_connected_after_read_ << "\n"
-         << "          removing_device_: " << removing_device_ << "\n"
-         << "          first_connection_: " << first_connection_ << "\n"
-         << "          encrypted_: " << encrypted_ << "\n"
-         << "          connecting_actively_: " << connecting_actively_ << "\n";
+         << "\n\t  set member: " << csis_member_
+         << "\n\t  known_service_handles_: " << known_service_handles_
+         << "\n\t  notify_connected_after_read_: " << notify_connected_after_read_
+         << "\n\t  removing_device_: " << removing_device_
+         << "\n\t  first_connection_: " << first_connection_
+         << "\n\t  encrypted_: " << encrypted_
+         << "\n\t  connecting_actively_: " << connecting_actively_
+         << "\n";
 
   dprintf(fd, "%s", stream.str().c_str());
 }

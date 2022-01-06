@@ -435,6 +435,17 @@ void btm_acl_update_conn_addr(uint16_t handle, const RawAddress& address) {
   p_acl->conn_addr = address;
 }
 
+void btm_configure_data_path(uint8_t direction, uint8_t path_id,
+                             std::vector<uint8_t> vendor_config) {
+  if (direction != btm_data_direction::CONTROLLER_TO_HOST &&
+      direction != btm_data_direction::HOST_TO_CONTROLLER) {
+    LOG_WARN("Unknown data direction");
+    return;
+  }
+
+  btsnd_hcic_configure_data_path(direction, path_id, vendor_config);
+}
+
 /*******************************************************************************
  *
  * Function         btm_acl_removed
@@ -1450,6 +1461,7 @@ void StackAclBtmAcl::btm_acl_role_changed(tHCI_STATUS hci_status,
   }
 
   BTA_dm_report_role_change(bd_addr, new_role, hci_status);
+  btm_sec_role_changed(hci_status, bd_addr, new_role);
 
   /* If a disconnect is pending, issue it now that role switch has completed */
   if (p_acl->rs_disc_pending == BTM_SEC_DISC_PENDING) {

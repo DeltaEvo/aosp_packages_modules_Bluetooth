@@ -25,6 +25,7 @@
 #include "hci/address_with_type.h"
 #include "isochronous_connection_handler.h"
 #include "phy.h"
+#include "sco_connection.h"
 
 namespace test_vendor_lib {
 static constexpr uint16_t kReservedHandle = 0xF00;
@@ -41,6 +42,21 @@ class AclConnectionHandler {
   bool CancelPendingConnection(bluetooth::hci::Address addr);
   bool AuthenticatePendingConnection() const;
 
+  bool HasPendingScoConnection(bluetooth::hci::Address addr) const;
+  ScoState GetScoConnectionState(bluetooth::hci::Address addr) const;
+  bool IsLegacyScoConnection(bluetooth::hci::Address addr) const;
+  void CreateScoConnection(bluetooth::hci::Address addr,
+    ScoConnectionParameters const &parameters, ScoState state, bool legacy = false);
+  void CancelPendingScoConnection(bluetooth::hci::Address addr);
+  bool AcceptPendingScoConnection(bluetooth::hci::Address addr,
+    ScoLinkParameters const &parameters);
+  bool AcceptPendingScoConnection(bluetooth::hci::Address addr,
+    ScoConnectionParameters const &parameters);
+  uint16_t GetScoHandle(bluetooth::hci::Address addr) const;
+  ScoConnectionParameters GetScoConnectionParameters(
+      bluetooth::hci::Address addr) const;
+  ScoLinkParameters GetScoLinkParameters(bluetooth::hci::Address addr) const;
+
   bool CreatePendingLeConnection(bluetooth::hci::AddressWithType addr);
   bool HasPendingLeConnection(bluetooth::hci::AddressWithType addr) const;
   bool CancelPendingLeConnection(bluetooth::hci::AddressWithType addr);
@@ -51,10 +67,12 @@ class AclConnectionHandler {
                               bluetooth::hci::AddressWithType own_addr);
   bool Disconnect(uint16_t handle);
   bool HasHandle(uint16_t handle) const;
+  bool HasScoHandle(uint16_t handle) const;
 
   uint16_t GetHandle(bluetooth::hci::AddressWithType addr) const;
   uint16_t GetHandleOnlyAddress(bluetooth::hci::Address addr) const;
   bluetooth::hci::AddressWithType GetAddress(uint16_t handle) const;
+  bluetooth::hci::Address GetScoAddress(uint16_t handle) const;
   bluetooth::hci::AddressWithType GetOwnAddress(uint16_t handle) const;
 
   void Encrypt(uint16_t handle);
@@ -102,8 +120,12 @@ class AclConnectionHandler {
   StreamParameters GetStreamParameters(uint16_t handle) const;
   GroupParameters GetGroupParameters(uint8_t id) const;
 
+  std::vector<uint16_t> GetAclHandles() const;
+
  private:
   std::unordered_map<uint16_t, AclConnection> acl_connections_;
+  std::unordered_map<uint16_t, ScoConnection> sco_connections_;
+
   bool classic_connection_pending_{false};
   bluetooth::hci::Address pending_connection_address_{
       bluetooth::hci::Address::kEmpty};

@@ -32,11 +32,13 @@
 namespace bluetooth {
 namespace audio {
 
-using ::android::hardware::bluetooth::audio::V2_0::IBluetoothAudioPort;
+using ::android::hardware::bluetooth::audio::V2_2::IBluetoothAudioPort;
 using AudioCapabilities =
     ::android::hardware::bluetooth::audio::V2_0::AudioCapabilities;
 using AudioCapabilities_2_1 =
     ::android::hardware::bluetooth::audio::V2_1::AudioCapabilities;
+using AudioCapabilities_2_2 =
+    ::android::hardware::bluetooth::audio::V2_2::AudioCapabilities;
 using AudioConfiguration =
     ::android::hardware::bluetooth::audio::V2_0::AudioConfiguration;
 using AudioConfiguration_2_1 =
@@ -155,6 +157,7 @@ class IBluetoothTransportInstance {
                                        timespec* data_position) = 0;
 
   virtual void MetadataChanged(const source_metadata_t& source_metadata) = 0;
+  virtual void SinkMetadataChanged(const sink_metadata_t& sink_metadata) = 0;
 
   // Invoked when the transport is requested to reset presentation position
   virtual void ResetPresentationPosition() = 0;
@@ -228,7 +231,7 @@ class BluetoothAudioClientInterface {
       SessionType session_type);
   static std::vector<AudioCapabilities_2_1> GetAudioCapabilities_2_1(
       SessionType_2_1 session_type_2_1);
-  static std::vector<AudioCapabilities_2_1> GetAudioCapabilities_2_2(
+  static std::vector<AudioCapabilities_2_2> GetAudioCapabilities_2_2(
       SessionType_2_1 session_type_2_1);
 
   void StreamStarted(const BluetoothAudioCtrlAck& ack);
@@ -277,6 +280,7 @@ class BluetoothAudioClientInterface {
   IBluetoothTransportInstance* transport_;
   std::vector<AudioCapabilities> capabilities_;
   std::vector<AudioCapabilities_2_1> capabilities_2_1_;
+  std::vector<AudioCapabilities_2_2> capabilities_2_2_;
 };
 
 // The client interface connects an IBluetoothTransportInstance to
