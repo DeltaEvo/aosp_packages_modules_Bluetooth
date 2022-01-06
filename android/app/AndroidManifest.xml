@@ -398,7 +398,7 @@
             </intent-filter>
         </service>
         <service android:process="@string/process"
-             android:name=".hfpclient.connserv.HfpClientConnectionService"
+             android:name=".hfpclient.HfpClientConnectionService"
              android:permission="android.permission.BIND_CONNECTION_SERVICE"
              android:enabled="@bool/hfp_client_connection_service_enabled"
              android:exported="true">
@@ -447,6 +447,15 @@
             android:exported = "true">
             <intent-filter>
                 <action android:name="android.bluetooth.IBluetoothCsipSetCoordinator" />
+            </intent-filter>
+        </service>
+        <service
+            android:process="@string/process"
+            android:name = ".tbs.TbsService"
+            android:enabled="@bool/profile_supported_le_call_control"
+            android:exported = "true">
+            <intent-filter>
+                <action android:name="android.bluetooth.IBluetoothLeCallControl" />
             </intent-filter>
         </service>
         <!-- Authenticator for PBAP account. -->
