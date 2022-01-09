@@ -8,7 +8,7 @@ package {
 }
 
 cc_library_static {
-    name: "liblc3codec",
+    name: "liblc3",
     host_supported: true,
     apex_available: [
 
@@ -17,13 +17,11 @@ cc_library_static {
     ],
     defaults: ["fluoride_defaults"],
     srcs: [
-        "Common/*.cpp",
-        "Common/fft/*.c",
-        "Common/Tables/*.cpp",
-        "Decoder/*.cpp",
-        "TestSupport/DatapointsAndroid.cpp",
+        "src/*.c",
     ],
     cflags: [
+        "-O3",
+        "-ffast-math",
         "-Werror",
         "-Wmissing-braces",
         "-Wno-unused-parameter",
@@ -44,26 +42,19 @@ cc_library_static {
             },
        },
     },
-    shared_libs: [
-        "liblog",
-    ],
     export_include_dirs: [
-        "Api",
-        "Common",
-        "Common/fft",
-        "Common/Tables",
-        "TestSupport",
+        "include",
     ],
 }
 
 cc_fuzz {
-  name: "liblc3codec_decoder_fuzzer",
+  name: "liblc3_fuzzer",
 
   srcs: [
-    "fuzzer/liblc3codec_decoder_fuzzer.cpp",
+    "fuzzer/liblc3encoder_fuzzer.cpp",
   ],
 
   static_libs: [
-    "liblc3codec",
+    "liblc3",
   ],
 }

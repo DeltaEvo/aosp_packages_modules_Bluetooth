@@ -53,6 +53,8 @@ class AclConnectionHandler {
   bool AcceptPendingScoConnection(bluetooth::hci::Address addr,
     ScoConnectionParameters const &parameters);
   uint16_t GetScoHandle(bluetooth::hci::Address addr) const;
+  ScoConnectionParameters GetScoConnectionParameters(
+      bluetooth::hci::Address addr) const;
   ScoLinkParameters GetScoLinkParameters(bluetooth::hci::Address addr) const;
 
   bool CreatePendingLeConnection(bluetooth::hci::AddressWithType addr);
@@ -117,6 +119,8 @@ class AclConnectionHandler {
 
   StreamParameters GetStreamParameters(uint16_t handle) const;
   GroupParameters GetGroupParameters(uint8_t id) const;
+
+  std::vector<uint16_t> GetAclHandles() const;
 
  private:
   std::unordered_map<uint16_t, AclConnection> acl_connections_;
