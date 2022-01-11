@@ -3,7 +3,11 @@ use paste::paste;
 use std::sync::Mutex;
 
 /// Deprecated immutable flag
-pub fn gd_acl_is_enabled() -> bool {
+pub fn gd_advertising_is_enabled() -> bool {
+    true
+}
+/// Deprecated immutable flag
+pub fn gd_scanning_is_enabled() -> bool {
     true
 }
 
@@ -80,8 +84,6 @@ macro_rules! init_flags {
 init_flags!(
     flags: {
         gd_core,
-        gd_advertising,
-        gd_scanning,
         gd_security,
         gd_l2cap,
         gatt_robust_caching,
@@ -90,9 +92,7 @@ init_flags!(
         gd_link_policy
     },
     dependencies: {
-        gd_core => gd_security,
-        gd_l2cap => gd_scanning,
-        gd_scanning => gd_advertising
+        gd_core => gd_security
     }
 );
 
