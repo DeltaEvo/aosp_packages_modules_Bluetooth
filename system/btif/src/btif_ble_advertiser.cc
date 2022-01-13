@@ -79,6 +79,7 @@ void parseParams(tBTM_BLE_ADV_PARAMS* p_params,
   p_params->secondary_advertising_phy = params.secondary_advertising_phy;
   p_params->scan_request_notification_enable =
       params.scan_request_notification_enable;
+  p_params->own_address_type = params.own_address_type;
 }
 
 void parsePeriodicParams(tBLE_PERIODIC_ADV_PARAMS* p_periodic_params,
@@ -260,17 +261,9 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface {
   }
 };
 
-BleAdvertiserInterface* btLeAdvertiserInstance = nullptr;
-
 }  // namespace
 
 BleAdvertiserInterface* get_ble_advertiser_instance() {
-  if (bluetooth::shim::is_gd_advertising_enabled()) {
-    LOG(INFO) << __func__ << " use gd le advertiser";
-    return bluetooth::shim::get_ble_advertiser_instance();
-  } else if (btLeAdvertiserInstance == nullptr) {
-    btLeAdvertiserInstance = new BleAdvertiserInterfaceImpl();
-  }
-
-  return btLeAdvertiserInstance;
+  LOG(INFO) << __func__ << " use gd le advertiser";
+  return bluetooth::shim::get_ble_advertiser_instance();
 }
