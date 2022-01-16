@@ -2133,8 +2133,8 @@ class LeAudioClientImpl : public LeAudioClient {
           lc3_setup_encoder(dt_us, sr_hz, lc3_encoder_right_mem);
     } else if (CodecManager::GetInstance()->GetCodecLocation() ==
                le_audio::types::CodecLocation::ADSP) {
-      CodecManager::GetInstance()->UpdateActiveAudioConfig(*stream_conf,
-                                                           remote_delay_ms);
+      CodecManager::GetInstance()->UpdateActiveSourceAudioConfig(
+          *stream_conf, remote_delay_ms);
     }
 
     LeAudioClientAudioSource::UpdateRemoteDelay(remote_delay_ms);
@@ -2195,14 +2195,22 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    Lc3Config lc3Config(
-        current_sink_codec_config.sample_rate,
-        Lc3ConfigFrameDuration(current_sink_codec_config.data_interval_us), 1);
-
-    lc3_decoder = new Lc3Decoder(lc3Config);
-
     uint16_t remote_delay_ms =
         group->GetRemoteDelay(le_audio::types::kLeAudioDirectionSource);
+
+    if (CodecManager::GetInstance()->GetCodecLocation() ==
+        le_audio::types::CodecLocation::HOST) {
+      Lc3Config lc3Config(
+          current_sink_codec_config.sample_rate,
+          Lc3ConfigFrameDuration(current_sink_codec_config.data_interval_us),
+          1);
+
+      lc3_decoder = new Lc3Decoder(lc3Config);
+    } else if (CodecManager::GetInstance()->GetCodecLocation() ==
+               le_audio::types::CodecLocation::ADSP) {
+      CodecManager::GetInstance()->UpdateActiveSinkAudioConfig(*stream_conf,
+                                                               remote_delay_ms);
+    }
 
     LeAudioClientAudioSink::UpdateRemoteDelay(remote_delay_ms);
     LeAudioClientAudioSink::ConfirmStreamingRequest();
@@ -2336,7 +2344,11 @@ class LeAudioClientImpl : public LeAudioClient {
 
       current_source_codec_config = *source_configuration;
 
-      LeAudioClientAudioSource::Start(current_source_codec_config,
+      /*Let's always request 2 channels from the framework */
+      auto audio_framework_configuration = current_source_codec_config;
+      audio_framework_configuration.num_channels = 2;
+
+      LeAudioClientAudioSource::Start(audio_framework_configuration,
                                       audioSinkReceiver);
 
     } else {

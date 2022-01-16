@@ -174,7 +174,7 @@ static inline std::string security_state_text(const tSECURITY_STATE& state) {
     CASE_RETURN_TEXT(BTM_SEC_STATE_DISCONNECTING_BLE);
     CASE_RETURN_TEXT(BTM_SEC_STATE_DISCONNECTING_BOTH);
     default:
-      return std::string("UNKNOWN[%hhu]", state);
+      return base::StringPrintf("UNKNOWN[%hhu]", state);
   }
 }
 
@@ -313,7 +313,7 @@ struct tBTM_SEC_DEV_REC {
   tBTM_BD_NAME sec_bd_name; /* User friendly name of the device. (may be
                                truncated to save space in dev_rec table) */
 
-  uint8_t sec_state;          /* Operating state                    */
+  tSECURITY_STATE sec_state; /* Operating state                    */
   bool is_security_state_idle() const {
     return sec_state == BTM_SEC_STATE_IDLE;
   }

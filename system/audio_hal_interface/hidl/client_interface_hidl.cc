@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "BTAudioClientIf"
+#define LOG_TAG "BTAudioClientIf_HIDL"
 
-#include "client_interface.h"
+#include "client_interface_hidl.h"
 
 #include <android/hardware/bluetooth/audio/2.2/IBluetoothAudioPort.h>
 #include <base/logging.h>
@@ -30,6 +30,7 @@
 
 namespace bluetooth {
 namespace audio {
+namespace hidl {
 
 using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
@@ -46,9 +47,6 @@ static constexpr int kDefaultDataReadTimeoutMs = 10;       // 10 ms
 static constexpr int kDefaultDataWriteTimeoutMs = 10;      // 10 ms
 static constexpr int kDefaultDataReadPollIntervalMs = 1;   // non-blocking poll
 static constexpr int kDefaultDataWritePollIntervalMs = 1;  // non-blocking poll
-
-std::unique_ptr<HalVersionManager> HalVersionManager::instance_ptr =
-    std::unique_ptr<HalVersionManager>(new HalVersionManager());
 
 std::ostream& operator<<(std::ostream& os, const BluetoothAudioCtrlAck& ack) {
   switch (ack) {
@@ -1018,7 +1016,9 @@ int BluetoothAudioClientInterface::EndSession() {
 
 void BluetoothAudioClientInterface::FlushAudioData() {
   if (transport_->GetSessionType_2_1() ==
-      SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH)
+          SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
+      transport_->GetSessionType_2_1() ==
+          SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH)
     return;
 
   if (mDataMQ == nullptr || !mDataMQ->isValid()) {
@@ -1166,5 +1166,6 @@ size_t BluetoothAudioSourceClientInterface::WriteAudioData(const uint8_t* p_buf,
   return total_written;
 }
 
+}  // namespace hidl
 }  // namespace audio
 }  // namespace bluetooth
