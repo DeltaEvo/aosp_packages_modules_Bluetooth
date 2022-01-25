@@ -127,7 +127,9 @@ class AdapterProperties {
     private int mDynamicAudioBufferSizeSupportedCodecsGroup2;
 
     private boolean mIsLePeriodicAdvertisingSyncTransferSenderSupported;
+    private boolean mIsLePeriodicAdvertisingSyncTransferRecipientSupported;
     private boolean mIsLeConnectedIsochronousStreamCentralSupported;
+    private boolean mIsLeIsochronousBroadcasterSupported;
 
     private List<BufferConstraint> mBufferConstraintList;
 
@@ -198,7 +200,7 @@ class AdapterProperties {
     AdapterProperties(AdapterService service) {
         mService = service;
         mAdapter = BluetoothAdapter.getDefaultAdapter();
-        invalidateBluetoothCaches();
+        //invalidateBluetoothCaches();
     }
 
     public void init(RemoteDevices remoteDevices) {
@@ -240,7 +242,7 @@ class AdapterProperties {
         filter.addAction(BluetoothPbapClient.ACTION_CONNECTION_STATE_CHANGED);
         mService.registerReceiver(mReceiver, filter);
         mReceiverRegistered = true;
-        invalidateBluetoothCaches();
+        //invalidateBluetoothCaches();
     }
 
     public void cleanup() {
@@ -252,8 +254,9 @@ class AdapterProperties {
         }
         mService = null;
         mBondedDevices.clear();
-        invalidateBluetoothCaches();
+        //invalidateBluetoothCaches();
     }
+    /*
     private static void invalidateGetProfileConnectionStateCache() {
         BluetoothAdapter.invalidateGetProfileConnectionStateCache();
     }
@@ -272,6 +275,7 @@ class AdapterProperties {
         invalidateGetConnectionStateCache();
         invalidateGetBondStateCache();
     }
+     */
 
     @Override
     public Object clone() throws CloneNotSupportedException {
@@ -409,7 +413,7 @@ class AdapterProperties {
      */
     void setConnectionState(int connectionState) {
         mConnectionState = connectionState;
-        invalidateGetConnectionStateCache();
+        //invalidateGetConnectionStateCache();
     }
 
     /**
@@ -512,10 +516,24 @@ class AdapterProperties {
     }
 
     /**
+     * @return the mIsLePeriodicAdvertisingSyncTransferRecipientSupported
+     */
+    boolean isLePeriodicAdvertisingSyncTransferRecipientSupported() {
+        return mIsLePeriodicAdvertisingSyncTransferRecipientSupported;
+    }
+
+    /**
      * @return the mIsLeConnectedIsochronousStreamCentralSupported
      */
     boolean isLeConnectedIsochronousStreamCentralSupported() {
         return mIsLeConnectedIsochronousStreamCentralSupported;
+    }
+
+    /**
+     * @return the mIsLeIsochronousBroadcasterSupported
+     */
+    boolean isLeIsochronousBroadcasterSupported() {
+        return mIsLeIsochronousBroadcasterSupported;
     }
 
     /**
@@ -629,7 +647,7 @@ class AdapterProperties {
                     debugLog("Failed to remove device: " + device);
                 }
             }
-            invalidateGetBondStateCache();
+            //invalidateGetBondStateCache();
         } catch (Exception ee) {
             Log.w(TAG, "onBondStateChanged: Exception ", ee);
         }
@@ -858,7 +876,7 @@ class AdapterProperties {
 
         if (update) {
             mProfileConnectionState.put(profile, new Pair<Integer, Integer>(newHashState, numDev));
-            invalidateGetProfileConnectionStateCache();
+            //invalidateGetProfileConnectionStateCache();
         }
     }
 
@@ -980,6 +998,8 @@ class AdapterProperties {
                 ((0xFF & ((int) val[23])) << 8) + (0xFF & ((int) val[22]));
         mIsLePeriodicAdvertisingSyncTransferSenderSupported = ((0xFF & ((int) val[24])) != 0);
         mIsLeConnectedIsochronousStreamCentralSupported = ((0xFF & ((int) val[25])) != 0);
+        mIsLeIsochronousBroadcasterSupported = ((0xFF & ((int) val[26])) != 0);
+        mIsLePeriodicAdvertisingSyncTransferRecipientSupported = ((0xFF & ((int) val[27])) != 0);
 
         Log.d(TAG, "BT_PROPERTY_LOCAL_LE_FEATURES: update from BT controller"
                 + " mNumOfAdvertisementInstancesSupported = "
@@ -1003,8 +1023,12 @@ class AdapterProperties {
                 + " mIsLePeriodicAdvertisingSyncTransferSenderSupported = "
                 + mIsLePeriodicAdvertisingSyncTransferSenderSupported
                 + " mIsLeConnectedIsochronousStreamCentralSupported = "
-                + mIsLeConnectedIsochronousStreamCentralSupported);
-        invalidateIsOffloadedFilteringSupportedCache();
+                + mIsLeConnectedIsochronousStreamCentralSupported
+                + " mIsLeIsochronousBroadcasterSupported = "
+                + mIsLeIsochronousBroadcasterSupported
+                + " mIsLePeriodicAdvertisingSyncTransferRecipientSupported = "
+                + mIsLePeriodicAdvertisingSyncTransferRecipientSupported);
+        //invalidateIsOffloadedFilteringSupportedCache();
     }
 
     private void updateDynamicAudioBufferSupport(byte[] val) {
@@ -1037,7 +1061,7 @@ class AdapterProperties {
             // Reset adapter and profile connection states
             setConnectionState(BluetoothAdapter.STATE_DISCONNECTED);
             mProfileConnectionState.clear();
-            invalidateGetProfileConnectionStateCache();
+            //invalidateGetProfileConnectionStateCache();
             mProfilesConnected = 0;
             mProfilesConnecting = 0;
             mProfilesDisconnecting = 0;

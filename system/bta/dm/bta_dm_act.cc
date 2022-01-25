@@ -25,6 +25,8 @@
 
 #define LOG_TAG "bt_bta_dm"
 
+#include <base/logging.h>
+
 #include <cstdint>
 
 #include "bta/dm/bta_dm_int.h"
@@ -44,6 +46,8 @@
 #include "osi/include/fixed_queue.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
+#include "stack/btm/btm_ble_int.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/gatt/connection_manager.h"
@@ -55,8 +59,6 @@
 #include "stack/include/btu.h"  // do_in_main_thread
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 #if (GAP_INCLUDED == TRUE)
 #include "gap_api.h"
@@ -72,19 +74,21 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
                                   uint16_t eir_len);
 static void bta_dm_inq_cmpl_cb(void* p_result);
 static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
-                                                DEV_CLASS dc, BD_NAME bd_name);
+                                                DEV_CLASS dc,
+                                                tBTM_BD_NAME bd_name);
 static void bta_dm_remname_cback(void* p);
 static void bta_dm_find_services(const RawAddress& bd_addr);
 static void bta_dm_discover_next_device(void);
 static void bta_dm_sdp_callback(tSDP_STATUS sdp_status);
 static uint8_t bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                                const BD_NAME bd_name, bool min_16_digit);
+                                const tBTM_BD_NAME bd_name, bool min_16_digit);
 static uint8_t bta_dm_new_link_key_cback(const RawAddress& bd_addr,
-                                         DEV_CLASS dev_class, BD_NAME bd_name,
+                                         DEV_CLASS dev_class,
+                                         tBTM_BD_NAME bd_name,
                                          const LinkKey& key, uint8_t key_type);
 static void bta_dm_authentication_complete_cback(const RawAddress& bd_addr,
                                                  DEV_CLASS dev_class,
-                                                 BD_NAME bd_name,
+                                                 tBTM_BD_NAME bd_name,
                                                  tHCI_REASON result);
 static void bta_dm_local_name_cback(void* p_name);
 static void bta_dm_check_av();
@@ -1807,6 +1811,10 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
   uint16_t service_class;
 
   result.inq_res.bd_addr = p_inq->remote_bd_addr;
+
+  // Pass the original address to GattService#onScanResult
+  result.inq_res.original_bda = p_inq->original_bda;
+
   memcpy(result.inq_res.dev_class, p_inq->dev_class, DEV_CLASS_LEN);
   BTM_COD_SERVICE_CLASS(service_class, p_inq->dev_class);
   result.inq_res.is_limited =
@@ -1867,7 +1875,7 @@ static void bta_dm_inq_cmpl_cb(void* p_result) {
  ******************************************************************************/
 static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
                                                 UNUSED_ATTR DEV_CLASS dc,
-                                                BD_NAME bd_name) {
+                                                tBTM_BD_NAME bd_name) {
   tBTM_REMOTE_DEV_NAME rem_name;
   tBTM_STATUS btm_status;
 
@@ -2018,7 +2026,7 @@ static void bta_dm_pinname_cback(void* p_data) {
  *
  ******************************************************************************/
 static uint8_t bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                                const BD_NAME bd_name, bool min_16_digit) {
+                                const tBTM_BD_NAME bd_name, bool min_16_digit) {
   if (!bta_dm_cb.p_sec_cback) return BTM_NOT_AUTHORIZED;
 
   /* If the device name is not known, save bdaddr and devclass and initiate a
@@ -2057,15 +2065,14 @@ static uint8_t bta_dm_pin_cback(const RawAddress& bd_addr, DEV_CLASS dev_class,
  ******************************************************************************/
 static uint8_t bta_dm_new_link_key_cback(const RawAddress& bd_addr,
                                          UNUSED_ATTR DEV_CLASS dev_class,
-                                         BD_NAME bd_name, const LinkKey& key,
-                                         uint8_t key_type) {
+                                         tBTM_BD_NAME bd_name,
+                                         const LinkKey& key, uint8_t key_type) {
   tBTA_DM_SEC sec_event;
   tBTA_DM_AUTH_CMPL* p_auth_cmpl;
-  uint8_t event;
+  tBTA_DM_SEC_EVT event = BTA_DM_AUTH_CMPL_EVT;
 
   memset(&sec_event, 0, sizeof(tBTA_DM_SEC));
 
-  event = BTA_DM_AUTH_CMPL_EVT;
   p_auth_cmpl = &sec_event.auth_cmpl;
 
   p_auth_cmpl->bd_addr = bd_addr;
@@ -2103,8 +2110,8 @@ static uint8_t bta_dm_new_link_key_cback(const RawAddress& bd_addr,
  *
  ******************************************************************************/
 static void bta_dm_authentication_complete_cback(
-    const RawAddress& bd_addr, UNUSED_ATTR DEV_CLASS dev_class, BD_NAME bd_name,
-    tHCI_REASON reason) {
+    const RawAddress& bd_addr, UNUSED_ATTR DEV_CLASS dev_class,
+    tBTM_BD_NAME bd_name, tHCI_REASON reason) {
   if (reason != HCI_SUCCESS) {
     if (bta_dm_cb.p_sec_cback) {
       // Build out the security event data structure
@@ -3311,6 +3318,7 @@ static void bta_dm_observe_results_cb(tBTM_INQ_RESULTS* p_inq,
   APPL_TRACE_DEBUG("bta_dm_observe_results_cb");
 
   result.inq_res.bd_addr = p_inq->remote_bd_addr;
+  result.inq_res.original_bda = p_inq->original_bda;
   result.inq_res.rssi = p_inq->rssi;
   result.inq_res.ble_addr_type = p_inq->ble_addr_type;
   result.inq_res.inq_result_type = p_inq->inq_result_type;
@@ -3632,9 +3640,9 @@ static void bta_dm_ble_id_key_cback(uint8_t key_type,
         };
         memcpy(&dm_key.ble_id_keys, p_key, sizeof(tBTM_BLE_LOCAL_KEYS));
 
-        uint8_t evt = (key_type == BTM_BLE_KEY_TYPE_ID)
-                          ? BTA_DM_BLE_LOCAL_IR_EVT
-                          : BTA_DM_BLE_LOCAL_ER_EVT;
+        tBTA_DM_SEC_EVT evt = (key_type == BTM_BLE_KEY_TYPE_ID)
+                                  ? BTA_DM_BLE_LOCAL_IR_EVT
+                                  : BTA_DM_BLE_LOCAL_ER_EVT;
         bta_dm_cb.p_sec_cback(evt, &dm_key);
       }
       break;

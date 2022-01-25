@@ -60,7 +60,6 @@
 #include "btif_av.h"
 #include "btif_bqr.h"
 #include "btif_config.h"
-#include "btif_debug.h"
 #include "btif_debug_btsnoop.h"
 #include "btif_debug_conn.h"
 #include "btif_hf.h"
@@ -195,7 +194,6 @@ static int init(bt_callbacks_t* callbacks, bool start_restricted,
   is_local_device_atv = is_atv;
 
   stack_manager_get_interface()->init_stack();
-  btif_debug_init();
   return BT_STATUS_SUCCESS;
 }
 
@@ -591,6 +589,12 @@ static int set_dynamic_audio_buffer_size(int codec, int size) {
   return btif_set_dynamic_audio_buffer_size(codec, size);
 }
 
+static bool allow_low_latency_audio(bool allowed, const RawAddress& address) {
+  LOG_INFO("%s %s", __func__, allowed ? "true" : "false");
+  // Call HAL here
+  return true;
+}
+
 EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     sizeof(bluetoothInterface),
     init,
@@ -629,7 +633,8 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     obfuscate_address,
     get_metric_id,
     set_dynamic_audio_buffer_size,
-    generate_local_oob_data};
+    generate_local_oob_data,
+    allow_low_latency_audio};
 
 // callback reporting helpers
 

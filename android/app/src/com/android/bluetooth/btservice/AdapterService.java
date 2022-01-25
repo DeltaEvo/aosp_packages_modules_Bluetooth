@@ -524,7 +524,7 @@ public class AdapterService extends Service {
 
         setAdapterService(this);
 
-        invalidateBluetoothCaches();
+        //invalidateBluetoothCaches();
 
         // First call to getSharedPreferences will result in a file read into
         // memory cache. Call it here asynchronously to avoid potential ANR
@@ -714,9 +714,11 @@ public class AdapterService extends Service {
         setProfileServiceState(GattService.class, BluetoothAdapter.STATE_OFF);
     }
 
+    /*
     private void invalidateBluetoothGetStateCache() {
         BluetoothAdapter.invalidateBluetoothGetStateCache();
     }
+     */
 
     void updateLeAudioProfileServiceState(boolean isCisCentralSupported) {
         if (isCisCentralSupported) {
@@ -737,7 +739,7 @@ public class AdapterService extends Service {
 
     void updateAdapterState(int prevState, int newState) {
         mAdapterProperties.setState(newState);
-        invalidateBluetoothGetStateCache();
+        //invalidateBluetoothGetStateCache();
         if (mCallbacks != null) {
             int n = mCallbacks.beginBroadcast();
             debugLog("updateAdapterState() - Broadcasting state " + BluetoothAdapter.nameForState(
@@ -835,7 +837,7 @@ public class AdapterService extends Service {
         clearAdapterService(this);
 
         mCleaningUp = true;
-        invalidateBluetoothCaches();
+        //invalidateBluetoothCaches();
 
         unregisterReceiver(mAlarmBroadcastReceiver);
 
@@ -930,6 +932,7 @@ public class AdapterService extends Service {
         }
     }
 
+    /*
     private void invalidateBluetoothCaches() {
         BluetoothAdapter.invalidateGetProfileConnectionStateCache();
         BluetoothAdapter.invalidateIsOffloadedFilteringSupportedCache();
@@ -937,6 +940,7 @@ public class AdapterService extends Service {
         BluetoothAdapter.invalidateBluetoothGetStateCache();
         BluetoothAdapter.invalidateGetAdapterConnectionStateCache();
     }
+     */
 
     private void setProfileServiceState(Class service, int state) {
         if (state == BluetoothAdapter.STATE_ON) {
@@ -1264,8 +1268,8 @@ public class AdapterService extends Service {
 
         AdapterServiceBinder(AdapterService svc) {
             mService = svc;
-            mService.invalidateBluetoothGetStateCache();
-            BluetoothAdapter.getDefaultAdapter().disableBluetoothGetStateCache();
+            //mService.invalidateBluetoothGetStateCache();
+            //BluetoothAdapter.getDefaultAdapter().disableBluetoothGetStateCache();
         }
 
         public void cleanup() {
@@ -2453,13 +2457,27 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public int isLePeriodicAdvertisingSyncTransferSenderSupported() {
+        public int isLeAudioBroadcastSourceSupported() {
             AdapterService service = getService();
             if (service == null) {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
             }
 
-            if (service.mAdapterProperties.isLePeriodicAdvertisingSyncTransferSenderSupported()) {
+            if (service.isLeAudioBroadcastSourceSupported()) {
+                return BluetoothStatusCodes.SUCCESS;
+            }
+
+            return BluetoothStatusCodes.ERROR_FEATURE_NOT_SUPPORTED;
+        }
+
+        @Override
+        public int isLeAudioBroadcastAssistantSupported() {
+            AdapterService service = getService();
+            if (service == null) {
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            }
+
+            if (service.isLeAudioBroadcastAssistantSupported()) {
                 return BluetoothStatusCodes.SUCCESS;
             }
 
@@ -2628,6 +2646,16 @@ public class AdapterService extends Service {
 
             service.dump(fd, writer, args);
             writer.close();
+        }
+
+        @Override
+        public boolean allowLowLatencyAudio(boolean allowed, BluetoothDevice device) {
+            AdapterService service = getService();
+            if (service == null) {
+                return false;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            return service.allowLowLatencyAudio(allowed, device);
         }
     }
 
@@ -3460,16 +3488,33 @@ public class AdapterService extends Service {
         return mAdapterProperties.isLePeriodicAdvertisingSupported();
     }
 
+    /**
+     * Check if the LE audio broadcast source feature is supported.
+     *
+     * @return true, if the LE audio broadcast source is supported
+     */
+    public boolean isLeAudioBroadcastSourceSupported() {
+        //TODO: check the profile support status as well after we have the implementation
+        return mAdapterProperties.isLePeriodicAdvertisingSupported()
+                && mAdapterProperties.isLeExtendedAdvertisingSupported()
+                && mAdapterProperties.isLeIsochronousBroadcasterSupported();
+    }
+
+    /**
+     * Check if the LE audio broadcast assistant feature is supported.
+     *
+     * @return true, if the LE audio broadcast assistant is supported
+     */
+    public boolean isLeAudioBroadcastAssistantSupported() {
+        //TODO: check the profile support status as well after we have the implementation
+        return mAdapterProperties.isLePeriodicAdvertisingSupported()
+            && mAdapterProperties.isLeExtendedAdvertisingSupported()
+            && (mAdapterProperties.isLePeriodicAdvertisingSyncTransferSenderSupported()
+                || mAdapterProperties.isLePeriodicAdvertisingSyncTransferRecipientSupported());
+    }
+
     public int getLeMaximumAdvertisingDataLength() {
         return mAdapterProperties.getLeMaximumAdvertisingDataLength();
-    }
-
-    public boolean isLePeriodicAdvertisingSyncTransferSenderSupported() {
-        return mAdapterProperties.isLePeriodicAdvertisingSyncTransferSenderSupported();
-    }
-
-    public boolean isLeConnectedIsochronousStreamCentralSupported() {
-        return mAdapterProperties.isLeConnectedIsochronousStreamCentralSupported();
     }
 
     /**
@@ -3736,6 +3781,11 @@ public class AdapterService extends Service {
         return getResources().getInteger(R.integer.config_bluetooth_operating_voltage_mv) / 1000.0;
     }
 
+    @VisibleForTesting
+    protected RemoteDevices getRemoteDevices() {
+        return mRemoteDevices;
+    }
+
     @Override
     protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         if (args.length == 0) {
@@ -3962,6 +4012,9 @@ public class AdapterService extends Service {
     private long mScanQuotaWindowMillis = DeviceConfigListener.DEFAULT_SCAN_QUOTA_WINDOW_MILLIS;
     @GuardedBy("mDeviceConfigLock")
     private long mScanTimeoutMillis = DeviceConfigListener.DEFAULT_SCAN_TIMEOUT_MILLIS;
+    @GuardedBy("mDeviceConfigLock")
+    private int mScanUpgradeDurationMillis =
+            DeviceConfigListener.DEFAULT_SCAN_UPGRADE_DURATION_MILLIS;
 
     public @NonNull Predicate<String> getLocationDenylistName() {
         synchronized (mDeviceConfigLock) {
@@ -3999,6 +4052,15 @@ public class AdapterService extends Service {
         }
     }
 
+    /**
+     * Returns scan upgrade duration in millis.
+     */
+    public long getScanUpgradeDurationMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScanUpgradeDurationMillis;
+        }
+    }
+
     private final DeviceConfigListener mDeviceConfigListener = new DeviceConfigListener();
 
     private class DeviceConfigListener implements DeviceConfig.OnPropertiesChangedListener {
@@ -4014,6 +4076,8 @@ public class AdapterService extends Service {
                 "scan_quota_window_millis";
         private static final String SCAN_TIMEOUT_MILLIS =
                 "scan_timeout_millis";
+        private static final String SCAN_UPGRADE_DURATION_MILLIS =
+                "scan_upgrade_duration_millis";
 
         /**
          * Default denylist which matches Eddystone and iBeacon payloads.
@@ -4024,6 +4088,7 @@ public class AdapterService extends Service {
         private static final int DEFAULT_SCAN_QUOTA_COUNT = 5;
         private static final long DEFAULT_SCAN_QUOTA_WINDOW_MILLIS = 30 * SECOND_IN_MILLIS;
         private static final long DEFAULT_SCAN_TIMEOUT_MILLIS = 30 * MINUTE_IN_MILLIS;
+        private static final int DEFAULT_SCAN_UPGRADE_DURATION_MILLIS = (int) SECOND_IN_MILLIS * 6;
 
         public void start() {
             DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_BLUETOOTH,
@@ -4049,6 +4114,8 @@ public class AdapterService extends Service {
                         DEFAULT_SCAN_QUOTA_WINDOW_MILLIS);
                 mScanTimeoutMillis = properties.getLong(SCAN_TIMEOUT_MILLIS,
                         DEFAULT_SCAN_TIMEOUT_MILLIS);
+                mScanUpgradeDurationMillis = properties.getInt(SCAN_UPGRADE_DURATION_MILLIS,
+                        DEFAULT_SCAN_UPGRADE_DURATION_MILLIS);
             }
         }
     }
@@ -4110,6 +4177,17 @@ public class AdapterService extends Service {
             return 0;
         }
         return getMetricIdNative(Utils.getByteAddress(device));
+    }
+
+    /**
+     *  Allow audio low latency
+     *
+     *  @param allowed true if audio low latency is being allowed
+     *  @param device device whose audio low latency will be allowed or disallowed
+     *  @return boolean true if audio low latency is successfully allowed or disallowed
+     */
+    public boolean allowLowLatencyAudio(boolean allowed, BluetoothDevice device) {
+        return allowLowLatencyAudioNative(allowed, Utils.getByteAddress(device));
     }
 
     static native void classInitNative();
@@ -4203,6 +4281,8 @@ public class AdapterService extends Service {
             int type, String serviceName, byte[] uuid, int port, int flag, int callingUid);
 
     /*package*/ native void requestMaximumTxDataLengthNative(byte[] address);
+
+    private native boolean allowLowLatencyAudioNative(boolean allowed, byte[] address);
 
     // Returns if this is a mock object. This is currently used in testing so that we may not call
     // System.exit() while finalizing the object. Otherwise GC of mock objects unfortunately ends up

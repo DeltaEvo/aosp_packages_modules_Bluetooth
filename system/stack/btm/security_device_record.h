@@ -224,7 +224,7 @@ struct tBTM_SEC_DEV_REC {
 
  private:
   friend bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                               BD_NAME bd_name, uint8_t* features,
+                               const BD_NAME& bd_name, uint8_t* features,
                                LinkKey* p_link_key, uint8_t key_type,
                                uint8_t pin_length);
   friend void BTM_PINCodeReply(const RawAddress& bd_addr, tBTM_STATUS res,
@@ -313,7 +313,7 @@ struct tBTM_SEC_DEV_REC {
   tBTM_BD_NAME sec_bd_name; /* User friendly name of the device. (may be
                                truncated to save space in dev_rec table) */
 
-  uint8_t sec_state;          /* Operating state                    */
+  tSECURITY_STATE sec_state; /* Operating state                    */
   bool is_security_state_idle() const {
     return sec_state == BTM_SEC_STATE_IDLE;
   }
