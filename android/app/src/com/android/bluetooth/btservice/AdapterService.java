@@ -96,6 +96,7 @@ import android.util.SparseArray;
 
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.BluetoothStatsLog;
+import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
@@ -122,7 +123,6 @@ import com.android.bluetooth.sap.SapService;
 import com.android.bluetooth.sdp.SdpManager;
 import com.android.bluetooth.telephony.BluetoothInCallService;
 import com.android.bluetooth.vc.VolumeControlService;
-import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.BinderCallsStats;
@@ -502,7 +502,7 @@ public class AdapterService extends Service {
 
         // Phone policy is specific to phone implementations and hence if a device wants to exclude
         // it out then it can be disabled by using the flag below.
-        if (getResources().getBoolean(com.android.bluetooth.R.bool.enable_phone_policy)) {
+        if (getResources().getBoolean(R.bool.enable_phone_policy)) {
             Log.i(TAG, "Phone policy enabled");
             mPhonePolicy = new PhonePolicy(this, new ServiceFactory());
             mPhonePolicy.start();
@@ -809,6 +809,20 @@ public class AdapterService extends Service {
                     timestamp, rssi, snr, retransmissionCount,
                     packetsNotReceiveCount, negativeAcknowledgementCount);
         }
+    }
+
+    void switchBufferSizeCallback(byte[] address, boolean isLowLatencyBufferSize) {
+        BluetoothDevice device = getDeviceFromByte(address);
+        // Send intent to fastpair
+        Intent switchBufferSizeIntent = new Intent(BluetoothDevice.ACTION_SWITCH_BUFFER_SIZE);
+        switchBufferSizeIntent.setClassName(
+                getString(com.android.bluetooth.R.string.peripheral_link_package),
+                getString(com.android.bluetooth.R.string.peripheral_link_package)
+                        + getString(com.android.bluetooth.R.string.peripheral_link_service));
+        switchBufferSizeIntent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        switchBufferSizeIntent.putExtra(
+                BluetoothDevice.EXTRA_LOW_LATENCY_BUFFER_SIZE, isLowLatencyBufferSize);
+        sendBroadcast(switchBufferSizeIntent);
     }
 
     /**
@@ -2266,7 +2280,7 @@ public class AdapterService extends Service {
             AdapterService service = getService();
             if (service == null || !Utils.checkConnectPermissionForDataDelivery(
                     service, attributionSource, "AdapterService getMaxConnectedAudioDevices")) {
-                return AdapterProperties.MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOND;
+                return -1;
             }
 
             return service.getMaxConnectedAudioDevices();
@@ -3766,19 +3780,19 @@ public class AdapterService extends Service {
     }
 
     private int getIdleCurrentMa() {
-        return getResources().getInteger(R.integer.config_bluetooth_idle_cur_ma);
+        return BluetoothProperties.getHardwareIdleCurrentMa().orElse(0);
     }
 
     private int getTxCurrentMa() {
-        return getResources().getInteger(R.integer.config_bluetooth_tx_cur_ma);
+        return BluetoothProperties.getHardwareTxCurrentMa().orElse(0);
     }
 
     private int getRxCurrentMa() {
-        return getResources().getInteger(R.integer.config_bluetooth_rx_cur_ma);
+        return BluetoothProperties.getHardwareRxCurrentMa().orElse(0);
     }
 
     private double getOperatingVolt() {
-        return getResources().getInteger(R.integer.config_bluetooth_operating_voltage_mv) / 1000.0;
+        return BluetoothProperties.getHardwareOperatingVoltageMv().orElse(0) / 1000.0;
     }
 
     @VisibleForTesting
@@ -4012,6 +4026,9 @@ public class AdapterService extends Service {
     private long mScanQuotaWindowMillis = DeviceConfigListener.DEFAULT_SCAN_QUOTA_WINDOW_MILLIS;
     @GuardedBy("mDeviceConfigLock")
     private long mScanTimeoutMillis = DeviceConfigListener.DEFAULT_SCAN_TIMEOUT_MILLIS;
+    @GuardedBy("mDeviceConfigLock")
+    private int mScanUpgradeDurationMillis =
+            DeviceConfigListener.DEFAULT_SCAN_UPGRADE_DURATION_MILLIS;
 
     public @NonNull Predicate<String> getLocationDenylistName() {
         synchronized (mDeviceConfigLock) {
@@ -4049,6 +4066,15 @@ public class AdapterService extends Service {
         }
     }
 
+    /**
+     * Returns scan upgrade duration in millis.
+     */
+    public long getScanUpgradeDurationMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScanUpgradeDurationMillis;
+        }
+    }
+
     private final DeviceConfigListener mDeviceConfigListener = new DeviceConfigListener();
 
     private class DeviceConfigListener implements DeviceConfig.OnPropertiesChangedListener {
@@ -4064,6 +4090,8 @@ public class AdapterService extends Service {
                 "scan_quota_window_millis";
         private static final String SCAN_TIMEOUT_MILLIS =
                 "scan_timeout_millis";
+        private static final String SCAN_UPGRADE_DURATION_MILLIS =
+                "scan_upgrade_duration_millis";
 
         /**
          * Default denylist which matches Eddystone and iBeacon payloads.
@@ -4074,6 +4102,7 @@ public class AdapterService extends Service {
         private static final int DEFAULT_SCAN_QUOTA_COUNT = 5;
         private static final long DEFAULT_SCAN_QUOTA_WINDOW_MILLIS = 30 * SECOND_IN_MILLIS;
         private static final long DEFAULT_SCAN_TIMEOUT_MILLIS = 30 * MINUTE_IN_MILLIS;
+        private static final int DEFAULT_SCAN_UPGRADE_DURATION_MILLIS = (int) SECOND_IN_MILLIS * 6;
 
         public void start() {
             DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_BLUETOOTH,
@@ -4099,6 +4128,8 @@ public class AdapterService extends Service {
                         DEFAULT_SCAN_QUOTA_WINDOW_MILLIS);
                 mScanTimeoutMillis = properties.getLong(SCAN_TIMEOUT_MILLIS,
                         DEFAULT_SCAN_TIMEOUT_MILLIS);
+                mScanUpgradeDurationMillis = properties.getInt(SCAN_UPGRADE_DURATION_MILLIS,
+                        DEFAULT_SCAN_UPGRADE_DURATION_MILLIS);
             }
         }
     }

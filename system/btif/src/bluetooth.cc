@@ -60,7 +60,6 @@
 #include "btif_av.h"
 #include "btif_bqr.h"
 #include "btif_config.h"
-#include "btif_debug.h"
 #include "btif_debug_btsnoop.h"
 #include "btif_debug_conn.h"
 #include "btif_hf.h"
@@ -195,7 +194,6 @@ static int init(bt_callbacks_t* callbacks, bool start_restricted,
   is_local_device_atv = is_atv;
 
   stack_manager_get_interface()->init_stack();
-  btif_debug_init();
   return BT_STATUS_SUCCESS;
 }
 
@@ -896,4 +894,16 @@ void invoke_link_quality_report_cb(
           },
           timestamp, report_id, rssi, snr, retransmission_count,
           packets_not_receive_count, negative_acknowledgement_count));
+}
+
+void invoke_switch_buffer_size_cb(RawAddress remote_addr,
+                                  bool is_low_latency_buffer_size) {
+  do_in_jni_thread(
+      FROM_HERE,
+      base::BindOnce(
+          [](RawAddress remote_addr, bool is_low_latency_buffer_size) {
+            HAL_CBACK(bt_hal_cbacks, switch_buffer_size_cb, &remote_addr,
+                      is_low_latency_buffer_size);
+          },
+          remote_addr, is_low_latency_buffer_size));
 }
