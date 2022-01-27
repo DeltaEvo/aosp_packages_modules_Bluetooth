@@ -7,7 +7,9 @@ use bt_topshim::profiles::a2dp::{
     PresentationPosition,
 };
 use bt_topshim::profiles::avrcp::{Avrcp, AvrcpCallbacks, AvrcpCallbacksDispatcher};
-use bt_topshim::profiles::hfp::{BthfConnectionState, Hfp, HfpCallbacks, HfpCallbacksDispatcher};
+use bt_topshim::profiles::hfp::{
+    BthfConnectionState, Hfp, HfpCallbacks, HfpCallbacksDispatcher, HfpCodecCapability,
+};
 
 use bt_topshim::topstack;
 
@@ -32,7 +34,6 @@ pub trait IBluetoothMedia {
     /// clean up media stack
     fn cleanup(&mut self) -> bool;
 
-    // TODO (b/204488289): Accept and validate RawAddress instead.
     fn connect(&mut self, device: String);
     fn set_active_device(&mut self, device: String);
     fn disconnect(&mut self, device: String);
@@ -49,13 +50,17 @@ pub trait IBluetoothMedia {
 }
 
 pub trait IBluetoothMediaCallback {
-    ///
+    /// Triggered when a Bluetooth audio device is ready to be used. This should
+    /// only be triggered once for a device and send an event to clients. If the
+    ///  device supports both HFP and A2DP, both should be ready when this is
+    /// triggered.
     fn on_bluetooth_audio_device_added(
         &self,
         addr: String,
         sample_rate: i32,
         bits_per_sample: i32,
         channel_mode: i32,
+        hfp_cap: i32,
     );
 
     ///
@@ -128,6 +133,7 @@ impl BluetoothMedia {
                                         cap.sample_rate,
                                         cap.bits_per_sample,
                                         cap.channel_mode,
+                                        HfpCodecCapability::UNSUPPORTED.bits(),
                                     );
                                 });
                                 return;
@@ -268,14 +274,12 @@ impl IBluetoothMedia for BluetoothMedia {
     }
 
     fn connect(&mut self, device: String) {
-        let addr = RawAddress::from_string(device.clone());
-        if addr.is_none() {
+        if let Some(addr) = RawAddress::from_string(device.clone()) {
+            self.a2dp.as_mut().unwrap().connect(addr);
+            self.hfp.as_mut().unwrap().connect(addr);
+        } else {
             warn!("Invalid device string {}", device);
-            return;
         }
-
-        self.a2dp.as_mut().unwrap().connect(device);
-        self.hfp.as_mut().unwrap().connect(addr.unwrap());
     }
 
     fn cleanup(&mut self) -> bool {
@@ -283,18 +287,20 @@ impl IBluetoothMedia for BluetoothMedia {
     }
 
     fn set_active_device(&mut self, device: String) {
-        self.a2dp.as_mut().unwrap().set_active_device(device);
+        if let Some(addr) = RawAddress::from_string(device.clone()) {
+            self.a2dp.as_mut().unwrap().set_active_device(addr);
+        } else {
+            warn!("Invalid device string {}", device);
+        }
     }
 
     fn disconnect(&mut self, device: String) {
-        let addr = RawAddress::from_string(device.clone());
-        if addr.is_none() {
+        if let Some(addr) = RawAddress::from_string(device.clone()) {
+            self.a2dp.as_mut().unwrap().disconnect(addr);
+            self.hfp.as_mut().unwrap().disconnect(addr);
+        } else {
             warn!("Invalid device string {}", device);
-            return;
         }
-
-        self.a2dp.as_mut().unwrap().disconnect(device);
-        self.hfp.as_mut().unwrap().disconnect(addr.unwrap());
     }
 
     fn set_audio_config(

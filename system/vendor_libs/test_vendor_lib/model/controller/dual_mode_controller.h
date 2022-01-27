@@ -69,6 +69,8 @@ class DualModeController : public Device {
 
   virtual void TimerTick() override;
 
+  virtual void Close() override;
+
   // Route commands and data from the stack.
   void HandleAcl(std::shared_ptr<std::vector<uint8_t>> acl_packet);
   void HandleCommand(std::shared_ptr<std::vector<uint8_t>> command_packet);
@@ -117,6 +119,9 @@ class DualModeController : public Device {
 
   // 7.1.6
   void Disconnect(CommandView args);
+
+  // Deprecated
+  void AddScoConnection(CommandView args);
 
   // 7.1.7
   void CreateConnectionCancel(CommandView args);
@@ -171,6 +176,15 @@ class DualModeController : public Device {
 
   // 7.1.24
   void ReadClockOffset(CommandView args);
+
+  // 7.1.26
+  void SetupSynchronousConnection(CommandView command);
+
+  // 7.1.27
+  void AcceptSynchronousConnection(CommandView command);
+
+  // 7.1.28
+  void RejectSynchronousConnection(CommandView command);
 
   // 7.1.29
   void IoCapabilityRequestReply(CommandView args);
@@ -288,6 +302,12 @@ class DualModeController : public Device {
 
   // 7.3.28
   void WriteVoiceSetting(CommandView args);
+
+  // 7.3.36
+  void ReadSynchronousFlowControlEnable(CommandView args);
+
+  // 7.3.37
+  void WriteSynchronousFlowControlEnable(CommandView args);
 
   // 7.3.39
   void HostBufferSize(CommandView args);

@@ -95,12 +95,14 @@ class LinkLayerController {
   ErrorCode Disconnect(uint16_t handle, uint8_t reason);
 
  private:
-  void DisconnectCleanup(uint16_t handle, uint8_t reason);
+  void SendDisconnectionCompleteEvent(uint16_t handle, uint8_t reason);
 
  public:
   void IncomingPacket(model::packets::LinkLayerPacketView incoming);
 
   void TimerTick();
+
+  void Close();
 
   AsyncTaskId ScheduleTask(std::chrono::milliseconds delay_ms, const TaskCallback& task);
 
@@ -173,6 +175,8 @@ class LinkLayerController {
                               uint8_t role, uint16_t connection_interval,
                               uint16_t connection_latency,
                               uint16_t supervision_timeout);
+
+  bool ListBusy(uint16_t ignore_mask);
 
   bool ConnectListBusy();
   ErrorCode LeConnectListClear();
@@ -346,6 +350,29 @@ class LinkLayerController {
   void ReadLocalOobData();
   void ReadLocalOobExtendedData();
 
+  ErrorCode AddScoConnection(
+      uint16_t connection_handle,
+      uint16_t packet_type);
+  ErrorCode SetupSynchronousConnection(
+      uint16_t connection_handle,
+      uint32_t transmit_bandwidth,
+      uint32_t receive_bandwidth,
+      uint16_t max_latency,
+      uint16_t voice_setting,
+      uint8_t retransmission_effort,
+      uint16_t packet_types);
+  ErrorCode AcceptSynchronousConnection(
+      Address bd_addr,
+      uint32_t transmit_bandwidth,
+      uint32_t receive_bandwidth,
+      uint16_t max_latency,
+      uint16_t voice_setting,
+      uint8_t retransmission_effort,
+      uint16_t packet_types);
+  ErrorCode RejectSynchronousConnection(
+      Address bd_addr,
+      uint16_t reason);
+
   void HandleIso(bluetooth::hci::IsoView iso);
 
  protected:
@@ -354,6 +381,7 @@ class LinkLayerController {
   void SendLinkLayerPacket(
       std::unique_ptr<model::packets::LinkLayerPacketBuilder> packet);
   void IncomingAclPacket(model::packets::LinkLayerPacketView packet);
+  void IncomingScoPacket(model::packets::LinkLayerPacketView packet);
   void IncomingDisconnectPacket(model::packets::LinkLayerPacketView packet);
   void IncomingEncryptConnection(model::packets::LinkLayerPacketView packet);
   void IncomingEncryptConnectionResponse(
@@ -420,6 +448,12 @@ class LinkLayerController {
   void IncomingRemoteNameRequestResponse(
       model::packets::LinkLayerPacketView packet);
 
+  void IncomingScoConnectionRequest(
+      model::packets::LinkLayerPacketView packet);
+  void IncomingScoConnectionResponse(
+      model::packets::LinkLayerPacketView packet);
+  void IncomingScoDisconnect(model::packets::LinkLayerPacketView packet);
+
  private:
   const DeviceProperties& properties_;
   AclConnectionHandler connections_;
@@ -429,7 +463,6 @@ class LinkLayerController {
 
   // Timing related state
   std::vector<AsyncTaskId> controller_events_;
-  AsyncTaskId timer_tick_task_{};
   std::chrono::milliseconds timer_period_ = std::chrono::milliseconds(100);
 
   // Callbacks to schedule tasks.

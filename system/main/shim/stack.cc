@@ -36,6 +36,7 @@
 #include "gd/hci/vendor_specific_event_manager.h"
 #include "gd/l2cap/classic/l2cap_classic_module.h"
 #include "gd/l2cap/le/l2cap_le_module.h"
+#include "gd/metrics/counter_metrics.h"
 #include "gd/neighbor/connectability.h"
 #include "gd/neighbor/discoverability.h"
 #include "gd/neighbor/inquiry.h"
@@ -99,6 +100,7 @@ void Stack::StartIdleMode() {
   ASSERT_LOG(!is_running_, "%s Gd stack already running", __func__);
   LOG_INFO("%s Starting Gd stack", __func__);
   ModuleList modules;
+  modules.add<metrics::CounterMetrics>();
   modules.add<storage::StorageModule>();
   Start(&modules);
   // Make sure the leaf modules are started
@@ -120,6 +122,12 @@ void Stack::StartEverything() {
 
     // Create pid since we're up and running
     CreatePidFile();
+
+    // Create the acl shim layer
+    acl_ = new legacy::Acl(
+        stack_handler_, legacy::GetAclInterface(),
+        controller_get_interface()->get_ble_acceptlist_size(),
+        controller_get_interface()->get_ble_resolving_list_max_size());
     return;
   }
 
@@ -128,6 +136,7 @@ void Stack::StartEverything() {
   LOG_INFO("%s Starting Gd stack", __func__);
   ModuleList modules;
 
+  modules.add<metrics::CounterMetrics>();
   modules.add<hal::HciHal>();
   modules.add<hci::HciLayer>();
   modules.add<storage::StorageModule>();
@@ -135,9 +144,7 @@ void Stack::StartEverything() {
   modules.add<hci::VendorSpecificEventManager>();
 
   modules.add<hci::Controller>();
-  if (common::init_flags::gd_acl_is_enabled()) {
-    modules.add<hci::AclManager>();
-  }
+  modules.add<hci::AclManager>();
   if (common::init_flags::gd_l2cap_is_enabled()) {
     modules.add<l2cap::classic::L2capClassicModule>();
     modules.add<l2cap::le::L2capLeModule>();
@@ -146,12 +153,8 @@ void Stack::StartEverything() {
   if (common::init_flags::gd_security_is_enabled()) {
     modules.add<security::SecurityModule>();
   }
-  if (common::init_flags::gd_advertising_is_enabled()) {
-    modules.add<hci::LeAdvertisingManager>();
-  }
-  if (common::init_flags::gd_scanning_is_enabled()) {
-    modules.add<hci::LeScanningManager>();
-  }
+  modules.add<hci::LeAdvertisingManager>();
+  modules.add<hci::LeScanningManager>();
   if (common::init_flags::btaa_hci_is_enabled()) {
     modules.add<activity_attribution::ActivityAttribution>();
   }
@@ -175,24 +178,19 @@ void Stack::StartEverything() {
     btm_ = new Btm(stack_handler_,
                    stack_manager_.GetInstance<neighbor::InquiryModule>());
   }
-  if (common::init_flags::gd_acl_is_enabled()) {
-    if (!common::init_flags::gd_core_is_enabled()) {
-      acl_ = new legacy::Acl(
-          stack_handler_, legacy::GetAclInterface(),
-          controller_get_interface()->get_ble_acceptlist_size(),
-          controller_get_interface()->get_ble_resolving_list_max_size());
-    }
+  if (!common::init_flags::gd_core_is_enabled()) {
+    acl_ = new legacy::Acl(
+        stack_handler_, legacy::GetAclInterface(),
+        controller_get_interface()->get_ble_acceptlist_size(),
+        controller_get_interface()->get_ble_resolving_list_max_size());
   }
   if (!common::init_flags::gd_core_is_enabled()) {
     bluetooth::shim::hci_on_reset_complete();
   }
 
-  if (common::init_flags::gd_advertising_is_enabled()) {
-    bluetooth::shim::init_advertising_manager();
-  }
-  if (common::init_flags::gd_scanning_is_enabled()) {
-    bluetooth::shim::init_scanning_manager();
-  }
+  bluetooth::shim::init_advertising_manager();
+  bluetooth::shim::init_scanning_manager();
+
   if (common::init_flags::gd_l2cap_is_enabled() &&
       !common::init_flags::gd_core_is_enabled()) {
     L2CA_UseLegacySecurityModule();
@@ -210,7 +208,7 @@ void Stack::Start(ModuleList* modules) {
   LOG_INFO("%s Starting Gd stack", __func__);
 
   stack_thread_ =
-      new os::Thread("gd_stack_thread", os::Thread::Priority::NORMAL);
+      new os::Thread("gd_stack_thread", os::Thread::Priority::REAL_TIME);
   stack_manager_.StartUp(modules, stack_thread_);
 
   stack_handler_ = new os::Handler(stack_thread_);
@@ -235,7 +233,7 @@ void Stack::Stop() {
   }
 
   // Make sure gd acl flag is enabled and we started it up
-  if (common::init_flags::gd_acl_is_enabled() && acl_ != nullptr) {
+  if (acl_ != nullptr) {
     acl_->FinalShutdown();
     delete acl_;
     acl_ = nullptr;

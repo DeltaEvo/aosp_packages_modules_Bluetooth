@@ -51,7 +51,7 @@ typedef struct {
  * array of returned parameter bytes are included. This asynchronous event
  * is enabled/disabled by calling BTM_RegisterForVSEvents().
 */
-typedef void(tBTM_VS_EVT_CB)(uint8_t len, uint8_t* p);
+typedef void(tBTM_VS_EVT_CB)(uint8_t len, const uint8_t* p);
 
 /* General callback function for notifying an application that a synchronous
  * BTM function is complete. The pointer contains the address of any returned
@@ -132,6 +132,7 @@ typedef void(tBTM_VSC_CMPL_CB)(tBTM_VSC_CMPL* p1);
  * service class fields
  ***************************/
 #define BTM_COD_SERVICE_LMTD_DISCOVER 0x0020
+#define BTM_COD_SERVICE_LE_AUDIO 0x0040
 #define BTM_COD_SERVICE_POSITIONING 0x0100
 #define BTM_COD_SERVICE_NETWORKING 0x0200
 #define BTM_COD_SERVICE_RENDERING 0x0400
@@ -445,7 +446,7 @@ inline std::string security_mode_text(const tSECURITY_MODE& security_mode) {
     case BTM_SEC_MODE_SC:
       return std::string("secure connections only");
     default:
-      return std::string("UNKNOWN[%hhu]", security_mode);
+      return base::StringPrintf("UNKNOWN[%hhu]", security_mode);
   }
 }
 
@@ -935,7 +936,8 @@ typedef struct {
 typedef uint8_t tBTM_CONTRL_STATE;
 
 // Bluetooth Quality Report - Report receiver
-typedef void(tBTM_BT_QUALITY_REPORT_RECEIVER)(uint8_t len, uint8_t* p_stream);
+typedef void(tBTM_BT_QUALITY_REPORT_RECEIVER)(uint8_t len,
+                                              const uint8_t* p_stream);
 
 struct tREMOTE_VERSION_INFO {
   uint8_t lmp_version{0};

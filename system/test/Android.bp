@@ -261,6 +261,14 @@ filegroup {
 }
 
 filegroup {
+    name: "TestMockMainShimLeScanning",
+    srcs: [
+      "mock/mock_main_shim_le_scanning_manager.cc",
+      "mock/mock_main_shim.cc",
+    ],
+}
+
+filegroup {
     name: "TestMockMainShimFlags",
     srcs: [
       "mock/mock_main_shim.cc",
@@ -404,5 +412,19 @@ filegroup {
   name: "TestMockBluetoothInterface",
   srcs: [
       "mock/mock_bluetooth_interface.cc",
+  ],
+}
+
+filegroup {
+  name: "TestMockStackHcic",
+  srcs: [
+      "mock/mock_stack_hcic*.cc",
+  ],
+}
+
+filegroup {
+  name: "TestMockLegacyHciInterface",
+  srcs: [
+      "mock/mock_legacy_hci_iterface.cc"
   ],
 }

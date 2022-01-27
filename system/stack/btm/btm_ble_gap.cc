@@ -33,6 +33,7 @@
 #include <memory>
 #include <vector>
 
+#include "bta/include/bta_api.h"
 #include "common/time_util.h"
 #include "device/include/controller.h"
 #include "main/shim/acl_api.h"
@@ -175,7 +176,7 @@ void btm_ble_process_adv_pkt_cont(uint16_t evt_type, uint8_t addr_type,
                                   uint8_t secondary_phy,
                                   uint8_t advertising_sid, int8_t tx_power,
                                   int8_t rssi, uint16_t periodic_adv_int,
-                                  uint8_t data_len, uint8_t* data);
+                                  uint8_t data_len, const uint8_t* data);
 static uint8_t btm_set_conn_mode_adv_init_addr(RawAddress& p_peer_addr_ptr,
                                                tBLE_ADDR_TYPE* p_peer_addr_type,
                                                tBLE_ADDR_TYPE* p_own_addr_type);
@@ -620,7 +621,9 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
   if (btm_cb.cmn_ble_vsc_cb.max_filter > 0) btm_ble_adv_filter_init();
 
   /* VS capability included and non-4.2 device */
-  if (btm_cb.cmn_ble_vsc_cb.max_irk_list_sz > 0 &&
+  if (controller_get_interface()->supports_ble() && 
+      controller_get_interface()->supports_ble_privacy() &&
+      btm_cb.cmn_ble_vsc_cb.max_irk_list_sz > 0 &&
       controller_get_interface()->get_ble_resolving_list_max_size() == 0)
     btm_ble_resolving_list_init(btm_cb.cmn_ble_vsc_cb.max_irk_list_sz);
 
@@ -701,7 +704,7 @@ void BTM_BleReadControllerFeatures(
 bool BTM_BleConfigPrivacy(bool privacy_mode) {
   tBTM_BLE_CB* p_cb = &btm_cb.ble_ctr_cb;
 
-  BTM_TRACE_EVENT("%s", __func__);
+  BTM_TRACE_WARNING("%s %d", __func__, (int)privacy_mode);
 
   /* if LE is not supported, return error */
   if (!controller_get_interface()->supports_ble()) return false;
@@ -727,6 +730,8 @@ bool BTM_BleConfigPrivacy(bool privacy_mode) {
     } else /* 4.1/4.0 controller */
       p_cb->privacy_mode = BTM_PRIVACY_1_1;
   }
+  VLOG(2) << __func__ << " privacy_mode: " << p_cb->privacy_mode
+          << " own_addr_type: " << p_cb->addr_mgnt_cb.own_addr_type;
 
   GAP_BleAttrDBUpdate(GATT_UUID_GAP_CENTRAL_ADDR_RESOL, &gap_ble_attr_value);
 
@@ -1243,6 +1248,17 @@ void btm_send_hci_set_scan_params(uint8_t scan_type, uint16_t scan_int,
   }
 }
 
+/* Scan filter param config event */
+static void btm_ble_scan_filt_param_cfg_evt(uint8_t avbl_space,
+                                            tBTM_BLE_SCAN_COND_OP action_type,
+                                            tBTM_STATUS btm_status) {
+  if (btm_status != btm_status_value(BTM_SUCCESS)) {
+    BTM_TRACE_ERROR("%s, %d", __func__, btm_status);
+  } else {
+    BTM_TRACE_DEBUG("%s", __func__);
+  }
+}
+
 /*******************************************************************************
  *
  * Function         btm_ble_start_inquiry
@@ -1278,6 +1294,22 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
     BTM_TRACE_ERROR("LE Inquiry is active, can not start inquiry");
     return (BTM_BUSY);
   }
+
+  /* Cleanup anything remaining on index 0 */
+  BTM_BleAdvFilterParamSetup(BTM_BLE_SCAN_COND_DELETE,
+                             static_cast<tBTM_BLE_PF_FILT_INDEX>(0), nullptr,
+                             base::Bind(btm_ble_scan_filt_param_cfg_evt));
+
+  auto adv_filt_param = std::make_unique<btgatt_filt_param_setup_t>();
+  /* Add an allow-all filter on index 0*/
+  adv_filt_param->dely_mode = IMMEDIATE_DELY_MODE;
+  adv_filt_param->feat_seln = ALLOW_ALL_FILTER;
+  adv_filt_param->filt_logic_type = BTA_DM_BLE_PF_FILT_LOGIC_OR;
+  adv_filt_param->list_logic_type = BTA_DM_BLE_PF_LIST_LOGIC_OR;
+  adv_filt_param->rssi_low_thres = LOWEST_RSSI_VALUE;
+  adv_filt_param->rssi_high_thres = LOWEST_RSSI_VALUE;
+  BTM_BleAdvFilterParamSetup(BTM_BLE_SCAN_COND_ADD, static_cast<tBTM_BLE_PF_FILT_INDEX>(0),
+                 std::move(adv_filt_param), base::Bind(btm_ble_scan_filt_param_cfg_evt));
 
   if (!p_ble_cb->is_ble_scan_active()) {
     cache.ClearAll();
@@ -1345,7 +1377,7 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda,
   }
 
   btm_process_remote_name(&bda, bd_name, length + 1, hci_status);
-  btm_sec_rmt_name_request_complete(&bda, (uint8_t*)p_name, hci_status);
+  btm_sec_rmt_name_request_complete(&bda, (const uint8_t*)p_name, hci_status);
 }
 
 /*******************************************************************************
@@ -1765,9 +1797,9 @@ void btm_ble_process_adv_addr(RawAddress& bda, uint8_t* addr_type) {
  * It updates the inquiry database. If the inquiry database is full, the oldest
  * entry is discarded.
  */
-void btm_ble_process_ext_adv_pkt(uint8_t data_len, uint8_t* data) {
+void btm_ble_process_ext_adv_pkt(uint8_t data_len, const uint8_t* data) {
   RawAddress bda, direct_address;
-  uint8_t* p = data;
+  const uint8_t* p = data;
   uint8_t addr_type, num_reports, pkt_data_len, primary_phy, secondary_phy,
       advertising_sid;
   int8_t rssi, tx_power;
@@ -1803,7 +1835,7 @@ void btm_ble_process_ext_adv_pkt(uint8_t data_len, uint8_t* data) {
     STREAM_TO_BDADDR(direct_address, p);
     STREAM_TO_UINT8(pkt_data_len, p);
 
-    uint8_t* pkt_data = p;
+    const uint8_t* pkt_data = p;
     p += pkt_data_len; /* Advance to the the next packet*/
     if (p > data + data_len) {
       LOG(ERROR) << "Invalid pkt_data_len: " << +pkt_data_len;
@@ -1830,9 +1862,9 @@ void btm_ble_process_ext_adv_pkt(uint8_t data_len, uint8_t* data) {
  * the inquiry database. If the inquiry database is full, the oldest entry is
  * discarded.
  */
-void btm_ble_process_adv_pkt(uint8_t data_len, uint8_t* data) {
+void btm_ble_process_adv_pkt(uint8_t data_len, const uint8_t* data) {
   RawAddress bda;
-  uint8_t* p = data;
+  const uint8_t* p = data;
   uint8_t legacy_evt_type, addr_type, num_reports, pkt_data_len;
   int8_t rssi;
 
@@ -1856,7 +1888,7 @@ void btm_ble_process_adv_pkt(uint8_t data_len, uint8_t* data) {
     STREAM_TO_BDADDR(bda, p);
     STREAM_TO_UINT8(pkt_data_len, p);
 
-    uint8_t* pkt_data = p;
+    const uint8_t* pkt_data = p;
     p += pkt_data_len; /* Advance to the the rssi byte */
     if (p > data + data_len - sizeof(rssi)) {
       LOG(ERROR) << "Invalid pkt_data_len: " << +pkt_data_len;
@@ -1914,7 +1946,7 @@ void btm_ble_process_adv_pkt_cont(uint16_t evt_type, uint8_t addr_type,
                                   uint8_t secondary_phy,
                                   uint8_t advertising_sid, int8_t tx_power,
                                   int8_t rssi, uint16_t periodic_adv_int,
-                                  uint8_t data_len, uint8_t* data) {
+                                  uint8_t data_len, const uint8_t* data) {
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
   bool update = true;
 
@@ -2210,6 +2242,11 @@ void btm_ble_stop_inquiry(void) {
   alarm_cancel(p_ble_cb->inq_var.inquiry_timer);
 
   p_ble_cb->reset_ble_inquiry();
+
+  /* Cleanup anything remaining on index 0 */
+  BTM_BleAdvFilterParamSetup(BTM_BLE_SCAN_COND_DELETE,
+                             static_cast<tBTM_BLE_PF_FILT_INDEX>(0), nullptr,
+                             base::Bind(btm_ble_scan_filt_param_cfg_evt));
 
   /* If no more scan activity, stop LE scan now */
   if (!p_ble_cb->is_ble_scan_active()) {

@@ -26,7 +26,7 @@ class LeAudioClientAudioSinkReceiver {
   virtual ~LeAudioClientAudioSinkReceiver() = default;
   virtual void OnAudioDataReady(const std::vector<uint8_t>& data) = 0;
   virtual void OnAudioSuspend(std::promise<void> do_suspend_promise) = 0;
-  virtual void OnAudioResume(std::promise<void> do_resume_promise) = 0;
+  virtual void OnAudioResume(void) = 0;
   virtual void OnAudioMetadataUpdate(
       std::promise<void> do_update_metadata_promise,
       const source_metadata_t& source_metadata) = 0;
@@ -35,7 +35,7 @@ class LeAudioClientAudioSourceReceiver {
  public:
   virtual ~LeAudioClientAudioSourceReceiver() = default;
   virtual void OnAudioSuspend(std::promise<void> do_suspend_promise) = 0;
-  virtual void OnAudioResume(std::promise<void> do_resume_promise) = 0;
+  virtual void OnAudioResume(void) = 0;
 };
 
 /* Represents configuration of audio codec, as exchanged between le audio and
@@ -113,6 +113,7 @@ class LeAudioClientAudioSource {
   static void CancelStreamingRequest();
   static void UpdateRemoteDelay(uint16_t remote_delay_ms);
   static void DebugDump(int fd);
+  static void UpdateAudioConfigToHal(const ::le_audio::offload_config& config);
 };
 
 /* Represents audio sink for le audio client */
@@ -128,4 +129,5 @@ class LeAudioClientAudioSink {
   static void CancelStreamingRequest();
   static void UpdateRemoteDelay(uint16_t remote_delay_ms);
   static void DebugDump(int fd);
+  static void UpdateAudioConfigToHal(const ::le_audio::offload_config& config);
 };

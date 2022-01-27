@@ -148,7 +148,7 @@ void btm_ble_init(void) { mock_function_count_map[__func__]++; }
 void btm_ble_process_adv_addr(RawAddress& bda, uint8_t* addr_type) {
   mock_function_count_map[__func__]++;
 }
-void btm_ble_process_adv_pkt(uint8_t data_len, uint8_t* data) {
+void btm_ble_process_adv_pkt(uint8_t data_len, const uint8_t* data) {
   mock_function_count_map[__func__]++;
 }
 void btm_ble_process_adv_pkt_cont(uint16_t evt_type, uint8_t addr_type,
@@ -156,7 +156,7 @@ void btm_ble_process_adv_pkt_cont(uint16_t evt_type, uint8_t addr_type,
                                   uint8_t secondary_phy,
                                   uint8_t advertising_sid, int8_t tx_power,
                                   int8_t rssi, uint16_t periodic_adv_int,
-                                  uint8_t data_len, uint8_t* data) {
+                                  uint8_t data_len, const uint8_t* data) {
   mock_function_count_map[__func__]++;
 }
 void btm_ble_process_adv_pkt_cont_for_inquiry(
@@ -166,7 +166,7 @@ void btm_ble_process_adv_pkt_cont_for_inquiry(
     std::vector<uint8_t> advertising_data) {
   mock_function_count_map[__func__]++;
 }
-void btm_ble_process_ext_adv_pkt(uint8_t data_len, uint8_t* data) {
+void btm_ble_process_ext_adv_pkt(uint8_t data_len, const uint8_t* data) {
   mock_function_count_map[__func__]++;
 }
 void btm_ble_process_phy_update_pkt(uint8_t len, uint8_t* data) {

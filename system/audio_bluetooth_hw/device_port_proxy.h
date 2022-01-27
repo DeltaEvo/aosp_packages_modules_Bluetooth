@@ -78,6 +78,8 @@ class BluetoothAudioPort {
   // source has been changed.
   void UpdateMetadata(const source_metadata* source_metadata) const;
 
+  void UpdateSinkMetadata(const sink_metadata* sink_metadata) const;
+
   // Return the current BluetoothStreamState
   BluetoothStreamState GetState() const;
 
@@ -88,6 +90,8 @@ class BluetoothAudioPort {
     return session_type_ == SessionType_2_1::A2DP_SOFTWARE_ENCODING_DATAPATH ||
            session_type_ == SessionType_2_1::A2DP_HARDWARE_OFFLOAD_DATAPATH;
   }
+
+  bool GetPreferredDataIntervalUs(size_t* interval_us) const;
 
  protected:
   uint16_t cookie_;

@@ -435,6 +435,17 @@ void btm_acl_update_conn_addr(uint16_t handle, const RawAddress& address) {
   p_acl->conn_addr = address;
 }
 
+void btm_configure_data_path(uint8_t direction, uint8_t path_id,
+                             std::vector<uint8_t> vendor_config) {
+  if (direction != btm_data_direction::CONTROLLER_TO_HOST &&
+      direction != btm_data_direction::HOST_TO_CONTROLLER) {
+    LOG_WARN("Unknown data direction");
+    return;
+  }
+
+  btsnd_hcic_configure_data_path(direction, path_id, vendor_config);
+}
+
 /*******************************************************************************
  *
  * Function         btm_acl_removed
@@ -1450,6 +1461,7 @@ void StackAclBtmAcl::btm_acl_role_changed(tHCI_STATUS hci_status,
   }
 
   BTA_dm_report_role_change(bd_addr, new_role, hci_status);
+  btm_sec_role_changed(hci_status, bd_addr, new_role);
 
   /* If a disconnect is pending, issue it now that role switch has completed */
   if (p_acl->rs_disc_pending == BTM_SEC_DISC_PENDING) {
@@ -2070,7 +2082,7 @@ void btm_read_link_quality_complete(uint8_t* p) {
  * Description      This function is called to disconnect an ACL connection
  *
  * Returns          BTM_SUCCESS if successfully initiated, otherwise
- *                  BTM_NO_RESOURCES.
+ *                  BTM_UNKNOWN_ADDR.
  *
  ******************************************************************************/
 tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
@@ -2329,23 +2341,11 @@ void BTM_ReadConnectionAddr(const RawAddress& remote_bda,
     bluetooth::shim::L2CA_ReadConnectionAddr(remote_bda, local_conn_addr,
                                              p_addr_type);
     return;
-  } else if (bluetooth::shim::is_gd_scanning_enabled()) {
+  } else {
     bluetooth::shim::ACL_ReadConnectionAddress(remote_bda, local_conn_addr,
                                                p_addr_type);
     return;
   }
-
-  tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_LE);
-
-  if (p_acl == NULL) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-  local_conn_addr = p_acl->conn_addr;
-  *p_addr_type = p_acl->conn_addr_type;
-
-  LOG_DEBUG("BTM_ReadConnectionAddr address type: %d addr: 0x%02x",
-            p_acl->conn_addr_type, p_acl->conn_addr.address[0]);
 }
 
 /*******************************************************************************

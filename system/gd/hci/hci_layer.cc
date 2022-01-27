@@ -178,10 +178,29 @@ struct HciLayer::impl {
                OpCodeText(op_code).c_str());
     ASSERT_LOG(waiting_command_ == op_code, "Waiting for 0x%02hx (%s), got 0x%02hx (%s)", waiting_command_,
                OpCodeText(waiting_command_).c_str(), op_code, OpCodeText(op_code).c_str());
-    ASSERT_LOG(command_queue_.front().waiting_for_status_ == is_status, "0x%02hx (%s) was not expecting %s event",
-               op_code, OpCodeText(op_code).c_str(), logging_id.c_str());
 
-    command_queue_.front().GetCallback<TResponse>()->Invoke(move(response_view));
+    bool is_vendor_specific = static_cast<int>(op_code) & (0x3f << 10);
+    CommandStatusView status_view = CommandStatusView::Create(event);
+    if (is_vendor_specific && (is_status && !command_queue_.front().waiting_for_status_) &&
+        (status_view.IsValid() && status_view.GetStatus() == ErrorCode::UNKNOWN_HCI_COMMAND)) {
+      // If this is a command status of a vendor specific command, and command complete is expected, we can't treat
+      // this as hard failure since we have no way of probing this lack of support at earlier time. Instead we let
+      // the command complete handler handle a empty Command Complete packet, which will be interpreted as invalid
+      // response.
+      CommandCompleteView command_complete_view = CommandCompleteView::Create(
+          EventView::Create(PacketView<kLittleEndian>(std::make_shared<std::vector<uint8_t>>(std::vector<uint8_t>()))));
+      command_queue_.front().GetCallback<CommandCompleteView>()->Invoke(move(command_complete_view));
+    } else {
+      ASSERT_LOG(
+          command_queue_.front().waiting_for_status_ == is_status,
+          "0x%02hx (%s) was not expecting %s event",
+          op_code,
+          OpCodeText(op_code).c_str(),
+          logging_id.c_str());
+
+      command_queue_.front().GetCallback<TResponse>()->Invoke(move(response_view));
+    }
+
     command_queue_.pop_front();
     waiting_command_ = OpCode::NONE;
     if (hci_timeout_alarm_ != nullptr) {
@@ -235,7 +254,7 @@ struct HciLayer::impl {
     ASSERT(cmd_view.IsValid());
     OpCode op_code = cmd_view.GetOpCode();
     command_queue_.front().command_view = std::make_unique<CommandView>(std::move(cmd_view));
-    log_link_layer_connection_command_status(command_queue_.front().command_view, ErrorCode::STATUS_UNKNOWN);
+    log_link_layer_connection_command(command_queue_.front().command_view);
     log_classic_pairing_command_status(command_queue_.front().command_view, ErrorCode::STATUS_UNKNOWN);
     waiting_command_ = op_code;
     command_credits_ = 0;  // Only allow one outstanding command
@@ -309,6 +328,11 @@ struct HciLayer::impl {
   void on_hci_event(EventView event) {
     ASSERT(event.IsValid());
     if (command_queue_.empty()) {
+      auto event_code = event.GetEventCode();
+      ASSERT_LOG(
+          event_code != EventCode::COMMAND_COMPLETE && event_code != EventCode::COMMAND_STATUS,
+          "Received %s without a waiting command (is the HAL sending commands, but not handling the events?)",
+          EventCodeText(event_code).c_str());
       std::unique_ptr<CommandView> no_waiting_command{nullptr};
       log_hci_event(no_waiting_command, event, module_.GetDependency<storage::StorageModule>());
     } else {
@@ -492,12 +516,20 @@ AclConnectionInterface* HciLayer::GetAclConnectionInterface(
     ContextualCallback<
         void(hci::ErrorCode hci_status, uint16_t, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version)>
         on_read_remote_version) {
+  disconnect_handlers_.push_back(on_disconnect);
+  read_remote_version_handlers_.push_back(on_read_remote_version);
   for (const auto event : AclConnectionEvents) {
     RegisterEventHandler(event, event_handler);
   }
-  disconnect_handlers_.push_back(on_disconnect);
-  read_remote_version_handlers_.push_back(on_read_remote_version);
   return &acl_connection_manager_interface_;
+}
+
+void HciLayer::PutAclConnectionInterface() {
+  for (const auto event : AclConnectionEvents) {
+    UnregisterEventHandler(event);
+  }
+  disconnect_handlers_.clear();
+  read_remote_version_handlers_.clear();
 }
 
 LeAclConnectionInterface* HciLayer::GetLeAclConnectionInterface(
@@ -506,12 +538,20 @@ LeAclConnectionInterface* HciLayer::GetLeAclConnectionInterface(
     ContextualCallback<
         void(hci::ErrorCode hci_status, uint16_t, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version)>
         on_read_remote_version) {
+  disconnect_handlers_.push_back(on_disconnect);
+  read_remote_version_handlers_.push_back(on_read_remote_version);
   for (const auto event : LeConnectionManagementEvents) {
     RegisterLeEventHandler(event, event_handler);
   }
-  disconnect_handlers_.push_back(on_disconnect);
-  read_remote_version_handlers_.push_back(on_read_remote_version);
   return &le_acl_connection_manager_interface_;
+}
+
+void HciLayer::PutLeAclConnectionInterface() {
+  for (const auto event : LeConnectionManagementEvents) {
+    UnregisterLeEventHandler(event);
+  }
+  disconnect_handlers_.clear();
+  read_remote_version_handlers_.clear();
 }
 
 SecurityInterface* HciLayer::GetSecurityInterface(ContextualCallback<void(EventView)> event_handler) {
@@ -568,13 +608,10 @@ void HciLayer::Start() {
   RegisterEventHandler(EventCode::COMMAND_COMPLETE, handler->BindOn(impl_, &impl::on_command_complete));
   RegisterEventHandler(EventCode::COMMAND_STATUS, handler->BindOn(impl_, &impl::on_command_status));
   RegisterLeMetaEventHandler(handler->BindOn(impl_, &impl::on_le_meta_event));
-  if (bluetooth::common::init_flags::gd_acl_is_enabled() || bluetooth::common::init_flags::gd_l2cap_is_enabled()) {
-    RegisterEventHandler(
-        EventCode::DISCONNECTION_COMPLETE, handler->BindOn(this, &HciLayer::on_disconnection_complete));
-    RegisterEventHandler(
-        EventCode::READ_REMOTE_VERSION_INFORMATION_COMPLETE,
-        handler->BindOn(this, &HciLayer::on_read_remote_version_complete));
-  }
+  RegisterEventHandler(EventCode::DISCONNECTION_COMPLETE, handler->BindOn(this, &HciLayer::on_disconnection_complete));
+  RegisterEventHandler(
+      EventCode::READ_REMOTE_VERSION_INFORMATION_COMPLETE,
+      handler->BindOn(this, &HciLayer::on_read_remote_version_complete));
   auto drop_packet = handler->BindOn(impl_, &impl::drop);
   RegisterEventHandler(EventCode::PAGE_SCAN_REPETITION_MODE_CHANGE, drop_packet);
   RegisterEventHandler(EventCode::MAX_SLOTS_CHANGE, drop_packet);

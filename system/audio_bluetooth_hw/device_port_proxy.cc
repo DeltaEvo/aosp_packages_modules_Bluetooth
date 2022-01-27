@@ -280,6 +280,26 @@ bool BluetoothAudioPort::in_use() const {
   return (cookie_ != android::bluetooth::audio::kObserversCookieUndefined);
 }
 
+bool BluetoothAudioPort::GetPreferredDataIntervalUs(size_t* interval_us) const {
+  if (!in_use()) {
+    return false;
+  }
+
+  const ::android::hardware::bluetooth::audio::V2_2::AudioConfiguration&
+      hal_audio_cfg =
+          BluetoothAudioSessionControl_2_2::GetAudioConfig(session_type_);
+  if (hal_audio_cfg.getDiscriminator() !=
+      ::android::hardware::bluetooth::audio::V2_2::AudioConfiguration::
+          hidl_discriminator::pcmConfig) {
+    return false;
+  }
+
+  const ::android::hardware::bluetooth::audio::V2_1::PcmParameters& pcm_cfg =
+      hal_audio_cfg.pcmConfig();
+  *interval_us = pcm_cfg.dataIntervalUs;
+  return true;
+}
+
 bool BluetoothAudioPortOut::LoadAudioConfig(audio_config_t* audio_cfg) const {
   if (!in_use()) {
     LOG(ERROR) << __func__ << ": BluetoothAudioPortOut is not in use";
@@ -513,6 +533,21 @@ void BluetoothAudioPort::UpdateMetadata(
   if (source_metadata->track_count == 0) return;
   BluetoothAudioSessionControl_2_2::UpdateTracksMetadata(session_type_,
                                                          source_metadata);
+}
+
+void BluetoothAudioPort::UpdateSinkMetadata(
+    const sink_metadata* sink_metadata) const {
+  if (!in_use()) {
+    LOG(ERROR) << __func__ << ": BluetoothAudioPort is not in use";
+    return;
+  }
+  LOG(DEBUG) << __func__ << ": session_type=" << toString(session_type_)
+             << ", cookie=" << StringPrintf("%#hx", cookie_)
+             << ", state=" << state_ << ", " << sink_metadata->track_count
+             << " track(s)";
+  if (sink_metadata->track_count == 0) return;
+  BluetoothAudioSessionControl_2_2::UpdateSinkMetadata(session_type_,
+                                                       sink_metadata);
 }
 
 BluetoothStreamState BluetoothAudioPort::GetState() const { return state_; }

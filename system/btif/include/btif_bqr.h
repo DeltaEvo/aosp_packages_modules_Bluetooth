@@ -243,7 +243,7 @@ typedef struct {
   // Buffer underflow count (in byte).
   uint32_t buffer_underflow_bytes;
   // For the controller vendor to obtain more vendor specific parameters.
-  uint8_t* vendor_specific_parameter;
+  const uint8_t* vendor_specific_parameter;
 } BqrLinkQualityEvent;
 
 // Log dump related BQR event
@@ -253,7 +253,7 @@ typedef struct {
   // Connection handle of the connection.
   uint16_t connection_handle;
   // For the controller vendor to obtain more vendor specific parameters.
-  uint8_t* vendor_specific_parameter;
+  const uint8_t* vendor_specific_parameter;
 } BqrLogDumpEvent;
 
 // BQR sub-event of Vendor Specific Event
@@ -263,20 +263,21 @@ class BqrVseSubEvt {
   //
   // @param length Total length of all parameters contained in the sub-event.
   // @param p_param_buf A pointer to the parameters contained in the sub-event.
-  void ParseBqrLinkQualityEvt(uint8_t length, uint8_t* p_param_buf);
+  void ParseBqrLinkQualityEvt(uint8_t length, const uint8_t* p_param_buf);
   // Write the LMP/LL message trace to the log file.
   //
   // @param fd The File Descriptor of the log file.
   // @param length Total length of all parameters contained in the sub-event.
   // @param p_param_buf A pointer to the parameters contained in the sub-event.
-  void WriteLmpLlTraceLogFile(int fd, uint8_t length, uint8_t* p_param_buf);
+  void WriteLmpLlTraceLogFile(int fd, uint8_t length,
+                              const uint8_t* p_param_buf);
   // Write the Bluetooth Multi-profile/Coex scheduling trace to the log file.
   //
   // @param fd The File Descriptor of the log file.
   // @param length Total length of all parameters contained in the sub-event.
   // @param p_param_buf A pointer to the parameters contained in the sub-event.
   void WriteBtSchedulingTraceLogFile(int fd, uint8_t length,
-                                     uint8_t* p_param_buf);
+                                     const uint8_t* p_param_buf);
   // Get a string representation of the Bluetooth Quality event.
   //
   // @return a string representation of the Bluetooth Quality event.
@@ -343,19 +344,20 @@ void ConfigureBqrCmpl(uint32_t current_evt_mask);
 //   controller.
 // @param p_bqr_event A pointer to the BQR VSE sub-event which is sent from the
 //   Bluetooth controller.
-void CategorizeBqrEvent(uint8_t length, uint8_t* p_bqr_event);
+void CategorizeBqrEvent(uint8_t length, const uint8_t* p_bqr_event);
 
 // Record a new incoming Link Quality related BQR event in quality event queue.
 //
 // @param length Lengths of the Link Quality related BQR event.
 // @param p_link_quality_event A pointer to the Link Quality related BQR event.
-void AddLinkQualityEventToQueue(uint8_t length, uint8_t* p_link_quality_event);
+void AddLinkQualityEventToQueue(uint8_t length,
+                                const uint8_t* p_link_quality_event);
 
 // Dump the LMP/LL message handshaking with the remote device to a log file.
 //
 // @param length Lengths of the LMP/LL message trace event.
 // @param p_lmp_ll_message_event A pointer to the LMP/LL message trace event.
-void DumpLmpLlMessage(uint8_t length, uint8_t* p_lmp_ll_message_event);
+void DumpLmpLlMessage(uint8_t length, const uint8_t* p_lmp_ll_message_event);
 
 // Open the LMP/LL message trace log file.
 //
@@ -368,7 +370,7 @@ int OpenLmpLlTraceLogFile();
 //   event.
 // @param p_bt_scheduling_event A pointer to the Bluetooth Multi-profile/Coex
 //   scheduling trace event.
-void DumpBtScheduling(uint8_t length, uint8_t* p_bt_scheduling_event);
+void DumpBtScheduling(uint8_t length, const uint8_t* p_bt_scheduling_event);
 
 // Open the Bluetooth Multi-profile/Coex scheduling trace log file.
 //

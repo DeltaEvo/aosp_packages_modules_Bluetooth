@@ -87,6 +87,8 @@ class MockLeAudioClientInterfaceSink : public LeAudioClientInterface::Sink {
   MOCK_METHOD((void), StopSession, (), (override));
   MOCK_METHOD((void), ConfirmStreamingRequest, (), (override));
   MOCK_METHOD((void), CancelStreamingRequest, (), (override));
+  MOCK_METHOD((void), UpdateAudioConfigToHal,
+              (const ::le_audio::offload_config&));
   MOCK_METHOD((size_t), Read, (uint8_t * p_buf, uint32_t len));
 };
 
@@ -101,6 +103,8 @@ class MockLeAudioClientInterfaceSource : public LeAudioClientInterface::Source {
   MOCK_METHOD((void), StopSession, (), (override));
   MOCK_METHOD((void), ConfirmStreamingRequest, (), (override));
   MOCK_METHOD((void), CancelStreamingRequest, (), (override));
+  MOCK_METHOD((void), UpdateAudioConfigToHal,
+              (const ::le_audio::offload_config&));
   MOCK_METHOD((size_t), Write, (const uint8_t* p_buf, uint32_t len));
 };
 
@@ -156,6 +160,8 @@ void LeAudioClientInterface::Sink::StartSession() {}
 void LeAudioClientInterface::Sink::StopSession() {}
 void LeAudioClientInterface::Sink::ConfirmStreamingRequest(){};
 void LeAudioClientInterface::Sink::CancelStreamingRequest(){};
+void LeAudioClientInterface::Sink::UpdateAudioConfigToHal(
+    const ::le_audio::offload_config& config){};
 
 void LeAudioClientInterface::Source::Cleanup() {}
 void LeAudioClientInterface::Source::SetPcmParameters(
@@ -165,6 +171,8 @@ void LeAudioClientInterface::Source::StartSession() {}
 void LeAudioClientInterface::Source::StopSession() {}
 void LeAudioClientInterface::Source::ConfirmStreamingRequest(){};
 void LeAudioClientInterface::Source::CancelStreamingRequest(){};
+void LeAudioClientInterface::Source::UpdateAudioConfigToHal(
+    const ::le_audio::offload_config& config){};
 
 size_t LeAudioClientInterface::Source::Write(const uint8_t* p_buf,
                                              uint32_t len) {
@@ -185,8 +193,7 @@ class MockLeAudioClientAudioSinkEventReceiver
               (override));
   MOCK_METHOD((void), OnAudioSuspend, (std::promise<void> do_suspend_promise),
               (override));
-  MOCK_METHOD((void), OnAudioResume, (std::promise<void> do_resume_promise),
-              (override));
+  MOCK_METHOD((void), OnAudioResume, (), (override));
   MOCK_METHOD((void), OnAudioMetadataUpdate,
               (std::promise<void> do_update_metadata_promise,
                const source_metadata_t& source_metadata),
@@ -198,8 +205,7 @@ class MockLeAudioClientAudioSourceEventReceiver
  public:
   MOCK_METHOD((void), OnAudioSuspend, (std::promise<void> do_suspend_promise),
               (override));
-  MOCK_METHOD((void), OnAudioResume, (std::promise<void> do_resume_promise),
-              (override));
+  MOCK_METHOD((void), OnAudioResume, (), (override));
 };
 
 class LeAudioClientAudioTest : public ::testing::Test {
@@ -419,7 +425,7 @@ TEST_F(LeAudioClientAudioTest, testLeAudioClientAudioSinkResume) {
   /* Expect LeAudio registered event listener to get called when HAL calls the
    * client_audio's internal resume callback.
    */
-  EXPECT_CALL(mock_hal_source_event_receiver_, OnAudioResume(_)).Times(1);
+  EXPECT_CALL(mock_hal_source_event_receiver_, OnAudioResume()).Times(1);
   bool start_media_task = false;
   ASSERT_TRUE(hal_source_stream_cb.on_resume_(start_media_task));
 }
@@ -473,7 +479,7 @@ TEST_F(LeAudioClientAudioTest,
    * client_audio's internal resume callback.
    */
   ASSERT_NE(hal_sink_stream_cb.on_resume_, nullptr);
-  EXPECT_CALL(mock_hal_sink_event_receiver_, OnAudioResume(_)).Times(1);
+  EXPECT_CALL(mock_hal_sink_event_receiver_, OnAudioResume()).Times(1);
   resumed_ts = std::chrono::system_clock::now();
   bool start_media_task = true;
   ASSERT_TRUE(hal_sink_stream_cb.on_resume_(start_media_task));
@@ -513,7 +519,7 @@ TEST_F(LeAudioClientAudioTest, testLeAudioClientAudioSourceResume) {
   /* Expect LeAudio registered event listener to get called when HAL calls the
    * client_audio's internal resume callback.
    */
-  EXPECT_CALL(mock_hal_sink_event_receiver_, OnAudioResume(_)).Times(1);
+  EXPECT_CALL(mock_hal_sink_event_receiver_, OnAudioResume()).Times(1);
   bool start_media_task = false;
   ASSERT_TRUE(hal_sink_stream_cb.on_resume_(start_media_task));
 }

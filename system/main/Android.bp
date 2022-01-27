@@ -104,6 +104,7 @@ cc_library_shared {
         "libFraunhoferAAC",
         "libg722codec",
         "liblc3codec",
+        "liblc3",
         "libudrv-uipc",
         "libprotobuf-cpp-lite",
         "libbluetooth_gd", // Gabeldorsche
@@ -223,6 +224,7 @@ cc_test {
         ":TestMockBta",
         ":TestMockBtif",
         ":TestMockLegacyHciCommands",
+        ":TestMockLegacyHciInterface",
         ":TestMockMainShimEntry",
         ":TestMockStack",
         "shim/acl_api.cc",
@@ -242,6 +244,7 @@ cc_test {
         "shim/metrics_api.cc",
         "shim/shim.cc",
         "shim/stack.cc",
+        "test/common_stack_test.cc",
         "test/main_shim_test.cc",
     ],
     static_libs: [

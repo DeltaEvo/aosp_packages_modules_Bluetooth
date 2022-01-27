@@ -53,13 +53,11 @@ group("bluetooth") {
   #}
 #}
 
-if (host_cpu == target_cpu && host_os == target_os) {
-  group("tools") {
-    deps = [
-      "//bt/system/gd/dumpsys/bundler:bluetooth_flatbuffer_bundler",
-      "//bt/system/gd/packet/parser:bluetooth_packetgen",
-    ]
-  }
+group("tools") {
+  deps = [
+    "//bt/system/gd/dumpsys/bundler:bluetooth_flatbuffer_bundler",
+    "//bt/system/gd/packet/parser:bluetooth_packetgen",
+  ]
 }
 
 if (defined(use.android) && use.android) {
@@ -104,6 +102,8 @@ config("target_defaults") {
     "-Wno-pessimizing-move",
     "-Wno-unknown-warning-option",
     "-Wno-final-dtor-non-final-class",
+
+    string_join("", ["-ffile-prefix-map=", rebase_path(".", "${root_build_dir}", "."), "/= "])
   ]
 
   cflags_cc = [

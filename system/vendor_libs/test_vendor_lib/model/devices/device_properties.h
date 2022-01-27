@@ -133,6 +133,14 @@ class DeviceProperties {
     return num_sco_data_packets_;
   }
 
+  bool GetSynchronousFlowControl() const {
+    return sco_flow_control_;
+  }
+
+  void SetSynchronousFlowControl(bool sco_flow_control) {
+    sco_flow_control_ = sco_flow_control;
+  }
+
   const Address& GetAddress() const {
     return address_;
   }
@@ -368,6 +376,18 @@ class DeviceProperties {
   // Specification Version 4.2, Volume 2, Part E, Section 7.8.41
   uint8_t GetLeResolvingListSize() const { return le_resolving_list_size_; }
 
+  // Workaround for misbehaving stacks
+  static constexpr uint8_t kLeListIgnoreScanEnable = 0x1;
+  static constexpr uint8_t kLeListIgnoreConnections = 0x2;
+  static constexpr uint8_t kLeListIgnoreAdvertising = 0x4;
+
+  uint16_t GetLeResolvingListIgnoreReasons() const {
+    return le_resolving_list_ignore_reasons_;
+  }
+  uint16_t GetLeConnectListIgnoreReasons() const {
+    return le_connect_list_ignore_reasons_;
+  }
+
   // Vendor-specific commands
   const std::vector<uint8_t>& GetLeVendorCap() const {
     return le_vendor_cap_;
@@ -379,18 +399,18 @@ class DeviceProperties {
   uint8_t sco_data_packet_size_;
   uint16_t num_acl_data_packets_;
   uint16_t num_sco_data_packets_;
+  bool sco_flow_control_{false};
   uint8_t version_;
   uint16_t revision_;
   uint8_t lmp_pal_version_;
   uint16_t manufacturer_name_;
   uint16_t lmp_pal_subversion_;
-  uint64_t supported_features_{};
   uint64_t event_mask_{0x00001fffffffffff};
   uint8_t authentication_enable_{};
   std::vector<uint8_t> supported_codecs_;
   std::vector<uint32_t> vendor_specific_codecs_;
   std::array<uint8_t, 64> supported_commands_;
-  std::vector<uint64_t> extended_features_{{0x875b3fd8fe8ffeff, 0x04}};
+  std::vector<uint64_t> extended_features_{{0x875bffdbfe8ffeff, 0x04}};
   ClassOfDevice class_of_device_{{0, 0, 0}};
   std::vector<uint8_t> extended_inquiry_data_;
   std::array<uint8_t, 248> name_{};
@@ -425,6 +445,10 @@ class DeviceProperties {
   uint8_t le_advertisement_type_{};
   std::vector<uint8_t> le_advertisement_;
   std::vector<uint8_t> le_scan_response_;
+
+  // LE Workarounds
+  uint16_t le_connect_list_ignore_reasons_{0};
+  uint16_t le_resolving_list_ignore_reasons_{0};
 
   // ISO
   uint16_t iso_data_packet_length_{1021};

@@ -16,6 +16,7 @@
 
 #include "a2dp_encoding_host.h"
 
+#include <base/logging.h>
 #include <errno.h>
 #include <grp.h>
 #include <sys/stat.h>
@@ -32,8 +33,6 @@
 #include "osi/include/properties.h"
 #include "types/raw_address.h"
 #include "udrv/include/uipc.h"
-
-#include <base/logging.h>
 
 #define A2DP_DATA_READ_POLL_MS 10
 #define A2DP_HOST_DATA_PATH "/var/run/bluetooth/audio/.a2dp_data"
@@ -124,6 +123,11 @@ bool SetAudioConfig(AudioConfig config) {
 
 // Invoked by audio server when it has audio data to stream.
 bool StartRequest() {
+  // Reset total read bytes and timestamp to avoid confusing audio
+  // server at delay calculation.
+  total_bytes_read_ = 0;
+  data_position_ = {0, 0};
+
   // Check if a previous request is not finished
   if (a2dp_pending_cmd_ == A2DP_CTRL_CMD_START) {
     LOG(INFO) << __func__ << ": A2DP_CTRL_CMD_START in progress";
@@ -199,10 +203,10 @@ bool update_codec_offloading_capabilities(
 }
 
 // Checking if new bluetooth_audio is enabled
-bool is_hal_2_0_enabled() { return true; }
+bool is_hal_enabled() { return true; }
 
 // Check if new bluetooth_audio is running with offloading encoders
-bool is_hal_2_0_offloading() { return false; }
+bool is_hal_offloading() { return false; }
 
 // Initialize BluetoothAudio HAL: openProvider
 bool init(bluetooth::common::MessageLoopThread* message_loop) {
@@ -235,6 +239,9 @@ void start_session() {
 
 void end_session() {
   // TODO: Notify server; or do we handle it during disconnected?
+
+  // Reset remote delay. New value will be set when new session starts.
+  remote_delay_report_ = 0;
 }
 
 void ack_stream_started(const tA2DP_CTRL_ACK& ack) {
@@ -249,10 +256,16 @@ void ack_stream_suspended(const tA2DP_CTRL_ACK& ack) {
 
 // Read from the FMQ of BluetoothAudio HAL
 size_t read(uint8_t* p_buf, uint32_t len) {
+  uint32_t bytes_read = 0;
   if (a2dp_uipc == nullptr) {
     return 0;
   }
-  return UIPC_Read(*a2dp_uipc, UIPC_CH_ID_AV_AUDIO, p_buf, len);
+  bytes_read = UIPC_Read(*a2dp_uipc, UIPC_CH_ID_AV_AUDIO, p_buf, len);
+  total_bytes_read_ += bytes_read;
+  // MONOTONIC_RAW isn't affected by NTP, audio stack rely on this
+  // to get precise delay calculation.
+  clock_gettime(CLOCK_MONOTONIC_RAW, &data_position_);
+  return bytes_read;
 }
 
 }  // namespace a2dp

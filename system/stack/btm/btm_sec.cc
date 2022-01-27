@@ -2004,7 +2004,7 @@ static void btm_sec_bond_cancel_complete(void) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_create_conn_cancel_complete(uint8_t* p) {
+void btm_create_conn_cancel_complete(const uint8_t* p) {
   uint8_t status;
   STREAM_TO_UINT8(status, p);
   RawAddress bd_addr;
@@ -2185,7 +2185,8 @@ bool is_state_getting_name(void* data, void* context) {
  *
  ******************************************************************************/
 void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
-                                       uint8_t* p_bd_name, tHCI_STATUS status) {
+                                       const uint8_t* p_bd_name,
+                                       tHCI_STATUS status) {
   tBTM_SEC_DEV_REC* p_dev_rec;
   int i;
   DEV_CLASS dev_class;
@@ -2215,7 +2216,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
   /* Commenting out trace due to obf/compilation problems.
    */
-  if (!p_bd_name) p_bd_name = (uint8_t*)"";
+  if (!p_bd_name) p_bd_name = (const uint8_t*)"";
 
   if (p_dev_rec) {
     BTM_TRACE_EVENT(
@@ -2232,7 +2233,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
   if (p_dev_rec) {
     old_sec_state = p_dev_rec->sec_state;
     if (status == HCI_SUCCESS) {
-      strlcpy((char*)p_dev_rec->sec_bd_name, (char*)p_bd_name,
+      strlcpy((char*)p_dev_rec->sec_bd_name, (const char*)p_bd_name,
               BTM_MAX_REM_BD_NAME_LEN + 1);
       p_dev_rec->sec_flags |= BTM_SEC_NAME_KNOWN;
       BTM_TRACE_EVENT("setting BTM_SEC_NAME_KNOWN sec_flags:0x%x",
@@ -2414,7 +2415,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-void btm_sec_rmt_host_support_feat_evt(uint8_t* p) {
+void btm_sec_rmt_host_support_feat_evt(const uint8_t* p) {
   tBTM_SEC_DEV_REC* p_dev_rec;
   RawAddress bd_addr; /* peer address */
   BD_FEATURES features;
@@ -2630,7 +2631,7 @@ void btm_io_capabilities_req(const RawAddress& p) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_io_capabilities_rsp(uint8_t* p) {
+void btm_io_capabilities_rsp(const uint8_t* p) {
   tBTM_SEC_DEV_REC* p_dev_rec;
   tBTM_SP_IO_RSP evt_data;
 
@@ -2691,7 +2692,7 @@ void btm_io_capabilities_rsp(uint8_t* p) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_proc_sp_req_evt(tBTM_SP_EVT event, uint8_t* p) {
+void btm_proc_sp_req_evt(tBTM_SP_EVT event, const uint8_t* p) {
   tBTM_STATUS status = BTM_ERR_PROCESSING;
   tBTM_SP_EVT_DATA evt_data;
   RawAddress& p_bda = evt_data.cfm_req.bd_addr;
@@ -2831,7 +2832,7 @@ void btm_proc_sp_req_evt(tBTM_SP_EVT event, uint8_t* p) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_simple_pair_complete(uint8_t* p) {
+void btm_simple_pair_complete(const uint8_t* p) {
   RawAddress bd_addr;
   tBTM_SEC_DEV_REC* p_dev_rec;
   uint8_t status;
@@ -2894,7 +2895,7 @@ void btm_simple_pair_complete(uint8_t* p) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_rem_oob_req(uint8_t* p) {
+void btm_rem_oob_req(const uint8_t* p) {
   tBTM_SP_RMT_OOB evt_data;
   tBTM_SEC_DEV_REC* p_dev_rec;
   Octet16 c;
@@ -3143,33 +3144,23 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
     } else {
       BTM_LogHistory(kBtmLogTag, p_dev_rec->bd_addr, "Bonding completed",
                      hci_error_code_text(status));
-      BTM_TRACE_DEBUG("TRYING TO DECIDE IF CAN USE SMP_BR_CHNL");
-      if (p_dev_rec->new_encryption_key_is_p256 &&
-          (btm_sec_use_smp_br_chnl(p_dev_rec))
-          /* no LE keys are available, do deriving */
-          && (!(p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN) ||
-              /* or BR key is higher security than existing LE keys */
-              (!(p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_AUTHED) &&
-               (p_dev_rec->sec_flags & BTM_SEC_LINK_KEY_AUTHED)))) {
-        BTM_TRACE_DEBUG(
-            "link encrypted afer dedic bonding can use SMP_BR_CHNL");
 
-        tHCI_ROLE role = HCI_ROLE_UNKNOWN;
-        BTM_GetRole(p_dev_rec->bd_addr, &role);
-        if (role == HCI_ROLE_CENTRAL) {
-          // Encryption is required to start SM over BR/EDR
-          // indicate that this is encryption after authentication
-          BTM_SetEncryption(p_dev_rec->bd_addr, BT_TRANSPORT_BR_EDR, NULL, NULL,
-                            BTM_BLE_SEC_NONE);
-        } else if (p_dev_rec->IsLocallyInitiated()) {
-          // Encryption will be set in role_changed callback
-          BTM_TRACE_DEBUG(
-              "%s auth completed in role=peripheral, try to switch role and "
-              "encrypt",
-              __func__);
-          BTM_SwitchRoleToCentral(p_dev_rec->RemoteAddress());
-        }
+      tHCI_ROLE role = HCI_ROLE_UNKNOWN;
+      BTM_GetRole(p_dev_rec->bd_addr, &role);
+      if (role == HCI_ROLE_CENTRAL) {
+        // Encryption is required to start SM over BR/EDR
+        // indicate that this is encryption after authentication
+        BTM_SetEncryption(p_dev_rec->bd_addr, BT_TRANSPORT_BR_EDR, NULL, NULL,
+                          BTM_BLE_SEC_NONE);
+      } else if (p_dev_rec->IsLocallyInitiated()) {
+        // Encryption will be set in role_changed callback
+        LOG_INFO(
+            "%s auth completed in role=peripheral, try to switch role and "
+            "encrypt",
+            __func__);
+        BTM_SwitchRoleToCentral(p_dev_rec->RemoteAddress());
       }
+
       l2cu_start_post_bond_timer(p_dev_rec->hci_handle);
     }
 
@@ -3308,22 +3299,6 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
 
         BTM_TRACE_DEBUG("%s start SM over BR/EDR", __func__);
         SMP_BR_PairWith(p_dev_rec->bd_addr);
-      }
-    } else {
-      // BR/EDR is successfully encrypted. Correct LK type if needed
-      // (BR/EDR LK derived from LE LTK was used for encryption)
-      if ((encr_enable == 1) && /* encryption is ON for SSP */
-          /* LK type is for BR/EDR SC */
-          (p_dev_rec->link_key_type == BTM_LKEY_TYPE_UNAUTH_COMB_P_256 ||
-           p_dev_rec->link_key_type == BTM_LKEY_TYPE_AUTH_COMB_P_256)) {
-        if (p_dev_rec->link_key_type == BTM_LKEY_TYPE_UNAUTH_COMB_P_256)
-          p_dev_rec->link_key_type = BTM_LKEY_TYPE_UNAUTH_COMB;
-        else /* BTM_LKEY_TYPE_AUTH_COMB_P_256 */
-          p_dev_rec->link_key_type = BTM_LKEY_TYPE_AUTH_COMB;
-
-        BTM_TRACE_DEBUG("updated link key type to %d",
-                        p_dev_rec->link_key_type);
-        btm_send_link_key_notif(p_dev_rec);
       }
     }
   }
@@ -3823,6 +3798,20 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason,
   }
 }
 
+void btm_sec_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr,
+                          tHCI_ROLE new_role) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
+
+  if (p_dev_rec == nullptr || hci_status != HCI_SUCCESS) {
+    return;
+  }
+  if (new_role == HCI_ROLE_CENTRAL && btm_dev_authenticated(p_dev_rec) &&
+      !btm_dev_encrypted(p_dev_rec)) {
+    BTM_SetEncryption(p_dev_rec->bd_addr, BT_TRANSPORT_BR_EDR, NULL, NULL,
+                      BTM_BLE_SEC_NONE);
+  }
+}
+
 /** This function is called when a new connection link key is generated */
 void btm_sec_link_key_notification(const RawAddress& p_bda,
                                    const Octet16& link_key, uint8_t key_type) {
@@ -3942,7 +3931,7 @@ void btm_sec_link_key_notification(const RawAddress& p_bda,
  * Returns          Pointer to the record or NULL
  *
  ******************************************************************************/
-void btm_sec_link_key_request(uint8_t* p_event) {
+void btm_sec_link_key_request(const uint8_t* p_event) {
   RawAddress bda;
 
   STREAM_TO_BDADDR(bda, p_event);
@@ -4094,7 +4083,7 @@ static void btm_sec_pairing_timeout(UNUSED_ATTR void* data) {
  * Returns          Pointer to the record or NULL
  *
  ******************************************************************************/
-void btm_sec_pin_code_request(uint8_t* p_event) {
+void btm_sec_pin_code_request(const uint8_t* p_event) {
   tBTM_SEC_DEV_REC* p_dev_rec;
   tBTM_CB* p_cb = &btm_cb;
   RawAddress p_bda;

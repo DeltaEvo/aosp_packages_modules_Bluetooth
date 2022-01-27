@@ -678,9 +678,8 @@ static void out_update_source_metadata(
   out->bluetooth_output_.UpdateMetadata(source_metadata);
 }
 
-static size_t samples_per_ticks(size_t milliseconds, uint32_t sample_rate,
-                                size_t channel_count) {
-  return milliseconds * sample_rate * channel_count / 1000;
+static size_t frame_count(size_t microseconds, uint32_t sample_rate) {
+  return (microseconds * sample_rate) / 1000000;
 }
 
 int adev_open_output_stream(struct audio_hw_device* dev,
@@ -734,8 +733,19 @@ int adev_open_output_stream(struct audio_hw_device* dev,
   out->channel_mask_ = config->channel_mask;
   out->format_ = config->format;
   // frame is number of samples per channel
+
+  size_t preferred_data_interval_us = kBluetoothDefaultOutputBufferMs * 1000;
+  if (out->bluetooth_output_.GetPreferredDataIntervalUs(
+          &preferred_data_interval_us) &&
+      preferred_data_interval_us != 0) {
+    out->preferred_data_interval_us = preferred_data_interval_us;
+  } else {
+    out->preferred_data_interval_us = kBluetoothDefaultOutputBufferMs * 1000;
+  }
+
   out->frames_count_ =
-      samples_per_ticks(kBluetoothDefaultOutputBufferMs, out->sample_rate_, 1);
+      frame_count(out->preferred_data_interval_us, out->sample_rate_);
+
   out->frames_rendered_ = 0;
   out->frames_presented_ = 0;
 
@@ -745,8 +755,11 @@ int adev_open_output_stream(struct audio_hw_device* dev,
     bluetooth_device->opened_stream_outs_.push_back(out);
   }
   *stream_out = &out->stream_out_;
-  LOG(INFO) << __func__ << ": state=" << out->bluetooth_output_.GetState() << ", sample_rate=" << out->sample_rate_
-            << ", channels=" << StringPrintf("%#x", out->channel_mask_) << ", format=" << out->format_
+  LOG(INFO) << __func__ << ": state=" << out->bluetooth_output_.GetState()
+            << ", sample_rate=" << out->sample_rate_
+            << ", channels=" << StringPrintf("%#x", out->channel_mask_)
+            << ", format=" << out->format_
+            << ", preferred_data_interval_us=" << out->preferred_data_interval_us
             << ", frames=" << out->frames_count_;
   return 0;
 }
@@ -1130,9 +1143,16 @@ static int in_set_microphone_field_dimension(
 
 static void in_update_sink_metadata(struct audio_stream_in* stream,
                                     const struct sink_metadata* sink_metadata) {
+  LOG(INFO) << __func__;
+  if (sink_metadata == nullptr || sink_metadata->track_count == 0) {
+    return;
+  }
+
   const auto* in = reinterpret_cast<const BluetoothStreamIn*>(stream);
-  LOG(VERBOSE) << __func__
-               << ": NOT HANDLED! state=" << in->bluetooth_input_.GetState();
+  LOG(INFO) << __func__ << ": state=" << in->bluetooth_input_.GetState() << ", "
+            << sink_metadata->track_count << " track(s)";
+
+  in->bluetooth_input_.UpdateSinkMetadata(sink_metadata);
 }
 
 int adev_open_input_stream(struct audio_hw_device* dev,
@@ -1187,15 +1207,27 @@ int adev_open_input_stream(struct audio_hw_device* dev,
   in->channel_mask_ = config->channel_mask;
   in->format_ = config->format;
   // frame is number of samples per channel
+
+  size_t preferred_data_interval_us = kBluetoothDefaultOutputBufferMs * 1000;
+  if (in->bluetooth_input_.GetPreferredDataIntervalUs(
+          &preferred_data_interval_us) &&
+      preferred_data_interval_us != 0) {
+    in->preferred_data_interval_us = preferred_data_interval_us;
+  } else {
+    in->preferred_data_interval_us = kBluetoothDefaultOutputBufferMs * 1000;
+  }
+
   in->frames_count_ =
-      samples_per_ticks(kBluetoothDefaultInputBufferMs, in->sample_rate_, 1);
+      frame_count(in->preferred_data_interval_us, in->sample_rate_);
   in->frames_presented_ = 0;
 
   *stream_in = &in->stream_in_;
   LOG(INFO) << __func__ << ": state=" << in->bluetooth_input_.GetState()
             << ", sample_rate=" << in->sample_rate_
             << ", channels=" << StringPrintf("%#x", in->channel_mask_)
-            << ", format=" << in->format_ << ", frames=" << in->frames_count_;
+            << ", format=" << in->format_
+            << ", preferred_data_interval_us=" << in->preferred_data_interval_us
+            << ", frames=" << in->frames_count_;
 
   return 0;
 }

@@ -11,6 +11,7 @@ package {
 filegroup {
     name: "libbluetooth-binder-aidl",
     srcs: [
+        ":modules-utils-synchronous-result-receiver-aidl",
         "android/bluetooth/IBluetooth.aidl",
         "android/bluetooth/IBluetoothA2dp.aidl",
         "android/bluetooth/IBluetoothA2dpSink.aidl",
@@ -45,6 +46,8 @@ filegroup {
         "android/bluetooth/IBluetoothMetadataListener.aidl",
         "android/bluetooth/IBluetoothGattServerCallback.aidl",
         "android/bluetooth/IBluetoothOobDataCallback.aidl",
+        "android/bluetooth/IBluetoothLeCallControl.aidl",
+        "android/bluetooth/IBluetoothLeCallControlCallback.aidl",
         "android/bluetooth/le/IAdvertisingSetCallback.aidl",
         "android/bluetooth/le/IPeriodicAdvertisingCallback.aidl",
         "android/bluetooth/le/IScannerCallback.aidl",

@@ -117,7 +117,6 @@ static void bta_dm_ble_id_key_cback(uint8_t key_type,
                                     tBTM_BLE_LOCAL_KEYS* p_key);
 static void bta_dm_gattc_register(void);
 static void btm_dm_start_gatt_discovery(const RawAddress& bd_addr);
-static void bta_dm_cancel_gatt_discovery(const RawAddress& bd_addr);
 static void bta_dm_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data);
 extern tBTM_CONTRL_STATE bta_dm_pm_obtain_controller_state(void);
 #if (BLE_VND_INCLUDED == TRUE)
@@ -141,7 +140,7 @@ static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result);
 
 /* Disable connection down timer (in milliseconds) */
 #ifndef BTA_DM_DISABLE_CONN_DOWN_TIMER_MS
-#define BTA_DM_DISABLE_CONN_DOWN_TIMER_MS 1000
+#define BTA_DM_DISABLE_CONN_DOWN_TIMER_MS 100
 #endif
 
 /* Switch delay timer (in milliseconds) */
@@ -470,9 +469,7 @@ void bta_dm_disable() {
  * Description      Called if the disable timer expires
  *                  Used to close ACL connections which are still active
  *
- *
- *
- * Returns          void
+ * Returns          true if there is a device being forcefully disconnected
  *
  ******************************************************************************/
 static bool force_disconnect_all_acl_connections() {
@@ -879,10 +876,6 @@ void bta_dm_search_cancel() {
     bta_dm_search_cmpl();
   } else {
     bta_dm_inq_cmpl(0);
-  }
-
-  if (bta_dm_search_cb.gatt_disc_active) {
-    bta_dm_cancel_gatt_discovery(bta_dm_search_cb.peer_bdaddr);
   }
 }
 
@@ -1531,9 +1524,6 @@ void bta_dm_search_cancel_notify() {
       (bta_dm_search_cb.state == BTA_DM_SEARCH_ACTIVE ||
        bta_dm_search_cb.state == BTA_DM_SEARCH_CANCELLING)) {
     BTM_CancelRemoteDeviceName();
-  }
-  if (bta_dm_search_cb.gatt_disc_active) {
-    bta_dm_cancel_gatt_discovery(bta_dm_search_cb.peer_bdaddr);
   }
 }
 
@@ -3959,23 +3949,6 @@ void btm_dm_start_gatt_discovery(const RawAddress& bd_addr) {
       BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr, true, false);
     }
   }
-}
-
-/*******************************************************************************
- *
- * Function         bta_dm_cancel_gatt_discovery
- *
- * Description      This is GATT cancel the GATT service search.
- *
- * Parameters:
- *
- ******************************************************************************/
-static void bta_dm_cancel_gatt_discovery(const RawAddress& bd_addr) {
-  if (bta_dm_search_cb.conn_id == GATT_INVALID_CONN_ID) {
-    BTA_GATTC_CancelOpen(bta_dm_search_cb.client_if, bd_addr, true);
-  }
-
-  bta_dm_gatt_disc_complete(bta_dm_search_cb.conn_id, (tGATT_STATUS)GATT_ERROR);
 }
 
 /*******************************************************************************

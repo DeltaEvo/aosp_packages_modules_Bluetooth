@@ -46,6 +46,7 @@ config("rust_defaults") {
 
 group("gd_default_deps") {
   deps = [
+    "//bt/system:libbt-platform-protos-lite",
     "//bt/system/gd:BluetoothGeneratedDumpsysDataSchema_h",
     "//bt/system/gd:BluetoothGeneratedPackets_h",
     "//bt/system/gd/dumpsys:libbluetooth-dumpsys",
@@ -73,6 +74,7 @@ static_library("libbluetooth_gd") {
     "//bt/system/gd/hal:BluetoothHalSources",
     "//bt/system/gd/hal:BluetoothHalSources_hci_host",
     "//bt/system/gd/l2cap:BluetoothL2capSources",
+    "//bt/system/gd/metrics:BluetoothMetricsSources",
     "//bt/system/gd/neighbor:BluetoothNeighborSources",
     "//bt/system/gd/security:BluetoothSecuritySources",
     "//bt/system/gd/shim:BluetoothShimSources",
@@ -132,6 +134,6 @@ packetgen_headers("BluetoothGeneratedPackets_h") {
 packetgen_rust("BluetoothGeneratedPackets_rust") {
   sources = [ "hci/hci_packets.pdl" ]
 
-  include = "bt/gd"
+  include = "system/gd"
   source_root = "../.."
 }

@@ -52,6 +52,10 @@ enum PacketType : 8 {
     LE_READ_REMOTE_FEATURES_RESPONSE = 0x2D,
     LE_CONNECTION_PARAMETER_REQUEST = 0x2E,
     LE_CONNECTION_PARAMETER_UPDATE = 0x2F,
+
+    SCO_CONNECTION_REQUEST = 0x30,
+    SCO_CONNECTION_RESPONSE = 0x31,
+    SCO_DISCONNECT = 0x32,
 }
 
 packet LinkLayerPacket {
@@ -235,7 +239,7 @@ packet RemoteNameRequestResponse : LinkLayerPacket (type = REMOTE_NAME_REQUEST_R
   name : 8[248],
 }
 
-packet ScoPacket : LinkLayerPacket (type = SCO) {
+packet Sco : LinkLayerPacket (type = SCO) {
   _payload_,
 }
 
@@ -376,4 +380,29 @@ packet LeConnectionParameterUpdate : LinkLayerPacket (type = LE_CONNECTION_PARAM
   interval : 16,
   latency : 16,
   timeout : 16,
+}
+
+packet ScoConnectionRequest : LinkLayerPacket (type = SCO_CONNECTION_REQUEST) {
+  transmit_bandwidth : 32,
+  receive_bandwidth : 32,
+  max_latency : 16,
+  voice_setting : 10,
+  _reserved_ : 6,
+  retransmission_effort : 8,
+  packet_type : 16,
+}
+
+packet ScoConnectionResponse : LinkLayerPacket (type = SCO_CONNECTION_RESPONSE) {
+  status : 8,
+  transmission_interval : 8,
+  retransmission_window : 8,
+  rx_packet_length : 16,
+  tx_packet_length : 16,
+  air_mode : 8,
+  extended : 1,
+  _reserved_ : 7,
+}
+
+packet ScoDisconnect : LinkLayerPacket (type = SCO_DISCONNECT) {
+  reason : 8,
 }

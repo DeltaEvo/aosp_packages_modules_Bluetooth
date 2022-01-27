@@ -59,6 +59,18 @@ using bluetooth::Uuid;
 
 using namespace bluetooth::le_audio;
 
+namespace bluetooth {
+namespace audio {
+namespace le_audio {
+
+std::vector<::le_audio::set_configurations::AudioSetConfiguration>
+get_offload_capabilities() {
+  return std::vector<::le_audio::set_configurations::AudioSetConfiguration>(0);
+}
+}  // namespace le_audio
+}  // namespace audio
+}  // namespace bluetooth
+
 std::map<std::string, int> mock_function_count_map;
 
 // Disables most likely false-positives from base::SplitString()
@@ -365,22 +377,20 @@ class UnicastTestNoInit : public Test {
 
     // default action for WriteDescriptor function call
     ON_CALL(mock_gatt_queue_, WriteDescriptor(_, _, _, _, _, _))
-        .WillByDefault(
-            Invoke([](uint16_t conn_id, uint16_t handle,
-                      std::vector<uint8_t> value, tGATT_WRITE_TYPE write_type,
-                      GATT_WRITE_OP_CB cb, void* cb_data) -> void {
-              if (cb)
-                do_in_main_thread(FROM_HERE,
-                                  base::BindOnce(
-                                      [](GATT_WRITE_OP_CB cb, uint16_t conn_id,
-                                         uint16_t handle, uint16_t len,
-                                         uint8_t* value, void* cb_data) {
-                                        cb(conn_id, GATT_SUCCESS, handle, len,
-                                           value, cb_data);
-                                      },
-                                      cb, conn_id, handle, value.size(),
-                                      value.data(), cb_data));
-            }));
+        .WillByDefault(Invoke([](uint16_t conn_id, uint16_t handle,
+                                 std::vector<uint8_t> value,
+                                 tGATT_WRITE_TYPE write_type,
+                                 GATT_WRITE_OP_CB cb, void* cb_data) -> void {
+          if (cb)
+            do_in_main_thread(
+                FROM_HERE,
+                base::BindOnce(
+                    [](GATT_WRITE_OP_CB cb, uint16_t conn_id, uint16_t handle,
+                       uint16_t len, uint8_t* value, void* cb_data) {
+                      cb(conn_id, GATT_SUCCESS, handle, len, value, cb_data);
+                    },
+                    cb, conn_id, handle, value.size(), value.data(), cb_data));
+        }));
 
     global_conn_id = 1;
     ON_CALL(mock_gatt_interface_, Open(_, _, _, _))
@@ -565,7 +575,8 @@ class UnicastTestNoInit : public Test {
                               LeAudioDevice* leAudioDevice) {
           if (!group) return;
           auto* stream_conf = &group->stream_conf;
-          if (stream_conf->valid) {
+          if (!stream_conf->sink_streams.empty() ||
+              !stream_conf->source_streams.empty()) {
             stream_conf->sink_streams.erase(
                 std::remove_if(stream_conf->sink_streams.begin(),
                                stream_conf->sink_streams.end(),
@@ -585,11 +596,6 @@ class UnicastTestNoInit : public Test {
                                  return ases.source;
                                }),
                 stream_conf->source_streams.end());
-
-            if (stream_conf->sink_streams.empty()) {
-              LOG(INFO) << __func__ << " stream stopped ";
-              stream_conf->valid = false;
-            }
           }
 
           if (group->IsEmpty()) {
@@ -615,7 +621,8 @@ class UnicastTestNoInit : public Test {
               }
               /* Invalidate stream configuration if needed */
               auto* stream_conf = &group->stream_conf;
-              if (stream_conf->valid) {
+              if (!stream_conf->sink_streams.empty() ||
+                  !stream_conf->source_streams.empty()) {
                 stream_conf->sink_streams.erase(
                     std::remove_if(
                         stream_conf->sink_streams.begin(),
@@ -645,11 +652,6 @@ class UnicastTestNoInit : public Test {
                           return ases.source;
                         }),
                     stream_conf->source_streams.end());
-
-                if (stream_conf->sink_streams.empty()) {
-                  LOG(INFO) << __func__ << " stream stopped ";
-                  stream_conf->valid = false;
-                }
               }
             });
 
@@ -962,38 +964,20 @@ class UnicastTestNoInit : public Test {
 
     UpdateMetadata(usage, content_type);
 
-    EXPECT_CALL(mock_audio_source_, ConfirmStreamingRequest()).Times(1);
-    std::promise<void> do_resume_sink_promise;
-    auto do_resume_sink_future = do_resume_sink_promise.get_future();
-    /* It's enough to call only one suspend even if it'll be bi-directional
-     * streaming. First resume will trigger GroupStream.
-     *
-     * There is no - 'only source receiver' scenario (e.g. single microphone).
-     * If there will be such test oriented scenario, such resume choose logic
-     * should be applied.
-     */
-    audio_sink_receiver_->OnAudioResume(std::move(do_resume_sink_promise));
-    do_resume_sink_future.wait();
-    SyncOnMainLoop();
-
     if (reconfigured_sink) {
-      std::promise<void> do_resume_sink_reconf_promise;
-      auto do_resume_sink_reconf_future =
-          do_resume_sink_reconf_promise.get_future();
-
-      audio_sink_receiver_->OnAudioResume(
-          std::move(do_resume_sink_reconf_promise));
-      do_resume_sink_reconf_future.wait();
+      EXPECT_CALL(mock_audio_source_, CancelStreamingRequest()).Times(1);
+      audio_sink_receiver_->OnAudioResume();
     }
+    SyncOnMainLoop();
+    audio_sink_receiver_->OnAudioResume();
+
+    EXPECT_CALL(mock_audio_source_, ConfirmStreamingRequest()).Times(1);
+    state_machine_callbacks_->StatusReportCb(group_id,
+                                             GroupStreamStatus::STREAMING);
 
     if (usage == AUDIO_USAGE_VOICE_COMMUNICATION) {
       ASSERT_NE(audio_source_receiver_, nullptr);
-
-      std::promise<void> do_resume_source_promise;
-      auto do_resume_source_future = do_resume_source_promise.get_future();
-      audio_source_receiver_->OnAudioResume(
-          std::move(do_resume_source_promise));
-      do_resume_source_future.wait();
+      audio_source_receiver_->OnAudioResume();
     }
   }
 
@@ -2451,7 +2435,6 @@ TEST_F(UnicastTest, TwoEarbudsStreaming) {
 
   // Start streaming with reconfiguration from default media stream setup
   EXPECT_CALL(mock_audio_source_, Start(_, _)).Times(1);
-  EXPECT_CALL(mock_audio_source_, CancelStreamingRequest()).Times(1);
   EXPECT_CALL(mock_audio_source_, Stop()).Times(1);
   EXPECT_CALL(mock_audio_sink_, Start(_, _)).Times(1);
 
@@ -2538,7 +2521,6 @@ TEST_F(UnicastTest, TwoEarbudsStreamingContextSwitchSimple) {
       StartStream(_, le_audio::types::LeAudioContextType::NOTIFICATIONS))
       .Times(1);
   EXPECT_CALL(mock_audio_source_, Start(_, _)).Times(1);
-  EXPECT_CALL(mock_audio_source_, CancelStreamingRequest()).Times(1);
   EXPECT_CALL(mock_audio_source_, Stop()).Times(1);
 
   StartStreaming(AUDIO_USAGE_NOTIFICATION, AUDIO_CONTENT_TYPE_UNKNOWN, group_id,
@@ -2619,7 +2601,6 @@ TEST_F(UnicastTest, TwoEarbudsStreamingContextSwitchReconfigure) {
 
   // Start streaming
   EXPECT_CALL(mock_audio_source_, Start(_, _)).Times(1);
-  EXPECT_CALL(mock_audio_source_, CancelStreamingRequest()).Times(1);
   EXPECT_CALL(mock_audio_source_, Stop()).Times(1);
   EXPECT_CALL(mock_audio_sink_, Start(_, _)).Times(1);
   LeAudioClient::Get()->GroupSetActive(group_id);
