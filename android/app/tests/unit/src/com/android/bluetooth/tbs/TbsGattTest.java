@@ -39,7 +39,6 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
-import com.android.internal.R;
 import com.google.common.primitives.Bytes;
 
 import org.junit.After;
@@ -465,8 +464,8 @@ public class TbsGattTest {
         Assert.assertTrue(Arrays.equals(characteristic.getValue(),
                 new byte[] {(byte) (requestedOpcode & 0xff), (byte) (callIndex & 0xff),
                         (byte) (result & 0xff)}));
-        verify(mMockGattServer).notifyCharacteristicChanged(eq(mCurrentDevice), eq(characteristic),
-                eq(false));
+        verify(mMockGattServer, after(2000)).notifyCharacteristicChanged(eq(mCurrentDevice),
+                eq(characteristic), eq(false));
         reset(mMockGattServer);
 
         callIndex = 0x02;
@@ -477,7 +476,8 @@ public class TbsGattTest {
         Assert.assertTrue(Arrays.equals(characteristic.getValue(),
                 new byte[] {(byte) (requestedOpcode & 0xff), (byte) (callIndex & 0xff),
                         (byte) (result & 0xff)}));
-        verify(mMockGattServer, times(0)).notifyCharacteristicChanged(any(), any(), anyBoolean());
+        verify(mMockGattServer, after(2000).times(0)).notifyCharacteristicChanged(any(), any(),
+                anyBoolean());
     }
 
     @Test

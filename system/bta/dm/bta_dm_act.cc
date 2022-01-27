@@ -25,6 +25,8 @@
 
 #define LOG_TAG "bt_bta_dm"
 
+#include <base/logging.h>
+
 #include <cstdint>
 
 #include "bta/dm/bta_dm_int.h"
@@ -44,6 +46,8 @@
 #include "osi/include/fixed_queue.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
+#include "stack/btm/btm_ble_int.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/gatt/connection_manager.h"
@@ -55,8 +59,6 @@
 #include "stack/include/btu.h"  // do_in_main_thread
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 #if (GAP_INCLUDED == TRUE)
 #include "gap_api.h"
@@ -1809,6 +1811,10 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
   uint16_t service_class;
 
   result.inq_res.bd_addr = p_inq->remote_bd_addr;
+
+  // Pass the original address to GattService#onScanResult
+  result.inq_res.original_bda = p_inq->original_bda;
+
   memcpy(result.inq_res.dev_class, p_inq->dev_class, DEV_CLASS_LEN);
   BTM_COD_SERVICE_CLASS(service_class, p_inq->dev_class);
   result.inq_res.is_limited =
@@ -3312,6 +3318,7 @@ static void bta_dm_observe_results_cb(tBTM_INQ_RESULTS* p_inq,
   APPL_TRACE_DEBUG("bta_dm_observe_results_cb");
 
   result.inq_res.bd_addr = p_inq->remote_bd_addr;
+  result.inq_res.original_bda = p_inq->original_bda;
   result.inq_res.rssi = p_inq->rssi;
   result.inq_res.ble_addr_type = p_inq->ble_addr_type;
   result.inq_res.inq_result_type = p_inq->inq_result_type;
