@@ -52,6 +52,7 @@
 #include "bta/include/bta_hearing_aid_api.h"
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_le_audio_api.h"
+#include "bta/include/bta_le_audio_broadcaster_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -60,8 +61,6 @@
 #include "btif_av.h"
 #include "btif_bqr.h"
 #include "btif_config.h"
-#include "btif_debug.h"
-#include "btif_debug_btsnoop.h"
 #include "btif_debug_conn.h"
 #include "btif_hf.h"
 #include "btif_keystore.h"
@@ -90,6 +89,7 @@
 
 using bluetooth::csis::CsisClientInterface;
 using bluetooth::hearing_aid::HearingAidInterface;
+using bluetooth::le_audio::LeAudioBroadcasterInterface;
 using bluetooth::le_audio::LeAudioClientInterface;
 using bluetooth::vc::VolumeControlInterface;
 
@@ -135,6 +135,8 @@ extern const btsdp_interface_t* btif_sdp_get_interface();
 extern HearingAidInterface* btif_hearing_aid_get_interface();
 /* LeAudio testi client */
 extern LeAudioClientInterface* btif_le_audio_get_interface();
+/* LeAudio Broadcaster */
+extern LeAudioBroadcasterInterface* btif_le_audio_broadcaster_get_interface();
 /* Coordinated Set Service Client */
 extern CsisClientInterface* btif_csis_client_get_interface();
 /* Volume Control client */
@@ -195,7 +197,6 @@ static int init(bt_callbacks_t* callbacks, bool start_restricted,
   is_local_device_atv = is_atv;
 
   stack_manager_get_interface()->init_stack();
-  btif_debug_init();
   return BT_STATUS_SUCCESS;
 }
 
@@ -417,6 +418,7 @@ static void dump(int fd, const char** arguments) {
   bluetooth::csis::CsisClient::DebugDump(fd);
   HearingAid::DebugDump(fd);
   LeAudioClient::DebugDump(fd);
+  LeAudioBroadcaster::DebugDump(fd);
   connection_manager::dump(fd);
   bluetooth::bqr::DebugDump(fd);
   bluetooth::shim::Dump(fd, arguments);
@@ -481,6 +483,9 @@ static const void* get_profile_interface(const char* profile_id) {
 
   if (is_profile(profile_id, BT_PROFILE_LE_AUDIO_ID))
     return btif_le_audio_get_interface();
+
+  if (is_profile(profile_id, BT_PROFILE_LE_AUDIO_BROADCASTER_ID))
+    return btif_le_audio_broadcaster_get_interface();
 
   if (is_profile(profile_id, BT_PROFILE_VC_ID))
     return btif_volume_control_get_interface();
@@ -768,7 +773,7 @@ void invoke_oob_data_request_cb(tBT_TRANSPORT t, bool valid, Octet16 c,
                                 uint8_t address_type) {
   LOG_INFO("%s", __func__);
   bt_oob_data_t oob_data = {};
-  char* local_name;
+  const char* local_name;
   BTM_ReadLocalDeviceName(&local_name);
   for (int i = 0; i < BTM_MAX_LOC_BD_NAME_LEN; i++) {
     oob_data.device_name[i] = local_name[i];
@@ -896,4 +901,16 @@ void invoke_link_quality_report_cb(
           },
           timestamp, report_id, rssi, snr, retransmission_count,
           packets_not_receive_count, negative_acknowledgement_count));
+}
+
+void invoke_switch_buffer_size_cb(RawAddress remote_addr,
+                                  bool is_low_latency_buffer_size) {
+  do_in_jni_thread(
+      FROM_HERE,
+      base::BindOnce(
+          [](RawAddress remote_addr, bool is_low_latency_buffer_size) {
+            HAL_CBACK(bt_hal_cbacks, switch_buffer_size_cb, &remote_addr,
+                      is_low_latency_buffer_size);
+          },
+          remote_addr, is_low_latency_buffer_size));
 }

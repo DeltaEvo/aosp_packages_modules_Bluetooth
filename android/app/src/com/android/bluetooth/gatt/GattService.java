@@ -1088,8 +1088,28 @@ public class GattService extends ProfileService {
         }
 
         @Override
-        public void unregisterSync(
+        public void transferSync(BluetoothDevice bda, int serviceData , int syncHandle,
+                AttributionSource attributionSource) {
+            GattService service = getService();
+            if (service == null) {
+                return;
+            }
+            service.transferSync(bda, serviceData , syncHandle, attributionSource);
+        }
+
+        @Override
+        public void transferSetInfo(BluetoothDevice bda, int serviceData , int advHandle,
                 IPeriodicAdvertisingCallback callback, AttributionSource attributionSource) {
+            GattService service = getService();
+            if (service == null) {
+                return;
+            }
+            service.transferSetInfo(bda, serviceData , advHandle, callback, attributionSource);
+        }
+
+        @Override
+        public void unregisterSync(IPeriodicAdvertisingCallback callback,
+                AttributionSource attributionSource) {
             GattService service = getService();
             if (service == null) {
                 return;
@@ -2621,6 +2641,25 @@ public class GattService extends ProfileService {
         mPeriodicScanManager.stopSync(callback);
     }
 
+    void transferSync(BluetoothDevice bda, int serviceData, int syncHandle,
+            AttributionSource attributionSource) {
+        if (!Utils.checkScanPermissionForDataDelivery(
+                this, attributionSource, "GattService transferSync")) {
+            return;
+        }
+        mPeriodicScanManager.transferSync(bda, serviceData, syncHandle);
+    }
+
+    void transferSetInfo(BluetoothDevice bda, int serviceData,
+                  int advHandle, IPeriodicAdvertisingCallback callback,
+                  AttributionSource attributionSource) {
+        if (!Utils.checkScanPermissionForDataDelivery(
+                this, attributionSource, "GattService transferSetInfo")) {
+            return;
+        }
+        mPeriodicScanManager.transferSetInfo(bda, serviceData, advHandle, callback);
+    }
+
     /**************************************************************************
      * ADVERTISING SET
      *************************************************************************/
@@ -3779,13 +3818,18 @@ public class GattService extends ProfileService {
     }
 
     private boolean isLeAudioSrvcUuid(final UUID uuid) {
-        return LE_AUDIO_SERVICE_UUIDS.equals(uuid);
+        for (UUID leAudioUuid : LE_AUDIO_SERVICE_UUIDS) {
+            if (leAudioUuid.equals(uuid)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isRestrictedSrvcUuid(final UUID uuid) {
-        return isLeAudioSrvcUuid(uuid) ||
-               isAndroidTvRemoteSrvcUuid(uuid) ||
-               isLeAudioSrvcUuid(uuid);
+        return isFidoSrvcUuid(uuid)
+                || isAndroidTvRemoteSrvcUuid(uuid)
+                || isLeAudioSrvcUuid(uuid);
     }
 
     private int getDeviceType(BluetoothDevice device) {
