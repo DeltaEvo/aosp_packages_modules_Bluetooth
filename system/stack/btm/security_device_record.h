@@ -33,8 +33,6 @@
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
-typedef char tBTM_LOC_BD_NAME[BTM_MAX_LOC_BD_NAME_LEN + 1];
-
 typedef struct {
   uint16_t min_conn_int;
   uint16_t max_conn_int;
@@ -217,6 +215,7 @@ struct tBTM_SEC_DEV_REC {
   RawAddress bd_addr;      /* BD_ADDR of the device              */
   DEV_CLASS dev_class;     /* DEV_CLASS of the device            */
   LinkKey link_key;        /* Device link key                    */
+  tHCI_STATUS sec_status;      /* status for pin_or_key_missing      */
 
  public:
   RawAddress RemoteAddress() const { return bd_addr; }

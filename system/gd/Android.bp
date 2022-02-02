@@ -212,6 +212,7 @@ cc_library {
     defaults: [
         "libbluetooth_gd_defaults",
     ],
+    min_sdk_version: "31",
 }
 
 cc_library {
@@ -573,12 +574,47 @@ rust_library {
         "libthiserror",
         "liblog_rust",
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.bluetooth",
+    ],
+    min_sdk_version: "30",
 }
 
 rust_test_host {
     name: "libbt_packets_test",
     defaults: ["gd_rust_defaults"],
     srcs: ["rust/packets/lib.rs", ":BluetoothGeneratedPackets_rust"],
+    test_suites: ["general-tests"],
+    edition: "2018",
+    proc_macros: ["libnum_derive"],
+    rustlibs: [
+        "libbytes",
+        "libnum_traits",
+        "libthiserror",
+        "liblog_rust",
+    ],
+}
+
+// Generate and run tests of rust pdl parser for tests packets
+genrule {
+    name: "TestGeneratedPackets_rust",
+    tools: [
+        "bluetooth_packetgen",
+    ],
+    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/system/gd --out=$(genDir) $(in) --rust",
+    srcs: [
+        "packet/parser/test/rust_test_packets.pdl",
+    ],
+    out: [
+        "packet/parser/test/rust_test_packets.rs",
+    ],
+}
+
+rust_test_host {
+    name: "packets_test_rust",
+    defaults: ["gd_rust_defaults"],
+    srcs: ["rust/packets/test_lib.rs", ":TestGeneratedPackets_rust"],
     test_suites: ["general-tests"],
     edition: "2018",
     proc_macros: ["libnum_derive"],
@@ -850,11 +886,11 @@ genrule {
         "mkdir -p $(genDir)/files/blueberry/tests/gd/shim && " +
         "touch $(genDir)/files/blueberry/tests/gd/shim/__init__.py && " +
         // Bundle topshim proto here for now
-        "mkdir -p $(genDir)/files/rust/topshim/facade && " +
+        "mkdir -p $(genDir)/files/blueberry/tests/gd/rust/topshim/facade && " +
         "$(location aprotoc) -Ipackages/modules/Bluetooth/system/gd --plugin=protoc-gen-grpc=$(location protoc-gen-grpc-python-plugin) packages/modules/Bluetooth/system/gd/rust/topshim/facade/facade.proto --grpc_out=$(genDir)/files --python_out=$(genDir)/files && " +
-        "touch $(genDir)/files/rust/__init__.py && " +
-        "touch $(genDir)/files/rust/topshim/__init__.py && " +
-        "touch $(genDir)/files/rust/topshim/facade/__init__.py && " +
+        "touch $(genDir)/files/blueberry/tests/gd/rust/__init__.py && " +
+        "touch $(genDir)/files/blueberry/tests/gd/rust/topshim/__init__.py && " +
+        "touch $(genDir)/files/blueberry/tests/gd/rust/topshim/facade/__init__.py && " +
         "$(location soong_zip) -C $(genDir)/files -D $(genDir)/files -o $(out)",
     srcs: [
         ":BluetoothFacadeProto",
@@ -965,4 +1001,9 @@ rust_protobuf {
     ],
     source_stem: "facade",
     host_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.bluetooth",
+    ],
+    min_sdk_version: "30",
 }

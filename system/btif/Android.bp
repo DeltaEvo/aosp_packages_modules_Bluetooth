@@ -13,7 +13,6 @@ btifCommonIncludes = [
     "packages/modules/Bluetooth/system/bta/dm",
     "packages/modules/Bluetooth/system/bta/include",
     "packages/modules/Bluetooth/system/bta/sys",
-    "packages/modules/Bluetooth/system/btcore/include",
     "packages/modules/Bluetooth/system/btif/avrcp",
     "packages/modules/Bluetooth/system/btif/co",
     "packages/modules/Bluetooth/system/btif/include",
@@ -48,6 +47,11 @@ cc_library {
     shared_libs: [
         "libcutils",
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.bluetooth",
+    ],
+    min_sdk_version: "30",
     target: {
         android: {
             shared_libs: [
@@ -118,7 +122,6 @@ cc_defaults {
         "src/btif_config_transcode.cc",
         "src/btif_core.cc",
         "src/btif_csis_client.cc",
-        "src/btif_debug_btsnoop.cc",
         "src/btif_debug_conn.cc",
         "src/btif_dm.cc",
         "src/btif_gatt.cc",
@@ -133,6 +136,7 @@ cc_defaults {
         "src/btif_hh.cc",
         "src/btif_hd.cc",
         "src/btif_le_audio.cc",
+        "src/btif_le_audio_broadcaster.cc",
         "src/btif_metrics_logging.cc",
         "src/btif_pan.cc",
         "src/btif_profile_queue.cc",

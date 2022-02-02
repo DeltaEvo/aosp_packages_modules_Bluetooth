@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Android Open Source Project
+ * Copyright 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,30 @@
  * limitations under the License.
  */
 
-/*
- * Generated mock file from original source file
- *   Functions generated:3
- */
-
 #include <map>
 #include <string>
 
 extern std::map<std::string, int> mock_function_count_map;
 
-#include <base/logging.h>
-#include "gd/common/init_flags.h"
-#include "hci/include/btsnoop_mem.h"
+#include <base/bind.h>
+#include <base/bind_helpers.h>
+#include <hardware/bt_le_audio.h>
+
+#include "bta/include/bta_le_audio_broadcaster_api.h"
 
 #ifndef UNUSED_ATTR
 #define UNUSED_ATTR
 #endif
 
-void activity_attribution_set_callback(activity_attribution_cb cb) {
+void LeAudioBroadcaster::DebugDump(int) { mock_function_count_map[__func__]++; }
+void LeAudioBroadcaster::Initialize(
+    bluetooth::le_audio::LeAudioBroadcasterCallbacks*,
+    base::RepeatingCallback<bool()>) {
   mock_function_count_map[__func__]++;
 }
-void btsnoop_mem_capture(const BT_HDR* packet, uint64_t timestamp_us) {
+void LeAudioBroadcaster::Stop() { mock_function_count_map[__func__]++; }
+void LeAudioBroadcaster::Cleanup() { mock_function_count_map[__func__]++; }
+LeAudioBroadcaster* LeAudioBroadcaster::Get() {
   mock_function_count_map[__func__]++;
-}
-void btsnoop_mem_set_callback(btsnoop_data_cb cb) {
-  mock_function_count_map[__func__]++;
+  return nullptr;
 }
