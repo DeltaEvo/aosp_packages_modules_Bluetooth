@@ -57,11 +57,9 @@ cc_library_static {
         "external/libldac/abr/inc",
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/btcore/include",
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/vnd/ble",
         "packages/modules/Bluetooth/system/btif/include",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/udrv/include",
         "packages/modules/Bluetooth/system/bta/include",
@@ -302,8 +300,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/internal_include",
-        "packages/modules/Bluetooth/system/btcore/include",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/utils/include",
     ],
     srcs: [
@@ -360,8 +356,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/internal_include",
-        "packages/modules/Bluetooth/system/btcore/include",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/utils/include",
     ],
     srcs: crypto_toolbox_srcs + [
@@ -417,8 +411,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/internal_include",
-        "packages/modules/Bluetooth/system/btcore/include",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/utils/include",
     ],
@@ -478,8 +470,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/internal_include",
-        "packages/modules/Bluetooth/system/btcore/include",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/utils/include",
     ],
@@ -689,7 +679,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/btcore/include",
     ],
     srcs: [
         "btm/btm_iso.cc",
@@ -739,7 +728,6 @@ cc_test {
     include_dirs:[
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/btcore/include",
     ],
     srcs: [
         "eatt/eatt.cc",
