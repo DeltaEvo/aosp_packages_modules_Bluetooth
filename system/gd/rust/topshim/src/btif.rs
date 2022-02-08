@@ -567,6 +567,11 @@ impl From<SupportedProfiles> for Vec<u8> {
 
 #[cxx::bridge(namespace = bluetooth::topshim::rust)]
 mod ffi {
+    #[derive(Debug, Copy, Clone)]
+    pub struct RustRawAddress {
+        address: [u8; 6],
+    }
+
     unsafe extern "C++" {
         include!("btif/btif_shim.h");
 
@@ -699,6 +704,7 @@ pub enum BaseCallbacks {
     // energy_info_cb
     // link_quality_report_cb
     // generate_local_oob_data_cb
+    // switch_buffer_size_cb
 }
 
 pub struct BaseCallbacksDispatcher {
@@ -814,6 +820,7 @@ impl BluetoothInterface {
             energy_info_cb: None,
             link_quality_report_cb: None,
             generate_local_oob_data_cb: None,
+            switch_buffer_size_cb: None,
         });
 
         let rawcb: *mut bindings::bt_callbacks_t = &mut *callbacks;

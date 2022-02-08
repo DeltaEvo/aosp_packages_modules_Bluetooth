@@ -16,6 +16,8 @@
 
 package android.bluetooth;
 
+import static android.bluetooth.BluetoothUtils.getSyncTimeout;
+
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -42,11 +44,16 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.util.Log;
 
+import com.android.modules.utils.SynchronousResultReceiver;
+
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Represents a remote Bluetooth device. A {@link BluetoothDevice} lets you
@@ -135,7 +142,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     /**
      * Broadcast Action: Indicates a low level (ACL) connection has been
      * established with a remote device.
-     * <p>Always contains the extra field {@link #EXTRA_DEVICE}.
+     * <p>Always contains the extra fields {@link #EXTRA_DEVICE} and {@link #EXTRA_TRANSPORT}.
      * <p>ACL connections are managed automatically by the Android Bluetooth
      * stack.
      */
@@ -164,7 +171,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     /**
      * Broadcast Action: Indicates a low level (ACL) disconnection from a
      * remote device.
-     * <p>Always contains the extra field {@link #EXTRA_DEVICE}.
+     * <p>Always contains the extra fields {@link #EXTRA_DEVICE} and {@link #EXTRA_TRANSPORT}.
      * <p>ACL connections are managed automatically by the Android Bluetooth
      * stack.
      */
@@ -230,6 +237,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_BATTERY_LEVEL_CHANGED =
             "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED";
+
+    /**
+     * Broadcast Action: Indicates the audio buffer size should be switched
+     * between a low latency buffer size and a higher and larger latency buffer size.
+     * <p>Always contains the extra fields {@link #EXTRA_DEVICE} and {@link
+     * #EXTRA_LOW_LATENCY_BUFFER_SIZE}.
+     *
+     * @hide
+     */
+    @SuppressLint("ActionValue")
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SystemApi
+    public static final String ACTION_SWITCH_BUFFER_SIZE =
+            "android.bluetooth.device.action.SWITCH_BUFFER_SIZE";
 
     /**
      * Used as an Integer extra field in {@link #ACTION_BATTERY_LEVEL_CHANGED}
@@ -310,6 +336,17 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      */
     public static final String EXTRA_PREVIOUS_BOND_STATE =
             "android.bluetooth.device.extra.PREVIOUS_BOND_STATE";
+
+    /**
+     * Used as a boolean extra field to indicate if audio buffer size is low latency or not
+     *
+     * @hide
+     */
+    @SuppressLint("ActionValue")
+    @SystemApi
+    public static final String EXTRA_LOW_LATENCY_BUFFER_SIZE =
+            "android.bluetooth.device.extra.LOW_LATENCY_BUFFER_SIZE";
+
     /**
      * Indicates the remote device is not bonded (paired).
      * <p>There is no shared link key with the remote device, so communication
@@ -1020,12 +1057,12 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     public static final int TRANSPORT_AUTO = 0;
 
     /**
-     * Prefer BR/EDR transport for GATT connections to remote dual-mode devices
+     * Constant representing the BR/EDR transport.
      */
     public static final int TRANSPORT_BREDR = 1;
 
     /**
-     * Prefer LE transport for GATT connections to remote dual-mode devices
+     * Constant representing the Bluetooth Low Energy (BLE) Transport.
      */
     public static final int TRANSPORT_LE = 2;
 
@@ -1085,6 +1122,14 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     public static final String EXTRA_MAS_INSTANCE =
             "android.bluetooth.device.extra.MAS_INSTANCE";
 
+    /**
+     * Used as an int extra field in {@link #ACTION_ACL_CONNECTED} and
+     * {@link #ACTION_ACL_DISCONNECTED} intents to indicate which transport is connected.
+     * Possible values are: {@link #TRANSPORT_BREDR} and {@link #TRANSPORT_LE}.
+     */
+    @SuppressLint("ActionValue")
+    public static final String EXTRA_TRANSPORT = "android.bluetooth.device.extra.TRANSPORT";
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(
@@ -1094,6 +1139,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             ADDRESS_TYPE_PUBLIC,
             /** Address is either resolvable, non-resolvable or static.*/
             ADDRESS_TYPE_RANDOM,
+            /** Address type is unknown or unavailable **/
+            ADDRESS_TYPE_UNKNOWN,
         }
     )
     public @interface AddressType {}
@@ -1102,6 +1149,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     public static final int ADDRESS_TYPE_PUBLIC = 0;
     /** Address is either resolvable, non-resolvable or static. */
     public static final int ADDRESS_TYPE_RANDOM = 1;
+    /** Address type is unknown or unavailable **/
+    public static final int ADDRESS_TYPE_UNKNOWN = 0xFFFF;
 
     private static final String NULL_MAC_ADDRESS = "00:00:00:00:00:00";
 
@@ -1156,26 +1205,44 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     };
 
     /**
-     * Create a new BluetoothDevice
+     * Create a new BluetoothDevice.
      * Bluetooth MAC address must be upper case, such as "00:11:22:33:AA:BB",
      * and is validated in this constructor.
      *
      * @param address valid Bluetooth MAC address
-     * @param attributionSource attribution for permission-protected calls
+     * @param addressType valid address type
+     * @throws RuntimeException Bluetooth is not available on this platform
+     * @throws IllegalArgumentException address or addressType is invalid
+     * @hide
+     */
+    /*package*/ BluetoothDevice(String address, int addressType) {
+        getService();  // ensures sService is initialized
+        if (!BluetoothAdapter.checkBluetoothAddress(address)) {
+            throw new IllegalArgumentException(address + " is not a valid Bluetooth address");
+        }
+
+        if (addressType != ADDRESS_TYPE_PUBLIC && addressType != ADDRESS_TYPE_RANDOM) {
+            throw new IllegalArgumentException(addressType + " is not a Bluetooth address type");
+        }
+
+        mAddress = address;
+        mAddressType = addressType;
+        mAttributionSource = AttributionSource.myAttributionSource();
+    }
+
+    /**
+     * Create a new BluetoothDevice.
+     * Bluetooth MAC address must be upper case, such as "00:11:22:33:AA:BB",
+     * and is validated in this constructor.
+     *
+     * @param address valid Bluetooth MAC address
      * @throws RuntimeException Bluetooth is not available on this platform
      * @throws IllegalArgumentException address is invalid
      * @hide
      */
     @UnsupportedAppUsage
     /*package*/ BluetoothDevice(String address) {
-        getService();  // ensures sService is initialized
-        if (!BluetoothAdapter.checkBluetoothAddress(address)) {
-            throw new IllegalArgumentException(address + " is not a valid Bluetooth address");
-        }
-
-        mAddress = address;
-        mAddressType = ADDRESS_TYPE_PUBLIC;
-        mAttributionSource = AttributionSource.myAttributionSource();
+        this(address, ADDRESS_TYPE_PUBLIC);
     }
 
     /** {@hide} */
@@ -1260,6 +1327,33 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     }
 
     /**
+     * Returns the identity address of this BluetoothDevice.
+     * <p> For example, "00:11:22:AA:BB:CC".
+     *
+     * @return Bluetooth identity address as a string
+     * @hide
+     */
+    @SystemApi
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public @Nullable String getIdentityAddress() {
+        final IBluetooth service = sService;
+        if (service == null) {
+            Log.e(TAG, "BT not enabled. Cannot get identity address");
+            return null;
+        }
+        try {
+            return service.getIdentityAddress(mAddress);
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        }
+        return null;
+    }
+
+    /**
      * Get the friendly Bluetooth name of the remote device.
      *
      * <p>The local adapter will automatically retrieve remote names when
@@ -1272,25 +1366,29 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public String getName() {
+        if (DBG) log("getName()");
         final IBluetooth service = sService;
+        final String defaultValue = null;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot get Remote Device name");
-            return null;
-        }
-        try {
-            String name = service.getRemoteName(this, mAttributionSource);
-            if (name != null) {
-                // remove whitespace characters from the name
-                return name
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<String> recv = new SynchronousResultReceiver();
+                service.getRemoteName(this, mAttributionSource, recv);
+                String name = recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+                if (name != null) {
+                    // remove whitespace characters from the name
+                    return name
                         .replace('\t', ' ')
                         .replace('\n', ' ')
                         .replace('\r', ' ');
+                }
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }
-            return null;
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
         }
-        return null;
+        return defaultValue;
     }
 
     /**
@@ -1303,17 +1401,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int getType() {
+        if (DBG) log("getType()");
         final IBluetooth service = sService;
+        final int defaultValue = DEVICE_TYPE_UNKNOWN;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot get Remote Device type");
-            return DEVICE_TYPE_UNKNOWN;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getRemoteType(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getRemoteType(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return DEVICE_TYPE_UNKNOWN;
+        return defaultValue;
     }
 
     /**
@@ -1327,24 +1430,29 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public String getAlias() {
+        if (DBG) log("getAlias()");
         final IBluetooth service = sService;
+        final String defaultValue = null;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot get Remote Device Alias");
-            return null;
-        }
-        try {
-            String alias = service.getRemoteAliasWithAttribution(this, mAttributionSource);
-            if (alias == null) {
-                return getName();
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<String> recv = new SynchronousResultReceiver();
+                service.getRemoteAliasWithAttribution(this, mAttributionSource, recv);
+                String alias = recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+                if (alias == null) {
+                    return getName();
+                }
+                return alias
+                        .replace('\t', ' ')
+                        .replace('\n', ' ')
+                        .replace('\r', ' ');
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }
-            return alias
-                    .replace('\t', ' ')
-                    .replace('\n', ' ')
-                    .replace('\r', ' ');
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
         }
-        return null;
+        return defaultValue;
     }
 
     /** @hide */
@@ -1383,17 +1491,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         if (alias != null && alias.isEmpty()) {
             throw new IllegalArgumentException("alias cannot be the empty string");
         }
+        if (DBG) log("setAlias(" + alias + ")");
         final IBluetooth service = sService;
+        final int defaultValue = BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot set Remote Device name");
-            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.setRemoteAlias(this, alias, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                Log.e(TAG, "", e);
+                throw e.rethrowFromSystemServer();
+            }
         }
-        try {
-            return service.setRemoteAlias(this, alias, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-            throw e.rethrowFromSystemServer();
-        }
+        return defaultValue;
     }
 
     /**
@@ -1409,17 +1525,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int getBatteryLevel() {
+        if (DBG) log("getBatteryLevel()");
         final IBluetooth service = sService;
+        final int defaultValue = BATTERY_LEVEL_BLUETOOTH_OFF;
         if (service == null) {
             Log.e(TAG, "Bluetooth disabled. Cannot get remote device battery level");
-            return BATTERY_LEVEL_BLUETOOTH_OFF;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getBatteryLevel(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getBatteryLevel(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return BATTERY_LEVEL_UNKNOWN;
+        return defaultValue;
     }
 
     /**
@@ -1499,22 +1620,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     private boolean createBondInternal(int transport, @Nullable OobData remoteP192Data,
             @Nullable OobData remoteP256Data) {
+        if (DBG) log("createBondOutOfBand()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.w(TAG, "BT not enabled, createBondOutOfBand failed");
-            return false;
-        }
-        if (NULL_MAC_ADDRESS.equals(mAddress)) {
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else if (NULL_MAC_ADDRESS.equals(mAddress)) {
             Log.e(TAG, "Unable to create bond, invalid address " + mAddress);
-            return false;
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.createBond(this, transport, remoteP192Data, remoteP256Data,
+                        mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.createBond(
-                    this, transport, remoteP192Data, remoteP256Data, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -1529,17 +1653,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean isBondingInitiatedLocally() {
+        if (DBG) log("isBondingInitiatedLocally()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.w(TAG, "BT not enabled, isBondingInitiatedLocally failed");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.isBondingInitiatedLocally(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.isBondingInitiatedLocally(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -1551,20 +1680,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean cancelBondProcess() {
+        if (DBG) log("cancelBondProcess()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot cancel Remote Device bond");
-            return false;
-        }
-        try {
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
             Log.i(TAG, "cancelBondProcess() for device " + getAddress()
                     + " called by pid: " + Process.myPid()
                     + " tid: " + Process.myTid());
-            return service.cancelBondProcess(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.cancelBondProcess(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -1579,20 +1713,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean removeBond() {
+        if (DBG) log("removeBond()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot remove Remote Device bond");
-            return false;
-        }
-        try {
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
             Log.i(TAG, "removeBond() for device " + getAddress()
                     + " called by pid: " + Process.myPid()
                     + " tid: " + Process.myTid());
-            return service.removeBond(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.removeBond(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        return false;
+        return defaultValue;
     }
 
     /*
@@ -1605,10 +1744,16 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 @SuppressLint("AndroidFrameworkRequiresPermission")
                 protected Integer recompute(BluetoothDevice query) {
                     try {
-                        return sService.getBondState(query, mAttributionSource);
+                        final SynchronousResultReceiver<Integer> recv =
+                                new SynchronousResultReceiver();
+                        sService.getBondState(query, mAttributionSource, recv);
+                        return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+                    } catch (TimeoutException e) {
+                        Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
                     } catch (RemoteException e) {
                         throw e.rethrowAsRuntimeException();
                     }
+                    return defaultValue;
                 }
             };
      */
@@ -1639,19 +1784,26 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SuppressLint("AndroidFrameworkRequiresPermission")
     public int getBondState() {
+        if (DBG) log("getBondState()");
         final IBluetooth service = sService;
+        final int defaultValue = BOND_NONE;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot get bond state");
-            return BOND_NONE;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                //return mBluetoothBondCache.query(this);
+                service.getBondState(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                Log.e(TAG, "failed to ", e);
+                e.rethrowFromSystemServer();
+            }
         }
-        try {
-            //return mBluetoothBondCache.query(this);
-            return sService.getBondState(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "failed to ", e);
-            e.rethrowFromSystemServer();
-        }
-        return BOND_NONE;
+        return defaultValue;
     }
 
     /**
@@ -1668,18 +1820,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean canBondWithoutDialog() {
+        if (DBG) log("canBondWithoutDialog, device: " + this);
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot check if we can skip pairing dialog");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.canBondWithoutDialog(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            if (DBG) Log.d(TAG, "canBondWithoutDialog, device: " + this);
-            return service.canBondWithoutDialog(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /** @hide */
@@ -1715,20 +1871,28 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.MODIFY_PHONE_STATE,
     })
     public @ConnectionReturnValues int connect() {
+        if (DBG) log("connect()");
         if (!BluetoothAdapter.checkBluetoothAddress(getAddress())) {
             throw new IllegalArgumentException("device cannot have an invalid address");
         }
-
-        try {
-            if (sService == null) {
-                Log.e(TAG, "BT not enabled. Cannot connect to remote device.");
-                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        final IBluetooth service = sService;
+        final int defaultValue = BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        if (service == null) {
+            Log.e(TAG, "BT not enabled. Cannot connect to remote device.");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.connectAllEnabledProfiles(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                Log.e(TAG, "", e);
+                throw e.rethrowFromSystemServer();
             }
-            return sService.connectAllEnabledProfiles(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-            throw e.rethrowFromSystemServer();
         }
+        return defaultValue;
     }
 
     /**
@@ -1750,20 +1914,28 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public @ConnectionReturnValues int disconnect() {
+        if (DBG) log("disconnect()");
         if (!BluetoothAdapter.checkBluetoothAddress(getAddress())) {
             throw new IllegalArgumentException("device cannot have an invalid address");
         }
-
-        try {
-            if (sService == null) {
-                Log.e(TAG, "BT not enabled. Cannot disconnect from remote device.");
-                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        final IBluetooth service = sService;
+        final int defaultValue = BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        if (service == null) {
+            Log.e(TAG, "BT not enabled. Cannot disconnect to remote device.");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.disconnectAllEnabledProfiles(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                Log.e(TAG, "", e);
+                throw e.rethrowFromSystemServer();
             }
-            return sService.disconnectAllEnabledProfiles(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-            throw e.rethrowFromSystemServer();
         }
+        return defaultValue;
     }
 
     /**
@@ -1777,18 +1949,24 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean isConnected() {
+        if (DBG) log("isConnected()");
         final IBluetooth service = sService;
+        final int defaultValue = CONNECTION_STATE_DISCONNECTED;
         if (service == null) {
-            // BT is not enabled, we cannot be connected.
-            return false;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getConnectionStateWithAttribution(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue)
+                        != CONNECTION_STATE_DISCONNECTED;
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getConnectionStateWithAttribution(this, mAttributionSource)
-                    != CONNECTION_STATE_DISCONNECTED;
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-            return false;
-        }
+        // BT is not enabled, we cannot be connected.
+        return false;
     }
 
     /**
@@ -1803,18 +1981,24 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean isEncrypted() {
+        if (DBG) log("isEncrypted()");
         final IBluetooth service = sService;
+        final int defaultValue = CONNECTION_STATE_DISCONNECTED;
         if (service == null) {
-            // BT is not enabled, we cannot be connected.
-            return false;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getConnectionStateWithAttribution(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue)
+                        > CONNECTION_STATE_CONNECTED;
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getConnectionStateWithAttribution(this, mAttributionSource)
-                    > CONNECTION_STATE_CONNECTED;
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-            return false;
-        }
+        // BT is not enabled, we cannot be encrypted.
+        return false;
     }
 
     /**
@@ -1826,17 +2010,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public BluetoothClass getBluetoothClass() {
+        if (DBG) log("getBluetoothClass()");
         final IBluetooth service = sService;
+        final int defaultValue = 0;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot get Bluetooth Class");
-            return null;
-        }
-        try {
-            int classInt = service.getRemoteClass(this, mAttributionSource);
-            if (classInt == BluetoothClass.ERROR) return null;
-            return new BluetoothClass(classInt);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getRemoteClass(this, mAttributionSource, recv);
+                int classInt = recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+                if (classInt == BluetoothClass.ERROR) return null;
+                return new BluetoothClass(classInt);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
         return null;
     }
@@ -1855,17 +2044,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public ParcelUuid[] getUuids() {
+        if (DBG) log("getUuids()");
         final IBluetooth service = sService;
+        final ParcelUuid[] defaultValue = null;
         if (service == null || !isBluetoothEnabled()) {
             Log.e(TAG, "BT not enabled. Cannot get remote device Uuids");
-            return null;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<List<ParcelUuid>> recv =
+                        new SynchronousResultReceiver();
+                service.getRemoteUuids(this, mAttributionSource, recv);
+                List<ParcelUuid> parcels = recv.awaitResultNoInterrupt(getSyncTimeout())
+                        .getValue(new ArrayList<>());
+                return parcels.toArray(new ParcelUuid[parcels.size()]);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getRemoteUuids(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return null;
+        return defaultValue;
     }
 
     /**
@@ -1914,17 +2111,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean fetchUuidsWithSdp(@Transport int transport) {
+        if (DBG) log("fetchUuidsWithSdp()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null || !isBluetoothEnabled()) {
             Log.e(TAG, "BT not enabled. Cannot fetchUuidsWithSdp");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.fetchRemoteUuidsWithAttribution(this, transport, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.fetchRemoteUuidsWithAttribution(this, transport, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -1951,17 +2153,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean sdpSearch(ParcelUuid uuid) {
+        if (DBG) log("sdpSearch()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot query remote device sdp records");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.sdpSearch(this, uuid, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.sdpSearch(this, uuid, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -1973,17 +2180,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean setPin(byte[] pin) {
+        if (DBG) log("setPin()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot set Remote Device pin");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.setPin(this, true, pin.length, pin, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.setPin(this, true, pin.length, pin, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -2014,17 +2226,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean setPairingConfirmation(boolean confirm) {
+        if (DBG) log("setPairingConfirmation()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot set pairing confirmation");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.setPairingConfirmation(this, confirm, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.setPairingConfirmation(this, confirm, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -2039,17 +2256,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean cancelPairing() {
+        if (DBG) log("cancelPairing()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot cancel pairing");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.cancelBondProcess(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.cancelBondProcess(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     boolean isBluetoothEnabled() {
@@ -2073,16 +2295,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public @AccessPermission int getPhonebookAccessPermission() {
+        if (DBG) log("getPhonebookAccessPermission()");
         final IBluetooth service = sService;
+        final int defaultValue = ACCESS_UNKNOWN;
         if (service == null) {
-            return ACCESS_UNKNOWN;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getPhonebookAccessPermission(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getPhonebookAccessPermission(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return ACCESS_UNKNOWN;
+        return defaultValue;
     }
 
     /**
@@ -2114,16 +2342,21 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean setSilenceMode(boolean silence) {
+        if (DBG) log("setSilenceMode()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             throw new IllegalStateException("Bluetooth is not turned ON");
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.setSilenceMode(this, silence, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.setSilenceMode(this, silence, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "setSilenceMode fail", e);
-            return false;
-        }
+        return defaultValue;
     }
 
     /**
@@ -2139,16 +2372,21 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean isInSilenceMode() {
+        if (DBG) log("isInSilenceMode()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             throw new IllegalStateException("Bluetooth is not turned ON");
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.getSilenceMode(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getSilenceMode(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "isInSilenceMode fail", e);
-            return false;
-        }
+        return defaultValue;
     }
 
     /**
@@ -2165,16 +2403,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean setPhonebookAccessPermission(@AccessPermission int value) {
+        if (DBG) log("setPhonebookAccessPermission()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
-            return false;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.setPhonebookAccessPermission(this, value, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.setPhonebookAccessPermission(this, value, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -2188,16 +2432,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public @AccessPermission int getMessageAccessPermission() {
+        if (DBG) log("getMessageAccessPermission()");
         final IBluetooth service = sService;
+        final int defaultValue = ACCESS_UNKNOWN;
         if (service == null) {
-            return ACCESS_UNKNOWN;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getMessageAccessPermission(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getMessageAccessPermission(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return ACCESS_UNKNOWN;
+        return defaultValue;
     }
 
     /**
@@ -2219,16 +2469,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         if (value != ACCESS_ALLOWED && value != ACCESS_REJECTED && value != ACCESS_UNKNOWN) {
             throw new IllegalArgumentException(value + "is not a valid AccessPermission value");
         }
+        if (DBG) log("setMessageAccessPermission()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
-            return false;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.setMessageAccessPermission(this, value, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.setMessageAccessPermission(this, value, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -2242,16 +2498,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public @AccessPermission int getSimAccessPermission() {
+        if (DBG) log("getSimAccessPermission()");
         final IBluetooth service = sService;
+        final int defaultValue = ACCESS_UNKNOWN;
         if (service == null) {
-            return ACCESS_UNKNOWN;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                service.getSimAccessPermission(this, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getSimAccessPermission(this, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return ACCESS_UNKNOWN;
+        return defaultValue;
     }
 
     /**
@@ -2269,16 +2531,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean setSimAccessPermission(int value) {
+        if (DBG) log("setSimAccessPermission()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
-            return false;
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.setSimAccessPermission(this, value, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.setSimAccessPermission(this, value, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        }
-        return false;
+        return defaultValue;
     }
 
     /**
@@ -2774,21 +3042,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean setMetadata(@MetadataKey int key, @NonNull byte[] value) {
+        if (DBG) log("setMetadata()");
         final IBluetooth service = sService;
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "Bluetooth is not enabled. Cannot set metadata");
-            return false;
-        }
-        if (value.length > METADATA_MAX_LENGTH) {
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else if (value.length > METADATA_MAX_LENGTH) {
             throw new IllegalArgumentException("value length is " + value.length
                     + ", should not over " + METADATA_MAX_LENGTH);
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.setMetadata(this, key, value, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.setMetadata(this, key, value, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "setMetadata fail", e);
-            return false;
-        }
+        return defaultValue;
     }
 
     /**
@@ -2805,17 +3077,22 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public byte[] getMetadata(@MetadataKey int key) {
+        if (DBG) log("getMetadata()");
         final IBluetooth service = sService;
+        final byte[] defaultValue = null;
         if (service == null) {
             Log.e(TAG, "Bluetooth is not enabled. Cannot get metadata");
-            return null;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<byte[]> recv = new SynchronousResultReceiver();
+                service.getMetadata(this, key, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            return service.getMetadata(this, key, mAttributionSource);
-        } catch (RemoteException e) {
-            Log.e(TAG, "getMetadata fail", e);
-            return null;
-        }
+        return defaultValue;
     }
 
     /**
@@ -2843,18 +3120,25 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public boolean setLowLatencyAudioAllowed(boolean allowed) {
+        if (DBG) log("setLowLatencyAudioAllowed(" + allowed + ")");
         final IBluetooth service = sService;
-        Log.i(TAG, "Allowing bluetooth audio low latency: " + allowed);
+        final boolean defaultValue = false;
         if (service == null) {
             Log.e(TAG, "Bluetooth is not enabled. Cannot allow low latency");
-            return false;
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+        } else {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.allowLowLatencyAudio(allowed, this, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
         }
-        try {
-            service.allowLowLatencyAudio(allowed, this);
-        } catch (RemoteException e) {
-            Log.e(TAG, "allowLowLatencyAudio fail ", e);
-            e.rethrowFromSystemServer();
-        }
-        return true;
+        return defaultValue;
+    }
+
+    private static void log(String msg) {
+        Log.d(TAG, msg);
     }
 }

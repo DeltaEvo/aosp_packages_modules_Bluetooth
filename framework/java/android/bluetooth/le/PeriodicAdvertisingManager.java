@@ -16,6 +16,9 @@
 
 package android.bluetooth.le;
 
+import static android.bluetooth.le.BluetoothLeUtils.getSyncTimeout;
+
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.bluetooth.Attributable;
@@ -32,9 +35,12 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.util.Log;
 
+import com.android.modules.utils.SynchronousResultReceiver;
+
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeoutException;
 
 /**
  * This class provides methods to perform periodic advertising related
@@ -171,9 +177,10 @@ public final class PeriodicAdvertisingManager {
         mCallbackWrappers.put(callback, wrapped);
 
         try {
-            gatt.registerSync(
-                    scanResult, skip, timeout, wrapped, mAttributionSource);
-        } catch (RemoteException e) {
+            final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+            gatt.registerSync(scanResult, skip, timeout, wrapped, mAttributionSource, recv);
+            recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+        } catch (TimeoutException | RemoteException e) {
             Log.e(TAG, "Failed to register sync - ", e);
             return;
         }
@@ -208,11 +215,90 @@ public final class PeriodicAdvertisingManager {
         }
 
         try {
-            gatt.unregisterSync(wrapper, mAttributionSource);
-        } catch (RemoteException e) {
+            final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+            gatt.unregisterSync(wrapper, mAttributionSource, recv);
+            recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+        } catch (TimeoutException | RemoteException e) {
             Log.e(TAG, "Failed to cancel sync creation - ", e);
             return;
         }
+    }
+
+    /**
+     * Transfer periodic sync
+     *
+     * @hide
+     */
+    public void transferSync(BluetoothDevice bda, int serviceData, int syncHandle) {
+        IBluetoothGatt gatt;
+        try {
+            gatt = mBluetoothManager.getBluetoothGatt();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to get Bluetooth gatt - ", e);
+            PeriodicAdvertisingCallback callback = null;
+            for (PeriodicAdvertisingCallback cb : mCallbackWrappers.keySet()) {
+                callback = cb;
+            }
+            if (callback != null) {
+                callback.onSyncTransferred(bda,
+                        PeriodicAdvertisingCallback.SYNC_NO_RESOURCES);
+            }
+            return;
+        }
+        try {
+            final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+            gatt.transferSync(bda, serviceData , syncHandle, mAttributionSource, recv);
+            recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+        } catch (TimeoutException | RemoteException e) {
+            Log.e(TAG, "Failed to register sync - ", e);
+            return;
+        }
+    }
+
+    /**
+     * Transfer set info
+     *
+     * @hide
+     */
+    public void transferSetInfo(BluetoothDevice bda, int serviceData,
+                                int advHandle, PeriodicAdvertisingCallback callback) {
+        transferSetInfo(bda, serviceData, advHandle, callback, null);
+    }
+
+    /**
+     * Transfer set info
+     *
+     * @hide
+     */
+    public void transferSetInfo(BluetoothDevice bda, int serviceData,
+                                int advHandle, PeriodicAdvertisingCallback callback,
+                                @Nullable Handler handler) {
+        if (callback == null) {
+            throw new IllegalArgumentException("callback can't be null");
+        }
+        IBluetoothGatt gatt;
+        try {
+            gatt = mBluetoothManager.getBluetoothGatt();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to get Bluetooth gatt - ", e);
+            return;
+        }
+        if (handler == null) {
+            handler = new Handler(Looper.getMainLooper());
+        }
+        IPeriodicAdvertisingCallback wrapper = wrap(callback, handler);
+        if (wrapper == null) {
+            throw new IllegalArgumentException("callback was not properly registered");
+        }
+        try {
+            final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+            gatt.transferSetInfo(bda, serviceData , advHandle, wrapper, mAttributionSource, recv);
+            recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+        } catch (RemoteException | TimeoutException e) {
+            Log.e(TAG, "Failed to register sync - ", e);
+            return;
+        }
+
     }
 
     @SuppressLint("AndroidFrameworkBluetoothPermission")
@@ -256,6 +342,15 @@ public final class PeriodicAdvertisingManager {
                         // App can still unregister the sync until notified it's lost.
                         // Remove callback after app was notifed.
                         mCallbackWrappers.remove(callback);
+                    }
+                });
+            }
+
+            public void onSyncTransferred(BluetoothDevice device, int status) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        callback.onSyncTransferred(device, status);
                     }
                 });
             }

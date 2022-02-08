@@ -49,12 +49,14 @@
 #define BT_PROFILE_AV_RC_ID "avrcp"
 #define BT_PROFILE_AV_RC_CTRL_ID "avrcp_ctrl"
 #define BT_PROFILE_HEARING_AID_ID "hearing_aid"
+#define BT_PROFILE_HAP_CLIENT_ID "has_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_KEYSTORE_ID "bluetooth_keystore"
 #define BT_ACTIVITY_ATTRIBUTION_ID "activity_attribution"
 #define BT_PROFILE_VC_ID "volume_control"
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
+#define BT_PROFILE_LE_AUDIO_BROADCASTER_ID "le_audio_broadcaster"
 
 /** Bluetooth Device Name */
 typedef struct { uint8_t name[249]; } __attribute__((packed)) bt_bdname_t;
@@ -469,6 +471,10 @@ typedef void (*link_quality_report_callback)(
     int retransmission_count, int packets_not_receive_count,
     int negative_acknowledgement_count);
 
+/** Switch the buffer size callback */
+typedef void (*switch_buffer_size_callback)(RawAddress* remote_addr,
+                                            bool is_low_latency_buffer_size);
+
 typedef enum { ASSOCIATE_JVM, DISASSOCIATE_JVM } bt_cb_thread_evt;
 
 /** Thread Associate/Disassociate JVM Callback */
@@ -526,6 +532,7 @@ typedef struct {
   energy_info_callback energy_info_cb;
   link_quality_report_callback link_quality_report_cb;
   generate_local_oob_data_callback generate_local_oob_data_cb;
+  switch_buffer_size_callback switch_buffer_size_cb;
 } bt_callbacks_t;
 
 typedef void (*alarm_cb)(void* data);

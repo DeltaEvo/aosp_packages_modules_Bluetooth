@@ -33,7 +33,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/sys",
         "packages/modules/Bluetooth/system/bta/dm",
-        "packages/modules/Bluetooth/system/btcore/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
@@ -43,7 +42,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/udrv/include",
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/btif/co",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/encoder/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/decoder/include",
@@ -73,7 +71,6 @@ cc_library_shared {
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/sys",
         "packages/modules/Bluetooth/system/bta/dm",
-        "packages/modules/Bluetooth/system/btcore/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
@@ -83,7 +80,6 @@ cc_library_shared {
         "packages/modules/Bluetooth/system/udrv/include",
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/btif/co",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/encoder/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/decoder/include",
@@ -130,6 +126,7 @@ cc_library_shared {
                 "android.hardware.bluetooth.audio@2.0",
                 "android.hardware.bluetooth.audio@2.1",
                 "android.hardware.bluetooth.audio@2.2",
+                "android.hardware.bluetooth.audio-V1-ndk",
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
                 "android.system.suspend.control-V1-ndk",
@@ -166,7 +163,12 @@ cc_library_shared {
     sanitize: {
         never: true,
     },
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.bluetooth",
+    ],
     host_supported: true,
+    min_sdk_version: "30",
 }
 
 cc_library_static {
@@ -183,9 +185,7 @@ cc_library_static {
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/bta/include",
-        "packages/modules/Bluetooth/system/btcore/include",
         "packages/modules/Bluetooth/system/btif/include",
-        "packages/modules/Bluetooth/system/hci/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/utils/include",
@@ -221,6 +221,7 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMainHandler",
+        ":TestCommonMockFunctions",
         ":TestMockBta",
         ":TestMockBtif",
         ":TestMockLegacyHciCommands",
