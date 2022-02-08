@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Android Open Source Project
+ * Copyright 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,14 @@
  * limitations under the License.
  */
 
-/**
- * Gd shim layer to legacy le scanner
- */
 #pragma once
 
-#include "include/hardware/ble_scanner.h"
+#include <base/callback.h>
 
-namespace bluetooth {
-namespace shim {
+#include <queue>
 
-::BleScannerInterface* get_ble_scanner_instance();
-void init_scanning_manager();
-void set_empty_filter(bool enable);
+extern std::queue<base::OnceClosure> do_in_jni_thread_task_queue;
 
-}  // namespace shim
-}  // namespace bluetooth
+void run_one_jni_thread_task();
+void run_all_jni_thread_task();
+void reset_mock_jni_thread_task_queue();
