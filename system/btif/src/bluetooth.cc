@@ -32,6 +32,7 @@
 #include <hardware/bt_av.h>
 #include <hardware/bt_csis.h>
 #include <hardware/bt_gatt.h>
+#include <hardware/bt_has.h>
 #include <hardware/bt_hd.h>
 #include <hardware/bt_hearing_aid.h>
 #include <hardware/bt_hf_client.h>
@@ -47,8 +48,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "audio_hal_interface/a2dp_encoding.h"
 #include "bt_utils.h"
 #include "bta/include/bta_csis_api.h"
+#include "bta/include/bta_has_api.h"
 #include "bta/include/bta_hearing_aid_api.h"
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_le_audio_api.h"
@@ -88,6 +91,7 @@
 #include "types/raw_address.h"
 
 using bluetooth::csis::CsisClientInterface;
+using bluetooth::has::HasClientInterface;
 using bluetooth::hearing_aid::HearingAidInterface;
 #ifndef TARGET_FLOSS
 using bluetooth::le_audio::LeAudioBroadcasterInterface;
@@ -136,6 +140,8 @@ extern const btsdp_interface_t* btif_sdp_get_interface();
 /*Hearing Aid client*/
 extern HearingAidInterface* btif_hearing_aid_get_interface();
 #ifndef TARGET_FLOSS
+/* Hearing Access client */
+extern HasClientInterface* btif_has_client_get_interface();
 /* LeAudio testi client */
 extern LeAudioClientInterface* btif_le_audio_get_interface();
 /* LeAudio Broadcaster */
@@ -420,6 +426,9 @@ static void dump(int fd, const char** arguments) {
   osi_allocator_debug_dump(fd);
   alarm_debug_dump(fd);
   bluetooth::csis::CsisClient::DebugDump(fd);
+#ifndef TARGET_FLOSS
+  le_audio::has::HasClient::DebugDump(fd);
+#endif
   HearingAid::DebugDump(fd);
 #ifndef TARGET_FLOSS
   LeAudioClient::DebugDump(fd);
@@ -479,6 +488,11 @@ static const void* get_profile_interface(const char* profile_id) {
 
   if (is_profile(profile_id, BT_PROFILE_HEARING_AID_ID))
     return btif_hearing_aid_get_interface();
+
+#ifndef TARGET_FLOSS
+  if (is_profile(profile_id, BT_PROFILE_HAP_CLIENT_ID))
+    return btif_has_client_get_interface();
+#endif
 
   if (is_profile(profile_id, BT_KEYSTORE_ID))
     return bluetooth::bluetooth_keystore::getBluetoothKeystoreInterface();
@@ -606,8 +620,7 @@ static int set_dynamic_audio_buffer_size(int codec, int size) {
 
 static bool allow_low_latency_audio(bool allowed, const RawAddress& address) {
   LOG_INFO("%s %s", __func__, allowed ? "true" : "false");
-  // Call HAL here
-  return true;
+  return bluetooth::audio::a2dp::set_audio_low_latency_mode_allowed(allowed);
 }
 
 EXPORT_SYMBOL bt_interface_t bluetoothInterface = {

@@ -2259,13 +2259,13 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
         "status:%s name:%s",
         btm_pair_state_descr(btm_cb.pairing_state),
         hci_status_code_text(status).c_str(), p_bd_name);
-    DEV_CLASS dev_class = {0, 0, 0};
 
     /* Notify all clients waiting for name to be resolved even if not found so
      * clients can continue */
     for (i = 0; i < BTM_SEC_MAX_RMT_NAME_CALLBACKS; i++) {
       if (btm_cb.p_rmt_name_callback[i] && p_bd_addr)
-        (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, dev_class, (uint8_t*)"");
+        (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, (uint8_t*)kDevClassEmpty,
+                                         (uint8_t*)kBtmBdNameEmpty);
     }
 
     return;
@@ -3378,7 +3378,6 @@ static void btm_sec_connect_after_reject_timeout(UNUSED_ATTR void* data) {
 void btm_sec_connected(const RawAddress& bda, uint16_t handle,
                        tHCI_STATUS status, uint8_t enc_mode,
                        tHCI_ROLE assigned_role) {
-  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
   tBTM_STATUS res;
   bool is_pairing_device = false;
   bool addr_matched;
@@ -3386,6 +3385,7 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
 
   btm_acl_resubmit_page();
 
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
   if (!p_dev_rec) {
     LOG_DEBUG(
         "Connected to new device state:%s handle:0x%04x status:%s "
