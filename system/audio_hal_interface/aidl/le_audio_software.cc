@@ -36,9 +36,7 @@ using ::aidl::android::hardware::bluetooth::audio::ChannelMode;
 using ::aidl::android::hardware::bluetooth::audio::CodecType;
 using ::aidl::android::hardware::bluetooth::audio::Lc3Configuration;
 using ::aidl::android::hardware::bluetooth::audio::LeAudioCodecConfiguration;
-using ::aidl::android::hardware::bluetooth::audio::LeAudioMode;
 using ::aidl::android::hardware::bluetooth::audio::PcmConfiguration;
-using ::aidl::android::hardware::bluetooth::audio::UnicastConfiguration;
 using ::bluetooth::audio::aidl::AudioConfiguration;
 using ::bluetooth::audio::aidl::BluetoothAudioCtrlAck;
 using ::bluetooth::audio::le_audio::LeAudioClientInterface;
@@ -385,6 +383,7 @@ bool hal_ucast_capability_to_stack_format(
   auto sample_rate_hz = hal_lc3_capability.samplingFrequencyHz[0];
   auto frame_duration_us = hal_lc3_capability.frameDurationUs[0];
   auto octets_per_frame = hal_lc3_capability.octetsPerFrame[0];
+  auto channel_count = hal_capability.channelCountPerDevice;
 
   if (sampling_freq_map.find(sample_rate_hz) == sampling_freq_map.end() ||
       frame_duration_map.find(frame_duration_us) == frame_duration_map.end() ||
@@ -406,8 +405,8 @@ bool hal_ucast_capability_to_stack_format(
           {.sampling_frequency = sampling_freq_map[sample_rate_hz],
            .frame_duration = frame_duration_map[frame_duration_us],
            .octets_per_codec_frame = octets_per_frame_map[octets_per_frame],
-           .audio_channel_allocation = audio_location_map[supportedChannel]})};
-
+           .audio_channel_allocation = audio_location_map[supportedChannel],
+           .channel_count = static_cast<uint8_t>(channel_count)})};
   return true;
 }
 
@@ -471,8 +470,8 @@ AudioConfiguration offload_config_to_hal_audio_config(
       .octetsPerFrame = static_cast<int32_t>(offload_config.octets_per_frame),
       .blocksPerSdu = static_cast<int8_t>(offload_config.blocks_per_sdu),
   };
-  UnicastConfiguration ucast_config = {
-      .peerDelay = static_cast<int32_t>(offload_config.peer_delay),
+  LeAudioConfiguration ucast_config = {
+      .peerDelayUs = static_cast<int32_t>(offload_config.peer_delay_ms * 1000),
       .leAudioCodecConfig = LeAudioCodecConfiguration(lc3_config)};
 
   for (auto& [handle, location] : offload_config.stream_map) {
@@ -482,11 +481,7 @@ AudioConfiguration offload_config_to_hal_audio_config(
     });
   }
 
-  LeAudioConfiguration le_audio_config{
-      .mode = LeAudioMode::UNICAST,
-      .modeConfig = LeAudioConfiguration::LeAudioModeConfig(ucast_config),
-  };
-  return AudioConfiguration(le_audio_config);
+  return AudioConfiguration(ucast_config);
 }
 
 }  // namespace le_audio

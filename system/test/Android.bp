@@ -286,6 +286,7 @@ filegroup {
 filegroup {
   name: "TestMockBtif",
   srcs: [
+      ":TestCommonJniThread",
       "mock/mock_btif*.cc",
   ],
 }
@@ -403,6 +404,13 @@ filegroup {
 }
 
 filegroup {
+  name: "TestCommonJniThread",
+  srcs: [
+      "common/jni_thread.cc",
+  ],
+}
+
+filegroup {
   name: "TestCommonMainHandler",
   srcs: [
       "common/main_handler.cc",
@@ -413,6 +421,13 @@ filegroup {
   name: "TestCommonInitFlags",
   srcs: [
       "common/init_flags.cc",
+  ],
+}
+
+filegroup {
+  name: "TestCommonStackConfig",
+  srcs: [
+      "common/stack_config.cc",
   ],
 }
 
