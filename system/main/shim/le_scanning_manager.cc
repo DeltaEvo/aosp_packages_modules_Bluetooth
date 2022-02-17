@@ -132,7 +132,9 @@ void BleScannerInterfaceImpl::Scan(bool start) {
   BTM_LogHistory(
       kBtmLogTag, RawAddress::kEmpty,
       base::StringPrintf("Le scan %s", (start) ? "started" : "stopped"));
-  address_cache_.init();
+  do_in_jni_thread(FROM_HERE,
+                   base::Bind(&BleScannerInterfaceImpl::AddressCache::init,
+                              base::Unretained(&address_cache_)));
 }
 
   /** Setup scan filter params */
@@ -494,6 +496,11 @@ bool BleScannerInterfaceImpl::parse_filter_command(
 void BleScannerInterfaceImpl::handle_remote_properties(
     RawAddress bd_addr, tBLE_ADDR_TYPE addr_type,
     std::vector<uint8_t> advertising_data) {
+  if (!bluetooth::shim::is_gd_stack_started_up()) {
+    LOG_WARN("Gd stack is stopped, return");
+    return;
+  }
+
   // skip anonymous advertisment
   if (addr_type == BLE_ADDR_ANONYMOUS) {
     return;
@@ -541,11 +548,6 @@ void BleScannerInterfaceImpl::handle_remote_properties(
       }
     }
   }
-  if (!bluetooth::shim::is_gd_stack_started_up()) {
-    LOG_WARN("Gd stack is stopped, return");
-    return;
-  }
-
   auto* storage_module = bluetooth::shim::GetStorage();
   bluetooth::hci::Address address = ToGdAddress(bd_addr);
 
