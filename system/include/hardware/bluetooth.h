@@ -282,11 +282,11 @@ typedef enum {
    */
   BT_PROPERTY_ADAPTER_BONDED_DEVICES,
   /**
-   * Description - Bluetooth Adapter Discovery timeout (in seconds)
+   * Description - Bluetooth Adapter Discoverable timeout (in seconds)
    * Access mode - GET and SET
    * Data type   - uint32_t
    */
-  BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT,
+  BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT,
 
   /* Properties unique to remote device */
   /**
@@ -472,8 +472,7 @@ typedef void (*link_quality_report_callback)(
     int negative_acknowledgement_count);
 
 /** Switch the buffer size callback */
-typedef void (*switch_buffer_size_callback)(RawAddress* remote_addr,
-                                            bool is_low_latency_buffer_size);
+typedef void (*switch_buffer_size_callback)(bool is_low_latency_buffer_size);
 
 typedef enum { ASSOCIATE_JVM, DISASSOCIATE_JVM } bt_cb_thread_evt;
 
@@ -772,6 +771,11 @@ typedef struct {
    * @return true if audio low latency is successfully allowed or disallowed
    */
   bool (*allow_low_latency_audio)(bool allowed, const RawAddress& address);
+
+  /**
+   * Set the event filter for the controller
+   */
+  int (*clear_event_filter)();
 } bt_interface_t;
 
 #define BLUETOOTH_INTERFACE_STRING "bluetoothInterface"

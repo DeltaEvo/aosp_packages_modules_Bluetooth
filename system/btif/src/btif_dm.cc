@@ -2180,7 +2180,7 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop) {
       prop->len = sizeof(bt_scan_mode_t);
     } break;
 
-    case BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT: {
+    case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT: {
       uint32_t* tmt = (uint32_t*)prop->val;
       *tmt = 120; /* default to 120s, if not found in NV */
       prop->len = sizeof(uint32_t);
@@ -3205,4 +3205,9 @@ bool btif_get_address_type(const RawAddress& bda, tBLE_ADDR_TYPE* p_addr_type) {
   LOG_DEBUG(" bd_addr:%s[%s]", PRIVATE_ADDRESS(bda),
             AddressTypeText(*p_addr_type).c_str());
   return true;
+}
+
+void btif_dm_clear_event_filter() {
+  LOG_VERBOSE("%s: called", __func__);
+  bta_dm_clear_event_filter();
 }
