@@ -831,15 +831,21 @@ public class AdapterService extends Service {
         }
     }
 
-    void switchBufferSizeCallback(byte[] address, boolean isLowLatencyBufferSize) {
-        BluetoothDevice device = getDeviceFromByte(address);
+    void switchBufferSizeCallback(boolean isLowLatencyBufferSize) {
+        List<BluetoothDevice> activeDevices = getActiveDevices(BluetoothProfile.A2DP);
+        if (activeDevices.size() != 1) {
+            errorLog(
+                    "Cannot switch buffer size. The number of A2DP active devices is "
+                            + activeDevices.size());
+        }
+
         // Send intent to fastpair
         Intent switchBufferSizeIntent = new Intent(BluetoothDevice.ACTION_SWITCH_BUFFER_SIZE);
         switchBufferSizeIntent.setClassName(
                 getString(com.android.bluetooth.R.string.peripheral_link_package),
                 getString(com.android.bluetooth.R.string.peripheral_link_package)
                         + getString(com.android.bluetooth.R.string.peripheral_link_service));
-        switchBufferSizeIntent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        switchBufferSizeIntent.putExtra(BluetoothDevice.EXTRA_DEVICE, activeDevices.get(0));
         switchBufferSizeIntent.putExtra(
                 BluetoothDevice.EXTRA_LOW_LATENCY_BUFFER_SIZE, isLowLatencyBufferSize);
         sendBroadcast(switchBufferSizeIntent);
@@ -2049,6 +2055,8 @@ public class AdapterService extends Service {
                 return new ArrayList<>();
             }
 
+            enforceBluetoothPrivilegedPermission(service);
+
             return service.mDatabaseManager.getMostRecentlyConnectedDevices();
         }
 
@@ -2158,6 +2166,8 @@ public class AdapterService extends Service {
                             service, attributionSource, "AdapterService cancelBondProcess")) {
                 return false;
             }
+
+            enforceBluetoothPrivilegedPermission(service);
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp != null) {

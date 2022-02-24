@@ -217,14 +217,13 @@ void LinkQualityReportCallback(uint64_t timestamp, int report_id, int rssi,
       packets_not_receive_count, negative_acknowledgement_count));
 }
 
-void SwitchBufferSizeCallback(RawAddress* remote_addr,
-                              bool is_low_latency_buffer_size) {
+void SwitchBufferSizeCallback(bool is_low_latency_buffer_size) {
   shared_lock<shared_mutex_impl> lock(g_instance_lock);
   VERIFY_INTERFACE_OR_RETURN();
   LOG(WARNING) << __func__ << " - is_low_latency_buffer_size: "
                << is_low_latency_buffer_size;
   FOR_EACH_BLUETOOTH_OBSERVER(
-      SwitchBufferSizeCallback(remote_addr, is_low_latency_buffer_size));
+      SwitchBufferSizeCallback(is_low_latency_buffer_size));
 }
 
 // The HAL Bluetooth DM callbacks.
@@ -246,7 +245,7 @@ bt_callbacks_t bt_callbacks = {
     nullptr, /* energy_info_cb */
     LinkQualityReportCallback,
     nullptr /* generate_local_oob_data_cb */,
-    SwitchBufferSizeCallback
+    SwitchBufferSizeCallback,
 };
 
 bt_os_callouts_t bt_os_callouts = {sizeof(bt_os_callouts_t),
@@ -296,6 +295,9 @@ error:
 class BluetoothInterfaceImpl : public BluetoothInterface {
  public:
   BluetoothInterfaceImpl() : hal_iface_(nullptr) {}
+
+  BluetoothInterfaceImpl(const BluetoothInterfaceImpl&) = delete;
+  BluetoothInterfaceImpl& operator=(const BluetoothInterfaceImpl&) = delete;
 
   ~BluetoothInterfaceImpl() override {
     if (hal_iface_) hal_iface_->cleanup();
@@ -358,8 +360,6 @@ class BluetoothInterfaceImpl : public BluetoothInterface {
   // The HAL handle obtained from the shared library. We hold a weak reference
   // to this since the actual data resides in the shared Bluetooth library.
   const bt_interface_t* hal_iface_;
-
-  DISALLOW_COPY_AND_ASSIGN(BluetoothInterfaceImpl);
 };
 
 namespace {
@@ -437,7 +437,7 @@ void BluetoothInterface::Observer::LinkQualityReportCallback(
 }
 
 void BluetoothInterface::Observer::SwitchBufferSizeCallback(
-    RawAddress* /* remote_addr */, bool /* is_low_latency_buffer_size */) {
+    bool /* is_low_latency_buffer_size */) {
   // Do nothing.
 }
 

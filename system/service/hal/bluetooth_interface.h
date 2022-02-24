@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <base/macros.h>
 #include <hardware/bluetooth.h>
 
 #include "types/raw_address.h"
@@ -83,8 +82,7 @@ class BluetoothInterface {
         int retransmission_count, int packets_not_receive_count,
         int negative_acknowledgement_count);
 
-    virtual void SwitchBufferSizeCallback(RawAddress* remote_addr,
-                                          bool is_low_latency_buffer_size);
+    virtual void SwitchBufferSizeCallback(bool is_low_latency_buffer_size);
 
     // TODO(armansito): Complete the list of callbacks.
   };
@@ -127,10 +125,10 @@ class BluetoothInterface {
 
  protected:
   BluetoothInterface() = default;
-  virtual ~BluetoothInterface() = default;
+  BluetoothInterface(const BluetoothInterface&) = delete;
+  BluetoothInterface& operator=(const BluetoothInterface&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(BluetoothInterface);
+  virtual ~BluetoothInterface() = default;
 };
 
 }  // namespace hal

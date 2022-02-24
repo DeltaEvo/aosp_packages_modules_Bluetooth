@@ -262,7 +262,7 @@ static int set_adapter_property(const bt_property_t* property) {
   switch (property->type) {
     case BT_PROPERTY_BDNAME:
     case BT_PROPERTY_ADAPTER_SCAN_MODE:
-    case BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT:
+    case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
     case BT_PROPERTY_CLASS_OF_DEVICE:
     case BT_PROPERTY_LOCAL_IO_CAPS:
     case BT_PROPERTY_LOCAL_IO_CAPS_BLE:
@@ -409,6 +409,14 @@ static int read_energy_info() {
   if (!interface_ready()) return BT_STATUS_NOT_READY;
 
   do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_read_energy_info));
+  return BT_STATUS_SUCCESS;
+}
+
+static int clear_event_filter() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_event_filter));
   return BT_STATUS_SUCCESS;
 }
 
@@ -620,7 +628,8 @@ static int set_dynamic_audio_buffer_size(int codec, int size) {
 
 static bool allow_low_latency_audio(bool allowed, const RawAddress& address) {
   LOG_INFO("%s %s", __func__, allowed ? "true" : "false");
-  return bluetooth::audio::a2dp::set_audio_low_latency_mode_allowed(allowed);
+  bluetooth::audio::a2dp::set_audio_low_latency_mode_allowed(allowed);
+  return true;
 }
 
 EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
@@ -662,7 +671,8 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     get_metric_id,
     set_dynamic_audio_buffer_size,
     generate_local_oob_data,
-    allow_low_latency_audio};
+    allow_low_latency_audio,
+    clear_event_filter};
 
 // callback reporting helpers
 
@@ -924,14 +934,13 @@ void invoke_link_quality_report_cb(
           packets_not_receive_count, negative_acknowledgement_count));
 }
 
-void invoke_switch_buffer_size_cb(RawAddress remote_addr,
-                                  bool is_low_latency_buffer_size) {
+void invoke_switch_buffer_size_cb(bool is_low_latency_buffer_size) {
   do_in_jni_thread(
       FROM_HERE,
       base::BindOnce(
-          [](RawAddress remote_addr, bool is_low_latency_buffer_size) {
-            HAL_CBACK(bt_hal_cbacks, switch_buffer_size_cb, &remote_addr,
+          [](bool is_low_latency_buffer_size) {
+            HAL_CBACK(bt_hal_cbacks, switch_buffer_size_cb,
                       is_low_latency_buffer_size);
           },
-          remote_addr, is_low_latency_buffer_size));
+          is_low_latency_buffer_size));
 }
