@@ -2,8 +2,8 @@
 
 use bt_topshim::btif::{
     BaseCallbacks, BaseCallbacksDispatcher, BluetoothInterface, BluetoothProperty, BtAclState,
-    BtBondState, BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType, BtScanMode,
-    BtSspVariant, BtState, BtStatus, BtTransport, RawAddress, Uuid, Uuid128Bit,
+    BtBondState, BtDiscoveryState, BtHciErrorCode, BtLocalLeFeatures, BtPinCode, BtPropertyType,
+    BtScanMode, BtSspVariant, BtState, BtStatus, BtTransport, RawAddress, Uuid, Uuid128Bit,
 };
 use bt_topshim::{
     profiles::hid_host::{HHCallbacksDispatcher, HidHost},
@@ -26,6 +26,7 @@ use crate::uuid::{Profile, UuidHelper};
 use crate::{BluetoothCallbackType, Message, RPCProxy};
 
 const DEFAULT_DISCOVERY_TIMEOUT_MS: u64 = 12800;
+const MIN_ADV_INSTANCES_FOR_MULTI_ADV: u8 = 5;
 
 /// Defines the adapter API.
 pub trait IBluetooth {
@@ -74,6 +75,13 @@ pub trait IBluetooth {
 
     /// Sets discoverability. If discoverable, limits the duration with given value.
     fn set_discoverable(&self, mode: bool, duration: u32) -> bool;
+
+    /// Returns whether multi-advertisement is supported.
+    /// A minimum number of 5 advertising instances is required for multi-advertisment support.
+    fn is_multi_advertisement_supported(&self) -> bool;
+
+    /// Returns whether LE extended advertising is supported.
+    fn is_le_extended_advertising_supported(&self) -> bool;
 
     /// Starts BREDR Inquiry.
     fn start_discovery(&self) -> bool;
@@ -364,6 +372,22 @@ impl Bluetooth {
                 self.connection_callbacks.remove(&id);
             }
         };
+    }
+
+    fn get_remote_device_if_found(
+        &self,
+        device: &BluetoothDevice,
+    ) -> Option<&BluetoothDeviceContext> {
+        self.bonded_devices.get(&device.address).or_else(|| self.found_devices.get(&device.address))
+    }
+
+    fn get_remote_device_property(
+        &self,
+        device: &BluetoothDevice,
+        property_type: &BtPropertyType,
+    ) -> Option<BluetoothProperty> {
+        self.get_remote_device_if_found(&device)
+            .and_then(|d| d.properties.get(property_type).and_then(|p| Some(p.clone())))
     }
 }
 
@@ -850,6 +874,28 @@ impl IBluetooth for Bluetooth {
         )) == 0
     }
 
+    fn is_multi_advertisement_supported(&self) -> bool {
+        match self.properties.get(&BtPropertyType::LocalLeFeatures) {
+            Some(prop) => match prop {
+                BluetoothProperty::LocalLeFeatures(llf) => {
+                    llf.max_adv_instance >= MIN_ADV_INSTANCES_FOR_MULTI_ADV
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn is_le_extended_advertising_supported(&self) -> bool {
+        match self.properties.get(&BtPropertyType::LocalLeFeatures) {
+            Some(prop) => match prop {
+                BluetoothProperty::LocalLeFeatures(llf) => llf.le_extended_advertising_supported,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     fn start_discovery(&self) -> bool {
         self.intf.lock().unwrap().start_discovery() == 0
     }
@@ -1025,35 +1071,16 @@ impl IBluetooth for Bluetooth {
     }
 
     fn get_remote_uuids(&self, device: BluetoothDevice) -> Vec<Uuid128Bit> {
-        // Device must exist in either bonded or found list
-        let found = self
-            .bonded_devices
-            .get(&device.address)
-            .or_else(|| self.found_devices.get(&device.address));
-
-        // Extract property from the device
-        return found
-            .and_then(|d| {
-                if let Some(u) = d.properties.get(&BtPropertyType::Uuids) {
-                    match u {
-                        BluetoothProperty::Uuids(uuids) => {
-                            return Some(
-                                uuids.iter().map(|&x| x.uu.clone()).collect::<Vec<Uuid128Bit>>(),
-                            );
-                        }
-                        _ => (),
-                    }
-                }
-
-                None
-            })
-            .unwrap_or(vec![]);
+        match self.get_remote_device_property(&device, &BtPropertyType::Uuids) {
+            Some(BluetoothProperty::Uuids(uuids)) => {
+                return uuids.iter().map(|&x| x.uu.clone()).collect::<Vec<Uuid128Bit>>()
+            }
+            _ => return vec![],
+        }
     }
 
     fn fetch_remote_uuids(&self, device: BluetoothDevice) -> bool {
-        if !self.bonded_devices.contains_key(&device.address)
-            && !self.found_devices.contains_key(&device.address)
-        {
+        if self.get_remote_device_if_found(&device).is_none() {
             warn!("Won't fetch UUIDs on unknown device {}", device.address);
             return false;
         }

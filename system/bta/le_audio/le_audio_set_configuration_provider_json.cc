@@ -124,6 +124,7 @@ struct AudioSetConfigurationProviderJson {
     uint8_t frame_duration = 0;
     uint32_t audio_channel_allocation = 0;
     uint16_t octets_per_codec_frame = 0;
+    uint8_t codec_frames_blocks_per_sdu = 0;
 
     auto param = LookupCodecSpecificParam(
         flat_codec_specific_params,
@@ -173,10 +174,23 @@ struct AudioSetConfigurationProviderJson {
       STREAM_TO_UINT16(octets_per_codec_frame, ptr);
     }
 
+    param = LookupCodecSpecificParam(
+        flat_codec_specific_params,
+        bluetooth::le_audio::
+            CodecSpecificLtvGenericTypes_SUPPORTED_CODEC_FRAME_BLOCKS_PER_SDU);
+    if (param) {
+      ASSERT_LOG((param->compound_value()->value()->size() == 1),
+                 " Invalid compound value length %d",
+                 param->compound_value()->value()->size());
+      auto ptr = param->compound_value()->value()->data();
+      STREAM_TO_UINT8(codec_frames_blocks_per_sdu, ptr);
+    }
+
     codec.config = types::LeAudioLc3Config({
         .sampling_frequency = sampling_frequency,
         .frame_duration = frame_duration,
         .octets_per_codec_frame = octets_per_codec_frame,
+        .codec_frames_blocks_per_sdu = codec_frames_blocks_per_sdu,
         .channel_count =
             (uint8_t)std::bitset<32>(audio_channel_allocation).count(),
         .audio_channel_allocation = audio_channel_allocation,
@@ -199,9 +213,19 @@ struct AudioSetConfigurationProviderJson {
             ? static_cast<types::LeAudioConfigurationStrategy>(strategy_int)
             : types::LeAudioConfigurationStrategy::RFU;
 
+    auto target_latency_int =
+        static_cast<int>(flat_subconfig->target_latency());
+
+    bool valid_target_latency =
+        (target_latency_int >= (int)types::kTargetLatencyLower &&
+         target_latency_int <= (int)types::kTargetLatencyHigherReliability);
+
+    uint8_t target_latency =
+        valid_target_latency ? static_cast<uint8_t>(target_latency_int)
+                             : types::kTargetLatencyBalancedLatencyReliability;
     return SetConfiguration(
         flat_subconfig->direction(), flat_subconfig->device_cnt(),
-        flat_subconfig->ase_cnt(),
+        flat_subconfig->ase_cnt(), target_latency,
         CodecCapabilitySettingFromFlat(flat_subconfig->codec_id(),
                                        flat_subconfig->codec_configuration()),
         strategy);

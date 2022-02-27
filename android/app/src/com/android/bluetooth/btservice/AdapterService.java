@@ -45,6 +45,8 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceProfile;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceUse;
 import android.bluetooth.BluetoothClass;
+import android.bluetooth.BluetoothCodecConfig;
+import android.bluetooth.BluetoothCodecStatus;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
@@ -102,7 +104,6 @@ import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
-import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
 import com.android.bluetooth.btservice.activityattribution.ActivityAttributionService;
 import com.android.bluetooth.btservice.bluetoothkeystore.BluetoothKeystoreService;
@@ -851,6 +852,50 @@ public class AdapterService extends Service {
         sendBroadcast(switchBufferSizeIntent);
     }
 
+    void switchCodecCallback(boolean isLowLatencyBufferSize) {
+        List<BluetoothDevice> activeDevices = getActiveDevices(BluetoothProfile.A2DP);
+        if (activeDevices.size() != 1) {
+            errorLog(
+                    "Cannot switch buffer size. The number of A2DP active devices is "
+                            + activeDevices.size());
+        }
+        BluetoothCodecConfig codecConfig = null;
+        BluetoothCodecStatus currentCodecStatus = mA2dpService.getCodecStatus(activeDevices.get(0));
+        int currentCodec = currentCodecStatus.getCodecConfig().getCodecType();
+        if (isLowLatencyBufferSize) {
+            if (currentCodec == BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3) {
+                Log.w(TAG, "Current codec is already LC3. No need to change it.");
+                return;
+            }
+            codecConfig = new BluetoothCodecConfig(
+                    BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3,
+                    BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST,
+                    BluetoothCodecConfig.SAMPLE_RATE_48000,
+                    BluetoothCodecConfig.BITS_PER_SAMPLE_16,
+                    BluetoothCodecConfig.CHANNEL_MODE_STEREO,
+                    0, 0x1 << 2, 0, 0);
+        } else {
+            if (currentCodec != BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3) {
+                Log.w(TAG, "Current codec is not LC3. No need to change it.");
+                return;
+            }
+            List<BluetoothCodecConfig> selectableCodecs =
+                    currentCodecStatus.getCodecsSelectableCapabilities();
+            for (BluetoothCodecConfig config : selectableCodecs) {
+                // Find a non LC3 codec
+                if (config.getCodecType() != BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3) {
+                    codecConfig = config;
+                    break;
+                }
+            }
+            if (codecConfig == null) {
+                Log.e(TAG, "Cannot find a non LC3 codec compatible with the remote device");
+                return;
+            }
+        }
+        mA2dpService.setCodecConfigPreference(activeDevices.get(0), codecConfig);
+    }
+
     /**
      * Enable/disable BluetoothInCallService
      *
@@ -1097,7 +1142,7 @@ public class AdapterService extends Service {
      * @return true if any profile is enabled, false otherwise
      */
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    private boolean isAnyProfileEnabled(BluetoothDevice device) {
+    boolean isAnyProfileEnabled(BluetoothDevice device) {
 
         if (mA2dpService != null && mA2dpService.getConnectionPolicy(device)
                 > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
@@ -3331,10 +3376,10 @@ public class AdapterService extends Service {
             HashSet<Class> leAudioUnicastProfiles = Config.geLeAudioUnicastProfiles();
 
             if (supportedProfileServices.containsAll(leAudioUnicastProfiles)) {
-                return BluetoothStatusCodes.SUCCESS;
+                return BluetoothStatusCodes.FEATURE_SUPPORTED;
             }
 
-            return BluetoothStatusCodes.ERROR_FEATURE_NOT_SUPPORTED;
+            return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
         }
 
         @Override
@@ -3352,10 +3397,10 @@ public class AdapterService extends Service {
             }
 
             if (service.isLeAudioBroadcastSourceSupported()) {
-                return BluetoothStatusCodes.SUCCESS;
+                return BluetoothStatusCodes.FEATURE_SUPPORTED;
             }
 
-            return BluetoothStatusCodes.ERROR_FEATURE_NOT_SUPPORTED;
+            return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
         }
 
         @Override
@@ -3373,10 +3418,10 @@ public class AdapterService extends Service {
             }
 
             if (service.isLeAudioBroadcastAssistantSupported()) {
-                return BluetoothStatusCodes.SUCCESS;
+                return BluetoothStatusCodes.FEATURE_SUPPORTED;
             }
 
-            return BluetoothStatusCodes.ERROR_FEATURE_NOT_SUPPORTED;
+            return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
         }
 
         @Override
@@ -4526,8 +4571,8 @@ public class AdapterService extends Service {
      * @return true, if the LE audio broadcast source is supported
      */
     public boolean isLeAudioBroadcastSourceSupported() {
-        //TODO: check the profile support status as well after we have the implementation
-        return mAdapterProperties.isLePeriodicAdvertisingSupported()
+        return  getResources().getBoolean(R.bool.profile_supported_le_audio_broadcast)
+                && mAdapterProperties.isLePeriodicAdvertisingSupported()
                 && mAdapterProperties.isLeExtendedAdvertisingSupported()
                 && mAdapterProperties.isLeIsochronousBroadcasterSupported();
     }
