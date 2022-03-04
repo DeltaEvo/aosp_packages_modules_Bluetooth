@@ -25,6 +25,7 @@ filegroup {
         "android/bluetooth/IBluetoothHeadset.aidl",
         "android/bluetooth/IBluetoothHearingAid.aidl",
         "android/bluetooth/IBluetoothHapClient.aidl",
+        "android/bluetooth/IBluetoothHapClientCallback.aidl",
         "android/bluetooth/IBluetoothVolumeControl.aidl",
         "android/bluetooth/IBluetoothHidHost.aidl",
         "android/bluetooth/IBluetoothLeAudio.aidl",
@@ -55,5 +56,7 @@ filegroup {
         "android/bluetooth/le/IPeriodicAdvertisingCallback.aidl",
         "android/bluetooth/le/IScannerCallback.aidl",
         "android/bluetooth/IBluetoothConnectionCallback.aidl",
+        "android/bluetooth/IBluetoothLeBroadcastAssistantCallback.aidl",
+        "android/bluetooth/IBluetoothLeBroadcastAssistant.aidl",
     ],
 }

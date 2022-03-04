@@ -99,7 +99,6 @@ cc_library_shared {
         "libbt-sbc-encoder",
         "libFraunhoferAAC",
         "libg722codec",
-        "liblc3codec",
         "liblc3",
         "libudrv-uipc",
         "libprotobuf-cpp-lite",
@@ -125,7 +124,6 @@ cc_library_shared {
                 "android.hardware.bluetooth.a2dp@1.0",
                 "android.hardware.bluetooth.audio@2.0",
                 "android.hardware.bluetooth.audio@2.1",
-                "android.hardware.bluetooth.audio@2.2",
                 "android.hardware.bluetooth.audio-V1-ndk",
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
@@ -156,6 +154,10 @@ cc_library_shared {
     required: [
         "bt_did.conf",
         "bt_stack.conf",
+        "audio_set_scenarios_bfbs",
+        "audio_set_scenarios_json",
+        "audio_set_configurations_bfbs",
+        "audio_set_configurations_json",
     ],
     cflags: [
         "-DBUILDCFG",

@@ -22,6 +22,7 @@
 #include "osi/include/properties.h"
 #include "stack/acl/acl.h"
 #include "stack/include/acl_api.h"
+#include "le_audio_set_configuration_provider.h"
 
 namespace {
 
@@ -32,6 +33,7 @@ using le_audio::types::CodecLocation;
 
 using bluetooth::le_audio::btle_audio_codec_config_t;
 using bluetooth::le_audio::btle_audio_codec_index_t;
+using le_audio::AudioSetConfigurationProvider;
 using le_audio::set_configurations::AudioSetConfiguration;
 using le_audio::set_configurations::AudioSetConfigurations;
 using le_audio::set_configurations::SetConfiguration;
@@ -83,7 +85,7 @@ struct codec_manager_impl {
   CodecLocation GetCodecLocation(void) const { return codec_location_; }
 
   void UpdateActiveSourceAudioConfig(
-      const le_audio::stream_configuration& stream_conf, uint16_t delay) {
+      const le_audio::stream_configuration& stream_conf, uint16_t delay_ms) {
     if (stream_conf.sink_streams.empty()) return;
 
     sink_config.stream_map = std::move(stream_conf.sink_streams);
@@ -96,12 +98,12 @@ struct codec_manager_impl {
     // TODO: set the default value 1 for now, would change it if we need more
     // configuration
     sink_config.blocks_per_sdu = 1;
-    sink_config.peer_delay = delay;
+    sink_config.peer_delay_ms = delay_ms;
     LeAudioClientAudioSource::UpdateAudioConfigToHal(sink_config);
   }
 
   void UpdateActiveSinkAudioConfig(
-      const le_audio::stream_configuration& stream_conf, uint16_t delay) {
+      const le_audio::stream_configuration& stream_conf, uint16_t delay_ms) {
     if (stream_conf.source_streams.empty()) return;
 
     source_config.stream_map = std::move(stream_conf.source_streams);
@@ -114,7 +116,7 @@ struct codec_manager_impl {
     // TODO: set the default value 1 for now, would change it if we need more
     // configuration
     source_config.blocks_per_sdu = 1;
-    source_config.peer_delay = delay;
+    source_config.peer_delay_ms = delay_ms;
     LeAudioClientAudioSink::UpdateAudioConfigToHal(source_config);
   }
 
@@ -220,6 +222,11 @@ struct codec_manager_impl {
     LOG(INFO) << __func__;
     std::unordered_set<uint8_t> offload_preference_set;
 
+    if (AudioSetConfigurationProvider::Get() == nullptr) {
+      LOG(ERROR) << __func__ << " Audio set configuration provider is not available.";
+      return;
+    }
+
     for (auto codec : offloading_preference) {
       auto it = btle_audio_codec_type_map_.find(codec.codec_type);
 
@@ -233,7 +240,7 @@ struct codec_manager_impl {
       // Gets the software supported context type and the corresponding config
       // priority
       const AudioSetConfigurations* software_audio_set_confs =
-          set_configurations::get_confs_by_type(ctx_type);
+          AudioSetConfigurationProvider::Get()->GetConfigurations(ctx_type);
 
       for (const auto& software_audio_set_conf : *software_audio_set_confs) {
         if (IsAudioSetConfigurationMatched(software_audio_set_conf,
@@ -306,17 +313,17 @@ types::CodecLocation CodecManager::GetCodecLocation(void) const {
 }
 
 void CodecManager::UpdateActiveSourceAudioConfig(
-    const stream_configuration& stream_conf, uint16_t delay) {
+    const stream_configuration& stream_conf, uint16_t delay_ms) {
   if (pimpl_->IsRunning())
     pimpl_->codec_manager_impl_->UpdateActiveSourceAudioConfig(stream_conf,
-                                                               delay);
+                                                               delay_ms);
 }
 
 void CodecManager::UpdateActiveSinkAudioConfig(
-    const stream_configuration& stream_conf, uint16_t delay) {
+    const stream_configuration& stream_conf, uint16_t delay_ms) {
   if (pimpl_->IsRunning())
     pimpl_->codec_manager_impl_->UpdateActiveSinkAudioConfig(stream_conf,
-                                                             delay);
+                                                             delay_ms);
 }
 
 const AudioSetConfigurations* CodecManager::GetOffloadCodecConfig(

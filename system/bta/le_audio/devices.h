@@ -232,7 +232,6 @@ class LeAudioDeviceGroup {
   uint8_t GetSCA(void);
   uint8_t GetPacking(void);
   uint8_t GetFraming(void);
-  uint8_t GetTargetLatency(void);
   uint16_t GetMaxTransportLatencyStom(void);
   uint16_t GetMaxTransportLatencyMtos(void);
   void SetTransportLatency(uint8_t direction, uint32_t transport_latency_us);
@@ -265,6 +264,15 @@ class LeAudioDeviceGroup {
     target_state_ = state;
   }
 
+  inline std::optional<types::AudioContexts> GetPendingUpdateAvailableContexts()
+      const {
+    return pending_update_available_contexts_;
+  }
+  inline void SetPendingUpdateAvailableContexts(
+      std::optional<types::AudioContexts> audio_contexts) {
+    pending_update_available_contexts_ = audio_contexts;
+  }
+
   bool IsInTransition(void);
   bool IsReleasing(void);
   void Dump(int fd);
@@ -286,6 +294,7 @@ class LeAudioDeviceGroup {
   /* Mask and table of currently supported contexts */
   types::LeAudioContextType active_context_type_;
   types::AudioContexts active_contexts_mask_;
+  std::optional<types::AudioContexts> pending_update_available_contexts_;
   std::map<types::LeAudioContextType,
            const set_configurations::AudioSetConfiguration*>
       active_context_to_configuration_map;

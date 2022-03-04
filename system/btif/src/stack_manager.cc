@@ -119,6 +119,15 @@ static_assert(
     "  Pan profile always supports user as a client in the bluetooth stack"
     "*** Conditional Compilation Directive error");
 
+// Once BTA_HH_INCLUDED is no longer exposed via bt_target.h
+// this check and error statement may be removed.
+static_assert(
+    BTA_HH_INCLUDED,
+    "#define BTA_HH_INCLUDED preprocessor compilation flag is "
+    "unsupported"
+    "  Host interface device profile is always enabled in the bluetooth stack"
+    "*** Conditional Compilation Directive error");
+
 void main_thread_shut_down();
 void main_thread_start_up();
 void BTA_dm_on_hw_on();
@@ -191,16 +200,13 @@ static void clean_up_stack() {
 static bool get_stack_is_running() { return stack_is_running; }
 
 // Internal functions
-
 extern const module_t bt_utils_module;
 extern const module_t bte_logmsg_module;
 extern const module_t btif_config_module;
-extern const module_t btsnoop_module;
 extern const module_t bt_utils_module;
 extern const module_t gd_controller_module;
 extern const module_t gd_idle_module;
 extern const module_t gd_shim_module;
-extern const module_t hci_module;
 extern const module_t interop_module;
 extern const module_t osi_module;
 extern const module_t stack_config_module;

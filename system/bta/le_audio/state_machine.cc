@@ -211,7 +211,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
   void StopStream(LeAudioDeviceGroup* group) override {
     if (group->IsReleasing()) {
-      LOG(INFO) << __func__ << ", group already in releasing process";
+      LOG(INFO) << __func__ << ", group: " << group->group_id_
+                << " already in releasing process";
       return;
     }
 
@@ -344,10 +345,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
 
     if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-      leAudioDevice = group->GetFirstActiveDevice();
-      LOG_ASSERT(leAudioDevice)
-          << __func__ << " Shouldn't be called without an active device.";
-      PrepareAndSendEnable(leAudioDevice);
+      StartConfigQoSForTheGroup(group);
     } else {
       LOG(ERROR) << __func__
                  << ", invalid state transition, from: " << group->GetState()
@@ -499,6 +497,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       return;
     }
 
+    /* If group is in Idle there is nothing to do here */
+    if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) &&
+        (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE)) {
+      LOG(INFO) << __func__ << " group: " << group->group_id_ << " is in IDLE";
+      return;
+    }
+
     auto* stream_conf = &group->stream_conf;
     if (!stream_conf->sink_streams.empty() ||
         !stream_conf->source_streams.empty()) {
@@ -544,13 +549,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     /* Group is not connected and all the CISes are down.
-     * If group is in Idle there is nothing to do here */
-    if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
-      LOG(INFO) << __func__ << " group: " << group->group_id_ << " is in IDLE";
-      return;
-    }
-
-    /* Clean states and destroy HCI group */
+     * Clean states and destroy HCI group
+     */
     group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
     group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
     if (alarm_is_scheduled(watchdog_)) alarm_cancel(watchdog_);
@@ -594,7 +594,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     if (group->GetTargetState() != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-      LOG(ERROR) << __func__ << ", Unintended CIS establishement event came";
+      LOG(ERROR) << __func__
+                 << ", Unintended CIS establishement event came for group id:"
+                 << group->group_id_;
       StopStream(group);
       return;
     }
@@ -866,14 +868,12 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
             group->GetPhyBitmask(le_audio::types::kLeAudioDirectionSource);
 
         if (ases_pair.sink) {
-          /* TODO: config should be previously adopted */
-          cis_cfg.max_sdu_size_mtos = ase->max_sdu_size;
-          cis_cfg.rtn_mtos = ase->retrans_nb;
+          cis_cfg.max_sdu_size_mtos = ases_pair.sink->max_sdu_size;
+          cis_cfg.rtn_mtos = ases_pair.sink->retrans_nb;
         }
         if (ases_pair.source) {
-          /* TODO: config should be previously adopted */
-          cis_cfg.max_sdu_size_stom = ase->max_sdu_size;
-          cis_cfg.rtn_stom = ase->retrans_nb;
+          cis_cfg.max_sdu_size_stom = ases_pair.source->max_sdu_size;
+          cis_cfg.rtn_stom = ases_pair.source->retrans_nb;
         }
 
         cis_cfgs.push_back(cis_cfg);
@@ -1090,8 +1090,22 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     ase = leAudioDevice->GetFirstActiveAse();
     LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
     do {
+      /* Get completive (to be bi-directional CIS) CIS ID for ASE */
+      uint8_t cis_id = leAudioDevice->GetMatchingBidirectionCisId(ase);
+      if (cis_id == le_audio::kInvalidCisId) {
+        /* Get next free CIS ID for group */
+        cis_id = group->GetFirstFreeCisId();
+        if (cis_id == le_audio::kInvalidCisId) {
+          LOG(ERROR) << __func__ << ", failed to get free CIS ID";
+          StopStream(group);
+          return;
+        }
+      }
+
+      ase->cis_id = cis_id;
+
       conf.ase_id = ase->id;
-      conf.target_latency = group->GetTargetLatency();
+      conf.target_latency = ase->target_latency;
       conf.target_phy = group->GetTargetPhy(ase->direction);
       conf.codec_id = ase->codec_id;
       conf.codec_config = ase->codec_config;
@@ -1177,7 +1191,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
           if (group->GetTargetState() ==
               AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-            StartConfigQoSForTheGroup(group);
+            CigCreate(group);
             return;
           } else {
             LOG(ERROR) << __func__ << ", invalid state transition, from: "
@@ -1241,7 +1255,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
           if (group->GetTargetState() ==
               AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-            StartConfigQoSForTheGroup(group);
+            CigCreate(group);
             return;
           } else {
             LOG(ERROR) << __func__
@@ -1329,7 +1343,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         if (leAudioDeviceNext) {
           PrepareAndSendConfigQos(group, leAudioDeviceNext);
         } else {
-          CigCreate(group);
+          leAudioDevice = group->GetFirstActiveDevice();
+          LOG_ASSERT(leAudioDevice)
+              << __func__ << " Shouldn't be called without an active device.";
+          PrepareAndSendEnable(leAudioDevice);
         }
 
         break;
@@ -1456,20 +1473,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     for (struct ase* ase = leAudioDevice->GetFirstActiveAse(); ase != nullptr;
          ase = leAudioDevice->GetNextActiveAse(ase)) {
-      /* Get completive (to be bi-directional CIS) CIS ID for ASE */
-      uint8_t cis_id = leAudioDevice->GetMatchingBidirectionCisId(ase);
-      if (cis_id == le_audio::kInvalidCisId) {
-        /* Get next free CIS ID for group */
-        cis_id = group->GetFirstFreeCisId();
-        if (cis_id == le_audio::kInvalidCisId) {
-          LOG(ERROR) << __func__ << ", failed to get free CIS ID";
-          StopStream(group);
-          return;
-        }
-      }
-
-      ase->cis_id = cis_id;
-
       /* TODO: Configure first ASE qos according to context type */
       struct le_audio::client_parser::ascs::ctp_qos_conf conf;
       conf.ase_id = ase->id;

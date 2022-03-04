@@ -41,7 +41,6 @@
 #include "stack/include/acl_api_types.h"  // tBTM_RSSI_RESULT
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
-#include "stack/include/gap_api.h"
 #include "stack/include/l2c_api.h"  // L2CAP_MIN_OFFSET
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
@@ -589,9 +588,9 @@ class HearingAidImpl : public HearingAid {
     hearingDevice->first_connection = true;
     hearingDevice->service_changed_rcvd = true;
     BtaGattQueue::Clean(hearingDevice->conn_id);
-    if (hearingDevice->gap_handle) {
+    if (hearingDevice->gap_handle != GAP_INVALID_HANDLE) {
       GAP_ConnClose(hearingDevice->gap_handle);
-      hearingDevice->gap_handle = 0;
+      hearingDevice->gap_handle = GAP_INVALID_HANDLE;
     }
   }
 
@@ -1332,9 +1331,19 @@ class HearingAidImpl : public HearingAid {
       case GAP_EVT_CONN_CLOSED:
         LOG(INFO) << __func__
                   << ": GAP_EVT_CONN_CLOSED: " << hearingDevice->address
-                  << ", playback_started=" << hearingDevice->playback_started;
-        /* Disconnect profile when data channel is not available */
-        Disconnect(hearingDevice->address);
+                  << ", playback_started=" << hearingDevice->playback_started
+                  << ", accepting_audio=" << hearingDevice->accepting_audio;
+        if (!hearingDevice->accepting_audio) {
+          /* Disconnect connection when data channel is not available */
+          BTA_GATTC_Close(hearingDevice->conn_id);
+        } else {
+          /* Just clean data channel related parameter when data channel is
+           * available */
+          hearingDevice->gap_handle = GAP_INVALID_HANDLE;
+          hearingDevice->accepting_audio = false;
+          hearingDevice->playback_started = false;
+          hearingDevice->command_acked = false;
+        }
         break;
       case GAP_EVT_CONN_DATA_AVAIL: {
         DVLOG(2) << "GAP_EVT_CONN_DATA_AVAIL";
@@ -1461,7 +1470,7 @@ class HearingAidImpl : public HearingAid {
     bool connected = hearingDevice->accepting_audio;
     bool connecting_by_user = hearingDevice->connecting_actively;
 
-    LOG(INFO) << "GAP_EVT_CONN_CLOSED: " << hearingDevice->address
+    LOG(INFO) << __func__ << ": " << hearingDevice->address
               << ", playback_started=" << hearingDevice->playback_started
               << ", accepting_audio=" << hearingDevice->accepting_audio;
 
@@ -1480,17 +1489,19 @@ class HearingAidImpl : public HearingAid {
 
     DoDisconnectCleanUp(hearingDevice);
 
-    hearingDevices.Remove(address);
-
     if (!connected) {
       /* In case user wanted to connect, sent DISCONNECTED state */
-      if (connecting_by_user)
+      if (connecting_by_user) {
         callbacks->OnConnectionState(ConnectionState::DISCONNECTED, address);
-
+      }
+      /* Do remove device when the address is useless. */
+      hearingDevices.Remove(address);
       return;
     }
 
     callbacks->OnConnectionState(ConnectionState::DISCONNECTED, address);
+    /* Do remove device when the address is useless. */
+    hearingDevices.Remove(address);
     for (const auto& device : hearingDevices.devices) {
       if (device.accepting_audio) return;
     }
@@ -1549,9 +1560,9 @@ class HearingAidImpl : public HearingAid {
       hearingDevice->conn_id = 0;
     }
 
-    if (hearingDevice->gap_handle) {
+    if (hearingDevice->gap_handle != GAP_INVALID_HANDLE) {
       GAP_ConnClose(hearingDevice->gap_handle);
-      hearingDevice->gap_handle = 0;
+      hearingDevice->gap_handle = GAP_INVALID_HANDLE;
     }
 
     hearingDevice->accepting_audio = false;

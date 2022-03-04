@@ -134,7 +134,7 @@ pub enum BtPropertyType {
     ServiceRecord,
     AdapterScanMode,
     AdapterBondedDevices,
-    AdapterDiscoveryTimeout,
+    AdapterDiscoverableTimeout,
     RemoteFriendlyName,
     RemoteRssi,
     RemoteVersionInfo,
@@ -299,7 +299,7 @@ pub enum BluetoothProperty {
     ServiceRecord(BtServiceRecord),
     AdapterScanMode(BtScanMode),
     AdapterBondedDevices(Vec<RawAddress>),
-    AdapterDiscoveryTimeout(u32),
+    AdapterDiscoverableTimeout(u32),
     RemoteFriendlyName(String),
     RemoteRssi(i8),
     RemoteVersionInfo(BtRemoteVersion),
@@ -327,8 +327,8 @@ impl BluetoothProperty {
             BluetoothProperty::ServiceRecord(_) => BtPropertyType::ServiceRecord,
             BluetoothProperty::AdapterScanMode(_) => BtPropertyType::AdapterScanMode,
             BluetoothProperty::AdapterBondedDevices(_) => BtPropertyType::AdapterBondedDevices,
-            BluetoothProperty::AdapterDiscoveryTimeout(_) => {
-                BtPropertyType::AdapterDiscoveryTimeout
+            BluetoothProperty::AdapterDiscoverableTimeout(_) => {
+                BtPropertyType::AdapterDiscoverableTimeout
             }
             BluetoothProperty::RemoteFriendlyName(_) => BtPropertyType::RemoteFriendlyName,
             BluetoothProperty::RemoteRssi(_) => BtPropertyType::RemoteRssi,
@@ -356,7 +356,7 @@ impl BluetoothProperty {
             BluetoothProperty::AdapterBondedDevices(devlist) => {
                 devlist.len() * mem::size_of::<RawAddress>()
             }
-            BluetoothProperty::AdapterDiscoveryTimeout(_) => mem::size_of::<u32>(),
+            BluetoothProperty::AdapterDiscoverableTimeout(_) => mem::size_of::<u32>(),
             BluetoothProperty::RemoteFriendlyName(name) => {
                 cmp::min(PROPERTY_NAME_MAX, name.len() + 1)
             }
@@ -423,7 +423,7 @@ impl BluetoothProperty {
                     data[start..end].copy_from_slice(&dev.val);
                 }
             }
-            BluetoothProperty::AdapterDiscoveryTimeout(timeout) => {
+            BluetoothProperty::AdapterDiscoverableTimeout(timeout) => {
                 data.copy_from_slice(&timeout.to_ne_bytes());
             }
             BluetoothProperty::RemoteFriendlyName(name) => {
@@ -497,8 +497,8 @@ impl From<bindings::bt_property_t> for BluetoothProperty {
                     count,
                 ))
             }
-            BtPropertyType::AdapterDiscoveryTimeout => {
-                BluetoothProperty::AdapterDiscoveryTimeout(u32_from_bytes(slice))
+            BtPropertyType::AdapterDiscoverableTimeout => {
+                BluetoothProperty::AdapterDiscoverableTimeout(u32_from_bytes(slice))
             }
             BtPropertyType::RemoteFriendlyName => {
                 BluetoothProperty::RemoteFriendlyName(ascii_to_string(slice, len))
@@ -705,6 +705,7 @@ pub enum BaseCallbacks {
     // link_quality_report_cb
     // generate_local_oob_data_cb
     // switch_buffer_size_cb
+    // switch_codec_cb
 }
 
 pub struct BaseCallbacksDispatcher {
@@ -872,6 +873,7 @@ impl BluetoothInterface {
             link_quality_report_cb: None,
             generate_local_oob_data_cb: None,
             switch_buffer_size_cb: None,
+            switch_codec_cb: None,
         });
 
         let rawcb: *mut bindings::bt_callbacks_t = &mut *callbacks;
@@ -1002,6 +1004,10 @@ impl BluetoothInterface {
         let cvariant = bindings::bt_ssp_variant_t::from(variant);
         let ffi_addr = cast_to_const_ffi_address!(addr as *const RawAddress);
         ccall!(self, ssp_reply, ffi_addr, cvariant, accept, passkey)
+    }
+
+    pub fn clear_event_filter(&self) -> i32 {
+        ccall!(self, clear_event_filter)
     }
 
     pub(crate) fn get_profile_interface(

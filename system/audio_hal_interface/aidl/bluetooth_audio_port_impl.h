@@ -37,7 +37,7 @@ class BluetoothAudioPortImpl : public BnBluetoothAudioPort {
       IBluetoothTransportInstance* transport_instance,
       const std::shared_ptr<IBluetoothAudioProvider>& provider);
 
-  ndk::ScopedAStatus startStream() override;
+  ndk::ScopedAStatus startStream(bool is_low_latency) override;
 
   ndk::ScopedAStatus suspendStream() override;
 
@@ -54,14 +54,15 @@ class BluetoothAudioPortImpl : public BnBluetoothAudioPort {
 
   ndk::ScopedAStatus setLatencyMode(LatencyMode latency_mode) override;
 
-  ndk::ScopedAStatus setCodecType(CodecType codec_type) override;
-
  protected:
   virtual ~BluetoothAudioPortImpl();
 
   IBluetoothTransportInstance* transport_instance_;
   const std::shared_ptr<IBluetoothAudioProvider> provider_;
   PresentationPosition::TimeSpec timespec_convert_to_hal(const timespec& ts);
+
+ private:
+  ndk::ScopedAStatus switchCodec(bool isLowLatency);
 };
 
 }  // namespace aidl

@@ -222,6 +222,7 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
+    @SystemApi
     public static final int STATE_BLE_ON = 15;
 
     /**
@@ -247,6 +248,8 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
+    @SystemApi
+    @SuppressLint("ActionValue")
     public static final String EXTRA_RFCOMM_LISTENER_ID =
             "android.bluetooth.adapter.extra.RFCOMM_LISTENER_ID";
 
@@ -269,6 +272,9 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
+    @SystemApi
+    @RequiresNoPermission
+    @NonNull
     public static String nameForState(@AdapterState int state) {
         switch (state) {
             case STATE_OFF:
@@ -365,10 +371,13 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION) public static final String
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SuppressLint("ActionValue")
+    public static final String
             ACTION_REQUEST_DISABLE = "android.bluetooth.adapter.action.REQUEST_DISABLE";
 
     /**
@@ -1154,11 +1163,8 @@ public final class BluetoothAdapter {
                 mService.getState(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(state);
             }
-        } catch (TimeoutException e) {
+        } catch (RemoteException | TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-            e.rethrowFromSystemServer();
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -1393,7 +1399,7 @@ public final class BluetoothAdapter {
      * @return true to indicate that the config file was successfully cleared
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @SystemApi
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {
             android.Manifest.permission.BLUETOOTH_CONNECT,
@@ -1427,10 +1433,11 @@ public final class BluetoothAdapter {
      * @return the UUIDs supported by the local Bluetooth Adapter.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @SuppressLint(value = {"ArrayReturn", "NullableCollection"})
     public @Nullable ParcelUuid[] getUuids() {
         if (getState() != STATE_ON) {
             return null;
@@ -2438,19 +2445,20 @@ public final class BluetoothAdapter {
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(value = {
-            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.FEATURE_SUPPORTED,
             BluetoothStatusCodes.ERROR_UNKNOWN,
             BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
-            BluetoothStatusCodes.ERROR_FEATURE_NOT_SUPPORTED,
+            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED,
     })
     public @interface LeFeatureReturnValues {}
 
     /**
-     * Returns {@link BluetoothStatusCodes#SUCCESS} if the LE audio feature is
-     * supported, returns {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if
-     * the feature is not supported or an error code.
+     * Returns {@link BluetoothStatusCodes#FEATURE_SUPPORTED} if the LE audio feature is
+     * supported, returns {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED} if the feature is not
+     * supported, or an error code.
      *
      * @return whether the LE audio is supported
+     * @throws IllegalStateException if the bluetooth service is null
      */
     @RequiresNoPermission
     public @LeFeatureReturnValues int isLeAudioSupported() {
@@ -2464,6 +2472,9 @@ public final class BluetoothAdapter {
                 mService.isLeAudioSupported(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout())
                     .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } else {
+                throw new IllegalStateException(
+                        "LE state is on, but there is no bluetooth service.");
             }
         } catch (TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -2476,11 +2487,12 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Returns {@link BluetoothStatusCodes#SUCCESS} if the LE audio broadcast source
-     * feature is supported, {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if the
+     * Returns {@link BluetoothStatusCodes#FEATURE_SUPPORTED} if the LE audio broadcast source
+     * feature is supported, {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED} if the
      * feature is not supported, or an error code.
      *
      * @return whether the LE audio broadcast source is supported
+     * @throws IllegalStateException if the bluetooth service is null
      */
     @RequiresNoPermission
     public @LeFeatureReturnValues int isLeAudioBroadcastSourceSupported() {
@@ -2494,6 +2506,9 @@ public final class BluetoothAdapter {
                 mService.isLeAudioBroadcastSourceSupported(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout())
                     .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } else {
+                throw new IllegalStateException(
+                        "LE state is on, but there is no bluetooth service.");
             }
         } catch (TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -2507,11 +2522,12 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Returns {@link BluetoothStatusCodes#SUCCESS} if the LE audio broadcast assistant
-     * feature is supported, {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if the
+     * Returns {@link BluetoothStatusCodes#FEATURE_SUPPORTED} if the LE audio broadcast assistant
+     * feature is supported, {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED} if the
      * feature is not supported, or an error code.
      *
      * @return whether the LE audio broadcast assistent is supported
+     * @throws IllegalStateException if the bluetooth service is null
      */
     @RequiresNoPermission
     public @LeFeatureReturnValues int isLeAudioBroadcastAssistantSupported() {
@@ -2525,6 +2541,9 @@ public final class BluetoothAdapter {
                 mService.isLeAudioBroadcastAssistantSupported(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout())
                     .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } else {
+                throw new IllegalStateException(
+                        "LE state is on, but there is no bluetooth service.");
             }
         } catch (TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -2641,12 +2660,14 @@ public final class BluetoothAdapter {
      * @param result The callback to which to send the activity info.
      * @hide
      */
+    @SystemApi
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public void requestControllerActivityEnergyInfo(ResultReceiver result) {
+    public void requestControllerActivityEnergyInfo(@NonNull ResultReceiver result) {
+        requireNonNull(result, "ResultReceiver cannot be null");
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
@@ -2673,9 +2694,13 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
+    @SystemApi
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public @NonNull List<BluetoothDevice> getMostRecentlyConnectedDevices() {
         if (getState() != STATE_ON) {
             return new ArrayList<>();
@@ -2833,8 +2858,7 @@ public final class BluetoothAdapter {
      * #STATE_CONNECTING} or {@link #STATE_DISCONNECTED}
      * @hide
      */
-    @UnsupportedAppUsage
-    @RequiresLegacyBluetoothPermission
+    @SystemApi
     @RequiresNoPermission
     public int getConnectionState() {
         if (getState() != STATE_ON) {
@@ -3101,7 +3125,7 @@ public final class BluetoothAdapter {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     @RfcommListenerResult
-    public int closeRfcommServer(@NonNull UUID uuid) {
+    public int stopRfcommServer(@NonNull UUID uuid) {
         try {
             final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
             mService.stopRfcommListener(new ParcelUuid(uuid), mAttributionSource, recv);
@@ -4127,7 +4151,9 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
-    public boolean registerServiceLifecycleCallback(ServiceLifecycleCallback callback) {
+    @RequiresNoPermission
+    @SystemApi
+    public boolean registerServiceLifecycleCallback(@NonNull ServiceLifecycleCallback callback) {
         return getBluetoothService(callback.mRemote) != null;
     }
 
@@ -4136,7 +4162,9 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
-    public void unregisterServiceLifecycleCallback(ServiceLifecycleCallback callback) {
+    @RequiresNoPermission
+    @SystemApi
+    public void unregisterServiceLifecycleCallback(@NonNull ServiceLifecycleCallback callback) {
         removeServiceStateCallback(callback.mRemote);
     }
 
@@ -4145,6 +4173,7 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
+    @SystemApi
     public abstract static class ServiceLifecycleCallback {
 
         /** Called when the bluetooth stack is up */
@@ -4620,6 +4649,7 @@ public final class BluetoothAdapter {
      * @throws IllegalArgumentException if the callback is already registered
      * @hide
      */
+    @SystemApi
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {
             android.Manifest.permission.BLUETOOTH_CONNECT,
@@ -4628,7 +4658,7 @@ public final class BluetoothAdapter {
     public boolean registerBluetoothConnectionCallback(@NonNull @CallbackExecutor Executor executor,
             @NonNull BluetoothConnectionCallback callback) {
         if (DBG) Log.d(TAG, "registerBluetoothConnectionCallback()");
-        if (callback == null) {
+        if (callback == null || executor == null) {
             return false;
         }
 
@@ -4671,6 +4701,7 @@ public final class BluetoothAdapter {
      * @return true if the callback was unregistered successfully, false otherwise
      * @hide
      */
+    @SystemApi
     @RequiresBluetoothConnectPermission
     @RequiresPermission(allOf = {
             android.Manifest.permission.BLUETOOTH_CONNECT,
@@ -4717,19 +4748,21 @@ public final class BluetoothAdapter {
      *
      * @hide
      */
+    @SystemApi
     public abstract static class BluetoothConnectionCallback {
         /**
          * Callback triggered when a bluetooth device (classic or BLE) is connected
          * @param device is the connected bluetooth device
          */
-        public void onDeviceConnected(BluetoothDevice device) {}
+        public void onDeviceConnected(@NonNull BluetoothDevice device) {}
 
         /**
          * Callback triggered when a bluetooth device (classic or BLE) is disconnected
          * @param device is the disconnected bluetooth device
          * @param reason is the disconnect reason
          */
-        public void onDeviceDisconnected(BluetoothDevice device, @DisconnectReason int reason) {}
+        public void onDeviceDisconnected(@NonNull BluetoothDevice device,
+                @DisconnectReason int reason) {}
 
         /**
          * @hide
@@ -4752,6 +4785,7 @@ public final class BluetoothAdapter {
         /**
          * Returns human-readable strings corresponding to {@link DisconnectReason}.
          */
+        @NonNull
         public static String disconnectReasonText(@DisconnectReason int reason) {
             switch (reason) {
                 case BluetoothStatusCodes.ERROR_UNKNOWN:
