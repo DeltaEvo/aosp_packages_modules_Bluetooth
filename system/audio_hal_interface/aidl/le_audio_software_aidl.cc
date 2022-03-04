@@ -17,12 +17,12 @@
 
 #define LOG_TAG "BTAudioClientLeAudioAIDL"
 
-#include "le_audio_software.h"
+#include "le_audio_software_aidl.h"
 
 #include <unordered_map>
 #include <vector>
 
-#include "codec_status.h"
+#include "codec_status_aidl.h"
 #include "hal_version_manager.h"
 
 namespace bluetooth {
@@ -432,7 +432,9 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
 
     if (hal_ucast_capability_to_stack_format(hal_encode_cap, encode_cap)) {
       audio_set_config.confs.push_back(SetConfiguration(
-          ::le_audio::types::kLeAudioDirectionSink, hal_encode_cap.deviceCount,
+          ::le_audio::types::kLeAudioDirectionSink,
+          ::le_audio::types::kTargetLatencyBalancedLatencyReliability,
+          hal_encode_cap.deviceCount,
           hal_encode_cap.deviceCount * hal_encode_cap.channelCountPerDevice,
           encode_cap));
       str_capability_log = " Encode Capability: " + hal_encode_cap.toString();
@@ -441,6 +443,7 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
     if (hal_ucast_capability_to_stack_format(hal_decode_cap, decode_cap)) {
       audio_set_config.confs.push_back(SetConfiguration(
           ::le_audio::types::kLeAudioDirectionSource,
+          ::le_audio::types::kTargetLatencyBalancedLatencyReliability,
           hal_decode_cap.deviceCount,
           hal_decode_cap.deviceCount * hal_decode_cap.channelCountPerDevice,
           decode_cap));

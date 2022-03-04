@@ -118,7 +118,7 @@ class A2dpCodecConfig {
     void enableOptionalCodecs(BluetoothDevice device, BluetoothCodecConfig currentCodecConfig) {
         if (currentCodecConfig != null && !currentCodecConfig.isMandatoryCodec()) {
             Log.i(TAG, "enableOptionalCodecs: already using optional codec "
-                    + currentCodecConfig.getCodecName());
+                    + BluetoothCodecConfig.getCodecName(currentCodecConfig.getCodecType()));
             return;
         }
 
@@ -245,7 +245,7 @@ class A2dpCodecConfig {
 
         BluetoothCodecConfig codecConfig;
         BluetoothCodecConfig[] codecConfigArray =
-                new BluetoothCodecConfig[BluetoothCodecConfig.getMaxCodecType()];
+                new BluetoothCodecConfig[6];
         codecConfig = new BluetoothCodecConfig.Builder()
                 .setCodecType(BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC)
                 .setCodecPriority(mA2dpSourceCodecPrioritySbc)
@@ -278,6 +278,28 @@ class A2dpCodecConfig {
         codecConfigArray[5] = codecConfig;
 
         return codecConfigArray;
+    }
+
+    public void switchCodecByBufferSize(
+            BluetoothDevice device, boolean isLowLatency, int currentCodecType) {
+        if ((isLowLatency && currentCodecType == BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3)
+        || (!isLowLatency && currentCodecType != BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3)) {
+            return;
+        }
+        BluetoothCodecConfig[] codecConfigArray = assignCodecConfigPriorities();
+        for (int i = 0; i < codecConfigArray.length; i++){
+            BluetoothCodecConfig codecConfig = codecConfigArray[i];
+            if (codecConfig.getCodecType() == BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3) {
+                if (isLowLatency) {
+                    codecConfig.setCodecPriority(BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST);
+                } else {
+                    codecConfig.setCodecPriority(BluetoothCodecConfig.CODEC_PRIORITY_DISABLED);
+                }
+            } else {
+                codecConfigArray[i] = null;
+            }
+        }
+        mA2dpNativeInterface.setCodecConfigPreference(device, codecConfigArray);
     }
 }
 

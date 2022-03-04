@@ -313,8 +313,20 @@ impl IBluetooth for BluetoothDBus {
         self.client_proxy.method("GetDiscoverable", ())
     }
 
+    fn get_discoverable_timeout(&self) -> u32 {
+        self.client_proxy.method("GetDiscoverableTimeout", ())
+    }
+
     fn set_discoverable(&self, mode: bool, duration: u32) -> bool {
         self.client_proxy.method("SetDiscoverable", (mode, duration))
+    }
+
+    fn is_multi_advertisement_supported(&self) -> bool {
+        self.client_proxy.method("IsMultiAdvertisementSupported", ())
+    }
+
+    fn is_le_extended_advertising_supported(&self) -> bool {
+        self.client_proxy.method("IsLeExtendedAdvertisingSupported", ())
     }
 
     fn start_discovery(&self) -> bool {

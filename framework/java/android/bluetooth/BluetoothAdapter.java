@@ -2445,19 +2445,20 @@ public final class BluetoothAdapter {
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(value = {
-            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.FEATURE_SUPPORTED,
             BluetoothStatusCodes.ERROR_UNKNOWN,
             BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
-            BluetoothStatusCodes.ERROR_FEATURE_NOT_SUPPORTED,
+            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED,
     })
     public @interface LeFeatureReturnValues {}
 
     /**
-     * Returns {@link BluetoothStatusCodes#SUCCESS} if the LE audio feature is
-     * supported, returns {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if
-     * the feature is not supported or an error code.
+     * Returns {@link BluetoothStatusCodes#FEATURE_SUPPORTED} if the LE audio feature is
+     * supported, returns {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED} if the feature is not
+     * supported, or an error code.
      *
      * @return whether the LE audio is supported
+     * @throws IllegalStateException if the bluetooth service is null
      */
     @RequiresNoPermission
     public @LeFeatureReturnValues int isLeAudioSupported() {
@@ -2471,6 +2472,9 @@ public final class BluetoothAdapter {
                 mService.isLeAudioSupported(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout())
                     .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } else {
+                throw new IllegalStateException(
+                        "LE state is on, but there is no bluetooth service.");
             }
         } catch (TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -2483,11 +2487,12 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Returns {@link BluetoothStatusCodes#SUCCESS} if the LE audio broadcast source
-     * feature is supported, {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if the
+     * Returns {@link BluetoothStatusCodes#FEATURE_SUPPORTED} if the LE audio broadcast source
+     * feature is supported, {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED} if the
      * feature is not supported, or an error code.
      *
      * @return whether the LE audio broadcast source is supported
+     * @throws IllegalStateException if the bluetooth service is null
      */
     @RequiresNoPermission
     public @LeFeatureReturnValues int isLeAudioBroadcastSourceSupported() {
@@ -2501,6 +2506,9 @@ public final class BluetoothAdapter {
                 mService.isLeAudioBroadcastSourceSupported(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout())
                     .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } else {
+                throw new IllegalStateException(
+                        "LE state is on, but there is no bluetooth service.");
             }
         } catch (TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -2514,11 +2522,12 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Returns {@link BluetoothStatusCodes#SUCCESS} if the LE audio broadcast assistant
-     * feature is supported, {@link BluetoothStatusCodes#ERROR_FEATURE_NOT_SUPPORTED} if the
+     * Returns {@link BluetoothStatusCodes#FEATURE_SUPPORTED} if the LE audio broadcast assistant
+     * feature is supported, {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED} if the
      * feature is not supported, or an error code.
      *
      * @return whether the LE audio broadcast assistent is supported
+     * @throws IllegalStateException if the bluetooth service is null
      */
     @RequiresNoPermission
     public @LeFeatureReturnValues int isLeAudioBroadcastAssistantSupported() {
@@ -2532,6 +2541,9 @@ public final class BluetoothAdapter {
                 mService.isLeAudioBroadcastAssistantSupported(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout())
                     .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } else {
+                throw new IllegalStateException(
+                        "LE state is on, but there is no bluetooth service.");
             }
         } catch (TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));

@@ -1583,7 +1583,8 @@ public class A2dpService extends ProfileService {
         if (mA2dpCodecConfig != null) {
             ProfileService.println(sb, "codecConfigPriorities:");
             for (BluetoothCodecConfig codecConfig : mA2dpCodecConfig.codecConfigPriorities()) {
-                ProfileService.println(sb, "  " + codecConfig.getCodecName() + ": "
+                ProfileService.println(sb, "  " + BluetoothCodecConfig.getCodecName(
+                        codecConfig.getCodecType()) + ": "
                         + codecConfig.getCodecPriority());
             }
             ProfileService.println(sb, "mA2dpOffloadEnabled: " + mA2dpOffloadEnabled);
@@ -1599,5 +1600,10 @@ public class A2dpService extends ProfileService {
         for (A2dpStateMachine sm : mStateMachines.values()) {
             sm.dump(sb);
         }
+    }
+
+    public void switchCodecByBufferSize(BluetoothDevice device, boolean isLowLatency) {
+        mA2dpCodecConfig.switchCodecByBufferSize(
+                device, isLowLatency, getCodecStatus(device).getCodecConfig().getCodecType());
     }
 }
