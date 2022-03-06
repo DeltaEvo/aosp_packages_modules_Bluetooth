@@ -269,6 +269,7 @@ impl CommandHandler {
                     let name = adapter_dbus.get_name();
                     let uuids = adapter_dbus.get_uuids();
                     let is_discoverable = adapter_dbus.get_discoverable();
+                    let discoverable_timeout = adapter_dbus.get_discoverable_timeout();
                     let cod = adapter_dbus.get_bluetooth_class();
                     let multi_adv_supported = adapter_dbus.is_multi_advertisement_supported();
                     let le_ext_adv_supported = adapter_dbus.is_le_extended_advertising_supported();
@@ -276,6 +277,7 @@ impl CommandHandler {
                     print_info!("Name: {}", name);
                     print_info!("State: {}", if enabled { "enabled" } else { "disabled" });
                     print_info!("Discoverable: {}", is_discoverable);
+                    print_info!("DiscoverableTimeout: {}s", discoverable_timeout);
                     print_info!("Class: {:#06x}", cod);
                     print_info!("IsMultiAdvertisementSupported: {}", multi_adv_supported);
                     print_info!("IsLeExtendedAdvertisingSupported: {}", le_ext_adv_supported);
@@ -536,11 +538,16 @@ impl CommandHandler {
 
         enforce_arg_len(args, 1, "gatt <commands>", || match &args[0][0..] {
             "register-client" => {
+                let dbus_connection = self.context.lock().unwrap().dbus_connection.clone();
+                let dbus_crossroads = self.context.lock().unwrap().dbus_crossroads.clone();
+
                 self.context.lock().unwrap().gatt_dbus.as_mut().unwrap().register_client(
                     String::from(GATT_CLIENT_APP_UUID),
                     Box::new(BtGattCallback::new(
                         String::from("/org/chromium/bluetooth/client/bluetooth_gatt_callback"),
                         self.context.clone(),
+                        dbus_connection,
+                        dbus_crossroads,
                     )),
                     false,
                 );

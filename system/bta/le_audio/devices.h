@@ -197,10 +197,10 @@ class LeAudioDeviceGroup {
         transport_latency_mtos_us_(0),
         transport_latency_stom_us_(0),
         active_context_type_(types::LeAudioContextType::UNINITIALIZED),
+        pending_update_available_contexts_(std::nullopt),
         target_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
         current_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
-        context_type_(types::LeAudioContextType::UNINITIALIZED) {
-  }
+        context_type_(types::LeAudioContextType::UNINITIALIZED) {}
   ~LeAudioDeviceGroup(void);
 
   void AddNode(const std::shared_ptr<LeAudioDevice>& leAudioDevice);
@@ -264,6 +264,15 @@ class LeAudioDeviceGroup {
     target_state_ = state;
   }
 
+  inline std::optional<types::AudioContexts> GetPendingUpdateAvailableContexts()
+      const {
+    return pending_update_available_contexts_;
+  }
+  inline void SetPendingUpdateAvailableContexts(
+      std::optional<types::AudioContexts> audio_contexts) {
+    pending_update_available_contexts_ = audio_contexts;
+  }
+
   bool IsInTransition(void);
   bool IsReleasing(void);
   void Dump(int fd);
@@ -285,6 +294,7 @@ class LeAudioDeviceGroup {
   /* Mask and table of currently supported contexts */
   types::LeAudioContextType active_context_type_;
   types::AudioContexts active_contexts_mask_;
+  std::optional<types::AudioContexts> pending_update_available_contexts_;
   std::map<types::LeAudioContextType,
            const set_configurations::AudioSetConfiguration*>
       active_context_to_configuration_map;
