@@ -243,6 +243,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     /**
      * Broadcast Action: Indicates the audio buffer size should be switched
      * between a low latency buffer size and a higher and larger latency buffer size.
+     * Only registered receivers will receive this intent.
      * <p>Always contains the extra fields {@link #EXTRA_DEVICE} and {@link
      * #EXTRA_LOW_LATENCY_BUFFER_SIZE}.
      *
@@ -263,7 +264,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * Used as an Integer extra field in {@link #ACTION_BATTERY_LEVEL_CHANGED}
      * intent. It contains the most recently retrieved battery level information
      * ranging from 0% to 100% for a remote device, {@link #BATTERY_LEVEL_UNKNOWN}
-     * when the valid is unknown or there is an error
+     * when the valid is unknown or there is an error, {@link #BATTERY_LEVEL_BLUETOOTH_OFF} when the
+     * bluetooth is off
      *
      * @hide
      */
@@ -414,7 +416,10 @@ public final class BluetoothDevice implements Parcelable, Attributable {
 
     /**
      * Used as an int extra field in {@link #ACTION_PAIRING_REQUEST}
-     * intents as the value of passkey.
+     * intents as the location of initiator. Possible value are:
+     * {@link #EXTRA_PAIRING_INITIATOR_FOREGROUND},
+     * {@link #EXTRA_PAIRING_INITIATOR_BACKGROUND},
+     *
      * @hide
      */
     @SystemApi
