@@ -22,6 +22,7 @@ import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
+import android.annotation.Nullable;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHapClient;
@@ -564,9 +565,9 @@ public class HapClientService extends ProfileService {
      * Gets the currently active preset info for a HA device
      *
      * @param device is the device for which we want to get the currently active preset info
-     * @return active preset info
+     * @return active preset info or null if not available
      */
-    public BluetoothHapPresetInfo getActivePresetInfo(BluetoothDevice device) {
+    public @Nullable BluetoothHapPresetInfo getActivePresetInfo(BluetoothDevice device) {
         int index = getActivePresetIndex(device);
         if (index == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) return null;
 
@@ -594,7 +595,7 @@ public class HapClientService extends ProfileService {
                 int n = mCallbacks.beginBroadcast();
                 for (int i = 0; i < n; i++) {
                     try {
-                        mCallbacks.getBroadcastItem(i).onSelectActivePresetFailed(device,
+                        mCallbacks.getBroadcastItem(i).onPresetSelectionFailed(device,
                                 BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX);
                     } catch (RemoteException e) {
                         continue;
@@ -629,7 +630,7 @@ public class HapClientService extends ProfileService {
                 int n = mCallbacks.beginBroadcast();
                 for (int i = 0; i < n; i++) {
                     try {
-                        mCallbacks.getBroadcastItem(i).onSelectActivePresetForGroupFailed(groupId,
+                        mCallbacks.getBroadcastItem(i).onPresetSelectionForGroupFailed(groupId,
                                 BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX);
                     } catch (RemoteException e) {
                         continue;
@@ -684,11 +685,10 @@ public class HapClientService extends ProfileService {
      *
      * @param device is the device for which we want to get the preset name
      * @param presetIndex is an index of one of the available presets
-     * @return a preset Info corresponding to the requested preset index
+     * @return a preset Info corresponding to the requested preset index or null if not available
      */
-    public BluetoothHapPresetInfo getPresetInfo(BluetoothDevice device, int presetIndex) {
-        BluetoothHapPresetInfo defaultValue = new BluetoothHapPresetInfo.Builder().build();
-
+    public @Nullable BluetoothHapPresetInfo getPresetInfo(BluetoothDevice device, int presetIndex) {
+        BluetoothHapPresetInfo defaultValue = null;
         if (presetIndex == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) return defaultValue;
 
         List<BluetoothHapPresetInfo> current_presets = mPresetsMap.get(device);
@@ -772,11 +772,17 @@ public class HapClientService extends ProfileService {
     }
 
     private void notifyFeaturesAvailable(BluetoothDevice device, int features) {
+        Log.d(TAG, "HAP device: " + device + ", features: " + String.format("0x%04X", features));
+    }
+
+    private void notifyActivePresetChanged(BluetoothDevice device, int presetIndex,
+            int reasonCode) {
         if (mCallbacks != null) {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
-                    mCallbacks.getBroadcastItem(i).onHapFeaturesAvailable(device, features);
+                    mCallbacks.getBroadcastItem(i).onPresetSelected(device, presetIndex,
+                            reasonCode);
                 } catch (RemoteException e) {
                     continue;
                 }
@@ -785,24 +791,10 @@ public class HapClientService extends ProfileService {
         }
     }
 
-    private void notifyActivePresetChanged(BluetoothDevice device, int presetIndex) {
-        if (mCallbacks != null) {
-            int n = mCallbacks.beginBroadcast();
-            for (int i = 0; i < n; i++) {
-                try {
-                    mCallbacks.getBroadcastItem(i).onActivePresetChanged(device, presetIndex);
-                } catch (RemoteException e) {
-                    continue;
-                }
-            }
-            mCallbacks.finishBroadcast();
-        }
-    }
-
-    private void notifyActivePresetChangedForGroup(int groupId, int presetIndex) {
+    private void notifyActivePresetChangedForGroup(int groupId, int presetIndex, int reasonCode) {
         List<BluetoothDevice> all_group_devices = getGroupDevices(groupId);
         for (BluetoothDevice dev : all_group_devices) {
-            notifyActivePresetChanged(dev, presetIndex);
+            notifyActivePresetChanged(dev, presetIndex, reasonCode);
         }
     }
 
@@ -832,7 +824,7 @@ public class HapClientService extends ProfileService {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
-                    mCallbacks.getBroadcastItem(i).onSelectActivePresetFailed(device,
+                    mCallbacks.getBroadcastItem(i).onPresetSelectionFailed(device,
                             stackEventStatusToProfileStatus(statusCode));
                 } catch (RemoteException e) {
                     continue;
@@ -847,7 +839,7 @@ public class HapClientService extends ProfileService {
             int n = mCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
-                    mCallbacks.getBroadcastItem(i).onSelectActivePresetForGroupFailed(groupId,
+                    mCallbacks.getBroadcastItem(i).onPresetSelectionForGroupFailed(groupId,
                             stackEventStatusToProfileStatus(statusCode));
                 } catch (RemoteException e) {
                     continue;
@@ -1103,14 +1095,18 @@ public class HapClientService extends ProfileService {
 
                 if (device != null) {
                     mDeviceCurrentPresetMap.put(device, currentPresetIndex);
-                    notifyActivePresetChanged(device, currentPresetIndex);
+                    // FIXME: Add app request queueing to support other reasons
+                    int reasonCode = BluetoothStatusCodes.REASON_LOCAL_STACK_REQUEST;
+                    notifyActivePresetChanged(device, currentPresetIndex, reasonCode);
 
                 } else if (groupId != BluetoothCsipSetCoordinator.GROUP_ID_INVALID) {
                     List<BluetoothDevice> all_group_devices = getGroupDevices(groupId);
                     for (BluetoothDevice dev : all_group_devices) {
                         mDeviceCurrentPresetMap.put(dev, currentPresetIndex);
                     }
-                    notifyActivePresetChangedForGroup(groupId, currentPresetIndex);
+                    // FIXME: Add app request queueing to support other reasons
+                    int reasonCode = BluetoothStatusCodes.REASON_LOCAL_STACK_REQUEST;
+                    notifyActivePresetChangedForGroup(groupId, currentPresetIndex, reasonCode);
                 }
             } return;
 
@@ -1400,7 +1396,7 @@ public class HapClientService extends ProfileService {
         public void getPresetInfo(BluetoothDevice device, int presetIndex,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
-                BluetoothHapPresetInfo defaultValue = new BluetoothHapPresetInfo.Builder().build();
+                BluetoothHapPresetInfo defaultValue = null;
                 HapClientService service = getService(source);
                 if (service != null) {
                     defaultValue = service.getPresetInfo(device, presetIndex);

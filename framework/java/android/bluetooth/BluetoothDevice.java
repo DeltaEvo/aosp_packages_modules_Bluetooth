@@ -26,7 +26,6 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
-import android.app.PropertyInvalidatedCache;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.bluetooth.annotations.RequiresBluetoothLocationPermission;
 import android.bluetooth.annotations.RequiresBluetoothScanPermission;
@@ -38,6 +37,7 @@ import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Build;
 import android.os.Handler;
+import android.os.IpcDataCache;
 import android.os.Parcel;
 import android.os.ParcelUuid;
 import android.os.Parcelable;
@@ -244,6 +244,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     /**
      * Broadcast Action: Indicates the audio buffer size should be switched
      * between a low latency buffer size and a higher and larger latency buffer size.
+     * Only registered receivers will receive this intent.
      * <p>Always contains the extra fields {@link #EXTRA_DEVICE} and {@link
      * #EXTRA_LOW_LATENCY_BUFFER_SIZE}.
      *
@@ -264,7 +265,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * Used as an Integer extra field in {@link #ACTION_BATTERY_LEVEL_CHANGED}
      * intent. It contains the most recently retrieved battery level information
      * ranging from 0% to 100% for a remote device, {@link #BATTERY_LEVEL_UNKNOWN}
-     * when the valid is unknown or there is an error
+     * when the valid is unknown or there is an error, {@link #BATTERY_LEVEL_BLUETOOTH_OFF} when the
+     * bluetooth is off
      *
      * @hide
      */
@@ -415,7 +417,10 @@ public final class BluetoothDevice implements Parcelable, Attributable {
 
     /**
      * Used as an int extra field in {@link #ACTION_PAIRING_REQUEST}
-     * intents as the value of passkey.
+     * intents as the location of initiator. Possible value are:
+     * {@link #EXTRA_PAIRING_INITIATOR_FOREGROUND},
+     * {@link #EXTRA_PAIRING_INITIATOR_BACKGROUND},
+     *
      * @hide
      */
     @SystemApi
@@ -1318,7 +1323,14 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         mAttributionSource = attributionSource;
     }
 
-    /** {@hide} */
+    /**
+     * Method should never be used anywhere. Only exception is from {@link Intent}
+     * Used to set the device current attribution source
+     *
+     * @param attributionSource The associated {@link AttributionSource} for this device in this
+     * process
+     * @hide
+     */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public void prepareToEnterProcess(@NonNull AttributionSource attributionSource) {
@@ -1382,6 +1394,17 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     public String getAddress() {
         if (DBG) Log.d(TAG, "mAddress: " + mAddress);
         return mAddress;
+    }
+
+    /**
+     * Returns the address type of this BluetoothDevice.
+     *
+     * @return Bluetooth address type
+     * @hide
+     */
+    public int getAddressType() {
+        if (DBG) Log.d(TAG, "mAddressType: " + mAddressType);
+        return mAddressType;
     }
 
     /**
@@ -1812,13 +1835,13 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     }
 
     /**
-     * There are several instances of PropertyInvalidatedCache used in this class.
+     * There are several instances of IpcDataCache used in this class.
      * BluetoothCache wraps up the common code.  All caches are created with a maximum of
      * eight entries, and the key is in the bluetooth module.  The name is set to the api.
      */
-    private static class BluetoothCache<Q, R> extends PropertyInvalidatedCache<Q, R> {
-        BluetoothCache(String api, PropertyInvalidatedCache.QueryHandler query) {
-            super(8, PropertyInvalidatedCache.MODULE_BLUETOOTH, api, api, query);
+    private static class BluetoothCache<Q, R> extends IpcDataCache<Q, R> {
+        BluetoothCache(String api, IpcDataCache.QueryHandler query) {
+            super(8, IpcDataCache.MODULE_BLUETOOTH, api, api, query);
         }};
 
     /**
@@ -1826,12 +1849,12 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * enforces the bluetooth module.
      */
     private static void invalidateCache(@NonNull String api) {
-        PropertyInvalidatedCache.invalidateCache(PropertyInvalidatedCache.MODULE_BLUETOOTH, api);
+        IpcDataCache.invalidateCache(IpcDataCache.MODULE_BLUETOOTH, api);
     }
 
     private final
-            PropertyInvalidatedCache.QueryHandler<BluetoothDevice, Integer> mBluetoothBondQuery =
-            new PropertyInvalidatedCache.QueryHandler<>() {
+            IpcDataCache.QueryHandler<BluetoothDevice, Integer> mBluetoothBondQuery =
+            new IpcDataCache.QueryHandler<>() {
                 @RequiresLegacyBluetoothPermission
                 @RequiresBluetoothConnectPermission
                 @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)

@@ -458,7 +458,7 @@ public class HapClientTest {
         verify(mNativeInterface, times(0))
                 .selectActivePreset(eq(mDevice), eq(0x00));
         try {
-            verify(mCallback, after(TIMEOUT_MS).times(1)).onSelectActivePresetFailed(eq(mDevice),
+            verify(mCallback, after(TIMEOUT_MS).times(1)).onPresetSelectionFailed(eq(mDevice),
                     eq(BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -482,7 +482,7 @@ public class HapClientTest {
         // Verify Native Interface call
         mService.selectPresetForGroup(0x03, 0x00);
         try {
-            verify(mCallback, after(TIMEOUT_MS).times(1)).onSelectActivePresetForGroupFailed(
+            verify(mCallback, after(TIMEOUT_MS).times(1)).onPresetSelectionForGroupFailed(
                     eq(0x03), eq(BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -564,7 +564,7 @@ public class HapClientTest {
         doReturn(new ParcelUuid[]{BluetoothUuid.HAS}).when(mAdapterService)
                 .getRemoteUuids(any(BluetoothDevice.class));
         testConnectingDevice(mDevice);
-        testOnActivePresetChanged(mDevice, 0x01);
+        testOnPresetSelected(mDevice, 0x01);
 
         // Verify cached value
         Assert.assertEquals(0x01, mService.getActivePresetIndex(mDevice));
@@ -585,7 +585,7 @@ public class HapClientTest {
         Assert.assertEquals(null, mService.getActivePresetInfo(mDevice2));
 
         // Inject active preset change event
-        testOnActivePresetChanged(mDevice2, 0x01);
+        testOnPresetSelected(mDevice2, 0x01);
 
         // Check when active preset is known
         Assert.assertEquals(0x01, mService.getActivePresetIndex(mDevice2));
@@ -678,34 +678,15 @@ public class HapClientTest {
      * Test that native callback generates proper callback call.
      */
     @Test
-    public void testStackEventOnFeaturesUpdate() {
-        doReturn(new ParcelUuid[]{BluetoothUuid.HAS}).when(mAdapterService)
-                .getRemoteUuids(any(BluetoothDevice.class));
-
-        mNativeInterface.onDeviceAvailable(getByteAddress(mDevice), 0x00);
-        mNativeInterface.onFeaturesUpdate(getByteAddress(mDevice), 0x03);
-
-        try {
-            verify(mCallback, after(TIMEOUT_MS).times(1)).onHapFeaturesAvailable(eq(mDevice),
-                    eq(0x03));
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Test that native callback generates proper callback call.
-     */
-    @Test
-    public void testStackEventOnActivePresetChanged() {
+    public void testStackEventOnPresetSelected() {
         doReturn(new ParcelUuid[]{BluetoothUuid.HAS}).when(mAdapterService)
                 .getRemoteUuids(any(BluetoothDevice.class));
 
         mNativeInterface.onActivePresetSelected(getByteAddress(mDevice), 0x01);
 
         try {
-            verify(mCallback, after(TIMEOUT_MS).times(1)).onActivePresetChanged(eq(mDevice),
-                    eq(0x01));
+            verify(mCallback, after(TIMEOUT_MS).times(1)).onPresetSelected(eq(mDevice),
+                    eq(0x01), eq(BluetoothStatusCodes.REASON_LOCAL_STACK_REQUEST));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -726,7 +707,7 @@ public class HapClientTest {
         mNativeInterface.onActivePresetSelectError(getByteAddress(mDevice), 0x05);
 
         try {
-            verify(mCallback, after(TIMEOUT_MS).times(1)).onSelectActivePresetFailed(eq(mDevice),
+            verify(mCallback, after(TIMEOUT_MS).times(1)).onPresetSelectionFailed(eq(mDevice),
                     eq(BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX));
         } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -746,9 +727,7 @@ public class HapClientTest {
 
         int info_reason = HapClientStackEvent.PRESET_INFO_REASON_PRESET_INFO_UPDATE;
         BluetoothHapPresetInfo[] info =
-                {new BluetoothHapPresetInfo.Builder()
-                        .setIndex(0x01)
-                        .setName("OneChangedToUnavailable")
+                {new BluetoothHapPresetInfo.Builder(0x01, "OneChangedToUnavailable")
                         .setWritable(true)
                         .setAvailable(false)
                         .build()};
@@ -955,31 +934,18 @@ public class HapClientTest {
         evt.valueInt1 = 0x01; // features
         mService.messageFromNative(evt);
 
-        try {
-            verify(mCallback, after(TIMEOUT_MS).times(1)).onHapFeaturesAvailable(eq(device),
-                    eq(evt.valueInt1));
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-
         // Inject some initial presets
         List<BluetoothHapPresetInfo> presets =
                 new ArrayList<BluetoothHapPresetInfo>(Arrays.asList(
-                        new BluetoothHapPresetInfo.Builder()
-                                .setIndex(0x01)
-                                .setName("One")
+                        new BluetoothHapPresetInfo.Builder(0x01, "One")
                                 .setAvailable(true)
                                 .setWritable(false)
                                 .build(),
-                        new BluetoothHapPresetInfo.Builder()
-                                .setIndex(0x02)
-                                .setName("Two")
+                        new BluetoothHapPresetInfo.Builder(0x02, "Two")
                                 .setAvailable(true)
                                 .setWritable(true)
                                 .build(),
-                        new BluetoothHapPresetInfo.Builder()
-                                .setIndex(0x03)
-                                .setName("Three")
+                        new BluetoothHapPresetInfo.Builder(0x03, "Three")
                                 .setAvailable(false)
                                 .setWritable(false)
                                 .build()));
@@ -987,7 +953,7 @@ public class HapClientTest {
                 HapClientStackEvent.PRESET_INFO_REASON_ALL_PRESET_INFO, presets);
     }
 
-    private void testOnActivePresetChanged(BluetoothDevice device, int index) {
+    private void testOnPresetSelected(BluetoothDevice device, int index) {
         HapClientStackEvent evt =
                 new HapClientStackEvent(HapClientStackEvent.EVENT_TYPE_ON_ACTIVE_PRESET_SELECTED);
         evt.device = device;
@@ -995,8 +961,8 @@ public class HapClientTest {
         mService.messageFromNative(evt);
 
         try {
-            verify(mCallback, after(TIMEOUT_MS).times(1)).onActivePresetChanged(eq(device),
-                    eq(evt.valueInt1));
+            verify(mCallback, after(TIMEOUT_MS).times(1)).onPresetSelected(eq(device),
+                    eq(evt.valueInt1), eq(BluetoothStatusCodes.REASON_LOCAL_STACK_REQUEST));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

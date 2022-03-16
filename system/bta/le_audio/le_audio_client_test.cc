@@ -145,6 +145,9 @@ class MockLeAudioClientCallbacks
               (uint8_t direction, int group_id, uint32_t snk_audio_location,
                uint32_t src_audio_location, uint16_t avail_cont),
               (override));
+  MOCK_METHOD((void), OnSinkAudioLocationAvailable,
+              (const RawAddress& bd_addr, uint32_t snk_audio_location),
+              (override));
 };
 
 class UnicastTestNoInit : public Test {
@@ -974,7 +977,10 @@ class UnicastTestNoInit : public Test {
     tracks_[0].content_type = content_type;
 
     if (reconfigure_existing_stream) {
+      EXPECT_CALL(mock_audio_source_, SuspendedForReconfiguration()).Times(1);
       EXPECT_CALL(mock_audio_source_, ConfirmStreamingRequest()).Times(1);
+    } else {
+      EXPECT_CALL(mock_audio_source_, SuspendedForReconfiguration()).Times(0);
     }
 
     auto do_metadata_update_future = do_metadata_update_promise.get_future();

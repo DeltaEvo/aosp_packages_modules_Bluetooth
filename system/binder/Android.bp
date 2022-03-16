@@ -10,13 +10,19 @@ package {
 // AIDL interface between libbluetooth-binder and framework.jar
 filegroup {
     name: "libbluetooth-binder-aidl",
+    visibility: [
+        "//frameworks/base",
+        "//packages/modules/Bluetooth:__subpackages__",
+    ],
     srcs: [
+        ":framework-bluetooth-updatable-exported-aidl-sources",
         ":modules-utils-synchronous-result-receiver-aidl",
         "android/bluetooth/IBluetooth.aidl",
         "android/bluetooth/IBluetoothA2dp.aidl",
         "android/bluetooth/IBluetoothA2dpSink.aidl",
         "android/bluetooth/IBluetoothAvrcpController.aidl",
         "android/bluetooth/IBluetoothAvrcpTarget.aidl",
+        "android/bluetooth/IBluetoothBattery.aidl",
         "android/bluetooth/IBluetoothCallback.aidl",
         "android/bluetooth/IBluetoothCsipSetCoordinator.aidl",
         "android/bluetooth/IBluetoothCsipSetCoordinatorCallback.aidl",
@@ -27,8 +33,11 @@ filegroup {
         "android/bluetooth/IBluetoothHapClient.aidl",
         "android/bluetooth/IBluetoothHapClientCallback.aidl",
         "android/bluetooth/IBluetoothVolumeControl.aidl",
+        "android/bluetooth/IBluetoothVolumeControlCallback.aidl",
         "android/bluetooth/IBluetoothHidHost.aidl",
         "android/bluetooth/IBluetoothLeAudio.aidl",
+        "android/bluetooth/IBluetoothLeAudioCallback.aidl",
+        "android/bluetooth/IBluetoothLeBroadcastCallback.aidl",
         "android/bluetooth/IBluetoothManager.aidl",
         "android/bluetooth/IBluetoothManagerCallback.aidl",
         "android/bluetooth/IBluetoothMap.aidl",
@@ -56,5 +65,7 @@ filegroup {
         "android/bluetooth/le/IPeriodicAdvertisingCallback.aidl",
         "android/bluetooth/le/IScannerCallback.aidl",
         "android/bluetooth/IBluetoothConnectionCallback.aidl",
+        "android/bluetooth/IBluetoothLeBroadcastAssistantCallback.aidl",
+        "android/bluetooth/IBluetoothLeBroadcastAssistant.aidl",
     ],
 }

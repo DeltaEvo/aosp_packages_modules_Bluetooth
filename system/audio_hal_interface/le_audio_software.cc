@@ -22,7 +22,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "aidl/le_audio_software.h"
+#include "aidl/le_audio_software_aidl.h"
 #include "bta/le_audio/codec_manager.h"
 #include "hal_version_manager.h"
 #include "hidl/le_audio_software_hidl.h"
@@ -226,6 +226,22 @@ void LeAudioClientInterface::Sink::UpdateAudioConfigToHal(
       aidl::le_audio::offload_config_to_hal_audio_config(offload_config));
 }
 
+void LeAudioClientInterface::Sink::SuspendedForReconfiguration() {
+  if (HalVersionManager::GetHalTransport() ==
+      BluetoothAudioHalTransport::HIDL) {
+    return;
+  }
+
+  if (aidl::le_audio::LeAudioSinkTransport::interface->GetTransportInstance()
+          ->GetSessionType() !=
+      aidl::SessionType::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH) {
+    return;
+  }
+
+  aidl::le_audio::LeAudioSinkTransport::interface->StreamSuspended(
+      aidl::BluetoothAudioCtrlAck::SUCCESS_RECONFIGURATION);
+}
+
 size_t LeAudioClientInterface::Sink::Read(uint8_t* p_buf, uint32_t len) {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::HIDL) {
@@ -287,8 +303,6 @@ void LeAudioClientInterface::Source::SetRemoteDelay(uint16_t delay_report_ms) {
 
 void LeAudioClientInterface::Source::StartSession() {
   LOG(INFO) << __func__;
-  if (!hidl::le_audio::is_source_hal_enabled()) return;
-
   if (HalVersionManager::GetHalVersion() ==
       BluetoothAudioHalVersion::VERSION_2_1) {
     AudioConfiguration_2_1 audio_config;
@@ -324,6 +338,22 @@ void LeAudioClientInterface::Source::StartSession() {
     }
     aidl::le_audio::LeAudioSourceTransport::interface->StartSession();
   }
+}
+
+void LeAudioClientInterface::Source::SuspendedForReconfiguration() {
+  if (HalVersionManager::GetHalTransport() ==
+      BluetoothAudioHalTransport::HIDL) {
+    return;
+  }
+
+  if (aidl::le_audio::LeAudioSourceTransport::interface->GetTransportInstance()
+          ->GetSessionType() !=
+      aidl::SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) {
+    return;
+  }
+
+  aidl::le_audio::LeAudioSourceTransport::interface->StreamSuspended(
+      aidl::BluetoothAudioCtrlAck::SUCCESS_RECONFIGURATION);
 }
 
 void LeAudioClientInterface::Source::ConfirmStreamingRequest() {

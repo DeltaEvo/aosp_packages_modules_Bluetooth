@@ -1,10 +1,11 @@
 extern crate bt_shim;
 
-use bt_topshim::btif::{BtSspVariant, BtTransport, Uuid128Bit};
+use bt_topshim::btif::{BtDeviceType, BtSspVariant, BtTransport, Uuid128Bit};
 
 use btstack::bluetooth::{
     BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
 };
+use btstack::uuid::Profile;
 use btstack::RPCProxy;
 
 use dbus::arg::RefArg;
@@ -62,8 +63,10 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
     }
 }
 
-impl_dbus_arg_enum!(BtTransport);
+impl_dbus_arg_enum!(BtDeviceType);
 impl_dbus_arg_enum!(BtSspVariant);
+impl_dbus_arg_enum!(BtTransport);
+impl_dbus_arg_enum!(Profile);
 
 #[allow(dead_code)]
 struct BluetoothConnectionCallbackDBus {}
@@ -147,22 +150,27 @@ impl IBluetooth for IBluetoothDBus {
 
     #[dbus_method("GetDiscoverable")]
     fn get_discoverable(&self) -> bool {
-        true
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetDiscoverableTimeout")]
+    fn get_discoverable_timeout(&self) -> u32 {
+        dbus_generated!()
     }
 
     #[dbus_method("SetDiscoverable")]
     fn set_discoverable(&self, mode: bool, duration: u32) -> bool {
-        true
+        dbus_generated!()
     }
 
     #[dbus_method("IsMultiAdvertisementSupported")]
     fn is_multi_advertisement_supported(&self) -> bool {
-        true
+        dbus_generated!()
     }
 
     #[dbus_method("IsLeExtendedAdvertisingSupported")]
     fn is_le_extended_advertising_supported(&self) -> bool {
-        true
+        dbus_generated!()
     }
 
     #[dbus_method("StartDiscovery")]
@@ -225,8 +233,33 @@ impl IBluetooth for IBluetoothDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("GetRemoteName")]
+    fn get_remote_name(&self, _device: BluetoothDevice) -> String {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteType")]
+    fn get_remote_type(&self, _device: BluetoothDevice) -> BtDeviceType {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteAlias")]
+    fn get_remote_alias(&self, _device: BluetoothDevice) -> String {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteClass")]
+    fn get_remote_class(&self, _device: BluetoothDevice) -> u32 {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetConnectionState")]
     fn get_connection_state(&self, _device: BluetoothDevice) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetProfileConnectionState")]
+    fn get_profile_connection_state(&self, _profile: Profile) -> u32 {
         dbus_generated!()
     }
 

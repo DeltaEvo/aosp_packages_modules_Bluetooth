@@ -45,8 +45,6 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceProfile;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceUse;
 import android.bluetooth.BluetoothClass;
-import android.bluetooth.BluetoothCodecConfig;
-import android.bluetooth.BluetoothCodecStatus;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothFrameworkInitializer;
 import android.bluetooth.BluetoothProfile;
@@ -105,6 +103,8 @@ import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
+import com.android.bluetooth.bas.BatteryService;
+import com.android.bluetooth.bass_client.BassClientService;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
 import com.android.bluetooth.btservice.activityattribution.ActivityAttributionService;
 import com.android.bluetooth.btservice.bluetoothkeystore.BluetoothKeystoreService;
@@ -112,6 +112,7 @@ import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.btservice.storage.MetadataDatabase;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
 import com.android.bluetooth.gatt.GattService;
+import com.android.bluetooth.gatt.ScanManager;
 import com.android.bluetooth.hap.HapClientService;
 import com.android.bluetooth.hearingaid.HearingAidService;
 import com.android.bluetooth.hfp.HeadsetService;
@@ -326,6 +327,8 @@ public class AdapterService extends Service {
     private VolumeControlService mVolumeControlService;
     private CsipSetCoordinatorService mCsipSetCoordinatorService;
     private LeAudioService mLeAudioService;
+    private BassClientService mBassClientService;
+    private BatteryService mBatteryService;
 
     private volatile boolean mTestModeEnabled = false;
 
@@ -368,7 +371,7 @@ public class AdapterService extends Service {
     /**
      * Confirm whether the ProfileService is started expectedly.
      *
-     * @param string the service simple name.
+     * @param serviceSampleName the service simple name.
      * @return true if the service is started expectedly, false otherwise.
      */
     public boolean isStartedProfile(String serviceSampleName) {
@@ -515,9 +518,16 @@ public class AdapterService extends Service {
         mDatabaseManager = new DatabaseManager(this);
         mDatabaseManager.start(MetadataDatabase.createDatabase(this));
 
-        // Phone policy is specific to phone implementations and hence if a device wants to exclude
-        // it out then it can be disabled by using the flag below.
-        if (getResources().getBoolean(R.bool.enable_phone_policy)) {
+        boolean isAutomotiveDevice = getApplicationContext().getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_AUTOMOTIVE);
+
+        /*
+         * Phone policy is specific to phone implementations and hence if a device wants to exclude
+         * it out then it can be disabled by using the flag below. Phone policy is never used on
+         * Android Automotive OS builds, in favor of a policy currently located in
+         * CarBluetoothService.
+         */
+        if (!isAutomotiveDevice && getResources().getBoolean(R.bool.enable_phone_policy)) {
             Log.i(TAG, "Phone policy enabled");
             mPhonePolicy = new PhonePolicy(this, new ServiceFactory());
             mPhonePolicy.start();
@@ -850,42 +860,9 @@ public class AdapterService extends Service {
             errorLog(
                     "Cannot switch buffer size. The number of A2DP active devices is "
                             + activeDevices.size());
+            return;
         }
-        BluetoothCodecConfig codecConfig = null;
-        BluetoothCodecStatus currentCodecStatus = mA2dpService.getCodecStatus(activeDevices.get(0));
-        int currentCodec = currentCodecStatus.getCodecConfig().getCodecType();
-        if (isLowLatencyBufferSize) {
-            if (currentCodec == BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3) {
-                Log.w(TAG, "Current codec is already LC3. No need to change it.");
-                return;
-            }
-            codecConfig = new BluetoothCodecConfig(
-                    BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3,
-                    BluetoothCodecConfig.CODEC_PRIORITY_HIGHEST,
-                    BluetoothCodecConfig.SAMPLE_RATE_48000,
-                    BluetoothCodecConfig.BITS_PER_SAMPLE_16,
-                    BluetoothCodecConfig.CHANNEL_MODE_STEREO,
-                    0, 0x1 << 2, 0, 0);
-        } else {
-            if (currentCodec != BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3) {
-                Log.w(TAG, "Current codec is not LC3. No need to change it.");
-                return;
-            }
-            List<BluetoothCodecConfig> selectableCodecs =
-                    currentCodecStatus.getCodecsSelectableCapabilities();
-            for (BluetoothCodecConfig config : selectableCodecs) {
-                // Find a non LC3 codec
-                if (config.getCodecType() != BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3) {
-                    codecConfig = config;
-                    break;
-                }
-            }
-            if (codecConfig == null) {
-                Log.e(TAG, "Cannot find a non LC3 codec compatible with the remote device");
-                return;
-            }
-        }
-        mA2dpService.setCodecConfigPreference(activeDevices.get(0), codecConfig);
+        mA2dpService.switchCodecByBufferSize(activeDevices.get(0), isLowLatencyBufferSize);
     }
 
     /**
@@ -1120,6 +1097,12 @@ public class AdapterService extends Service {
         if (profile == BluetoothProfile.HAP_CLIENT) {
             return Utils.arrayContains(remoteDeviceUuids, BluetoothUuid.HAS);
         }
+        if (profile == BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT) {
+            return Utils.arrayContains(remoteDeviceUuids, BluetoothUuid.BASS);
+        }
+        if (profile == BluetoothProfile.BATTERY) {
+            return Utils.arrayContains(remoteDeviceUuids, BluetoothUuid.BATTERY);
+        }
 
         Log.e(TAG, "isSupported: Unexpected profile passed in to function: " + profile);
         return false;
@@ -1133,7 +1116,6 @@ public class AdapterService extends Service {
      */
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     boolean isAnyProfileEnabled(BluetoothDevice device) {
-
         if (mA2dpService != null && mA2dpService.getConnectionPolicy(device)
                 > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
             return true;
@@ -1187,12 +1169,20 @@ public class AdapterService extends Service {
                 > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
             return true;
         }
+        if (mBassClientService != null && mBassClientService.getConnectionPolicy(device)
+                 > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            return true;
+        }
+        if (mBatteryService != null && mBatteryService.getConnectionPolicy(device)
+                > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            return true;
+        }
         return false;
     }
 
     /**
      * Connects only available profiles
-     * (those with {@link BluetoothProfile.CONNECTION_POLICY_ALLOWED})
+     * (those with {@link BluetoothProfile#CONNECTION_POLICY_ALLOWED})
      *
      * @param device is the device with which we are connecting the profiles
      * @return {@link BluetoothStatusCodes#SUCCESS}
@@ -1288,9 +1278,24 @@ public class AdapterService extends Service {
         if (mLeAudioService != null && isSupported(localDeviceUuids, remoteDeviceUuids,
                 BluetoothProfile.LE_AUDIO, device)
                 && mLeAudioService.getConnectionPolicy(device)
-                > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+                        > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
             Log.i(TAG, "connectEnabledProfiles: Connecting LeAudio profile (BAP)");
             mLeAudioService.connect(device);
+        }
+        if (mBassClientService != null && isSupported(localDeviceUuids, remoteDeviceUuids,
+                BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT, device)
+                && mBassClientService.getConnectionPolicy(device)
+                        > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            Log.i(TAG, "connectEnabledProfiles: Connecting LE Broadcast Assistant Profile");
+            mBassClientService.connect(device);
+        }
+        if (mBatteryService != null
+                && isSupported(
+                        localDeviceUuids, remoteDeviceUuids, BluetoothProfile.BATTERY, device)
+                && mBatteryService.getConnectionPolicy(device)
+                        > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            Log.i(TAG, "connectEnabledProfiles: Connecting Battery Service");
+            mBatteryService.connect(device);
         }
         return BluetoothStatusCodes.SUCCESS;
     }
@@ -1332,6 +1337,8 @@ public class AdapterService extends Service {
         mVolumeControlService = VolumeControlService.getVolumeControlService();
         mCsipSetCoordinatorService = CsipSetCoordinatorService.getCsipSetCoordinatorService();
         mLeAudioService = LeAudioService.getLeAudioService();
+        mBassClientService = BassClientService.getBassClientService();
+        mBatteryService = BatteryService.getBatteryService();
     }
 
     @BluetoothAdapter.RfcommListenerResult
@@ -3918,7 +3925,7 @@ public class AdapterService extends Service {
      * Fetches the local OOB data to give out to remote.
      *
      * @param transport - specify data transport.
-     * @param callback - callback used to receive the requested {@link Oobdata}; null will be
+     * @param callback - callback used to receive the requested {@link OobData}; null will be
      * ignored silently.
      *
      * @hide
@@ -4116,16 +4123,22 @@ public class AdapterService extends Service {
                 if (mHeadsetService == null) {
                     Log.e(TAG, "getActiveDevices: HeadsetService is null");
                 } else {
-                    activeDevices.add(mHeadsetService.getActiveDevice());
-                    Log.i(TAG, "getActiveDevices: Headset device: " + activeDevices.get(0));
+                    BluetoothDevice device = mHeadsetService.getActiveDevice();
+                    if (device != null) {
+                        activeDevices.add(device);
+                    }
+                    Log.i(TAG, "getActiveDevices: Headset device: " + device);
                 }
                 break;
             case BluetoothProfile.A2DP:
                 if (mA2dpService == null) {
                     Log.e(TAG, "getActiveDevices: A2dpService is null");
                 } else {
-                    activeDevices.add(mA2dpService.getActiveDevice());
-                    Log.i(TAG, "getActiveDevices: A2dp device: " + activeDevices.get(0));
+                    BluetoothDevice device = mA2dpService.getActiveDevice();
+                    if (device != null) {
+                        activeDevices.add(device);
+                    }
+                    Log.i(TAG, "getActiveDevices: A2dp device: " + device);
                 }
                 break;
             case BluetoothProfile.HEARING_AID:
@@ -4269,6 +4282,13 @@ public class AdapterService extends Service {
                     BluetoothProfile.CONNECTION_POLICY_ALLOWED);
             numProfilesConnected++;
         }
+        if (mBassClientService != null && isSupported(localDeviceUuids, remoteDeviceUuids,
+                BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT, device)) {
+            Log.i(TAG, "connectAllEnabledProfiles: Connecting LE Broadcast Assistant Profile");
+            mBassClientService.setConnectionPolicy(device,
+                    BluetoothProfile.CONNECTION_POLICY_ALLOWED);
+            numProfilesConnected++;
+        }
 
         Log.i(TAG, "connectAllEnabledProfiles: Number of Profiles Connected: "
                 + numProfilesConnected);
@@ -4375,6 +4395,12 @@ public class AdapterService extends Service {
                 == BluetoothProfile.STATE_CONNECTED) {
             Log.i(TAG, "disconnectAllEnabledProfiles: Disconnecting LeAudio profile (BAP)");
             mLeAudioService.disconnect(device);
+        }
+        if (mBassClientService != null && mBassClientService.getConnectionState(device)
+                == BluetoothProfile.STATE_CONNECTED) {
+            Log.i(TAG, "disconnectAllEnabledProfiles: Disconnecting "
+                            + "LE Broadcast Assistant Profile");
+            mBassClientService.disconnect(device);
         }
 
         return BluetoothStatusCodes.SUCCESS;
@@ -5089,6 +5115,18 @@ public class AdapterService extends Service {
     @GuardedBy("mDeviceConfigLock")
     private int mScanUpgradeDurationMillis =
             DeviceConfigListener.DEFAULT_SCAN_UPGRADE_DURATION_MILLIS;
+    @GuardedBy("mDeviceConfigLock")
+    private int mScreenOffLowPowerWindowMillis =
+            ScanManager.SCAN_MODE_SCREEN_OFF_LOW_POWER_WINDOW_MS;
+    @GuardedBy("mDeviceConfigLock")
+    private int mScreenOffLowPowerIntervalMillis =
+            ScanManager.SCAN_MODE_SCREEN_OFF_LOW_POWER_INTERVAL_MS;
+    @GuardedBy("mDeviceConfigLock")
+    private int mScreenOffBalancedWindowMillis =
+            ScanManager.SCAN_MODE_SCREEN_OFF_BALANCED_WINDOW_MS;
+    @GuardedBy("mDeviceConfigLock")
+    private int mScreenOffBalancedIntervalMillis =
+            ScanManager.SCAN_MODE_SCREEN_OFF_BALANCED_INTERVAL_MS;
 
     public @NonNull Predicate<String> getLocationDenylistName() {
         synchronized (mDeviceConfigLock) {
@@ -5147,6 +5185,42 @@ public class AdapterService extends Service {
         }
     }
 
+    /**
+     * Returns SCREEN_OFF_BALANCED scan window in millis.
+     */
+    public int getScreenOffBalancedWindowMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScreenOffBalancedWindowMillis;
+        }
+    }
+
+    /**
+     * Returns SCREEN_OFF_BALANCED scan interval in millis.
+     */
+    public int getScreenOffBalancedIntervalMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScreenOffBalancedIntervalMillis;
+        }
+    }
+
+    /**
+     * Returns SCREEN_OFF low power scan window in millis.
+     */
+    public int getScreenOffLowPowerWindowMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScreenOffLowPowerWindowMillis;
+        }
+    }
+
+    /**
+     * Returns SCREEN_OFF low power scan interval in millis.
+     */
+    public int getScreenOffLowPowerIntervalMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScreenOffLowPowerIntervalMillis;
+        }
+    }
+
     private final DeviceConfigListener mDeviceConfigListener = new DeviceConfigListener();
 
     private class DeviceConfigListener implements DeviceConfig.OnPropertiesChangedListener {
@@ -5164,6 +5238,14 @@ public class AdapterService extends Service {
                 "scan_timeout_millis";
         private static final String SCAN_UPGRADE_DURATION_MILLIS =
                 "scan_upgrade_duration_millis";
+        private static final String SCREEN_OFF_LOW_POWER_WINDOW_MILLIS =
+                "screen_off_low_power_window_millis";
+        private static final String SCREEN_OFF_LOW_POWER_INTERVAL_MILLIS =
+                "screen_off_low_power_interval_millis";
+        private static final String SCREEN_OFF_BALANCED_WINDOW_MILLIS =
+                "screen_off_balanced_window_millis";
+        private static final String SCREEN_OFF_BALANCED_INTERVAL_MILLIS =
+                "screen_off_balanced_interval_millis";
 
         /**
          * Default denylist which matches Eddystone and iBeacon payloads.
@@ -5202,6 +5284,18 @@ public class AdapterService extends Service {
                         DEFAULT_SCAN_TIMEOUT_MILLIS);
                 mScanUpgradeDurationMillis = properties.getInt(SCAN_UPGRADE_DURATION_MILLIS,
                         DEFAULT_SCAN_UPGRADE_DURATION_MILLIS);
+                mScreenOffLowPowerWindowMillis = properties.getInt(
+                        SCREEN_OFF_LOW_POWER_WINDOW_MILLIS,
+                        ScanManager.SCAN_MODE_SCREEN_OFF_LOW_POWER_WINDOW_MS);
+                mScreenOffLowPowerIntervalMillis = properties.getInt(
+                        SCREEN_OFF_LOW_POWER_INTERVAL_MILLIS,
+                        ScanManager.SCAN_MODE_SCREEN_OFF_LOW_POWER_INTERVAL_MS);
+                mScreenOffBalancedWindowMillis = properties.getInt(
+                        SCREEN_OFF_BALANCED_WINDOW_MILLIS,
+                        ScanManager.SCAN_MODE_SCREEN_OFF_BALANCED_WINDOW_MS);
+                mScreenOffBalancedIntervalMillis = properties.getInt(
+                        SCREEN_OFF_BALANCED_INTERVAL_MILLIS,
+                        ScanManager.SCAN_MODE_SCREEN_OFF_BALANCED_INTERVAL_MS);
             }
         }
     }
@@ -5274,6 +5368,13 @@ public class AdapterService extends Service {
      */
     public boolean allowLowLatencyAudio(boolean allowed, BluetoothDevice device) {
         return allowLowLatencyAudioNative(allowed, Utils.getByteAddress(device));
+    }
+
+    /**
+     * Sets the battery level of the remote device
+     */
+    public void setBatteryLevel(BluetoothDevice device, int batteryLevel) {
+        mRemoteDevices.updateBatteryLevel(device, batteryLevel);
     }
 
     static native void classInitNative();

@@ -143,7 +143,7 @@ constexpr uint32_t kLeAudioLocationTopBackLeft = 0x00010000;
 constexpr uint32_t kLeAudioLocationTopBackRight = 0x00020000;
 constexpr uint32_t kLeAudioLocationTopSideLeft = 0x00040000;
 constexpr uint32_t kLeAudioLocationTopSideRight = 0x00080000;
-constexpr uint32_t kLeAudioLocationTopSideCenter = 0x00100000;
+constexpr uint32_t kLeAudioLocationTopBackCenter = 0x00100000;
 constexpr uint32_t kLeAudioLocationBottomFrontCenter = 0x00200000;
 constexpr uint32_t kLeAudioLocationBottomFrontLeft = 0x00400000;
 constexpr uint32_t kLeAudioLocationBottomFrontRight = 0x00800000;
@@ -660,6 +660,8 @@ struct stream_configuration {
   uint32_t sink_sample_frequency_hz;
   uint32_t sink_frame_duration_us;
   uint16_t sink_octets_per_codec_frame;
+  uint32_t sink_audio_channel_allocation;
+  uint8_t sink_codec_frames_blocks_per_sdu;
   /* Number of channels is what we will request from audio framework */
   uint8_t sink_num_of_channels;
   int sink_num_of_devices;
@@ -671,6 +673,8 @@ struct stream_configuration {
   uint32_t source_sample_frequency_hz;
   uint32_t source_frame_duration_us;
   uint16_t source_octets_per_codec_frame;
+  uint32_t source_audio_channel_allocation;
+  uint8_t source_codec_frames_blocks_per_sdu;
   /* Number of channels is what we will request from audio framework */
   uint8_t source_num_of_channels;
   int source_num_of_devices;

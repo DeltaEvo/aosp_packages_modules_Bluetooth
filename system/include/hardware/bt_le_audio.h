@@ -94,6 +94,9 @@ class LeAudioClientCallbacks {
                            uint32_t snk_audio_location,
                            uint32_t src_audio_location,
                            uint16_t avail_cont) = 0;
+  /* Callback for sink audio location recognized */
+  virtual void OnSinkAudioLocationAvailable(const RawAddress& address,
+                                            uint32_t snk_audio_locations) = 0;
 };
 
 class LeAudioClientInterface {
@@ -144,9 +147,10 @@ enum class BroadcastAudioProfile {
   MEDIA,
 };
 
-using BroadcastCode = std::array<uint8_t, 16>;
-using BroadcastId = std::array<uint8_t, 3>;
 constexpr uint8_t kBroadcastAnnouncementBroadcastIdSize = 3;
+using BroadcastId = std::array<uint8_t, kBroadcastAnnouncementBroadcastIdSize>;
+constexpr BroadcastId kBroadcastBroadcastIdInvalid = {0, 0, 0};
+using BroadcastCode = std::array<uint8_t, 16>;
 
 class LeAudioBroadcasterCallbacks {
  public:
