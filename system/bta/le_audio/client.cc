@@ -298,8 +298,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     /* Releasement didn't finished in time */
     if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
-      audio_sender_state_ = AudioState::IDLE;
-      audio_receiver_state_ = AudioState::IDLE;
+      CancelStreamingRequest();
       LeAudioDevice* leAudioDevice = group->GetFirstActiveDevice();
       LOG_ASSERT(leAudioDevice)
           << __func__ << " Shouldn't be called without an active device.";
@@ -1017,6 +1016,8 @@ class LeAudioClientImpl : public LeAudioClient {
       leAudioDevice->snk_audio_locations_ = snk_audio_locations;
 
       LeAudioDeviceGroup* group = aseGroups_.FindById(leAudioDevice->group_id_);
+      callbacks_->OnSinkAudioLocationAvailable(leAudioDevice->address_,
+                                               snk_audio_locations.to_ulong());
       /* Read of source audio locations during initial attribute discovery.
        * Group would be assigned once service search is completed.
        */
