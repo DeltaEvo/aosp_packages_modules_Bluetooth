@@ -298,8 +298,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     /* Releasement didn't finished in time */
     if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
-      audio_sender_state_ = AudioState::IDLE;
-      audio_receiver_state_ = AudioState::IDLE;
+      CancelStreamingRequest();
       LeAudioDevice* leAudioDevice = group->GetFirstActiveDevice();
       LOG_ASSERT(leAudioDevice)
           << __func__ << " Shouldn't be called without an active device.";
@@ -651,6 +650,14 @@ class LeAudioClientImpl : public LeAudioClient {
       RemoveDevice(dev->address_);
       dev = next_dev;
     }
+  }
+
+  void SetCodecConfigPreference(
+      int group_id,
+      bluetooth::le_audio::btle_audio_codec_config_t input_codec_config,
+      bluetooth::le_audio::btle_audio_codec_config_t output_codec_config)
+      override {
+    // TODO Implement
   }
 
   void GroupSetActive(const int group_id) override {
@@ -1017,6 +1024,8 @@ class LeAudioClientImpl : public LeAudioClient {
       leAudioDevice->snk_audio_locations_ = snk_audio_locations;
 
       LeAudioDeviceGroup* group = aseGroups_.FindById(leAudioDevice->group_id_);
+      callbacks_->OnSinkAudioLocationAvailable(leAudioDevice->address_,
+                                               snk_audio_locations.to_ulong());
       /* Read of source audio locations during initial attribute discovery.
        * Group would be assigned once service search is completed.
        */
@@ -1903,22 +1912,26 @@ class LeAudioClientImpl : public LeAudioClient {
     LOG(INFO) << __func__ << " data size: " << (int)data.size()
               << " byte count: " << byte_count << " mono: " << mono;
     if (!mono) {
-      lc3_encode(lc3_encoder_left, (const int16_t*)data.data(), 2,
-                 chan_left_enc.size(), chan_left_enc.data());
-      lc3_encode(lc3_encoder_right, ((const int16_t*)data.data()) + 1, 2,
-                 chan_right_enc.size(), chan_right_enc.data());
+      lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                 (const int16_t*)data.data(), 2, chan_left_enc.size(),
+                 chan_left_enc.data());
+      lc3_encode(lc3_encoder_right, LC3_PCM_FORMAT_S16,
+                 ((const int16_t*)data.data()) + 1, 2, chan_right_enc.size(),
+                 chan_right_enc.data());
     } else {
       std::vector<int16_t> chan_mono;
       get_mono_stream(data, chan_mono);
 
       if (left_cis_handle) {
-        lc3_encode(lc3_encoder_left, (const int16_t*)chan_mono.data(), 1,
-                   chan_left_enc.size(), chan_left_enc.data());
+        lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                   (const int16_t*)chan_mono.data(), 1, chan_left_enc.size(),
+                   chan_left_enc.data());
       }
 
       if (right_cis_handle) {
-        lc3_encode(lc3_encoder_right, (const int16_t*)chan_mono.data(), 1,
-                   chan_right_enc.size(), chan_right_enc.data());
+        lc3_encode(lc3_encoder_right, LC3_PCM_FORMAT_S16,
+                   (const int16_t*)chan_mono.data(), 1, chan_right_enc.size(),
+                   chan_right_enc.data());
       }
     }
 
@@ -1959,17 +1972,20 @@ class LeAudioClientImpl : public LeAudioClient {
       std::vector<int16_t> chan_mono;
       get_mono_stream(data, chan_mono);
 
-      auto err = lc3_encode(lc3_encoder_left, (const int16_t*)chan_mono.data(),
-                            1, byte_count, chan_encoded.data());
+      auto err = lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                            (const int16_t*)chan_mono.data(), 1, byte_count,
+                            chan_encoded.data());
 
       if (err < 0) {
         LOG(ERROR) << " error while encoding, error code: " << +err;
       }
     } else {
-      lc3_encode(lc3_encoder_left, (const int16_t*)data.data(), 2, byte_count,
+      lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                 (const int16_t*)data.data(), 2, byte_count,
                  chan_encoded.data());
-      lc3_encode(lc3_encoder_right, (const int16_t*)data.data() + 1, 2,
-                 byte_count, chan_encoded.data() + byte_count);
+      lc3_encode(lc3_encoder_right, LC3_PCM_FORMAT_S16,
+                 (const int16_t*)data.data() + 1, 2, byte_count,
+                 chan_encoded.data() + byte_count);
     }
 
     /* Send data to the controller */
@@ -2193,8 +2209,8 @@ class LeAudioClientImpl : public LeAudioClient {
     lc3_decoder_t decoder_to_use =
         is_left ? lc3_decoder_left : lc3_decoder_right;
 
-    err = lc3_decode(decoder_to_use, data, size, pcm_data_decoded.data(),
-                     1 /* pitch */);
+    err = lc3_decode(decoder_to_use, data, size, LC3_PCM_FORMAT_S16,
+                     pcm_data_decoded.data(), 1 /* pitch */);
 
     if (err < 0) {
       LOG(ERROR) << " bad decoding parameters: " << static_cast<int>(err);
@@ -2448,7 +2464,7 @@ class LeAudioClientImpl : public LeAudioClient {
     if (lc3_decoder_left_mem) {
       free(lc3_decoder_left_mem);
       lc3_decoder_left_mem = nullptr;
-      free(lc3_decoder_left_mem);
+      free(lc3_decoder_right_mem);
       lc3_decoder_right_mem = nullptr;
     }
   }

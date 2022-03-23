@@ -49,6 +49,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -930,7 +931,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      *
      * @param device is the Bluetooth device for which the audio state is being queried
      * @return the audio state of the device or an error code
-     * @throws IllegalArgumentException if the device is null
+     * @throws NullPointerException if the device is null
      *
      * @hide
      */
@@ -942,9 +943,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
     })
     public @GetAudioStateReturnValues int getAudioState(@NonNull BluetoothDevice device) {
         if (VDBG) log("getAudioState");
-        if (device == null) {
-            throw new IllegalArgumentException("device cannot be null");
-        }
+        Objects.requireNonNull(device);
         final IBluetoothHeadset service = mService;
         final int defaultValue = BluetoothHeadset.STATE_AUDIO_DISCONNECTED;
         if (service == null) {
@@ -970,7 +969,6 @@ public final class BluetoothHeadset implements BluetoothProfile {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(value = {
             BluetoothStatusCodes.SUCCESS,
-            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
             BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND,
             BluetoothStatusCodes.ERROR_TIMEOUT,
             BluetoothStatusCodes.ERROR_UNKNOWN,
@@ -982,7 +980,6 @@ public final class BluetoothHeadset implements BluetoothProfile {
     @IntDef(value = {
             BluetoothStatusCodes.ALLOWED,
             BluetoothStatusCodes.NOT_ALLOWED,
-            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
             BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND,
             BluetoothStatusCodes.ERROR_TIMEOUT,
             BluetoothStatusCodes.ERROR_UNKNOWN,
@@ -1015,21 +1012,22 @@ public final class BluetoothHeadset implements BluetoothProfile {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
             return BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND;
-        } else if (!isEnabled()) {
-            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        } else if (isEnabled()) {
+            try {
+                final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+                service.setAudioRouteAllowed(allowed, mAttributionSource, recv);
+                recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+                return BluetoothStatusCodes.SUCCESS;
+            } catch (TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                return BluetoothStatusCodes.ERROR_TIMEOUT;
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                e.rethrowFromSystemServer();
+            }
         }
-        try {
-            final SynchronousResultReceiver recv = new SynchronousResultReceiver();
-            service.setAudioRouteAllowed(allowed, mAttributionSource, recv);
-            recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
-            return BluetoothStatusCodes.SUCCESS;
-        } catch (TimeoutException e) {
-            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            return BluetoothStatusCodes.ERROR_TIMEOUT;
-        } catch (RemoteException e) {
-            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            e.rethrowFromSystemServer();
-        }
+
+        Log.e(TAG, "setAudioRouteAllowed: Bluetooth disabled, but profile service still bound");
         return BluetoothStatusCodes.ERROR_UNKNOWN;
     }
 
@@ -1054,21 +1052,22 @@ public final class BluetoothHeadset implements BluetoothProfile {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
             return BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND;
-        } else if (!isEnabled()) {
-            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        } else if (isEnabled()) {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                service.getAudioRouteAllowed(mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(false)
+                        ? BluetoothStatusCodes.ALLOWED : BluetoothStatusCodes.NOT_ALLOWED;
+            } catch (TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                return BluetoothStatusCodes.ERROR_TIMEOUT;
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                e.rethrowFromSystemServer();
+            }
         }
-        try {
-            final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
-            service.getAudioRouteAllowed(mAttributionSource, recv);
-            return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(false)
-                    ? BluetoothStatusCodes.ALLOWED : BluetoothStatusCodes.NOT_ALLOWED;
-        } catch (TimeoutException e) {
-            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            return BluetoothStatusCodes.ERROR_TIMEOUT;
-        } catch (RemoteException e) {
-            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-            e.rethrowFromSystemServer();
-        }
+
+        Log.e(TAG, "getAudioRouteAllowed: Bluetooth disabled, but profile service still bound");
         return BluetoothStatusCodes.ERROR_UNKNOWN;
     }
 
@@ -1119,11 +1118,11 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * can be identified with {@link BluetoothAdapter#getActiveDevices(int)}.
      * <p>
      * If this function returns {@link BluetoothStatusCodes#SUCCESS}, the intent
-     * {@link #ACTION_AUDIO_STATE_CHANGED} will be broadcasted twice. First with {@link #EXTRA_STATE}
-     * set to {@link #STATE_AUDIO_CONNECTING}. This will be followed by a broadcast with
-     * {@link #EXTRA_STATE} set to either {@link #STATE_AUDIO_CONNECTED} if the audio connection is
-     * established or {@link #STATE_AUDIO_DISCONNECTED} if there was a failure in establishing the
-     * audio connection.
+     * {@link #ACTION_AUDIO_STATE_CHANGED} will be broadcasted twice. First with
+     * {@link #EXTRA_STATE} set to {@link #STATE_AUDIO_CONNECTING}. This will be followed by a
+     * broadcast with {@link #EXTRA_STATE} set to either {@link #STATE_AUDIO_CONNECTED} if the audio
+     * connection is established or {@link #STATE_AUDIO_DISCONNECTED} if there was a failure in
+     * establishing the audio connection.
      *
      * @return whether the connection was successfully initiated or an error code on failure
      * @hide
@@ -1141,6 +1140,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         if (service == null) {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
+            return BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND;
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
@@ -1154,6 +1154,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
                 return BluetoothStatusCodes.ERROR_TIMEOUT;
             }
         }
+
+        Log.e(TAG, "connectAudio: Bluetooth disabled, but profile service still bound");
         return defaultValue;
     }
 
@@ -1193,6 +1195,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         if (service == null) {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
+            return BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND;
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
@@ -1206,6 +1209,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
                 return BluetoothStatusCodes.ERROR_TIMEOUT;
             }
         }
+
+        Log.e(TAG, "disconnectAudio: Bluetooth disabled, but profile service still bound");
         return defaultValue;
     }
 
