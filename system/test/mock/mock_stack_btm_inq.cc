@@ -109,10 +109,6 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
   mock_function_count_map[__func__]++;
   return BTM_SUCCESS;
 }
-tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff) {
-  mock_function_count_map[__func__]++;
-  return BTM_SUCCESS;
-}
 tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint8_t origin,
                                   uint64_t timeout_ms, tBTM_CMPL_CB* p_cb) {
   mock_function_count_map[__func__]++;
@@ -148,9 +144,6 @@ void BTM_AddEirService(uint32_t* p_eir_uuid, uint16_t uuid16) {
 void BTM_CancelInquiry(void) { mock_function_count_map[__func__]++; }
 void BTM_EnableInterlacedInquiryScan() { mock_function_count_map[__func__]++; }
 void BTM_EnableInterlacedPageScan() { mock_function_count_map[__func__]++; }
-void BTM_RemoveEirService(uint32_t* p_eir_uuid, uint16_t uuid16) {
-  mock_function_count_map[__func__]++;
-}
 void btm_clr_inq_db(const RawAddress* p_bda) {
   mock_function_count_map[__func__]++;
 }
@@ -166,10 +159,10 @@ void btm_inq_rmt_name_failed_cancelled(void) {
   mock_function_count_map[__func__]++;
 }
 void btm_inq_stop_on_ssp(void) { mock_function_count_map[__func__]++; }
-void btm_process_cancel_complete(uint8_t status, uint8_t mode) {
+void btm_process_cancel_complete(tHCI_STATUS status, uint8_t mode) {
   mock_function_count_map[__func__]++;
 }
-void btm_process_inq_complete(uint8_t status, uint8_t mode) {
+void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode) {
   mock_function_count_map[__func__]++;
 }
 void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
@@ -177,7 +170,7 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
   mock_function_count_map[__func__]++;
 }
 void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
-                             uint16_t evt_len, uint8_t hci_status) {
+                             uint16_t evt_len, tHCI_STATUS hci_status) {
   mock_function_count_map[__func__]++;
 }
 void btm_set_eir_uuid(const uint8_t* p_eir, tBTM_INQ_RESULTS* p_results) {

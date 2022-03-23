@@ -106,7 +106,11 @@ void start_audio_ticks() {
   wakelock_acquire();
   audio_timer.SchedulePeriodic(
       worker_thread.GetWeakPtr(), FROM_HERE, base::Bind(&send_audio_data),
+#if BASE_VER < 931007
       base::TimeDelta::FromMicroseconds(source_codec_config.data_interval_us));
+#else
+      base::Microseconds(source_codec_config.data_interval_us));
+#endif
 }
 
 void stop_audio_ticks() {
@@ -397,6 +401,17 @@ void LeAudioClientAudioSource::ConfirmStreamingRequest() {
   start_audio_ticks();
 }
 
+void LeAudioClientAudioSource::SuspendedForReconfiguration() {
+  LOG(INFO) << __func__;
+  if ((sinkClientInterface == nullptr) ||
+      (le_audio_sink_hal_state != HAL_STARTED)) {
+    LOG(ERROR) << "LE audio device HAL was not started!";
+    return;
+  }
+
+  sinkClientInterface->SuspendedForReconfiguration();
+}
+
 void LeAudioClientAudioSource::CancelStreamingRequest() {
   LOG(INFO) << __func__;
   if ((sinkClientInterface == nullptr) ||
@@ -623,4 +638,15 @@ void LeAudioClientAudioSink::UpdateAudioConfigToHal(
   }
 
   sourceClientInterface->UpdateAudioConfigToHal(config);
+}
+
+void LeAudioClientAudioSink::SuspendedForReconfiguration() {
+  LOG(INFO) << __func__;
+  if ((sourceClientInterface == nullptr) ||
+      (le_audio_source_hal_state != HAL_STARTED)) {
+    LOG(ERROR) << "LE audio device HAL was not started!";
+    return;
+  }
+
+  sourceClientInterface->SuspendedForReconfiguration();
 }

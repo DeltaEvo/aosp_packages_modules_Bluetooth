@@ -21,6 +21,7 @@ import static android.bluetooth.BluetoothUtils.getSyncTimeout;
 
 import android.Manifest;
 import android.annotation.CallbackExecutor;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -37,6 +38,8 @@ import android.util.Log;
 
 import com.android.modules.utils.SynchronousResultReceiver;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -49,7 +52,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * This class provides the public APIs to control the Bluetooth CSIP set coordinator.
  *
- * <p>BluetoothCsipSetCoordinator is a proxy object for controlling the Bluetooth VC
+ * <p>BluetoothCsipSetCoordinator is a proxy object for controlling the Bluetooth CSIP set
  * Service via IPC. Use {@link BluetoothAdapter#getProfileProxy} to get
  * the BluetoothCsipSetCoordinator proxy object.
  *
@@ -66,10 +69,29 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      */
     @SystemApi
     public interface ClientLockCallback {
+        /** @hide */
+        @IntDef(value = {
+                BluetoothStatusCodes.SUCCESS,
+                BluetoothStatusCodes.ERROR_DEVICE_NOT_CONNECTED,
+                BluetoothStatusCodes.ERROR_CSIP_INVALID_GROUP_ID,
+                BluetoothStatusCodes.ERROR_CSIP_GROUP_LOCKED_BY_OTHER,
+                BluetoothStatusCodes.ERROR_CSIP_LOCKED_GROUP_MEMBER_LOST,
+                BluetoothStatusCodes.ERROR_UNKNOWN,
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        @interface Status {}
+
         /**
+         * Callback is invoken as a result on {@link #groupLock()}.
+         *
+         * @param groupId group identifier
+         * @param opStatus status of lock operation
+         * @param isLocked inidcates if group is locked
+         *
          * @hide
          */
-        @SystemApi void onGroupLockSet(int groupId, int opStatus, boolean isLocked);
+        @SystemApi
+        void onGroupLockSet(int groupId, @Status int opStatus, boolean isLocked);
     }
 
     private static class BluetoothCsipSetCoordinatorLockCallbackDelegate
@@ -132,8 +154,12 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * Used as an extra field in {@link #ACTION_CSIS_DEVICE_AVAILABLE} intent.
      * Contains the group id.
      *
+     * <p>Possible Values:
+     * {@link GROUP_ID_INVALID} Invalid group identifier
+     * 0x01 - 0xEF Valid group identifier
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_CSIS_GROUP_ID = "android.bluetooth.extra.CSIS_GROUP_ID";
 
     /**
@@ -175,56 +201,8 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      *
      * @hide
      */
+    @SystemApi
     public static final int GROUP_ID_INVALID = IBluetoothCsipSetCoordinator.CSIS_GROUP_ID_INVALID;
-
-    /**
-     * Indicating that group was locked with success.
-     *
-     * @hide
-     */
-    public static final int GROUP_LOCK_SUCCESS = 0;
-
-    /**
-     * Indicating that group locked failed due to invalid group ID.
-     *
-     * @hide
-     */
-    public static final int GROUP_LOCK_FAILED_INVALID_GROUP = 1;
-
-    /**
-     * Indicating that group locked failed due to empty group.
-     *
-     * @hide
-     */
-    public static final int GROUP_LOCK_FAILED_GROUP_EMPTY = 2;
-
-    /**
-     * Indicating that group locked failed due to group members being disconnected.
-     *
-     * @hide
-     */
-    public static final int GROUP_LOCK_FAILED_GROUP_NOT_CONNECTED = 3;
-
-    /**
-     * Indicating that group locked failed due to group member being already locked.
-     *
-     * @hide
-     */
-    public static final int GROUP_LOCK_FAILED_LOCKED_BY_OTHER = 4;
-
-    /**
-     * Indicating that group locked failed due to other reason.
-     *
-     * @hide
-     */
-    public static final int GROUP_LOCK_FAILED_OTHER_REASON = 5;
-
-    /**
-     * Indicating that group member in locked state was lost.
-     *
-     * @hide
-     */
-    public static final int LOCKED_GROUP_MEMBER_LOST = 6;
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
@@ -274,32 +252,37 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * Lock the set.
      * @param groupId group ID to lock,
      * @param executor callback executor,
-     * @param cb callback to report lock and unlock events - stays valid until the app unlocks
+     * @param callback callback to report lock and unlock events - stays valid until the app unlocks
      *           using the returned lock identifier or the lock timeouts on the remote side,
      *           as per CSIS specification,
      * @return unique lock identifier used for unlocking or null if lock has failed.
+     * @throws {@link IllegalArgumentException} when executor or callback is null
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
     public
-    @Nullable UUID groupLock(int groupId, @Nullable @CallbackExecutor Executor executor,
-            @Nullable ClientLockCallback cb) {
-        if (VDBG) log("groupLockSet()");
+    @Nullable UUID lockGroup(int groupId, @NonNull @CallbackExecutor Executor executor,
+            @NonNull ClientLockCallback callback) {
+        if (VDBG) log("lockGroup()");
         final IBluetoothCsipSetCoordinator service = getService();
         final UUID defaultValue = null;
         if (service == null) {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
-            IBluetoothCsipSetCoordinatorLockCallback delegate = null;
-            if ((executor != null) && (cb != null)) {
-                delegate = new BluetoothCsipSetCoordinatorLockCallbackDelegate(executor, cb);
+            if (executor == null) {
+                throw new IllegalArgumentException("executor cannot be null");
             }
+            if (callback == null) {
+                throw new IllegalArgumentException("callback cannot be null");
+            }
+            IBluetoothCsipSetCoordinatorLockCallback delegate =
+                    new BluetoothCsipSetCoordinatorLockCallbackDelegate(executor, callback);
             try {
                 final SynchronousResultReceiver<ParcelUuid> recv = new SynchronousResultReceiver();
-                service.groupLock(groupId, delegate, mAttributionSource, recv);
+                service.lockGroup(groupId, delegate, mAttributionSource, recv);
                 final ParcelUuid ret = recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                 return ret == null ? defaultValue : ret.getUuid();
             } catch (RemoteException | TimeoutException e) {
@@ -313,15 +296,16 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * Unlock the set.
      * @param lockUuid unique lock identifier
      * @return true if unlocked, false on error
+     * @throws {@link IllegalArgumentException} when lockUuid is null
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public boolean groupUnlock(@NonNull UUID lockUuid) {
-        if (VDBG) log("groupLockSet()");
+    public boolean unlockGroup(@NonNull UUID lockUuid) {
+        if (VDBG) log("unlockGroup()");
         if (lockUuid == null) {
-            return false;
+            throw new IllegalArgumentException("lockUuid cannot be null");
         }
         final IBluetoothCsipSetCoordinator service = getService();
         final boolean defaultValue = false;
@@ -331,7 +315,7 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver recv = new SynchronousResultReceiver();
-                service.groupUnlock(new ParcelUuid(lockUuid), mAttributionSource, recv);
+                service.unlockGroup(new ParcelUuid(lockUuid), mAttributionSource, recv);
                 recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                 return true;
             } catch (RemoteException | TimeoutException e) {
@@ -350,7 +334,8 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public @NonNull Map getGroupUuidMapByDevice(@Nullable BluetoothDevice device) {
+    public @NonNull Map<Integer, ParcelUuid> getGroupUuidMapByDevice(
+            @Nullable BluetoothDevice device) {
         if (VDBG) log("getGroupUuidMapByDevice()");
         final IBluetoothCsipSetCoordinator service = getService();
         final Map defaultValue = new HashMap<>();

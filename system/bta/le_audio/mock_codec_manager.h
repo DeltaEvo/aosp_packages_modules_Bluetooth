@@ -25,6 +25,9 @@ class MockCodecManager {
   static MockCodecManager* GetInstance();
 
   MockCodecManager() = default;
+  MockCodecManager(const MockCodecManager&) = delete;
+  MockCodecManager& operator=(const MockCodecManager&) = delete;
+
   virtual ~MockCodecManager() = default;
 
   MOCK_METHOD((le_audio::types::CodecLocation), GetCodecLocation, (), (const));
@@ -34,10 +37,10 @@ class MockCodecManager {
   MOCK_METHOD((void), UpdateActiveSinkAudioConfig,
               (const le_audio::stream_configuration& stream_conf,
                uint16_t delay));
+  MOCK_METHOD((le_audio::set_configurations::AudioSetConfigurations*),
+              GetOffloadCodecConfig,
+              (le_audio::types::LeAudioContextType ctx_type), (const));
 
   MOCK_METHOD((void), Start, ());
   MOCK_METHOD((void), Stop, ());
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockCodecManager);
 };

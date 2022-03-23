@@ -32,6 +32,7 @@
 #include <hardware/bt_av.h>
 #include <hardware/bt_csis.h>
 #include <hardware/bt_gatt.h>
+#include <hardware/bt_has.h>
 #include <hardware/bt_hd.h>
 #include <hardware/bt_hearing_aid.h>
 #include <hardware/bt_hf_client.h>
@@ -47,11 +48,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "audio_hal_interface/a2dp_encoding.h"
 #include "bt_utils.h"
 #include "bta/include/bta_csis_api.h"
+#include "bta/include/bta_has_api.h"
 #include "bta/include/bta_hearing_aid_api.h"
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_le_audio_api.h"
+#include "bta/include/bta_le_audio_broadcaster_api.h"
+#include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -60,7 +65,6 @@
 #include "btif_av.h"
 #include "btif_bqr.h"
 #include "btif_config.h"
-#include "btif_debug_btsnoop.h"
 #include "btif_debug_conn.h"
 #include "btif_hf.h"
 #include "btif_keystore.h"
@@ -88,8 +92,12 @@
 #include "types/raw_address.h"
 
 using bluetooth::csis::CsisClientInterface;
+using bluetooth::has::HasClientInterface;
 using bluetooth::hearing_aid::HearingAidInterface;
+#ifndef TARGET_FLOSS
+using bluetooth::le_audio::LeAudioBroadcasterInterface;
 using bluetooth::le_audio::LeAudioClientInterface;
+#endif
 using bluetooth::vc::VolumeControlInterface;
 
 /*******************************************************************************
@@ -132,8 +140,14 @@ extern const btrc_ctrl_interface_t* btif_rc_ctrl_get_interface();
 extern const btsdp_interface_t* btif_sdp_get_interface();
 /*Hearing Aid client*/
 extern HearingAidInterface* btif_hearing_aid_get_interface();
+#ifndef TARGET_FLOSS
+/* Hearing Access client */
+extern HasClientInterface* btif_has_client_get_interface();
 /* LeAudio testi client */
 extern LeAudioClientInterface* btif_le_audio_get_interface();
+/* LeAudio Broadcaster */
+extern LeAudioBroadcasterInterface* btif_le_audio_broadcaster_get_interface();
+#endif
 /* Coordinated Set Service Client */
 extern CsisClientInterface* btif_csis_client_get_interface();
 /* Volume Control client */
@@ -249,7 +263,7 @@ static int set_adapter_property(const bt_property_t* property) {
   switch (property->type) {
     case BT_PROPERTY_BDNAME:
     case BT_PROPERTY_ADAPTER_SCAN_MODE:
-    case BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT:
+    case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
     case BT_PROPERTY_CLASS_OF_DEVICE:
     case BT_PROPERTY_LOCAL_IO_CAPS:
     case BT_PROPERTY_LOCAL_IO_CAPS_BLE:
@@ -399,6 +413,14 @@ static int read_energy_info() {
   return BT_STATUS_SUCCESS;
 }
 
+static int clear_event_filter() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_event_filter));
+  return BT_STATUS_SUCCESS;
+}
+
 static void dump(int fd, const char** arguments) {
   btif_debug_conn_dump(fd);
   btif_debug_bond_event_dump(fd);
@@ -413,8 +435,15 @@ static void dump(int fd, const char** arguments) {
   osi_allocator_debug_dump(fd);
   alarm_debug_dump(fd);
   bluetooth::csis::CsisClient::DebugDump(fd);
+#ifndef TARGET_FLOSS
+  le_audio::has::HasClient::DebugDump(fd);
+#endif
   HearingAid::DebugDump(fd);
+#ifndef TARGET_FLOSS
   LeAudioClient::DebugDump(fd);
+  LeAudioBroadcaster::DebugDump(fd);
+  VolumeControl::DebugDump(fd);
+#endif
   connection_manager::dump(fd);
   bluetooth::bqr::DebugDump(fd);
   bluetooth::shim::Dump(fd, arguments);
@@ -470,6 +499,11 @@ static const void* get_profile_interface(const char* profile_id) {
   if (is_profile(profile_id, BT_PROFILE_HEARING_AID_ID))
     return btif_hearing_aid_get_interface();
 
+#ifndef TARGET_FLOSS
+  if (is_profile(profile_id, BT_PROFILE_HAP_CLIENT_ID))
+    return btif_has_client_get_interface();
+#endif
+
   if (is_profile(profile_id, BT_KEYSTORE_ID))
     return bluetooth::bluetooth_keystore::getBluetoothKeystoreInterface();
 
@@ -477,8 +511,13 @@ static const void* get_profile_interface(const char* profile_id) {
     return bluetooth::activity_attribution::get_activity_attribution_instance();
   }
 
+#ifndef TARGET_FLOSS
   if (is_profile(profile_id, BT_PROFILE_LE_AUDIO_ID))
     return btif_le_audio_get_interface();
+
+  if (is_profile(profile_id, BT_PROFILE_LE_AUDIO_BROADCASTER_ID))
+    return btif_le_audio_broadcaster_get_interface();
+#endif
 
   if (is_profile(profile_id, BT_PROFILE_VC_ID))
     return btif_volume_control_get_interface();
@@ -591,7 +630,7 @@ static int set_dynamic_audio_buffer_size(int codec, int size) {
 
 static bool allow_low_latency_audio(bool allowed, const RawAddress& address) {
   LOG_INFO("%s %s", __func__, allowed ? "true" : "false");
-  // Call HAL here
+  bluetooth::audio::a2dp::set_audio_low_latency_mode_allowed(allowed);
   return true;
 }
 
@@ -634,7 +673,8 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     get_metric_id,
     set_dynamic_audio_buffer_size,
     generate_local_oob_data,
-    allow_low_latency_audio};
+    allow_low_latency_audio,
+    clear_event_filter};
 
 // callback reporting helpers
 
@@ -766,7 +806,7 @@ void invoke_oob_data_request_cb(tBT_TRANSPORT t, bool valid, Octet16 c,
                                 uint8_t address_type) {
   LOG_INFO("%s", __func__);
   bt_oob_data_t oob_data = {};
-  char* local_name;
+  const char* local_name;
   BTM_ReadLocalDeviceName(&local_name);
   for (int i = 0; i < BTM_MAX_LOC_BD_NAME_LEN; i++) {
     oob_data.device_name[i] = local_name[i];
@@ -896,14 +936,22 @@ void invoke_link_quality_report_cb(
           packets_not_receive_count, negative_acknowledgement_count));
 }
 
-void invoke_switch_buffer_size_cb(RawAddress remote_addr,
-                                  bool is_low_latency_buffer_size) {
+void invoke_switch_buffer_size_cb(bool is_low_latency_buffer_size) {
   do_in_jni_thread(
       FROM_HERE,
       base::BindOnce(
-          [](RawAddress remote_addr, bool is_low_latency_buffer_size) {
-            HAL_CBACK(bt_hal_cbacks, switch_buffer_size_cb, &remote_addr,
+          [](bool is_low_latency_buffer_size) {
+            HAL_CBACK(bt_hal_cbacks, switch_buffer_size_cb,
                       is_low_latency_buffer_size);
           },
-          remote_addr, is_low_latency_buffer_size));
+          is_low_latency_buffer_size));
+}
+
+void invoke_switch_codec_cb(bool is_low_latency_buffer_size) {
+  do_in_jni_thread(FROM_HERE, base::BindOnce(
+                                  [](bool is_low_latency_buffer_size) {
+                                    HAL_CBACK(bt_hal_cbacks, switch_codec_cb,
+                                              is_low_latency_buffer_size);
+                                  },
+                                  is_low_latency_buffer_size));
 }

@@ -49,12 +49,14 @@
 #define BT_PROFILE_AV_RC_ID "avrcp"
 #define BT_PROFILE_AV_RC_CTRL_ID "avrcp_ctrl"
 #define BT_PROFILE_HEARING_AID_ID "hearing_aid"
+#define BT_PROFILE_HAP_CLIENT_ID "has_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_KEYSTORE_ID "bluetooth_keystore"
 #define BT_ACTIVITY_ATTRIBUTION_ID "activity_attribution"
 #define BT_PROFILE_VC_ID "volume_control"
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
+#define BT_PROFILE_LE_AUDIO_BROADCASTER_ID "le_audio_broadcaster"
 
 /** Bluetooth Device Name */
 typedef struct { uint8_t name[249]; } __attribute__((packed)) bt_bdname_t;
@@ -280,11 +282,11 @@ typedef enum {
    */
   BT_PROPERTY_ADAPTER_BONDED_DEVICES,
   /**
-   * Description - Bluetooth Adapter Discovery timeout (in seconds)
+   * Description - Bluetooth Adapter Discoverable timeout (in seconds)
    * Access mode - GET and SET
    * Data type   - uint32_t
    */
-  BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT,
+  BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT,
 
   /* Properties unique to remote device */
   /**
@@ -470,8 +472,10 @@ typedef void (*link_quality_report_callback)(
     int negative_acknowledgement_count);
 
 /** Switch the buffer size callback */
-typedef void (*switch_buffer_size_callback)(RawAddress* remote_addr,
-                                            bool is_low_latency_buffer_size);
+typedef void (*switch_buffer_size_callback)(bool is_low_latency_buffer_size);
+
+/** Switch the codec callback */
+typedef void (*switch_codec_callback)(bool is_low_latency_buffer_size);
 
 typedef enum { ASSOCIATE_JVM, DISASSOCIATE_JVM } bt_cb_thread_evt;
 
@@ -531,6 +535,7 @@ typedef struct {
   link_quality_report_callback link_quality_report_cb;
   generate_local_oob_data_callback generate_local_oob_data_cb;
   switch_buffer_size_callback switch_buffer_size_cb;
+  switch_codec_callback switch_codec_cb;
 } bt_callbacks_t;
 
 typedef void (*alarm_cb)(void* data);
@@ -770,6 +775,11 @@ typedef struct {
    * @return true if audio low latency is successfully allowed or disallowed
    */
   bool (*allow_low_latency_audio)(bool allowed, const RawAddress& address);
+
+  /**
+   * Set the event filter for the controller
+   */
+  int (*clear_event_filter)();
 } bt_interface_t;
 
 #define BLUETOOTH_INTERFACE_STRING "bluetoothInterface"

@@ -1530,7 +1530,12 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_SUCCESS, true);
     else if (p_dev_rec->sec_flags & ~BTM_SEC_LE_LINK_KEY_KNOWN) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
-    } else if (p_dev_rec->role_central)
+    }
+    /* Add logic handle for KEY_MISSING */
+    else if (p_dev_rec->role_central && (p_dev_rec->sec_status == HCI_ERR_KEY_MISSING)) {
+      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_KEY_MISSING, true);
+    }
+    else if (p_dev_rec->role_central)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
   }
   /* to notify GATT to send data if any request is pending */
@@ -1738,10 +1743,15 @@ void btm_ble_connected_from_address_with_type(
  *****************************************************************************/
 tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
                                const tSMP_EVT_DATA* p_data) {
+  BTM_TRACE_DEBUG("btm_proc_smp_cback event = %d", event);
+
+  if (event == SMP_SC_LOC_OOB_DATA_UP_EVT) {
+    btm_sec_cr_loc_oob_data_cback_event(RawAddress{}, p_data->loc_oob_data);
+    return BTM_SUCCESS;
+  }
+
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tBTM_STATUS res = BTM_SUCCESS;
-
-  BTM_TRACE_DEBUG("btm_proc_smp_cback event = %d", event);
 
   if (p_dev_rec != NULL) {
     switch (event) {
@@ -1855,13 +1865,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
         break;
     }
   } else {
-    // If we are being paired with via OOB we haven't created a dev rec for
-    // the device yet
-    if (event == SMP_SC_LOC_OOB_DATA_UP_EVT) {
-      btm_sec_cr_loc_oob_data_cback_event(bd_addr, p_data->loc_oob_data);
-    } else {
-      LOG_WARN("Unexpected event '%d' without p_dev_rec", event);
-    }
+    LOG_WARN("Unexpected event '%d' for unknown device.", event);
   }
 
   return BTM_SUCCESS;
@@ -2066,32 +2070,6 @@ void btm_ble_reset_id(void) {
         },
         tmp));
   }));
-}
-
-/* This function set a random address to local controller. It also temporarily
- * disable scans and adv before sending the command to the controller. */
-void btm_ble_set_random_address(const RawAddress& random_bda) {
-  tBTM_LE_RANDOM_CB* p_cb = &btm_cb.ble_ctr_cb.addr_mgnt_cb;
-  tBTM_BLE_CB* p_ble_cb = &btm_cb.ble_ctr_cb;
-  const bool adv_mode = btm_cb.ble_ctr_cb.inq_var.adv_mode;
-
-  if (adv_mode == BTM_BLE_ADV_ENABLE)
-    btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_DISABLE);
-  if (p_ble_cb->is_ble_scan_active()) {
-    btm_ble_stop_scan();
-  }
-  btm_ble_suspend_bg_conn();
-
-  p_cb->private_addr = random_bda;
-  btsnd_hcic_ble_set_random_addr(p_cb->private_addr);
-  LOG_DEBUG("Updating local random address:%s", PRIVATE_ADDRESS(random_bda));
-
-  if (adv_mode == BTM_BLE_ADV_ENABLE)
-    btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_ENABLE);
-  if (p_ble_cb->is_ble_scan_active()) {
-    btm_ble_start_scan();
-  }
-  btm_ble_resume_bg_conn();
 }
 
 /*******************************************************************************

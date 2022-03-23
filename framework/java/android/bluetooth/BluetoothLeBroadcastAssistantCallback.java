@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Android Open Source Project
+ * Copyright 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,141 +16,256 @@
 
 package android.bluetooth;
 
-import android.annotation.IntDef;
 import android.annotation.NonNull;
-import android.bluetooth.le.ScanResult;
+import android.os.Binder;
+import android.os.RemoteException;
+import android.util.Log;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Executor;
 
 /**
- * This class provides a set of callbacks that are invoked when scanning for Broadcast Sources is
- * offloaded to a Broadcast Assistant.
- *
- * <p>An LE Audio Broadcast Assistant can help a Broadcast Sink to scan for available Broadcast
- * Sources. The Broadcast Sink achieves this by offloading the scan to a Broadcast Assistant. This
- * is facilitated by the Broadcast Audio Scan Service (BASS). A BASS server is a GATT server that is
- * part of the Scan Delegator on a Broadcast Sink. A BASS client instead runs on the Broadcast
- * Assistant.
- *
- * <p>Once a GATT connection is established between the BASS client and the BASS server, the
- * Broadcast Sink can offload the scans to the Broadcast Assistant. Upon finding new Broadcast
- * Sources, the Broadcast Assistant then notifies the Broadcast Sink about these over the
- * established GATT connection. The Scan Delegator on the Broadcast Sink can also notify the
- * Assistant about changes such as addition and removal of Broadcast Sources.
- *
  * @hide
  */
-public abstract class BluetoothLeBroadcastAssistantCallback {
+public class BluetoothLeBroadcastAssistantCallback
+            extends IBluetoothLeBroadcastAssistantCallback.Stub {
+    private static final String TAG = BluetoothLeBroadcastAssistantCallback.class.getSimpleName();
+    private boolean mIsRegistered = false;
+    private final Map<BluetoothLeBroadcastAssistant.Callback,
+            Executor> mCallbackMap = new HashMap<>();
+    IBluetoothLeBroadcastAssistant mAdapter;
+
+    public BluetoothLeBroadcastAssistantCallback(IBluetoothLeBroadcastAssistant adapter) {
+        mAdapter = adapter;
+    }
 
     /**
-     * Broadcast Audio Scan Service (BASS) codes returned by a BASS Server
-     *
      * @hide
+     * @param executor an {@link Executor} to execute given callback
+     * @param callback user implementation of the {@link BluetoothLeBroadcastAssistant#Callback}
      */
-    @IntDef(
-            prefix = "BASS_STATUS_",
-            value = {
-                BASS_STATUS_SUCCESS,
-                BASS_STATUS_FAILURE,
-                BASS_STATUS_INVALID_GATT_HANDLE,
-                BASS_STATUS_TXN_TIMEOUT,
-                BASS_STATUS_INVALID_SOURCE_ID,
-                BASS_STATUS_COLOCATED_SRC_UNAVAILABLE,
-                BASS_STATUS_INVALID_SOURCE_SELECTED,
-                BASS_STATUS_SOURCE_UNAVAILABLE,
-                BASS_STATUS_DUPLICATE_ADDITION,
-            })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface BassStatus {}
+    public void register(@NonNull Executor executor,
+                         @NonNull BluetoothLeBroadcastAssistant.Callback callback) {
+        synchronized (this) {
+            if (mCallbackMap.containsKey(callback)) {
+                return;
+            }
+            mCallbackMap.put(callback, executor);
 
-    public static final int BASS_STATUS_SUCCESS = 0x00;
-    public static final int BASS_STATUS_FAILURE = 0x01;
-    public static final int BASS_STATUS_INVALID_GATT_HANDLE = 0x02;
-    public static final int BASS_STATUS_TXN_TIMEOUT = 0x03;
-
-    public static final int BASS_STATUS_INVALID_SOURCE_ID = 0x04;
-    public static final int BASS_STATUS_COLOCATED_SRC_UNAVAILABLE = 0x05;
-    public static final int BASS_STATUS_INVALID_SOURCE_SELECTED = 0x06;
-    public static final int BASS_STATUS_SOURCE_UNAVAILABLE = 0x07;
-    public static final int BASS_STATUS_DUPLICATE_ADDITION = 0x08;
-    public static final int BASS_STATUS_NO_EMPTY_SLOT = 0x09;
-    public static final int BASS_STATUS_INVALID_GROUP_OP = 0x10;
-
-    /** @hide */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef(value = {
-            BluetoothProfile.STATE_CONNECTED,
-            BluetoothProfile.STATE_CONNECTING,
-            BluetoothProfile.STATE_DISCONNECTED,
-            BluetoothProfile.STATE_DISCONNECTING
-    })
-    public @interface ConnectionStateValues {}
+            if (!mIsRegistered) {
+                try {
+                    mAdapter.registerCallback(this);
+                    mIsRegistered = true;
+                } catch (RemoteException e) {
+                    Log.w(TAG, "Failed to register broaddcast assistant callback");
+                    Log.e(TAG, Log.getStackTraceString(new Throwable()));
+                }
+            }
+        }
+    }
 
     /**
-     * Callback invoked when the connection state for an LE Audio Broadcast Sink changes
+     * @hide
+     * @param callback user implementation of the {@link BluetoothLeBroadcastAssistant#Callback}
      */
-    public void onConnectionStateChange(@ConnectionStateValues int prevState,
-            @ConnectionStateValues int newState) {}
+    public void unregister(@NonNull BluetoothLeBroadcastAssistant.Callback callback) {
+        synchronized (this) {
+            if (!mCallbackMap.containsKey(callback)) {
+                return;
+            }
+            mCallbackMap.remove(callback);
+            if (mCallbackMap.isEmpty() && mIsRegistered) {
+                try {
+                    mAdapter.unregisterCallback(this);
+                    mIsRegistered = false;
+                } catch (RemoteException e) {
+                    Log.w(TAG, "Failed to unregister broaddcast assistant with service");
+                    Log.e(TAG, Log.getStackTraceString(new Throwable()));
+                }
+            }
+        }
+    }
 
-    /**
-     * Callback invoked when a new LE Audio Broadcast Source is found.
-     *
-     * @param result {@link ScanResult} scan result representing a Broadcast Source
-     */
-    public void onSourceFound(@NonNull ScanResult result) {}
+    @Override
+    public void onSearchStarted(int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSearchStarted(reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
 
-    /**
-     * Callback invoked when the Broadcast Assistant synchronizes with Periodic Advertisements (PAs)
-     * of an LE Audio Broadcast Source.
-     *
-     * @param source the selected Broadcast Source
-     */
-    public void onSourceSelected(
-            @NonNull BluetoothLeBroadcastSourceInfo source, @BassStatus int status) {}
+    @Override
+    public void onSearchStartFailed(int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSearchStartFailed(reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
 
-    /**
-     * Callback invoked when the Broadcast Assistant loses synchronization with an LE Audio
-     * Broadcast Source.
-     *
-     * @param source the Broadcast Source with which synchronization was lost
-     */
-    public void onSourceLost(
-            @NonNull BluetoothLeBroadcastSourceInfo source, @BassStatus int status) {}
+    @Override
+    public void onSearchStopped(int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSearchStopped(reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
 
-    /**
-     * Callback invoked when a new LE Audio Broadcast Source has been successfully added to the Scan
-     * Delegator (within a Broadcast Sink, for example).
-     *
-     * @param sink Scan Delegator device on which a new Broadcast Source has been added
-     * @param source the added Broadcast Source
-     */
-    public void onSourceAdded(
-            @NonNull BluetoothDevice sink,
-            @NonNull BluetoothLeBroadcastSourceInfo source,
-            @BassStatus int status) {}
+    @Override
+    public void onSearchStopFailed(int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSearchStopFailed(reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
 
-    /**
-     * Callback invoked when an existing LE Audio Broadcast Source within a remote Scan Delegator
-     * has been updated.
-     *
-     * @param sink Scan Delegator device on which a Broadcast Source has been updated
-     * @param source the updated Broadcast Source
-     */
-    public void onSourceUpdated(
-            @NonNull BluetoothDevice sink,
-            @NonNull BluetoothLeBroadcastSourceInfo source,
-            @BassStatus int status) {}
+    @Override
+    public void onSourceFound(BluetoothLeBroadcastMetadata source) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSourceFound(source));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
 
-    /**
-     * Callback invoked when an LE Audio Broadcast Source has been successfully removed from the
-     * Scan Delegator (within a Broadcast Sink, for example).
-     *
-     * @param sink Scan Delegator device from which a Broadcast Source has been removed
-     * @param source the removed Broadcast Source
-     */
-    public void onSourceRemoved(
-            @NonNull BluetoothDevice sink,
-            @NonNull BluetoothLeBroadcastSourceInfo source,
-            @BassStatus int status) {}
+    @Override
+    public void onSourceAdded(BluetoothDevice sink, int sourceId, int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSourceAdded(sink, sourceId, reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onSourceAddFailed(BluetoothDevice sink, BluetoothLeBroadcastMetadata source,
+                           int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSourceAddFailed(sink, source, reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onSourceModified(BluetoothDevice sink, int sourceId, int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSourceModified(sink, sourceId, reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onSourceModifyFailed(BluetoothDevice sink, int sourceId, int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSourceModifyFailed(sink, sourceId, reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onSourceRemoved(BluetoothDevice sink, int sourceId, int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSourceRemoved(sink, sourceId, reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onSourceRemoveFailed(BluetoothDevice sink, int sourceId, int reason) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onSourceRemoveFailed(sink, sourceId, reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onReceiveStateChanged(BluetoothDevice sink, int sourceId,
+                               BluetoothLeBroadcastReceiveState state) {
+        synchronized (this) {
+            for (BluetoothLeBroadcastAssistant.Callback cb : mCallbackMap.keySet()) {
+                Executor executor = mCallbackMap.get(cb);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> cb.onReceiveStateChanged(sink, sourceId, state));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        }
+    }
 }

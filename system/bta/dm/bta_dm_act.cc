@@ -32,6 +32,7 @@
 #include "bta/dm/bta_dm_int.h"
 #include "bta/gatt/bta_gattc_int.h"
 #include "bta/include/bta_dm_ci.h"
+#include "btif/include/btif_config.h"
 #include "btif/include/btif_dm.h"
 #include "btif/include/btif_storage.h"
 #include "btif/include/stack_manager.h"
@@ -69,6 +70,7 @@ using bluetooth::Uuid;
 void BTIF_dm_disable();
 void BTIF_dm_enable();
 void btm_ble_adv_init(void);
+void btm_ble_scanner_init(void);
 
 static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
                                   uint16_t eir_len);
@@ -262,8 +264,6 @@ void bta_dm_enable(tBTA_DM_SEC_CBACK* p_sec_cback) {
   previous one,
   it could be an error recovery mechanism */
   if (p_sec_cback != NULL) bta_dm_cb.p_sec_cback = p_sec_cback;
-  /* notify BTA DM is now active */
-  bta_dm_cb.is_bta_dm_active = true;
 
   btm_local_io_caps = btif_storage_get_local_io_caps();
 }
@@ -326,9 +326,6 @@ void BTA_dm_on_hw_off() {
   osi_free(bta_dm_search_cb.p_pending_search);
   fixed_queue_free(bta_dm_search_cb.pending_discovery_queue, osi_free);
   memset(&bta_dm_search_cb, 0, sizeof(bta_dm_search_cb));
-
-  /* notify BTA DM is now unactive */
-  bta_dm_cb.is_bta_dm_active = false;
 }
 
 void BTA_dm_on_hw_on() {
@@ -343,7 +340,6 @@ void BTA_dm_on_hw_on() {
   bta_dm_init_cb();
   /* and retrieve the callback */
   bta_dm_cb.p_sec_cback = temp_cback;
-  bta_dm_cb.is_bta_dm_active = true;
 
   /* hw is ready, go on with BTA DM initialization */
   alarm_free(bta_dm_search_cb.search_timer);
@@ -403,6 +399,8 @@ void BTA_dm_on_hw_on() {
   if (bta_dm_cb.p_sec_cback)
     bta_dm_cb.p_sec_cback(BTA_DM_LE_FEATURES_READ, NULL);
 #endif
+
+  btm_ble_scanner_init();
 
   /* Earlier, we used to invoke BTM_ReadLocalAddr which was just copying the
      bd_addr
@@ -491,21 +489,19 @@ static void bta_dm_wait_for_acl_to_drain_cback(void* data) {
   const WaitForAllAclConnectionsToDrain* pass =
       WaitForAllAclConnectionsToDrain::FromAlarmCallbackData(data);
 
-  if (BTM_GetNumAclLinks() &&
+  if (BTM_GetNumAclLinks() && force_disconnect_all_acl_connections() &&
       WaitForAllAclConnectionsToDrain::IsFirstPass(pass)) {
     /* DISABLE_EVT still need to be sent out to avoid java layer disable timeout
      */
-    if (force_disconnect_all_acl_connections()) {
-      LOG_DEBUG(
-          "Set timer for second pass to wait for all ACL connections to "
-          "close:%lu ms ",
-          second_pass.TimeToWaitInMs());
-      alarm_set_on_mloop(
-          bta_dm_cb.disable_timer, second_pass.time_to_wait_in_ms,
-          bta_dm_wait_for_acl_to_drain_cback, second_pass.AlarmCallbackData());
-    }
+    LOG_DEBUG(
+        "Set timer for second pass to wait for all ACL connections to "
+        "close:%lu ms ",
+        second_pass.TimeToWaitInMs());
+    alarm_set_on_mloop(bta_dm_cb.disable_timer, second_pass.time_to_wait_in_ms,
+                       bta_dm_wait_for_acl_to_drain_cback,
+                       second_pass.AlarmCallbackData());
   } else {
-    // No ACL links were up or is second pass at ACL closure
+    // No ACL links to close were up or is second pass at ACL closure
     LOG_INFO("Ensuring all ACL connections have been properly flushed");
     bluetooth::shim::ACL_Shutdown();
 
@@ -654,6 +650,13 @@ void bta_dm_remove_device(const RawAddress& bd_addr) {
   /* Delete the other paired device too */
   if (!other_address_connected && !other_address.IsEmpty()) {
     bta_dm_process_remove_device(other_address);
+  }
+
+  /* Check the length of the paired devices, and if 0 then reset IRK */
+  auto paired_devices = btif_config_get_paired_devices();
+  if (paired_devices.empty()) {
+    LOG_INFO("Last paired device removed, resetting IRK");
+    btm_ble_reset_id();
   }
 }
 
@@ -2877,7 +2880,7 @@ static void bta_dm_set_eir(char* local_name) {
 #if (BTA_EIR_CANNED_UUID_LIST != TRUE)
   /* if local name is not provided, get it from controller */
   if (local_name == NULL) {
-    if (BTM_ReadLocalDeviceName(&local_name) != BTM_SUCCESS) {
+    if (BTM_ReadLocalDeviceName((const char**)&local_name) != BTM_SUCCESS) {
       APPL_TRACE_ERROR("Fail to read local device name for EIR");
     }
   }
@@ -3097,7 +3100,7 @@ static void bta_dm_set_eir(char* local_name) {
   if (free_eir_length)
     UINT8_TO_STREAM(p, 0); /* terminator of significant part */
 
-  BTM_WriteEIR(p_buf);
+  get_btm_client_interface().eir.BTM_WriteEIR(p_buf);
 }
 
 #if (BTA_EIR_CANNED_UUID_LIST != TRUE)
@@ -3197,7 +3200,8 @@ void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding) {
   } else {
     LOG_INFO("EIR Removing UUID=0x%04X from extended inquiry response", uuid16);
 
-    BTM_RemoveEirService(bta_dm_cb.eir_uuid, uuid16);
+    get_btm_client_interface().eir.BTM_RemoveEirService(bta_dm_cb.eir_uuid,
+                                                        uuid16);
   }
 
   bta_dm_set_eir(NULL);
@@ -3987,6 +3991,20 @@ void bta_dm_proc_open_evt(tBTA_GATTC_OPEN* p_data) {
 
 /*******************************************************************************
  *
+ * Function         bta_dm_proc_open_evt
+ *
+ * Description      process BTA_GATTC_OPEN_EVT in DM.
+ *
+ * Parameters:
+ *
+ ******************************************************************************/
+void bta_dm_clear_event_filter(void) {
+  VLOG(1) << "bta_dm_clear_event_filter in bta_dm_act";
+  bluetooth::shim::BTM_ClearEventFilter();
+}
+
+/*******************************************************************************
+ *
  * Function         bta_dm_gattc_callback
  *
  * Description      This is GATT client callback function used in DM.
@@ -4048,3 +4066,15 @@ static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result) {
   }
 }
 #endif /* BLE_VND_INCLUDED */
+
+void bta_dm_process_delete_key_RC_to_unpair(const RawAddress& bd_addr)
+{
+    LOG_WARN("RC key missing");
+    tBTA_DM_SEC param = {
+        .delete_key_RC_to_unpair = {
+            .bd_addr = bd_addr,
+        },
+    };
+    bta_dm_cb.p_sec_cback(BTA_DM_REPORT_BONDING_EVT, &param);
+}
+

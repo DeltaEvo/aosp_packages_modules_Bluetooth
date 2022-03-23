@@ -811,8 +811,6 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
           if (check_cod(&p_data->conn.bda, COD_HID_KEYBOARD) ||
               check_cod(&p_data->conn.bda, COD_HID_COMBO))
             BTA_HhSetIdle(p_data->conn.handle, 0);
-          btif_hh_cb.p_curr_dev =
-              btif_hh_find_connected_dev_by_handle(p_data->conn.handle);
           BTA_HhGetDscpInfo(p_data->conn.handle);
           p_dev->dev_status = BTHH_CONN_STATE_CONNECTED;
           HAL_CBACK(bt_hh_callbacks, connection_state_cb, &(p_dev->bd_addr),
@@ -907,6 +905,12 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
 
     case BTA_HH_GET_PROTO_EVT:
       p_dev = btif_hh_find_connected_dev_by_handle(p_data->hs_data.handle);
+      if (p_dev == NULL) {
+        BTIF_TRACE_WARNING(
+            "BTA_HH_GET_PROTO_EVT: Error, cannot find device with handle %d",
+            p_data->hs_data.handle);
+        return;
+      }
       BTIF_TRACE_WARNING(
           "BTA_HH_GET_PROTO_EVT: status = %d, handle = %d, proto = [%d], %s",
           p_data->hs_data.status, p_data->hs_data.handle,
@@ -943,9 +947,11 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
           p_data->hs_data.handle, p_data->hs_data.status,
           p_data->hs_data.rsp_data.idle_rate);
       p_dev = btif_hh_find_connected_dev_by_handle(p_data->hs_data.handle);
-      HAL_CBACK(bt_hh_callbacks, idle_time_cb, (RawAddress*)&(p_dev->bd_addr),
-                (bthh_status_t)p_data->hs_data.status,
-                p_data->hs_data.rsp_data.idle_rate);
+      if (p_dev) {
+        HAL_CBACK(bt_hh_callbacks, idle_time_cb, (RawAddress*)&(p_dev->bd_addr),
+                  (bthh_status_t)p_data->hs_data.status,
+                  p_data->hs_data.rsp_data.idle_rate);
+      }
       break;
 
     case BTA_HH_SET_IDLE_EVT:
@@ -956,10 +962,11 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
     case BTA_HH_GET_DSCP_EVT:
       len = p_data->dscp_info.descriptor.dl_len;
       BTIF_TRACE_DEBUG("BTA_HH_GET_DSCP_EVT: len = %d", len);
-      p_dev = btif_hh_cb.p_curr_dev;
+      p_dev = btif_hh_find_connected_dev_by_handle(p_data->dscp_info.hid_handle);
       if (p_dev == NULL) {
         BTIF_TRACE_ERROR(
             "BTA_HH_GET_DSCP_EVT: No HID device is currently connected");
+        p_data->dscp_info.hid_handle = BTA_HH_INVALID_HANDLE;
         return;
       }
       if (p_dev->fd < 0) {

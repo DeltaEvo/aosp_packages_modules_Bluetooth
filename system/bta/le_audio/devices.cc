@@ -28,6 +28,7 @@
 #include "btm_iso_api_types.h"
 #include "client_audio.h"
 #include "device/include/controller.h"
+#include "le_audio_set_configuration_provider.h"
 
 using bluetooth::hci::kIsoCigFramingFramed;
 using bluetooth::hci::kIsoCigFramingUnframed;
@@ -35,6 +36,7 @@ using bluetooth::hci::kIsoCigPackingSequential;
 using bluetooth::hci::kIsoCigPhy1M;
 using bluetooth::hci::kIsoCigPhy2M;
 using bluetooth::hci::iso_manager::kIsoSca0To20Ppm;
+using le_audio::AudioSetConfigurationProvider;
 using le_audio::set_configurations::CodecCapabilitySetting;
 using le_audio::types::ase;
 using le_audio::types::AseState;
@@ -104,7 +106,10 @@ void LeAudioDeviceGroup::Deactivate(void) {
 }
 
 LeAudioDevice* LeAudioDeviceGroup::GetFirstDevice(void) {
-  return (leAudioDevices_.front().lock()).get();
+  auto d = leAudioDevices_.front();
+  if (d.expired()) return nullptr;
+
+  return (d.lock()).get();
 }
 
 LeAudioDevice* LeAudioDeviceGroup::GetFirstDeviceWithActiveContext(
@@ -305,11 +310,6 @@ uint8_t LeAudioDeviceGroup::GetFraming(void) {
   } while ((leAudioDevice = GetNextActiveDevice(leAudioDevice)));
 
   return kIsoCigFramingUnframed;
-}
-
-uint8_t LeAudioDeviceGroup::GetTargetLatency(void) {
-  /* TODO: Decide about target latency */
-  return types::kTargetLatencyBalancedLatencyReliability;
 }
 
 /* TODO: Preferred parameter may be other than minimum */
@@ -939,6 +939,7 @@ bool LeAudioDevice::ConfigureAses(
     if (ase->state == AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED)
       ase->reconfigure = true;
 
+    ase->target_latency = ent.target_latency;
     ase->codec_id = ent.codec.id;
     /* TODO: find better way to not use LC3 explicitly */
     ase->codec_config = std::get<LeAudioLc3Config>(ent.codec.config);
@@ -963,7 +964,8 @@ bool LeAudioDevice::ConfigureAses(
                << ", activated ASE id=" << +ase->id
                << ", direction=" << +ase->direction
                << ", max_sdu_size=" << +ase->max_sdu_size
-               << ", cis_id=" << +ase->cis_id;
+               << ", cis_id=" << +ase->cis_id
+               << ", target_latency=" << +ent.target_latency;
 
     ase = GetFirstInactiveAse(ent.direction, reconnect);
   }
@@ -1114,7 +1116,7 @@ const set_configurations::AudioSetConfiguration*
 LeAudioDeviceGroup::FindFirstSupportedConfiguration(
     LeAudioContextType context_type) {
   const set_configurations::AudioSetConfigurations* confs =
-      set_configurations::get_confs_by_type(context_type);
+      AudioSetConfigurationProvider::Get()->GetConfigurations(context_type);
 
   DLOG(INFO) << __func__ << " context type: " << (int)context_type
              << " number of connected devices: " << NumOfConnected();

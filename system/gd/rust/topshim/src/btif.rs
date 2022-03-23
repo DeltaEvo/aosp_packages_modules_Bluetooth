@@ -1,7 +1,6 @@
-//! Bluetooth interface shim
+//! Shim for `bt_interface_t`, providing access to libbluetooth.
 //!
 //! This is a shim interface for calling the C++ bluetooth interface via Rust.
-//!
 
 use crate::bindings::root as bindings;
 use crate::topstack::get_dispatchers;
@@ -122,6 +121,7 @@ pub enum BtDeviceType {
     Bredr,
     Ble,
     Dual,
+    Unknown,
 }
 
 #[derive(Clone, Debug, Eq, Hash, FromPrimitive, ToPrimitive, PartialEq, PartialOrd)]
@@ -135,7 +135,7 @@ pub enum BtPropertyType {
     ServiceRecord,
     AdapterScanMode,
     AdapterBondedDevices,
-    AdapterDiscoveryTimeout,
+    AdapterDiscoverableTimeout,
     RemoteFriendlyName,
     RemoteRssi,
     RemoteVersionInfo,
@@ -300,7 +300,7 @@ pub enum BluetoothProperty {
     ServiceRecord(BtServiceRecord),
     AdapterScanMode(BtScanMode),
     AdapterBondedDevices(Vec<RawAddress>),
-    AdapterDiscoveryTimeout(u32),
+    AdapterDiscoverableTimeout(u32),
     RemoteFriendlyName(String),
     RemoteRssi(i8),
     RemoteVersionInfo(BtRemoteVersion),
@@ -328,8 +328,8 @@ impl BluetoothProperty {
             BluetoothProperty::ServiceRecord(_) => BtPropertyType::ServiceRecord,
             BluetoothProperty::AdapterScanMode(_) => BtPropertyType::AdapterScanMode,
             BluetoothProperty::AdapterBondedDevices(_) => BtPropertyType::AdapterBondedDevices,
-            BluetoothProperty::AdapterDiscoveryTimeout(_) => {
-                BtPropertyType::AdapterDiscoveryTimeout
+            BluetoothProperty::AdapterDiscoverableTimeout(_) => {
+                BtPropertyType::AdapterDiscoverableTimeout
             }
             BluetoothProperty::RemoteFriendlyName(_) => BtPropertyType::RemoteFriendlyName,
             BluetoothProperty::RemoteRssi(_) => BtPropertyType::RemoteRssi,
@@ -357,7 +357,7 @@ impl BluetoothProperty {
             BluetoothProperty::AdapterBondedDevices(devlist) => {
                 devlist.len() * mem::size_of::<RawAddress>()
             }
-            BluetoothProperty::AdapterDiscoveryTimeout(_) => mem::size_of::<u32>(),
+            BluetoothProperty::AdapterDiscoverableTimeout(_) => mem::size_of::<u32>(),
             BluetoothProperty::RemoteFriendlyName(name) => {
                 cmp::min(PROPERTY_NAME_MAX, name.len() + 1)
             }
@@ -374,10 +374,10 @@ impl BluetoothProperty {
         }
     }
 
-    // Given a mutable array, this will copy the data to that array and return a
-    // pointer to it.
-    //
-    // The lifetime of the returned pointer is tied to that of the slice given.
+    /// Given a mutable array, this will copy the data to that array and return a
+    /// pointer to it.
+    ///
+    /// The lifetime of the returned pointer is tied to that of the slice given.
     fn get_data_ptr<'a>(&'a self, data: &'a mut [u8]) -> *mut u8 {
         let len = self.get_len();
         match &*self {
@@ -424,7 +424,7 @@ impl BluetoothProperty {
                     data[start..end].copy_from_slice(&dev.val);
                 }
             }
-            BluetoothProperty::AdapterDiscoveryTimeout(timeout) => {
+            BluetoothProperty::AdapterDiscoverableTimeout(timeout) => {
                 data.copy_from_slice(&timeout.to_ne_bytes());
             }
             BluetoothProperty::RemoteFriendlyName(name) => {
@@ -498,8 +498,8 @@ impl From<bindings::bt_property_t> for BluetoothProperty {
                     count,
                 ))
             }
-            BtPropertyType::AdapterDiscoveryTimeout => {
-                BluetoothProperty::AdapterDiscoveryTimeout(u32_from_bytes(slice))
+            BtPropertyType::AdapterDiscoverableTimeout => {
+                BluetoothProperty::AdapterDiscoverableTimeout(u32_from_bytes(slice))
             }
             BtPropertyType::RemoteFriendlyName => {
                 BluetoothProperty::RemoteFriendlyName(ascii_to_string(slice, len))
@@ -567,6 +567,11 @@ impl From<SupportedProfiles> for Vec<u8> {
 
 #[cxx::bridge(namespace = bluetooth::topshim::rust)]
 mod ffi {
+    #[derive(Debug, Copy, Clone)]
+    pub struct RustRawAddress {
+        address: [u8; 6],
+    }
+
     unsafe extern "C++" {
         include!("btif/btif_shim.h");
 
@@ -680,6 +685,7 @@ macro_rules! cast_to_const_ffi_address {
     };
 }
 
+/// An enum representing `bt_callbacks_t` from btif.
 #[derive(Clone, Debug)]
 pub enum BaseCallbacks {
     AdapterState(BtState),
@@ -700,6 +706,7 @@ pub enum BaseCallbacks {
     // link_quality_report_cb
     // generate_local_oob_data_cb
     // switch_buffer_size_cb
+    // switch_codec_cb
 }
 
 pub struct BaseCallbacksDispatcher {
@@ -756,13 +763,14 @@ struct RawInterfaceWrapper {
 
 unsafe impl Send for RawInterfaceWrapper {}
 
-pub struct BluetoothInterface {
-    internal: RawInterfaceWrapper,
-    pub is_init: bool,
-    // Need to take ownership of callbacks so it doesn't get freed after init
-    callbacks: Option<Box<bindings::bt_callbacks_t>>,
-}
-
+/// Macro to call functions via function pointers. Expects the self object to
+/// have a raw interface wrapper at `self.internal`. The actual function call is
+/// marked unsafe since it will need to dereference a C object. This can cause
+/// segfaults if not validated beforehand.
+///
+/// Example:
+///     ccall!(self, foobar, arg1, arg2)
+///     Expands to: unsafe {((*self.internal.raw).foobar.unwrap())(arg1, arg2)}
 #[macro_export]
 macro_rules! ccall {
     ($self:ident,$fn_name:ident) => {
@@ -774,7 +782,51 @@ macro_rules! ccall {
         unsafe {
             ((*$self.internal.raw).$fn_name.unwrap())($($args),*)
         }
-    }
+    };
+}
+
+/// Macro to call const functions via cxx. Expects the self object to have the
+/// cxx object to be called at `self.internal_cxx`.
+///
+/// Example:
+///     cxxcall!(self, foobar, arg1, arg2)
+///     Expands to: self.internal_cxx.foobar(arg1, arg2)
+#[macro_export]
+macro_rules! cxxcall {
+    ($self:expr,$fn_name:ident) => {
+        $self.internal_cxx.$fn_name()
+    };
+    ($self:expr,$fn_name:ident, $($args:expr),*) => {
+        $self.internal_cxx.$fn_name($($args),*)
+    };
+}
+
+/// Macro to call mutable functions via cxx. Mutable functions are always
+/// required to be defined with `self: Pin<&mut Self>`. The self object must
+/// have the cxx object at `self.internal_cxx`.
+///
+/// Example:
+///     mutcxxcall!(self, foobar, arg1, arg2)
+///     Expands to: self.internal_cxx.pin_mut().foobar(arg1, arg2)
+#[macro_export]
+macro_rules! mutcxxcall {
+    ($self:expr,$fn_name:ident) => {
+        $self.internal_cxx.pin_mut().$fn_name()
+    };
+    ($self:expr,$fn_name:ident, $($args:expr),*) => {
+        $self.internal_cxx.pin_mut().$fn_name($($args),*)
+    };
+}
+
+/// Rust wrapper around `bt_interface_t`.
+pub struct BluetoothInterface {
+    internal: RawInterfaceWrapper,
+
+    /// Set to true after `initialize` is called.
+    pub is_init: bool,
+
+    // Need to take ownership of callbacks so it doesn't get freed after init
+    callbacks: Option<Box<bindings::bt_callbacks_t>>,
 }
 
 impl BluetoothInterface {
@@ -782,6 +834,12 @@ impl BluetoothInterface {
         self.is_init
     }
 
+    /// Initialize the Bluetooth interface by setting up the underlying interface.
+    ///
+    /// # Arguments
+    ///
+    /// * `callbacks` - Dispatcher struct that accepts [`BaseCallbacks`]
+    /// * `init_flags` - List of flags sent to libbluetooth for init.
     pub fn initialize(
         &mut self,
         callbacks: BaseCallbacksDispatcher,
@@ -816,6 +874,7 @@ impl BluetoothInterface {
             link_quality_report_cb: None,
             generate_local_oob_data_cb: None,
             switch_buffer_size_cb: None,
+            switch_codec_cb: None,
         });
 
         let rawcb: *mut bindings::bt_callbacks_t = &mut *callbacks;
@@ -946,6 +1005,10 @@ impl BluetoothInterface {
         let cvariant = bindings::bt_ssp_variant_t::from(variant);
         let ffi_addr = cast_to_const_ffi_address!(addr as *const RawAddress);
         ccall!(self, ssp_reply, ffi_addr, cvariant, accept, passkey)
+    }
+
+    pub fn clear_event_filter(&self) -> i32 {
+        ccall!(self, clear_event_filter)
     }
 
     pub(crate) fn get_profile_interface(

@@ -20,6 +20,7 @@ package android.bluetooth;
 import static android.bluetooth.BluetoothUtils.getSyncTimeout;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -39,7 +40,11 @@ import android.util.Log;
 import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -57,6 +62,49 @@ public final class BluetoothVolumeControl implements BluetoothProfile, AutoClose
     private static final boolean VDBG = false;
 
     private CloseGuard mCloseGuard;
+    private final Map<Callback, Executor> mCallbackExecutorMap = new HashMap<>();
+
+    /**
+     * This class provides a callback that is invoked when volume offset value changes on
+     * the remote device.
+     *
+     * <p> In order to balance volume on the group of Le Audio devices,
+     * Volume Offset Control Service (VOCS) shall be used. User can verify
+     * if the remote device supports VOCS by calling {@link #isVolumeOffsetAvailable(device)}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface Callback {
+        /**
+         * Callback invoked when callback is registered and when volume offset
+         * changes on the remote device. Change can be triggered autonomously by the remote device
+         * or after volume offset change on the user request done by calling
+         * {@link #setVolumeOffset(device, volumeOffset)}
+         *
+         * @param device remote device whose volume offset changed
+         * @param volumeOffset latest volume offset for this device
+         * @hide
+         */
+        @SystemApi
+        void onVolumeOffsetChanged(@NonNull BluetoothDevice device,
+                                   @IntRange(from = -255, to = 255) int volumeOffset);
+    }
+
+    @SuppressLint("AndroidFrameworkBluetoothPermission")
+    private final IBluetoothVolumeControlCallback mCallback =
+            new IBluetoothVolumeControlCallback.Stub() {
+        @Override
+        public void onVolumeOffsetChanged(@NonNull BluetoothDevice device, int volumeOffset) {
+            Attributable.setAttributionSource(device, mAttributionSource);
+            for (Map.Entry<BluetoothVolumeControl.Callback, Executor> callbackExecutorEntry:
+                    mCallbackExecutorMap.entrySet()) {
+                        BluetoothVolumeControl.Callback callback = callbackExecutorEntry.getKey();
+                Executor executor = callbackExecutorEntry.getValue();
+                executor.execute(() -> callback.onVolumeOffsetChanged(device, volumeOffset));
+            }
+        }
+    };
 
     /**
      * Intent used to broadcast the change in connection state of the Volume Control
@@ -94,6 +142,37 @@ public final class BluetoothVolumeControl implements BluetoothProfile, AutoClose
                 }
             };
 
+    @SuppressLint("AndroidFrameworkBluetoothPermission")
+    private final IBluetoothStateChangeCallback mBluetoothStateChangeCallback =
+            new IBluetoothStateChangeCallback.Stub() {
+                public void onBluetoothStateChange(boolean up) {
+                    if (DBG) Log.d(TAG, "onBluetoothStateChange: up=" + up);
+                    if (!up) {
+                        return;
+                    }
+                    // re-register the service-to-app callback
+                    synchronized (mCallbackExecutorMap) {
+                        if (!mCallbackExecutorMap.isEmpty()) {
+                            try {
+                                final IBluetoothVolumeControl service = getService();
+                                if (service != null) {
+                                    final SynchronousResultReceiver<Integer> recv =
+                                                    new SynchronousResultReceiver();
+                                    service.registerCallback(mCallback, mAttributionSource, recv);
+                                    recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+                                }
+                            } catch (RemoteException e) {
+                                Log.e(TAG, "onBluetoothServiceUp: Failed to register"
+                                        + "Volume Control callback", e);
+                            } catch (TimeoutException e) {
+                                Log.e(TAG, e.toString() + "\n"
+                                        + Log.getStackTraceString(new Throwable()));
+                            }
+                        }
+                    }
+                }
+            };
+
     /**
      * Create a BluetoothVolumeControl proxy object for interacting with the local
      * Bluetooth Volume Control service.
@@ -103,6 +182,17 @@ public final class BluetoothVolumeControl implements BluetoothProfile, AutoClose
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
         mProfileConnector.connect(context, listener);
+
+        IBluetoothManager mgr = mAdapter.getBluetoothManager();
+        if (mgr != null) {
+            try {
+                mgr.registerStateChangeCallback(mBluetoothStateChangeCallback);
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
         mCloseGuard = new CloseGuard();
         mCloseGuard.open("close");
     }
@@ -117,6 +207,16 @@ public final class BluetoothVolumeControl implements BluetoothProfile, AutoClose
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
     public void close() {
+        if (VDBG) log("close()");
+
+        IBluetoothManager mgr = mAdapter.getBluetoothManager();
+        if (mgr != null) {
+            try {
+                mgr.unregisterStateChangeCallback(mBluetoothStateChangeCallback);
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
+        }
         mProfileConnector.disconnect();
     }
 
@@ -217,10 +317,17 @@ public final class BluetoothVolumeControl implements BluetoothProfile, AutoClose
     }
 
     /**
-     * Tells remote device to set an absolute volume.
+     * Register a {@link Callback} that will be invoked during the
+     * operation of this profile.
      *
-     * @param volume Absolute volume to be set on remote device.
-     *               Minimum value is 0 and maximum value is 255
+     * Repeated registration of the same <var>callback</var> object will have no effect after
+     * the first call to this method, even when the <var>executor</var> is different. API caller
+     * would have to call {@link #unregisterCallback(Callback)} with
+     * the same callback object before registering it again.
+     *
+     * @param executor an {@link Executor} to execute given callback
+     * @param callback user implementation of the {@link Callback}
+     * @throws IllegalArgumentException if a null executor, sink, or callback is given
      * @hide
      */
     @SystemApi
@@ -229,9 +336,106 @@ public final class BluetoothVolumeControl implements BluetoothProfile, AutoClose
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public void setVolume(@Nullable BluetoothDevice device,
-            @IntRange(from = 0, to = 255) int volume) {
-        if (DBG) log("setVolume(" + volume + ")");
+    public void registerCallback(@NonNull @CallbackExecutor Executor executor,
+            @NonNull Callback callback) {
+        Objects.requireNonNull(executor, "executor cannot be null");
+        Objects.requireNonNull(callback, "callback cannot be null");
+        if (DBG) log("registerCallback");
+        synchronized (mCallbackExecutorMap) {
+            // If the callback map is empty, we register the service-to-app callback
+            if (mCallbackExecutorMap.isEmpty()) {
+                if (!mAdapter.isEnabled()) {
+                    /* If Bluetooth is off, just store callback and it will be registered
+                     * when Bluetooth is on
+                     */
+                    mCallbackExecutorMap.put(callback, executor);
+                    return;
+                }
+                try {
+                    final IBluetoothVolumeControl service = getService();
+                    if (service != null) {
+                        final SynchronousResultReceiver<Integer> recv =
+                                                        new SynchronousResultReceiver();
+                        service.registerCallback(mCallback, mAttributionSource, recv);
+                        recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+                    }
+                } catch (RemoteException e) {
+                    Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                    throw e.rethrowFromSystemServer();
+                } catch (TimeoutException e) {
+                    Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                }
+            }
+
+            // Adds the passed in callback to our map of callbacks to executors
+            if (mCallbackExecutorMap.containsKey(callback)) {
+                throw new IllegalArgumentException("This callback has already been registered");
+            }
+            mCallbackExecutorMap.put(callback, executor);
+        }
+    }
+
+    /**
+     * Unregister the specified {@link Callback}.
+     * <p>The same {@link Callback} object used when calling
+     * {@link #registerCallback(Executor, Callback)} must be used.
+     *
+     * <p>Callbacks are automatically unregistered when application process goes away
+     *
+     * @param callback user implementation of the {@link Callback}
+     * @throws IllegalArgumentException when callback is null or when no callback is registered
+     * @hide
+     */
+    @SystemApi
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public void unregisterCallback(@NonNull Callback callback) {
+        Objects.requireNonNull(callback, "callback cannot be null");
+        if (DBG) log("unregisterCallback");
+        synchronized (mCallbackExecutorMap) {
+            if (mCallbackExecutorMap.remove(callback) == null) {
+                throw new IllegalArgumentException("This callback has not been registered");
+            }
+        }
+
+        // If the callback map is empty, we unregister the service-to-app callback
+        if (mCallbackExecutorMap.isEmpty()) {
+            try {
+                final IBluetoothVolumeControl service = getService();
+                if (service != null) {
+                    final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                    service.unregisterCallback(mCallback, mAttributionSource, recv);
+                    recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+                }
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                throw e.rethrowFromSystemServer();
+            } catch (IllegalStateException | TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            }
+        }
+    }
+
+    /**
+     * Tells the remote device to set a volume offset to the absolute volume.
+     *
+     * @param device {@link BluetoothDevice} representing the remote device
+     * @param volumeOffset volume offset to be set on the remote device
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public void setVolumeOffset(@NonNull BluetoothDevice device,
+            @IntRange(from = -255, to = 255) int volumeOffset) {
+        if (DBG) log("setVolumeOffset(" + device  + " volumeOffset: " + volumeOffset + ")");
         final IBluetoothVolumeControl service = getService();
         if (service == null) {
             Log.w(TAG, "Proxy not attached to service");
@@ -239,12 +443,54 @@ public final class BluetoothVolumeControl implements BluetoothProfile, AutoClose
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver recv = new SynchronousResultReceiver();
-                service.setVolume(device, volume, mAttributionSource, recv);
+                service.setVolumeOffset(device, volumeOffset, mAttributionSource, recv);
                 recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }
         }
+    }
+
+    /**
+     * Provides information about the possibility to set volume offset on the remote device.
+     * If the remote device supports Volume Offset Control Service, it is automatically
+     * connected.
+     *
+     * @param device {@link BluetoothDevice} representing the remote device
+     * @return {@code true} if volume offset function is supported and available to use on the
+     *         remote device. When Bluetooth is off, the return value should always be
+     *         {@code false}.
+     * @hide
+     */
+    @SystemApi
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public boolean isVolumeOffsetAvailable(@NonNull BluetoothDevice device) {
+        if (DBG) log("isVolumeOffsetAvailable(" + device + ")");
+        final IBluetoothVolumeControl service = getService();
+        if (service == null) {
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) log(Log.getStackTraceString(new Throwable()));
+            return false;
+        }
+
+        if (!isEnabled()) {
+            return false;
+        }
+
+        final boolean defaultValue = false;
+        try {
+            final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+            service.isVolumeOffsetAvailable(device, mAttributionSource, recv);
+            recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+        } catch (RemoteException | TimeoutException e) {
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+        }
+
+        return defaultValue;
     }
 
     /**

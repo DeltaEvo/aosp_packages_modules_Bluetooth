@@ -25,12 +25,10 @@
 #define LOG_TAG "bluetooth"
 
 // BTA_HH_INCLUDED
-#include "bt_target.h"  // Must be first to define build configuration
-#if (BTA_HH_INCLUDED == TRUE)
-
 #include <cstdint>
 #include <string>
 
+#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/hh/bta_hh_int.h"
 #include "bta/include/bta_hh_api.h"
 #include "bta/include/bta_hh_co.h"
@@ -170,7 +168,6 @@ void bta_hh_disc_cmpl(void) {
   if (HID_HostDeregister() != HID_SUCCESS) status = BTA_HH_ERR;
 
   bta_hh_cleanup_disable(status);
-#endif
 }
 
 /*******************************************************************************
@@ -907,9 +904,14 @@ void bta_hh_close_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
 void bta_hh_get_dscp_act(tBTA_HH_DEV_CB* p_cb,
                          UNUSED_ATTR const tBTA_HH_DATA* p_data) {
   if (p_cb->is_le_device) {
+    if (p_cb->hid_srvc.in_use) {
+      p_cb->dscp_info.hid_handle = p_cb->hid_handle;
+    }
     bta_hh_le_get_dscp_act(p_cb);
-  } else
+  } else {
+    p_cb->dscp_info.hid_handle = p_cb->hid_handle;
     (*bta_hh_cb.p_cback)(BTA_HH_GET_DSCP_EVT, (tBTA_HH*)&p_cb->dscp_info);
+  }
 }
 
 /*******************************************************************************

@@ -230,9 +230,6 @@ void btm_ble_rand_enc_complete(uint8_t* p, uint16_t op_code,
                                tBTM_RAND_ENC_CB* p_enc_cplt_cback) {
   mock_function_count_map[__func__]++;
 }
-void btm_ble_set_random_address(const RawAddress& random_bda) {
-  mock_function_count_map[__func__]++;
-}
 void btm_ble_test_command_complete(uint8_t* p) {
   mock_function_count_map[__func__]++;
 }
@@ -250,5 +247,8 @@ void doNothing(uint8_t* data, uint16_t len) {
 void read_phy_cb(
     base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb,
     uint8_t* data, uint16_t len) {
+  mock_function_count_map[__func__]++;
+}
+void btm_ble_reset_id(void) {
   mock_function_count_map[__func__]++;
 }

@@ -110,6 +110,9 @@ class Metadata {
             case BluetoothProfile.HEARING_AID:
                 profileConnectionPolicies.hearing_aid_connection_policy = connectionPolicy;
                 break;
+            case BluetoothProfile.HAP_CLIENT:
+                profileConnectionPolicies.hap_client_connection_policy = connectionPolicy;
+                break;
             case BluetoothProfile.LE_AUDIO:
                 profileConnectionPolicies.le_audio_connection_policy = connectionPolicy;
                 break;
@@ -121,6 +124,12 @@ class Metadata {
                 break;
             case BluetoothProfile.LE_CALL_CONTROL:
                 profileConnectionPolicies.le_call_control_connection_policy = connectionPolicy;
+                break;
+            case BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT:
+                profileConnectionPolicies.bass_client_connection_policy = connectionPolicy;
+                break;
+            case BluetoothProfile.BATTERY:
+                profileConnectionPolicies.battery_connection_policy = connectionPolicy;
                 break;
             default:
                 throw new IllegalArgumentException("invalid profile " + profile);
@@ -153,6 +162,8 @@ class Metadata {
                 return profileConnectionPolicies.sap_connection_policy;
             case BluetoothProfile.HEARING_AID:
                 return profileConnectionPolicies.hearing_aid_connection_policy;
+            case BluetoothProfile.HAP_CLIENT:
+                return profileConnectionPolicies.hap_client_connection_policy;
             case BluetoothProfile.LE_AUDIO:
                 return profileConnectionPolicies.le_audio_connection_policy;
             case BluetoothProfile.VOLUME_CONTROL:
@@ -161,6 +172,10 @@ class Metadata {
                 return profileConnectionPolicies.csip_set_coordinator_connection_policy;
             case BluetoothProfile.LE_CALL_CONTROL:
                 return profileConnectionPolicies.le_call_control_connection_policy;
+            case BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT:
+                return profileConnectionPolicies.bass_client_connection_policy;
+            case BluetoothProfile.BATTERY:
+                return profileConnectionPolicies.battery_connection_policy;
         }
         return BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
     }
@@ -239,6 +254,12 @@ class Metadata {
             case BluetoothDevice.METADATA_UNTETHERED_CASE_LOW_BATTERY_THRESHOLD:
                 publicMetadata.untethered_case_low_battery_threshold = value;
                 break;
+            case BluetoothDevice.METADATA_SPATIAL_AUDIO:
+                publicMetadata.spatial_audio = value;
+                break;
+            case BluetoothDevice.METADATA_FAST_PAIR_CUSTOMIZED_FIELDS:
+                publicMetadata.fastpair_customized = value;
+                break;
         }
     }
 
@@ -316,6 +337,12 @@ class Metadata {
                 break;
             case BluetoothDevice.METADATA_UNTETHERED_CASE_LOW_BATTERY_THRESHOLD:
                 value = publicMetadata.untethered_case_low_battery_threshold;
+                break;
+            case BluetoothDevice.METADATA_SPATIAL_AUDIO:
+                value = publicMetadata.spatial_audio;
+                break;
+            case BluetoothDevice.METADATA_FAST_PAIR_CUSTOMIZED_FIELDS:
+                value = publicMetadata.fastpair_customized;
                 break;
         }
         return value;

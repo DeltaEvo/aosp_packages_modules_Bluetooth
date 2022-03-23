@@ -32,6 +32,7 @@
 #include "btm_int_types.h"
 #include "smp_api.h"
 #include "stack/include/hci_error_code.h"
+#include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
 extern void btm_ble_process_periodic_adv_sync_est_evt(uint8_t len,
@@ -111,8 +112,8 @@ extern uint64_t btm_get_next_private_addrress_interval_ms();
 
 /*  privacy function */
 /* BLE address mapping with CS feature */
-extern bool btm_random_pseudo_to_identity_addr(RawAddress* random_pseudo,
-                                               uint8_t* p_identity_addr_type);
+extern bool btm_random_pseudo_to_identity_addr(
+    RawAddress* random_pseudo, tBLE_ADDR_TYPE* p_identity_addr_type);
 extern void btm_ble_refresh_peer_resolvable_private_addr(
     const RawAddress& pseudo_bda, const RawAddress& rra,
     tBTM_SEC_BLE::tADDRESS_TYPE type);
@@ -137,7 +138,9 @@ extern void btm_ble_adv_filter_init(void);
 extern bool btm_ble_topology_check(tBTM_BLE_STATE_MASK request);
 extern bool btm_ble_clear_topology_mask(tBTM_BLE_STATE_MASK request_state);
 extern bool btm_ble_set_topology_mask(tBTM_BLE_STATE_MASK request_state);
-extern void btm_ble_set_random_address(const RawAddress& random_bda);
+
+extern void btm_ble_scanner_init(void);
+extern void btm_ble_scanner_cleanup(void);
 
 #if (BTM_BLE_CONFORMANCE_TESTING == TRUE)
 extern void btm_ble_set_no_disc_if_pair_fail(bool disble_disc);

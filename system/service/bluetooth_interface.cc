@@ -51,6 +51,7 @@
 #include "bta/include/bta_hearing_aid_api.h"
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_le_audio_api.h"
+#include "bta/include/bta_le_audio_broadcaster_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -238,7 +239,7 @@ static int set_adapter_property(const bt_property_t* property) {
   switch (property->type) {
     case BT_PROPERTY_BDNAME:
     case BT_PROPERTY_ADAPTER_SCAN_MODE:
-    case BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT:
+    case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
     case BT_PROPERTY_CLASS_OF_DEVICE:
     case BT_PROPERTY_LOCAL_IO_CAPS:
     case BT_PROPERTY_LOCAL_IO_CAPS_BLE:
@@ -404,6 +405,7 @@ static void dump(int fd, const char** arguments) {
   bluetooth::csis::CsisClient::DebugDump(fd);
   HearingAid::DebugDump(fd);
   LeAudioClient::DebugDump(fd);
+  LeAudioBroadcaster::DebugDump(fd);
   connection_manager::dump(fd);
   bluetooth::bqr::DebugDump(fd);
   if (bluetooth::shim::is_any_gd_enabled()) {

@@ -20,7 +20,7 @@ import android.annotation.SystemApi;
 
 /**
  * A class with constants representing possible return values for Bluetooth APIs. General return
- * values occupy the range 0 to 99. Profile-specific return values occupy the range 100-999.
+ * values occupy the range 0 to 199. Profile-specific return values occupy the range 200-999.
  * API-specific return values start at 1000. The exception to this is the "UNKNOWN" error code which
  * occupies the max integer value.
  */
@@ -29,28 +29,28 @@ public final class BluetoothStatusCodes {
     private BluetoothStatusCodes() {}
 
     /**
-     * Indicates that the API call was successful
+     * Indicates that the API call was successful.
      */
     public static final int SUCCESS = 0;
 
     /**
-     * Error code indicating that Bluetooth is not enabled
+     * Error code indicating that Bluetooth is not enabled.
      */
     public static final int ERROR_BLUETOOTH_NOT_ENABLED = 1;
 
     /**
      * Error code indicating that the API call was initiated by neither the system nor the active
-     * Zuser
+     * Zuser.
      */
     public static final int ERROR_BLUETOOTH_NOT_ALLOWED = 2;
 
     /**
-     * Error code indicating that the Bluetooth Device specified is not bonded
+     * Error code indicating that the Bluetooth Device specified is not bonded.
      */
     public static final int ERROR_DEVICE_NOT_BONDED = 3;
 
     /**
-     * Error code indicating that the Bluetooth Device specified is not connected, but is bonded
+     * Error code indicating that the Bluetooth Device specified is not connected, but is bonded.
      *
      * @hide
      */
@@ -58,52 +58,188 @@ public final class BluetoothStatusCodes {
 
     /**
      * Error code indicating that the caller does not have the
-     * {@link android.Manifest.permission#BLUETOOTH_ADVERTISE} permission
-     *
-     * @hide
-     */
-    public static final int ERROR_MISSING_BLUETOOTH_ADVERTISE_PERMISSION = 5;
-
-    /**
-     * Error code indicating that the caller does not have the
-     * {@link android.Manifest.permission#BLUETOOTH_CONNECT} permission
+     * {@link android.Manifest.permission#BLUETOOTH_CONNECT} permission.
      */
     public static final int ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION = 6;
 
     /**
      * Error code indicating that the caller does not have the
-     * {@link android.Manifest.permission#BLUETOOTH_SCAN} permission
+     * {@link android.Manifest.permission#BLUETOOTH_SCAN} permission.
      *
      * @hide
      */
     public static final int ERROR_MISSING_BLUETOOTH_SCAN_PERMISSION = 7;
 
     /**
-     * Error code indicating that the caller does not have the
-     * {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED} permission
-     */
-    public static final int ERROR_MISSING_BLUETOOTH_PRIVILEGED_PERMISSION = 8;
-
-    /**
      * Error code indicating that the profile service is not bound. You can bind a profile service
-     * by calling {@link BluetoothAdapter#getProfileProxy}
+     * by calling {@link BluetoothAdapter#getProfileProxy}.
      */
     public static final int ERROR_PROFILE_SERVICE_NOT_BOUND = 9;
 
     /**
-     * Error code indicating that the feature is not supported.
+     * Indicates that the feature is supported.
      */
-    public static final int ERROR_FEATURE_NOT_SUPPORTED = 10;
+    public static final int FEATURE_SUPPORTED = 10;
+
+    /**
+     * Indicates that the feature is not supported.
+     */
+    public static final int FEATURE_NOT_SUPPORTED = 11;
+
+    /**
+     * Error code indicating that the device is not the active device for this profile.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_NOT_ACTIVE_DEVICE = 12;
+
+    /**
+     * Error code indicating that there are no active devices for the profile.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_NO_ACTIVE_DEVICES = 13;
+
+    /**
+     * Indicates that the Bluetooth profile is not connected to this device.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_PROFILE_NOT_CONNECTED = 14;
+
+    /**
+     * Error code indicating that the requested operation timed out.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_TIMEOUT = 15;
+
+    /**
+     * Indicates that some local application caused the event.
+     * @hide
+     */
+    @SystemApi
+    public static final int REASON_LOCAL_APP_REQUEST = 16;
+
+    /**
+     * Indicate that this change was initiated by the Bluetooth implementation on this device
+     * @hide
+     */
+    @SystemApi
+    public static final int REASON_LOCAL_STACK_REQUEST = 17;
+
+    /**
+     * Indicate that this change was initiated by the remote device.
+     * @hide
+     */
+    @SystemApi
+    public static final int REASON_REMOTE_REQUEST = 18;
+
+    /**
+     * Indicates that the local system policy caused the change, such as privacy policy, power
+     * management policy, permission changes, and more.
+     * @hide
+     */
+    @SystemApi
+    public static final int REASON_SYSTEM_POLICY = 19;
+
+    /**
+     * Indicates that an underlying hardware incurred some error maybe try again later or toggle
+     * the hardware state.
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_HARDWARE_GENERIC = 20;
+
+    /**
+     * Indicates that the operation failed due to bad API input parameter that is not covered
+     * by other more detailed error code
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_BAD_PARAMETERS = 21;
+
+    /**
+     * Indicate that there is not enough local resource to perform the requested operation
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LOCAL_NOT_ENOUGH_RESOURCES = 22;
+
+    /**
+     * Indicate that a remote device does not have enough resource to perform the requested
+     * operation
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_REMOTE_NOT_ENOUGH_RESOURCES = 23;
+
+    /**
+     * Indicates that the remote rejected this operation for reasons not covered above
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_REMOTE_OPERATION_REJECTED = 24;
+
+    /**
+     * Indicates that there is an underlying link error between the local and remote devices.
+     *
+     * Maybe try again later or disconnect and retry.
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_REMOTE_LINK_ERROR = 25;
+
+    /**
+     * A generic error code to indicate that the system is already in a target state that an API
+     * tries to request.
+     *
+     * For example, this error code will be delivered if someone tries to stop scanning when
+     * scan has already stopped, or start scanning when scan has already started.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_ALREADY_IN_TARGET_STATE = 26;
+
+    /**
+     * Indicates that the requested operation is not supported by the remote device
+     *
+     * Caller should stop trying this operation
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_REMOTE_OPERATION_NOT_SUPPORTED = 27;
 
     /**
      * A GATT writeCharacteristic request is not permitted on the remote device.
      */
-    public static final int ERROR_GATT_WRITE_NOT_ALLOWED = 101;
+    public static final int ERROR_GATT_WRITE_NOT_ALLOWED = 200;
 
     /**
      * A GATT writeCharacteristic request is issued to a busy remote device.
      */
-    public static final int ERROR_GATT_WRITE_REQUEST_BUSY = 102;
+    public static final int ERROR_GATT_WRITE_REQUEST_BUSY = 201;
+
+    /**
+     * Indicates that the operation is allowed.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ALLOWED = 400;
+
+    /**
+     * Indicates that the operation is not allowed.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int NOT_ALLOWED = 401;
 
     /**
      * If another application has already requested {@link OobData} then another fetch will be
@@ -226,67 +362,187 @@ public final class BluetoothStatusCodes {
     public static final int ERROR_DISCONNECT_REASON_BAD_PARAMETERS = 1109;
 
     /**
-     * Indicates that setting the LE Audio Broadcast mode failed.
-     * <p>
-     * Example solution: Change parameters and try again. If error persists, the app can report
-     * telemetry and/or log the error in a bugreport.
+     * Indicates that there is already one device for which SCO audio is connected or connecting.
      *
      * @hide
      */
-    public static final int ERROR_LE_AUDIO_BROADCAST_SOURCE_SET_BROADCAST_MODE_FAILED = 1110;
+    @SystemApi
+    public static final int ERROR_AUDIO_DEVICE_ALREADY_CONNECTED = 1116;
 
     /**
-     * Indicates that setting a new encryption key for Bluetooth LE Audio Broadcast Source failed.
-     * <p>
-     * Example solution: Change parameters and try again. If error persists, the app can report
-     * telemetry and/or log the error in a bugreport.
+     * Indicates that SCO audio was already not connected for this device.
      *
      * @hide
      */
-    public static final int ERROR_LE_AUDIO_BROADCAST_SOURCE_SET_ENCRYPTION_KEY_FAILED = 1111;
+    @SystemApi
+    public static final int ERROR_AUDIO_DEVICE_ALREADY_DISCONNECTED = 1117;
 
     /**
-     * Indicates that connecting to a remote Broadcast Audio Scan Service failed.
-     * <p>
-     * Example solution: Change parameters and try again. If error persists, the app can report
-     * telemetry and/or log the error in a bugreport.
+     * Indicates that there audio route is currently blocked by the system.
      *
      * @hide
      */
-    public static final int ERROR_LE_AUDIO_BROADCAST_AUDIO_SCAN_SERVICE_CONNECT_FAILED = 1112;
+    @SystemApi
+    public static final int ERROR_AUDIO_ROUTE_BLOCKED = 1118;
 
     /**
-     * Indicates that disconnecting from a remote Broadcast Audio Scan Service failed.
-     * <p>
-     * Example solution: Change parameters and try again. If error persists, the app can report
-     * telemetry and/or log the error in a bugreport.
+     * Indicates that there is an active call preventing this operation from succeeding.
      *
      * @hide
      */
-    public static final int ERROR_LE_AUDIO_BROADCAST_AUDIO_SCAN_SERVICE_DISCONNECT_FAILED = 1113;
+    @SystemApi
+    public static final int ERROR_CALL_ACTIVE = 1119;
+
+    // LE audio related return codes reserved from 1200 to 1300
 
     /**
-     * Indicates that enabling LE Audio Broadcast encryption failed
-     * <p>
-     * Example solution: Change parameters and try again. If error persists, the app can report
-     * telemetry and/or log the error in a bugreport.
+     * Indicates that the broadcast ID cannot be found among existing Broadcast Sources.
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LE_BROADCAST_INVALID_BROADCAST_ID = 1200;
+
+    /**
+     * Indicates that encryption code entered does not meet the specification requirement
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LE_BROADCAST_INVALID_CODE = 1201;
+
+    /**
+     * Indicates that the source ID cannot be found in the given Broadcast sink device
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LE_BROADCAST_ASSISTANT_INVALID_SOURCE_ID = 1202;
+
+    /**
+     * Indicates that the same Broadcast Source is already added to the Broadcast Sink
+     *
+     * Broadcast Source is identified by their advertising SID and broadcast ID
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LE_BROADCAST_ASSISTANT_DUPLICATE_ADDITION = 1203;
+
+
+    /**
+     * Indicates that the program info in a {@link BluetoothLeAudioContentMetadata} is not valid
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LE_CONTENT_METADATA_INVALID_PROGRAM_INFO = 1204;
+
+    /**
+     * Indicates that the language code in a {@link BluetoothLeAudioContentMetadata} is not valid
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LE_CONTENT_METADATA_INVALID_LANGUAGE = 1205;
+
+    /**
+     * Indicates that operation failed due to other {@link BluetoothLeAudioContentMetadata} related
+     * issues not covered by other reason codes.
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_LE_CONTENT_METADATA_INVALID_OTHER = 1206;
+
+    /**
+     * Indicates that provided group ID is invalid for the coordinated set
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_CSIP_INVALID_GROUP_ID = 1207;
+
+    /**
+     * Indicating that CSIP group locked failed due to group member being already locked.
      *
      * @hide
      */
-    public static final int ERROR_LE_AUDIO_BROADCAST_SOURCE_ENABLE_ENCRYPTION_FAILED = 1114;
+    @SystemApi
+    public static final int ERROR_CSIP_GROUP_LOCKED_BY_OTHER = 1208;
 
     /**
-     * Indicates that disabling LE Audio Broadcast encryption failed
+     * Indicating that CSIP device has been lost while being locked.
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_CSIP_LOCKED_GROUP_MEMBER_LOST = 1209;
+
+    /**
+     * Indicates that the set preset name is too long.
      * <p>
-     * Example solution: Change parameters and try again. If error persists, the app can report
-     * telemetry and/or log the error in a bugreport.
+     * Example solution: Try using shorter name.
      *
      * @hide
      */
-    public static final int ERROR_LE_AUDIO_BROADCAST_SOURCE_DISABLE_ENCRYPTION_FAILED = 1115;
+    @SystemApi
+    public static final int ERROR_HAP_PRESET_NAME_TOO_LONG = 1210;
 
     /**
-     * Indicates that an unknown error has occurred has occurred.
+     * Indicates that provided preset index parameters is invalid
+     * <p>
+     * Example solution: Use preset index of a known existing preset.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ERROR_HAP_INVALID_PRESET_INDEX = 1211;
+
+    /**
+     * Indicates that the RFCOMM listener could not be started due to the requested UUID already
+     * being in use.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int RFCOMM_LISTENER_START_FAILED_UUID_IN_USE = 2000;
+
+    /**
+     * Indicates that the operation could not be competed because the service record on which the
+     * operation was requested on does not exist.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int RFCOMM_LISTENER_OPERATION_FAILED_NO_MATCHING_SERVICE_RECORD = 2001;
+
+    /**
+     * Indicates that the operation could not be completed because the application requesting the
+     * operation on the RFCOMM listener was not the one which registered it.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int RFCOMM_LISTENER_OPERATION_FAILED_DIFFERENT_APP = 2002;
+
+    /**
+     * Indicates that the creation of the underlying BluetoothServerSocket failed.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int RFCOMM_LISTENER_FAILED_TO_CREATE_SERVER_SOCKET = 2003;
+
+    /**
+     * Indicates that closing the underlying BluetoothServerSocket failed.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int RFCOMM_LISTENER_FAILED_TO_CLOSE_SERVER_SOCKET = 2004;
+
+    /**
+     * Indicates that there is no socket available to retrieve from the given listener.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int RFCOMM_LISTENER_NO_SOCKET_AVAILABLE = 2005;
+
+    /**
+     * Indicates that an unknown error has occurred.
      */
     public static final int ERROR_UNKNOWN = Integer.MAX_VALUE;
 }

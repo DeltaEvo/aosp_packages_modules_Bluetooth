@@ -27,6 +27,7 @@
 #include "btm_api_mock.h"
 #include "client_parser.h"
 #include "fake_osi.h"
+#include "le_audio_set_configuration_provider.h"
 #include "mock_codec_manager.h"
 #include "mock_controller.h"
 #include "mock_iso_manager.h"
@@ -136,14 +137,16 @@ class MockLeAudioGroupStateMachineCallbacks
     : public LeAudioGroupStateMachine::Callbacks {
  public:
   MockLeAudioGroupStateMachineCallbacks() = default;
+  MockLeAudioGroupStateMachineCallbacks(
+      const MockLeAudioGroupStateMachineCallbacks&) = delete;
+  MockLeAudioGroupStateMachineCallbacks& operator=(
+      const MockLeAudioGroupStateMachineCallbacks&) = delete;
+
   ~MockLeAudioGroupStateMachineCallbacks() override = default;
   MOCK_METHOD((void), StatusReportCb,
               (int group_id, bluetooth::le_audio::GroupStreamStatus status),
               (override));
   MOCK_METHOD((void), OnStateTransitionTimeout, (int group_id), (override));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockLeAudioGroupStateMachineCallbacks);
 };
 
 class StateMachineTest : public Test {
@@ -156,6 +159,7 @@ class StateMachineTest : public Test {
     gatt::SetMockBtaGattQueue(&gatt_queue);
 
     ase_id_last_assigned = types::ase::kAseIdInvalid;
+    ::le_audio::AudioSetConfigurationProvider::Initialize();
     LeAudioGroupStateMachine::Initialize(&mock_callbacks_);
 
     // Support 2M Phy
@@ -169,7 +173,7 @@ class StateMachineTest : public Test {
                          : ((uint16_t)(remote_bda.address[0] ^
                                        remote_bda.address[1] ^
                                        remote_bda.address[2]))
-                                   << 8 ||
+                                   << 8 |
                                (remote_bda.address[3] ^ remote_bda.address[4] ^
                                 remote_bda.address[5]);
             }));
@@ -384,7 +388,11 @@ class StateMachineTest : public Test {
   void ConfigCodecManagerMock() {
     codec_manager_ = le_audio::CodecManager::GetInstance();
     ASSERT_NE(codec_manager_, nullptr);
-    codec_manager_->Start();
+    std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+        mock_offloading_preference(0);
+    std::vector<set_configurations::AudioSetConfiguration>
+        mock_adsp_capabilities(0);
+    codec_manager_->Start(mock_offloading_preference, mock_adsp_capabilities);
     mock_codec_manager_ = MockCodecManager::GetInstance();
     ASSERT_NE(mock_codec_manager_, nullptr);
     ON_CALL(*mock_codec_manager_, GetCodecLocation())
@@ -408,6 +416,7 @@ class StateMachineTest : public Test {
     le_audio_devices_.clear();
     cached_codec_configuration_map_.clear();
     LeAudioGroupStateMachine::Cleanup();
+    ::le_audio::AudioSetConfigurationProvider::Cleanup();
   }
 
   std::shared_ptr<LeAudioDevice> PrepareConnectedDevice(uint8_t id,
@@ -1118,11 +1127,17 @@ TEST_F(StateMachineTest, testConfigureCodecSingle) {
   auto* leAudioDevice = group->GetFirstDevice();
   PrepareConfigureCodecHandler(group, 1);
 
-  // Start the configuration and stream Media content
+  /* Start the configuration and stream Media content.
+   * Expect 1 time for the Codec Config call only. */
   EXPECT_CALL(gatt_queue,
               WriteCharacteristic(1, leAudioDevice->ctp_hdls_.val_hdl, _,
                                   GATT_WRITE_NO_RSP, _, _))
-      .Times(2);
+      .Times(1);
+
+  /* Do nothing on the CigCreate, so the state machine stays in the configure
+   * state */
+  ON_CALL(*mock_iso_manager_, CreateCig).WillByDefault(Return());
+  EXPECT_CALL(*mock_iso_manager_, CreateCig).Times(1);
 
   InjectInitialIdleNotification(group);
 
@@ -1160,6 +1175,11 @@ TEST_F(StateMachineTest, testConfigureCodecMulti) {
   ASSERT_EQ(expected_devices_written, num_devices);
 
   InjectInitialIdleNotification(group);
+
+  /* Do nothing on the CigCreate, so the state machine stays in the configure
+   * state */
+  ON_CALL(*mock_iso_manager_, CreateCig).WillByDefault(Return());
+  EXPECT_CALL(*mock_iso_manager_, CreateCig).Times(1);
 
   // Start the configuration and stream the content
   ASSERT_TRUE(LeAudioGroupStateMachine::Get()->StartStream(
@@ -2114,6 +2134,31 @@ TEST_F(StateMachineTest, testAseAutonomousRelease) {
       ASSERT_EQ(ase.state, types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
     }
   }
+}
+
+TEST_F(StateMachineTest, testStateTransitionTimeoutOnIdleState) {
+  const auto context_type = kContextTypeRingtone;
+  const int leaudio_group_id = 4;
+
+  // Prepare fake connected device group
+  auto* group = PrepareSingleTestDeviceGroup(leaudio_group_id, context_type);
+
+  auto* leAudioDevice = group->GetFirstDevice();
+  EXPECT_CALL(gatt_queue,
+              WriteCharacteristic(1, leAudioDevice->ctp_hdls_.val_hdl, _,
+                                  GATT_WRITE_NO_RSP, _, _))
+      .Times(1);
+
+  // Start the configuration and stream Media content
+  ASSERT_TRUE(LeAudioGroupStateMachine::Get()->StartStream(
+      group, static_cast<types::LeAudioContextType>(context_type)));
+
+  // Disconnect device
+  LeAudioGroupStateMachine::Get()->ProcessHciNotifAclDisconnected(
+      group, leAudioDevice);
+
+  // Make sure timeout is cleared
+  ASSERT_TRUE(fake_osi_alarm_set_on_mloop_.cb == nullptr);
 }
 
 TEST_F(StateMachineTest, testStateTransitionTimeout) {

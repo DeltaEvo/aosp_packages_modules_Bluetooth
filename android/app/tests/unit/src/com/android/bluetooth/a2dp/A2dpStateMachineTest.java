@@ -122,6 +122,7 @@ public class A2dpStateMachineTest {
         }
         mA2dpStateMachine.doQuit();
         mHandlerThread.quit();
+        mHandlerThread.join(TIMEOUT_MS);
         TestUtils.clearAdapterService(mAdapterService);
     }
 

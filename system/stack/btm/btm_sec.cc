@@ -49,6 +49,7 @@
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/btm_status.h"
+#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2cap_security_interface.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "stack/smp/smp_int.h"
@@ -2187,15 +2188,15 @@ bool is_state_getting_name(void* data, void* context) {
 void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
                                        const uint8_t* p_bd_name,
                                        tHCI_STATUS status) {
-  tBTM_SEC_DEV_REC* p_dev_rec;
+  tBTM_SEC_DEV_REC* p_dev_rec = nullptr;
+
   int i;
-  DEV_CLASS dev_class;
   uint8_t old_sec_state;
 
-  BTM_TRACE_EVENT("btm_sec_rmt_name_request_complete");
   if ((!p_bd_addr &&
        !BTM_IsAclConnectionUp(btm_cb.connecting_bda, BT_TRANSPORT_BR_EDR)) ||
       (p_bd_addr && !BTM_IsAclConnectionUp(*p_bd_addr, BT_TRANSPORT_BR_EDR))) {
+    LOG_WARN("Remote read request complete with no underlying link connection");
     btm_acl_resubmit_page();
   }
 
@@ -2204,41 +2205,41 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
   if (p_bd_addr)
     p_dev_rec = btm_find_dev(*p_bd_addr);
   else {
+    LOG_INFO(
+        "Remote read request complete with no address so searching device "
+        "database");
     list_node_t* node =
         list_foreach(btm_cb.sec_dev_rec, is_state_getting_name, NULL);
     if (node != NULL) {
       p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(list_node(node));
       p_bd_addr = &p_dev_rec->bd_addr;
-    } else {
-      p_dev_rec = NULL;
     }
   }
 
-  /* Commenting out trace due to obf/compilation problems.
-   */
   if (!p_bd_name) p_bd_name = (const uint8_t*)"";
 
-  if (p_dev_rec) {
-    BTM_TRACE_EVENT(
-        "%s PairState: %s  RemName: %s  status: %d State:%d  p_dev_rec: "
-        "0x%08x ",
-        __func__, btm_pair_state_descr(btm_cb.pairing_state), p_bd_name, status,
-        p_dev_rec->sec_state, p_dev_rec);
-  } else {
-    BTM_TRACE_EVENT("%s PairState: %s  RemName: %s  status: %d", __func__,
-                    btm_pair_state_descr(btm_cb.pairing_state), p_bd_name,
-                    status);
-  }
-
-  if (p_dev_rec) {
+  if (p_dev_rec != nullptr) {
     old_sec_state = p_dev_rec->sec_state;
     if (status == HCI_SUCCESS) {
+      LOG_DEBUG(
+          "Remote read request complete for known device pairing_state:%s "
+          "name:%s sec_state:%s",
+          btm_pair_state_descr(btm_cb.pairing_state), p_bd_name,
+          security_state_text(p_dev_rec->sec_state).c_str());
+
       strlcpy((char*)p_dev_rec->sec_bd_name, (const char*)p_bd_name,
               BTM_MAX_REM_BD_NAME_LEN + 1);
       p_dev_rec->sec_flags |= BTM_SEC_NAME_KNOWN;
       BTM_TRACE_EVENT("setting BTM_SEC_NAME_KNOWN sec_flags:0x%x",
                       p_dev_rec->sec_flags);
     } else {
+      LOG_WARN(
+          "Remote read request failed for known device pairing_state:%s "
+          "status:%s name:%s sec_state:%s",
+          btm_pair_state_descr(btm_cb.pairing_state),
+          hci_status_code_text(status).c_str(), p_bd_name,
+          security_state_text(p_dev_rec->sec_state).c_str());
+
       /* Notify all clients waiting for name to be resolved even if it failed so
        * clients can continue */
       p_dev_rec->sec_bd_name[0] = 0;
@@ -2254,15 +2255,18 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
                                          p_dev_rec->sec_bd_name);
     }
   } else {
-    dev_class[0] = 0;
-    dev_class[1] = 0;
-    dev_class[2] = 0;
+    LOG_DEBUG(
+        "Remote read request complete for unknown device pairing_state:%s "
+        "status:%s name:%s",
+        btm_pair_state_descr(btm_cb.pairing_state),
+        hci_status_code_text(status).c_str(), p_bd_name);
 
     /* Notify all clients waiting for name to be resolved even if not found so
      * clients can continue */
     for (i = 0; i < BTM_SEC_MAX_RMT_NAME_CALLBACKS; i++) {
       if (btm_cb.p_rmt_name_callback[i] && p_bd_addr)
-        (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, dev_class, (uint8_t*)"");
+        (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, (uint8_t*)kDevClassEmpty,
+                                         (uint8_t*)kBtmBdNameEmpty);
     }
 
     return;
@@ -3263,6 +3267,7 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
         status == HCI_ERR_ENCRY_MODE_NOT_ACCEPTABLE) {
       p_dev_rec->sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
       p_dev_rec->ble.key_type = BTM_LE_KEY_NONE;
+      p_dev_rec->sec_status = status;
     }
     btm_ble_link_encrypted(p_dev_rec->ble.pseudo_addr, encr_enable);
     return;
@@ -3374,7 +3379,6 @@ static void btm_sec_connect_after_reject_timeout(UNUSED_ATTR void* data) {
 void btm_sec_connected(const RawAddress& bda, uint16_t handle,
                        tHCI_STATUS status, uint8_t enc_mode,
                        tHCI_ROLE assigned_role) {
-  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
   tBTM_STATUS res;
   bool is_pairing_device = false;
   bool addr_matched;
@@ -3382,6 +3386,7 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
 
   btm_acl_resubmit_page();
 
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
   if (!p_dev_rec) {
     LOG_DEBUG(
         "Connected to new device state:%s handle:0x%04x status:%s "
@@ -4400,12 +4405,16 @@ static bool btm_sec_start_get_name(tBTM_SEC_DEV_REC* p_dev_rec) {
  *
  ******************************************************************************/
 static void btm_sec_wait_and_start_authentication(tBTM_SEC_DEV_REC* p_dev_rec) {
-  if (alarm_is_scheduled(btm_cb.execution_wait_timer)) {
-    BTM_TRACE_EVENT("%s: alarm already scheduled", __func__);
-    return;
+  p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
+  auto addr = new RawAddress(p_dev_rec->bd_addr);
+  bt_status_t status = do_in_main_thread_delayed(
+      FROM_HERE, base::Bind(&btm_sec_auth_timer_timeout, addr),
+      base::TimeDelta::FromMilliseconds(BTM_DELAY_AUTH_MS));
+  if (status != BT_STATUS_SUCCESS) {
+    LOG(ERROR) << __func__
+               << ": do_in_main_thread_delayed failed. directly calling.";
+    btm_sec_auth_timer_timeout(addr);
   }
-  alarm_set(btm_cb.execution_wait_timer, BTM_DELAY_AUTH_MS,
-            btm_sec_auth_timer_timeout, p_dev_rec);
 }
 
 /*******************************************************************************
@@ -4416,9 +4425,17 @@ static void btm_sec_wait_and_start_authentication(tBTM_SEC_DEV_REC* p_dev_rec) {
  *
  ******************************************************************************/
 static void btm_sec_auth_timer_timeout(void* data) {
-  tBTM_SEC_DEV_REC* p_dev_rec = (tBTM_SEC_DEV_REC*)data;
-  p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
-  btsnd_hcic_auth_request(p_dev_rec->hci_handle);
+  RawAddress* p_addr = (RawAddress*)data;
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(*p_addr);
+  delete p_addr;
+  if (p_dev_rec == NULL) {
+    LOG_INFO("%s: invalid device or not found", __func__);
+  } else if (btm_dev_authenticated(p_dev_rec)) {
+    LOG_INFO("%s: device is already authenticated", __func__);
+  } else {
+    LOG_INFO("%s: starting authentication", __func__);
+    btsnd_hcic_auth_request(p_dev_rec->hci_handle);
+  }
 }
 
 /*******************************************************************************

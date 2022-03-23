@@ -72,15 +72,23 @@ oneway interface IBluetoothCsipSetCoordinator {
    * @return unique lock identifier required for unlocking
    */
   @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)")
-  void groupLock(int groupId, in IBluetoothCsipSetCoordinatorLockCallback callback, in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
+  void lockGroup(int groupId, in IBluetoothCsipSetCoordinatorLockCallback callback, in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
 
   /**
    * Unlock group using {@var lockUuid} acquired through
-   * {@link android.bluetooth.IBluetoothCsipSetCoordinator.groupLock}.
+   * {@link android.bluetooth.IBluetoothCsipSetCoordinator.lockGroup}.
    */
   @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)")
-  void groupUnlock(in ParcelUuid lockUuid, in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
+  void unlockGroup(in ParcelUuid lockUuid, in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
 
   const int CSIS_GROUP_ID_INVALID = -1;
   const int CSIS_GROUP_SIZE_UNKNOWN = 1;
+
+  const int CSIS_GROUP_LOCK_SUCCESS = 0;
+  const int CSIS_GROUP_LOCK_FAILED_INVALID_GROUP = 1;
+  const int CSIS_GROUP_LOCK_FAILED_GROUP_EMPTY = 2;
+  const int CSIS_GROUP_LOCK_FAILED_GROUP_NOT_CONNECTED = 3;
+  const int CSIS_GROUP_LOCK_FAILED_LOCKED_BY_OTHER = 4;
+  const int CSIS_GROUP_LOCK_FAILED_OTHER_REASON = 5;
+  const int CSIS_LOCKED_GROUP_MEMBER_LOST = 6;
 }

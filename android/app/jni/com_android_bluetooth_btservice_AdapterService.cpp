@@ -72,6 +72,7 @@ static jmethodID method_aclStateChangeCallback;
 static jmethodID method_discoveryStateChangeCallback;
 static jmethodID method_linkQualityReportCallback;
 static jmethodID method_switchBufferSizeCallback;
+static jmethodID method_switchCodecCallback;
 static jmethodID method_setWakeAlarm;
 static jmethodID method_acquireWakeLock;
 static jmethodID method_releaseWakeLock;
@@ -599,32 +600,27 @@ static void link_quality_report_callback(
       (jint)negative_acknowledgement_count);
 }
 
-static void switch_buffer_size_callback(RawAddress* bd_addr,
-                                        bool is_low_latency_buffer_size) {
-
-  if (!bd_addr) {
-    ALOGE("Address is null in %s", __func__);
-    return;
-  }
+static void switch_buffer_size_callback(bool is_low_latency_buffer_size) {
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
-
-  ScopedLocalRef<jbyteArray> addr(
-      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
-  if (!addr.get()) {
-    ALOGE("Error while allocating in: %s", __func__);
-    return;
-  }
-
-  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
-                                 (jbyte*)bd_addr);
 
   ALOGV("%s: SwitchBufferSizeCallback: %s", __func__,
         is_low_latency_buffer_size ? "true" : "false");
 
   sCallbackEnv->CallVoidMethod(
-      sJniCallbacksObj, method_switchBufferSizeCallback, addr.get(),
+      sJniCallbacksObj, method_switchBufferSizeCallback,
       (jboolean)is_low_latency_buffer_size);
+}
+
+static void switch_codec_callback(bool is_low_latency_buffer_size) {
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+
+  ALOGV("%s: SwitchCodecCallback: %s", __func__,
+        is_low_latency_buffer_size ? "true" : "false");
+
+  sCallbackEnv->CallVoidMethod(sJniCallbacksObj, method_switchCodecCallback,
+                               (jboolean)is_low_latency_buffer_size);
 }
 
 static void callback_thread_event(bt_cb_thread_evt event) {
@@ -704,7 +700,8 @@ static bt_callbacks_t sBluetoothCallbacks = {sizeof(sBluetoothCallbacks),
                                              energy_info_recv_callback,
                                              link_quality_report_callback,
                                              generate_local_oob_data_callback,
-                                             switch_buffer_size_callback};
+                                             switch_buffer_size_callback,
+                                             switch_codec_callback};
 
 // The callback to call when the wake alarm fires.
 static alarm_cb sAlarmCallback;
@@ -924,7 +921,10 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
       jniCallbackClass, "linkQualityReportCallback", "(JIIIIII)V");
 
   method_switchBufferSizeCallback =
-      env->GetMethodID(jniCallbackClass, "switchBufferSizeCallback", "([BZ)V");
+      env->GetMethodID(jniCallbackClass, "switchBufferSizeCallback", "(Z)V");
+
+  method_switchCodecCallback =
+      env->GetMethodID(jniCallbackClass, "switchCodecCallback", "(Z)V");
 
   method_setWakeAlarm = env->GetMethodID(clazz, "setWakeAlarm", "(JZ)Z");
   method_acquireWakeLock =
@@ -1917,6 +1917,13 @@ jint JNI_OnLoad(JavaVM* jvm, void* reserved) {
   status = android::register_com_android_bluetooth_hearing_aid(e);
   if (status < 0) {
     ALOGE("jni hearing aid registration failure: %d", status);
+    return JNI_ERR;
+  }
+
+  status = android::register_com_android_bluetooth_hap_client(e);
+  if (status < 0) {
+    ALOGE("jni le audio hearing access client registration failure: %d",
+          status);
     return JNI_ERR;
   }
 

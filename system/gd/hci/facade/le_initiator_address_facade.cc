@@ -20,11 +20,11 @@
 #include <memory>
 #include <mutex>
 
+#include "blueberry/facade/hci/le_initiator_address_facade.grpc.pb.h"
+#include "blueberry/facade/hci/le_initiator_address_facade.pb.h"
 #include "common/bind.h"
 #include "grpc/grpc_event_queue.h"
 #include "hci/acl_manager.h"
-#include "hci/facade/le_initiator_address_facade.grpc.pb.h"
-#include "hci/facade/le_initiator_address_facade.pb.h"
 #include "hci/hci_packets.h"
 #include "packet/raw_builder.h"
 
@@ -37,6 +37,8 @@ using ::bluetooth::packet::RawBuilder;
 namespace bluetooth {
 namespace hci {
 namespace facade {
+
+using namespace blueberry::facade::hci;
 
 class LeInitiatorAddressFacadeService : public LeInitiatorAddressFacade::Service {
  public:
@@ -56,29 +58,31 @@ class LeInitiatorAddressFacadeService : public LeInitiatorAddressFacade::Service
       ASSERT(Address::FromString(request->address_with_type().address().address(), address));
     }
     AddressWithType address_with_type(address, static_cast<AddressType>(request->address_with_type().type()));
+    auto minimum_rotation_time = std::chrono::milliseconds(request->minimum_rotation_time());
+    auto maximum_rotation_time = std::chrono::milliseconds(request->maximum_rotation_time());
     crypto_toolbox::Octet16 irk = {};
     auto request_irk_length = request->rotation_irk().end() - request->rotation_irk().begin();
     if (request_irk_length == crypto_toolbox::OCTET16_LEN) {
       std::vector<uint8_t> irk_data(request->rotation_irk().begin(), request->rotation_irk().end());
       std::copy_n(irk_data.begin(), crypto_toolbox::OCTET16_LEN, irk.begin());
+      acl_manager_->SetPrivacyPolicyForInitiatorAddressForTest(
+          address_policy, address_with_type, irk, minimum_rotation_time, maximum_rotation_time);
     } else {
+      acl_manager_->SetPrivacyPolicyForInitiatorAddress(
+          address_policy, address_with_type, minimum_rotation_time, maximum_rotation_time);
       ASSERT(request_irk_length == 0);
     }
-    auto minimum_rotation_time = std::chrono::milliseconds(request->minimum_rotation_time());
-    auto maximum_rotation_time = std::chrono::milliseconds(request->maximum_rotation_time());
-    acl_manager_->SetPrivacyPolicyForInitiatorAddress(
-        address_policy, address_with_type, minimum_rotation_time, maximum_rotation_time);
     return ::grpc::Status::OK;
   }
 
   ::grpc::Status GetCurrentInitiatorAddress(
       ::grpc::ServerContext* context,
       const ::google::protobuf::Empty* request,
-      ::bluetooth::facade::BluetoothAddressWithType* response) override {
+      ::blueberry::facade::BluetoothAddressWithType* response) override {
     AddressWithType current = address_manager_->GetCurrentAddress();
-    auto bluetooth_address = new ::bluetooth::facade::BluetoothAddress();
+    auto bluetooth_address = new ::blueberry::facade::BluetoothAddress();
     bluetooth_address->set_address(current.GetAddress().ToString());
-    response->set_type(static_cast<::bluetooth::facade::BluetoothAddressTypeEnum>(current.GetAddressType()));
+    response->set_type(static_cast<::blueberry::facade::BluetoothAddressTypeEnum>(current.GetAddressType()));
     response->set_allocated_address(bluetooth_address);
     return ::grpc::Status::OK;
   }
@@ -86,11 +90,11 @@ class LeInitiatorAddressFacadeService : public LeInitiatorAddressFacade::Service
   ::grpc::Status GetAnotherAddress(
       ::grpc::ServerContext* context,
       const ::google::protobuf::Empty* request,
-      ::bluetooth::facade::BluetoothAddressWithType* response) override {
+      ::blueberry::facade::BluetoothAddressWithType* response) override {
     AddressWithType another = address_manager_->GetAnotherAddress();
-    auto bluetooth_address = new ::bluetooth::facade::BluetoothAddress();
+    auto bluetooth_address = new ::blueberry::facade::BluetoothAddress();
     bluetooth_address->set_address(another.GetAddress().ToString());
-    response->set_type(static_cast<::bluetooth::facade::BluetoothAddressTypeEnum>(another.GetAddressType()));
+    response->set_type(static_cast<::blueberry::facade::BluetoothAddressTypeEnum>(another.GetAddressType()));
     response->set_allocated_address(bluetooth_address);
     return ::grpc::Status::OK;
   }

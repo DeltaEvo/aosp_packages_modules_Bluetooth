@@ -28,8 +28,10 @@ namespace hci {
 class Controller : public Module {
  public:
   Controller();
+  Controller(const Controller&) = delete;
+  Controller& operator=(const Controller&) = delete;
+
   virtual ~Controller();
-  DISALLOW_COPY_AND_ASSIGN(Controller);
 
   using CompletedAclPacketsCallback =
       common::ContextualCallback<void(uint16_t /* handle */, uint16_t /* num_packets */)>;
@@ -180,7 +182,7 @@ class Controller : public Module {
   static const ModuleFactory Factory;
 
   static constexpr uint64_t kDefaultEventMask = 0x3dbfffffffffffff;
-  static constexpr uint64_t kDefaultLeEventMask = 0x0000000041021e7f;
+  static constexpr uint64_t kDefaultLeEventMask = 0x000000004d02fe7f;
 
  protected:
   void ListDependencies(ModuleList* list) const override;

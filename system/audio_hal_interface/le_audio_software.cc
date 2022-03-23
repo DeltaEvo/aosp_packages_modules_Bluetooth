@@ -22,7 +22,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "aidl/le_audio_software.h"
+#include "aidl/le_audio_software_aidl.h"
 #include "bta/le_audio/codec_manager.h"
 #include "hal_version_manager.h"
 #include "hidl/le_audio_software_hidl.h"
@@ -38,8 +38,6 @@ namespace {
 using ::android::hardware::bluetooth::audio::V2_1::PcmParameters;
 using AudioConfiguration_2_1 =
     ::android::hardware::bluetooth::audio::V2_1::AudioConfiguration;
-using AudioConfiguration_2_2 =
-    ::android::hardware::bluetooth::audio::V2_2::AudioConfiguration;
 using AudioConfigurationAIDL =
     ::aidl::android::hardware::bluetooth::audio::AudioConfiguration;
 
@@ -51,7 +49,7 @@ using ::le_audio::types::CodecLocation;
 std::vector<AudioSetConfiguration> get_offload_capabilities() {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::HIDL) {
-    return hidl::le_audio::get_offload_capabilities();
+    return std::vector<AudioSetConfiguration>(0);
   }
   return aidl::le_audio::get_offload_capabilities();
 }
@@ -131,25 +129,6 @@ void LeAudioClientInterface::Sink::StartSession() {
       return;
     }
     hidl::le_audio::LeAudioSinkTransport::interface->StartSession_2_1();
-    return;
-  } else if (HalVersionManager::GetHalVersion() ==
-             BluetoothAudioHalVersion::VERSION_2_2) {
-    AudioConfiguration_2_2 audio_config;
-    if (hidl::le_audio::LeAudioSinkTransport::interface->GetTransportInstance()
-            ->GetSessionType_2_1() ==
-        hidl::SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH) {
-      hidl::le_audio::LeAudioConfiguration le_audio_config = {};
-      audio_config.leAudioConfig(le_audio_config);
-    } else {
-      audio_config.pcmConfig(hidl::le_audio::LeAudioSinkTransport::instance
-                                 ->LeAudioGetSelectedHalPcmConfig());
-    }
-    if (!hidl::le_audio::LeAudioSinkTransport::interface->UpdateAudioConfig_2_2(
-            audio_config)) {
-      LOG(ERROR) << __func__ << ": cannot update audio config to HAL";
-      return;
-    }
-    hidl::le_audio::LeAudioSinkTransport::interface->StartSession_2_2();
     return;
   } else if (HalVersionManager::GetHalVersion() ==
              BluetoothAudioHalVersion::VERSION_AIDL_V1) {
@@ -236,13 +215,6 @@ void LeAudioClientInterface::Sink::UpdateAudioConfigToHal(
     const ::le_audio::offload_config& offload_config) {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::HIDL) {
-    if (hidl::le_audio::LeAudioSinkTransport::interface->GetTransportInstance()
-            ->GetSessionType_2_1() !=
-        hidl::SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH) {
-      return;
-    }
-    hidl::le_audio::LeAudioSinkTransport::interface->UpdateAudioConfig_2_2(
-        hidl::le_audio::offload_config_to_hal_audio_config(offload_config));
     return;
   }
   if (aidl::le_audio::LeAudioSinkTransport::interface->GetTransportInstance()
@@ -252,6 +224,22 @@ void LeAudioClientInterface::Sink::UpdateAudioConfigToHal(
   }
   aidl::le_audio::LeAudioSinkTransport::interface->UpdateAudioConfig(
       aidl::le_audio::offload_config_to_hal_audio_config(offload_config));
+}
+
+void LeAudioClientInterface::Sink::SuspendedForReconfiguration() {
+  if (HalVersionManager::GetHalTransport() ==
+      BluetoothAudioHalTransport::HIDL) {
+    return;
+  }
+
+  if (aidl::le_audio::LeAudioSinkTransport::interface->GetTransportInstance()
+          ->GetSessionType() !=
+      aidl::SessionType::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH) {
+    return;
+  }
+
+  aidl::le_audio::LeAudioSinkTransport::interface->StreamSuspended(
+      aidl::BluetoothAudioCtrlAck::SUCCESS_RECONFIGURATION);
 }
 
 size_t LeAudioClientInterface::Sink::Read(uint8_t* p_buf, uint32_t len) {
@@ -315,8 +303,6 @@ void LeAudioClientInterface::Source::SetRemoteDelay(uint16_t delay_report_ms) {
 
 void LeAudioClientInterface::Source::StartSession() {
   LOG(INFO) << __func__;
-  if (!hidl::le_audio::is_source_hal_enabled()) return;
-
   if (HalVersionManager::GetHalVersion() ==
       BluetoothAudioHalVersion::VERSION_2_1) {
     AudioConfiguration_2_1 audio_config;
@@ -328,27 +314,6 @@ void LeAudioClientInterface::Source::StartSession() {
       return;
     }
     hidl::le_audio::LeAudioSourceTransport::interface->StartSession_2_1();
-    return;
-  } else if (HalVersionManager::GetHalVersion() ==
-             BluetoothAudioHalVersion::VERSION_2_2) {
-    AudioConfiguration_2_2 audio_config;
-    if (hidl::le_audio::LeAudioSourceTransport::
-            interface->GetTransportInstance()
-                ->GetSessionType_2_1() ==
-        hidl::SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) {
-      hidl::le_audio::LeAudioConfiguration le_audio_config = {};
-      audio_config.leAudioConfig(le_audio_config);
-    } else {
-      audio_config.pcmConfig(hidl::le_audio::LeAudioSourceTransport::instance
-                                 ->LeAudioGetSelectedHalPcmConfig());
-    }
-
-    if (!hidl::le_audio::LeAudioSourceTransport::
-             interface->UpdateAudioConfig_2_2(audio_config)) {
-      LOG(ERROR) << __func__ << ": cannot update audio config to HAL";
-      return;
-    }
-    hidl::le_audio::LeAudioSourceTransport::interface->StartSession_2_2();
     return;
   } else if (HalVersionManager::GetHalVersion() ==
              BluetoothAudioHalVersion::VERSION_AIDL_V1) {
@@ -373,6 +338,22 @@ void LeAudioClientInterface::Source::StartSession() {
     }
     aidl::le_audio::LeAudioSourceTransport::interface->StartSession();
   }
+}
+
+void LeAudioClientInterface::Source::SuspendedForReconfiguration() {
+  if (HalVersionManager::GetHalTransport() ==
+      BluetoothAudioHalTransport::HIDL) {
+    return;
+  }
+
+  if (aidl::le_audio::LeAudioSourceTransport::interface->GetTransportInstance()
+          ->GetSessionType() !=
+      aidl::SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) {
+    return;
+  }
+
+  aidl::le_audio::LeAudioSourceTransport::interface->StreamSuspended(
+      aidl::BluetoothAudioCtrlAck::SUCCESS_RECONFIGURATION);
 }
 
 void LeAudioClientInterface::Source::ConfirmStreamingRequest() {
@@ -439,16 +420,16 @@ void LeAudioClientInterface::Source::UpdateAudioConfigToHal(
     const ::le_audio::offload_config& offload_config) {
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::HIDL) {
-    if (hidl::le_audio::LeAudioSourceTransport::
-            interface->GetTransportInstance()
-                ->GetSessionType_2_1() !=
-        hidl::SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) {
-      return;
-    }
-    hidl::le_audio::LeAudioSourceTransport::interface->UpdateAudioConfig_2_2(
-        hidl::le_audio::offload_config_to_hal_audio_config(offload_config));
     return;
   }
+
+  if (aidl::le_audio::LeAudioSourceTransport::interface->GetTransportInstance()
+          ->GetSessionType() !=
+      aidl::SessionType::LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH) {
+    return;
+  }
+  aidl::le_audio::LeAudioSourceTransport::interface->UpdateAudioConfig(
+      aidl::le_audio::offload_config_to_hal_audio_config(offload_config));
 }
 
 size_t LeAudioClientInterface::Source::Write(const uint8_t* p_buf,
@@ -478,11 +459,6 @@ LeAudioClientInterface::Sink* LeAudioClientInterface::GetSink(
       BluetoothAudioHalTransport::HIDL) {
     hidl::SessionType_2_1 session_type =
         hidl::SessionType_2_1::LE_AUDIO_SOFTWARE_ENCODING_DATAPATH;
-    if (CodecManager::GetInstance()->GetCodecLocation() !=
-        CodecLocation::HOST) {
-      session_type =
-          hidl::SessionType_2_1::LE_AUDIO_HARDWARE_OFFLOAD_ENCODING_DATAPATH;
-    }
 
     hidl::le_audio::LeAudioSinkTransport::instance =
         new hidl::le_audio::LeAudioSinkTransport(session_type,

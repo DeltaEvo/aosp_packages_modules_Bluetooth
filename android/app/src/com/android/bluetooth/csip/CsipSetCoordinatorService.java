@@ -18,7 +18,6 @@
 package com.android.bluetooth.csip;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
-import static android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
@@ -26,6 +25,7 @@ import android.annotation.Nullable;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothCsipSetCoordinator;
 import android.bluetooth.IBluetoothCsipSetCoordinatorCallback;
@@ -66,6 +66,9 @@ import java.util.stream.Collectors;
 public class CsipSetCoordinatorService extends ProfileService {
     private static final boolean DBG = false;
     private static final String TAG = "CsipSetCoordinatorService";
+
+    // Timeout for state machine thread join, to prevent potential ANR.
+    private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
 
     // Upper limit of all CSIP devices: Bonded or Connected
     private static final int MAX_CSIS_STATE_MACHINES = 10;
@@ -182,8 +185,13 @@ public class CsipSetCoordinatorService extends ProfileService {
         }
 
         if (mStateMachinesThread != null) {
-            mStateMachinesThread.quitSafely();
-            mStateMachinesThread = null;
+            try {
+                mStateMachinesThread.quitSafely();
+                mStateMachinesThread.join(SM_THREAD_JOIN_TIMEOUT_MS);
+                mStateMachinesThread = null;
+            } catch (InterruptedException e) {
+                // Do not rethrow as we are shutting down anyway
+            }
         }
 
         mDeviceGroupIdMap.clear();
@@ -477,7 +485,7 @@ public class CsipSetCoordinatorService extends ProfileService {
      *
      * @hide
      */
-    public @Nullable UUID groupLock(
+    public @Nullable UUID lockGroup(
             int groupId, @NonNull IBluetoothCsipSetCoordinatorLockCallback callback) {
         if (callback == null) {
             return null;
@@ -488,7 +496,8 @@ public class CsipSetCoordinatorService extends ProfileService {
             if (mLocks.containsKey(groupId)) {
                 try {
                     callback.onGroupLockSet(groupId,
-                            BluetoothCsipSetCoordinator.GROUP_LOCK_FAILED_LOCKED_BY_OTHER, true);
+                            BluetoothStatusCodes.ERROR_CSIP_GROUP_LOCKED_BY_OTHER,
+                            true);
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
                 }
@@ -508,7 +517,7 @@ public class CsipSetCoordinatorService extends ProfileService {
      *
      * @hide
      */
-    public void groupUnlock(@NonNull UUID lockUuid) {
+    public void unlockGroup(@NonNull UUID lockUuid) {
         if (lockUuid == null) {
             return;
         }
@@ -615,6 +624,25 @@ public class CsipSetCoordinatorService extends ProfileService {
         }
     }
 
+    int getApiStatusCode(int nativeResult) {
+        switch (nativeResult) {
+            case IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_SUCCESS:
+                return BluetoothStatusCodes.SUCCESS;
+            case IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_FAILED_INVALID_GROUP:
+                return BluetoothStatusCodes.ERROR_CSIP_INVALID_GROUP_ID;
+            case IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_FAILED_GROUP_NOT_CONNECTED:
+                return BluetoothStatusCodes.ERROR_DEVICE_NOT_CONNECTED;
+            case IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_FAILED_LOCKED_BY_OTHER:
+                return BluetoothStatusCodes.ERROR_CSIP_GROUP_LOCKED_BY_OTHER;
+            case IBluetoothCsipSetCoordinator.CSIS_LOCKED_GROUP_MEMBER_LOST:
+                return BluetoothStatusCodes.ERROR_CSIP_LOCKED_GROUP_MEMBER_LOST;
+            case IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_FAILED_OTHER_REASON:
+            default:
+                Log.e(TAG, " Unknown status code: " + nativeResult);
+                return BluetoothStatusCodes.ERROR_UNKNOWN;
+        }
+    }
+
     void handleGroupLockChanged(int groupId, int status, boolean isLocked) {
         synchronized (mLocks) {
             if (!mLocks.containsKey(groupId)) {
@@ -623,7 +651,7 @@ public class CsipSetCoordinatorService extends ProfileService {
 
             IBluetoothCsipSetCoordinatorLockCallback cb = mLocks.get(groupId).second;
             try {
-                cb.onGroupLockSet(groupId, status, isLocked);
+                cb.onGroupLockSet(groupId, getApiStatusCode(status), isLocked);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -954,14 +982,14 @@ public class CsipSetCoordinatorService extends ProfileService {
         }
 
         @Override
-        public void groupLock(
+        public void lockGroup(
                 int groupId, @NonNull IBluetoothCsipSetCoordinatorLockCallback callback,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
                 ParcelUuid defaultValue = null;
                 CsipSetCoordinatorService service = getService(source);
                 if (service != null) {
-                     UUID lockUuid = service.groupLock(groupId, callback);
+                    UUID lockUuid = service.lockGroup(groupId, callback);
                     defaultValue = lockUuid == null ? null : new ParcelUuid(lockUuid);
                 }
                 receiver.send(defaultValue);
@@ -971,12 +999,12 @@ public class CsipSetCoordinatorService extends ProfileService {
         }
 
         @Override
-        public void groupUnlock(@NonNull ParcelUuid lockUuid, AttributionSource source,
+        public void unlockGroup(@NonNull ParcelUuid lockUuid, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
                 CsipSetCoordinatorService service = getService(source);
                 if (service != null) {
-                    service.groupUnlock(lockUuid.getUuid());
+                    service.unlockGroup(lockUuid.getUuid());
                 }
                 receiver.send(null);
             } catch (RuntimeException e) {

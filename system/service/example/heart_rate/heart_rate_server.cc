@@ -41,6 +41,11 @@ class CLIBluetoothLeAdvertiserCallback
       android::sp<android::bluetooth::IBluetooth> bt)
       : bt_(bt) {}
 
+  CLIBluetoothLeAdvertiserCallback(const CLIBluetoothLeAdvertiserCallback&) =
+      delete;
+  CLIBluetoothLeAdvertiserCallback& operator=(
+      const CLIBluetoothLeAdvertiserCallback&) = delete;
+
   // IBluetoothLeAdvertiserCallback overrides:
   Status OnAdvertiserRegistered(int status, int advertiser_id) {
     if (status != bluetooth::BLE_STATUS_SUCCESS) {
@@ -90,7 +95,6 @@ class CLIBluetoothLeAdvertiserCallback
 
  private:
   android::sp<android::bluetooth::IBluetooth> bt_;
-  DISALLOW_COPY_AND_ASSIGN(CLIBluetoothLeAdvertiserCallback);
 };
 
 HeartRateServer::HeartRateServer(
@@ -153,7 +157,11 @@ void HeartRateServer::ScheduleNextMeasurement() {
   main_task_runner_->PostDelayedTask(
       FROM_HERE, base::Bind(&HeartRateServer::SendHeartRateMeasurement,
                             weak_ptr_factory_.GetWeakPtr()),
+#if BASE_VER < 931007
       base::TimeDelta::FromSeconds(1));
+#else
+      base::Seconds(1));
+#endif
 }
 
 void HeartRateServer::SendHeartRateMeasurement() {

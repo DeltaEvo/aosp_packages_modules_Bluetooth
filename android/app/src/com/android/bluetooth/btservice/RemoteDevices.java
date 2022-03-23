@@ -41,6 +41,7 @@ import android.util.Log;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.bas.BatteryService;
 import com.android.bluetooth.hfp.HeadsetHalConstants;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -663,6 +664,9 @@ final class RemoteDevices {
                             }
                             break;
                         case AbstractionLayer.BT_PROPERTY_TYPE_OF_DEVICE:
+                            if (device.isConsolidated()) {
+                                return;
+                            }
                             // The device type from hal layer, defined in bluetooth.h,
                             // matches the type defined in BluetoothDevice.java
                             device.mDeviceType = Utils.byteArrayToInt(val);
@@ -737,6 +741,7 @@ final class RemoteDevices {
 
         DeviceProperties deviceProperties = getDeviceProperties(device);
         deviceProperties.mIsConsolidated = true;
+        deviceProperties.mDeviceType = BluetoothDevice.DEVICE_TYPE_DUAL;
         deviceProperties.mIdentityAddress = Utils.getAddressStringFromByte(secondaryAddress);
         mDualDevicesMap.put(deviceProperties.getIdentityAddress(), Utils.getAddressStringFromByte(mainAddress));
     }
@@ -761,6 +766,10 @@ final class RemoteDevices {
                     || state == BluetoothAdapter.STATE_BLE_TURNING_ON) {
                 intent = new Intent(BluetoothAdapter.ACTION_BLE_ACL_CONNECTED);
             }
+            BatteryService batteryService = BatteryService.getBatteryService();
+            if (batteryService != null) {
+                batteryService.connect(device);
+            }
             debugLog(
                     "aclStateChangeCallback: Adapter State: " + BluetoothAdapter.nameForState(state)
                             + " Connected: " + device);
@@ -782,7 +791,17 @@ final class RemoteDevices {
             }
             // Reset battery level on complete disconnection
             if (sAdapterService.getConnectionState(device) == 0) {
+                BatteryService batteryService = BatteryService.getBatteryService();
+                if (batteryService != null) {
+                    batteryService.disconnect(device);
+                }
                 resetBatteryLevel(device);
+            }
+            if (!sAdapterService.isAnyProfileEnabled(device)) {
+                DeviceProperties deviceProp = getDeviceProperties(device);
+                if (deviceProp != null) {
+                    deviceProp.setBondingInitiatedLocally(false);
+                }
             }
             debugLog(
                     "aclStateChangeCallback: Adapter State: " + BluetoothAdapter.nameForState(state)

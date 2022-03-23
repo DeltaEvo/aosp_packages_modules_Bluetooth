@@ -26,6 +26,7 @@ namespace audio {
 namespace aidl {
 
 using ::aidl::android::hardware::bluetooth::audio::AudioConfiguration;
+using ::aidl::android::hardware::bluetooth::audio::LatencyMode;
 using ::aidl::android::hardware::bluetooth::audio::SessionType;
 
 /***
@@ -58,10 +59,13 @@ class IBluetoothTransportInstance {
         audio_config_.set<AudioConfiguration::leAudioConfig>(
             audio_config.get<AudioConfiguration::leAudioConfig>());
         break;
+      case AudioConfiguration::leAudioBroadcastConfig:
+        audio_config_.set<AudioConfiguration::leAudioBroadcastConfig>(
+            audio_config.get<AudioConfiguration::leAudioBroadcastConfig>());
     }
   }
 
-  virtual BluetoothAudioCtrlAck StartRequest() = 0;
+  virtual BluetoothAudioCtrlAck StartRequest(bool is_low_latency) = 0;
 
   virtual BluetoothAudioCtrlAck SuspendRequest() = 0;
 

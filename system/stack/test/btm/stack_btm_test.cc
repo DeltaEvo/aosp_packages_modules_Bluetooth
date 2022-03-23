@@ -25,13 +25,16 @@
 #include <vector>
 
 #include "btif/include/btif_hh.h"
+#include "common/init_flags.h"
 #include "hci/include/hci_layer.h"
 #include "hci/include/hci_packet_factory.h"
 #include "internal_include/stack_config.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
+#include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/btm_client_interface.h"
@@ -39,6 +42,9 @@
 #include "stack/l2cap/l2c_int.h"
 #include "test/mock/mock_stack_hcic_hcicmds.h"
 #include "types/raw_address.h"
+
+using testing::Each;
+using testing::Eq;
 
 namespace mock = test::mock::stack_hcic_hcicmds;
 
@@ -114,6 +120,13 @@ TEST_F(StackBtmTest, GlobalLifecycle) {
 TEST_F(StackBtmTest, DynamicLifecycle) {
   auto* btm = new tBTM_CB();
   delete btm;
+}
+
+TEST_F(StackBtmTest, tSCO_CB) {
+  bluetooth::common::InitFlags::SetAllForTesting();
+  tSCO_CB* p_sco = &btm_cb.sco_cb;
+  p_sco->Init();
+  p_sco->Free();
 }
 
 TEST_F(StackBtmTest, InformClientOnConnectionSuccess) {
@@ -205,4 +218,48 @@ TEST(ScoTest, make_sco_packet) {
   osi_free(p);
 }
 
+TEST(BtmTest, BTM_EIR_MAX_SERVICES) { ASSERT_EQ(46, BTM_EIR_MAX_SERVICES); }
+
 }  // namespace
+
+void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
+                                       const uint8_t* p_bd_name,
+                                       tHCI_STATUS status);
+
+struct {
+  RawAddress bd_addr;
+  DEV_CLASS dc;
+  tBTM_BD_NAME bd_name;
+} btm_test;
+
+TEST(SecTest, btm_sec_rmt_name_request_complete) {
+  bluetooth::common::InitFlags::SetAllForTesting();
+  btm_cb.Init(0);
+
+  ASSERT_TRUE(BTM_SecAddRmtNameNotifyCallback(
+      [](const RawAddress& bd_addr, DEV_CLASS dc, tBTM_BD_NAME bd_name) {
+        btm_test.bd_addr = bd_addr;
+        memcpy(btm_test.dc, dc, DEV_CLASS_LEN);
+        memcpy(btm_test.bd_name, bd_name, BTM_MAX_REM_BD_NAME_LEN);
+      }));
+
+  RawAddress bd_addr = RawAddress({0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6});
+  const uint8_t* p_bd_name = (const uint8_t*)"MyTestName";
+
+  btm_test = {};
+  btm_sec_rmt_name_request_complete(&bd_addr, p_bd_name, HCI_SUCCESS);
+
+  ASSERT_THAT(btm_test.bd_name, Each(Eq(0)));
+  ASSERT_THAT(btm_test.dc, Each(Eq(0)));
+  ASSERT_EQ(bd_addr, btm_test.bd_addr);
+
+  btm_test = {};
+  ASSERT_TRUE(btm_find_or_alloc_dev(bd_addr) != nullptr);
+  btm_sec_rmt_name_request_complete(&bd_addr, p_bd_name, HCI_SUCCESS);
+
+  ASSERT_STREQ((const char*)p_bd_name, (const char*)btm_test.bd_name);
+  ASSERT_THAT(btm_test.dc, Each(Eq(0)));
+  ASSERT_EQ(bd_addr, btm_test.bd_addr);
+
+  btm_cb.Free();
+}

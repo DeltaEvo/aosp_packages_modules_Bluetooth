@@ -15,6 +15,7 @@
 #   limitations under the License.
 
 from abc import ABC
+from abc import abstractmethod
 from datetime import datetime
 import inspect
 import logging
@@ -22,7 +23,6 @@ import os
 import pathlib
 import shutil
 import signal
-import socket
 import subprocess
 import time
 from typing import List
@@ -43,21 +43,21 @@ from blueberry.tests.gd.cert.os_utils import is_subprocess_alive
 from blueberry.tests.gd.cert.os_utils import make_ports_available
 from blueberry.tests.gd.cert.os_utils import TerminalColor
 
-from facade import rootservice_pb2_grpc as facade_rootservice_pb2_grpc
-from hal import hal_facade_pb2_grpc
-from hci.facade import hci_facade_pb2_grpc
-from hci.facade import acl_manager_facade_pb2_grpc
-from hci.facade import controller_facade_pb2_grpc
-from hci.facade import le_acl_manager_facade_pb2_grpc
-from hci.facade import le_advertising_manager_facade_pb2_grpc
-from hci.facade import le_initiator_address_facade_pb2_grpc
-from hci.facade import le_scanning_manager_facade_pb2_grpc
-from l2cap.classic import facade_pb2_grpc as l2cap_facade_pb2_grpc
-from l2cap.le import facade_pb2_grpc as l2cap_le_facade_pb2_grpc
-from iso import facade_pb2_grpc as iso_facade_pb2_grpc
-from neighbor.facade import facade_pb2_grpc as neighbor_facade_pb2_grpc
-from security import facade_pb2_grpc as security_facade_pb2_grpc
-from shim.facade import facade_pb2_grpc as shim_facade_pb2_grpc
+from blueberry.facade import rootservice_pb2_grpc as facade_rootservice_pb2_grpc
+from blueberry.facade.hal import hal_facade_pb2_grpc
+from blueberry.facade.hci import hci_facade_pb2_grpc
+from blueberry.facade.hci import acl_manager_facade_pb2_grpc
+from blueberry.facade.hci import controller_facade_pb2_grpc
+from blueberry.facade.hci import le_acl_manager_facade_pb2_grpc
+from blueberry.facade.hci import le_advertising_manager_facade_pb2_grpc
+from blueberry.facade.hci import le_initiator_address_facade_pb2_grpc
+from blueberry.facade.hci import le_scanning_manager_facade_pb2_grpc
+from blueberry.facade.l2cap.classic import facade_pb2_grpc as l2cap_facade_pb2_grpc
+from blueberry.facade.l2cap.le import facade_pb2_grpc as l2cap_le_facade_pb2_grpc
+from blueberry.facade.iso import facade_pb2_grpc as iso_facade_pb2_grpc
+from blueberry.facade.neighbor import facade_pb2_grpc as neighbor_facade_pb2_grpc
+from blueberry.facade.security import facade_pb2_grpc as security_facade_pb2_grpc
+from blueberry.facade.shim import facade_pb2_grpc as shim_facade_pb2_grpc
 
 from mobly import utils
 from mobly.controllers.android_device_lib.adb import AdbError
@@ -141,6 +141,8 @@ class GdDeviceBase(ABC):
     """
 
     WAIT_CHANNEL_READY_TIMEOUT_SECONDS = 10
+    WAIT_SIGINT_TIMEOUT_SECONDS = 5
+    WAIT_SIGKILL_TIMEOUT_SECONDS = 1
 
     def __init__(self, grpc_port: str, grpc_root_server_port: str, signal_port: str, cmd: List[str], label: str,
                  type_identifier: str, name: str, verbose_mode: bool):
@@ -214,21 +216,25 @@ class GdDeviceBase(ABC):
             tag=self.label,
             color=self.terminal_color)
 
-        # Setup gRPC management channels
-        self.grpc_root_server_channel = grpc.insecure_channel("localhost:%d" % self.grpc_root_server_port)
+        # If gRPC root server port is not specified, we can skip settings up the root server
+        if self.grpc_root_server_port != -1:
+            # Setup gRPC management channels
+            self.grpc_root_server_channel = grpc.insecure_channel("localhost:%d" % self.grpc_root_server_port)
 
-        self.grpc_root_server_ready = False
-        try:
-            logging.info("[%s] Waiting to connect to gRPC root server for %s, timeout is %d seconds" %
-                         (self.type_identifier, self.label, GRPC_START_TIMEOUT_SEC))
-            grpc.channel_ready_future(self.grpc_root_server_channel).result(timeout=GRPC_START_TIMEOUT_SEC)
-            logging.info("[%s] Successfully connected to gRPC root server for %s" % (self.type_identifier, self.label))
-            self.grpc_root_server_ready = True
-        except grpc.FutureTimeoutError:
-            logging.error("[%s] Failed to connect to gRPC root server for %s" % (self.type_identifier, self.label))
+            self.grpc_root_server_ready = False
 
-        asserts.assert_true(
-            self.grpc_root_server_ready, msg="gRPC root server did not start after running " + " ".join(self.cmd))
+            try:
+                logging.info("[%s] Waiting to connect to gRPC root server for %s, timeout is %d seconds" %
+                             (self.type_identifier, self.label, GRPC_START_TIMEOUT_SEC))
+                grpc.channel_ready_future(self.grpc_root_server_channel).result(timeout=GRPC_START_TIMEOUT_SEC)
+                logging.info(
+                    "[%s] Successfully connected to gRPC root server for %s" % (self.type_identifier, self.label))
+                self.grpc_root_server_ready = True
+            except grpc.FutureTimeoutError:
+                logging.error("[%s] Failed to connect to gRPC root server for %s" % (self.type_identifier, self.label))
+
+            asserts.assert_true(
+                self.grpc_root_server_ready, msg="gRPC root server did not start after running " + " ".join(self.cmd))
 
         self.grpc_channel = grpc.insecure_channel("localhost:%d" % self.grpc_port)
 
@@ -236,7 +242,9 @@ class GdDeviceBase(ABC):
             self.grpc_channel = grpc.intercept_channel(self.grpc_channel, LoggingClientInterceptor(self.label))
 
         # Establish services from facades
-        self.rootservice = facade_rootservice_pb2_grpc.RootFacadeStub(self.grpc_root_server_channel)
+        if self.grpc_root_server_port != -1:
+            self.rootservice = facade_rootservice_pb2_grpc.RootFacadeStub(self.grpc_root_server_channel)
+
         self.hal = hal_facade_pb2_grpc.HciHalFacadeStub(self.grpc_channel)
         self.controller_read_only_property = facade_rootservice_pb2_grpc.ReadOnlyPropertyStub(self.grpc_channel)
         self.hci = hci_facade_pb2_grpc.HciFacadeStub(self.grpc_channel)
@@ -271,17 +279,19 @@ class GdDeviceBase(ABC):
         :return:
         """
         self.grpc_channel.close()
-        self.grpc_root_server_channel.close()
-        stop_signal = signal.SIGINT
-        self.backing_process.send_signal(stop_signal)
+        if self.grpc_root_server_port != -1:
+            self.grpc_root_server_channel.close()
+        stop_signal = self.gracefully_stop_backing_process()
         try:
-            return_code = self.backing_process.wait(timeout=self.WAIT_CHANNEL_READY_TIMEOUT_SECONDS)
-        except subprocess.TimeoutExpired:
+            if stop_signal == 0:
+                raise RuntimeError("Failed to gracefully shutdown backing process")
+            return_code = self.backing_process.wait(timeout=self.WAIT_SIGINT_TIMEOUT_SECONDS)
+        except (subprocess.TimeoutExpired, RuntimeError):
             logging.error("[%s] Failed to interrupt backing process via SIGINT, sending SIGKILL" % self.label)
             stop_signal = signal.SIGKILL
             self.backing_process.kill()
             try:
-                return_code = self.backing_process.wait(timeout=self.WAIT_CHANNEL_READY_TIMEOUT_SECONDS)
+                return_code = self.backing_process.wait(timeout=self.WAIT_SIGKILL_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:
                 logging.error("Failed to kill backing process")
                 return_code = -65536
@@ -295,6 +305,10 @@ class GdDeviceBase(ABC):
             future.result(timeout=self.WAIT_CHANNEL_READY_TIMEOUT_SECONDS)
         except grpc.FutureTimeoutError:
             asserts.fail("[%s] wait channel ready timeout" % self.label)
+
+    @abstractmethod
+    def gracefully_stop_backing_process(self):
+        return NotImplemented
 
 
 class GdHostOnlyDevice(GdDeviceBase):
@@ -325,9 +339,10 @@ class GdHostOnlyDevice(GdDeviceBase):
         # Only check on host only test, for Android devices, these ports will
         # be opened on Android device and host machine ports will be occupied
         # by sshd or adb forwarding
+        ports_needed = [self.grpc_port,
+                        self.grpc_root_server_port] if self.grpc_root_server_port != -1 else [self.grpc_port]
         asserts.assert_true(
-            make_ports_available((self.grpc_port, self.grpc_root_server_port)),
-            "[%s] Failed to make backing process ports available" % self.label)
+            make_ports_available(ports_needed), "[%s] Failed to make backing process ports available" % self.label)
         super().setup()
 
     def teardown(self):
@@ -435,12 +450,19 @@ class GdHostOnlyDevice(GdDeviceBase):
             logging.warning("[%s] Failed to generated coverage summary, cmd result: %r" % (label, result))
             coverage_summary_path.unlink(missing_ok=True)
 
+    def gracefully_stop_backing_process(self):
+        stop_signal = signal.SIGINT
+        self.backing_process.send_signal(stop_signal)
+        return stop_signal
+
 
 class GdAndroidDevice(GdDeviceBase):
     """Real Android device where the backing process is running on it
     """
 
     WAIT_FOR_DEVICE_TIMEOUT_SECONDS = 180
+    WAIT_FOR_DEVICE_SIGINT_TIMEOUT_SECONDS = 1
+    ADB_ABORT_EXIT_CODE = 134
 
     def __init__(self, grpc_port: str, grpc_root_server_port: str, signal_port: str, cmd: List[str], label: str,
                  type_identifier: str, name: str, serial_number: str, verbose_mode: bool):
@@ -453,15 +475,19 @@ class GdAndroidDevice(GdDeviceBase):
         logging.info("Setting up device %s %s" % (self.label, self.serial_number))
         asserts.assert_true(self.adb.ensure_root(), "device %s cannot run as root", self.serial_number)
         self.ensure_verity_disabled()
+        logging.info("Confirmed that verity is disabled on device %s %s" % (self.label, self.serial_number))
 
         # Try freeing ports and ignore results
         self.cleanup_port_forwarding()
         self.sync_device_time()
+        logging.info("Ports cleaned up and clock is set for device %s %s" % (self.label, self.serial_number))
 
         # Set up port forwarding or reverse or die
         self.tcp_forward_or_die(self.grpc_port, self.grpc_port)
-        self.tcp_forward_or_die(self.grpc_root_server_port, self.grpc_root_server_port)
+        if self.grpc_root_server_port != -1:
+            self.tcp_forward_or_die(self.grpc_root_server_port, self.grpc_root_server_port)
         self.tcp_reverse_or_die(self.signal_port, self.signal_port)
+        logging.info("Port forwarding done on device %s %s" % (self.label, self.serial_number))
 
         # Push test binaries
         self.push_or_die(os.path.join(get_gd_root(), "target", "bluetooth_stack_with_facade"), "system/bin")
@@ -472,6 +498,7 @@ class GdAndroidDevice(GdDeviceBase):
         self.push_or_die(os.path.join(get_gd_root(), "target", "libgrpc++.so"), "system/lib64")
         self.push_or_die(os.path.join(get_gd_root(), "target", "libgrpc_wrap.so"), "system/lib64")
         self.push_or_die(os.path.join(get_gd_root(), "target", "libstatslog_bt.so"), "system/lib64")
+        logging.info("Binaries pushed to device %s %s" % (self.label, self.serial_number))
 
         try:
             self.adb.shell("rm /data/misc/bluetooth/logs/btsnoop_hci.log")
@@ -496,8 +523,12 @@ class GdAndroidDevice(GdDeviceBase):
         except AdbError as error:
             if ADB_FILE_NOT_EXIST_ERROR not in str(error):
                 logging.error("Error during setup: " + str(error))
+        logging.info("Old logs removed from device %s %s" % (self.label, self.serial_number))
 
+        # Ensure Bluetooth is disabled
+        self.ensure_no_output(self.adb.shell("settings put global ble_scan_always_enabled 0"))
         self.ensure_no_output(self.adb.shell("svc bluetooth disable"))
+        logging.info("Bluetooth disabled on device %s %s" % (self.label, self.serial_number))
 
         # Start logcat logging
         self.logcat_output_path = os.path.join(
@@ -525,14 +556,14 @@ class GdAndroidDevice(GdDeviceBase):
         stop_signal = signal.SIGINT
         self.logcat_process.send_signal(stop_signal)
         try:
-            return_code = self.logcat_process.wait(timeout=self.WAIT_CHANNEL_READY_TIMEOUT_SECONDS)
+            return_code = self.logcat_process.wait(timeout=self.WAIT_FOR_DEVICE_SIGINT_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             logging.error("[%s_%s] Failed to interrupt logcat process via SIGINT, sending SIGKILL" %
                           (self.label, self.serial_number))
             stop_signal = signal.SIGKILL
             self.logcat_process.kill()
             try:
-                return_code = self.logcat_process.wait(timeout=self.WAIT_CHANNEL_READY_TIMEOUT_SECONDS)
+                return_code = self.logcat_process.wait(timeout=self.WAIT_SIGKILL_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:
                 logging.error("Failed to kill logcat_process %s %s" % (self.label, self.serial_number))
                 return_code = -65536
@@ -540,29 +571,30 @@ class GdAndroidDevice(GdDeviceBase):
             logging.error("logcat_process %s_%s stopped with code: %d" % (self.label, self.serial_number, return_code))
         self.logcat_logger.stop()
         self.cleanup_port_forwarding()
+        self.pull_logs(self.log_path_base)
+
+    def pull_logs(self, base_dir):
         try:
             self.adb.pull([
                 "/data/misc/bluetooth/logs/btsnoop_hci.log",
-                str(os.path.join(self.log_path_base, "%s_btsnoop_hci.log" % self.label))
+                str(os.path.join(base_dir, "%s_btsnoop_hci.log" % self.label))
             ])
         except AdbError as error:
             # Some tests have no snoop logs, and that's OK
             if ADB_FILE_NOT_EXIST_ERROR not in str(error):
                 logging.error(PULL_LOG_FILE_ERROR_MSG_PREFIX + str(error))
         try:
-            self.adb.pull([
-                "/data/misc/bluedroid/bt_config.conf",
-                str(os.path.join(self.log_path_base, "%s_bt_config.conf" % self.label))
-            ])
+            self.adb.pull(
+                ["/data/misc/bluedroid/bt_config.conf",
+                 str(os.path.join(base_dir, "%s_bt_config.conf" % self.label))])
         except AdbError as error:
             # Some tests have no config file, and that's OK
             if ADB_FILE_NOT_EXIST_ERROR not in str(error):
                 logging.error(PULL_LOG_FILE_ERROR_MSG_PREFIX + str(error))
         try:
-            self.adb.pull([
-                "/data/misc/bluedroid/bt_config.bak",
-                str(os.path.join(self.log_path_base, "%s_bt_config.bak" % self.label))
-            ])
+            self.adb.pull(
+                ["/data/misc/bluedroid/bt_config.bak",
+                 str(os.path.join(base_dir, "%s_bt_config.bak" % self.label))])
         except AdbError as error:
             # Some tests have no config.bak file, and that's OK
             if ADB_FILE_NOT_EXIST_ERROR not in str(error):
@@ -574,16 +606,17 @@ class GdAndroidDevice(GdDeviceBase):
         except AdbError as error:
             msg = PORT_FORWARDING_ERROR_MSG_PREFIX + str(error)
             if "not found" in msg:
-                logging.info(msg)
+                logging.debug(msg)
             else:
                 logging.error(msg)
 
         try:
-            self.adb.remove_tcp_forward(self.grpc_root_server_port)
+            if self.grpc_root_server_port != -1:
+                self.adb.remove_tcp_forward(self.grpc_root_server_port)
         except AdbError as error:
             msg = PORT_FORWARDING_ERROR_MSG_PREFIX + str(error)
             if "not found" in msg:
-                logging.info(msg)
+                logging.debug(msg)
             else:
                 logging.error(msg)
 
@@ -592,7 +625,7 @@ class GdAndroidDevice(GdDeviceBase):
         except AdbError as error:
             msg = PORT_FORWARDING_ERROR_MSG_PREFIX + str(error)
             if "not found" in msg:
-                logging.info(msg)
+                logging.debug(msg)
             else:
                 logging.error(msg)
 
@@ -738,12 +771,15 @@ class GdAndroidDevice(GdDeviceBase):
         # sys.boot_completed.
         while time.time() < timeout_start + timeout:
             try:
+                logging.debug("waiting for device %s to turn off", self.serial_number)
                 self.adb.get_state()
+                logging.debug("device %s not turned off yet", self.serial_number)
                 time.sleep(.1)
             except AdbError:
                 # get_state will raise an error if the device is not found. We
                 # want the device to be missing to prove the device has kicked
                 # off the reboot.
+                logging.debug("device %s is turned off, waiting for it to boot", self.serial_number)
                 break
         minutes_left = timeout_minutes - (time.time() - timeout_start) / 60.0
         self.wait_for_boot_completion(timeout_minutes=minutes_left)
@@ -769,3 +805,44 @@ class GdAndroidDevice(GdDeviceBase):
                 pass
             time.sleep(5)
         asserts.fail(msg='Device %s booting process timed out.' % self.serial_number)
+
+    def gracefully_stop_backing_process(self):
+        """
+        Gracefully stops backing process
+        :return: expected backing process exit code on success, 0 on error
+        """
+        backing_process_pid = None
+        # Since we do not know which segment of self.cmd is the command running
+        # on the Android device. We have to iterate with trial and error.
+        cmd = self.cmd
+        if len(self.cmd) >= 5:
+            # skip adb -s serial shell to speed up the search
+            # we don't know if any environment variables are set up before the
+            # actual command and hence has to try from the 4th argument
+            cmd = self.cmd[4:] + self.cmd[:4]
+        for segment in cmd:
+            try:
+                # pgrep only takes 16 bytes including null terminator
+                # -f cannot be used because that include the full command args
+                current_cmd = pathlib.Path(segment).stem[:15]
+                # -x matches whole command, cannot avoid as short segment may partially match
+                # -n returnes the newest command matched
+                backing_process_pid = int(self.adb.shell("pgrep -n -x {}".format(current_cmd)))
+                logging.debug("Found backing process name on Android as {}, pid is {}".format(
+                    segment, backing_process_pid))
+            except (AdbError, ValueError) as e:
+                logging.debug("Failed to run pgrep {}".format(e))
+            if backing_process_pid is not None:
+                break
+        if backing_process_pid is None:
+            logging.warning("Failed to get pid for cmd {}".format(self.cmd))
+            try:
+                logging.debug(self.adb.shell("ps -A | grep bluetooth"))
+            except AdbError:
+                pass
+            return 0
+        stop_signal = signal.SIGINT
+        self.adb.shell("kill -{} {}".format(stop_signal, backing_process_pid))
+        logging.debug("Sent SIGINT to backing process at pid {}".format(backing_process_pid))
+        stop_signal = -self.ADB_ABORT_EXIT_CODE
+        return stop_signal

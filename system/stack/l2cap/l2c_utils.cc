@@ -23,13 +23,11 @@
  ******************************************************************************/
 #define LOG_TAG "l2c_utils"
 
+#include <base/logging.h>
 #include <stdio.h>
 #include <string.h>
 
-#include "btm_api.h"
 #include "device/include/controller.h"
-#include "l2c_int.h"
-#include "l2cdefs.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
@@ -37,10 +35,11 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_api.h"
 #include "stack/include/hci_error_code.h"
+#include "stack/include/l2cdefs.h"
+#include "stack/l2cap/l2c_int.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* p_lcb); // TODO Move
 
@@ -2948,7 +2947,7 @@ void l2cu_reject_ble_connection(tL2C_CCB* p_ccb, uint8_t rem_id,
                                 uint16_t result) {
   if (p_ccb->ecoc)
     l2cu_reject_credit_based_conn_req(
-        p_ccb->p_lcb, rem_id, p_ccb->p_lcb->pending_ecoc_reconfig_cnt, result);
+        p_ccb->p_lcb, rem_id, p_ccb->p_lcb->pending_ecoc_conn_cnt, result);
   else
     l2cu_reject_ble_coc_connection(p_ccb->p_lcb, rem_id, result);
 }

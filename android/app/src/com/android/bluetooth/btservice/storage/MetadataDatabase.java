@@ -33,7 +33,7 @@ import java.util.List;
 /**
  * MetadataDatabase is a Room database stores Bluetooth persistence data
  */
-@Database(entities = {Metadata.class}, version = 109)
+@Database(entities = {Metadata.class}, version = 113)
 public abstract class MetadataDatabase extends RoomDatabase {
     /**
      * The metadata database file name
@@ -62,6 +62,10 @@ public abstract class MetadataDatabase extends RoomDatabase {
                 .addMigrations(MIGRATION_106_107)
                 .addMigrations(MIGRATION_107_108)
                 .addMigrations(MIGRATION_108_109)
+                .addMigrations(MIGRATION_109_110)
+                .addMigrations(MIGRATION_110_111)
+                .addMigrations(MIGRATION_111_112)
+                .addMigrations(MIGRATION_112_113)
                 .allowMainThreadQueries()
                 .build();
     }
@@ -402,6 +406,78 @@ public abstract class MetadataDatabase extends RoomDatabase {
                 // Check if user has new schema, but is just missing the version update
                 Cursor cursor = database.query("SELECT * FROM metadata");
                 if (cursor == null || cursor.getColumnIndex("le_call_control_connection_policy") == -1) {
+                    throw ex;
+                }
+            }
+        }
+    };
+
+    @VisibleForTesting
+    static final Migration MIGRATION_109_110 = new Migration(109, 110) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            try {
+                database.execSQL(
+                        "ALTER TABLE metadata ADD COLUMN `hap_client_connection_policy` "
+                        + "INTEGER DEFAULT 100");
+            } catch (SQLException ex) {
+                // Check if user has new schema, but is just missing the version update
+                Cursor cursor = database.query("SELECT * FROM metadata");
+                if (cursor == null || cursor.getColumnIndex("hap_client_connection_policy") == -1) {
+                    throw ex;
+                }
+            }
+        }
+    };
+
+    @VisibleForTesting
+    static final Migration MIGRATION_110_111 = new Migration(110, 111) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            try {
+                database.execSQL(
+                        "ALTER TABLE metadata ADD COLUMN `bass_client_connection_policy` "
+                                + "INTEGER DEFAULT 100");
+            } catch (SQLException ex) {
+                // Check if user has new schema, but is just missing the version update
+                Cursor cursor = database.query("SELECT * FROM metadata");
+                if (cursor == null
+                        || cursor.getColumnIndex("bass_client_connection_policy") == -1) {
+                    throw ex;
+                }
+            }
+        }
+    };
+
+    @VisibleForTesting
+    static final Migration MIGRATION_111_112 = new Migration(111, 112) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            try {
+                database.execSQL(
+                        "ALTER TABLE metadata ADD COLUMN `battery_connection_policy` "
+                                + "INTEGER DEFAULT 100");
+            } catch (SQLException ex) {
+                // Check if user has new schema, but is just missing the version update
+                Cursor cursor = database.query("SELECT * FROM metadata");
+                if (cursor == null || cursor.getColumnIndex("battery_connection_policy") == -1) {
+                    throw ex;
+                }
+            }
+        }
+    };
+
+    @VisibleForTesting
+    static final Migration MIGRATION_112_113 = new Migration(112, 113) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            try {
+                database.execSQL("ALTER TABLE metadata ADD COLUMN `spatial_audio` BLOB");
+                database.execSQL("ALTER TABLE metadata ADD COLUMN `fastpair_customized` BLOB");
+            } catch (SQLException ex) {
+                // Check if user has new schema, but is just missing the version update
+                Cursor cursor = database.query("SELECT * FROM metadata");
+                if (cursor == null || cursor.getColumnIndex("spatial_audio") == -1) {
                     throw ex;
                 }
             }

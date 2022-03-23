@@ -19,6 +19,8 @@
 #include <base/bind.h>
 #include <base/cancelable_callback.h>
 #include <base/location.h>
+#include <base/time/time.h>
+
 #include <future>
 
 namespace bluetooth {
@@ -37,6 +39,9 @@ class MessageLoopThread;
 class RepeatingTimer final {
  public:
   RepeatingTimer() : expected_time_next_task_us_(0) {}
+  RepeatingTimer(const RepeatingTimer&) = delete;
+  RepeatingTimer& operator=(const RepeatingTimer&) = delete;
+
   ~RepeatingTimer();
 
   /**
@@ -83,8 +88,6 @@ class RepeatingTimer final {
   void CancelClosure(std::promise<void> promise);
 
   void RunTask();
-
-  DISALLOW_COPY_AND_ASSIGN(RepeatingTimer);
 };
 
 }  // namespace common

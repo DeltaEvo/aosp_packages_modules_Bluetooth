@@ -25,6 +25,7 @@ import android.annotation.RequiresNoPermission;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
@@ -124,11 +125,12 @@ public final class BluetoothA2dp implements BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    @UnsupportedAppUsage(trackingBug = 171933273)
+    @SuppressLint("ActionValue")
     public static final String ACTION_ACTIVE_DEVICE_CHANGED =
             "android.bluetooth.a2dp.profile.action.ACTIVE_DEVICE_CHANGED";
 
@@ -145,11 +147,12 @@ public final class BluetoothA2dp implements BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    @UnsupportedAppUsage(trackingBug = 181103983)
+    @SuppressLint("ActionValue")
     public static final String ACTION_CODEC_CONFIG_CHANGED =
             "android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED";
 
@@ -695,8 +698,12 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @param volume Absolute volume to be set on AVRCP side
      * @hide
      */
+    @SystemApi
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public void setAvrcpAbsoluteVolume(int volume) {
         if (DBG) Log.d(TAG, "setAvrcpAbsoluteVolume");
         final IBluetoothA2dp service = getService();
@@ -769,7 +776,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @return the current codec status
      * @hide
      */
-    @UnsupportedAppUsage(trackingBug = 181103983)
+    @SystemApi
     @Nullable
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
@@ -802,7 +809,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @param codecConfig the codec configuration preference
      * @hide
      */
-    @UnsupportedAppUsage(trackingBug = 181103983)
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -828,12 +835,17 @@ public final class BluetoothA2dp implements BluetoothProfile {
     }
 
     /**
-     * Enables the optional codecs.
+     * Enables the optional codecs for the given device for this connection.
      *
-     * @param device the remote Bluetooth device.
+     * If the given device supports another codec type than
+     * {@link BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC}, this will switch to it.
+     * See {@link #setOptionalCodecsEnabled} to enable optional codecs by default
+     * when the given device is connected.
+     *
+     * @param device the remote Bluetooth device
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -844,12 +856,18 @@ public final class BluetoothA2dp implements BluetoothProfile {
     }
 
     /**
-     * Disables the optional codecs.
+     * Disables the optional codecs for the given device.
      *
-     * @param device the remote Bluetooth device.
+     * When optional codecs are disabled, the device will use the default
+     * Bluetooth audio codec type.
+     * See {@link BluetoothCodecConfig.SOURCE_CODEC_TYPE_SBC}.
+     * See {@link #setOptionalCodecsEnabled} to disable optional codecs by default
+     * when the given device is connected.
+     *
+     * @param device the remote Bluetooth device
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -863,7 +881,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * Enables or disables the optional codecs.
      *
      * @param device the remote Bluetooth device.
-     * @param enable if true, enable the optional codecs, other disable them
+     * @param enable if true, enable the optional codecs, otherwise disable them
      */
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     private void enableDisableOptionalCodecs(BluetoothDevice device, boolean enable) {
@@ -887,17 +905,18 @@ public final class BluetoothA2dp implements BluetoothProfile {
     /**
      * Returns whether this device supports optional codecs.
      *
-     * @param device The device to check
-     * @return one of OPTIONAL_CODECS_SUPPORT_UNKNOWN, OPTIONAL_CODECS_NOT_SUPPORTED, or
-     * OPTIONAL_CODECS_SUPPORTED.
+     * @param device the remote Bluetooth device
+     * @return whether the optional codecs are supported or not, or
+     *         {@link #OPTIONAL_CODECS_SUPPORT_UNKNOWN} if the state
+     *         can't be retrieved.
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @SystemApi
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    @OptionalCodecsSupportStatus
-    public int isOptionalCodecsSupported(@NonNull BluetoothDevice device) {
+    public @OptionalCodecsSupportStatus int isOptionalCodecsSupported(
+            @NonNull BluetoothDevice device) {
         if (DBG) log("isOptionalCodecsSupported(" + device + ")");
         verifyDeviceNotNull(device, "isOptionalCodecsSupported");
         final IBluetoothA2dp service = getService();
@@ -918,19 +937,20 @@ public final class BluetoothA2dp implements BluetoothProfile {
     }
 
     /**
-     * Returns whether this device should have optional codecs enabled.
+     * Returns whether this device has its optional codecs enabled.
      *
-     * @param device The device in question.
-     * @return one of OPTIONAL_CODECS_PREF_UNKNOWN, OPTIONAL_CODECS_PREF_ENABLED, or
-     * OPTIONAL_CODECS_PREF_DISABLED.
+     * @param device the remote Bluetooth device
+     * @return whether the optional codecs are enabled or not, or
+     *         {@link #OPTIONAL_CODECS_PREF_UNKNOWN} if the state
+     *         can't be retrieved.
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @SystemApi
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    @OptionalCodecsPreferenceStatus
-    public int isOptionalCodecsEnabled(@NonNull BluetoothDevice device) {
+    public @OptionalCodecsPreferenceStatus int isOptionalCodecsEnabled(
+            @NonNull BluetoothDevice device) {
         if (DBG) log("isOptionalCodecsEnabled(" + device + ")");
         verifyDeviceNotNull(device, "isOptionalCodecsEnabled");
         final IBluetoothA2dp service = getService();
@@ -951,15 +971,16 @@ public final class BluetoothA2dp implements BluetoothProfile {
     }
 
     /**
-     * Sets a persistent preference for whether a given device should have optional codecs enabled.
+     * Sets the default state of optional codecs for the given device.
      *
-     * @param device The device to set this preference for.
-     * @param value Whether the optional codecs should be enabled for this device.  This should be
-     * one of OPTIONAL_CODECS_PREF_UNKNOWN, OPTIONAL_CODECS_PREF_ENABLED, or
-     * OPTIONAL_CODECS_PREF_DISABLED.
+     * Automatically enables or disables the optional codecs for the given device when
+     * connected.
+     *
+     * @param device the remote Bluetooth device
+     * @param value whether the optional codecs should be enabled for this device
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @SystemApi
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)

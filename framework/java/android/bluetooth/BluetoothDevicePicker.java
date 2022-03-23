@@ -19,6 +19,8 @@ package android.bluetooth;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SuppressLint;
+import android.annotation.SystemApi;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 
 /**
@@ -26,13 +28,40 @@ import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
  *
  * @hide
  */
+@SystemApi
 public interface BluetoothDevicePicker {
+
+    /**
+     * Extra for filter type used with {@link #ACTION_LAUNCH}.
+     * The value must be a boolean indicating whether the device should need authentication or not.
+     */
+    @SuppressLint("ActionValue")
     public static final String EXTRA_NEED_AUTH =
             "android.bluetooth.devicepicker.extra.NEED_AUTH";
+
+    /**
+     * Extra for filter type used with {@link #ACTION_LAUNCH}.
+     * This extra must contain the filter type that will be applied to the device list.
+     * Possible values are {@link #FILTER_TYPE_ALL}, {@link #FILTER_TYPE_AUDIO},
+     * {@link #FILTER_TYPE_TRANSFER}, {@link #FILTER_TYPE_PANU}, and {@link #FILTER_TYPE_NAP}.
+     */
+    @SuppressLint("ActionValue")
     public static final String EXTRA_FILTER_TYPE =
             "android.bluetooth.devicepicker.extra.FILTER_TYPE";
+
+    /**
+     * Extra for filter type used with {@link #ACTION_LAUNCH}.
+     * This extra must contain the package name that called {@link #ACTION_LAUNCH}.
+     */
+    @SuppressLint("ActionValue")
     public static final String EXTRA_LAUNCH_PACKAGE =
             "android.bluetooth.devicepicker.extra.LAUNCH_PACKAGE";
+
+    /**
+     * Extra for filter type used with {@link #ACTION_LAUNCH}.
+     * This extra must contain the class name that called {@link #ACTION_LAUNCH}.
+     */
+    @SuppressLint("ActionValue")
     public static final String EXTRA_LAUNCH_CLASS =
             "android.bluetooth.devicepicker.extra.DEVICE_PICKER_LAUNCH_CLASS";
 
@@ -44,6 +73,7 @@ public interface BluetoothDevicePicker {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SuppressLint("ActionValue")
     public static final String ACTION_DEVICE_SELECTED =
             "android.bluetooth.devicepicker.action.DEVICE_SELECTED";
 
@@ -61,6 +91,7 @@ public interface BluetoothDevicePicker {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SuppressLint("ActionValue")
     public static final String ACTION_LAUNCH =
             "android.bluetooth.devicepicker.action.LAUNCH";
 

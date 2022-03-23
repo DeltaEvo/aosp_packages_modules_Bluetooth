@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 package android.bluetooth;
+
 import static android.bluetooth.BluetoothUtils.getSyncTimeout;
+
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
@@ -32,10 +34,13 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.CloseGuard;
 import android.util.Log;
+
 import com.android.modules.utils.SynchronousResultReceiver;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
+
 /**
  * This class provides the System APIs to interact with the Hands-Free Client profile.
  *
@@ -76,7 +81,7 @@ public final class BluetoothHeadsetClient implements BluetoothProfile, AutoClose
     })
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CONNECTION_STATE_CHANGED =
-            "android.bluetooth.headsetprofile.action.CONNECTION_STATE_CHANGED";
+            "android.bluetooth.headsetclient.profile.action.CONNECTION_STATE_CHANGED";
     /**
      * Intent sent whenever audio state changes.
      *
@@ -94,9 +99,11 @@ public final class BluetoothHeadsetClient implements BluetoothProfile, AutoClose
      *
      * @hide
      */
+    @SystemApi
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SuppressLint("ActionValue")
     public static final String ACTION_AUDIO_STATE_CHANGED =
             "android.bluetooth.headsetclient.profile.action.AUDIO_STATE_CHANGED";
     /**
@@ -180,14 +187,17 @@ public final class BluetoothHeadsetClient implements BluetoothProfile, AutoClose
     /**
      * @hide
      */
+    @SystemApi
     public static final int STATE_AUDIO_DISCONNECTED = 0;
     /**
      * @hide
      */
+    @SystemApi
     public static final int STATE_AUDIO_CONNECTING = 1;
     /**
      * @hide
      */
+    @SystemApi
     public static final int STATE_AUDIO_CONNECTED = 2;
     /**
      * Extra with information if connected audio is WBS.

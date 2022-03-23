@@ -17,6 +17,7 @@
 package android.bluetooth;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.RequiresNoPermission;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
@@ -100,6 +101,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     int HID_HOST = 4;
 
     /**
@@ -115,6 +117,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     int PBAP = 6;
 
     /**
@@ -132,6 +135,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     int MAP = 9;
 
     /*
@@ -197,6 +201,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     int OPP = 20;
 
     /**
@@ -237,6 +242,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     int LE_AUDIO_BROADCAST = 26;
 
     /**
@@ -253,12 +259,27 @@ public interface BluetoothProfile {
     int HAP_CLIENT = 28;
 
     /**
+     * LE Audio Broadcast Assistant
+     *
+     * @hide
+     */
+    @SystemApi
+    int LE_AUDIO_BROADCAST_ASSISTANT = 29;
+
+    /**
+     * Battery Service
+     *
+     * @hide
+     */
+    int BATTERY = 30;
+
+    /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
      * the largest value assigned to a profile.
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 28;
+    int MAX_PROFILE_ID = 30;
 
     /**
      * Default priority for devices that we try to auto-connect to and
@@ -396,6 +417,9 @@ public interface BluetoothProfile {
      * is not defined
      * @hide
      */
+    @SystemApi
+    @NonNull
+    @RequiresNoPermission
     static String getConnectionStateName(int connectionState) {
         switch (connectionState) {
             case STATE_DISCONNECTED:
@@ -418,6 +442,9 @@ public interface BluetoothProfile {
      * @return profile name as String, UNKOWN_PROFILE if the profile ID is not defined.
      * @hide
      */
+    @SystemApi
+    @NonNull
+    @RequiresNoPermission
     static String getProfileName(int profile) {
         switch(profile) {
             case HEADSET:

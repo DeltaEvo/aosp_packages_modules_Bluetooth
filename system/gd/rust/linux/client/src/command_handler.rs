@@ -8,7 +8,7 @@ use crate::{console_red, console_yellow, print_error, print_info};
 use bt_topshim::btif::BtTransport;
 use btstack::bluetooth::{BluetoothDevice, IBluetooth};
 use btstack::bluetooth_gatt::IBluetoothGatt;
-use btstack::uuid::UuidHelper;
+use btstack::uuid::{Profile, UuidHelper};
 use manager_service::iface_bluetooth_manager::IBluetoothManager;
 
 const INDENT_CHAR: &str = " ";
@@ -85,7 +85,8 @@ fn build_commands() -> HashMap<String, CommandOption> {
         String::from("adapter"),
         CommandOption {
             description: String::from(
-                "Enable/Disable/Show default bluetooth adapter. (e.g. adapter enable)",
+                "Enable/Disable/Show default bluetooth adapter. (e.g. adapter enable)\n
+                 Discoverable On/Off (e.g. adapter discoverable on)",
             ),
             function_pointer: CommandHandler::cmd_adapter,
         },
@@ -244,47 +245,94 @@ impl CommandHandler {
         }
 
         let default_adapter = self.context.lock().unwrap().default_adapter;
-        enforce_arg_len(args, 1, "adapter <enable|disable|show>", || match &args[0][0..] {
-            "enable" => {
-                self.context.lock().unwrap().manager_dbus.start(default_adapter);
-            }
-            "disable" => {
-                self.context.lock().unwrap().manager_dbus.stop(default_adapter);
-            }
-            "show" => {
-                if !self.context.lock().unwrap().adapter_ready {
-                    self.adapter_not_ready();
-                    return;
+        enforce_arg_len(args, 1, "adapter <enable|disable|show|discoverable>", || {
+            match &args[0][0..] {
+                "enable" => {
+                    self.context.lock().unwrap().manager_dbus.start(default_adapter);
                 }
+                "disable" => {
+                    self.context.lock().unwrap().manager_dbus.stop(default_adapter);
+                }
+                "show" => {
+                    if !self.context.lock().unwrap().adapter_ready {
+                        self.adapter_not_ready();
+                        return;
+                    }
 
-                let enabled = self.context.lock().unwrap().enabled;
-                let address = match self.context.lock().unwrap().adapter_address.as_ref() {
-                    Some(x) => x.clone(),
-                    None => String::from(""),
-                };
-                let name = self.context.lock().unwrap().adapter_dbus.as_ref().unwrap().get_name();
-                let uuids = self.context.lock().unwrap().adapter_dbus.as_ref().unwrap().get_uuids();
-                let cod = self
-                    .context
-                    .lock()
-                    .unwrap()
-                    .adapter_dbus
-                    .as_ref()
-                    .unwrap()
-                    .get_bluetooth_class();
-                print_info!("Address: {}", address);
-                print_info!("Name: {}", name);
-                print_info!("State: {}", if enabled { "enabled" } else { "disabled" });
-                print_info!("Class: {:#06x}", cod);
-                print_info!(
-                    "Uuids: {}",
-                    DisplayList(
-                        uuids.iter().map(|&x| UuidHelper::to_string(&x)).collect::<Vec<String>>()
-                    )
-                );
-            }
-            _ => {
-                println!("Invalid argument '{}'", args[0]);
+                    let enabled = self.context.lock().unwrap().enabled;
+                    let address = match self.context.lock().unwrap().adapter_address.as_ref() {
+                        Some(x) => x.clone(),
+                        None => String::from(""),
+                    };
+                    let context = self.context.lock().unwrap();
+                    let adapter_dbus = context.adapter_dbus.as_ref().unwrap();
+                    let name = adapter_dbus.get_name();
+                    let uuids = adapter_dbus.get_uuids();
+                    let is_discoverable = adapter_dbus.get_discoverable();
+                    let discoverable_timeout = adapter_dbus.get_discoverable_timeout();
+                    let cod = adapter_dbus.get_bluetooth_class();
+                    let multi_adv_supported = adapter_dbus.is_multi_advertisement_supported();
+                    let le_ext_adv_supported = adapter_dbus.is_le_extended_advertising_supported();
+                    let uuid_helper = UuidHelper::new();
+                    let enabled_profiles = uuid_helper.get_enabled_profiles();
+                    let connected_profiles: Vec<Profile> = enabled_profiles
+                        .iter()
+                        .filter(|&&prof| adapter_dbus.get_profile_connection_state(prof) > 0)
+                        .cloned()
+                        .collect();
+                    print_info!("Address: {}", address);
+                    print_info!("Name: {}", name);
+                    print_info!("State: {}", if enabled { "enabled" } else { "disabled" });
+                    print_info!("Discoverable: {}", is_discoverable);
+                    print_info!("DiscoverableTimeout: {}s", discoverable_timeout);
+                    print_info!("Class: {:#06x}", cod);
+                    print_info!("IsMultiAdvertisementSupported: {}", multi_adv_supported);
+                    print_info!("IsLeExtendedAdvertisingSupported: {}", le_ext_adv_supported);
+                    print_info!("Connected profiles: {:?}", connected_profiles);
+                    print_info!(
+                        "Uuids: {}",
+                        DisplayList(
+                            uuids
+                                .iter()
+                                .map(|&x| UuidHelper::to_string(&x))
+                                .collect::<Vec<String>>()
+                        )
+                    );
+                }
+                "discoverable" => match &args[1][0..] {
+                    "on" => {
+                        let discoverable = self
+                            .context
+                            .lock()
+                            .unwrap()
+                            .adapter_dbus
+                            .as_ref()
+                            .unwrap()
+                            .set_discoverable(true, 60);
+                        print_info!(
+                            "Set discoverable for 60s: {}",
+                            if discoverable { "succeeded" } else { "failed" }
+                        );
+                    }
+                    "off" => {
+                        let discoverable = self
+                            .context
+                            .lock()
+                            .unwrap()
+                            .adapter_dbus
+                            .as_ref()
+                            .unwrap()
+                            .set_discoverable(false, 60);
+                        print_info!(
+                            "Turn discoverable off: {}",
+                            if discoverable { "succeeded" } else { "failed" }
+                        );
+                    }
+                    _ => println!("Invalid argument for adapter discoverable '{}'", args[1]),
+                },
+                _ => {
+                    println!("Invalid argument '{}'", args[0]);
+                }
             }
         });
     }
@@ -439,18 +487,26 @@ impl CommandHandler {
                         name: String::from("Classic Device"),
                     };
 
-                    let (bonded, connected, uuids) = {
+                    let (name, alias, device_type, class, bonded, connected, uuids) = {
                         let ctx = self.context.lock().unwrap();
                         let adapter = ctx.adapter_dbus.as_ref().unwrap();
 
+                        let name = adapter.get_remote_name(device.clone());
+                        let device_type = adapter.get_remote_type(device.clone());
+                        let alias = adapter.get_remote_alias(device.clone());
+                        let class = adapter.get_remote_class(device.clone());
                         let bonded = adapter.get_bond_state(device.clone());
                         let connected = adapter.get_connection_state(device.clone());
                         let uuids = adapter.get_remote_uuids(device.clone());
 
-                        (bonded, connected, uuids)
+                        (name, alias, device_type, class, bonded, connected, uuids)
                     };
 
                     print_info!("Address: {}", &device.address);
+                    print_info!("Name: {}", name);
+                    print_info!("Alias: {}", alias);
+                    print_info!("Type: {:?}", device_type);
+                    print_info!("Class: {}", class);
                     print_info!("Bonded: {}", bonded);
                     print_info!("Connected: {}", connected);
                     print_info!(
@@ -498,11 +554,16 @@ impl CommandHandler {
 
         enforce_arg_len(args, 1, "gatt <commands>", || match &args[0][0..] {
             "register-client" => {
+                let dbus_connection = self.context.lock().unwrap().dbus_connection.clone();
+                let dbus_crossroads = self.context.lock().unwrap().dbus_crossroads.clone();
+
                 self.context.lock().unwrap().gatt_dbus.as_mut().unwrap().register_client(
                     String::from(GATT_CLIENT_APP_UUID),
                     Box::new(BtGattCallback::new(
                         String::from("/org/chromium/bluetooth/client/bluetooth_gatt_callback"),
                         self.context.clone(),
+                        dbus_connection,
+                        dbus_crossroads,
                     )),
                     false,
                 );
