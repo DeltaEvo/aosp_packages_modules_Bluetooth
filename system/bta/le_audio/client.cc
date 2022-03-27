@@ -1909,25 +1909,27 @@ class LeAudioClientImpl : public LeAudioClient {
 
     bool mono = (left_cis_handle == 0) || (right_cis_handle == 0);
 
-    LOG(INFO) << __func__ << " data size: " << (int)data.size()
-              << " byte count: " << byte_count << " mono: " << mono;
     if (!mono) {
-      lc3_encode(lc3_encoder_left, (const int16_t*)data.data(), 2,
-                 chan_left_enc.size(), chan_left_enc.data());
-      lc3_encode(lc3_encoder_right, ((const int16_t*)data.data()) + 1, 2,
-                 chan_right_enc.size(), chan_right_enc.data());
+      lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                 (const int16_t*)data.data(), 2, chan_left_enc.size(),
+                 chan_left_enc.data());
+      lc3_encode(lc3_encoder_right, LC3_PCM_FORMAT_S16,
+                 ((const int16_t*)data.data()) + 1, 2, chan_right_enc.size(),
+                 chan_right_enc.data());
     } else {
       std::vector<int16_t> chan_mono;
       get_mono_stream(data, chan_mono);
 
       if (left_cis_handle) {
-        lc3_encode(lc3_encoder_left, (const int16_t*)chan_mono.data(), 1,
-                   chan_left_enc.size(), chan_left_enc.data());
+        lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                   (const int16_t*)chan_mono.data(), 1, chan_left_enc.size(),
+                   chan_left_enc.data());
       }
 
       if (right_cis_handle) {
-        lc3_encode(lc3_encoder_right, (const int16_t*)chan_mono.data(), 1,
-                   chan_right_enc.size(), chan_right_enc.data());
+        lc3_encode(lc3_encoder_right, LC3_PCM_FORMAT_S16,
+                   (const int16_t*)chan_mono.data(), 1, chan_right_enc.size(),
+                   chan_right_enc.data());
       }
     }
 
@@ -1968,17 +1970,20 @@ class LeAudioClientImpl : public LeAudioClient {
       std::vector<int16_t> chan_mono;
       get_mono_stream(data, chan_mono);
 
-      auto err = lc3_encode(lc3_encoder_left, (const int16_t*)chan_mono.data(),
-                            1, byte_count, chan_encoded.data());
+      auto err = lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                            (const int16_t*)chan_mono.data(), 1, byte_count,
+                            chan_encoded.data());
 
       if (err < 0) {
         LOG(ERROR) << " error while encoding, error code: " << +err;
       }
     } else {
-      lc3_encode(lc3_encoder_left, (const int16_t*)data.data(), 2, byte_count,
+      lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
+                 (const int16_t*)data.data(), 2, byte_count,
                  chan_encoded.data());
-      lc3_encode(lc3_encoder_right, (const int16_t*)data.data() + 1, 2,
-                 byte_count, chan_encoded.data() + byte_count);
+      lc3_encode(lc3_encoder_right, LC3_PCM_FORMAT_S16,
+                 (const int16_t*)data.data() + 1, 2, byte_count,
+                 chan_encoded.data() + byte_count);
     }
 
     /* Send data to the controller */
@@ -2127,12 +2132,18 @@ class LeAudioClientImpl : public LeAudioClient {
     }
   }
 
+  void CleanCachedMicrophoneData() {
+    cached_channel_data_.clear();
+    cached_channel_timestamp_ = 0;
+    cached_channel_is_left_ = false;
+  }
+
   void SendAudioData(uint8_t* data, uint16_t size, uint16_t cis_conn_hdl,
                      uint32_t timestamp) {
     /* Get only one channel for MONO microphone */
     /* Gather data for channel */
     if ((active_group_id_ == bluetooth::groups::kGroupUnknown) ||
-        (audio_sender_state_ != AudioState::STARTED))
+        (audio_receiver_state_ != AudioState::STARTED))
       return;
 
     LeAudioDeviceGroup* group = aseGroups_.FindById(active_group_id_);
@@ -2202,8 +2213,8 @@ class LeAudioClientImpl : public LeAudioClient {
     lc3_decoder_t decoder_to_use =
         is_left ? lc3_decoder_left : lc3_decoder_right;
 
-    err = lc3_decode(decoder_to_use, data, size, pcm_data_decoded.data(),
-                     1 /* pitch */);
+    err = lc3_decode(decoder_to_use, data, size, LC3_PCM_FORMAT_S16,
+                     pcm_data_decoded.data(), 1 /* pitch */);
 
     if (err < 0) {
       LOG(ERROR) << " bad decoding parameters: " << static_cast<int>(err);
@@ -2219,9 +2230,9 @@ class LeAudioClientImpl : public LeAudioClient {
                         &pcm_data_decoded, nullptr);
       return;
     }
-
     /* both devices are connected */
-    if (cached_channel_timestamp_ == 0) {
+
+    if (cached_channel_timestamp_ == 0 && cached_channel_data_.empty()) {
       /* First packet received, cache it. We need both channel data to send it
        * to AF. */
       cached_channel_data_ = pcm_data_decoded;
@@ -2245,7 +2256,7 @@ class LeAudioClientImpl : public LeAudioClient {
                             &pcm_data_decoded, &cached_channel_data_);
         }
 
-        cached_channel_timestamp_ = 0;
+        CleanCachedMicrophoneData();
         return;
       }
 
@@ -2409,7 +2420,8 @@ class LeAudioClientImpl : public LeAudioClient {
     uint16_t remote_delay_ms =
         group->GetRemoteDelay(le_audio::types::kLeAudioDirectionSource);
 
-    cached_channel_timestamp_ = 0;
+    CleanCachedMicrophoneData();
+
     if (CodecManager::GetInstance()->GetCodecLocation() ==
         le_audio::types::CodecLocation::HOST) {
       if (lc3_decoder_left_mem) {
