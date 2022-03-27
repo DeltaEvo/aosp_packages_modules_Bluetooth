@@ -1909,8 +1909,6 @@ class LeAudioClientImpl : public LeAudioClient {
 
     bool mono = (left_cis_handle == 0) || (right_cis_handle == 0);
 
-    LOG(INFO) << __func__ << " data size: " << (int)data.size()
-              << " byte count: " << byte_count << " mono: " << mono;
     if (!mono) {
       lc3_encode(lc3_encoder_left, LC3_PCM_FORMAT_S16,
                  (const int16_t*)data.data(), 2, chan_left_enc.size(),
@@ -2134,12 +2132,18 @@ class LeAudioClientImpl : public LeAudioClient {
     }
   }
 
+  void CleanCachedMicrophoneData() {
+    cached_channel_data_.clear();
+    cached_channel_timestamp_ = 0;
+    cached_channel_is_left_ = false;
+  }
+
   void SendAudioData(uint8_t* data, uint16_t size, uint16_t cis_conn_hdl,
                      uint32_t timestamp) {
     /* Get only one channel for MONO microphone */
     /* Gather data for channel */
     if ((active_group_id_ == bluetooth::groups::kGroupUnknown) ||
-        (audio_sender_state_ != AudioState::STARTED))
+        (audio_receiver_state_ != AudioState::STARTED))
       return;
 
     LeAudioDeviceGroup* group = aseGroups_.FindById(active_group_id_);
@@ -2226,9 +2230,9 @@ class LeAudioClientImpl : public LeAudioClient {
                         &pcm_data_decoded, nullptr);
       return;
     }
-
     /* both devices are connected */
-    if (cached_channel_timestamp_ == 0) {
+
+    if (cached_channel_timestamp_ == 0 && cached_channel_data_.empty()) {
       /* First packet received, cache it. We need both channel data to send it
        * to AF. */
       cached_channel_data_ = pcm_data_decoded;
@@ -2252,7 +2256,7 @@ class LeAudioClientImpl : public LeAudioClient {
                             &pcm_data_decoded, &cached_channel_data_);
         }
 
-        cached_channel_timestamp_ = 0;
+        CleanCachedMicrophoneData();
         return;
       }
 
@@ -2416,7 +2420,8 @@ class LeAudioClientImpl : public LeAudioClient {
     uint16_t remote_delay_ms =
         group->GetRemoteDelay(le_audio::types::kLeAudioDirectionSource);
 
-    cached_channel_timestamp_ = 0;
+    CleanCachedMicrophoneData();
+
     if (CodecManager::GetInstance()->GetCodecLocation() ==
         le_audio::types::CodecLocation::HOST) {
       if (lc3_decoder_left_mem) {
