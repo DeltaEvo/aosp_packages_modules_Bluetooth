@@ -575,6 +575,9 @@ using PublishedAudioCapabilities =
 using AudioLocations = std::bitset<32>;
 using AudioContexts = std::bitset<16>;
 
+std::ostream& operator<<(std::ostream& os, const AseState& state);
+
+std::ostream& operator<<(std::ostream& os, const LeAudioLc3Config& config);
 }  // namespace types
 
 namespace set_configurations {
@@ -595,9 +598,16 @@ struct CodecCapabilitySetting {
   uint8_t GetConfigChannelCount() const;
 };
 
+struct QosConfigSetting {
+  uint8_t retransmission_number;
+  uint16_t max_transport_latency;
+};
+
 struct SetConfiguration {
   SetConfiguration(uint8_t direction, uint8_t device_cnt, uint8_t ase_cnt,
                    uint8_t target_latency, CodecCapabilitySetting codec,
+                   QosConfigSetting qos = {.retransmission_number = 0,
+                                           .max_transport_latency = 0},
                    le_audio::types::LeAudioConfigurationStrategy strategy =
                        le_audio::types::LeAudioConfigurationStrategy::
                            MONO_ONE_CIS_PER_DEVICE)
@@ -606,6 +616,7 @@ struct SetConfiguration {
         ase_cnt(ase_cnt),
         target_latency(target_latency),
         codec(codec),
+        qos(qos),
         strategy(strategy) {}
 
   uint8_t direction;  /* Direction of set */
@@ -613,6 +624,7 @@ struct SetConfiguration {
   uint8_t ase_cnt;    /* How many ASE we need in configuration */
   uint8_t target_latency;
   CodecCapabilitySetting codec;
+  QosConfigSetting qos;
   types::LeAudioConfigurationStrategy strategy;
 };
 
@@ -687,11 +699,4 @@ void AppendMetadataLtvEntryForCcidList(std::vector<uint8_t>& metadata,
 void AppendMetadataLtvEntryForStreamingContext(
     std::vector<uint8_t>& metadata, types::LeAudioContextType context_type);
 uint8_t GetMaxCodecFramesPerSduFromPac(const types::acs_ac_record* pac_record);
-
 }  // namespace le_audio
-
-std::ostream& operator<<(std::ostream& os,
-                         const le_audio::types::LeAudioLc3Config& config);
-
-std::ostream& operator<<(std::ostream& os,
-                         const le_audio::types::AseState& state);

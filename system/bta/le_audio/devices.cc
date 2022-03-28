@@ -28,7 +28,9 @@
 #include "btm_iso_api_types.h"
 #include "client_audio.h"
 #include "device/include/controller.h"
+#include "gd/common/strings.h"
 #include "le_audio_set_configuration_provider.h"
+#include "osi/include/log.h"
 
 using bluetooth::hci::kIsoCigFramingFramed;
 using bluetooth::hci::kIsoCigFramingUnframed;
@@ -957,6 +959,9 @@ bool LeAudioDevice::ConfigureAses(
                             *ase->codec_config.audio_channel_allocation) *
                         *ase->codec_config.octets_per_codec_frame *
                         *ase->codec_config.codec_frames_blocks_per_sdu;
+
+    ase->retrans_nb = ent.qos.retransmission_number;
+    ase->max_transport_latency = ent.qos.max_transport_latency;
 
     ase->metadata = GetMetadata(context_type);
 
