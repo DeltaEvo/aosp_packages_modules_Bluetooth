@@ -871,7 +871,7 @@ public final class BluetoothAdapter {
         }
 
         @Override
-        public void onBluetoothActivityEnergyInfo(BluetoothActivityEnergyInfo info) {
+        public void onBluetoothActivityEnergyInfoAvailable(BluetoothActivityEnergyInfo info) {
             Executor executor;
             OnBluetoothActivityEnergyInfoListener listener;
             synchronized (mLock) {
@@ -1518,7 +1518,7 @@ public final class BluetoothAdapter {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public boolean factoryReset() {
+    public boolean clearBluetooth() {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
@@ -1538,6 +1538,22 @@ public final class BluetoothAdapter {
             mServiceLock.readLock().unlock();
         }
         return false;
+    }
+
+     /**
+     * See {@link #clearBluetooth()}
+     *
+     * @return true to indicate that the config file was successfully cleared
+     * @hide
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public boolean factoryReset() {
+        return clearBluetooth();
     }
 
     /**
@@ -2733,7 +2749,9 @@ public final class BluetoothAdapter {
      * A null value for the activity info object may be sent if the bluetooth service is
      * unreachable or the device does not support reporting such information.
      *
-     * @param result The callback to which to send the activity info.
+     * @param executor the executor that the listener will be invoked on
+     * @param listener the listener that will receive the {@link BluetoothActivityEnergyInfo}
+     *                 object when it becomes available
      * @hide
      */
     @SystemApi
