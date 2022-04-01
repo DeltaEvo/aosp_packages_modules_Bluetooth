@@ -120,7 +120,7 @@ void Btm::ScanningCallbacks::OnScanResult(
     uint8_t primary_phy, uint8_t secondary_phy, uint8_t advertising_sid,
     int8_t tx_power, int8_t rssi, uint16_t periodic_advertising_interval,
     std::vector<uint8_t> advertising_data) {
-  tBLE_ADDR_TYPE ble_address_type = static_cast<tBLE_ADDR_TYPE>(address_type);
+  tBLE_ADDR_TYPE ble_address_type = to_ble_addr_type(address_type);
   uint16_t extended_event_type = 0;
 
   RawAddress raw_address;
@@ -678,7 +678,7 @@ hci::AddressWithType Btm::GetAddressAndType(const RawAddress& bd_addr) {
                                p_dev_rec->ble.identity_address_with_type.type);
     } else {
       return ToAddressWithType(p_dev_rec->ble.pseudo_addr,
-                               p_dev_rec->ble.ble_addr_type);
+                               p_dev_rec->ble.AddressType());
     }
   }
   LOG(ERROR) << "Unknown bd_addr. Use public address";

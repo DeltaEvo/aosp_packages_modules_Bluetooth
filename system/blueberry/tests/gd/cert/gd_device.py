@@ -527,7 +527,9 @@ class GdAndroidDevice(GdDeviceBase):
 
         # Ensure Bluetooth is disabled
         self.ensure_no_output(self.adb.shell("settings put global ble_scan_always_enabled 0"))
-        self.ensure_no_output(self.adb.shell("svc bluetooth disable"))
+        self.adb.shell("cmd bluetooth_manager disable")
+        device_bt_state = int(self.adb.shell("settings get global bluetooth_on"))
+        asserts.assert_equal(device_bt_state, 0, "Failed to disable Bluetooth on device %s %s" % (self.label, self.serial_number))
         logging.info("Bluetooth disabled on device %s %s" % (self.label, self.serial_number))
 
         # Start logcat logging
@@ -651,7 +653,7 @@ class GdAndroidDevice(GdDeviceBase):
             self.adb.shell("setprop persist.sys.timezone %s" % target_timezone)
             self.reboot()
             self.adb.remount()
-            device_tz = self.adb.shell("date +%z")
+            device_tz = self.adb.shell("date +%z").decode(UTF_8).rstrip()
             asserts.assert_equal(
                 host_tz, device_tz, "Device timezone %s still does not match host "
                 "timezone %s after reset" % (device_tz, host_tz))
