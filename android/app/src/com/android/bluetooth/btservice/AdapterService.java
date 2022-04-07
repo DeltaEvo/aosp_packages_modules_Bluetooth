@@ -33,7 +33,6 @@ import static com.android.bluetooth.Utils.isPackageNameAccurate;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
-import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
@@ -210,10 +209,6 @@ public class AdapterService extends Service {
     private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
-
-    private static final ComponentName BLUETOOTH_INCALLSERVICE_COMPONENT =
-            new ComponentName("com.android.bluetooth.services",
-                    BluetoothInCallService.class.getCanonicalName());
 
     public static final String ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS =
             "no_active_device_address";
@@ -576,11 +571,6 @@ public class AdapterService extends Service {
             // Some platforms, such as wearables do not have a system ui.
             Log.w(TAG, "Unable to resolve SystemUI's UID.", e);
         }
-
-        IntentFilter filter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
-        getApplicationContext().registerReceiverForAllUsers(sUserSwitchedReceiver, filter, null, null);
-        int fuid = ActivityManager.getCurrentUser();
-        Utils.setForegroundUserId(fuid);
     }
 
     @Override
@@ -605,16 +595,6 @@ public class AdapterService extends Service {
             System.exit(0);
         }
     }
-
-    public static final BroadcastReceiver sUserSwitchedReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (Intent.ACTION_USER_SWITCHED.equals(intent.getAction())) {
-                int fuid = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
-                Utils.setForegroundUserId(fuid);
-            }
-        }
-    };
 
     private boolean initMetricsLogger() {
         if (mMetricsLogger != null) {
@@ -870,20 +850,6 @@ public class AdapterService extends Service {
             return;
         }
         mA2dpService.switchCodecByBufferSize(activeDevices.get(0), isLowLatencyBufferSize);
-    }
-
-    /**
-     * Enable/disable BluetoothInCallService
-     *
-     * @param enable to enable/disable BluetoothInCallService.
-     */
-    public void enableBluetoothInCallService(boolean enable) {
-        debugLog("enableBluetoothInCallService() - Enable = " + enable);
-        getPackageManager().setComponentEnabledSetting(
-                BLUETOOTH_INCALLSERVICE_COMPONENT,
-                enable ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                        : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP);
     }
 
     void cleanup() {
@@ -3741,6 +3707,19 @@ public class AdapterService extends Service {
                 ParcelUuid uuid, AttributionSource attributionSource) {
             return mService.retrievePendingSocketForServiceRecord(uuid, attributionSource);
         }
+
+        @Override
+        public void setForegroundUserId(int userId, AttributionSource attributionSource) {
+            AdapterService service = getService();
+            if (service == null || !callerIsSystemOrActiveUser(TAG, "setForegroundUserId")
+                    || !Utils.checkConnectPermissionForDataDelivery(
+                    service, Utils.getCallingAttributionSource(mService),
+                    "AdapterService setForegroundUserId")) {
+                return;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            Utils.setForegroundUserId(userId);
+        }
     }
 
     // ----API Methods--------
@@ -4609,7 +4588,7 @@ public class AdapterService extends Service {
      * @return true, if the LE audio broadcast source is supported
      */
     public boolean isLeAudioBroadcastSourceSupported() {
-        return  getResources().getBoolean(R.bool.profile_supported_le_audio_broadcast)
+        return  BluetoothProperties.isProfileBapBroadcastSourceEnabled().orElse(false)
                 && mAdapterProperties.isLePeriodicAdvertisingSupported()
                 && mAdapterProperties.isLeExtendedAdvertisingSupported()
                 && mAdapterProperties.isLeIsochronousBroadcasterSupported();
@@ -4936,6 +4915,12 @@ public class AdapterService extends Service {
         writer.println("mDefaultSnoopLogSettingAtEnable = " + mDefaultSnoopLogSettingAtEnable);
 
         writer.println();
+        writer.println("Enabled Profile Services:");
+        for (Class profile : Config.getSupportedProfiles()) {
+            writer.println("  " + profile.getSimpleName());
+        }
+        writer.println();
+
         mAdapterStateMachine.dump(fd, writer, args);
 
         StringBuilder sb = new StringBuilder();
