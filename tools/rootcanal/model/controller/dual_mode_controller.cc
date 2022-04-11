@@ -38,17 +38,6 @@ constexpr uint16_t kLeMaximumDataLength = 64;
 constexpr uint16_t kLeMaximumDataTime = 0x148;
 
 // Device methods.
-void DualModeController::Initialize(const std::vector<std::string>& args) {
-  if (args.size() < 2) return;
-
-  Address addr{};
-  if (Address::FromString(args[1], addr)) {
-    properties_.SetAddress(addr);
-  } else {
-    LOG_ALWAYS_FATAL("Invalid address: %s", args[1].c_str());
-  }
-};
-
 std::string DualModeController::GetTypeString() const {
   return "Simulated Bluetooth Controller";
 }
@@ -2299,7 +2288,8 @@ void DualModeController::LeRemoveIsoDataPath(CommandView command) {
       gd_hci::LeRemoveIsoDataPathView::Create(std::move(iso_command_view));
   ASSERT(command_view.IsValid());
   link_layer_controller_.LeRemoveIsoDataPath(
-      command_view.GetConnectionHandle(), command_view.GetDataPathDirection());
+      command_view.GetConnectionHandle(),
+      command_view.GetRemoveDataPathDirection());
 }
 
 void DualModeController::LeReadRemoteFeatures(CommandView command) {
