@@ -25,7 +25,6 @@ import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothLeBroadcastAssistant;
 import android.bluetooth.IBluetoothLeBroadcastAssistantCallback;
-import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
@@ -39,6 +38,7 @@ import android.os.Message;
 import android.os.ParcelUuid;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -85,6 +85,10 @@ public class BassClientService extends ProfileService {
     private Map<BluetoothDevice, PeriodicAdvertisementResult> mPeriodicAdvertisementResultMap;
     private ScanCallback mSearchScanCallback;
     private Callbacks mCallbacks;
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileBapBroadcastAssistEnabled().orElse(false);
+    }
 
     void updatePeriodicAdvertisementResultMap(
             BluetoothDevice device,
@@ -255,8 +259,7 @@ public class BassClientService extends ProfileService {
         }
         synchronized (mStateMachines) {
             for (BassClientStateMachine sm : mStateMachines.values()) {
-                sm.doQuit();
-                sm.cleanup();
+                BassObjectsFactory.getInstance().destroyStateMachine(sm);
             }
             mStateMachines.clear();
         }
@@ -364,8 +367,8 @@ public class BassClientService extends ProfileService {
                 return null;
             }
             log("Creating a new state machine for " + device);
-            stateMachine = BassClientStateMachine.make(device,
-                    this, mStateMachinesThread.getLooper());
+            stateMachine = BassObjectsFactory.getInstance().makeStateMachine(
+                    device, this, mStateMachinesThread.getLooper());
             mStateMachines.put(device, stateMachine);
             return stateMachine;
         }
@@ -615,7 +618,8 @@ public class BassClientService extends ProfileService {
             Log.e(TAG, "startSearchingForSources: Adapter is NULL");
             return;
         }
-        BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
+        BluetoothLeScannerWrapper scanner = BassObjectsFactory.getInstance()
+                .getBluetoothLeScannerWrapper(mBluetoothAdapter);
         if (scanner == null) {
             Log.e(TAG, "startLeScan: cannot get BluetoothLeScanner");
             return;
@@ -681,7 +685,12 @@ public class BassClientService extends ProfileService {
      */
     public void stopSearchingForSources() {
         log("stopSearchingForSources");
-        BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
+        if (mBluetoothAdapter == null) {
+            Log.e(TAG, "stopSearchingForSources: Adapter is NULL");
+            return;
+        }
+        BluetoothLeScannerWrapper scanner = BassObjectsFactory.getInstance()
+                .getBluetoothLeScannerWrapper(mBluetoothAdapter);
         if (scanner == null) {
             Log.e(TAG, "startLeScan: cannot get BluetoothLeScanner");
             return;

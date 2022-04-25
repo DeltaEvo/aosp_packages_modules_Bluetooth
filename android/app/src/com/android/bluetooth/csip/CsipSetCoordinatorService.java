@@ -40,6 +40,7 @@ import android.content.IntentFilter;
 import android.os.HandlerThread;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 import android.util.Pair;
 
@@ -95,6 +96,10 @@ public class CsipSetCoordinatorService extends ProfileService {
 
     private BroadcastReceiver mBondStateChangedReceiver;
     private BroadcastReceiver mConnectionStateChangedReceiver;
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileCsipSetCoordinatorEnabled().orElse(false);
+    }
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -802,6 +807,8 @@ public class CsipSetCoordinatorService extends ProfileService {
         if (bondState != BluetoothDevice.BOND_NONE) {
             return;
         }
+
+        mDeviceGroupIdMap.remove(device);
 
         synchronized (mStateMachines) {
             CsipSetCoordinatorStateMachine sm = mStateMachines.get(device);

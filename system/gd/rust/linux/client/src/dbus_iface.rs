@@ -183,6 +183,9 @@ impl IBluetoothCallback for IBluetoothCallbackDBus {
     #[dbus_method("OnDeviceFound")]
     fn on_device_found(&self, remote_device: BluetoothDevice) {}
 
+    #[dbus_method("OnDeviceCleared")]
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {}
+
     #[dbus_method("OnDiscoveringChanged")]
     fn on_discovering_changed(&self, discovering: bool) {}
 
@@ -442,12 +445,12 @@ impl IBluetooth for BluetoothDBus {
     }
 
     #[dbus_method("ConnectAllEnabledProfiles")]
-    fn connect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 
     #[dbus_method("DisconnectAllEnabledProfiles")]
-    fn disconnect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 }
