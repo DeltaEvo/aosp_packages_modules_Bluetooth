@@ -47,7 +47,6 @@ cc_library {
         "libcutils",
     ],
     apex_available: [
-        "//apex_available:platform",
         "com.android.bluetooth",
     ],
     min_sdk_version: "30",
@@ -162,6 +161,9 @@ cc_defaults {
     ],
     target: {
         android: {
+            whole_static_libs: [
+                "PlatformProperties",
+            ],
             srcs: ["src/btif_avrcp_audio_track.cc"],
         },
         host: {

@@ -33,7 +33,6 @@ import static com.android.bluetooth.Utils.isPackageNameAccurate;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
-import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
@@ -67,7 +66,6 @@ import android.bluetooth.UidTraffic;
 import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -76,6 +74,7 @@ import android.content.pm.PackageManager;
 import android.os.AsyncTask;
 import android.os.BatteryStatsManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -209,10 +208,6 @@ public class AdapterService extends Service {
     private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
-
-    private static final ComponentName BLUETOOTH_INCALLSERVICE_COMPONENT =
-            new ComponentName("com.android.bluetooth",
-                    BluetoothInCallService.class.getCanonicalName());
 
     public static final String ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS =
             "no_active_device_address";
@@ -575,11 +570,6 @@ public class AdapterService extends Service {
             // Some platforms, such as wearables do not have a system ui.
             Log.w(TAG, "Unable to resolve SystemUI's UID.", e);
         }
-
-        IntentFilter filter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
-        getApplicationContext().registerReceiverForAllUsers(sUserSwitchedReceiver, filter, null, null);
-        int fuid = ActivityManager.getCurrentUser();
-        Utils.setForegroundUserId(fuid);
     }
 
     @Override
@@ -604,16 +594,6 @@ public class AdapterService extends Service {
             System.exit(0);
         }
     }
-
-    public static final BroadcastReceiver sUserSwitchedReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (Intent.ACTION_USER_SWITCHED.equals(intent.getAction())) {
-                int fuid = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
-                Utils.setForegroundUserId(fuid);
-            }
-        }
-    };
 
     private boolean initMetricsLogger() {
         if (mMetricsLogger != null) {
@@ -702,8 +682,10 @@ public class AdapterService extends Service {
     void startProfileServices() {
         debugLog("startCoreServices()");
         Class[] supportedProfileServices = Config.getSupportedProfiles();
-        if (supportedProfileServices.length == 1 && GattService.class.getSimpleName()
-                .equals(supportedProfileServices[0].getSimpleName())) {
+        // If we support no profiles, or we only support GATT/BLE, just move on to BREDR_STARTED
+        if (supportedProfileServices.length == 0
+                || (supportedProfileServices.length == 1 && GattService.class.getSimpleName()
+                .equals(supportedProfileServices[0].getSimpleName()))) {
             mAdapterProperties.onBluetoothReady();
             updateUuids();
             setBluetoothClassFromConfig();
@@ -719,8 +701,10 @@ public class AdapterService extends Service {
         mAdapterProperties.setScanMode(AbstractionLayer.BT_SCAN_MODE_NONE);
 
         Class[] supportedProfileServices = Config.getSupportedProfiles();
-        if (supportedProfileServices.length == 1 && (mRunningProfiles.size() == 1
-                && GattService.class.getSimpleName().equals(mRunningProfiles.get(0).getName()))) {
+        // If we support no profiles, or we only support GATT/BLE, just move on to BREDR_STOPPED
+        if (supportedProfileServices.length == 0
+                || (supportedProfileServices.length == 1 && (mRunningProfiles.size() == 1
+                && GattService.class.getSimpleName().equals(mRunningProfiles.get(0).getName())))) {
             debugLog("stopProfileServices() - No profiles services to stop or already stopped.");
             mAdapterStateMachine.sendMessage(AdapterState.BREDR_STOPPED);
         } else {
@@ -741,19 +725,31 @@ public class AdapterService extends Service {
         BluetoothAdapter.invalidateBluetoothGetStateCache();
     }
 
-    void updateLeAudioProfileServiceState(boolean isCisCentralSupported) {
-        if (isCisCentralSupported) {
-            return;
+    void updateLeAudioProfileServiceState() {
+        HashSet<Class> nonSupportedProfiles = new HashSet<>();
+
+        if (!isLeConnectedIsochronousStreamCentralSupported()) {
+            nonSupportedProfiles.addAll(Config.geLeAudioUnicastProfiles());
         }
 
-        // Remove the Le audio unicast profiles from the supported list
-        // since the controller doesn't support
-        Config.removeLeAudioUnicastProfilesFromSupportedList();
-        HashSet<Class> leAudioUnicastProfiles = Config.geLeAudioUnicastProfiles();
+        if (!isLeAudioBroadcastAssistantSupported()) {
+            nonSupportedProfiles.add(BassClientService.class);
+        }
 
-        for (Class profileService : leAudioUnicastProfiles) {
-            if (isStartedProfile(profileService.getSimpleName())){
-                setProfileServiceState(profileService, BluetoothAdapter.STATE_OFF);
+        if (isLeAudioBroadcastSourceSupported()) {
+            Config.addSupportedProfile(BluetoothProfile.LE_AUDIO_BROADCAST);
+        }
+
+        if (!nonSupportedProfiles.isEmpty()) {
+            // Remove non-supported profiles from the supported list
+            // since the controller doesn't support
+            Config.removeProfileFromSupportedList(nonSupportedProfiles);
+
+            // Disable the non-supported profiles service
+            for (Class profileService : nonSupportedProfiles) {
+                if (isStartedProfile(profileService.getSimpleName())) {
+                    setProfileServiceState(profileService, BluetoothAdapter.STATE_OFF);
+                }
             }
         }
     }
@@ -861,20 +857,6 @@ public class AdapterService extends Service {
             return;
         }
         mA2dpService.switchCodecByBufferSize(activeDevices.get(0), isLowLatencyBufferSize);
-    }
-
-    /**
-     * Enable/disable BluetoothInCallService
-     *
-     * @param enable to enable/disable BluetoothInCallService.
-     */
-    public void enableBluetoothInCallService(boolean enable) {
-        debugLog("enableBluetoothInCallService() - Enable = " + enable);
-        getPackageManager().setComponentEnabledSetting(
-                BLUETOOTH_INCALLSERVICE_COMPONENT,
-                enable ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                        : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP);
     }
 
     void cleanup() {
@@ -3421,7 +3403,10 @@ public class AdapterService extends Service {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
             }
 
-            if (service.isLeAudioBroadcastAssistantSupported()) {
+            HashSet<Class> supportedProfileServices =
+                    new HashSet<Class>(Arrays.asList(Config.getSupportedProfiles()));
+
+            if (supportedProfileServices.contains(BassClientService.class)) {
                 return BluetoothStatusCodes.FEATURE_SUPPORTED;
             }
 
@@ -3729,6 +3714,18 @@ public class AdapterService extends Service {
                 ParcelUuid uuid, AttributionSource attributionSource) {
             return mService.retrievePendingSocketForServiceRecord(uuid, attributionSource);
         }
+
+        @Override
+        public void setForegroundUserId(int userId, AttributionSource attributionSource) {
+            AdapterService service = getService();
+            if (service == null || !Utils.checkConnectPermissionForDataDelivery(
+                    service, Utils.getCallingAttributionSource(mService),
+                    "AdapterService setForegroundUserId")) {
+                return;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            Utils.setForegroundUserId(userId);
+        }
     }
 
     // ----API Methods--------
@@ -3796,7 +3793,7 @@ public class AdapterService extends Service {
         debugLog("startDiscovery");
         String callingPackage = attributionSource.getPackageName();
         mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
-        boolean isQApp = Utils.isQApp(this, callingPackage);
+        boolean isQApp = Utils.checkCallerTargetSdk(this, callingPackage, Build.VERSION_CODES.Q);
         boolean hasDisavowedLocation =
                 Utils.hasDisavowedLocationForScan(this, attributionSource, mTestModeEnabled);
         String permission = null;
@@ -4597,7 +4594,7 @@ public class AdapterService extends Service {
      * @return true, if the LE audio broadcast source is supported
      */
     public boolean isLeAudioBroadcastSourceSupported() {
-        return  getResources().getBoolean(R.bool.profile_supported_le_audio_broadcast)
+        return  BluetoothProperties.isProfileBapBroadcastSourceEnabled().orElse(false)
                 && mAdapterProperties.isLePeriodicAdvertisingSupported()
                 && mAdapterProperties.isLeExtendedAdvertisingSupported()
                 && mAdapterProperties.isLeIsochronousBroadcasterSupported();
@@ -4609,11 +4606,19 @@ public class AdapterService extends Service {
      * @return true, if the LE audio broadcast assistant is supported
      */
     public boolean isLeAudioBroadcastAssistantSupported() {
-        //TODO: check the profile support status as well after we have the implementation
         return mAdapterProperties.isLePeriodicAdvertisingSupported()
             && mAdapterProperties.isLeExtendedAdvertisingSupported()
             && (mAdapterProperties.isLePeriodicAdvertisingSyncTransferSenderSupported()
                 || mAdapterProperties.isLePeriodicAdvertisingSyncTransferRecipientSupported());
+    }
+
+    /**
+     * Check if the LE audio CIS central feature is supported.
+     *
+     * @return true, if the LE audio CIS central is supported
+     */
+    public boolean isLeConnectedIsochronousStreamCentralSupported() {
+        return mAdapterProperties.isLeConnectedIsochronousStreamCentralSupported();
     }
 
     public int getLeMaximumAdvertisingDataLength() {
@@ -4916,6 +4921,12 @@ public class AdapterService extends Service {
         writer.println("mDefaultSnoopLogSettingAtEnable = " + mDefaultSnoopLogSettingAtEnable);
 
         writer.println();
+        writer.println("Enabled Profile Services:");
+        for (Class profile : Config.getSupportedProfiles()) {
+            writer.println("  " + profile.getSimpleName());
+        }
+        writer.println();
+
         mAdapterStateMachine.dump(fd, writer, args);
 
         StringBuilder sb = new StringBuilder();
