@@ -19,6 +19,7 @@ package com.android.bluetooth.le_audio;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothLeAudioCodecConfig;
+import android.bluetooth.BluetoothLeBroadcastMetadata;
 
 import java.util.List;
 /**
@@ -42,7 +43,7 @@ public class LeAudioStackEvent {
     public static final int EVENT_TYPE_BROADCAST_CREATED = EVENT_TYPE_UNICAST_MAX + 1;
     public static final int EVENT_TYPE_BROADCAST_DESTROYED = EVENT_TYPE_UNICAST_MAX + 2;
     public static final int EVENT_TYPE_BROADCAST_STATE = EVENT_TYPE_UNICAST_MAX + 3;
-    public static final int EVENT_TYPE_BROADCAST_ID = EVENT_TYPE_UNICAST_MAX + 4;
+    public static final int EVENT_TYPE_BROADCAST_METADATA_CHANGED = EVENT_TYPE_UNICAST_MAX + 4;
 
     // Do not modify without updating the HAL bt_le_audio.h files.
     // Match up with GroupStatus enum of bt_le_audio.h
@@ -73,11 +74,11 @@ public class LeAudioStackEvent {
     public int valueInt4 = 0;
     public int valueInt5 = 0;
     public boolean valueBool1 = false;
-    public byte[] valueByte1;
     public BluetoothLeAudioCodecConfig valueCodec1;
     public BluetoothLeAudioCodecConfig valueCodec2;
     public List<BluetoothLeAudioCodecConfig> valueCodecList1;
     public List<BluetoothLeAudioCodecConfig> valueCodecList2;
+    public BluetoothLeBroadcastMetadata broadcastMetadata;
 
     LeAudioStackEvent(int type) {
         this.type = type;
@@ -101,7 +102,10 @@ public class LeAudioStackEvent {
                 + eventTypeValueCodecList1ToString(type, valueCodecList1));
         result.append(", valueCodecList2:"
                 + eventTypeValueCodecList2ToString(type, valueCodecList2));
-        result.append(", " + eventTypeValueByte1ToString(type, valueByte1));
+        if (type == EVENT_TYPE_BROADCAST_METADATA_CHANGED) {
+            result.append(", broadcastMetadata:"
+                    + eventTypeValueBroadcastMetadataToString(broadcastMetadata));
+        }
         result.append("}");
         return result.toString();
     }
@@ -126,8 +130,8 @@ public class LeAudioStackEvent {
                 return "EVENT_TYPE_BROADCAST_DESTROYED";
             case EVENT_TYPE_BROADCAST_STATE:
                 return "EVENT_TYPE_BROADCAST_STATE";
-            case EVENT_TYPE_BROADCAST_ID:
-                return "EVENT_TYPE_BROADCAST_ID";
+            case EVENT_TYPE_BROADCAST_METADATA_CHANGED:
+                return "EVENT_TYPE_BROADCAST_METADATA_CHANGED";
             case EVENT_TYPE_AUDIO_LOCAL_CODEC_CONFIG_CAPA_CHANGED:
                 return "EVENT_TYPE_AUDIO_LOCAL_CODEC_CONFIG_CAPA_CHANGED";
             case EVENT_TYPE_AUDIO_GROUP_CODEC_CONFIG_CHANGED:
@@ -164,13 +168,13 @@ public class LeAudioStackEvent {
             case EVENT_TYPE_SINK_AUDIO_LOCATION_AVAILABLE:
                 return "{sink_audio_location:" + value + "}";
             case EVENT_TYPE_BROADCAST_CREATED:
-                return "{instance_id:" + value + "}";
+                // same as EVENT_TYPE_BROADCAST_STATE
             case EVENT_TYPE_BROADCAST_DESTROYED:
-                return "{instance_id:" + value + "}";
+                // same as EVENT_TYPE_BROADCAST_STATE
+            case EVENT_TYPE_BROADCAST_METADATA_CHANGED:
+                // same as EVENT_TYPE_BROADCAST_STATE
             case EVENT_TYPE_BROADCAST_STATE:
-                return "{instance_id:" + value + "}";
-            case EVENT_TYPE_BROADCAST_ID:
-                return "{instance_id:" + value + "}";
+                return "{broadcastId:" + value + "}";
             default:
                 break;
         }
@@ -202,8 +206,6 @@ public class LeAudioStackEvent {
                 return "{group_id:" + Integer.toString(value) + "}";
             case EVENT_TYPE_BROADCAST_STATE:
                 return "{state:" + broadcastStateToString(value) + "}";
-            case EVENT_TYPE_BROADCAST_ID:
-                return "{addr_type:" + addrTypeToString(value) + "}";
             default:
                 break;
         }
@@ -240,18 +242,6 @@ public class LeAudioStackEvent {
                 break;
         }
         return Integer.toString(value);
-    }
-
-    private static String eventTypeValueByte1ToString(int type, byte[] value) {
-        switch (type) {
-            case EVENT_TYPE_BROADCAST_ID:
-                if (value == null) {
-                    return "empty";
-                }
-                return "broadcast_id: [" + encodeHexString(value) + "]";
-            default:
-                return "<unused>";
-        }
     }
 
     private static String eventTypeValueBool1ToString(int type, boolean value) {
@@ -324,15 +314,9 @@ public class LeAudioStackEvent {
         }
     }
 
-    private static String addrTypeToString(int value) {
-        switch (value) {
-            case 0:
-                return "Static";
-            case 1:
-                return "Random";
-            default:
-                return "Unknown {" + value + "}";
-        }
+    private static String eventTypeValueBroadcastMetadataToString(
+            BluetoothLeBroadcastMetadata meta) {
+        return meta.toString();
     }
 
     protected static String encodeHexString(byte[] pduData) {
