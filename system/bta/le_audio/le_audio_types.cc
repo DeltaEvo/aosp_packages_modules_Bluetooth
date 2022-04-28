@@ -122,9 +122,7 @@ static bool IsCodecConfigurationSupported(const types::LeAudioLtvMap& pacs,
   DLOG(INFO) << __func__ << " Pac:SamplFreq=" << loghex(u16_pac_val);
 
   /* TODO: Integrate with codec capabilities */
-  if ((u8_req_val != codec_spec_conf::kLeAudioSamplingFreq16000Hz &&
-       u8_req_val != codec_spec_conf::kLeAudioSamplingFreq48000Hz) ||
-      !(u16_pac_val &
+  if (!(u16_pac_val &
         codec_spec_caps::SamplingFreqConfig2Capability(u8_req_val))) {
     DLOG(ERROR) << __func__ << ", sampling frequency not supported";
     return false;
@@ -315,6 +313,19 @@ uint8_t* LeAudioLtvMap::RawPacket(uint8_t* p_buf) const {
   return p_buf;
 }
 
+std::vector<uint8_t> LeAudioLtvMap::RawPacket() const {
+  std::vector<uint8_t> data(RawPacketSize());
+  RawPacket(data.data());
+  return data;
+}
+
+void LeAudioLtvMap::Append(const LeAudioLtvMap& other) {
+  /* This will override values for the already existing keys */
+  for (auto& el : other.values) {
+    values[el.first] = el.second;
+  }
+}
+
 LeAudioLtvMap LeAudioLtvMap::Parse(const uint8_t* p_value, uint8_t len,
                                    bool& success) {
   LeAudioLtvMap ltv_map;
@@ -444,6 +455,15 @@ uint8_t GetMaxCodecFramesPerSduFromPac(const acs_ac_record* pac) {
 }
 
 namespace types {
+std::ostream& operator<<(std::ostream& os, const types::CigState& state) {
+  static const char* char_value_[4] = {"NONE", "CREATING", "CREATED",
+                                       "REMOVING"};
+
+  os << char_value_[static_cast<uint8_t>(state)] << " ("
+     << "0x" << std::setfill('0') << std::setw(2) << static_cast<int>(state)
+     << ")";
+  return os;
+}
 std::ostream& operator<<(std::ostream& os, const types::AseState& state) {
   static const char* char_value_[7] = {
       "IDLE",      "CODEC_CONFIGURED", "QOS_CONFIGURED", "ENABLING",
