@@ -12,7 +12,6 @@ cc_library_static {
     host_supported: true,
     apex_available: [
 
-        "//apex_available:platform",
         "com.android.bluetooth"
     ],
     defaults: ["fluoride_defaults"],
@@ -45,16 +44,18 @@ cc_library_static {
     export_include_dirs: [
         "include",
     ],
+    min_sdk_version: "Tiramisu"
 }
 
 cc_fuzz {
   name: "liblc3_fuzzer",
 
   srcs: [
-    "fuzzer/liblc3encoder_fuzzer.cpp",
+    "fuzzer/liblc3_fuzzer.cpp",
   ],
 
   static_libs: [
     "liblc3",
   ],
 }
+

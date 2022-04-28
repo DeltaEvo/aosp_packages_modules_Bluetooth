@@ -264,8 +264,6 @@ void bta_dm_enable(tBTA_DM_SEC_CBACK* p_sec_cback) {
   previous one,
   it could be an error recovery mechanism */
   if (p_sec_cback != NULL) bta_dm_cb.p_sec_cback = p_sec_cback;
-  /* notify BTA DM is now active */
-  bta_dm_cb.is_bta_dm_active = true;
 
   btm_local_io_caps = btif_storage_get_local_io_caps();
 }
@@ -328,9 +326,6 @@ void BTA_dm_on_hw_off() {
   osi_free(bta_dm_search_cb.p_pending_search);
   fixed_queue_free(bta_dm_search_cb.pending_discovery_queue, osi_free);
   memset(&bta_dm_search_cb, 0, sizeof(bta_dm_search_cb));
-
-  /* notify BTA DM is now unactive */
-  bta_dm_cb.is_bta_dm_active = false;
 }
 
 void BTA_dm_on_hw_on() {
@@ -345,7 +340,6 @@ void BTA_dm_on_hw_on() {
   bta_dm_init_cb();
   /* and retrieve the callback */
   bta_dm_cb.p_sec_cback = temp_cback;
-  bta_dm_cb.is_bta_dm_active = true;
 
   /* hw is ready, go on with BTA DM initialization */
   alarm_free(bta_dm_search_cb.search_timer);
@@ -495,21 +489,19 @@ static void bta_dm_wait_for_acl_to_drain_cback(void* data) {
   const WaitForAllAclConnectionsToDrain* pass =
       WaitForAllAclConnectionsToDrain::FromAlarmCallbackData(data);
 
-  if (BTM_GetNumAclLinks() &&
+  if (BTM_GetNumAclLinks() && force_disconnect_all_acl_connections() &&
       WaitForAllAclConnectionsToDrain::IsFirstPass(pass)) {
     /* DISABLE_EVT still need to be sent out to avoid java layer disable timeout
      */
-    if (force_disconnect_all_acl_connections()) {
-      LOG_DEBUG(
-          "Set timer for second pass to wait for all ACL connections to "
-          "close:%lu ms ",
-          second_pass.TimeToWaitInMs());
-      alarm_set_on_mloop(
-          bta_dm_cb.disable_timer, second_pass.time_to_wait_in_ms,
-          bta_dm_wait_for_acl_to_drain_cback, second_pass.AlarmCallbackData());
-    }
+    LOG_DEBUG(
+        "Set timer for second pass to wait for all ACL connections to "
+        "close:%lu ms ",
+        second_pass.TimeToWaitInMs());
+    alarm_set_on_mloop(bta_dm_cb.disable_timer, second_pass.time_to_wait_in_ms,
+                       bta_dm_wait_for_acl_to_drain_cback,
+                       second_pass.AlarmCallbackData());
   } else {
-    // No ACL links were up or is second pass at ACL closure
+    // No ACL links to close were up or is second pass at ACL closure
     LOG_INFO("Ensuring all ACL connections have been properly flushed");
     bluetooth::shim::ACL_Shutdown();
 
@@ -1205,7 +1197,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
             &bta_dm_service_search_remname_cback);
       }
 
-      p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+      p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
       p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
       p_msg->disc_result.result.disc_res.result = BTA_SUCCESS;
       p_msg->disc_result.result.disc_res.num_uuids = uuid_list.size();
@@ -1214,7 +1206,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
         // TODO(jpawlowski): make p_uuid_list into vector, and just copy
         // vectors, but first get rid of bta_sys_sendmsg below.
         p_msg->disc_result.result.disc_res.p_uuid_list =
-            (Uuid*)osi_malloc(uuid_list.size() * sizeof(Uuid));
+            (Uuid*)osi_calloc(uuid_list.size() * sizeof(Uuid));
         memcpy(p_msg->disc_result.result.disc_res.p_uuid_list, uuid_list.data(),
                uuid_list.size() * sizeof(Uuid));
       }
@@ -1270,7 +1262,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
       BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
     }
 
-    p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+    p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
     p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
     p_msg->disc_result.result.disc_res.result = BTA_FAILURE;
     p_msg->disc_result.result.disc_res.services =
@@ -1801,7 +1793,7 @@ static void bta_dm_sdp_callback(tSDP_STATUS sdp_status) {
       (tBTA_DM_SDP_RESULT*)osi_malloc(sizeof(tBTA_DM_SDP_RESULT));
 
   p_msg->hdr.event = BTA_DM_SDP_RESULT_EVT;
-  p_msg->sdp_result = static_cast<uint16_t>(sdp_status);
+  p_msg->sdp_result = sdp_status;
 
   bta_sys_sendmsg(p_msg);
 }
@@ -3108,7 +3100,7 @@ static void bta_dm_set_eir(char* local_name) {
   if (free_eir_length)
     UINT8_TO_STREAM(p, 0); /* terminator of significant part */
 
-  BTM_WriteEIR(p_buf);
+  get_btm_client_interface().eir.BTM_WriteEIR(p_buf);
 }
 
 #if (BTA_EIR_CANNED_UUID_LIST != TRUE)
@@ -3208,7 +3200,8 @@ void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding) {
   } else {
     LOG_INFO("EIR Removing UUID=0x%04X from extended inquiry response", uuid16);
 
-    BTM_RemoveEirService(bta_dm_cb.eir_uuid, uuid16);
+    get_btm_client_interface().eir.BTM_RemoveEirService(bta_dm_cb.eir_uuid,
+                                                        uuid16);
   }
 
   bta_dm_set_eir(NULL);
@@ -3994,6 +3987,20 @@ void bta_dm_proc_open_evt(tBTA_GATTC_OPEN* p_data) {
   } else {
     bta_dm_gatt_disc_complete(GATT_INVALID_CONN_ID, p_data->status);
   }
+}
+
+/*******************************************************************************
+ *
+ * Function         bta_dm_proc_open_evt
+ *
+ * Description      process BTA_GATTC_OPEN_EVT in DM.
+ *
+ * Parameters:
+ *
+ ******************************************************************************/
+void bta_dm_clear_event_filter(void) {
+  VLOG(1) << "bta_dm_clear_event_filter in bta_dm_act";
+  bluetooth::shim::BTM_ClearEventFilter();
 }
 
 /*******************************************************************************

@@ -24,10 +24,14 @@
 
 #include <vector>
 
+class LeAudioUnicastClientAudioSource;
+class LeAudioUnicastClientAudioSink;
+
 class LeAudioHalVerifier {
  public:
   static bool SupportsLeAudio();
   static bool SupportsLeAudioHardwareOffload();
+  static bool SupportsLeAudioBroadcast();
 };
 
 /* Interface class */
@@ -42,6 +46,9 @@ class LeAudioClient {
           offloading_preference);
   static void Cleanup(base::Callback<void()> cleanupCb);
   static LeAudioClient* Get(void);
+  static void InitializeAudioClients(
+      LeAudioUnicastClientAudioSource* clientAudioSource,
+      LeAudioUnicastClientAudioSink* clientAudioSink);
   static void DebugDump(int fd);
 
   virtual void RemoveDevice(const RawAddress& address) = 0;
@@ -54,6 +61,10 @@ class LeAudioClient {
   virtual void GroupStop(const int group_id) = 0;
   virtual void GroupDestroy(const int group_id) = 0;
   virtual void GroupSetActive(const int group_id) = 0;
+  virtual void SetCodecConfigPreference(
+      int group_id,
+      bluetooth::le_audio::btle_audio_codec_config_t input_codec_config,
+      bluetooth::le_audio::btle_audio_codec_config_t output_codec_config) = 0;
   virtual std::vector<RawAddress> GetGroupDevices(const int group_id) = 0;
   static void AddFromStorage(const RawAddress& addr, bool autoconnect);
   static bool IsLeAudioClientRunning();
