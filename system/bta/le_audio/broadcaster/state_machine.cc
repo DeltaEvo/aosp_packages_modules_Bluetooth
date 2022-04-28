@@ -118,8 +118,13 @@ class BroadcastStateMachineImpl : public BroadcastStateMachine {
     return sm_config_.broadcast_code;
   }
 
+  const bluetooth::le_audio::BasicAudioAnnouncementData&
+  GetBroadcastAnnouncement() const override {
+    return sm_config_.announcement;
+  }
+
   void UpdateBroadcastAnnouncement(
-      BasicAudioAnnouncementData announcement) override {
+      bluetooth::le_audio::BasicAudioAnnouncementData announcement) override {
     std::vector<uint8_t> periodic_data;
     PreparePeriodicData(announcement, periodic_data);
 
@@ -267,7 +272,8 @@ class BroadcastStateMachineImpl : public BroadcastStateMachine {
 
   void CreateBroadcastAnnouncement(
       bluetooth::le_audio::BroadcastId& broadcast_id,
-      const BasicAudioAnnouncementData& announcement, uint8_t streaming_phy) {
+      const bluetooth::le_audio::BasicAudioAnnouncementData& announcement,
+      uint8_t streaming_phy) {
     LOG_INFO();
     if (advertiser_if_ != nullptr) {
       tBTM_BLE_ADV_PARAMS adv_params;
@@ -476,8 +482,22 @@ class BroadcastStateMachineImpl : public BroadcastStateMachine {
         /* TODO: Implement HCI command to get the controller delay */
         .controller_delay = 0x00000000,
     };
-    if (codec_id.coding_format != le_audio::types::kLeAudioCodingFormatLC3)
-      param.codec_conf = sm_config_.codec_wrapper.GetCodecSpecData();
+    if (codec_id.coding_format != le_audio::types::kLeAudioCodingFormatLC3) {
+      // TODO: Until the proper offloader support is added, pass all the params
+      auto const& conn_handles = active_config_->connection_handles;
+
+      auto it =
+          std::find(conn_handles.begin(), conn_handles.end(), conn_handle);
+      if (it != conn_handles.end()) {
+        /* Find BIS index - BIS indices start at 1 */
+        auto bis_idx = it - conn_handles.begin() + 1;
+
+        /* Compose subgroup params with BIS params  */
+        auto params = sm_config_.codec_wrapper.GetSubgroupCodecSpecData();
+        params.Append(sm_config_.codec_wrapper.GetBisCodecSpecData(bis_idx));
+        param.codec_conf = params.RawPacket();
+      }
+    }
 
     IsoManager::GetInstance()->SetupIsoDataPath(conn_handle, std::move(param));
   }
@@ -488,7 +508,8 @@ class BroadcastStateMachineImpl : public BroadcastStateMachine {
 
     SetMuted(true);
     IsoManager::GetInstance()->RemoveIsoDataPath(
-        conn_handle, bluetooth::hci::iso_manager::kIsoDataPathDirectionIn);
+        conn_handle,
+        bluetooth::hci::iso_manager::kRemoveIsoDataPathDirectionInput);
   }
 
   void HandleHciEvent(uint16_t event, void* data) override {
@@ -645,7 +666,7 @@ std::ostream& operator<<(
   }
 
   std::vector<uint8_t> an_raw;
-  config.announcement.ToRawPacket(an_raw);
+  ToRawPacket(config.announcement, an_raw);
   os << "        Announcement RAW: [";
   for (auto& el : an_raw) {
     os << std::hex << +el << ":";

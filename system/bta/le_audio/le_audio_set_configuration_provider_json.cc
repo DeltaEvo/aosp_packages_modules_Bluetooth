@@ -238,24 +238,62 @@ struct AudioSetConfigurationProviderJson {
       std::vector<const bluetooth::le_audio::CodecConfiguration*>* codec_cfgs,
       std::vector<const bluetooth::le_audio::QosConfiguration*>* qos_cfgs) {
     std::vector<SetConfiguration> subconfigs;
-    QosConfigSetting qos;
+    QosConfigSetting qos_sink;
+    QosConfigSetting qos_source;
     const bluetooth::le_audio::CodecConfiguration* codec_cfg = NULL;
-    const bluetooth::le_audio::QosConfiguration* qos_cfg = NULL;
+    const bluetooth::le_audio::QosConfiguration* qos_sink_cfg = NULL;
+    const bluetooth::le_audio::QosConfiguration* qos_source_cfg = NULL;
 
     const char* codec_config_key = flat_cfg->codec_config_name()->c_str();
-    const char* qos_config_key = flat_cfg->qos_config_name()->c_str();
+    auto* qos_config_key_array = flat_cfg->qos_config_name();
+
+    char default_qos[] = "QoS_Config_Server_Preferred";
+
+    const char* qos_sink_key = default_qos;
+    const char* qos_source_key = default_qos;
+
+    /* We expect maximum two QoS settings. First for Sink and second for Source
+     */
+    if (qos_config_key_array->size() > 0) {
+      qos_sink_key = qos_config_key_array->Get(0)->c_str();
+      if (qos_config_key_array->size() > 1) {
+        qos_source_key = qos_config_key_array->Get(1)->c_str();
+      } else {
+        qos_source_key = qos_sink_key;
+      }
+    }
+
+    LOG_DEBUG("Config name %s, qos_sink %s, qos_source %s", codec_config_key,
+              qos_sink_key, qos_source_key);
 
     for (auto i = qos_cfgs->begin(); i != qos_cfgs->end(); ++i) {
-      if (0 == strcmp((*i)->name()->c_str(), qos_config_key)) {
-        qos_cfg = *i;
+      if (0 == strcmp((*i)->name()->c_str(), qos_sink_key)) {
+        qos_sink_cfg = *i;
         break;
       }
     }
-    if (qos_cfg != NULL) {
-      qos.retransmission_number = qos_cfg->retransmission_number();
-      qos.max_transport_latency = qos_cfg->max_transport_latency();
+
+    for (auto i = qos_cfgs->begin(); i != qos_cfgs->end(); ++i) {
+      if (0 == strcmp((*i)->name()->c_str(), qos_source_key)) {
+        qos_source_cfg = *i;
+        break;
+      }
+    }
+
+    if (qos_sink_cfg != NULL) {
+      qos_sink.retransmission_number = qos_sink_cfg->retransmission_number();
+      qos_sink.max_transport_latency = qos_sink_cfg->max_transport_latency();
     } else {
-      LOG_ERROR("No qos config matching key %s found", qos_config_key);
+      LOG_ERROR("No qos config matching key %s found", qos_sink_key);
+    }
+
+    if (qos_source_cfg != NULL) {
+      qos_source.retransmission_number =
+          qos_source_cfg->retransmission_number();
+      qos_source.max_transport_latency =
+          qos_source_cfg->max_transport_latency();
+    } else {
+      LOG_ERROR("No qos config matching key %s found", qos_source_key);
     }
 
     for (auto i = codec_cfgs->begin(); i != codec_cfgs->end(); ++i) {
@@ -267,7 +305,13 @@ struct AudioSetConfigurationProviderJson {
     if (codec_cfg != NULL && codec_cfg->subconfigurations()) {
       /* Load subconfigurations */
       for (auto subconfig : *codec_cfg->subconfigurations()) {
-        subconfigs.push_back(SetConfigurationFromFlatSubconfig(subconfig, qos));
+        if (subconfig->direction() == le_audio::types::kLeAudioDirectionSink) {
+          subconfigs.push_back(
+              SetConfigurationFromFlatSubconfig(subconfig, qos_sink));
+        } else {
+          subconfigs.push_back(
+              SetConfigurationFromFlatSubconfig(subconfig, qos_source));
+        }
       }
     } else {
       if (codec_cfg == NULL) {
@@ -437,6 +481,8 @@ struct AudioSetConfigurationProviderJson {
             {"Media", types::LeAudioContextType::MEDIA},
             {"Conversational", types::LeAudioContextType::CONVERSATIONAL},
             {"Ringtone", types::LeAudioContextType::RINGTONE},
+            {"Recording", types::LeAudioContextType::LIVE},
+            {"Game", types::LeAudioContextType::GAME},
             {"Default", types::LeAudioContextType::UNSPECIFIED},
         };
     return scenarios.count(scenario) ? scenarios.at(scenario)
@@ -461,6 +507,38 @@ struct AudioSetConfigurationProvider::impl {
 
   bool IsRunning() { return config_provider_impl_ ? true : false; }
 
+  void Dump(int fd) {
+    std::stringstream stream;
+
+    for (LeAudioContextType context : types::kLeAudioContextAllTypesArray) {
+      auto confs = Get()->GetConfigurations(context);
+      stream << "\n  === Configurations for context type: " << (int)context
+             << ", num: " << (confs == nullptr ? 0 : confs->size()) << " \n";
+      if (confs->size() > 0) {
+        for (const auto& conf : *confs) {
+          stream << "  name: " << conf->name << " \n";
+          for (const auto& ent : conf->confs) {
+            stream << "    direction: "
+                   << (ent.direction == types::kLeAudioDirectionSink
+                           ? "Sink (speaker)\n"
+                           : "Source (mic)\n")
+                   << "     number of devices: " << +ent.device_cnt << " \n"
+                   << "     number of ASEs: " << +ent.ase_cnt << " \n"
+                   << "     target latency: " << +ent.target_latency << " \n"
+                   << "     strategy: " << (int)(ent.strategy) << " \n"
+                   << "     qos->retransmission_number: "
+                   << +ent.qos.retransmission_number << " \n"
+                   << "     qos->max_transport_latency: "
+                   << +ent.qos.max_transport_latency << " \n"
+                   << "     channel count: "
+                   << +ent.codec.GetConfigChannelCount() << "\n";
+          }
+        }
+      }
+    }
+    dprintf(fd, "%s", stream.str().c_str());
+  }
+
   const AudioSetConfigurationProvider& config_provider_;
   std::unique_ptr<AudioSetConfigurationProviderJson> config_provider_impl_;
 };
@@ -476,6 +554,21 @@ void AudioSetConfigurationProvider::Initialize() {
 
   if (!config_provider->pimpl_->IsRunning())
     config_provider->pimpl_->Initialize();
+}
+
+void AudioSetConfigurationProvider::DebugDump(int fd) {
+  if (!config_provider || !config_provider->pimpl_->IsRunning()) {
+    dprintf(
+        fd,
+        "\n AudioSetConfigurationProvider not initialized: config provider: "
+        "%d, pimpl: %d \n",
+        config_provider != nullptr,
+        (config_provider == nullptr ? 0
+                                    : config_provider->pimpl_->IsRunning()));
+    return;
+  }
+  dprintf(fd, "\n AudioSetConfigurationProvider: \n");
+  config_provider->pimpl_->Dump(fd);
 }
 
 void AudioSetConfigurationProvider::Cleanup() {
