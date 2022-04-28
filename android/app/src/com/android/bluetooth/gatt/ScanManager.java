@@ -67,6 +67,20 @@ public class ScanManager {
     private static final boolean DBG = GattServiceConfig.DBG;
     private static final String TAG = GattServiceConfig.TAG_PREFIX + "ScanManager";
 
+    /**
+     * Scan params corresponding to regular scan setting
+     */
+    private static final int SCAN_MODE_LOW_POWER_WINDOW_MS = 140;
+    private static final int SCAN_MODE_LOW_POWER_INTERVAL_MS = 1400;
+    private static final int SCAN_MODE_BALANCED_WINDOW_MS = 183;
+    private static final int SCAN_MODE_BALANCED_INTERVAL_MS = 730;
+    private static final int SCAN_MODE_LOW_LATENCY_WINDOW_MS = 100;
+    private static final int SCAN_MODE_LOW_LATENCY_INTERVAL_MS = 100;
+    public static final int SCAN_MODE_SCREEN_OFF_LOW_POWER_WINDOW_MS = 512;
+    public static final int SCAN_MODE_SCREEN_OFF_LOW_POWER_INTERVAL_MS = 10240;
+    public static final int SCAN_MODE_SCREEN_OFF_BALANCED_WINDOW_MS = 183;
+    public static final int SCAN_MODE_SCREEN_OFF_BALANCED_INTERVAL_MS = 730;
+
     // Result type defined in bt stack. Need to be accessed by GattService.
     static final int SCAN_RESULT_TYPE_TRUNCATED = 1;
     static final int SCAN_RESULT_TYPE_FULL = 2;
@@ -95,7 +109,8 @@ public class ScanManager {
     private BatchScanParams mBatchScanParms;
 
     private Integer mCurUsedTrackableAdvertisements;
-    private GattService mService;
+    private final GattService mService;
+    private final AdapterService mAdapterService;
     private BroadcastReceiver mBatchAlarmReceiver;
     private boolean mBatchAlarmReceiverRegistered;
     private ScanNative mScanNative;
@@ -129,7 +144,7 @@ public class ScanManager {
         }
     }
 
-    ScanManager(GattService service) {
+    ScanManager(GattService service, AdapterService adapterService) {
         mRegularScanClients =
                 Collections.newSetFromMap(new ConcurrentHashMap<ScanClient, Boolean>());
         mBatchClients = Collections.newSetFromMap(new ConcurrentHashMap<ScanClient, Boolean>());
@@ -141,6 +156,7 @@ public class ScanManager {
         mDm = mService.getSystemService(DisplayManager.class);
         mActivityManager = mService.getSystemService(ActivityManager.class);
         mLocationManager = mService.getSystemService(LocationManager.class);
+        mAdapterService = adapterService;
 
         mPriorityMap.put(ScanSettings.SCAN_MODE_OPPORTUNISTIC, 0);
         mPriorityMap.put(ScanSettings.SCAN_MODE_SCREEN_OFF, 1);
@@ -383,7 +399,7 @@ public class ScanManager {
                         Message msg = obtainMessage(MSG_SCAN_TIMEOUT);
                         msg.obj = client;
                         // Only one timeout message should exist at any time
-                        sendMessageDelayed(msg, AppScanStats.getScanTimeoutMillis());
+                        sendMessageDelayed(msg, mAdapterService.getScanTimeoutMillis());
                     }
                 }
             }
@@ -547,7 +563,7 @@ public class ScanManager {
         }
 
         private boolean upgradeScanModeBeforeStart(ScanClient client) {
-            if (client.started || AppScanStats.getScanUpgradeDurationMillis() == 0) {
+            if (client.started || mAdapterService.getScanUpgradeDurationMillis() == 0) {
                 return false;
             }
             if (client.stats == null || client.stats.hasRecentScan()) {
@@ -563,7 +579,7 @@ public class ScanManager {
                 if (DBG) {
                     Log.d(TAG, "scanMode is upgraded for " + client);
                 }
-                sendMessageDelayed(msg, AppScanStats.getScanUpgradeDurationMillis());
+                sendMessageDelayed(msg, mAdapterService.getScanUpgradeDurationMillis());
                 return true;
             }
             return false;
@@ -693,19 +709,6 @@ public class ScanManager {
 
         private static final int DISCARD_OLDEST_WHEN_BUFFER_FULL = 0;
 
-        /**
-         * Scan params corresponding to regular scan setting
-         */
-        private static final int SCAN_MODE_LOW_POWER_WINDOW_MS = 35;
-        private static final int SCAN_MODE_LOW_POWER_INTERVAL_MS = 350;
-        private static final int SCAN_MODE_BALANCED_WINDOW_MS = 35;
-        private static final int SCAN_MODE_BALANCED_INTERVAL_MS = 175;
-        private static final int SCAN_MODE_LOW_LATENCY_WINDOW_MS = 4096;
-        private static final int SCAN_MODE_LOW_LATENCY_INTERVAL_MS = 4096;
-        private static final int SCAN_MODE_SCREEN_OFF_WINDOW_MS = 512;
-        private static final int SCAN_MODE_SCREEN_OFF_INTERVAL_MS = 10240;
-        private static final int SCAN_MODE_SCREEN_OFF_BALANCED_WINDOW_MS = 128;
-        private static final int SCAN_MODE_SCREEN_OFF_BALANCED_INTERVAL_MS = 640;
 
         /**
          * Onfound/onlost for scan settings
@@ -962,20 +965,34 @@ public class ScanManager {
         // infrequently anyway. To avoid redefining paramete sets, map to the low duty cycle
         // parameter set as follows.
         private int getBatchScanWindowMillis(int scanMode) {
+            ContentResolver resolver = mService.getContentResolver();
             switch (scanMode) {
                 case ScanSettings.SCAN_MODE_LOW_LATENCY:
-                    return SCAN_MODE_BALANCED_WINDOW_MS;
+                    return Settings.Global.getInt(
+                        resolver,
+                        Settings.Global.BLE_SCAN_BALANCED_WINDOW_MS,
+                        SCAN_MODE_BALANCED_WINDOW_MS);
                 default:
-                    return SCAN_MODE_LOW_POWER_WINDOW_MS;
+                    return Settings.Global.getInt(
+                        resolver,
+                        Settings.Global.BLE_SCAN_LOW_POWER_WINDOW_MS,
+                        SCAN_MODE_LOW_POWER_WINDOW_MS);
             }
         }
 
         private int getBatchScanIntervalMillis(int scanMode) {
+            ContentResolver resolver = mService.getContentResolver();
             switch (scanMode) {
                 case ScanSettings.SCAN_MODE_LOW_LATENCY:
-                    return SCAN_MODE_BALANCED_INTERVAL_MS;
+                    return Settings.Global.getInt(
+                        resolver,
+                        Settings.Global.BLE_SCAN_BALANCED_INTERVAL_MS,
+                        SCAN_MODE_BALANCED_INTERVAL_MS);
                 default:
-                    return SCAN_MODE_LOW_POWER_INTERVAL_MS;
+                    return Settings.Global.getInt(
+                        resolver,
+                        Settings.Global.BLE_SCAN_LOW_POWER_INTERVAL_MS,
+                        SCAN_MODE_LOW_POWER_INTERVAL_MS);
             }
         }
 
@@ -1341,9 +1358,9 @@ public class ScanManager {
                         Settings.Global.BLE_SCAN_LOW_POWER_WINDOW_MS,
                         SCAN_MODE_LOW_POWER_WINDOW_MS);
                 case ScanSettings.SCAN_MODE_SCREEN_OFF:
-                    return SCAN_MODE_SCREEN_OFF_WINDOW_MS;
+                    return mAdapterService.getScreenOffLowPowerWindowMillis();
                 case ScanSettings.SCAN_MODE_SCREEN_OFF_BALANCED:
-                    return SCAN_MODE_SCREEN_OFF_BALANCED_WINDOW_MS;
+                    return mAdapterService.getScreenOffBalancedWindowMillis();
                 default:
                     return Settings.Global.getInt(
                         resolver,
@@ -1378,9 +1395,9 @@ public class ScanManager {
                         Settings.Global.BLE_SCAN_LOW_POWER_INTERVAL_MS,
                         SCAN_MODE_LOW_POWER_INTERVAL_MS);
                 case ScanSettings.SCAN_MODE_SCREEN_OFF:
-                    return SCAN_MODE_SCREEN_OFF_INTERVAL_MS;
+                    return mAdapterService.getScreenOffLowPowerIntervalMillis();
                 case ScanSettings.SCAN_MODE_SCREEN_OFF_BALANCED:
-                    return SCAN_MODE_SCREEN_OFF_BALANCED_INTERVAL_MS;
+                    return mAdapterService.getScreenOffBalancedIntervalMillis();
                 default:
                     return Settings.Global.getInt(
                         resolver,

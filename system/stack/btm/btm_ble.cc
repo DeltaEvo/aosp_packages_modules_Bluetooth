@@ -89,12 +89,16 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
   memset(p_dev_rec->sec_bd_name, 0, sizeof(tBTM_BD_NAME));
 
   p_dev_rec->device_type |= dev_type;
-  p_dev_rec->ble.ble_addr_type = addr_type;
+  if (is_ble_addr_type_known(addr_type))
+    p_dev_rec->ble.SetAddressType(addr_type);
+  else
+    LOG_WARN(
+        "Please do not update device record from anonymous le advertisement");
 
   /* sync up with the Inq Data base*/
   tBTM_INQ_INFO* p_info = BTM_InqDbRead(bd_addr);
   if (p_info) {
-    p_info->results.ble_addr_type = p_dev_rec->ble.ble_addr_type;
+    p_info->results.ble_addr_type = p_dev_rec->ble.AddressType();
     p_info->results.device_type = p_dev_rec->device_type;
     BTM_TRACE_DEBUG("InqDb  device_type =0x%x  addr_type=0x%x",
                     p_info->results.device_type, p_info->results.ble_addr_type);
@@ -137,8 +141,8 @@ void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
             key_type);
 
   btm_sec_save_le_key(bd_addr, key_type, p_le_key, false);
-
-  if (key_type == BTM_LE_KEY_PID || key_type == BTM_LE_KEY_LID) {
+  // Only set peer irk. Local irk is always the same.
+  if (key_type == BTM_LE_KEY_PID) {
     btm_ble_resolving_list_load_dev(*p_dev_rec);
   }
 }
@@ -364,7 +368,7 @@ void BTM_BleSecureConnectionOobDataReply(const RawAddress& bd_addr,
   oob.peer_oob_data.present = true;
   memcpy(&oob.peer_oob_data.randomizer, p_r, OCTET16_LEN);
   memcpy(&oob.peer_oob_data.commitment, p_c, OCTET16_LEN);
-  oob.peer_oob_data.addr_rcvd_from.type = p_dev_rec->ble.ble_addr_type;
+  oob.peer_oob_data.addr_rcvd_from.type = p_dev_rec->ble.AddressType();
   oob.peer_oob_data.addr_rcvd_from.bda = bd_addr;
 
   SMP_SecureConnectionOobDataReply((uint8_t*)&oob);
@@ -481,16 +485,21 @@ void BTM_ReadDevInfo(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
     /* new inquiry result, overwrite device type in security device record */
     if (p_inq_info) {
       p_dev_rec->device_type = p_inq_info->results.device_type;
-      p_dev_rec->ble.ble_addr_type = p_inq_info->results.ble_addr_type;
+      if (is_ble_addr_type_known(p_inq_info->results.ble_addr_type))
+        p_dev_rec->ble.SetAddressType(p_inq_info->results.ble_addr_type);
+      else
+        LOG_WARN(
+            "Please do not update device record from anonymous le "
+            "advertisement");
     }
 
     if (p_dev_rec->bd_addr == remote_bda &&
         p_dev_rec->ble.pseudo_addr == remote_bda) {
       *p_dev_type = p_dev_rec->device_type;
-      *p_addr_type = p_dev_rec->ble.ble_addr_type;
+      *p_addr_type = p_dev_rec->ble.AddressType();
     } else if (p_dev_rec->ble.pseudo_addr == remote_bda) {
       *p_dev_type = BT_DEVICE_TYPE_BLE;
-      *p_addr_type = p_dev_rec->ble.ble_addr_type;
+      *p_addr_type = p_dev_rec->ble.AddressType();
     } else /* matching static adddress only */ {
       if (p_dev_rec->device_type != BT_DEVICE_TYPE_UNKNOWN) {
         *p_dev_type = p_dev_rec->device_type;
@@ -1713,7 +1722,12 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
     p_dev_rec->timestamp = btm_cb.dev_rec_count++;
   }
 
-  p_dev_rec->ble.ble_addr_type = addr_type;
+  if (is_ble_addr_type_known(addr_type))
+    p_dev_rec->ble.SetAddressType(addr_type);
+  else
+    LOG_WARN(
+        "Please do not update device record from anonymous le advertisement");
+
   p_dev_rec->ble.pseudo_addr = bda;
   p_dev_rec->ble_hci_handle = handle;
   p_dev_rec->device_type |= BT_DEVICE_TYPE_BLE;
@@ -1721,7 +1735,7 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
 
   if (!addr_matched) {
     p_dev_rec->ble.active_addr_type = tBTM_SEC_BLE::BTM_BLE_ADDR_PSEUDO;
-    if (p_dev_rec->ble.ble_addr_type == BLE_ADDR_RANDOM) {
+    if (p_dev_rec->ble.AddressType() == BLE_ADDR_RANDOM) {
       p_dev_rec->ble.cur_rand_addr = bda;
     }
   }
@@ -1743,10 +1757,15 @@ void btm_ble_connected_from_address_with_type(
  *****************************************************************************/
 tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
                                const tSMP_EVT_DATA* p_data) {
+  BTM_TRACE_DEBUG("btm_proc_smp_cback event = %d", event);
+
+  if (event == SMP_SC_LOC_OOB_DATA_UP_EVT) {
+    btm_sec_cr_loc_oob_data_cback_event(RawAddress{}, p_data->loc_oob_data);
+    return BTM_SUCCESS;
+  }
+
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tBTM_STATUS res = BTM_SUCCESS;
-
-  BTM_TRACE_DEBUG("btm_proc_smp_cback event = %d", event);
 
   if (p_dev_rec != NULL) {
     switch (event) {
@@ -1860,13 +1879,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
         break;
     }
   } else {
-    // If we are being paired with via OOB we haven't created a dev rec for
-    // the device yet
-    if (event == SMP_SC_LOC_OOB_DATA_UP_EVT) {
-      btm_sec_cr_loc_oob_data_cback_event(bd_addr, p_data->loc_oob_data);
-    } else {
-      LOG_WARN("Unexpected event '%d' without p_dev_rec", event);
-    }
+    LOG_WARN("Unexpected event '%d' for unknown device.", event);
   }
 
   return BTM_SUCCESS;
@@ -2073,32 +2086,6 @@ void btm_ble_reset_id(void) {
   }));
 }
 
-/* This function set a random address to local controller. It also temporarily
- * disable scans and adv before sending the command to the controller. */
-void btm_ble_set_random_address(const RawAddress& random_bda) {
-  tBTM_LE_RANDOM_CB* p_cb = &btm_cb.ble_ctr_cb.addr_mgnt_cb;
-  tBTM_BLE_CB* p_ble_cb = &btm_cb.ble_ctr_cb;
-  const bool adv_mode = btm_cb.ble_ctr_cb.inq_var.adv_mode;
-
-  if (adv_mode == BTM_BLE_ADV_ENABLE)
-    btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_DISABLE);
-  if (p_ble_cb->is_ble_scan_active()) {
-    btm_ble_stop_scan();
-  }
-  btm_ble_suspend_bg_conn();
-
-  p_cb->private_addr = random_bda;
-  btsnd_hcic_ble_set_random_addr(p_cb->private_addr);
-  LOG_DEBUG("Updating local random address:%s", PRIVATE_ADDRESS(random_bda));
-
-  if (adv_mode == BTM_BLE_ADV_ENABLE)
-    btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_ENABLE);
-  if (p_ble_cb->is_ble_scan_active()) {
-    btm_ble_start_scan();
-  }
-  btm_ble_resume_bg_conn();
-}
-
 /*******************************************************************************
  *
  * Function         btm_ble_get_acl_remote_addr
@@ -2124,7 +2111,7 @@ bool btm_ble_get_acl_remote_addr(uint16_t hci_handle, RawAddress& conn_addr,
   switch (p_dev_rec->ble.active_addr_type) {
     case tBTM_SEC_BLE::BTM_BLE_ADDR_PSEUDO:
       conn_addr = p_dev_rec->bd_addr;
-      *p_addr_type = p_dev_rec->ble.ble_addr_type;
+      *p_addr_type = p_dev_rec->ble.AddressType();
       break;
 
     case tBTM_SEC_BLE::BTM_BLE_ADDR_RRA:

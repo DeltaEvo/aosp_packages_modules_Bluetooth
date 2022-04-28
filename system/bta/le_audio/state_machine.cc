@@ -29,9 +29,11 @@
 #include "client_parser.h"
 #include "codec_manager.h"
 #include "devices.h"
+#include "gd/common/strings.h"
 #include "hcimsgs.h"
 #include "le_audio_types.h"
 #include "osi/include/alarm.h"
+#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 
@@ -86,6 +88,7 @@
  */
 // clang-format on
 
+using bluetooth::common::ToString;
 using bluetooth::hci::IsoManager;
 using bluetooth::le_audio::GroupStreamStatus;
 using le_audio::CodecManager;
@@ -133,8 +136,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
      * group and just got reconnected.
      */
     if (group->GetState() != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-      LOG(ERROR) << __func__
-                 << " group not in the streaming state: " << group->GetState();
+      LOG_ERROR(" group not in the streaming state: %s",
+                ToString(group->GetState()).c_str());
       return false;
     }
 
@@ -144,10 +147,19 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
   bool StartStream(LeAudioDeviceGroup* group,
                    le_audio::types::LeAudioContextType context_type) override {
-    LOG(INFO) << __func__ << " current state: " << group->GetState();
+    LOG_INFO(" current state: %s", ToString(group->GetState()).c_str());
 
     switch (group->GetState()) {
       case AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED:
+        if (group->GetCurrentContextType() == context_type) {
+          group->Activate();
+          SetTargetState(group, AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
+          CigCreate(group);
+          return true;
+        }
+
+        /* If configuration is needed */
+        FALLTHROUGH;
       case AseState::BTA_LE_AUDIO_ASE_STATE_IDLE:
         if (!group->Configure(context_type)) {
           LOG(ERROR) << __func__ << ", failed to set ASE configuration";
@@ -190,9 +202,33 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       }
 
       default:
-        LOG(ERROR) << "Unable to transit from " << group->GetState();
+        LOG_ERROR("Unable to transit from %s",
+                  ToString(group->GetState()).c_str());
         return false;
     }
+
+    return true;
+  }
+
+  bool ConfigureStream(
+      LeAudioDeviceGroup* group,
+      le_audio::types::LeAudioContextType context_type) override {
+    if (group->GetState() > AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED) {
+      LOG_ERROR(
+          "Stream should be stopped or in configured stream. Current state: %s",
+          ToString(group->GetState()).c_str());
+      return false;
+    }
+
+    if (!group->Configure(context_type)) {
+      LOG_ERROR("Could not configure ASEs for group %d content type %d",
+                group->group_id_, int(context_type));
+
+      return false;
+    }
+
+    SetTargetState(group, AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
+    PrepareAndSendCodecConfigure(group, group->GetFirstActiveDevice());
 
     return true;
   }
@@ -211,7 +247,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
   void StopStream(LeAudioDeviceGroup* group) override {
     if (group->IsReleasing()) {
-      LOG(INFO) << __func__ << ", group already in releasing process";
+      LOG(INFO) << __func__ << ", group: " << group->group_id_
+                << " already in releasing process";
       return;
     }
 
@@ -238,9 +275,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     ParseAseStatusHeader(arh, len, value);
 
-    LOG(INFO) << __func__ << " " << leAudioDevice->address_
-              << ", ASE id: " << +ase->id << " state changed " << ase->state
-              << " -> " << AseState(arh.state);
+    LOG_INFO(" %s , ASE id: %d, state changed %s -> %s ",
+             leAudioDevice->address_.ToString().c_str(), +ase->id,
+             ToString(ase->state).c_str(),
+             ToString(AseState(arh.state)).c_str());
 
     switch (static_cast<AseState>(arh.state)) {
       case AseState::BTA_LE_AUDIO_ASE_STATE_IDLE:
@@ -290,21 +328,26 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
      */
 
     if (!group) {
-      LOG(ERROR) << __func__ << ", invalid cig";
+      LOG_ERROR(", group is null");
       return;
     }
 
     if (status != HCI_SUCCESS) {
-      LOG(ERROR) << __func__
-                 << ", failed to create CIG, reason: " << loghex(status);
+      group->cig_state_ = le_audio::types::CigState::NONE;
+      LOG_ERROR(", failed to create CIG, reason: 0x%02x, new cig state: %s",
+                +status, ToString(group->cig_state_).c_str());
       StopStream(group);
       return;
     }
 
-    group->cig_created_ = true;
+    ASSERT_LOG(group->cig_state_ == le_audio::types::CigState::CREATING,
+               "Unexpected CIG creation group id: %d, cig state: %s",
+               group->group_id_, ToString(group->cig_state_).c_str());
 
-    LOG(INFO) << __func__ << "Group id: " << +group->group_id_
-              << " conn_handle size " << +conn_handles.size();
+    group->cig_state_ = le_audio::types::CigState::CREATED;
+    LOG_INFO("Group: %p, id: %d cig state: %s, number of cis handles: %d",
+             group, group->group_id_, ToString(group->cig_state_).c_str(),
+             static_cast<int>(conn_handles.size()));
 
     /* Assign all connection handles to ases. CIS ID order is represented by the
      * order of active ASEs in active leAudioDevices
@@ -344,14 +387,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
 
     if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-      leAudioDevice = group->GetFirstActiveDevice();
-      LOG_ASSERT(leAudioDevice)
-          << __func__ << " Shouldn't be called without an active device.";
-      PrepareAndSendEnable(leAudioDevice);
+      StartConfigQoSForTheGroup(group);
     } else {
-      LOG(ERROR) << __func__
-                 << ", invalid state transition, from: " << group->GetState()
-                 << ", to: " << group->GetTargetState();
+      LOG_ERROR(", invalid state transition, from: %s , to: %s",
+                ToString(group->GetState()).c_str(),
+                ToString(group->GetTargetState()).c_str());
       StopStream(group);
       return;
     }
@@ -367,13 +407,18 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
   void ProcessHciNotifOnCigRemove(uint8_t status,
                                   LeAudioDeviceGroup* group) override {
     if (status) {
-      LOG(ERROR) << __func__
-                 << ", failed to remove cig, id: " << loghex(group->group_id_)
-                 << ", status: " << loghex(status);
+      group->cig_state_ = le_audio::types::CigState::CREATED;
+      LOG_ERROR(
+          "failed to remove cig, id: %d, status 0x%02x, new cig state: %s",
+          group->group_id_, +status, ToString(group->cig_state_).c_str());
       return;
     }
 
-    group->cig_created_ = false;
+    ASSERT_LOG(group->cig_state_ == le_audio::types::CigState::REMOVING,
+               "Unexpected CIG remove group id: %d, cig state %s",
+               group->group_id_, ToString(group->cig_state_).c_str());
+
+    group->cig_state_ = le_audio::types::CigState::NONE;
 
     LeAudioDevice* leAudioDevice = group->GetFirstDevice();
     if (!leAudioDevice) return;
@@ -383,7 +428,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
       for (auto& ase : leAudioDevice->ases_) {
         ase.data_path_state = AudioStreamDataPathState::IDLE;
-        ase.cis_id = le_audio::kInvalidCisId;
       }
     } while ((leAudioDevice = group->GetNextDevice(leAudioDevice)));
   }
@@ -487,6 +531,37 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
               << ", duplicatePackets: " << loghex(duplicatePackets);
   }
 
+  void ReleaseCisIds(LeAudioDeviceGroup* group) {
+    if (group == nullptr) {
+      LOG_DEBUG(" Group is null.");
+      return;
+    }
+    LOG_DEBUG(" Releasing CIS is for group %d", group->group_id_);
+
+    LeAudioDevice* leAudioDevice = group->GetFirstDevice();
+    while (leAudioDevice != nullptr) {
+      for (auto& ase : leAudioDevice->ases_) {
+        ase.cis_id = le_audio::kInvalidCisId;
+      }
+      leAudioDevice = group->GetNextDevice(leAudioDevice);
+    }
+  }
+
+  void RemoveCigForGroup(LeAudioDeviceGroup* group) {
+    LOG_DEBUG("Group: %p, id: %d cig state: %s", group, group->group_id_,
+              ToString(group->cig_state_).c_str());
+    if (group->cig_state_ != le_audio::types::CigState::CREATED) {
+      LOG_WARN("Group: %p, id: %d cig state: %s cannot be removed", group,
+               group->group_id_, ToString(group->cig_state_).c_str());
+      return;
+    }
+
+    group->cig_state_ = le_audio::types::CigState::REMOVING;
+    IsoManager::GetInstance()->RemoveCig(group->group_id_);
+    LOG_DEBUG("Group: %p, id: %d cig state: %s", group, group->group_id_,
+              ToString(group->cig_state_).c_str());
+  }
+
   void ProcessHciNotifAclDisconnected(LeAudioDeviceGroup* group,
                                       LeAudioDevice* leAudioDevice) {
     FreeLinkQualityReports(leAudioDevice);
@@ -496,6 +571,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       LOG(ERROR) << __func__
                  << " group is null for device: " << leAudioDevice->address_
                  << " group_id: " << leAudioDevice->group_id_;
+      return;
+    }
+
+    /* If group is in Idle there is nothing to do here */
+    if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) &&
+        (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE)) {
+      LOG(INFO) << __func__ << " group: " << group->group_id_ << " is in IDLE";
       return;
     }
 
@@ -544,22 +626,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     /* Group is not connected and all the CISes are down.
-     * If group is in Idle there is nothing to do here */
-    if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
-      LOG(INFO) << __func__ << " group: " << group->group_id_ << " is in IDLE";
-      return;
-    }
-
-    /* Clean states and destroy HCI group */
+     * Clean states and destroy HCI group
+     */
     group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
     group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
     if (alarm_is_scheduled(watchdog_)) alarm_cancel(watchdog_);
+    ReleaseCisIds(group);
     state_machine_callbacks_->StatusReportCb(group->group_id_,
                                              GroupStreamStatus::IDLE);
-
-    if (!group->cig_created_) return;
-
-    IsoManager::GetInstance()->RemoveCig(group->group_id_);
+    RemoveCigForGroup(group);
   }
 
   void ProcessHciNotifCisEstablished(
@@ -583,7 +658,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
        * complete event
        */
       if (group->HaveAllActiveDevicesCisDisc()) {
-        IsoManager::GetInstance()->RemoveCig(group->group_id_);
+        RemoveCigForGroup(group);
       }
 
       LOG(ERROR) << __func__
@@ -594,7 +669,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     if (group->GetTargetState() != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-      LOG(ERROR) << __func__ << ", Unintended CIS establishement event came";
+      LOG(ERROR) << __func__
+                 << ", Unintended CIS establishement event came for group id:"
+                 << group->group_id_;
       StopStream(group);
       return;
     }
@@ -627,7 +704,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
      * to streaming state.
      */
     struct ase* ase = leAudioDevice->GetFirstActiveAse();
-    LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
+    ASSERT_LOG(ase != nullptr,
+               "shouldn't be called without an active ASE, device %s, group "
+               "id: %d, cis handle 0x%04x",
+               leAudioDevice->address_.ToString().c_str(), event->cig_id,
+               event->cis_conn_hdl);
     do {
       if (ase->direction == le_audio::types::kLeAudioDirectionSource)
         ids.push_back(ase->id);
@@ -652,6 +733,19 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       alarm_cancel(watchdog_);
       PrepareDataPath(group);
     }
+  }
+
+  static void RemoveDataPathByCisHandle(LeAudioDevice* leAudioDevice,
+                                        uint16_t cis_conn_hdl) {
+    auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(cis_conn_hdl);
+    IsoManager::GetInstance()->RemoveIsoDataPath(
+        cis_conn_hdl,
+        (ases_pair.sink
+             ? bluetooth::hci::iso_manager::kRemoveIsoDataPathDirectionInput
+             : 0x00) |
+            (ases_pair.source ? bluetooth::hci::iso_manager::
+                                    kRemoveIsoDataPathDirectionOutput
+                              : 0x00));
   }
 
   void ProcessHciNotifCisDisconnected(
@@ -703,15 +797,21 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
          * is, otherwise stop the stream.
          */
         if (!group->HaveAllActiveDevicesCisDisc()) {
-          /* TODO: Reconfigure LC3 codec from here or maybe other place?*/
+          /* There is ASE streaming for some device. Continue streaming. */
+          LOG_WARN(
+              "Group member disconnected during streaming. Cis handle 0x%04x",
+              event->cis_conn_hdl);
           return;
         }
 
-        /*If there is no more ase to stream. Suspend audio and clear state
-         * machine -> go to Idle */
+        LOG_INFO("Lost all members from the group %d", group->group_id_);
+        RemoveCigForGroup(group);
+
+        group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+        group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+        /* If there is no more ase to stream. Notify it is in IDLE. */
         state_machine_callbacks_->StatusReportCb(group->group_id_,
-                                                 GroupStreamStatus::SUSPENDED);
-        StopStream(group);
+                                                 GroupStreamStatus::IDLE);
         return;
 
       case AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED:
@@ -736,7 +836,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         /* Those two are used when closing the stream and CIS disconnection is
          * expected */
         if (group->HaveAllActiveDevicesCisDisc()) {
-          IsoManager::GetInstance()->RemoveCig(group->group_id_);
+          RemoveCigForGroup(group);
           return;
         }
 
@@ -770,23 +870,14 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
-    ases_pair = leAudioDevice->GetAsesByCisConnHdl(ase->cis_conn_hdl);
-
     if (ase->data_path_state ==
         AudioStreamDataPathState::DATA_PATH_ESTABLISHED) {
-      IsoManager::GetInstance()->RemoveIsoDataPath(
-          ase->cis_conn_hdl,
-          (ases_pair.sink
-               ? bluetooth::hci::iso_manager::kIsoDataPathDirectionOut
-               : 0x00) |
-              (ases_pair.source
-                   ? bluetooth::hci::iso_manager::kIsoDataPathDirectionIn
-                   : 0x00));
+      RemoveDataPathByCisHandle(leAudioDevice, ase->cis_conn_hdl);
     }
   }
 
  private:
-  static constexpr uint64_t kStateTransitionTimeoutMs = 5000;
+  static constexpr uint64_t kStateTransitionTimeoutMs = 3500;
   static constexpr char kStateTransitionTimeoutMsProp[] =
       "persist.bluetooth.leaudio.device.set.state.timeoutms";
   Callbacks* state_machine_callbacks_;
@@ -822,15 +913,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     uint8_t packing, framing, sca;
     std::vector<EXT_CIS_CFG> cis_cfgs;
 
-    if (group->cig_created_) {
-      LOG(ERROR) << __func__ << " group id " << group->group_id_
-                 << " is already created  in the controller. ";
+    LOG_DEBUG("Group: %p, id: %d cig state: %s", group, group->group_id_,
+              ToString(group->cig_state_).c_str());
+
+    if (group->cig_state_ != le_audio::types::CigState::NONE) {
+      LOG_WARN(" Group %p, id: %d has invalid cig state: %s ", group,
+               group->group_id_, ToString(group->cig_state_).c_str());
       return;
     }
 
     if (!leAudioDevice) {
-      LOG(ERROR) << __func__ << ", no active devices in group";
-
+      LOG_ERROR("No active devices in group id: %d", group->group_id_);
       return;
     }
 
@@ -850,6 +943,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                       << " shouldn't be called without an active ASE";
       do {
         auto& cis = ase->cis_id;
+        ASSERT_LOG(ase->cis_id != le_audio::kInvalidCisId,
+                   " ase id %d has invalid cis id %d", ase->id, ase->cis_id);
         auto iter =
             find_if(cis_cfgs.begin(), cis_cfgs.end(),
                     [&cis](auto const& cfg) { return cis == cfg.cis_id; });
@@ -858,7 +953,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         if (iter != cis_cfgs.end()) continue;
 
         auto ases_pair = leAudioDevice->GetAsesByCisId(cis);
-        EXT_CIS_CFG cis_cfg;
+        EXT_CIS_CFG cis_cfg = {0, 0, 0, 0, 0, 0, 0};
+
         cis_cfg.cis_id = ase->cis_id;
         cis_cfg.phy_mtos =
             group->GetPhyBitmask(le_audio::types::kLeAudioDirectionSink);
@@ -866,14 +962,12 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
             group->GetPhyBitmask(le_audio::types::kLeAudioDirectionSource);
 
         if (ases_pair.sink) {
-          /* TODO: config should be previously adopted */
-          cis_cfg.max_sdu_size_mtos = ase->max_sdu_size;
-          cis_cfg.rtn_mtos = ase->retrans_nb;
+          cis_cfg.max_sdu_size_mtos = ases_pair.sink->max_sdu_size;
+          cis_cfg.rtn_mtos = ases_pair.sink->retrans_nb;
         }
         if (ases_pair.source) {
-          /* TODO: config should be previously adopted */
-          cis_cfg.max_sdu_size_stom = ase->max_sdu_size;
-          cis_cfg.rtn_stom = ase->retrans_nb;
+          cis_cfg.max_sdu_size_stom = ases_pair.source->max_sdu_size;
+          cis_cfg.rtn_stom = ases_pair.source->retrans_nb;
         }
 
         cis_cfgs.push_back(cis_cfg);
@@ -890,7 +984,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         .max_trans_lat_mtos = max_trans_lat_mtos,
         .cis_cfgs = std::move(cis_cfgs),
     };
+    group->cig_state_ = le_audio::types::CigState::CREATING;
     IsoManager::GetInstance()->CreateCig(group->group_id_, std::move(param));
+    LOG_DEBUG("Group: %p, id: %d cig state: %s", group, group->group_id_,
+              ToString(group->cig_state_).c_str());
   }
 
   static void CisCreateForDevice(LeAudioDevice* leAudioDevice) {
@@ -1009,16 +1106,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         AudioStreamDataPathState::DATA_PATH_ESTABLISHED);
     LOG_ASSERT(ase) << __func__
                     << " Shouldn't be called without an active ASE.";
-
-    auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(ase->cis_conn_hdl);
-
-    IsoManager::GetInstance()->RemoveIsoDataPath(
-        ase->cis_conn_hdl,
-        (ases_pair.sink ? bluetooth::hci::iso_manager::kIsoDataPathDirectionOut
-                        : 0x00) |
-            (ases_pair.source
-                 ? bluetooth::hci::iso_manager::kIsoDataPathDirectionIn
-                 : 0x00));
+    RemoveDataPathByCisHandle(leAudioDevice, ase->cis_conn_hdl);
   }
 
   void AseStateMachineProcessIdle(
@@ -1042,6 +1130,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                 AseState::BTA_LE_AUDIO_ASE_STATE_IDLE)) {
           /* More ASEs notification from this device has to come for this group
            */
+          LOG_DEBUG("Wait for more ASE to configure for device %s",
+                    leAudioDevice->address_.ToString().c_str());
+          return;
+        }
+
+        /* Before continue with release, make sure this is what is requested.
+         * If not (e.g. only single device got disconnected), stop here
+         */
+        if (group->GetTargetState() != AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
+          LOG_DEBUG("Autonomus change of stated for device %s, ase id: %d",
+                    leAudioDevice->address_.ToString().c_str(), ase->id);
           return;
         }
 
@@ -1055,7 +1154,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           if (alarm_is_scheduled(watchdog_)) alarm_cancel(watchdog_);
 
           group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-
+          ReleaseCisIds(group);
           state_machine_callbacks_->StatusReportCb(group->group_id_,
                                                    GroupStreamStatus::IDLE);
         }
@@ -1090,8 +1189,28 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     ase = leAudioDevice->GetFirstActiveAse();
     LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
     do {
+      uint8_t cis_id = ase->cis_id;
+      if (cis_id == le_audio::kInvalidCisId) {
+        /* Get completive (to be bi-directional CIS) CIS ID for ASE */
+        cis_id = leAudioDevice->GetMatchingBidirectionCisId(ase);
+        if (cis_id == le_audio::kInvalidCisId) {
+          /* Get next free CIS ID for group */
+          cis_id = group->GetFirstFreeCisId();
+          if (cis_id == le_audio::kInvalidCisId) {
+            LOG(ERROR) << __func__ << ", failed to get free CIS ID";
+            StopStream(group);
+            return;
+          }
+        }
+      }
+
+      LOG_INFO(" Configure ase_id %d, cis_id %d, ase state %s", ase->id, cis_id,
+               ToString(ase->state).c_str());
+
+      ase->cis_id = cis_id;
+
       conf.ase_id = ase->id;
-      conf.target_latency = group->GetTargetLatency();
+      conf.target_latency = ase->target_latency;
       conf.target_phy = group->GetTargetPhy(ase->direction);
       conf.codec_id = ase->codec_id;
       conf.codec_config = ase->codec_config;
@@ -1139,24 +1258,36 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         }
         ase->framing = rsp.framing;
         ase->preferred_phy = rsp.preferred_phy;
-        ase->max_transport_latency = rsp.max_transport_latency;
+        /* Validate and update QoS settings to be consistent */
+        if ((!ase->max_transport_latency ||
+             ase->max_transport_latency > rsp.max_transport_latency) ||
+            !ase->retrans_nb) {
+          ase->max_transport_latency = rsp.max_transport_latency;
+          ase->retrans_nb = rsp.preferred_retrans_nb;
+          LOG_INFO(
+              " Using server preferred QoS settings. Max Transport Latency: %d"
+              ", Retransmission Number: %d",
+              +ase->max_transport_latency, ase->retrans_nb);
+        }
         ase->pres_delay_min = rsp.pres_delay_min;
         ase->pres_delay_max = rsp.pres_delay_max;
         ase->preferred_pres_delay_min = rsp.preferred_pres_delay_min;
         ase->preferred_pres_delay_max = rsp.preferred_pres_delay_max;
-        ase->retrans_nb = rsp.preferred_retrans_nb;
 
         ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED;
 
         if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
           /* This is autonomus change of the remote device */
-          LOG(INFO) << __func__ << " Autonomus change. Just store it. ";
+          LOG_DEBUG("Autonomus change for device %s, ase id %d. Just store it.",
+                    leAudioDevice->address_.ToString().c_str(), ase->id);
           return;
         }
 
         if (leAudioDevice->HaveAnyUnconfiguredAses()) {
           /* More ASEs notification from this device has to come for this group
            */
+          LOG_DEBUG("More Ases to be configured for the device %s",
+                    leAudioDevice->address_.ToString().c_str());
           return;
         }
 
@@ -1177,15 +1308,28 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
           if (group->GetTargetState() ==
               AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-            StartConfigQoSForTheGroup(group);
-            return;
-          } else {
-            LOG(ERROR) << __func__ << ", invalid state transition, from: "
-                       << group->GetState()
-                       << ", to: " << group->GetTargetState();
-            StopStream(group);
+            CigCreate(group);
             return;
           }
+
+          if (group->GetTargetState() ==
+                  AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED &&
+              group->stream_conf.pending_configuration) {
+            LOG_INFO(" Configured state completed ");
+            group->stream_conf.pending_configuration = false;
+            state_machine_callbacks_->StatusReportCb(
+                group->group_id_, GroupStreamStatus::CONFIGURED_BY_USER);
+
+            /* No more transition for group */
+            alarm_cancel(watchdog_);
+            return;
+          }
+
+          LOG_ERROR(", invalid state transition, from: %s to %s",
+                    ToString(group->GetState()).c_str(),
+                    ToString(group->GetTargetState()).c_str());
+          StopStream(group);
+          return;
         }
 
         break;
@@ -1208,12 +1352,20 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
         ase->framing = rsp.framing;
         ase->preferred_phy = rsp.preferred_phy;
-        ase->max_transport_latency = rsp.max_transport_latency;
+        /* Validate and update QoS settings to be consistent */
+        if ((!ase->max_transport_latency ||
+             ase->max_transport_latency > rsp.max_transport_latency) ||
+            !ase->retrans_nb) {
+          ase->max_transport_latency = rsp.max_transport_latency;
+          ase->retrans_nb = rsp.preferred_retrans_nb;
+          LOG(INFO) << __func__ << " Using server preferred QoS settings."
+                    << " Max Transport Latency: " << +ase->max_transport_latency
+                    << ", Retransmission Number: " << +ase->retrans_nb;
+        }
         ase->pres_delay_min = rsp.pres_delay_min;
         ase->pres_delay_max = rsp.pres_delay_max;
         ase->preferred_pres_delay_min = rsp.preferred_pres_delay_min;
         ase->preferred_pres_delay_max = rsp.preferred_pres_delay_max;
-        ase->retrans_nb = rsp.preferred_retrans_nb;
 
         /* This may be a notification from a re-configured ASE */
         ase->reconfigure = false;
@@ -1241,13 +1393,26 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
           if (group->GetTargetState() ==
               AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-            StartConfigQoSForTheGroup(group);
+            CigCreate(group);
             return;
-          } else {
-            LOG(ERROR) << __func__
-                       << ", Autonomouse change ?: " << group->GetState()
-                       << ", to: " << group->GetTargetState();
           }
+
+          if (group->GetTargetState() ==
+                  AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED &&
+              group->stream_conf.pending_configuration) {
+            LOG_INFO(" Configured state completed ");
+            group->stream_conf.pending_configuration = false;
+            state_machine_callbacks_->StatusReportCb(
+                group->group_id_, GroupStreamStatus::CONFIGURED_BY_USER);
+
+            /* No more transition for group */
+            alarm_cancel(watchdog_);
+            return;
+          }
+
+          LOG_ERROR(", Autonomouse change, from: %s to %s",
+                    ToString(group->GetState()).c_str(),
+                    ToString(group->GetTargetState()).c_str());
         }
 
         break;
@@ -1264,6 +1429,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                 AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED)) {
           /* More ASEs notification from this device has to come for this group
            */
+          LOG_DEBUG("Wait for more ASE to configure for device %s",
+                    leAudioDevice->address_.ToString().c_str());
+          return;
+        }
+
+        /* Before continue with release, make sure this is what is requested.
+         * If not (e.g. only single device got disconnected), stop here
+         */
+        if (group->GetTargetState() != AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
+          LOG_DEBUG("Autonomus change of stated for device %s, ase id: %d",
+                    leAudioDevice->address_.ToString().c_str(), ase->id);
           return;
         }
 
@@ -1282,8 +1458,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
            * remote device.
            */
           group->SetTargetState(group->GetState());
-          state_machine_callbacks_->StatusReportCb(group->group_id_,
-                                                   GroupStreamStatus::IDLE);
+          state_machine_callbacks_->StatusReportCb(
+              group->group_id_, GroupStreamStatus::CONFIGURED_AUTONOMOUS);
         }
         break;
       default:
@@ -1329,7 +1505,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         if (leAudioDeviceNext) {
           PrepareAndSendConfigQos(group, leAudioDeviceNext);
         } else {
-          CigCreate(group);
+          leAudioDevice = group->GetFirstActiveDevice();
+          LOG_ASSERT(leAudioDevice)
+              << __func__ << " Shouldn't be called without an active device.";
+          PrepareAndSendEnable(leAudioDevice);
         }
 
         break;
@@ -1377,9 +1556,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           state_machine_callbacks_->StatusReportCb(
               group->group_id_, GroupStreamStatus::SUSPENDED);
         } else {
-          LOG(ERROR) << __func__ << ", invalid state transition, from: "
-                     << group->GetState()
-                     << ", to: " << group->GetTargetState();
+          LOG_ERROR(", invalid state transition, from: %s, to: %s",
+                    ToString(group->GetState()).c_str(),
+                    ToString(group->GetTargetState()).c_str());
           StopStream(group);
           return;
         }
@@ -1456,20 +1635,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     for (struct ase* ase = leAudioDevice->GetFirstActiveAse(); ase != nullptr;
          ase = leAudioDevice->GetNextActiveAse(ase)) {
-      /* Get completive (to be bi-directional CIS) CIS ID for ASE */
-      uint8_t cis_id = leAudioDevice->GetMatchingBidirectionCisId(ase);
-      if (cis_id == le_audio::kInvalidCisId) {
-        /* Get next free CIS ID for group */
-        cis_id = group->GetFirstFreeCisId();
-        if (cis_id == le_audio::kInvalidCisId) {
-          LOG(ERROR) << __func__ << ", failed to get free CIS ID";
-          StopStream(group);
-          return;
-        }
-      }
-
-      ase->cis_id = cis_id;
-
       /* TODO: Configure first ASE qos according to context type */
       struct le_audio::client_parser::ascs::ctp_qos_conf conf;
       conf.ase_id = ase->id;
@@ -1555,6 +1720,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
       /* We are here because of the reconnection of the single device. */
+      ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING;
       CisCreateForDevice(leAudioDevice);
       return;
     }
@@ -1614,7 +1780,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
         if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
           /* We are here because of the reconnection of the single device. */
-          CisCreateForDevice(leAudioDevice);
           return;
         }
 
@@ -1669,9 +1834,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
           return;
         } else {
-          LOG(ERROR) << __func__ << ", invalid state transition, from: "
-                     << group->GetState()
-                     << ", to: " << group->GetTargetState();
+          LOG_ERROR(", invalid state transition, from: %s, to: %s",
+                    ToString(group->GetState()).c_str(),
+                    ToString(group->GetTargetState()).c_str());
           StopStream(group);
           return;
         }
@@ -1719,9 +1884,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     if (ase->direction == le_audio::types::kLeAudioDirectionSink) {
       /* Sink ASE state machine does not have Disabling state */
-      LOG(ERROR) << __func__
-                 << ", invalid state transition, from: " << group->GetState()
-                 << ", to: " << group->GetTargetState();
+      LOG_ERROR(", invalid state transition, from: %s , to: %s ",
+                ToString(group->GetState()).c_str(),
+                ToString(group->GetTargetState()).c_str());
       StopStream(group);
       return;
     }
@@ -1767,8 +1932,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       }
       case AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED:
         /* At this point all of the active ASEs within group are released. */
-        if (group->cig_created_)
-          IsoManager::GetInstance()->RemoveCig(group->group_id_);
+        RemoveCigForGroup(group);
 
         ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING;
         if (group->HaveAllActiveDevicesAsesTheSameState(
@@ -1781,27 +1945,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       case AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING: {
         ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING;
 
-        /* Since single ase gets into Releasing state, lets assume our new
-         * target state is IDLE
-         */
-        SetTargetState(group, AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-
         /* Happens when bi-directional completive ASE releasing state came */
         if (ase->data_path_state == AudioStreamDataPathState::CIS_DISCONNECTING)
           break;
 
         if (ase->data_path_state ==
             AudioStreamDataPathState::DATA_PATH_ESTABLISHED) {
-          auto ases_pair =
-              leAudioDevice->GetAsesByCisConnHdl(ase->cis_conn_hdl);
-          IsoManager::GetInstance()->RemoveIsoDataPath(
-              ase->cis_conn_hdl,
-              (ases_pair.sink
-                   ? bluetooth::hci::iso_manager::kIsoDataPathDirectionOut
-                   : 0x00) |
-                  (ases_pair.source
-                       ? bluetooth::hci::iso_manager::kIsoDataPathDirectionIn
-                       : 0x00));
+          RemoveDataPathByCisHandle(leAudioDevice, ase->cis_conn_hdl);
         } else if (ase->data_path_state ==
                        AudioStreamDataPathState::CIS_ESTABLISHED ||
                    ase->data_path_state ==
@@ -1810,7 +1960,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                                                    HCI_ERR_PEER_USER);
         } else {
           DLOG(INFO) << __func__ << ", Nothing to do ase data path state: "
-                    << static_cast<int>(ase->data_path_state);
+                     << static_cast<int>(ase->data_path_state);
         }
         break;
       }
@@ -1845,9 +1995,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
       CisCreate(group);
     } else {
-      LOG(ERROR) << __func__
-                 << ", invalid state transition, from: " << group->GetState()
-                 << ", to: " << group->GetTargetState();
+      LOG_ERROR(", invalid state transition, from: %s , to: %s ",
+                ToString(group->GetState()).c_str(),
+                ToString(group->GetTargetState()).c_str());
       StopStream(group);
     }
   }
@@ -1876,9 +2026,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED) {
       ReleaseDataPath(group);
     } else {
-      LOG(ERROR) << __func__
-                 << ", invalid state transition, from: " << group->GetState()
-                 << ", to: " << group->GetTargetState();
+      LOG_ERROR(", invalid state transition, from: %s , to: %s ",
+                ToString(group->GetState()).c_str(),
+                ToString(group->GetTargetState()).c_str());
       StopStream(group);
     }
   }
