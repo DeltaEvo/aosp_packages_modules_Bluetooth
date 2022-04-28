@@ -7,12 +7,13 @@ use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
 use tokio::sync::mpsc;
 
-use crate::callbacks::{BtCallback, BtConnectionCallback, BtManagerCallback};
+use crate::callbacks::{BtCallback, BtConnectionCallback, BtManagerCallback, SuspendCallback};
 use crate::command_handler::CommandHandler;
-use crate::dbus_iface::{BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus};
+use crate::dbus_iface::{BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, SuspendDBus};
 use crate::editor::AsyncEditor;
 use bt_topshim::topstack;
 use btstack::bluetooth::{BluetoothDevice, IBluetooth};
+use btstack::suspend::ISuspend;
 use manager_service::iface_bluetooth_manager::IBluetoothManager;
 
 mod callbacks;
@@ -64,6 +65,9 @@ pub(crate) struct ClientContext {
     /// Proxy for GATT interface.
     pub(crate) gatt_dbus: Option<BluetoothGattDBus>,
 
+    /// Proxy for suspend interface.
+    pub(crate) suspend_dbus: Option<SuspendDBus>,
+
     /// Channel to send actions to take in the foreground
     fg: mpsc::Sender<ForegroundActions>,
 
@@ -82,8 +86,7 @@ impl ClientContext {
     ) -> ClientContext {
         // Manager interface is almost always available but adapter interface
         // requires that the specific adapter is enabled.
-        let manager_dbus =
-            BluetoothManagerDBus::new(dbus_connection.clone(), dbus_crossroads.clone());
+        let manager_dbus = BluetoothManagerDBus::new(dbus_connection.clone());
 
         ClientContext {
             adapters: HashMap::new(),
@@ -98,6 +101,7 @@ impl ClientContext {
             manager_dbus,
             adapter_dbus: None,
             gatt_dbus: None,
+            suspend_dbus: None,
             fg: tx,
             dbus_connection,
             dbus_crossroads,
@@ -128,13 +132,14 @@ impl ClientContext {
     // Creates adapter proxy, registers callbacks and initializes address.
     fn create_adapter_proxy(&mut self, idx: i32) {
         let conn = self.dbus_connection.clone();
-        let cr = self.dbus_crossroads.clone();
 
-        let dbus = BluetoothDBus::new(conn.clone(), cr.clone(), idx);
+        let dbus = BluetoothDBus::new(conn.clone(), idx);
         self.adapter_dbus = Some(dbus);
 
-        let gatt_dbus = BluetoothGattDBus::new(conn.clone(), cr.clone(), idx);
+        let gatt_dbus = BluetoothGattDBus::new(conn.clone(), idx);
         self.gatt_dbus = Some(gatt_dbus);
+
+        self.suspend_dbus = Some(SuspendDBus::new(conn.clone(), idx));
 
         // Trigger callback registration in the foreground
         let fg = self.fg.clone();
@@ -212,7 +217,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (tx, rx) = mpsc::channel::<ForegroundActions>(10);
 
         // Create the context needed for handling commands
-        let context = Arc::new(Mutex::new(ClientContext::new(conn, cr, tx.clone())));
+        let context =
+            Arc::new(Mutex::new(ClientContext::new(conn.clone(), cr.clone(), tx.clone())));
 
         // Check if manager interface is valid. We only print some help text before failing on the
         // first actual access to the interface (so we can also capture the actual reason the
@@ -228,6 +234,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         context.lock().unwrap().manager_dbus.register_callback(Box::new(BtManagerCallback::new(
             String::from("/org/chromium/bluetooth/client/bluetooth_manager_callback"),
             context.clone(),
+            conn.clone(),
+            cr.clone(),
         )));
 
         // Check if the default adapter is enabled. If yes, we should create the adapter proxy
@@ -311,14 +319,20 @@ async fn start_interactive_shell(
                     format!("/org/chromium/bluetooth/client/{}/bluetooth_callback", adapter);
                 let conn_cb_objpath: String =
                     format!("/org/chromium/bluetooth/client/{}/bluetooth_conn_callback", adapter);
+                let suspend_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/suspend_callback", adapter);
 
-                context
-                    .lock()
-                    .unwrap()
-                    .adapter_dbus
-                    .as_mut()
-                    .unwrap()
-                    .register_callback(Box::new(BtCallback::new(cb_objpath, context.clone())));
+                let dbus_connection = context.lock().unwrap().dbus_connection.clone();
+                let dbus_crossroads = context.lock().unwrap().dbus_crossroads.clone();
+
+                context.lock().unwrap().adapter_dbus.as_mut().unwrap().register_callback(Box::new(
+                    BtCallback::new(
+                        cb_objpath.clone(),
+                        context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    ),
+                ));
                 context
                     .lock()
                     .unwrap()
@@ -328,7 +342,20 @@ async fn start_interactive_shell(
                     .register_connection_callback(Box::new(BtConnectionCallback::new(
                         conn_cb_objpath,
                         context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
                     )));
+
+                // When adapter is ready, Suspend API is also ready. Register as an observer.
+                // TODO(b/224606285): Implement suspend debug utils in btclient.
+                context.lock().unwrap().suspend_dbus.as_mut().unwrap().register_callback(Box::new(
+                    SuspendCallback::new(
+                        suspend_cb_objpath,
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    ),
+                ));
+
                 context.lock().unwrap().adapter_ready = true;
                 let adapter_address = context.lock().unwrap().update_adapter_address();
                 print_info!("Adapter {} is ready", adapter_address);

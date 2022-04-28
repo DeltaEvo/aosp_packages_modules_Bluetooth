@@ -1,6 +1,6 @@
 //! D-Bus proxy implementations of the APIs.
 
-use bt_topshim::btif::{BtSspVariant, BtTransport, Uuid128Bit};
+use bt_topshim::btif::{BtDeviceType, BtSspVariant, BtTransport, Uuid128Bit};
 use bt_topshim::profiles::gatt::GattStatus;
 
 use btstack::bluetooth::{
@@ -12,14 +12,17 @@ use btstack::bluetooth_gatt::{
     IScannerCallback, LePhy, ScanFilter, ScanSettings,
 };
 
+use btstack::suspend::{ISuspend, ISuspendCallback, SuspendType};
+
+use btstack::uuid::Profile;
 use dbus::arg::{AppendAll, RefArg};
 use dbus::nonblock::SyncConnection;
 
-use dbus_crossroads::Crossroads;
-
 use dbus_projection::{impl_dbus_arg_enum, DisconnectWatcher};
 
-use dbus_macros::{dbus_method, dbus_propmap, generate_dbus_exporter};
+use dbus_macros::{
+    dbus_method, dbus_propmap, generate_dbus_exporter, generate_dbus_interface_client,
+};
 
 use manager_service::iface_bluetooth_manager::{
     AdapterWithEnabled, IBluetoothManager, IBluetoothManagerCallback,
@@ -28,7 +31,7 @@ use manager_service::iface_bluetooth_manager::{
 use num_traits::{FromPrimitive, ToPrimitive};
 
 use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::dbus_arg::{DBusArg, DBusArgError, RefArgToRust};
 
@@ -36,11 +39,15 @@ fn make_object_path(idx: i32, name: &str) -> dbus::Path {
     dbus::Path::new(format!("/org/chromium/bluetooth/hci{}/{}", idx, name)).unwrap()
 }
 
-impl_dbus_arg_enum!(BtTransport);
+impl_dbus_arg_enum!(BtDeviceType);
 impl_dbus_arg_enum!(BtSspVariant);
+impl_dbus_arg_enum!(BtTransport);
 impl_dbus_arg_enum!(GattStatus);
+impl_dbus_arg_enum!(GattWriteRequestStatus);
 impl_dbus_arg_enum!(GattWriteType);
 impl_dbus_arg_enum!(LePhy);
+impl_dbus_arg_enum!(Profile);
+impl_dbus_arg_enum!(SuspendType);
 
 // Represents Uuid128Bit as an array in D-Bus.
 impl DBusArg for Uuid128Bit {
@@ -95,7 +102,6 @@ pub struct BluetoothDeviceDBus {
 
 struct ClientDBusProxy {
     conn: Arc<SyncConnection>,
-    cr: Arc<Mutex<Crossroads>>,
     bus_name: String,
     objpath: dbus::Path<'static>,
     interface: String,
@@ -157,6 +163,7 @@ impl btstack::RPCProxy for IBluetoothCallbackDBus {
     fn unregister(&mut self, _id: u32) -> bool {
         false
     }
+    fn export_for_rpc(self: Box<Self>) {}
 }
 
 #[generate_dbus_exporter(
@@ -167,8 +174,17 @@ impl IBluetoothCallback for IBluetoothCallbackDBus {
     #[dbus_method("OnAddressChanged")]
     fn on_address_changed(&self, addr: String) {}
 
+    #[dbus_method("OnNameChanged")]
+    fn on_name_changed(&self, name: String) {}
+
+    #[dbus_method("OnDiscoverableChanged")]
+    fn on_discoverable_changed(&self, discoverable: bool) {}
+
     #[dbus_method("OnDeviceFound")]
     fn on_device_found(&self, remote_device: BluetoothDevice) {}
+
+    #[dbus_method("OnDeviceCleared")]
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {}
 
     #[dbus_method("OnDiscoveringChanged")]
     fn on_discovering_changed(&self, discovering: bool) {}
@@ -201,6 +217,7 @@ impl btstack::RPCProxy for IBluetoothConnectionCallbackDBus {
     fn unregister(&mut self, _id: u32) -> bool {
         false
     }
+    fn export_for_rpc(self: Box<Self>) {}
 }
 
 #[generate_dbus_exporter(
@@ -220,15 +237,10 @@ pub(crate) struct BluetoothDBus {
 }
 
 impl BluetoothDBus {
-    pub(crate) fn new(
-        conn: Arc<SyncConnection>,
-        cr: Arc<Mutex<Crossroads>>,
-        index: i32,
-    ) -> BluetoothDBus {
+    pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> BluetoothDBus {
         BluetoothDBus {
             client_proxy: ClientDBusProxy {
                 conn: conn.clone(),
-                cr: cr,
                 bus_name: String::from("org.chromium.bluetooth"),
                 objpath: make_object_path(index, "adapter"),
                 interface: String::from("org.chromium.bluetooth.Bluetooth"),
@@ -237,41 +249,24 @@ impl BluetoothDBus {
     }
 }
 
-// TODO(b/200732080): These are boilerplate codes, consider creating a macro to generate.
+#[generate_dbus_interface_client]
 impl IBluetooth for BluetoothDBus {
+    #[dbus_method("RegisterCallback")]
     fn register_callback(&mut self, callback: Box<dyn IBluetoothCallback + Send>) {
-        let path_string = callback.get_object_id();
-        let path = dbus::Path::new(path_string.clone()).unwrap();
-        export_bluetooth_callback_dbus_obj(
-            path_string,
-            self.client_proxy.conn.clone(),
-            &mut self.client_proxy.cr.lock().unwrap(),
-            Arc::new(Mutex::new(callback)),
-            Arc::new(Mutex::new(DisconnectWatcher::new())),
-        );
-
-        self.client_proxy.method_noreturn("RegisterCallback", (path,))
+        dbus_generated!()
     }
 
+    #[dbus_method("RegisterConnectionCallback")]
     fn register_connection_callback(
         &mut self,
         callback: Box<dyn IBluetoothConnectionCallback + Send>,
     ) -> u32 {
-        let path_string = callback.get_object_id();
-        let path = dbus::Path::new(path_string.clone()).unwrap();
-        export_bluetooth_connection_callback_dbus_obj(
-            path_string,
-            self.client_proxy.conn.clone(),
-            &mut self.client_proxy.cr.lock().unwrap(),
-            Arc::new(Mutex::new(callback)),
-            Arc::new(Mutex::new(DisconnectWatcher::new())),
-        );
-
-        self.client_proxy.method("RegisterConnectionCallback", (path,))
+        dbus_generated!()
     }
 
+    #[dbus_method("UnregisterConnectionCallback")]
     fn unregister_connection_callback(&mut self, id: u32) -> bool {
-        self.client_proxy.method("UnregisterConnectionCallback", (id,))
+        dbus_generated!()
     }
 
     fn enable(&mut self) -> bool {
@@ -284,116 +279,179 @@ impl IBluetooth for BluetoothDBus {
         true
     }
 
+    #[dbus_method("GetAddress")]
     fn get_address(&self) -> String {
-        self.client_proxy.method("GetAddress", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("GetUuids")]
     fn get_uuids(&self) -> Vec<Uuid128Bit> {
-        let result: Vec<Vec<u8>> = self.client_proxy.method("GetUuids", ());
-        <Vec<Uuid128Bit> as DBusArg>::from_dbus(result, None, None, None).unwrap()
+        dbus_generated!()
     }
 
+    #[dbus_method("GetName")]
     fn get_name(&self) -> String {
-        self.client_proxy.method("GetName", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("SetName")]
     fn set_name(&self, name: String) -> bool {
-        self.client_proxy.method("SetName", (name,))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetBluetoothClass")]
     fn get_bluetooth_class(&self) -> u32 {
-        self.client_proxy.method("GetBluetoothClass", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("SetBluetoothClass")]
     fn set_bluetooth_class(&self, cod: u32) -> bool {
-        self.client_proxy.method("SetBluetoothClass", (cod,))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetDiscoverable")]
+    fn get_discoverable(&self) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetDiscoverableTimeout")]
+    fn get_discoverable_timeout(&self) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetDiscoverable")]
+    fn set_discoverable(&self, mode: bool, duration: u32) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("IsMultiAdvertisementSupported")]
+    fn is_multi_advertisement_supported(&self) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("IsLeExtendedAdvertisingSupported")]
+    fn is_le_extended_advertising_supported(&self) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("StartDiscovery")]
     fn start_discovery(&self) -> bool {
-        self.client_proxy.method("StartDiscovery", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("CancelDiscovery")]
     fn cancel_discovery(&self) -> bool {
-        self.client_proxy.method("CancelDiscovery", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("IsDiscovering")]
     fn is_discovering(&self) -> bool {
-        self.client_proxy.method("IsDiscovering", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("GetDiscoveryEndMillis")]
     fn get_discovery_end_millis(&self) -> u64 {
-        self.client_proxy.method("GetDiscoveryEndMillis", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("CreateBond")]
     fn create_bond(&self, device: BluetoothDevice, transport: BtTransport) -> bool {
-        self.client_proxy.method(
-            "CreateBond",
-            (BluetoothDevice::to_dbus(device).unwrap(), BtTransport::to_dbus(transport).unwrap()),
-        )
+        dbus_generated!()
     }
 
+    #[dbus_method("CancelBondProcess")]
     fn cancel_bond_process(&self, device: BluetoothDevice) -> bool {
-        self.client_proxy.method("CancelBondProcess", (BluetoothDevice::to_dbus(device).unwrap(),))
+        dbus_generated!()
     }
 
+    #[dbus_method("RemoveBond")]
     fn remove_bond(&self, device: BluetoothDevice) -> bool {
-        self.client_proxy.method("RemoveBond", (BluetoothDevice::to_dbus(device).unwrap(),))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetBondedDevices")]
     fn get_bonded_devices(&self) -> Vec<BluetoothDevice> {
-        let props: Vec<dbus::arg::PropMap> = self.client_proxy.method("GetBondedDevices", ());
-        <Vec<BluetoothDevice> as DBusArg>::from_dbus(props, None, None, None).unwrap()
+        dbus_generated!()
     }
 
+    #[dbus_method("GetBondState")]
     fn get_bond_state(&self, device: BluetoothDevice) -> u32 {
-        self.client_proxy.method("GetBondState", (BluetoothDevice::to_dbus(device).unwrap(),))
+        dbus_generated!()
     }
 
+    #[dbus_method("SetPin")]
     fn set_pin(&self, device: BluetoothDevice, accept: bool, pin_code: Vec<u8>) -> bool {
-        self.client_proxy
-            .method("SetPin", (BluetoothDevice::to_dbus(device).unwrap(), accept, pin_code))
+        dbus_generated!()
     }
 
+    #[dbus_method("SetPasskey")]
     fn set_passkey(&self, device: BluetoothDevice, accept: bool, passkey: Vec<u8>) -> bool {
-        self.client_proxy
-            .method("SetPasskey", (BluetoothDevice::to_dbus(device).unwrap(), accept, passkey))
+        dbus_generated!()
     }
 
+    #[dbus_method("SetPairingConfirmation")]
     fn set_pairing_confirmation(&self, device: BluetoothDevice, accept: bool) -> bool {
-        self.client_proxy
-            .method("SetPairingConfirmation", (BluetoothDevice::to_dbus(device).unwrap(), accept))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetRemoteName")]
+    fn get_remote_name(&self, device: BluetoothDevice) -> String {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteType")]
+    fn get_remote_type(&self, device: BluetoothDevice) -> BtDeviceType {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteAlias")]
+    fn get_remote_alias(&self, device: BluetoothDevice) -> String {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetRemoteAlias")]
+    fn set_remote_alias(&mut self, device: BluetoothDevice, new_alias: String) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteClass")]
+    fn get_remote_class(&self, device: BluetoothDevice) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetConnectionState")]
     fn get_connection_state(&self, device: BluetoothDevice) -> u32 {
-        self.client_proxy.method("GetConnectionState", (BluetoothDevice::to_dbus(device).unwrap(),))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetProfileConnectionState")]
+    fn get_profile_connection_state(&self, profile: Profile) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteUuids")]
     fn get_remote_uuids(&self, device: BluetoothDevice) -> Vec<Uuid128Bit> {
-        let result: Vec<Vec<u8>> = self
-            .client_proxy
-            .method("GetRemoteUuids", (BluetoothDevice::to_dbus(device).unwrap(),));
-        <Vec<Uuid128Bit> as DBusArg>::from_dbus(result, None, None, None).unwrap()
+        dbus_generated!()
     }
 
+    #[dbus_method("FetchRemoteUuids")]
     fn fetch_remote_uuids(&self, device: BluetoothDevice) -> bool {
-        self.client_proxy.method("FetchRemoteUuids", (BluetoothDevice::to_dbus(device).unwrap(),))
+        dbus_generated!()
     }
 
+    #[dbus_method("SdpSearch")]
     fn sdp_search(&self, device: BluetoothDevice, uuid: Uuid128Bit) -> bool {
-        self.client_proxy.method(
-            "SdpSearch",
-            (BluetoothDevice::to_dbus(device).unwrap(), Uuid128Bit::to_dbus(uuid).unwrap()),
-        )
+        dbus_generated!()
     }
 
-    fn connect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
-        self.client_proxy
-            .method("ConnectAllEnabledProfiles", (BluetoothDevice::to_dbus(device).unwrap(),))
+    #[dbus_method("ConnectAllEnabledProfiles")]
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
+        dbus_generated!()
     }
 
-    fn disconnect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
-        self.client_proxy
-            .method("DisconnectAllEnabledProfiles", (BluetoothDevice::to_dbus(device).unwrap(),))
+    #[dbus_method("DisconnectAllEnabledProfiles")]
+    fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
+        dbus_generated!()
     }
 }
 
@@ -408,14 +466,10 @@ pub(crate) struct BluetoothManagerDBus {
 }
 
 impl BluetoothManagerDBus {
-    pub(crate) fn new(
-        conn: Arc<SyncConnection>,
-        cr: Arc<Mutex<Crossroads>>,
-    ) -> BluetoothManagerDBus {
+    pub(crate) fn new(conn: Arc<SyncConnection>) -> BluetoothManagerDBus {
         BluetoothManagerDBus {
             client_proxy: ClientDBusProxy {
                 conn: conn.clone(),
-                cr: cr,
                 bus_name: String::from("org.chromium.bluetooth.Manager"),
                 objpath: dbus::Path::new("/org/chromium/bluetooth/Manager").unwrap(),
                 interface: String::from("org.chromium.bluetooth.Manager"),
@@ -429,45 +483,41 @@ impl BluetoothManagerDBus {
     }
 }
 
-// TODO: These are boilerplate codes, consider creating a macro to generate.
+#[generate_dbus_interface_client]
 impl IBluetoothManager for BluetoothManagerDBus {
+    #[dbus_method("Start")]
     fn start(&mut self, hci_interface: i32) {
-        self.client_proxy.method_noreturn("Start", (hci_interface,))
+        dbus_generated!()
     }
 
+    #[dbus_method("Stop")]
     fn stop(&mut self, hci_interface: i32) {
-        self.client_proxy.method_noreturn("Stop", (hci_interface,))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetAdapterEnabled")]
     fn get_adapter_enabled(&mut self, hci_interface: i32) -> bool {
-        self.client_proxy.method("GetAdapterEnabled", (hci_interface,))
+        dbus_generated!()
     }
 
+    #[dbus_method("RegisterCallback")]
     fn register_callback(&mut self, callback: Box<dyn IBluetoothManagerCallback + Send>) {
-        let path_string = callback.get_object_id();
-        let path = dbus::Path::new(path_string.clone()).unwrap();
-        export_bluetooth_manager_callback_dbus_obj(
-            path_string,
-            self.client_proxy.conn.clone(),
-            &mut self.client_proxy.cr.lock().unwrap(),
-            Arc::new(Mutex::new(callback)),
-            Arc::new(Mutex::new(DisconnectWatcher::new())),
-        );
-
-        self.client_proxy.method_noreturn("RegisterCallback", (path,))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetFlossEnabled")]
     fn get_floss_enabled(&mut self) -> bool {
-        self.client_proxy.method("GetFlossEnabled", ())
+        dbus_generated!()
     }
 
+    #[dbus_method("SetFlossEnabled")]
     fn set_floss_enabled(&mut self, enabled: bool) {
-        self.client_proxy.method_noreturn("SetFlossEnabled", (enabled,))
+        dbus_generated!()
     }
 
+    #[dbus_method("GetAvailableAdapters")]
     fn get_available_adapters(&mut self) -> Vec<AdapterWithEnabled> {
-        let props: Vec<dbus::arg::PropMap> = self.client_proxy.method("GetAvailableAdapters", ());
-        <Vec<AdapterWithEnabled> as DBusArg>::from_dbus(props, None, None, None).unwrap()
+        dbus_generated!()
     }
 }
 
@@ -485,6 +535,7 @@ impl manager_service::RPCProxy for IBluetoothManagerCallbackDBus {
     fn unregister(&mut self, _id: u32) -> bool {
         false
     }
+    fn export_for_rpc(self: Box<Self>) {}
 }
 
 #[generate_dbus_exporter(
@@ -504,15 +555,10 @@ pub(crate) struct BluetoothGattDBus {
 }
 
 impl BluetoothGattDBus {
-    pub(crate) fn new(
-        conn: Arc<SyncConnection>,
-        cr: Arc<Mutex<Crossroads>>,
-        index: i32,
-    ) -> BluetoothGattDBus {
+    pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> BluetoothGattDBus {
         BluetoothGattDBus {
             client_proxy: ClientDBusProxy {
                 conn: conn.clone(),
-                cr: cr,
                 bus_name: String::from("org.chromium.bluetooth"),
                 objpath: make_object_path(index, "gatt"),
                 interface: String::from("org.chromium.bluetooth.BluetoothGatt"),
@@ -521,7 +567,7 @@ impl BluetoothGattDBus {
     }
 }
 
-// TODO: These are boilerplate codes, consider creating a macro to generate.
+#[generate_dbus_interface_client]
 impl IBluetoothGatt for BluetoothGattDBus {
     fn register_scanner(&self, _callback: Box<dyn IScannerCallback + Send>) {
         // TODO(b/200066804): implement
@@ -539,29 +585,22 @@ impl IBluetoothGatt for BluetoothGattDBus {
         // TODO(b/200066804): implement
     }
 
+    #[dbus_method("RegisterClient")]
     fn register_client(
         &mut self,
         app_uuid: String,
         callback: Box<dyn IBluetoothGattCallback + Send>,
         eatt_support: bool,
     ) {
-        let path_string = callback.get_object_id();
-        let path = dbus::Path::new(path_string.clone()).unwrap();
-        export_bluetooth_gatt_callback_dbus_obj(
-            path_string,
-            self.client_proxy.conn.clone(),
-            &mut self.client_proxy.cr.lock().unwrap(),
-            Arc::new(Mutex::new(callback)),
-            Arc::new(Mutex::new(DisconnectWatcher::new())),
-        );
-
-        self.client_proxy.method_noreturn("RegisterClient", (app_uuid, path, eatt_support))
+        dbus_generated!()
     }
 
+    #[dbus_method("UnregisterClient")]
     fn unregister_client(&mut self, client_id: i32) {
-        self.client_proxy.method_noreturn("UnregisterClient", (client_id,))
+        dbus_generated!()
     }
 
+    #[dbus_method("ClientConnect")]
     fn client_connect(
         &self,
         client_id: i32,
@@ -571,16 +610,15 @@ impl IBluetoothGatt for BluetoothGattDBus {
         opportunistic: bool,
         phy: i32,
     ) {
-        self.client_proxy.method_noreturn(
-            "ClientConnect",
-            (client_id, addr, is_direct, transport, opportunistic, phy),
-        )
+        dbus_generated!()
     }
 
+    #[dbus_method("ClientDisconnect")]
     fn client_disconnect(&self, client_id: i32, addr: String) {
-        self.client_proxy.method_noreturn("ClientDisconnect", (client_id, addr))
+        dbus_generated!()
     }
 
+    #[dbus_method("ClientSetPreferredPhy")]
     fn client_set_preferred_phy(
         &self,
         client_id: i32,
@@ -589,32 +627,35 @@ impl IBluetoothGatt for BluetoothGattDBus {
         rx_phy: LePhy,
         phy_options: i32,
     ) {
-        self.client_proxy.method_noreturn(
-            "ClientSetPreferredPhy",
-            (client_id, addr, tx_phy.to_i32().unwrap(), rx_phy.to_i32().unwrap(), phy_options),
-        )
+        dbus_generated!()
     }
 
+    #[dbus_method("ClientReadPhy")]
     fn client_read_phy(&mut self, client_id: i32, addr: String) {
-        self.client_proxy.method_noreturn("ClientReadPhy", (client_id, addr))
+        dbus_generated!()
     }
 
+    #[dbus_method("RefreshDevice")]
     fn refresh_device(&self, client_id: i32, addr: String) {
-        self.client_proxy.method_noreturn("RefreshDevice", (client_id, addr))
+        dbus_generated!()
     }
 
+    #[dbus_method("DiscoverServices")]
     fn discover_services(&self, client_id: i32, addr: String) {
-        self.client_proxy.method_noreturn("DiscoverServices", (client_id, addr))
+        dbus_generated!()
     }
 
+    #[dbus_method("DiscoverServiceByUuid")]
     fn discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String) {
-        self.client_proxy.method_noreturn("DiscoverServiceByUuid", (client_id, addr, uuid))
+        dbus_generated!()
     }
 
+    #[dbus_method("ReadCharacteristic")]
     fn read_characteristic(&self, client_id: i32, addr: String, handle: i32, auth_req: i32) {
-        self.client_proxy.method_noreturn("ReadCharacteristic", (client_id, addr, handle, auth_req))
+        dbus_generated!()
     }
 
+    #[dbus_method("ReadUsingCharacteristicUuid")]
     fn read_using_characteristic_uuid(
         &self,
         client_id: i32,
@@ -624,12 +665,10 @@ impl IBluetoothGatt for BluetoothGattDBus {
         end_handle: i32,
         auth_req: i32,
     ) {
-        self.client_proxy.method_noreturn(
-            "ReadUsingCharacteristicUuid",
-            (client_id, addr, uuid, start_handle, end_handle, auth_req),
-        )
+        dbus_generated!()
     }
 
+    #[dbus_method("WriteCharacteristic")]
     fn write_characteristic(
         &self,
         client_id: i32,
@@ -639,17 +678,15 @@ impl IBluetoothGatt for BluetoothGattDBus {
         auth_req: i32,
         value: Vec<u8>,
     ) -> GattWriteRequestStatus {
-        GattWriteRequestStatus::from_i32(self.client_proxy.method(
-            "WriteCharacteristic",
-            (client_id, addr, handle, write_type.to_i32().unwrap(), auth_req, value),
-        ))
-        .unwrap()
+        dbus_generated!()
     }
 
+    #[dbus_method("ReadDescriptor")]
     fn read_descriptor(&self, client_id: i32, addr: String, handle: i32, auth_req: i32) {
-        self.client_proxy.method_noreturn("ReadDescriptor", (client_id, addr, handle, auth_req))
+        dbus_generated!()
     }
 
+    #[dbus_method("WriteDescriptor")]
     fn write_descriptor(
         &self,
         client_id: i32,
@@ -658,31 +695,35 @@ impl IBluetoothGatt for BluetoothGattDBus {
         auth_req: i32,
         value: Vec<u8>,
     ) {
-        self.client_proxy
-            .method_noreturn("WriteDescriptor", (client_id, addr, handle, auth_req, value))
+        dbus_generated!()
     }
 
+    #[dbus_method("RegisterForNotification")]
     fn register_for_notification(&self, client_id: i32, addr: String, handle: i32, enable: bool) {
-        self.client_proxy
-            .method_noreturn("RegisterForNotification", (client_id, addr, handle, enable))
+        dbus_generated!()
     }
 
+    #[dbus_method("BeginReliableWrite")]
     fn begin_reliable_write(&mut self, client_id: i32, addr: String) {
-        self.client_proxy.method_noreturn("BeginReliableWrite", (client_id, addr))
+        dbus_generated!()
     }
 
+    #[dbus_method("EndReliableWrite")]
     fn end_reliable_write(&mut self, client_id: i32, addr: String, execute: bool) {
-        self.client_proxy.method_noreturn("EndReliableWrite", (client_id, addr, execute))
+        dbus_generated!()
     }
 
+    #[dbus_method("ReadRemoteRssi")]
     fn read_remote_rssi(&self, client_id: i32, addr: String) {
-        self.client_proxy.method_noreturn("ReadRemoteRssi", (client_id, addr))
+        dbus_generated!()
     }
 
+    #[dbus_method("ConfigureMtu")]
     fn configure_mtu(&self, client_id: i32, addr: String, mtu: i32) {
-        self.client_proxy.method_noreturn("ConfigureMtu", (client_id, addr, mtu))
+        dbus_generated!()
     }
 
+    #[dbus_method("ConnectionParameterUpdate")]
     fn connection_parameter_update(
         &self,
         client_id: i32,
@@ -694,10 +735,7 @@ impl IBluetoothGatt for BluetoothGattDBus {
         min_ce_len: u16,
         max_ce_len: u16,
     ) {
-        self.client_proxy.method_noreturn(
-            "ConnectionParameterUpdate",
-            (client_id, addr, min_interval, max_interval, latency, timeout, min_ce_len, max_ce_len),
-        )
+        dbus_generated!()
     }
 }
 
@@ -715,6 +753,7 @@ impl btstack::RPCProxy for IBluetoothGattCallbackDBus {
     fn unregister(&mut self, _id: u32) -> bool {
         false
     }
+    fn export_for_rpc(self: Box<Self>) {}
 }
 
 #[generate_dbus_exporter(
@@ -781,4 +820,74 @@ impl IBluetoothGattCallback for IBluetoothGattCallbackDBus {
 
     #[dbus_method("OnServiceChanged")]
     fn on_service_changed(&self, addr: String) {}
+}
+
+pub(crate) struct SuspendDBus {
+    client_proxy: ClientDBusProxy,
+}
+
+impl SuspendDBus {
+    pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> SuspendDBus {
+        SuspendDBus {
+            client_proxy: ClientDBusProxy {
+                conn: conn.clone(),
+                bus_name: String::from("org.chromium.bluetooth"),
+                objpath: make_object_path(index, "suspend"),
+                interface: String::from("org.chromium.bluetooth.Suspend"),
+            },
+        }
+    }
+}
+
+#[generate_dbus_interface_client]
+impl ISuspend for SuspendDBus {
+    #[dbus_method("RegisterCallback")]
+    fn register_callback(&mut self, _callback: Box<dyn ISuspendCallback + Send>) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("UnregisterCallback")]
+    fn unregister_callback(&mut self, _callback_id: u32) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("Suspend")]
+    fn suspend(&self, _suspend_type: SuspendType) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("Resume")]
+    fn resume(&self) -> bool {
+        dbus_generated!()
+    }
+}
+
+#[allow(dead_code)]
+struct ISuspendCallbackDBus {}
+
+impl btstack::RPCProxy for ISuspendCallbackDBus {
+    // Placeholder implementations just to satisfy impl RPCProxy requirements.
+    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
+        0
+    }
+    fn get_object_id(&self) -> String {
+        String::from("")
+    }
+    fn unregister(&mut self, _id: u32) -> bool {
+        false
+    }
+    fn export_for_rpc(self: Box<Self>) {}
+}
+
+#[generate_dbus_exporter(
+    export_suspend_callback_dbus_obj,
+    "org.chromium.bluetooth.SuspendCallback"
+)]
+impl ISuspendCallback for ISuspendCallbackDBus {
+    #[dbus_method("OnCallbackRegistered")]
+    fn on_callback_registered(&self, callback_id: u32) {}
+    #[dbus_method("OnSuspendReady")]
+    fn on_suspend_ready(&self, suspend_id: u32) {}
+    #[dbus_method("OnResumed")]
+    fn on_resumed(&self, suspend_id: u32) {}
 }

@@ -94,7 +94,7 @@ public class HeadsetStateMachine extends StateMachine {
     static final int INTENT_CONNECTION_ACCESS_REPLY = 8;
     static final int CALL_STATE_CHANGED = 9;
     static final int DEVICE_STATE_CHANGED = 10;
-    static final int SEND_CCLC_RESPONSE = 11;
+    static final int SEND_CLCC_RESPONSE = 11;
     static final int SEND_VENDOR_SPECIFIC_RESULT_CODE = 12;
     static final int SEND_BSIR = 13;
     static final int DIALING_OUT_RESULT = 14;
@@ -525,7 +525,7 @@ public class HeadsetStateMachine extends StateMachine {
                 // Both events result in Connecting state as SLC establishment is still required
                 case HeadsetHalConstants.CONNECTION_STATE_CONNECTED:
                 case HeadsetHalConstants.CONNECTION_STATE_CONNECTING:
-                    if (mHeadsetService.okToAcceptConnection(mDevice)) {
+                    if (mHeadsetService.okToAcceptConnection(mDevice, false)) {
                         stateLogI("accept incoming connection");
                         transitionTo(mConnecting);
                     } else {
@@ -868,8 +868,8 @@ public class HeadsetStateMachine extends StateMachine {
                     }
                     mNativeInterface.notifyDeviceStatus(mDevice, (HeadsetDeviceState) message.obj);
                     break;
-                case SEND_CCLC_RESPONSE:
-                    processSendClccResponse((HeadsetClccResponse) message.obj);
+                case SEND_CLCC_RESPONSE:
+                    processSendClccResponse((ArrayList<HeadsetClccResponse>) message.obj);
                     break;
                 case CLCC_RSP_TIMEOUT: {
                     BluetoothDevice device = (BluetoothDevice) message.obj;
@@ -2029,15 +2029,16 @@ public class HeadsetStateMachine extends StateMachine {
         sendIndicatorIntent(device, indId, indValue);
     }
 
-    private void processSendClccResponse(HeadsetClccResponse clcc) {
+    private void processSendClccResponse(ArrayList<HeadsetClccResponse> clccList) {
         if (!hasMessages(CLCC_RSP_TIMEOUT)) {
             return;
         }
-        if (clcc.mIndex == 0) {
-            removeMessages(CLCC_RSP_TIMEOUT);
+        removeMessages(CLCC_RSP_TIMEOUT);
+
+        for (HeadsetClccResponse clcc : clccList) {
+            mNativeInterface.clccResponse(mDevice, clcc.mIndex, clcc.mDirection, clcc.mStatus,
+                    clcc.mMode, clcc.mMpty, clcc.mNumber, clcc.mType);
         }
-        mNativeInterface.clccResponse(mDevice, clcc.mIndex, clcc.mDirection, clcc.mStatus,
-                clcc.mMode, clcc.mMpty, clcc.mNumber, clcc.mType);
     }
 
     private void processSendVendorSpecificResultCode(HeadsetVendorSpecificResultCode resultCode) {
@@ -2170,8 +2171,8 @@ public class HeadsetStateMachine extends StateMachine {
                 return "CALL_STATE_CHANGED";
             case DEVICE_STATE_CHANGED:
                 return "DEVICE_STATE_CHANGED";
-            case SEND_CCLC_RESPONSE:
-                return "SEND_CCLC_RESPONSE";
+            case SEND_CLCC_RESPONSE:
+                return "SEND_CLCC_RESPONSE";
             case SEND_VENDOR_SPECIFIC_RESULT_CODE:
                 return "SEND_VENDOR_SPECIFIC_RESULT_CODE";
             case STACK_EVENT:

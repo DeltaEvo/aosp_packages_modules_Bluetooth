@@ -43,50 +43,6 @@ extern void btm_ble_advertiser_notify_terminated_legacy(
 
 extern bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                                      const RawAddress& new_pseudo_addr);
-void btm_send_hci_create_connection(
-    uint16_t scan_int, uint16_t scan_win, uint8_t init_filter_policy,
-    tBLE_ADDR_TYPE addr_type_peer, const RawAddress& bda_peer,
-    tBLE_ADDR_TYPE addr_type_own, uint16_t conn_int_min, uint16_t conn_int_max,
-    uint16_t conn_latency, uint16_t conn_timeout, uint16_t min_ce_len,
-    uint16_t max_ce_len, uint8_t initiating_phys) {
-  ASSERT_LOG(false,
-             "When gd_acl enabled this code path should not be exercised");
-
-  if (controller_get_interface()->supports_ble_extended_advertising()) {
-    EXT_CONN_PHY_CFG phy_cfg[3];  // maximum three phys
-
-    int phy_cnt =
-        std::bitset<std::numeric_limits<uint8_t>::digits>(initiating_phys)
-            .count();
-
-    LOG_ASSERT(phy_cnt <= 3) << "More than three phys provided";
-    // TODO(jpawlowski): tune parameters for different transports
-    for (int i = 0; i < phy_cnt; i++) {
-      phy_cfg[i].scan_int = scan_int;
-      phy_cfg[i].scan_win = scan_win;
-      phy_cfg[i].conn_int_min = conn_int_min;
-      phy_cfg[i].conn_int_max = conn_int_max;
-      phy_cfg[i].conn_latency = conn_latency;
-      phy_cfg[i].sup_timeout = conn_timeout;
-      phy_cfg[i].min_ce_len = min_ce_len;
-      phy_cfg[i].max_ce_len = max_ce_len;
-    }
-
-    addr_type_peer &= ~BLE_ADDR_TYPE_ID_BIT;
-    btsnd_hcic_ble_ext_create_conn(init_filter_policy, addr_type_own,
-                                   addr_type_peer, bda_peer, initiating_phys,
-                                   phy_cfg);
-  } else {
-    btsnd_hcic_ble_create_ll_conn(scan_int, scan_win, init_filter_policy,
-                                  addr_type_peer, bda_peer, addr_type_own,
-                                  conn_int_min, conn_int_max, conn_latency,
-                                  conn_timeout, min_ce_len, max_ce_len);
-  }
-
-  btm_cb.ble_ctr_cb.set_connection_state_connecting();
-  btm_ble_set_topology_mask(BTM_BLE_STATE_INIT_BIT);
-}
-
 /** LE connection complete. */
 void btm_ble_create_ll_conn_complete(tHCI_STATUS status) {
   if (status == HCI_SUCCESS) return;
@@ -132,7 +88,7 @@ bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
       if (!btm_ble_init_pseudo_addr(match_rec, *bda)) {
         /* assign the original address to be the current report address */
         *bda = match_rec->ble.pseudo_addr;
-        *bda_type = match_rec->ble.ble_addr_type;
+        *bda_type = match_rec->ble.AddressType();
       } else {
         *bda = match_rec->bd_addr;
       }
@@ -141,70 +97,6 @@ bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
     }
   }
   return is_in_security_db;
-}
-
-/** LE connection complete. */
-void btm_ble_conn_complete(uint8_t* p, UNUSED_ATTR uint16_t evt_len,
-                           bool enhanced) {
-  RawAddress local_rpa, peer_rpa;
-  uint8_t raw_role, status;
-  tBLE_ADDR_TYPE bda_type;
-  uint16_t handle;
-  RawAddress bda;
-  uint16_t conn_interval, conn_latency, conn_timeout;
-
-  STREAM_TO_UINT8(status, p);
-  STREAM_TO_UINT16(handle, p);
-  STREAM_TO_UINT8(raw_role, p);
-  STREAM_TO_UINT8(bda_type, p);
-  STREAM_TO_BDADDR(bda, p);
-  if (enhanced) {
-    STREAM_TO_BDADDR(local_rpa, p);
-    STREAM_TO_BDADDR(peer_rpa, p);
-  }
-  STREAM_TO_UINT16(conn_interval, p);
-  STREAM_TO_UINT16(conn_latency, p);
-  STREAM_TO_UINT16(conn_timeout, p);
-  handle = HCID_GET_HANDLE(handle);
-
-  uint32_t hci_ble_event =
-      enhanced ? android::bluetooth::hci::BLE_EVT_ENHANCED_CONN_COMPLETE_EVT
-               : android::bluetooth::hci::BLE_EVT_CONN_COMPLETE_EVT;
-
-  if (status == HCI_SUCCESS) {
-    tBLE_ADDR_TYPE peer_addr_type = bda_type;
-    bool is_in_security_db = maybe_resolve_address(&bda, &bda_type);
-
-    // Log for the HCI success case after maybe resolving Bluetooth address
-    log_link_layer_connection_event(
-        &bda, handle, android::bluetooth::DIRECTION_UNKNOWN,
-        android::bluetooth::LINK_TYPE_ACL, android::bluetooth::hci::CMD_UNKNOWN,
-        android::bluetooth::hci::EVT_BLE_META, hci_ble_event, status,
-        android::bluetooth::hci::STATUS_UNKNOWN);
-
-    tBLE_BD_ADDR address_with_type{.bda = bda, .type = bda_type};
-    tHCI_ROLE role = to_hci_role(raw_role);
-    if (enhanced) {
-      acl_ble_enhanced_connection_complete(
-          address_with_type, handle, role, is_in_security_db, conn_interval,
-          conn_latency, conn_timeout, local_rpa, peer_rpa, peer_addr_type);
-
-    } else {
-      acl_ble_connection_complete(address_with_type, handle, role,
-                                  is_in_security_db, conn_interval,
-                                  conn_latency, conn_timeout);
-    }
-  } else {
-    log_link_layer_connection_event(
-        &bda, handle, android::bluetooth::DIRECTION_UNKNOWN,
-        android::bluetooth::LINK_TYPE_ACL, android::bluetooth::hci::CMD_UNKNOWN,
-        android::bluetooth::hci::EVT_BLE_META, hci_ble_event, status,
-        android::bluetooth::hci::STATUS_UNKNOWN);
-
-    tBLE_BD_ADDR address_with_type{.bda = bda, .type = bda_type};
-    acl_ble_connection_fail(address_with_type, handle, enhanced,
-                            static_cast<tHCI_STATUS>(status));
-  }
 }
 
 void btm_ble_create_conn_cancel() {

@@ -56,6 +56,7 @@
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_le_audio_api.h"
 #include "bta/include/bta_le_audio_broadcaster_api.h"
+#include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -412,9 +413,18 @@ static int read_energy_info() {
   return BT_STATUS_SUCCESS;
 }
 
+static int clear_event_filter() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_event_filter));
+  return BT_STATUS_SUCCESS;
+}
+
 static void dump(int fd, const char** arguments) {
   btif_debug_conn_dump(fd);
   btif_debug_bond_event_dump(fd);
+  btif_debug_linkkey_type_dump(fd);
   btif_debug_a2dp_dump(fd);
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
@@ -433,6 +443,7 @@ static void dump(int fd, const char** arguments) {
 #ifndef TARGET_FLOSS
   LeAudioClient::DebugDump(fd);
   LeAudioBroadcaster::DebugDump(fd);
+  VolumeControl::DebugDump(fd);
 #endif
   connection_manager::dump(fd);
   bluetooth::bqr::DebugDump(fd);
@@ -663,7 +674,8 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     get_metric_id,
     set_dynamic_audio_buffer_size,
     generate_local_oob_data,
-    allow_low_latency_audio};
+    allow_low_latency_audio,
+    clear_event_filter};
 
 // callback reporting helpers
 
@@ -934,4 +946,13 @@ void invoke_switch_buffer_size_cb(bool is_low_latency_buffer_size) {
                       is_low_latency_buffer_size);
           },
           is_low_latency_buffer_size));
+}
+
+void invoke_switch_codec_cb(bool is_low_latency_buffer_size) {
+  do_in_jni_thread(FROM_HERE, base::BindOnce(
+                                  [](bool is_low_latency_buffer_size) {
+                                    HAL_CBACK(bt_hal_cbacks, switch_codec_cb,
+                                              is_low_latency_buffer_size);
+                                  },
+                                  is_low_latency_buffer_size));
 }
