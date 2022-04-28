@@ -22,10 +22,13 @@ import android.bluetooth.IBluetoothMcpServiceManager;
 import android.content.AttributionSource;
 import android.os.Handler;
 import android.os.Looper;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,10 +43,17 @@ public class McpService extends ProfileService {
     private static final String TAG = "BluetoothMcpService";
 
     private static McpService sMcpService;
+    private static MediaControlProfile sGmcsForTesting;
 
-    private static MediaControlProfile mGmcs;
+    private Object mLock = new Object();
+    @GuardedBy("mLock")
+    private MediaControlProfile mGmcs;
     private Map<BluetoothDevice, Integer> mDeviceAuthorizations = new HashMap<>();
     private Handler mHandler = new Handler(Looper.getMainLooper());
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileMcpServerEnabled().orElse(false);
+    }
 
     private static synchronized void setMcpService(McpService instance) {
         if (VDBG) {
@@ -65,8 +75,14 @@ public class McpService extends ProfileService {
         return sMcpService;
     }
 
+    @VisibleForTesting
+    public static MediaControlProfile getMediaControlProfile() {
+        return sGmcsForTesting;
+    }
+
+    @VisibleForTesting
     public static void setMediaControlProfileForTesting(MediaControlProfile mediaControlProfile) {
-        mGmcs = mediaControlProfile;
+        sGmcsForTesting = mediaControlProfile;
     }
 
     @Override
@@ -94,11 +110,19 @@ public class McpService extends ProfileService {
         // Mark service as started
         setMcpService(this);
 
-        if (mGmcs == null) {
-            // Initialize the Media Control Service Server
-            mGmcs = new MediaControlProfile(this);
-            // Requires this service to be already started thus we have to make it an async call
-            mHandler.post(() -> mGmcs.init());
+        synchronized (mLock) {
+            if (getGmcsLocked() == null) {
+                // Initialize the Media Control Service Server
+                mGmcs = new MediaControlProfile(this);
+                // Requires this service to be already started thus we have to make it an async call
+                mHandler.post(() -> {
+                    synchronized (mLock) {
+                        if (mGmcs != null) {
+                            mGmcs.init();
+                        }
+                    }
+                });
+            }
         }
 
         return true;
@@ -115,8 +139,17 @@ public class McpService extends ProfileService {
             return true;
         }
 
-        if (mGmcs != null) {
-            mGmcs.cleanup();
+        synchronized (mLock) {
+            // A runnable for calling mGmcs.init() could be pending on mHandler
+            mHandler.removeCallbacksAndMessages(null);
+            if (mGmcs != null) {
+                mGmcs.cleanup();
+                mGmcs = null;
+            }
+            if (sGmcsForTesting != null) {
+                sGmcsForTesting.cleanup();
+                sGmcsForTesting = null;
+            }
         }
 
         // Mark service as stopped
@@ -131,6 +164,17 @@ public class McpService extends ProfileService {
         }
     }
 
+    @Override
+    public void dump(StringBuilder sb) {
+        super.dump(sb);
+        synchronized (mLock) {
+            MediaControlProfile gmcs = getGmcsLocked();
+            if (gmcs != null) {
+                gmcs.dump(sb);
+            }
+        }
+    }
+
     public void onDeviceUnauthorized(BluetoothDevice device) {
         Log.w(TAG, "onDeviceUnauthorized - authorization notification not implemented yet ");
     }
@@ -141,13 +185,27 @@ public class McpService extends ProfileService {
                 : BluetoothDevice.ACCESS_REJECTED;
         mDeviceAuthorizations.put(device, authorization);
 
-        mGmcs.onDeviceAuthorizationSet(device);
+        synchronized (mLock) {
+            MediaControlProfile gmcs = getGmcsLocked();
+            if (gmcs != null) {
+                gmcs.onDeviceAuthorizationSet(device);
+            }
+        }
     }
 
     public int getDeviceAuthorization(BluetoothDevice device) {
         // TODO: For now just reject authorization for other than LeAudio device already authorized.
         //       Consider intent based authorization mechanism for non-LeAudio devices.
         return mDeviceAuthorizations.getOrDefault(device, BluetoothDevice.ACCESS_UNKNOWN);
+    }
+
+    @GuardedBy("mLock")
+    private MediaControlProfile getGmcsLocked() {
+        if (sGmcsForTesting != null) {
+            return sGmcsForTesting;
+        } else {
+            return mGmcs;
+        }
     }
 
     /**
@@ -187,11 +245,5 @@ public class McpService extends ProfileService {
             }
             mService = null;
         }
-    }
-
-    @Override
-    public void dump(StringBuilder sb) {
-        super.dump(sb);
-        mGmcs.dump(sb);
     }
 }
