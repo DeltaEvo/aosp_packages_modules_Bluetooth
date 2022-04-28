@@ -24,6 +24,7 @@ import static android.Manifest.permission.BLUETOOTH_SCAN;
 import static android.Manifest.permission.RENOUNCE_PERMISSIONS;
 import static android.bluetooth.BluetoothUtils.USER_HANDLE_NULL;
 import static android.content.pm.PackageManager.GET_PERMISSIONS;
+import static android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.permission.PermissionManager.PERMISSION_HARD_DENIED;
@@ -83,7 +84,6 @@ import java.util.concurrent.TimeUnit;
 /**
  * @hide
  */
-
 public final class Utils {
     private static final String TAG = "BluetoothUtils";
     private static final int MICROS_PER_UNIT = 625;
@@ -322,8 +322,13 @@ public final class Utils {
     }
 
     static int sForegroundUserId = USER_HANDLE_NULL.getIdentifier();
-    public static void setForegroundUserId(int uid) {
-        Utils.sForegroundUserId = uid;
+
+    public static int getForegroundUserId() {
+        return Utils.sForegroundUserId;
+    }
+
+    public static void setForegroundUserId(int userId) {
+        Utils.sForegroundUserId = userId;
     }
 
     /**
@@ -598,7 +603,8 @@ public final class Utils {
         PackageManager pm = context.getPackageManager();
         try {
             // TODO(b/183478032): Cache PackageInfo for use here.
-            PackageInfo pkgInfo = pm.getPackageInfo(packageName, GET_PERMISSIONS);
+            PackageInfo pkgInfo =
+                    pm.getPackageInfo(packageName, GET_PERMISSIONS | MATCH_UNINSTALLED_PACKAGES);
             for (int i = 0; i < pkgInfo.requestedPermissions.length; i++) {
                 if (pkgInfo.requestedPermissions[i].equals(BLUETOOTH_SCAN)) {
                     return (pkgInfo.requestedPermissionsFlags[i]
@@ -844,12 +850,26 @@ public final class Utils {
                 android.Manifest.permission.WRITE_SMS) == PackageManager.PERMISSION_GRANTED;
     }
 
-    public static boolean isQApp(Context context, String pkgName) {
+    /**
+     * Checks that the target sdk of the app corresponding to the provided package name is greater
+     * than or equal to the passed in target sdk.
+     * <p>
+     * For example, if the calling app has target SDK {@link Build.VERSION_CODES#S} and we pass in
+     * the targetSdk {@link Build.VERSION_CODES#R}, the API will return true because S >= R.
+     *
+     * @param context Bluetooth service context
+     * @param pkgName caller's package name
+     * @param expectedMinimumTargetSdk one of the values from {@link Build.VERSION_CODES}
+     * @return {@code true} if the caller's target sdk is greater than or equal to
+     * expectedMinimumTargetSdk, {@code false} otherwise
+     */
+    public static boolean checkCallerTargetSdk(Context context, String pkgName,
+            int expectedMinimumTargetSdk) {
         try {
             return context.getPackageManager().getApplicationInfo(pkgName, 0).targetSdkVersion
-                    >= Build.VERSION_CODES.Q;
+                    >= expectedMinimumTargetSdk;
         } catch (PackageManager.NameNotFoundException e) {
-            // In case of exception, assume Q app
+            // In case of exception, assume true
         }
         return true;
     }
