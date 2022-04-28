@@ -31,6 +31,7 @@
 #include "gd/common/strings.h"
 #include "le_audio_set_configuration_provider.h"
 #include "osi/include/log.h"
+#include "stack/include/acl_api.h"
 
 using bluetooth::hci::kIsoCigFramingFramed;
 using bluetooth::hci::kIsoCigFramingUnframed;
@@ -60,7 +61,13 @@ void LeAudioDeviceGroup::AddNode(
 
 void LeAudioDeviceGroup::RemoveNode(
     const std::shared_ptr<LeAudioDevice>& leAudioDevice) {
+  /* Group information cleaning in the device. */
   leAudioDevice->group_id_ = bluetooth::groups::kGroupUnknown;
+  for (auto ase : leAudioDevice->ases_) {
+    ase.active = false;
+    ase.cis_conn_hdl = 0;
+  }
+
   leAudioDevices_.erase(
       std::remove_if(
           leAudioDevices_.begin(), leAudioDevices_.end(),
@@ -580,9 +587,9 @@ std::optional<AudioContexts> LeAudioDeviceGroup::UpdateActiveContextsMap(
 
 bool LeAudioDeviceGroup::ReloadAudioLocations(void) {
   AudioLocations updated_snk_audio_locations_ =
-      codec_spec_conf::kLeAudioLocationMonoUnspecified;
+      codec_spec_conf::kLeAudioLocationNotAllowed;
   AudioLocations updated_src_audio_locations_ =
-      codec_spec_conf::kLeAudioLocationMonoUnspecified;
+      codec_spec_conf::kLeAudioLocationNotAllowed;
 
   for (const auto& device : leAudioDevices_) {
     if (device.expired()) continue;
@@ -1206,6 +1213,7 @@ void LeAudioDeviceGroup::Dump(int fd) {
   stream << "    == Group id: " << group_id_ << " == \n"
          << "      state: " << GetState() << "\n"
          << "      target state: " << GetTargetState() << "\n"
+         << "      cig state: " << cig_state_ << "\n"
          << "      number of devices: " << Size() << "\n"
          << "      number of connected devices: " << NumOfConnected() << "\n"
          << "      active context types: "
@@ -1651,6 +1659,17 @@ void LeAudioDevice::Dump(int fd) {
          << "\n";
 
   dprintf(fd, "%s", stream.str().c_str());
+}
+
+void LeAudioDevice::DisconnectAcl(void) {
+  if (conn_id_ == GATT_INVALID_CONN_ID) return;
+
+  uint16_t acl_handle =
+      BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
+  if (acl_handle != HCI_INVALID_HANDLE) {
+    acl_disconnect_from_handle(acl_handle, HCI_ERR_PEER_USER,
+                               "bta::le_audio::client disconnect");
+  }
 }
 
 AudioContexts LeAudioDevice::GetAvailableContexts(void) {
