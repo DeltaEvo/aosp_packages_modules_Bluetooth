@@ -41,8 +41,11 @@ import android.util.Log;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
+import com.android.bluetooth.bas.BatteryService;
+import com.android.bluetooth.bass_client.BassClientService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
+import com.android.bluetooth.hap.HapClientService;
 import com.android.bluetooth.hearingaid.HearingAidService;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.hid.HidHostService;
@@ -296,6 +299,9 @@ class PhonePolicy {
              mFactory.getCsipSetCoordinatorService();
         VolumeControlService volumeControlService =
              mFactory.getVolumeControlService();
+        HapClientService hapClientService = mFactory.getHapClientService();
+        BassClientService bcService = mFactory.getBassClientService();
+        BatteryService batteryService = mFactory.getBatteryService();
 
         // Set profile priorities only for the profiles discovered on the remote device.
         // This avoids needless auto-connect attempts to profiles non-existent on the remote device
@@ -363,6 +369,30 @@ class PhonePolicy {
             debugLog("setting volume control profile priority for device " + device);
             mAdapterService.getDatabase().setProfileConnectionPolicy(device,
                     BluetoothProfile.VOLUME_CONTROL, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
+        }
+
+        if ((hapClientService != null) && Utils.arrayContains(uuids,
+                BluetoothUuid.HAS) && (hapClientService.getConnectionPolicy(device)
+                == BluetoothProfile.CONNECTION_POLICY_UNKNOWN)) {
+            debugLog("setting hearing access profile priority for device " + device);
+            mAdapterService.getDatabase().setProfileConnectionPolicy(device,
+                    BluetoothProfile.HAP_CLIENT, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
+        }
+
+        if ((bcService != null) && Utils.arrayContains(uuids,
+                BluetoothUuid.BASS) && (bcService.getConnectionPolicy(device)
+                == BluetoothProfile.CONNECTION_POLICY_UNKNOWN)) {
+            debugLog("setting broadcast assistant profile priority for device " + device);
+            mAdapterService.getDatabase().setProfileConnectionPolicy(device,
+                    BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT,
+                    BluetoothProfile.CONNECTION_POLICY_ALLOWED);
+        }
+        if ((batteryService != null) && Utils.arrayContains(uuids,
+                BluetoothUuid.BATTERY) && (batteryService.getConnectionPolicy(device)
+                    == BluetoothProfile.CONNECTION_POLICY_UNKNOWN)) {
+            debugLog("setting battery profile priority for device " + device);
+            mAdapterService.getDatabase().setProfileConnectionPolicy(device,
+                    BluetoothProfile.BATTERY, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
         }
     }
 
@@ -573,6 +603,7 @@ class PhonePolicy {
             mFactory.getCsipSetCoordinatorService();
         VolumeControlService volumeControlService =
             mFactory.getVolumeControlService();
+        BatteryService batteryService = mFactory.getBatteryService();
 
         if (hsService != null) {
             if (!mHeadsetRetrySet.contains(device) && (hsService.getConnectionPolicy(device)
@@ -632,8 +663,18 @@ class PhonePolicy {
                     == BluetoothProfile.CONNECTION_POLICY_ALLOWED)
                     && (volumeControlService.getConnectionState(device)
                     == BluetoothProfile.STATE_DISCONNECTED)) {
-                debugLog("Retrying connection to CSIP with device " + device);
+                debugLog("Retrying connection to VCP with device " + device);
                 volumeControlService.connect(device);
+            }
+        }
+        if (batteryService != null) {
+            List<BluetoothDevice> connectedDevices = batteryService.getConnectedDevices();
+            if (!connectedDevices.contains(device) && (batteryService.getConnectionPolicy(device)
+                    == BluetoothProfile.CONNECTION_POLICY_ALLOWED)
+                    && (batteryService.getConnectionState(device)
+                    == BluetoothProfile.STATE_DISCONNECTED)) {
+                debugLog("Retrying connection to BAS with device " + device);
+                batteryService.connect(device);
             }
         }
     }

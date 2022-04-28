@@ -102,6 +102,8 @@ class LeAdvertisingManager : public bluetooth::Module {
   static constexpr uint16_t kLeMaximumFragmentLength = 251;
   static constexpr FragmentPreference kFragment_preference = FragmentPreference::CONTROLLER_SHOULD_NOT;
   LeAdvertisingManager();
+  LeAdvertisingManager(const LeAdvertisingManager&) = delete;
+  LeAdvertisingManager& operator=(const LeAdvertisingManager&) = delete;
 
   size_t GetNumberOfAdvertisingInstances() const;
 
@@ -114,7 +116,19 @@ class LeAdvertisingManager : public bluetooth::Module {
       uint8_t max_extended_advertising_events,
       os::Handler* handler);
 
+  void StartAdvertising(
+      AdvertiserId advertiser_id,
+      const ExtendedAdvertisingConfig config,
+      uint16_t duration,
+      const base::Callback<void(uint8_t /* status */)>& status_callback,
+      const base::Callback<void(uint8_t /* status */)>& timeout_callback,
+      const common::Callback<void(Address, AddressType)>& scan_callback,
+      const common::Callback<void(ErrorCode, uint8_t, uint8_t)>& set_terminated_callback,
+      os::Handler* handler);
+
   void GetOwnAddress(uint8_t advertiser_id);
+
+  void RegisterAdvertiser(base::Callback<void(uint8_t /* inst_id */, uint8_t /* status */)> callback);
 
   void SetParameters(AdvertiserId advertiser_id, ExtendedAdvertisingConfig config);
 
@@ -147,13 +161,13 @@ class LeAdvertisingManager : public bluetooth::Module {
  private:
   // Return -1 if the advertiser was not created, otherwise the advertiser ID.
   AdvertiserId create_advertiser(
+      int reg_id,
       const AdvertisingConfig config,
       const common::Callback<void(Address, AddressType)>& scan_callback,
       const common::Callback<void(ErrorCode, uint8_t, uint8_t)>& set_terminated_callback,
       os::Handler* handler);
   struct impl;
   std::unique_ptr<impl> pimpl_;
-  DISALLOW_COPY_AND_ASSIGN(LeAdvertisingManager);
 };
 
 }  // namespace hci
