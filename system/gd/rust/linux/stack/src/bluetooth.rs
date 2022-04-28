@@ -2,8 +2,8 @@
 
 use bt_topshim::btif::{
     BaseCallbacks, BaseCallbacksDispatcher, BluetoothInterface, BluetoothProperty, BtAclState,
-    BtBondState, BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType, BtSspVariant,
-    BtState, BtStatus, BtTransport, RawAddress, Uuid, Uuid128Bit,
+    BtBondState, BtDeviceType, BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType,
+    BtScanMode, BtSspVariant, BtState, BtStatus, BtTransport, RawAddress, Uuid, Uuid128Bit,
 };
 use bt_topshim::{
     profiles::hid_host::{HHCallbacksDispatcher, HidHost},
@@ -18,12 +18,23 @@ use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
+use tokio::task::JoinHandle;
+use tokio::time;
 
 use crate::bluetooth_media::{BluetoothMedia, IBluetoothMedia, MediaActions};
 use crate::uuid::{Profile, UuidHelper};
 use crate::{BluetoothCallbackType, Message, RPCProxy};
+
+const DEFAULT_DISCOVERY_TIMEOUT_MS: u64 = 12800;
+const MIN_ADV_INSTANCES_FOR_MULTI_ADV: u8 = 5;
+
+/// Devices that were last seen longer than this duration are considered stale
+/// if they haven't already bonded or connected. Once this duration expires, the
+/// clear event should be sent to clients.
+const FOUND_DEVICE_FRESHNESS: Duration = Duration::from_secs(30);
 
 /// Defines the adapter API.
 pub trait IBluetooth {
@@ -67,6 +78,22 @@ pub trait IBluetooth {
     /// Sets the bluetooth class.
     fn set_bluetooth_class(&self, cod: u32) -> bool;
 
+    /// Returns whether the adapter is discoverable.
+    fn get_discoverable(&self) -> bool;
+
+    /// Returns the adapter discoverable timeout.
+    fn get_discoverable_timeout(&self) -> u32;
+
+    /// Sets discoverability. If discoverable, limits the duration with given value.
+    fn set_discoverable(&self, mode: bool, duration: u32) -> bool;
+
+    /// Returns whether multi-advertisement is supported.
+    /// A minimum number of 5 advertising instances is required for multi-advertisment support.
+    fn is_multi_advertisement_supported(&self) -> bool;
+
+    /// Returns whether LE extended advertising is supported.
+    fn is_le_extended_advertising_supported(&self) -> bool;
+
     /// Starts BREDR Inquiry.
     fn start_discovery(&self) -> bool;
 
@@ -103,8 +130,26 @@ pub trait IBluetooth {
     /// Confirm that a pairing should be completed on a bonding device.
     fn set_pairing_confirmation(&self, device: BluetoothDevice, accept: bool) -> bool;
 
+    /// Gets the name of the remote device.
+    fn get_remote_name(&self, device: BluetoothDevice) -> String;
+
+    /// Gets the type of the remote device.
+    fn get_remote_type(&self, device: BluetoothDevice) -> BtDeviceType;
+
+    /// Gets the alias of the remote device.
+    fn get_remote_alias(&self, device: BluetoothDevice) -> String;
+
+    /// Sets the alias of the remote device.
+    fn set_remote_alias(&mut self, device: BluetoothDevice, new_alias: String);
+
+    /// Gets the class of the remote device.
+    fn get_remote_class(&self, device: BluetoothDevice) -> u32;
+
     /// Gets the connection state of a single device.
     fn get_connection_state(&self, device: BluetoothDevice) -> u32;
+
+    /// Gets the connection state of a specific profile.
+    fn get_profile_connection_state(&self, profile: Profile) -> u32;
 
     /// Returns the cached UUIDs of a remote device.
     fn get_remote_uuids(&self, device: BluetoothDevice) -> Vec<Uuid128Bit>;
@@ -116,10 +161,10 @@ pub trait IBluetooth {
     fn sdp_search(&self, device: BluetoothDevice, uuid: Uuid128Bit) -> bool;
 
     /// Connect all profiles supported by device and enabled on adapter.
-    fn connect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool;
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool;
 
     /// Disconnect all profiles supported by device and enabled on adapter.
-    fn disconnect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool;
+    fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool;
 }
 
 /// Serializable device used in various apis.
@@ -159,6 +204,7 @@ struct BluetoothDeviceContext {
     pub bond_state: BtBondState,
     pub acl_state: BtAclState,
     pub info: BluetoothDevice,
+    pub last_seen: Instant,
     pub properties: HashMap<BtPropertyType, BluetoothProperty>,
 }
 
@@ -167,10 +213,16 @@ impl BluetoothDeviceContext {
         bond_state: BtBondState,
         acl_state: BtAclState,
         info: BluetoothDevice,
+        last_seen: Instant,
         properties: Vec<BluetoothProperty>,
     ) -> BluetoothDeviceContext {
-        let mut device =
-            BluetoothDeviceContext { bond_state, acl_state, info, properties: HashMap::new() };
+        let mut device = BluetoothDeviceContext {
+            bond_state,
+            acl_state,
+            info,
+            last_seen,
+            properties: HashMap::new(),
+        };
         device.update_properties(properties);
         device
     }
@@ -190,6 +242,11 @@ impl BluetoothDeviceContext {
             self.properties.insert(prop.get_type(), prop);
         }
     }
+
+    /// Mark this device as seen.
+    pub(crate) fn seen(&mut self) {
+        self.last_seen = Instant::now();
+    }
 }
 
 /// The interface for adapter callbacks registered through `IBluetooth::register_callback`.
@@ -197,8 +254,17 @@ pub trait IBluetoothCallback: RPCProxy {
     /// When any of the adapter local address is changed.
     fn on_address_changed(&self, addr: String);
 
+    /// When the adapter name is changed.
+    fn on_name_changed(&self, name: String);
+
+    /// When the adapter's discoverable mode is changed.
+    fn on_discoverable_changed(&self, discoverable: bool);
+
     /// When a device is found via discovery.
     fn on_device_found(&self, remote_device: BluetoothDevice);
+
+    /// When a device is cleared from discovered devices cache.
+    fn on_device_cleared(&self, remote_device: BluetoothDevice);
 
     /// When the discovery state is changed.
     fn on_discovering_changed(&self, discovering: bool);
@@ -234,15 +300,19 @@ pub struct Bluetooth {
     connection_callbacks: HashMap<u32, Box<dyn IBluetoothConnectionCallback + Send>>,
     discovering_started: Instant,
     hh: Option<HidHost>,
+    is_connectable: bool,
     is_discovering: bool,
     local_address: Option<RawAddress>,
     properties: HashMap<BtPropertyType, BluetoothProperty>,
     profiles_ready: bool,
     found_devices: HashMap<String, BluetoothDeviceContext>,
+    freshness_check: Option<JoinHandle<()>>,
     sdp: Option<Sdp>,
     state: BtState,
     tx: Sender<Message>,
     uuid_helper: UuidHelper,
+    /// Used to delay connection until we have SDP results.
+    wait_to_connect: bool,
 }
 
 impl Bluetooth {
@@ -260,15 +330,18 @@ impl Bluetooth {
             bluetooth_media,
             discovering_started: Instant::now(),
             intf,
+            is_connectable: false,
             is_discovering: false,
             local_address: None,
             properties: HashMap::new(),
             profiles_ready: false,
             found_devices: HashMap::new(),
+            freshness_check: None,
             sdp: None,
             state: BtState::Off,
             tx,
             uuid_helper: UuidHelper::new(),
+            wait_to_connect: false,
         }
     }
 
@@ -322,6 +395,29 @@ impl Bluetooth {
         }
     }
 
+    pub fn get_connectable(&self) -> bool {
+        match self.properties.get(&BtPropertyType::AdapterScanMode) {
+            Some(prop) => match prop {
+                BluetoothProperty::AdapterScanMode(mode) => match *mode {
+                    BtScanMode::Connectable | BtScanMode::ConnectableDiscoverable => true,
+                    _ => false,
+                },
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    pub fn set_connectable(&mut self, mode: bool) -> bool {
+        self.is_connectable = mode;
+        if mode && self.get_discoverable() {
+            return true;
+        }
+        self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::AdapterScanMode(
+            if mode { BtScanMode::Connectable } else { BtScanMode::None_ },
+        )) == 0
+    }
+
     pub(crate) fn callback_disconnected(&mut self, id: u32, cb_type: BluetoothCallbackType) {
         match cb_type {
             BluetoothCallbackType::Adapter => {
@@ -331,6 +427,96 @@ impl Bluetooth {
                 self.connection_callbacks.remove(&id);
             }
         };
+    }
+
+    fn get_remote_device_if_found(&self, address: &str) -> Option<&BluetoothDeviceContext> {
+        self.bonded_devices.get(address).or_else(|| self.found_devices.get(address))
+    }
+
+    fn get_remote_device_if_found_mut(
+        &mut self,
+        address: &str,
+    ) -> Option<&mut BluetoothDeviceContext> {
+        match self.bonded_devices.get_mut(address) {
+            None => self.found_devices.get_mut(address),
+            some => some,
+        }
+    }
+
+    fn get_remote_device_property(
+        &self,
+        device: &BluetoothDevice,
+        property_type: &BtPropertyType,
+    ) -> Option<BluetoothProperty> {
+        self.get_remote_device_if_found(&device.address)
+            .and_then(|d| d.properties.get(property_type).and_then(|p| Some(p.clone())))
+    }
+
+    fn set_remote_device_property(
+        &mut self,
+        device: &BluetoothDevice,
+        property_type: BtPropertyType,
+        property: BluetoothProperty,
+    ) -> Result<(), ()> {
+        let remote_device = match self.get_remote_device_if_found_mut(&device.address) {
+            Some(d) => d,
+            None => {
+                return Err(());
+            }
+        };
+
+        let mut addr = RawAddress::from_string(device.address.clone());
+        if addr.is_none() {
+            return Err(());
+        }
+        let addr = addr.as_mut().unwrap();
+
+        // TODO: Determine why a callback isn't invoked to do this.
+        remote_device.properties.insert(property_type, property.clone());
+        self.intf.lock().unwrap().set_remote_device_property(addr, property);
+        Ok(())
+    }
+
+    /// Check whether found devices are still fresh. If they're outside the
+    /// freshness window, send a notification to clear the device from clients.
+    pub(crate) fn trigger_freshness_check(&mut self) {
+        // Drop previous joinhandle
+        self.freshness_check = None;
+
+        // A found device is considered fresh if:
+        // * It was last seen less than |FOUND_DEVICE_FRESHNESS| ago.
+        // * It is currently connected.
+        fn is_fresh(d: &BluetoothDeviceContext, now: &Instant) -> bool {
+            let fresh_at = d.last_seen + FOUND_DEVICE_FRESHNESS;
+            now < &fresh_at || d.acl_state == BtAclState::Connected
+        }
+
+        let now = Instant::now();
+        let stale_devices: Vec<BluetoothDevice> = self
+            .found_devices
+            .iter()
+            .filter(|(_, d)| !is_fresh(d, &now))
+            .map(|(_, d)| d.info.clone())
+            .collect();
+
+        // Retain only devices that are fresh.
+        self.found_devices.retain(|_, d| is_fresh(d, &now));
+
+        for d in stale_devices {
+            self.for_all_callbacks(|callback| {
+                callback.on_device_cleared(d.clone());
+            });
+        }
+
+        // If we have any fresh devices remaining, re-queue a freshness check.
+        if self.found_devices.len() > 0 {
+            let txl = self.tx.clone();
+
+            self.freshness_check = Some(tokio::spawn(async move {
+                time::sleep(FOUND_DEVICE_FRESHNESS).await;
+                let _ = txl.send(Message::DeviceFreshnessCheck).await;
+            }));
+        }
     }
 }
 
@@ -438,6 +624,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
             // Also need to manually request some properties
             self.intf.lock().unwrap().get_adapter_property(BtPropertyType::ClassOfDevice);
+
+            // Ensure device is connectable so that disconnected device can reconnect
+            self.set_connectable(true);
         }
     }
 
@@ -471,9 +660,21 @@ impl BtifBluetoothCallbacks for Bluetooth {
                                 BtBondState::Bonded,
                                 BtAclState::Disconnected,
                                 BluetoothDevice::new(address.clone(), "".to_string()),
+                                Instant::now(),
                                 vec![],
                             ));
                     }
+                }
+                BluetoothProperty::BdName(bdname) => {
+                    self.for_all_callbacks(|callback| {
+                        callback.on_name_changed(bdname.clone());
+                    });
+                }
+                BluetoothProperty::AdapterScanMode(mode) => {
+                    self.for_all_callbacks(|callback| {
+                        callback
+                            .on_discoverable_changed(*mode == BtScanMode::ConnectableDiscoverable);
+                    });
                 }
                 _ => {}
             }
@@ -488,11 +689,13 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
         if let Some(existing) = self.found_devices.get_mut(&address) {
             existing.update_properties(properties);
+            existing.seen();
         } else {
             let device_with_props = BluetoothDeviceContext::new(
                 BtBondState::NotBonded,
                 BtAclState::Disconnected,
                 device,
+                Instant::now(),
                 properties,
             );
             self.found_devices.insert(address.clone(), device_with_props);
@@ -506,9 +709,11 @@ impl BtifBluetoothCallbacks for Bluetooth {
     }
 
     fn discovery_state(&mut self, state: BtDiscoveryState) {
-        // Clear found devices when discovery session starts
-        if !self.is_discovering && &state == &BtDiscoveryState::Started {
-            self.found_devices.clear();
+        let is_discovering = &state == &BtDiscoveryState::Started;
+
+        // No-op if we're updating the state to the same value again.
+        if &is_discovering == &self.is_discovering {
+            return;
         }
 
         // Cache discovering state
@@ -520,6 +725,13 @@ impl BtifBluetoothCallbacks for Bluetooth {
         self.for_all_callbacks(|callback| {
             callback.on_discovering_changed(state == BtDiscoveryState::Started);
         });
+
+        // Stopped discovering and no freshness check is active. Immediately do
+        // freshness check which will schedule a recurring future until all
+        // entries are cleared.
+        if !is_discovering && self.freshness_check.is_none() {
+            self.trigger_freshness_check();
+        }
     }
 
     fn ssp_request(
@@ -573,6 +785,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     bond_state.clone(),
                     BtAclState::Disconnected,
                     BluetoothDevice::new(address.clone(), "".to_string()),
+                    Instant::now(),
                     vec![],
                 ),
             };
@@ -603,27 +816,37 @@ impl BtifBluetoothCallbacks for Bluetooth {
         properties: Vec<BluetoothProperty>,
     ) {
         let address = addr.to_string();
-        // Device should be in either found devices or bonded devices
-        // If it isn't in either, create it and put it found devices.
-        let device = if self.bonded_devices.contains_key(&address) {
-            self.bonded_devices.get_mut(&address)
-        } else if self.found_devices.contains_key(&address) {
-            self.found_devices.get_mut(&address)
-        } else {
-            self.found_devices.insert(
-                address.clone(),
-                BluetoothDeviceContext::new(
-                    BtBondState::NotBonded,
-                    BtAclState::Disconnected,
-                    BluetoothDevice::new(address.clone(), String::from("")),
-                    vec![],
-                ),
-            );
+        let device = match self.get_remote_device_if_found_mut(&address) {
+            None => {
+                self.found_devices.insert(
+                    address.clone(),
+                    BluetoothDeviceContext::new(
+                        BtBondState::NotBonded,
+                        BtAclState::Disconnected,
+                        BluetoothDevice::new(address.clone(), String::from("")),
+                        Instant::now(),
+                        vec![],
+                    ),
+                );
 
-            self.found_devices.get_mut(&address)
+                self.found_devices.get_mut(&address)
+            }
+            some => some,
         };
 
-        device.unwrap().update_properties(properties);
+        match device {
+            Some(d) => {
+                d.update_properties(properties);
+                d.seen();
+
+                let info = d.info.clone();
+                let uuids = self.get_remote_uuids(info.clone());
+                if self.wait_to_connect && uuids.len() > 0 {
+                    self.connect_all_enabled_profiles(info);
+                }
+            }
+            None => (),
+        };
     }
 
     fn acl_state(
@@ -640,44 +863,48 @@ impl BtifBluetoothCallbacks for Bluetooth {
         }
 
         let address = addr.to_string();
+        let device = match self.get_remote_device_if_found_mut(&address) {
+            None => {
+                self.found_devices.insert(
+                    address.clone(),
+                    BluetoothDeviceContext::new(
+                        BtBondState::NotBonded,
+                        BtAclState::Disconnected,
+                        BluetoothDevice::new(address.clone(), String::from("")),
+                        Instant::now(),
+                        vec![],
+                    ),
+                );
 
-        let found = if self.bonded_devices.contains_key(&address) {
-            self.bonded_devices.get_mut(&address)
-        } else if self.found_devices.contains_key(&address) {
-            self.found_devices.get_mut(&address)
-        } else {
-            self.found_devices.insert(
-                address.clone(),
-                BluetoothDeviceContext::new(
-                    BtBondState::NotBonded,
-                    BtAclState::Disconnected,
-                    BluetoothDevice::new(address.clone(), String::from("")),
-                    vec![],
-                ),
-            );
-
-            self.found_devices.get_mut(&address)
+                self.found_devices.get_mut(&address)
+            }
+            some => some,
         };
 
-        // Only notify if there's been a change in state
-        let prev_state = &found.as_ref().unwrap().acl_state;
-        if prev_state != &state {
-            let device = found.as_ref().unwrap().info.clone();
-            found.unwrap().acl_state = state.clone();
+        match device {
+            Some(found) => {
+                // Only notify if there's been a change in state
+                let prev_state = &found.acl_state;
+                if prev_state != &state {
+                    let device = found.info.clone();
+                    found.acl_state = state.clone();
 
-            match state {
-                BtAclState::Connected => {
-                    self.for_all_connection_callbacks(|callback| {
-                        callback.on_device_connected(device.clone());
-                    });
+                    match state {
+                        BtAclState::Connected => {
+                            self.for_all_connection_callbacks(|callback| {
+                                callback.on_device_connected(device.clone());
+                            });
+                        }
+                        BtAclState::Disconnected => {
+                            self.for_all_connection_callbacks(|callback| {
+                                callback.on_device_disconnected(device.clone());
+                            });
+                        }
+                    };
                 }
-                BtAclState::Disconnected => {
-                    self.for_all_connection_callbacks(|callback| {
-                        callback.on_device_disconnected(device.clone());
-                    });
-                }
-            };
-        }
+            }
+            None => (),
+        };
     }
 }
 
@@ -786,6 +1013,69 @@ impl IBluetooth for Bluetooth {
         self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::ClassOfDevice(cod)) == 0
     }
 
+    fn get_discoverable(&self) -> bool {
+        match self.properties.get(&BtPropertyType::AdapterScanMode) {
+            Some(prop) => match prop {
+                BluetoothProperty::AdapterScanMode(mode) => match mode {
+                    BtScanMode::ConnectableDiscoverable => true,
+                    _ => false,
+                },
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn get_discoverable_timeout(&self) -> u32 {
+        match self.properties.get(&BtPropertyType::AdapterDiscoverableTimeout) {
+            Some(prop) => match prop {
+                BluetoothProperty::AdapterDiscoverableTimeout(timeout) => timeout.clone(),
+                _ => 0,
+            },
+            _ => 0,
+        }
+    }
+
+    fn set_discoverable(&self, mode: bool, duration: u32) -> bool {
+        self.intf
+            .lock()
+            .unwrap()
+            .set_adapter_property(BluetoothProperty::AdapterDiscoverableTimeout(duration));
+        self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::AdapterScanMode(
+            if mode {
+                BtScanMode::ConnectableDiscoverable
+            } else {
+                if self.is_connectable {
+                    BtScanMode::Connectable
+                } else {
+                    BtScanMode::None_
+                }
+            },
+        )) == 0
+    }
+
+    fn is_multi_advertisement_supported(&self) -> bool {
+        match self.properties.get(&BtPropertyType::LocalLeFeatures) {
+            Some(prop) => match prop {
+                BluetoothProperty::LocalLeFeatures(llf) => {
+                    llf.max_adv_instance >= MIN_ADV_INSTANCES_FOR_MULTI_ADV
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn is_le_extended_advertising_supported(&self) -> bool {
+        match self.properties.get(&BtPropertyType::LocalLeFeatures) {
+            Some(prop) => match prop {
+                BluetoothProperty::LocalLeFeatures(llf) => llf.le_extended_advertising_supported,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     fn start_discovery(&self) -> bool {
         self.intf.lock().unwrap().start_discovery() == 0
     }
@@ -803,20 +1093,11 @@ impl IBluetooth for Bluetooth {
             return 0;
         }
 
-        match self.properties.get(&BtPropertyType::AdapterDiscoveryTimeout) {
-            Some(variant) => match variant {
-                BluetoothProperty::AdapterDiscoveryTimeout(timeout) => {
-                    let seconds: u64 = (*timeout).into();
-                    let elapsed = self.discovering_started.elapsed();
-                    if elapsed.as_secs() >= seconds {
-                        0
-                    } else {
-                        seconds * 1000 - elapsed.as_millis() as u64
-                    }
-                }
-                _ => 0,
-            },
-            _ => 0,
+        let elapsed_ms = self.discovering_started.elapsed().as_millis() as u64;
+        if elapsed_ms >= DEFAULT_DISCOVERY_TIMEOUT_MS {
+            0
+        } else {
+            DEFAULT_DISCOVERY_TIMEOUT_MS - elapsed_ms
         }
     }
 
@@ -829,6 +1110,10 @@ impl IBluetooth for Bluetooth {
         }
 
         let address = addr.unwrap();
+
+        // BREDR connection won't work when Inquiry is in progress.
+        self.cancel_discovery();
+
         self.intf.lock().unwrap().create_bond(&address, transport) == 0
     }
 
@@ -958,6 +1243,42 @@ impl IBluetooth for Bluetooth {
         ) == 0
     }
 
+    fn get_remote_name(&self, device: BluetoothDevice) -> String {
+        match self.get_remote_device_property(&device, &BtPropertyType::BdName) {
+            Some(BluetoothProperty::BdName(name)) => return name.clone(),
+            _ => return "".to_string(),
+        }
+    }
+
+    fn get_remote_type(&self, device: BluetoothDevice) -> BtDeviceType {
+        match self.get_remote_device_property(&device, &BtPropertyType::TypeOfDevice) {
+            Some(BluetoothProperty::TypeOfDevice(device_type)) => return device_type,
+            _ => return BtDeviceType::Unknown,
+        }
+    }
+
+    fn get_remote_alias(&self, device: BluetoothDevice) -> String {
+        match self.get_remote_device_property(&device, &BtPropertyType::RemoteFriendlyName) {
+            Some(BluetoothProperty::RemoteFriendlyName(name)) => return name.clone(),
+            _ => "".to_string(),
+        }
+    }
+
+    fn set_remote_alias(&mut self, device: BluetoothDevice, new_alias: String) {
+        let _ = self.set_remote_device_property(
+            &device,
+            BtPropertyType::RemoteFriendlyName,
+            BluetoothProperty::RemoteFriendlyName(new_alias),
+        );
+    }
+
+    fn get_remote_class(&self, device: BluetoothDevice) -> u32 {
+        match self.get_remote_device_property(&device, &BtPropertyType::ClassOfDevice) {
+            Some(BluetoothProperty::ClassOfDevice(class)) => return class,
+            _ => 0,
+        }
+    }
+
     fn get_connection_state(&self, device: BluetoothDevice) -> u32 {
         let addr = RawAddress::from_string(device.address.clone());
 
@@ -969,36 +1290,30 @@ impl IBluetooth for Bluetooth {
         self.intf.lock().unwrap().get_connection_state(&addr.unwrap())
     }
 
+    fn get_profile_connection_state(&self, profile: Profile) -> u32 {
+        match profile {
+            Profile::A2dpSink | Profile::A2dpSource => {
+                self.bluetooth_media.lock().unwrap().get_a2dp_connection_state()
+            }
+            Profile::Hfp | Profile::HfpAg => {
+                self.bluetooth_media.lock().unwrap().get_hfp_connection_state()
+            }
+            // TODO: (b/223431229) Profile::Hid and Profile::Hogp
+            _ => 0,
+        }
+    }
+
     fn get_remote_uuids(&self, device: BluetoothDevice) -> Vec<Uuid128Bit> {
-        // Device must exist in either bonded or found list
-        let found = self
-            .bonded_devices
-            .get(&device.address)
-            .or_else(|| self.found_devices.get(&device.address));
-
-        // Extract property from the device
-        return found
-            .and_then(|d| {
-                if let Some(u) = d.properties.get(&BtPropertyType::Uuids) {
-                    match u {
-                        BluetoothProperty::Uuids(uuids) => {
-                            return Some(
-                                uuids.iter().map(|&x| x.uu.clone()).collect::<Vec<Uuid128Bit>>(),
-                            );
-                        }
-                        _ => (),
-                    }
-                }
-
-                None
-            })
-            .unwrap_or(vec![]);
+        match self.get_remote_device_property(&device, &BtPropertyType::Uuids) {
+            Some(BluetoothProperty::Uuids(uuids)) => {
+                return uuids.iter().map(|&x| x.uu.clone()).collect::<Vec<Uuid128Bit>>()
+            }
+            _ => return vec![],
+        }
     }
 
     fn fetch_remote_uuids(&self, device: BluetoothDevice) -> bool {
-        if !self.bonded_devices.contains_key(&device.address)
-            && !self.found_devices.contains_key(&device.address)
-        {
+        if self.get_remote_device_if_found(&device.address).is_none() {
             warn!("Won't fetch UUIDs on unknown device {}", device.address);
             return false;
         }
@@ -1027,7 +1342,7 @@ impl IBluetooth for Bluetooth {
         self.sdp.as_ref().unwrap().sdp_search(&mut addr.unwrap(), &uu) == BtStatus::Success
     }
 
-    fn connect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         // Profile init must be complete before this api is callable
         if !self.profiles_ready {
             return false;
@@ -1040,6 +1355,7 @@ impl IBluetooth for Bluetooth {
         }
 
         // Check all remote uuids to see if they match enabled profiles and connect them.
+        let mut has_enabled_uuids = false;
         let uuids = self.get_remote_uuids(device.clone());
         for uuid in uuids.iter() {
             match self.uuid_helper.is_known_profile(uuid) {
@@ -1063,15 +1379,22 @@ impl IBluetooth for Bluetooth {
                             _ => (),
                         }
                     }
+                    has_enabled_uuids = true;
                 }
                 _ => {}
             }
         }
 
+        // If SDP isn't completed yet, we wait for it to complete and retry the connection again.
+        // Otherwise, this connection request is done, no retry is required.
+        self.wait_to_connect = !has_enabled_uuids;
         return true;
     }
 
-    fn disconnect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
+        // No need to retry connection as we are going to disconnect all enabled profiles.
+        self.wait_to_connect = false;
+
         if !self.profiles_ready {
             return false;
         }
