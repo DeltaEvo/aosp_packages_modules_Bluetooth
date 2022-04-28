@@ -304,13 +304,13 @@ struct LeScanningManager::impl : public bluetooth::hci::LeAddressManagerCallback
       LOG_INFO("Dropping invalid advertising event");
       return;
     }
-    std::vector<LeAdvertisingReport> reports = event_view.GetAdvertisingReports();
+    std::vector<LeAdvertisingResponse> reports = event_view.GetResponses();
     if (reports.empty()) {
       LOG_INFO("Zero results in advertising event");
       return;
     }
 
-    for (LeAdvertisingReport report : reports) {
+    for (LeAdvertisingResponse report : reports) {
       uint16_t extended_event_type = 0;
       switch (report.event_type_) {
         case hci::AdvertisingEventType::ADV_IND:
@@ -362,7 +362,7 @@ struct LeScanningManager::impl : public bluetooth::hci::LeAddressManagerCallback
       LOG_INFO("Dropping invalid advertising event");
       return;
     }
-    std::vector<LeDirectedAdvertisingReport> reports = event_view.GetAdvertisingReports();
+    std::vector<LeDirectedAdvertisingResponse> reports = event_view.GetResponses();
     if (reports.empty()) {
       LOG_INFO("Zero results in advertising event");
       return;
@@ -377,13 +377,13 @@ struct LeScanningManager::impl : public bluetooth::hci::LeAddressManagerCallback
       LOG_INFO("Dropping invalid advertising event");
       return;
     }
-    std::vector<LeExtendedAdvertisingReport> reports = event_view.GetAdvertisingReports();
+    std::vector<LeExtendedAdvertisingResponse> reports = event_view.GetResponses();
     if (reports.empty()) {
       LOG_INFO("Zero results in advertising event");
       return;
     }
 
-    for (LeExtendedAdvertisingReport report : reports) {
+    for (LeExtendedAdvertisingResponse report : reports) {
       uint16_t event_type = report.connectable_ | (report.scannable_ << kScannableBit) |
                             (report.directed_ << kDirectedBit) | (report.scan_response_ << kScanResponseBit) |
                             (report.legacy_ << kLegacyBit) | ((uint16_t)report.data_status_ << kDataStatusBits);
@@ -712,7 +712,7 @@ struct LeScanningManager::impl : public bluetooth::hci::LeAddressManagerCallback
 
       switch (filter.filter_type) {
         case ApcfFilterType::BROADCASTER_ADDRESS: {
-          update_address_filter(apcf_action, filter_index, filter.address, filter.application_address_type);
+          update_address_filter(apcf_action, filter_index, filter.address, filter.application_address_type, filter.irk);
           break;
         }
         case ApcfFilterType::SERVICE_UUID:
@@ -741,16 +741,50 @@ struct LeScanningManager::impl : public bluetooth::hci::LeAddressManagerCallback
   }
 
   void update_address_filter(
-      ApcfAction action, uint8_t filter_index, Address address, ApcfApplicationAddressType address_type) {
+      ApcfAction action,
+      uint8_t filter_index,
+      Address address,
+      ApcfApplicationAddressType address_type,
+      std::array<uint8_t, 16> irk) {
     if (action != ApcfAction::CLEAR) {
+      /*
+       * The vendor command (APCF Filtering 0x0157) takes Public (0) or Random (1)
+       * or Addresses type not applicable (2).
+       *
+       * Advertising results have four types:
+       * ￼    -  Public = 0
+       * ￼    -  Random = 1
+       * ￼    -  Public ID = 2
+       * ￼    -  Random ID = 3
+       *
+       * e.g. specifying PUBLIC (0) will only return results with a public
+       * address. It will ignore resolved addresses, since they return PUBLIC
+       * IDENTITY (2). For this, Addresses type not applicable (0x02) must be specified.
+       * This should also cover if the RPA is derived from RANDOM STATIC.
+       */
       le_scanning_interface_->EnqueueCommand(
-          LeAdvFilterBroadcasterAddressBuilder::Create(action, filter_index, address, address_type),
+          LeAdvFilterBroadcasterAddressBuilder::Create(
+              action, filter_index, address, ApcfApplicationAddressType::NOT_APPLICABLE),
           module_handler_->BindOnceOn(this, &impl::on_advertising_filter_complete));
+      if (!is_empty_128bit(irk)) {
+        std::array<uint8_t, 16> empty_irk;
+        le_address_manager_->AddDeviceToResolvingList(
+            static_cast<PeerAddressType>(address_type), address, irk, empty_irk);
+      }
     } else {
       le_scanning_interface_->EnqueueCommand(
           LeAdvFilterClearBroadcasterAddressBuilder::Create(filter_index),
           module_handler_->BindOnceOn(this, &impl::on_advertising_filter_complete));
     }
+  }
+
+  bool is_empty_128bit(const std::array<uint8_t, 16> data) {
+    for (int i = 0; i < 16; i++) {
+      if (data[i] != (uint8_t)0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void update_uuid_filter(
@@ -983,7 +1017,7 @@ struct LeScanningManager::impl : public bluetooth::hci::LeAddressManagerCallback
   void batch_scan_read_results(ScannerId scanner_id, uint16_t total_num_of_records, BatchScanMode scan_mode) {
     if (!is_batch_scan_support_) {
       LOG_WARN("Batch scan is not supported");
-      int status = static_cast<int>(ErrorCode::UNSUPORTED_FEATURE_OR_PARAMETER_VALUE);
+      int status = static_cast<int>(ErrorCode::UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE);
       scanning_callbacks_->OnBatchScanReports(scanner_id, status, 0, 0, {});
       return;
     }
