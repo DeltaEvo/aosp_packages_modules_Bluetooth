@@ -186,12 +186,12 @@ class LinkLayerController {
 
   bool ListBusy(uint16_t ignore_mask);
 
-  bool ConnectListBusy();
-  ErrorCode LeConnectListClear();
-  ErrorCode LeConnectListAddDevice(Address addr, uint8_t addr_type);
-  ErrorCode LeConnectListRemoveDevice(Address addr, uint8_t addr_type);
-  bool LeConnectListContainsDevice(Address addr, uint8_t addr_type);
-  bool LeConnectListFull();
+  bool FilterAcceptListBusy();
+  ErrorCode LeFilterAcceptListClear();
+  ErrorCode LeFilterAcceptListAddDevice(Address addr, uint8_t addr_type);
+  ErrorCode LeFilterAcceptListRemoveDevice(Address addr, uint8_t addr_type);
+  bool LeFilterAcceptListContainsDevice(Address addr, uint8_t addr_type);
+  bool LeFilterAcceptListFull();
   bool ResolvingListBusy();
   ErrorCode LeSetAddressResolutionEnable(bool enable);
   ErrorCode LeResolvingListClear();
@@ -239,7 +239,7 @@ class LinkLayerController {
                           std::vector<uint8_t> codec_configuration);
   void LeRemoveIsoDataPath(
       uint16_t connection_handle,
-      bluetooth::hci::DataPathDirection data_path_direction);
+      bluetooth::hci::RemoveDataPathDirection remove_data_path_direction);
 
   void HandleLeEnableEncryption(uint16_t handle, std::array<uint8_t, 8> rand,
                                 uint16_t ediv, std::array<uint8_t, 16> ltk);
