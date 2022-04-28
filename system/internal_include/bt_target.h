@@ -75,10 +75,6 @@
 #define BTA_HH_ROLE BTA_CENTRAL_ROLE_PREF
 #endif
 
-#ifndef BTA_AV_SINK_INCLUDED
-#define BTA_AV_SINK_INCLUDED FALSE
-#endif
-
 #ifndef BTA_DISABLE_DELAY
 #define BTA_DISABLE_DELAY 200 /* in milliseconds */
 #endif
@@ -344,13 +340,6 @@
 #define BTM_MAX_LOC_BD_NAME_LEN 248
 #endif
 
-/* Fixed Default String. When this is defined as null string, the device's
- * product model name is used as the default local name.
- */
-#ifndef BTM_DEF_LOCAL_NAME
-#define BTM_DEF_LOCAL_NAME ""
-#endif
-
 /* Maximum service name stored with security authorization (0 if not needed) */
 #ifndef BTM_SEC_SERVICE_NAME_LEN
 #define BTM_SEC_SERVICE_NAME_LEN BT_MAX_SERVICE_NAME_LEN
@@ -422,15 +411,13 @@
  *****************************************************************************/
 
 /* The maximum number of simultaneous links that L2CAP can support. */
-#ifndef MAX_ACL_CONNECTIONS
-#define MAX_L2CAP_LINKS 13
-#else
-#define MAX_L2CAP_LINKS MAX_ACL_CONNECTIONS
+#ifndef MAX_L2CAP_LINKS
+#define MAX_L2CAP_LINKS 16
 #endif
 
 /* The maximum number of simultaneous channels that L2CAP can support. */
 #ifndef MAX_L2CAP_CHANNELS
-#define MAX_L2CAP_CHANNELS 32
+#define MAX_L2CAP_CHANNELS 64
 #endif
 
 /* The maximum number of simultaneous applications that can register with L2CAP.
@@ -538,26 +525,11 @@
 #endif
 
 /*
- * Toggles support for general LE privacy features such as remote address
- * resolution, local address rotation etc.
- */
-#ifndef BLE_PRIVACY_SPT
-#define BLE_PRIVACY_SPT TRUE
-#endif
-
-/*
- * Enables or disables support for local privacy (ex. address rotation)
- */
-#ifndef BLE_LOCAL_PRIVACY_ENABLED
-#define BLE_LOCAL_PRIVACY_ENABLED TRUE
-#endif
-
-/*
  * Toggles support for vendor specific extensions such as RPA offloading,
  * feature discovery, multi-adv etc.
  */
 #ifndef BLE_VND_INCLUDED
-#define BLE_VND_INCLUDED FALSE
+#define BLE_VND_INCLUDED TRUE
 #endif
 
 /* The maximum number of simultaneous applications that can register with LE
@@ -699,10 +671,8 @@
 #endif
 
 /* The maximum simultaneous links to different devices. */
-#ifndef MAX_ACL_CONNECTIONS
-#define MAX_BD_CONNECTIONS 7
-#else
-#define MAX_BD_CONNECTIONS MAX_ACL_CONNECTIONS
+#ifndef MAX_BD_CONNECTIONS
+#define MAX_BD_CONNECTIONS 16
 #endif
 
 /* The port receive queue low watermark level, in bytes. */
@@ -813,7 +783,7 @@
 
 /* Number of simultaneous stream endpoints. */
 #ifndef AVDT_NUM_SEPS
-#define AVDT_NUM_SEPS 6
+#define AVDT_NUM_SEPS 12
 #endif
 
 /* Number of transport channels setup by AVDT for all media streams */

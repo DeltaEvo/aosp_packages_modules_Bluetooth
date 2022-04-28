@@ -18,6 +18,7 @@ package com.android.bluetooth.a2dp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
+import static com.android.bluetooth.Utils.checkCallerTargetSdk;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
 import android.annotation.RequiresPermission;
@@ -38,7 +39,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.BluetoothProfileConnectionInfo;
+import android.os.Build;
 import android.os.HandlerThread;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
@@ -49,6 +52,7 @@ import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
+import com.android.bluetooth.hfp.HeadsetService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.SynchronousResultReceiver;
@@ -100,6 +104,10 @@ public class A2dpService extends ProfileService {
 
     private BroadcastReceiver mBondStateChangedReceiver;
     private BroadcastReceiver mConnectionStateChangedReceiver;
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileA2dpSourceEnabled().orElse(false);
+    }
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -402,6 +410,14 @@ public class A2dpService extends ProfileService {
             return false;
         } else if (connectionPolicy != BluetoothProfile.CONNECTION_POLICY_UNKNOWN
                 && connectionPolicy != BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
+            if (!isOutgoingRequest) {
+                HeadsetService headsetService = HeadsetService.getHeadsetService();
+                if (headsetService != null && headsetService.okToAcceptConnection(device, true)) {
+                    Log.d(TAG, "okToConnect: Fallback connection to allowed HFP profile");
+                    headsetService.connect(device);
+                    return true;
+                }
+            }
             // Otherwise, reject the connection if connectionPolicy is not valid.
             Log.w(TAG, "okToConnect: return false, connectionPolicy=" + connectionPolicy);
             return false;
@@ -1428,6 +1444,7 @@ public class A2dpService extends ProfileService {
             if (service == null) {
                 return;
             }
+            enforceBluetoothPrivilegedPermission(service);
             service.setAvrcpAbsoluteVolume(volume);
         }
 
@@ -1453,6 +1470,10 @@ public class A2dpService extends ProfileService {
                 A2dpService service = getService(source);
                 BluetoothCodecStatus codecStatus = null;
                 if (service != null) {
+                    if (checkCallerTargetSdk(mService, source.getPackageName(),
+                                Build.VERSION_CODES.TIRAMISU)) {
+                        enforceBluetoothPrivilegedPermission(service);
+                    }
                     codecStatus = service.getCodecStatus(device);
                 }
                 receiver.send(codecStatus);
@@ -1468,6 +1489,10 @@ public class A2dpService extends ProfileService {
             if (service == null) {
                 return;
             }
+            if (checkCallerTargetSdk(mService, source.getPackageName(),
+                        Build.VERSION_CODES.TIRAMISU)) {
+                enforceBluetoothPrivilegedPermission(service);
+            }
             service.setCodecConfigPreference(device, codecConfig);
         }
 
@@ -1476,6 +1501,10 @@ public class A2dpService extends ProfileService {
             A2dpService service = getService(source);
             if (service == null) {
                 return;
+            }
+            if (checkCallerTargetSdk(mService, source.getPackageName(),
+                        Build.VERSION_CODES.TIRAMISU)) {
+                enforceBluetoothPrivilegedPermission(service);
             }
             service.enableOptionalCodecs(device);
         }
@@ -1486,16 +1515,24 @@ public class A2dpService extends ProfileService {
             if (service == null) {
                 return;
             }
+            if (checkCallerTargetSdk(mService, source.getPackageName(),
+                        Build.VERSION_CODES.TIRAMISU)) {
+                enforceBluetoothPrivilegedPermission(service);
+            }
             service.disableOptionalCodecs(device);
         }
 
         @Override
-        public void supportsOptionalCodecs(BluetoothDevice device, AttributionSource source,
+        public void isOptionalCodecsSupported(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
                 A2dpService service = getService(source);
                 int codecSupport = BluetoothA2dp.OPTIONAL_CODECS_SUPPORT_UNKNOWN;
                 if (service != null) {
+                    if (checkCallerTargetSdk(mService, source.getPackageName(),
+                                Build.VERSION_CODES.TIRAMISU)) {
+                        enforceBluetoothPrivilegedPermission(service);
+                    }
                     codecSupport = service.getSupportsOptionalCodecs(device);
                 }
                 receiver.send(codecSupport);
@@ -1505,12 +1542,16 @@ public class A2dpService extends ProfileService {
         }
 
         @Override
-        public void getOptionalCodecsEnabled(BluetoothDevice device, AttributionSource source,
+        public void isOptionalCodecsEnabled(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
                 A2dpService service = getService(source);
                 int optionalCodecEnabled = BluetoothA2dp.OPTIONAL_CODECS_PREF_UNKNOWN;
                 if (service != null) {
+                    if (checkCallerTargetSdk(mService, source.getPackageName(),
+                                Build.VERSION_CODES.TIRAMISU)) {
+                        enforceBluetoothPrivilegedPermission(service);
+                    }
                     optionalCodecEnabled = service.getOptionalCodecsEnabled(device);
                 }
                 receiver.send(optionalCodecEnabled);
@@ -1525,6 +1566,10 @@ public class A2dpService extends ProfileService {
             A2dpService service = getService(source);
             if (service == null) {
                 return;
+            }
+            if (checkCallerTargetSdk(mService, source.getPackageName(),
+                        Build.VERSION_CODES.TIRAMISU)) {
+                enforceBluetoothPrivilegedPermission(service);
             }
             service.setOptionalCodecsEnabled(device, value);
         }
