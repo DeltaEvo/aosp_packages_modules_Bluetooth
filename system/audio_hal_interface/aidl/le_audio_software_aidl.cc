@@ -54,14 +54,6 @@ static ChannelMode le_audio_channel_mode2audio_hal(uint8_t channels_count) {
   return ChannelMode::UNKNOWN;
 }
 
-bool is_source_hal_enabled() {
-  return LeAudioSourceTransport::interface != nullptr;
-}
-
-bool is_sink_hal_enabled() {
-  return LeAudioSinkTransport::interface != nullptr;
-}
-
 LeAudioTransport::LeAudioTransport(void (*flush)(void),
                                    StreamCallbacks stream_cb,
                                    PcmConfiguration pcm_config)
@@ -183,17 +175,36 @@ void LeAudioTransport::ClearPendingStartStream(void) {
   is_pending_start_request_ = false;
 }
 
-void flush_sink() {
-  if (!is_sink_hal_enabled()) return;
+inline void flush_unicast_sink() {
+  if (LeAudioSinkTransport::interface_unicast_ == nullptr) return;
 
-  LeAudioSinkTransport::interface->FlushAudioData();
+  LeAudioSinkTransport::interface_unicast_->FlushAudioData();
+}
+
+inline void flush_broadcast_sink() {
+  if (LeAudioSinkTransport::interface_broadcast_ == nullptr) return;
+
+  LeAudioSinkTransport::interface_broadcast_->FlushAudioData();
+}
+
+inline bool is_broadcaster_session(SessionType session_type) {
+  if (session_type ==
+          SessionType::LE_AUDIO_BROADCAST_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
+      session_type ==
+          SessionType::LE_AUDIO_BROADCAST_SOFTWARE_ENCODING_DATAPATH) {
+    return true;
+  }
+
+  return false;
 }
 
 LeAudioSinkTransport::LeAudioSinkTransport(SessionType session_type,
                                            StreamCallbacks stream_cb)
     : IBluetoothSinkTransportInstance(session_type, (AudioConfiguration){}) {
-  transport_ = new LeAudioTransport(flush_sink, std::move(stream_cb),
-                                    {16000, ChannelMode::STEREO, 16, 0});
+  transport_ = new LeAudioTransport(
+      is_broadcaster_session(session_type) ? flush_broadcast_sink
+                                           : flush_unicast_sink,
+      std::move(stream_cb), {16000, ChannelMode::STEREO, 16, 0});
 };
 
 LeAudioSinkTransport::~LeAudioSinkTransport() { delete transport_; }
@@ -265,7 +276,7 @@ LeAudioSourceTransport::LeAudioSourceTransport(SessionType session_type,
                                                StreamCallbacks stream_cb)
     : IBluetoothSourceTransportInstance(session_type, (AudioConfiguration){}) {
   transport_ = new LeAudioTransport(flush_source, std::move(stream_cb),
-                                    {16000, ChannelMode::MONO, 16, 0});
+                                    {16000, ChannelMode::STEREO, 16, 0});
 };
 
 LeAudioSourceTransport::~LeAudioSourceTransport() { delete transport_; }
@@ -352,7 +363,7 @@ std::unordered_map<int32_t, uint16_t> octets_per_frame_map{
 
 std::unordered_map<AudioLocation, uint32_t> audio_location_map{
     {AudioLocation::UNKNOWN,
-     ::le_audio::codec_spec_conf::kLeAudioLocationMonoUnspecified},
+     ::le_audio::codec_spec_conf::kLeAudioLocationFrontCenter},
     {AudioLocation::FRONT_LEFT,
      ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft},
     {AudioLocation::FRONT_RIGHT,
