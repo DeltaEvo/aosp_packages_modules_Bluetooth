@@ -28,10 +28,10 @@ class MockBroadcastStateMachine
       le_audio::broadcaster::BroadcastStateMachineConfig cfg,
       le_audio::broadcaster::IBroadcastStateMachineCallbacks* cb)
       : cfg(cfg), cb(cb) {
-    instance_id_ = ++instance_counter_;
+    advertising_sid_ = ++instance_counter_;
 
     ON_CALL(*this, Initialize).WillByDefault([this]() {
-      this->cb->OnStateMachineCreateStatus(GetInstanceId(), result_);
+      this->cb->OnStateMachineCreateStatus(this->cfg.broadcast_id, result_);
       return result_;
     });
 
@@ -53,14 +53,14 @@ class MockBroadcastStateMachine
                   if (result_) SetState(State::CONFIGURED);
                   break;
               };
-              this->cb->OnStateMachineEvent(GetInstanceId(), GetState(),
+              this->cb->OnStateMachineEvent(this->cfg.broadcast_id, GetState(),
                                             sent_data);
             });
 
     ON_CALL(*this, GetBigConfig).WillByDefault(testing::ReturnRef(big_config_));
 
     ON_CALL(*this, RequestOwnAddress()).WillByDefault([this]() {
-      this->cb->OnOwnAddressResponse(GetInstanceId(), 0, RawAddress());
+      this->cb->OnOwnAddressResponse(this->cfg.broadcast_id, 0, RawAddress());
     });
 
     ON_CALL(*this, GetCodecConfig())
@@ -70,9 +70,10 @@ class MockBroadcastStateMachine
             });
 
     ON_CALL(*this, GetBroadcastId())
-        .WillByDefault([this]() -> const bluetooth::le_audio::BroadcastId {
+        .WillByDefault([this]() -> bluetooth::le_audio::BroadcastId {
           return this->cfg.broadcast_id;
         });
+
     ON_CALL(*this, GetOwnAddress()).WillByDefault([this]() -> RawAddress {
       return this->addr_;
     });
@@ -80,15 +81,23 @@ class MockBroadcastStateMachine
     ON_CALL(*this, GetOwnAddressType()).WillByDefault([this]() -> uint8_t {
       return this->addr_type_;
     });
+
+    ON_CALL(*this, GetPaInterval()).WillByDefault([this]() -> uint8_t {
+      return this->BroadcastStateMachine::GetPaInterval();
+    });
   };
 
-  ~MockBroadcastStateMachine() { cb->OnStateMachineDestroyed(instance_id_); }
+  ~MockBroadcastStateMachine() {
+    cb->OnStateMachineDestroyed(this->cfg.broadcast_id);
+  }
 
   MOCK_METHOD((bool), Initialize, (), (override));
   MOCK_METHOD((const le_audio::broadcaster::BroadcastCodecWrapper&),
               GetCodecConfig, (), (const override));
   MOCK_METHOD((std::optional<le_audio::broadcaster::BigConfig> const&),
-              GetBigConfig, (), (override));
+              GetBigConfig, (), (const override));
+  MOCK_METHOD((le_audio::broadcaster::BroadcastStateMachineConfig const&),
+              GetStateMachineConfig, (), (const override));
   MOCK_METHOD(
       (void), RequestOwnAddress,
       (base::Callback<void(uint8_t /* address_type*/, RawAddress /*address*/)>
@@ -99,11 +108,14 @@ class MockBroadcastStateMachine
   MOCK_METHOD((uint8_t), GetOwnAddressType, (), (override));
   MOCK_METHOD((std::optional<bluetooth::le_audio::BroadcastCode>),
               GetBroadcastCode, (), (const override));
-  MOCK_METHOD((bluetooth::le_audio::BroadcastId const&), GetBroadcastId, (),
+  MOCK_METHOD((bluetooth::le_audio::BroadcastId), GetBroadcastId, (),
               (const override));
+  MOCK_METHOD((bluetooth::le_audio::BasicAudioAnnouncementData&),
+              GetBroadcastAnnouncement, (), (const override));
   MOCK_METHOD((void), UpdateBroadcastAnnouncement,
-              (le_audio::broadcaster::BasicAudioAnnouncementData announcement),
+              (bluetooth::le_audio::BasicAudioAnnouncementData announcement),
               (override));
+  MOCK_METHOD((uint8_t), GetPaInterval, (), (const override));
   MOCK_METHOD((void), HandleHciEvent, (uint16_t event, void* data), (override));
   MOCK_METHOD((void), OnSetupIsoDataPath,
               (uint8_t status, uint16_t conn_handle), (override));
@@ -113,6 +125,7 @@ class MockBroadcastStateMachine
               (le_audio::broadcaster::BroadcastStateMachine::Message event,
                const void* data),
               (override));
+  MOCK_METHOD((uint8_t), GetAdvertisingSid, (), (const override));
 
   bool result_ = true;
   std::optional<le_audio::broadcaster::BigConfig> big_config_ = std::nullopt;
