@@ -76,16 +76,6 @@
 
 // Validate or respond to various conditional compilation flags
 
-#if BLE_PRIVACY_SPT != TRUE
-// Once BLE_PRIVACY_SPT is no longer exposed via bt_target.h
-// this check and error statement may be removed.
-#warning \
-    "#define BLE_PRIVACY_SPT FALSE preprocessor compilation flag is unsupported"
-#warning \
-    "  To disable LE privacy for a device use: #define BLE_LOCAL_PRIVACY_ENABLED FALSE"
-#error "*** Conditional Compilation Directive error"
-#endif
-
 #if SDP_RAW_DATA_INCLUDED != TRUE
 // Once SDP_RAW_DATA_INCLUDED is no longer exposed via bt_target.h
 // this check and error statement may be removed.
@@ -117,6 +107,15 @@ static_assert(
     "#define PAN_SUPPORTS_ROLE_PANU preprocessor compilation flag is "
     "unsupported"
     "  Pan profile always supports user as a client in the bluetooth stack"
+    "*** Conditional Compilation Directive error");
+
+// Once BTA_HH_INCLUDED is no longer exposed via bt_target.h
+// this check and error statement may be removed.
+static_assert(
+    BTA_HH_INCLUDED,
+    "#define BTA_HH_INCLUDED preprocessor compilation flag is "
+    "unsupported"
+    "  Host interface device profile is always enabled in the bluetooth stack"
     "*** Conditional Compilation Directive error");
 
 void main_thread_shut_down();
@@ -191,16 +190,13 @@ static void clean_up_stack() {
 static bool get_stack_is_running() { return stack_is_running; }
 
 // Internal functions
-
 extern const module_t bt_utils_module;
 extern const module_t bte_logmsg_module;
 extern const module_t btif_config_module;
-extern const module_t btsnoop_module;
 extern const module_t bt_utils_module;
 extern const module_t gd_controller_module;
 extern const module_t gd_idle_module;
 extern const module_t gd_shim_module;
-extern const module_t hci_module;
 extern const module_t interop_module;
 extern const module_t osi_module;
 extern const module_t stack_config_module;

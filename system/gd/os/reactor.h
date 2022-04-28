@@ -22,6 +22,7 @@
 #include <functional>
 #include <future>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -43,10 +44,11 @@ class Reactor {
   // Construct a reactor on the current thread
   Reactor();
 
+  Reactor(const Reactor&) = delete;
+  Reactor& operator=(const Reactor&) = delete;
+
   // Destruct this reactor and release its resources
   ~Reactor();
-
-  DISALLOW_COPY_AND_ASSIGN(Reactor);
 
   // Start the reactor. The current thread will be blocked until Stop() is invoked and handled.
   void Run();
@@ -70,6 +72,23 @@ class Reactor {
 
   // Modify the registration for a reactable with given reactable
   void ModifyRegistration(Reactable* reactable, common::Closure on_read_ready, common::Closure on_write_ready);
+
+  class Event {
+   public:
+    Event();
+    ~Event();
+    bool Read();
+    int Id() const;
+    void Clear();
+    void Close();
+    void Notify();
+
+   private:
+    Event(const Event& handler) = default;
+    struct impl;
+    impl* pimpl_{nullptr};
+  };
+  std::unique_ptr<Reactor::Event> NewEvent() const;
 
  private:
   mutable std::mutex mutex_;

@@ -1,7 +1,7 @@
-//! Fluoride/GD Bluetooth stack.
+//! Floss Bluetooth stack.
 //!
-//! This crate provides the API implementation of the Fluoride/GD Bluetooth stack, independent of
-//! any RPC projection.
+//! This crate provides the API implementation of the Fluoride/GD Bluetooth
+//! stack, independent of any RPC projection.
 
 #[macro_use]
 extern crate num_derive;
@@ -9,6 +9,7 @@ extern crate num_derive;
 pub mod bluetooth;
 pub mod bluetooth_gatt;
 pub mod bluetooth_media;
+pub mod suspend;
 pub mod uuid;
 
 use log::debug;
@@ -19,6 +20,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::bluetooth::Bluetooth;
 use crate::bluetooth_gatt::BluetoothGatt;
 use crate::bluetooth_media::{BluetoothMedia, MediaActions};
+use crate::suspend::Suspend;
 use bt_topshim::{
     btif::BaseCallbacks,
     profiles::{
@@ -26,9 +28,6 @@ use bt_topshim::{
         gatt::GattServerCallbacks, hfp::HfpCallbacks, hid_host::HHCallbacks, sdp::SdpCallbacks,
     },
 };
-
-/// Represents a Bluetooth address.
-// TODO: Add support for LE random addresses.
 
 #[derive(Clone, Debug)]
 pub enum BluetoothCallbackType {
@@ -53,6 +52,13 @@ pub enum Message {
 
     // Client callback disconnections
     BluetoothCallbackDisconnected(u32, BluetoothCallbackType),
+
+    // Update list of found devices and remove old instances.
+    DeviceFreshnessCheck,
+
+    // Suspend related
+    SuspendCallbackRegistered(u32),
+    SuspendCallbackDisconnected(u32),
 }
 
 /// Umbrella class for the Bluetooth stack.
@@ -70,6 +76,7 @@ impl Stack {
         bluetooth: Arc<Mutex<Box<Bluetooth>>>,
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
         bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
+        suspend: Arc<Mutex<Box<Suspend>>>,
     ) {
         loop {
             let m = rx.recv().await;
@@ -121,6 +128,18 @@ impl Stack {
                 Message::BluetoothCallbackDisconnected(id, cb_type) => {
                     bluetooth.lock().unwrap().callback_disconnected(id, cb_type);
                 }
+
+                Message::DeviceFreshnessCheck => {
+                    bluetooth.lock().unwrap().trigger_freshness_check();
+                }
+
+                Message::SuspendCallbackRegistered(id) => {
+                    suspend.lock().unwrap().callback_registered(id);
+                }
+
+                Message::SuspendCallbackDisconnected(id) => {
+                    suspend.lock().unwrap().remove_callback(id);
+                }
             }
         }
     }
@@ -140,4 +159,7 @@ pub trait RPCProxy {
 
     /// Unregisters callback with this id.
     fn unregister(&mut self, id: u32) -> bool;
+
+    /// Makes this object available for remote call.
+    fn export_for_rpc(self: Box<Self>);
 }

@@ -19,7 +19,6 @@ package android.bluetooth;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.RequiresNoPermission;
-import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -268,12 +267,19 @@ public interface BluetoothProfile {
     int LE_AUDIO_BROADCAST_ASSISTANT = 29;
 
     /**
+     * Battery Service
+     *
+     * @hide
+     */
+    int BATTERY = 30;
+
+    /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
      * the largest value assigned to a profile.
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 29;
+    int MAX_PROFILE_ID = 30;
 
     /**
      * Default priority for devices that we try to auto-connect to and
@@ -413,7 +419,7 @@ public interface BluetoothProfile {
      */
     @SystemApi
     @NonNull
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresNoPermission
     static String getConnectionStateName(int connectionState) {
         switch (connectionState) {
             case STATE_DISCONNECTED:
@@ -438,7 +444,7 @@ public interface BluetoothProfile {
      */
     @SystemApi
     @NonNull
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresNoPermission
     static String getProfileName(int profile) {
         switch(profile) {
             case HEADSET:
@@ -479,8 +485,22 @@ public interface BluetoothProfile {
                 return "HEARING_AID";
             case LE_AUDIO:
                 return "LE_AUDIO";
+            case VOLUME_CONTROL:
+                return "VOLUME_CONTROL";
+            case MCP_SERVER:
+                return "MCP_SERVER";
+            case CSIP_SET_COORDINATOR:
+                return "CSIP_SET_COORDINATOR";
+            case LE_AUDIO_BROADCAST:
+                return "LE_AUDIO_BROADCAST";
+            case LE_CALL_CONTROL:
+                return "LE_CALL_CONTROL";
             case HAP_CLIENT:
                 return "HAP_CLIENT";
+            case LE_AUDIO_BROADCAST_ASSISTANT:
+                return "LE_AUDIO_BROADCAST_ASSISTANT";
+            case BATTERY:
+                return "BATTERY";
             default:
                 return "UNKNOWN_PROFILE";
         }

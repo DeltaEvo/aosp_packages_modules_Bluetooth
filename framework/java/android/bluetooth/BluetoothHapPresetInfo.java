@@ -21,6 +21,7 @@ import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.text.TextUtils;
 
 /**
  * Represents the Hearing Access Profile preset.
@@ -29,7 +30,7 @@ import android.os.Parcelable;
 @SystemApi
 public final class BluetoothHapPresetInfo implements Parcelable {
     private int mPresetIndex;
-    private String mPresetName;
+    private String mPresetName = "";
     private boolean mIsWritable;
     private boolean mIsAvailable;
 
@@ -127,9 +128,10 @@ public final class BluetoothHapPresetInfo implements Parcelable {
 
     /**
      * Builder for {@link BluetoothHapPresetInfo}.
-     * <p> By default, the codec type will be set to
+     * <p> By default, the preset index will be set to
      * {@link BluetoothHapClient#PRESET_INDEX_UNAVAILABLE}, the name to an empty string,
      * writability and availability both to false.
+     * @hide
      */
     public static final class Builder {
         private int mPresetIndex = BluetoothHapClient.PRESET_INDEX_UNAVAILABLE;
@@ -138,25 +140,23 @@ public final class BluetoothHapPresetInfo implements Parcelable {
         private boolean mIsAvailable = false;
 
         /**
-         * Set preset index for HAP preset info.
+         * Creates a new builder.
          *
-         * @param index of this preset
-         * @return the same Builder instance
+         * @param index The preset index for HAP preset info
+         * @param name The preset name for HAP preset info
          */
-        public @NonNull Builder setIndex(int index) {
-            mPresetIndex = index;
-            return this;
-        }
+        public Builder(int index, @NonNull String name) {
+            if (TextUtils.isEmpty(name)) {
+                throw new IllegalArgumentException("The size of the preset name for HAP shall be at"
+                        + " least one character long.");
+            }
+            if (index < 0) {
+                throw new IllegalArgumentException(
+                        "Preset index for HAP shall be a non-negative value.");
+            }
 
-        /**
-         * Set preset name for HAP preset info.
-         *
-         * @param name of this preset
-         * @return the same Builder instance
-         */
-        public @NonNull Builder setName(@NonNull String name) {
+            mPresetIndex = index;
             mPresetName = name;
-            return this;
         }
 
         /**
@@ -165,7 +165,7 @@ public final class BluetoothHapPresetInfo implements Parcelable {
          * @param isWritable whether preset is writable
          * @return the same Builder instance
          */
-        public @NonNull Builder setWritable(@NonNull boolean isWritable) {
+        public @NonNull Builder setWritable(boolean isWritable) {
             mIsWritable = isWritable;
             return this;
         }
@@ -176,7 +176,7 @@ public final class BluetoothHapPresetInfo implements Parcelable {
          * @param isAvailable whether preset is currently available to select
          * @return the same Builder instance
          */
-        public @NonNull Builder setAvailable(@NonNull boolean isAvailable) {
+        public @NonNull Builder setAvailable(boolean isAvailable) {
             mIsAvailable = isAvailable;
             return this;
         }

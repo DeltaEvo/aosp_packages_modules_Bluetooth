@@ -36,6 +36,7 @@ using types::LeAudioContextType;
 
 namespace set_configurations {
 using set_configurations::CodecCapabilitySetting;
+using types::CodecLocation;
 using types::kLeAudioCodingFormatLC3;
 using types::kLeAudioDirectionSink;
 using types::kLeAudioDirectionSource;
@@ -121,9 +122,7 @@ static bool IsCodecConfigurationSupported(const types::LeAudioLtvMap& pacs,
   DLOG(INFO) << __func__ << " Pac:SamplFreq=" << loghex(u16_pac_val);
 
   /* TODO: Integrate with codec capabilities */
-  if ((u8_req_val != codec_spec_conf::kLeAudioSamplingFreq16000Hz &&
-       u8_req_val != codec_spec_conf::kLeAudioSamplingFreq48000Hz) ||
-      !(u16_pac_val &
+  if (!(u16_pac_val &
         codec_spec_caps::SamplingFreqConfig2Capability(u8_req_val))) {
     DLOG(ERROR) << __func__ << ", sampling frequency not supported";
     return false;
@@ -225,18 +224,6 @@ bool IsCodecCapabilitySettingSupported(
   }
 }
 
-const AudioSetConfigurations* get_confs_by_type(LeAudioContextType type) {
-  switch (type) {
-    case LeAudioContextType::MEDIA:
-      return &audio_set_conf_media;
-    case LeAudioContextType::CONVERSATIONAL:
-      return &audio_set_conf_conversational;
-    case LeAudioContextType::RINGTONE:
-      return &audio_set_conf_ringtone;
-    default:
-      return &audio_set_conf_default;
-  }
-}
 uint32_t CodecCapabilitySetting::GetConfigSamplingFrequency() const {
   switch (id.coding_format) {
     case kLeAudioCodingFormatLC3:
@@ -324,6 +311,19 @@ uint8_t* LeAudioLtvMap::RawPacket(uint8_t* p_buf) const {
   }
 
   return p_buf;
+}
+
+std::vector<uint8_t> LeAudioLtvMap::RawPacket() const {
+  std::vector<uint8_t> data(RawPacketSize());
+  RawPacket(data.data());
+  return data;
+}
+
+void LeAudioLtvMap::Append(const LeAudioLtvMap& other) {
+  /* This will override values for the already existing keys */
+  for (auto& el : other.values) {
+    values[el.first] = el.second;
+  }
 }
 
 LeAudioLtvMap LeAudioLtvMap::Parse(const uint8_t* p_value, uint8_t len,
@@ -454,20 +454,17 @@ uint8_t GetMaxCodecFramesPerSduFromPac(const acs_ac_record* pac) {
   return 1;
 }
 
-}  // namespace le_audio
+namespace types {
+std::ostream& operator<<(std::ostream& os, const types::CigState& state) {
+  static const char* char_value_[4] = {"NONE", "CREATING", "CREATED",
+                                       "REMOVING"};
 
-std::ostream& operator<<(std::ostream& os,
-                         const le_audio::types::LeAudioLc3Config& config) {
-  os << " LeAudioLc3Config(SamplFreq=" << loghex(*config.sampling_frequency)
-     << ", FrameDur=" << loghex(*config.frame_duration)
-     << ", OctetsPerFrame=" << int(*config.octets_per_codec_frame)
-     << ", CodecFramesBlocksPerSDU=" << int(*config.codec_frames_blocks_per_sdu)
-     << ", AudioChanLoc=" << loghex(*config.audio_channel_allocation) << ")";
+  os << char_value_[static_cast<uint8_t>(state)] << " ("
+     << "0x" << std::setfill('0') << std::setw(2) << static_cast<int>(state)
+     << ")";
   return os;
 }
-
-std::ostream& operator<<(std::ostream& os,
-                         const le_audio::types::AseState& state) {
+std::ostream& operator<<(std::ostream& os, const types::AseState& state) {
   static const char* char_value_[7] = {
       "IDLE",      "CODEC_CONFIGURED", "QOS_CONFIGURED", "ENABLING",
       "STREAMING", "DISABLING",        "RELEASING",
@@ -478,3 +475,16 @@ std::ostream& operator<<(std::ostream& os,
      << ")";
   return os;
 }
+
+std::ostream& operator<<(std::ostream& os,
+                         const types::LeAudioLc3Config& config) {
+  os << " LeAudioLc3Config(SamplFreq=" << loghex(*config.sampling_frequency)
+     << ", FrameDur=" << loghex(*config.frame_duration)
+     << ", OctetsPerFrame=" << int(*config.octets_per_codec_frame)
+     << ", CodecFramesBlocksPerSDU=" << int(*config.codec_frames_blocks_per_sdu)
+     << ", AudioChanLoc=" << loghex(*config.audio_channel_allocation) << ")";
+  return os;
+}
+}  // namespace types
+
+}  // namespace le_audio

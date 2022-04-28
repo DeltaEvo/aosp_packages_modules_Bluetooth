@@ -60,8 +60,6 @@
 using base::Location;
 using bluetooth::hci::IsoManager;
 
-bool l2c_link_hci_disc_comp(uint16_t handle,
-                            tHCI_REASON reason);               // TODO remove
 bool BTM_BLE_IS_RESOLVE_BDA(const RawAddress& x);              // TODO remove
 void BTA_sys_signal_hw_error();                                // TODO remove
 void smp_cancel_start_encryption_attempt();                    // TODO remove
@@ -73,7 +71,6 @@ void acl_disconnect_from_handle(uint16_t handle, tHCI_STATUS reason,
 /******************************************************************************/
 static void btu_hcif_inquiry_comp_evt(uint8_t* p);
 
-static void btu_hcif_connection_comp_evt(const uint8_t* p, uint8_t evt_len);
 static void btu_hcif_connection_request_evt(const uint8_t* p);
 static void btu_hcif_disconnection_comp_evt(uint8_t* p);
 static void btu_hcif_authentication_comp_evt(uint8_t* p);
@@ -152,56 +149,6 @@ void btu_hcif_log_event_metrics(uint8_t evt_code, const uint8_t* p_event) {
                                 encryption_enabled);
       break;
     }
-    case HCI_CONNECTION_COMP_EVT: {
-      uint8_t link_type;
-      STREAM_TO_UINT8(status, p_event);
-      STREAM_TO_UINT16(handle, p_event);
-      STREAM_TO_BDADDR(bda, p_event);
-      STREAM_TO_UINT8(link_type, p_event);
-      handle = HCID_GET_HANDLE(handle);
-      log_link_layer_connection_event(
-          &bda, handle, android::bluetooth::DIRECTION_UNKNOWN, link_type, cmd,
-          evt_code, android::bluetooth::hci::BLE_EVT_UNKNOWN, status, reason);
-
-      // Read SDP_DI manufacturer, model, HW version from config,
-      // and log them
-      int sdp_di_manufacturer_id = 0;
-      int sdp_di_model_id = 0;
-      int sdp_di_hw_version = 0;
-      int sdp_di_vendor_id_source = 0;
-      std::string bda_string = bda.ToString();
-      btif_config_get_int(bda_string, BT_CONFIG_KEY_SDP_DI_MANUFACTURER,
-                          &sdp_di_manufacturer_id);
-      btif_config_get_int(bda_string, BT_CONFIG_KEY_SDP_DI_MODEL,
-                          &sdp_di_model_id);
-      btif_config_get_int(bda_string, BT_CONFIG_KEY_SDP_DI_HW_VERSION,
-                          &sdp_di_hw_version);
-      btif_config_get_int(bda_string, BT_CONFIG_KEY_SDP_DI_VENDOR_ID_SRC,
-                          &sdp_di_vendor_id_source);
-
-      std::stringstream ss;
-      // [N - native]::SDP::[DIP - Device ID Profile]
-      ss << "N:SDP::DIP::" << loghex(sdp_di_vendor_id_source);
-      log_manufacturer_info(
-          bda, android::bluetooth::DeviceInfoSrcEnum::DEVICE_INFO_INTERNAL,
-          ss.str(), loghex(sdp_di_manufacturer_id), loghex(sdp_di_model_id),
-          loghex(sdp_di_hw_version), "");
-
-      // Read LMP version, subversion and  manufacturer from config,
-      // and log them
-      int lmp_version = -1;
-      int lmp_subversion = -1;
-      int lmp_manufacturer_id = -1;
-      btif_config_get_int(bda_string, BT_CONFIG_KEY_REMOTE_VER_VER,
-                          &lmp_version);
-      btif_config_get_int(bda_string, BT_CONFIG_KEY_REMOTE_VER_SUBVER,
-                          &lmp_subversion);
-      btif_config_get_int(bda_string, BT_CONFIG_KEY_REMOTE_VER_MFCT,
-                          &lmp_manufacturer_id);
-      bluetooth::common::LogRemoteVersionInfo(
-          handle, status, lmp_version, lmp_manufacturer_id, lmp_subversion);
-      break;
-    }
     case HCI_CONNECTION_REQUEST_EVT: {
       DEV_CLASS dc;
       uint8_t link_type;
@@ -247,6 +194,16 @@ void btu_hcif_log_event_metrics(uint8_t evt_code, const uint8_t* p_event) {
           android::bluetooth::hci::BLE_EVT_UNKNOWN, status, reason);
       break;
     }
+    case HCI_BLE_EVENT: {
+      break;
+    }
+    case HCI_CONNECTION_COMP_EVT:  // EventCode::CONNECTION_COMPLETE
+    default:
+      LOG_ERROR(
+          "Unexpectedly received event_code:0x%02x that should not be "
+          "handled here",
+          evt_code);
+      break;
   }
 }
 
@@ -289,9 +246,6 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
       break;
     case HCI_EXTENDED_INQUIRY_RESULT_EVT:
       btm_process_inq_results(p, hci_evt_len, BTM_INQ_RESULT_EXTENDED);
-      break;
-    case HCI_CONNECTION_COMP_EVT:
-      btu_hcif_connection_comp_evt(p, hci_evt_len);
       break;
     case HCI_CONNECTION_REQUEST_EVT:
       btu_hcif_connection_request_evt(p);
@@ -398,9 +352,6 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
         case HCI_BLE_ADV_PKT_RPT_EVT: /* result of inquiry */
           btm_ble_process_adv_pkt(ble_evt_len, p);
           break;
-        case HCI_BLE_CONN_COMPLETE_EVT:
-          btm_ble_conn_complete(p, hci_evt_len, false);
-          break;
         case HCI_BLE_LL_CONN_PARAM_UPD_EVT:
           btu_ble_ll_conn_param_upd_evt(p, hci_evt_len);
           break;
@@ -409,9 +360,6 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
           break;
         case HCI_BLE_LTK_REQ_EVT: /* received only at peripheral device */
           btu_ble_proc_ltk_req(p);
-          break;
-        case HCI_BLE_ENHANCED_CONN_COMPLETE_EVT:
-          btm_ble_conn_complete(p, hci_evt_len, true);
           break;
         case HCI_BLE_RC_PARAM_REQ_EVT:
           btu_ble_rc_param_req_evt(p);
@@ -467,12 +415,30 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
         case HCI_LE_BIGINFO_ADVERTISING_REPORT_EVT:
           btm_ble_biginfo_adv_report_rcvd(p, hci_evt_len);
           break;
+
+          // Events are now captured by gd/hci/le_acl_connection_interface.h
+        case HCI_BLE_CONN_COMPLETE_EVT:  // SubeventCode::CONNECTION_COMPLETE
+        case HCI_BLE_ENHANCED_CONN_COMPLETE_EVT:  // SubeventCode::ENHANCED_CONNECTION_COMPLETE
+        default:
+          LOG_ERROR(
+              "Unexpectedly received LE sub_event_code:0x%02x that should not "
+              "be handled here",
+              ble_sub_code);
+          break;
       }
-      break;
-    }
+    } break;
 
     case HCI_VENDOR_SPECIFIC_EVT:
       btm_vendor_specific_evt(const_cast<const uint8_t*>(p), hci_evt_len);
+      break;
+
+      // Events now captured by gd::hci_layer module
+    case HCI_CONNECTION_COMP_EVT:  // EventCode::CONNECTION_COMPLETE
+    default:
+      LOG_ERROR(
+          "Unexpectedly received event_code:0x%02x that should not be "
+          "handled here",
+          hci_evt_code);
       break;
   }
 }
@@ -952,56 +918,7 @@ static void btu_hcif_inquiry_comp_evt(uint8_t* p) {
   STREAM_TO_UINT8(status, p);
 
   /* Tell inquiry processing that we are done */
-  btm_process_inq_complete(status, BTM_BR_INQUIRY_MASK);
-}
-
-/*******************************************************************************
- *
- * Function         btu_hcif_connection_comp_evt
- *
- * Description      Process event HCI_CONNECTION_COMP_EVT
- *
- * Returns          void
- *
- ******************************************************************************/
-static void btu_hcif_connection_comp_evt(const uint8_t* p, uint8_t evt_len) {
-  uint8_t status;
-  uint16_t handle;
-  RawAddress bda;
-  uint8_t link_type;
-  uint8_t enc_mode;
-  tBTM_ESCO_DATA esco_data;
-
-  if (evt_len < 11) {
-    android_errorWriteLog(0x534e4554, "141619686");
-    HCI_TRACE_WARNING("%s: malformed event of size %hhd", __func__, evt_len);
-    return;
-  }
-
-  STREAM_TO_UINT8(status, p);
-  STREAM_TO_UINT16(handle, p);
-  STREAM_TO_BDADDR(bda, p);
-  STREAM_TO_UINT8(link_type, p);
-  STREAM_TO_UINT8(enc_mode, p);
-
-  handle = HCID_GET_HANDLE(handle);
-
-  if (status != HCI_SUCCESS) {
-    HCI_TRACE_DEBUG(
-        "%s: Connection failed: status=%d, handle=%d, link_type=%d, "
-        "enc_mode=%d",
-        __func__, status, handle, link_type, enc_mode);
-  }
-
-  if (link_type == HCI_LINK_TYPE_ACL) {
-    btm_acl_connected(bda, handle, static_cast<tHCI_STATUS>(status), enc_mode);
-  } else {
-    memset(&esco_data, 0, sizeof(tBTM_ESCO_DATA));
-    /* esco_data.link_type = HCI_LINK_TYPE_SCO; already zero */
-    esco_data.bd_addr = bda;
-    btm_sco_connected(static_cast<tHCI_STATUS>(status), bda, handle,
-                      &esco_data);
-  }
+  btm_process_inq_complete(to_hci_status_code(status), BTM_BR_INQUIRY_MASK);
 }
 
 /*******************************************************************************
@@ -1091,10 +1008,9 @@ static void btu_hcif_rmt_name_request_comp_evt(const uint8_t* p,
 
   evt_len -= (1 + BD_ADDR_LEN);
 
-  btm_process_remote_name(&bd_addr, p, evt_len, status);
+  btm_process_remote_name(&bd_addr, p, evt_len, to_hci_status_code(status));
 
-  btm_sec_rmt_name_request_complete(&bd_addr, p,
-                                    static_cast<tHCI_STATUS>(status));
+  btm_sec_rmt_name_request_complete(&bd_addr, p, to_hci_status_code(status));
 }
 
 constexpr uint8_t MIN_KEY_SIZE = 7;
@@ -1423,7 +1339,8 @@ static void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
     case HCI_INQUIRY:
       if (status != HCI_SUCCESS) {
         // Tell inquiry processing that we are done
-        btm_process_inq_complete(status, BTM_BR_INQUIRY_MASK);
+        btm_process_inq_complete(to_hci_status_code(status),
+                                 BTM_BR_INQUIRY_MASK);
       }
       break;
     case HCI_SWITCH_ROLE:
@@ -1460,9 +1377,10 @@ static void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
     case HCI_RMT_NAME_REQUEST:
       if (status != HCI_SUCCESS) {
         // Tell inquiry processing that we are done
-        btm_process_remote_name(nullptr, nullptr, 0, status);
+        btm_process_remote_name(nullptr, nullptr, 0,
+                                to_hci_status_code(status));
         btm_sec_rmt_name_request_complete(nullptr, nullptr,
-                                          static_cast<tHCI_STATUS>(status));
+                                          to_hci_status_code(status));
       }
       break;
     case HCI_READ_RMT_EXT_FEATURES:

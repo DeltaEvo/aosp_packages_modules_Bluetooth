@@ -8,7 +8,7 @@ use crate::profiles::gatt::bindings::{
     BleAdvertiserInterface, BleScannerInterface,
 };
 use crate::topstack::get_dispatchers;
-use crate::{cast_to_ffi_address, ccall, deref_ffi_address};
+use crate::{cast_to_ffi_address, ccall, deref_ffi_address, mutcxxcall};
 
 use num_traits::cast::FromPrimitive;
 
@@ -29,6 +29,11 @@ pub mod ffi {
         address: [u8; 6],
     }
 
+    #[derive(Debug, Copy, Clone)]
+    pub struct RustUuid {
+        uu: [u8; 16],
+    }
+
     #[derive(Debug, Clone)]
     pub struct RustAdvertisingTrackInfo {
         scanner_id: u8,
@@ -44,6 +49,58 @@ pub mod ffi {
         adv_packet: Vec<u8>,
         scan_response_len: u8,
         scan_response: Vec<u8>,
+    }
+
+    // Original definition exists in C++.
+    #[derive(Debug, Clone)]
+    pub struct RustGattFilterParam {
+        feat_seln: u16,
+        list_logic_type: u16,
+        filt_logic_type: u8,
+        rssi_high_thres: u8,
+        rssi_low_thres: u8,
+        delay_mode: u8,
+        found_timeout: u16,
+        lost_timeout: u16,
+        found_timeout_count: u8,
+        num_of_tracking_entries: u16,
+    }
+
+    // Defined in C++ and needs a translation in shim.
+    #[derive(Debug, Clone)]
+    pub struct RustApcfCommand {
+        type_: u8,
+        address: RustRawAddress,
+        addr_type: u8,
+        uuid: RustUuid,
+        uuid_mask: RustUuid,
+        name: Vec<u8>,
+        company: u16,
+        company_mask: u16,
+        data: Vec<u8>,
+        data_mask: Vec<u8>,
+        irk: [u8; 16],
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct RustAdvertiseParameters {
+        advertising_event_properties: u16,
+        min_interval: u32,
+        max_interval: u32,
+        channel_map: u8,
+        tx_power: i8,
+        primary_advertising_phy: u8,
+        secondary_advertising_phy: u8,
+        scan_request_notification_enable: u8,
+        own_address_type: i8,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct RustPeriodicAdvertisingParameters {
+        enable: u8,
+        min_interval: u16,
+        max_interval: u16,
+        periodic_advertising_properties: u16,
     }
 
     unsafe extern "C++" {
@@ -75,7 +132,76 @@ pub mod ffi {
 
         unsafe fn GetBleScannerIntf(gatt: *const u8) -> UniquePtr<BleScannerIntf>;
 
-        // TODO - Implement the rest of the BleScannerIntf
+        fn RegisterScanner(self: Pin<&mut BleScannerIntf>, uuid: RustUuid);
+        fn Unregister(self: Pin<&mut BleScannerIntf>, scanner_id: u8);
+        fn Scan(self: Pin<&mut BleScannerIntf>, start: bool);
+        fn ScanFilterParamSetup(
+            self: Pin<&mut BleScannerIntf>,
+            scanner_id: u8,
+            action: u8,
+            filter_index: u8,
+            filt_param: RustGattFilterParam,
+        );
+        fn ScanFilterAdd(
+            self: Pin<&mut BleScannerIntf>,
+            filter_index: u8,
+            filters: Vec<RustApcfCommand>,
+        );
+        fn ScanFilterClear(self: Pin<&mut BleScannerIntf>, filter_index: u8);
+        fn ScanFilterEnable(self: Pin<&mut BleScannerIntf>, enable: bool);
+        fn SetScanParameters(
+            self: Pin<&mut BleScannerIntf>,
+            scanner_id: u8,
+            scan_interval: u16,
+            scan_window: u16,
+        );
+
+        fn BatchscanConfigStorage(
+            self: Pin<&mut BleScannerIntf>,
+            scanner_id: u8,
+            batch_scan_full_max: i32,
+            batch_scan_trunc_max: i32,
+            batch_scan_notify_threshold: i32,
+        );
+        fn BatchscanEnable(
+            self: Pin<&mut BleScannerIntf>,
+            scan_mode: i32,
+            scan_interval: u16,
+            scan_window: u16,
+            addr_type: i32,
+            discard_rule: i32,
+        );
+        fn BatchscanDisable(self: Pin<&mut BleScannerIntf>);
+        fn BatchscanReadReports(self: Pin<&mut BleScannerIntf>, scanner_id: u8, scan_mode: i32);
+
+        fn StartSync(
+            self: Pin<&mut BleScannerIntf>,
+            sid: u8,
+            address: RustRawAddress,
+            skip: u16,
+            timeout: u16,
+        );
+        fn StopSync(self: Pin<&mut BleScannerIntf>, handle: u16);
+        fn CancelCreateSync(self: Pin<&mut BleScannerIntf>, sid: u8, address: RustRawAddress);
+        fn TransferSync(
+            self: Pin<&mut BleScannerIntf>,
+            address: RustRawAddress,
+            service_data: u16,
+            sync_handle: u16,
+        );
+        fn TransferSetInfo(
+            self: Pin<&mut BleScannerIntf>,
+            address: RustRawAddress,
+            service_data: u16,
+            adv_handle: u8,
+        );
+        fn SyncTxParameters(
+            self: Pin<&mut BleScannerIntf>,
+            address: RustRawAddress,
+            mode: u8,
+            skip: u16,
+            timeout: u16,
+        );
 
         /// Registers a C++ |ScanningCallbacks| implementation with the BleScanner.
         /// The shim implementation will call all the callbacks defined via |cb_variant!|.
@@ -83,7 +209,6 @@ pub mod ffi {
     }
 
     extern "Rust" {
-
         // All callbacks below are generated by cb_variant! and will be called
         // by the ScanningCallbacks handler in shim.
         unsafe fn gdscan_on_scanner_registered(uuid: *const i8, scannerId: u8, status: u8);
@@ -111,10 +236,162 @@ pub mod ffi {
             data_len: usize,
         );
         unsafe fn gdscan_on_batch_scan_threshold_crossed(client_if: i32);
+
+        // Static cb_variant! callbacks using base::Callback
+        unsafe fn gdscan_register_callback(uuid: RustUuid, scanner_id: u8, btm_status: u8);
+        unsafe fn gdscan_status_callback(scanner_id: u8, btm_status: u8);
+        unsafe fn gdscan_enable_callback(action: u8, btm_status: u8);
+        unsafe fn gdscan_filter_param_setup_callback(
+            scanner_id: u8,
+            available_space: u8,
+            action: u8,
+            btm_status: u8,
+        );
+        unsafe fn gdscan_filter_config_callback(
+            filter_index: u8,
+            filter_type: u8,
+            available_space: u8,
+            action: u8,
+            btm_status: u8,
+        );
+        unsafe fn gdscan_start_sync_callback(
+            status: u8,
+            sync_handle: u16,
+            advertising_sid: u8,
+            addr_type: u8,
+            address: *const RustRawAddress,
+            phy: u8,
+            interval: u16,
+        );
+        unsafe fn gdscan_sync_report_callback(
+            sync_handle: u16,
+            tx_power: i8,
+            rssi: i8,
+            status: u8,
+            data: *const u8,
+            len: usize,
+        );
+        unsafe fn gdscan_sync_lost_callback(sync_handle: u16);
+        unsafe fn gdscan_sync_transfer_callback(status: u8, address: *const RustRawAddress);
+    }
+
+    unsafe extern "C++" {
+        include!("gatt/gatt_ble_advertiser_shim.h");
+
+        type BleAdvertiserIntf;
+
+        /// Given the gatt profile interface, creates a shim interface for
+        /// |BleAdvertiserInterface|.
+        unsafe fn GetBleAdvertiserIntf(gatt: *const u8) -> UniquePtr<BleAdvertiserIntf>;
+
+        fn RegisterAdvertiser(self: Pin<&mut BleAdvertiserIntf>);
+        fn Unregister(self: Pin<&mut BleAdvertiserIntf>, adv_id: u8);
+
+        fn GetOwnAddress(self: Pin<&mut BleAdvertiserIntf>, adv_id: u8);
+        fn SetParameters(
+            self: Pin<&mut BleAdvertiserIntf>,
+            adv_id: u8,
+            params: RustAdvertiseParameters,
+        );
+        fn SetData(
+            self: Pin<&mut BleAdvertiserIntf>,
+            adv_id: u8,
+            set_scan_rsp: bool,
+            data: Vec<u8>,
+        );
+        fn Enable(
+            self: Pin<&mut BleAdvertiserIntf>,
+            adv_id: u8,
+            enable: bool,
+            duration: u16,
+            max_ext_adv_events: u8,
+        );
+        fn StartAdvertising(
+            self: Pin<&mut BleAdvertiserIntf>,
+            adv_id: u8,
+            params: RustAdvertiseParameters,
+            advertise_data: Vec<u8>,
+            scan_response_data: Vec<u8>,
+            timeout_in_sec: i32,
+        );
+        fn StartAdvertisingSet(
+            self: Pin<&mut BleAdvertiserIntf>,
+            reg_id: i32,
+            params: RustAdvertiseParameters,
+            advertise_data: Vec<u8>,
+            scan_response_data: Vec<u8>,
+            periodic_params: RustPeriodicAdvertisingParameters,
+            periodic_data: Vec<u8>,
+            duration: u16,
+            max_ext_adv_events: u8,
+        );
+        fn SetPeriodicAdvertisingParameters(
+            self: Pin<&mut BleAdvertiserIntf>,
+            adv_id: u8,
+            params: RustPeriodicAdvertisingParameters,
+        );
+        fn SetPeriodicAdvertisingData(self: Pin<&mut BleAdvertiserIntf>, adv_id: u8, data: Vec<u8>);
+        fn SetPeriodicAdvertisingEnable(
+            self: Pin<&mut BleAdvertiserIntf>,
+            adv_id: u8,
+            enable: bool,
+        );
+
+        /// Registers a C++ |AdvertisingCallbacks| implementation with the BleAdvertiser.
+        /// The shim implementation will call all the callbacks defined via |cb_variant!|.
+        fn RegisterCallbacks(self: Pin<&mut BleAdvertiserIntf>);
+    }
+
+    extern "Rust" {
+        // All callbacks below are generated by cb_variant!.
+        unsafe fn gdadv_on_advertising_set_started(
+            reg_id: i32,
+            adv_id: u8,
+            tx_power: i8,
+            status: u8,
+        );
+        unsafe fn gdadv_on_advertising_enabled(adv_id: u8, enabled: bool, status: u8);
+        unsafe fn gdadv_on_advertising_data_set(adv_id: u8, status: u8);
+        unsafe fn gdadv_on_scan_response_data_set(adv_id: u8, status: u8);
+        unsafe fn gdadv_on_advertising_parameters_updated(adv_id: u8, tx_power: i8, status: u8);
+        unsafe fn gdadv_on_periodic_advertising_parameters_updated(adv_id: u8, status: u8);
+        unsafe fn gdadv_on_periodic_advertising_data_set(adv_id: u8, status: u8);
+        unsafe fn gdadv_on_periodic_advertising_enabled(adv_id: u8, enabled: bool, status: u8);
+        unsafe fn gdadv_on_own_address_read(
+            adv_id: u8,
+            addr_type: u8,
+            address: *const RustRawAddress,
+        );
+
+        // In-band callbacks also generated with cb_variant!.
+        unsafe fn gdadv_idstatus_callback(adv_id: u8, status: u8);
+        unsafe fn gdadv_idtxpowerstatus_callback(adv_id: u8, tx_power: i8, status: u8);
+        unsafe fn gdadv_parameters_callback(adv_id: u8, status: u8, tx_power: i8);
+        unsafe fn gdadv_getaddress_callback(
+            adv_id: u8,
+            addr_type: u8,
+            address: *const RustRawAddress,
+        );
     }
 }
 
 pub type AdvertisingTrackInfo = ffi::RustAdvertisingTrackInfo;
+pub type GattFilterParam = ffi::RustGattFilterParam;
+pub type ApcfCommand = ffi::RustApcfCommand;
+pub type AdvertiseParameters = ffi::RustAdvertiseParameters;
+pub type PeriodicAdvertisingParameters = ffi::RustPeriodicAdvertisingParameters;
+
+impl From<ffi::RustUuid> for Uuid {
+    fn from(item: ffi::RustUuid) -> Self {
+        Uuid { uu: item.uu }
+    }
+}
+
+impl From<Uuid> for ffi::RustUuid {
+    fn from(item: Uuid) -> Self {
+        ffi::RustUuid { uu: item.uu }
+    }
+}
 
 #[derive(Debug, FromPrimitive, ToPrimitive, PartialEq, PartialOrd)]
 #[repr(u32)]
@@ -532,6 +809,171 @@ cb_variant!(
 
 cb_variant!(GDScannerCb, gdscan_on_batch_scan_threshold_crossed -> GattScannerCallbacks::OnBatchScanThresholdCrossed, i32);
 
+/// In-band callbacks from the various |BleScannerInterface| methods. Rather than
+/// store closures for each registered callback, we instead bind and return an
+/// identifier for the callback instead (such as scanner id or Uuid).
+#[derive(Debug)]
+pub enum GattScannerInbandCallbacks {
+    /// Params: App Uuid, Scanner Id, BTM Status
+    RegisterCallback(Uuid, u8, u8),
+
+    /// Params: Scanner Id, BTM Status
+    StatusCallback(u8, u8),
+
+    /// Params: Action (enable/disable), BTM Status
+    EnableCallback(u8, u8),
+
+    /// Params: Scanner Id, Available Space, Action Type, BTM Status
+    FilterParamSetupCallback(u8, u8, u8, u8),
+
+    /// Params: Filter Index, Filter Type, Available Space, Action, BTM Status
+    FilterConfigCallback(u8, u8, u8, u8, u8),
+
+    /// Params: Status, Sync Handle, Advertising Sid, Address Type, Address, Phy, Interval
+    StartSyncCallback(u8, u16, u8, u8, RawAddress, u8, u16),
+
+    /// Params: Sync Handle, Tx Power, RSSI, Status, Data
+    SyncReportCallback(u16, i8, i8, u8, Vec<u8>),
+
+    /// Params: Sync Handle
+    SyncLostCallback(u16),
+
+    /// Params: Status, Address
+    SyncTransferCallback(u8, RawAddress),
+}
+
+pub struct GattScannerInbandCallbacksDispatcher {
+    pub dispatch: Box<dyn Fn(GattScannerInbandCallbacks) + Send>,
+}
+
+type GDScannerInbandCb = Arc<Mutex<GattScannerInbandCallbacksDispatcher>>;
+
+cb_variant!(GDScannerInbandCb, gdscan_register_callback -> GattScannerInbandCallbacks::RegisterCallback,
+    ffi::RustUuid -> Uuid, u8, u8);
+
+cb_variant!(GDScannerInbandCb, gdscan_status_callback -> GattScannerInbandCallbacks::StatusCallback, u8, u8);
+cb_variant!(GDScannerInbandCb, gdscan_enable_callback -> GattScannerInbandCallbacks::EnableCallback, u8, u8);
+cb_variant!(GDScannerInbandCb,
+    gdscan_filter_param_setup_callback -> GattScannerInbandCallbacks::FilterParamSetupCallback,
+    u8, u8, u8, u8);
+cb_variant!(GDScannerInbandCb,
+    gdscan_filter_config_callback -> GattScannerInbandCallbacks::FilterConfigCallback,
+    u8, u8, u8, u8, u8);
+cb_variant!(GDScannerInbandCb,
+gdscan_start_sync_callback -> GattScannerInbandCallbacks::StartSyncCallback,
+u8, u16, u8, u8, *const ffi::RustRawAddress, u8, u16, {
+    let _4 = unsafe { deref_ffi_address!(_4) };
+});
+cb_variant!(GDScannerInbandCb,
+gdscan_sync_report_callback -> GattScannerInbandCallbacks::SyncReportCallback,
+u16, i8, i8, u8, *const u8, usize -> _, {
+    let _4 = ptr_to_vec(_4, _5 as usize);
+});
+cb_variant!(GDScannerInbandCb, gdscan_sync_lost_callback -> GattScannerInbandCallbacks::SyncLostCallback, u16);
+cb_variant!(GDScannerInbandCb, gdscan_sync_transfer_callback -> GattScannerInbandCallbacks::SyncTransferCallback,
+u8, *const ffi::RustRawAddress, {
+    let _1 = unsafe { deref_ffi_address!(_1) };
+});
+
+/// Advertising callbacks used by the GD implementation of BleAdvertiserInterface.
+/// These callbacks should be registered using |RegisterCallbacks| on
+/// `BleAdvertiser`.
+#[derive(Debug)]
+pub enum GattAdvCallbacks {
+    /// Params: Reg Id, Advertiser Id, Tx Power, Status
+    OnAdvertisingSetStarted(i32, u8, i8, u8),
+
+    /// Params: Advertiser Id, Enabled, Status
+    OnAdvertisingEnabled(u8, bool, u8),
+
+    /// Params: Advertiser Id, Status
+    OnAdvertisingDataSet(u8, u8),
+
+    /// Params: Advertiser Id, Status
+    OnScanResponseDataSet(u8, u8),
+
+    /// Params: Advertiser Id, Tx Power, Status
+    OnAdvertisingParametersUpdated(u8, i8, u8),
+
+    /// Params: Advertiser Id, Status
+    OnPeriodicAdvertisingParametersUpdated(u8, u8),
+
+    /// Params: Advertiser Id, Status
+    OnPeriodicAdvertisingDataSet(u8, u8),
+
+    /// Params: Advertiser Id, Enabled, Status
+    OnPeriodicAdvertisingEnabled(u8, bool, u8),
+
+    /// Params: Advertiser Id, Address Type, Address
+    OnOwnAddressRead(u8, u8, RawAddress),
+}
+
+pub struct GattAdvCallbacksDispatcher {
+    pub dispatch: Box<dyn Fn(GattAdvCallbacks) + Send>,
+}
+
+type GDAdvCb = Arc<Mutex<GattAdvCallbacksDispatcher>>;
+
+cb_variant!(GDAdvCb,
+    gdadv_on_advertising_set_started -> GattAdvCallbacks::OnAdvertisingSetStarted,
+    i32, u8, i8, u8);
+cb_variant!(GDAdvCb,
+    gdadv_on_advertising_enabled -> GattAdvCallbacks::OnAdvertisingEnabled,
+    u8, bool, u8);
+cb_variant!(GDAdvCb,
+    gdadv_on_advertising_data_set -> GattAdvCallbacks::OnAdvertisingDataSet,
+    u8, u8);
+cb_variant!(GDAdvCb,
+    gdadv_on_scan_response_data_set -> GattAdvCallbacks::OnScanResponseDataSet,
+    u8, u8);
+cb_variant!(GDAdvCb,
+    gdadv_on_advertising_parameters_updated -> GattAdvCallbacks::OnAdvertisingParametersUpdated,
+    u8, i8, u8);
+cb_variant!(GDAdvCb,
+    gdadv_on_periodic_advertising_parameters_updated -> GattAdvCallbacks::OnPeriodicAdvertisingParametersUpdated,
+    u8, u8);
+cb_variant!(GDAdvCb,
+    gdadv_on_periodic_advertising_data_set -> GattAdvCallbacks::OnPeriodicAdvertisingDataSet,
+    u8, u8);
+cb_variant!(GDAdvCb,
+    gdadv_on_periodic_advertising_enabled -> GattAdvCallbacks::OnPeriodicAdvertisingEnabled,
+    u8, bool, u8);
+cb_variant!(GDAdvCb,
+gdadv_on_own_address_read -> GattAdvCallbacks::OnOwnAddressRead, u8, u8,
+*const ffi::RustRawAddress, {
+    let _2 = unsafe { deref_ffi_address!(_2) };
+});
+
+#[derive(Debug)]
+pub enum GattAdvInbandCallbacks {
+    /// Params: Advertiser Id, Status
+    /// StatusCallback isn't implemented because we always want advertiser id.
+    IdStatusCallback(u8, u8),
+
+    /// Params: Advertiser Id, Tx Power, Status
+    IdTxPowerStatusCallback(u8, i8, u8),
+
+    /// Params: Advertiser Id, Status, Tx Power
+    ParametersCallback(u8, u8, i8),
+
+    /// Params: Advertiser Id, Addr Type, Address
+    GetAddressCallback(u8, u8, RawAddress),
+}
+
+pub struct GattAdvInbandCallbacksDispatcher {
+    pub dispatch: Box<dyn Fn(GattAdvInbandCallbacks) + Send>,
+}
+
+type GDAdvInbandCb = Arc<Mutex<GattAdvInbandCallbacksDispatcher>>;
+
+cb_variant!(GDAdvInbandCb, gdadv_idstatus_callback -> GattAdvInbandCallbacks::IdStatusCallback, u8, u8);
+cb_variant!(GDAdvInbandCb, gdadv_idtxpowerstatus_callback -> GattAdvInbandCallbacks::IdTxPowerStatusCallback, u8, i8, u8);
+cb_variant!(GDAdvInbandCb, gdadv_parameters_callback -> GattAdvInbandCallbacks::ParametersCallback, u8, u8, i8);
+cb_variant!(GDAdvInbandCb, gdadv_getaddress_callback -> GattAdvInbandCallbacks::GetAddressCallback,
+u8, u8, *const ffi::RustRawAddress, {
+    let _2 = unsafe { deref_ffi_address!(_2) };
+});
+
 struct RawGattWrapper {
     raw: *const btgatt_interface_t,
 }
@@ -545,7 +987,7 @@ struct RawGattServerWrapper {
 }
 
 struct RawBleScannerWrapper {
-    raw: *const BleScannerInterface,
+    _raw: *const BleScannerInterface,
 }
 
 struct RawBleAdvertiserWrapper {
@@ -562,6 +1004,7 @@ unsafe impl Send for btgatt_callbacks_t {}
 unsafe impl Send for GattClient {}
 unsafe impl Send for GattClientCallbacks {}
 unsafe impl Send for BleScanner {}
+unsafe impl Send for BleAdvertiser {}
 
 pub struct GattClient {
     internal: RawGattClientWrapper,
@@ -761,11 +1204,12 @@ impl GattClient {
     }
 
     pub fn read_phy(&mut self, client_if: i32, addr: &RawAddress) -> BtStatus {
-        BtStatus::from_i32(
-            self.internal_cxx
-                .pin_mut()
-                .read_phy(client_if, ffi::RustRawAddress { address: addr.val }),
-        )
+        BtStatus::from_i32(mutcxxcall!(
+            self,
+            read_phy,
+            client_if,
+            ffi::RustRawAddress { address: addr.val }
+        ))
         .unwrap()
     }
 
@@ -863,9 +1307,8 @@ impl GattServer {
     // TODO(b/193916778): Figure out how to shim read_phy which accepts base::Callback
 }
 
-// TODO(b/193916778): Underlying FFI is C++, implement using cxx.
 pub struct BleScanner {
-    internal: RawBleScannerWrapper,
+    _internal: RawBleScannerWrapper,
     internal_cxx: cxx::UniquePtr<ffi::BleScannerIntf>,
 }
 
@@ -875,17 +1318,227 @@ impl BleScanner {
         internal_cxx: cxx::UniquePtr<ffi::BleScannerIntf>,
     ) -> Self {
         BleScanner {
-            internal: RawBleScannerWrapper {
-                raw: unsafe { (*raw_gatt).scanner as *const BleScannerInterface },
+            _internal: RawBleScannerWrapper {
+                _raw: unsafe { (*raw_gatt).scanner as *const BleScannerInterface },
             },
             internal_cxx,
         }
     }
+
+    pub fn register_scanner(&mut self, app_uuid: Uuid) {
+        mutcxxcall!(self, RegisterScanner, app_uuid.into());
+    }
+
+    pub fn unregister(&mut self, scanner_id: u8) {
+        mutcxxcall!(self, Unregister, scanner_id);
+    }
+
+    pub fn start_scan(&mut self) {
+        mutcxxcall!(self, Scan, true);
+    }
+
+    pub fn stop_scan(&mut self) {
+        mutcxxcall!(self, Scan, false);
+    }
+
+    pub fn scan_filter_setup(
+        &mut self,
+        scanner_id: u8,
+        action: u8,
+        filter_index: u8,
+        param: GattFilterParam,
+    ) {
+        mutcxxcall!(self, ScanFilterParamSetup, scanner_id, action, filter_index, param);
+    }
+
+    pub fn scan_filter_add(&mut self, filter_index: u8, filters: Vec<ApcfCommand>) {
+        mutcxxcall!(self, ScanFilterAdd, filter_index, filters);
+    }
+
+    pub fn scan_filter_clear(&mut self, filter_index: u8) {
+        mutcxxcall!(self, ScanFilterClear, filter_index);
+    }
+
+    pub fn scan_filter_enable(&mut self) {
+        mutcxxcall!(self, ScanFilterEnable, true);
+    }
+
+    pub fn scan_filter_disable(&mut self) {
+        mutcxxcall!(self, ScanFilterEnable, false);
+    }
+
+    pub fn set_scan_parameters(&mut self, scanner_id: u8, scan_interval: u16, scan_window: u16) {
+        mutcxxcall!(self, SetScanParameters, scanner_id, scan_interval, scan_window);
+    }
+
+    pub fn batchscan_config_storage(
+        &mut self,
+        scanner_id: u8,
+        full_max: i32,
+        trunc_max: i32,
+        notify_threshold: i32,
+    ) {
+        mutcxxcall!(
+            self,
+            BatchscanConfigStorage,
+            scanner_id,
+            full_max,
+            trunc_max,
+            notify_threshold
+        );
+    }
+
+    pub fn batchscan_enable(
+        &mut self,
+        scan_mode: i32,
+        scan_interval: u16,
+        scan_window: u16,
+        addr_type: i32,
+        discard_rule: i32,
+    ) {
+        mutcxxcall!(
+            self,
+            BatchscanEnable,
+            scan_mode,
+            scan_interval,
+            scan_window,
+            addr_type,
+            discard_rule
+        );
+    }
+
+    pub fn batchscan_disable(&mut self) {
+        mutcxxcall!(self, BatchscanDisable);
+    }
+
+    pub fn batchscan_read_reports(&mut self, scanner_id: u8, scan_mode: i32) {
+        mutcxxcall!(self, BatchscanReadReports, scanner_id, scan_mode);
+    }
+
+    pub fn start_sync(&mut self, sid: u8, address: RawAddress, skip: u16, timeout: u16) {
+        let addr = unsafe { *((&address as *const RawAddress) as *const ffi::RustRawAddress) };
+        mutcxxcall!(self, StartSync, sid, addr, skip, timeout);
+    }
+
+    pub fn stop_sync(&mut self, handle: u16) {
+        mutcxxcall!(self, StopSync, handle);
+    }
+
+    pub fn cancel_create_sync(&mut self, sid: u8, address: RawAddress) {
+        let addr = unsafe { *((&address as *const RawAddress) as *const ffi::RustRawAddress) };
+        mutcxxcall!(self, CancelCreateSync, sid, addr);
+    }
+
+    pub fn transfer_sync(&mut self, address: RawAddress, service_data: u16, sync_handle: u16) {
+        let addr = unsafe { *((&address as *const RawAddress) as *const ffi::RustRawAddress) };
+        mutcxxcall!(self, TransferSync, addr, service_data, sync_handle);
+    }
+
+    pub fn transfer_set_info(&mut self, address: RawAddress, service_data: u16, adv_handle: u8) {
+        let addr = unsafe { *((&address as *const RawAddress) as *const ffi::RustRawAddress) };
+        mutcxxcall!(self, TransferSetInfo, addr, service_data, adv_handle);
+    }
+
+    pub fn sync_tx_parameters(&mut self, address: RawAddress, mode: u8, skip: u16, timeout: u16) {
+        let addr = unsafe { *((&address as *const RawAddress) as *const ffi::RustRawAddress) };
+        mutcxxcall!(self, SyncTxParameters, addr, mode, skip, timeout);
+    }
 }
 
-// TODO(b/193916778): Underlying FFI is C++, implement using cxx.
 pub struct BleAdvertiser {
     _internal: RawBleAdvertiserWrapper,
+    internal_cxx: cxx::UniquePtr<ffi::BleAdvertiserIntf>,
+}
+
+impl BleAdvertiser {
+    pub(crate) fn new(
+        raw_gatt: *const btgatt_interface_t,
+        internal_cxx: cxx::UniquePtr<ffi::BleAdvertiserIntf>,
+    ) -> Self {
+        BleAdvertiser {
+            _internal: RawBleAdvertiserWrapper {
+                _raw: unsafe { (*raw_gatt).advertiser as *const BleAdvertiserInterface },
+            },
+            internal_cxx,
+        }
+    }
+
+    pub fn register_advertiser(&mut self) {
+        mutcxxcall!(self, RegisterAdvertiser);
+    }
+
+    pub fn unregister(&mut self, adv_id: u8) {
+        mutcxxcall!(self, Unregister, adv_id);
+    }
+
+    pub fn get_own_address(&mut self, adv_id: u8) {
+        mutcxxcall!(self, GetOwnAddress, adv_id);
+    }
+
+    pub fn set_parameters(&mut self, adv_id: u8, params: AdvertiseParameters) {
+        mutcxxcall!(self, SetParameters, adv_id, params);
+    }
+    pub fn set_data(&mut self, adv_id: u8, set_scan_rsp: bool, data: Vec<u8>) {
+        mutcxxcall!(self, SetData, adv_id, set_scan_rsp, data);
+    }
+    pub fn enable(&mut self, adv_id: u8, enable: bool, duration: u16, max_ext_adv_events: u8) {
+        mutcxxcall!(self, Enable, adv_id, enable, duration, max_ext_adv_events);
+    }
+    pub fn start_advertising(
+        &mut self,
+        adv_id: u8,
+        params: AdvertiseParameters,
+        advertise_data: Vec<u8>,
+        scan_response_data: Vec<u8>,
+        timeout_in_sec: i32,
+    ) {
+        mutcxxcall!(
+            self,
+            StartAdvertising,
+            adv_id,
+            params,
+            advertise_data,
+            scan_response_data,
+            timeout_in_sec
+        );
+    }
+    pub fn start_advertising_set(
+        &mut self,
+        reg_id: i32,
+        params: AdvertiseParameters,
+        advertise_data: Vec<u8>,
+        scan_response_data: Vec<u8>,
+        periodic_params: PeriodicAdvertisingParameters,
+        periodic_data: Vec<u8>,
+        duration: u16,
+        max_ext_adv_events: u8,
+    ) {
+        mutcxxcall!(
+            self,
+            StartAdvertisingSet,
+            reg_id,
+            params,
+            advertise_data,
+            scan_response_data,
+            periodic_params,
+            periodic_data,
+            duration,
+            max_ext_adv_events
+        );
+    }
+    pub fn set_periodic_advertising_parameters(
+        &mut self,
+        adv_id: u8,
+        params: PeriodicAdvertisingParameters,
+    ) {
+        mutcxxcall!(self, SetPeriodicAdvertisingParameters, adv_id, params);
+    }
+    pub fn set_periodic_advertising_data(&mut self, adv_id: u8, data: Vec<u8>) {
+        mutcxxcall!(self, SetPeriodicAdvertisingData, adv_id, data);
+    }
+    pub fn set_periodic_advertising_enable(&mut self, adv_id: u8, enable: bool) {
+        mutcxxcall!(self, SetPeriodicAdvertisingEnable, adv_id, enable);
+    }
 }
 
 pub struct Gatt {
@@ -914,6 +1567,7 @@ impl Gatt {
 
         let gatt_client_intf = unsafe { ffi::GetGattClientProfile(r as *const u8) };
         let gatt_scanner_intf = unsafe { ffi::GetBleScannerIntf(r as *const u8) };
+        let gatt_advertiser_intf = unsafe { ffi::GetBleAdvertiserIntf(r as *const u8) };
 
         Some(Gatt {
             internal: RawGattWrapper { raw: r as *const btgatt_interface_t },
@@ -936,13 +1590,7 @@ impl Gatt {
                 },
             },
             scanner: BleScanner::new(r as *const btgatt_interface_t, gatt_scanner_intf),
-            advertiser: BleAdvertiser {
-                _internal: RawBleAdvertiserWrapper {
-                    _raw: unsafe {
-                        (*(r as *const btgatt_interface_t)).scanner as *const BleAdvertiserInterface
-                    },
-                },
-            },
+            advertiser: BleAdvertiser::new(r as *const btgatt_interface_t, gatt_advertiser_intf),
             callbacks: None,
             gatt_client_callbacks: None,
             gatt_server_callbacks: None,
@@ -1052,8 +1700,9 @@ impl Gatt {
         self.gatt_server_callbacks = Some(gatt_server_callbacks);
         self.gatt_scanner_callbacks = Some(gatt_scanner_callbacks);
 
-        // Register callbacks for gatt scanner
-        self.scanner.internal_cxx.pin_mut().RegisterCallbacks();
+        // Register callbacks for gatt scanner and advertiser
+        mutcxxcall!(self.scanner, RegisterCallbacks);
+        mutcxxcall!(self.advertiser, RegisterCallbacks);
 
         return self.is_init;
     }

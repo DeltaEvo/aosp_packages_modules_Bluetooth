@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server;
+package com.android.server.bluetooth;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
@@ -28,6 +28,8 @@ import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
+import android.app.admin.DevicePolicyManager;
+import android.app.compat.CompatChanges;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothHearingAid;
@@ -43,7 +45,8 @@ import android.bluetooth.IBluetoothManager;
 import android.bluetooth.IBluetoothManagerCallback;
 import android.bluetooth.IBluetoothProfileServiceConnection;
 import android.bluetooth.IBluetoothStateChangeCallback;
-import android.content.ActivityNotFoundException;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -55,7 +58,6 @@ import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.os.BatteryStatsManager;
 import android.os.Binder;
@@ -65,6 +67,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
 import android.os.PowerExemptionManager;
 import android.os.Process;
 import android.os.RemoteCallbackList;
@@ -79,11 +82,13 @@ import android.provider.Settings.SettingNotFoundException;
 import android.sysprop.BluetoothProperties;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.SynchronousResultReceiver;
+import com.android.server.BluetoothManagerServiceDumpProto;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -100,7 +105,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-class BluetoothManagerService extends IBluetoothManager.Stub {
+public class BluetoothManagerService extends IBluetoothManager.Stub {
     private static final String TAG = "BluetoothManagerService";
     private static final boolean DBG = true;
 
@@ -177,6 +182,17 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     private static final int SERVICE_IBLUETOOTH = 1;
     private static final int SERVICE_IBLUETOOTHGATT = 2;
 
+    private static final int FLAGS_SYSTEM_APP =
+            ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
+
+    /**
+     * Starting with {@link android.os.Build.VERSION_CODES#TIRAMISU}, applications are
+     * not allowed to enable/disable Bluetooth.
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.TIRAMISU)
+    static final long RESTRICT_ENABLE_DISABLE = 218493289L;
+
     private final Context mContext;
 
     private final UserManager mUserManager;
@@ -210,6 +226,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     // used inside handler thread
     private boolean mQuietEnable = false;
     private boolean mEnable;
+    private boolean mShutdownInProgress = false;
 
     private static CharSequence timeToLog(long timestamp) {
         return android.text.format.DateFormat.format("MM-dd HH:mm:ss", timestamp);
@@ -271,8 +288,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     // Save a ProfileServiceConnections object for each of the bound
     // bluetooth profile services
     private final Map<Integer, ProfileServiceConnections> mProfileServices = new HashMap<>();
-
-    private final boolean mWirelessConsentRequired;
 
     private final IBluetoothCallback mBluetoothCallback = new IBluetoothCallback.Stub() {
         @Override
@@ -470,6 +485,23 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     Log.i(TAG, "Device disconnected, reactivating pending flag changes");
                     onInitFlagsChanged();
                 }
+            } else if (action.equals(Intent.ACTION_SHUTDOWN)) {
+                Log.i(TAG, "Device is shutting down.");
+                mShutdownInProgress = true;
+                mBluetoothLock.readLock().lock();
+                try {
+                    mEnable = false;
+                    mEnableExternal = false;
+                    if (mBluetooth != null && (mState == BluetoothAdapter.STATE_BLE_ON)) {
+                        synchronousOnBrEdrDown(mContext.getAttributionSource());
+                    } else if (mBluetooth != null && (mState == BluetoothAdapter.STATE_ON)) {
+                        synchronousDisable(mContext.getAttributionSource());
+                    }
+                } catch (RemoteException | TimeoutException e) {
+                    Log.e(TAG, "Unable to shutdown Bluetooth", e);
+                } finally {
+                    mBluetoothLock.readLock().unlock();
+                }
             }
         }
     };
@@ -481,10 +513,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         mHandler = new BluetoothHandler(mBluetoothHandlerThread.getLooper());
 
         mContext = context;
-
-        mWirelessConsentRequired = context.getResources()
-                .getBoolean(Resources.getSystem().getIdentifier(
-                "config_wirelessConsentRequired", "bool", "android"));
 
         mCrashes = 0;
         mBluetooth = null;
@@ -515,6 +543,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
         String value = SystemProperties.get(
                 "persist.sys.fflag.override.settings_bluetooth_hearing_aid");
+
         if (!TextUtils.isEmpty(value)) {
             boolean isHearingAidEnabled = Boolean.parseBoolean(value);
             Log.v(TAG, "set feature flag HEARING_AID_SETTINGS to " + isHearingAidEnabled);
@@ -530,16 +559,29 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         filter.addAction(Intent.ACTION_SETTING_RESTORED);
         filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
+        filter.addAction(Intent.ACTION_SHUTDOWN);
         filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         mContext.registerReceiver(mReceiver, filter);
 
         IntentFilter filterUser = new IntentFilter();
         filterUser.addAction(UserManager.ACTION_USER_RESTRICTIONS_CHANGED);
+        filterUser.addAction(Intent.ACTION_USER_SWITCHED);
         filterUser.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         mContext.registerReceiverForAllUsers(new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                onUserRestrictionsChanged(getSendingUser());
+                switch (intent.getAction()) {
+                    case Intent.ACTION_USER_SWITCHED:
+                        int foregroundUserId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
+                        propagateForegroundUserId(foregroundUserId);
+                        break;
+                    case UserManager.ACTION_USER_RESTRICTIONS_CHANGED:
+                        onUserRestrictionsChanged(getSendingUser());
+                        break;
+                    default:
+                        Log.e(TAG, "Unknown broadcast received in BluetoothManagerService receiver"
+                                + " registered across all users");
+                }
             }
         }, filterUser, null, null);
 
@@ -561,23 +603,13 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
         int systemUiUid = -1;
         // Check if device is configured with no home screen, which implies no SystemUI.
-        boolean noHome = context.getResources()
-                .getBoolean(Resources.getSystem().getIdentifier(
-                "config_noHomeScreen", "bool", "android"));
-        if (!noHome) {
-            try {
-                systemUiUid = mContext.createContextAsUser(UserHandle.SYSTEM, 0)
-                    .getPackageManager()
-                    .getPackageUid("com.android.systemui",
-                            PackageManager.PackageInfoFlags.of(PackageManager.MATCH_SYSTEM_ONLY));
-            } catch (PackageManager.NameNotFoundException e) {
-                Log.w(TAG, "SystemUi uid not found", e);
-            }
-        }
-        if (systemUiUid >= 0) {
+        try {
+            systemUiUid = mContext.createContextAsUser(UserHandle.SYSTEM, 0)
+                .getPackageManager()
+                .getPackageUid("com.android.systemui",
+                        PackageManager.PackageInfoFlags.of(PackageManager.MATCH_SYSTEM_ONLY));
             Log.d(TAG, "Detected SystemUiUid: " + Integer.toString(systemUiUid));
-        } else {
-            // Some platforms, such as wearables do not have a system ui.
+        } catch (PackageManager.NameNotFoundException e) {
             Log.w(TAG, "Unable to resolve SystemUI's UID.");
         }
         mSystemUiUid = systemUiUid;
@@ -838,6 +870,25 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
 
+    /**
+     * Sends the current foreground user id to the Bluetooth process. This user id is used to
+     * determine if Binder calls are coming from the active user.
+     *
+     * @param userId is the foreground user id we are propagating to the Bluetooth process
+     */
+    private void propagateForegroundUserId(int userId) {
+        mBluetoothLock.readLock().lock();
+        try {
+            if (mBluetooth != null) {
+                mBluetooth.setForegroundUserId(userId, mContext.getAttributionSource());
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Unable to set foreground user id", e);
+        } finally {
+            mBluetoothLock.readLock().unlock();
+        }
+    }
+
     public int getState() {
         if ((Binder.getCallingUid() != Process.SYSTEM_UID) && (!checkIfCallerIsForegroundUser())) {
             Log.w(TAG, "getState(): report OFF for non-active and non system user");
@@ -1019,7 +1070,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         // Check if packageName belongs to callingUid
         final int callingUid = Binder.getCallingUid();
         final boolean isCallerSystem = UserHandle.getAppId(callingUid) == Process.SYSTEM_UID;
-        if (!isCallerSystem) {
+        if (!isCallerSystem && callingUid != Process.SHELL_UID) {
             checkPackage(callingUid, attributionSource.getPackageName());
 
             if (requireForeground && !checkIfCallerIsForegroundUser()) {
@@ -1037,7 +1088,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     public boolean enableBle(AttributionSource attributionSource, IBinder token)
             throws RemoteException {
         final String packageName = attributionSource.getPackageName();
-        if (!checkBluetoothPermissions(attributionSource, "enableBle", false)) {
+        if (!checkBluetoothPermissions(attributionSource, "enableBle", false)
+                || isAirplaneModeOn()) {
             if (DBG) {
                 Log.d(TAG, "enableBle(): bluetooth disallowed");
             }
@@ -1229,10 +1281,12 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
 
         final int callingUid = Binder.getCallingUid();
-        final boolean callerSystem = UserHandle.getAppId(callingUid) == Process.SYSTEM_UID;
-        if (!callerSystem && !isEnabled() && mWirelessConsentRequired
-                && startConsentUiIfNeeded(packageName,
-                callingUid, BluetoothAdapter.ACTION_REQUEST_ENABLE)) {
+        final int callingPid = Binder.getCallingPid();
+        if (CompatChanges.isChangeEnabled(RESTRICT_ENABLE_DISABLE, callingUid)
+                && !isPrivileged(callingPid, callingUid)
+                && !isSystem(packageName, callingUid)
+                && !isDeviceOwner(callingUid, packageName)
+                && !isProfileOwner(callingUid, packageName)) {
             return false;
         }
 
@@ -1270,10 +1324,12 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
 
         final int callingUid = Binder.getCallingUid();
-        final boolean callerSystem = UserHandle.getAppId(callingUid) == Process.SYSTEM_UID;
-        if (!callerSystem && isEnabled() && mWirelessConsentRequired
-                && startConsentUiIfNeeded(packageName,
-                callingUid, BluetoothAdapter.ACTION_REQUEST_DISABLE)) {
+        final int callingPid = Binder.getCallingPid();
+        if (CompatChanges.isChangeEnabled(RESTRICT_ENABLE_DISABLE, callingUid)
+                && !isPrivileged(callingPid, callingUid)
+                && !isSystem(packageName, callingUid)
+                && !isDeviceOwner(callingUid, packageName)
+                && !isProfileOwner(callingUid, packageName)) {
             return false;
         }
 
@@ -1292,39 +1348,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     packageName);
         }
         return true;
-    }
-
-    private boolean startConsentUiIfNeeded(String packageName,
-            int callingUid, String intentAction) throws RemoteException {
-        if (checkBluetoothPermissionWhenWirelessConsentRequired()) {
-            return false;
-        }
-        try {
-            // Validate the package only if we are going to use it
-            ApplicationInfo applicationInfo = mContext.getPackageManager()
-                    .getApplicationInfoAsUser(packageName,
-                            PackageManager.MATCH_DIRECT_BOOT_AUTO,
-                            UserHandle.getUserHandleForUid(callingUid));
-            if (applicationInfo.uid != callingUid) {
-                throw new SecurityException("Package " + packageName
-                        + " not in uid " + callingUid);
-            }
-
-            Intent intent = new Intent(intentAction);
-            intent.putExtra(Intent.EXTRA_PACKAGE_NAME, packageName);
-            intent.setFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-            try {
-                mContext.startActivity(intent);
-            } catch (ActivityNotFoundException e) {
-                // Shouldn't happen
-                Log.e(TAG, "Intent to handle action " + intentAction + " missing");
-                return false;
-            }
-            return true;
-        } catch (PackageManager.NameNotFoundException e) {
-            throw new RemoteException(e.getMessage());
-        }
     }
 
     /**
@@ -1933,6 +1956,11 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 case MESSAGE_ENABLE:
                     int quietEnable = msg.arg1;
                     int isBle  = msg.arg2;
+                    if (mShutdownInProgress) {
+                        Log.d(TAG, "Skip Bluetooth Enable in device shutdown process");
+                        break;
+                    }
+
                     if (mHandler.hasMessages(MESSAGE_HANDLE_DISABLE_DELAYED)
                             || mHandler.hasMessages(MESSAGE_HANDLE_ENABLE_DELAYED)) {
                         // We are handling enable or disable right now, wait for it.
@@ -2180,6 +2208,9 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         mBinding = false;
                         mBluetoothBinder = service;
                         mBluetooth = IBluetooth.Stub.asInterface(service);
+
+                        int foregroundUserId = ActivityManager.getCurrentUser();
+                        propagateForegroundUserId(foregroundUserId);
 
                         if (!isNameAndAddressSet()) {
                             Message getMsg = mHandler.obtainMessage(MESSAGE_GET_NAME_AND_ADDRESS);
@@ -2851,7 +2882,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
      */
     private void updateOppLauncherComponentState(UserHandle userHandle,
             boolean bluetoothSharingDisallowed) {
-        final ComponentName oppLauncherComponent = new ComponentName("com.android.bluetooth",
+        final ComponentName oppLauncherComponent = new ComponentName(
+                mContext.getPackageManager().getPackagesForUid(Process.BLUETOOTH_UID)[0],
                 "com.android.bluetooth.opp.BluetoothOppLauncherActivity");
         final int newState =
                 bluetoothSharingDisallowed ? PackageManager.COMPONENT_ENABLED_STATE_DISABLED
@@ -3051,6 +3083,14 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 attributionSource, message);
     }
 
+    @Override
+    public int handleShellCommand(@NonNull ParcelFileDescriptor in,
+            @NonNull ParcelFileDescriptor out, @NonNull ParcelFileDescriptor err,
+            @NonNull String[] args) {
+        return new BluetoothShellCommand(this, mContext).exec(this, in.getFileDescriptor(),
+                out.getFileDescriptor(), err.getFileDescriptor(), args);
+    }
+
     static @NonNull Bundle getTempAllowlistBroadcastOptions() {
         final long duration = 10_000;
         final BroadcastOptions bOptions = BroadcastOptions.makeBasic();
@@ -3081,5 +3121,84 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             comp = foundComp;
         }
         return comp;
+    }
+
+    private boolean isPrivileged(int pid, int uid) {
+        return (mContext.checkPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED, pid, uid)
+                == PackageManager.PERMISSION_GRANTED)
+                || (mContext.checkPermission(android.Manifest.permission.NETWORK_SETTINGS, pid, uid)
+                == PackageManager.PERMISSION_GRANTED)
+                || (mContext.getPackageManager().checkSignatures(uid, Process.SYSTEM_UID)
+                == PackageManager.SIGNATURE_MATCH);
+    }
+
+    private Pair<UserHandle, ComponentName> getDeviceOwner() {
+        DevicePolicyManager devicePolicyManager =
+                mContext.getSystemService(DevicePolicyManager.class);
+        if (devicePolicyManager == null) return null;
+        long ident = Binder.clearCallingIdentity();
+        UserHandle deviceOwnerUser = null;
+        ComponentName deviceOwnerComponent = null;
+        try {
+            deviceOwnerUser = devicePolicyManager.getDeviceOwnerUser();
+            deviceOwnerComponent = devicePolicyManager.getDeviceOwnerComponentOnAnyUser();
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+        if (deviceOwnerUser == null || deviceOwnerComponent == null
+                || deviceOwnerComponent.getPackageName() == null) {
+            return null;
+        }
+        return new Pair<>(deviceOwnerUser, deviceOwnerComponent);
+    }
+
+    private boolean isDeviceOwner(int uid, String packageName) {
+        if (packageName == null) {
+            Log.e(TAG, "isDeviceOwner: packageName is null, returning false");
+            return false;
+        }
+
+        Pair<UserHandle, ComponentName> deviceOwner = getDeviceOwner();
+
+        // no device owner
+        if (deviceOwner == null) return false;
+
+        return deviceOwner.first.equals(UserHandle.getUserHandleForUid(uid))
+                && deviceOwner.second.getPackageName().equals(packageName);
+    }
+
+    private boolean isProfileOwner(int uid, String packageName) {
+        Context userContext;
+        try {
+            userContext = mContext.createPackageContextAsUser(mContext.getPackageName(), 0,
+                    UserHandle.getUserHandleForUid(uid));
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(TAG, "Unknown package name");
+            return false;
+        }
+        if (userContext == null) {
+            Log.e(TAG, "Unable to retrieve user context for " + uid);
+            return false;
+        }
+        DevicePolicyManager devicePolicyManager =
+                userContext.getSystemService(DevicePolicyManager.class);
+        if (devicePolicyManager == null) {
+            Log.w(TAG, "Error retrieving DPM service");
+            return false;
+        }
+        return devicePolicyManager.isProfileOwnerApp(packageName);
+    }
+
+    public boolean isSystem(String packageName, int uid) {
+        long ident = Binder.clearCallingIdentity();
+        try {
+            ApplicationInfo info = mContext.getPackageManager().getApplicationInfoAsUser(
+                    packageName, 0, UserHandle.getUserHandleForUid(uid));
+            return (info.flags & FLAGS_SYSTEM_APP) != 0;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
     }
 }

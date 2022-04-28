@@ -16,6 +16,7 @@
 
 #include "bluetooth_audio_port_impl.h"
 
+#include "btif/include/btif_common.h"
 #include "common/stop_watch_legacy.h"
 
 namespace bluetooth {
@@ -31,9 +32,9 @@ BluetoothAudioPortImpl::BluetoothAudioPortImpl(
 
 BluetoothAudioPortImpl::~BluetoothAudioPortImpl() {}
 
-ndk::ScopedAStatus BluetoothAudioPortImpl::startStream() {
+ndk::ScopedAStatus BluetoothAudioPortImpl::startStream(bool is_low_latency) {
   StopWatchLegacy stop_watch(__func__);
-  BluetoothAudioCtrlAck ack = transport_instance_->StartRequest();
+  BluetoothAudioCtrlAck ack = transport_instance_->StartRequest(is_low_latency);
   if (ack != BluetoothAudioCtrlAck::PENDING) {
     auto aidl_retval =
         provider_->streamStarted(BluetoothAudioCtrlAckToHalStatus(ack));
@@ -129,6 +130,13 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::updateSinkMetadata(
   const sink_metadata_t legacy_sink_metadata = {
       .track_count = metadata_vec.size(), .tracks = metadata_vec.data()};
   transport_instance_->SinkMetadataChanged(legacy_sink_metadata);
+  return ndk::ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus BluetoothAudioPortImpl::setLatencyMode(
+    LatencyMode latency_mode) {
+  bool is_low_latency = latency_mode == LatencyMode::LOW_LATENCY ? true : false;
+  invoke_switch_buffer_size_cb(is_low_latency);
   return ndk::ScopedAStatus::ok();
 }
 

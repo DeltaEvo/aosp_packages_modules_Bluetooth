@@ -75,177 +75,10 @@ typedef void(tBTM_VSC_CMPL_CB)(tBTM_VSC_CMPL* p1);
  * minor device class field
  ****************************/
 
-/* 0x00 is used as unclassified for all minor device classes */
-#define BTM_COD_MINOR_UNCLASSIFIED 0x00
-#define BTM_COD_MINOR_WEARABLE_HEADSET 0x04
-#define BTM_COD_MINOR_CONFM_HANDSFREE 0x08
-#define BTM_COD_MINOR_CAR_AUDIO 0x20
-#define BTM_COD_MINOR_SET_TOP_BOX 0x24
-
-/* minor device class field for Peripheral Major Class */
-/* Bits 6-7 independently specify mouse, keyboard, or combo mouse/keyboard */
-#define BTM_COD_MINOR_KEYBOARD 0x40
-#define BTM_COD_MINOR_POINTING 0x80
-/* Bits 2-5 OR'd with selection from bits 6-7 */
-/* #define BTM_COD_MINOR_UNCLASSIFIED       0x00    */
-#define BTM_COD_MINOR_JOYSTICK 0x04
-#define BTM_COD_MINOR_GAMEPAD 0x08
-#define BTM_COD_MINOR_REMOTE_CONTROL 0x0C
-#define BTM_COD_MINOR_DIGITIZING_TABLET 0x14
-#define BTM_COD_MINOR_CARD_READER 0x18 /* e.g. SIM card reader */
-#define BTM_COD_MINOR_DIGITAL_PAN 0x1C
-
-/* minor device class field for Imaging Major Class */
-/* Bits 5-7 independently specify display, camera, scanner, or printer */
-#define BTM_COD_MINOR_DISPLAY 0x10
-/* Bits 2-3 Reserved */
-/* #define BTM_COD_MINOR_UNCLASSIFIED       0x00    */
-
-/* minor device class field for Wearable Major Class */
-/* Bits 2-7 meaningful    */
-#define BTM_COD_MINOR_WRIST_WATCH 0x04
-#define BTM_COD_MINOR_GLASSES 0x14
-
-/* minor device class field for Health Major Class */
-/* Bits 2-7 meaningful    */
-#define BTM_COD_MINOR_BLOOD_MONITOR 0x04
-#define BTM_COD_MINOR_THERMOMETER 0x08
-#define BTM_COD_MINOR_WEIGHING_SCALE 0x0C
-#define BTM_COD_MINOR_GLUCOSE_METER 0x10
-#define BTM_COD_MINOR_PULSE_OXIMETER 0x14
-#define BTM_COD_MINOR_HEART_PULSE_MONITOR 0x18
-#define BTM_COD_MINOR_STEP_COUNTER 0x20
-
-/***************************
- * major device class field
- ***************************/
-#define BTM_COD_MAJOR_COMPUTER 0x01
-#define BTM_COD_MAJOR_PHONE 0x02
-#define BTM_COD_MAJOR_AUDIO 0x04
-#define BTM_COD_MAJOR_PERIPHERAL 0x05
-#define BTM_COD_MAJOR_IMAGING 0x06
-#define BTM_COD_MAJOR_WEARABLE 0x07
-#define BTM_COD_MAJOR_HEALTH 0x09
-#define BTM_COD_MAJOR_UNCLASSIFIED 0x1F
-
-/***************************
- * service class fields
- ***************************/
-#define BTM_COD_SERVICE_LMTD_DISCOVER 0x0020
-#define BTM_COD_SERVICE_LE_AUDIO 0x0040
-#define BTM_COD_SERVICE_POSITIONING 0x0100
-#define BTM_COD_SERVICE_NETWORKING 0x0200
-#define BTM_COD_SERVICE_RENDERING 0x0400
-#define BTM_COD_SERVICE_CAPTURING 0x0800
-#define BTM_COD_SERVICE_OBJ_TRANSFER 0x1000
-#define BTM_COD_SERVICE_AUDIO 0x2000
-#define BTM_COD_SERVICE_TELEPHONY 0x4000
-#define BTM_COD_SERVICE_INFORMATION 0x8000
-
-/* class of device field macros */
-#define BTM_COD_MINOR_CLASS(u8, pd) \
-  { (u8) = (pd)[2] & 0xFC; }
-#define BTM_COD_MAJOR_CLASS(u8, pd) \
-  { (u8) = (pd)[1] & 0x1F; }
-#define BTM_COD_SERVICE_CLASS(u16, pd) \
-  {                                    \
-    (u16) = (pd)[0];                   \
-    (u16) <<= 8;                       \
-    (u16) += (pd)[1] & 0xE0;           \
-  }
-
-/* to set the fields (assumes that format type is always 0) */
-#define FIELDS_TO_COD(pd, mn, mj, sv)                   \
-  {                                                     \
-    (pd)[2] = mn;                                       \
-    (pd)[1] = (mj) + ((sv)&BTM_COD_SERVICE_CLASS_LO_B); \
-    (pd)[0] = (sv) >> 8;                                \
-  }
-
-/* the COD masks */
-#define BTM_COD_MINOR_CLASS_MASK 0xFC
-#define BTM_COD_MAJOR_CLASS_MASK 0x1F
-#define BTM_COD_SERVICE_CLASS_LO_B 0x00E0
-#define BTM_COD_SERVICE_CLASS_MASK 0xFFE0
-
 /* BTM service definitions
  * Used for storing EIR data to bit mask
 */
-enum {
-  BTM_EIR_UUID_SERVCLASS_SERVICE_DISCOVERY_SERVER,
-  /*    BTM_EIR_UUID_SERVCLASS_BROWSE_GROUP_DESCRIPTOR,   */
-  /*    BTM_EIR_UUID_SERVCLASS_PUBLIC_BROWSE_GROUP,       */
-  BTM_EIR_UUID_SERVCLASS_SERIAL_PORT,
-  BTM_EIR_UUID_SERVCLASS_LAN_ACCESS_USING_PPP,
-  BTM_EIR_UUID_SERVCLASS_DIALUP_NETWORKING,
-  BTM_EIR_UUID_SERVCLASS_IRMC_SYNC,
-  BTM_EIR_UUID_SERVCLASS_OBEX_OBJECT_PUSH,
-  BTM_EIR_UUID_SERVCLASS_OBEX_FILE_TRANSFER,
-  BTM_EIR_UUID_SERVCLASS_IRMC_SYNC_COMMAND,
-  BTM_EIR_UUID_SERVCLASS_HEADSET,
-  BTM_EIR_UUID_SERVCLASS_CORDLESS_TELEPHONY,
-  BTM_EIR_UUID_SERVCLASS_AUDIO_SOURCE,
-  BTM_EIR_UUID_SERVCLASS_AUDIO_SINK,
-  BTM_EIR_UUID_SERVCLASS_AV_REM_CTRL_TARGET,
-  /*    BTM_EIR_UUID_SERVCLASS_ADV_AUDIO_DISTRIBUTION,    */
-  BTM_EIR_UUID_SERVCLASS_AV_REMOTE_CONTROL,
-  /*    BTM_EIR_UUID_SERVCLASS_VIDEO_CONFERENCING,        */
-  BTM_EIR_UUID_SERVCLASS_INTERCOM,
-  BTM_EIR_UUID_SERVCLASS_FAX,
-  BTM_EIR_UUID_SERVCLASS_HEADSET_AUDIO_GATEWAY,
-  /*    BTM_EIR_UUID_SERVCLASS_WAP,                       */
-  /*    BTM_EIR_UUID_SERVCLASS_WAP_CLIENT,                */
-  BTM_EIR_UUID_SERVCLASS_PANU,
-  BTM_EIR_UUID_SERVCLASS_NAP,
-  BTM_EIR_UUID_SERVCLASS_GN,
-  BTM_EIR_UUID_SERVCLASS_DIRECT_PRINTING,
-  /*    BTM_EIR_UUID_SERVCLASS_REFERENCE_PRINTING,        */
-  BTM_EIR_UUID_SERVCLASS_IMAGING,
-  BTM_EIR_UUID_SERVCLASS_IMAGING_RESPONDER,
-  BTM_EIR_UUID_SERVCLASS_IMAGING_AUTO_ARCHIVE,
-  BTM_EIR_UUID_SERVCLASS_IMAGING_REF_OBJECTS,
-  BTM_EIR_UUID_SERVCLASS_HF_HANDSFREE,
-  BTM_EIR_UUID_SERVCLASS_AG_HANDSFREE,
-  BTM_EIR_UUID_SERVCLASS_DIR_PRT_REF_OBJ_SERVICE,
-  /*    BTM_EIR_UUID_SERVCLASS_REFLECTED_UI,              */
-  BTM_EIR_UUID_SERVCLASS_BASIC_PRINTING,
-  BTM_EIR_UUID_SERVCLASS_PRINTING_STATUS,
-  BTM_EIR_UUID_SERVCLASS_HUMAN_INTERFACE,
-  BTM_EIR_UUID_SERVCLASS_CABLE_REPLACEMENT,
-  BTM_EIR_UUID_SERVCLASS_HCRP_PRINT,
-  BTM_EIR_UUID_SERVCLASS_HCRP_SCAN,
-  /*    BTM_EIR_UUID_SERVCLASS_COMMON_ISDN_ACCESS,        */
-  /*    BTM_EIR_UUID_SERVCLASS_VIDEO_CONFERENCING_GW,     */
-  /*    BTM_EIR_UUID_SERVCLASS_UDI_MT,                    */
-  /*    BTM_EIR_UUID_SERVCLASS_UDI_TA,                    */
-  /*    BTM_EIR_UUID_SERVCLASS_VCP,                       */
-  BTM_EIR_UUID_SERVCLASS_SAP,
-  BTM_EIR_UUID_SERVCLASS_PBAP_PCE,
-  BTM_EIR_UUID_SERVCLASS_PBAP_PSE,
-  /*    BTM_EIR_UUID_SERVCLASS_TE_PHONE_ACCESS,           */
-  /*    BTM_EIR_UUID_SERVCLASS_ME_PHONE_ACCESS,           */
-  BTM_EIR_UUID_SERVCLASS_PHONE_ACCESS,
-  BTM_EIR_UUID_SERVCLASS_HEADSET_HS,
-  BTM_EIR_UUID_SERVCLASS_PNP_INFORMATION,
-  /*    BTM_EIR_UUID_SERVCLASS_GENERIC_NETWORKING,        */
-  /*    BTM_EIR_UUID_SERVCLASS_GENERIC_FILETRANSFER,      */
-  /*    BTM_EIR_UUID_SERVCLASS_GENERIC_AUDIO,             */
-  /*    BTM_EIR_UUID_SERVCLASS_GENERIC_TELEPHONY,         */
-  /*    BTM_EIR_UUID_SERVCLASS_UPNP_SERVICE,              */
-  /*    BTM_EIR_UUID_SERVCLASS_UPNP_IP_SERVICE,           */
-  /*    BTM_EIR_UUID_SERVCLASS_ESDP_UPNP_IP_PAN,          */
-  /*    BTM_EIR_UUID_SERVCLASS_ESDP_UPNP_IP_LAP,          */
-  /*    BTM_EIR_UUID_SERVCLASS_ESDP_UPNP_IP_L2CAP,        */
-  BTM_EIR_UUID_SERVCLASS_VIDEO_SOURCE,
-  BTM_EIR_UUID_SERVCLASS_VIDEO_SINK,
-  /*    BTM_EIR_UUID_SERVCLASS_VIDEO_DISTRIBUTION         */
-  /*    BTM_EIR_UUID_SERVCLASS_HDP_PROFILE                */
-  BTM_EIR_UUID_SERVCLASS_MESSAGE_ACCESS,
-  BTM_EIR_UUID_SERVCLASS_MESSAGE_NOTIFICATION,
-  BTM_EIR_UUID_SERVCLASS_HDP_SOURCE,
-  BTM_EIR_UUID_SERVCLASS_HDP_SINK,
-  BTM_EIR_MAX_SERVICES
-};
+#define BTM_EIR_MAX_SERVICES 46
 
 /* search result in EIR of inquiry database */
 #define BTM_EIR_FOUND 0
@@ -491,12 +324,36 @@ enum : uint16_t {
 */
 #define BTM_LKEY_TYPE_COMBINATION HCI_LKEY_TYPE_COMBINATION
 #define BTM_LKEY_TYPE_REMOTE_UNIT HCI_LKEY_TYPE_REMOTE_UNIT
+#define BTM_LKEY_TYPE_DEBUG_COMB HCI_LKEY_TYPE_DEBUG_COMB
 #define BTM_LKEY_TYPE_UNAUTH_COMB HCI_LKEY_TYPE_UNAUTH_COMB
 #define BTM_LKEY_TYPE_AUTH_COMB HCI_LKEY_TYPE_AUTH_COMB
 #define BTM_LKEY_TYPE_CHANGED_COMB HCI_LKEY_TYPE_CHANGED_COMB
 
 #define BTM_LKEY_TYPE_UNAUTH_COMB_P_256 HCI_LKEY_TYPE_UNAUTH_COMB_P_256
 #define BTM_LKEY_TYPE_AUTH_COMB_P_256 HCI_LKEY_TYPE_AUTH_COMB_P_256
+
+inline std::string linkkey_type_text(const int linkkey_type) {
+  switch (linkkey_type) {
+    case BTM_LKEY_TYPE_COMBINATION:
+      return std::string("COMBINATION");
+    case BTM_LKEY_TYPE_REMOTE_UNIT:
+      return std::string("REMOTE_UNIT");
+    case BTM_LKEY_TYPE_DEBUG_COMB:
+      return std::string("DEBUG_COMB");
+    case BTM_LKEY_TYPE_UNAUTH_COMB:
+      return std::string("UNAUTH_COMB");
+    case BTM_LKEY_TYPE_AUTH_COMB:
+      return std::string("AUTH_COMB");
+    case BTM_LKEY_TYPE_CHANGED_COMB:
+      return std::string("CHANGED_COMB");
+    case BTM_LKEY_TYPE_UNAUTH_COMB_P_256:
+      return std::string("UNAUTH_COMB_P_256");
+    case BTM_LKEY_TYPE_AUTH_COMB_P_256:
+      return std::string("AUTH_COMB_P_256");
+    default:
+      return base::StringPrintf("UNKNOWN[0x%02x]", linkkey_type);
+  }
+}
 
 /* "easy" requirements for LK derived from LTK */
 #define BTM_LTK_DERIVED_LKEY_OFFSET 0x20

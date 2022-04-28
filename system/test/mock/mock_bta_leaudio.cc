@@ -52,7 +52,10 @@ void LeAudioClient::AddFromStorage(const RawAddress& address,
                                    bool auto_connect) {
   mock_function_count_map[__func__]++;
 }
-void LeAudioClient::Cleanup() { mock_function_count_map[__func__]++; }
+void LeAudioClient::Cleanup(base::Callback<void()> cleanupCb) {
+  std::move(cleanupCb).Run();
+  mock_function_count_map[__func__]++;
+}
 
 LeAudioClient* LeAudioClient::Get(void) {
   mock_function_count_map[__func__]++;
@@ -64,7 +67,15 @@ bool LeAudioClient::IsLeAudioClientRunning(void) {
 }
 void LeAudioClient::Initialize(
     bluetooth::le_audio::LeAudioClientCallbacks* callbacks_,
-    base::Closure initCb, base::Callback<bool()> hal_2_1_verifier) {
+    base::Closure initCb, base::Callback<bool()> hal_2_1_verifier,
+    const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>&
+        offloading_preference) {
   mock_function_count_map[__func__]++;
 }
 void LeAudioClient::DebugDump(int fd) { mock_function_count_map[__func__]++; }
+void LeAudioClient::InitializeAudioSetConfigurationProvider() {
+  mock_function_count_map[__func__]++;
+}
+void LeAudioClient::CleanupAudioSetConfigurationProvider() {
+  mock_function_count_map[__func__]++;
+}

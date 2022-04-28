@@ -23,13 +23,11 @@
  ******************************************************************************/
 #define LOG_TAG "l2c_utils"
 
+#include <base/logging.h>
 #include <stdio.h>
 #include <string.h>
 
-#include "btm_api.h"
 #include "device/include/controller.h"
-#include "l2c_int.h"
-#include "l2cdefs.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
@@ -37,10 +35,11 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_api.h"
 #include "stack/include/hci_error_code.h"
+#include "stack/include/l2cdefs.h"
+#include "stack/l2cap/l2c_int.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* p_lcb); // TODO Move
 
@@ -1488,33 +1487,44 @@ bool l2cu_start_post_bond_timer(uint16_t handle) {
   }
 
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
-
-  if (!p_lcb) return (true);
-
+  if (p_lcb == nullptr) {
+    LOG_WARN("Unable to find link control block for handle:0x%04x", handle);
+    return true;
+  }
   p_lcb->ResetBonding();
 
   /* Only start timer if no control blocks allocated */
-  if (p_lcb->ccb_queue.p_first_ccb != NULL) return (false);
-
-  /* If no channels on the connection, start idle timeout */
-  if ((p_lcb->link_state == LST_CONNECTED) ||
-      (p_lcb->link_state == LST_CONNECTING) ||
-      (p_lcb->link_state == LST_DISCONNECTING)) {
-    uint64_t timeout_ms = L2CAP_BONDING_TIMEOUT * 1000;
-
-    if (p_lcb->idle_timeout == 0) {
-      acl_disconnect_from_handle(
-          p_lcb->Handle(), HCI_ERR_PEER_USER,
-          "stack::l2cap::l2c_utils::l2cu_start_post_bond_timer Idle timeout");
-      p_lcb->link_state = LST_DISCONNECTING;
-      timeout_ms = L2CAP_LINK_DISCONNECT_TIMEOUT_MS;
-    }
-    alarm_set_on_mloop(p_lcb->l2c_lcb_timer, timeout_ms, l2c_lcb_timer_timeout,
-                       p_lcb);
-    return (true);
+  if (p_lcb->ccb_queue.p_first_ccb != nullptr) {
+    LOG_DEBUG("Unable to start post bond timer with existing dynamic channels");
+    return false;
   }
 
-  return (false);
+  switch (p_lcb->link_state) {
+    case LST_CONNECTED:
+    case LST_CONNECTING:
+    case LST_DISCONNECTING: {
+      /* If no channels on the connection, start idle timeout */
+      uint64_t timeout_ms = L2CAP_BONDING_TIMEOUT * 1000;
+
+      if (p_lcb->idle_timeout == 0) {
+        acl_disconnect_from_handle(
+            p_lcb->Handle(), HCI_ERR_PEER_USER,
+            "stack::l2cap::l2c_utils::l2cu_start_post_bond_timer Idle timeout");
+        p_lcb->link_state = LST_DISCONNECTING;
+        timeout_ms = L2CAP_LINK_DISCONNECT_TIMEOUT_MS;
+      }
+      alarm_set_on_mloop(p_lcb->l2c_lcb_timer, timeout_ms,
+                         l2c_lcb_timer_timeout, p_lcb);
+      LOG_DEBUG("Started link IDLE timeout_ms:%lu", (unsigned long)timeout_ms);
+      return true;
+    } break;
+
+    default:
+      LOG_DEBUG("Will not start post bond timer with link state:%s",
+                link_state_text(p_lcb->link_state).c_str());
+      break;
+  }
+  return false;
 }
 
 /*******************************************************************************
@@ -2507,9 +2517,9 @@ void l2cu_no_dynamic_ccbs(tL2C_LCB* p_lcb) {
   }
 
   if (start_timeout) {
-    L2CAP_TRACE_DEBUG("%s starting IDLE timeout: %d ms", __func__, timeout_ms);
     alarm_set_on_mloop(p_lcb->l2c_lcb_timer, timeout_ms, l2c_lcb_timer_timeout,
                        p_lcb);
+    LOG_DEBUG("Started link IDLE timeout_ms:%lu", (unsigned long)timeout_ms);
   } else {
     alarm_cancel(p_lcb->l2c_lcb_timer);
   }
@@ -2948,7 +2958,7 @@ void l2cu_reject_ble_connection(tL2C_CCB* p_ccb, uint8_t rem_id,
                                 uint16_t result) {
   if (p_ccb->ecoc)
     l2cu_reject_credit_based_conn_req(
-        p_ccb->p_lcb, rem_id, p_ccb->p_lcb->pending_ecoc_reconfig_cnt, result);
+        p_ccb->p_lcb, rem_id, p_ccb->p_lcb->pending_ecoc_conn_cnt, result);
   else
     l2cu_reject_ble_coc_connection(p_ccb->p_lcb, rem_id, result);
 }

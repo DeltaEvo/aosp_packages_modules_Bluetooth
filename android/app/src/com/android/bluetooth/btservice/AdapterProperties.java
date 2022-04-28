@@ -69,7 +69,7 @@ class AdapterProperties {
 
     private static final String MAX_CONNECTED_AUDIO_DEVICES_PROPERTY =
             "persist.bluetooth.maxconnectedaudiodevices";
-    static final int MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOND = 1;
+    private static final int MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOUND = 1;
     private static final int MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND = 5;
     private static final String A2DP_OFFLOAD_SUPPORTED_PROPERTY =
             "ro.bluetooth.a2dp_offload.supported";
@@ -200,7 +200,7 @@ class AdapterProperties {
     AdapterProperties(AdapterService service) {
         mService = service;
         mAdapter = BluetoothAdapter.getDefaultAdapter();
-        //invalidateBluetoothCaches();
+        invalidateBluetoothCaches();
     }
 
     public void init(RemoteDevices remoteDevices) {
@@ -216,7 +216,7 @@ class AdapterProperties {
                         configDefaultMaxConnectedAudioDevices);
         // Make sure the final value of max connected audio devices is within allowed range
         mMaxConnectedAudioDevices = Math.min(Math.max(propertyOverlayedMaxConnectedAudioDevices,
-                MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOND), MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND);
+                MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOUND), MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND);
         Log.i(TAG, "init(), maxConnectedAudioDevices, default="
                 + configDefaultMaxConnectedAudioDevices + ", propertyOverlayed="
                 + propertyOverlayedMaxConnectedAudioDevices + ", finalValue="
@@ -242,7 +242,7 @@ class AdapterProperties {
         filter.addAction(BluetoothPbapClient.ACTION_CONNECTION_STATE_CHANGED);
         mService.registerReceiver(mReceiver, filter);
         mReceiverRegistered = true;
-        //invalidateBluetoothCaches();
+        invalidateBluetoothCaches();
     }
 
     public void cleanup() {
@@ -254,9 +254,9 @@ class AdapterProperties {
         }
         mService = null;
         mBondedDevices.clear();
-        //invalidateBluetoothCaches();
+        invalidateBluetoothCaches();
     }
-    /*
+
     private static void invalidateGetProfileConnectionStateCache() {
         BluetoothAdapter.invalidateGetProfileConnectionStateCache();
     }
@@ -275,7 +275,6 @@ class AdapterProperties {
         invalidateGetConnectionStateCache();
         invalidateGetBondStateCache();
     }
-     */
 
     @Override
     public Object clone() throws CloneNotSupportedException {
@@ -413,7 +412,7 @@ class AdapterProperties {
      */
     void setConnectionState(int connectionState) {
         mConnectionState = connectionState;
-        //invalidateGetConnectionStateCache();
+        invalidateGetConnectionStateCache();
     }
 
     /**
@@ -647,7 +646,7 @@ class AdapterProperties {
                     debugLog("Failed to remove device: " + device);
                 }
             }
-            //invalidateGetBondStateCache();
+            invalidateGetBondStateCache();
         } catch (Exception ee) {
             Log.w(TAG, "onBondStateChanged: Exception ", ee);
         }
@@ -876,7 +875,7 @@ class AdapterProperties {
 
         if (update) {
             mProfileConnectionState.put(profile, new Pair<Integer, Integer>(newHashState, numDev));
-            //invalidateGetProfileConnectionStateCache();
+            invalidateGetProfileConnectionStateCache();
         }
     }
 
@@ -950,8 +949,7 @@ class AdapterProperties {
 
                     case AbstractionLayer.BT_PROPERTY_LOCAL_LE_FEATURES:
                         updateFeatureSupport(val);
-                        mService.updateLeAudioProfileServiceState(
-                                mIsLeConnectedIsochronousStreamCentralSupported);
+                        mService.updateLeAudioProfileServiceState();
                         break;
 
                     case AbstractionLayer.BT_PROPERTY_DYNAMIC_AUDIO_BUFFER:
@@ -1028,7 +1026,7 @@ class AdapterProperties {
                 + mIsLeIsochronousBroadcasterSupported
                 + " mIsLePeriodicAdvertisingSyncTransferRecipientSupported = "
                 + mIsLePeriodicAdvertisingSyncTransferRecipientSupported);
-        //invalidateIsOffloadedFilteringSupportedCache();
+        invalidateIsOffloadedFilteringSupportedCache();
     }
 
     private void updateDynamicAudioBufferSupport(byte[] val) {
@@ -1061,7 +1059,7 @@ class AdapterProperties {
             // Reset adapter and profile connection states
             setConnectionState(BluetoothAdapter.STATE_DISCONNECTED);
             mProfileConnectionState.clear();
-            //invalidateGetProfileConnectionStateCache();
+            invalidateGetProfileConnectionStateCache();
             mProfilesConnected = 0;
             mProfilesConnecting = 0;
             mProfilesDisconnecting = 0;
@@ -1114,11 +1112,21 @@ class AdapterProperties {
         writer.println("  " + "DiscoveryEndMs: " + mDiscoveryEndMs);
 
         writer.println("  " + "Bonded devices:");
+        StringBuilder sb = new StringBuilder();
         for (BluetoothDevice device : mBondedDevices) {
-            writer.println(
-                    "    " + device.getAddress() + " [" + dumpDeviceType(device.getType()) + "] "
+            String address = device.getAddress();
+            String identityAddress = mService.getIdentityAddress(address);
+            if (identityAddress.equals(address)) {
+                writer.println("    " + address
+                            + " [" + dumpDeviceType(device.getType()) + "] "
                             + Utils.getName(device));
+            } else {
+                sb.append("    " + address + " => " + identityAddress
+                            + " [" + dumpDeviceType(device.getType()) + "] "
+                            + Utils.getName(device) + "\n");
+            }
         }
+        writer.println(sb.toString());
     }
 
     private String dumpDeviceType(int deviceType) {

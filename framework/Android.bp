@@ -66,7 +66,15 @@ java_sdk_library {
     },
     hostdex: true, // for hiddenapi check
 
-    impl_library_visibility: ["//visibility:public"],
+    impl_library_visibility: [
+        "//external/sl4a/Common",
+        "//frameworks/opt/wear",
+        "//packages/modules/Bluetooth/android/app/tests/unit",
+        "//packages/modules/Bluetooth/service",
+        "//packages/modules/Connectivity/nearby/tests/multidevices/clients/test_support/fastpair_provider",
+        "//packages/services/Car/car-builtin-lib",
+        ":__subpackages__",
+    ],
 
     apex_available: [
         "com.android.bluetooth",
@@ -82,10 +90,10 @@ java_sdk_library {
     },
 }
 
-// defaults for CTS tests that need to build against framework-bluetooths's @hide APIs
+// defaults for tests that need to build against framework-bluetooths's @hide APIs
 java_defaults {
-    name: "framework-bluetooth-cts-defaults",
-    sdk_version: "core_current",
+    name: "framework-bluetooth-tests-defaults",
+    sdk_version: "core_platform",
     libs: [
         // order matters: classes in framework-bluetooth are resolved before framework, meaning
         // @hide APIs in framework-bluetooth are resolved before @SystemApi stubs in framework

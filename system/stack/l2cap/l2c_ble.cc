@@ -28,11 +28,8 @@
 #include <base/strings/stringprintf.h>
 
 #include "bt_target.h"
-#include "bta_hearing_aid_api.h"
+#include "bta/include/bta_hearing_aid_api.h"
 #include "device/include/controller.h"
-#include "l2c_api.h"
-#include "l2c_int.h"
-#include "l2cdefs.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
@@ -41,6 +38,9 @@
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
+#include "stack/include/l2c_api.h"
+#include "stack/include/l2cdefs.h"
+#include "stack/l2cap/l2c_int.h"
 #include "stack_config.h"
 #include "types/raw_address.h"
 
@@ -671,7 +671,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
         con_info.l2cap_result = L2CAP_LE_RESULT_INVALID_PARAMETERS;
         l2c_csm_execute(p_ccb, L2CEVT_L2CAP_CREDIT_BASED_CONNECT_RSP_NEG,
                         &con_info);
-        break;
+        return;
       }
 
       /* At least some of the channels has been created and parameters are
@@ -698,8 +698,27 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
       for (int i = 0; i < p_lcb->pending_ecoc_conn_cnt; i++) {
         uint16_t cid = p_lcb->pending_ecoc_connection_cids[i];
+        STREAM_TO_UINT16(rcid, p);
+        /* if duplicated remote cid then disconnect original channel
+         * and current channel by sending event to upper layer */
+        temp_p_ccb = l2cu_find_ccb_by_remote_cid(p_lcb, rcid);
+        if (temp_p_ccb != nullptr) {
+          L2CAP_TRACE_ERROR(
+              "Already Allocated Destination cid. "
+              "rcid = %d "
+              "send peer_disc_req", rcid);
+
+          l2cu_send_peer_disc_req(temp_p_ccb);
+
+          temp_p_ccb = l2cu_find_ccb_by_cid(p_lcb, cid);
+          con_info.l2cap_result = L2CAP_LE_RESULT_UNACCEPTABLE_PARAMETERS;
+          l2c_csm_execute(temp_p_ccb, L2CEVT_L2CAP_CREDIT_BASED_CONNECT_RSP_NEG,
+                          &con_info);
+          continue;
+        }
+
         temp_p_ccb = l2cu_find_ccb_by_cid(p_lcb, cid);
-        STREAM_TO_UINT16(temp_p_ccb->remote_cid, p);
+        temp_p_ccb->remote_cid = rcid;
 
         L2CAP_TRACE_DEBUG(
             "local cid = %d "
@@ -779,7 +798,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
           return;
         }
 
-        if (p_ccb->peer_conn_cfg.mps > mps) {
+        if (p_ccb->peer_conn_cfg.mps > mps && num_of_channels > 1) {
           L2CAP_TRACE_WARNING(
               "L2CAP - rcvd config req mps reduction new mps < mps (%d < %d)",
               mtu, p_ccb->peer_conn_cfg.mtu);
@@ -812,6 +831,11 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_CREDIT_BASED_RECONFIG_RES: {
       uint16_t result;
+      if (p + sizeof(uint16_t) > p_pkt_end) {
+        android_errorWriteLog(0x534e4554, "212694559");
+        LOG(ERROR) << "invalid read";
+        return;
+      }
       STREAM_TO_UINT16(result, p);
 
       L2CAP_TRACE_DEBUG(
@@ -1022,7 +1046,7 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
           l2c_csm_execute(p_ccb, L2CEVT_L2CAP_DISCONNECT_REQ, NULL);
         }
       } else
-        l2cu_send_peer_disc_rsp(p_lcb, id, lcid, rcid);
+        l2cu_send_peer_cmd_reject(p_lcb, L2CAP_CMD_REJ_INVALID_CID, id, 0, 0);
 
       break;
 

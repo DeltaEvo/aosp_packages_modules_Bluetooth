@@ -192,7 +192,8 @@ bool BTM_BLE_IS_RESOLVE_BDA(const RawAddress& x);
 
 bool acl_refresh_remote_address(const RawAddress& identity_address,
                                 tBLE_ADDR_TYPE identity_address_type,
-                                const RawAddress& remote_bda, uint8_t rra_type,
+                                const RawAddress& remote_bda,
+                                tBTM_SEC_BLE::tADDRESS_TYPE rra_type,
                                 const RawAddress& rpa);
 
 void btm_establish_continue_from_address(const RawAddress& remote_bda,
@@ -203,6 +204,7 @@ bool acl_peer_supports_ble_connection_parameters_request(
 
 bool sco_peer_supports_esco_2m_phy(const RawAddress& remote_bda);
 bool sco_peer_supports_esco_3m_phy(const RawAddress& remote_bda);
+bool sco_peer_supports_esco_ev3(const RawAddress& remote_bda);
 
 bool acl_peer_supports_ble_packet_extension(uint16_t hci_handle);
 bool acl_peer_supports_ble_2m_phy(uint16_t hci_handle);

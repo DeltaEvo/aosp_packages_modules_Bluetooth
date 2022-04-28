@@ -58,14 +58,6 @@ public final class BluetoothStatusCodes {
 
     /**
      * Error code indicating that the caller does not have the
-     * {@link android.Manifest.permission#BLUETOOTH_ADVERTISE} permission.
-     *
-     * @hide
-     */
-    public static final int ERROR_MISSING_BLUETOOTH_ADVERTISE_PERMISSION = 5;
-
-    /**
-     * Error code indicating that the caller does not have the
      * {@link android.Manifest.permission#BLUETOOTH_CONNECT} permission.
      */
     public static final int ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION = 6;
@@ -77,12 +69,6 @@ public final class BluetoothStatusCodes {
      * @hide
      */
     public static final int ERROR_MISSING_BLUETOOTH_SCAN_PERMISSION = 7;
-
-    /**
-     * Error code indicating that the caller does not have the
-     * {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED} permission.
-     */
-    public static final int ERROR_MISSING_BLUETOOTH_PRIVILEGED_PERMISSION = 8;
 
     /**
      * Error code indicating that the profile service is not bound. You can bind a profile service
@@ -227,7 +213,7 @@ public final class BluetoothStatusCodes {
      * @hide
      */
     @SystemApi
-    public static final int ERROR_REMOTE_OPERATION_NOT_SUPPORTED = 24;
+    public static final int ERROR_REMOTE_OPERATION_NOT_SUPPORTED = 27;
 
     /**
      * A GATT writeCharacteristic request is not permitted on the remote device.
