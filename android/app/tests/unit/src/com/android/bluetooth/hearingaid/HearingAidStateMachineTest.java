@@ -63,8 +63,6 @@ public class HearingAidStateMachineTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when HearingAidService is not enabled",
-                BluetoothProperties.isProfileAshaCentralEnabled().orElse(false));
         // Set up mocks and test assets
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
@@ -86,9 +84,6 @@ public class HearingAidStateMachineTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!BluetoothProperties.isProfileAshaCentralEnabled().orElse(false)) {
-            return;
-        }
         mHearingAidStateMachine.doQuit();
         mHandlerThread.quit();
         TestUtils.clearAdapterService(mAdapterService);

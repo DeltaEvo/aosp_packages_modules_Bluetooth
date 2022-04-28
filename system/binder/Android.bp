@@ -10,14 +10,20 @@ package {
 // AIDL interface between libbluetooth-binder and framework.jar
 filegroup {
     name: "libbluetooth-binder-aidl",
+    visibility: [
+        "//frameworks/base",
+        "//packages/modules/Bluetooth:__subpackages__",
+    ],
     srcs: [
         ":framework-bluetooth-updatable-exported-aidl-sources",
         ":modules-utils-synchronous-result-receiver-aidl",
         "android/bluetooth/IBluetooth.aidl",
         "android/bluetooth/IBluetoothA2dp.aidl",
         "android/bluetooth/IBluetoothA2dpSink.aidl",
+        "android/bluetooth/IBluetoothActivityEnergyInfoListener.aidl",
         "android/bluetooth/IBluetoothAvrcpController.aidl",
         "android/bluetooth/IBluetoothAvrcpTarget.aidl",
+        "android/bluetooth/IBluetoothBattery.aidl",
         "android/bluetooth/IBluetoothCallback.aidl",
         "android/bluetooth/IBluetoothCsipSetCoordinator.aidl",
         "android/bluetooth/IBluetoothCsipSetCoordinatorCallback.aidl",
@@ -31,6 +37,7 @@ filegroup {
         "android/bluetooth/IBluetoothVolumeControlCallback.aidl",
         "android/bluetooth/IBluetoothHidHost.aidl",
         "android/bluetooth/IBluetoothLeAudio.aidl",
+        "android/bluetooth/IBluetoothLeAudioCallback.aidl",
         "android/bluetooth/IBluetoothLeBroadcastCallback.aidl",
         "android/bluetooth/IBluetoothManager.aidl",
         "android/bluetooth/IBluetoothManagerCallback.aidl",
