@@ -122,7 +122,7 @@ constexpr uint8_t kLeAudioCodecLC3FrameDur7500us = 0x00;
 constexpr uint8_t kLeAudioCodecLC3FrameDur10000us = 0x01;
 
 /* Audio Allocations */
-constexpr uint32_t kLeAudioLocationMonoUnspecified = 0x00000000;
+constexpr uint32_t kLeAudioLocationNotAllowed = 0x00000000;
 constexpr uint32_t kLeAudioLocationFrontLeft = 0x00000001;
 constexpr uint32_t kLeAudioLocationFrontRight = 0x00000002;
 constexpr uint32_t kLeAudioLocationFrontCenter = 0x00000004;
@@ -302,17 +302,7 @@ constexpr uint16_t kMaxTransportLatencyMin = 0x0005;
 constexpr uint16_t kMaxTransportLatencyMax = 0x0FA0;
 
 /* Enums */
-enum class CsisLockState : uint8_t {
-  CSIS_STATE_UNSET = 0x00,
-  CSIS_STATE_UNLOCKED,
-  CSIS_STATE_LOCKED
-};
-
-enum class CsisDiscoveryState : uint8_t {
-  CSIS_DISCOVERY_IDLE,
-  CSIS_DISCOVERY_ONGOING,
-  CSIS_DISCOVERY_COMPLETED,
-};
+enum class CigState : uint8_t { NONE, CREATING, CREATED, REMOVING };
 
 /* ASE states according to BAP defined state machine states */
 enum class AseState : uint8_t {
@@ -408,7 +398,9 @@ class LeAudioLtvMap {
   std::string ToString() const;
   size_t RawPacketSize() const;
   uint8_t* RawPacket(uint8_t* p_buf) const;
+  std::vector<uint8_t> RawPacket() const;
   static LeAudioLtvMap Parse(const uint8_t* value, uint8_t len, bool& success);
+  void Append(const LeAudioLtvMap& other);
 
  private:
   std::map<uint8_t, std::vector<uint8_t>> values;
@@ -575,6 +567,9 @@ using PublishedAudioCapabilities =
 using AudioLocations = std::bitset<32>;
 using AudioContexts = std::bitset<16>;
 
+std::ostream& operator<<(std::ostream& os, const AseState& state);
+std::ostream& operator<<(std::ostream& os, const CigState& state);
+std::ostream& operator<<(std::ostream& os, const LeAudioLc3Config& config);
 }  // namespace types
 
 namespace set_configurations {
@@ -595,9 +590,16 @@ struct CodecCapabilitySetting {
   uint8_t GetConfigChannelCount() const;
 };
 
+struct QosConfigSetting {
+  uint8_t retransmission_number;
+  uint16_t max_transport_latency;
+};
+
 struct SetConfiguration {
   SetConfiguration(uint8_t direction, uint8_t device_cnt, uint8_t ase_cnt,
                    uint8_t target_latency, CodecCapabilitySetting codec,
+                   QosConfigSetting qos = {.retransmission_number = 0,
+                                           .max_transport_latency = 0},
                    le_audio::types::LeAudioConfigurationStrategy strategy =
                        le_audio::types::LeAudioConfigurationStrategy::
                            MONO_ONE_CIS_PER_DEVICE)
@@ -606,6 +608,7 @@ struct SetConfiguration {
         ase_cnt(ase_cnt),
         target_latency(target_latency),
         codec(codec),
+        qos(qos),
         strategy(strategy) {}
 
   uint8_t direction;  /* Direction of set */
@@ -613,6 +616,7 @@ struct SetConfiguration {
   uint8_t ase_cnt;    /* How many ASE we need in configuration */
   uint8_t target_latency;
   CodecCapabilitySetting codec;
+  QosConfigSetting qos;
   types::LeAudioConfigurationStrategy strategy;
 };
 
@@ -629,8 +633,6 @@ const types::LeAudioCodecId LeAudioCodecIdLc3 = {
     .vendor_company_id = types::kLeAudioVendorCompanyIdUndefined,
     .vendor_codec_id = types::kLeAudioVendorCodecIdUndefined};
 
-static constexpr uint32_t kChannelAllocationMono =
-    codec_spec_conf::kLeAudioLocationMonoUnspecified;
 static constexpr uint32_t kChannelAllocationStereo =
     codec_spec_conf::kLeAudioLocationFrontLeft |
     codec_spec_conf::kLeAudioLocationFrontRight;
@@ -648,7 +650,7 @@ uint8_t get_num_of_devices_in_configuration(
 }  // namespace set_configurations
 
 struct stream_configuration {
-  bool reconfiguration_ongoing;
+  bool pending_configuration;
 
   types::LeAudioCodecId id;
 
@@ -687,11 +689,4 @@ void AppendMetadataLtvEntryForCcidList(std::vector<uint8_t>& metadata,
 void AppendMetadataLtvEntryForStreamingContext(
     std::vector<uint8_t>& metadata, types::LeAudioContextType context_type);
 uint8_t GetMaxCodecFramesPerSduFromPac(const types::acs_ac_record* pac_record);
-
 }  // namespace le_audio
-
-std::ostream& operator<<(std::ostream& os,
-                         const le_audio::types::LeAudioLc3Config& config);
-
-std::ostream& operator<<(std::ostream& os,
-                         const le_audio::types::AseState& state);
