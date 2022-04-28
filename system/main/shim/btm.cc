@@ -120,7 +120,7 @@ void Btm::ScanningCallbacks::OnScanResult(
     uint8_t primary_phy, uint8_t secondary_phy, uint8_t advertising_sid,
     int8_t tx_power, int8_t rssi, uint16_t periodic_advertising_interval,
     std::vector<uint8_t> advertising_data) {
-  tBLE_ADDR_TYPE ble_address_type = static_cast<tBLE_ADDR_TYPE>(address_type);
+  tBLE_ADDR_TYPE ble_address_type = to_ble_addr_type(address_type);
   uint16_t extended_event_type = 0;
 
   RawAddress raw_address;
@@ -174,7 +174,7 @@ Btm::Btm(os::Handler* handler, neighbor::InquiryModule* inquiry)
 }
 
 void Btm::OnInquiryResult(bluetooth::hci::InquiryResultView view) {
-  for (auto& response : view.GetInquiryResults()) {
+  for (auto& response : view.GetResponses()) {
     btm_api_process_inquiry_result(
         ToRawAddress(response.bd_addr_),
         static_cast<uint8_t>(response.page_scan_repetition_mode_),
@@ -184,7 +184,7 @@ void Btm::OnInquiryResult(bluetooth::hci::InquiryResultView view) {
 
 void Btm::OnInquiryResultWithRssi(
     bluetooth::hci::InquiryResultWithRssiView view) {
-  for (auto& response : view.GetInquiryResults()) {
+  for (auto& response : view.GetResponses()) {
     btm_api_process_inquiry_result_with_rssi(
         ToRawAddress(response.address_),
         static_cast<uint8_t>(response.page_scan_repetition_mode_),
