@@ -585,7 +585,7 @@ bool btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC* p_dev_rec) {
     if (p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
       p_dev_rec->ble.identity_address_with_type.bda = p_dev_rec->bd_addr;
       p_dev_rec->ble.identity_address_with_type.type =
-          p_dev_rec->ble.ble_addr_type;
+          p_dev_rec->ble.AddressType();
     }
 
     BTM_TRACE_DEBUG(
@@ -647,10 +647,6 @@ static void btm_ble_ble_unsupported_resolving_list_load_dev(
   return;
 }
 
-static bool is_local_identity_key_valid(const tBTM_SEC_DEV_REC& dev_rec) {
-  return dev_rec.ble.key_type & BTM_LE_KEY_LID;
-}
-
 static bool is_peer_identity_key_valid(const tBTM_SEC_DEV_REC& dev_rec) {
   return dev_rec.ble.key_type & BTM_LE_KEY_PID;
 }
@@ -667,8 +663,8 @@ void btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC& dev_rec) {
     return btm_ble_ble_unsupported_resolving_list_load_dev(&dev_rec);
   }
 
-  if (!is_local_identity_key_valid(dev_rec) &&
-      !is_peer_identity_key_valid(dev_rec)) {
+  // No need to check for local identity key validity. It remains unchanged.
+  if (!is_peer_identity_key_valid(dev_rec)) {
     LOG_INFO("Peer is not an RPA enabled device:%s",
              PRIVATE_ADDRESS(dev_rec.ble.identity_address_with_type));
     return;
@@ -686,7 +682,7 @@ void btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC& dev_rec) {
   if (dev_rec.ble.identity_address_with_type.bda.IsEmpty()) {
     dev_rec.ble.identity_address_with_type = {
         .bda = dev_rec.bd_addr,
-        .type = dev_rec.ble.ble_addr_type,
+        .type = dev_rec.ble.AddressType(),
     };
   }
 
