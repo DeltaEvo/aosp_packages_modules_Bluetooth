@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <base/callback.h>
+
 #include "bta_le_audio_api.h"
 
 class LeAudioClientImpl : public LeAudioClient {
@@ -31,6 +33,11 @@ class LeAudioClientImpl : public LeAudioClient {
   void GroupStop(const int group_id) override {}
   void GroupDestroy(const int group_id) override {}
   void GroupSetActive(const int group_id) override {}
+  void SetCodecConfigPreference(
+      int group_id,
+      bluetooth::le_audio::btle_audio_codec_config_t input_codec_config,
+      bluetooth::le_audio::btle_audio_codec_config_t output_codec_config)
+      override {}
   std::vector<RawAddress> GetGroupDevices(const int group_id) override {
     return {};
   }
@@ -41,7 +48,7 @@ void LeAudioClient::Initialize(
     base::Closure initCb, base::Callback<bool()> hal_2_1_verifier,
     const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>&
         offloading_preference) {}
-void LeAudioClient::Cleanup(void) {}
+void LeAudioClient::Cleanup(base::Callback<void()> cleanupCb) {}
 LeAudioClient* LeAudioClient::Get(void) { return nullptr; }
 void LeAudioClient::DebugDump(int fd) {}
 void LeAudioClient::AddFromStorage(const RawAddress& addr, bool autoconnect) {}

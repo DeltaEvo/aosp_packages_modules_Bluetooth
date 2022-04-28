@@ -29,6 +29,10 @@
 
 #include "btif_dm.h"
 
+#ifdef OS_ANDROID
+#include <android/sysprop/BluetoothProperties.sysprop.h>
+#endif
+
 #include <base/bind.h>
 #include <base/logging.h>
 #include <bluetooth/uuid.h>
@@ -46,6 +50,10 @@
 #include <unistd.h>
 
 #include <mutex>
+
+#ifdef OS_ANDROID
+#include <android/sysprop/BluetoothProperties.sysprop.h>
+#endif
 
 #include "advertise_data_parser.h"
 #include "bta_csis_api.h"
@@ -95,8 +103,9 @@ const Uuid UUID_VC = Uuid::FromString("1844");
 const Uuid UUID_CSIS = Uuid::FromString("1846");
 const Uuid UUID_LE_AUDIO = Uuid::FromString("184E");
 const Uuid UUID_LE_MIDI = Uuid::FromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
-/* FIXME: Not known yet, using a placeholder instead. */
-const Uuid UUID_HAS = Uuid::FromString("EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE");
+const Uuid UUID_HAS = Uuid::FromString("1854");
+const Uuid UUID_BASS = Uuid::FromString("184F");
+const Uuid UUID_BATTERY = Uuid::FromString("180F");
 const bool enable_address_consolidate = true;  // TODO remove
 
 #define COD_MASK 0x07FF
@@ -116,12 +125,19 @@ const bool enable_address_consolidate = true;  // TODO remove
 #define BTIF_DM_MAX_SDP_ATTEMPTS_AFTER_PAIRING 2
 
 #define NUM_TIMEOUT_RETRIES 5
+#ifndef PROPERTY_DEFAULT_DEVICE_NAME
+#define PROPERTY_DEFAULT_DEVICE_NAME "bluetooth.device.default_name"
+#endif
 #ifndef PROPERTY_PRODUCT_MODEL
 #define PROPERTY_PRODUCT_MODEL "ro.product.model"
 #endif
 #define DEFAULT_LOCAL_NAME_MAX 31
 #if (DEFAULT_LOCAL_NAME_MAX > BTM_MAX_LOC_BD_NAME_LEN)
 #error "default btif local name size exceeds stack supported length"
+#endif
+
+#ifndef PROPERTY_BLE_PRIVACY_ENABLED
+#define PROPERTY_BLE_PRIVACY_ENABLED "bluetooth.core.gap.le.privacy.enabled"
 #endif
 
 #define ENCRYPTED_BREDR 2
@@ -966,9 +982,14 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
         bt_status_t ret;
         BTIF_TRACE_DEBUG("%s: Storing link key. key_type=0x%x, bond_type=%d",
                          __func__, p_auth_cmpl->key_type, pairing_cb.bond_type);
-        ret = btif_storage_add_bonded_device(&bd_addr, p_auth_cmpl->key,
-                                             p_auth_cmpl->key_type,
-                                             pairing_cb.pin_code_len);
+        if (!bd_addr.IsEmpty()) {
+          ret = btif_storage_add_bonded_device(&bd_addr, p_auth_cmpl->key,
+                                               p_auth_cmpl->key_type,
+                                               pairing_cb.pin_code_len);
+        } else {
+          LOG_WARN("bd_addr is empty");
+          ret = BT_STATUS_FAIL;
+        }
         ASSERTC(ret == BT_STATUS_SUCCESS, "storing link key failed", ret);
       } else {
         BTIF_TRACE_DEBUG(
@@ -1336,7 +1357,8 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
 static bool btif_is_interesting_le_service(bluetooth::Uuid uuid) {
   return (uuid.As16Bit() == UUID_SERVCLASS_LE_HID || uuid == UUID_HEARING_AID ||
           uuid == UUID_VC || uuid == UUID_CSIS || uuid == UUID_LE_AUDIO ||
-          uuid == UUID_LE_MIDI || uuid == UUID_HAS);
+          uuid == UUID_LE_MIDI || uuid == UUID_HAS || uuid == UUID_BASS ||
+          uuid == UUID_BATTERY);
 }
 
 /*******************************************************************************
@@ -1529,8 +1551,22 @@ void BTIF_dm_enable() {
     BTA_DmSetDeviceName(btif_get_default_local_name());
   }
 
-  /* Enable local privacy */
-  BTA_DmBleConfigLocalPrivacy(BLE_LOCAL_PRIVACY_ENABLED);
+  /* Enable or disable local privacy */
+  bool ble_privacy_enabled = true;
+#ifdef OS_ANDROID
+  ble_privacy_enabled =
+      android::sysprop::BluetoothProperties::isGapLePrivacyEnabled().value_or(
+          true);
+#else
+  char ble_privacy_text[PROPERTY_VALUE_MAX] = "true";  // default is enabled
+  if (osi_property_get(PROPERTY_BLE_PRIVACY_ENABLED, ble_privacy_text,
+                       "true") &&
+      !strcmp(ble_privacy_text, "false")) {
+    ble_privacy_enabled = false;
+  }
+#endif
+  LOG_INFO("%s BLE Privacy: %d", __func__, ble_privacy_enabled);
+  BTA_DmBleConfigLocalPrivacy(ble_privacy_enabled);
 
   /* for each of the enabled services in the mask, trigger the profile
    * enable */
@@ -2180,7 +2216,7 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop) {
       prop->len = sizeof(bt_scan_mode_t);
     } break;
 
-    case BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT: {
+    case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT: {
       uint32_t* tmt = (uint32_t*)prop->val;
       *tmt = 120; /* default to 120s, if not found in NV */
       prop->len = sizeof(uint32_t);
@@ -2510,8 +2546,14 @@ void btif_dm_proc_loc_oob(tBT_TRANSPORT transport, bool is_valid,
     waiting_on_oob_advertiser_start = false;
     return;
   }
-  // Now that we have the data, lets start advertising and get the address.
-  start_oob_advertiser(transport, is_valid, c, r);
+  if (transport == BT_TRANSPORT_LE) {
+    // Now that we have the data, lets start advertising and get the address.
+    start_oob_advertiser(transport, is_valid, c, r);
+  } else {
+    invoke_oob_data_request_cb(transport, is_valid, c, r,
+                               *controller_get_interface()->get_address(),
+                               0x00);
+  }
 }
 
 /*******************************************************************************
@@ -2766,6 +2808,11 @@ void btif_dm_get_ble_local_keys(tBTA_DM_BLE_LOCAL_KEY_MASK* p_key_mask,
 
 static void btif_dm_save_ble_bonding_keys(RawAddress& bd_addr) {
   BTIF_TRACE_DEBUG("%s", __func__);
+
+  if (bd_addr.IsEmpty()) {
+    LOG_WARN("bd_addr is empty");
+    return;
+  }
 
   if (pairing_cb.ble.is_penc_key_rcvd) {
     btif_storage_add_ble_bonding_key(
@@ -3065,9 +3112,23 @@ void btif_dm_read_energy_info() { BTA_DmBleGetEnergyInfo(bta_energy_info_cb); }
 static const char* btif_get_default_local_name() {
   if (btif_default_local_name[0] == '\0') {
     int max_len = sizeof(btif_default_local_name) - 1;
-    if (BTM_DEF_LOCAL_NAME[0] != '\0') {
-      strncpy(btif_default_local_name, BTM_DEF_LOCAL_NAME, max_len);
-    } else {
+
+    // Use the stable sysprop on Android devices, otherwise use osi_property_get
+#ifdef OS_ANDROID
+    std::optional<std::string> default_local_name =
+        android::sysprop::BluetoothProperties::getDefaultDeviceName();
+    if (default_local_name.has_value() && default_local_name.value() != "") {
+      strncpy(btif_default_local_name, default_local_name.value().c_str(),
+              max_len);
+    }
+#else
+    char prop_name[PROPERTY_VALUE_MAX];
+    osi_property_get(PROPERTY_DEFAULT_DEVICE_NAME, prop_name, "");
+    strncpy(btif_default_local_name, prop_name, max_len);
+#endif
+
+    // If no value was placed in the btif_default_local_name then use model name
+    if (btif_default_local_name[0] == '\0') {
       char prop_model[PROPERTY_VALUE_MAX];
       osi_property_get(PROPERTY_PRODUCT_MODEL, prop_model, "");
       strncpy(btif_default_local_name, prop_model, max_len);
@@ -3205,4 +3266,9 @@ bool btif_get_address_type(const RawAddress& bda, tBLE_ADDR_TYPE* p_addr_type) {
   LOG_DEBUG(" bd_addr:%s[%s]", PRIVATE_ADDRESS(bda),
             AddressTypeText(*p_addr_type).c_str());
   return true;
+}
+
+void btif_dm_clear_event_filter() {
+  LOG_VERBOSE("%s: called", __func__);
+  bta_dm_clear_event_filter();
 }
