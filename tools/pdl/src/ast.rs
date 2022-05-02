@@ -14,8 +14,11 @@ pub type SourceDatabase = files::SimpleFiles<String, String>;
 
 #[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SourceLocation {
+    /// Byte offset into the file (counted from zero).
     pub offset: usize,
+    /// Line number (counted from zero).
     pub line: usize,
+    /// Column number (counted from zero)
     pub column: usize,
 }
 
@@ -165,24 +168,21 @@ pub struct Grammar {
     pub declarations: Vec<Decl>,
 }
 
-/// Implemented for all AST elements.
-pub trait Located<'d> {
-    fn loc(&'d self) -> &'d SourceRange;
-}
-
-/// Implemented for named AST elements.
-pub trait Named<'d> {
-    fn id(&'d self) -> Option<&'d String>;
-}
-
 impl SourceLocation {
+    /// Construct a new source location.
+    ///
+    /// The `line_starts` indicates the byte offsets where new lines
+    /// start in the file. The first element should thus be `0` since
+    /// every file has at least one line starting at offset `0`.
     pub fn new(offset: usize, line_starts: &[usize]) -> SourceLocation {
+        let mut loc = SourceLocation { offset, line: 0, column: offset };
         for (line, start) in line_starts.iter().enumerate() {
-            if *start <= offset {
-                return SourceLocation { offset, line, column: offset - start };
+            if *start > offset {
+                break;
             }
+            loc = SourceLocation { offset, line, column: offset - start };
         }
-        unreachable!()
+        loc
     }
 }
 
@@ -234,8 +234,34 @@ impl Grammar {
     }
 }
 
-impl<'d> Located<'d> for Field {
-    fn loc(&'d self) -> &'d SourceRange {
+impl Decl {
+    pub fn loc(&self) -> &SourceRange {
+        match self {
+            Decl::Checksum { loc, .. }
+            | Decl::CustomField { loc, .. }
+            | Decl::Enum { loc, .. }
+            | Decl::Packet { loc, .. }
+            | Decl::Struct { loc, .. }
+            | Decl::Group { loc, .. }
+            | Decl::Test { loc, .. } => loc,
+        }
+    }
+
+    pub fn id(&self) -> Option<&String> {
+        match self {
+            Decl::Test { .. } => None,
+            Decl::Checksum { id, .. }
+            | Decl::CustomField { id, .. }
+            | Decl::Enum { id, .. }
+            | Decl::Packet { id, .. }
+            | Decl::Struct { id, .. }
+            | Decl::Group { id, .. } => Some(id),
+        }
+    }
+}
+
+impl Field {
+    pub fn loc(&self) -> &SourceRange {
         match self {
             Field::Checksum { loc, .. }
             | Field::Padding { loc, .. }
@@ -251,24 +277,8 @@ impl<'d> Located<'d> for Field {
             | Field::Group { loc, .. } => loc,
         }
     }
-}
 
-impl<'d> Located<'d> for Decl {
-    fn loc(&'d self) -> &'d SourceRange {
-        match self {
-            Decl::Checksum { loc, .. }
-            | Decl::CustomField { loc, .. }
-            | Decl::Enum { loc, .. }
-            | Decl::Packet { loc, .. }
-            | Decl::Struct { loc, .. }
-            | Decl::Group { loc, .. }
-            | Decl::Test { loc, .. } => loc,
-        }
-    }
-}
-
-impl<'d> Named<'d> for Field {
-    fn id(&'d self) -> Option<&'d String> {
+    pub fn id(&self) -> Option<&String> {
         match self {
             Field::Checksum { .. }
             | Field::Padding { .. }
@@ -286,16 +296,38 @@ impl<'d> Named<'d> for Field {
     }
 }
 
-impl<'d> Named<'d> for Decl {
-    fn id(&'d self) -> Option<&'d String> {
-        match self {
-            Decl::Test { .. } => None,
-            Decl::Checksum { id, .. }
-            | Decl::CustomField { id, .. }
-            | Decl::Enum { id, .. }
-            | Decl::Packet { id, .. }
-            | Decl::Struct { id, .. }
-            | Decl::Group { id, .. } => Some(id),
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_location_new() {
+        let line_starts = &[0, 20, 80, 120, 150];
+        assert_eq!(
+            SourceLocation::new(0, line_starts),
+            SourceLocation { offset: 0, line: 0, column: 0 }
+        );
+        assert_eq!(
+            SourceLocation::new(10, line_starts),
+            SourceLocation { offset: 10, line: 0, column: 10 }
+        );
+        assert_eq!(
+            SourceLocation::new(50, line_starts),
+            SourceLocation { offset: 50, line: 1, column: 30 }
+        );
+        assert_eq!(
+            SourceLocation::new(100, line_starts),
+            SourceLocation { offset: 100, line: 2, column: 20 }
+        );
+        assert_eq!(
+            SourceLocation::new(1000, line_starts),
+            SourceLocation { offset: 1000, line: 4, column: 850 }
+        );
+    }
+
+    #[test]
+    fn source_location_new_no_crash_with_empty_line_starts() {
+        let loc = SourceLocation::new(100, &[]);
+        assert_eq!(loc, SourceLocation { offset: 100, line: 0, column: 100 });
     }
 }

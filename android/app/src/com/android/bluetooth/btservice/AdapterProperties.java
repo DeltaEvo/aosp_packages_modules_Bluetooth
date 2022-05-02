@@ -69,7 +69,7 @@ class AdapterProperties {
 
     private static final String MAX_CONNECTED_AUDIO_DEVICES_PROPERTY =
             "persist.bluetooth.maxconnectedaudiodevices";
-    static final int MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOND = 1;
+    private static final int MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOUND = 1;
     private static final int MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND = 5;
     private static final String A2DP_OFFLOAD_SUPPORTED_PROPERTY =
             "ro.bluetooth.a2dp_offload.supported";
@@ -216,7 +216,7 @@ class AdapterProperties {
                         configDefaultMaxConnectedAudioDevices);
         // Make sure the final value of max connected audio devices is within allowed range
         mMaxConnectedAudioDevices = Math.min(Math.max(propertyOverlayedMaxConnectedAudioDevices,
-                MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOND), MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND);
+                MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOUND), MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND);
         Log.i(TAG, "init(), maxConnectedAudioDevices, default="
                 + configDefaultMaxConnectedAudioDevices + ", propertyOverlayed="
                 + propertyOverlayedMaxConnectedAudioDevices + ", finalValue="
@@ -263,6 +263,10 @@ class AdapterProperties {
     private static void invalidateIsOffloadedFilteringSupportedCache() {
         BluetoothAdapter.invalidateIsOffloadedFilteringSupportedCache();
     }
+    private static void invalidateBluetoothGetConnectionStateCache() {
+        BluetoothMap.invalidateBluetoothGetConnectionStateCache();
+        BluetoothSap.invalidateBluetoothGetConnectionStateCache();
+    }
     private static void invalidateGetConnectionStateCache() {
         BluetoothAdapter.invalidateGetAdapterConnectionStateCache();
     }
@@ -274,6 +278,7 @@ class AdapterProperties {
         invalidateIsOffloadedFilteringSupportedCache();
         invalidateGetConnectionStateCache();
         invalidateGetBondStateCache();
+        invalidateBluetoothGetConnectionStateCache();
     }
 
     @Override

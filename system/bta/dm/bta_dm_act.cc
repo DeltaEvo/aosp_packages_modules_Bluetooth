@@ -253,8 +253,6 @@ const tBTM_APPL_INFO bta_security = {
 #define MAX_DISC_RAW_DATA_BUF (4096)
 uint8_t g_disc_raw_data_buf[MAX_DISC_RAW_DATA_BUF];
 
-extern DEV_CLASS local_device_default_class;
-
 // Stores the local Input/Output Capabilities of the Bluetooth device.
 static uint8_t btm_local_io_caps;
 
@@ -359,7 +357,10 @@ void BTA_dm_on_hw_on() {
   memset(&bta_dm_conn_srvcs, 0, sizeof(bta_dm_conn_srvcs));
   memset(&bta_dm_di_cb, 0, sizeof(tBTA_DM_DI_CB));
 
-  memcpy(dev_class, p_bta_dm_cfg->dev_class, sizeof(dev_class));
+  btif_dm_get_local_class_of_device(dev_class);
+  LOG_INFO("%s: Read default class of device {0x%x, 0x%x, 0x%x}", __func__,
+      dev_class[0], dev_class[1], dev_class[2]);
+
   if (bluetooth::shim::is_gd_security_enabled()) {
     bluetooth::shim::BTM_SetDeviceClass(dev_class);
   } else {
@@ -1197,7 +1198,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
             &bta_dm_service_search_remname_cback);
       }
 
-      p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+      p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
       p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
       p_msg->disc_result.result.disc_res.result = BTA_SUCCESS;
       p_msg->disc_result.result.disc_res.num_uuids = uuid_list.size();
@@ -1206,7 +1207,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
         // TODO(jpawlowski): make p_uuid_list into vector, and just copy
         // vectors, but first get rid of bta_sys_sendmsg below.
         p_msg->disc_result.result.disc_res.p_uuid_list =
-            (Uuid*)osi_malloc(uuid_list.size() * sizeof(Uuid));
+            (Uuid*)osi_calloc(uuid_list.size() * sizeof(Uuid));
         memcpy(p_msg->disc_result.result.disc_res.p_uuid_list, uuid_list.data(),
                uuid_list.size() * sizeof(Uuid));
       }
@@ -1262,7 +1263,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
       BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
     }
 
-    p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+    p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
     p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
     p_msg->disc_result.result.disc_res.result = BTA_FAILURE;
     p_msg->disc_result.result.disc_res.services =
@@ -1793,7 +1794,7 @@ static void bta_dm_sdp_callback(tSDP_STATUS sdp_status) {
       (tBTA_DM_SDP_RESULT*)osi_malloc(sizeof(tBTA_DM_SDP_RESULT));
 
   p_msg->hdr.event = BTA_DM_SDP_RESULT_EVT;
-  p_msg->sdp_result = static_cast<uint16_t>(sdp_status);
+  p_msg->sdp_result = sdp_status;
 
   bta_sys_sendmsg(p_msg);
 }
