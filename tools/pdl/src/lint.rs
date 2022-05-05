@@ -22,19 +22,12 @@ pub trait Lintable {
 /// Each field but the last in the chain is a typedef field of a group.
 /// The last field can also be a typedef field of a group if the chain is
 /// not fully expanded.
-type FieldPath<'d> = Vec<&'d Field>;
+#[derive(Clone)]
+struct FieldPath<'d>(Vec<&'d Field>);
 
 /// Gather information about the full grammar declaration.
 struct Scope<'d> {
-    // Collection of Group declarations.
-    groups: HashMap<String, &'d Decl>,
-
-    // Collection of Packet declarations.
-    packets: HashMap<String, &'d Decl>,
-
-    // Collection of Enum, Struct, Checksum, and CustomField declarations.
-    // Packet and Group can not be referenced in a Typedef field and thus
-    // do not share the same namespace.
+    // Collection of Group, Packet, Enum, Struct, Checksum, and CustomField declarations.
     typedef: HashMap<String, &'d Decl>,
 
     // Collection of Packet, Struct, and Group scope declarations.
@@ -90,9 +83,9 @@ impl<'d> std::hash::Hash for &'d Decl {
     }
 }
 
-impl<'d> Located<'d> for FieldPath<'d> {
-    fn loc(&'d self) -> &'d SourceRange {
-        self.last().unwrap().loc()
+impl FieldPath<'_> {
+    fn loc(&self) -> &SourceRange {
+        self.0.last().unwrap().loc()
     }
 }
 
@@ -147,7 +140,7 @@ impl<'d> PacketScope<'d> {
     fn insert(&mut self, field: &'d Field, result: &mut LintDiagnostics) {
         match field {
             Field::Checksum { loc, field_id, .. } => {
-                self.checksums.insert(field_id.clone(), vec![field]).map(|prev| {
+                self.checksums.insert(field_id.clone(), FieldPath(vec![field])).map(|prev| {
                     result.push(
                         Diagnostic::error()
                             .with_message(format!(
@@ -167,7 +160,7 @@ impl<'d> PacketScope<'d> {
             Field::Padding { .. } | Field::Reserved { .. } | Field::Fixed { .. } => None,
 
             Field::Size { loc, field_id, .. } | Field::Count { loc, field_id, .. } => {
-                self.sizes.insert(field_id.clone(), vec![field]).map(|prev| {
+                self.sizes.insert(field_id.clone(), FieldPath(vec![field])).map(|prev| {
                     result.push(
                         Diagnostic::error()
                             .with_message(format!(
@@ -195,7 +188,7 @@ impl<'d> PacketScope<'d> {
                             ]),
                     )
                 }
-                self.payload = Some(vec![field]);
+                self.payload = Some(FieldPath(vec![field]));
                 None
             }
 
@@ -203,7 +196,7 @@ impl<'d> PacketScope<'d> {
             | Field::Scalar { loc, id, .. }
             | Field::Typedef { loc, id, .. } => self
                 .named
-                .insert(id.clone(), vec![field])
+                .insert(id.clone(), FieldPath(vec![field]))
                 .map(|prev| result.err_redeclared(id, "field", loc, prev.loc())),
 
             Field::Group { loc, group_id, .. } => {
@@ -314,8 +307,8 @@ impl<'d> PacketScope<'d> {
         }
         for (id, field) in packet_scope.named.iter() {
             let mut path = vec![group];
-            path.extend(field.clone());
-            if let Some(prev) = self.named.insert(id.clone(), path) {
+            path.extend(field.0.clone());
+            if let Some(prev) = self.named.insert(id.clone(), FieldPath(path)) {
                 err_redeclared_by_group(
                     result,
                     format!("inserted group redeclares field `{}`", id),
@@ -328,8 +321,8 @@ impl<'d> PacketScope<'d> {
         // Append group fields to the finalizeed fields.
         for field in packet_scope.fields.iter() {
             let mut path = vec![group];
-            path.extend(field.clone());
-            self.fields.push(path);
+            path.extend(field.0.clone());
+            self.fields.push(FieldPath(path));
         }
 
         // Append group constraints to the caller packet_scope.
@@ -357,7 +350,7 @@ impl<'d> PacketScope<'d> {
     /// Cleanup scope after processing all fields.
     fn finalize(&mut self, result: &mut LintDiagnostics) {
         // Check field shadowing.
-        for f in self.fields.iter().map(|f| f.last().unwrap()) {
+        for f in self.fields.iter().map(|f| f.0.last().unwrap()) {
             if let Some(id) = f.id() {
                 if let Some(prev) = self.all_fields.insert(id.clone(), f) {
                     result.push(
@@ -499,10 +492,11 @@ impl<'d> Scope<'d> {
                 _ => (),
             }
 
-            let (parent_id, parent_namespace, fields) = match decl {
-                Decl::Packet { parent_id, fields, .. } => (parent_id, &scope.packets, fields),
-                Decl::Struct { parent_id, fields, .. } => (parent_id, &scope.typedef, fields),
-                Decl::Group { fields, .. } => (&None, &scope.groups, fields),
+            let (parent_id, fields) = match decl {
+                Decl::Packet { parent_id, fields, .. } | Decl::Struct { parent_id, fields, .. } => {
+                    (parent_id.as_ref(), fields)
+                }
+                Decl::Group { fields, .. } => (None, fields),
                 _ => return None,
             };
 
@@ -513,7 +507,7 @@ impl<'d> Scope<'d> {
             for f in fields {
                 match f {
                     Field::Group { group_id, constraints, .. } => {
-                        match scope.groups.get(group_id) {
+                        match scope.typedef.get(group_id) {
                             None => result.push(
                                 Diagnostic::error()
                                     .with_message(format!(
@@ -522,7 +516,7 @@ impl<'d> Scope<'d> {
                                     ))
                                     .with_labels(vec![f.loc().primary()]),
                             ),
-                            Some(group_decl) => {
+                            Some(group_decl @ Decl::Group { .. }) => {
                                 // Recurse to flatten the inserted group.
                                 if let Some(rscope) = bfs(group_decl, context, scope, result) {
                                     // Inline the group fields and constraints into
@@ -530,10 +524,19 @@ impl<'d> Scope<'d> {
                                     lscope.inline(scope, rscope, f, constraints.iter(), result)
                                 }
                             }
+                            Some(_) => result.push(
+                                Diagnostic::error()
+                                    .with_message(format!(
+                                        "invalid group field identifier `{}`",
+                                        group_id
+                                    ))
+                                    .with_labels(vec![f.loc().primary()])
+                                    .with_notes(vec!["hint: expected group identifier".to_owned()]),
+                            ),
                         }
                     }
                     Field::Typedef { type_id, .. } => {
-                        lscope.fields.push(vec![f]);
+                        lscope.fields.push(FieldPath(vec![f]));
                         match scope.typedef.get(type_id) {
                             None => result.push(
                                 Diagnostic::error()
@@ -549,26 +552,37 @@ impl<'d> Scope<'d> {
                             Some(_) => (),
                         }
                     }
-                    _ => lscope.fields.push(vec![f]),
+                    _ => lscope.fields.push(FieldPath(vec![f])),
                 }
             }
 
             // Iterate over parent declaration.
-            for id in parent_id {
-                match parent_namespace.get(id) {
-                    None => result.push(
-                        Diagnostic::error()
-                            .with_message(format!("undeclared parent identifier `{}`", id))
-                            .with_labels(vec![decl.loc().primary()])
-                            .with_notes(vec![format!("hint: expected {} parent", decl.kind())]),
-                    ),
-                    Some(parent_decl) => {
-                        if let Some(rscope) = bfs(parent_decl, context, scope, result) {
-                            // Import the parent fields and constraints into the current scope.
-                            lscope.inherit(scope, rscope, decl.constraints(), result)
-                        }
+            let parent = parent_id.and_then(|id| scope.typedef.get(id));
+            match (decl, parent) {
+                (Decl::Packet { parent_id: Some(_), .. }, None)
+                | (Decl::Struct { parent_id: Some(_), .. }, None) => result.push(
+                    Diagnostic::error()
+                        .with_message(format!(
+                            "undeclared parent identifier `{}`",
+                            parent_id.unwrap()
+                        ))
+                        .with_labels(vec![decl.loc().primary()])
+                        .with_notes(vec![format!("hint: expected {} parent", decl.kind())]),
+                ),
+                (Decl::Packet { .. }, Some(Decl::Struct { .. }))
+                | (Decl::Struct { .. }, Some(Decl::Packet { .. })) => result.push(
+                    Diagnostic::error()
+                        .with_message(format!("invalid parent identifier `{}`", parent_id.unwrap()))
+                        .with_labels(vec![decl.loc().primary()])
+                        .with_notes(vec![format!("hint: expected {} parent", decl.kind())]),
+                ),
+                (_, Some(parent_decl)) => {
+                    if let Some(rscope) = bfs(parent_decl, context, scope, result) {
+                        // Import the parent fields and constraints into the current scope.
+                        lscope.inherit(scope, rscope, decl.constraints(), result)
                     }
                 }
+                _ => (),
             }
 
             lscope.finalize(result);
@@ -581,7 +595,7 @@ impl<'d> Scope<'d> {
         let mut context =
             Context::<'d> { list: vec![], visited: HashMap::new(), scopes: HashMap::new() };
 
-        for decl in self.packets.values().chain(self.typedef.values()).chain(self.groups.values()) {
+        for decl in self.typedef.values() {
             bfs(decl, &mut context, self, result);
         }
 
@@ -652,7 +666,7 @@ fn lint_checksum(
     let checksum_loc = path.loc();
     let field_decl = packet_scope.named.get(field_id);
 
-    match field_decl.and_then(|f| f.last()) {
+    match field_decl.and_then(|f| f.0.last()) {
         Some(Field::Typedef { loc: field_loc, type_id, .. }) => {
             // Check declaration type of checksum field.
             match scope.typedef.get(type_id) {
@@ -675,7 +689,7 @@ fn lint_checksum(
                 None => (),
             };
             // Check declaration order of checksum field.
-            match field_decl.and_then(|f| f.first()) {
+            match field_decl.and_then(|f| f.0.first()) {
                 Some(decl) if decl.loc().start > checksum_loc.start => result.push(
                     Diagnostic::error()
                         .with_message("invalid checksum start declaration")
@@ -722,14 +736,14 @@ fn lint_size(
     let size_loc = path.loc();
 
     if field_id == "_payload_" {
-        return match packet_scope.payload.as_ref().and_then(|f| f.last()) {
+        return match packet_scope.payload.as_ref().and_then(|f| f.0.last()) {
             Some(Field::Body { .. }) => result.push(
                 Diagnostic::error()
                     .with_message("size field uses undeclared payload field, did you mean _body_ ?")
                     .with_labels(vec![size_loc.primary()]),
             ),
             Some(Field::Payload { .. }) => {
-                match packet_scope.payload.as_ref().and_then(|f| f.first()) {
+                match packet_scope.payload.as_ref().and_then(|f| f.0.first()) {
                     Some(field) if field.loc().start < size_loc.start => result.push(
                         Diagnostic::error().with_message("invalid size field").with_labels(vec![
                             size_loc
@@ -750,14 +764,14 @@ fn lint_size(
         };
     }
     if field_id == "_body_" {
-        return match packet_scope.payload.as_ref().and_then(|f| f.last()) {
+        return match packet_scope.payload.as_ref().and_then(|f| f.0.last()) {
             Some(Field::Payload { .. }) => result.push(
                 Diagnostic::error()
                     .with_message("size field uses undeclared body field, did you mean _payload_ ?")
                     .with_labels(vec![size_loc.primary()]),
             ),
             Some(Field::Body { .. }) => {
-                match packet_scope.payload.as_ref().and_then(|f| f.first()) {
+                match packet_scope.payload.as_ref().and_then(|f| f.0.first()) {
                     Some(field) if field.loc().start < size_loc.start => result.push(
                         Diagnostic::error().with_message("invalid size field").with_labels(vec![
                             size_loc
@@ -780,7 +794,7 @@ fn lint_size(
 
     let field = packet_scope.named.get(field_id);
 
-    match field.and_then(|f| f.last()) {
+    match field.and_then(|f| f.0.last()) {
         Some(Field::Array { size: Some(_), loc: array_loc, .. }) => result.push(
             Diagnostic::warning()
                 .with_message(format!("size field uses array `{}` with static size", field_id))
@@ -807,7 +821,7 @@ fn lint_size(
 
         None => result.err_undeclared(field_id, size_loc),
     };
-    match field.and_then(|f| f.first()) {
+    match field.and_then(|f| f.0.first()) {
         Some(field) if field.loc().start < size_loc.start => {
             result.push(Diagnostic::error().with_message("invalid size field").with_labels(vec![
                     size_loc
@@ -839,7 +853,7 @@ fn lint_count(
     let count_loc = path.loc();
     let field = packet_scope.named.get(field_id);
 
-    match field.and_then(|f| f.last()) {
+    match field.and_then(|f| f.0.last()) {
         Some(Field::Array { size: Some(_), loc: array_loc, .. }) => result.push(
             Diagnostic::warning()
                 .with_message(format!("count field uses array `{}` with static size", field_id))
@@ -867,7 +881,7 @@ fn lint_count(
 
         None => result.err_undeclared(field_id, count_loc),
     };
-    match field.and_then(|f| f.first()) {
+    match field.and_then(|f| f.0.first()) {
         Some(field) if field.loc().start < count_loc.start => {
             result.push(Diagnostic::error().with_message("invalid count field").with_labels(vec![
                     count_loc.primary().with_message(format!(
@@ -1043,7 +1057,7 @@ fn lint_field(
     field: &FieldPath,
     result: &mut LintDiagnostics,
 ) {
-    match field.last().unwrap() {
+    match field.0.last().unwrap() {
         Field::Checksum { field_id, .. } => {
             lint_checksum(scope, packet_scope, field, field_id, result)
         }
@@ -1215,28 +1229,15 @@ impl Decl {
 
 impl Grammar {
     fn scope<'d>(&'d self, result: &mut LintDiagnostics) -> Scope<'d> {
-        let mut scope = Scope {
-            groups: HashMap::new(),
-            packets: HashMap::new(),
-            typedef: HashMap::new(),
-            scopes: HashMap::new(),
-        };
+        let mut scope = Scope { typedef: HashMap::new(), scopes: HashMap::new() };
 
         // Gather top-level declarations.
         // Validate the top-level scopes (Group, Packet, Typedef).
         //
         // TODO: switch to try_insert when stable
         for decl in &self.declarations {
-            if let Some((id, namespace)) = match decl {
-                Decl::Checksum { id, .. }
-                | Decl::CustomField { id, .. }
-                | Decl::Struct { id, .. }
-                | Decl::Enum { id, .. } => Some((id, &mut scope.typedef)),
-                Decl::Group { id, .. } => Some((id, &mut scope.groups)),
-                Decl::Packet { id, .. } => Some((id, &mut scope.packets)),
-                _ => None,
-            } {
-                if let Some(prev) = namespace.insert(id.clone(), decl) {
+            if let Some(id) = decl.id() {
+                if let Some(prev) = scope.typedef.insert(id.clone(), decl) {
                     result.err_redeclared(id, decl.kind(), decl.loc(), prev.loc())
                 }
             }
@@ -1261,5 +1262,33 @@ impl Lintable for Grammar {
             decl.lint(&scope, &mut result)
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ast::*;
+    use crate::lint::Lintable;
+    use crate::parser::parse_inline;
+
+    macro_rules! grammar {
+        ($db:expr, $text:literal) => {
+            parse_inline($db, "stdin".to_owned(), $text.to_owned()).expect("parsing failure")
+        };
+    }
+
+    #[test]
+    fn test_packet_redeclared() {
+        let mut db = SourceDatabase::new();
+        let grammar = grammar!(
+            &mut db,
+            r#"
+        little_endian_packets
+        struct Name { }
+        packet Name { }
+        "#
+        );
+        let result = grammar.lint();
+        assert!(!result.diagnostics.is_empty());
     }
 }

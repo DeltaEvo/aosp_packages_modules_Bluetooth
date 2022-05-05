@@ -464,16 +464,16 @@ class DualModeController : public Device {
   void LeConnectionCancel(CommandView args);
 
   // 7.8.14
-  void LeReadConnectListSize(CommandView args);
+  void LeReadFilterAcceptListSize(CommandView args);
 
   // 7.8.15
-  void LeClearConnectList(CommandView args);
+  void LeClearFilterAcceptList(CommandView args);
 
   // 7.8.16
-  void LeAddDeviceToConnectList(CommandView args);
+  void LeAddDeviceToFilterAcceptList(CommandView args);
 
   // 7.8.17
-  void LeRemoveDeviceFromConnectList(CommandView args);
+  void LeRemoveDeviceFromFilterAcceptList(CommandView args);
 
   // 7.8.21
   void LeReadRemoteFeatures(CommandView args);
@@ -585,6 +585,9 @@ class DualModeController : public Device {
   void LeRequestPeerSca(CommandView packet_view);
   void LeSetupIsoDataPath(CommandView packet_view);
   void LeRemoveIsoDataPath(CommandView packet_view);
+
+  // 7.8.115
+  void LeSetHostFeature(CommandView packet_view);
 
   // Vendor-specific Commands
 

@@ -26,9 +26,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.Looper;
-import android.os.SystemProperties;
 import android.os.UserManager;
 import android.sysprop.BluetoothProperties;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
@@ -384,10 +384,10 @@ public class AvrcpTargetService extends ProfileService {
 
     String getCurrentMediaId() {
         String id = mMediaPlayerList.getCurrentMediaId();
-        if (id != null) return id;
+        if (id != null && !id.isEmpty()) return id;
 
         Metadata song = getCurrentSongInfo();
-        if (song != null) return song.mediaId;
+        if (song != null && !song.mediaId.isEmpty()) return song.mediaId;
 
         // We always want to return something, the error string just makes debugging easier
         return "error";
@@ -400,7 +400,7 @@ public class AvrcpTargetService extends ProfileService {
         List<Metadata> nowPlayingList = mMediaPlayerList.getNowPlayingList();
         if (mAvrcpCoverArtService != null) {
             for (Metadata metadata : nowPlayingList) {
-                if (metadata.mediaId == currentMediaId) {
+                if (TextUtils.equals(metadata.mediaId, currentMediaId)) {
                     currentTrack = metadata;
                 } else if (metadata.image != null) {
                     imageHandle = mAvrcpCoverArtService.storeImage(metadata.image);

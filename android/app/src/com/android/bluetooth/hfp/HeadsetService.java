@@ -31,7 +31,6 @@ import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothHeadset;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -51,6 +50,7 @@ import android.util.Log;
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
@@ -109,6 +109,7 @@ public class HeadsetService extends ProfileService {
     private static final int[] CONNECTING_CONNECTED_STATES =
             {BluetoothProfile.STATE_CONNECTING, BluetoothProfile.STATE_CONNECTED};
     private static final int DIALING_OUT_TIMEOUT_MS = 10000;
+    private static final int CLCC_END_MARK_INDEX = 0;
 
     // Timeout for state machine thread join, to prevent potential ANR.
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
@@ -135,6 +136,7 @@ public class HeadsetService extends ProfileService {
     private VoiceRecognitionTimeoutEvent mVoiceRecognitionTimeoutEvent;
     // Timeout when voice recognition is started by remote device
     @VisibleForTesting static int sStartVrTimeoutMs = 5000;
+    private ArrayList<StateMachineTask> mPendingClccResponses = new ArrayList<>();
     private boolean mStarted;
     private boolean mCreated;
     private static HeadsetService sHeadsetService;
@@ -322,6 +324,14 @@ public class HeadsetService extends ProfileService {
         synchronized (mStateMachines) {
             for (BluetoothDevice device : getConnectedDevices()) {
                 task.execute(mStateMachines.get(device));
+            }
+        }
+    }
+
+    private void doForEachConnectedStateMachine(List<StateMachineTask> tasks) {
+        synchronized (mStateMachines) {
+            for (StateMachineTask task : tasks) {
+                doForEachConnectedStateMachine(task);
             }
         }
     }
@@ -1859,10 +1869,14 @@ public class HeadsetService extends ProfileService {
     private void clccResponse(int index, int direction, int status, int mode, boolean mpty,
             String number, int type) {
         enforceCallingOrSelfPermission(MODIFY_PHONE_STATE, "Need MODIFY_PHONE_STATE permission");
-        doForEachConnectedStateMachine(
-                stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.SEND_CCLC_RESPONSE,
+        mPendingClccResponses.add(
+                stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.SEND_CLCC_RESPONSE,
                         new HeadsetClccResponse(index, direction, status, mode, mpty, number,
                                 type)));
+        if (index == CLCC_END_MARK_INDEX) {
+            doForEachConnectedStateMachine(mPendingClccResponses);
+            mPendingClccResponses.clear();
+        }
     }
 
     private boolean sendVendorSpecificResultCode(BluetoothDevice device, String command,
@@ -2036,7 +2050,7 @@ public class HeadsetService extends ProfileService {
      * @param device remote device that initiates the connection
      * @return true if the connection is acceptable
      */
-    public boolean okToAcceptConnection(BluetoothDevice device) {
+    public boolean okToAcceptConnection(BluetoothDevice device, boolean isOutgoingRequest) {
         // Check if this is an incoming connection in Quiet mode.
         if (mAdapterService.isQuietModeEnabled()) {
             Log.w(TAG, "okToAcceptConnection: return false as quiet mode enabled");
@@ -2053,6 +2067,15 @@ public class HeadsetService extends ProfileService {
         } else if (connectionPolicy != BluetoothProfile.CONNECTION_POLICY_UNKNOWN
                 && connectionPolicy != BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
             // Otherwise, reject the connection if connection policy is not valid.
+            if (!isOutgoingRequest) {
+                A2dpService a2dpService = A2dpService.getA2dpService();
+                if (a2dpService != null && a2dpService.okToConnect(device, true)) {
+                    Log.d(TAG, "okToAcceptConnection: return false,"
+                            + " Fallback connection to allowed A2DP profile");
+                    a2dpService.connect(device);
+                    return false;
+                }
+            }
             Log.w(TAG, "okToAcceptConnection: return false, connectionPolicy=" + connectionPolicy);
             return false;
         }

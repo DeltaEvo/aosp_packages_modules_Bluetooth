@@ -106,6 +106,14 @@ impl IBluetoothCallback for BtCallback {
         self.context.lock().unwrap().adapter_address = Some(addr);
     }
 
+    fn on_name_changed(&self, name: String) {
+        print_info!("Name changed to {}", &name);
+    }
+
+    fn on_discoverable_changed(&self, discoverable: bool) {
+        print_info!("Discoverable changed to {}", &discoverable);
+    }
+
     fn on_device_found(&self, remote_device: BluetoothDevice) {
         self.context
             .lock()
@@ -117,12 +125,16 @@ impl IBluetoothCallback for BtCallback {
         print_info!("Found device: {:?}", remote_device);
     }
 
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {
+        match self.context.lock().unwrap().found_devices.remove(&remote_device.address) {
+            Some(_) => print_info!("Removed device: {:?}", remote_device),
+            None => (),
+        };
+    }
+
     fn on_discovering_changed(&self, discovering: bool) {
         self.context.lock().unwrap().discovering_state = discovering;
 
-        if discovering {
-            self.context.lock().unwrap().found_devices.clear();
-        }
         print_info!("Discovering: {}", discovering);
     }
 
