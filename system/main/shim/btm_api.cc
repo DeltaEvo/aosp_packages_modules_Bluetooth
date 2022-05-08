@@ -38,8 +38,11 @@
 #include "main/shim/stack.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_int_types.h"
+#include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/hci_error_code.h"
+#include "types/ble_address_with_type.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -878,13 +881,6 @@ tBTM_STATUS bluetooth::shim::BTM_ClearInqDb(const RawAddress* p_bda) {
   return BTM_NO_RESOURCES;
 }
 
-tBTM_STATUS bluetooth::shim::BTM_WriteEIR(BT_HDR* p_buff) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_buff != nullptr);
-  osi_free(p_buff);
-  return BTM_NO_RESOURCES;
-}
-
 bool bluetooth::shim::BTM_HasEirService(const uint32_t* p_eir_uuid,
                                         uint16_t uuid16) {
   LOG_INFO("UNIMPLEMENTED %s", __func__);
@@ -900,12 +896,6 @@ tBTM_EIR_SEARCH_RESULT bluetooth::shim::BTM_HasInquiryEirService(
 }
 
 void bluetooth::shim::BTM_AddEirService(uint32_t* p_eir_uuid, uint16_t uuid16) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_eir_uuid != nullptr);
-}
-
-void bluetooth::shim::BTM_RemoveEirService(uint32_t* p_eir_uuid,
-                                           uint16_t uuid16) {
   LOG_INFO("UNIMPLEMENTED %s", __func__);
   CHECK(p_eir_uuid != nullptr);
 }
@@ -1243,8 +1233,8 @@ void bluetooth::shim::BTM_ConfirmReqReply(tBTM_STATUS res,
                                           const RawAddress& bd_addr) {
   // Send for both Classic and LE until we can determine the type
   bool accept = res == BTM_SUCCESS;
-  hci::AddressWithType address = ToAddressWithType(bd_addr, 0);
-  hci::AddressWithType address2 = ToAddressWithType(bd_addr, 1);
+  hci::AddressWithType address = ToAddressWithType(bd_addr, BLE_ADDR_PUBLIC);
+  hci::AddressWithType address2 = ToAddressWithType(bd_addr, BLE_ADDR_RANDOM);
   auto security_manager =
       bluetooth::shim::GetSecurityModule()->GetSecurityManager();
   if (ShimUi::GetInstance()->waiting_for_pairing_prompt_) {
@@ -1344,5 +1334,45 @@ tBTM_STATUS bluetooth::shim::BTM_SetDeviceClass(DEV_CLASS dev_class) {
 
 tBTM_STATUS bluetooth::shim::BTM_ClearEventFilter() {
   controller_get_interface()->clear_event_filter();
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_ClearEventMask() {
+  controller_get_interface()->clear_event_mask();
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_ClearFilterAcceptList() {
+  Stack::GetInstance()->GetAcl()->ClearFilterAcceptList();
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_DisconnectAllAcls() {
+  for (uint16_t i = 0; i < 0xfffe; i++) {
+    btm_sec_disconnect(i, HCI_SUCCESS, "");
+  }
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_LeRand(LeRandCallback cb) {
+  controller_get_interface()->le_rand(cb);
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList() {
+  LOG_ERROR("%s: TODO(230604670): Figure out what address for A2DP Connected Resume", __func__);
+  // TODO(230604670): Figure out what address for A2DP Connected Resume
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMask() {
+  // Autoplumbed
+  controller_get_interface()->set_default_event_mask();
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetEventFilterInquiryResultAllDevices() {
+  // Autoplumbed
+  controller_get_interface()->set_event_filter_inquiry_result_all_devices();
   return BTM_SUCCESS;
 }

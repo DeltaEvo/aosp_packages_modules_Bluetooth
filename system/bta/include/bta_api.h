@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/callback.h"
 #include "bt_target.h"  // Must be first to define build configuration
 #include "osi/include/log.h"
 #include "stack/include/bt_octets.h"
@@ -456,7 +457,7 @@ typedef struct {
   BD_NAME bd_name;             /* Name of peer device. */
   tBTA_SERVICE_MASK services;  /* Services found on peer device. */
   tBT_DEVICE_TYPE device_type; /* device type in case it is BLE device */
-  uint32_t num_uuids;
+  size_t num_uuids;
   bluetooth::Uuid* p_uuid_list;
   tBTA_STATUS result;
 } tBTA_DM_DISC_RES;
@@ -775,7 +776,7 @@ tBTA_STATUS BTA_DmGetCachedRemoteName(const RawAddress& remote_device,
  *
  ******************************************************************************/
 extern void BTA_DmBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
-                       tBT_TRANSPORT transport, tBLE_ADDR_TYPE device_type);
+                       tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type);
 
 /*******************************************************************************
  *
@@ -1204,5 +1205,50 @@ extern void BTA_VendorInit(void);
  *
  ******************************************************************************/
 extern void BTA_DmClearEventFilter(void);
+
+using LeRandCallback = base::Callback<void(uint64_t)>;
+/*******************************************************************************
+ *
+ * Function         BTA_DmLeRand
+ *
+ * Description      This function clears the event filter
+ *
+ * Returns          cb: callback to receive the resulting random number
+ *
+ ******************************************************************************/
+extern void BTA_DmLeRand(LeRandCallback cb);
+
+/*******************************************************************************
+ *
+ * Function        BTA_DmRestoreFilterAcceptList
+ *
+ * Description    Floss: Restore the state of the for the filter accept list
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+extern void BTA_DmRestoreFilterAcceptList();
+
+/*******************************************************************************
+ *
+ * Function        BTA_DmSetDefaultEventMask
+ *
+ * Description    Floss: Set the default event mask for Classic and LE
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+extern void BTA_DmSetDefaultEventMask();
+
+/*******************************************************************************
+ *
+ * Function        BTA_DmSetEventFilterInquiryResultAllDevices
+ *
+ * Description    Floss: Set the event filter to inquiry result device all
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+extern void BTA_DmSetEventFilterInquiryResultAllDevices();
 
 #endif /* BTA_API_H */

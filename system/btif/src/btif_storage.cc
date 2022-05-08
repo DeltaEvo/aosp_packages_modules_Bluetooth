@@ -952,8 +952,14 @@ void btif_storage_load_consolidate_devices(void) {
         LOG_INFO("found consolidated device %s %s",
                  bonded_devices.devices[i].ToString().c_str(),
                  key.pid_key.identity_addr.ToString().c_str());
-        consolidated_devices.emplace_back(bonded_devices.devices[i],
-                                          key.pid_key.identity_addr);
+
+        if (bonded_devices.devices[i].IsEmpty() ||
+            key.pid_key.identity_addr.IsEmpty()) {
+          LOG_WARN("Address is empty! Skip");
+        } else {
+          consolidated_devices.emplace_back(bonded_devices.devices[i],
+                                            key.pid_key.identity_addr);
+        }
       }
     }
   }
@@ -1937,6 +1943,7 @@ void btif_storage_load_bonded_leaudio_has_devices() {
         !btif_config_exist(name, HAS_FEATURES))
       continue;
 
+#ifndef TARGET_FLOSS
     int value;
     uint16_t is_acceptlisted = 0;
     if (btif_config_get_int(name, HAS_IS_ACCEPTLISTED, &value))
@@ -1945,7 +1952,6 @@ void btif_storage_load_bonded_leaudio_has_devices() {
     uint8_t features = 0;
     if (btif_config_get_int(name, HAS_FEATURES, &value)) features = value;
 
-#ifndef TARGET_FLOSS
     do_in_main_thread(FROM_HERE, Bind(&le_audio::has::HasClient::AddFromStorage,
                                       bd_addr, features, is_acceptlisted));
 #else
@@ -2296,4 +2302,31 @@ void btif_storage_remove_gatt_cl_db_hash(const RawAddress& bd_addr) {
                          }
                        },
                        bd_addr));
+}
+
+void btif_debug_linkkey_type_dump(int fd) {
+  dprintf(fd, "\nLink Key Types:\n");
+  for (const auto& bd_addr : btif_config_get_paired_devices()) {
+    auto bdstr = bd_addr.ToString();
+    int linkkey_type;
+    dprintf(fd, "  %s\n", bdstr.c_str());
+
+    dprintf(fd, "    BR: ");
+    if (btif_config_get_int(bdstr, "LinkKeyType", &linkkey_type)) {
+      dprintf(fd, "%s", linkkey_type_text(linkkey_type).c_str());
+    }
+    dprintf(fd, "\n");
+
+    dprintf(fd, "    LE:");
+    if (btif_config_exist(bdstr, "LE_KEY_PENC")) dprintf(fd, " PENC");
+    if (btif_config_exist(bdstr, "LE_KEY_PID")) dprintf(fd, " PID");
+    if (btif_config_exist(bdstr, "LE_KEY_PCSRK")) dprintf(fd, " PCSRK");
+    if (btif_config_exist(bdstr, "LE_KEY_PLK")) dprintf(fd, " PLK");
+    if (btif_config_exist(bdstr, "LE_KEY_LENC")) dprintf(fd, " LENC");
+    if (btif_config_exist(bdstr, "LE_KEY_LCSRK")) dprintf(fd, " LCSRK");
+    if (btif_config_exist(bdstr, "LE_KEY_LID")) dprintf(fd, " LID");
+    if (btif_config_exist(bdstr, "LE_KEY_PLK")) dprintf(fd, " LLK");
+
+    dprintf(fd, "\n");
+  }
 }

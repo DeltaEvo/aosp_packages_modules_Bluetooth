@@ -26,6 +26,8 @@ namespace audio {
 namespace aidl {
 namespace le_audio {
 
+using ::aidl::android::hardware::bluetooth::audio::
+    LeAudioBroadcastConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::LeAudioConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::PcmConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::SessionType;
@@ -68,7 +70,7 @@ class LeAudioTransport {
   LeAudioTransport(void (*flush)(void), StreamCallbacks stream_cb,
                    PcmConfiguration pcm_config);
 
-  BluetoothAudioCtrlAck StartRequest();
+  BluetoothAudioCtrlAck StartRequest(bool is_low_latency);
 
   BluetoothAudioCtrlAck SuspendRequest();
 
@@ -115,7 +117,7 @@ class LeAudioSinkTransport
 
   ~LeAudioSinkTransport();
 
-  BluetoothAudioCtrlAck StartRequest() override;
+  BluetoothAudioCtrlAck StartRequest(bool is_low_latency) override;
 
   BluetoothAudioCtrlAck SuspendRequest() override;
 
@@ -144,8 +146,12 @@ class LeAudioSinkTransport
   bool IsPendingStartStream(void);
   void ClearPendingStartStream(void);
 
-  static inline LeAudioSinkTransport* instance = nullptr;
-  static inline BluetoothAudioSinkClientInterface* interface = nullptr;
+  static inline LeAudioSinkTransport* instance_unicast_ = nullptr;
+  static inline LeAudioSinkTransport* instance_broadcast_ = nullptr;
+
+  static inline BluetoothAudioSinkClientInterface* interface_unicast_ = nullptr;
+  static inline BluetoothAudioSinkClientInterface* interface_broadcast_ =
+      nullptr;
 
  private:
   LeAudioTransport* transport_;
@@ -158,7 +164,7 @@ class LeAudioSourceTransport
 
   ~LeAudioSourceTransport();
 
-  BluetoothAudioCtrlAck StartRequest() override;
+  BluetoothAudioCtrlAck StartRequest(bool is_low_latency) override;
 
   BluetoothAudioCtrlAck SuspendRequest() override;
 

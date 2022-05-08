@@ -57,7 +57,6 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
-import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.sysprop.BluetoothProperties;
 import android.util.Log;
@@ -83,6 +82,7 @@ import java.util.UUID;
 import java.util.WeakHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -188,6 +188,16 @@ public final class BluetoothAdapter {
             STATE_BLE_TURNING_OFF
     })
     @Retention(RetentionPolicy.SOURCE)
+    public @interface InternalAdapterState {}
+
+    /** @hide */
+    @IntDef(prefix = { "STATE_" }, value = {
+            STATE_OFF,
+            STATE_TURNING_ON,
+            STATE_ON,
+            STATE_TURNING_OFF,
+    })
+    @Retention(RetentionPolicy.SOURCE)
     public @interface AdapterState {}
 
     /**
@@ -268,14 +278,14 @@ public final class BluetoothAdapter {
     public @interface RfcommListenerResult {}
 
     /**
-     * Human-readable string helper for AdapterState
+     * Human-readable string helper for AdapterState and InternalAdapterState
      *
      * @hide
      */
     @SystemApi
     @RequiresNoPermission
     @NonNull
-    public static String nameForState(@AdapterState int state) {
+    public static String nameForState(@InternalAdapterState int state) {
         switch (state) {
             case STATE_OFF:
                 return "OFF";
@@ -809,6 +819,109 @@ public final class BluetoothAdapter {
         }
     };
 
+    /** @hide */
+    @IntDef(value = {
+            BluetoothStatusCodes.ERROR_UNKNOWN,
+            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED,
+            BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface BluetoothActivityEnergyInfoCallbackError {}
+
+    /**
+     * Interface for Bluetooth activity energy info callback. Should be implemented by applications
+     * and set when calling {@link #requestControllerActivityEnergyInfo}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface OnBluetoothActivityEnergyInfoCallback {
+        /**
+         * Called when Bluetooth activity energy info is available.
+         * Note: this callback is triggered at most once for each call to
+         * {@link #requestControllerActivityEnergyInfo}.
+         *
+         * @param info the latest {@link BluetoothActivityEnergyInfo}
+         */
+        void onBluetoothActivityEnergyInfoAvailable(
+                @NonNull BluetoothActivityEnergyInfo info);
+
+        /**
+         * Called when the latest {@link BluetoothActivityEnergyInfo} can't be retrieved.
+         * The reason of the failure is indicated by the {@link BluetoothStatusCodes}
+         * passed as an argument to this method.
+         * Note: this callback is triggered at most once for each call to
+         * {@link #requestControllerActivityEnergyInfo}.
+         *
+         * @param error code indicating the reason for the failure
+         */
+        void onBluetoothActivityEnergyInfoError(
+                @BluetoothActivityEnergyInfoCallbackError int error);
+    }
+
+    private static class OnBluetoothActivityEnergyInfoProxy
+            extends IBluetoothActivityEnergyInfoListener.Stub {
+        private final Object mLock = new Object();
+        @Nullable @GuardedBy("mLock") private Executor mExecutor;
+        @Nullable @GuardedBy("mLock") private OnBluetoothActivityEnergyInfoCallback mCallback;
+
+        OnBluetoothActivityEnergyInfoProxy(Executor executor,
+                OnBluetoothActivityEnergyInfoCallback callback) {
+            mExecutor = executor;
+            mCallback = callback;
+        }
+
+        @Override
+        public void onBluetoothActivityEnergyInfoAvailable(BluetoothActivityEnergyInfo info) {
+            Executor executor;
+            OnBluetoothActivityEnergyInfoCallback callback;
+            synchronized (mLock) {
+                if (mExecutor == null || mCallback == null) {
+                    return;
+                }
+                executor = mExecutor;
+                callback = mCallback;
+                mExecutor = null;
+                mCallback = null;
+            }
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                if (info == null) {
+                    executor.execute(() -> callback.onBluetoothActivityEnergyInfoError(
+                            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED));
+                } else {
+                    executor.execute(() -> callback.onBluetoothActivityEnergyInfoAvailable(info));
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        /**
+         * Framework only method that is called when the service can't be reached.
+         */
+        public void onError(int errorCode) {
+            Executor executor;
+            OnBluetoothActivityEnergyInfoCallback callback;
+            synchronized (mLock) {
+                if (mExecutor == null || mCallback == null) {
+                    return;
+                }
+                executor = mExecutor;
+                callback = mCallback;
+                mExecutor = null;
+                mCallback = null;
+            }
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                executor.execute(() -> callback.onBluetoothActivityEnergyInfoError(
+                        errorCode));
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+    }
+
     /**
      * Get a handle to the default local Bluetooth adapter.
      * <p>
@@ -850,8 +963,12 @@ public final class BluetoothAdapter {
     BluetoothAdapter(IBluetoothManager managerService, AttributionSource attributionSource) {
         mManagerService = Objects.requireNonNull(managerService);
         mAttributionSource = Objects.requireNonNull(attributionSource);
-        synchronized (mServiceLock.writeLock()) {
+        Lock l = mServiceLock.writeLock();
+        l.lock();
+        try {
             mService = getBluetoothService(mManagerCallback);
+        } finally {
+            l.unlock();
         }
         mLeScanClients = new HashMap<LeScanCallback, ScanCallback>();
         mToken = new Binder(DESCRIPTOR);
@@ -1151,8 +1268,7 @@ public final class BluetoothAdapter {
      * Fetch the current bluetooth state.  If the service is down, return
      * OFF.
      */
-    @AdapterState
-    private int getStateInternal() {
+    private @InternalAdapterState int getStateInternal() {
         int state = BluetoothAdapter.STATE_OFF;
         try {
             mServiceLock.readLock().lock();
@@ -1183,8 +1299,7 @@ public final class BluetoothAdapter {
      */
     @RequiresLegacyBluetoothPermission
     @RequiresNoPermission
-    @AdapterState
-    public int getState() {
+    public @AdapterState int getState() {
         int state = getStateInternal();
 
         // Consider all internal states as OFF
@@ -1220,10 +1335,9 @@ public final class BluetoothAdapter {
      */
     @RequiresLegacyBluetoothPermission
     @RequiresNoPermission
-    @AdapterState
     @UnsupportedAppUsage(publicAlternatives = "Use {@link #getState()} instead to determine "
             + "whether you can use BLE & BT classic.")
-    public int getLeState() {
+    public @InternalAdapterState int getLeState() {
         int state = getStateInternal();
 
         if (VDBG) {
@@ -1405,7 +1519,7 @@ public final class BluetoothAdapter {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public boolean factoryReset() {
+    public boolean clearBluetooth() {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
@@ -1427,37 +1541,62 @@ public final class BluetoothAdapter {
         return false;
     }
 
+     /**
+     * See {@link #clearBluetooth()}
+     *
+     * @return true to indicate that the config file was successfully cleared
+     * @hide
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public boolean factoryReset() {
+        return clearBluetooth();
+    }
+
     /**
      * Get the UUIDs supported by the local Bluetooth adapter.
      *
      * @return the UUIDs supported by the local Bluetooth Adapter.
      * @hide
      */
-    @SystemApi
+    @UnsupportedAppUsage
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    @SuppressLint(value = {"ArrayReturn", "NullableCollection"})
-    public @Nullable ParcelUuid[] getUuids() {
-        if (getState() != STATE_ON) {
-            return null;
+    public @NonNull ParcelUuid[] getUuids() {
+        List<ParcelUuid> parcels = getUuidsList();
+        return parcels.toArray(new ParcelUuid[parcels.size()]);
+    }
+
+    /**
+     * Get the UUIDs supported by the local Bluetooth adapter.
+     *
+     * @return a list of the UUIDs supported by the local Bluetooth Adapter.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    public @NonNull List<ParcelUuid> getUuidsList() {
+        List<ParcelUuid> defaultValue = new ArrayList<>();
+        if (getState() != STATE_ON || mService == null) {
+            return defaultValue;
         }
+        mServiceLock.readLock().lock();
         try {
-            mServiceLock.readLock().lock();
-            if (mService != null) {
-                final SynchronousResultReceiver<List<ParcelUuid>> recv =
-                        new SynchronousResultReceiver();
-                mService.getUuids(mAttributionSource, recv);
-                List<ParcelUuid> parcels = recv.awaitResultNoInterrupt(getSyncTimeout())
-                        .getValue(new ArrayList<>());
-                return parcels.toArray(new ParcelUuid[parcels.size()]);
-            }
+            final SynchronousResultReceiver<List<ParcelUuid>> recv =
+                    new SynchronousResultReceiver();
+            mService.getUuids(mAttributionSource, recv);
+            return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
         } catch (RemoteException | TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         } finally {
             mServiceLock.readLock().unlock();
         }
-        return null;
+        return defaultValue;
     }
 
     /**
@@ -2654,10 +2793,12 @@ public final class BluetoothAdapter {
      * has the activity and energy info. This can be used to ascertain what
      * the controller has been up to, since the last sample.
      *
-     * A null value for the activity info object may be sent if the bluetooth service is
-     * unreachable or the device does not support reporting such information.
+     * The callback will be called only once, when the record is available.
      *
-     * @param result The callback to which to send the activity info.
+     * @param executor the executor that the callback will be invoked on
+     * @param callback the callback that will be called with either the
+     *                 {@link BluetoothActivityEnergyInfo} object, or the
+     *                 error code if an error has occurred
      * @hide
      */
     @SystemApi
@@ -2666,22 +2807,27 @@ public final class BluetoothAdapter {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public void requestControllerActivityEnergyInfo(@NonNull ResultReceiver result) {
-        requireNonNull(result, "ResultReceiver cannot be null");
+    public void requestControllerActivityEnergyInfo(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull OnBluetoothActivityEnergyInfoCallback callback) {
+        requireNonNull(executor, "executor cannot be null");
+        requireNonNull(callback, "callback cannot be null");
+        OnBluetoothActivityEnergyInfoProxy proxy =
+                new OnBluetoothActivityEnergyInfoProxy(executor, callback);
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                mService.requestActivityInfo(result, mAttributionSource);
-                result = null;
+                mService.requestActivityInfo(
+                        proxy,
+                        mAttributionSource);
+            } else {
+                proxy.onError(BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "getControllerActivityEnergyInfoCallback: " + e);
+            proxy.onError(BluetoothStatusCodes.ERROR_UNKNOWN);
         } finally {
             mServiceLock.readLock().unlock();
-            if (result != null) {
-                // Only send an immediate result if we failed.
-                result.send(0, null);
-            }
         }
     }
 
@@ -3511,6 +3657,9 @@ public final class BluetoothAdapter {
         } else if (profile == BluetoothProfile.LE_AUDIO) {
             BluetoothLeAudio leAudio = new BluetoothLeAudio(context, listener, this);
             return true;
+        } else if (profile == BluetoothProfile.LE_AUDIO_BROADCAST) {
+            BluetoothLeBroadcast leAudio = new BluetoothLeBroadcast(context, listener);
+            return true;
         } else if (profile == BluetoothProfile.VOLUME_CONTROL) {
             BluetoothVolumeControl vcs = new BluetoothVolumeControl(context, listener, this);
             return true;
@@ -3520,6 +3669,10 @@ public final class BluetoothAdapter {
             return true;
         } else if (profile == BluetoothProfile.LE_CALL_CONTROL) {
             BluetoothLeCallControl tbs = new BluetoothLeCallControl(context, listener);
+            return true;
+        } else if (profile == BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT) {
+            BluetoothLeBroadcastAssistant leAudioBroadcastAssistant =
+                    new BluetoothLeBroadcastAssistant(context, listener);
             return true;
         } else {
             return false;
@@ -3618,6 +3771,10 @@ public final class BluetoothAdapter {
                 BluetoothLeAudio leAudio = (BluetoothLeAudio) proxy;
                 leAudio.close();
                 break;
+            case BluetoothProfile.LE_AUDIO_BROADCAST:
+                BluetoothLeBroadcast leAudioBroadcast = (BluetoothLeBroadcast) proxy;
+                leAudioBroadcast.close();
+                break;
             case BluetoothProfile.VOLUME_CONTROL:
                 BluetoothVolumeControl vcs = (BluetoothVolumeControl) proxy;
                 vcs.close();
@@ -3630,6 +3787,11 @@ public final class BluetoothAdapter {
             case BluetoothProfile.LE_CALL_CONTROL:
                 BluetoothLeCallControl tbs = (BluetoothLeCallControl) proxy;
                 tbs.close();
+                break;
+            case BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT:
+                BluetoothLeBroadcastAssistant leAudioBroadcastAssistant =
+                        (BluetoothLeBroadcastAssistant) proxy;
+                leAudioBroadcastAssistant.close();
                 break;
         }
     }
@@ -3702,8 +3864,12 @@ public final class BluetoothAdapter {
     private final IBluetoothManagerCallback mManagerCallback =
             new IBluetoothManagerCallback.Stub() {
                 public void onBluetoothServiceUp(IBluetooth bluetoothService) {
-                    synchronized (mServiceLock.writeLock()) {
+                    Lock l = mServiceLock.writeLock();
+                    l.lock();
+                    try {
                         mService = bluetoothService;
+                    } finally {
+                        l.unlock();
                     }
                     synchronized (mMetadataListeners) {
                         mMetadataListeners.forEach((device, pair) -> {
@@ -3737,7 +3903,9 @@ public final class BluetoothAdapter {
                 }
 
                 public void onBluetoothServiceDown() {
-                    synchronized (mServiceLock.writeLock()) {
+                    Lock l = mServiceLock.writeLock();
+                    l.lock();
+                    try {
                         mService = null;
                         if (mLeScanClients != null) {
                             mLeScanClients.clear();
@@ -3748,6 +3916,8 @@ public final class BluetoothAdapter {
                         if (mBluetoothLeScanner != null) {
                             mBluetoothLeScanner.cleanup();
                         }
+                    } finally {
+                        l.unlock();
                     }
                 }
 

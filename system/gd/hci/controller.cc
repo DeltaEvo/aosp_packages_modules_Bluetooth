@@ -78,7 +78,7 @@ struct Controller::impl {
     }
 
     hci_->EnqueueCommand(
-        LeReadConnectListSizeBuilder::Create(),
+        LeReadFilterAcceptListSizeBuilder::Create(),
         handler->BindOnceOn(this, &Controller::impl::le_read_connect_list_size_handler));
 
     if (is_supported(OpCode::LE_READ_RESOLVING_LIST_SIZE) && module_.SupportsBlePrivacy()) {
@@ -260,11 +260,10 @@ struct Controller::impl {
     ErrorCode status = complete_view.GetStatus();
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
     uint8_t page_number = complete_view.GetPageNumber();
-    maximum_page_number_ = complete_view.GetMaximumPageNumber();
     extended_lmp_features_array_.push_back(complete_view.GetExtendedLmpFeatures());
 
     // Query all extended features
-    if (page_number < maximum_page_number_) {
+    if (page_number < complete_view.GetMaximumPageNumber()) {
       page_number++;
       hci_->EnqueueCommand(
           ReadLocalExtendedFeaturesBuilder::Create(page_number),
@@ -353,11 +352,11 @@ struct Controller::impl {
   }
 
   void le_read_connect_list_size_handler(CommandCompleteView view) {
-    auto complete_view = LeReadConnectListSizeCompleteView::Create(view);
+    auto complete_view = LeReadFilterAcceptListSizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
-    le_connect_list_size_ = complete_view.GetConnectListSize();
+    le_connect_list_size_ = complete_view.GetFilterAcceptListSize();
   }
 
   void le_read_resolving_list_size_handler(CommandCompleteView view) {
@@ -510,6 +509,22 @@ struct Controller::impl {
     std::unique_ptr<ResetBuilder> packet = ResetBuilder::Create();
     hci_->EnqueueCommand(std::move(packet),
                          module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<ResetCompleteView>));
+  }
+
+  void le_rand(LeRandCallback cb) {
+    std::unique_ptr<LeRandBuilder> packet = LeRandBuilder::Create();
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnceOn(this, &Controller::impl::le_rand_cb<LeRandCompleteView>, cb));
+  }
+
+  template <class T>
+  void le_rand_cb(LeRandCallback cb, CommandCompleteView view) {
+    ASSERT(view.IsValid());
+    auto status_view = T::Create(view);
+    ASSERT(status_view.IsValid());
+    ASSERT(status_view.GetStatus() == ErrorCode::SUCCESS);
+    cb.Run(status_view.GetRandomNumber());
   }
 
   void set_event_filter(std::unique_ptr<SetEventFilterBuilder> packet) {
@@ -710,10 +725,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_SET_SCAN_ENABLE)
       OP_CODE_MAPPING(LE_CREATE_CONNECTION)
       OP_CODE_MAPPING(LE_CREATE_CONNECTION_CANCEL)
-      OP_CODE_MAPPING(LE_READ_CONNECT_LIST_SIZE)
-      OP_CODE_MAPPING(LE_CLEAR_CONNECT_LIST)
-      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_CONNECT_LIST)
-      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_CONNECT_LIST)
+      OP_CODE_MAPPING(LE_READ_FILTER_ACCEPT_LIST_SIZE)
+      OP_CODE_MAPPING(LE_CLEAR_FILTER_ACCEPT_LIST)
+      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST)
+      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST)
       OP_CODE_MAPPING(LE_CONNECTION_UPDATE)
       OP_CODE_MAPPING(LE_SET_HOST_CHANNEL_CLASSIFICATION)
       OP_CODE_MAPPING(LE_READ_CHANNEL_MAP)
@@ -858,7 +873,6 @@ struct Controller::impl {
   CompletedAclPacketsCallback acl_monitor_credits_callback_{};
   LocalVersionInformation local_version_information_;
   std::array<uint8_t, 64> local_supported_commands_;
-  uint8_t maximum_page_number_;
   std::vector<uint64_t> extended_lmp_features_array_;
   uint16_t acl_buffer_length_ = 0;
   uint16_t acl_buffers_ = 0;
@@ -988,7 +1002,7 @@ LOCAL_LE_FEATURE_ACCESSOR(SupportsBlePowerChangeIndication, 34)
 LOCAL_LE_FEATURE_ACCESSOR(SupportsBlePathLossMonitoring, 35)
 
 uint64_t Controller::GetLocalFeatures(uint8_t page_number) const {
-  if (page_number <= impl_->maximum_page_number_) {
+  if (page_number < impl_->extended_lmp_features_array_.size()) {
     return impl_->extended_lmp_features_array_[page_number];
   }
   return 0x00;
@@ -1020,6 +1034,10 @@ void Controller::SetEventMask(uint64_t event_mask) {
 
 void Controller::Reset() {
   CallOn(impl_.get(), &impl::reset);
+}
+
+void Controller::LeRand(LeRandCallback cb) {
+  CallOn(impl_.get(), &impl::le_rand, cb);
 }
 
 void Controller::SetEventFilterClearAll() {
@@ -1108,7 +1126,7 @@ uint64_t Controller::GetLeSupportedStates() const {
   return impl_->le_supported_states_;
 }
 
-uint8_t Controller::GetLeConnectListSize() const {
+uint8_t Controller::GetLeFilterAcceptListSize() const {
   return impl_->le_connect_list_size_;
 }
 

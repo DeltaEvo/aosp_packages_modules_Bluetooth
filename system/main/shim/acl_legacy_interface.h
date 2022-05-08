@@ -45,7 +45,7 @@ typedef struct {
                        tHCI_ROLE role, uint16_t conn_interval,
                        uint16_t conn_latency, uint16_t conn_timeout,
                        const RawAddress& local_rpa, const RawAddress& peer_rpa,
-                       uint8_t peer_addr_type);
+                       tBLE_ADDR_TYPE peer_addr_type);
   void (*on_failed)(const tBLE_BD_ADDR& address_with_type, uint16_t handle,
                     bool enhanced, tHCI_STATUS status);
   void (*on_disconnected)(tHCI_STATUS status, uint16_t handle,
@@ -116,8 +116,9 @@ typedef struct {
                                uint16_t connection_interval,
                                uint16_t connection_latency,
                                uint16_t supervision_timeout);
-  void (*on_data_length_change)(uint16_t tx_octets, uint16_t tx_time,
-                                uint16_t rx_octets, uint16_t rx_time);
+  void (*on_data_length_change)(uint16_t handle, uint16_t max_tx_octets,
+                                uint16_t max_tx_time, uint16_t max_rx_octets,
+                                uint16_t max_rx_time);
   void (*on_read_remote_version_information_complete)(
       tHCI_STATUS status, uint16_t handle, uint8_t lmp_version,
       uint16_t manufacturer_name, uint16_t sub_version);

@@ -237,7 +237,7 @@ void SecurityManagerImpl::NotifyDeviceUnbonded(hci::AddressWithType device) {
     iter.second->Post(
         common::Bind(&ISecurityManagerListener::OnDeviceUnbonded, common::Unretained(iter.first), device));
   }
-  acl_manager_->RemoveDeviceFromConnectList(device);
+  acl_manager_->RemoveDeviceFromFilterAcceptList(device);
 }
 
 void SecurityManagerImpl::NotifyEncryptionStateChanged(hci::EncryptionChangeView encryption_change_view) {
@@ -734,7 +734,7 @@ void SecurityManagerImpl::OnPairingFinished(security::PairingResultOrFailure pai
 
 void SecurityManagerImpl::WipeLePairingHandler() {
   pending_le_pairing_.handler_.reset();
-  pending_le_pairing_.connection_handle_ = 0;
+  pending_le_pairing_.connection_handle_ = kInvalidConnectionHandle;
   pending_le_pairing_.address_ = hci::AddressWithType();
 }
 

@@ -56,6 +56,7 @@
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_le_audio_api.h"
 #include "bta/include/bta_le_audio_broadcaster_api.h"
+#include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -420,9 +421,74 @@ static int clear_event_filter() {
   return BT_STATUS_SUCCESS;
 }
 
+static int clear_event_mask() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_event_mask));
+  return BT_STATUS_SUCCESS;
+}
+
+static int clear_filter_accept_list() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(btif_dm_clear_filter_accept_list));
+  return BT_STATUS_SUCCESS;
+}
+
+static int disconnect_all_acls() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_disconnect_all_acls));
+  return BT_STATUS_SUCCESS;
+}
+
+static void le_rand_btif_cb(uint64_t random_number) {
+  LOG_VERBOSE("%s", __func__);
+  do_in_jni_thread(
+      FROM_HERE,
+      base::BindOnce(
+          [](uint64_t random) { HAL_CBACK(bt_hal_cbacks, le_rand_cb, random); },
+          random_number));
+}
+
+static int le_rand() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(
+      FROM_HERE, base::BindOnce(btif_dm_le_rand, base::Bind(&le_rand_btif_cb)));
+  return BT_STATUS_SUCCESS;
+}
+
+static int set_event_filter_inquiry_result_all_devices() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(
+      FROM_HERE,
+      base::BindOnce(btif_dm_set_event_filter_inquiry_result_all_devices));
+  return BT_STATUS_SUCCESS;
+}
+
+static int set_default_event_mask() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_set_default_event_mask));
+  return BT_STATUS_SUCCESS;
+}
+
+static int restore_filter_accept_list() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(btif_dm_restore_filter_accept_list));
+  return BT_STATUS_SUCCESS;
+}
+
 static void dump(int fd, const char** arguments) {
   btif_debug_conn_dump(fd);
   btif_debug_bond_event_dump(fd);
+  btif_debug_linkkey_type_dump(fd);
   btif_debug_a2dp_dump(fd);
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
@@ -441,6 +507,7 @@ static void dump(int fd, const char** arguments) {
 #ifndef TARGET_FLOSS
   LeAudioClient::DebugDump(fd);
   LeAudioBroadcaster::DebugDump(fd);
+  VolumeControl::DebugDump(fd);
 #endif
   connection_manager::dump(fd);
   bluetooth::bqr::DebugDump(fd);
@@ -672,7 +739,14 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     set_dynamic_audio_buffer_size,
     generate_local_oob_data,
     allow_low_latency_audio,
-    clear_event_filter};
+    clear_event_filter,
+    clear_event_mask,
+    clear_filter_accept_list,
+    disconnect_all_acls,
+    le_rand,
+    restore_filter_accept_list,
+    set_default_event_mask,
+    set_event_filter_inquiry_result_all_devices};
 
 // callback reporting helpers
 

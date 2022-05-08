@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "common/contextual_callback.h"
 #include "hci/address.h"
 #include "hci/hci_packets.h"
+#include "hci/le_rand_callback.h"
 #include "module.h"
 #include "os/handler.h"
 
@@ -127,6 +127,8 @@ class Controller : public Module {
 
   virtual void Reset();
 
+  virtual void LeRand(LeRandCallback cb);
+
   virtual void SetEventFilterClearAll();
 
   virtual void SetEventFilterInquiryResultAllDevices();
@@ -161,7 +163,7 @@ class Controller : public Module {
 
   virtual uint64_t GetControllerLeLocalSupportedFeatures() const;
 
-  virtual uint8_t GetLeConnectListSize() const;
+  virtual uint8_t GetLeFilterAcceptListSize() const;
 
   virtual uint8_t GetLeResolvingListSize() const;
 

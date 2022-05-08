@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "base/callback.h"
 #include "device/include/esco_parameters.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
@@ -289,21 +290,6 @@ tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda);
 
 /*******************************************************************************
  *
- * Function         BTM_WriteEIR
- *
- * Description      This function is called to write EIR data to controller.
- *
- * Parameters       p_buff - allocated HCI command buffer including extended
- *                           inquriry response
- *
- * Returns          BTM_SUCCESS  - if successful
- *                  BTM_MODE_UNSUPPORTED - if local device cannot support it
- *
- ******************************************************************************/
-tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff);
-
-/*******************************************************************************
- *
  * Function         BTM_HasEirService
  *
  * Description      This function is called to know if UUID in bit map of UUID.
@@ -348,21 +334,6 @@ tBTM_EIR_SEARCH_RESULT BTM_HasInquiryEirService(tBTM_INQ_RESULTS* p_results,
  *
  ******************************************************************************/
 void BTM_AddEirService(uint32_t* p_eir_uuid, uint16_t uuid16);
-
-/*******************************************************************************
- *
- * Function         BTM_RemoveEirService
- *
- * Description      This function is called to remove a service from the bit map
- *                  UUID list.
- *
- * Parameters       p_eir_uuid - bit mask of UUID list for EIR
- *                  uuid16 - UUID 16-bit
- *
- * Returns          None
- *
- ******************************************************************************/
-void BTM_RemoveEirService(uint32_t* p_eir_uuid, uint16_t uuid16);
 
 /*******************************************************************************
  *
@@ -1850,6 +1821,86 @@ tBTM_STATUS BTM_BleGetEnergyInfo(tBTM_BLE_ENERGY_INFO_CBACK* p_ener_cback);
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ClearEventFilter(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_ClearEventMask
+ *
+ * Description      Clears the event mask in the controller
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_ClearEventMask(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_ClearFilterAcceptList
+ *
+ * Description      Clears the connect list in the controller
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_ClearFilterAcceptList(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_DisconnectAllAcls
+ *
+ * Description      Disconnects all of the ACL connections
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_DisconnectAllAcls(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_LeRand
+ *
+ * Description      Retrieves a random number from the controller
+ *
+ * Parameters       cb - The callback to receive the random number
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+using LeRandCallback = base::Callback<void(uint64_t)>;
+tBTM_STATUS BTM_LeRand(LeRandCallback);
+
+/*******************************************************************************
+ *
+ * Function        BTM_RestoreFilterAcceptList
+ *
+ * Description    Floss: Restore the state of the for the filter accept list
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_RestoreFilterAcceptList(void);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetDefaultEventMask
+ *
+ * Description    Floss: Set the default event mask for Classic and LE
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetDefaultEventMask(void);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetEventFilterInquiryResultAllDevices
+ *
+ * Description    Floss: Set the event filter to inquiry result device all
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetEventFilterInquiryResultAllDevices(void);
 
 /**
  * Send remote name request to GD shim Name module

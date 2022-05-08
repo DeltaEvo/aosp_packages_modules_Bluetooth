@@ -282,10 +282,10 @@ enum OpCode : 16 {
   LE_SET_SCAN_ENABLE = 0x200C,
   LE_CREATE_CONNECTION = 0x200D,
   LE_CREATE_CONNECTION_CANCEL = 0x200E,
-  LE_READ_CONNECT_LIST_SIZE = 0x200F,
-  LE_CLEAR_CONNECT_LIST = 0x2010,
-  LE_ADD_DEVICE_TO_CONNECT_LIST = 0x2011,
-  LE_REMOVE_DEVICE_FROM_CONNECT_LIST = 0x2012,
+  LE_READ_FILTER_ACCEPT_LIST_SIZE = 0x200F,
+  LE_CLEAR_FILTER_ACCEPT_LIST = 0x2010,
+  LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST = 0x2011,
+  LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST = 0x2012,
   LE_CONNECTION_UPDATE = 0x2013,
   LE_SET_HOST_CHANNEL_CLASSIFICATION = 0x2014,
   LE_READ_CHANNEL_MAP = 0x2015,
@@ -537,10 +537,10 @@ enum OpCodeIndex : 16 {
   LE_SET_SCAN_ENABLE = 263,
   LE_CREATE_CONNECTION = 264,
   LE_CREATE_CONNECTION_CANCEL = 265,
-  LE_READ_CONNECT_LIST_SIZE = 266,
-  LE_CLEAR_CONNECT_LIST = 267,
-  LE_ADD_DEVICE_TO_CONNECT_LIST = 270,
-  LE_REMOVE_DEVICE_FROM_CONNECT_LIST = 271,
+  LE_READ_FILTER_ACCEPT_LIST_SIZE = 266,
+  LE_CLEAR_FILTER_ACCEPT_LIST = 267,
+  LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST = 270,
+  LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST = 271,
   LE_CONNECTION_UPDATE = 272,
   LE_SET_HOST_CHANNEL_CLASSIFICATION = 273,
   LE_READ_CHANNEL_MAP = 274,
@@ -803,7 +803,7 @@ enum ErrorCode: 8 {
   CONNECTION_REJECTED_SECURITY_REASONS = 0x0E,
   CONNECTION_REJECTED_UNACCEPTABLE_BD_ADDR = 0x0F,
   CONNECTION_ACCEPT_TIMEOUT = 0x10,
-  UNSUPORTED_FEATURE_OR_PARAMETER_VALUE = 0x11,
+  UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE = 0x11,
   INVALID_HCI_COMMAND_PARAMETERS = 0x12,
   REMOTE_USER_TERMINATED_CONNECTION = 0x13,
   REMOTE_DEVICE_TERMINATED_CONNECTION_LOW_RESOURCES = 0x14,
@@ -2994,6 +2994,58 @@ test LeReadBufferSizeV1Complete {
   "\x0e\x07\x01\x02\x20\x00\xfb\x00\x10",
 }
 
+enum LLFeaturesBits : 64 {
+  // Byte 0
+  LE_ENCRYPTION                                 = 0x0000000000000001,
+  CONNECTION_PARAMETERS_REQUEST_PROCEDURE       = 0x0000000000000002,
+  EXTENDED_REJECT_INDICATION                    = 0x0000000000000004,
+  PERIPHERAL_INITIATED_FEATURES_EXCHANGE        = 0x0000000000000008,
+  LE_PING                                       = 0x0000000000000010,
+  LE_DATA_PACKET_LENGTH_EXTENSION               = 0x0000000000000020,
+  LL_PRIVACY                                    = 0x0000000000000040,
+  EXTENDED_SCANNER_FILTER_POLICIES              = 0x0000000000000080,
+
+  // Byte 1
+  LE_2M_PHY                                     = 0x0000000000000100,
+  STABLE_MODULATION_INDEX_TRANSMITTER           = 0x0000000000000200,
+  STABLE_MODULATION_INDEX_RECEIVER              = 0x0000000000000400,
+  LE_CODED_PHY                                  = 0x0000000000000800,
+  LE_EXTENDED_ADVERTISING                       = 0x0000000000001000,
+  LE_PERIODIC_ADVERTISING                       = 0x0000000000002000,
+  CHANNEL_SELECTION_ALGORITHM_2                 = 0x0000000000004000,
+  LE_POWER_CLASS_1                              = 0x0000000000008000,
+
+  // Byte 2
+  MINIMUM_NUMBER_OF_USED_CHANNELS_PROCEDURE     = 0x0000000000010000,
+  CONNECTION_CTE_REQUEST                        = 0x0000000000020000,
+  CONNECTION_CTE_RESPONSE                       = 0x0000000000040000,
+  CONNECTIONLESS_CTE_TRANSMITTER                = 0x0000000000080000,
+  CONNECTIONLESS_CTE_RECEIVER                   = 0x0000000000100000,
+  ANTENNA_SWITCHING_DURING_CTE_TRANSMISSION     = 0x0000000000200000,
+  ANTENNA_SWITCHING_DURING_CTE_RECEPTION        = 0x0000000000400000,
+  RECEIVING_CONSTANT_TONE_EXTENSIONS            = 0x0000000000800000,
+
+  // Byte 3
+  PERIODIC_ADVERTISING_SYNC_TRANSFER_SENDER     = 0x0000000001000000,
+  PERIODIC_ADVERTISING_SYNC_TRANSFER_RECIPIENT  = 0x0000000002000000,
+  SLEEP_CLOCK_ACCURACY_UPDATES                  = 0x0000000004000000,
+  REMOTE_PUBLIC_KEY_VALIDATION                  = 0x0000000008000000,
+  CONNECTED_ISOCHRONOUS_STREAM_CENTRAL          = 0x0000000010000000,
+  CONNECTED_ISOCHRONOUS_STREAM_PERIPHERAL       = 0x0000000020000000,
+  ISOCHRONOUS_BROADCASTER                       = 0x0000000040000000,
+  SYNCHRONIZED_RECEIVER                         = 0x0000000080000000,
+
+  // Byte 4
+  CONNECTED_ISOCHRONOUS_STREAM_HOST_SUPPORT     = 0x0000000100000000,
+  LE_POWER_CONTROL_REQUEST                      = 0x0000000200000000,
+  LE_POWER_CONTROL_REQUEST_BIS                  = 0x0000000400000000,
+  LE_PATH_LOSS_MONITORING                       = 0x0000000800000000,
+  PERIODIC_ADVERTISING_ADI_SUPPORT              = 0x0000001000000000,
+  CONNECTION_SUBRATING                          = 0x0000002000000000,
+  CONNECTION_SUBRATING_HOST_SUPPORT             = 0x0000004000000000,
+  CHANNEL_CLASSIFICATION                        = 0x0000008000000000,
+}
+
 packet LeReadLocalSupportedFeatures : Command (op_code = LE_READ_LOCAL_SUPPORTED_FEATURES) {
 }
 
@@ -3103,9 +3155,9 @@ enum LeScanType : 8 {
 
 enum LeScanningFilterPolicy : 8 {
   ACCEPT_ALL = 0x00, // Default
-  CONNECT_LIST_ONLY = 0x01,
+  FILTER_ACCEPT_LIST_ONLY = 0x01,
   CHECK_INITIATORS_IDENTITY = 0x02,
-  CONNECT_LIST_AND_INITIATORS_IDENTITY = 0x03,
+  FILTER_ACCEPT_LIST_AND_INITIATORS_IDENTITY = 0x03,
 }
 
 packet LeSetScanParameters : LeScanningCommand (op_code = LE_SET_SCAN_PARAMETERS) {
@@ -3139,7 +3191,7 @@ packet LeSetScanEnableComplete : CommandComplete (command_op_code = LE_SET_SCAN_
 
 enum InitiatorFilterPolicy : 8 {
   USE_PEER_ADDRESS = 0x00,
-  USE_CONNECT_LIST = 0x01,
+  USE_FILTER_ACCEPT_LIST = 0x01,
 }
 
 packet LeCreateConnection : LeConnectionManagementCommand (op_code = LE_CREATE_CONNECTION) {
@@ -3167,50 +3219,50 @@ packet LeCreateConnectionCancelComplete : CommandComplete (command_op_code = LE_
   status : ErrorCode,
 }
 
-packet LeReadConnectListSize : Command (op_code = LE_READ_CONNECT_LIST_SIZE) {
+packet LeReadFilterAcceptListSize : Command (op_code = LE_READ_FILTER_ACCEPT_LIST_SIZE) {
 }
 
-test LeReadConnectListSize {
+test LeReadFilterAcceptListSize {
   "\x0f\x20\x00",
 }
 
-packet LeReadConnectListSizeComplete : CommandComplete (command_op_code = LE_READ_CONNECT_LIST_SIZE) {
+packet LeReadFilterAcceptListSizeComplete : CommandComplete (command_op_code = LE_READ_FILTER_ACCEPT_LIST_SIZE) {
   status : ErrorCode,
-  connect_list_size : 8,
+  filter_accept_list_size : 8,
 }
 
-test LeReadConnectListSizeComplete {
+test LeReadFilterAcceptListSizeComplete {
   "\x0e\x05\x01\x0f\x20\x00\x80",
 }
 
-packet LeClearConnectList : LeConnectionManagementCommand (op_code = LE_CLEAR_CONNECT_LIST) {
+packet LeClearFilterAcceptList : LeConnectionManagementCommand (op_code = LE_CLEAR_FILTER_ACCEPT_LIST) {
 }
 
-packet LeClearConnectListComplete : CommandComplete (command_op_code = LE_CLEAR_CONNECT_LIST) {
+packet LeClearFilterAcceptListComplete : CommandComplete (command_op_code = LE_CLEAR_FILTER_ACCEPT_LIST) {
   status : ErrorCode,
 }
 
-enum ConnectListAddressType : 8 {
+enum FilterAcceptListAddressType : 8 {
   PUBLIC = 0x00,
   RANDOM = 0x01,
   ANONYMOUS_ADVERTISERS = 0xFF,
 }
 
-packet LeAddDeviceToConnectList : LeConnectionManagementCommand (op_code = LE_ADD_DEVICE_TO_CONNECT_LIST) {
-  address_type : ConnectListAddressType,
+packet LeAddDeviceToFilterAcceptList : LeConnectionManagementCommand (op_code = LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST) {
+  address_type : FilterAcceptListAddressType,
   address : Address,
 }
 
-packet LeAddDeviceToConnectListComplete : CommandComplete (command_op_code = LE_ADD_DEVICE_TO_CONNECT_LIST) {
+packet LeAddDeviceToFilterAcceptListComplete : CommandComplete (command_op_code = LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST) {
   status : ErrorCode,
 }
 
-packet LeRemoveDeviceFromConnectList : LeConnectionManagementCommand (op_code = LE_REMOVE_DEVICE_FROM_CONNECT_LIST) {
-  address_type : ConnectListAddressType,
+packet LeRemoveDeviceFromFilterAcceptList : LeConnectionManagementCommand (op_code = LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST) {
+  address_type : FilterAcceptListAddressType,
   address : Address,
 }
 
-packet LeRemoveDeviceFromConnectListComplete : CommandComplete (command_op_code = LE_REMOVE_DEVICE_FROM_CONNECT_LIST) {
+packet LeRemoveDeviceFromFilterAcceptListComplete : CommandComplete (command_op_code = LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST) {
   status : ErrorCode,
 }
 
@@ -4370,10 +4422,16 @@ packet LeSetupIsoDataPathComplete : CommandComplete (command_op_code = LE_SETUP_
   _reserved_ : 4,
 }
 
+enum RemoveDataPathDirection : 8 {
+  INPUT = 1,
+  OUTPUT = 2,
+  INPUT_AND_OUTPUT = 3,
+}
+
 packet LeRemoveIsoDataPath : LeIsoCommand (op_code = LE_REMOVE_ISO_DATA_PATH) {
   connection_handle : 12,
   _reserved_ : 4,
-  data_path_direction : DataPathDirection,
+  remove_data_path_direction : RemoveDataPathDirection,
 }
 
 packet LeRemoveIsoDataPathComplete : CommandComplete (command_op_code = LE_REMOVE_ISO_DATA_PATH) {
@@ -4953,7 +5011,7 @@ packet InquiryComplete : Event (event_code = INQUIRY_COMPLETE) {
   status : ErrorCode,
 }
 
-struct InquiryResult {
+struct InquiryResponse {
   bd_addr : Address,
   page_scan_repetition_mode : PageScanRepetitionMode,
   _reserved_ : 8,
@@ -4964,8 +5022,8 @@ struct InquiryResult {
 }
 
 packet InquiryResult : Event (event_code = INQUIRY_RESULT) {
-  _count_(inquiry_results) : 8,
-  inquiry_results : InquiryResult[],
+  _count_(responses) : 8,
+  responses : InquiryResponse[],
 }
 
 enum LinkType : 8 {
@@ -5191,7 +5249,7 @@ packet FlowSpecificationComplete : Event (event_code = FLOW_SPECIFICATION_COMPLE
   access_latency : 32, // Octets/s
 }
 
-struct InquiryResultWithRssi {
+struct InquiryResponseWithRssi {
   address : Address,
   page_scan_repetition_mode : PageScanRepetitionMode,
   _reserved_ : 8,
@@ -5202,8 +5260,8 @@ struct InquiryResultWithRssi {
 }
 
 packet InquiryResultWithRssi : Event (event_code = INQUIRY_RESULT_WITH_RSSI) {
-  _count_(inquiry_results) : 8,
-  inquiry_results : InquiryResultWithRssi[],
+  _count_(responses) : 8,
+  responses : InquiryResponseWithRssi[],
 }
 
 packet ReadRemoteExtendedFeaturesComplete : Event (event_code = READ_REMOTE_EXTENDED_FEATURES_COMPLETE) {
@@ -5397,7 +5455,7 @@ enum AdvertisingEventType : 8 {
   SCAN_RESPONSE = 0x04,
 }
 
-struct LeAdvertisingReport {
+struct LeAdvertisingResponse {
   event_type : AdvertisingEventType,
   address_type : AddressType,
   address : Address,
@@ -5407,11 +5465,11 @@ struct LeAdvertisingReport {
 }
 
 packet LeAdvertisingReport : LeMetaEvent (subevent_code = ADVERTISING_REPORT) {
-  _count_(advertising_reports) : 8,
-  advertising_reports : LeAdvertisingReport[],
+  _count_(responses) : 8,
+  responses : LeAdvertisingResponse[],
 }
 
-struct LeAdvertisingReportRaw {
+struct LeAdvertisingResponseRaw {
   event_type : AdvertisingEventType,
   address_type : AddressType,
   address : Address,
@@ -5421,8 +5479,8 @@ struct LeAdvertisingReportRaw {
 }
 
 packet LeAdvertisingReportRaw : LeMetaEvent (subevent_code = ADVERTISING_REPORT) {
-  _count_(advertising_reports) : 8,
-  advertising_reports : LeAdvertisingReportRaw[],
+  _count_(responses) : 8,
+  responses : LeAdvertisingResponseRaw[],
 }
 
 packet LeConnectionUpdateComplete : LeMetaEvent (subevent_code = CONNECTION_UPDATE_COMPLETE) {
@@ -5508,7 +5566,7 @@ enum DirectAddressType : 8 {
   RANDOM_DEVICE_ADDRESS = 0x01,
 }
 
-struct LeDirectedAdvertisingReport {
+struct LeDirectedAdvertisingResponse {
   event_type : DirectAdvertisingEventType,
   address_type : DirectAdvertisingAddressType,
   address : Address,
@@ -5518,8 +5576,8 @@ struct LeDirectedAdvertisingReport {
 }
 
 packet LeDirectedAdvertisingReport : LeMetaEvent (subevent_code = DIRECTED_ADVERTISING_REPORT) {
-  _count_(advertising_reports) : 8,
-  advertising_reports : LeDirectedAdvertisingReport[],
+  _count_(responses) : 8,
+  responses : LeDirectedAdvertisingResponse[],
 }
 
 packet LePhyUpdateComplete : LeMetaEvent (subevent_code = PHY_UPDATE_COMPLETE) {
@@ -5537,7 +5595,7 @@ enum DataStatus : 2 {
   RESERVED = 0x3,
 }
 
-struct LeExtendedAdvertisingReport {
+struct LeExtendedAdvertisingResponse {
   connectable : 1,
   scannable : 1,
   directed : 1,
@@ -5560,8 +5618,8 @@ struct LeExtendedAdvertisingReport {
 }
 
 packet LeExtendedAdvertisingReport : LeMetaEvent (subevent_code = EXTENDED_ADVERTISING_REPORT) {
-  _count_(advertising_reports) : 8,
-  advertising_reports : LeExtendedAdvertisingReport[],
+  _count_(responses) : 8,
+  responses : LeExtendedAdvertisingResponse[],
 }
 
 packet LePeriodicAdvertisingSyncEstablished : LeMetaEvent (subevent_code = PERIODIC_ADVERTISING_SYNC_ESTABLISHED) {

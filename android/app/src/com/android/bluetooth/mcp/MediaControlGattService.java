@@ -41,7 +41,12 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.util.Pair;
 
+import com.android.bluetooth.a2dp.A2dpService;
+import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.hearingaid.HearingAidService;
+import com.android.bluetooth.le_audio.LeAudioService;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.nio.ByteBuffer;
@@ -51,6 +56,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -133,6 +139,8 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
     private MediaState mCurrentMediaState = MediaState.INACTIVE;
     private Map<BluetoothDevice, List<GattOpContext>> mPendingGattOperations = new HashMap<>();
     private McpService mMcpService;
+    private LeAudioService mLeAudioService;
+    private AdapterService mAdapterService;
 
     private static class GattOpContext {
         public enum Operation {
@@ -294,7 +302,7 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
                 if (VDBG) {
                     Log.d(TAG, "MEDIA_CONTROL_POINT write request");
                 }
-                int status = handleMediaControlPointRequest(value);
+                int status = handleMediaControlPointRequest(device, value);
                 if (responseNeeded) {
                     mBluetoothGattServer.sendResponse(device, requestId, status, offset, value);
                 }
@@ -783,6 +791,8 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
         mCcid = ccid;
 
         mMcpService = mcpService;
+        mAdapterService =  Objects.requireNonNull(AdapterService.getAdapterService(),
+                "AdapterService shouldn't be null when creating MediaControlCattService");
     }
 
     protected boolean init(UUID scvUuid) {
@@ -835,7 +845,7 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
     }
 
     @VisibleForTesting
-    int handleMediaControlPointRequest(byte[] value) {
+    int handleMediaControlPointRequest(BluetoothDevice device, byte[] value) {
         if (DBG) {
             Log.d(TAG, "handleMediaControlPointRequest");
         }
@@ -879,6 +889,18 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
             Log.d(TAG, "handleMediaControlPointRequest: sending request up");
         }
 
+        if (req.getOpcode() == Request.Opcodes.PLAY) {
+            if (mAdapterService.getActiveDevices(BluetoothProfile.A2DP).size() > 0) {
+                A2dpService.getA2dpService().setActiveDevice(null);
+            }
+            if (mAdapterService.getActiveDevices(BluetoothProfile.HEARING_AID).size() > 0) {
+                HearingAidService.getHearingAidService().setActiveDevice(null);
+            }
+            if (mLeAudioService == null) {
+                mLeAudioService = LeAudioService.getLeAudioService();
+            }
+            mLeAudioService.setActiveDevice(device);
+        }
         mCallbacks.onMediaControlRequest(req);
 
         return BluetoothGatt.GATT_SUCCESS;
@@ -896,6 +918,11 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
     @VisibleForTesting
     void setBluetoothGattServerForTesting(BluetoothGattServerProxy proxy) {
         mBluetoothGattServer = proxy;
+    }
+
+    @VisibleForTesting
+    void setLeAudioServiceForTesting(LeAudioService leAudioService) {
+        mLeAudioService = leAudioService;
     }
 
     private boolean initGattService(UUID serviceUuid) {
@@ -919,10 +946,9 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
         mGattService =
                 new BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY);
 
-        for (Map.Entry<UUID, CharacteristicData> entry :
-                sUuidToCharacteristic.entrySet()) {
-            CharacteristicData desc = entry.getValue();
-            UUID uuid = entry.getKey();
+        for (Pair<UUID, CharacteristicData> entry : getUuidCharacteristicList()) {
+            CharacteristicData desc = entry.second;
+            UUID uuid = entry.first;
             if (VDBG) {
                 Log.d(TAG, "Checking uuid: " + uuid);
             }
@@ -1702,136 +1728,119 @@ public class MediaControlGattService implements MediaControlGattServiceInterface
     /* All characteristic attributes (UUIDs, properties, permissions and flags needed to enable
      * them) This is set according to the Media Control Service Specification.
      */
-    private final static Map<UUID, CharacteristicData> sUuidToCharacteristic = Map.ofEntries(
-            entry(UUID_PLAYER_NAME,
-                    new CharacteristicData(CharId.PLAYER_NAME,
-                            ServiceFeature.PLAYER_NAME, ServiceFeature.PLAYER_NAME_NOTIFY,
-                            PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_PLAYER_ICON_OBJ_ID,
-                    new CharacteristicData(CharId.PLAYER_ICON_OBJ_ID,
-                            ServiceFeature.PLAYER_ICON_OBJ_ID,
-                            // Notifications unsupported
-                            0, PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_PLAYER_ICON_URL,
-                    new CharacteristicData(CharId.PLAYER_ICON_URL,
-                            ServiceFeature.PLAYER_ICON_URL,
-                            // Notifications unsupported
-                            0, PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_TRACK_CHANGED,
-                    new CharacteristicData(CharId.TRACK_CHANGED,
-                            ServiceFeature.TRACK_CHANGED,
-                            // Mandatory notification if char. exists.
-                            ServiceFeature.TRACK_CHANGED,
-                            PROPERTY_NOTIFY, 0)),
-            entry(UUID_TRACK_TITLE,
-                    new CharacteristicData(CharId.TRACK_TITLE,
-                            ServiceFeature.TRACK_TITLE, ServiceFeature.TRACK_TITLE_NOTIFY,
-                            PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_TRACK_DURATION,
-                    new CharacteristicData(CharId.TRACK_DURATION,
-                            ServiceFeature.TRACK_DURATION, ServiceFeature.TRACK_DURATION_NOTIFY,
-                            PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_TRACK_POSITION,
-                    new CharacteristicData(CharId.TRACK_POSITION,
-                            ServiceFeature.TRACK_POSITION, ServiceFeature.TRACK_POSITION_NOTIFY,
-                            PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
-                            PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_PLAYBACK_SPEED,
-                    new CharacteristicData(CharId.PLAYBACK_SPEED,
-                            ServiceFeature.PLAYBACK_SPEED, ServiceFeature.PLAYBACK_SPEED_NOTIFY,
-                            PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
-                            PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_SEEKING_SPEED,
-                    new CharacteristicData(CharId.SEEKING_SPEED,
-                            ServiceFeature.SEEKING_SPEED, ServiceFeature.SEEKING_SPEED_NOTIFY,
-                            PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_CURRENT_TRACK_SEGMENT_OBJ_ID,
-                    new CharacteristicData(CharId.CURRENT_TRACK_SEGMENT_OBJ_ID,
-                            ServiceFeature.CURRENT_TRACK_SEGMENT_OBJ_ID,
-                            // Notifications unsupported
-                            0, PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_CURRENT_TRACK_OBJ_ID,
-                    new CharacteristicData(CharId.CURRENT_TRACK_OBJ_ID,
-                            ServiceFeature.CURRENT_TRACK_OBJ_ID,
-                            ServiceFeature.CURRENT_TRACK_OBJ_ID_NOTIFY,
-                            PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
-                            PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_NEXT_TRACK_OBJ_ID,
-                    new CharacteristicData(CharId.NEXT_TRACK_OBJ_ID,
-                            ServiceFeature.NEXT_TRACK_OBJ_ID,
-                            ServiceFeature.NEXT_TRACK_OBJ_ID_NOTIFY,
-                            PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
-                            PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_CURRENT_GROUP_OBJ_ID,
-                    new CharacteristicData(CharId.CURRENT_GROUP_OBJ_ID,
-                            ServiceFeature.CURRENT_GROUP_OBJ_ID,
-                            ServiceFeature.CURRENT_GROUP_OBJ_ID_NOTIFY,
-                            PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
-                            PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_PARENT_GROUP_OBJ_ID,
-                    new CharacteristicData(CharId.PARENT_GROUP_OBJ_ID,
-                            ServiceFeature.PARENT_GROUP_OBJ_ID,
-                            ServiceFeature.PARENT_GROUP_OBJ_ID_NOTIFY,
-                            PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_PLAYING_ORDER,
-                    new CharacteristicData(CharId.PLAYING_ORDER,
-                            ServiceFeature.PLAYING_ORDER, ServiceFeature.PLAYING_ORDER_NOTIFY,
-                            PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
-                            PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_PLAYING_ORDER_SUPPORTED,
-                    new CharacteristicData(CharId.PLAYING_ORDER_SUPPORTED,
-                            ServiceFeature.PLAYING_ORDER_SUPPORTED,
-                            // Notifications unsupported
-                            0, PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_MEDIA_STATE,
-                    new CharacteristicData(CharId.MEDIA_STATE,
-                            ServiceFeature.MEDIA_STATE,
-                            // Mandatory notification if char. exists.
-                            ServiceFeature.MEDIA_STATE,
-                            PROPERTY_READ | PROPERTY_NOTIFY,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_MEDIA_CONTROL_POINT,
-                    new CharacteristicData(CharId.MEDIA_CONTROL_POINT,
-                            ServiceFeature.MEDIA_CONTROL_POINT,
-                            // Mandatory notification if char. exists.
-                            ServiceFeature.MEDIA_CONTROL_POINT,
-                            PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE | PROPERTY_NOTIFY,
-                            PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_MEDIA_CONTROL_POINT_OPCODES_SUPPORTED,
-                    new CharacteristicData(CharId.MEDIA_CONTROL_POINT_OPCODES_SUPPORTED,
-                            ServiceFeature.MEDIA_CONTROL_POINT_OPCODES_SUPPORTED,
-                            ServiceFeature.MEDIA_CONTROL_POINT_OPCODES_SUPPORTED_NOTIFY,
-                            PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_SEARCH_RESULT_OBJ_ID,
-                    new CharacteristicData(CharId.SEARCH_RESULT_OBJ_ID,
-                            ServiceFeature.SEARCH_RESULT_OBJ_ID,
-                            // Mandatory notification if char. exists.
-                            ServiceFeature.SEARCH_RESULT_OBJ_ID,
-                            PROPERTY_READ | PROPERTY_NOTIFY,
-                            PERMISSION_READ_ENCRYPTED)),
-            entry(UUID_SEARCH_CONTROL_POINT,
-                    new CharacteristicData(CharId.SEARCH_CONTROL_POINT,
-                            ServiceFeature.SEARCH_CONTROL_POINT,
-                            // Mandatory notification if char. exists.
-                            ServiceFeature.SEARCH_CONTROL_POINT,
-                            PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE | PROPERTY_NOTIFY,
-                            PERMISSION_WRITE_ENCRYPTED)),
-            entry(UUID_CONTENT_CONTROL_ID,
-                    new CharacteristicData(CharId.CONTENT_CONTROL_ID,
-                            ServiceFeature.CONTENT_CONTROL_ID,
-                            // Notifications unsupported
-                            0, PROPERTY_READ,
-                            PERMISSION_READ_ENCRYPTED)));
+    private static List<Pair<UUID, CharacteristicData>> getUuidCharacteristicList() {
+        List<Pair<UUID, CharacteristicData>> characteristics = new ArrayList<>();
+        characteristics.add(new Pair<>(UUID_PLAYER_NAME,
+                new CharacteristicData(CharId.PLAYER_NAME, ServiceFeature.PLAYER_NAME,
+                        ServiceFeature.PLAYER_NAME_NOTIFY, PROPERTY_READ,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_PLAYER_ICON_OBJ_ID,
+                new CharacteristicData(CharId.PLAYER_ICON_OBJ_ID, ServiceFeature.PLAYER_ICON_OBJ_ID,
+                        // Notifications unsupported
+                        0, PROPERTY_READ, PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_PLAYER_ICON_URL,
+                new CharacteristicData(CharId.PLAYER_ICON_URL, ServiceFeature.PLAYER_ICON_URL,
+                        // Notifications unsupported
+                        0, PROPERTY_READ, PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_TRACK_CHANGED,
+                new CharacteristicData(CharId.TRACK_CHANGED, ServiceFeature.TRACK_CHANGED,
+                        // Mandatory notification if char. exists.
+                        ServiceFeature.TRACK_CHANGED, PROPERTY_NOTIFY, 0)));
+        characteristics.add(new Pair<>(UUID_TRACK_TITLE,
+                new CharacteristicData(CharId.TRACK_TITLE, ServiceFeature.TRACK_TITLE,
+                        ServiceFeature.TRACK_TITLE_NOTIFY, PROPERTY_READ,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_TRACK_DURATION,
+                new CharacteristicData(CharId.TRACK_DURATION, ServiceFeature.TRACK_DURATION,
+                        ServiceFeature.TRACK_DURATION_NOTIFY, PROPERTY_READ,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_TRACK_POSITION,
+                new CharacteristicData(CharId.TRACK_POSITION, ServiceFeature.TRACK_POSITION,
+                        ServiceFeature.TRACK_POSITION_NOTIFY,
+                        PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
+                        PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_PLAYBACK_SPEED,
+                new CharacteristicData(CharId.PLAYBACK_SPEED, ServiceFeature.PLAYBACK_SPEED,
+                        ServiceFeature.PLAYBACK_SPEED_NOTIFY,
+                        PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
+                        PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_SEEKING_SPEED,
+                new CharacteristicData(CharId.SEEKING_SPEED, ServiceFeature.SEEKING_SPEED,
+                        ServiceFeature.SEEKING_SPEED_NOTIFY, PROPERTY_READ,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_CURRENT_TRACK_SEGMENT_OBJ_ID,
+                new CharacteristicData(CharId.CURRENT_TRACK_SEGMENT_OBJ_ID,
+                        ServiceFeature.CURRENT_TRACK_SEGMENT_OBJ_ID,
+                        // Notifications unsupported
+                        0, PROPERTY_READ, PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_CURRENT_TRACK_OBJ_ID,
+                new CharacteristicData(CharId.CURRENT_TRACK_OBJ_ID,
+                        ServiceFeature.CURRENT_TRACK_OBJ_ID,
+                        ServiceFeature.CURRENT_TRACK_OBJ_ID_NOTIFY,
+                        PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
+                        PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_NEXT_TRACK_OBJ_ID,
+                new CharacteristicData(CharId.NEXT_TRACK_OBJ_ID, ServiceFeature.NEXT_TRACK_OBJ_ID,
+                        ServiceFeature.NEXT_TRACK_OBJ_ID_NOTIFY,
+                        PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
+                        PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_CURRENT_GROUP_OBJ_ID,
+                new CharacteristicData(CharId.CURRENT_GROUP_OBJ_ID,
+                        ServiceFeature.CURRENT_GROUP_OBJ_ID,
+                        ServiceFeature.CURRENT_GROUP_OBJ_ID_NOTIFY,
+                        PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
+                        PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_PARENT_GROUP_OBJ_ID,
+                new CharacteristicData(CharId.PARENT_GROUP_OBJ_ID,
+                        ServiceFeature.PARENT_GROUP_OBJ_ID,
+                        ServiceFeature.PARENT_GROUP_OBJ_ID_NOTIFY, PROPERTY_READ,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_PLAYING_ORDER,
+                new CharacteristicData(CharId.PLAYING_ORDER, ServiceFeature.PLAYING_ORDER,
+                        ServiceFeature.PLAYING_ORDER_NOTIFY,
+                        PROPERTY_READ | PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE,
+                        PERMISSION_READ_ENCRYPTED | PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_PLAYING_ORDER_SUPPORTED,
+                new CharacteristicData(CharId.PLAYING_ORDER_SUPPORTED,
+                        ServiceFeature.PLAYING_ORDER_SUPPORTED,
+                        // Notifications unsupported
+                        0, PROPERTY_READ, PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_MEDIA_STATE,
+                new CharacteristicData(CharId.MEDIA_STATE, ServiceFeature.MEDIA_STATE,
+                        // Mandatory notification if char. exists.
+                        ServiceFeature.MEDIA_STATE, PROPERTY_READ | PROPERTY_NOTIFY,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_MEDIA_CONTROL_POINT,
+                new CharacteristicData(CharId.MEDIA_CONTROL_POINT,
+                        ServiceFeature.MEDIA_CONTROL_POINT,
+                        // Mandatory notification if char. exists.
+                        ServiceFeature.MEDIA_CONTROL_POINT,
+                        PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE | PROPERTY_NOTIFY,
+                        PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_MEDIA_CONTROL_POINT_OPCODES_SUPPORTED,
+                new CharacteristicData(CharId.MEDIA_CONTROL_POINT_OPCODES_SUPPORTED,
+                        ServiceFeature.MEDIA_CONTROL_POINT_OPCODES_SUPPORTED,
+                        ServiceFeature.MEDIA_CONTROL_POINT_OPCODES_SUPPORTED_NOTIFY, PROPERTY_READ,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_SEARCH_RESULT_OBJ_ID,
+                new CharacteristicData(CharId.SEARCH_RESULT_OBJ_ID,
+                        ServiceFeature.SEARCH_RESULT_OBJ_ID,
+                        // Mandatory notification if char. exists.
+                        ServiceFeature.SEARCH_RESULT_OBJ_ID, PROPERTY_READ | PROPERTY_NOTIFY,
+                        PERMISSION_READ_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_SEARCH_CONTROL_POINT,
+                new CharacteristicData(CharId.SEARCH_CONTROL_POINT,
+                        ServiceFeature.SEARCH_CONTROL_POINT,
+                        // Mandatory notification if char. exists.
+                        ServiceFeature.SEARCH_CONTROL_POINT,
+                        PROPERTY_WRITE | PROPERTY_WRITE_NO_RESPONSE | PROPERTY_NOTIFY,
+                        PERMISSION_WRITE_ENCRYPTED)));
+        characteristics.add(new Pair<>(UUID_CONTENT_CONTROL_ID,
+                new CharacteristicData(CharId.CONTENT_CONTROL_ID, ServiceFeature.CONTENT_CONTROL_ID,
+                        // Notifications unsupported
+                        0, PROPERTY_READ, PERMISSION_READ_ENCRYPTED)));
+        return characteristics;
+    }
 
     public void dump(StringBuilder sb) {
         sb.append("\tMediaControlService instance:");
