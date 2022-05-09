@@ -474,6 +474,9 @@ typedef void (*link_quality_report_callback)(
 /** Switch the buffer size callback */
 typedef void (*switch_buffer_size_callback)(bool is_low_latency_buffer_size);
 
+/** Switch the codec callback */
+typedef void (*switch_codec_callback)(bool is_low_latency_buffer_size);
+
 typedef enum { ASSOCIATE_JVM, DISASSOCIATE_JVM } bt_cb_thread_evt;
 
 /** Thread Associate/Disassociate JVM Callback */
@@ -532,6 +535,7 @@ typedef struct {
   link_quality_report_callback link_quality_report_cb;
   generate_local_oob_data_callback generate_local_oob_data_cb;
   switch_buffer_size_callback switch_buffer_size_cb;
+  switch_codec_callback switch_codec_cb;
 } bt_callbacks_t;
 
 typedef void (*alarm_cb)(void* data);
@@ -771,6 +775,11 @@ typedef struct {
    * @return true if audio low latency is successfully allowed or disallowed
    */
   bool (*allow_low_latency_audio)(bool allowed, const RawAddress& address);
+
+  /**
+   * Set the event filter for the controller
+   */
+  int (*clear_event_filter)();
 } bt_interface_t;
 
 #define BLUETOOTH_INTERFACE_STRING "bluetoothInterface"

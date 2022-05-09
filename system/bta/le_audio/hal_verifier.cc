@@ -23,6 +23,11 @@ bool LeAudioHalVerifier::SupportsLeAudio() {
 }
 
 bool LeAudioHalVerifier::SupportsLeAudioHardwareOffload() {
-  return bluetooth::audio::HalVersionManager::GetHalVersion() >
-         bluetooth::audio::BluetoothAudioHalVersion::VERSION_2_1;
+  return bluetooth::audio::HalVersionManager::GetHalTransport() ==
+         bluetooth::audio::BluetoothAudioHalTransport::AIDL;
+}
+
+bool LeAudioHalVerifier::SupportsLeAudioBroadcast() {
+  return bluetooth::audio::HalVersionManager::GetHalTransport() ==
+         bluetooth::audio::BluetoothAudioHalTransport::AIDL;
 }

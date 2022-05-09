@@ -21,6 +21,7 @@
 #include <hardware/bt_le_audio.h>
 
 #include "audio_hal_interface/hal_version_manager.h"
+#include "bta_le_audio_api.h"
 #include "bta_le_audio_broadcaster_api.h"
 #include "btif_common.h"
 #include "stack/include/btu.h"
@@ -46,8 +47,7 @@ class LeAudioBroadcasterInterfaceImpl : public LeAudioBroadcasterInterface,
     do_in_main_thread(
         FROM_HERE,
         Bind(&LeAudioBroadcaster::Initialize, this, base::Bind([]() -> bool {
-          return bluetooth::audio::HalVersionManager::GetHalVersion() ==
-                 bluetooth::audio::BluetoothAudioHalVersion::VERSION_2_1;
+          return LeAudioHalVerifier::SupportsLeAudioBroadcast();
         })));
   }
 
@@ -63,84 +63,79 @@ class LeAudioBroadcasterInterfaceImpl : public LeAudioBroadcasterInterface,
              broadcast_code));
   }
 
-  void UpdateMetadata(uint8_t instance_id,
+  void UpdateMetadata(uint32_t broadcast_id,
                       std::vector<uint8_t> metadata) override {
     DVLOG(2) << __func__;
     do_in_main_thread(FROM_HERE, Bind(&LeAudioBroadcaster::UpdateMetadata,
                                       Unretained(LeAudioBroadcaster::Get()),
-                                      instance_id, std::move(metadata)));
+                                      broadcast_id, std::move(metadata)));
   }
 
-  void StartBroadcast(uint8_t instance_id) override {
+  void StartBroadcast(uint32_t broadcast_id) override {
     DVLOG(2) << __func__;
-    do_in_main_thread(FROM_HERE,
-                      Bind(&LeAudioBroadcaster::StartAudioBroadcast,
-                           Unretained(LeAudioBroadcaster::Get()), instance_id));
+    do_in_main_thread(
+        FROM_HERE, Bind(&LeAudioBroadcaster::StartAudioBroadcast,
+                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
-  void StopBroadcast(uint8_t instance_id) override {
+  void StopBroadcast(uint32_t broadcast_id) override {
     DVLOG(2) << __func__;
-    do_in_main_thread(FROM_HERE,
-                      Bind(&LeAudioBroadcaster::StopAudioBroadcast,
-                           Unretained(LeAudioBroadcaster::Get()), instance_id));
+    do_in_main_thread(
+        FROM_HERE, Bind(&LeAudioBroadcaster::StopAudioBroadcast,
+                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
-  void PauseBroadcast(uint8_t instance_id) override {
+  void PauseBroadcast(uint32_t broadcast_id) override {
     DVLOG(2) << __func__;
-    do_in_main_thread(FROM_HERE,
-                      Bind(&LeAudioBroadcaster::SuspendAudioBroadcast,
-                           Unretained(LeAudioBroadcaster::Get()), instance_id));
+    do_in_main_thread(
+        FROM_HERE, Bind(&LeAudioBroadcaster::SuspendAudioBroadcast,
+                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
-  void DestroyBroadcast(uint8_t instance_id) override {
+  void DestroyBroadcast(uint32_t broadcast_id) override {
     DVLOG(2) << __func__;
-    do_in_main_thread(FROM_HERE,
-                      Bind(&LeAudioBroadcaster::DestroyAudioBroadcast,
-                           Unretained(LeAudioBroadcaster::Get()), instance_id));
+    do_in_main_thread(
+        FROM_HERE, Bind(&LeAudioBroadcaster::DestroyAudioBroadcast,
+                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
-  void GetBroadcastId(uint8_t instance_id) override {
+  void GetBroadcastMetadata(uint32_t broadcast_id) override {
     DVLOG(2) << __func__;
-    do_in_main_thread(FROM_HERE,
-                      Bind(&LeAudioBroadcaster::GetBroadcastId,
-                           Unretained(LeAudioBroadcaster::Get()), instance_id));
+    do_in_main_thread(
+        FROM_HERE, Bind(&LeAudioBroadcaster::GetBroadcastMetadata,
+                        Unretained(LeAudioBroadcaster::Get()), broadcast_id));
   }
 
-  void GetAllBroadcastStates(void) override {
-    DVLOG(2) << __func__;
-    do_in_main_thread(FROM_HERE,
-                      Bind(&LeAudioBroadcaster::GetAllBroadcastStates,
-                           Unretained(LeAudioBroadcaster::Get())));
-  }
-
-  void OnBroadcastCreated(uint8_t instance_id, bool success) override {
+  void OnBroadcastCreated(uint32_t broadcast_id, bool success) override {
     DVLOG(2) << __func__;
     do_in_jni_thread(FROM_HERE,
                      Bind(&LeAudioBroadcasterCallbacks::OnBroadcastCreated,
-                          Unretained(callbacks_), instance_id, success));
+                          Unretained(callbacks_), broadcast_id, success));
   }
 
-  void OnBroadcastDestroyed(uint8_t instance_id) override {
+  void OnBroadcastDestroyed(uint32_t broadcast_id) override {
     DVLOG(2) << __func__;
     do_in_jni_thread(FROM_HERE,
                      Bind(&LeAudioBroadcasterCallbacks::OnBroadcastDestroyed,
-                          Unretained(callbacks_), instance_id));
+                          Unretained(callbacks_), broadcast_id));
   }
 
-  void OnBroadcastStateChanged(uint8_t instance_id,
+  void OnBroadcastStateChanged(uint32_t broadcast_id,
                                BroadcastState state) override {
     DVLOG(2) << __func__;
     do_in_jni_thread(FROM_HERE,
                      Bind(&LeAudioBroadcasterCallbacks::OnBroadcastStateChanged,
-                          Unretained(callbacks_), instance_id, state));
+                          Unretained(callbacks_), broadcast_id, state));
   }
 
-  void OnBroadcastId(uint8_t instance_id,
-                     const BroadcastId& broadcast_id) override {
+  void OnBroadcastMetadataChanged(uint32_t broadcast_id,
+                                  const bluetooth::le_audio::BroadcastMetadata&
+                                      broadcast_metadata) override {
     DVLOG(2) << __func__;
-    do_in_jni_thread(FROM_HERE,
-                     Bind(&LeAudioBroadcasterCallbacks::OnBroadcastId,
-                          Unretained(callbacks_), instance_id, broadcast_id));
+    do_in_jni_thread(
+        FROM_HERE,
+        Bind(&LeAudioBroadcasterCallbacks::OnBroadcastMetadataChanged,
+             Unretained(callbacks_), broadcast_id, broadcast_metadata));
   }
 
   void Stop(void) override {

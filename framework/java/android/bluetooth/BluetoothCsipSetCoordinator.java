@@ -45,6 +45,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
@@ -154,6 +155,9 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * Used as an extra field in {@link #ACTION_CSIS_DEVICE_AVAILABLE} intent.
      * Contains the group id.
      *
+     * <p>Possible Values:
+     * {@link GROUP_ID_INVALID} Invalid group identifier
+     * 0x01 - 0xEF Valid group identifier
      * @hide
      */
     @SystemApi
@@ -249,36 +253,39 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * Lock the set.
      * @param groupId group ID to lock,
      * @param executor callback executor,
-     * @param cb callback to report lock and unlock events - stays valid until the app unlocks
+     * @param callback callback to report lock and unlock events - stays valid until the app unlocks
      *           using the returned lock identifier or the lock timeouts on the remote side,
      *           as per CSIS specification,
      * @return unique lock identifier used for unlocking or null if lock has failed.
+     * @throws {@link IllegalArgumentException} when executor or callback is null
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
     public
-    @Nullable UUID groupLock(int groupId, @Nullable @CallbackExecutor Executor executor,
-            @Nullable ClientLockCallback cb) {
-        if (VDBG) log("groupLockSet()");
+    @Nullable UUID lockGroup(int groupId, @NonNull @CallbackExecutor Executor executor,
+            @NonNull ClientLockCallback callback) {
+        if (VDBG) log("lockGroup()");
+        Objects.requireNonNull(executor, "executor cannot be null");
+        Objects.requireNonNull(callback, "callback cannot be null");
         final IBluetoothCsipSetCoordinator service = getService();
         final UUID defaultValue = null;
         if (service == null) {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
-            IBluetoothCsipSetCoordinatorLockCallback delegate = null;
-            if ((executor != null) && (cb != null)) {
-                delegate = new BluetoothCsipSetCoordinatorLockCallbackDelegate(executor, cb);
-            }
+            IBluetoothCsipSetCoordinatorLockCallback delegate =
+                    new BluetoothCsipSetCoordinatorLockCallbackDelegate(executor, callback);
             try {
                 final SynchronousResultReceiver<ParcelUuid> recv = new SynchronousResultReceiver();
-                service.groupLock(groupId, delegate, mAttributionSource, recv);
+                service.lockGroup(groupId, delegate, mAttributionSource, recv);
                 final ParcelUuid ret = recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                 return ret == null ? defaultValue : ret.getUuid();
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -288,16 +295,15 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      * Unlock the set.
      * @param lockUuid unique lock identifier
      * @return true if unlocked, false on error
+     * @throws {@link IllegalArgumentException} when lockUuid is null
      *
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public boolean groupUnlock(@NonNull UUID lockUuid) {
-        if (VDBG) log("groupLockSet()");
-        if (lockUuid == null) {
-            return false;
-        }
+    public boolean unlockGroup(@NonNull UUID lockUuid) {
+        if (VDBG) log("unlockGroup()");
+        Objects.requireNonNull(lockUuid, "lockUuid cannot be null");
         final IBluetoothCsipSetCoordinator service = getService();
         final boolean defaultValue = false;
         if (service == null) {
@@ -306,11 +312,13 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver recv = new SynchronousResultReceiver();
-                service.groupUnlock(new ParcelUuid(lockUuid), mAttributionSource, recv);
+                service.unlockGroup(new ParcelUuid(lockUuid), mAttributionSource, recv);
                 recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                 return true;
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -325,7 +333,8 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public @NonNull Map getGroupUuidMapByDevice(@Nullable BluetoothDevice device) {
+    public @NonNull Map<Integer, ParcelUuid> getGroupUuidMapByDevice(
+            @Nullable BluetoothDevice device) {
         if (VDBG) log("getGroupUuidMapByDevice()");
         final IBluetoothCsipSetCoordinator service = getService();
         final Map defaultValue = new HashMap<>();
@@ -337,8 +346,10 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
                 final SynchronousResultReceiver<Map> recv = new SynchronousResultReceiver();
                 service.getGroupUuidMapByDevice(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -366,8 +377,10 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
                         new SynchronousResultReceiver();
                 service.getAllGroupIds(uuid, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -390,8 +403,10 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
                         new SynchronousResultReceiver();
                 service.getConnectedDevices(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -415,8 +430,10 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
                         new SynchronousResultReceiver();
                 service.getDevicesMatchingConnectionStates(states, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -439,8 +456,10 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
                 final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
                 service.getConnectionState(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -476,8 +495,10 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
                 final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
                 service.setConnectionPolicy(device, connectionPolicy, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;
@@ -509,8 +530,10 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
                 final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
                 service.getConnectionPolicy(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
-            } catch (RemoteException | TimeoutException e) {
+            } catch (TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
             }
         }
         return defaultValue;

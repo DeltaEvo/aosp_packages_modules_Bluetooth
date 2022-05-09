@@ -26,6 +26,7 @@
 #define LOG_TAG "bt_bta_gattc"
 
 #include <base/logging.h>
+#include <base/strings/string_number_conversions.h>
 #include <base/strings/stringprintf.h>
 
 #include <cstdint>
@@ -50,10 +51,7 @@ using gatt::DatabaseBuilder;
 using gatt::Descriptor;
 using gatt::IncludedService;
 using gatt::Service;
-using gatt::StoredAttribute;
 
-static void bta_gattc_cache_write(const RawAddress& server_bda,
-                                  const std::vector<StoredAttribute>& attr);
 static tGATT_STATUS bta_gattc_sdp_service_disc(uint16_t conn_id,
                                                tBTA_GATTC_SERV* p_server_cb);
 const Descriptor* bta_gattc_get_descriptor_srcb(tBTA_GATTC_SERV* p_srcb,
@@ -64,7 +62,8 @@ static void bta_gattc_explore_srvc_finished(uint16_t conn_id,
                                             tBTA_GATTC_SERV* p_srvc_cb);
 
 static void bta_gattc_read_db_hash_cmpl(tBTA_GATTC_CLCB* p_clcb,
-                                        const tBTA_GATTC_OP_CMPL* p_data);
+                                        const tBTA_GATTC_OP_CMPL* p_data,
+                                        bool is_svc_chg);
 
 static void bta_gattc_read_ext_prop_desc_cmpl(tBTA_GATTC_CLCB* p_clcb,
                                               const tBTA_GATTC_OP_CMPL* p_data);
@@ -73,16 +72,6 @@ static void bta_gattc_read_ext_prop_desc_cmpl(tBTA_GATTC_CLCB* p_clcb,
 #define BTA_GATTC_DISCOVER_RETRY_COUNT 2
 
 #define BTA_GATT_SDP_DB_SIZE 4096
-
-#define GATT_CACHE_PREFIX "/data/misc/bluetooth/gatt_cache_"
-#define GATT_CACHE_VERSION 6
-
-static void bta_gattc_generate_cache_file_name(char* buffer, size_t buffer_len,
-                                               const RawAddress& bda) {
-  snprintf(buffer, buffer_len, "%s%02x%02x%02x%02x%02x%02x", GATT_CACHE_PREFIX,
-           bda.address[0], bda.address[1], bda.address[2], bda.address[3],
-           bda.address[4], bda.address[5]);
-}
 
 /*****************************************************************************
  *  Constants and data types
@@ -229,16 +218,25 @@ static void bta_gattc_explore_srvc_finished(uint16_t conn_id,
   /* save cache to NV */
   p_clcb->p_srcb->state = BTA_GATTC_SERV_SAVE;
 
-  if (btm_sec_is_a_bonded_dev(p_srvc_cb->server_bda)) {
-    bta_gattc_cache_write(p_clcb->p_srcb->server_bda,
-                          p_clcb->p_srcb->gatt_database.Serialize());
-  }
+  // If robust caching is not enabled, use original design
+  if (!bta_gattc_is_robust_caching_enabled()) {
+    if (btm_sec_is_a_bonded_dev(p_srvc_cb->server_bda)) {
+      bta_gattc_cache_write(p_clcb->p_srcb->server_bda,
+                            p_clcb->p_srcb->gatt_database);
+    }
+  } else {
+    // If robust caching is enabled, do something optimized
+    Octet16 hash = p_clcb->p_srcb->gatt_database.Hash();
+    bool success = bta_gattc_hash_write(hash, p_clcb->p_srcb->gatt_database);
 
-  // After success, reset the count.
-  if (bta_gattc_is_robust_caching_enabled()) {
-    LOG(INFO) << __func__
-              << ": service discovery succeed, reset count to zero, conn_id="
-              << loghex(conn_id);
+    // If the device is trusted, link the addr file to hash file
+    if (success && btm_sec_is_a_bonded_dev(p_srvc_cb->server_bda)) {
+      bta_gattc_cache_link(p_clcb->p_srcb->server_bda, hash);
+    }
+
+    // After success, reset the count.
+    LOG_DEBUG("service discovery succeed, reset count to zero, conn_id=0x%04x",
+              conn_id);
     p_srvc_cb->srvc_disc_count = 0;
   }
 
@@ -379,8 +377,11 @@ void bta_gattc_op_cmpl_during_discovery(tBTA_GATTC_CLCB* p_clcb,
       bta_gattc_read_ext_prop_desc_cmpl(p_clcb, &p_data->op_cmpl);
       break;
     case BTA_GATTC_DISCOVER_REQ_READ_DB_HASH:
+    case BTA_GATTC_DISCOVER_REQ_READ_DB_HASH_FOR_SVC_CHG:
       if (bta_gattc_is_robust_caching_enabled()) {
-        bta_gattc_read_db_hash_cmpl(p_clcb, &p_data->op_cmpl);
+        bool is_svc_chg = (p_clcb->request_during_discovery ==
+                           BTA_GATTC_DISCOVER_REQ_READ_DB_HASH_FOR_SVC_CHG);
+        bta_gattc_read_db_hash_cmpl(p_clcb, &p_data->op_cmpl, is_svc_chg);
       } else {
         // it is not possible here if flag is off, but just in case
         p_clcb->request_during_discovery = BTA_GATTC_DISCOVER_REQ_NONE;
@@ -627,7 +628,7 @@ const Characteristic* bta_gattc_get_owning_characteristic(uint16_t conn_id,
 }
 
 /* request reading database hash */
-bool bta_gattc_read_db_hash(tBTA_GATTC_CLCB* p_clcb) {
+bool bta_gattc_read_db_hash(tBTA_GATTC_CLCB* p_clcb, bool is_svc_chg) {
   tGATT_READ_PARAM read_param;
   memset(&read_param, 0, sizeof(tGATT_READ_BY_TYPE));
 
@@ -639,14 +640,21 @@ bool bta_gattc_read_db_hash(tBTA_GATTC_CLCB* p_clcb) {
       GATTC_Read(p_clcb->bta_conn_id, GATT_READ_BY_TYPE, &read_param);
 
   if (status != GATT_SUCCESS) return false;
-  p_clcb->request_during_discovery = BTA_GATTC_DISCOVER_REQ_READ_DB_HASH;
+
+  if (is_svc_chg) {
+    p_clcb->request_during_discovery =
+        BTA_GATTC_DISCOVER_REQ_READ_DB_HASH_FOR_SVC_CHG;
+  } else {
+    p_clcb->request_during_discovery = BTA_GATTC_DISCOVER_REQ_READ_DB_HASH;
+  }
 
   return true;
 }
 
 /* handle response of reading database hash */
 static void bta_gattc_read_db_hash_cmpl(tBTA_GATTC_CLCB* p_clcb,
-                                        const tBTA_GATTC_OP_CMPL* p_data) {
+                                        const tBTA_GATTC_OP_CMPL* p_data,
+                                        bool is_svc_chg) {
   uint8_t op = (uint8_t)p_data->op_code;
   if (op != GATTC_OPTYPE_READ) {
     VLOG(1) << __func__ << ": op = " << +p_data->hdr.layer_specific;
@@ -656,29 +664,72 @@ static void bta_gattc_read_db_hash_cmpl(tBTA_GATTC_CLCB* p_clcb,
 
   // run match flow only if the status is success
   bool matched = false;
+  bool found = false;
   if (p_data->status == GATT_SUCCESS) {
     // start to compare local hash and remote hash
     uint16_t len = p_data->p_cmpl->att_value.len;
     uint8_t* data = p_data->p_cmpl->att_value.value;
 
     Octet16 remote_hash;
-    if (len == remote_hash.size()) {
-      uint8_t idx = 0;
-      auto it = remote_hash.begin();
-      for (; idx < len; idx++, data++, it++) *it = *data;
+    if (len == remote_hash.max_size()) {
+      std::copy(data, data + len, remote_hash.begin());
 
       Octet16 local_hash = p_clcb->p_srcb->gatt_database.Hash();
       matched = (local_hash == remote_hash);
+
+      LOG_DEBUG("lhash=%s",
+                base::HexEncode(local_hash.data(), local_hash.size()).c_str());
+      LOG_DEBUG(
+          "rhash=%s",
+          base::HexEncode(remote_hash.data(), remote_hash.size()).c_str());
+
+      if (!matched) {
+        gatt::Database db = bta_gattc_hash_load(remote_hash);
+        if (!db.IsEmpty()) {
+          p_clcb->p_srcb->gatt_database = db;
+          found = true;
+        }
+        // If the device is trusted, link addr file to correct hash file
+        if (found && (btm_sec_is_a_bonded_dev(p_clcb->p_srcb->server_bda))) {
+          bta_gattc_cache_link(p_clcb->p_srcb->server_bda, remote_hash);
+        }
+      }
+    }
+  } else {
+    // Only load cache for trusted device if no database hash on server side.
+    // If is_svc_chg is true, do not read the existing cache.
+    bool is_a_bonded_dev = btm_sec_is_a_bonded_dev(p_clcb->p_srcb->server_bda);
+    if (!is_svc_chg && is_a_bonded_dev) {
+      gatt::Database db = bta_gattc_cache_load(p_clcb->p_srcb->server_bda);
+      if (!db.IsEmpty()) {
+        p_clcb->p_srcb->gatt_database = db;
+        found = true;
+      }
+      LOG_DEBUG("load cache directly, result=%d", found);
+    } else {
+      LOG_DEBUG("skip read cache, is_svc_chg=%d, is_a_bonded_dev=%d",
+                is_svc_chg, is_a_bonded_dev);
     }
   }
 
   if (matched) {
-    LOG(INFO) << __func__ << ": hash is the same, skip service discovery";
+    LOG_DEBUG("hash is the same, skip service discovery");
     p_clcb->p_srcb->state = BTA_GATTC_SERV_IDLE;
     bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_SUCCESS);
   } else {
-    LOG(INFO) << __func__ << ": hash is not the same, start service discovery";
-    bta_gattc_start_discover_internal(p_clcb);
+    if (found) {
+      LOG_DEBUG("hash found in cache, skip service discovery");
+
+#if (BTA_GATT_DEBUG == TRUE)
+      bta_gattc_display_cache_server(p_clcb->p_srcb->gatt_database);
+#endif
+
+      p_clcb->p_srcb->state = BTA_GATTC_SERV_IDLE;
+      bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_SUCCESS);
+    } else {
+      LOG_DEBUG("hash is not the same, start service discovery");
+      bta_gattc_start_discover_internal(p_clcb);
+    }
   }
 }
 
@@ -921,129 +972,4 @@ void bta_gattc_get_gatt_db(uint16_t conn_id, uint16_t start_handle,
 
   bta_gattc_get_gatt_db_impl(p_clcb->p_srcb, start_handle, end_handle, db,
                              count);
-}
-
-/*******************************************************************************
- *
- * Function         bta_gattc_cache_load
- *
- * Description      Load GATT cache from storage for server.
- *
- * Parameter        p_srcb: pointer to server cache, that will
- *                          be filled from storage
- * Returns          true on success, false otherwise
- *
- ******************************************************************************/
-bool bta_gattc_cache_load(tBTA_GATTC_SERV* p_srcb) {
-  char fname[255] = {0};
-  bta_gattc_generate_cache_file_name(fname, sizeof(fname), p_srcb->server_bda);
-
-  FILE* fd = fopen(fname, "rb");
-  if (!fd) {
-    LOG(ERROR) << __func__ << ": can't open GATT cache file " << fname
-               << " for reading, error: " << strerror(errno);
-    return false;
-  }
-
-  uint16_t cache_ver = 0;
-  bool success = false;
-  uint16_t num_attr = 0;
-
-  if (fread(&cache_ver, sizeof(uint16_t), 1, fd) != 1) {
-    LOG(ERROR) << __func__ << ": can't read GATT cache version from: " << fname;
-    goto done;
-  }
-
-  if (cache_ver != GATT_CACHE_VERSION) {
-    LOG(ERROR) << __func__ << ": wrong GATT cache version: " << fname;
-    goto done;
-  }
-
-  if (fread(&num_attr, sizeof(uint16_t), 1, fd) != 1) {
-    LOG(ERROR) << __func__
-               << ": can't read number of GATT attributes: " << fname;
-    goto done;
-  }
-
-  {
-    std::vector<StoredAttribute> attr(num_attr);
-
-    if (fread(attr.data(), sizeof(StoredAttribute), num_attr, fd) != num_attr) {
-      LOG(ERROR) << __func__ << "s: can't read GATT attributes: " << fname;
-      goto done;
-    }
-
-    p_srcb->gatt_database = gatt::Database::Deserialize(attr, &success);
-  }
-
-done:
-  fclose(fd);
-  return success;
-}
-
-/*******************************************************************************
- *
- * Function         bta_gattc_cache_write
- *
- * Description      This callout function is executed by GATT when a server
- *                  cache is available to save.
- *
- * Parameter        server_bda: server bd address of this cache belongs to
- *                  attr: attributes to save.
- * Returns
- *
- ******************************************************************************/
-static void bta_gattc_cache_write(const RawAddress& server_bda,
-                                  const std::vector<StoredAttribute>& attr) {
-  char fname[255] = {0};
-  bta_gattc_generate_cache_file_name(fname, sizeof(fname), server_bda);
-
-  FILE* fd = fopen(fname, "wb");
-  if (!fd) {
-    LOG(ERROR) << __func__
-               << ": can't open GATT cache file for writing: " << fname;
-    return;
-  }
-
-  uint16_t cache_ver = GATT_CACHE_VERSION;
-  if (fwrite(&cache_ver, sizeof(uint16_t), 1, fd) != 1) {
-    LOG(ERROR) << __func__ << ": can't write GATT cache version: " << fname;
-    fclose(fd);
-    return;
-  }
-
-  uint16_t num_attr = attr.size();
-  if (fwrite(&num_attr, sizeof(uint16_t), 1, fd) != 1) {
-    LOG(ERROR) << __func__
-               << ": can't write GATT cache attribute count: " << fname;
-    fclose(fd);
-    return;
-  }
-
-  if (fwrite(attr.data(), sizeof(StoredAttribute), num_attr, fd) != num_attr) {
-    LOG(ERROR) << __func__ << ": can't write GATT cache attributes: " << fname;
-    fclose(fd);
-    return;
-  }
-
-  fclose(fd);
-}
-
-/*******************************************************************************
- *
- * Function         bta_gattc_cache_reset
- *
- * Description      This callout function is executed by GATTC to reset cache in
- *                  application
- *
- * Parameter        server_bda: server bd address of this cache belongs to
- *
- * Returns          void.
- *
- ******************************************************************************/
-void bta_gattc_cache_reset(const RawAddress& server_bda) {
-  VLOG(1) << __func__;
-  char fname[255] = {0};
-  bta_gattc_generate_cache_file_name(fname, sizeof(fname), server_bda);
-  unlink(fname);
 }
