@@ -69,8 +69,9 @@ static int get_bits_left(const struct lc3_bits *bits)
     uintptr_t start = (uintptr_t)buffer->p_fw -
         (bits->mode == LC3_BITS_MODE_READ ? LC3_AC_BITS/8 : 0);
 
-    return 8 * (end - start) -
-        (accu->n + accu->nover + ac_get_pending_bits(ac));
+    int n = end > start ? (int)(end - start) : -(int)(start - end);
+
+    return 8 * n - (accu->n + accu->nover + ac_get_pending_bits(ac));
 }
 
 /**
@@ -138,7 +139,8 @@ int lc3_check_bits(const struct lc3_bits *bits)
 static inline void accu_flush(
     struct lc3_bits_accu *accu, struct lc3_bits_buffer *buffer)
 {
-    int nbytes = LC3_MIN(accu->n >> 3, buffer->p_bw - buffer->p_fw);
+    int nbytes = LC3_MIN(accu->n >> 3,
+        LC3_MAX(buffer->p_bw - buffer->p_fw, 0));
 
     accu->n -= 8 * nbytes;
 

@@ -253,8 +253,6 @@ const tBTM_APPL_INFO bta_security = {
 #define MAX_DISC_RAW_DATA_BUF (4096)
 uint8_t g_disc_raw_data_buf[MAX_DISC_RAW_DATA_BUF];
 
-extern DEV_CLASS local_device_default_class;
-
 // Stores the local Input/Output Capabilities of the Bluetooth device.
 static uint8_t btm_local_io_caps;
 
@@ -264,8 +262,6 @@ void bta_dm_enable(tBTA_DM_SEC_CBACK* p_sec_cback) {
   previous one,
   it could be an error recovery mechanism */
   if (p_sec_cback != NULL) bta_dm_cb.p_sec_cback = p_sec_cback;
-  /* notify BTA DM is now active */
-  bta_dm_cb.is_bta_dm_active = true;
 
   btm_local_io_caps = btif_storage_get_local_io_caps();
 }
@@ -328,9 +324,6 @@ void BTA_dm_on_hw_off() {
   osi_free(bta_dm_search_cb.p_pending_search);
   fixed_queue_free(bta_dm_search_cb.pending_discovery_queue, osi_free);
   memset(&bta_dm_search_cb, 0, sizeof(bta_dm_search_cb));
-
-  /* notify BTA DM is now unactive */
-  bta_dm_cb.is_bta_dm_active = false;
 }
 
 void BTA_dm_on_hw_on() {
@@ -345,7 +338,6 @@ void BTA_dm_on_hw_on() {
   bta_dm_init_cb();
   /* and retrieve the callback */
   bta_dm_cb.p_sec_cback = temp_cback;
-  bta_dm_cb.is_bta_dm_active = true;
 
   /* hw is ready, go on with BTA DM initialization */
   alarm_free(bta_dm_search_cb.search_timer);
@@ -365,7 +357,10 @@ void BTA_dm_on_hw_on() {
   memset(&bta_dm_conn_srvcs, 0, sizeof(bta_dm_conn_srvcs));
   memset(&bta_dm_di_cb, 0, sizeof(tBTA_DM_DI_CB));
 
-  memcpy(dev_class, p_bta_dm_cfg->dev_class, sizeof(dev_class));
+  btif_dm_get_local_class_of_device(dev_class);
+  LOG_INFO("%s: Read default class of device {0x%x, 0x%x, 0x%x}", __func__,
+      dev_class[0], dev_class[1], dev_class[2]);
+
   if (bluetooth::shim::is_gd_security_enabled()) {
     bluetooth::shim::BTM_SetDeviceClass(dev_class);
   } else {
@@ -495,21 +490,19 @@ static void bta_dm_wait_for_acl_to_drain_cback(void* data) {
   const WaitForAllAclConnectionsToDrain* pass =
       WaitForAllAclConnectionsToDrain::FromAlarmCallbackData(data);
 
-  if (BTM_GetNumAclLinks() &&
+  if (BTM_GetNumAclLinks() && force_disconnect_all_acl_connections() &&
       WaitForAllAclConnectionsToDrain::IsFirstPass(pass)) {
     /* DISABLE_EVT still need to be sent out to avoid java layer disable timeout
      */
-    if (force_disconnect_all_acl_connections()) {
-      LOG_DEBUG(
-          "Set timer for second pass to wait for all ACL connections to "
-          "close:%lu ms ",
-          second_pass.TimeToWaitInMs());
-      alarm_set_on_mloop(
-          bta_dm_cb.disable_timer, second_pass.time_to_wait_in_ms,
-          bta_dm_wait_for_acl_to_drain_cback, second_pass.AlarmCallbackData());
-    }
+    LOG_DEBUG(
+        "Set timer for second pass to wait for all ACL connections to "
+        "close:%lu ms ",
+        second_pass.TimeToWaitInMs());
+    alarm_set_on_mloop(bta_dm_cb.disable_timer, second_pass.time_to_wait_in_ms,
+                       bta_dm_wait_for_acl_to_drain_cback,
+                       second_pass.AlarmCallbackData());
   } else {
-    // No ACL links were up or is second pass at ACL closure
+    // No ACL links to close were up or is second pass at ACL closure
     LOG_INFO("Ensuring all ACL connections have been properly flushed");
     bluetooth::shim::ACL_Shutdown();
 
@@ -1205,7 +1198,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
             &bta_dm_service_search_remname_cback);
       }
 
-      p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+      p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
       p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
       p_msg->disc_result.result.disc_res.result = BTA_SUCCESS;
       p_msg->disc_result.result.disc_res.num_uuids = uuid_list.size();
@@ -1214,7 +1207,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
         // TODO(jpawlowski): make p_uuid_list into vector, and just copy
         // vectors, but first get rid of bta_sys_sendmsg below.
         p_msg->disc_result.result.disc_res.p_uuid_list =
-            (Uuid*)osi_malloc(uuid_list.size() * sizeof(Uuid));
+            (Uuid*)osi_calloc(uuid_list.size() * sizeof(Uuid));
         memcpy(p_msg->disc_result.result.disc_res.p_uuid_list, uuid_list.data(),
                uuid_list.size() * sizeof(Uuid));
       }
@@ -1270,7 +1263,7 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
       BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
     }
 
-    p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+    p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
     p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
     p_msg->disc_result.result.disc_res.result = BTA_FAILURE;
     p_msg->disc_result.result.disc_res.services =
@@ -1801,7 +1794,7 @@ static void bta_dm_sdp_callback(tSDP_STATUS sdp_status) {
       (tBTA_DM_SDP_RESULT*)osi_malloc(sizeof(tBTA_DM_SDP_RESULT));
 
   p_msg->hdr.event = BTA_DM_SDP_RESULT_EVT;
-  p_msg->sdp_result = static_cast<uint16_t>(sdp_status);
+  p_msg->sdp_result = sdp_status;
 
   bta_sys_sendmsg(p_msg);
 }
@@ -3108,7 +3101,7 @@ static void bta_dm_set_eir(char* local_name) {
   if (free_eir_length)
     UINT8_TO_STREAM(p, 0); /* terminator of significant part */
 
-  BTM_WriteEIR(p_buf);
+  get_btm_client_interface().eir.BTM_WriteEIR(p_buf);
 }
 
 #if (BTA_EIR_CANNED_UUID_LIST != TRUE)
@@ -3208,12 +3201,23 @@ void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding) {
   } else {
     LOG_INFO("EIR Removing UUID=0x%04X from extended inquiry response", uuid16);
 
-    BTM_RemoveEirService(bta_dm_cb.eir_uuid, uuid16);
+    get_btm_client_interface().eir.BTM_RemoveEirService(bta_dm_cb.eir_uuid,
+                                                        uuid16);
   }
 
   bta_dm_set_eir(NULL);
 }
 #endif
+
+static tBTA_DM_PEER_DEVICE* find_connected_device(
+    const RawAddress& bd_addr, UNUSED_ATTR tBT_TRANSPORT transport) {
+  for (uint8_t i = 0; i < bta_dm_cb.device_list.count; i++) {
+    if (bta_dm_cb.device_list.peer_device[i].peer_bdaddr == bd_addr &&
+        bta_dm_cb.device_list.peer_device[i].conn_state == BTA_DM_CONNECTED)
+      return &bta_dm_cb.device_list.peer_device[i];
+  }
+  return nullptr;
+}
 
 /*******************************************************************************
  *
@@ -3270,29 +3274,35 @@ void bta_dm_encrypt_cback(const RawAddress* bd_addr, tBT_TRANSPORT transport,
 void bta_dm_set_encryption(const RawAddress& bd_addr, tBT_TRANSPORT transport,
                            tBTA_DM_ENCRYPT_CBACK* p_callback,
                            tBTM_BLE_SEC_ACT sec_act) {
-  uint8_t i;
-
-  APPL_TRACE_DEBUG("bta_dm_set_encryption");  // todo
-  if (!p_callback) {
-    APPL_TRACE_ERROR("bta_dm_set_encryption callback is not provided");
+  if (p_callback == nullptr) {
+    LOG_ERROR("bta_dm_set_encryption callback is not provided");
     return;
   }
-  for (i = 0; i < bta_dm_cb.device_list.count; i++) {
-    if (bta_dm_cb.device_list.peer_device[i].peer_bdaddr == bd_addr &&
-        bta_dm_cb.device_list.peer_device[i].conn_state == BTA_DM_CONNECTED)
-      break;
-  }
-  if (i < bta_dm_cb.device_list.count) {
-    if (bta_dm_cb.device_list.peer_device[i].p_encrypt_cback) {
-      APPL_TRACE_ERROR("earlier enc was not done for same device");
-      (*p_callback)(bd_addr, transport, BTA_BUSY);
-      return;
-    }
 
-    if (BTM_SetEncryption(bd_addr, transport, bta_dm_encrypt_cback, NULL,
-                          sec_act) == BTM_CMD_STARTED) {
-      bta_dm_cb.device_list.peer_device[i].p_encrypt_cback = p_callback;
-    }
+  tBTA_DM_PEER_DEVICE* device = find_connected_device(bd_addr, transport);
+  if (device == nullptr) {
+    LOG_ERROR("Unable to find active ACL connection device:%s transport:%s",
+              PRIVATE_ADDRESS(bd_addr), bt_transport_text(transport).c_str());
+    return;
+  }
+
+  if (device->p_encrypt_cback) {
+    LOG_ERROR(
+        "Unable to start encryption as already in progress peer:%s "
+        "transport:%s",
+        PRIVATE_ADDRESS(bd_addr), bt_transport_text(transport).c_str());
+    (*p_callback)(bd_addr, transport, BTA_BUSY);
+    return;
+  }
+
+  if (BTM_SetEncryption(bd_addr, transport, bta_dm_encrypt_cback, NULL,
+                        sec_act) == BTM_CMD_STARTED) {
+    device->p_encrypt_cback = p_callback;
+    LOG_DEBUG("Started encryption peer:%s transport:%s",
+              PRIVATE_ADDRESS(bd_addr), bt_transport_text(transport).c_str());
+  } else {
+    LOG_ERROR("Unable to start encryption process peer:%s transport:%s",
+              PRIVATE_ADDRESS(bd_addr), bt_transport_text(transport).c_str());
   }
 }
 
@@ -3998,6 +4008,20 @@ void bta_dm_proc_open_evt(tBTA_GATTC_OPEN* p_data) {
 
 /*******************************************************************************
  *
+ * Function         bta_dm_proc_open_evt
+ *
+ * Description      process BTA_GATTC_OPEN_EVT in DM.
+ *
+ * Parameters:
+ *
+ ******************************************************************************/
+void bta_dm_clear_event_filter(void) {
+  VLOG(1) << "bta_dm_clear_event_filter in bta_dm_act";
+  bluetooth::shim::BTM_ClearEventFilter();
+}
+
+/*******************************************************************************
+ *
  * Function         bta_dm_gattc_callback
  *
  * Description      This is GATT client callback function used in DM.
@@ -4071,3 +4095,14 @@ void bta_dm_process_delete_key_RC_to_unpair(const RawAddress& bd_addr)
     bta_dm_cb.p_sec_cback(BTA_DM_REPORT_BONDING_EVT, &param);
 }
 
+namespace bluetooth {
+namespace legacy {
+namespace testing {
+tBTA_DM_PEER_DEVICE* allocate_device_for(const RawAddress& bd_addr,
+                                         tBT_TRANSPORT transport) {
+  return ::allocate_device_for(bd_addr, transport);
+}
+
+}  // namespace testing
+}  // namespace legacy
+}  // namespace bluetooth

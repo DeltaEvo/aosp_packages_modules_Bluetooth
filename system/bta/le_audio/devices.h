@@ -57,6 +57,7 @@ class LeAudioDevice {
    * This is true only during initial phase of first connection. */
   bool first_connection_;
   bool connecting_actively_;
+  bool closing_stream_for_disconnection_;
   uint16_t conn_id_;
   bool encrypted_;
   int group_id_;
@@ -87,6 +88,7 @@ class LeAudioDevice {
         removing_device_(false),
         first_connection_(first_connection),
         connecting_actively_(first_connection),
+        closing_stream_for_disconnection_(false),
         conn_id_(GATT_INVALID_CONN_ID),
         encrypted_(false),
         group_id_(group_id),
@@ -139,7 +141,9 @@ class LeAudioDevice {
   types::AudioContexts SetAvailableContexts(types::AudioContexts snk_cont_val,
                                             types::AudioContexts src_cont_val);
   void DeactivateAllAses(void);
+  void ActivateConfiguredAses(void);
   void Dump(int fd);
+  void DisconnectAcl(void);
   std::vector<uint8_t> GetMetadata(types::LeAudioContextType context_type);
   bool IsMetadataChanged(types::LeAudioContextType context_type);
 
@@ -181,7 +185,7 @@ class LeAudioDevices {
 class LeAudioDeviceGroup {
  public:
   const int group_id_;
-  bool cig_created_;
+  types::CigState cig_state_;
 
   struct stream_configuration stream_conf;
 
@@ -191,16 +195,16 @@ class LeAudioDeviceGroup {
 
   explicit LeAudioDeviceGroup(const int group_id)
       : group_id_(group_id),
-        cig_created_(false),
+        cig_state_(types::CigState::NONE),
         stream_conf({}),
         audio_directions_(0),
         transport_latency_mtos_us_(0),
         transport_latency_stom_us_(0),
         active_context_type_(types::LeAudioContextType::UNINITIALIZED),
+        pending_update_available_contexts_(std::nullopt),
         target_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
         current_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
-        context_type_(types::LeAudioContextType::UNINITIALIZED) {
-  }
+        context_type_(types::LeAudioContextType::UNINITIALIZED) {}
   ~LeAudioDeviceGroup(void);
 
   void AddNode(const std::shared_ptr<LeAudioDevice>& leAudioDevice);
@@ -210,6 +214,7 @@ class LeAudioDeviceGroup {
   int Size(void);
   int NumOfConnected(
       types::LeAudioContextType context_type = types::LeAudioContextType::RFU);
+  void Activate(void);
   void Deactivate(void);
   void Cleanup(void);
   LeAudioDevice* GetFirstDevice(void);
@@ -232,7 +237,6 @@ class LeAudioDeviceGroup {
   uint8_t GetSCA(void);
   uint8_t GetPacking(void);
   uint8_t GetFraming(void);
-  uint8_t GetTargetLatency(void);
   uint16_t GetMaxTransportLatencyStom(void);
   uint16_t GetMaxTransportLatencyMtos(void);
   void SetTransportLatency(uint8_t direction, uint32_t transport_latency_us);
@@ -246,6 +250,8 @@ class LeAudioDeviceGroup {
   bool ReloadAudioLocations(void);
   const set_configurations::AudioSetConfiguration* GetActiveConfiguration(void);
   types::LeAudioContextType GetCurrentContextType(void);
+  bool IsPendingConfiguration(void);
+  void SetPendingConfiguration(void);
   types::AudioContexts GetActiveContexts(void);
   std::optional<LeAudioCodecConfiguration> GetCodecConfigurationByDirection(
       types::LeAudioContextType group_context_type, uint8_t direction);
@@ -263,6 +269,15 @@ class LeAudioDeviceGroup {
     LOG(INFO) << __func__ << " target state: " << target_state_
               << " new target state: " << state;
     target_state_ = state;
+  }
+
+  inline std::optional<types::AudioContexts> GetPendingUpdateAvailableContexts()
+      const {
+    return pending_update_available_contexts_;
+  }
+  inline void SetPendingUpdateAvailableContexts(
+      std::optional<types::AudioContexts> audio_contexts) {
+    pending_update_available_contexts_ = audio_contexts;
   }
 
   bool IsInTransition(void);
@@ -286,6 +301,7 @@ class LeAudioDeviceGroup {
   /* Mask and table of currently supported contexts */
   types::LeAudioContextType active_context_type_;
   types::AudioContexts active_contexts_mask_;
+  std::optional<types::AudioContexts> pending_update_available_contexts_;
   std::map<types::LeAudioContextType,
            const set_configurations::AudioSetConfiguration*>
       active_context_to_configuration_map;

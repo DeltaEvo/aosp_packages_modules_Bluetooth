@@ -50,18 +50,19 @@ public class McpServiceTest {
     private McpService mMcpService;
     private Context mTargetContext;
 
-    @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
+    @Rule
+    public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
-    @Mock private AdapterService mAdapterService;
-    @Mock private MediaControlGattService mMockMcpService;
-    @Mock private MediaControlProfile mMediaControlProfile;
+    @Mock
+    private AdapterService mAdapterService;
+    @Mock
+    private MediaControlGattService mMockMcpService;
+    @Mock
+    private MediaControlProfile mMediaControlProfile;
 
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when MCP Server is not enabled",
-                mTargetContext.getResources().getBoolean(
-                        R.bool.profile_supported_mcp_server));
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
@@ -80,9 +81,6 @@ public class McpServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mTargetContext.getResources().getBoolean(R.bool.profile_supported_mcp_server)) {
-            return;
-        }
         doReturn(false).when(mAdapterService).isStartedProfile(anyString());
         TestUtils.stopService(mServiceRule, McpService.class);
         mMcpService = McpService.getMcpService();
@@ -114,5 +112,24 @@ public class McpServiceTest {
         verify(mMediaControlProfile).onDeviceAuthorizationSet(eq(device1));
         Assert.assertEquals(BluetoothDevice.ACCESS_REJECTED,
                 mMcpService.getDeviceAuthorization(device1));
+    }
+
+    @Test
+    public void testStopMcpService() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
+            public void run() {
+                Assert.assertTrue(mMcpService.stop());
+            }
+        });
+        Assert.assertNull(McpService.getMcpService());
+        Assert.assertNull(McpService.getMediaControlProfile());
+
+        McpService.setMediaControlProfileForTesting(mMediaControlProfile);
+        // Try to restart the service. Note: must be done on the main thread
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
+            public void run() {
+                Assert.assertTrue(mMcpService.start());
+            }
+        });
     }
 }

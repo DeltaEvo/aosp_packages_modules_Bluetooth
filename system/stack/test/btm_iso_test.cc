@@ -69,6 +69,9 @@ namespace {
 class MockCigCallbacks : public bluetooth::hci::iso_manager::CigCallbacks {
  public:
   MockCigCallbacks() = default;
+  MockCigCallbacks(const MockCigCallbacks&) = delete;
+  MockCigCallbacks& operator=(const MockCigCallbacks&) = delete;
+
   ~MockCigCallbacks() override = default;
 
   MOCK_METHOD((void), OnSetupIsoDataPath,
@@ -86,14 +89,14 @@ class MockCigCallbacks : public bluetooth::hci::iso_manager::CigCallbacks {
 
   MOCK_METHOD((void), OnCisEvent, (uint8_t event, void* data), (override));
   MOCK_METHOD((void), OnCigEvent, (uint8_t event, void* data), (override));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockCigCallbacks);
 };
 
 class MockBigCallbacks : public bluetooth::hci::iso_manager::BigCallbacks {
  public:
   MockBigCallbacks() = default;
+  MockBigCallbacks(const MockBigCallbacks&) = delete;
+  MockBigCallbacks& operator=(const MockBigCallbacks&) = delete;
+
   ~MockBigCallbacks() override = default;
 
   MOCK_METHOD((void), OnSetupIsoDataPath,
@@ -104,9 +107,6 @@ class MockBigCallbacks : public bluetooth::hci::iso_manager::BigCallbacks {
               (override));
 
   MOCK_METHOD((void), OnBigEvent, (uint8_t event, void* data), (override));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockBigCallbacks);
 };
 }  // namespace
 
@@ -1288,7 +1288,8 @@ TEST_F(IsoManagerDeathTest, CreateBigInvalidResponsePacket) {
           });
 
   ASSERT_EXIT(IsoManager::GetInstance()->CreateBig(0x01, kDefaultBigParams),
-              ::testing::KilledBySignal(SIGABRT), "Invalid bis count");
+              ::testing::KilledBySignal(SIGABRT),
+              "num_bis != 0. Bis count is 0");
 }
 
 TEST_F(IsoManagerDeathTest, CreateBigInvalidResponsePacket2) {
@@ -1673,7 +1674,7 @@ TEST_F(IsoManagerTest, RemoveIsoDataPathValid) {
 
   // Setup and remove data paths for all CISes
   path_params.data_path_dir =
-      bluetooth::hci::iso_manager::kIsoDataPathDirectionIn;
+      bluetooth::hci::iso_manager::kRemoveIsoDataPathDirectionInput;
   for (auto& handle : volatile_test_cig_create_cmpl_evt_.conn_handles) {
     IsoManager::GetInstance()->SetupIsoDataPath(handle, path_params);
 
@@ -1802,6 +1803,17 @@ TEST_F(IsoManagerTest, RemoveIsoDataPathInvalidStatus) {
       .Times(1);
   IsoManager::GetInstance()->RemoveIsoDataPath(
       iso_handle, kDefaultIsoDataPathParams.data_path_dir);
+}
+
+TEST_F(IsoManagerTest, SendIsoDataWithNoCigConnected) {
+  std::vector<uint8_t> data_vec(108, 0);
+  IsoManager::GetInstance()->CreateCig(
+      volatile_test_cig_create_cmpl_evt_.cig_id, kDefaultCigParams);
+
+  auto handle = volatile_test_cig_create_cmpl_evt_.conn_handles[0];
+  IsoManager::GetInstance()->SendIsoData(handle, data_vec.data(),
+                                         data_vec.size());
+  EXPECT_CALL(bte_interface_, HciSend).Times(0);
 }
 
 TEST_F(IsoManagerTest, SendIsoDataCigValid) {
@@ -2113,20 +2125,18 @@ TEST_F(IsoManagerDeathTest, SendIsoDataWithNoDataPath) {
   IsoManager::GetInstance()->EstablishCis(params);
 
   EXPECT_CALL(bte_interface_, HciSend).Times(0);
-  ASSERT_EXIT(IsoManager::GetInstance()->SendIsoData(
-                  volatile_test_cig_create_cmpl_evt_.conn_handles[0],
-                  data_vec.data(), data_vec.size()),
-              ::testing::KilledBySignal(SIGABRT), "Data path not set");
+  IsoManager::GetInstance()->SendIsoData(
+      volatile_test_cig_create_cmpl_evt_.conn_handles[0], data_vec.data(),
+      data_vec.size());
 
   // Check on BIG
   IsoManager::GetInstance()->CreateBig(volatile_test_big_params_evt_.big_id,
                                        kDefaultBigParams);
 
   EXPECT_CALL(bte_interface_, HciSend).Times(0);
-  ASSERT_EXIT(IsoManager::GetInstance()->SendIsoData(
-                  volatile_test_big_params_evt_.conn_handles[0],
-                  data_vec.data(), data_vec.size()),
-              ::testing::KilledBySignal(SIGABRT), "Data path not set");
+  IsoManager::GetInstance()->SendIsoData(
+      volatile_test_big_params_evt_.conn_handles[0], data_vec.data(),
+      data_vec.size());
 }
 
 TEST_F(IsoManagerDeathTest, SendIsoDataWithNoCigBigHandle) {
@@ -2134,17 +2144,6 @@ TEST_F(IsoManagerDeathTest, SendIsoDataWithNoCigBigHandle) {
   ASSERT_EXIT(IsoManager::GetInstance()->SendIsoData(134, data_vec.data(),
                                                      data_vec.size()),
               ::testing::KilledBySignal(SIGABRT), "No such iso");
-}
-
-TEST_F(IsoManagerDeathTest, SendIsoDataWithNoCigConnected) {
-  std::vector<uint8_t> data_vec(108, 0);
-  IsoManager::GetInstance()->CreateCig(
-      volatile_test_cig_create_cmpl_evt_.cig_id, kDefaultCigParams);
-
-  auto handle = volatile_test_cig_create_cmpl_evt_.conn_handles[0];
-  ASSERT_EXIT(IsoManager::GetInstance()->SendIsoData(handle, data_vec.data(),
-                                                     data_vec.size()),
-              ::testing::KilledBySignal(SIGABRT), "CIS not established");
 }
 
 TEST_F(IsoManagerTest, HandleDisconnectNoSuchHandle) {

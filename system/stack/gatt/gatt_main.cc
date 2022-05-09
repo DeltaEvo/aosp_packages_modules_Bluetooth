@@ -125,6 +125,7 @@ void gatt_init(void) {
   gatt_cb.hdl_cfg.gap_start_hdl = GATT_GAP_START_HANDLE;
   gatt_cb.hdl_cfg.gmcs_start_hdl = GATT_GMCS_START_HANDLE;
   gatt_cb.hdl_cfg.gtbs_start_hdl = GATT_GTBS_START_HANDLE;
+  gatt_cb.hdl_cfg.tmas_start_hdl = GATT_TMAS_START_HANDLE;
   gatt_cb.hdl_cfg.app_start_hdl = GATT_APP_START_HANDLE;
 
   gatt_cb.hdl_list_info = new std::list<tGATT_HDL_LIST_ELEM>();
@@ -189,7 +190,7 @@ void gatt_find_in_device_record(const RawAddress& bd_addr,
 
   if (p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) {
     if (p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
-      *address_with_type = {.type = p_dev_rec->ble.ble_addr_type,
+      *address_with_type = {.type = p_dev_rec->ble.AddressType(),
                             .bda = bd_addr};
       return;
     }
