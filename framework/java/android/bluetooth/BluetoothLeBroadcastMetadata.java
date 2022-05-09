@@ -24,7 +24,9 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * This class represents a Broadcast Source group and the associated information that is needed
@@ -75,6 +77,30 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
         mSubgroups = subgroups;
     }
 
+    @Override
+    public boolean equals(@Nullable Object o) {
+        if (!(o instanceof BluetoothLeBroadcastMetadata)) {
+            return false;
+        }
+        final BluetoothLeBroadcastMetadata other = (BluetoothLeBroadcastMetadata) o;
+        return mSourceAddressType == other.getSourceAddressType()
+                && mSourceDevice.equals(other.getSourceDevice())
+                && mSourceAdvertisingSid == other.getSourceAdvertisingSid()
+                && mBroadcastId == other.getBroadcastId()
+                && mPaSyncInterval == other.getPaSyncInterval()
+                && mIsEncrypted == other.isEncrypted()
+                && Arrays.equals(mBroadcastCode, other.getBroadcastCode())
+                && mPresentationDelayMicros == other.getPresentationDelayMicros()
+                && mSubgroups.equals(other.getSubgroups());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mSourceAddressType, mSourceDevice, mSourceAdvertisingSid,
+                mBroadcastId, mPaSyncInterval, mIsEncrypted, Arrays.hashCode(mBroadcastCode),
+                mPresentationDelayMicros, mSubgroups);
+    }
+
     /**
      * Get the address type of the Broadcast Source.
      *
@@ -97,7 +123,7 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
      * @hide
      */
     @SystemApi
-    public @Nullable BluetoothDevice getSourceDevice() {
+    public @NonNull BluetoothDevice getSourceDevice() {
         return mSourceDevice;
     }
 
@@ -300,6 +326,7 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
 
         /**
          * Create an empty builder.
+         *
          * @hide
          */
         @SystemApi
@@ -336,14 +363,26 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
          *
          * @param sourceDevice source advertiser address
          * @param sourceAddressType source advertiser address type
+         * @throws IllegalArgumentException if sourceAddressType is invalid
+         * @throws NullPointerException if sourceDevice is null
          * @return this builder
          * @hide
          */
         @SystemApi
-        public @NonNull Builder setSourceDevice(@Nullable BluetoothDevice sourceDevice,
+        public @NonNull Builder setSourceDevice(@NonNull BluetoothDevice sourceDevice,
                 @BluetoothDevice.AddressType int sourceAddressType) {
-            mSourceDevice = sourceDevice;
+            if (sourceAddressType == BluetoothDevice.ADDRESS_TYPE_UNKNOWN) {
+                throw new IllegalArgumentException(
+                        "sourceAddressType cannot be ADDRESS_TYPE_UNKNOWN");
+            }
+            if (sourceAddressType != BluetoothDevice.ADDRESS_TYPE_RANDOM
+                    && sourceAddressType != BluetoothDevice.ADDRESS_TYPE_PUBLIC) {
+                throw new IllegalArgumentException("sourceAddressType " + sourceAddressType
+                        + " is invalid");
+            }
+            Objects.requireNonNull(sourceDevice, "sourceDevice cannot be null");
             mSourceAddressType = sourceAddressType;
+            mSourceDevice = sourceDevice;
             return this;
         }
 
@@ -433,12 +472,18 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
          *
          * @param presentationDelayMicros presentation delay of this Broadcast Source in
          *                                microseconds
+         * @throws IllegalArgumentException if presentationDelayMicros does not fall in
+         *                                  [0, 0xFFFFFF]
          * @return this builder
          * @hide
          */
         @SystemApi
         public @NonNull Builder setPresentationDelayMicros(
                 @IntRange(from = 0, to = 0xFFFFFF) int presentationDelayMicros) {
+            if (presentationDelayMicros < 0 || presentationDelayMicros >= 0xFFFFFF) {
+                throw new IllegalArgumentException("presentationDelayMicros "
+                        + presentationDelayMicros + " does not fall in [0, 0xFFFFFF]");
+            }
             mPresentationDelayMicros = presentationDelayMicros;
             return this;
         }
@@ -447,11 +492,13 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
          * Add a subgroup to this broadcast source.
          *
          * @param subgroup {@link BluetoothLeBroadcastSubgroup} that contains a subgroup's metadata
+         * @throws NullPointerException if subgroup is null
          * @return this builder
          * @hide
          */
         @SystemApi
         public @NonNull Builder addSubgroup(@NonNull BluetoothLeBroadcastSubgroup subgroup) {
+            Objects.requireNonNull(subgroup, "subgroup cannot be null");
             mSubgroups.add(subgroup);
             return this;
         }
@@ -474,10 +521,23 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
          *
          * @return {@link BluetoothLeBroadcastMetadata}
          * @throws IllegalArgumentException if the object cannot be built
+         * @throws NullPointerException if {@link NonNull} items are null
          * @hide
          */
         @SystemApi
         public @NonNull BluetoothLeBroadcastMetadata build() {
+            if (mSourceAddressType == BluetoothDevice.ADDRESS_TYPE_UNKNOWN) {
+                throw new IllegalArgumentException("SourceAddressTyp cannot be unknown");
+            }
+            if (mSourceAddressType != BluetoothDevice.ADDRESS_TYPE_RANDOM
+                    && mSourceAddressType != BluetoothDevice.ADDRESS_TYPE_PUBLIC) {
+                throw new IllegalArgumentException("sourceAddressType " + mSourceAddressType
+                        + " is invalid");
+            }
+            Objects.requireNonNull(mSourceDevice, "mSourceDevice cannot be null");
+            if (mSubgroups.isEmpty()) {
+                throw new IllegalArgumentException("Must contain at least one subgroup");
+            }
             return new BluetoothLeBroadcastMetadata(mSourceAddressType, mSourceDevice,
                     mSourceAdvertisingSid, mBroadcastId, mPaSyncInterval, mIsEncrypted,
                     mBroadcastCode, mPresentationDelayMicros, mSubgroups);

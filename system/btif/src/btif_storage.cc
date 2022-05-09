@@ -248,7 +248,7 @@ static int prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
       btif_config_set_int("Adapter", BTIF_STORAGE_KEY_LOCAL_IO_CAPS_BLE,
                           *(int*)prop->val);
       break;
-    case BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT:
+    case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
       btif_config_set_int("Adapter", BTIF_STORAGE_KEY_ADAPTER_DISC_TIMEOUT,
                           *(int*)prop->val);
       break;
@@ -358,7 +358,7 @@ static int cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
                                   (int*)prop->val);
       break;
 
-    case BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT:
+    case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
       if (prop->len >= (int)sizeof(int))
         ret = btif_config_get_int(
             "Adapter", BTIF_STORAGE_KEY_ADAPTER_DISC_TIMEOUT, (int*)prop->val);
@@ -952,8 +952,14 @@ void btif_storage_load_consolidate_devices(void) {
         LOG_INFO("found consolidated device %s %s",
                  bonded_devices.devices[i].ToString().c_str(),
                  key.pid_key.identity_addr.ToString().c_str());
-        consolidated_devices.emplace_back(bonded_devices.devices[i],
-                                          key.pid_key.identity_addr);
+
+        if (bonded_devices.devices[i].IsEmpty() ||
+            key.pid_key.identity_addr.IsEmpty()) {
+          LOG_WARN("Address is empty! Skip");
+        } else {
+          consolidated_devices.emplace_back(bonded_devices.devices[i],
+                                            key.pid_key.identity_addr);
+        }
       }
     }
   }
@@ -1040,9 +1046,9 @@ bt_status_t btif_storage_load_bonded_devices(void) {
     num_props++;
 
     /* DISC_TIMEOUT */
-    BTIF_STORAGE_GET_ADAPTER_PROP(status, BT_PROPERTY_ADAPTER_DISCOVERY_TIMEOUT,
-                                  &disc_timeout, sizeof(disc_timeout),
-                                  adapter_props[num_props]);
+    BTIF_STORAGE_GET_ADAPTER_PROP(
+        status, BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT, &disc_timeout,
+        sizeof(disc_timeout), adapter_props[num_props]);
     num_props++;
 
     /* BONDED_DEVICES */
@@ -2296,4 +2302,31 @@ void btif_storage_remove_gatt_cl_db_hash(const RawAddress& bd_addr) {
                          }
                        },
                        bd_addr));
+}
+
+void btif_debug_linkkey_type_dump(int fd) {
+  dprintf(fd, "\nLink Key Types:\n");
+  for (const auto& bd_addr : btif_config_get_paired_devices()) {
+    auto bdstr = bd_addr.ToString();
+    int linkkey_type;
+    dprintf(fd, "  %s\n", bdstr.c_str());
+
+    dprintf(fd, "    BR: ");
+    if (btif_config_get_int(bdstr, "LinkKeyType", &linkkey_type)) {
+      dprintf(fd, "%s", linkkey_type_text(linkkey_type).c_str());
+    }
+    dprintf(fd, "\n");
+
+    dprintf(fd, "    LE:");
+    if (btif_config_exist(bdstr, "LE_KEY_PENC")) dprintf(fd, " PENC");
+    if (btif_config_exist(bdstr, "LE_KEY_PID")) dprintf(fd, " PID");
+    if (btif_config_exist(bdstr, "LE_KEY_PCSRK")) dprintf(fd, " PCSRK");
+    if (btif_config_exist(bdstr, "LE_KEY_PLK")) dprintf(fd, " PLK");
+    if (btif_config_exist(bdstr, "LE_KEY_LENC")) dprintf(fd, " LENC");
+    if (btif_config_exist(bdstr, "LE_KEY_LCSRK")) dprintf(fd, " LCSRK");
+    if (btif_config_exist(bdstr, "LE_KEY_LID")) dprintf(fd, " LID");
+    if (btif_config_exist(bdstr, "LE_KEY_PLK")) dprintf(fd, " LLK");
+
+    dprintf(fd, "\n");
+  }
 }

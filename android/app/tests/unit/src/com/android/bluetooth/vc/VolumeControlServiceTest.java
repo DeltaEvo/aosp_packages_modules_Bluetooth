@@ -79,8 +79,6 @@ public class VolumeControlServiceTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when VolumeControl is not enabled",
-                mTargetContext.getResources().getBoolean(R.bool.profile_supported_vc));
         // Set up mocks and test assets
         MockitoAnnotations.initMocks(this);
 
@@ -120,10 +118,6 @@ public class VolumeControlServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mTargetContext.getResources().getBoolean(
-            R.bool.profile_supported_vc)) {
-            return;
-        }
         stopService();
         mTargetContext.unregisterReceiver(mVolumeControlIntentReceiver);
         mDeviceQueueMap.clear();
@@ -318,6 +312,10 @@ public class VolumeControlServiceTest {
 
         // Send a connect request
         Assert.assertTrue("Connect expected to succeed", mService.connect(mDevice));
+
+        // Verify the connection state broadcast, and that we are in Connecting state
+        verifyConnectionStateIntent(TIMEOUT_MS, mDevice, BluetoothProfile.STATE_CONNECTING,
+                BluetoothProfile.STATE_DISCONNECTED);
     }
 
     /**
