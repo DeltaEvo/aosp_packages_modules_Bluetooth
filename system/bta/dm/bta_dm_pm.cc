@@ -49,18 +49,15 @@ static void bta_dm_pm_btm_cback(const RawAddress& bd_addr,
                                 tHCI_STATUS hci_status);
 static bool bta_dm_pm_park(const RawAddress& peer_addr);
 void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index);
-static bool bta_dm_pm_is_sco_active();
 static int bta_dm_get_sco_index();
 static void bta_dm_pm_stop_timer_by_index(tBTA_PM_TIMER* p_timer,
                                           uint8_t timer_idx);
 
-#if (BTA_HH_INCLUDED == TRUE)
 #include "../hh/bta_hh_int.h"
 /* BTA_DM_PM_SSR1 will be dedicated for HH SSR setting entry, no other profile
  * can use it */
 #define BTA_DM_PM_SSR_HH BTA_DM_PM_SSR1
-#endif
-static void bta_dm_pm_ssr(const RawAddress& peer_addr, int ssr);
+static void bta_dm_pm_ssr(const RawAddress& peer_addr, const int ssr);
 
 tBTA_DM_CONNECTED_SRVCS bta_dm_conn_srvcs;
 static std::recursive_mutex pm_timer_schedule_mutex;
@@ -762,10 +759,9 @@ void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_pm_ssr(const RawAddress& peer_addr, int ssr) {
-  int current_ssr_index;
+static void bta_dm_pm_ssr(const RawAddress& peer_addr, const int ssr) {
   int ssr_index = ssr;
-  tBTA_DM_SSR_SPEC* p_spec = &p_bta_dm_ssr_spec[ssr_index];
+  tBTA_DM_SSR_SPEC* p_spec = &p_bta_dm_ssr_spec[ssr];
 
   LOG_DEBUG("Request to put link to device:%s into power_mode:%s",
             PRIVATE_ADDRESS(peer_addr), p_spec->name);
@@ -776,6 +772,7 @@ static void bta_dm_pm_ssr(const RawAddress& peer_addr, int ssr) {
       continue;
     }
     /* p_bta_dm_pm_cfg[0].app_id is the number of entries */
+    int current_ssr_index = BTA_DM_PM_SSR0;
     for (int j = 1; j <= p_bta_dm_pm_cfg[0].app_id; j++) {
       /* find the associated p_bta_dm_pm_cfg */
       const tBTA_DM_PM_CFG& config = p_bta_dm_pm_cfg[j];
@@ -791,7 +788,6 @@ static void bta_dm_pm_ssr(const RawAddress& peer_addr, int ssr) {
     }
     /* find the ssr index with the smallest max latency. */
     tBTA_DM_SSR_SPEC* p_spec_cur = &p_bta_dm_ssr_spec[current_ssr_index];
-#if (BTA_HH_INCLUDED == TRUE)
     /* HH has the per connection SSR preference, already read the SSR params
      * from BTA HH */
     if (current_ssr_index == BTA_DM_PM_SSR_HH) {
@@ -800,7 +796,6 @@ static void bta_dm_pm_ssr(const RawAddress& peer_addr, int ssr) {
         continue;
       }
     }
-#endif
     if (p_spec_cur->max_lat < p_spec->max_lat ||
         (ssr_index == BTA_DM_PM_SSR0 && current_ssr_index != BTA_DM_PM_SSR0)) {
       LOG_DEBUG(
@@ -815,13 +810,11 @@ static void bta_dm_pm_ssr(const RawAddress& peer_addr, int ssr) {
 
   if (p_spec->max_lat) {
     /* Avoid SSR reset on device which has SCO connected */
-    if (bta_dm_pm_is_sco_active()) {
-      int idx = bta_dm_get_sco_index();
-      if (idx != -1) {
-        if (bta_dm_conn_srvcs.conn_srvc[idx].peer_bdaddr == peer_addr) {
-          LOG_WARN("SCO is active on device, ignore SSR");
-          return;
-        }
+    int idx = bta_dm_get_sco_index();
+    if (idx != -1) {
+      if (bta_dm_conn_srvcs.conn_srvc[idx].peer_bdaddr == peer_addr) {
+        LOG_WARN("SCO is active on device, ignore SSR");
+        return;
       }
     }
 
@@ -863,8 +856,8 @@ void bta_dm_pm_active(const RawAddress& peer_addr) {
                 PRIVATE_ADDRESS(peer_addr));
       break;
     case BTM_SUCCESS:
-      LOG_INFO("Active power mode already set for device:%s",
-               PRIVATE_ADDRESS(peer_addr));
+      LOG_DEBUG("Active power mode already set for device:%s",
+                PRIVATE_ADDRESS(peer_addr));
       break;
     default:
       LOG_WARN("Unable to set active power mode for device:%s status:%s",
@@ -1045,30 +1038,6 @@ tBTA_DM_PEER_DEVICE* bta_dm_find_peer_device(const RawAddress& peer_addr) {
     }
   }
   return p_dev;
-}
-
-/*******************************************************************************
- *
- * Function         bta_dm_is_sco_active
- *
- * Description      Loop through connected services for HFP+State=SCO
- *
- * Returns          bool. true if SCO active, else false
- *
- ******************************************************************************/
-static bool bta_dm_pm_is_sco_active() {
-  int j;
-  bool bScoActive = false;
-
-  for (j = 0; j < bta_dm_conn_srvcs.count; j++) {
-    /* check if an entry already present */
-    if ((bta_dm_conn_srvcs.conn_srvc[j].id == BTA_ID_AG) &&
-        (bta_dm_conn_srvcs.conn_srvc[j].state == BTA_SYS_SCO_OPEN)) {
-      bScoActive = true;
-      break;
-    }
-  }
-  return bScoActive;
 }
 
 /*******************************************************************************

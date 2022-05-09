@@ -577,6 +577,11 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
     return BTM_BUSY;
   }
 
+  if (interop_match_addr(INTEROP_DYNAMIC_ROLE_SWITCH, &remote_bd_addr)) {
+    LOG_DEBUG("Device restrict listed under INTEROP_DYNAMIC_ROLE_SWITCH");
+    return BTM_DEV_RESTRICT_LISTED;
+  }
+
   tBTM_PM_MODE pwr_mode;
   if (!BTM_ReadPowerMode(p_acl->remote_addr, &pwr_mode)) {
     LOG_WARN(
@@ -2282,7 +2287,8 @@ bool BTM_BLE_IS_RESOLVE_BDA(const RawAddress& x) {
 
 bool acl_refresh_remote_address(const RawAddress& identity_address,
                                 tBLE_ADDR_TYPE identity_address_type,
-                                const RawAddress& bda, tBLE_ADDR_TYPE rra_type,
+                                const RawAddress& bda,
+                                tBTM_SEC_BLE::tADDRESS_TYPE rra_type,
                                 const RawAddress& rpa) {
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(bda, BT_TRANSPORT_LE);
   if (p_acl == nullptr) {
@@ -2300,7 +2306,7 @@ bool acl_refresh_remote_address(const RawAddress& identity_address,
       p_acl->active_remote_addr = rpa;
     }
   } else {
-    p_acl->active_remote_addr_type = rra_type;
+    p_acl->active_remote_addr_type = static_cast<tBLE_ADDR_TYPE>(rra_type);
     p_acl->active_remote_addr = rpa;
   }
 
@@ -2762,6 +2768,15 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
     gatt_find_in_device_record(bd_addr, &address_with_type);
     LOG_DEBUG("Creating le direct connection to:%s",
               PRIVATE_ADDRESS(address_with_type));
+
+    if (address_with_type.type == BLE_ADDR_ANONYMOUS) {
+      LOG_WARN(
+          "Creating le direct connection to:%s, address type 'anonymous' is "
+          "invalid",
+          PRIVATE_ADDRESS(address_with_type));
+      return false;
+    }
+
     bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
                                                 /* is_direct */ true);
     return true;

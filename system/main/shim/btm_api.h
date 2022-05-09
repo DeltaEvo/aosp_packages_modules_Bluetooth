@@ -289,21 +289,6 @@ tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda);
 
 /*******************************************************************************
  *
- * Function         BTM_WriteEIR
- *
- * Description      This function is called to write EIR data to controller.
- *
- * Parameters       p_buff - allocated HCI command buffer including extended
- *                           inquriry response
- *
- * Returns          BTM_SUCCESS  - if successful
- *                  BTM_MODE_UNSUPPORTED - if local device cannot support it
- *
- ******************************************************************************/
-tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff);
-
-/*******************************************************************************
- *
  * Function         BTM_HasEirService
  *
  * Description      This function is called to know if UUID in bit map of UUID.
@@ -348,21 +333,6 @@ tBTM_EIR_SEARCH_RESULT BTM_HasInquiryEirService(tBTM_INQ_RESULTS* p_results,
  *
  ******************************************************************************/
 void BTM_AddEirService(uint32_t* p_eir_uuid, uint16_t uuid16);
-
-/*******************************************************************************
- *
- * Function         BTM_RemoveEirService
- *
- * Description      This function is called to remove a service from the bit map
- *                  UUID list.
- *
- * Parameters       p_eir_uuid - bit mask of UUID list for EIR
- *                  uuid16 - UUID 16-bit
- *
- * Returns          None
- *
- ******************************************************************************/
-void BTM_RemoveEirService(uint32_t* p_eir_uuid, uint16_t uuid16);
 
 /*******************************************************************************
  *
@@ -1839,6 +1809,17 @@ bool BTM_BleLocalPrivacyEnabled(void);
  *
  ******************************************************************************/
 tBTM_STATUS BTM_BleGetEnergyInfo(tBTM_BLE_ENERGY_INFO_CBACK* p_ener_cback);
+
+/*******************************************************************************
+ *
+ * Function         BTM_ClearEventFilter
+ *
+ * Description      Clears the event filter in the controller
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_ClearEventFilter(void);
 
 /**
  * Send remote name request to GD shim Name module

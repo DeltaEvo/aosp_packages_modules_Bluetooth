@@ -17,9 +17,17 @@
 package android.bluetooth;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.bluetooth.BluetoothUtils.TypeValueEntry;
 import android.os.Parcel;
 import android.os.Parcelable;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * A class representing the codec specific config metadata information defined in the Basic Audio
@@ -29,7 +37,7 @@ import android.os.Parcelable;
  */
 @SystemApi
 public final class BluetoothLeAudioCodecConfigMetadata implements Parcelable {
-    private static final int UNKNOWN_VALUE_PLACEHOLDER = -1;
+    private static final int AUDIO_CHANNEL_LOCATION_TYPE = 0x03;
 
     private final long mAudioLocation;
     private final byte[] mRawMetadata;
@@ -37,6 +45,21 @@ public final class BluetoothLeAudioCodecConfigMetadata implements Parcelable {
     private BluetoothLeAudioCodecConfigMetadata(long audioLocation, byte[] rawMetadata) {
         mAudioLocation = audioLocation;
         mRawMetadata = rawMetadata;
+    }
+
+    @Override
+    public boolean equals(@Nullable Object o) {
+        if (o != null && o instanceof BluetoothLeAudioCodecConfigMetadata) {
+            final BluetoothLeAudioCodecConfigMetadata oth = (BluetoothLeAudioCodecConfigMetadata) o;
+            return mAudioLocation == oth.getAudioLocation()
+                && Arrays.equals(mRawMetadata, oth.getRawMetadata());
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mAudioLocation, mRawMetadata);
     }
 
     /**
@@ -137,7 +160,21 @@ public final class BluetoothLeAudioCodecConfigMetadata implements Parcelable {
         if (rawBytes == null) {
             throw new IllegalArgumentException("Raw bytes cannot be null");
         }
-        return null;
+        List<TypeValueEntry> entries = BluetoothUtils.parseLengthTypeValueBytes(rawBytes);
+        if (rawBytes.length > 0 && rawBytes[0] > 0 && entries.isEmpty()) {
+            throw new IllegalArgumentException("No LTV entries are found from rawBytes of size "
+                    + rawBytes.length);
+        }
+        long audioLocation = 0;
+        for (TypeValueEntry entry : entries) {
+            if (entry.getType() == AUDIO_CHANNEL_LOCATION_TYPE) {
+                byte[] bytes = entry.getValue();
+                // Get unsigned uint32_t to long
+                audioLocation = ((bytes[0] & 0xFF) <<  0) | ((bytes[1] & 0xFF) <<  8)
+                        | ((bytes[2] & 0xFF) << 16) | ((long) (bytes[3] & 0xFF) << 24);
+            }
+        }
+        return new BluetoothLeAudioCodecConfigMetadata(audioLocation, rawBytes);
     }
 
     /**
@@ -146,7 +183,7 @@ public final class BluetoothLeAudioCodecConfigMetadata implements Parcelable {
      */
     @SystemApi
     public static final class Builder {
-        private long mAudioLocation = UNKNOWN_VALUE_PLACEHOLDER;
+        private long mAudioLocation = 0;
         private byte[] mRawMetadata = null;
 
         /**
@@ -191,10 +228,25 @@ public final class BluetoothLeAudioCodecConfigMetadata implements Parcelable {
          */
         @SystemApi
         public @NonNull BluetoothLeAudioCodecConfigMetadata build() {
-            if (mRawMetadata == null) {
-                mRawMetadata = new byte[0];
+            List<TypeValueEntry> entries = new ArrayList<>();
+            if (mRawMetadata != null) {
+                entries = BluetoothUtils.parseLengthTypeValueBytes(mRawMetadata);
+                if (mRawMetadata.length > 0 && mRawMetadata[0] > 0 && entries.isEmpty()) {
+                    throw new IllegalArgumentException("No LTV entries are found from rawBytes of"
+                            + " size " + mRawMetadata.length + " please check the original object"
+                            + " passed to Builder's copy constructor");
+                }
             }
-            return new BluetoothLeAudioCodecConfigMetadata(mAudioLocation, mRawMetadata);
+            if (mAudioLocation != 0) {
+                entries.removeIf(entry -> entry.getType() == AUDIO_CHANNEL_LOCATION_TYPE);
+                entries.add(new TypeValueEntry(AUDIO_CHANNEL_LOCATION_TYPE,
+                        ByteBuffer.allocate(Long.BYTES).putLong(mAudioLocation).array()));
+            }
+            byte[] rawBytes = BluetoothUtils.serializeTypeValue(entries);
+            if (rawBytes == null) {
+                throw new IllegalArgumentException("Failed to serialize entries to bytes");
+            }
+            return new BluetoothLeAudioCodecConfigMetadata(mAudioLocation, rawBytes);
         }
     }
 }
