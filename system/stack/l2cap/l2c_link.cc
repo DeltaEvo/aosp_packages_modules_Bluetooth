@@ -933,8 +933,7 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
         continue;
       }
 
-      if ((!p_lcb->in_use) || (p_lcb->partial_segment_being_sent) ||
-          (p_lcb->link_state != LST_CONNECTED) ||
+      if ((!p_lcb->in_use) || (p_lcb->link_state != LST_CONNECTED) ||
           (p_lcb->link_xmit_quota != 0) || (l2c_link_check_power_mode(p_lcb))) {
         LOG_DEBUG("Skipping lcb %d due to quota", xx);
         continue;
@@ -975,8 +974,7 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
   } else /* if this is not round-robin service */
   {
     /* If a partial segment is being sent, can't send anything else */
-    if ((p_lcb->partial_segment_being_sent) ||
-        (p_lcb->link_state != LST_CONNECTED) ||
+    if ((p_lcb->link_state != LST_CONNECTED) ||
         (l2c_link_check_power_mode(p_lcb))) {
       LOG_INFO("A partial segment is being sent, cannot send anything else");
       return;
@@ -1053,45 +1051,15 @@ void l2c_OnHciModeChangeSendPendingPackets(RawAddress remote) {
  *
  ******************************************************************************/
 static void l2c_link_send_to_lower_br_edr(tL2C_LCB* p_lcb, BT_HDR* p_buf) {
-  const uint16_t acl_data_size_classic =
-      controller_get_interface()->get_acl_data_size_classic();
   const uint16_t link_xmit_quota = p_lcb->link_xmit_quota;
-  const bool is_bdr_and_fits_in_buffer = true;
 
-  if (is_bdr_and_fits_in_buffer) {
-    if (link_xmit_quota == 0) {
-      l2cb.round_robin_unacked++;
-    }
-    p_lcb->sent_not_acked++;
-    p_buf->layer_specific = 0;
-    l2cb.controller_xmit_window--;
-  } else {
-    uint16_t num_segs =
-        (p_buf->len - HCI_DATA_PREAMBLE_SIZE + acl_data_size_classic - 1) /
-        acl_data_size_classic;
-
-    /* If doing round-robin, then only 1 segment each time */
-    if (p_lcb->link_xmit_quota == 0) {
-      num_segs = 1;
-      p_lcb->partial_segment_being_sent = true;
-    } else {
-      /* Multi-segment packet. Make sure it can fit */
-      if (num_segs > l2cb.controller_xmit_window) {
-        num_segs = l2cb.controller_xmit_window;
-        p_lcb->partial_segment_being_sent = true;
-      }
-
-      if (num_segs > (p_lcb->link_xmit_quota - p_lcb->sent_not_acked)) {
-        num_segs = (p_lcb->link_xmit_quota - p_lcb->sent_not_acked);
-        p_lcb->partial_segment_being_sent = true;
-      }
-    }
-
-    p_lcb->sent_not_acked += num_segs;
-    p_buf->layer_specific = num_segs;
-    l2cb.controller_xmit_window -= num_segs;
-    if (p_lcb->link_xmit_quota == 0) l2cb.round_robin_unacked += num_segs;
+  if (link_xmit_quota == 0) {
+    l2cb.round_robin_unacked++;
   }
+  p_lcb->sent_not_acked++;
+  p_buf->layer_specific = 0;
+  l2cb.controller_xmit_window--;
+
   acl_send_data_packet_br_edr(p_lcb->remote_bd_addr, p_buf);
   LOG_DEBUG("TotalWin=%d,Hndl=0x%x,Quota=%d,Unack=%d,RRQuota=%d,RRUnack=%d",
             l2cb.controller_xmit_window, p_lcb->Handle(),
@@ -1100,47 +1068,15 @@ static void l2c_link_send_to_lower_br_edr(tL2C_LCB* p_lcb, BT_HDR* p_buf) {
 }
 
 static void l2c_link_send_to_lower_ble(tL2C_LCB* p_lcb, BT_HDR* p_buf) {
-  const uint16_t acl_packet_size_ble =
-      controller_get_interface()->get_acl_packet_size_ble();
-  const uint16_t acl_data_size_ble =
-      controller_get_interface()->get_acl_data_size_ble();
   const uint16_t link_xmit_quota = p_lcb->link_xmit_quota;
-  const bool is_ble_and_fits_in_buffer = (p_buf->len <= acl_packet_size_ble);
 
-  if (is_ble_and_fits_in_buffer) {
-    if (link_xmit_quota == 0) {
-      l2cb.ble_round_robin_unacked++;
-    }
-    p_lcb->sent_not_acked++;
-    p_buf->layer_specific = 0;
-    l2cb.controller_le_xmit_window--;
-  } else {
-    uint16_t num_segs =
-        (p_buf->len - HCI_DATA_PREAMBLE_SIZE + acl_data_size_ble - 1) /
-        acl_data_size_ble;
-
-    /* If doing round-robin, then only 1 segment each time */
-    if (p_lcb->link_xmit_quota == 0) {
-      num_segs = 1;
-      p_lcb->partial_segment_being_sent = true;
-    } else {
-      /* Multi-segment packet. Make sure it can fit */
-      if (num_segs > l2cb.controller_le_xmit_window) {
-        num_segs = l2cb.controller_le_xmit_window;
-        p_lcb->partial_segment_being_sent = true;
-      }
-
-      if (num_segs > (p_lcb->link_xmit_quota - p_lcb->sent_not_acked)) {
-        num_segs = (p_lcb->link_xmit_quota - p_lcb->sent_not_acked);
-        p_lcb->partial_segment_being_sent = true;
-      }
-    }
-
-    p_lcb->sent_not_acked += num_segs;
-    p_buf->layer_specific = num_segs;
-    l2cb.controller_le_xmit_window -= num_segs;
-    if (p_lcb->link_xmit_quota == 0) l2cb.ble_round_robin_unacked += num_segs;
+  if (link_xmit_quota == 0) {
+    l2cb.ble_round_robin_unacked++;
   }
+  p_lcb->sent_not_acked++;
+  p_buf->layer_specific = 0;
+  l2cb.controller_le_xmit_window--;
+
   acl_send_data_packet_ble(p_lcb->remote_bd_addr, p_buf);
   LOG_DEBUG("TotalWin=%d,Hndl=0x%x,Quota=%d,Unack=%d,RRQuota=%d,RRUnack=%d",
             l2cb.controller_le_xmit_window, p_lcb->Handle(),
@@ -1343,8 +1279,6 @@ void l2c_link_segments_xmitted(BT_HDR* p_msg) {
   /* Enqueue the buffer to the head of the transmit queue, and see */
   /* if we can transmit anything more.                             */
   list_prepend(p_lcb->link_xmit_data_q, p_msg);
-
-  p_lcb->partial_segment_being_sent = false;
 
   l2c_link_check_send_pkts(p_lcb, 0, NULL);
 }

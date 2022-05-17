@@ -70,12 +70,23 @@ audio_channel_mask_t InputChannelModeToAudioFormat(ChannelMode channel_mode) {
   }
 }
 
-audio_format_t BitsPerSampleToAudioFormat(uint8_t bits_per_sample) {
+audio_format_t BitsPerSampleToAudioFormat(uint8_t bits_per_sample,
+                                          const SessionType& session_type) {
   switch (bits_per_sample) {
     case 16:
       return AUDIO_FORMAT_PCM_16_BIT;
     case 24:
-      return AUDIO_FORMAT_PCM_24_BIT_PACKED;
+      /* Now we use knowledge that Classic sessions used packed, and LE Audio
+       * LC3 encoder uses unpacked as input. This should be passed as parameter
+       * from BT stack through AIDL, but it would require new interface version,
+       * so sticking with this workaround for now. */
+      if (session_type ==
+              SessionType::A2DP_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
+          session_type == SessionType::A2DP_SOFTWARE_ENCODING_DATAPATH) {
+        return AUDIO_FORMAT_PCM_24_BIT_PACKED;
+      } else {
+        return AUDIO_FORMAT_PCM_8_24_BIT;
+      }
     case 32:
       return AUDIO_FORMAT_PCM_32_BIT;
     default:
@@ -181,6 +192,13 @@ bool BluetoothAudioPortAidl::init_session_type(audio_devices_t device) {
                    << ": device=AUDIO_DEVICE_IN_BLE_HEADSET (VOICE) ("
                    << StringPrintf("%#x", device) << ")";
       session_type_ = SessionType::LE_AUDIO_SOFTWARE_DECODING_DATAPATH;
+      break;
+    case AUDIO_DEVICE_OUT_BLE_BROADCAST:
+      LOG(VERBOSE) << __func__
+                   << ": device=AUDIO_DEVICE_OUT_BLE_BROADCAST (MEDIA) ("
+                   << StringPrintf("%#x", device) << ")";
+      session_type_ =
+          SessionType::LE_AUDIO_BROADCAST_SOFTWARE_ENCODING_DATAPATH;
       break;
     default:
       LOG(ERROR) << __func__
@@ -347,7 +365,8 @@ bool BluetoothAudioPortAidlOut::LoadAudioConfig(
       (is_stereo_to_mono_
            ? AUDIO_CHANNEL_OUT_STEREO
            : OutputChannelModeToAudioFormat(pcm_cfg.channelMode));
-  audio_cfg->format = BitsPerSampleToAudioFormat(pcm_cfg.bitsPerSample);
+  audio_cfg->format =
+      BitsPerSampleToAudioFormat(pcm_cfg.bitsPerSample, session_type_);
   return true;
 }
 
@@ -381,7 +400,8 @@ bool BluetoothAudioPortAidlIn::LoadAudioConfig(
 
   audio_cfg->sample_rate = pcm_cfg.sampleRateHz;
   audio_cfg->channel_mask = InputChannelModeToAudioFormat(pcm_cfg.channelMode);
-  audio_cfg->format = BitsPerSampleToAudioFormat(pcm_cfg.bitsPerSample);
+  audio_cfg->format =
+      BitsPerSampleToAudioFormat(pcm_cfg.bitsPerSample, session_type_);
   return true;
 }
 

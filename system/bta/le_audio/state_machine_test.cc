@@ -38,6 +38,7 @@ using ::testing::AnyNumber;
 using ::testing::AtLeast;
 using ::testing::DoAll;
 using ::testing::Invoke;
+using ::testing::NiceMock;
 using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::Test;
@@ -392,9 +393,7 @@ class StateMachineTest : public Test {
     ASSERT_NE(codec_manager_, nullptr);
     std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
         mock_offloading_preference(0);
-    std::vector<set_configurations::AudioSetConfiguration>
-        mock_adsp_capabilities(0);
-    codec_manager_->Start(mock_offloading_preference, mock_adsp_capabilities);
+    codec_manager_->Start(mock_offloading_preference);
     mock_codec_manager_ = MockCodecManager::GetInstance();
     ASSERT_NE(mock_codec_manager_, nullptr);
     ON_CALL(*mock_codec_manager_, GetCodecLocation())
@@ -731,7 +730,8 @@ class StateMachineTest : public Test {
           src_context_type |= kContextTypeConversational;
 
           leAudioDevice->src_audio_locations_ =
-              ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+              ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
+              ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
         }
 
         leAudioDevice->SetSupportedContexts(snk_context_type, src_context_type);
@@ -923,7 +923,7 @@ class StateMachineTest : public Test {
 
             auto meta_len = *ase_p++;
             auto num_handled_bytes = ase_p - value.data();
-            ase_p += num_handled_bytes;
+            ase_p += meta_len;
 
             client_parser::ascs::ase_transient_state_params enable_params = {
                 .metadata = std::vector<uint8_t>(
@@ -1104,8 +1104,8 @@ class StateMachineTest : public Test {
         };
   }
 
-  controller::MockControllerInterface mock_controller_;
-  bluetooth::manager::MockBtmInterface btm_interface;
+  NiceMock<controller::MockControllerInterface> mock_controller_;
+  NiceMock<bluetooth::manager::MockBtmInterface> btm_interface;
   gatt::MockBtaGattInterface gatt_interface;
   gatt::MockBtaGattQueue gatt_queue;
 
@@ -1441,11 +1441,11 @@ TEST_F(StateMachineTest, testStreamMultipleConversational) {
   PrepareConfigureCodecHandler(group);
   PrepareConfigureQosHandler(group);
   PrepareEnableHandler(group);
-  PrepareReceiverStartReady(group, 1);
+  PrepareReceiverStartReady(group);
 
   EXPECT_CALL(*mock_iso_manager_, CreateCig(_, _)).Times(1);
   EXPECT_CALL(*mock_iso_manager_, EstablishCis(_)).Times(AtLeast(1));
-  EXPECT_CALL(*mock_iso_manager_, SetupIsoDataPath(_, _)).Times(3);
+  EXPECT_CALL(*mock_iso_manager_, SetupIsoDataPath(_, _)).Times(4);
   EXPECT_CALL(*mock_iso_manager_, RemoveIsoDataPath(_, _)).Times(0);
   EXPECT_CALL(*mock_iso_manager_, DisconnectCis(_, _)).Times(0);
   EXPECT_CALL(*mock_iso_manager_, RemoveCig(_)).Times(0);
@@ -1459,7 +1459,7 @@ TEST_F(StateMachineTest, testStreamMultipleConversational) {
                 WriteCharacteristic(leAudioDevice->conn_id_,
                                     leAudioDevice->ctp_hdls_.val_hdl, _,
                                     GATT_WRITE_NO_RSP, _, _))
-        .Times(AtLeast(3));
+        .Times(4);
     expected_devices_written++;
     leAudioDevice = group->GetNextDevice(leAudioDevice);
   }
@@ -2146,7 +2146,11 @@ TEST_F(StateMachineTest, testAseAutonomousRelease) {
   // Validate new GroupStreamStatus
   EXPECT_CALL(mock_callbacks_,
               StatusReportCb(leaudio_group_id,
-                             bluetooth::le_audio::GroupStreamStatus::IDLE));
+                             bluetooth::le_audio::GroupStreamStatus::IDLE))
+      .Times(AtLeast(1));
+
+  /* Single disconnect as it is bidirectional Cis*/
+  EXPECT_CALL(*mock_iso_manager_, DisconnectCis(_, _)).Times(1);
 
   for (auto* device = group->GetFirstDevice(); device != nullptr;
        device = group->GetNextDevice(device)) {
@@ -2170,6 +2174,62 @@ TEST_F(StateMachineTest, testAseAutonomousRelease) {
     for (auto& ase : device->ases_) {
       ASSERT_EQ(ase.state, types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
     }
+  }
+}
+
+TEST_F(StateMachineTest, testAseAutonomousRelease2Devices) {
+  const auto context_type = kContextTypeConversational;
+  const int leaudio_group_id = 4;
+  const int num_of_devices = 2;
+
+  // Prepare fake connected device group
+  auto* group = PrepareSingleTestDeviceGroup(leaudio_group_id, context_type,
+                                             num_of_devices);
+
+  /* Since we prepared device with Conversional context in mind, Sink and Source
+   * ASEs should have been configured.
+   */
+  PrepareConfigureCodecHandler(group);
+  PrepareConfigureQosHandler(group);
+  PrepareEnableHandler(group);
+  PrepareDisableHandler(group);
+  PrepareReceiverStartReady(group);
+  PrepareReceiverStopReady(group);
+  PrepareReleaseHandler(group);
+
+  InjectInitialIdleNotification(group);
+
+  // Validate initial GroupStreamStatus
+  EXPECT_CALL(
+      mock_callbacks_,
+      StatusReportCb(leaudio_group_id,
+                     bluetooth::le_audio::GroupStreamStatus::STREAMING));
+
+  // Start the configuration and stream Media content
+  ASSERT_TRUE(LeAudioGroupStateMachine::Get()->StartStream(
+      group, static_cast<types::LeAudioContextType>(context_type)));
+
+  // Check streaming will continue
+  EXPECT_CALL(mock_callbacks_,
+              StatusReportCb(leaudio_group_id,
+                             bluetooth::le_audio::GroupStreamStatus::IDLE))
+      .Times(0);
+
+  /* Single disconnect as it is bidirectional Cis*/
+  EXPECT_CALL(*mock_iso_manager_, DisconnectCis(_, _)).Times(1);
+
+  auto device = group->GetFirstDevice();
+  for (auto& ase : device->ases_) {
+    client_parser::ascs::ase_codec_configured_state_params
+        codec_configured_state_params;
+
+    ASSERT_EQ(ase.state, types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
+
+    // Simulate autonomus release for one device.
+    InjectAseStateNotification(&ase, device, group, ascs::kAseStateReleasing,
+                               &codec_configured_state_params);
+    InjectAseStateNotification(&ase, device, group, ascs::kAseStateIdle,
+                               &codec_configured_state_params);
   }
 }
 

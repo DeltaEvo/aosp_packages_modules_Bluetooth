@@ -55,7 +55,7 @@ impl IBluetoothManagerCallback for BtManagerCallback {
     }
 }
 
-impl manager_service::RPCProxy for BtManagerCallback {
+impl RPCProxy for BtManagerCallback {
     fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
         0
     }
@@ -125,12 +125,16 @@ impl IBluetoothCallback for BtCallback {
         print_info!("Found device: {:?}", remote_device);
     }
 
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {
+        match self.context.lock().unwrap().found_devices.remove(&remote_device.address) {
+            Some(_) => print_info!("Removed device: {:?}", remote_device),
+            None => (),
+        };
+    }
+
     fn on_discovering_changed(&self, discovering: bool) {
         self.context.lock().unwrap().discovering_state = discovering;
 
-        if discovering {
-            self.context.lock().unwrap().found_devices.clear();
-        }
         print_info!("Discovering: {}", discovering);
     }
 

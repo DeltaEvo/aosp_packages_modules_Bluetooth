@@ -62,6 +62,7 @@ struct Advertiser {
   bool started = false;
   bool connectable = false;
   bool directed = false;
+  bool in_use = false;
   std::unique_ptr<os::Alarm> address_rotation_alarm;
 };
 
@@ -117,7 +118,7 @@ struct LeAdvertisingManager::impl : public bluetooth::hci::LeAddressManagerCallb
       enabled_sets_[i].advertising_handle_ = kInvalidHandle;
     }
 
-    if (controller_->IsSupported(hci::OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS)) {
+    if (controller_->SupportsBleExtendedAdvertising()) {
       advertising_api_type_ = AdvertisingApiType::EXTENDED;
     } else if (controller_->IsSupported(hci::OpCode::LE_MULTI_ADVT)) {
       advertising_api_type_ = AdvertisingApiType::ANDROID_HCI;
@@ -221,9 +222,10 @@ struct LeAdvertisingManager::impl : public bluetooth::hci::LeAddressManagerCallb
       while (id < num_instances_ && advertising_sets_.count(id) != 0) {
         id++;
       }
-    }
-    if (id == num_instances_) {
-      return kInvalidId;
+      if (id == num_instances_) {
+        return kInvalidId;
+      }
+      advertising_sets_[id].in_use = true;
     }
     return id;
   }
@@ -348,6 +350,14 @@ struct LeAdvertisingManager::impl : public bluetooth::hci::LeAddressManagerCallb
 
     if (advertising_api_type_ != AdvertisingApiType::EXTENDED) {
       create_advertiser(reg_id, id, config, scan_callback, set_terminated_callback, handler);
+      return;
+    }
+
+    // check extended advertising data is valid before start advertising
+    if (!check_extended_advertising_data(config.advertisement) ||
+        !check_extended_advertising_data(config.scan_response)) {
+      advertising_callbacks_->OnAdvertisingSetStarted(
+          reg_id, id, le_physical_channel_tx_power_, AdvertisingCallback::AdvertisingStatus::DATA_TOO_LARGE);
       return;
     }
 
@@ -628,6 +638,25 @@ struct LeAdvertisingManager::impl : public bluetooth::hci::LeAddressManagerCallb
       } break;
     }
   }
+
+  bool check_extended_advertising_data(std::vector<GapData> data) {
+    uint16_t data_len = 0;
+    // check data size
+    for (size_t i = 0; i < data.size(); i++) {
+      if (data[i].size() > kLeMaximumFragmentLength) {
+        LOG_WARN("AD data len shall not greater than %d", kLeMaximumFragmentLength);
+        return false;
+      }
+      data_len += data[i].size();
+    }
+
+    if (data_len > le_maximum_advertising_data_length_) {
+      LOG_WARN(
+          "advertising data len exceeds le_maximum_advertising_data_length_ %d", le_maximum_advertising_data_length_);
+      return false;
+    }
+    return true;
+  };
 
   void set_data(AdvertiserId advertiser_id, bool set_scan_rsp, std::vector<GapData> data) {
     if (!set_scan_rsp && advertising_sets_[advertiser_id].connectable) {

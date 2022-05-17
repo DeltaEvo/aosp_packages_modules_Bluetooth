@@ -413,6 +413,7 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/test/common",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs : [
@@ -581,6 +582,9 @@ cc_test {
         "libprotobuf-cpp-lite",
         "libcrypto",
         "liblog",  // __android_log_print
+        "android.hardware.bluetooth.audio@2.0",
+        "android.hardware.bluetooth.audio@2.1",
+        "libhidlbase",
     ],
     static_libs : [
         "libgmock",
@@ -602,6 +606,8 @@ cc_test {
         "clang_coverage_bin",
     ],
     host_supported: true,
+    // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
+    isolated: false,
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
@@ -614,13 +620,13 @@ cc_test {
         "gatt/database.cc",
         "gatt/database_builder.cc",
         "le_audio/client.cc",
+        "le_audio/client_audio.cc",
         "le_audio/client_parser.cc",
         "le_audio/devices.cc",
         "le_audio/le_audio_client_test.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
         "le_audio/le_audio_types.cc",
         "le_audio/mock_iso_manager.cc",
-        "le_audio/mock_le_audio_client_audio.cc",
         "le_audio/mock_state_machine.cc",
         "test/common/btm_api_mock.cc",
         "test/common/bta_gatt_api_mock.cc",
@@ -634,11 +640,15 @@ cc_test {
     shared_libs: [
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
+        "libhidlbase",
         "libprotobuf-cpp-lite",
         "libcrypto",
         "liblog",
+        "libfmq",
+        "libbinder_ndk",
     ],
     static_libs : [
+        "libbt-audio-hal-interface",
         "crypto_toolbox_for_tests",
         "libgmock",
         "libbt-common",
@@ -684,6 +694,8 @@ cc_test {
         "clang_coverage_bin",
     ],
     host_supported: true,
+    // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
+    isolated: false,
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
@@ -747,23 +759,37 @@ cc_test {
         "le_audio/broadcaster/broadcaster_types.cc",
         "le_audio/broadcaster/mock_ble_advertising_manager.cc",
         "le_audio/broadcaster/mock_state_machine.cc",
+        "le_audio/client_audio.cc",
         "le_audio/le_audio_types.cc",
         "le_audio/mock_iso_manager.cc",
-        "le_audio/mock_le_audio_client_audio.cc",
         "test/common/mock_controller.cc",
         "le_audio/mock_codec_manager.cc",
     ],
     shared_libs: [
         "libprotobuf-cpp-lite",
         "libcrypto",
+        "libfmq",
+        "libbinder_ndk",
+        "android.hardware.bluetooth.audio@2.0",
+        "android.hardware.bluetooth.audio@2.1",
+        "libhidlbase",
     ],
     static_libs : [
+        "libbt-audio-hal-interface",
         "libgmock",
         "libbt-common",
         "libbt-protos-lite",
         "libosi",
         "liblc3",
     ],
+    target: {
+        android: {
+            shared_libs: [
+                "libbinder_ndk",
+                "android.hardware.bluetooth.audio-V1-ndk",
+            ],
+        },
+    },
     sanitize: {
         cfi: true,
         scs: true,
@@ -784,6 +810,8 @@ cc_test {
         "clang_coverage_bin",
     ],
     host_supported: true,
+    // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
+    isolated: false,
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",

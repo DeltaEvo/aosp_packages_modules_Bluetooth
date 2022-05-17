@@ -130,7 +130,7 @@ declaration = _{
 
 grammar = {
     SOI ~
-    endianness_declaration? ~
+    endianness_declaration ~
     declaration* ~
     EOI
 }
@@ -187,7 +187,7 @@ fn err_missing_rule<T>(expected: Rule) -> Result<T, String> {
     Err(format!("expected rule {:?}, got nothing", expected))
 }
 
-fn expect<'i>(iter: &mut NodeIterator<'i>, rule: Rule) -> Result<Node<'i>, String> {
+fn expect<'i>(iter: &mut impl Iterator<Item = Node<'i>>, rule: Rule) -> Result<Node<'i>, String> {
     match iter.next() {
         Some(node) if node.as_rule() == rule => Ok(node),
         Some(node) => err_unexpected_rule(rule, node.as_rule()),
@@ -233,28 +233,12 @@ fn parse_identifier_or_integer(
     }
 }
 
-fn parse_string(iter: &mut NodeIterator<'_>) -> Result<String, String> {
-    expect(iter, Rule::string).map(|n| n.as_string())
-}
-
-fn parse_atomic_expr(iter: &mut NodeIterator<'_>, context: &Context) -> Result<ast::Expr, String> {
-    match iter.next() {
-        Some(n) if n.as_rule() == Rule::identifier => {
-            Ok(ast::Expr::Identifier { loc: n.as_loc(context), name: n.as_string() })
-        }
-        Some(n) if n.as_rule() == Rule::integer => {
-            Ok(ast::Expr::Integer { loc: n.as_loc(context), value: n.as_usize()? })
-        }
-        Some(n) => Err(format!(
-            "expected rule {:?} or {:?}, got {:?}",
-            Rule::identifier,
-            Rule::integer,
-            n.as_rule()
-        )),
-        None => {
-            Err(format!("expected rule {:?} or {:?}, got nothing", Rule::identifier, Rule::integer))
-        }
-    }
+fn parse_string<'i>(iter: &mut impl Iterator<Item = Node<'i>>) -> Result<String, String> {
+    expect(iter, Rule::string)
+        .map(|n| n.as_str())
+        .and_then(|s| s.strip_prefix('"').ok_or_else(|| "expected \" prefix".to_owned()))
+        .and_then(|s| s.strip_suffix('"').ok_or_else(|| "expected \" suffix".to_owned()))
+        .map(|s| s.to_owned())
 }
 
 fn parse_size_modifier_opt(iter: &mut NodeIterator<'_>) -> Option<String> {
@@ -283,8 +267,8 @@ fn parse_constraint(node: Node<'_>, context: &Context) -> Result<ast::Constraint
         let loc = node.as_loc(context);
         let mut children = node.children();
         let id = parse_identifier(&mut children)?;
-        let value = parse_atomic_expr(&mut children, context)?;
-        Ok(ast::Constraint { id, loc, value })
+        let (tag_id, value) = parse_identifier_or_integer(&mut children)?;
+        Ok(ast::Constraint { id, loc, value, tag_id })
     }
 }
 
@@ -439,9 +423,7 @@ fn parse_grammar(root: Node<'_>, context: &Context) -> Result<ast::Grammar, Stri
         let loc = node.as_loc(context);
         let rule = node.as_rule();
         match rule {
-            Rule::endianness_declaration => {
-                grammar.endianness = Some(parse_endianness(node, context)?)
-            }
+            Rule::endianness_declaration => grammar.endianness = parse_endianness(node, context)?,
             Rule::checksum_declaration => {
                 let mut children = node.children();
                 let id = parse_identifier(&mut children)?;
@@ -506,6 +488,26 @@ fn parse_grammar(root: Node<'_>, context: &Context) -> Result<ast::Grammar, Stri
     Ok(grammar)
 }
 
+/// Parse a PDL grammar text.
+/// The grammar is added to the compilation database under the
+/// provided name.
+pub fn parse_inline(
+    sources: &mut ast::SourceDatabase,
+    name: String,
+    source: String,
+) -> Result<ast::Grammar, Diagnostic<ast::FileId>> {
+    let root = PDLParser::parse(Rule::grammar, &source)
+        .map_err(|e| {
+            Diagnostic::error()
+                .with_message(format!("failed to parse input file '{}': {}", &name, e))
+        })?
+        .next()
+        .unwrap();
+    let line_starts: Vec<_> = files::line_starts(&source).collect();
+    let file = sources.add(name, source.clone());
+    parse_grammar(root, &(file, &line_starts)).map_err(|e| Diagnostic::error().with_message(e))
+}
+
 /// Parse a new source file.
 /// The source file is fully read and added to the compilation database.
 /// Returns the constructed AST, or a descriptive error message in case
@@ -517,14 +519,47 @@ pub fn parse_file(
     let source = std::fs::read_to_string(&name).map_err(|e| {
         Diagnostic::error().with_message(format!("failed to read input file '{}': {}", &name, e))
     })?;
-    let root = PDLParser::parse(Rule::grammar, &source)
-        .map_err(|e| {
-            Diagnostic::error()
-                .with_message(format!("failed to parse input file '{}': {}", &name, e))
-        })?
-        .next()
-        .unwrap();
-    let line_starts: Vec<_> = files::line_starts(&source).collect();
-    let file = sources.add(name, source.clone());
-    parse_grammar(root, &(file, &line_starts)).map_err(|e| Diagnostic::error().with_message(e))
+    parse_inline(sources, name, source)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn endianness_is_set() {
+        // The grammar starts out with a placeholder little-endian
+        // value. This tests that we update it while parsing.
+        let mut db = ast::SourceDatabase::new();
+        let grammar =
+            parse_inline(&mut db, String::from("stdin"), String::from("  big_endian_packets  "))
+                .unwrap();
+        assert_eq!(grammar.endianness.value, ast::EndiannessValue::BigEndian);
+        assert_ne!(grammar.endianness.loc, ast::SourceRange::default());
+    }
+
+    #[test]
+    fn test_parse_string_bare() {
+        let mut pairs = PDLParser::parse(Rule::string, r#""test""#).unwrap();
+
+        assert_eq!(parse_string(&mut pairs).as_deref(), Ok("test"));
+        assert_eq!(pairs.next(), None, "pairs is empty");
+    }
+
+    #[test]
+    fn test_parse_string_space() {
+        let mut pairs = PDLParser::parse(Rule::string, r#""test with space""#).unwrap();
+
+        assert_eq!(parse_string(&mut pairs).as_deref(), Ok("test with space"));
+        assert_eq!(pairs.next(), None, "pairs is empty");
+    }
+
+    #[test]
+    #[should_panic] /* This is not supported */
+    fn test_parse_string_escape() {
+        let mut pairs = PDLParser::parse(Rule::string, r#""\"test\"""#).unwrap();
+
+        assert_eq!(parse_string(&mut pairs).as_deref(), Ok(r#""test""#));
+        assert_eq!(pairs.next(), None, "pairs is empty");
+    }
 }

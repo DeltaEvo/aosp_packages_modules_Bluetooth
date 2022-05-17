@@ -653,7 +653,7 @@ class ClassicShimAclConnection
       return;
     }
 
-    if (page_number != max_page_number)
+    if (max_page_number != 0 && page_number != max_page_number)
       connection_->ReadRemoteExtendedFeatures(page_number + 1);
   }
 
@@ -716,7 +716,8 @@ class LeShimAclConnection
   }
 
   void ReadRemoteControllerInformation() override {
-    // TODO Issue LeReadRemoteFeatures Command
+    connection_->LeReadRemoteFeatures();
+    connection_->ReadRemoteVersionInformation();
   }
 
   bluetooth::hci::AddressWithType GetLocalAddressWithType() {
@@ -731,10 +732,10 @@ class LeShimAclConnection
         interface_.on_connection_update, ToLegacyHciErrorCode(hci_status),
         handle_, connection_interval, connection_latency, supervision_timeout);
   }
-  void OnDataLengthChange(uint16_t tx_octets, uint16_t tx_time,
-                          uint16_t rx_octets, uint16_t rx_time) {
-    TRY_POSTING_ON_MAIN(interface_.on_data_length_change, tx_octets, tx_time,
-                        rx_octets, rx_time);
+  void OnDataLengthChange(uint16_t max_tx_octets, uint16_t max_tx_time,
+                          uint16_t max_rx_octets, uint16_t max_rx_time) {
+    TRY_POSTING_ON_MAIN(interface_.on_data_length_change, handle_,
+                        max_tx_octets, max_tx_time, max_rx_octets, max_rx_time);
   }
 
   void OnReadRemoteVersionInformationComplete(hci::ErrorCode hci_status,
@@ -744,6 +745,11 @@ class LeShimAclConnection
     TRY_POSTING_ON_MAIN(interface_.on_read_remote_version_information_complete,
                         ToLegacyHciErrorCode(hci_status), handle_, lmp_version,
                         manufacturer_name, sub_version);
+  }
+
+  void OnLeReadRemoteFeaturesComplete(hci::ErrorCode hci_status,
+                                      uint64_t features) {
+    // TODO
   }
 
   void OnPhyUpdate(hci::ErrorCode hci_status, uint8_t tx_phy,
@@ -1491,6 +1497,17 @@ void shim::legacy::Acl::OnLeConnectSuccess(
   hci::Role connection_role = connection->GetRole();
   bool locally_initiated = connection->locally_initiated_;
 
+  uint16_t conn_interval = connection->interval_;
+  uint16_t conn_latency = connection->latency_;
+  uint16_t conn_timeout = connection->supervision_timeout_;
+
+  RawAddress local_rpa =
+      ToRawAddress(connection->local_resolvable_private_address_);
+  RawAddress peer_rpa =
+      ToRawAddress(connection->peer_resolvable_private_address_);
+  tBLE_ADDR_TYPE peer_addr_type =
+      (tBLE_ADDR_TYPE)connection->peer_address_with_type_.GetAddressType();
+
   pimpl_->handle_to_le_connection_map_.emplace(
       handle, std::make_unique<LeShimAclConnection>(
                   acl_interface_.on_send_data_upwards,
@@ -1506,16 +1523,9 @@ void shim::legacy::Acl::OnLeConnectSuccess(
   tBLE_BD_ADDR legacy_address_with_type =
       ToLegacyAddressWithType(address_with_type);
 
-  uint16_t conn_interval = 36; /* TODO Default to 45 msec*/
-  uint16_t conn_latency = 0;   /* TODO Default to zero events */
-  uint16_t conn_timeout = 500; /* TODO Default to 5s */
-
-  RawAddress local_rpa = RawAddress::kEmpty; /* TODO enhanced */
-  RawAddress peer_rpa = RawAddress::kEmpty;  /* TODO enhanced */
-  tBLE_ADDR_TYPE peer_addr_type = BLE_ADDR_PUBLIC; /* TODO public */
-
   // Once an le connection has successfully been established
   // the device address is removed from the controller accept list.
+
   if (IsRpa(address_with_type)) {
     LOG_DEBUG("Connection address is rpa:%s identity_addr:%s",
               PRIVATE_ADDRESS(address_with_type),
@@ -1646,7 +1656,7 @@ void shim::legacy::Acl::FinalShutdown() {
   LOG_INFO("Unregistered and cleared any orphaned ACL connections");
 }
 
-void shim::legacy::Acl::ClearAcceptList() {
+void shim::legacy::Acl::ClearFilterAcceptList() {
   handler_->CallOn(pimpl_.get(), &Acl::impl::clear_acceptlist);
 }
 

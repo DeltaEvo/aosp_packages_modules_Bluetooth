@@ -16,6 +16,9 @@
 
 package com.android.bluetooth.bass_client;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
+
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothLeBroadcastMetadata;
@@ -25,7 +28,6 @@ import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothLeBroadcastAssistant;
 import android.bluetooth.IBluetoothLeBroadcastAssistantCallback;
-import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
@@ -81,7 +83,6 @@ public class BassClientService extends ProfileService {
     private Map<BluetoothDevice, Integer> mDeviceToSyncHandleMap;
     /*syncHandle, parsed BaseData data*/
     private Map<Integer, BaseData> mSyncHandleToBaseDataMap;
-    private Map<Integer, BluetoothLeBroadcastMetadata> mBroadcastSources;
     /*bcastSrcDevice, corresponding PeriodicAdvertisementResult*/
     private Map<BluetoothDevice, PeriodicAdvertisementResult> mPeriodicAdvertisementResultMap;
     private ScanCallback mSearchScanCallback;
@@ -179,25 +180,6 @@ public class BassClientService extends ProfileService {
         return base;
     }
 
-    void updateSourceInternal(int sourceId, BluetoothLeBroadcastMetadata metaData) {
-        if (mBroadcastSources == null) {
-            return;
-        }
-        if (metaData != null) {
-            // This will replace old metadata with new one
-            mBroadcastSources.put(sourceId, metaData);
-        } else {
-            mBroadcastSources.remove(sourceId);
-        }
-    }
-
-    BluetoothLeBroadcastMetadata getSourceInternal(int sourceId) {
-        if (mBroadcastSources != null) {
-            return mBroadcastSources.get(sourceId);
-        }
-        return null;
-    }
-
     void setActiveSyncedSource(BluetoothDevice scanDelegator, BluetoothDevice sourceDevice) {
         log("setActiveSyncedSource: scanDelegator" + scanDelegator
                 + ":: sourceDevice:" + sourceDevice);
@@ -260,8 +242,7 @@ public class BassClientService extends ProfileService {
         }
         synchronized (mStateMachines) {
             for (BassClientStateMachine sm : mStateMachines.values()) {
-                sm.doQuit();
-                sm.cleanup();
+                BassObjectsFactory.getInstance().destroyStateMachine(sm);
             }
             mStateMachines.clear();
         }
@@ -281,10 +262,6 @@ public class BassClientService extends ProfileService {
         if (mActiveSourceMap != null) {
             mActiveSourceMap.clear();
             mActiveSourceMap = null;
-        }
-        if (mBroadcastSources != null) {
-            mBroadcastSources.clear();
-            mBroadcastSources = null;
         }
         if (mBassUtils != null) {
             mBassUtils.cleanUp();
@@ -369,8 +346,8 @@ public class BassClientService extends ProfileService {
                 return null;
             }
             log("Creating a new state machine for " + device);
-            stateMachine = BassClientStateMachine.make(device,
-                    this, mStateMachinesThread.getLooper());
+            stateMachine = BassObjectsFactory.getInstance().makeStateMachine(
+                    device, this, mStateMachinesThread.getLooper());
             mStateMachines.put(device, stateMachine);
             return stateMachine;
         }
@@ -620,7 +597,8 @@ public class BassClientService extends ProfileService {
             Log.e(TAG, "startSearchingForSources: Adapter is NULL");
             return;
         }
-        BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
+        BluetoothLeScannerWrapper scanner = BassObjectsFactory.getInstance()
+                .getBluetoothLeScannerWrapper(mBluetoothAdapter);
         if (scanner == null) {
             Log.e(TAG, "startLeScan: cannot get BluetoothLeScanner");
             return;
@@ -673,8 +651,12 @@ public class BassClientService extends ProfileService {
                 filters = new ArrayList<ScanFilter>();
             }
             if (!BassUtils.containUuid(filters, BassConstants.BAAS_UUID)) {
+                byte[] serviceData = {0x00, 0x00 ,0x00}; // Broadcast_ID
+                byte[] serviceDataMask = {0x00, 0x00, 0x00};
+
                 filters.add(new ScanFilter.Builder()
-                        .setServiceUuid(BassConstants.BAAS_UUID).build());
+                        .setServiceData(BassConstants.BAAS_UUID,
+                                serviceData, serviceDataMask).build());
             }
             scanner.startScan(filters, settings, mSearchScanCallback);
             mCallbacks.notifySearchStarted(BluetoothStatusCodes.REASON_LOCAL_APP_REQUEST);
@@ -686,7 +668,12 @@ public class BassClientService extends ProfileService {
      */
     public void stopSearchingForSources() {
         log("stopSearchingForSources");
-        BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
+        if (mBluetoothAdapter == null) {
+            Log.e(TAG, "stopSearchingForSources: Adapter is NULL");
+            return;
+        }
+        BluetoothLeScannerWrapper scanner = BassObjectsFactory.getInstance()
+                .getBluetoothLeScannerWrapper(mBluetoothAdapter);
         if (scanner == null) {
             Log.e(TAG, "startLeScan: cannot get BluetoothLeScanner");
             return;
@@ -748,7 +735,17 @@ public class BassClientService extends ProfileService {
                     BluetoothStatusCodes.ERROR_BAD_PARAMETERS);
             return;
         }
+        if (getConnectionState(sink) != BluetoothProfile.STATE_CONNECTED) {
+            log("addSource: device is not connected");
+            mCallbacks.notifySourceAddFailed(sink, sourceMetadata,
+                    BluetoothStatusCodes.ERROR_REMOTE_LINK_ERROR);
+            return;
+        }
+        if (stateMachine.hasPendingSourceOperation()) {
+            throw new IllegalStateException("addSource: source operation already pending");
+        }
         if (!hasRoomForBroadcastSourceAddition(sink)) {
+            log("addSource: device has no room");
             mCallbacks.notifySourceAddFailed(sink, sourceMetadata,
                     BluetoothStatusCodes.ERROR_REMOTE_NOT_ENOUGH_RESOURCES);
             return;
@@ -784,6 +781,15 @@ public class BassClientService extends ProfileService {
                     BluetoothStatusCodes.ERROR_BAD_PARAMETERS);
             return;
         }
+        if (getConnectionState(sink) != BluetoothProfile.STATE_CONNECTED) {
+            log("modifySource: device is not connected");
+            mCallbacks.notifySourceModifyFailed(sink, sourceId,
+                    BluetoothStatusCodes.ERROR_REMOTE_LINK_ERROR);
+            return;
+        }
+        if (stateMachine.hasPendingSourceOperation()) {
+            throw new IllegalStateException("modifySource: source operation already pending");
+        }
         Message message = stateMachine.obtainMessage(BassClientStateMachine.UPDATE_BCAST_SOURCE);
         message.arg1 = sourceId;
         message.obj = updatedMetadata;
@@ -803,9 +809,15 @@ public class BassClientService extends ProfileService {
         BassClientStateMachine stateMachine = getOrCreateStateMachine(sink);
         if (sourceId == BassConstants.INVALID_SOURCE_ID
                 || stateMachine == null) {
-            log("Error bad parameters: sourceId = " + sourceId);
+            log("removeSource: Error bad parameters: sourceId = " + sourceId);
             mCallbacks.notifySourceRemoveFailed(sink, sourceId,
                     BluetoothStatusCodes.ERROR_BAD_PARAMETERS);
+            return;
+        }
+        if (getConnectionState(sink) != BluetoothProfile.STATE_CONNECTED) {
+            log("removeSource: device is not connected");
+            mCallbacks.notifySourceRemoveFailed(sink, sourceId,
+                    BluetoothStatusCodes.ERROR_REMOTE_LINK_ERROR);
             return;
         }
         Message message = stateMachine.obtainMessage(BassClientStateMachine.REMOVE_BCAST_SOURCE);
@@ -1096,6 +1108,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return false;
                 }
+                mService.enforceCallingOrSelfPermission(BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
                 return service.setConnectionPolicy(device, connectionPolicy);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1111,6 +1124,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return BluetoothProfile.CONNECTION_POLICY_FORBIDDEN;
                 }
+                mService.enforceCallingOrSelfPermission(BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
                 return service.getConnectionPolicy(device);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1126,6 +1140,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 service.registerCallback(cb);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1140,6 +1155,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 service.unregisterCallback(cb);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1154,6 +1170,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 service.startSearchingForSources(filters);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1168,6 +1185,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 service.stopSearchingForSources();
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1182,6 +1200,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return false;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 return service.isSearchInProgress();
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1199,6 +1218,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 service.addSource(sink, sourceMetadata, isGroupOp);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1214,6 +1234,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 service.modifySource(sink, sourceId, updatedMetadata);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1228,6 +1249,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 service.removeSource(sink, sourceId);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1242,6 +1264,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return Collections.emptyList();
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 return service.getAllSources(sink);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1257,6 +1280,7 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return 0;
                 }
+                enforceBluetoothPrivilegedPermission(service);
                 return service.getMaximumSourceCapacity(sink);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);

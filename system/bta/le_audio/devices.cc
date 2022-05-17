@@ -31,6 +31,7 @@
 #include "gd/common/strings.h"
 #include "le_audio_set_configuration_provider.h"
 #include "osi/include/log.h"
+#include "stack/include/acl_api.h"
 
 using bluetooth::hci::kIsoCigFramingFramed;
 using bluetooth::hci::kIsoCigFramingUnframed;
@@ -101,7 +102,42 @@ int LeAudioDeviceGroup::NumOfConnected(types::LeAudioContextType context_type) {
       });
 }
 
-void LeAudioDeviceGroup::Cleanup(void) { leAudioDevices_.clear(); }
+void LeAudioDeviceGroup::Cleanup(void) {
+  /* Bluetooth is off while streaming - disconnect CISes and remove CIG */
+  if (GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+    if (!stream_conf.sink_streams.empty()) {
+      for (auto [cis_handle, audio_location] : stream_conf.sink_streams) {
+        bluetooth::hci::IsoManager::GetInstance()->DisconnectCis(
+            cis_handle, HCI_ERR_PEER_USER);
+
+        if (stream_conf.source_streams.empty()) {
+          continue;
+        }
+        uint16_t cis_hdl = cis_handle;
+        stream_conf.source_streams.erase(
+            std::remove_if(
+                stream_conf.source_streams.begin(),
+                stream_conf.source_streams.end(),
+                [cis_hdl](auto& pair) { return pair.first == cis_hdl; }),
+            stream_conf.source_streams.end());
+      }
+    }
+
+    if (!stream_conf.source_streams.empty()) {
+      for (auto [cis_handle, audio_location] : stream_conf.source_streams) {
+        bluetooth::hci::IsoManager::GetInstance()->DisconnectCis(
+            cis_handle, HCI_ERR_PEER_USER);
+      }
+    }
+  }
+
+  /* Note: CIG will stay in the controller. We cannot remove it here, because
+   * Cises are not yet disconnected.
+   * When user start Bluetooth, HCI Reset should remove it
+   */
+
+  leAudioDevices_.clear();
+}
 
 void LeAudioDeviceGroup::Deactivate(void) {
   for (auto* leAudioDevice = GetFirstActiveDevice(); leAudioDevice;
@@ -911,11 +947,15 @@ uint32_t PickAudioLocation(types::LeAudioConfigurationStrategy strategy,
       }
       break;
     default:
-      LOG_ASSERT(0) << " Shall never happen ";
+      LOG_ALWAYS_FATAL("%s: Unknown strategy: %hhu", __func__, strategy);
       return 0;
   }
 
-  LOG_ASSERT(0) << " Shall never happen ";
+  LOG_ALWAYS_FATAL(
+      "%s: Shall never exit switch statement, strategy: %hhu, "
+      "locations: %lx, group_locations: %lx",
+      __func__, strategy, audio_locations.to_ulong(),
+      group_audio_locations->to_ulong());
   return 0;
 }
 
@@ -1041,6 +1081,9 @@ bool LeAudioDeviceGroup::ConfigureAses(
       /* Skip if device has ASE configured in this direction already */
       if (device->GetFirstActiveAseByDirection(ent.direction)) continue;
 
+      /* For the moment, we configure only connected devices. */
+      if (device->conn_id_ == GATT_INVALID_CONN_ID) continue;
+
       if (!device->ConfigureAses(ent, context_type, &active_ase_num,
                                  group_snk_audio_locations,
                                  group_src_audio_locations, reuse_cis_id))
@@ -1120,6 +1163,14 @@ LeAudioDeviceGroup::GetCodecConfigurationByDirection(
   if (group_config.IsInvalid()) return std::nullopt;
 
   return group_config;
+}
+
+bool LeAudioDeviceGroup::IsContextSupported(
+    types::LeAudioContextType group_context_type) {
+  auto iter = active_context_to_configuration_map.find(group_context_type);
+  if (iter == active_context_to_configuration_map.end()) return false;
+
+  return active_context_to_configuration_map[group_context_type] != nullptr;
 }
 
 bool LeAudioDeviceGroup::IsMetadataChanged(
@@ -1660,6 +1711,17 @@ void LeAudioDevice::Dump(int fd) {
   dprintf(fd, "%s", stream.str().c_str());
 }
 
+void LeAudioDevice::DisconnectAcl(void) {
+  if (conn_id_ == GATT_INVALID_CONN_ID) return;
+
+  uint16_t acl_handle =
+      BTM_GetHCIConnHandle(address_, BT_TRANSPORT_LE);
+  if (acl_handle != HCI_INVALID_HANDLE) {
+    acl_disconnect_from_handle(acl_handle, HCI_ERR_PEER_USER,
+                               "bta::le_audio::client disconnect");
+  }
+}
+
 AudioContexts LeAudioDevice::GetAvailableContexts(void) {
   return avail_snk_contexts_ | avail_src_contexts_;
 }
@@ -1888,6 +1950,11 @@ void LeAudioDevices::Dump(int fd, int group_id) {
   }
 }
 
-void LeAudioDevices::Cleanup(void) { leAudioDevices_.clear(); }
+void LeAudioDevices::Cleanup(void) {
+  for (auto const& device : leAudioDevices_) {
+    device->DisconnectAcl();
+  }
+  leAudioDevices_.clear();
+}
 
 }  // namespace le_audio

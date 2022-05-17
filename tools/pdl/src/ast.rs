@@ -12,7 +12,7 @@ pub type FileId = usize;
 /// Stores the source file contents for reference.
 pub type SourceDatabase = files::SimpleFiles<String, String>;
 
-#[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, Copy, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SourceLocation {
     /// Byte offset into the file (counted from zero).
     pub offset: usize,
@@ -22,7 +22,7 @@ pub struct SourceLocation {
     pub column: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
 pub struct SourceRange {
     pub file: FileId,
     pub start: SourceLocation,
@@ -36,7 +36,7 @@ pub struct Comment {
     pub text: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EndiannessValue {
     LittleEndian,
@@ -48,19 +48,6 @@ pub enum EndiannessValue {
 pub struct Endianness {
     pub loc: SourceRange,
     pub value: EndiannessValue,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "kind")]
-pub enum Expr {
-    #[serde(rename = "identifier")]
-    Identifier { loc: SourceRange, name: String },
-    #[serde(rename = "integer")]
-    Integer { loc: SourceRange, value: usize },
-    #[serde(rename = "unary_expr")]
-    Unary { loc: SourceRange, op: String, operand: Box<Expr> },
-    #[serde(rename = "binary_expr")]
-    Binary { loc: SourceRange, op: String, operands: Box<(Expr, Expr)> },
 }
 
 #[derive(Debug, Serialize)]
@@ -76,7 +63,8 @@ pub struct Tag {
 pub struct Constraint {
     pub id: String,
     pub loc: SourceRange,
-    pub value: Expr,
+    pub value: Option<usize>,
+    pub tag_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -164,7 +152,7 @@ pub struct Grammar {
     pub version: String,
     pub file: FileId,
     pub comments: Vec<Comment>,
-    pub endianness: Option<Endianness>,
+    pub endianness: Endianness,
     pub declarations: Vec<Decl>,
 }
 
@@ -227,7 +215,12 @@ impl Grammar {
         Grammar {
             version: "1,0".to_owned(),
             comments: vec![],
-            endianness: None,
+            // The endianness is mandatory, so this default value will
+            // be updated while parsing.
+            endianness: Endianness {
+                loc: SourceRange::default(),
+                value: EndiannessValue::LittleEndian,
+            },
             declarations: vec![],
             file,
         }

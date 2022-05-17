@@ -20,6 +20,7 @@
  */
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 
@@ -426,6 +427,41 @@ void btm_api_process_inquiry_result_with_rssi(RawAddress raw_address,
 }
 
 tBTM_STATUS bluetooth::shim::BTM_ClearEventFilter() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_ClearEventMask() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_ClearFilterAcceptList() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_DisconnectAllAcls() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_LeRand(LeRandCallback cb) {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMask() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetEventFilterInquiryResultAllDevices() {
   mock_function_count_map[__func__]++;
   return BTM_SUCCESS;
 }

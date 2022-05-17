@@ -295,20 +295,6 @@
 #define BTM_DEFAULT_DISC_INTERVAL 0x0800
 #endif
 
-/* Default class of device
-* {SERVICE_CLASS, MAJOR_CLASS, MINOR_CLASS}
-*
-* SERVICE_CLASS:0x5A (Bit17 -Networking,Bit19 - Capturing,Bit20 -Object
-* Transfer,Bit22 -Telephony)
-* MAJOR_CLASS:0x02 - PHONE
-* MINOR_CLASS:0x0C - SMART_PHONE
-*
-*/
-#ifndef BTA_DM_COD
-#define BTA_DM_COD \
-  { 0x5A, 0x02, 0x0C }
-#endif
-
 /* The number of SCO links. */
 #ifndef BTM_MAX_SCO_LINKS
 #define BTM_MAX_SCO_LINKS 6
@@ -338,13 +324,6 @@
 /* Maximum local device name length stored btm database */
 #ifndef BTM_MAX_LOC_BD_NAME_LEN
 #define BTM_MAX_LOC_BD_NAME_LEN 248
-#endif
-
-/* Fixed Default String. When this is defined as null string, the device's
- * product model name is used as the default local name.
- */
-#ifndef BTM_DEF_LOCAL_NAME
-#define BTM_DEF_LOCAL_NAME ""
 #endif
 
 /* Maximum service name stored with security authorization (0 if not needed) */
@@ -529,21 +508,6 @@
 
 #ifndef LOCAL_BLE_CONTROLLER_ID
 #define LOCAL_BLE_CONTROLLER_ID 1
-#endif
-
-/*
- * Toggles support for general LE privacy features such as remote address
- * resolution, local address rotation etc.
- */
-#ifndef BLE_PRIVACY_SPT
-#define BLE_PRIVACY_SPT TRUE
-#endif
-
-/*
- * Enables or disables support for local privacy (ex. address rotation)
- */
-#ifndef BLE_LOCAL_PRIVACY_ENABLED
-#define BLE_LOCAL_PRIVACY_ENABLED TRUE
 #endif
 
 /*

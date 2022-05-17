@@ -11,14 +11,15 @@ use btstack::bluetooth_gatt::{
     GattWriteRequestStatus, GattWriteType, IBluetoothGatt, IBluetoothGattCallback,
     IScannerCallback, LePhy, ScanFilter, ScanSettings,
 };
+use btstack::RPCProxy;
 
 use btstack::suspend::{ISuspend, ISuspendCallback, SuspendType};
 
 use btstack::uuid::Profile;
-use dbus::arg::{AppendAll, RefArg};
+use dbus::arg::RefArg;
 use dbus::nonblock::SyncConnection;
 
-use dbus_projection::{impl_dbus_arg_enum, DisconnectWatcher};
+use dbus_projection::{impl_dbus_arg_enum, ClientDBusProxy, DisconnectWatcher};
 
 use dbus_macros::{
     dbus_method, dbus_propmap, generate_dbus_exporter, generate_dbus_interface_client,
@@ -100,59 +101,10 @@ pub struct BluetoothDeviceDBus {
     name: String,
 }
 
-struct ClientDBusProxy {
-    conn: Arc<SyncConnection>,
-    bus_name: String,
-    objpath: dbus::Path<'static>,
-    interface: String,
-}
-
-impl ClientDBusProxy {
-    fn create_proxy(&self) -> dbus::nonblock::Proxy<Arc<SyncConnection>> {
-        let conn = self.conn.clone();
-        dbus::nonblock::Proxy::new(
-            self.bus_name.clone(),
-            self.objpath.clone(),
-            std::time::Duration::from_secs(2),
-            conn,
-        )
-    }
-
-    /// Calls a method and returns the dbus result.
-    fn method_withresult<A: AppendAll, T: 'static + dbus::arg::Arg + for<'z> dbus::arg::Get<'z>>(
-        &self,
-        member: &str,
-        args: A,
-    ) -> Result<(T,), dbus::Error> {
-        let proxy = self.create_proxy();
-        // We know that all APIs return immediately, so we can block on it for simplicity.
-        return futures::executor::block_on(async {
-            proxy.method_call(self.interface.clone(), member, args).await
-        });
-    }
-
-    fn method<A: AppendAll, T: 'static + dbus::arg::Arg + for<'z> dbus::arg::Get<'z>>(
-        &self,
-        member: &str,
-        args: A,
-    ) -> T {
-        let (ret,): (T,) = self.method_withresult(member, args).unwrap();
-        return ret;
-    }
-
-    fn method_noreturn<A: AppendAll>(&self, member: &str, args: A) {
-        // The real type should be Result<((),), _> since there is no return value. However, to
-        // meet trait constraints, we just use bool and never unwrap the result. This calls the
-        // method, waits for the response but doesn't actually attempt to parse the result (on
-        // unwrap).
-        let _: Result<(bool,), _> = self.method_withresult(member, args);
-    }
-}
-
 #[allow(dead_code)]
 struct IBluetoothCallbackDBus {}
 
-impl btstack::RPCProxy for IBluetoothCallbackDBus {
+impl RPCProxy for IBluetoothCallbackDBus {
     // Dummy implementations just to satisfy impl RPCProxy requirements.
     fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
         0
@@ -183,6 +135,9 @@ impl IBluetoothCallback for IBluetoothCallbackDBus {
     #[dbus_method("OnDeviceFound")]
     fn on_device_found(&self, remote_device: BluetoothDevice) {}
 
+    #[dbus_method("OnDeviceCleared")]
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {}
+
     #[dbus_method("OnDiscoveringChanged")]
     fn on_discovering_changed(&self, discovering: bool) {}
 
@@ -203,7 +158,7 @@ impl IBluetoothCallback for IBluetoothCallbackDBus {
 #[allow(dead_code)]
 struct IBluetoothConnectionCallbackDBus {}
 
-impl btstack::RPCProxy for IBluetoothConnectionCallbackDBus {
+impl RPCProxy for IBluetoothConnectionCallbackDBus {
     // Dummy implementations just to satisfy impl RPCProxy requirements.
     fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
         0
@@ -236,12 +191,12 @@ pub(crate) struct BluetoothDBus {
 impl BluetoothDBus {
     pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> BluetoothDBus {
         BluetoothDBus {
-            client_proxy: ClientDBusProxy {
-                conn: conn.clone(),
-                bus_name: String::from("org.chromium.bluetooth"),
-                objpath: make_object_path(index, "adapter"),
-                interface: String::from("org.chromium.bluetooth.Bluetooth"),
-            },
+            client_proxy: ClientDBusProxy::new(
+                conn.clone(),
+                String::from("org.chromium.bluetooth"),
+                make_object_path(index, "adapter"),
+                String::from("org.chromium.bluetooth.Bluetooth"),
+            ),
         }
     }
 }
@@ -442,12 +397,12 @@ impl IBluetooth for BluetoothDBus {
     }
 
     #[dbus_method("ConnectAllEnabledProfiles")]
-    fn connect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 
     #[dbus_method("DisconnectAllEnabledProfiles")]
-    fn disconnect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 }
@@ -465,12 +420,12 @@ pub(crate) struct BluetoothManagerDBus {
 impl BluetoothManagerDBus {
     pub(crate) fn new(conn: Arc<SyncConnection>) -> BluetoothManagerDBus {
         BluetoothManagerDBus {
-            client_proxy: ClientDBusProxy {
-                conn: conn.clone(),
-                bus_name: String::from("org.chromium.bluetooth.Manager"),
-                objpath: dbus::Path::new("/org/chromium/bluetooth/Manager").unwrap(),
-                interface: String::from("org.chromium.bluetooth.Manager"),
-            },
+            client_proxy: ClientDBusProxy::new(
+                conn.clone(),
+                String::from("org.chromium.bluetooth.Manager"),
+                dbus::Path::new("/org/chromium/bluetooth/Manager").unwrap(),
+                String::from("org.chromium.bluetooth.Manager"),
+            ),
         }
     }
 
@@ -521,7 +476,7 @@ impl IBluetoothManager for BluetoothManagerDBus {
 #[allow(dead_code)]
 struct IBluetoothManagerCallbackDBus {}
 
-impl manager_service::RPCProxy for IBluetoothManagerCallbackDBus {
+impl RPCProxy for IBluetoothManagerCallbackDBus {
     // Placeholder implementations just to satisfy impl RPCProxy requirements.
     fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
         0
@@ -554,12 +509,12 @@ pub(crate) struct BluetoothGattDBus {
 impl BluetoothGattDBus {
     pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> BluetoothGattDBus {
         BluetoothGattDBus {
-            client_proxy: ClientDBusProxy {
-                conn: conn.clone(),
-                bus_name: String::from("org.chromium.bluetooth"),
-                objpath: make_object_path(index, "gatt"),
-                interface: String::from("org.chromium.bluetooth.BluetoothGatt"),
-            },
+            client_proxy: ClientDBusProxy::new(
+                conn.clone(),
+                String::from("org.chromium.bluetooth"),
+                make_object_path(index, "gatt"),
+                String::from("org.chromium.bluetooth.BluetoothGatt"),
+            ),
         }
     }
 }
@@ -739,7 +694,7 @@ impl IBluetoothGatt for BluetoothGattDBus {
 #[allow(dead_code)]
 struct IBluetoothGattCallbackDBus {}
 
-impl btstack::RPCProxy for IBluetoothGattCallbackDBus {
+impl RPCProxy for IBluetoothGattCallbackDBus {
     // Placeholder implementations just to satisfy impl RPCProxy requirements.
     fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
         0
@@ -826,12 +781,12 @@ pub(crate) struct SuspendDBus {
 impl SuspendDBus {
     pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> SuspendDBus {
         SuspendDBus {
-            client_proxy: ClientDBusProxy {
-                conn: conn.clone(),
-                bus_name: String::from("org.chromium.bluetooth"),
-                objpath: make_object_path(index, "suspend"),
-                interface: String::from("org.chromium.bluetooth.Suspend"),
-            },
+            client_proxy: ClientDBusProxy::new(
+                conn.clone(),
+                String::from("org.chromium.bluetooth"),
+                make_object_path(index, "suspend"),
+                String::from("org.chromium.bluetooth.Suspend"),
+            ),
         }
     }
 }
@@ -862,7 +817,7 @@ impl ISuspend for SuspendDBus {
 #[allow(dead_code)]
 struct ISuspendCallbackDBus {}
 
-impl btstack::RPCProxy for ISuspendCallbackDBus {
+impl RPCProxy for ISuspendCallbackDBus {
     // Placeholder implementations just to satisfy impl RPCProxy requirements.
     fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
         0

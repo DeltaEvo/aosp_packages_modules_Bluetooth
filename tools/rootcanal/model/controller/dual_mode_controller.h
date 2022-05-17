@@ -29,7 +29,9 @@
 #include "link_layer_controller.h"
 #include "model/devices/device.h"
 #include "model/setup/async_manager.h"
+#ifndef ROOTCANAL_LMP
 #include "security_manager.h"
+#endif /* !ROOTCANAL_LMP */
 
 namespace rootcanal {
 
@@ -108,6 +110,9 @@ class DualModeController : public Device {
 
   // Set the device's address.
   void SetAddress(Address address) override;
+
+  // Get the device's address.
+  const Address& GetAddress();
 
   // Controller commands. For error codes, see the Bluetooth Core Specification,
   // Version 4.2, Volume 2, Part D (page 370).
@@ -586,6 +591,9 @@ class DualModeController : public Device {
   void LeSetupIsoDataPath(CommandView packet_view);
   void LeRemoveIsoDataPath(CommandView packet_view);
 
+  // 7.8.115
+  void LeSetHostFeature(CommandView packet_view);
+
   // Vendor-specific Commands
 
   void LeVendorSleepMode(CommandView args);
@@ -639,7 +647,9 @@ class DualModeController : public Device {
 
   bluetooth::hci::LoopbackMode loopback_mode_;
 
+#ifndef ROOTCANAL_LMP
   SecurityManager security_manager_;
+#endif /* ROOTCANAL_LMP */
 
   DualModeController(const DualModeController& cmdPckt) = delete;
   DualModeController& operator=(const DualModeController& cmdPckt) = delete;
