@@ -1081,6 +1081,9 @@ bool LeAudioDeviceGroup::ConfigureAses(
       /* Skip if device has ASE configured in this direction already */
       if (device->GetFirstActiveAseByDirection(ent.direction)) continue;
 
+      /* For the moment, we configure only connected devices. */
+      if (device->conn_id_ == GATT_INVALID_CONN_ID) continue;
+
       if (!device->ConfigureAses(ent, context_type, &active_ase_num,
                                  group_snk_audio_locations,
                                  group_src_audio_locations, reuse_cis_id))
@@ -1160,6 +1163,14 @@ LeAudioDeviceGroup::GetCodecConfigurationByDirection(
   if (group_config.IsInvalid()) return std::nullopt;
 
   return group_config;
+}
+
+bool LeAudioDeviceGroup::IsContextSupported(
+    types::LeAudioContextType group_context_type) {
+  auto iter = active_context_to_configuration_map.find(group_context_type);
+  if (iter == active_context_to_configuration_map.end()) return false;
+
+  return active_context_to_configuration_map[group_context_type] != nullptr;
 }
 
 bool LeAudioDeviceGroup::IsMetadataChanged(
