@@ -21,6 +21,7 @@
 #ifndef A2DP_VENDOR_H
 #define A2DP_VENDOR_H
 
+#include <dlfcn.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -29,6 +30,12 @@
 
 #include "a2dp_codec_api.h"
 #include "stack/include/bt_hdr.h"
+
+typedef enum {
+  LOAD_SUCCESS,
+  LOAD_ERROR_MISSING_CODEC,
+  LOAD_ERROR_VERSION_MISMATCH,
+} tLOADING_CODEC_STATUS;
 
 /* Offset for A2DP vendor codec */
 #define A2DP_VENDOR_CODEC_START_IDX 3
@@ -214,11 +221,24 @@ bool A2DP_VendorInitCodecConfig(btav_a2dp_codec_index_t codec_index,
 std::string A2DP_VendorCodecInfoString(const uint8_t* p_codec_info);
 
 // Try to dlopen external codec library
-// Will iterate over |lib_paths| to return the first successfully dlopen library
+//
+// |lib_name| is the name of the library to load
 // |friendly_name| is only use for logging purpose
 // Return pointer to the handle if the library is successfully dlopen,
 // nullptr otherwise
-void* A2DP_VendorCodecLoadExternalLib(const std::vector<std::string>& lib_paths,
+void* A2DP_VendorCodecLoadExternalLib(const std::string& lib_name,
                                       const std::string& friendly_name);
+
+#define LOAD_CODEC_SYMBOL(codec_name, handle, error_fn, symbol_name, api_type) \
+  ({                                                                           \
+    void* load_sym = dlsym(handle, symbol_name.c_str());                       \
+    if (load_sym == NULL) {                                                    \
+      LOG_ERROR("Cannot find function '%s' in the '%s' encoder library: %s",   \
+                symbol_name.c_str(), codec_name, dlerror());                   \
+      error_fn();                                                              \
+      return LOAD_ERROR_VERSION_MISMATCH;                                      \
+    }                                                                          \
+    (api_type) load_sym;                                                       \
+  })
 
 #endif  // A2DP_VENDOR_H
