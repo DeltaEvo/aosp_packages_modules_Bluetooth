@@ -78,6 +78,9 @@ class LeAclConnection : public AclConnection {
   // Time Range: 100 ms to 32 s
   uint16_t supervision_timeout_;
 
+  Address local_resolvable_private_address_ = Address::kEmpty;
+  Address peer_resolvable_private_address_ = Address::kEmpty;
+
   virtual void RegisterCallbacks(LeConnectionManagementCallbacks* callbacks, os::Handler* handler);
   virtual void Disconnect(DisconnectReason reason);
 
@@ -85,11 +88,17 @@ class LeAclConnection : public AclConnection {
                                   uint16_t supervision_timeout, uint16_t min_ce_length, uint16_t max_ce_length);
 
   virtual bool ReadRemoteVersionInformation() override;
+  virtual bool LeReadRemoteFeatures();
 
   // TODO implement LeRemoteConnectionParameterRequestReply, LeRemoteConnectionParameterRequestNegativeReply
 
   // Called once before passing the connection to the client
   virtual LeConnectionManagementCallbacks* GetEventCallbacks(std::function<void(uint16_t)> invalidate_callbacks);
+
+ protected:
+  AddressWithType local_address_;
+  AddressWithType remote_address_;
+  Role role_;
 
  private:
   virtual bool check_connection_parameters(
@@ -99,9 +108,6 @@ class LeAclConnection : public AclConnection {
       uint16_t expected_supervision_timeout);
   struct impl;
   struct impl* pimpl_ = nullptr;
-  AddressWithType local_address_;
-  AddressWithType remote_address_;
-  Role role_;
 };
 
 }  // namespace acl_manager
