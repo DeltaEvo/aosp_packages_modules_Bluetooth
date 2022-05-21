@@ -35,6 +35,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.le_audio.LeAudioService;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -71,6 +72,7 @@ public class MediaControlGattServiceTest {
     @Mock private AdapterService mAdapterService;
     @Mock private MediaControlGattService.BluetoothGattServerProxy mMockGattServer;
     @Mock private McpService mMockMcpService;
+    @Mock private LeAudioService mMockLeAudioService;
     @Mock private MediaControlServiceCallbacks mMockMcsCallbacks;
 
     @Captor private ArgumentCaptor<BluetoothGattService> mGattServiceCaptor;
@@ -78,7 +80,6 @@ public class MediaControlGattServiceTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when MCP Server is not enabled", McpService.isEnabled());
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
@@ -93,6 +94,7 @@ public class MediaControlGattServiceTest {
         mMcpService = new MediaControlGattService(mMockMcpService, mMockMcsCallbacks, TEST_CCID);
         mMcpService.setBluetoothGattServerForTesting(mMockGattServer);
         mMcpService.setServiceManagerForTesting(mMockMcpService);
+        mMcpService.setLeAudioServiceForTesting(mMockLeAudioService);
 
         when(mMockMcpService.getDeviceAuthorization(any(BluetoothDevice.class))).thenReturn(
                 BluetoothDevice.ACCESS_ALLOWED);
@@ -100,13 +102,11 @@ public class MediaControlGattServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!McpService.isEnabled()) {
-            return;
-        }
         mMcpService = null;
         reset(mMockGattServer);
         reset(mMockMcpService);
         reset(mMockMcsCallbacks);
+        reset(mMockLeAudioService);
         TestUtils.clearAdapterService(mAdapterService);
     }
 
@@ -827,8 +827,8 @@ public class MediaControlGattServiceTest {
             bb.putInt(value);
         }
 
-        Assert.assertEquals(
-                expectedGattResult, mMcpService.handleMediaControlPointRequest(bb.array()));
+        Assert.assertEquals(expectedGattResult,
+                mMcpService.handleMediaControlPointRequest(mCurrentDevice, bb.array()));
 
         if (expectedGattResult == BluetoothGatt.GATT_SUCCESS) {
             // Verify if callback comes to profile
@@ -933,6 +933,16 @@ public class MediaControlGattServiceTest {
 
         Assert.assertFalse(
                 mMcpService.isOpcodeSupported(Request.Opcodes.PLAY));
+    }
+
+    @Test
+    public void testMediaControlPointeRequest_OpcodePlayCallLeAudioServiceSetActiveDevice() {
+        BluetoothGattService service = initAllFeaturesGattService();
+        prepareConnectedDevice();
+        mMcpService.updateSupportedOpcodesChar(Request.SupportedOpcodes.PLAY, true);
+        verifyMediaControlPointRequest(service, Request.Opcodes.PLAY, null,
+                BluetoothGatt.GATT_SUCCESS, 1);
+        verify(mMockLeAudioService).setActiveDevice(any(BluetoothDevice.class));
     }
 
     @Test
