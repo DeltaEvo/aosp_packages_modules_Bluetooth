@@ -57,6 +57,7 @@ class LeAudioDevice {
    * This is true only during initial phase of first connection. */
   bool first_connection_;
   bool connecting_actively_;
+  bool closing_stream_for_disconnection_;
   uint16_t conn_id_;
   bool encrypted_;
   int group_id_;
@@ -87,6 +88,7 @@ class LeAudioDevice {
         removing_device_(false),
         first_connection_(first_connection),
         connecting_actively_(first_connection),
+        closing_stream_for_disconnection_(false),
         conn_id_(GATT_INVALID_CONN_ID),
         encrypted_(false),
         group_id_(group_id),
@@ -132,7 +134,7 @@ class LeAudioDevice {
                      uint8_t* number_of_already_active_group_ase,
                      types::AudioLocations& group_snk_audio_locations,
                      types::AudioLocations& group_src_audio_locations,
-                     bool reconnect = false);
+                     bool reconnect = false, int ccid = -1);
   void SetSupportedContexts(types::AudioContexts snk_contexts,
                             types::AudioContexts src_contexts);
   types::AudioContexts GetAvailableContexts(void);
@@ -142,8 +144,9 @@ class LeAudioDevice {
   void ActivateConfiguredAses(void);
   void Dump(int fd);
   void DisconnectAcl(void);
-  std::vector<uint8_t> GetMetadata(types::LeAudioContextType context_type);
-  bool IsMetadataChanged(types::LeAudioContextType context_type);
+  std::vector<uint8_t> GetMetadata(types::LeAudioContextType context_type,
+                                   int ccid);
+  bool IsMetadataChanged(types::LeAudioContextType context_type, int ccid);
 
  private:
   types::AudioContexts avail_snk_contexts_;
@@ -228,7 +231,7 @@ class LeAudioDeviceGroup {
   bool IsGroupStreamReady(void);
   bool HaveAllActiveDevicesCisDisc(void);
   uint8_t GetFirstFreeCisId(void);
-  bool Configure(types::LeAudioContextType context_type);
+  bool Configure(types::LeAudioContextType context_type, int ccid = 1);
   bool SetContextType(types::LeAudioContextType context_type);
   types::LeAudioContextType GetContextType(void);
   uint32_t GetSduInterval(uint8_t direction);
@@ -253,7 +256,9 @@ class LeAudioDeviceGroup {
   types::AudioContexts GetActiveContexts(void);
   std::optional<LeAudioCodecConfiguration> GetCodecConfigurationByDirection(
       types::LeAudioContextType group_context_type, uint8_t direction);
-  bool IsMetadataChanged(types::LeAudioContextType group_context_type);
+  bool IsContextSupported(types::LeAudioContextType group_context_type);
+  bool IsMetadataChanged(types::LeAudioContextType group_context_type,
+                         int ccid);
 
   inline types::AseState GetState(void) const { return current_state_; }
   void SetState(types::AseState state) {
@@ -290,7 +295,7 @@ class LeAudioDeviceGroup {
   FindFirstSupportedConfiguration(types::LeAudioContextType context_type);
   bool ConfigureAses(
       const set_configurations::AudioSetConfiguration* audio_set_conf,
-      types::LeAudioContextType context_type);
+      types::LeAudioContextType context_type, int ccid = 1);
   bool IsConfigurationSupported(
       const set_configurations::AudioSetConfiguration* audio_set_configuration,
       types::LeAudioContextType context_type);
