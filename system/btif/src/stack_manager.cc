@@ -76,27 +76,6 @@
 
 // Validate or respond to various conditional compilation flags
 
-#ifdef BLE_PRIVACY_SPT
-// When BLE_PRIVACY_SPT is not used anymore this check and error statement may be removed.
-#warning \
-    "#define BLE_PRIVACY_SPT FALSE preprocessor compilation flag is no longer used"
-#warning \
-    "  To disable LE privacy for a device \
-set 'bluetooth.core.gap.le.privacy.enabled' sysprop to false"
-#if BLE_PRIVACY_SPT == FALSE
-#error "*** Conditional Compilation Directive error"
-#endif
-#endif
-
-#ifdef BLE_LOCAL_PRIVACY_ENABLED
-// When BLE_PRIVACY_SPT is not used anymore this warning statement may be removed.
-#warning \
-    "#define BLE_LOCAL_PRIVACY_ENABLED FALSE preprocessor compilation flag is no longer used"
-#warning \
-    "  To disable LE privacy for a device \
-set 'bluetooth.core.gap.le.privacy.enabled sysprop' to false"
-#endif
-
 #if SDP_RAW_DATA_INCLUDED != TRUE
 // Once SDP_RAW_DATA_INCLUDED is no longer exposed via bt_target.h
 // this check and error statement may be removed.
@@ -307,10 +286,10 @@ static void event_start_up_stack(UNUSED_ATTR void* context) {
 
   LOG_INFO("%s Gd shim module enabled", __func__);
   module_shut_down(get_local_module(GD_IDLE_MODULE));
+  get_btm_client_interface().lifecycle.btm_init();
   module_start_up(get_local_module(GD_SHIM_MODULE));
   module_start_up(get_local_module(BTIF_CONFIG_MODULE));
 
-  get_btm_client_interface().lifecycle.btm_init();
   l2c_init();
   sdp_init();
   gatt_init();
@@ -402,10 +381,10 @@ static void event_shut_down_stack(UNUSED_ATTR void* context) {
   l2c_free();
   sdp_free();
   get_btm_client_interface().lifecycle.btm_ble_free();
-  get_btm_client_interface().lifecycle.btm_free();
 
   LOG_INFO("%s Gd shim module disabled", __func__);
   module_shut_down(get_local_module(GD_SHIM_MODULE));
+  get_btm_client_interface().lifecycle.btm_free();
   module_start_up(get_local_module(GD_IDLE_MODULE));
 
   hack_future = future_new();
