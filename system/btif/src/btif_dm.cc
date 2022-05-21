@@ -124,6 +124,10 @@ const bool enable_address_consolidate = true;  // TODO remove
 
 #define BTIF_DM_MAX_SDP_ATTEMPTS_AFTER_PAIRING 2
 
+#ifndef PROPERTY_CLASS_OF_DEVICE
+#define PROPERTY_CLASS_OF_DEVICE "bluetooth.device.class_of_device"
+#endif
+
 #define NUM_TIMEOUT_RETRIES 5
 #ifndef PROPERTY_DEFAULT_DEVICE_NAME
 #define PROPERTY_DEFAULT_DEVICE_NAME "bluetooth.device.default_name"
@@ -1216,8 +1220,7 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
       /* inquiry result */
       bt_bdname_t bdname;
       uint8_t remote_name_len;
-      uint8_t num_uuids = 0, max_num_uuid = 32;
-      uint8_t uuid_list[32 * Uuid::kNumBytes16];
+      tBTA_SERVICE_MASK services = 0;
 
       p_search_data->inq_res.remt_name_not_required =
           check_eir_remote_name(p_search_data, NULL, NULL);
@@ -1231,15 +1234,18 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
       if (!check_eir_remote_name(p_search_data, bdname.name, &remote_name_len))
         check_cached_remote_name(p_search_data, bdname.name, &remote_name_len);
 
-      /* Check EIR for services */
+      /* Check EIR for remote name and services */
       if (p_search_data->inq_res.p_eir) {
-        BTM_GetEirUuidList(p_search_data->inq_res.p_eir,
-                           p_search_data->inq_res.eir_len, Uuid::kNumBytes16,
-                           &num_uuids, uuid_list, max_num_uuid);
+        BTA_GetEirService(p_search_data->inq_res.p_eir,
+                          p_search_data->inq_res.eir_len, &services);
+        BTIF_TRACE_DEBUG("%s()EIR BTA services = %08X", __func__,
+                         (uint32_t)services);
+        /* TODO:  Get the service list and check to see which uuids we got and
+         * send it back to the client. */
       }
 
       {
-        bt_property_t properties[7];
+        bt_property_t properties[6];
         bt_device_type_t dev_type;
         uint32_t num_properties = 0;
         bt_status_t status;
@@ -1302,21 +1308,6 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
                                    sizeof(bool),
                                    &(p_search_data->inq_res.include_rsi));
         num_properties++;
-
-        /* EIR queried services */
-        std::vector<Uuid> uuid128_list;
-        if (num_uuids > 0) {
-          uint16_t* p_uuid16 = (uint16_t*)uuid_list;
-          for (int i = 0; i < num_uuids; ++i) {
-            Uuid uuid = Uuid::From16Bit(p_uuid16[i]);
-            uuid128_list.push_back(uuid);
-          }
-
-          BTIF_STORAGE_FILL_PROPERTY(
-              &properties[num_properties], BT_PROPERTY_UUIDS,
-              num_uuids * Uuid::kNumBytes128, uuid128_list.data());
-          num_properties++;
-        }
 
         status =
             btif_storage_add_remote_device(&bdaddr, num_properties, properties);
@@ -2190,6 +2181,139 @@ void btif_dm_ssp_reply(const RawAddress bd_addr, bt_ssp_variant_t variant,
 
 /*******************************************************************************
  *
+ * Function         btif_dm_get_local_class_of_device
+ *
+ * Description      Reads the system property configured class of device
+ *
+ * Inputs           A pointer to a DEV_CLASS that you want filled with the
+ *                  current class of device. Size is assumed to be 3.
+ *
+ * Returns          Nothing. device_class will contain the current class of
+ *                  device. If no value is present, or the value is malformed
+ *                  the default "unclassified" value will be used
+ *
+ ******************************************************************************/
+void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
+  /* A class of device is a {SERVICE_CLASS, MAJOR_CLASS, MINOR_CLASS}
+   *
+   * The input is expected to be a string of the following format:
+   * <decimal number>,<decimal number>,<decimal number>
+   *
+   * For example, "90,2,12" (Hex: 0x5A, 0x2, 0xC)
+   *
+   * Notice there is always two commas and no spaces.
+   */
+
+  device_class[0] = 0x00;
+  device_class[1] = BTM_COD_MAJOR_UNCLASSIFIED;
+  device_class[2] = BTM_COD_MINOR_UNCLASSIFIED;
+
+#ifdef OS_ANDROID
+  std::vector<std::optional<std::uint32_t>> local_device_class =
+          android::sysprop::BluetoothProperties::getClassOfDevice();
+  // Error check the inputs. Use the default if problems are found
+  if (local_device_class.size() != 3) {
+    LOG_ERROR("COD malformed, must have unsigned 3 integers.");
+  } else if (!local_device_class[0].has_value()
+      || local_device_class[0].value() > 0xFF) {
+    LOG_ERROR("COD malformed, first value is missing or too large.");
+  } else if (!local_device_class[1].has_value()
+      || local_device_class[1].value() > 0xFF) {
+    LOG_ERROR("COD malformed, second value is missing or too large.");
+  } else if (!local_device_class[2].has_value()
+      || local_device_class[2].value() > 0xFF) {
+    LOG_ERROR("COD malformed, third value is missing or too large.");
+  } else {
+    device_class[0] = (uint8_t) local_device_class[0].value();
+    device_class[1] = (uint8_t) local_device_class[1].value();
+    device_class[2] = (uint8_t) local_device_class[2].value();
+  }
+#else
+  char prop_cod[PROPERTY_VALUE_MAX];
+  osi_property_get(PROPERTY_CLASS_OF_DEVICE, prop_cod, "");
+
+  // If the property is empty, use the default
+  if (prop_cod[0] == '\0') {
+    LOG_ERROR("%s: COD property is empty", __func__);
+    return;
+  }
+
+  // Start reading the contents of the property string. If at any point anything
+  // is malformed, use the default.
+  DEV_CLASS temp_device_class;
+  int i = 0;
+  int j = 0;
+  for (;;) {
+    // Build a string of all the chars until the next comma, null, or end of the
+    // buffer is reached. If any char is not a digit, then return the default.
+    std::string value;
+    while (i < PROPERTY_VALUE_MAX && prop_cod[i] != ',' && prop_cod[i] != '\0') {
+      char c = prop_cod[i++];
+      if (!std::isdigit(c)) {
+        LOG_ERROR("%s: COD malformed, '%c' is a non-digit", __func__, c);
+        return;
+      }
+      value += c;
+    }
+
+    // If we hit the end and it wasn't null terminated then return the default
+    if (i == PROPERTY_VALUE_MAX && prop_cod[PROPERTY_VALUE_MAX - 1] != '\0') {
+      LOG_ERROR("%s: COD malformed, value was truncated", __func__);
+      return;
+    }
+
+    // Each number in the list must be one byte, meaning 0 (0x00) -> 255 (0xFF)
+    if (value.size() > 3 || value.size() == 0) {
+      LOG_ERROR("%s: COD malformed, '%s' must be between [0, 255]", __func__,
+          value.c_str());
+      return;
+    }
+
+    // Grab the value. If it's too large, then return the default
+    uint32_t uint32_val = static_cast<uint32_t>(std::stoul(value.c_str()));
+    if (uint32_val > 0xFF) {
+      LOG_ERROR("%s: COD malformed, '%s' must be between [0, 255]", __func__,
+          value.c_str());
+      return;
+    }
+
+    // Otherwise, it's safe to use
+    temp_device_class[j++] = uint32_val;
+
+    // If we've reached 3 numbers then make sure we're at a null terminator
+    if (j >= 3) {
+      if (prop_cod[i] != '\0') {
+        LOG_ERROR("%s: COD malformed, more than three numbers", __func__);
+        return;
+      }
+      break;
+    }
+
+    // If we're at a null terminator then we're done
+    if (prop_cod[i] == '\0') {
+      break;
+    }
+
+    // Otherwise, skip over the comma
+    ++i;
+  }
+
+  // We must have read exactly 3 numbers
+  if (j == 3) {
+    device_class[0] = temp_device_class[0];
+    device_class[1] = temp_device_class[1];
+    device_class[2] = temp_device_class[2];
+  } else {
+    LOG_ERROR("%s: COD malformed, fewer than three numbers", __func__);
+  }
+#endif
+
+  LOG_DEBUG("%s: Using class of device '0x%x, 0x%x, 0x%x'", __func__,
+      device_class[0], device_class[1], device_class[2]);
+}
+
+/*******************************************************************************
+ *
  * Function         btif_dm_get_adapter_property
  *
  * Description     Queries the BTA for the adapter property
@@ -2223,7 +2347,8 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop) {
     } break;
 
     case BT_PROPERTY_CLASS_OF_DEVICE: {
-      DEV_CLASS dev_class = BTA_DM_COD;
+      DEV_CLASS dev_class;
+      btif_dm_get_local_class_of_device(dev_class);
       memcpy(prop->val, dev_class, sizeof(DEV_CLASS));
       prop->len = sizeof(DEV_CLASS);
     } break;
