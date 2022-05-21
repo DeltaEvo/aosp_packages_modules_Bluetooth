@@ -803,7 +803,9 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
      * of the system, which wants to set to active a particular Le Audio group.
      *
      * Note: getActiveDevice() returns the Lead device for the currently active LE Audio group.
-     * Note: When lead device gets disconnected, there will be new lead device for the group.
+     * Note: When Lead device gets disconnected while Le Audio group is active and has more devices
+     * in the group, then Lead device will not change. If Lead device gets disconnected, for the
+     * Le Audio group which is not active, a new Lead device will be chosen
      *
      * @param groupId The group id.
      * @return group lead device.
@@ -924,6 +926,10 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
      * would have to call {@link #unregisterCallback(Callback)} with
      * the same callback object before registering it again.
      *
+     * <p> The {@link Callback} will be invoked only if there is codec status changed for the
+     * remote device or the device is connected/disconnected in a certain group or the group
+     * status is changed.
+     *
      * @param executor an {@link Executor} to execute given callback
      * @param callback user implementation of the {@link Callback}
      * @throws NullPointerException if a null executor or callback is given
@@ -998,7 +1004,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
         if (DBG) log("unregisterCallback");
 
         synchronized (mCallbackExecutorMap) {
-            if (mCallbackExecutorMap.remove(callback) != null) {
+            if (mCallbackExecutorMap.remove(callback) == null) {
                 throw new IllegalArgumentException("This callback has not been registered");
             }
         }

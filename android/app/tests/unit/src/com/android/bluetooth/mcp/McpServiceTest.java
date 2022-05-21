@@ -63,9 +63,6 @@ public class McpServiceTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when MCP Server is not enabled",
-                mTargetContext.getResources().getBoolean(
-                        R.bool.profile_supported_mcp_server));
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
@@ -84,9 +81,6 @@ public class McpServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mTargetContext.getResources().getBoolean(R.bool.profile_supported_mcp_server)) {
-            return;
-        }
         doReturn(false).when(mAdapterService).isStartedProfile(anyString());
         TestUtils.stopService(mServiceRule, McpService.class);
         mMcpService = McpService.getMcpService();

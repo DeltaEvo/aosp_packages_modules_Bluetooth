@@ -145,7 +145,7 @@ cc_binary {
     target: {
         android: {
             shared_libs: [
-                "android.hardware.bluetooth.audio-V1-ndk",
+                "android.hardware.bluetooth.audio-V2-ndk",
             ],
         },
     },
@@ -193,7 +193,6 @@ cc_test {
         "libchrome",
         "libgmock",
         "liblog",
-        "libutils",
         "libflatbuffers-cpp",
         "libFraunhoferAAC",
         "libg722codec",
@@ -230,7 +229,7 @@ cc_test {
                 "libbluetooth-binder-common",
             ],
             shared_libs: [
-                "android.hardware.bluetooth.audio-V1-ndk",
+                "android.hardware.bluetooth.audio-V2-ndk",
                 "android.system.suspend-V1-ndk",
                 "libbinder",
                 "libvndksupport",
@@ -241,7 +240,7 @@ cc_test {
                 "test/stub_ipc_handler_binder.cc",
             ],
         },
-        linux_glibc: {
+        host_linux: {
             srcs: btserviceLinuxSrc + [
                 // TODO(bcf): Fix this test.
                 //"test/ipc_linux_unittest.cc",

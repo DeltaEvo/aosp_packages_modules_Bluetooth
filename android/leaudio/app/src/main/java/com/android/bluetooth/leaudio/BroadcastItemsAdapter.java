@@ -20,6 +20,7 @@ package com.android.bluetooth.leaudio;
 import android.bluetooth.BluetoothLeBroadcastMetadata;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,12 +35,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.android.bluetooth.leaudio.R;
-
 public class BroadcastItemsAdapter
         extends RecyclerView.Adapter<BroadcastItemsAdapter.BroadcastItemHolder> {
-    private List<BluetoothLeBroadcastMetadata> mBroadcastMetadata = new ArrayList<>();
-    private final Map<Integer /* broadcastId */, Boolean /* isPlaying */> mBroadcastPlayback =
+    private List<BluetoothLeBroadcastMetadata> mBroadcastMetadataList = new ArrayList<>();
+    private final Map<Integer /* broadcastId */, Boolean /* isPlaying */> mBroadcastPlaybackMap =
             new HashMap<>();
     private OnItemClickListener mOnItemClickListener;
 
@@ -57,52 +56,73 @@ public class BroadcastItemsAdapter
 
     @Override
     public void onBindViewHolder(@NonNull BroadcastItemHolder holder, int position) {
-        Integer broadcastId = (Integer) mBroadcastPlayback.keySet().toArray()[position];
-        Boolean isPlaying = mBroadcastPlayback.get(broadcastId);
+        BluetoothLeBroadcastMetadata meta = mBroadcastMetadataList.get(position);
+        Integer broadcastId = meta.getBroadcastId();
+        Boolean isPlaybackStateKnown = mBroadcastPlaybackMap.containsKey(broadcastId);
 
-        // Set card color based on the playback state
-        if (isPlaying) {
-            holder.background
-                    .setCardBackgroundColor(ColorStateList.valueOf(Color.parseColor("#92b141")));
-            holder.mTextViewBroadcastId.setText("ID: " + broadcastId + " ▶️");
+        if (isPlaybackStateKnown) {
+            // Set card color based on the playback state
+            Boolean isPlaying = mBroadcastPlaybackMap.getOrDefault(broadcastId, false);
+            if (isPlaying) {
+                holder.background
+                .setCardBackgroundColor(ColorStateList.valueOf(Color.parseColor("#92b141")));
+                holder.mTextViewBroadcastId.setText("ID: " + broadcastId + " ▶️");
+            } else {
+                holder.background.setCardBackgroundColor(ColorStateList.valueOf(Color.WHITE));
+                holder.mTextViewBroadcastId.setText("ID: " + broadcastId + " ⏸");
+            }
         } else {
             holder.background.setCardBackgroundColor(ColorStateList.valueOf(Color.WHITE));
-            holder.mTextViewBroadcastId.setText("ID: " + broadcastId + " ⏸");
+            holder.mTextViewBroadcastId.setText("ID: " + broadcastId);
         }
 
         // TODO: Add additional informations to the card
-        // BluetoothLeBroadcastMetadata current_item = mBroadcastMetadata.get(position);
     }
 
     @Override
     public int getItemCount() {
-        return mBroadcastPlayback.size();
+        return mBroadcastMetadataList.size();
     }
 
     public void updateBroadcastsMetadata(List<BluetoothLeBroadcastMetadata> broadcasts) {
-        mBroadcastMetadata = broadcasts;
+        mBroadcastMetadataList = broadcasts;
         notifyDataSetChanged();
     }
 
     public void updateBroadcastMetadata(BluetoothLeBroadcastMetadata broadcast) {
-        mBroadcastMetadata.removeIf(bc -> (bc.getBroadcastId() == broadcast.getBroadcastId()));
-        mBroadcastMetadata.add(broadcast);
+        mBroadcastMetadataList.removeIf(bc -> (bc.getBroadcastId() == broadcast.getBroadcastId()));
+        mBroadcastMetadataList.add(broadcast);
         notifyDataSetChanged();
     }
 
     public void addBroadcasts(Integer broadcastId) {
-        if (!mBroadcastPlayback.containsKey(broadcastId))
-            mBroadcastPlayback.put(broadcastId, false);
+        if (!mBroadcastPlaybackMap.containsKey(broadcastId))
+            mBroadcastPlaybackMap.put(broadcastId, false);
     }
 
     public void removeBroadcast(Integer broadcastId) {
-        mBroadcastMetadata.removeIf(bc -> (broadcastId.equals(bc.getBroadcastId())));
-        mBroadcastPlayback.remove(broadcastId);
+        mBroadcastMetadataList.removeIf(bc -> (broadcastId.equals(bc.getBroadcastId())));
+        mBroadcastPlaybackMap.remove(broadcastId);
+        notifyDataSetChanged();
+    }
+
+    public void setBroadcasts(List<BluetoothLeBroadcastMetadata> broadcasts) {
+        mBroadcastMetadataList.clear();
+        mBroadcastMetadataList.addAll(broadcasts);
+
+        for (BluetoothLeBroadcastMetadata b : broadcasts) {
+            int broadcastId = b.getBroadcastId();
+            if (mBroadcastPlaybackMap.containsKey(broadcastId)) {
+                continue;
+            }
+//          mBroadcastPlaybackMap.remove(broadcastId);
+            mBroadcastPlaybackMap.put(broadcastId, false);
+        }
         notifyDataSetChanged();
     }
 
     public void updateBroadcastPlayback(Integer broadcastId, boolean isPlaying) {
-        mBroadcastPlayback.put(broadcastId, isPlaying);
+        mBroadcastPlaybackMap.put(broadcastId, isPlaying);
         notifyDataSetChanged();
     }
 
@@ -125,7 +145,7 @@ public class BroadcastItemsAdapter
 
                 int position = getAdapterPosition();
                 if (position != RecyclerView.NO_POSITION) {
-                    Integer broadcastId = (Integer) mBroadcastPlayback.keySet().toArray()[position];
+                    Integer broadcastId = mBroadcastMetadataList.get(position).getBroadcastId();
                     listener.onItemClick(broadcastId);
                 }
             });

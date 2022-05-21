@@ -45,8 +45,7 @@ namespace le_audio {
 struct codec_manager_impl {
  public:
   codec_manager_impl(
-      const std::vector<btle_audio_codec_config_t>& offloading_preference,
-      const std::vector<AudioSetConfiguration>& adsp_capabilities) {
+      const std::vector<btle_audio_codec_config_t>& offloading_preference) {
     offload_enable_ = osi_property_get_bool(
                           "ro.bluetooth.leaudio_offload.supported", false) &&
                       !osi_property_get_bool(
@@ -71,7 +70,7 @@ struct codec_manager_impl {
                             kIsoDataPathPlatformDefault, {});
     btm_configure_data_path(btm_data_direction::CONTROLLER_TO_HOST,
                             kIsoDataPathPlatformDefault, {});
-    UpdateOffloadCapability(offloading_preference, adsp_capabilities);
+    UpdateOffloadCapability(offloading_preference);
     SetCodecLocation(CodecLocation::ADSP);
   }
   ~codec_manager_impl() {
@@ -85,7 +84,9 @@ struct codec_manager_impl {
   CodecLocation GetCodecLocation(void) const { return codec_location_; }
 
   void UpdateActiveSourceAudioConfig(
-      const le_audio::stream_configuration& stream_conf, uint16_t delay_ms) {
+      const le_audio::stream_configuration& stream_conf, uint16_t delay_ms,
+      std::function<void(const ::le_audio::offload_config& config)>
+          update_receiver) {
     if (stream_conf.sink_streams.empty()) return;
 
     sink_config.stream_map = std::move(stream_conf.sink_streams);
@@ -97,11 +98,13 @@ struct codec_manager_impl {
     sink_config.octets_per_frame = stream_conf.sink_octets_per_codec_frame;
     sink_config.blocks_per_sdu = stream_conf.sink_codec_frames_blocks_per_sdu;
     sink_config.peer_delay_ms = delay_ms;
-    LeAudioClientAudioSource::UpdateAudioConfigToHal(sink_config);
+    update_receiver(sink_config);
   }
 
   void UpdateActiveSinkAudioConfig(
-      const le_audio::stream_configuration& stream_conf, uint16_t delay_ms) {
+      const le_audio::stream_configuration& stream_conf, uint16_t delay_ms,
+      std::function<void(const ::le_audio::offload_config& config)>
+          update_receiver) {
     if (stream_conf.source_streams.empty()) return;
 
     source_config.stream_map = std::move(stream_conf.source_streams);
@@ -114,7 +117,7 @@ struct codec_manager_impl {
     source_config.blocks_per_sdu =
         stream_conf.source_codec_frames_blocks_per_sdu;
     source_config.peer_delay_ms = delay_ms;
-    LeAudioClientAudioSink::UpdateAudioConfigToHal(source_config);
+    update_receiver(source_config);
   }
 
   const AudioSetConfigurations* GetOffloadCodecConfig(
@@ -214,8 +217,7 @@ struct codec_manager_impl {
   }
 
   void UpdateOffloadCapability(
-      const std::vector<btle_audio_codec_config_t>& offloading_preference,
-      const std::vector<AudioSetConfiguration>& adsp_capabilities) {
+      const std::vector<btle_audio_codec_config_t>& offloading_preference) {
     LOG(INFO) << __func__;
     std::unordered_set<uint8_t> offload_preference_set;
 
@@ -223,6 +225,10 @@ struct codec_manager_impl {
       LOG(ERROR) << __func__ << " Audio set configuration provider is not available.";
       return;
     }
+
+    std::vector<::le_audio::set_configurations::AudioSetConfiguration>
+        adsp_capabilities =
+            ::bluetooth::audio::le_audio::get_offload_capabilities();
 
     for (auto codec : offloading_preference) {
       auto it = btle_audio_codec_type_map_.find(codec.codec_type);
@@ -268,12 +274,10 @@ struct CodecManager::impl {
   impl(const CodecManager& codec_manager) : codec_manager_(codec_manager) {}
 
   void Start(
-      const std::vector<btle_audio_codec_config_t>& offloading_preference,
-      const std::vector<set_configurations::AudioSetConfiguration>&
-          adsp_capabilities) {
+      const std::vector<btle_audio_codec_config_t>& offloading_preference) {
     LOG_ASSERT(!codec_manager_impl_);
-    codec_manager_impl_ = std::make_unique<codec_manager_impl>(
-        offloading_preference, adsp_capabilities);
+    codec_manager_impl_ =
+        std::make_unique<codec_manager_impl>(offloading_preference);
   }
 
   void Stop() {
@@ -290,11 +294,8 @@ struct CodecManager::impl {
 CodecManager::CodecManager() : pimpl_(std::make_unique<impl>(*this)) {}
 
 void CodecManager::Start(
-    const std::vector<btle_audio_codec_config_t>& offloading_preference,
-    const std::vector<set_configurations::AudioSetConfiguration>&
-        adsp_capabilities) {
-  if (!pimpl_->IsRunning())
-    pimpl_->Start(offloading_preference, adsp_capabilities);
+    const std::vector<btle_audio_codec_config_t>& offloading_preference) {
+  if (!pimpl_->IsRunning()) pimpl_->Start(offloading_preference);
 }
 
 void CodecManager::Stop() {
@@ -310,17 +311,21 @@ types::CodecLocation CodecManager::GetCodecLocation(void) const {
 }
 
 void CodecManager::UpdateActiveSourceAudioConfig(
-    const stream_configuration& stream_conf, uint16_t delay_ms) {
+    const stream_configuration& stream_conf, uint16_t delay_ms,
+    std::function<void(const ::le_audio::offload_config& config)>
+        update_receiver) {
   if (pimpl_->IsRunning())
-    pimpl_->codec_manager_impl_->UpdateActiveSourceAudioConfig(stream_conf,
-                                                               delay_ms);
+    pimpl_->codec_manager_impl_->UpdateActiveSourceAudioConfig(
+        stream_conf, delay_ms, update_receiver);
 }
 
 void CodecManager::UpdateActiveSinkAudioConfig(
-    const stream_configuration& stream_conf, uint16_t delay_ms) {
+    const stream_configuration& stream_conf, uint16_t delay_ms,
+    std::function<void(const ::le_audio::offload_config& config)>
+        update_receiver) {
   if (pimpl_->IsRunning())
-    pimpl_->codec_manager_impl_->UpdateActiveSinkAudioConfig(stream_conf,
-                                                             delay_ms);
+    pimpl_->codec_manager_impl_->UpdateActiveSinkAudioConfig(
+        stream_conf, delay_ms, update_receiver);
 }
 
 const AudioSetConfigurations* CodecManager::GetOffloadCodecConfig(

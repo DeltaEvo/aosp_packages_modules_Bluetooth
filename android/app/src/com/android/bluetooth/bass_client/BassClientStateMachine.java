@@ -56,6 +56,8 @@
  */
 package com.android.bluetooth.bass_client;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -63,9 +65,13 @@ import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
+import android.bluetooth.BluetoothLeAudioCodecConfigMetadata;
 import android.bluetooth.BluetoothLeAudioContentMetadata;
+import android.bluetooth.BluetoothLeBroadcastAssistant;
+import android.bluetooth.BluetoothLeBroadcastChannel;
 import android.bluetooth.BluetoothLeBroadcastMetadata;
 import android.bluetooth.BluetoothLeBroadcastReceiveState;
+import android.bluetooth.BluetoothLeBroadcastSubgroup;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.le.PeriodicAdvertisingCallback;
@@ -73,12 +79,15 @@ import android.bluetooth.le.PeriodicAdvertisingManager;
 import android.bluetooth.le.PeriodicAdvertisingReport;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
+import android.content.Intent;
+import android.os.Binder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelUuid;
 import android.provider.DeviceConfig;
 import android.util.Log;
 
+import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.internal.annotations.VisibleForTesting;
@@ -100,7 +109,8 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.stream.IntStream;
 
-class BassClientStateMachine extends StateMachine {
+@VisibleForTesting
+public class BassClientStateMachine extends StateMachine {
     private static final String TAG = "BassClientStateMachine";
     private static final byte[] REMOTE_SCAN_STOP = {00};
     private static final byte[] REMOTE_SCAN_START = {01};
@@ -131,6 +141,7 @@ class BassClientStateMachine extends StateMachine {
     private final Map<Integer, BluetoothLeBroadcastReceiveState>
             mBluetoothLeBroadcastReceiveStates =
             new HashMap<Integer, BluetoothLeBroadcastReceiveState>();
+    private final Map<Integer, BluetoothLeBroadcastMetadata> mCurrentMetadata = new HashMap();
     private final Disconnected mDisconnected = new Disconnected();
     private final Connected mConnected = new Connected();
     private final Connecting mConnecting = new Connecting();
@@ -185,12 +196,14 @@ class BassClientStateMachine extends StateMachine {
         if (mBluetoothAdapter != null) {
             mPeriodicAdvManager = mBluetoothAdapter.getPeriodicAdvertisingManager();
         }
+        long token = Binder.clearCallingIdentity();
         mIsAllowedList = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
                 "persist.vendor.service.bt.wl", true);
         mDefNoPAS = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
                 "persist.vendor.service.bt.defNoPAS", false);
         mForceSB = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
                 "persist.vendor.service.bt.forceSB", false);
+        Binder.restoreCallingIdentity(token);
     }
 
     static BassClientStateMachine make(BluetoothDevice device,
@@ -199,6 +212,16 @@ class BassClientStateMachine extends StateMachine {
         BassClientStateMachine BassclientSm = new BassClientStateMachine(device, svc, looper);
         BassclientSm.start();
         return BassclientSm;
+    }
+
+    static void destroy(BassClientStateMachine stateMachine) {
+        Log.i(TAG, "destroy");
+        if (stateMachine == null) {
+            Log.w(TAG, "destroy(), stateMachine is null");
+            return;
+        }
+        stateMachine.doQuit();
+        stateMachine.cleanup();
     }
 
     public void doQuit() {
@@ -219,6 +242,24 @@ class BassClientStateMachine extends StateMachine {
         mPendingOperation = -1;
         mPendingSourceId = -1;
         mPendingMetadata = null;
+        mCurrentMetadata.clear();
+    }
+
+    Boolean hasPendingSourceOperation() {
+        return mPendingMetadata != null;
+    }
+
+    BluetoothLeBroadcastMetadata getCurrentBroadcastMetadata(Integer sourceId) {
+        return mCurrentMetadata.getOrDefault(sourceId, null);
+    }
+
+    private void setCurrentBroadcastMetadata(Integer sourceId,
+            BluetoothLeBroadcastMetadata metadata) {
+        if (metadata != null) {
+            mCurrentMetadata.put(sourceId, metadata);
+        } else {
+            mCurrentMetadata.remove(sourceId);
+        }
     }
 
     BluetoothLeBroadcastReceiveState getBroadcastReceiveStateForSourceDevice(
@@ -376,6 +417,40 @@ class BassClientStateMachine extends StateMachine {
         mNoStopScanOffload = false;
     }
 
+    private BluetoothLeBroadcastMetadata getBroadcastMetadataFromBaseData(BaseData baseData,
+            BluetoothDevice device) {
+        BluetoothLeBroadcastMetadata.Builder metaData =
+                new BluetoothLeBroadcastMetadata.Builder();
+        int index = 0;
+        for (BaseData.BaseInformation baseLevel2 : baseData.getLevelTwo()) {
+            BluetoothLeBroadcastSubgroup.Builder subGroup =
+                    new BluetoothLeBroadcastSubgroup.Builder();
+            for (int j = 0; j < baseLevel2.numSubGroups; j ++) {
+                BaseData.BaseInformation baseLevel3 =
+                        baseData.getLevelThree().get(index++);
+                BluetoothLeBroadcastChannel.Builder channel =
+                        new BluetoothLeBroadcastChannel.Builder();
+                channel.setChannelIndex(baseLevel3.index);
+                channel.setCodecMetadata(BluetoothLeAudioCodecConfigMetadata.
+                        fromRawBytes(baseLevel3.codecConfigInfo));
+                channel.setSelected(false);
+                subGroup.addChannel(channel.build());
+            }
+            subGroup.setCodecId((long)(baseLevel2.codecId[4] << 32
+                    | baseLevel2.codecId[3] << 24
+                    | baseLevel2.codecId[2] << 16
+                    | baseLevel2.codecId[1] << 8
+                    | baseLevel2.codecId[0]));
+            subGroup.setCodecSpecificConfig(BluetoothLeAudioCodecConfigMetadata.
+                    fromRawBytes(baseLevel2.codecConfigInfo));
+            subGroup.setContentMetadata(BluetoothLeAudioContentMetadata.
+                    fromRawBytes(baseLevel2.metaData));
+            metaData.addSubgroup(subGroup.build());
+        }
+        metaData.setSourceDevice(device, device.getAddressType());
+        return metaData.build();
+    }
+
     /** Internal periodc Advertising manager callback */
     private PeriodicAdvertisingCallback mPeriodicAdvCallback =
             new PeriodicAdvertisingCallback() {
@@ -421,6 +496,13 @@ class BassClientStateMachine extends StateMachine {
                     // Parse the BIS indices from report's service data
                     if (mFirstTimeBisDiscovery) {
                         parseScanRecord(report.getSyncHandle(), report.getData());
+                        BaseData baseData = mService.getBase(report.getSyncHandle());
+                        if (baseData != null) {
+                            BluetoothLeBroadcastMetadata metaData =
+                                    getBroadcastMetadataFromBaseData(baseData,
+                                            mService.getDeviceForSyncHandle(report.getSyncHandle()));
+                            mService.getCallbacks().notifySourceFound(metaData);
+                        }
                         mFirstTimeBisDiscovery = false;
                     }
                 }
@@ -510,13 +592,15 @@ class BassClientStateMachine extends StateMachine {
         }
         log("processBroadcastReceiverState: receiverState length: " + receiverState.length);
 
+        BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();
         BluetoothLeBroadcastReceiveState recvState = null;
         if (receiverState.length == 0
                 || isEmpty(Arrays.copyOfRange(receiverState, 1, receiverState.length - 1))) {
+            String emptyBluetoothDevice = "00:00:00:00:00:00";
             if (mPendingOperation == REMOVE_BCAST_SOURCE) {
                 recvState = new BluetoothLeBroadcastReceiveState(mPendingSourceId,
-                        BluetoothDevice.ADDRESS_TYPE_UNKNOWN, // sourceAddressType
-                        null,   // sourceDevice
+                        BluetoothDevice.ADDRESS_TYPE_PUBLIC, // sourceAddressType
+                        btAdapter.getRemoteDevice(emptyBluetoothDevice),  // sourceDevice
                         0,  // sourceAdvertisingSid
                         0,  // broadcastId
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE, // paSyncState
@@ -524,8 +608,8 @@ class BassClientStateMachine extends StateMachine {
                         BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null,   // badCode
                         0,  // numSubgroups
-                        null,   // bisSyncState
-                        null    // subgroupMetadata
+                        Arrays.asList(new Long[0]),   // bisSyncState
+                        Arrays.asList(new BluetoothLeAudioContentMetadata[0])    // subgroupMetadata
                 );
             } else if (receiverState.length == 0) {
                 if (mBluetoothLeBroadcastReceiveStates != null) {
@@ -537,8 +621,8 @@ class BassClientStateMachine extends StateMachine {
                 }
                 mNextSourceId++;
                 recvState = new BluetoothLeBroadcastReceiveState(mNextSourceId,
-                        BluetoothDevice.ADDRESS_TYPE_UNKNOWN, // sourceAddressType
-                        null,   // sourceDevice
+                        BluetoothDevice.ADDRESS_TYPE_PUBLIC, // sourceAddressType
+                        btAdapter.getRemoteDevice(emptyBluetoothDevice),   // sourceDevice
                         0,  // sourceAdvertisingSid
                         0,  // broadcastId
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE, // paSyncState
@@ -546,8 +630,8 @@ class BassClientStateMachine extends StateMachine {
                         BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null,   // badCode
                         0,  // numSubgroups
-                        null,   // bisSyncState
-                        null    // subgroupMetadata
+                        Arrays.asList(new Long[0]),   // bisSyncState
+                        Arrays.asList(new BluetoothLeAudioContentMetadata[0])    // subgroupMetadata
                 );
             }
         } else {
@@ -600,7 +684,6 @@ class BassClientStateMachine extends StateMachine {
                     0,
                     mBroadcastSourceIdLength);
             int broadcastId = BassUtils.parseBroadcastId(broadcastIdBytes);
-            BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();
             byte[] sourceAddress = new byte[BassConstants.BCAST_RCVR_STATE_SRC_ADDR_SIZE];
             System.arraycopy(
                     receiverState,
@@ -658,27 +741,30 @@ class BassClientStateMachine extends StateMachine {
             log("old sourceInfo: " + oldRecvState);
             log("new sourceInfo: " + recvState);
             mBluetoothLeBroadcastReceiveStates.replace(characteristic.getInstanceId(), recvState);
-            if (oldRecvState.getSourceDevice() == null) {
+            String emptyBluetoothDevice = "00:00:00:00:00:00";
+            if (oldRecvState.getSourceDevice() == null
+                    || oldRecvState.getSourceDevice().getAddress().equals(emptyBluetoothDevice)) {
                 log("New Source Addition");
                 mService.getCallbacks().notifySourceAdded(mDevice,
                         recvState.getSourceId(), BluetoothStatusCodes.REASON_LOCAL_APP_REQUEST);
                 if (mPendingMetadata != null) {
-                    mService.updateSourceInternal(recvState.getSourceId(), mPendingMetadata);
+                    setCurrentBroadcastMetadata(recvState.getSourceId(), mPendingMetadata);
                 }
                 checkAndUpdateBroadcastCode(recvState);
                 processPASyncState(recvState);
             } else {
-                if (recvState.getSourceDevice() == null) {
+                if (recvState.getSourceDevice() == null
+                        || recvState.getSourceDevice().getAddress().equals(emptyBluetoothDevice)) {
                     BluetoothDevice removedDevice = oldRecvState.getSourceDevice();
                     log("sourceInfo removal" + removedDevice);
                     cancelActiveSync(removedDevice);
-                    mService.updateSourceInternal(oldRecvState.getSourceId(), null);
+                    setCurrentBroadcastMetadata(oldRecvState.getSourceId(), null);
                     mService.getCallbacks().notifySourceRemoved(mDevice,
                             oldRecvState.getSourceId(),
                             BluetoothStatusCodes.REASON_LOCAL_APP_REQUEST);
                 } else {
                     log("update to an existing recvState");
-                    mService.updateSourceInternal(recvState.getSourceId(), mPendingMetadata);
+                    setCurrentBroadcastMetadata(recvState.getSourceId(), mPendingMetadata);
                     mService.getCallbacks().notifySourceModified(mDevice,
                             recvState.getSourceId(), BluetoothStatusCodes.REASON_LOCAL_APP_REQUEST);
                     checkAndUpdateBroadcastCode(recvState);
@@ -897,6 +983,7 @@ class BassClientStateMachine extends StateMachine {
         }
         mPendingOperation = -1;
         mPendingMetadata = null;
+        mCurrentMetadata.clear();
     }
 
     @VisibleForTesting
@@ -913,6 +1000,16 @@ class BassClientStateMachine extends StateMachine {
             } else {
                 broadcastConnectionState(
                         mDevice, mLastConnectionState, BluetoothProfile.STATE_DISCONNECTED);
+                if (mLastConnectionState != BluetoothProfile.STATE_DISCONNECTED) {
+                    // Reconnect in background if not disallowed by the service
+                    if (mService.okToConnect(mDevice)) {
+                        mBluetoothGatt = mDevice.connectGatt(mService, true,
+                                mGattCallback, BluetoothDevice.TRANSPORT_LE,
+                                (BluetoothDevice.PHY_LE_1M_MASK
+                                        | BluetoothDevice.PHY_LE_2M_MASK
+                                        | BluetoothDevice.PHY_LE_CODED_MASK), null);
+                    }
+                }
             }
         }
 
@@ -949,7 +1046,15 @@ class BassClientStateMachine extends StateMachine {
                     }
                     break;
                 case DISCONNECT:
-                    Log.w(TAG, "Disconnected: DISCONNECT ignored: " + mDevice);
+                    // Disconnect if there's an ongoing background connection
+                    if (mBluetoothGatt != null) {
+                        log("Cancelling the background connection to " + mDevice);
+                        mBluetoothGatt.disconnect();
+                        mBluetoothGatt.close();
+                        mBluetoothGatt = null;
+                    } else {
+                        Log.d(TAG, "Disconnected: DISCONNECT ignored: " + mDevice);
+                    }
                     break;
                 case CONNECTION_STATE_CHANGED:
                     int state = (int) message.obj;
@@ -1227,8 +1332,8 @@ class BassClientStateMachine extends StateMachine {
         res[1] = (byte) recvState.getSourceId();
         log("convertRecvStateToSetBroadcastCodeByteArray: Source device : "
                 + recvState.getSourceDevice());
-        BluetoothLeBroadcastMetadata metaData = mService.getSourceInternal(
-                recvState.getSourceId());
+        BluetoothLeBroadcastMetadata metaData =
+                getCurrentBroadcastMetadata(recvState.getSourceId());
         if (metaData == null) {
             Log.e(TAG, "Fail to find broadcast source, sourceId = "
                     + recvState.getSourceId());
@@ -1288,7 +1393,7 @@ class BassClientStateMachine extends StateMachine {
                     + messageWhatToString(getCurrentMessage().what));
             removeDeferredMessages(CONNECT);
             if (mLastConnectionState == BluetoothProfile.STATE_CONNECTED) {
-                log("CONNECTED->CONNTECTED: Ignore");
+                log("CONNECTED->CONNECTED: Ignore");
             } else {
                 broadcastConnectionState(mDevice, mLastConnectionState,
                         BluetoothProfile.STATE_CONNECTED);
@@ -1685,9 +1790,17 @@ class BassClientStateMachine extends StateMachine {
         log("broadcastConnectionState " + device + ": " + fromState + "->" + toState);
         if (fromState == BluetoothProfile.STATE_CONNECTED
                 && toState == BluetoothProfile.STATE_CONNECTED) {
-            log("CONNECTED->CONNTECTED: Ignore");
+            log("CONNECTED->CONNECTED: Ignore");
             return;
         }
+
+        Intent intent = new Intent(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
+        intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, fromState);
+        intent.putExtra(BluetoothProfile.EXTRA_STATE, toState);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mDevice);
+        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
+                    | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        mService.sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
     }
 
     int getConnectionState() {

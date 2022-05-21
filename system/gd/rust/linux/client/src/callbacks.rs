@@ -1,6 +1,7 @@
 use crate::dbus_iface::{
     export_bluetooth_callback_dbus_obj, export_bluetooth_connection_callback_dbus_obj,
     export_bluetooth_gatt_callback_dbus_obj, export_bluetooth_manager_callback_dbus_obj,
+    export_suspend_callback_dbus_obj,
 };
 use crate::ClientContext;
 use crate::{console_yellow, print_info};
@@ -10,6 +11,7 @@ use btstack::bluetooth::{
     BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
 };
 use btstack::bluetooth_gatt::{BluetoothGattService, IBluetoothGattCallback, LePhy};
+use btstack::suspend::ISuspendCallback;
 use btstack::RPCProxy;
 use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
@@ -104,6 +106,14 @@ impl IBluetoothCallback for BtCallback {
         self.context.lock().unwrap().adapter_address = Some(addr);
     }
 
+    fn on_name_changed(&self, name: String) {
+        print_info!("Name changed to {}", &name);
+    }
+
+    fn on_discoverable_changed(&self, discoverable: bool) {
+        print_info!("Discoverable changed to {}", &discoverable);
+    }
+
     fn on_device_found(&self, remote_device: BluetoothDevice) {
         self.context
             .lock()
@@ -115,12 +125,16 @@ impl IBluetoothCallback for BtCallback {
         print_info!("Found device: {:?}", remote_device);
     }
 
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {
+        match self.context.lock().unwrap().found_devices.remove(&remote_device.address) {
+            Some(_) => print_info!("Removed device: {:?}", remote_device),
+            None => (),
+        };
+    }
+
     fn on_discovering_changed(&self, discovering: bool) {
         self.context.lock().unwrap().discovering_state = discovering;
 
-        if discovering {
-            self.context.lock().unwrap().found_devices.clear();
-        }
         print_info!("Discovering: {}", discovering);
     }
 
@@ -443,6 +457,56 @@ impl RPCProxy for BtGattCallback {
     fn export_for_rpc(self: Box<Self>) {
         let cr = self.dbus_crossroads.clone();
         export_bluetooth_gatt_callback_dbus_obj(
+            self.get_object_id(),
+            self.dbus_connection.clone(),
+            &mut cr.lock().unwrap(),
+            Arc::new(Mutex::new(self)),
+            Arc::new(Mutex::new(DisconnectWatcher::new())),
+        );
+    }
+}
+
+/// Callback container for suspend interface callbacks.
+pub(crate) struct SuspendCallback {
+    objpath: String,
+
+    dbus_connection: Arc<SyncConnection>,
+    dbus_crossroads: Arc<Mutex<Crossroads>>,
+}
+
+impl SuspendCallback {
+    pub(crate) fn new(
+        objpath: String,
+        dbus_connection: Arc<SyncConnection>,
+        dbus_crossroads: Arc<Mutex<Crossroads>>,
+    ) -> Self {
+        Self { objpath, dbus_connection, dbus_crossroads }
+    }
+}
+
+impl ISuspendCallback for SuspendCallback {
+    // TODO(b/224606285): Implement suspend utils in btclient.
+    fn on_callback_registered(&self, _callback_id: u32) {}
+    fn on_suspend_ready(&self, _suspend_id: u32) {}
+    fn on_resumed(&self, _suspend_id: u32) {}
+}
+
+impl RPCProxy for SuspendCallback {
+    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
+        0
+    }
+
+    fn get_object_id(&self) -> String {
+        self.objpath.clone()
+    }
+
+    fn unregister(&mut self, _id: u32) -> bool {
+        false
+    }
+
+    fn export_for_rpc(self: Box<Self>) {
+        let cr = self.dbus_crossroads.clone();
+        export_suspend_callback_dbus_obj(
             self.get_object_id(),
             self.dbus_connection.clone(),
             &mut cr.lock().unwrap(),

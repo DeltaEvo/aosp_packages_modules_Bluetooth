@@ -38,17 +38,6 @@ constexpr uint16_t kLeMaximumDataLength = 64;
 constexpr uint16_t kLeMaximumDataTime = 0x148;
 
 // Device methods.
-void DualModeController::Initialize(const std::vector<std::string>& args) {
-  if (args.size() < 2) return;
-
-  Address addr{};
-  if (Address::FromString(args[1], addr)) {
-    properties_.SetAddress(addr);
-  } else {
-    LOG_ALWAYS_FATAL("Invalid address: %s", args[1].c_str());
-  }
-};
-
 std::string DualModeController::GetTypeString() const {
   return "Simulated Bluetooth Controller";
 }
@@ -210,6 +199,7 @@ DualModeController::DualModeController(const std::string& properties_filename,
   SET_SUPPORTED(DELETE_STORED_LINK_KEY, DeleteStoredLinkKey);
   SET_SUPPORTED(REMOTE_NAME_REQUEST, RemoteNameRequest);
   SET_SUPPORTED(LE_SET_EVENT_MASK, LeSetEventMask);
+  SET_SUPPORTED(LE_SET_HOST_FEATURE, LeSetHostFeature);
   SET_SUPPORTED(LE_READ_BUFFER_SIZE_V1, LeReadBufferSize);
   SET_SUPPORTED(LE_READ_BUFFER_SIZE_V2, LeReadBufferSizeV2);
   SET_SUPPORTED(LE_READ_LOCAL_SUPPORTED_FEATURES, LeReadLocalSupportedFeatures);
@@ -227,11 +217,12 @@ DualModeController::DualModeController(const std::string& properties_filename,
   SET_SUPPORTED(CREATE_CONNECTION_CANCEL, CreateConnectionCancel);
   SET_SUPPORTED(DISCONNECT, Disconnect);
   SET_SUPPORTED(LE_CREATE_CONNECTION_CANCEL, LeConnectionCancel);
-  SET_SUPPORTED(LE_READ_CONNECT_LIST_SIZE, LeReadConnectListSize);
-  SET_SUPPORTED(LE_CLEAR_CONNECT_LIST, LeClearConnectList);
-  SET_SUPPORTED(LE_ADD_DEVICE_TO_CONNECT_LIST, LeAddDeviceToConnectList);
-  SET_SUPPORTED(LE_REMOVE_DEVICE_FROM_CONNECT_LIST,
-                LeRemoveDeviceFromConnectList);
+  SET_SUPPORTED(LE_READ_FILTER_ACCEPT_LIST_SIZE, LeReadFilterAcceptListSize);
+  SET_SUPPORTED(LE_CLEAR_FILTER_ACCEPT_LIST, LeClearFilterAcceptList);
+  SET_SUPPORTED(LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST,
+                LeAddDeviceToFilterAcceptList);
+  SET_SUPPORTED(LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST,
+                LeRemoveDeviceFromFilterAcceptList);
   SET_SUPPORTED(LE_ENCRYPT, LeEncrypt);
   SET_SUPPORTED(LE_RAND, LeRand);
   SET_SUPPORTED(LE_READ_SUPPORTED_STATES, LeReadSupportedStates);
@@ -1608,6 +1599,20 @@ void DualModeController::LeSetEventMask(CommandView command) {
       kNumCommandPackets, ErrorCode::SUCCESS));
 }
 
+void DualModeController::LeSetHostFeature(CommandView command) {
+  auto command_view = gd_hci::LeSetHostFeatureView::Create(command);
+  ASSERT(command_view.IsValid());
+  // TODO: if the controller has active connections, return COMMAND_DISALLOED
+  ErrorCode error_code =
+      properties_.SetLeHostFeature(
+          static_cast<uint8_t>(command_view.GetBitNumber()),
+          static_cast<uint8_t>(command_view.GetBitValue()))
+          ? ErrorCode::SUCCESS
+          : ErrorCode::UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE;
+  send_event_(bluetooth::hci::LeSetHostFeatureCompleteBuilder::Create(
+      kNumCommandPackets, error_code));
+}
+
 void DualModeController::LeReadBufferSize(CommandView command) {
   auto command_view = gd_hci::LeReadBufferSizeV1View::Create(command);
   ASSERT(command_view.IsValid());
@@ -1662,6 +1667,11 @@ void DualModeController::LeSetResovalablePrivateAddressTimeout(
 void DualModeController::LeReadLocalSupportedFeatures(CommandView command) {
   auto command_view = gd_hci::LeReadLocalSupportedFeaturesView::Create(command);
   ASSERT(command_view.IsValid());
+  LOG_INFO(
+      "%s | LeReadLocalSupportedFeatures (%016llx)",
+      properties_.GetAddress().ToString().c_str(),
+      static_cast<unsigned long long>(properties_.GetLeSupportedFeatures()));
+
   send_event_(
       bluetooth::hci::LeReadLocalSupportedFeaturesCompleteBuilder::Create(
           kNumCommandPackets, ErrorCode::SUCCESS,
@@ -1909,28 +1919,28 @@ void DualModeController::LeConnectionCancel(CommandView command) {
       static_cast<bluetooth::hci::ClockAccuracy>(0x00)));
 }
 
-void DualModeController::LeReadConnectListSize(CommandView command) {
-  auto command_view = gd_hci::LeReadConnectListSizeView::Create(
+void DualModeController::LeReadFilterAcceptListSize(CommandView command) {
+  auto command_view = gd_hci::LeReadFilterAcceptListSizeView::Create(
       gd_hci::LeConnectionManagementCommandView::Create(
           gd_hci::AclCommandView::Create(command)));
   ASSERT(command_view.IsValid());
-  send_event_(bluetooth::hci::LeReadConnectListSizeCompleteBuilder::Create(
+  send_event_(bluetooth::hci::LeReadFilterAcceptListSizeCompleteBuilder::Create(
       kNumCommandPackets, ErrorCode::SUCCESS,
-      properties_.GetLeConnectListSize()));
+      properties_.GetLeFilterAcceptListSize()));
 }
 
-void DualModeController::LeClearConnectList(CommandView command) {
-  auto command_view = gd_hci::LeClearConnectListView::Create(
+void DualModeController::LeClearFilterAcceptList(CommandView command) {
+  auto command_view = gd_hci::LeClearFilterAcceptListView::Create(
       gd_hci::LeConnectionManagementCommandView::Create(
           gd_hci::AclCommandView::Create(command)));
   ASSERT(command_view.IsValid());
-  link_layer_controller_.LeConnectListClear();
-  send_event_(bluetooth::hci::LeClearConnectListCompleteBuilder::Create(
+  link_layer_controller_.LeFilterAcceptListClear();
+  send_event_(bluetooth::hci::LeClearFilterAcceptListCompleteBuilder::Create(
       kNumCommandPackets, ErrorCode::SUCCESS));
 }
 
-void DualModeController::LeAddDeviceToConnectList(CommandView command) {
-  auto command_view = gd_hci::LeAddDeviceToConnectListView::Create(
+void DualModeController::LeAddDeviceToFilterAcceptList(CommandView command) {
+  auto command_view = gd_hci::LeAddDeviceToFilterAcceptListView::Create(
       gd_hci::LeConnectionManagementCommandView::Create(
           gd_hci::AclCommandView::Create(command)));
   ASSERT(command_view.IsValid());
@@ -1938,22 +1948,24 @@ void DualModeController::LeAddDeviceToConnectList(CommandView command) {
   uint8_t addr_type = static_cast<uint8_t>(command_view.GetAddressType());
   Address address = command_view.GetAddress();
   ErrorCode result =
-      link_layer_controller_.LeConnectListAddDevice(address, addr_type);
-  send_event_(bluetooth::hci::LeAddDeviceToConnectListCompleteBuilder::Create(
-      kNumCommandPackets, result));
+      link_layer_controller_.LeFilterAcceptListAddDevice(address, addr_type);
+  send_event_(
+      bluetooth::hci::LeAddDeviceToFilterAcceptListCompleteBuilder::Create(
+          kNumCommandPackets, result));
 }
 
-void DualModeController::LeRemoveDeviceFromConnectList(CommandView command) {
-  auto command_view = gd_hci::LeRemoveDeviceFromConnectListView::Create(
+void DualModeController::LeRemoveDeviceFromFilterAcceptList(
+    CommandView command) {
+  auto command_view = gd_hci::LeRemoveDeviceFromFilterAcceptListView::Create(
       gd_hci::LeConnectionManagementCommandView::Create(
           gd_hci::AclCommandView::Create(command)));
   ASSERT(command_view.IsValid());
 
   uint8_t addr_type = static_cast<uint8_t>(command_view.GetAddressType());
   Address address = command_view.GetAddress();
-  link_layer_controller_.LeConnectListRemoveDevice(address, addr_type);
+  link_layer_controller_.LeFilterAcceptListRemoveDevice(address, addr_type);
   send_event_(
-      bluetooth::hci::LeRemoveDeviceFromConnectListCompleteBuilder::Create(
+      bluetooth::hci::LeRemoveDeviceFromFilterAcceptListCompleteBuilder::Create(
           kNumCommandPackets, ErrorCode::SUCCESS));
 }
 
@@ -2299,7 +2311,8 @@ void DualModeController::LeRemoveIsoDataPath(CommandView command) {
       gd_hci::LeRemoveIsoDataPathView::Create(std::move(iso_command_view));
   ASSERT(command_view.IsValid());
   link_layer_controller_.LeRemoveIsoDataPath(
-      command_view.GetConnectionHandle(), command_view.GetDataPathDirection());
+      command_view.GetConnectionHandle(),
+      command_view.GetRemoveDataPathDirection());
 }
 
 void DualModeController::LeReadRemoteFeatures(CommandView command) {

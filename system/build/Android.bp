@@ -110,6 +110,11 @@ fluoride_defaults {
                 misc_undefined: ["bounds"],
             },
         },
+        host: {
+            static_libs: [
+                "libcutils",
+            ]
+        }
     },
     defaults: ["fluoride_types_defaults_fuzzable"],
     header_libs: ["libbluetooth_headers", "libbt_callbacks_cxx_headers"],
@@ -126,7 +131,6 @@ fluoride_defaults {
         "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-        "libcutils",
     ],
     shared_libs: [
         "liblog",
@@ -188,31 +192,31 @@ fluoride_defaults {
     ],
     static_libs: [
         "android.hardware.bluetooth.a2dp@1.0",
-        "libflatbuffers-cpp",
+        "libbluetooth-dumpsys",
+        "libbluetooth_gd",
+        "libbluetooth_rust_interop",
+        "libbluetooth-types",
+        "libbt_callbacks_cxx",
+        "libbt-platform-protos-lite",
+        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
+        "libflatbuffers-cpp",
         "libFraunhoferAAC",
         "libg722codec",
         "liblc3",
-        "libudrv-uipc",
         "libprotobuf-cpp-lite",
-        "libbluetooth_gd",
-        "libbluetooth-dumpsys",
-        "libbluetooth_rust_interop",
-        "libbluetooth-types",
-        "libbt-platform-protos-lite",
-        "libbt-protos-lite",
-        "libbt_callbacks_cxx",
-        "libbt_shim_bridge",
-        "libbt_shim_ffi",
         "libstatslog_bt",
+        "libudrv-uipc",
     ],
     target: {
         android: {
             shared_libs: [
                 "android.hardware.bluetooth.audio@2.0",
                 "android.hardware.bluetooth.audio@2.1",
-                "android.hardware.bluetooth.audio-V1-ndk",
+                "android.hardware.bluetooth.audio-V2-ndk",
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
                 "android.system.suspend-V1-ndk",
@@ -228,10 +232,6 @@ fluoride_defaults {
             ],
             static_libs: [
                 "android.system.suspend.control-V1-ndk",
-            ],
-            required: [
-                "libldacBT_enc",
-                "libldacBT_abr",
             ],
         },
         linux_glibc: {

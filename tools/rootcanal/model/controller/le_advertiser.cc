@@ -206,8 +206,8 @@ LeAdvertiser::GetScanResponse(bluetooth::hci::Address scanned,
   }
   switch (filter_policy_) {
     case bluetooth::hci::LeScanningFilterPolicy::
-        CONNECT_LIST_AND_INITIATORS_IDENTITY:
-    case bluetooth::hci::LeScanningFilterPolicy::CONNECT_LIST_ONLY:
+        FILTER_ACCEPT_LIST_AND_INITIATORS_IDENTITY:
+    case bluetooth::hci::LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY:
       LOG_WARN("ScanResponses don't handle connect list filters");
       return nullptr;
     case bluetooth::hci::LeScanningFilterPolicy::CHECK_INITIATORS_IDENTITY:
@@ -222,7 +222,7 @@ LeAdvertiser::GetScanResponse(bluetooth::hci::Address scanned,
     return model::packets::LeScanResponseBuilder::Create(
         address_.GetAddress(), peer_address_.GetAddress(),
         static_cast<model::packets::AddressType>(address_.GetAddressType()),
-        type_, advertisement_);
+        model::packets::AdvertisementType::SCAN_RESPONSE, scan_response_);
   } else {
     uint8_t tx_power_jittered = 2 + tx_power_ - (num_events_ & 0x03);
     return model::packets::RssiWrapperBuilder::Create(
@@ -230,7 +230,7 @@ LeAdvertiser::GetScanResponse(bluetooth::hci::Address scanned,
         model::packets::LeScanResponseBuilder::Create(
             address_.GetAddress(), peer_address_.GetAddress(),
             static_cast<model::packets::AddressType>(address_.GetAddressType()),
-            type_, advertisement_));
+            model::packets::AdvertisementType::SCAN_RESPONSE, scan_response_));
   }
 }
 

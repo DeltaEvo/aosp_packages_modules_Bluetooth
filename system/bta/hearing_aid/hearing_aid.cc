@@ -402,15 +402,6 @@ class HearingAidImpl : public HearingAid {
       hearingDevice->connection_update_status = AWAITING;
     }
 
-    if (controller_get_interface()->supports_ble_2m_phy()) {
-      LOG(INFO) << address << " set preferred PHY to 2M";
-      BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
-    }
-
-    // Set data length
-    // TODO(jpawlowski: for 16khz only 87 is required, optimize
-    BTM_SetBleDataLength(address, 167);
-
     if (BTM_SecIsSecurityPending(address)) {
       /* if security collision happened, wait for encryption done
        * (BTA_GATTC_ENC_CMPL_CB_EVT) */
@@ -510,6 +501,12 @@ class HearingAidImpl : public HearingAid {
       hearingDevice->connection_update_status = NONE;
     }
 
+    if (!hearingDevice->accepting_audio &&
+        hearingDevice->connection_update_status == COMPLETED &&
+        hearingDevice->gap_opened) {
+      OnDeviceReady(hearingDevice->address);
+    }
+
     for (auto& device : hearingDevices.devices) {
       if (device.conn_id && (device.connection_update_status == AWAITING)) {
         device.connection_update_status = STARTED;
@@ -576,6 +573,24 @@ class HearingAidImpl : public HearingAid {
       hearingDevice->first_connection = true;
       BTA_GATTC_ServiceSearchRequest(hearingDevice->conn_id, &HEARING_AID_UUID);
     }
+  }
+
+  void OnPhyUpdateEvent(uint16_t conn_id, uint8_t tx_phys, uint8_t rx_phys,
+                        tGATT_STATUS status) {
+    HearingDevice* hearingDevice = hearingDevices.FindByConnId(conn_id);
+    if (!hearingDevice) {
+      DVLOG(2) << "Skipping unknown device, conn_id=" << loghex(conn_id);
+      return;
+    }
+    if (status == GATT_SUCCESS && tx_phys == PHY_LE_2M &&
+        rx_phys == PHY_LE_2M) {
+      LOG(INFO) << hearingDevice->address << " phy update to 2M successful";
+      return;
+    }
+    LOG(INFO) << hearingDevice->address
+              << " phy update to 2M fail, try again. status: " << status
+              << ", tx_phys: " << tx_phys << ", rx_phys: " << rx_phys;
+    BTM_BleSetPhy(hearingDevice->address, PHY_LE_2M, PHY_LE_2M, 0);
   }
 
   void OnServiceChangeEvent(const RawAddress& address) {
@@ -875,6 +890,15 @@ class HearingAidImpl : public HearingAid {
   void ConnectSocket(HearingDevice* hearingDevice, uint16_t psm) {
     tL2CAP_CFG_INFO cfg_info = tL2CAP_CFG_INFO{.mtu = 512};
 
+    if (controller_get_interface()->supports_ble_2m_phy()) {
+      LOG(INFO) << hearingDevice->address << " set preferred PHY to 2M";
+      BTM_BleSetPhy(hearingDevice->address, PHY_LE_2M, PHY_LE_2M, 0);
+    }
+
+    // Set data length
+    // TODO(jpawlowski: for 16khz only 87 is required, optimize
+    BTM_SetBleDataLength(hearingDevice->address, 167);
+
     SendEnableServiceChangedInd(hearingDevice);
 
     uint8_t service_id = hearingDevice->isLeft()
@@ -915,8 +939,8 @@ class HearingAidImpl : public HearingAid {
       instance->OnPsmRead(conn_id, status, handle, len, value, data);
   }
 
-  /* CoC Socket is ready */
-  void OnGapConnection(const RawAddress& address) {
+  /* CoC Socket, BLE connection parameter are ready */
+  void OnDeviceReady(const RawAddress& address) {
     HearingDevice* hearingDevice = hearingDevices.FindByAddress(address);
     if (!hearingDevice) {
       LOG(INFO) << "Device not connected to profile" << address;
@@ -1151,10 +1175,54 @@ class HearingAidImpl : public HearingAid {
     hearingDevice->playback_started = true;
   }
 
+  /* Compare the two sides LE CoC credit and return true to drop two sides
+   * packet on these situations.
+   * 1) The credit is close
+   * 2) Other side is disconnected
+   * 3) Get one side current credit value failure.
+   *
+   * Otherwise, just flush audio packet one side.
+   */
+  bool NeedToDropPacket(HearingDevice* target_side, HearingDevice* other_side) {
+    // Just drop packet if the other side does not exist.
+    if (!other_side) {
+      VLOG(2) << __func__ << ": other side not connected to profile";
+      return true;
+    }
+
+    uint16_t diff_credit = 0;
+
+    uint16_t target_current_credit = L2CA_GetPeerLECocCredit(
+        target_side->address, GAP_ConnGetL2CAPCid(target_side->gap_handle));
+    if (target_current_credit == L2CAP_LE_CREDIT_MAX) {
+      LOG(ERROR) << __func__ << ": Get target side credit value fail.";
+      return true;
+    }
+
+    uint16_t other_current_credit = L2CA_GetPeerLECocCredit(
+        other_side->address, GAP_ConnGetL2CAPCid(other_side->gap_handle));
+    if (other_current_credit == L2CAP_LE_CREDIT_MAX) {
+      LOG(ERROR) << __func__ << ": Get other side credit value fail.";
+      return true;
+    }
+
+    if (target_current_credit > other_current_credit) {
+      diff_credit = target_current_credit - other_current_credit;
+    } else {
+      diff_credit = other_current_credit - target_current_credit;
+    }
+    VLOG(2) << __func__ << ": Target(" << target_side->address
+            << ") Credit: " << target_current_credit << ", Other("
+            << other_side->address << ") Credit: " << other_current_credit
+            << ", Init Credit: " << init_credit;
+    return diff_credit < (init_credit / 2 - 1);
+  }
+
   void OnAudioDataReady(const std::vector<uint8_t>& data) {
     /* For now we assume data comes in as 16bit per sample 16kHz PCM stereo */
     DVLOG(2) << __func__;
 
+    bool need_drop = false;
     int num_samples =
         data.size() / (2 /*bytes_per_sample*/ * 2 /*number of channels*/);
 
@@ -1228,16 +1296,24 @@ class HearingAidImpl : public HearingAid {
       encoded_data_left.resize(encoded_size);
 
       uint16_t cid = GAP_ConnGetL2CAPCid(left->gap_handle);
-      uint16_t packets_to_flush = L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_GET);
-      if (packets_to_flush) {
-        VLOG(2) << left->address << " skipping " << packets_to_flush
-                << " packets";
-        left->audio_stats.packet_flush_count += packets_to_flush;
-        left->audio_stats.frame_flush_count++;
+      uint16_t packets_in_chans = L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_GET);
+      if (packets_in_chans) {
+        // Compare the two sides LE CoC credit value to confirm need to drop or
+        // skip audio packet.
+        if (NeedToDropPacket(left, right)) {
+          LOG(INFO) << left->address << " triggers dropping, "
+                    << packets_in_chans << " packets in channel";
+          need_drop = true;
+          left->audio_stats.trigger_drop_count++;
+        } else {
+          LOG(INFO) << left->address << " skipping " << packets_in_chans
+                    << " packets";
+          left->audio_stats.packet_flush_count += packets_in_chans;
+          left->audio_stats.frame_flush_count++;
+          L2CA_FlushChannel(cid, 0xffff);
+        }
         hearingDevices.StartRssiLog();
       }
-      // flush all packets stuck in queue
-      L2CA_FlushChannel(cid, 0xffff);
       check_and_do_rssi_read(left);
     }
 
@@ -1252,16 +1328,24 @@ class HearingAidImpl : public HearingAid {
       encoded_data_right.resize(encoded_size);
 
       uint16_t cid = GAP_ConnGetL2CAPCid(right->gap_handle);
-      uint16_t packets_to_flush = L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_GET);
-      if (packets_to_flush) {
-        VLOG(2) << right->address << " skipping " << packets_to_flush
-                << " packets";
-        right->audio_stats.packet_flush_count += packets_to_flush;
-        right->audio_stats.frame_flush_count++;
+      uint16_t packets_in_chans = L2CA_FlushChannel(cid, L2CAP_FLUSH_CHANS_GET);
+      if (packets_in_chans) {
+        // Compare the two sides LE CoC credit value to confirm need to drop or
+        // skip audio packet.
+        if (NeedToDropPacket(right, left)) {
+          LOG(INFO) << right->address << " triggers dropping, "
+                    << packets_in_chans << " packets in channel";
+          need_drop = true;
+          right->audio_stats.trigger_drop_count++;
+        } else {
+          LOG(INFO) << right->address << " skipping " << packets_in_chans
+                    << " packets";
+          right->audio_stats.packet_flush_count += packets_in_chans;
+          right->audio_stats.frame_flush_count++;
+          L2CA_FlushChannel(cid, 0xffff);
+        }
         hearingDevices.StartRssiLog();
       }
-      // flush all packets stuck in queue
-      L2CA_FlushChannel(cid, 0xffff);
       check_and_do_rssi_read(right);
     }
 
@@ -1270,6 +1354,16 @@ class HearingAidImpl : public HearingAid {
 
     uint16_t packet_size =
         CalcCompressedAudioPacketSize(codec_in_use, default_data_interval_ms);
+
+    if (need_drop) {
+      if (left) {
+        left->audio_stats.packet_drop_count++;
+      }
+      if (right) {
+        right->audio_stats.packet_drop_count++;
+      }
+      return;
+    }
 
     for (size_t i = 0; i < encoded_data_size; i += packet_size) {
       if (left) {
@@ -1323,8 +1417,21 @@ class HearingAidImpl : public HearingAid {
         RawAddress address = *GAP_ConnGetRemoteAddr(gap_handle);
         uint16_t tx_mtu = GAP_ConnGetRemMtuSize(gap_handle);
 
-        LOG(INFO) << "GAP_EVT_CONN_OPENED " << address << ", tx_mtu=" << tx_mtu;
-        OnGapConnection(address);
+        init_credit =
+            L2CA_GetPeerLECocCredit(address, GAP_ConnGetL2CAPCid(gap_handle));
+
+        LOG(INFO) << "GAP_EVT_CONN_OPENED " << address << ", tx_mtu=" << tx_mtu
+                  << ", init_credit=" << init_credit;
+
+        HearingDevice* hearingDevice = hearingDevices.FindByAddress(address);
+        if (!hearingDevice) {
+          LOG(INFO) << "Skipping unknown device" << address;
+          return;
+        }
+        hearingDevice->gap_opened = true;
+        if (hearingDevice->connection_update_status == COMPLETED) {
+          OnDeviceReady(address);
+        }
         break;
       }
 
@@ -1343,6 +1450,7 @@ class HearingAidImpl : public HearingAid {
           hearingDevice->accepting_audio = false;
           hearingDevice->playback_started = false;
           hearingDevice->command_acked = false;
+          hearingDevice->gap_opened = false;
         }
         break;
       case GAP_EVT_CONN_DATA_AVAIL: {
@@ -1445,10 +1553,14 @@ class HearingAidImpl : public HearingAid {
              << (side ? "right" : "left") << " " << loghex(device.hi_sync_id)
              << std::endl;
       stream
-          << "    Packet counts (enqueued/flushed)                        : "
+          << "    Trigger dropped counts                                 : "
+          << device.audio_stats.trigger_drop_count
+          << "\n    Packet dropped counts                                  : "
+          << device.audio_stats.packet_drop_count
+          << "\n    Packet counts (send/flush)                             : "
           << device.audio_stats.packet_send_count << " / "
           << device.audio_stats.packet_flush_count
-          << "\n    Frame counts (enqueued/flushed)                         : "
+          << "\n    Frame counts (sent/flush)                              : "
           << device.audio_stats.frame_send_count << " / "
           << device.audio_stats.frame_flush_count << std::endl;
 
@@ -1553,6 +1665,7 @@ class HearingAidImpl : public HearingAid {
       }
     }
     hearingDevice->connection_update_status = NONE;
+    hearingDevice->gap_opened = false;
 
     if (hearingDevice->conn_id) {
       BtaGattQueue::Clean(hearingDevice->conn_id);
@@ -1614,6 +1727,8 @@ class HearingAidImpl : public HearingAid {
   uint8_t codec_in_use;
 
   uint16_t default_data_interval_ms;
+
+  uint16_t init_credit;
 
   HearingDevices hearingDevices;
 
@@ -1770,6 +1885,12 @@ void hearingaid_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       if (!instance) return;
       instance->OnServiceDiscDoneEvent(p_data->service_changed.remote_bda);
       break;
+    case BTA_GATTC_PHY_UPDATE_EVT: {
+      if (!instance) return;
+      tBTA_GATTC_PHY_UPDATE& p = p_data->phy_update;
+      instance->OnPhyUpdateEvent(p.conn_id, p.tx_phy, p.rx_phy, p.status);
+      break;
+    }
 
     default:
       break;
