@@ -223,13 +223,13 @@ public class BatteryStateMachine extends StateMachine {
             return false;
         }
 
-        if (mBluetoothGatt != null) {
-            mBluetoothGatt.connect();
-        } else {
+        if (mBluetoothGatt == null) {
             mGattCallback = new GattCallback();
-            mBluetoothGatt = mDevice.connectGatt(service, /*autoConnect=*/true,
+            mBluetoothGatt = mDevice.connectGatt(service, /*autoConnect=*/false,
                     mGattCallback, TRANSPORT_AUTO, /*opportunistic=*/true,
                     PHY_LE_1M_MASK | PHY_LE_2M_MASK, getHandler());
+        } else {
+            mBluetoothGatt.connect();
         }
         return mBluetoothGatt != null;
     }

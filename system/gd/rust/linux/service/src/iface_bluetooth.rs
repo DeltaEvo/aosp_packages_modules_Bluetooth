@@ -39,8 +39,20 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
     fn on_address_changed(&self, addr: String) {
         dbus_generated!()
     }
+    #[dbus_method("OnNameChanged")]
+    fn on_name_changed(&self, name: String) {
+        dbus_generated!()
+    }
+    #[dbus_method("OnDiscoverableChanged")]
+    fn on_discoverable_changed(&self, discoverable: bool) {
+        dbus_generated!()
+    }
     #[dbus_method("OnDeviceFound")]
     fn on_device_found(&self, remote_device: BluetoothDevice) {
+        dbus_generated!()
+    }
+    #[dbus_method("OnDeviceCleared")]
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {
         dbus_generated!()
     }
     #[dbus_method("OnDiscoveringChanged")]
@@ -248,6 +260,11 @@ impl IBluetooth for IBluetoothDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("SetRemoteAlias")]
+    fn set_remote_alias(&mut self, _device: BluetoothDevice, new_alias: String) {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetRemoteClass")]
     fn get_remote_class(&self, _device: BluetoothDevice) -> u32 {
         dbus_generated!()
@@ -279,12 +296,12 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("ConnectAllEnabledProfiles")]
-    fn connect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 
     #[dbus_method("DisconnectAllEnabledProfiles")]
-    fn disconnect_all_enabled_profiles(&self, device: BluetoothDevice) -> bool {
+    fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 }

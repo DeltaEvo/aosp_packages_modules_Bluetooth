@@ -155,8 +155,6 @@ public class HeadsetServiceAndStateMachineTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when HeadsetService is not enabled",
-                mTargetContext.getResources().getBoolean(R.bool.profile_supported_hs_hfp));
         MockitoAnnotations.initMocks(this);
         PowerManager powerManager = mTargetContext.getSystemService(PowerManager.class);
         mVoiceRecognitionWakeLock =
@@ -233,9 +231,6 @@ public class HeadsetServiceAndStateMachineTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mTargetContext.getResources().getBoolean(R.bool.profile_supported_hs_hfp)) {
-            return;
-        }
         mTargetContext.unregisterReceiver(mHeadsetIntentReceiver);
         TestUtils.stopService(mServiceRule, HeadsetService.class);
         HeadsetService.sStartVrTimeoutMs = mOriginalVrTimeoutMs;

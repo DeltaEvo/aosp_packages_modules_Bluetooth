@@ -3,8 +3,7 @@
 use bt_topshim::btif::{BluetoothInterface, RawAddress};
 use bt_topshim::profiles::a2dp::{
     A2dp, A2dpCallbacks, A2dpCallbacksDispatcher, A2dpCodecBitsPerSample, A2dpCodecChannelMode,
-    A2dpCodecConfig, A2dpCodecIndex, A2dpCodecSampleRate, BtavConnectionState,
-    PresentationPosition,
+    A2dpCodecConfig, A2dpCodecSampleRate, BtavConnectionState, PresentationPosition,
 };
 use bt_topshim::profiles::avrcp::{Avrcp, AvrcpCallbacks, AvrcpCallbacksDispatcher};
 use bt_topshim::profiles::hfp::{
@@ -25,6 +24,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
+use crate::bluetooth::{Bluetooth, BluetoothDevice, IBluetooth};
 use crate::Message;
 
 const DEFAULT_PROFILE_DISCOVERY_TIMEOUT_SEC: u64 = 5;
@@ -60,16 +60,9 @@ pub trait IBluetoothMedia {
 pub trait IBluetoothMediaCallback {
     /// Triggered when a Bluetooth audio device is ready to be used. This should
     /// only be triggered once for a device and send an event to clients. If the
-    ///  device supports both HFP and A2DP, both should be ready when this is
+    /// device supports both HFP and A2DP, both should be ready when this is
     /// triggered.
-    fn on_bluetooth_audio_device_added(
-        &self,
-        addr: String,
-        sample_rate: i32,
-        bits_per_sample: i32,
-        channel_mode: i32,
-        hfp_cap: i32,
-    );
+    fn on_bluetooth_audio_device_added(&self, device: BluetoothAudioDevice);
 
     ///
     fn on_bluetooth_audio_device_removed(&self, addr: String);
@@ -81,6 +74,27 @@ pub trait IBluetoothMediaCallback {
     fn on_absolute_volume_changed(&self, volume: i32);
 }
 
+/// Serializable device used in.
+#[derive(Debug, Default, Clone)]
+pub struct BluetoothAudioDevice {
+    pub address: String,
+    pub name: String,
+    pub a2dp_caps: Vec<A2dpCodecConfig>,
+    pub hfp_cap: HfpCodecCapability,
+    pub absolute_volume: bool,
+}
+
+impl BluetoothAudioDevice {
+    pub(crate) fn new(
+        address: String,
+        name: String,
+        a2dp_caps: Vec<A2dpCodecConfig>,
+        hfp_cap: HfpCodecCapability,
+        absolute_volume: bool,
+    ) -> BluetoothAudioDevice {
+        BluetoothAudioDevice { address, name, a2dp_caps, hfp_cap, absolute_volume }
+    }
+}
 /// Actions that `BluetoothMedia` can take on behalf of the stack.
 pub enum MediaActions {
     Connect(String),
@@ -93,6 +107,7 @@ pub struct BluetoothMedia {
     callbacks: Arc<Mutex<Vec<(u32, Box<dyn IBluetoothMediaCallback + Send>)>>>,
     callback_last_id: u32,
     tx: Sender<Message>,
+    adapter: Option<Arc<Mutex<Box<Bluetooth>>>>,
     a2dp: Option<A2dp>,
     avrcp: Option<Avrcp>,
     a2dp_states: HashMap<RawAddress, BtavConnectionState>,
@@ -101,6 +116,7 @@ pub struct BluetoothMedia {
     selectable_caps: HashMap<RawAddress, Vec<A2dpCodecConfig>>,
     hfp_caps: HashMap<RawAddress, HfpCodecCapability>,
     device_added_tasks: Arc<Mutex<HashMap<RawAddress, Option<JoinHandle<()>>>>>,
+    absolute_volume: bool,
 }
 
 impl BluetoothMedia {
@@ -111,6 +127,7 @@ impl BluetoothMedia {
             callbacks: Arc::new(Mutex::new(vec![])),
             callback_last_id: 0,
             tx,
+            adapter: None,
             a2dp: None,
             avrcp: None,
             a2dp_states: HashMap::new(),
@@ -119,7 +136,12 @@ impl BluetoothMedia {
             selectable_caps: HashMap::new(),
             hfp_caps: HashMap::new(),
             device_added_tasks: Arc::new(Mutex::new(HashMap::new())),
+            absolute_volume: false,
         }
+    }
+
+    pub fn set_adapter(&mut self, adapter: Arc<Mutex<Box<Bluetooth>>>) {
+        self.adapter = Some(adapter);
     }
 
     pub fn dispatch_a2dp_callbacks(&mut self, cb: A2dpCallbacks) {
@@ -158,6 +180,7 @@ impl BluetoothMedia {
     pub fn dispatch_avrcp_callbacks(&mut self, cb: AvrcpCallbacks) {
         match cb {
             AvrcpCallbacks::AvrcpAbsoluteVolumeEnabled(supported) => {
+                self.absolute_volume = supported;
                 self.for_all_callbacks(|callback| {
                     callback.on_absolute_volume_supported_changed(supported);
                 });
@@ -246,20 +269,13 @@ impl BluetoothMedia {
             device_added_tasks: Arc<Mutex<HashMap<RawAddress, Option<JoinHandle<()>>>>>,
             addr: RawAddress,
             callbacks: Arc<Mutex<Vec<(u32, Box<dyn IBluetoothMediaCallback + Send>)>>>,
-            cap: A2dpCodecConfig,
-            hfp_cap: HfpCodecCapability,
+            device: BluetoothAudioDevice,
             is_delayed: bool,
         ) -> bool {
             // Closure used to lock and trigger the device added callbacks.
             let trigger_device_added = || {
                 for callback in &*callbacks.lock().unwrap() {
-                    callback.1.on_bluetooth_audio_device_added(
-                        addr.to_string(),
-                        cap.sample_rate,
-                        cap.bits_per_sample,
-                        cap.channel_mode,
-                        hfp_cap.bits(),
-                    );
+                    callback.1.on_bluetooth_audio_device_added(device.clone());
                 }
             };
             let mut guard = device_added_tasks.lock().unwrap();
@@ -294,24 +310,27 @@ impl BluetoothMedia {
             }
         }
 
-        let cur_a2dp_cap = self.selectable_caps.get(&addr).and_then(|a2dp_caps| {
-            a2dp_caps
-                .iter()
-                .find(|cap| A2dpCodecIndex::SrcSbc == A2dpCodecIndex::from(cap.codec_type))
-        });
+        let cur_a2dp_caps = self.selectable_caps.get(&addr);
         let cur_hfp_cap = self.hfp_caps.get(&addr);
-        match (cur_a2dp_cap, cur_hfp_cap) {
+        let name = self.adapter_get_remote_name(addr);
+        let absolute_volume = self.absolute_volume;
+        match (cur_a2dp_caps, cur_hfp_cap) {
             (None, None) => warn!(
                 "[{}]: Try to add a device without a2dp and hfp capability.",
                 addr.to_string()
             ),
-            (Some(cap), Some(hfp_cap)) => {
+            (Some(caps), Some(hfp_cap)) => {
                 dedup_added_cb(
                     self.device_added_tasks.clone(),
                     addr,
                     self.callbacks.clone(),
-                    *cap,
-                    *hfp_cap,
+                    BluetoothAudioDevice::new(
+                        addr.to_string(),
+                        name.clone(),
+                        caps.to_vec(),
+                        *hfp_cap,
+                        absolute_volume,
+                    ),
                     false,
                 );
             }
@@ -320,11 +339,16 @@ impl BluetoothMedia {
                 if guard.get(&addr).is_none() {
                     let callbacks = self.callbacks.clone();
                     let device_added_tasks = self.device_added_tasks.clone();
-                    let cap = cur_a2dp_cap.unwrap_or(&A2dpCodecConfig::default()).clone();
-                    let hfp_cap = cur_hfp_cap.unwrap_or(&HfpCodecCapability::UNSUPPORTED).clone();
+                    let device = BluetoothAudioDevice::new(
+                        addr.to_string(),
+                        name.clone(),
+                        cur_a2dp_caps.unwrap_or(&Vec::new()).to_vec(),
+                        *cur_hfp_cap.unwrap_or(&HfpCodecCapability::UNSUPPORTED),
+                        absolute_volume,
+                    );
                     let task = topstack::get_runtime().spawn(async move {
                         sleep(Duration::from_secs(DEFAULT_PROFILE_DISCOVERY_TIMEOUT_SEC)).await;
-                        if dedup_added_cb(device_added_tasks, addr, callbacks, cap, hfp_cap, true) {
+                        if dedup_added_cb(device_added_tasks, addr, callbacks, device, true) {
                             warn!(
                                 "[{}]: Add a device with only hfp or a2dp capability after timeout.",
                                 addr.to_string()
@@ -355,6 +379,23 @@ impl BluetoothMedia {
     fn for_all_callbacks<F: Fn(&Box<dyn IBluetoothMediaCallback + Send>)>(&self, f: F) {
         for callback in &*self.callbacks.lock().unwrap() {
             f(&callback.1);
+        }
+    }
+
+    fn adapter_get_remote_name(&self, addr: RawAddress) -> String {
+        let device = BluetoothDevice::new(
+            addr.to_string(),
+            // get_remote_name needs a BluetoothDevice just for its address, the
+            // name field is unused so construct one with a fake name.
+            "Classic Device".to_string(),
+        );
+        if let Some(adapter) = &self.adapter {
+            match adapter.lock().unwrap().get_remote_name(device).as_str() {
+                "" => addr.to_string(),
+                name => name.into(),
+            }
+        } else {
+            addr.to_string()
         }
     }
 

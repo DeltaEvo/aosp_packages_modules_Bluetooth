@@ -28,6 +28,7 @@ using bluetooth::hci::Address;
 using bluetooth::hci::AddressType;
 using bluetooth::hci::AddressWithType;
 using bluetooth::hci::EventCode;
+using bluetooth::hci::SubeventCode;
 
 using namespace model::packets;
 using model::packets::PacketType;
@@ -799,7 +800,7 @@ void LinkLayerController::IncomingInquiryResponsePacket(
           (bluetooth::hci::PageScanRepetitionMode)
               inquiry_response.GetPageScanRepetitionMode();
 
-      std::vector<bluetooth::hci::InquiryResult> responses;
+      std::vector<bluetooth::hci::InquiryResponse> responses;
       responses.emplace_back();
       responses.back().bd_addr_ = inquiry_response.GetSourceAddress();
       responses.back().page_scan_repetition_mode_ = page_scan_repetition_mode;
@@ -820,7 +821,7 @@ void LinkLayerController::IncomingInquiryResponsePacket(
           (bluetooth::hci::PageScanRepetitionMode)
               inquiry_response.GetPageScanRepetitionMode();
 
-      std::vector<bluetooth::hci::InquiryResultWithRssi> responses;
+      std::vector<bluetooth::hci::InquiryResponseWithRssi> responses;
       responses.emplace_back();
       responses.back().address_ = inquiry_response.GetSourceAddress();
       responses.back().page_scan_repetition_mode_ = page_scan_repetition_mode;
@@ -1380,10 +1381,10 @@ void LinkLayerController::IncomingLeAdvertisementPacket(
   // Connect
   if ((le_peer_address_ == address &&
        le_peer_address_type_ == static_cast<uint8_t>(address_type)) ||
-      (LeConnectListContainsDevice(address,
-                                   static_cast<uint8_t>(address_type))) ||
+      (LeFilterAcceptListContainsDevice(address,
+                                        static_cast<uint8_t>(address_type))) ||
       (resolved &&
-       LeConnectListContainsDevice(
+       LeFilterAcceptListContainsDevice(
            resolved_address, static_cast<uint8_t>(resolved_address_type)))) {
     if (!connections_.CreatePendingLeConnection(AddressWithType(
             address, static_cast<bluetooth::hci::AddressType>(address_type)))) {
@@ -1557,20 +1558,37 @@ uint16_t LinkLayerController::HandleLeConnection(AddressWithType address,
                                                  uint16_t connection_interval,
                                                  uint16_t connection_latency,
                                                  uint16_t supervision_timeout) {
-  // TODO: Choose between LeConnectionComplete and LeEnhancedConnectionComplete
+  // Note: the HCI_LE_Connection_Complete event is not sent if the
+  // HCI_LE_Enhanced_Connection_Complete event (see Section 7.7.65.10) is
+  // unmasked.
+
   uint16_t handle = connections_.CreateLeConnection(address, own_address);
   if (handle == kReservedHandle) {
     LOG_WARN("No pending connection for connection from %s",
              address.ToString().c_str());
     return kReservedHandle;
   }
-  if (properties_.IsUnmasked(EventCode::LE_META_EVENT)) {
+
+  if (properties_.IsUnmasked(EventCode::LE_META_EVENT) &&
+      properties_.GetLeEventSupported(
+          SubeventCode::ENHANCED_CONNECTION_COMPLETE)) {
+    send_event_(bluetooth::hci::LeEnhancedConnectionCompleteBuilder::Create(
+        ErrorCode::SUCCESS, handle, static_cast<bluetooth::hci::Role>(role),
+        address.GetAddressType(), address.GetAddress(),
+        Address(),  // TODO local resolvable private address, if applicable
+        Address(),  // TODO Peer resolvable private address, if applicable
+        connection_interval, connection_latency, supervision_timeout,
+        static_cast<bluetooth::hci::ClockAccuracy>(0x00)));
+  } else if (properties_.IsUnmasked(EventCode::LE_META_EVENT) &&
+             properties_.GetLeEventSupported(
+                 SubeventCode::CONNECTION_COMPLETE)) {
     send_event_(bluetooth::hci::LeConnectionCompleteBuilder::Create(
         ErrorCode::SUCCESS, handle, static_cast<bluetooth::hci::Role>(role),
         address.GetAddressType(), address.GetAddress(), connection_interval,
         connection_latency, supervision_timeout,
         static_cast<bluetooth::hci::ClockAccuracy>(0x00)));
   }
+
   if (own_address.GetAddress() == le_connecting_rpa_) {
     le_connecting_rpa_ = Address::kEmpty;
   }
@@ -1825,7 +1843,7 @@ void LinkLayerController::IncomingLeScanResponsePacket(
     if (adv_type != model::packets::AdvertisementType::SCAN_RESPONSE) {
       return;
     }
-    bluetooth::hci::LeAdvertisingReportRaw report;
+    bluetooth::hci::LeAdvertisingResponseRaw report;
     report.event_type_ = bluetooth::hci::AdvertisingEventType::SCAN_RESPONSE;
     report.address_ = incoming.GetSourceAddress();
     report.address_type_ =
@@ -1845,7 +1863,7 @@ void LinkLayerController::IncomingLeScanResponsePacket(
       properties_.IsUnmasked(EventCode::LE_META_EVENT) &&
       properties_.GetLeEventSupported(
           bluetooth::hci::SubeventCode::EXTENDED_ADVERTISING_REPORT)) {
-    bluetooth::hci::LeExtendedAdvertisingReport report{};
+    bluetooth::hci::LeExtendedAdvertisingResponse report{};
     report.address_ = incoming.GetSourceAddress();
     report.address_type_ =
         static_cast<bluetooth::hci::DirectAdvertisingAddressType>(address_type);
@@ -3054,7 +3072,7 @@ ErrorCode LinkLayerController::SetLeExtendedAdvertisingParameters(
       break;
     case bluetooth::hci::AdvertisingFilterPolicy::LISTED_SCAN:
       scanning_filter_policy =
-          bluetooth::hci::LeScanningFilterPolicy::CONNECT_LIST_ONLY;
+          bluetooth::hci::LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY;
       break;
     case bluetooth::hci::AdvertisingFilterPolicy::LISTED_CONNECT:
       scanning_filter_policy =
@@ -3062,7 +3080,7 @@ ErrorCode LinkLayerController::SetLeExtendedAdvertisingParameters(
       break;
     case bluetooth::hci::AdvertisingFilterPolicy::LISTED_SCAN_AND_CONNECT:
       scanning_filter_policy = bluetooth::hci::LeScanningFilterPolicy::
-          CONNECT_LIST_AND_INITIATORS_IDENTITY;
+          FILTER_ACCEPT_LIST_AND_INITIATORS_IDENTITY;
       break;
   }
 
@@ -3176,8 +3194,8 @@ ErrorCode LinkLayerController::LeRemoteConnectionParameterRequestNegativeReply(
   return ErrorCode::SUCCESS;
 }
 
-ErrorCode LinkLayerController::LeConnectListClear() {
-  if (ConnectListBusy()) {
+ErrorCode LinkLayerController::LeFilterAcceptListClear() {
+  if (FilterAcceptListBusy()) {
     return ErrorCode::COMMAND_DISALLOWED;
   }
 
@@ -3203,9 +3221,9 @@ ErrorCode LinkLayerController::LeResolvingListClear() {
   return ErrorCode::SUCCESS;
 }
 
-ErrorCode LinkLayerController::LeConnectListAddDevice(Address addr,
-                                                      uint8_t addr_type) {
-  if (ConnectListBusy()) {
+ErrorCode LinkLayerController::LeFilterAcceptListAddDevice(Address addr,
+                                                           uint8_t addr_type) {
+  if (FilterAcceptListBusy()) {
     return ErrorCode::COMMAND_DISALLOWED;
   }
   std::tuple<Address, uint8_t> new_tuple = std::make_tuple(addr, addr_type);
@@ -3214,7 +3232,7 @@ ErrorCode LinkLayerController::LeConnectListAddDevice(Address addr,
       return ErrorCode::SUCCESS;
     }
   }
-  if (LeConnectListFull()) {
+  if (LeFilterAcceptListFull()) {
     return ErrorCode::MEMORY_CAPACITY_EXCEEDED;
   }
   le_connect_list_.emplace_back(new_tuple);
@@ -3395,7 +3413,7 @@ void LinkLayerController::LeSetupIsoDataPath(
 
 void LinkLayerController::LeRemoveIsoDataPath(
     uint16_t /* connection_handle */,
-    bluetooth::hci::DataPathDirection /* data_path_direction */) {}
+    bluetooth::hci::RemoveDataPathDirection /* remove_data_path_direction */) {}
 
 void LinkLayerController::HandleLeEnableEncryption(
     uint16_t handle, std::array<uint8_t, 8> rand, uint16_t ediv,
@@ -3570,17 +3588,17 @@ bool LinkLayerController::ListBusy(uint16_t ignore) {
   return false;
 }
 
-bool LinkLayerController::ConnectListBusy() {
-  return ListBusy(properties_.GetLeConnectListIgnoreReasons());
+bool LinkLayerController::FilterAcceptListBusy() {
+  return ListBusy(properties_.GetLeFilterAcceptListIgnoreReasons());
 }
 
 bool LinkLayerController::ResolvingListBusy() {
   return ListBusy(properties_.GetLeResolvingListIgnoreReasons());
 }
 
-ErrorCode LinkLayerController::LeConnectListRemoveDevice(Address addr,
-                                                         uint8_t addr_type) {
-  if (ConnectListBusy()) {
+ErrorCode LinkLayerController::LeFilterAcceptListRemoveDevice(
+    Address addr, uint8_t addr_type) {
+  if (FilterAcceptListBusy()) {
     return ErrorCode::COMMAND_DISALLOWED;
   }
   std::tuple<Address, uint8_t> erase_tuple = std::make_tuple(addr, addr_type);
@@ -3606,8 +3624,8 @@ ErrorCode LinkLayerController::LeResolvingListRemoveDevice(Address addr,
   return ErrorCode::SUCCESS;
 }
 
-bool LinkLayerController::LeConnectListContainsDevice(Address addr,
-                                                      uint8_t addr_type) {
+bool LinkLayerController::LeFilterAcceptListContainsDevice(Address addr,
+                                                           uint8_t addr_type) {
   std::tuple<Address, uint8_t> sought_tuple = std::make_tuple(addr, addr_type);
   for (size_t i = 0; i < le_connect_list_.size(); i++) {
     if (le_connect_list_[i] == sought_tuple) {
@@ -3628,8 +3646,8 @@ bool LinkLayerController::LeResolvingListContainsDevice(Address addr,
   return false;
 }
 
-bool LinkLayerController::LeConnectListFull() {
-  return le_connect_list_.size() >= properties_.GetLeConnectListSize();
+bool LinkLayerController::LeFilterAcceptListFull() {
+  return le_connect_list_.size() >= properties_.GetLeFilterAcceptListSize();
 }
 
 bool LinkLayerController::LeResolvingListFull() {

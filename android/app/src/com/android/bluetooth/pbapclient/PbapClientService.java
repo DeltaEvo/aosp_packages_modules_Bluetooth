@@ -30,6 +30,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.provider.CallLog;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.R;
@@ -58,6 +59,7 @@ public class PbapClientService extends ProfileService {
 
     private static final String TAG = "PbapClientService";
     private static final String SERVICE_NAME = "Phonebook Access PCE";
+
     // MAXIMUM_DEVICES set to 10 to prevent an excessive number of simultaneous devices.
     private static final int MAXIMUM_DEVICES = 10;
     private Map<BluetoothDevice, PbapClientStateMachine> mPbapClientStateMachineMap =
@@ -67,6 +69,10 @@ public class PbapClientService extends ProfileService {
     private int mSdpHandle = -1;
 
     private DatabaseManager mDatabaseManager;
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfilePbapClientEnabled().orElse(false);
+    }
 
     @Override
     public IProfileServiceBinder initBinder() {

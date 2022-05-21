@@ -25,8 +25,9 @@
 
 #include "hci_internals.h"
 #include "log/log.h"
-#include "model/devices/hci_socket_device.h"
+#include "model/devices/hci_device.h"
 #include "model/devices/link_layer_socket_device.h"
+#include "model/hci/hci_socket_transport.h"
 
 namespace android {
 namespace hardware {
@@ -35,9 +36,11 @@ namespace V1_1 {
 namespace sim {
 
 using android::hardware::hidl_vec;
+using ::bluetooth::hci::Address;
 using rootcanal::AsyncTaskId;
 using rootcanal::DualModeController;
-using rootcanal::HciSocketDevice;
+using rootcanal::HciDevice;
+using rootcanal::HciSocketTransport;
 using rootcanal::LinkLayerSocketDevice;
 using rootcanal::TaskCallback;
 
@@ -107,7 +110,12 @@ Return<void> BluetoothHci::initialize_impl(
   char mac_property[PROPERTY_VALUE_MAX] = "";
   property_get("vendor.bt.rootcanal_mac_address", mac_property,
                "3C:5A:B4:01:02:03");
-  controller_->Initialize({"dmc", std::string(mac_property)});
+  auto addr = Address::FromString(std::string(mac_property));
+  if (addr) {
+    controller_->SetAddress(*addr);
+  } else {
+    LOG_ALWAYS_FATAL("Invalid address: %s", mac_property);
+  }
 
   controller_->RegisterEventChannel(
       [this, cb](std::shared_ptr<std::vector<uint8_t>> packet) {
@@ -205,7 +213,8 @@ Return<void> BluetoothHci::initialize_impl(
     SetUpTestChannel();
     SetUpHciServer([this](std::shared_ptr<AsyncDataChannel> socket,
                           AsyncDataChannelServer* srv) {
-      test_model_.AddHciConnection(HciSocketDevice::Create(socket, ""));
+      auto transport = HciSocketTransport::Create(socket);
+      test_model_.AddHciConnection(HciDevice::Create(transport, ""));
       srv->StartListening();
     });
     SetUpLinkLayerServer([this](std::shared_ptr<AsyncDataChannel> socket,
