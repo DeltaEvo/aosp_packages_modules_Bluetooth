@@ -40,14 +40,16 @@ using ::le_audio::CodecManager;
 #ifdef OS_ANDROID
 static const std::vector<
     std::pair<const char* /*schema*/, const char* /*content*/>>
-    kLeAudioSetConfigs = {
-        {"/system/etc/bluetooth/le_audio/audio_set_configurations.bfbs",
-         "/system/etc/bluetooth/le_audio/audio_set_configurations.json"}};
+    kLeAudioSetConfigs = {{"/apex/com.android.bluetooth/etc/bluetooth/le_audio/"
+                           "audio_set_configurations.bfbs",
+                           "/apex/com.android.bluetooth/etc/bluetooth/le_audio/"
+                           "audio_set_configurations.json"}};
 static const std::vector<
     std::pair<const char* /*schema*/, const char* /*content*/>>
-    kLeAudioSetScenarios = {
-        {"/system/etc/bluetooth/le_audio/audio_set_scenarios.bfbs",
-         "/system/etc/bluetooth/le_audio/audio_set_scenarios.json"}};
+    kLeAudioSetScenarios = {{"/apex/com.android.bluetooth/etc/bluetooth/"
+                             "le_audio/audio_set_scenarios.bfbs",
+                             "/apex/com.android.bluetooth/etc/bluetooth/"
+                             "le_audio/audio_set_scenarios.json"}};
 #else
 static const std::vector<
     std::pair<const char* /*schema*/, const char* /*content*/>>
@@ -473,6 +475,8 @@ struct AudioSetConfigurationProviderJson {
         return "Media";
       case types::LeAudioContextType::CONVERSATIONAL:
         return "Conversational";
+      case types::LeAudioContextType::VOICEASSISTANTS:
+        return "VoiceAssinstants";
       case types::LeAudioContextType::RINGTONE:
         return "Ringtone";
       default:
@@ -489,6 +493,7 @@ struct AudioSetConfigurationProviderJson {
             {"Ringtone", types::LeAudioContextType::RINGTONE},
             {"Recording", types::LeAudioContextType::LIVE},
             {"Game", types::LeAudioContextType::GAME},
+            {"VoiceAssistants", types::LeAudioContextType::VOICEASSISTANTS},
             {"Default", types::LeAudioContextType::UNSPECIFIED},
         };
     return scenarios.count(scenario) ? scenarios.at(scenario)
