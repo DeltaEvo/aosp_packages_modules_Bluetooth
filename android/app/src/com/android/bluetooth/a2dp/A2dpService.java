@@ -413,9 +413,10 @@ public class A2dpService extends ProfileService {
             if (!isOutgoingRequest) {
                 HeadsetService headsetService = HeadsetService.getHeadsetService();
                 if (headsetService != null && headsetService.okToAcceptConnection(device, true)) {
-                    Log.d(TAG, "okToConnect: Fallback connection to allowed HFP profile");
+                    Log.d(TAG, "okToConnect: return false,"
+                            + " Fallback connection to allowed HFP profile");
                     headsetService.connect(device);
-                    return true;
+                    return false;
                 }
             }
             // Otherwise, reject the connection if connectionPolicy is not valid.
@@ -1470,10 +1471,6 @@ public class A2dpService extends ProfileService {
                 A2dpService service = getService(source);
                 BluetoothCodecStatus codecStatus = null;
                 if (service != null) {
-                    if (checkCallerTargetSdk(mService, source.getPackageName(),
-                                Build.VERSION_CODES.TIRAMISU)) {
-                        enforceBluetoothPrivilegedPermission(service);
-                    }
                     codecStatus = service.getCodecStatus(device);
                 }
                 receiver.send(codecStatus);
@@ -1488,10 +1485,6 @@ public class A2dpService extends ProfileService {
             A2dpService service = getService(source);
             if (service == null) {
                 return;
-            }
-            if (checkCallerTargetSdk(mService, source.getPackageName(),
-                        Build.VERSION_CODES.TIRAMISU)) {
-                enforceBluetoothPrivilegedPermission(service);
             }
             service.setCodecConfigPreference(device, codecConfig);
         }

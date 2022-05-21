@@ -577,6 +577,11 @@ tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
     return BTM_BUSY;
   }
 
+  if (interop_match_addr(INTEROP_DYNAMIC_ROLE_SWITCH, &remote_bd_addr)) {
+    LOG_DEBUG("Device restrict listed under INTEROP_DYNAMIC_ROLE_SWITCH");
+    return BTM_DEV_RESTRICT_LISTED;
+  }
+
   tBTM_PM_MODE pwr_mode;
   if (!BTM_ReadPowerMode(p_acl->remote_addr, &pwr_mode)) {
     LOG_WARN(
@@ -2756,13 +2761,22 @@ void acl_write_automatic_flush_timeout(const RawAddress& bd_addr,
 }
 
 bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
-    tBLE_BD_ADDR address_with_type{
-        .bda = bd_addr,
-        .type = BLE_ADDR_RANDOM,
-    };
-    gatt_find_in_device_record(bd_addr, &address_with_type);
-    LOG_DEBUG("Creating le direct connection to:%s",
-              PRIVATE_ADDRESS(address_with_type));
+  tBLE_BD_ADDR address_with_type{
+      .bda = bd_addr,
+      .type = BLE_ADDR_PUBLIC,
+  };
+  gatt_find_in_device_record(bd_addr, &address_with_type);
+  LOG_DEBUG("Creating le direct connection to:%s",
+            PRIVATE_ADDRESS(address_with_type));
+
+  if (address_with_type.type == BLE_ADDR_ANONYMOUS) {
+    LOG_WARN(
+        "Creating le direct connection to:%s, address type 'anonymous' is "
+        "invalid",
+        PRIVATE_ADDRESS(address_with_type));
+    return false;
+  }
+
     bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
                                                 /* is_direct */ true);
     return true;
@@ -2883,7 +2897,7 @@ void acl_process_extended_features(uint16_t handle, uint8_t current_page_number,
       bd_features_text(p_acl->peer_lmp_feature_pages[current_page_number])
           .c_str());
 
-  if (max_page_number == current_page_number) {
+  if (max_page_number == 0 || max_page_number == current_page_number) {
     NotifyAclFeaturesReadComplete(*p_acl, max_page_number);
   }
 }

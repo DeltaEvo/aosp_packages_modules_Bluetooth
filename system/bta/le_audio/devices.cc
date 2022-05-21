@@ -102,7 +102,42 @@ int LeAudioDeviceGroup::NumOfConnected(types::LeAudioContextType context_type) {
       });
 }
 
-void LeAudioDeviceGroup::Cleanup(void) { leAudioDevices_.clear(); }
+void LeAudioDeviceGroup::Cleanup(void) {
+  /* Bluetooth is off while streaming - disconnect CISes and remove CIG */
+  if (GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+    if (!stream_conf.sink_streams.empty()) {
+      for (auto [cis_handle, audio_location] : stream_conf.sink_streams) {
+        bluetooth::hci::IsoManager::GetInstance()->DisconnectCis(
+            cis_handle, HCI_ERR_PEER_USER);
+
+        if (stream_conf.source_streams.empty()) {
+          continue;
+        }
+        uint16_t cis_hdl = cis_handle;
+        stream_conf.source_streams.erase(
+            std::remove_if(
+                stream_conf.source_streams.begin(),
+                stream_conf.source_streams.end(),
+                [cis_hdl](auto& pair) { return pair.first == cis_hdl; }),
+            stream_conf.source_streams.end());
+      }
+    }
+
+    if (!stream_conf.source_streams.empty()) {
+      for (auto [cis_handle, audio_location] : stream_conf.source_streams) {
+        bluetooth::hci::IsoManager::GetInstance()->DisconnectCis(
+            cis_handle, HCI_ERR_PEER_USER);
+      }
+    }
+  }
+
+  /* Note: CIG will stay in the controller. We cannot remove it here, because
+   * Cises are not yet disconnected.
+   * When user start Bluetooth, HCI Reset should remove it
+   */
+
+  leAudioDevices_.clear();
+}
 
 void LeAudioDeviceGroup::Deactivate(void) {
   for (auto* leAudioDevice = GetFirstActiveDevice(); leAudioDevice;
@@ -912,11 +947,15 @@ uint32_t PickAudioLocation(types::LeAudioConfigurationStrategy strategy,
       }
       break;
     default:
-      LOG_ASSERT(0) << " Shall never happen ";
+      LOG_ALWAYS_FATAL("%s: Unknown strategy: %hhu", __func__, strategy);
       return 0;
   }
 
-  LOG_ASSERT(0) << " Shall never happen ";
+  LOG_ALWAYS_FATAL(
+      "%s: Shall never exit switch statement, strategy: %hhu, "
+      "locations: %lx, group_locations: %lx",
+      __func__, strategy, audio_locations.to_ulong(),
+      group_audio_locations->to_ulong());
   return 0;
 }
 
@@ -925,7 +964,8 @@ bool LeAudioDevice::ConfigureAses(
     types::LeAudioContextType context_type,
     uint8_t* number_of_already_active_group_ase,
     types::AudioLocations& group_snk_audio_locations,
-    types::AudioLocations& group_src_audio_locations, bool reuse_cis_id) {
+    types::AudioLocations& group_src_audio_locations, bool reuse_cis_id,
+    int ccid) {
   struct ase* ase = GetFirstInactiveAse(ent.direction, reuse_cis_id);
   if (!ase) return false;
 
@@ -980,7 +1020,7 @@ bool LeAudioDevice::ConfigureAses(
     ase->retrans_nb = ent.qos.retransmission_number;
     ase->max_transport_latency = ent.qos.max_transport_latency;
 
-    ase->metadata = GetMetadata(context_type);
+    ase->metadata = GetMetadata(context_type, ccid);
 
     DLOG(INFO) << __func__ << " device=" << address_
                << ", activated ASE id=" << +ase->id
@@ -1001,7 +1041,7 @@ bool LeAudioDevice::ConfigureAses(
  */
 bool LeAudioDeviceGroup::ConfigureAses(
     const set_configurations::AudioSetConfiguration* audio_set_conf,
-    types::LeAudioContextType context_type) {
+    types::LeAudioContextType context_type, int ccid) {
   if (!set_configurations::check_if_may_cover_scenario(
           audio_set_conf, NumOfConnected(context_type)))
     return false;
@@ -1042,9 +1082,12 @@ bool LeAudioDeviceGroup::ConfigureAses(
       /* Skip if device has ASE configured in this direction already */
       if (device->GetFirstActiveAseByDirection(ent.direction)) continue;
 
+      /* For the moment, we configure only connected devices. */
+      if (device->conn_id_ == GATT_INVALID_CONN_ID) continue;
+
       if (!device->ConfigureAses(ent, context_type, &active_ase_num,
                                  group_snk_audio_locations,
-                                 group_src_audio_locations, reuse_cis_id))
+                                 group_src_audio_locations, reuse_cis_id, ccid))
         continue;
 
       required_device_cnt--;
@@ -1123,11 +1166,19 @@ LeAudioDeviceGroup::GetCodecConfigurationByDirection(
   return group_config;
 }
 
+bool LeAudioDeviceGroup::IsContextSupported(
+    types::LeAudioContextType group_context_type) {
+  auto iter = active_context_to_configuration_map.find(group_context_type);
+  if (iter == active_context_to_configuration_map.end()) return false;
+
+  return active_context_to_configuration_map[group_context_type] != nullptr;
+}
+
 bool LeAudioDeviceGroup::IsMetadataChanged(
-    types::LeAudioContextType context_type) {
+    types::LeAudioContextType context_type, int ccid) {
   for (auto* leAudioDevice = GetFirstActiveDevice(); leAudioDevice;
        leAudioDevice = GetNextActiveDevice(leAudioDevice)) {
-    if (leAudioDevice->IsMetadataChanged(context_type)) return true;
+    if (leAudioDevice->IsMetadataChanged(context_type, ccid)) return true;
   }
 
   return false;
@@ -1176,7 +1227,7 @@ LeAudioDeviceGroup::FindFirstSupportedConfiguration(
 /* This method should choose aproperiate ASEs to be active and set a cached
  * configuration for codec and qos.
  */
-bool LeAudioDeviceGroup::Configure(LeAudioContextType context_type) {
+bool LeAudioDeviceGroup::Configure(LeAudioContextType context_type, int ccid) {
   const set_configurations::AudioSetConfiguration* conf =
       active_context_to_configuration_map[context_type];
 
@@ -1191,7 +1242,7 @@ bool LeAudioDeviceGroup::Configure(LeAudioContextType context_type) {
 
   DLOG(INFO) << __func__ << " setting context type: " << int(context_type);
 
-  if (!ConfigureAses(conf, context_type)) {
+  if (!ConfigureAses(conf, context_type, ccid)) {
     LOG(ERROR) << __func__ << ", requested pick ASE config context type: "
                << loghex(static_cast<uint16_t>(context_type))
                << ", is in mismatch with cached active contexts";
@@ -1726,20 +1777,21 @@ void LeAudioDevice::DeactivateAllAses(void) {
   }
 }
 
-std::vector<uint8_t> LeAudioDevice::GetMetadata(
-    LeAudioContextType context_type) {
+std::vector<uint8_t> LeAudioDevice::GetMetadata(LeAudioContextType context_type,
+                                                int ccid) {
   std::vector<uint8_t> metadata;
 
   AppendMetadataLtvEntryForStreamingContext(metadata, context_type);
-  AppendMetadataLtvEntryForCcidList(metadata, context_type);
+  AppendMetadataLtvEntryForCcidList(metadata, ccid);
 
   return std::move(metadata);
 }
 
-bool LeAudioDevice::IsMetadataChanged(types::LeAudioContextType context_type) {
+bool LeAudioDevice::IsMetadataChanged(types::LeAudioContextType context_type,
+                                      int ccid) {
   for (auto* ase = this->GetFirstActiveAse(); ase;
        ase = this->GetNextActiveAse(ase)) {
-    if (this->GetMetadata(context_type) != ase->metadata) return true;
+    if (this->GetMetadata(context_type, ccid) != ase->metadata) return true;
   }
 
   return false;
@@ -1900,6 +1952,11 @@ void LeAudioDevices::Dump(int fd, int group_id) {
   }
 }
 
-void LeAudioDevices::Cleanup(void) { leAudioDevices_.clear(); }
+void LeAudioDevices::Cleanup(void) {
+  for (auto const& device : leAudioDevices_) {
+    device->DisconnectAcl();
+  }
+  leAudioDevices_.clear();
+}
 
 }  // namespace le_audio
