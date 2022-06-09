@@ -429,34 +429,6 @@ void btsnd_hcic_ble_read_remote_feat(uint16_t handle) {
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }
 
-/* security management commands */
-void btsnd_hcic_ble_encrypt(uint8_t* key, uint8_t key_len, uint8_t* plain_text,
-                            uint8_t pt_len, void* p_cmd_cplt_cback) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_ENCRYPT;
-  p->offset = sizeof(void*);
-
-  *((void**)pp) =
-      p_cmd_cplt_cback; /* Store command complete callback in buffer */
-  pp += sizeof(void*);  /* Skip over callback pointer */
-
-  UINT16_TO_STREAM(pp, HCI_BLE_ENCRYPT);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_BLE_ENCRYPT);
-
-  memset(pp, 0, HCIC_PARAM_SIZE_BLE_ENCRYPT);
-
-  if (key_len > HCIC_BLE_ENCRYPT_KEY_SIZE) key_len = HCIC_BLE_ENCRYPT_KEY_SIZE;
-  if (pt_len > HCIC_BLE_ENCRYPT_KEY_SIZE) pt_len = HCIC_BLE_ENCRYPT_KEY_SIZE;
-
-  ARRAY_TO_STREAM(pp, key, key_len);
-  pp += (HCIC_BLE_ENCRYPT_KEY_SIZE - key_len);
-  ARRAY_TO_STREAM(pp, plain_text, pt_len);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
 void btsnd_hcic_ble_rand(base::Callback<void(BT_OCTET8)> cb) {
   btu_hcif_send_cmd_with_cb(FROM_HERE, HCI_BLE_RAND, nullptr, 0,
                             base::Bind(
@@ -617,73 +589,6 @@ void btsnd_hcic_ble_rc_param_req_neg_reply(uint16_t handle, uint8_t reason) {
 
   UINT16_TO_STREAM(pp, handle);
   UINT8_TO_STREAM(pp, reason);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_ble_add_device_resolving_list(uint8_t addr_type_peer,
-                                              const RawAddress& bda_peer,
-                                              const Octet16& irk_peer,
-                                              const Octet16& irk_local) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_ADD_DEV_RESOLVING_LIST;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_BLE_ADD_DEV_RESOLVING_LIST);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_BLE_ADD_DEV_RESOLVING_LIST);
-  UINT8_TO_STREAM(pp, addr_type_peer);
-  BDADDR_TO_STREAM(pp, bda_peer);
-  ARRAY_TO_STREAM(pp, irk_peer.data(), HCIC_BLE_ENCRYPT_KEY_SIZE);
-  ARRAY_TO_STREAM(pp, irk_local.data(), HCIC_BLE_ENCRYPT_KEY_SIZE);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_ble_rm_device_resolving_list(uint8_t addr_type_peer,
-                                             const RawAddress& bda_peer) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_RM_DEV_RESOLVING_LIST;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_BLE_RM_DEV_RESOLVING_LIST);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_BLE_RM_DEV_RESOLVING_LIST);
-  UINT8_TO_STREAM(pp, addr_type_peer);
-  BDADDR_TO_STREAM(pp, bda_peer);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_ble_set_privacy_mode(uint8_t addr_type_peer,
-                                     const RawAddress& bda_peer,
-                                     uint8_t privacy_type) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_SET_PRIVACY_MODE;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_BLE_SET_PRIVACY_MODE);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_BLE_SET_PRIVACY_MODE);
-  UINT8_TO_STREAM(pp, addr_type_peer);
-  BDADDR_TO_STREAM(pp, bda_peer);
-  UINT8_TO_STREAM(pp, privacy_type);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_ble_clear_resolving_list(void) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_CLEAR_RESOLVING_LIST;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_BLE_CLEAR_RESOLVING_LIST);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_BLE_CLEAR_RESOLVING_LIST);
 
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }

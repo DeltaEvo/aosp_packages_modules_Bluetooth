@@ -26,6 +26,7 @@
 
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
+#include <log/log.h>
 
 #include "bt_target.h"
 #include "bta/include/bta_hearing_aid_api.h"
@@ -43,6 +44,12 @@
 #include "stack/l2cap/l2c_int.h"
 #include "stack_config.h"
 #include "types/raw_address.h"
+
+namespace {
+
+constexpr char kBtmLogTag[] = "L2CAP";
+
+}
 
 tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
                                               uint16_t psm, bool is_originator,
@@ -516,6 +523,15 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
       /* Check how many channels remote side wants. */
       num_of_channels = (p_pkt_end - p) / sizeof(uint16_t);
+      if (num_of_channels > L2CAP_CREDIT_BASED_MAX_CIDS) {
+        android_errorWriteLog(0x534e4554, "232256974");
+        LOG_WARN("L2CAP - invalid number of channels requested: %d",
+                 num_of_channels);
+        l2cu_reject_credit_based_conn_req(p_lcb, id,
+                                          L2CAP_CREDIT_BASED_MAX_CIDS,
+                                          L2CAP_LE_RESULT_INVALID_PARAMETERS);
+        return;
+      }
 
       LOG_DEBUG(
           "Recv L2CAP_CMD_CREDIT_BASED_CONN_REQ with "
@@ -1312,16 +1328,32 @@ void l2cble_update_data_length(tL2C_LCB* p_lcb) {
  * Returns          void
  *
  ******************************************************************************/
+static bool is_legal_tx_data_len(const uint16_t& tx_data_len) {
+  return (tx_data_len >= 0x001B && tx_data_len <= 0x00FB);
+}
+
 void l2cble_process_data_length_change_event(uint16_t handle,
                                              uint16_t tx_data_len,
                                              uint16_t rx_data_len) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
+  if (p_lcb == nullptr) {
+    LOG_WARN("Received data length change event for unknown ACL handle:0x%04x",
+             handle);
+    return;
+  }
 
-  L2CAP_TRACE_DEBUG("%s TX data len = %d", __func__, tx_data_len);
-  if (p_lcb == NULL) return;
-
-  if (tx_data_len > 0) p_lcb->tx_data_len = tx_data_len;
-
+  if (is_legal_tx_data_len(tx_data_len)) {
+    LOG_DEBUG("Received data length change event for device:%s tx_data_len:%hu",
+              PRIVATE_ADDRESS(p_lcb->remote_bd_addr), tx_data_len);
+    p_lcb->tx_data_len = tx_data_len;
+    BTM_LogHistory(kBtmLogTag, p_lcb->remote_bd_addr, "LE Data length change",
+                   base::StringPrintf("tx_octets:%hu", tx_data_len));
+  } else {
+    LOG_WARN(
+        "Received illegal data length change event for device:%s "
+        "tx_data_len:%hu",
+        PRIVATE_ADDRESS(p_lcb->remote_bd_addr), tx_data_len);
+  }
   /* ignore rx_data len for now */
 }
 

@@ -1123,22 +1123,14 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
         break;
 
       case HCI_ERR_PAIRING_NOT_ALLOWED:
-        if (!bluetooth::shim::is_gd_security_enabled()) {
-          is_bonded_device_removed = (btif_storage_remove_bonded_device(
-                                          &bd_addr) == BT_STATUS_SUCCESS);
-        } else {
-          is_bonded_device_removed = true;
-        }
+        is_bonded_device_removed = false;
         status = BT_STATUS_AUTH_REJECTED;
         break;
 
       /* map the auth failure codes, so we can retry pairing if necessary */
       case HCI_ERR_AUTH_FAILURE:
       case HCI_ERR_KEY_MISSING:
-        is_bonded_device_removed = (bluetooth::shim::is_gd_security_enabled())
-                                       ? true
-                                       : (btif_storage_remove_bonded_device(
-                                              &bd_addr) == BT_STATUS_SUCCESS);
+        is_bonded_device_removed = false;
         [[fallthrough]];
       case HCI_ERR_HOST_REJECT_SECURITY:
       case HCI_ERR_ENCRY_MODE_NOT_ACCEPTABLE:
@@ -1169,10 +1161,7 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
       /* Remove Device as bonded in nvram as authentication failed */
       BTIF_TRACE_DEBUG("%s(): removing hid pointing device from nvram",
                        __func__);
-      is_bonded_device_removed = (bluetooth::shim::is_gd_security_enabled())
-                                     ? true
-                                     : (btif_storage_remove_bonded_device(
-                                            &bd_addr) == BT_STATUS_SUCCESS);
+      is_bonded_device_removed = false;
     }
     // Report bond state change to java only if we are bonding to a device or
     // a device is removed from the pairing list.
@@ -2227,13 +2216,13 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
   // Error check the inputs. Use the default if problems are found
   if (local_device_class.size() != 3) {
     LOG_ERROR("COD malformed, must have unsigned 3 integers.");
-  } else if (local_device_class[0].has_value()
+  } else if (!local_device_class[0].has_value()
       || local_device_class[0].value() > 0xFF) {
     LOG_ERROR("COD malformed, first value is missing or too large.");
-  } else if (local_device_class[1].has_value()
+  } else if (!local_device_class[1].has_value()
       || local_device_class[1].value() > 0xFF) {
     LOG_ERROR("COD malformed, second value is missing or too large.");
-  } else if (local_device_class[2].has_value()
+  } else if (!local_device_class[2].has_value()
       || local_device_class[2].value() > 0xFF) {
     LOG_ERROR("COD malformed, third value is missing or too large.");
   } else {
