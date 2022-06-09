@@ -10,7 +10,10 @@ package {
 cc_test {
     name: "bt_headless",
     test_suites: ["device-tests"],
-    defaults: ["fluoride_defaults"],
+    defaults: [
+        "fluoride_defaults",
+        "mts_defaults",
+    ],
     srcs: [
         "connect/connect.cc",
         "get_options.cc",
@@ -72,7 +75,7 @@ cc_test {
         "android.hardware.bluetooth@1.1",
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
-        "android.hardware.bluetooth.audio-V1-ndk",
+        "android.hardware.bluetooth.audio-V2-ndk",
         "android.system.suspend-V1-ndk",
         "libaaudio",
         "libbase",

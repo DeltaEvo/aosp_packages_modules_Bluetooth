@@ -100,7 +100,7 @@ cc_defaults {
     target: {
         android: {
             shared_libs: [
-                "android.hardware.bluetooth.audio-V1-ndk",
+                "android.hardware.bluetooth.audio-V2-ndk",
             ],
         },
     },
@@ -109,7 +109,10 @@ cc_defaults {
 cc_test {
     name: "net_test_bluetooth",
     test_suites: ["device-tests"],
-    defaults: ["net_test_defaults"],
+    defaults: [
+        "net_test_defaults",
+        "mts_defaults",
+    ],
     srcs: [
         "adapter/adapter_unittest.cc",
         "gatt/gatt_test.cc",

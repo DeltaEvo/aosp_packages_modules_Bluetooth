@@ -265,14 +265,8 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
     case HCI_ENCRYPTION_KEY_REFRESH_COMP_EVT:
       btu_hcif_encryption_key_refresh_cmpl_evt(p);
       break;
-    case HCI_READ_RMT_FEATURES_COMP_EVT:
-      btm_read_remote_features_complete_raw(p);
-      break;
     case HCI_READ_RMT_EXT_FEATURES_COMP_EVT:
       btu_hcif_read_rmt_ext_features_comp_evt(p, hci_evt_len);
-      break;
-    case HCI_READ_RMT_VERSION_COMP_EVT:
-      btm_read_remote_version_complete_raw(p);
       break;
     case HCI_COMMAND_COMPLETE_EVT:
       LOG_ERROR(
@@ -434,6 +428,8 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
 
       // Events now captured by gd::hci_layer module
     case HCI_CONNECTION_COMP_EVT:  // EventCode::CONNECTION_COMPLETE
+    case HCI_READ_RMT_FEATURES_COMP_EVT:  // EventCode::READ_REMOTE_SUPPORTED_FEATURES_COMPLETE
+    case HCI_READ_RMT_VERSION_COMP_EVT:  // EventCode::READ_REMOTE_VERSION_INFORMATION_COMPLETE
     default:
       LOG_ERROR(
           "Unexpectedly received event_code:0x%02x that should not be "
@@ -1138,7 +1134,12 @@ static void btu_hcif_esco_connection_comp_evt(const uint8_t* p) {
   handle = HCID_GET_HANDLE(handle);
 
   data.bd_addr = bda;
-  btm_sco_connected(static_cast<tHCI_STATUS>(status), bda, handle, &data);
+  if (status == HCI_SUCCESS) {
+    btm_sco_connected(bda, handle, &data);
+  } else {
+    btm_sco_connection_failed(static_cast<tHCI_STATUS>(status), bda, handle,
+                              &data);
+  }
 }
 
 /*******************************************************************************
@@ -1393,7 +1394,9 @@ static void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
     case HCI_ENH_SETUP_ESCO_CONNECTION:
       if (status != HCI_SUCCESS) {
         STREAM_TO_UINT16(handle, p_cmd);
-        // Determine if initial connection failed or is a change of setup
+        RawAddress addr(RawAddress::kEmpty);
+        btm_sco_connection_failed(static_cast<tHCI_STATUS>(status), addr,
+                                  handle, nullptr);
       }
       break;
 
@@ -1434,6 +1437,12 @@ static void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
                          (tBTM_VSC_CMPL_CB*)p_vsc_status_cback);
       }
   }
+}
+
+void bluetooth::legacy::testing::btu_hcif_hdl_command_status(
+    uint16_t opcode, uint8_t status, const uint8_t* p_cmd,
+    void* p_vsc_status_cback) {
+  ::btu_hcif_hdl_command_status(opcode, status, p_cmd, p_vsc_status_cback);
 }
 
 /*******************************************************************************
