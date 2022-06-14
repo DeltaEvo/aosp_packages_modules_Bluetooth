@@ -164,6 +164,8 @@ typedef struct {
   bool is_le_nc; /* LE Numeric comparison */
   btif_dm_ble_cb_t ble;
   uint8_t fail_reason;
+  Uuid::UUID128Bit eir_uuids[32];
+  uint8_t num_eir_uuids;
 } btif_dm_pairing_cb_t;
 
 // TODO(jpawlowski): unify ?
@@ -1209,7 +1211,8 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
       /* inquiry result */
       bt_bdname_t bdname;
       uint8_t remote_name_len;
-      tBTA_SERVICE_MASK services = 0;
+      uint8_t num_uuids = 0, max_num_uuid = 32;
+      uint8_t uuid_list[32 * Uuid::kNumBytes16];
 
       p_search_data->inq_res.remt_name_not_required =
           check_eir_remote_name(p_search_data, NULL, NULL);
@@ -1223,18 +1226,15 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
       if (!check_eir_remote_name(p_search_data, bdname.name, &remote_name_len))
         check_cached_remote_name(p_search_data, bdname.name, &remote_name_len);
 
-      /* Check EIR for remote name and services */
+      /* Check EIR for services */
       if (p_search_data->inq_res.p_eir) {
-        BTA_GetEirService(p_search_data->inq_res.p_eir,
-                          p_search_data->inq_res.eir_len, &services);
-        BTIF_TRACE_DEBUG("%s()EIR BTA services = %08X", __func__,
-                         (uint32_t)services);
-        /* TODO:  Get the service list and check to see which uuids we got and
-         * send it back to the client. */
+        BTM_GetEirUuidList(p_search_data->inq_res.p_eir,
+                           p_search_data->inq_res.eir_len, Uuid::kNumBytes16,
+                           &num_uuids, uuid_list, max_num_uuid);
       }
 
       {
-        bt_property_t properties[6];
+        bt_property_t properties[7];
         bt_device_type_t dev_type;
         uint32_t num_properties = 0;
         bt_status_t status;
@@ -1297,6 +1297,19 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
                                    sizeof(bool),
                                    &(p_search_data->inq_res.include_rsi));
         num_properties++;
+
+        /* Cache EIR queried services */
+        if (num_uuids > 0) {
+          uint16_t* p_uuid16 = (uint16_t*)uuid_list;
+          pairing_cb.num_eir_uuids = 0;
+          LOG_INFO("EIR UUIDS:");
+          for (int i = 0; i < num_uuids; ++i) {
+            Uuid uuid = Uuid::From16Bit(p_uuid16[i]);
+            LOG_INFO("        %s", uuid.ToString().c_str());
+            pairing_cb.eir_uuids[i] = uuid.To128BitBE();
+            pairing_cb.num_eir_uuids++;
+          }
+        }
 
         status =
             btif_storage_add_remote_device(&bdaddr, num_properties, properties);
@@ -1395,28 +1408,34 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
         LOG_INFO("SDP search done for %s", bd_addr.ToString().c_str());
         pairing_cb.sdp_attempts = 0;
 
+        // Send UUIDs discovered through EIR to Java to unblock pairing intent
+        // when SDP failed or no UUID is discovered
+        if (p_data->disc_res.result != BTA_SUCCESS ||
+            p_data->disc_res.num_uuids == 0) {
+          LOG_INFO("SDP failed, send %d EIR UUIDs to unblock bonding %s",
+                   pairing_cb.num_eir_uuids, bd_addr.ToString().c_str());
+          bt_property_t prop_uuids;
+          Uuid uuid = {};
+          prop_uuids.type = BT_PROPERTY_UUIDS;
+          if (pairing_cb.num_eir_uuids > 0) {
+            prop_uuids.val = pairing_cb.eir_uuids;
+            prop_uuids.len = pairing_cb.num_eir_uuids * Uuid::kNumBytes128;
+          } else {
+            prop_uuids.val = &uuid;
+            prop_uuids.len = Uuid::kNumBytes128;
+          }
+
+          /* Send the event to the BTIF
+           * prop_uuids will be deep copied by this call
+           */
+          invoke_remote_device_properties_cb(BT_STATUS_SUCCESS, bd_addr, 1,
+                                             &prop_uuids);
+          pairing_cb = {};
+          break;
+        }
         // Both SDP and bonding are done, clear pairing control block in case
         // it is not already cleared
         pairing_cb = {};
-
-        // Send one empty UUID to Java to unblock pairing intent when SDP failed
-        // or no UUID is discovered
-        if (p_data->disc_res.result != BTA_SUCCESS ||
-            p_data->disc_res.num_uuids == 0) {
-          LOG_INFO("SDP failed, send empty UUID to unblock bonding %s",
-                   bd_addr.ToString().c_str());
-          bt_property_t prop_uuids;
-          Uuid uuid = {};
-
-          prop_uuids.type = BT_PROPERTY_UUIDS;
-          prop_uuids.val = &uuid;
-          prop_uuids.len = Uuid::kNumBytes128;
-
-          /* Send the event to the BTIF */
-          invoke_remote_device_properties_cb(BT_STATUS_SUCCESS, bd_addr, 1,
-                                             &prop_uuids);
-          break;
-        }
       }
 
       if (p_data->disc_res.num_uuids != 0) {
