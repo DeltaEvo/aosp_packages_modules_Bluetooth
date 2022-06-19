@@ -46,21 +46,11 @@ fn generate_preamble(path: &Path) -> Result<String> {
             #[error("{field} was {value:x}, which is not known")]
             ConstraintOutOfBounds { field: String, value: u64 },
             #[error("when parsing {obj}.{field} needed length of {wanted} but got {got}")]
-            InvalidLengthError {
-                obj: String,
-                field: String,
-                wanted: usize,
-                got: usize,
-            },
+            InvalidLengthError { obj: String, field: String, wanted: usize, got: usize },
             #[error("Due to size restrictions a struct could not be parsed.")]
             ImpossibleStructError,
             #[error("when parsing field {obj}.{field}, {value} is not a valid {type_} value")]
-            InvalidEnumValueError {
-                obj: String,
-                field: String,
-                value: u64,
-                type_: String,
-            },
+            InvalidEnumValueError { obj: String, field: String, value: u64, type_: String },
         }
     });
 
@@ -506,7 +496,7 @@ mod tests {
     fn test_generate_preamble() {
         let actual_code = generate_preamble(Path::new("some/path/foo.pdl")).unwrap();
         let expected_code = include_str!("../test/generated/preamble.rs");
-        assert_eq_with_diff(&rustfmt(&actual_code), &rustfmt(expected_code));
+        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
     }
 
     #[test]
@@ -522,7 +512,7 @@ mod tests {
         let decl = &grammar.declarations[0];
         let actual_code = generate_decl(&grammar, &packets, &children, decl).unwrap();
         let expected_code = include_str!("../test/generated/packet_decl_empty.rs");
-        assert_eq_with_diff(&rustfmt(&actual_code), &rustfmt(expected_code));
+        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
     }
 
     #[test]
@@ -542,7 +532,7 @@ mod tests {
         let decl = &grammar.declarations[0];
         let actual_code = generate_decl(&grammar, &packets, &children, decl).unwrap();
         let expected_code = include_str!("../test/generated/packet_decl_simple_little_endian.rs");
-        assert_eq_with_diff(&rustfmt(&actual_code), &rustfmt(expected_code));
+        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
     }
 
     #[test]
@@ -562,6 +552,6 @@ mod tests {
         let decl = &grammar.declarations[0];
         let actual_code = generate_decl(&grammar, &packets, &children, decl).unwrap();
         let expected_code = include_str!("../test/generated/packet_decl_simple_big_endian.rs");
-        assert_eq_with_diff(&rustfmt(&actual_code), &rustfmt(expected_code));
+        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
     }
 }
