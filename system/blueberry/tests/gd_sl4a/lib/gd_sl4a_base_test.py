@@ -34,6 +34,7 @@ from blueberry.tests.gd.cert.gd_device import MOBLY_CONTROLLER_CONFIG_NAME as GD
 from blueberry.tests.gd_sl4a.lib.ble_lib import enable_bluetooth, disable_bluetooth, BleLib
 from blueberry.facade import rootservice_pb2 as facade_rootservice
 from blueberry.tests.gd.cert import gd_device
+from blueberry.utils.bt_test_utils import clear_bonded_devices
 
 
 class GdSl4aBaseTestClass(BaseTestClass):
@@ -61,9 +62,10 @@ class GdSl4aBaseTestClass(BaseTestClass):
         # Enable full btsnoop log
         self.dut.adb.root()
         self.dut.adb.shell("setprop persist.bluetooth.btsnooplogmode full")
-        getprop_result = self.dut.adb.shell("getprop persist.bluetooth.btsnooplogmode") == "full"
-        if not getprop_result:
-            self.dut.log.warning("Failed to enable Bluetooth Hci Snoop Logging.")
+        getprop_result = self.dut.adb.getprop("persist.bluetooth.btsnooplogmode")
+        if getprop_result is None or ("full" not in getprop_result.lower()):
+            self.dut.log.warning(
+                "Failed to enable Bluetooth Hci Snoop Logging, getprop returned {}".format(getprop_result))
 
         self.ble = BleLib(dut=self.dut)
 
@@ -89,13 +91,18 @@ class GdSl4aBaseTestClass(BaseTestClass):
         # Then enable Bluetooth
         enable_bluetooth(self.dut.sl4a, self.dut.ed)
         self.dut.sl4a.bluetoothDisableBLE()
+        clear_bonded_devices(self.dut)
         return True
 
     def teardown_test(self):
+        clear_bonded_devices(self.dut)
         # Make sure BLE is disabled and Bluetooth is disabled after test
         self.dut.sl4a.bluetoothDisableBLE()
         disable_bluetooth(self.dut.sl4a, self.dut.ed)
-        self.cert.rootservice.StopStack(facade_rootservice.StopStackRequest())
+        try:
+            self.cert.rootservice.StopStack(facade_rootservice.StopStackRequest())
+        except Exception:
+            logging.error("Failed to stop CERT stack")
 
         # TODO: split cert logcat logs into individual tests
         current_test_dir = get_current_context().get_full_output_path()
