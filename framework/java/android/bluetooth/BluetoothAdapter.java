@@ -1005,8 +1005,8 @@ public final class BluetoothAdapter {
     /**
      * Get a {@link BluetoothDevice} object for the given Bluetooth hardware
      * address.
-     * <p>Valid Bluetooth hardware addresses must be upper case, in a format
-     * such as "00:11:22:33:AA:BB". The helper {@link #checkBluetoothAddress} is
+     * <p>Valid Bluetooth hardware addresses must be upper case, in big endian byte order, and in a
+     * format such as "00:11:22:33:AA:BB". The helper {@link #checkBluetoothAddress} is
      * available to validate a Bluetooth address.
      * <p>A {@link BluetoothDevice} will always be returned for a valid
      * hardware address, even if this adapter has never seen that device.
@@ -1024,8 +1024,8 @@ public final class BluetoothAdapter {
     /**
      * Get a {@link BluetoothDevice} object for the given Bluetooth hardware
      * address and addressType.
-     * <p>Valid Bluetooth hardware addresses must be upper case, in a format
-     * such as "00:11:22:33:AA:BB". The helper {@link #checkBluetoothAddress} is
+     * <p>Valid Bluetooth hardware addresses must be upper case, in big endian byte order, and in a
+     * format such as "00:11:22:33:AA:BB". The helper {@link #checkBluetoothAddress} is
      * available to validate a Bluetooth address.
      * <p>A {@link BluetoothDevice} will always be returned for a valid
      * hardware address and type, even if this adapter has never seen that device.
@@ -3364,7 +3364,7 @@ public final class BluetoothAdapter {
      * can use the same UUID to query our SDP server and discover which channel
      * to connect to. This SDP record will be removed when this socket is
      * closed, or if this application closes unexpectedly.
-     * <p>Use {@link BluetoothDevice#createRfcommSocketToServiceRecord} to
+     * <p>Use {@link BluetoothDevice#createInsecureRfcommSocketToServiceRecord} to
      * connect to this socket from another device using the same {@link UUID}.
      *
      * @param name service name for SDP record
