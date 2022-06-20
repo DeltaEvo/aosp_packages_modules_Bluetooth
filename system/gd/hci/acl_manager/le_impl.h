@@ -265,6 +265,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
   // connection canceled by LeAddressManager.OnPause(), will auto reconnect by LeAddressManager.OnResume()
   void on_le_connection_canceled_on_pause() {
     ASSERT_LOG(pause_connection, "Connection must be paused to ack the le address manager");
+    arm_on_resume_ = true;
     connectability_state_ = ConnectabilityState::DISARMED;
     le_address_manager_->AckPause(this);
   }
@@ -307,6 +308,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
 
     arm_on_resume_ = false;
     ready_to_unregister = true;
+    const bool in_filter_accept_list = is_device_in_connect_list(remote_address);
     remove_device_from_connect_list(remote_address);
 
     if (!connect_list.empty()) {
@@ -344,6 +346,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     connection->interval_ = conn_interval;
     connection->latency_ = conn_latency;
     connection->supervision_timeout_ = supervision_timeout;
+    connection->in_filter_accept_list_ = in_filter_accept_list;
     connections.add(
         handle, remote_address, queue_down_end, handler_, connection->GetEventCallbacks([this](uint16_t handle) {
           this->connections.invalidate(handle);
@@ -392,6 +395,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
 
     arm_on_resume_ = false;
     ready_to_unregister = true;
+    const bool in_filter_accept_list = is_device_in_connect_list(remote_address);
     remove_device_from_connect_list(remote_address);
 
     if (!connect_list.empty()) {
@@ -439,6 +443,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     connection->supervision_timeout_ = supervision_timeout;
     connection->local_resolvable_private_address_ = connection_complete.GetLocalResolvablePrivateAddress();
     connection->peer_resolvable_private_address_ = connection_complete.GetPeerResolvablePrivateAddress();
+    connection->in_filter_accept_list_ = in_filter_accept_list;
     connections.add(
         handle, remote_address, queue_down_end, handler_, connection->GetEventCallbacks([this](uint16_t handle) {
           this->connections.invalidate(handle);
@@ -464,11 +469,8 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
 
     if (background_connections_.count(remote_address) == 1) {
       LOG_INFO("re-add device to connect list");
+      arm_on_resume_ = true;
       add_device_to_connect_list(remote_address);
-    }
-    if (!connect_list.empty() && connectability_state_ == ConnectabilityState::DISARMED) {
-      LOG_INFO("connect_list is not empty, send a new connection request");
-      arm_connectability();
     }
   }
 
@@ -585,6 +587,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       return;
     }
     connect_list.erase(address_with_type);
+    connecting_le_.erase(address_with_type);
     direct_connections_.erase(address_with_type);
     register_with_address_manager();
     le_address_manager_->RemoveDeviceFromFilterAcceptList(
@@ -641,6 +644,10 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       LOG_ERROR(
           "Attempting to re-arm le connection state machine in unexpected state:%s",
           connectability_state_machine_text(connectability_state_).c_str());
+      return;
+    }
+    if (connect_list.empty()) {
+      LOG_ERROR("Attempting to re-arm le connection state machine when filter accept list is empty");
       return;
     }
     AddressWithType empty(Address::kEmpty, AddressType::RANDOM_DEVICE_ADDRESS);
@@ -922,6 +929,15 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
 
   void remove_device_from_background_connection_list(AddressWithType address_with_type) {
     background_connections_.erase(address_with_type);
+  }
+
+  void is_on_background_connection_list(AddressWithType address_with_type, std::promise<bool> promise) {
+    promise.set_value(background_connections_.find(address_with_type) != background_connections_.end());
+  }
+
+  void cancel_connection_and_remove_device_from_background_connection_list(AddressWithType address_with_type) {
+    remove_device_from_background_connection_list(address_with_type);
+    cancel_connect(address_with_type);
   }
 
   void OnPause() override {  // bluetooth::hci::LeAddressManagerCallback
