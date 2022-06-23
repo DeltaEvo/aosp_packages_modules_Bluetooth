@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.android.bluetooth.services"
+  package="com.android.bluetooth"
   android:sharedUserId="android.uid.bluetooth">
 
     <!-- Allows access to the Bluetooth Share Manager -->
@@ -29,7 +29,6 @@
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED"/>
     <uses-permission android:name="android.permission.BLUETOOTH_MAP"/>
     <uses-permission android:name="android.permission.CONTROL_INCALL_EXPERIENCE" />
-    <uses-permission android:name="android.permission.DUMP"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
