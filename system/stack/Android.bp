@@ -136,9 +136,12 @@ cc_library_static {
         "acl/btm_pm.cc",
         "btm/btm_sco.cc",
         "btm/btm_sco_hci.cc",
+        "btm/btm_sco_hfp_hal.cc",
         "btm/btm_iso.cc",
         "btm/btm_sec.cc",
         "btm/btm_scn.cc",
+        "btm/hfp_msbc_encoder.cc",
+        "btm/hfp_msbc_decoder.cc",
         "btu/btu_hcif.cc",
         "btu/btu_task.cc",
         "eatt/eatt.cc",
@@ -819,14 +822,19 @@ cc_test {
         "btm/btm_main.cc",
         "btm/btm_sco.cc",
         "btm/btm_sco_hci.cc",
+        "btm/btm_sco_hfp_hal.cc",
         "btm/btm_scn.cc",
         "btm/btm_sec.cc",
+        "btm/hfp_msbc_encoder.cc",
+        "btm/hfp_msbc_decoder.cc",
         "metrics/stack_metrics_logging.cc",
         "test/btm/stack_btm_test.cc",
         "test/btm/peer_packet_types_test.cc",
     ],
     static_libs: [
         "libbt-common",
+        "libbt-sbc-decoder",
+        "libbt-sbc-encoder",
         "libbt-protos-lite",
         "libbtdevice",
         "libbt-utils",
@@ -1209,4 +1217,37 @@ cc_test {
             undefined : true
         },
     },
+}
+
+// Bluetooth stack connection multiplexing
+cc_test {
+    name: "net_test_stack_sdp",
+    defaults: ["fluoride_defaults"],
+    local_include_dirs: [
+        "include",
+        "test/common",
+    ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/device/include/",
+        "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/internal_include",
+        "packages/modules/Bluetooth/system/utils/include",
+    ],
+    srcs: [
+        ":TestCommonMockFunctions",
+        "sdp/sdp_main.cc",
+        "sdp/sdp_utils.cc",
+        "test/common/mock_btif_config.cc",
+        "test/stack_sdp_utils_test.cc",
+    ],
+    shared_libs: [
+        "libcutils",
+    ],
+    static_libs: [
+        "libbt-common",
+        "libbluetooth-types",
+        "liblog",
+        "libgmock",
+    ],
 }
