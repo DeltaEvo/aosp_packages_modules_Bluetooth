@@ -29,6 +29,7 @@
 #include "hci/hci_layer.h"
 #include "hci/hci_packets.h"
 #include "hci/le_address_manager.h"
+#include "hci/le_scanning_manager.h"
 #include "module.h"
 #include "os/handler.h"
 
@@ -54,6 +55,7 @@ class AclManager : public Module {
  friend class bluetooth::shim::legacy::Acl;
  friend void bluetooth::shim::L2CA_UseLegacySecurityModule();
  friend bool bluetooth::shim::L2CA_SetAclPriority(uint16_t, bool);
+ friend class bluetooth::hci::LeScanningManager;
 
 public:
  AclManager();
@@ -101,8 +103,12 @@ public:
  // Generates OnConnectFail with error code "terminated by local host 0x16" if cancelled, or OnConnectSuccess if not
  // successfully cancelled and already connected
  virtual void CancelConnect(Address address);
+ virtual void RemoveFromBackgroundList(AddressWithType address_with_type);
+ virtual void IsOnBackgroundList(AddressWithType address_with_type, std::promise<bool> promise);
 
  virtual void CancelLeConnect(AddressWithType address_with_type);
+ virtual void CancelLeConnectAndRemoveFromBackgroundList(AddressWithType address_with_type);
+
  virtual void AddDeviceToFilterAcceptList(AddressWithType address_with_type);
  virtual void RemoveDeviceFromFilterAcceptList(AddressWithType address_with_type);
  virtual void ClearFilterAcceptList();

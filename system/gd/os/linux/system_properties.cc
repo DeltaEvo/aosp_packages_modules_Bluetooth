@@ -25,7 +25,13 @@ namespace os {
 
 namespace {
 std::mutex properties_mutex;
-std::unordered_map<std::string, std::string> properties;
+
+// Properties set along with some default values for Floss.
+std::unordered_map<std::string, std::string> properties = {
+    {"bluetooth.profile.avrcp.target.enabled", "true"},
+    // TODO (b/235218533): Re-enable LL privacy on Floss
+    {"bluetooth.core.gap.le.privacy.enabled", "false"},
+};
 }  // namespace
 
 std::optional<std::string> GetSystemProperty(const std::string& property) {

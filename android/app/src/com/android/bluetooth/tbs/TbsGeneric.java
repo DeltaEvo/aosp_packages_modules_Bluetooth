@@ -18,6 +18,7 @@
 package com.android.bluetooth.tbs;
 
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothLeCall;
 import android.bluetooth.BluetoothLeCallControl;
 import android.bluetooth.IBluetoothLeCallControlCallback;
@@ -51,7 +52,11 @@ public class TbsGeneric {
 
     private static final String UCI = "GTBS";
     private static final String DEFAULT_PROVIDER_NAME = "none";
-    private static final int DEFAULT_BEARER_TECHNOLOGY = 0x00;
+    /* Use GSM as default technology value. It is used only
+     * when bearer is not registered. It will be updated on the phone call
+     */
+    private static final int DEFAULT_BEARER_TECHNOLOGY =
+            BluetoothLeCallControlProxy.BEARER_TECHNOLOGY_GSM;
     private static final String UNKNOWN_FRIENDLY_NAME = "unknown";
 
     /** Class representing the pending request sent to the application */
@@ -151,7 +156,8 @@ public class TbsGeneric {
         }
         mTbsGatt = tbsGatt;
 
-        int ccid = ContentControlIdKeeper.acquireCcid();
+        int ccid = ContentControlIdKeeper.acquireCcid(new ParcelUuid(TbsGatt.UUID_GTBS),
+                BluetoothLeAudio.CONTEXT_TYPE_COMMUNICATION);
         if (!isCcidValid(ccid)) {
             Log.e(TAG, " CCID is not valid");
             cleanup();
@@ -180,6 +186,9 @@ public class TbsGeneric {
         } else {
             mTbsGatt.clearSilentModeFlag();
         }
+
+        // Android supports inband ringtone
+        mTbsGatt.setInbandRingtoneFlag();
 
         mReceiver = new Receiver();
         mTbsGatt.getContext().registerReceiver(mReceiver,
@@ -270,7 +279,8 @@ public class TbsGeneric {
 
         // Acquire CCID for TbsObject. The CCID is released on remove()
         Bearer bearer = new Bearer(token, callback, uci, uriSchemes, capabilities, providerName,
-                technology, ContentControlIdKeeper.acquireCcid());
+                technology, ContentControlIdKeeper.acquireCcid(new ParcelUuid(UUID.randomUUID()),
+                        BluetoothLeAudio.CONTEXT_TYPE_COMMUNICATION));
         if (isCcidValid(bearer.ccid)) {
             mBearerList.add(bearer);
 

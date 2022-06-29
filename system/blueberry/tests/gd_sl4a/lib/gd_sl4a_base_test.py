@@ -26,16 +26,15 @@ from mobly.base_test import BaseTestClass
 from mobly.controllers.android_device_lib.adb import AdbError
 from mobly.controllers import android_device
 from mobly.controllers.android_device import MOBLY_CONTROLLER_CONFIG_NAME as ANDROID_DEVICE_COFNIG_NAME
-from mobly.controllers.android_device_lib.jsonrpc_client_base import \
-    AppRestoreConnectionError
-from mobly.controllers.android_device_lib.services.sl4a_service import Sl4aService
-import mobly.controllers.android_device_lib.sl4a_client as sl4a_client
 
+from blueberry.utils.mobly_sl4a_utils import setup_sl4a
+from blueberry.utils.mobly_sl4a_utils import teardown_sl4a
 from blueberry.tests.gd.cert.context import get_current_context
 from blueberry.tests.gd.cert.gd_device import MOBLY_CONTROLLER_CONFIG_NAME as GD_DEVICE_CONFIG_NAME
 from blueberry.tests.gd_sl4a.lib.ble_lib import enable_bluetooth, disable_bluetooth, BleLib
 from blueberry.facade import rootservice_pb2 as facade_rootservice
 from blueberry.tests.gd.cert import gd_device
+from blueberry.utils.bt_test_utils import clear_bonded_devices
 
 
 class GdSl4aBaseTestClass(BaseTestClass):
@@ -54,34 +53,24 @@ class GdSl4aBaseTestClass(BaseTestClass):
         self.cert = self.gd_devices[0]
 
         # Parse and construct Android device objects
+        self.android_devices = self.register_controller(android_device, required=True)
         server_port = int(self.controller_configs[ANDROID_DEVICE_COFNIG_NAME][0]['server_port'])
         forwarded_port = int(self.controller_configs[ANDROID_DEVICE_COFNIG_NAME][0]['forwarded_port'])
-        sl4a_client._DEVICE_SIDE_PORT = server_port
-        sl4a_client._APP_START_WAIT_TIME = 0.5
-        self.android_devices = self.register_controller(android_device, required=True)
         self.dut = self.android_devices[0]
-        self.dut.services.register('sl4a', Sl4aService, start_service=False)
-        try:
-            self.dut.sl4a.start()
-        except AppRestoreConnectionError:
-            pass
-        try:
-            self.dut.sl4a.clear_host_port()
-        except AdbError:
-            pass
-        sl4a_client._APP_START_WAIT_TIME = 2 * 60
-        self.dut.sl4a.restore_app_connection(port=forwarded_port)
+        setup_sl4a(self.dut, server_port, forwarded_port)
 
         # Enable full btsnoop log
+        self.dut.adb.root()
         self.dut.adb.shell("setprop persist.bluetooth.btsnooplogmode full")
-        getprop_result = self.dut.adb.shell("getprop persist.bluetooth.btsnooplogmode") == "full"
-        if not getprop_result:
-            self.dut.log.warning("Failed to enable Bluetooth Hci Snoop Logging.")
+        getprop_result = self.dut.adb.getprop("persist.bluetooth.btsnooplogmode")
+        if getprop_result is None or ("full" not in getprop_result.lower()):
+            self.dut.log.warning(
+                "Failed to enable Bluetooth Hci Snoop Logging, getprop returned {}".format(getprop_result))
 
         self.ble = BleLib(dut=self.dut)
 
     def teardown_class(self):
-        pass
+        teardown_sl4a(self.dut)
 
     def setup_test(self):
         self.cert.rootservice.StartStack(
@@ -102,13 +91,18 @@ class GdSl4aBaseTestClass(BaseTestClass):
         # Then enable Bluetooth
         enable_bluetooth(self.dut.sl4a, self.dut.ed)
         self.dut.sl4a.bluetoothDisableBLE()
+        clear_bonded_devices(self.dut)
         return True
 
     def teardown_test(self):
+        clear_bonded_devices(self.dut)
         # Make sure BLE is disabled and Bluetooth is disabled after test
         self.dut.sl4a.bluetoothDisableBLE()
         disable_bluetooth(self.dut.sl4a, self.dut.ed)
-        self.cert.rootservice.StopStack(facade_rootservice.StopStackRequest())
+        try:
+            self.cert.rootservice.StopStack(facade_rootservice.StopStackRequest())
+        except Exception:
+            logging.error("Failed to stop CERT stack")
 
         # TODO: split cert logcat logs into individual tests
         current_test_dir = get_current_context().get_full_output_path()

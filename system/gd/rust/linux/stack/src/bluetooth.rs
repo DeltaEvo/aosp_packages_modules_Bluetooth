@@ -251,6 +251,9 @@ impl BluetoothDeviceContext {
 
 /// The interface for adapter callbacks registered through `IBluetooth::register_callback`.
 pub trait IBluetoothCallback: RPCProxy {
+    /// When any adapter property changes.
+    fn on_adapter_property_changed(&self, prop: BtPropertyType);
+
     /// When any of the adapter local address is changed.
     fn on_address_changed(&self, addr: String);
 
@@ -679,7 +682,11 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 _ => {}
             }
 
-            self.properties.insert(prop.get_type(), prop);
+            self.properties.insert(prop.get_type(), prop.clone());
+
+            self.for_all_callbacks(|callback| {
+                callback.on_adapter_property_changed(prop.get_type());
+            });
         }
     }
 
@@ -1081,6 +1088,13 @@ impl IBluetooth for Bluetooth {
     }
 
     fn cancel_discovery(&self) -> bool {
+        // Reject the cancel discovery request if the underlying stack is not in a discovering
+        // state. For example, previous start discovery was enqueued for ongoing discovery.
+        if !self.is_discovering {
+            debug!("Reject cancel_discovery as it's not in discovering state.");
+            return false;
+        }
+
         self.intf.lock().unwrap().cancel_discovery() == 0
     }
 

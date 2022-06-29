@@ -77,14 +77,17 @@ pub mod ffi {
         fn init(self: Pin<&mut HfpIntf>) -> i32;
         fn connect(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
         fn connect_audio(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
+        fn set_volume(self: Pin<&mut HfpIntf>, volume: i8, bt_addr: RustRawAddress) -> i32;
         fn disconnect(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
         fn disconnect_audio(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
+        fn get_wbs_supported(self: Pin<&mut HfpIntf>) -> bool;
         fn cleanup(self: Pin<&mut HfpIntf>);
 
     }
     extern "Rust" {
         fn hfp_connection_state_callback(state: u32, addr: RustRawAddress);
         fn hfp_audio_state_callback(state: u32, addr: RustRawAddress);
+        fn hfp_volume_update_callback(volume: u8, addr: RustRawAddress);
     }
 }
 
@@ -104,6 +107,7 @@ impl Into<RawAddress> for ffi::RustRawAddress {
 pub enum HfpCallbacks {
     ConnectionState(BthfConnectionState, RawAddress),
     AudioState(BthfAudioState, RawAddress),
+    VolumeUpdate(u8, RawAddress),
 }
 
 pub struct HfpCallbacksDispatcher {
@@ -124,6 +128,14 @@ cb_variant!(
     HfpCb,
     hfp_audio_state_callback -> HfpCallbacks::AudioState,
     u32 -> BthfAudioState, ffi::RustRawAddress -> RawAddress, {
+        let _1 = _1.into();
+    }
+);
+
+cb_variant!(
+    HfpCb,
+    hfp_volume_update_callback -> HfpCallbacks::VolumeUpdate,
+    u8, ffi::RustRawAddress -> RawAddress, {
         let _1 = _1.into();
     }
 );
@@ -162,12 +174,20 @@ impl Hfp {
         self.internal.pin_mut().connect_audio(addr.into())
     }
 
+    pub fn set_volume(&mut self, volume: i8, addr: RawAddress) -> i32 {
+        self.internal.pin_mut().set_volume(volume, addr.into())
+    }
+
     pub fn disconnect(&mut self, addr: RawAddress) {
         self.internal.pin_mut().disconnect(addr.into());
     }
 
     pub fn disconnect_audio(&mut self, addr: RawAddress) -> i32 {
         self.internal.pin_mut().disconnect_audio(addr.into())
+    }
+
+    pub fn get_wbs_supported(&mut self) -> bool {
+        self.internal.pin_mut().get_wbs_supported()
     }
 
     pub fn cleanup(&mut self) -> bool {

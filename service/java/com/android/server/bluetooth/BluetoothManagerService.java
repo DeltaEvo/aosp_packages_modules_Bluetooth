@@ -113,13 +113,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     private static final String BLUETOOTH_PRIVILEGED =
             android.Manifest.permission.BLUETOOTH_PRIVILEGED;
 
-    private static final String SECURE_SETTINGS_BLUETOOTH_ADDR_VALID = "bluetooth_addr_valid";
-    private static final String SECURE_SETTINGS_BLUETOOTH_ADDRESS = "bluetooth_address";
-    private static final String SECURE_SETTINGS_BLUETOOTH_NAME = "bluetooth_name";
-
     private static final int ACTIVE_LOG_MAX_SIZE = 20;
     private static final int CRASH_LOG_MAX_SIZE = 100;
 
+    private static final int DEFAULT_REBIND_COUNT = 3;
     private static final int TIMEOUT_BIND_MS = 3000; //Maximum msec to wait for a bind
 
     /**
@@ -688,7 +685,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
         if (BluetoothProperties.isAdapterAddressValidationEnabled().orElse(false)
                 && Settings.Secure.getIntForUser(mContentResolver,
-                SECURE_SETTINGS_BLUETOOTH_ADDR_VALID, 0, mUserId)
+                Settings.Secure.BLUETOOTH_NAME, 0, mUserId)
                 == 0) {
             // if the valid flag is not set, don't load the address and name
             if (DBG) {
@@ -697,9 +694,9 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             return;
         }
         mName = Settings.Secure.getStringForUser(
-                mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME, mUserId);
+                mContentResolver, Settings.Secure.BLUETOOTH_NAME, mUserId);
         mAddress = Settings.Secure.getStringForUser(
-                mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS, mUserId);
+                mContentResolver, Settings.Secure.BLUETOOTH_ADDRESS, mUserId);
         if (DBG) {
             Slog.d(TAG, "Stored bluetooth Name=" + mName + ",Address=" + mAddress);
         }
@@ -713,30 +710,30 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
      */
     private void storeNameAndAddress(String name, String address) {
         if (name != null) {
-            Settings.Secure.putStringForUser(mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME, name,
+            Settings.Secure.putStringForUser(mContentResolver, Settings.Secure.BLUETOOTH_NAME, name,
                     mUserId);
             mName = name;
             if (DBG) {
                 Slog.d(TAG, "Stored Bluetooth name: " + Settings.Secure.getStringForUser(
-                        mContentResolver, SECURE_SETTINGS_BLUETOOTH_NAME,
+                        mContentResolver, Settings.Secure.BLUETOOTH_NAME,
                         mUserId));
             }
         }
 
         if (address != null) {
-            Settings.Secure.putStringForUser(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS,
+            Settings.Secure.putStringForUser(mContentResolver, Settings.Secure.BLUETOOTH_ADDRESS,
                     address, mUserId);
             mAddress = address;
             if (DBG) {
                 Slog.d(TAG,
                         "Stored Bluetoothaddress: " + Settings.Secure.getStringForUser(
-                                mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDRESS,
+                                mContentResolver, Settings.Secure.BLUETOOTH_ADDRESS,
                                 mUserId));
             }
         }
 
         if ((name != null) && (address != null)) {
-            Settings.Secure.putIntForUser(mContentResolver, SECURE_SETTINGS_BLUETOOTH_ADDR_VALID, 1,
+            Settings.Secure.putIntForUser(mContentResolver, Settings.Secure.BLUETOOTH_ADDR_VALID, 1,
                     mUserId);
         }
     }
@@ -1469,7 +1466,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 }
 
                 psc = new ProfileServiceConnections(intent);
-                if (!psc.bindService()) {
+                if (!psc.bindService(DEFAULT_REBIND_COUNT)) {
                     return false;
                 }
 
@@ -1598,7 +1595,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             mIntent = intent;
         }
 
-        private boolean bindService() {
+        private boolean bindService(int rebindCount) {
             int state = BluetoothAdapter.STATE_OFF;
             try {
                 mBluetoothLock.readLock().lock();
@@ -1621,6 +1618,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     UserHandle.CURRENT_OR_SELF)) {
                 Message msg = mHandler.obtainMessage(MESSAGE_BIND_PROFILE_SERVICE);
                 msg.obj = this;
+                msg.arg1 = rebindCount;
                 mHandler.sendMessageDelayed(msg, TIMEOUT_BIND_MS);
                 return true;
             }
@@ -1640,6 +1638,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 if (!mHandler.hasMessages(MESSAGE_BIND_PROFILE_SERVICE, this)) {
                     Message msg = mHandler.obtainMessage(MESSAGE_BIND_PROFILE_SERVICE);
                     msg.obj = this;
+                    msg.arg1 = DEFAULT_REBIND_COUNT;
                     mHandler.sendMessage(msg);
                 }
             }
@@ -2193,7 +2192,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     if (psc == null) {
                         break;
                     }
-                    psc.bindService();
+                    if (msg.arg1 > 0) {
+                        mContext.unbindService(psc);
+                        psc.bindService(msg.arg1 - 1);
+                    }
                     break;
                 }
                 case MESSAGE_BLUETOOTH_SERVICE_CONNECTED: {

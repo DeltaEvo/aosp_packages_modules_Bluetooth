@@ -39,6 +39,7 @@
 #include <string.h>
 #include <time.h>
 
+#include <unordered_set>
 #include <vector>
 
 #include "bta_csis_api.h"
@@ -486,7 +487,12 @@ static bt_status_t btif_in_fetch_bonded_devices(
           }
         }
         bt_linkkey_file_found = true;
-        p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+        if (p_bonded_devices->num_devices < BTM_SEC_MAX_DEVICE_RECORDS) {
+          p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+        } else {
+          BTIF_TRACE_WARNING("%s: exceed the max number of bonded devices",
+                             __func__);
+        }
       } else {
         bt_linkkey_file_found = false;
       }
@@ -940,6 +946,10 @@ static void remove_devices_with_sample_ltk() {
 void btif_storage_load_consolidate_devices(void) {
   btif_bonded_devices_t bonded_devices;
   btif_in_fetch_bonded_devices(&bonded_devices, 1);
+  std::unordered_set<RawAddress> bonded_addresses;
+  for (uint16_t i = 0; i < bonded_devices.num_devices; i++) {
+    bonded_addresses.insert(bonded_devices.devices[i]);
+  }
 
   std::vector<std::pair<RawAddress, RawAddress>> consolidated_devices;
   for (uint16_t i = 0; i < bonded_devices.num_devices; i++) {
@@ -948,7 +958,9 @@ void btif_storage_load_consolidate_devices(void) {
     if (btif_storage_get_ble_bonding_key(
             bonded_devices.devices[i], BTM_LE_KEY_PID, (uint8_t*)&key,
             sizeof(tBTM_LE_PID_KEYS)) == BT_STATUS_SUCCESS) {
-      if (bonded_devices.devices[i] != key.pid_key.identity_addr) {
+      if (bonded_devices.devices[i] != key.pid_key.identity_addr &&
+          bonded_addresses.find(key.pid_key.identity_addr) !=
+              bonded_addresses.end()) {
         LOG_INFO("found consolidated device %s %s",
                  bonded_devices.devices[i].ToString().c_str(),
                  key.pid_key.identity_addr.ToString().c_str());
@@ -1369,7 +1381,12 @@ static bt_status_t btif_in_fetch_bonded_ble_device(
 
     // Fill in the bonded devices
     if (device_added) {
-      p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+      if (p_bonded_devices->num_devices < BTM_SEC_MAX_DEVICE_RECORDS) {
+        p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+      } else {
+        BTIF_TRACE_WARNING("%s: exceed the max number of bonded devices",
+                           __func__);
+      }
       btif_gatts_add_bonded_dev_from_nv(bd_addr);
     }
 

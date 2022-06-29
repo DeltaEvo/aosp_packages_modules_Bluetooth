@@ -17,23 +17,13 @@
 #include <errno.h>
 #include <grp.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <memory>
 
 #include "osi/include/log.h"
 #include "stack/btm/btm_sco.h"
 #include "udrv/include/uipc.h"
-
-#if ESCO_DATA_PATH == ESCO_DATA_PATH_PCM
-// For hardware encoding path, provide an empty implementation
-
-namespace bluetooth::audio::sco {
-void open() {}
-void cleanup() {}
-size_t read(uint8_t*, uint32_t) { return 0; }
-size_t write(const uint8_t*, uint32_t) { return 0; }
-}  // namespace bluetooth::audio::sco
-#else
 
 #define SCO_DATA_READ_POLL_MS 10
 #define SCO_HOST_DATA_PATH "/var/run/bluetooth/audio/.sco_data"
@@ -110,5 +100,3 @@ size_t write(const uint8_t* p_buf, uint32_t len) {
 }  // namespace sco
 }  // namespace audio
 }  // namespace bluetooth
-
-#endif

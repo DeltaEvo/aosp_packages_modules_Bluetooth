@@ -146,7 +146,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
   }
 
   bool StartStream(LeAudioDeviceGroup* group,
-                   le_audio::types::LeAudioContextType context_type) override {
+                   le_audio::types::LeAudioContextType context_type,
+                   int ccid) override {
     LOG_INFO(" current state: %s", ToString(group->GetState()).c_str());
 
     switch (group->GetState()) {
@@ -161,7 +162,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         /* If configuration is needed */
         FALLTHROUGH;
       case AseState::BTA_LE_AUDIO_ASE_STATE_IDLE:
-        if (!group->Configure(context_type)) {
+        if (!group->Configure(context_type, ccid)) {
           LOG(ERROR) << __func__ << ", failed to set ASE configuration";
           return false;
         }
@@ -189,7 +190,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         /* This case just updates the metadata for the stream, in case
          * stream configuration is satisfied
          */
-        if (!group->IsMetadataChanged(context_type)) return true;
+        if (!group->IsMetadataChanged(context_type, ccid)) return true;
 
         LeAudioDevice* leAudioDevice = group->GetFirstActiveDevice();
         if (!leAudioDevice) {
@@ -197,7 +198,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           return false;
         }
 
-        PrepareAndSendUpdateMetadata(group, leAudioDevice, context_type);
+        PrepareAndSendUpdateMetadata(group, leAudioDevice, context_type, ccid);
         break;
       }
 
@@ -210,9 +211,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     return true;
   }
 
-  bool ConfigureStream(
-      LeAudioDeviceGroup* group,
-      le_audio::types::LeAudioContextType context_type) override {
+  bool ConfigureStream(LeAudioDeviceGroup* group,
+                       le_audio::types::LeAudioContextType context_type,
+                       int ccid) override {
     if (group->GetState() > AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED) {
       LOG_ERROR(
           "Stream should be stopped or in configured stream. Current state: %s",
@@ -220,7 +221,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       return false;
     }
 
-    if (!group->Configure(context_type)) {
+    if (!group->Configure(context_type, ccid)) {
       LOG_ERROR("Could not configure ASEs for group %d content type %d",
                 group->group_id_, int(context_type));
 
@@ -366,12 +367,12 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       do {
         auto ases_pair = leAudioDevice->GetAsesByCisId(ase->cis_id);
 
-        if (ases_pair.sink) {
+        if (ases_pair.sink && ases_pair.sink->active) {
           ases_pair.sink->cis_conn_hdl = conn_handles[i];
           ases_pair.sink->data_path_state =
               AudioStreamDataPathState::CIS_ASSIGNED;
         }
-        if (ases_pair.source) {
+        if (ases_pair.source && ases_pair.source->active) {
           ases_pair.source->cis_conn_hdl = conn_handles[i];
           ases_pair.source->data_path_state =
               AudioStreamDataPathState::CIS_ASSIGNED;
@@ -578,6 +579,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) &&
         (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE)) {
       LOG(INFO) << __func__ << " group: " << group->group_id_ << " is in IDLE";
+      group->UpdateActiveContextsMap();
       return;
     }
 
@@ -608,10 +610,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     /* mark ASEs as not used. */
     leAudioDevice->DeactivateAllAses();
 
-    DLOG(INFO) << __func__ << " device: " << leAudioDevice->address_
-               << " group connected: " << group->IsAnyDeviceConnected()
-               << " all active ase disconnected: "
-               << group->HaveAllActiveDevicesCisDisc();
+    LOG_DEBUG(
+        " device: %s, group connected: %d, all active ase disconnected:: %d",
+        leAudioDevice->address_.ToString().c_str(),
+        group->IsAnyDeviceConnected(), group->HaveAllActiveDevicesCisDisc());
 
     /* Group has changed. Lets update available contexts */
     group->UpdateActiveContextsMap();
@@ -952,23 +954,21 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         /* CIS configuration already on list */
         if (iter != cis_cfgs.end()) continue;
 
-        auto ases_pair = leAudioDevice->GetAsesByCisId(cis);
         EXT_CIS_CFG cis_cfg = {0, 0, 0, 0, 0, 0, 0};
 
         cis_cfg.cis_id = ase->cis_id;
+        cis_cfg.max_sdu_size_mtos = group->GetMaxSduSize(
+            le_audio::types::kLeAudioDirectionSink, ase->cis_id);
+        cis_cfg.max_sdu_size_stom = group->GetMaxSduSize(
+            le_audio::types::kLeAudioDirectionSource, ase->cis_id);
         cis_cfg.phy_mtos =
             group->GetPhyBitmask(le_audio::types::kLeAudioDirectionSink);
         cis_cfg.phy_stom =
             group->GetPhyBitmask(le_audio::types::kLeAudioDirectionSource);
-
-        if (ases_pair.sink) {
-          cis_cfg.max_sdu_size_mtos = ases_pair.sink->max_sdu_size;
-          cis_cfg.rtn_mtos = ases_pair.sink->retrans_nb;
-        }
-        if (ases_pair.source) {
-          cis_cfg.max_sdu_size_stom = ases_pair.source->max_sdu_size;
-          cis_cfg.rtn_stom = ases_pair.source->retrans_nb;
-        }
+        cis_cfg.rtn_mtos =
+            group->GetRtn(le_audio::types::kLeAudioDirectionSink, ase->cis_id);
+        cis_cfg.rtn_stom = group->GetRtn(
+            le_audio::types::kLeAudioDirectionSource, ase->cis_id);
 
         cis_cfgs.push_back(cis_cfg);
       } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
@@ -1678,15 +1678,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
   void PrepareAndSendUpdateMetadata(
       LeAudioDeviceGroup* group, LeAudioDevice* leAudioDevice,
-      le_audio::types::LeAudioContextType context_type) {
+      le_audio::types::LeAudioContextType context_type, int ccid) {
     std::vector<struct le_audio::client_parser::ascs::ctp_update_metadata>
         confs;
 
     for (; leAudioDevice;
          leAudioDevice = group->GetNextActiveDevice(leAudioDevice)) {
-      if (!leAudioDevice->IsMetadataChanged(context_type)) continue;
+      if (!leAudioDevice->IsMetadataChanged(context_type, ccid)) continue;
 
-      auto new_metadata = leAudioDevice->GetMetadata(context_type);
+      auto new_metadata = leAudioDevice->GetMetadata(context_type, ccid);
 
       /* Request server to update ASEs with new metadata */
       for (struct ase* ase = leAudioDevice->GetFirstActiveAse(); ase != nullptr;
@@ -1854,13 +1854,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         /* Cache current set up metadata values for for further possible
          * reconfiguration
          */
-        for (struct ase* ase = leAudioDevice->GetFirstActiveAse();
-             ase != nullptr; ase = leAudioDevice->GetNextActiveAse(ase)) {
+        if (!rsp.metadata.empty()) {
           ase->metadata = rsp.metadata;
         }
 
-        PrepareAndSendUpdateMetadata(group, leAudioDevice,
-                                     group->GetContextType());
         break;
       }
       default:

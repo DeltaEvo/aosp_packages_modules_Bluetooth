@@ -1,4 +1,3 @@
-
 package {
     // See: http://go/android-license-faq
     // A large-scale-change added 'default_applicable_licenses' to import
@@ -11,16 +10,23 @@ package {
 rust_defaults {
     name: "pdl_defaults",
     srcs: ["src/main.rs"],
+    // LINT.IfChange
     rustlibs: [
+        "libanyhow",
+        "libcodespan_reporting",
         "libpest",
+        "libproc_macro2",
+        "libquote",
         "libserde",
         "libserde_json",
         "libstructopt",
-        "libcodespan_reporting",
+        "libsyn",
+        "libtempfile",
     ],
     proc_macros: [
         "libpest_derive",
     ],
+    // LINT.ThenChange(Cargo.toml)
 }
 
 rust_binary_host {
@@ -32,4 +38,72 @@ rust_test_host {
     name: "pdl_inline_tests",
     defaults: ["pdl_defaults"],
     test_suites: ["general-tests"],
+    enabled: false, // rustfmt is only available on x86.
+    arch: {
+        x86_64: {
+            enabled: true,
+        },
+    },
+    data: [
+        ":rustfmt",
+    ],
+}
+
+rust_test_host {
+    name: "pdl_tests",
+    srcs: ["test/pdl_tests.rs"],
+    test_suites: ["general-tests"],
+    enabled: false, // rustfmt is only available on x86.
+    arch: {
+        x86_64: {
+            enabled: true,
+        },
+    },
+    // LINT.IfChange
+    rustlibs: [
+        "libtempfile",
+    ],
+    // LINT.ThenChange(Cargo.toml)
+    data: [
+        ":bluetooth_packetgen",
+        ":pdl",
+        ":rustfmt",
+    ],
+}
+
+// Generate the python parser+serializer backend for the
+// test grammar located at test/grammars/test-grammar.pdl.
+genrule {
+    name: "pdl_python_generator_test_gen",
+    cmd: "$(location :pdl) $(in) |" +
+        " $(location scripts/generate_python_backend.py)" +
+        " --output $(out) --custom-type-location test.custom_types",
+    tools: [ ":pdl" ],
+    tool_files: [
+        "scripts/generate_python_backend.py",
+        "scripts/pdl/core.py",
+        "scripts/pdl/ast.py",
+        "test/custom_types.py",
+    ],
+    srcs: [
+        "test/grammars/test-grammar.pdl",
+    ],
+    out: [
+        "pdl_test.py",
+    ],
+}
+
+// Test the generated python parser+serializer against
+// pre-generated binary inputs.
+python_test_host {
+    name: "pdl_python_generator_test",
+    main: "test/python_generator_test.py",
+    srcs: [
+        "test/python_generator_test.py",
+        "test/custom_types.py",
+        ":pdl_python_generator_test_gen",
+    ],
+    test_options: {
+        unit_test: true,
+    },
 }

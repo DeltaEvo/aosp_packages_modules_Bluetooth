@@ -665,7 +665,7 @@ final class RemoteDevices {
                             break;
                         case AbstractionLayer.BT_PROPERTY_TYPE_OF_DEVICE:
                             if (device.isConsolidated()) {
-                                return;
+                                break;
                             }
                             // The device type from hal layer, defined in bluetooth.h,
                             // matches the type defined in BluetoothDevice.java
@@ -718,11 +718,11 @@ final class RemoteDevices {
                 if (pkg.getPermission() != null) {
                     sAdapterService.sendBroadcastMultiplePermissions(intent,
                             new String[] { BLUETOOTH_SCAN, pkg.getPermission() },
-                            Utils.getTempAllowlistBroadcastOptions());
+                            Utils.getTempBroadcastOptions());
                 } else {
                     sAdapterService.sendBroadcastMultiplePermissions(intent,
                             new String[] { BLUETOOTH_SCAN },
-                            Utils.getTempAllowlistBroadcastOptions());
+                            Utils.getTempBroadcastOptions());
                 }
             }
         }

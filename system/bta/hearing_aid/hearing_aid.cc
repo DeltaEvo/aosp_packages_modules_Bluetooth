@@ -359,8 +359,6 @@ class HearingAidImpl : public HearingAid {
   void OnGattConnected(tGATT_STATUS status, uint16_t conn_id,
                        tGATT_IF client_if, RawAddress address,
                        tBT_TRANSPORT transport, uint16_t mtu) {
-    VLOG(2) << __func__ << ": address=" << address << ", conn_id=" << conn_id;
-
     HearingDevice* hearingDevice = hearingDevices.FindByAddress(address);
     if (!hearingDevice) {
       /* When Hearing Aid is quickly disabled and enabled in settings, this case
@@ -370,6 +368,8 @@ class HearingAidImpl : public HearingAid {
       BTA_GATTC_Close(conn_id);
       return;
     }
+
+    LOG(INFO) << __func__ << ": address=" << address << ", conn_id=" << conn_id;
 
     if (status != GATT_SUCCESS) {
       if (!hearingDevice->connecting_actively) {
@@ -403,7 +403,7 @@ class HearingAidImpl : public HearingAid {
     }
 
     if (controller_get_interface()->supports_ble_2m_phy()) {
-      LOG(INFO) << address << " set preferred PHY to 2M";
+      LOG(INFO) << address << " set preferred 2M PHY";
       BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
     }
 
@@ -510,6 +510,12 @@ class HearingAidImpl : public HearingAid {
       hearingDevice->connection_update_status = NONE;
     }
 
+    if (!hearingDevice->accepting_audio &&
+        hearingDevice->connection_update_status == COMPLETED &&
+        hearingDevice->gap_opened) {
+      OnDeviceReady(hearingDevice->address);
+    }
+
     for (auto& device : hearingDevices.devices) {
       if (device.conn_id && (device.connection_update_status == AWAITING)) {
         device.connection_update_status = STARTED;
@@ -564,7 +570,7 @@ class HearingAidImpl : public HearingAid {
       return;
     }
 
-    DVLOG(2) << __func__ << " " << address;
+    LOG(INFO) << __func__ << ": " << address;
 
     if (hearingDevice->audio_control_point_handle &&
         hearingDevice->audio_status_handle &&
@@ -573,9 +579,35 @@ class HearingAidImpl : public HearingAid {
       // Use cached data, jump to read PSM
       ReadPSM(hearingDevice);
     } else {
+      LOG(INFO) << __func__ << ": " << address
+                << ": do BTA_GATTC_ServiceSearchRequest";
       hearingDevice->first_connection = true;
       BTA_GATTC_ServiceSearchRequest(hearingDevice->conn_id, &HEARING_AID_UUID);
     }
+  }
+
+  // Just take care phy update successful case to avoid loop excuting.
+  void OnPhyUpdateEvent(uint16_t conn_id, uint8_t tx_phys, uint8_t rx_phys,
+                        tGATT_STATUS status) {
+    HearingDevice* hearingDevice = hearingDevices.FindByConnId(conn_id);
+    if (!hearingDevice) {
+      DVLOG(2) << "Skipping unknown device, conn_id=" << loghex(conn_id);
+      return;
+    }
+    if (status != GATT_SUCCESS) {
+      LOG(WARNING) << hearingDevice->address
+                   << " phy update fail with status: " << status;
+      return;
+    }
+    if (tx_phys == PHY_LE_2M && rx_phys == PHY_LE_2M) {
+      LOG(INFO) << hearingDevice->address << " phy update to 2M successful";
+      return;
+    }
+    LOG(INFO)
+        << hearingDevice->address
+        << " phy update successful but not target phy, try again. tx_phys: "
+        << tx_phys << ", rx_phys: " << rx_phys;
+    BTM_BleSetPhy(hearingDevice->address, PHY_LE_2M, PHY_LE_2M, 0);
   }
 
   void OnServiceChangeEvent(const RawAddress& address) {
@@ -600,7 +632,14 @@ class HearingAidImpl : public HearingAid {
       VLOG(2) << "Skipping unknown device" << address;
       return;
     }
-    if (hearingDevice->service_changed_rcvd) {
+    LOG(INFO) << __func__ << ": " << address;
+    if (hearingDevice->service_changed_rcvd ||
+        !(hearingDevice->audio_control_point_handle &&
+          hearingDevice->audio_status_handle &&
+          hearingDevice->audio_status_ccc_handle &&
+          hearingDevice->volume_handle && hearingDevice->read_psm_handle)) {
+      LOG(INFO) << __func__ << ": " << address
+                << ": do BTA_GATTC_ServiceSearchRequest";
       BTA_GATTC_ServiceSearchRequest(hearingDevice->conn_id, &HEARING_AID_UUID);
     }
   }
@@ -867,7 +906,8 @@ class HearingAidImpl : public HearingAid {
     uint16_t psm = *((uint16_t*)value);
     VLOG(2) << "read psm:" << loghex(psm);
 
-    if (hearingDevice->gap_handle == GAP_INVALID_HANDLE) {
+    if (hearingDevice->gap_handle == GAP_INVALID_HANDLE &&
+        BTM_IsEncrypted(hearingDevice->address, BT_TRANSPORT_LE)) {
       ConnectSocket(hearingDevice, psm);
     }
   }
@@ -915,8 +955,8 @@ class HearingAidImpl : public HearingAid {
       instance->OnPsmRead(conn_id, status, handle, len, value, data);
   }
 
-  /* CoC Socket is ready */
-  void OnGapConnection(const RawAddress& address) {
+  /* CoC Socket, BLE connection parameter are ready */
+  void OnDeviceReady(const RawAddress& address) {
     HearingDevice* hearingDevice = hearingDevices.FindByAddress(address);
     if (!hearingDevice) {
       LOG(INFO) << "Device not connected to profile" << address;
@@ -1398,7 +1438,16 @@ class HearingAidImpl : public HearingAid {
 
         LOG(INFO) << "GAP_EVT_CONN_OPENED " << address << ", tx_mtu=" << tx_mtu
                   << ", init_credit=" << init_credit;
-        OnGapConnection(address);
+
+        HearingDevice* hearingDevice = hearingDevices.FindByAddress(address);
+        if (!hearingDevice) {
+          LOG(INFO) << "Skipping unknown device" << address;
+          return;
+        }
+        hearingDevice->gap_opened = true;
+        if (hearingDevice->connection_update_status == COMPLETED) {
+          OnDeviceReady(address);
+        }
         break;
       }
 
@@ -1417,6 +1466,7 @@ class HearingAidImpl : public HearingAid {
           hearingDevice->accepting_audio = false;
           hearingDevice->playback_started = false;
           hearingDevice->command_acked = false;
+          hearingDevice->gap_opened = false;
         }
         break;
       case GAP_EVT_CONN_DATA_AVAIL: {
@@ -1631,6 +1681,7 @@ class HearingAidImpl : public HearingAid {
       }
     }
     hearingDevice->connection_update_status = NONE;
+    hearingDevice->gap_opened = false;
 
     if (hearingDevice->conn_id) {
       BtaGattQueue::Clean(hearingDevice->conn_id);
@@ -1833,7 +1884,9 @@ void hearingaid_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
 
     case BTA_GATTC_ENC_CMPL_CB_EVT:
       if (!instance) return;
-      instance->OnEncryptionComplete(p_data->enc_cmpl.remote_bda, true);
+      instance->OnEncryptionComplete(
+          p_data->enc_cmpl.remote_bda,
+          BTM_IsEncrypted(p_data->enc_cmpl.remote_bda, BT_TRANSPORT_LE));
       break;
 
     case BTA_GATTC_CONN_UPDATE_EVT:
@@ -1850,6 +1903,12 @@ void hearingaid_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       if (!instance) return;
       instance->OnServiceDiscDoneEvent(p_data->service_changed.remote_bda);
       break;
+    case BTA_GATTC_PHY_UPDATE_EVT: {
+      if (!instance) return;
+      tBTA_GATTC_PHY_UPDATE& p = p_data->phy_update;
+      instance->OnPhyUpdateEvent(p.conn_id, p.tx_phy, p.rx_phy, p.status);
+      break;
+    }
 
     default:
       break;

@@ -41,6 +41,7 @@ using bluetooth::le_audio::LeAudioClientCallbacks;
 using bluetooth::le_audio::LeAudioClientInterface;
 
 namespace android {
+static jmethodID method_onInitialized;
 static jmethodID method_onConnectionStateChanged;
 static jmethodID method_onGroupStatus;
 static jmethodID method_onGroupNodeStatus;
@@ -126,6 +127,14 @@ jobjectArray prepareArrayOfCodecConfigs(
 class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
  public:
   ~LeAudioClientCallbacksImpl() = default;
+
+  void OnInitialized(void) override {
+    LOG(INFO) << __func__;
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+    sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onInitialized);
+  }
 
   void OnConnectionState(ConnectionState state,
                          const RawAddress& bd_addr) override {
@@ -282,6 +291,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_onAudioConf = env->GetMethodID(clazz, "onAudioConf", "(IIIII)V");
   method_onSinkAudioLocationAvailable =
       env->GetMethodID(clazz, "onSinkAudioLocationAvailable", "([BI)V");
+  method_onInitialized = env->GetMethodID(clazz, "onInitialized", "()V");
   method_onConnectionStateChanged =
       env->GetMethodID(clazz, "onConnectionStateChanged", "(I[B)V");
   method_onAudioLocalCodecCapabilities =
@@ -514,6 +524,17 @@ static void setCodecConfigPreferenceNative(JNIEnv* env, jobject object,
       group_id, input_codec_config, output_codec_config);
 }
 
+static void setCcidInformationNative(JNIEnv* env, jobject object, jint ccid,
+                                     jint contextType) {
+  std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
+  if (!sLeAudioClientInterface) {
+    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth LeAudio Interface";
+    return;
+  }
+
+  sLeAudioClientInterface->SetCcidInformation(ccid, contextType);
+}
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initNative", "([Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V",
@@ -528,6 +549,7 @@ static JNINativeMethod sMethods[] = {
      "(ILandroid/bluetooth/BluetoothLeAudioCodecConfig;Landroid/bluetooth/"
      "BluetoothLeAudioCodecConfig;)V",
      (void*)setCodecConfigPreferenceNative},
+    {"setCcidInformationNative", "(II)V", (void*)setCcidInformationNative},
 };
 
 /* Le Audio Broadcaster */
@@ -1111,9 +1133,11 @@ static void CreateBroadcastNative(JNIEnv* env, jobject object,
   std::shared_lock<std::shared_timed_mutex> lock(sBroadcasterInterfaceMutex);
   if (!sLeAudioBroadcasterInterface) return;
 
-  std::array<uint8_t, 16> code_array;
-  if (broadcast_code)
-    env->GetByteArrayRegion(broadcast_code, 0, 16, (jbyte*)code_array.data());
+  std::array<uint8_t, 16> code_array{};
+  if (broadcast_code) {
+    jsize size = env->GetArrayLength(broadcast_code);
+    env->GetByteArrayRegion(broadcast_code, 0, size, (jbyte*)code_array.data());
+  }
 
   jbyte* meta = env->GetByteArrayElements(metadata, nullptr);
   sLeAudioBroadcasterInterface->CreateBroadcast(

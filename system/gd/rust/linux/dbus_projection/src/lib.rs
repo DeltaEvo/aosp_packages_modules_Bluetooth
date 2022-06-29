@@ -185,6 +185,29 @@ impl ClientDBusProxy {
         )
     }
 
+    /// Asynchronously calls the method and returns the D-Bus result and lets the caller unwrap.
+    pub async fn async_method<
+        A: AppendAll,
+        T: 'static + dbus::arg::Arg + for<'z> dbus::arg::Get<'z>,
+    >(
+        &self,
+        member: &str,
+        args: A,
+    ) -> Result<(T,), dbus::Error> {
+        let proxy = self.create_proxy();
+        proxy.method_call(self.interface.clone(), member, args).await
+    }
+
+    /// Asynchronously calls the method and returns the D-Bus result with empty return data.
+    pub async fn async_method_noreturn<A: AppendAll>(
+        &self,
+        member: &str,
+        args: A,
+    ) -> Result<(), dbus::Error> {
+        let proxy = self.create_proxy();
+        proxy.method_call(self.interface.clone(), member, args).await
+    }
+
     /// Calls the method and returns the D-Bus result and lets the caller unwrap.
     pub fn method_withresult<
         A: AppendAll,
@@ -268,9 +291,9 @@ macro_rules! impl_dbus_arg_from_into {
                     Arc<std::sync::Mutex<dbus_projection::DisconnectWatcher>>,
                 >,
             ) -> Result<$rust_type, Box<dyn std::error::Error>> {
-                match <$rust_type>::try_from(data) {
+                match <$rust_type>::try_from(data.clone()) {
                     Err(e) => Err(Box::new(DBusArgError::new(String::from(format!(
-                        "error converting {} to {}",
+                        "error converting {:?} to {:?}",
                         data,
                         stringify!($rust_type),
                     ))))),
@@ -279,9 +302,9 @@ macro_rules! impl_dbus_arg_from_into {
             }
 
             fn to_dbus(data: $rust_type) -> Result<$dbus_type, Box<dyn std::error::Error>> {
-                match data.try_into() {
+                match data.clone().try_into() {
                     Err(e) => Err(Box::new(DBusArgError::new(String::from(format!(
-                        "error converting {:?} to {}",
+                        "error converting {:?} to {:?}",
                         data,
                         stringify!($dbus_type)
                     ))))),

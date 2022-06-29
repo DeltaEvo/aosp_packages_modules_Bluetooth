@@ -173,6 +173,7 @@ constexpr uint32_t kLeAudioLocationStereo =
 constexpr uint16_t kLeAudioCodecLC3FrameLen30 = 30;
 constexpr uint16_t kLeAudioCodecLC3FrameLen40 = 40;
 constexpr uint16_t kLeAudioCodecLC3FrameLen60 = 60;
+constexpr uint16_t kLeAudioCodecLC3FrameLen80 = 80;
 constexpr uint16_t kLeAudioCodecLC3FrameLen120 = 120;
 
 }  // namespace codec_spec_conf
@@ -571,6 +572,7 @@ using AudioContexts = std::bitset<16>;
 std::ostream& operator<<(std::ostream& os, const AseState& state);
 std::ostream& operator<<(std::ostream& os, const CigState& state);
 std::ostream& operator<<(std::ostream& os, const LeAudioLc3Config& config);
+std::ostream& operator<<(std::ostream& os, const LeAudioContextType& context);
 }  // namespace types
 
 namespace set_configurations {
@@ -686,7 +688,7 @@ struct stream_configuration {
 };
 
 void AppendMetadataLtvEntryForCcidList(std::vector<uint8_t>& metadata,
-                                       types::LeAudioContextType context_type);
+                                       int ccid);
 void AppendMetadataLtvEntryForStreamingContext(
     std::vector<uint8_t>& metadata, types::LeAudioContextType context_type);
 uint8_t GetMaxCodecFramesPerSduFromPac(const types::acs_ac_record* pac_record);
