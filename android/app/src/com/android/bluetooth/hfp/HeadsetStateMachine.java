@@ -94,7 +94,7 @@ public class HeadsetStateMachine extends StateMachine {
     static final int INTENT_CONNECTION_ACCESS_REPLY = 8;
     static final int CALL_STATE_CHANGED = 9;
     static final int DEVICE_STATE_CHANGED = 10;
-    static final int SEND_CCLC_RESPONSE = 11;
+    static final int SEND_CLCC_RESPONSE = 11;
     static final int SEND_VENDOR_SPECIFIC_RESULT_CODE = 12;
     static final int SEND_BSIR = 13;
     static final int DIALING_OUT_RESULT = 14;
@@ -525,7 +525,7 @@ public class HeadsetStateMachine extends StateMachine {
                 // Both events result in Connecting state as SLC establishment is still required
                 case HeadsetHalConstants.CONNECTION_STATE_CONNECTED:
                 case HeadsetHalConstants.CONNECTION_STATE_CONNECTING:
-                    if (mHeadsetService.okToAcceptConnection(mDevice)) {
+                    if (mHeadsetService.okToAcceptConnection(mDevice, false)) {
                         stateLogI("accept incoming connection");
                         transitionTo(mConnecting);
                     } else {
@@ -868,7 +868,7 @@ public class HeadsetStateMachine extends StateMachine {
                     }
                     mNativeInterface.notifyDeviceStatus(mDevice, (HeadsetDeviceState) message.obj);
                     break;
-                case SEND_CCLC_RESPONSE:
+                case SEND_CLCC_RESPONSE:
                     processSendClccResponse((HeadsetClccResponse) message.obj);
                     break;
                 case CLCC_RSP_TIMEOUT: {
@@ -1914,10 +1914,14 @@ public class HeadsetStateMachine extends StateMachine {
         String vendorId = deviceInfo[0];
         String productId = deviceInfo[1];
         String version = deviceInfo[2];
+        String[] macAddress = device.getAddress().split(":");
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_INFO_REPORTED,
                 mAdapterService.obfuscateAddress(device), BluetoothProtoEnums.DEVICE_INFO_INTERNAL,
                 BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_XAPL, vendorId, productId, version,
-                null, mAdapterService.getMetricId(device));
+                null, mAdapterService.getMetricId(device),
+                device.getAddressType(),
+                Integer.parseInt(macAddress[0], 16),
+                Integer.parseInt(macAddress[1], 16), Integer.parseInt(macAddress[2], 16));
         // feature = 2 indicates that we support battery level reporting only
         mNativeInterface.atResponseString(device, "+XAPL=iPhone," + String.valueOf(2));
     }
@@ -2170,8 +2174,8 @@ public class HeadsetStateMachine extends StateMachine {
                 return "CALL_STATE_CHANGED";
             case DEVICE_STATE_CHANGED:
                 return "DEVICE_STATE_CHANGED";
-            case SEND_CCLC_RESPONSE:
-                return "SEND_CCLC_RESPONSE";
+            case SEND_CLCC_RESPONSE:
+                return "SEND_CLCC_RESPONSE";
             case SEND_VENDOR_SPECIFIC_RESULT_CODE:
                 return "SEND_VENDOR_SPECIFIC_RESULT_CODE";
             case STACK_EVENT:

@@ -64,9 +64,6 @@ public class HapClientStateMachineTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when HearingAccessClientService is not enabled",
-                mTargetContext.getResources().getBoolean(
-                        R.bool.profile_supported_hap_client));
         // Set up mocks and test assets
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
@@ -88,10 +85,6 @@ public class HapClientStateMachineTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mTargetContext.getResources().getBoolean(
-                R.bool.profile_supported_hap_client)) {
-            return;
-        }
         mHapClientStateMachine.doQuit();
         mHandlerThread.quit();
         TestUtils.clearAdapterService(mAdapterService);

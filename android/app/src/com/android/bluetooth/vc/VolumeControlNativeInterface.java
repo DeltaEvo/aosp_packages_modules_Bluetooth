@@ -117,6 +117,122 @@ public class VolumeControlNativeInterface {
         setVolumeGroupNative(groupId, volume);
     }
 
+     /**
+     * Mute the VolumeControl volume
+     * @param device
+     * @param unmute
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void mute(BluetoothDevice device) {
+        muteNative(getByteAddress(device));
+    }
+
+    /**
+     * Mute the VolumeControl volume in the group
+     * @param groupId
+     * @param unmute
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void muteGroup(int groupId) {
+        muteGroupNative(groupId);
+    }
+
+    /**
+     * Unmute the VolumeControl volume
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void unmute(BluetoothDevice device) {
+        unmuteNative(getByteAddress(device));
+    }
+
+     /**
+     * Unmute the VolumeControl volume group
+     * @param groupId
+     * @param unmute
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void unmuteGroup(int groupId) {
+        unmuteGroupNative(groupId);
+    }
+
+    /**
+     * Gets external audio output volume offset from a remote device.
+     *
+     * @param device the remote device
+     * @param externalOutputId external audio output id
+     * @return true on success, otherwise false.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean getExtAudioOutVolumeOffset(BluetoothDevice device, int externalOutputId) {
+        return getExtAudioOutVolumeOffsetNative(getByteAddress(device), externalOutputId);
+    }
+
+    /**
+     * Sets external audio output volume offset to a remote device.
+     *
+     * @param device the remote device
+     * @param externalOutputId external audio output id
+     * @param offset requested offset
+     * @return true on success, otherwise false.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean setExtAudioOutVolumeOffset(BluetoothDevice device, int externalOutputId,
+                                                    int offset) {
+        return setExtAudioOutVolumeOffsetNative(getByteAddress(device), externalOutputId, offset);
+    }
+
+    /**
+     * Gets external audio output location from a remote device.
+     *
+     * @param device the remote device
+     * @param externalOutputId external audio output id
+     * @return true on success, otherwise false.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean getExtAudioOutLocation(BluetoothDevice device, int externalOutputId) {
+        return getExtAudioOutLocationNative(getByteAddress(device), externalOutputId);
+    }
+
+    /**
+     * Sets external audio volume offset to a remote device.
+     *
+     * @param device the remote device
+     * @param externalOutputId external audio output id
+     * @param location requested location
+     * @return true on success, otherwise false.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean setExtAudioOutLocation(BluetoothDevice device, int externalOutputId,
+                                            int location) {
+        return setExtAudioOutLocationNative(getByteAddress(device), externalOutputId, location);
+    }
+
+    /**
+     * Gets external audio output description from a remote device.
+     *
+     * @param device the remote device
+     * @param externalOutputId external audio output id
+     * @return true on success, otherwise false.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean getExtAudioOutDescription(BluetoothDevice device, int externalOutputId) {
+        return getExtAudioOutDescriptionNative(getByteAddress(device), externalOutputId);
+    }
+
+    /**
+     * Sets external audio volume description to a remote device.
+     *
+     * @param device the remote device
+     * @param externalOutputId external audio output id
+     * @param descr requested description
+     * @return true on success, otherwise false.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public boolean setExtAudioOutDescription(BluetoothDevice device, int externalOutputId,
+                                                    String descr) {
+        return setExtAudioOutDescriptionNative(getByteAddress(device), externalOutputId, descr);
+    }
+
     private BluetoothDevice getDevice(byte[] address) {
         return mAdapter.getRemoteDevice(address);
     }
@@ -188,6 +304,65 @@ public class VolumeControlNativeInterface {
         sendMessageToService(event);
     }
 
+    private void onDeviceAvailable(int numOfExternalOutputs,
+                                   byte[] address) {
+        VolumeControlStackEvent event =
+                new VolumeControlStackEvent(
+                        VolumeControlStackEvent.EVENT_TYPE_DEVICE_AVAILABLE);
+        event.device = getDevice(address);
+        event.valueInt1 = numOfExternalOutputs;
+
+        if (DBG) {
+            Log.d(TAG, "onDeviceAvailable: " + event);
+        }
+        sendMessageToService(event);
+    }
+
+    private void onExtAudioOutVolumeOffsetChanged(int externalOutputId, int offset,
+                                               byte[] address) {
+        VolumeControlStackEvent event =
+                new VolumeControlStackEvent(
+                    VolumeControlStackEvent.EVENT_TYPE_EXT_AUDIO_OUT_VOL_OFFSET_CHANGED);
+        event.device = getDevice(address);
+        event.valueInt1 = externalOutputId;
+        event.valueInt2 = offset;
+
+        if (DBG) {
+            Log.d(TAG, "onExtAudioOutVolumeOffsetChanged: " + event);
+        }
+        sendMessageToService(event);
+    }
+
+    private void onExtAudioOutLocationChanged(int externalOutputId, int location,
+                                               byte[] address) {
+        VolumeControlStackEvent event =
+                new VolumeControlStackEvent(
+                    VolumeControlStackEvent.EVENT_TYPE_EXT_AUDIO_OUT_LOCATION_CHANGED);
+        event.device = getDevice(address);
+        event.valueInt1 = externalOutputId;
+        event.valueInt2 = location;
+
+        if (DBG) {
+            Log.d(TAG, "onExtAudioOutLocationChanged: " + event);
+        }
+        sendMessageToService(event);
+    }
+
+    private void onExtAudioOutDescriptionChanged(int externalOutputId, String descr,
+                                               byte[] address) {
+        VolumeControlStackEvent event =
+                new VolumeControlStackEvent(
+                    VolumeControlStackEvent.EVENT_TYPE_EXT_AUDIO_OUT_DESCRIPTION_CHANGED);
+        event.device = getDevice(address);
+        event.valueInt1 = externalOutputId;
+        event.valueString1 = descr;
+
+        if (DBG) {
+            Log.d(TAG, "onExtAudioOutLocationChanged: " + event);
+        }
+        sendMessageToService(event);
+    }
+
     // Native methods that call into the JNI interface
     private static native void classInitNative();
     private native void initNative();
@@ -196,4 +371,17 @@ public class VolumeControlNativeInterface {
     private native boolean disconnectVolumeControlNative(byte[] address);
     private native void setVolumeNative(byte[] address, int volume);
     private native void setVolumeGroupNative(int groupId, int volume);
+    private native void muteNative(byte[] address);
+    private native void muteGroupNative(int groupId);
+    private native void unmuteNative(byte[] address);
+    private native void unmuteGroupNative(int groupId);
+    private native boolean getExtAudioOutVolumeOffsetNative(byte[] address, int externalOutputId);
+    private native boolean setExtAudioOutVolumeOffsetNative(byte[] address, int externalOutputId,
+                                                                int offset);
+    private native boolean getExtAudioOutLocationNative(byte[] address, int externalOutputId);
+    private native boolean setExtAudioOutLocationNative(byte[] address, int externalOutputId,
+                                                            int location);
+    private native boolean getExtAudioOutDescriptionNative(byte[] address, int externalOutputId);
+    private native boolean setExtAudioOutDescriptionNative(byte[] address, int externalOutputId,
+                                                                String descr);
 }

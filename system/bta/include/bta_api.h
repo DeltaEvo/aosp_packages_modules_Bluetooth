@@ -456,7 +456,7 @@ typedef struct {
   BD_NAME bd_name;             /* Name of peer device. */
   tBTA_SERVICE_MASK services;  /* Services found on peer device. */
   tBT_DEVICE_TYPE device_type; /* device type in case it is BLE device */
-  uint32_t num_uuids;
+  size_t num_uuids;
   bluetooth::Uuid* p_uuid_list;
   tBTA_STATUS result;
 } tBTA_DM_DISC_RES;
@@ -710,15 +710,13 @@ extern bool BTA_DmSetVisibility(bt_scan_mode_t mode);
  *                  first performs an inquiry; for each device found from the
  *                  inquiry it gets the remote name of the device.  If
  *                  parameter services is nonzero, service discovery will be
- *                  performed on each device for the services specified. If the
- *                  parameter is_bonding_or_sdp is true, the request will be
- *                  queued until bonding or sdp completes
+ *                  performed on each device for the services specified.
  *
  *
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback, bool is_bonding_or_sdp);
+extern void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -746,7 +744,7 @@ extern void BTA_DmSearchCancel(void);
  ******************************************************************************/
 extern void BTA_DmDiscover(const RawAddress& bd_addr,
                            tBTA_DM_SEARCH_CBACK* p_cback,
-                           tBT_TRANSPORT transport, bool is_bonding_or_sdp);
+                           tBT_TRANSPORT transport);
 
 /*******************************************************************************
  *
@@ -775,7 +773,7 @@ tBTA_STATUS BTA_DmGetCachedRemoteName(const RawAddress& remote_device,
  *
  ******************************************************************************/
 extern void BTA_DmBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
-                       tBT_TRANSPORT transport, tBLE_ADDR_TYPE device_type);
+                       tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type);
 
 /*******************************************************************************
  *

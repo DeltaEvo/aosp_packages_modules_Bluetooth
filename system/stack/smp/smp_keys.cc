@@ -194,14 +194,12 @@ void smp_generate_csrk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
   bool div_status;
 
   SMP_TRACE_DEBUG("smp_generate_csrk");
-  smp_update_key_mask(p_cb, SMP_SEC_KEY_TYPE_CSRK, false);
 
   div_status = btm_get_local_div(p_cb->pairing_bda, &p_cb->div);
   if (div_status) {
     smp_compute_csrk(p_cb->div, p_cb);
   } else {
     SMP_TRACE_DEBUG("Generate DIV for CSRK");
-    p_cb->total_tx_unacked++;
     btsnd_hcic_ble_rand(Bind(
         [](tSMP_CB* p_cb, BT_OCTET8 rand) {
           uint16_t div;
@@ -535,7 +533,7 @@ static void smp_generate_ltk_cont(uint16_t div, tSMP_CB* p_cb) {
 void smp_generate_ltk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
   SMP_TRACE_DEBUG("%s", __func__);
 
-  if (p_cb->smp_over_br) {
+  if (smp_get_br_state() == SMP_BR_STATE_BOND_PENDING) {
     smp_br_process_link_key(p_cb, NULL);
     return;
   } else if (p_cb->le_secure_connections_mode_is_used) {

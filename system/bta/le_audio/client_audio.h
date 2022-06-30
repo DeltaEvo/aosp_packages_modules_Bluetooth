@@ -19,6 +19,7 @@
 #include <future>
 
 #include "audio_hal_interface/le_audio_software.h"
+#include "common/repeating_timer.h"
 
 /* Implementations of Le Audio will also implement this interface */
 class LeAudioClientAudioSinkReceiver {
@@ -36,6 +37,9 @@ class LeAudioClientAudioSourceReceiver {
   virtual ~LeAudioClientAudioSourceReceiver() = default;
   virtual void OnAudioSuspend(std::promise<void> do_suspend_promise) = 0;
   virtual void OnAudioResume(void) = 0;
+  virtual void OnAudioMetadataUpdate(
+      std::promise<void> do_update_metadata_promise,
+      const sink_metadata_t& sink_metadata) = 0;
 };
 
 /* Represents configuration of audio codec, as exchanged between le audio and
@@ -95,6 +99,13 @@ struct LeAudioCodecConfiguration {
              (data_interval_us == other.data_interval_us));
   }
 
+  bool operator==(const LeAudioCodecConfiguration& other) const {
+    return ((num_channels == other.num_channels) &&
+            (sample_rate == other.sample_rate) &&
+            (bits_per_sample == other.bits_per_sample) &&
+            (data_interval_us == other.data_interval_us));
+  }
+
   bool IsInvalid() {
     return (num_channels == 0) || (sample_rate == 0) ||
            (bits_per_sample == 0) || (data_interval_us == 0);
@@ -104,30 +115,80 @@ struct LeAudioCodecConfiguration {
 /* Represents source of audio for le audio client */
 class LeAudioClientAudioSource {
  public:
-  static bool Start(const LeAudioCodecConfiguration& codecConfiguration,
-                    LeAudioClientAudioSinkReceiver* audioReceiver);
-  static void Stop();
-  static const void* Acquire();
-  static void Release(const void* instance);
-  static void ConfirmStreamingRequest();
-  static void CancelStreamingRequest();
-  static void UpdateRemoteDelay(uint16_t remote_delay_ms);
+  virtual ~LeAudioClientAudioSource() = default;
+
+  virtual bool Start(const LeAudioCodecConfiguration& codecConfiguration,
+                     LeAudioClientAudioSinkReceiver* audioReceiver);
+  virtual void Stop();
+  virtual void Release(const void* instance);
+  virtual void ConfirmStreamingRequest();
+  virtual void CancelStreamingRequest();
+  virtual void UpdateRemoteDelay(uint16_t remote_delay_ms);
+  virtual void UpdateAudioConfigToHal(const ::le_audio::offload_config& config);
+  virtual void SuspendedForReconfiguration();
+
   static void DebugDump(int fd);
-  static void UpdateAudioConfigToHal(const ::le_audio::offload_config& config);
+
+ protected:
+  const void* Acquire(bool is_broadcasting_session_type);
+  bool InitAudioSinkThread(const std::string name);
+
+  bluetooth::common::MessageLoopThread* worker_thread_;
+
+ private:
+  bool SinkOnResumeReq(bool start_media_task);
+  bool SinkOnSuspendReq();
+  bool SinkOnMetadataUpdateReq(const source_metadata_t& source_metadata);
+
+  void StartAudioTicks();
+  void StopAudioTicks();
+  void SendAudioData();
+
+  bluetooth::common::RepeatingTimer audio_timer_;
+  LeAudioCodecConfiguration source_codec_config_;
+  LeAudioClientAudioSinkReceiver* audioSinkReceiver_;
+  bluetooth::audio::le_audio::LeAudioClientInterface::Sink*
+      sinkClientInterface_;
+
+  /* Guard audio sink receiver mutual access from stack with internal mutex */
+  std::mutex sinkInterfaceMutex_;
 };
 
 /* Represents audio sink for le audio client */
-class LeAudioClientAudioSink {
+class LeAudioUnicastClientAudioSink {
  public:
-  static bool Start(const LeAudioCodecConfiguration& codecConfiguration,
-                    LeAudioClientAudioSourceReceiver* audioReceiver);
-  static void Stop();
-  static const void* Acquire();
-  static void Release(const void* instance);
-  static size_t SendData(uint8_t* data, uint16_t size);
-  static void ConfirmStreamingRequest();
-  static void CancelStreamingRequest();
-  static void UpdateRemoteDelay(uint16_t remote_delay_ms);
+  virtual ~LeAudioUnicastClientAudioSink() = default;
+
+  virtual bool Start(const LeAudioCodecConfiguration& codecConfiguration,
+                     LeAudioClientAudioSourceReceiver* audioReceiver);
+  virtual void Stop();
+  virtual const void* Acquire();
+  virtual void Release(const void* instance);
+  virtual size_t SendData(uint8_t* data, uint16_t size);
+  virtual void ConfirmStreamingRequest();
+  virtual void CancelStreamingRequest();
+  virtual void UpdateRemoteDelay(uint16_t remote_delay_ms);
+  virtual void UpdateAudioConfigToHal(const ::le_audio::offload_config& config);
+  virtual void SuspendedForReconfiguration();
+
   static void DebugDump(int fd);
-  static void UpdateAudioConfigToHal(const ::le_audio::offload_config& config);
+
+ private:
+  bool SourceOnResumeReq(bool start_media_task);
+  bool SourceOnSuspendReq();
+  bool SourceOnMetadataUpdateReq(const sink_metadata_t& sink_metadata);
+
+  LeAudioClientAudioSourceReceiver* audioSourceReceiver_;
+  bluetooth::audio::le_audio::LeAudioClientInterface::Source*
+      sourceClientInterface_;
+};
+
+class LeAudioUnicastClientAudioSource : public LeAudioClientAudioSource {
+ public:
+  virtual const void* Acquire();
+};
+
+class LeAudioBroadcastClientAudioSource : public LeAudioClientAudioSource {
+ public:
+  virtual const void* Acquire();
 };

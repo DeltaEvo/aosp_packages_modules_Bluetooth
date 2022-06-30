@@ -91,7 +91,7 @@ public class HeadsetStateMachineTest {
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
         Assume.assumeTrue("Ignore test when HeadsetService is not enabled",
-                mTargetContext.getResources().getBoolean(R.bool.profile_supported_hs_hfp));
+                HeadsetService.isEnabled());
         // Setup mocks and test assets
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
@@ -123,7 +123,8 @@ public class HeadsetStateMachineTest {
         when(mHeadsetService.getConnectionPolicy(any(BluetoothDevice.class))).thenReturn(
                 BluetoothProfile.CONNECTION_POLICY_ALLOWED);
         when(mHeadsetService.getForceScoAudio()).thenReturn(true);
-        when(mHeadsetService.okToAcceptConnection(any(BluetoothDevice.class))).thenReturn(true);
+        when(mHeadsetService.okToAcceptConnection(any(BluetoothDevice.class), anyBoolean()))
+                .thenReturn(true);
         when(mHeadsetService.isScoAcceptable(any(BluetoothDevice.class))).thenReturn(
                 BluetoothStatusCodes.SUCCESS);
         // Setup thread and looper
@@ -138,7 +139,7 @@ public class HeadsetStateMachineTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mTargetContext.getResources().getBoolean(R.bool.profile_supported_hs_hfp)) {
+        if (!HeadsetService.isEnabled()) {
             return;
         }
         HeadsetObjectsFactory.getInstance().destroyStateMachine(mHeadsetStateMachine);

@@ -56,6 +56,7 @@
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/include/bta_le_audio_api.h"
 #include "bta/include/bta_le_audio_broadcaster_api.h"
+#include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -171,14 +172,24 @@ static bool is_profile(const char* p1, const char* p2) {
  *
  ****************************************************************************/
 
+const std::vector<std::string> get_allowed_bt_package_name(void);
+void handle_migration(const std::string& dst,
+                      const std::vector<std::string>& allowed_bt_package_name);
+
 static int init(bt_callbacks_t* callbacks, bool start_restricted,
                 bool is_common_criteria_mode, int config_compare_result,
-                const char** init_flags, bool is_atv) {
+                const char** init_flags, bool is_atv,
+                const char* user_data_directory) {
   LOG_INFO(
       "%s: start restricted = %d ; common criteria mode = %d, config compare "
       "result = %d",
       __func__, start_restricted, is_common_criteria_mode,
       config_compare_result);
+
+  if (user_data_directory != nullptr) {
+    handle_migration(std::string(user_data_directory),
+                     get_allowed_bt_package_name());
+  }
 
   bluetooth::common::InitFlags::Load(init_flags);
 
@@ -423,6 +434,7 @@ static int clear_event_filter() {
 static void dump(int fd, const char** arguments) {
   btif_debug_conn_dump(fd);
   btif_debug_bond_event_dump(fd);
+  btif_debug_linkkey_type_dump(fd);
   btif_debug_a2dp_dump(fd);
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
@@ -441,6 +453,7 @@ static void dump(int fd, const char** arguments) {
 #ifndef TARGET_FLOSS
   LeAudioClient::DebugDump(fd);
   LeAudioBroadcaster::DebugDump(fd);
+  VolumeControl::DebugDump(fd);
 #endif
   connection_manager::dump(fd);
   bluetooth::bqr::DebugDump(fd);

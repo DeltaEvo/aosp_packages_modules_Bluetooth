@@ -67,11 +67,13 @@ java_library {
     static_libs: [
         "androidx.annotation_annotation",
         "androidx.appcompat_appcompat",
+        "modules-utils-shell-command-handler",
     ],
 
     apex_available: [
         "com.android.bluetooth",
     ],
+    min_sdk_version: "Tiramisu"
 }
 
 // service-bluetooth static library
@@ -104,6 +106,7 @@ java_library {
     apex_available: [
         "com.android.bluetooth",
     ],
+    min_sdk_version: "Tiramisu"
 }
 
 gensrcs {

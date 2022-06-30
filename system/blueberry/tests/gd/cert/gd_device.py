@@ -463,6 +463,8 @@ class GdAndroidDevice(GdDeviceBase):
     WAIT_FOR_DEVICE_TIMEOUT_SECONDS = 180
     WAIT_FOR_DEVICE_SIGINT_TIMEOUT_SECONDS = 1
     ADB_ABORT_EXIT_CODE = 134
+    DEVICE_LIB_DIR = "/system/lib64"
+    DEVICE_BIN_DIR = "/system/bin"
 
     def __init__(self, grpc_port: str, grpc_root_server_port: str, signal_port: str, cmd: List[str], label: str,
                  type_identifier: str, name: str, serial_number: str, verbose_mode: bool):
@@ -490,14 +492,51 @@ class GdAndroidDevice(GdDeviceBase):
         logging.info("Port forwarding done on device %s %s" % (self.label, self.serial_number))
 
         # Push test binaries
-        self.push_or_die(os.path.join(get_gd_root(), "target", "bluetooth_stack_with_facade"), "system/bin")
+        local_dir = os.path.join(get_gd_root(), "target")
+
+        def generate_dir_pair(local_dir, device_dir, filename):
+            return os.path.join(local_dir, filename), os.path.join(device_dir, filename)
+
+        # Do not override exist libraries shared by other binaries on the Android device to avoid corrupting the Android device
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_BIN_DIR, "bluetooth_stack_with_facade"))
         self.push_or_die(
-            os.path.join(get_gd_root(), "target", "android.system.suspend.control-V1-ndk.so"), "system/lib64")
-        self.push_or_die(os.path.join(get_gd_root(), "target", "libbluetooth_gd.so"), "system/lib64")
-        self.push_or_die(os.path.join(get_gd_root(), "target", "libgrpc++_unsecure.so"), "system/lib64")
-        self.push_or_die(os.path.join(get_gd_root(), "target", "libgrpc++.so"), "system/lib64")
-        self.push_or_die(os.path.join(get_gd_root(), "target", "libgrpc_wrap.so"), "system/lib64")
-        self.push_or_die(os.path.join(get_gd_root(), "target", "libstatslog_bt.so"), "system/lib64")
+            *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "android.hardware.bluetooth@1.0.so"),
+            overwrite_existing=False)
+        self.push_or_die(
+            *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "android.hardware.bluetooth@1.1.so"),
+            overwrite_existing=False)
+        self.push_or_die(
+            *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libandroid_runtime_lazy.so"), overwrite_existing=False)
+        self.push_or_die(
+            *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libbacktrace.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libbase.so"), overwrite_existing=False)
+        self.push_or_die(
+            *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libbinder_ndk.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libbinder.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libc++.so"), overwrite_existing=False)
+        # libclang_rt.asan-aarch64-android.so is only needed for ASAN build and is automatically included on device
+        #self.push_or_die(
+        #    *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libclang_rt.asan-aarch64-android.so"),
+        #    overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libcrypto.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libcutils.so"), overwrite_existing=False)
+        self.push_or_die(
+            *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libgrpc_wrap.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libgrpc++_unsecure.so"))
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libgrpc++.so"))
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libhidlbase.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "liblog.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "liblzma.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libprotobuf-cpp-full.so"))
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libssl.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libgrpc++.so"))
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libstatslog_bt.so"))
+        self.push_or_die(
+            *generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libunwindstack.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libutils.so"), overwrite_existing=False)
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libgrpc++.so"))
+        self.push_or_die(*generate_dir_pair(local_dir, self.DEVICE_LIB_DIR, "libz.so"), overwrite_existing=False)
+
         logging.info("Binaries pushed to device %s %s" % (self.label, self.serial_number))
 
         try:
@@ -527,7 +566,10 @@ class GdAndroidDevice(GdDeviceBase):
 
         # Ensure Bluetooth is disabled
         self.ensure_no_output(self.adb.shell("settings put global ble_scan_always_enabled 0"))
-        self.ensure_no_output(self.adb.shell("svc bluetooth disable"))
+        self.adb.shell("cmd bluetooth_manager disable")
+        device_bt_state = int(self.adb.shell("settings get global bluetooth_on"))
+        asserts.assert_equal(device_bt_state, 0,
+                             "Failed to disable Bluetooth on device %s %s" % (self.label, self.serial_number))
         logging.info("Bluetooth disabled on device %s %s" % (self.label, self.serial_number))
 
         # Start logcat logging
@@ -651,7 +693,7 @@ class GdAndroidDevice(GdDeviceBase):
             self.adb.shell("setprop persist.sys.timezone %s" % target_timezone)
             self.reboot()
             self.adb.remount()
-            device_tz = self.adb.shell("date +%z")
+            device_tz = self.adb.shell("date +%z").decode(UTF_8).rstrip()
             asserts.assert_equal(
                 host_tz, device_tz, "Device timezone %s still does not match host "
                 "timezone %s after reset" % (device_tz, host_tz))
@@ -673,7 +715,7 @@ class GdAndroidDevice(GdDeviceBase):
             (device_time.isoformat(), host_time.isoformat(), int(max_delta_seconds * 1000)),
             delta=max_delta_seconds)
 
-    def push_or_die(self, src_file_path, dst_file_path, push_timeout=300):
+    def push_or_die(self, src_file_path, dst_file_path, push_timeout=300, overwrite_existing=True):
         """Pushes a file to the Android device
 
         Args:
@@ -681,6 +723,9 @@ class GdAndroidDevice(GdDeviceBase):
             dst_file_path: The destination of the file.
             push_timeout: How long to wait for the push to finish in seconds
         """
+        if not overwrite_existing and self.adb.path_exists(dst_file_path):
+            logging.debug("Skip pushing {} to {} as it already exists on device".format(src_file_path, dst_file_path))
+            return
         out = self.adb.push([src_file_path, dst_file_path], timeout=push_timeout).decode(UTF_8).rstrip()
         if 'error' in out:
             asserts.fail('Unable to push file %s to %s due to %s' % (src_file_path, dst_file_path, out))
@@ -771,12 +816,15 @@ class GdAndroidDevice(GdDeviceBase):
         # sys.boot_completed.
         while time.time() < timeout_start + timeout:
             try:
+                logging.debug("waiting for device %s to turn off", self.serial_number)
                 self.adb.get_state()
+                logging.debug("device %s not turned off yet", self.serial_number)
                 time.sleep(.1)
             except AdbError:
                 # get_state will raise an error if the device is not found. We
                 # want the device to be missing to prove the device has kicked
                 # off the reboot.
+                logging.debug("device %s is turned off, waiting for it to boot", self.serial_number)
                 break
         minutes_left = timeout_minutes - (time.time() - timeout_start) / 60.0
         self.wait_for_boot_completion(timeout_minutes=minutes_left)

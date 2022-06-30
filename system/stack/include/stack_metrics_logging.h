@@ -43,9 +43,13 @@ void log_sdp_attribute(const RawAddress& address, uint16_t protocol_uuid,
                        const char* attribute_value);
 
 void log_manufacturer_info(const RawAddress& address,
+                           android::bluetooth::AddressTypeEnum address_type,
                            android::bluetooth::DeviceInfoSrcEnum source_type,
                            const std::string& source_name,
                            const std::string& manufacturer,
                            const std::string& model,
                            const std::string& hardware_version,
                            const std::string& software_version);
+
+void log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum key,
+                         int64_t value);

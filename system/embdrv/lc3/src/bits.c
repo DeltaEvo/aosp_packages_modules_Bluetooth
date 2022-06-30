@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright 2021 Google, Inc.
+ *  Copyright 2022 Google LLC
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -139,7 +139,8 @@ int lc3_check_bits(const struct lc3_bits *bits)
 static inline void accu_flush(
     struct lc3_bits_accu *accu, struct lc3_bits_buffer *buffer)
 {
-    int nbytes = LC3_MIN(accu->n >> 3, buffer->p_bw - buffer->p_fw);
+    int nbytes = LC3_MIN(accu->n >> 3,
+        LC3_MAX(buffer->p_bw - buffer->p_fw, 0));
 
     accu->n -= 8 * nbytes;
 
@@ -166,7 +167,7 @@ static inline void ac_put(struct lc3_bits_buffer *buffer, int byte)
  * ac              Arithmetic coder
  * buffer          Bitstream buffer
  */
-static inline void ac_shift(
+LC3_HOT static inline void ac_shift(
     struct lc3_bits_ac *ac, struct lc3_bits_buffer *buffer)
 {
     if (ac->low < 0xff0000 || ac->carry)
@@ -261,7 +262,7 @@ void lc3_flush_bits(struct lc3_bits *bits)
  * Write from 1 to 32 bits,
  * exceeding the capacity of the accumulator
  */
-void lc3_put_bits_generic(struct lc3_bits *bits, unsigned v, int n)
+LC3_HOT void lc3_put_bits_generic(struct lc3_bits *bits, unsigned v, int n)
 {
     struct lc3_bits_accu *accu = &bits->accu;
 
@@ -284,7 +285,7 @@ void lc3_put_bits_generic(struct lc3_bits *bits, unsigned v, int n)
 /**
  * Arithmetic coder renormalization
  */
-void lc3_ac_write_renorm(struct lc3_bits *bits)
+LC3_HOT void lc3_ac_write_renorm(struct lc3_bits *bits)
 {
     struct lc3_bits_ac *ac = &bits->ac;
 
@@ -335,7 +336,7 @@ static inline void accu_load(struct lc3_bits_accu *accu,
  * Read from 1 to 32 bits,
  * exceeding the capacity of the accumulator
  */
-unsigned lc3_get_bits_generic(struct lc3_bits *bits, int n)
+LC3_HOT unsigned lc3_get_bits_generic(struct lc3_bits *bits, int n)
 {
     struct lc3_bits_accu *accu = &bits->accu;
     struct lc3_bits_buffer *buffer = &bits->buffer;
@@ -365,7 +366,7 @@ unsigned lc3_get_bits_generic(struct lc3_bits *bits, int n)
 /**
  * Arithmetic coder renormalization
  */
-void lc3_ac_read_renorm(struct lc3_bits *bits)
+LC3_HOT void lc3_ac_read_renorm(struct lc3_bits *bits)
 {
     struct lc3_bits_ac *ac = &bits->ac;
 

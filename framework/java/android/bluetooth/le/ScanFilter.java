@@ -24,6 +24,7 @@ import android.annotation.SystemApi;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothDevice.AddressType;
+import android.bluetooth.le.ScanRecord.AdvertisingDataType;
 import android.os.Parcel;
 import android.os.ParcelUuid;
 import android.os.Parcelable;
@@ -43,6 +44,7 @@ import java.util.UUID;
  * <li>Mac address of the remote device.
  * <li>Service data which is the data associated with a service.
  * <li>Manufacturer specific data which is the data associated with a particular manufacturer.
+ * <li>Advertising data type and corresponding data.
  *
  * @see ScanResult
  * @see BluetoothLeScanner
@@ -83,7 +85,7 @@ public final class ScanFilter implements Parcelable {
     @Nullable
     private final byte[] mManufacturerDataMask;
 
-    private int mAdvertisingDataType = -1;
+    private int mAdvertisingDataType = ScanRecord.DATA_TYPE_NONE;
     @Nullable
     private final byte[] mAdvertisingData;
     @Nullable
@@ -303,7 +305,7 @@ public final class ScanFilter implements Parcelable {
                     advertisingDataMask = new byte[advertisingDataMaskLength];
                     in.readByteArray(advertisingDataMask);
                 }
-                builder.setAdvertisingDataWithType(advertisingDataType, advertisingData,
+                builder.setAdvertisingDataTypeWithData(advertisingDataType, advertisingData,
                         advertisingDataMask);
             }
 
@@ -403,16 +405,26 @@ public final class ScanFilter implements Parcelable {
     }
 
     /**
-     * Returns the advertising data type. -1 if the type is not set.
-     */
+     * Returns the advertising data type of this filter.
+     * Returns {@link ScanRecord#DATA_TYPE_NONE} if the type is not set.
+     * The values of advertising data type are defined in the Bluetooth Generic Access Profile
+     * (https://www.bluetooth.com/specifications/assigned-numbers/)
+    */
+    @AdvertisingDataType
     public int getAdvertisingDataType() {
         return mAdvertisingDataType;
     }
 
+    /**
+     * Returns the advertising data of this filter.
+    */
     public @Nullable byte[] getAdvertisingData() {
         return mAdvertisingData;
     }
 
+    /**
+     * Returns the advertising data mask of this filter.
+    */
     public @Nullable byte[] getAdvertisingDataMask() {
         return mAdvertisingDataMask;
     }
@@ -477,7 +489,7 @@ public final class ScanFilter implements Parcelable {
         }
 
         // Advertising data type match
-        if (mAdvertisingDataType >= 0) {
+        if (mAdvertisingDataType > 0) {
             byte[] advertisingData = scanRecord.getAdvertisingDataMap().get(mAdvertisingDataType);
             if (advertisingData == null || !matchesPartialData(mAdvertisingData,
                     mAdvertisingDataMask, advertisingData)) {
@@ -665,7 +677,7 @@ public final class ScanFilter implements Parcelable {
         private byte[] mManufacturerData;
         private byte[] mManufacturerDataMask;
 
-        private int mAdvertisingDataType = -1;
+        private int mAdvertisingDataType = ScanRecord.DATA_TYPE_NONE;
         private byte[] mAdvertisingData;
         private byte[] mAdvertisingDataMask;
 
@@ -678,13 +690,15 @@ public final class ScanFilter implements Parcelable {
         }
 
         /**
-         * Set filter on device address.
+         * Set a scan filter on the remote device address.
+         * <p>
+         * The address passed to this API must be in big endian byte order. It needs to be in the
+         * format of "01:02:03:AB:CD:EF". The device address can be validated using
+         * {@link BluetoothAdapter#checkBluetoothAddress}. The @AddressType is defaulted to
+         * {@link BluetoothDevice#ADDRESS_TYPE_PUBLIC}.
          *
-         * @param deviceAddress The device Bluetooth address for the filter. It needs to be in the
-         * format of "01:02:03:AB:CD:EF". The device address can be validated using {@link
-         * BluetoothAdapter#checkBluetoothAddress}.  The @AddressType is defaulted to {@link
-         * BluetoothDevice#ADDRESS_TYPE_PUBLIC}
-         * @throws IllegalArgumentException If the {@code deviceAddress} is invalid.
+         * @param deviceAddress the remote device Bluetooth address for the filter
+         * @throws IllegalArgumentException if the {@code deviceAddress} is invalid
          */
         public Builder setDeviceAddress(String deviceAddress) {
             if (deviceAddress == null) {
@@ -695,20 +709,20 @@ public final class ScanFilter implements Parcelable {
         }
 
         /**
-         * Set filter on Address with AddressType
+         * Set a scan filter on the remote device address with an address type.
+         * <p>
+         * The address passed to this API must be in big endian byte order. It needs to be in the
+         * format of "01:02:03:AB:CD:EF". The device address can be validated using
+         * {@link BluetoothAdapter#checkBluetoothAddress}.
          *
-         * <p>This key is used to resolve a private address from a public address.
-         *
-         * @param deviceAddress The device Bluetooth address for the filter. It needs to be in the
-         * format of "01:02:03:AB:CD:EF". The device address can be validated using {@link
-         * BluetoothAdapter#checkBluetoothAddress}. May be any type of address.
+         * @param deviceAddress the remote device Bluetooth address for the filter
          * @param addressType indication of the type of address
-         * e.g. {@link BluetoothDevice#ADDRESS_TYPE_PUBLIC}
-         * or {@link BluetoothDevice#ADDRESS_TYPE_RANDOM}
          *
-         * @throws IllegalArgumentException If the {@code deviceAddress} is invalid.
-         * @throws IllegalArgumentException If the {@code addressType} is invalid length
-         * @throws NullPointerException if {@code deviceAddress} is null.
+         * @throws IllegalArgumentException If the {@code deviceAddress} is invalid
+         * @throws IllegalArgumentException If the {@code addressType} is invalid length or is not
+         * either {@link BluetoothDevice#ADDRESS_TYPE_PUBLIC} or
+         * {@link BluetoothDevice#ADDRESS_TYPE_RANDOM}
+         * @throws NullPointerException if {@code deviceAddress} is null
          *
          * @hide
          */
@@ -720,25 +734,25 @@ public final class ScanFilter implements Parcelable {
         }
 
         /**
-         * Set filter on Address with AddressType and the Identity Resolving Key (IRK).
+         * Set a scan filter on the remote device address with an address type and the Identity
+         * Resolving Key (IRK).
+         * <p>
+         * The address passed to this API must be either a public or random static address in big
+         * endian byte order. It needs to be in the format of "01:02:03:AB:CD:EF". The device
+         * address can be validated using {@link BluetoothAdapter#checkBluetoothAddress}.
+         * <p>
+         * The IRK is used to resolve a static address from a private address. The IRK must be
+         * provided in little endian byte order.
          *
-         * <p>The IRK is used to resolve a {@link BluetoothDevice#ADDRESS_TYPE_PUBLIC} from
-         * a PRIVATE_ADDRESS type.
-         *
-         * @param deviceAddress The device Bluetooth address for the filter. It needs to be in the
-         * format of "01:02:03:AB:CD:EF". The device address can be validated using {@link
-         * BluetoothAdapter#checkBluetoothAddress}.  This Address type must only be PUBLIC OR RANDOM
-         * STATIC.
+         * @param deviceAddress the remote device Bluetooth address for the filter
          * @param addressType indication of the type of address
-         * e.g. {@link BluetoothDevice#ADDRESS_TYPE_PUBLIC}
-         * or {@link BluetoothDevice#ADDRESS_TYPE_RANDOM}
-         * @param irk non-null byte array representing the Identity Resolving Key
+         * @param irk non-null little endian byte array representing the Identity Resolving Key
          *
-         * @throws IllegalArgumentException If the {@code deviceAddress} is invalid.
-         * @throws IllegalArgumentException if the {@code irk} is invalid length.
-         * @throws IllegalArgumentException If the {@code addressType} is invalid length or is not
-         * PUBLIC or RANDOM STATIC when an IRK is present.
-         * @throws NullPointerException if {@code deviceAddress} or {@code irk} is null.
+         * @throws IllegalArgumentException If the {@code deviceAddress} is invalid
+         * @throws IllegalArgumentException if the {@code irk} is invalid length
+         * @throws IllegalArgumentException If the {@code addressType} is an invalid length or is
+         * not PUBLIC or RANDOM STATIC
+         * @throws NullPointerException if {@code deviceAddress} or {@code irk} is null
          *
          * @hide
          */
@@ -763,13 +777,13 @@ public final class ScanFilter implements Parcelable {
          * format of "01:02:03:AB:CD:EF". The device address can be validated using {@link
          * BluetoothAdapter#checkBluetoothAddress}.
          * @param addressType indication of the type of address
-         * e.g. {@link BluetoothDevice#ADDRESS_TYPE_PUBLIC}
-         * @param irk non-null byte array representing the Identity Resolving Address; nullable
-         * internally.
+         * @param irk non-null little endian byte array representing the Identity Resolving Key;
+         *            nullable internally.
          *
-         * @throws IllegalArgumentException If the {@code deviceAddress} is invalid.
-         * @throws IllegalArgumentException If the {@code addressType} is invalid length.
-         * @throws NullPointerException if {@code deviceAddress} is null.
+         * @throws IllegalArgumentException if the {@code deviceAddress} is invalid
+         * @throws IllegalArgumentException if the {@code addressType} is not PUBLIC or RANDOM
+         * STATIC when an IRK is present
+         * @throws NullPointerException if {@code deviceAddress} is null
          *
          * @hide
          */
@@ -978,15 +992,19 @@ public final class ScanFilter implements Parcelable {
          * For any bit in the mask, set it the 1 if it needs to match the one in
          * advertising data, otherwise set it to 0.
          * <p>
+         * The values of {@code advertisingDataType} are assigned by Bluetooth SIG. For more
+         * details refer to Bluetooth Generic Access Profile.
+         * (https://www.bluetooth.com/specifications/assigned-numbers/)
          * The {@code advertisingDataMask} must have the same length of {@code advertisingData}.
          *
          * @throws IllegalArgumentException If the {@code advertisingDataType} is invalid, {@code
-         * advertisingData} is null while {@code advertisingDataMask} is not, or {@code
+         * advertisingData} or {@code advertisingDataMask} is null or {@code
          * advertisingData} and {@code advertisingDataMask} have different length.
          */
-        public @NonNull Builder setAdvertisingDataWithType(int advertisingDataType,
-                @Nullable byte[] advertisingData, @Nullable byte[] advertisingDataMask) {
-            if (advertisingDataType < -1) {
+        public @NonNull Builder setAdvertisingDataTypeWithData(
+                @AdvertisingDataType int advertisingDataType, @NonNull byte[] advertisingData,
+                @NonNull byte[] advertisingDataMask) {
+            if (advertisingDataType < 0) {
                 throw new IllegalArgumentException("invalid advertising data type");
             }
             if (mAdvertisingDataMask != null) {
@@ -1004,6 +1022,24 @@ public final class ScanFilter implements Parcelable {
             mAdvertisingDataType = advertisingDataType;
             mAdvertisingData = advertisingData;
             mAdvertisingDataMask = advertisingDataMask;
+            return this;
+        }
+
+
+        /**
+         * Set filter on advertising data with specific advertising data type.
+         * <p>
+         * The values of {@code advertisingDataType} are assigned by Bluetooth SIG. For more
+         * details refer to Bluetooth Generic Access Profile.
+         * (https://www.bluetooth.com/specifications/assigned-numbers/)
+         * @throws IllegalArgumentException If the {@code advertisingDataType} is invalid
+         */
+        public @NonNull Builder setAdvertisingDataType(
+                @AdvertisingDataType int advertisingDataType) {
+            if (advertisingDataType < 0) {
+                throw new IllegalArgumentException("invalid advertising data type");
+            }
+            mAdvertisingDataType = advertisingDataType;
             return this;
         }
 

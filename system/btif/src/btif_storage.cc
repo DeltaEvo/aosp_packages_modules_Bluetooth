@@ -486,7 +486,12 @@ static bt_status_t btif_in_fetch_bonded_devices(
           }
         }
         bt_linkkey_file_found = true;
-        p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+        if (p_bonded_devices->num_devices < BTM_SEC_MAX_DEVICE_RECORDS) {
+          p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+        } else {
+          BTIF_TRACE_WARNING("%s: exceed the max number of bonded devices",
+                             __func__);
+        }
       } else {
         bt_linkkey_file_found = false;
       }
@@ -940,6 +945,10 @@ static void remove_devices_with_sample_ltk() {
 void btif_storage_load_consolidate_devices(void) {
   btif_bonded_devices_t bonded_devices;
   btif_in_fetch_bonded_devices(&bonded_devices, 1);
+  std::unordered_set<RawAddress> bonded_addresses;
+  for (uint16_t i = 0; i < bonded_devices.num_devices; i++) {
+    bonded_addresses.insert(bonded_devices.devices[i]);
+  }
 
   std::vector<std::pair<RawAddress, RawAddress>> consolidated_devices;
   for (uint16_t i = 0; i < bonded_devices.num_devices; i++) {
@@ -948,12 +957,20 @@ void btif_storage_load_consolidate_devices(void) {
     if (btif_storage_get_ble_bonding_key(
             bonded_devices.devices[i], BTM_LE_KEY_PID, (uint8_t*)&key,
             sizeof(tBTM_LE_PID_KEYS)) == BT_STATUS_SUCCESS) {
-      if (bonded_devices.devices[i] != key.pid_key.identity_addr) {
+      if (bonded_devices.devices[i] != key.pid_key.identity_addr &&
+          bonded_addresses.find(key.pid_key.identity_addr) !=
+              bonded_addresses.end()) {
         LOG_INFO("found consolidated device %s %s",
                  bonded_devices.devices[i].ToString().c_str(),
                  key.pid_key.identity_addr.ToString().c_str());
-        consolidated_devices.emplace_back(bonded_devices.devices[i],
-                                          key.pid_key.identity_addr);
+
+        if (bonded_devices.devices[i].IsEmpty() ||
+            key.pid_key.identity_addr.IsEmpty()) {
+          LOG_WARN("Address is empty! Skip");
+        } else {
+          consolidated_devices.emplace_back(bonded_devices.devices[i],
+                                            key.pid_key.identity_addr);
+        }
       }
     }
   }
@@ -1363,7 +1380,12 @@ static bt_status_t btif_in_fetch_bonded_ble_device(
 
     // Fill in the bonded devices
     if (device_added) {
-      p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+      if (p_bonded_devices->num_devices < BTM_SEC_MAX_DEVICE_RECORDS) {
+        p_bonded_devices->devices[p_bonded_devices->num_devices++] = bd_addr;
+      } else {
+        BTIF_TRACE_WARNING("%s: exceed the max number of bonded devices",
+                           __func__);
+      }
       btif_gatts_add_bonded_dev_from_nv(bd_addr);
     }
 
@@ -2296,4 +2318,31 @@ void btif_storage_remove_gatt_cl_db_hash(const RawAddress& bd_addr) {
                          }
                        },
                        bd_addr));
+}
+
+void btif_debug_linkkey_type_dump(int fd) {
+  dprintf(fd, "\nLink Key Types:\n");
+  for (const auto& bd_addr : btif_config_get_paired_devices()) {
+    auto bdstr = bd_addr.ToString();
+    int linkkey_type;
+    dprintf(fd, "  %s\n", bdstr.c_str());
+
+    dprintf(fd, "    BR: ");
+    if (btif_config_get_int(bdstr, "LinkKeyType", &linkkey_type)) {
+      dprintf(fd, "%s", linkkey_type_text(linkkey_type).c_str());
+    }
+    dprintf(fd, "\n");
+
+    dprintf(fd, "    LE:");
+    if (btif_config_exist(bdstr, "LE_KEY_PENC")) dprintf(fd, " PENC");
+    if (btif_config_exist(bdstr, "LE_KEY_PID")) dprintf(fd, " PID");
+    if (btif_config_exist(bdstr, "LE_KEY_PCSRK")) dprintf(fd, " PCSRK");
+    if (btif_config_exist(bdstr, "LE_KEY_PLK")) dprintf(fd, " PLK");
+    if (btif_config_exist(bdstr, "LE_KEY_LENC")) dprintf(fd, " LENC");
+    if (btif_config_exist(bdstr, "LE_KEY_LCSRK")) dprintf(fd, " LCSRK");
+    if (btif_config_exist(bdstr, "LE_KEY_LID")) dprintf(fd, " LID");
+    if (btif_config_exist(bdstr, "LE_KEY_PLK")) dprintf(fd, " LLK");
+
+    dprintf(fd, "\n");
+  }
 }

@@ -42,6 +42,7 @@
 #include "storage/device.h"
 #include "storage/le_device.h"
 #include "storage/storage_module.h"
+#include "types/ble_address_with_type.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -57,30 +58,48 @@ constexpr uint8_t kLowestRssiValue = 129;
 
 class DefaultScanningCallback : public ::ScanningCallbacks {
   void OnScannerRegistered(const bluetooth::Uuid app_uuid, uint8_t scanner_id,
-                           uint8_t status) {
+                           uint8_t status) override {
     LogUnused();
   }
-  void OnSetScannerParameterComplete(uint8_t scanner_id, uint8_t status) {
+  void OnSetScannerParameterComplete(uint8_t scanner_id,
+                                     uint8_t status) override {
     LogUnused();
   }
   void OnScanResult(uint16_t event_type, uint8_t address_type, RawAddress bda,
                     uint8_t primary_phy, uint8_t secondary_phy,
                     uint8_t advertising_sid, int8_t tx_power, int8_t rssi,
                     uint16_t periodic_advertising_interval,
-                    std::vector<uint8_t> advertising_data) {
+                    std::vector<uint8_t> advertising_data) override {
     LogUnused();
   }
-  void OnTrackAdvFoundLost(AdvertisingTrackInfo advertising_track_info) {
+  void OnTrackAdvFoundLost(
+      AdvertisingTrackInfo advertising_track_info) override {
     LogUnused();
   }
   void OnBatchScanReports(int client_if, int status, int report_format,
-                          int num_records, std::vector<uint8_t> data) {
+                          int num_records, std::vector<uint8_t> data) override {
     LogUnused();
   }
-  void OnBatchScanThresholdCrossed(int client_if) { LogUnused(); }
+  void OnBatchScanThresholdCrossed(int client_if) override { LogUnused(); }
+  void OnPeriodicSyncStarted(int reg_id, uint8_t status, uint16_t sync_handle,
+                             uint8_t advertising_sid, uint8_t address_type,
+                             RawAddress address, uint8_t phy,
+                             uint16_t interval) override {
+    LogUnused();
+  };
+  void OnPeriodicSyncReport(uint16_t sync_handle, int8_t tx_power, int8_t rssi,
+                            uint8_t status,
+                            std::vector<uint8_t> data) override {
+    LogUnused();
+  };
+  void OnPeriodicSyncLost(uint16_t sync_handle) override { LogUnused(); };
+  void OnPeriodicSyncTransferred(int pa_source, uint8_t status,
+                                 RawAddress address) override {
+    LogUnused();
+  };
 
  private:
-  void LogUnused() const {
+  static void LogUnused() {
     LOG_WARN("BLE Scanning callbacks have not been registered");
   }
 } default_scanning_callback_;
@@ -91,11 +110,13 @@ class DefaultScanningCallback : public ::ScanningCallbacks {
     static_cast<::ScanningCallbacks*>(&default_scanning_callback_);
 extern ::ScanningCallbacks* bluetooth::shim::default_scanning_callback;
 
+extern tBTM_CB btm_cb;
+
 extern void btm_ble_process_adv_pkt_cont_for_inquiry(
-    uint16_t event_type, uint8_t address_type, const RawAddress& raw_address,
-    uint8_t primary_phy, uint8_t secondary_phy, uint8_t advertising_sid,
-    int8_t tx_power, int8_t rssi, uint16_t periodic_adv_int,
-    std::vector<uint8_t> advertising_data);
+    uint16_t event_type, tBLE_ADDR_TYPE address_type,
+    const RawAddress& raw_address, uint8_t primary_phy, uint8_t secondary_phy,
+    uint8_t advertising_sid, int8_t tx_power, int8_t rssi,
+    uint16_t periodic_adv_int, std::vector<uint8_t> advertising_data);
 
 extern void btif_dm_update_ble_remote_properties(const RawAddress& bd_addr,
                                                  BD_NAME bd_name,
@@ -127,11 +148,16 @@ void BleScannerInterfaceImpl::Unregister(int scanner_id) {
 
   /** Start or stop LE device scanning */
 void BleScannerInterfaceImpl::Scan(bool start) {
-  LOG(INFO) << __func__ << " in shim layer";
+  LOG(INFO) << __func__ << " in shim layer " <<  ((start) ? "started" : "stopped");
   bluetooth::shim::GetScanning()->Scan(start);
   BTM_LogHistory(
       kBtmLogTag, RawAddress::kEmpty,
       base::StringPrintf("Le scan %s", (start) ? "started" : "stopped"));
+  if (start) {
+    btm_cb.ble_ctr_cb.set_ble_observe_active();
+  } else {
+    btm_cb.ble_ctr_cb.reset_ble_observe();
+  }
   do_in_jni_thread(FROM_HERE,
                    base::Bind(&BleScannerInterfaceImpl::AddressCache::init,
                               base::Unretained(&address_cache_)));
@@ -148,8 +174,9 @@ void BleScannerInterfaceImpl::ScanFilterParamSetup(
   bluetooth::hci::AdvertisingFilterParameter advertising_filter_parameter;
 
   if (filt_param != nullptr) {
-    if (filt_param && filt_param->dely_mode == 1) {
-      bluetooth::shim::GetScanning()->TrackAdvertiser(client_if);
+    if (filt_param && filt_param->dely_mode == 1 &&
+        apcf_action == hci::ApcfAction::ADD) {
+      bluetooth::shim::GetScanning()->TrackAdvertiser(filter_index, client_if);
     }
     advertising_filter_parameter.feature_selection = filt_param->feat_seln;
     advertising_filter_parameter.list_logic_type = filt_param->list_logic_type;
@@ -218,6 +245,16 @@ void BleScannerInterfaceImpl::SetScanParameters(int scanner_id,
                                                 int scan_interval,
                                                 int scan_window, Callback cb) {
   LOG(INFO) << __func__ << " in shim layer";
+  tBTM_BLE_INQ_CB* p_cb = &btm_cb.ble_ctr_cb.inq_var;
+  if (BTM_BLE_ISVALID_PARAM(scan_interval, BTM_BLE_SCAN_INT_MIN,
+                            BTM_BLE_EXT_SCAN_INT_MAX) &&
+      BTM_BLE_ISVALID_PARAM(scan_window, BTM_BLE_SCAN_WIN_MIN,
+                            BTM_BLE_EXT_SCAN_WIN_MAX)) {
+    p_cb->scan_type = BTM_BLE_SCAN_MODE_ACTI;
+    p_cb->scan_interval = scan_interval;
+    p_cb->scan_window = scan_window;
+  }
+
   // use active scan
   auto scan_type = static_cast<bluetooth::hci::LeScanType>(0x01);
   bluetooth::shim::GetScanning()->SetScanParameters(scanner_id, scan_type,
@@ -265,47 +302,82 @@ void BleScannerInterfaceImpl::BatchscanReadReports(int client_if,
                                                       batch_scan_mode);
 }
 
+extern bool btm_random_pseudo_to_identity_addr(
+    RawAddress* random_pseudo, tBLE_ADDR_TYPE* p_identity_addr_type);
+
+extern bool btm_identity_addr_to_random_pseudo(RawAddress* bd_addr,
+                                               tBLE_ADDR_TYPE* p_addr_type,
+                                               bool refresh);
+
+extern tACL_CONN* btm_acl_for_bda(const RawAddress& bd_addr,
+                                  tBT_TRANSPORT transport);
+
 void BleScannerInterfaceImpl::StartSync(uint8_t sid, RawAddress address,
                                         uint16_t skip, uint16_t timeout,
-                                        StartSyncCb start_cb,
-                                        SyncReportCb report_cb,
-                                        SyncLostCb lost_cb) {
+                                        int reg_id) {
   LOG(INFO) << __func__ << " in shim layer";
-  // This function doesn't implement in the old stack
+  tBLE_ADDR_TYPE address_type = BLE_ADDR_RANDOM;
+  tINQ_DB_ENT* p_i = btm_inq_db_find(address);
+  if (p_i) {
+    address_type = p_i->inq_info.results.ble_addr_type;  // Random
+  }
+  btm_random_pseudo_to_identity_addr(&address, &address_type);
+  address_type &= ~BLE_ADDR_TYPE_ID_BIT;
+  bluetooth::shim::GetScanning()->StartSync(
+      sid, ToAddressWithType(address, address_type), skip, timeout, reg_id);
 }
 
 void BleScannerInterfaceImpl::StopSync(uint16_t handle) {
   LOG(INFO) << __func__ << " in shim layer";
-  // This function doesn't implement in the old stack
+  bluetooth::shim::GetScanning()->StopSync(handle);
 }
 
 void BleScannerInterfaceImpl::CancelCreateSync(uint8_t sid,
                                                RawAddress address) {
   LOG(INFO) << __func__ << " in shim layer";
-  // This function doesn't implement in the old stack
+  bluetooth::shim::GetScanning()->CancelCreateSync(sid, ToGdAddress(address));
 }
 
 void BleScannerInterfaceImpl::TransferSync(RawAddress address,
                                            uint16_t service_data,
                                            uint16_t sync_handle,
-                                           SyncTransferCb cb) {
+                                           int pa_source) {
   LOG(INFO) << __func__ << " in shim layer";
-  // This function doesn't implement in the old stack
+  tACL_CONN* p_acl = btm_acl_for_bda(address, BT_TRANSPORT_LE);
+  if (p_acl == NULL || !HCI_LE_PERIODIC_ADVERTISING_SYNC_TRANSFER_RECIPIENT(
+                           p_acl->peer_le_features)) {
+    LOG_ERROR("[PAST] Remote doesn't support PAST");
+    scanning_callbacks_->OnPeriodicSyncTransferred(
+        pa_source, BTM_MODE_UNSUPPORTED, address);
+    return;
+  }
+  bluetooth::shim::GetScanning()->TransferSync(
+      ToGdAddress(address), service_data, sync_handle, pa_source);
 }
 
 void BleScannerInterfaceImpl::TransferSetInfo(RawAddress address,
                                               uint16_t service_data,
                                               uint8_t adv_handle,
-                                              SyncTransferCb cb) {
+                                              int pa_source) {
   LOG(INFO) << __func__ << " in shim layer";
-  // This function doesn't implement in the old stack
+  tACL_CONN* p_acl = btm_acl_for_bda(address, BT_TRANSPORT_LE);
+  if (p_acl == NULL || !HCI_LE_PERIODIC_ADVERTISING_SYNC_TRANSFER_RECIPIENT(
+                           p_acl->peer_le_features)) {
+    LOG_ERROR("[PAST] Remote doesn't support PAST");
+    scanning_callbacks_->OnPeriodicSyncTransferred(
+        pa_source, BTM_MODE_UNSUPPORTED, address);
+    return;
+  }
+  bluetooth::shim::GetScanning()->TransferSetInfo(
+      ToGdAddress(address), service_data, adv_handle, pa_source);
 }
 
 void BleScannerInterfaceImpl::SyncTxParameters(RawAddress addr, uint8_t mode,
                                                uint16_t skip, uint16_t timeout,
-                                               StartSyncCb start_cb) {
+                                               int reg_id) {
   LOG(INFO) << __func__ << " in shim layer";
-  // This function doesn't implement in the old stack
+  bluetooth::shim::GetScanning()->SyncTxParameters(ToGdAddress(addr), mode,
+                                                   skip, timeout, reg_id);
 }
 
 void BleScannerInterfaceImpl::RegisterCallbacks(ScanningCallbacks* callbacks) {
@@ -337,28 +409,29 @@ void BleScannerInterfaceImpl::OnScanResult(
     int8_t tx_power, int8_t rssi, uint16_t periodic_advertising_interval,
     std::vector<uint8_t> advertising_data) {
   RawAddress raw_address = ToRawAddress(address);
+  tBLE_ADDR_TYPE ble_addr_type = to_ble_addr_type(address_type);
 
-  if (address_type != BLE_ADDR_ANONYMOUS) {
-    btm_ble_process_adv_addr(raw_address, &address_type);
+  if (ble_addr_type != BLE_ADDR_ANONYMOUS) {
+    btm_ble_process_adv_addr(raw_address, &ble_addr_type);
   }
 
   do_in_jni_thread(
       FROM_HERE,
       base::BindOnce(&BleScannerInterfaceImpl::handle_remote_properties,
-                     base::Unretained(this), raw_address, address_type,
+                     base::Unretained(this), raw_address, ble_addr_type,
                      advertising_data));
 
   do_in_jni_thread(
       FROM_HERE,
       base::BindOnce(&ScanningCallbacks::OnScanResult,
                      base::Unretained(scanning_callbacks_), event_type,
-                     address_type, raw_address, primary_phy, secondary_phy,
-                     advertising_sid, tx_power, rssi,
-                     periodic_advertising_interval, advertising_data));
+                     static_cast<uint8_t>(address_type), raw_address,
+                     primary_phy, secondary_phy, advertising_sid, tx_power,
+                     rssi, periodic_advertising_interval, advertising_data));
 
   // TODO: Remove when StartInquiry in GD part implemented
   btm_ble_process_adv_pkt_cont_for_inquiry(
-      event_type, address_type, raw_address, primary_phy, secondary_phy,
+      event_type, ble_addr_type, raw_address, primary_phy, secondary_phy,
       advertising_sid, tx_power, rssi, periodic_advertising_interval,
       advertising_data);
 }
@@ -368,6 +441,12 @@ void BleScannerInterfaceImpl::OnTrackAdvFoundLost(
   AdvertisingTrackInfo track_info = {};
   RawAddress raw_address =
       ToRawAddress(on_found_on_lost_info.advertiser_address);
+
+  if (on_found_on_lost_info.advertiser_address_type != BLE_ADDR_ANONYMOUS) {
+    btm_ble_process_adv_addr(raw_address,
+                             &on_found_on_lost_info.advertiser_address_type);
+  }
+
   track_info.advertiser_address = raw_address;
   track_info.advertiser_address_type =
       on_found_on_lost_info.advertiser_address_type;
@@ -414,6 +493,51 @@ void BleScannerInterfaceImpl::OnBatchScanThresholdCrossed(int client_if) {
       FROM_HERE,
       base::BindOnce(&ScanningCallbacks::OnBatchScanThresholdCrossed,
                      base::Unretained(scanning_callbacks_), client_if));
+}
+
+void BleScannerInterfaceImpl::OnPeriodicSyncStarted(
+    int reg_id, uint8_t status, uint16_t sync_handle, uint8_t advertising_sid,
+    bluetooth::hci::AddressWithType address_with_type, uint8_t phy,
+    uint16_t interval) {
+  RawAddress raw_address = ToRawAddress(address_with_type.GetAddress());
+  tBLE_ADDR_TYPE ble_addr_type =
+      to_ble_addr_type((uint8_t)address_with_type.GetAddressType());
+  if (ble_addr_type & BLE_ADDR_TYPE_ID_BIT) {
+    btm_identity_addr_to_random_pseudo(&raw_address, &ble_addr_type, true);
+  }
+
+  do_in_jni_thread(FROM_HERE,
+                   base::BindOnce(&ScanningCallbacks::OnPeriodicSyncStarted,
+                                  base::Unretained(scanning_callbacks_), reg_id,
+                                  status, sync_handle, advertising_sid,
+                                  static_cast<int>(ble_addr_type), raw_address,
+                                  phy, interval));
+}
+
+void BleScannerInterfaceImpl::OnPeriodicSyncReport(uint16_t sync_handle,
+                                                   int8_t tx_power, int8_t rssi,
+                                                   uint8_t status,
+                                                   std::vector<uint8_t> data) {
+  do_in_jni_thread(
+      FROM_HERE,
+      base::BindOnce(&ScanningCallbacks::OnPeriodicSyncReport,
+                     base::Unretained(scanning_callbacks_), sync_handle,
+                     tx_power, rssi, status, std::move(data)));
+}
+
+void BleScannerInterfaceImpl::OnPeriodicSyncLost(uint16_t sync_handle) {
+  do_in_jni_thread(
+      FROM_HERE,
+      base::BindOnce(&ScanningCallbacks::OnPeriodicSyncLost,
+                     base::Unretained(scanning_callbacks_), sync_handle));
+}
+
+void BleScannerInterfaceImpl::OnPeriodicSyncTransferred(
+    int pa_source, uint8_t status, bluetooth::hci::Address address) {
+  do_in_jni_thread(FROM_HERE,
+                   base::BindOnce(&ScanningCallbacks::OnPeriodicSyncTransferred,
+                                  base::Unretained(scanning_callbacks_),
+                                  pa_source, status, ToRawAddress(address)));
 }
 
 void BleScannerInterfaceImpl::OnTimeout() {}
@@ -490,6 +614,7 @@ bool BleScannerInterfaceImpl::parse_filter_command(
       apcf_command.data.begin(), apcf_command.data.end());
   advertising_packet_content_filter_command.data_mask.assign(
       apcf_command.data_mask.begin(), apcf_command.data_mask.end());
+  advertising_packet_content_filter_command.irk = apcf_command.irk;
   return true;
 }
 

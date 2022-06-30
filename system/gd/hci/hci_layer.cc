@@ -176,6 +176,10 @@ struct HciLayer::impl {
 
     ASSERT_LOG(!command_queue_.empty(), "Unexpected %s event with OpCode 0x%02hx (%s)", logging_id.c_str(), op_code,
                OpCodeText(op_code).c_str());
+    if (waiting_command_ == OpCode::CONTROLLER_DEBUG_INFO && op_code != OpCode::CONTROLLER_DEBUG_INFO) {
+      LOG_ERROR("Discarding event that came after timeout 0x%02hx (%s)", op_code, OpCodeText(op_code).c_str());
+      return;
+    }
     ASSERT_LOG(waiting_command_ == op_code, "Waiting for 0x%02hx (%s), got 0x%02hx (%s)", waiting_command_,
                OpCodeText(waiting_command_).c_str(), op_code, OpCodeText(op_code).c_str());
 
@@ -329,10 +333,26 @@ struct HciLayer::impl {
     ASSERT(event.IsValid());
     if (command_queue_.empty()) {
       auto event_code = event.GetEventCode();
-      ASSERT_LOG(
-          event_code != EventCode::COMMAND_COMPLETE && event_code != EventCode::COMMAND_STATUS,
-          "Received %s without a waiting command (is the HAL sending commands, but not handling the events?)",
-          EventCodeText(event_code).c_str());
+      // BT Core spec 5.2 (Volume 4, Part E section 4.4) allows anytime
+      // COMMAND_COMPLETE and COMMAND_STATUS with opcode 0x0 for flow control
+      if (event_code == EventCode::COMMAND_COMPLETE) {
+          auto view = CommandCompleteView::Create(event);
+          ASSERT(view.IsValid());
+          auto op_code = view.GetCommandOpCode();
+          ASSERT_LOG(op_code == OpCode::NONE,
+            "Received %s event with OpCode 0x%02hx (%s) without a waiting command"
+            "(is the HAL sending commands, but not handling the events?)",
+            EventCodeText(event_code).c_str(), op_code, OpCodeText(op_code).c_str());
+      }
+      if (event_code == EventCode::COMMAND_STATUS) {
+          auto view = CommandStatusView::Create(event);
+          ASSERT(view.IsValid());
+          auto op_code = view.GetCommandOpCode();
+          ASSERT_LOG(op_code == OpCode::NONE,
+            "Received %s event with OpCode 0x%02hx (%s) without a waiting command"
+            "(is the HAL sending commands, but not handling the events?)",
+            EventCodeText(event_code).c_str(), op_code, OpCodeText(op_code).c_str());
+      }
       std::unique_ptr<CommandView> no_waiting_command{nullptr};
       log_hci_event(no_waiting_command, event, module_.GetDependency<storage::StorageModule>());
     } else {

@@ -17,9 +17,12 @@
 package android.bluetooth;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.os.Parcel;
 import android.os.Parcelable;
+
+import java.util.Objects;
 
 /**
  * This class contains the Broadcast Isochronous Channel level information as defined in the BASE
@@ -40,6 +43,22 @@ public final class BluetoothLeBroadcastChannel implements Parcelable {
         mIsSelected = isSelected;
         mChannelIndex = channelIndex;
         mCodecMetadata = codecMetadata;
+    }
+
+    @Override
+    public boolean equals(@Nullable Object o) {
+        if (!(o instanceof BluetoothLeBroadcastChannel)) {
+            return false;
+        }
+        final BluetoothLeBroadcastChannel other = (BluetoothLeBroadcastChannel) o;
+        return mIsSelected == other.isSelected()
+                && mChannelIndex == other.getChannelIndex()
+                && mCodecMetadata.equals(other.getCodecMetadata());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mIsSelected, mChannelIndex, mCodecMetadata);
     }
 
     /**
@@ -168,11 +187,17 @@ public final class BluetoothLeBroadcastChannel implements Parcelable {
         /**
          * Set the Broadcast Isochronous Channel index of this Broadcast Channel.
          *
-         * @return Broadcast Isochronous Channel index
+         * @param channelIndex Broadcast Isochronous Channel index
+         * @throws IllegalArgumentException if the input argument is not valid
+         * @return this builder
          * @hide
          */
         @SystemApi
         public @NonNull Builder setChannelIndex(int channelIndex) {
+            if (channelIndex == UNKNOWN_VALUE_PLACEHOLDER) {
+                throw new IllegalArgumentException("channelIndex cannot be "
+                        + UNKNOWN_VALUE_PLACEHOLDER);
+            }
             mChannelIndex = channelIndex;
             return this;
         }
@@ -181,12 +206,14 @@ public final class BluetoothLeBroadcastChannel implements Parcelable {
          * Set the codec specific configuration for this Broadcast Channel.
          *
          * @param codecMetadata codec specific configuration for this Broadcast Channel
+         * @throws NullPointerException if codecMetadata is null
          * @return this builder
          * @hide
          */
         @SystemApi
         public @NonNull Builder setCodecMetadata(
                 @NonNull BluetoothLeAudioCodecConfigMetadata codecMetadata) {
+            Objects.requireNonNull(codecMetadata, "codecMetadata cannot be null");
             mCodecMetadata = codecMetadata;
             return this;
         }
@@ -195,11 +222,17 @@ public final class BluetoothLeBroadcastChannel implements Parcelable {
          * Build {@link BluetoothLeBroadcastChannel}.
          *
          * @return constructed {@link BluetoothLeBroadcastChannel}
+         * @throws NullPointerException if {@link NonNull} items are null
          * @throws IllegalArgumentException if the object cannot be built
          * @hide
          */
         @SystemApi
         public @NonNull BluetoothLeBroadcastChannel build() {
+            Objects.requireNonNull(mCodecMetadata, "codec metadata cannot be null");
+            if (mChannelIndex == UNKNOWN_VALUE_PLACEHOLDER) {
+                throw new IllegalArgumentException("mChannelIndex cannot be "
+                        + UNKNOWN_VALUE_PLACEHOLDER);
+            }
             return new BluetoothLeBroadcastChannel(mIsSelected, mChannelIndex, mCodecMetadata);
         }
     }

@@ -621,6 +621,34 @@ bool L2CA_GetPeerLECocConfig(uint16_t lcid, tL2CAP_LE_CFG_INFO* peer_cfg) {
 
 /*******************************************************************************
  *
+ *  Function         L2CA_GetPeerLECocCredit
+ *
+ *  Description      Get peers current credit for LE Connection Oriented
+ *                   Channel.
+ *
+ *  Return value:    Number of the peer current credit
+ *
+ ******************************************************************************/
+uint16_t L2CA_GetPeerLECocCredit(const RawAddress& bd_addr, uint16_t lcid) {
+  /* First, find the link control block */
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, BT_TRANSPORT_LE);
+  if (p_lcb == NULL) {
+    /* No link. Get an LCB and start link establishment */
+    L2CAP_TRACE_WARNING("%s no LCB", __func__);
+    return L2CAP_LE_CREDIT_MAX;
+  }
+
+  tL2C_CCB* p_ccb = l2cu_find_ccb_by_cid(p_lcb, lcid);
+  if (p_ccb == NULL) {
+    L2CAP_TRACE_ERROR("%s No CCB for CID:0x%04x", __func__, lcid);
+    return L2CAP_LE_CREDIT_MAX;
+  }
+
+  return p_ccb->peer_conn_cfg.credits;
+}
+
+/*******************************************************************************
+ *
  * Function         L2CA_ConnectCreditBasedRsp
  *
  * Description      Response for the pL2CA_CreditBasedConnectInd_Cb which is the
@@ -1576,7 +1604,9 @@ uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush) {
   /* Cannot flush eRTM buffers once they have a sequence number */
   if (p_ccb->peer_cfg.fcr.mode != L2CAP_FCR_ERTM_MODE) {
     const controller_t* controller = controller_get_interface();
-    if (num_to_flush != L2CAP_FLUSH_CHANS_GET) {
+    // Don't need send enhanced_flush to controller if it is LE transport.
+    if (p_lcb->transport != BT_TRANSPORT_LE &&
+        num_to_flush != L2CAP_FLUSH_CHANS_GET) {
       /* If the controller supports enhanced flush, flush the data queued at the
        * controller */
       if (controller->supports_non_flushable_pb() &&

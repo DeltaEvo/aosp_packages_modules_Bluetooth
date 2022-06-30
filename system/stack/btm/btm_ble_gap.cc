@@ -55,6 +55,7 @@
 #include "stack/include/gap_api.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/inq_hci_link_interface.h"
+#include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;
@@ -63,7 +64,7 @@ extern void btm_inq_remote_name_timer_timeout(void* data);
 extern bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                                      const RawAddress& new_pseudo_addr);
 extern bool btm_identity_addr_to_random_pseudo(RawAddress* bd_addr,
-                                               uint8_t* p_addr_type,
+                                               tBLE_ADDR_TYPE* p_addr_type,
                                                bool refresh);
 extern void btm_ble_batchscan_init(void);
 extern void btm_ble_adv_filter_init(void);
@@ -243,7 +244,7 @@ static void btm_ble_start_sync_timeout(void* data);
  *  Local functions
  ******************************************************************************/
 static void btm_ble_update_adv_flag(uint8_t flag);
-void btm_ble_process_adv_pkt_cont(uint16_t evt_type, uint8_t addr_type,
+void btm_ble_process_adv_pkt_cont(uint16_t evt_type, tBLE_ADDR_TYPE addr_type,
                                   const RawAddress& bda, uint8_t primary_phy,
                                   uint8_t secondary_phy,
                                   uint8_t advertising_sid, int8_t tx_power,
@@ -523,10 +524,6 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
       p_inq->scan_type = (p_inq->scan_type == BTM_BLE_SCAN_MODE_NONE)
                              ? BTM_BLE_SCAN_MODE_ACTI
                              : p_inq->scan_type;
-      /* assume observe always not using acceptlist */
-      /* enable resolving list */
-      btm_ble_enable_resolving_list_for_platform(BTM_BLE_RL_SCAN);
-
       btm_send_hci_set_scan_params(
           p_inq->scan_type, (uint16_t)scan_interval, (uint16_t)scan_window,
           btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, BTM_BLE_DEFAULT_SFP);
@@ -909,18 +906,12 @@ static void sync_queue_cleanup(remove_sync_node_t* p_param) {
 
 void btm_ble_start_sync_request(uint8_t sid, RawAddress addr, uint16_t skip,
                                 uint16_t timeout) {
-  uint8_t address_type = BLE_ADDR_RANDOM;
+  tBLE_ADDR_TYPE address_type = BLE_ADDR_RANDOM;
   tINQ_DB_ENT* p_i = btm_inq_db_find(addr);
   if (p_i) {
     address_type = p_i->inq_info.results.ble_addr_type;  // Random
   }
   btm_random_pseudo_to_identity_addr(&addr, &address_type);
-  if (address_type & BLE_ADDR_TYPE_ID_BIT) {
-#if (BLE_PRIVACY_SPT == TRUE)
-    LOG_INFO("Enable resolving list");
-    btm_ble_enable_resolving_list(BTM_BLE_RL_SCAN);
-#endif
-  }
   address_type &= ~BLE_ADDR_TYPE_ID_BIT;
   uint8_t options = 0;
   uint8_t cte_type = 7;
@@ -1106,11 +1097,10 @@ void btm_ble_periodic_adv_sync_established(uint8_t status, uint16_t sync_handle,
 
   RawAddress bda = addr;
   alarm_cancel(sync_timeout_alarm);
-  if (address_type & BLE_ADDR_TYPE_ID_BIT) {
-    btm_identity_addr_to_random_pseudo(&bda, &address_type, true);
-#if (BLE_PRIVACY_SPT == TRUE)
-    btm_ble_disable_resolving_list(BTM_BLE_RL_SCAN, true);
-#endif
+
+  tBLE_ADDR_TYPE ble_addr_type = to_ble_addr_type(address_type);
+  if (ble_addr_type & BLE_ADDR_TYPE_ID_BIT) {
+    btm_identity_addr_to_random_pseudo(&bda, &ble_addr_type, true);
   }
   int index = btm_ble_get_psync_index(adv_sid, bda);
   if (index == MAX_SYNC_TRANSACTION) {
@@ -1128,8 +1118,8 @@ void btm_ble_periodic_adv_sync_established(uint8_t status, uint16_t sync_handle,
   tBTM_BLE_PERIODIC_SYNC* ps = &btm_ble_pa_sync_cb.p_sync[index];
   ps->sync_handle = sync_handle;
   ps->sync_state = PERIODIC_SYNC_ESTABLISHED;
-  ps->sync_start_cb.Run(status, sync_handle, adv_sid, address_type, bda, phy,
-                        interval);
+  ps->sync_start_cb.Run(status, sync_handle, adv_sid,
+                        from_ble_addr_type(ble_addr_type), bda, phy, interval);
   btm_sync_queue_advance();
 }
 
@@ -1528,16 +1518,12 @@ static uint8_t btm_set_conn_mode_adv_init_addr(
         /* only do so for bonded device */
         if ((p_dev_rec = btm_find_or_alloc_dev(p_cb->direct_bda.bda)) != NULL &&
             p_dev_rec->ble.in_controller_list & BTM_RESOLVING_LIST_BIT) {
-          btm_ble_enable_resolving_list(BTM_BLE_RL_ADV);
           p_peer_addr_ptr = p_dev_rec->ble.identity_address_with_type.bda;
           *p_peer_addr_type = p_dev_rec->ble.identity_address_with_type.type;
           *p_own_addr_type = BLE_ADDR_RANDOM_ID;
           return evt_type;
         }
         /* otherwise fall though as normal directed adv */
-        else {
-          btm_ble_disable_resolving_list(BTM_BLE_RL_ADV, true);
-        }
       }
       /* direct adv mode does not have privacy, if privacy is not enabled  */
       *p_peer_addr_type = p_cb->direct_bda.type;
@@ -1830,8 +1816,6 @@ tBTM_STATUS btm_ble_set_discoverability(uint16_t combined_mode) {
     /* start initial GAP mode adv timer */
     alarm_set_on_mloop(p_cb->fast_adv_timer, BTM_BLE_GAP_FAST_ADV_TIMEOUT_MS,
                        btm_ble_fast_adv_timer_timeout, NULL);
-  } else {
-    btm_ble_disable_resolving_list(BTM_BLE_RL_ADV, true);
   }
 
   /* set up stop advertising timer */
@@ -1915,8 +1899,6 @@ tBTM_STATUS btm_ble_set_connectability(uint16_t combined_mode) {
     /* start initial GAP mode adv timer */
     alarm_set_on_mloop(p_cb->fast_adv_timer, BTM_BLE_GAP_FAST_ADV_TIMEOUT_MS,
                        btm_ble_fast_adv_timer_timeout, NULL);
-  } else {
-    btm_ble_disable_resolving_list(BTM_BLE_RL_ADV, true);
   }
   return status;
 }
@@ -1932,7 +1914,8 @@ static void btm_send_hci_scan_enable(uint8_t enable,
 }
 
 void btm_send_hci_set_scan_params(uint8_t scan_type, uint16_t scan_int,
-                                  uint16_t scan_win, uint8_t addr_type_own,
+                                  uint16_t scan_win,
+                                  tBLE_ADDR_TYPE addr_type_own,
                                   uint8_t scan_filter_policy) {
   if (controller_get_interface()->supports_ble_extended_advertising()) {
     scanning_phy_cfg phy_cfg;
@@ -2017,8 +2000,6 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
         BTM_BLE_SCAN_MODE_ACTI, BTM_BLE_LOW_LATENCY_SCAN_INT,
         BTM_BLE_LOW_LATENCY_SCAN_WIN,
         btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, SP_ADV_ALL);
-    /* enable IRK list */
-    btm_ble_enable_resolving_list_for_platform(BTM_BLE_RL_SCAN);
     p_ble_cb->inq_var.scan_type = BTM_BLE_SCAN_MODE_ACTI;
     btm_ble_start_scan();
   } else if ((p_ble_cb->inq_var.scan_interval !=
@@ -2469,7 +2450,7 @@ void btm_clear_all_pending_le_entry(void) {
   }
 }
 
-void btm_ble_process_adv_addr(RawAddress& bda, uint8_t* addr_type) {
+void btm_ble_process_adv_addr(RawAddress& bda, tBLE_ADDR_TYPE* addr_type) {
   /* map address to security record */
   bool match = btm_identity_addr_to_random_pseudo(&bda, addr_type, false);
 
@@ -2486,7 +2467,7 @@ void btm_ble_process_adv_addr(RawAddress& bda, uint8_t* addr_type) {
       } else {
         // Assign the original address to be the current report address
         bda = match_rec->ble.pseudo_addr;
-        *addr_type = match_rec->ble.ble_addr_type;
+        *addr_type = match_rec->ble.AddressType();
       }
     }
   }
@@ -2649,7 +2630,7 @@ void btm_ble_process_adv_pkt(uint8_t data_len, const uint8_t* data) {
  * This function is called after random address resolution is done, and proceed
  * to process adv packet.
  */
-void btm_ble_process_adv_pkt_cont(uint16_t evt_type, uint8_t addr_type,
+void btm_ble_process_adv_pkt_cont(uint16_t evt_type, tBLE_ADDR_TYPE addr_type,
                                   const RawAddress& bda, uint8_t primary_phy,
                                   uint8_t secondary_phy,
                                   uint8_t advertising_sid, int8_t tx_power,
@@ -2797,7 +2778,7 @@ void btm_ble_process_adv_pkt_cont(uint16_t evt_type, uint8_t addr_type,
  * from gd scanning module to handle inquiry result callback.
  */
 void btm_ble_process_adv_pkt_cont_for_inquiry(
-    uint16_t evt_type, uint8_t addr_type, const RawAddress& bda,
+    uint16_t evt_type, tBLE_ADDR_TYPE addr_type, const RawAddress& bda,
     uint8_t primary_phy, uint8_t secondary_phy, uint8_t advertising_sid,
     int8_t tx_power, int8_t rssi, uint16_t periodic_adv_int,
     std::vector<uint8_t> advertising_data) {
@@ -3061,13 +3042,6 @@ tBTM_STATUS btm_ble_start_adv(void) {
 
   if (!btm_ble_adv_states_operation(btm_ble_topology_check, p_cb->evt_type))
     return BTM_WRONG_MODE;
-
-  /* To relax resolving list,  always have resolving list enabled, unless
-   * directed adv */
-  if (p_cb->evt_type != BTM_BLE_CONNECT_LO_DUTY_DIR_EVT &&
-      p_cb->evt_type != BTM_BLE_CONNECT_DIR_EVT)
-    /* enable resolving list is desired */
-    btm_ble_enable_resolving_list_for_platform(BTM_BLE_RL_ADV);
 
   btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_ENABLE);
   p_cb->adv_mode = BTM_BLE_ADV_ENABLE;

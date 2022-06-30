@@ -74,19 +74,23 @@ struct rssi_log {
 };
 
 struct AudioStats {
-  size_t packet_flush_count;
+  size_t trigger_drop_count;
+  size_t packet_drop_count;
   size_t packet_send_count;
-  size_t frame_flush_count;
+  size_t packet_flush_count;
   size_t frame_send_count;
+  size_t frame_flush_count;
   std::deque<rssi_log> rssi_history;
 
   AudioStats() { Reset(); }
 
   void Reset() {
-    packet_flush_count = 0;
+    trigger_drop_count = 0;
+    packet_drop_count = 0;
     packet_send_count = 0;
-    frame_flush_count = 0;
+    packet_flush_count = 0;
     frame_send_count = 0;
+    frame_flush_count = 0;
   }
 };
 
@@ -154,6 +158,8 @@ struct HearingDevice {
   int read_rssi_count;
   int num_intervals_since_last_rssi_read;
 
+  bool gap_opened;
+
   HearingDevice(const RawAddress& address, uint8_t capabilities,
                 uint16_t codecs, uint16_t audio_control_point_handle,
                 uint16_t audio_status_handle, uint16_t audio_status_ccc_handle,
@@ -181,7 +187,8 @@ struct HearingDevice {
         codecs(codecs),
         playback_started(false),
         command_acked(false),
-        read_rssi_count(0) {}
+        read_rssi_count(0),
+        gap_opened(false) {}
 
   HearingDevice(const RawAddress& address, bool first_connection)
       : address(address),
@@ -203,7 +210,8 @@ struct HearingDevice {
         codecs(0),
         playback_started(false),
         command_acked(false),
-        read_rssi_count(0) {}
+        read_rssi_count(0),
+        gap_opened(false) {}
 
   HearingDevice() : HearingDevice(RawAddress::kEmpty, false) {}
 

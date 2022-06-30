@@ -20,6 +20,7 @@ import static java.util.Map.entry;
 
 import android.annotation.NonNull;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothUuid;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -675,14 +676,15 @@ public class MediaControlProfile implements MediaControlServiceCallbacks {
             }
 
             // Instantiate a Service Instance and it's state machine
-            int ccid = ContentControlIdKeeper.acquireCcid();
+            int ccid = ContentControlIdKeeper.acquireCcid(BluetoothUuid.GENERIC_MEDIA_CONTROL,
+                    BluetoothLeAudio.CONTEXT_TYPE_MEDIA);
             if (ccid == ContentControlIdKeeper.CCID_INVALID) {
                 Log.e(TAG, "Unable to acquire valid CCID!");
                 return;
             }
 
             // Only the bluetooth app is allowed to create generic media control service
-            boolean isGenericMcs = appToken.equals(THIS_PACKAGE_NAME);
+            boolean isGenericMcs = appToken.equals(mContext.getPackageName());
 
             MediaControlGattService svc = new MediaControlGattService(mMcpService, this, ccid);
             svc.init(isGenericMcs ? BluetoothUuid.GENERIC_MEDIA_CONTROL.getUuid()
@@ -751,7 +753,6 @@ public class MediaControlProfile implements MediaControlServiceCallbacks {
 
 
     private final Map<String, MediaControlGattServiceInterface> mServiceMap;
-    static final String THIS_PACKAGE_NAME = "com.android.bluetooth";
 
     public void unregisterServiceInstance(String appToken) {
         Log.d(TAG, "unregisterServiceInstance");

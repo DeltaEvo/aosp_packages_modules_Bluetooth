@@ -188,6 +188,7 @@ enum class Lc3SettingId {
   LC3_48_4,
   LC3_48_5,
   LC3_48_6,
+  LC3_VND_1,
   _END,
   UNSUPPORTED = _END,
 };
@@ -198,15 +199,22 @@ bool IsLc3SettingSupported(LeAudioContextType context_type, Lc3SettingId id) {
   /* Update those values, on any change of codec linked with content type */
   switch (context_type) {
     case LeAudioContextType::RINGTONE:
-    case LeAudioContextType::CONVERSATIONAL:
       if (id == Lc3SettingId::LC3_16_1 || id == Lc3SettingId::LC3_16_2)
+        return true;
+
+      break;
+
+    case LeAudioContextType::CONVERSATIONAL:
+      if (id == Lc3SettingId::LC3_16_1 || id == Lc3SettingId::LC3_16_2 ||
+          id == Lc3SettingId::LC3_32_2)
         return true;
 
       break;
 
     case LeAudioContextType::MEDIA:
       if (id == Lc3SettingId::LC3_16_1 || id == Lc3SettingId::LC3_16_2 ||
-          id == Lc3SettingId::LC3_48_4)
+          id == Lc3SettingId::LC3_48_4 || id == Lc3SettingId::LC3_48_2 ||
+          id == Lc3SettingId::LC3_VND_1 || id == Lc3SettingId::LC3_24_2)
         return true;
 
       break;
@@ -244,6 +252,7 @@ uint8_t GetSamplingFrequency(Lc3SettingId id) {
     case Lc3SettingId::LC3_48_4:
     case Lc3SettingId::LC3_48_5:
     case Lc3SettingId::LC3_48_6:
+    case Lc3SettingId::LC3_VND_1:
       return ::le_audio::codec_spec_conf::kLeAudioSamplingFreq48000Hz;
     case Lc3SettingId::UNSUPPORTED:
       return kLeAudioSamplingFreqRfu;
@@ -270,6 +279,7 @@ uint8_t GetFrameDuration(Lc3SettingId id) {
     case Lc3SettingId::LC3_48_2:
     case Lc3SettingId::LC3_48_4:
     case Lc3SettingId::LC3_48_6:
+    case Lc3SettingId::LC3_VND_1:
       return ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameDur10000us;
     case Lc3SettingId::UNSUPPORTED:
       return kLeAudioCodecLC3FrameDurRfu;
@@ -300,6 +310,7 @@ uint16_t GetOctetsPerCodecFrame(Lc3SettingId id) {
     case Lc3SettingId::LC3_48_1:
       return 75;
     case Lc3SettingId::LC3_48_2:
+    case Lc3SettingId::LC3_VND_1:
       return 100;
     case Lc3SettingId::LC3_48_3:
       return 90;
@@ -429,7 +440,8 @@ class LeAudioAseConfigurationTest : public Test {
         ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
         ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
     device->src_audio_locations_ =
-        ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft;
+        ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
+        ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
 
     device->conn_id_ = index;
     return device.get();
@@ -519,6 +531,11 @@ class LeAudioAseConfigurationTest : public Test {
                              data[i].active_channel_num_src) > 0;
 
         /* Prepare PAC's */
+        /* Note this test requires that reach TwoStereoChan configuration
+         * version has similar version for OneStereoChan (both SingleDev,
+         * DualDev). This is just how the test is created and this limitation
+         * should be removed b/230107540
+         */
         PublishedAudioCapabilitiesBuilder snk_pac_builder, src_pac_builder;
         for (const auto& entry : (*audio_set_conf).confs) {
           if (entry.direction == kLeAudioDirectionSink) {
@@ -746,7 +763,7 @@ TEST_F(LeAudioAseConfigurationTest, test_earbuds_conversional) {
       {left, kLeAudioCodecLC3ChannelCountSingleChannel,
        kLeAudioCodecLC3ChannelCountSingleChannel, 1, 1},
       {right, kLeAudioCodecLC3ChannelCountSingleChannel,
-       kLeAudioCodecLC3ChannelCountSingleChannel, 1, 0}};
+       kLeAudioCodecLC3ChannelCountSingleChannel, 1, 1}};
 
   TestGroupAseConfiguration(LeAudioContextType::CONVERSATIONAL, data, 2);
 }

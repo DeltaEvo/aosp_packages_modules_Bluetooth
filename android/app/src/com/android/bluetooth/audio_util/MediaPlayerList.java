@@ -196,7 +196,16 @@ public class MediaPlayerList {
 
                 // If there were any active players and we don't already have one due to the Media
                 // Framework Callbacks then set the highest priority one to active
-                if (mActivePlayerId == 0 && mMediaPlayers.size() > 0) setActivePlayer(1);
+                if (mActivePlayerId == 0 && mMediaPlayers.size() > 0) {
+                    String packageName = mMediaSessionManager.getMediaKeyEventSessionPackageName();
+                    if (!TextUtils.isEmpty(packageName) && haveMediaPlayer(packageName)) {
+                        Log.i(TAG, "Set active player to MediaKeyEvent session = " + packageName);
+                        setActivePlayer(mMediaPlayerIds.get(packageName));
+                    } else {
+                        Log.i(TAG, "Set active player to first default");
+                        setActivePlayer(1);
+                    }
+                }
             });
     }
 
@@ -376,14 +385,23 @@ public class MediaPlayerList {
         }
 
         int playerIndex = Integer.parseInt(mediaId.substring(0, 2));
-        String itemId = mediaId.substring(2);
-
         if (!haveMediaBrowser(playerIndex)) {
             e("playFolderItem: Do not have the a browsable player with ID " + playerIndex);
             return;
         }
 
-        mBrowsablePlayers.get(playerIndex).playItem(itemId);
+        BrowsedPlayerWrapper wrapper = mBrowsablePlayers.get(playerIndex);
+        String itemId = mediaId.substring(2);
+        if (TextUtils.isEmpty(itemId)) {
+            itemId = wrapper.getRootId();
+            if (TextUtils.isEmpty(itemId)) {
+                e("playFolderItem: Failed to start playback with an empty media id.");
+                return;
+            }
+            Log.i(TAG, "playFolderItem: Empty media id, trying with the root id for "
+                    + wrapper.getPackageName());
+        }
+        wrapper.playItem(itemId);
     }
 
     void getFolderItemsMediaPlayerList(GetFolderItemsCallback cb) {

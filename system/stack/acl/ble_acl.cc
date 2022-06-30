@@ -65,8 +65,6 @@ static bool acl_ble_common_connection(const tBLE_BD_ADDR& address_with_type,
     return false;
   }
 
-  btm_ble_disable_resolving_list(BTM_BLE_RL_INIT, true);
-
   /* Tell BTM Acl management about the link */
   btm_acl_created(address_with_type.bda, handle, role, BT_TRANSPORT_LE);
 
@@ -127,12 +125,7 @@ void acl_ble_enhanced_connection_complete_from_shim(
     uint16_t conn_interval, uint16_t conn_latency, uint16_t conn_timeout,
     const RawAddress& local_rpa, const RawAddress& peer_rpa,
     tBLE_ADDR_TYPE peer_addr_type) {
-  if (!connection_manager::remove_unconditional_from_shim(
-          address_with_type.bda)) {
-    LOG_WARN(
-        "Unable to remove from legacy connection manager accept list addr:%s",
-        PRIVATE_ADDRESS(address_with_type.bda));
-  }
+  connection_manager::on_connection_complete(address_with_type.bda);
 
   tBLE_BD_ADDR resolved_address_with_type;
   const bool is_in_security_db = maybe_resolve_received_address(
@@ -145,8 +138,7 @@ void acl_ble_enhanced_connection_complete_from_shim(
 
   // The legacy stack continues the LE connection after the read remote version
   // complete has been received.
-  l2cble_notify_le_connection(address_with_type.bda);
-  l2cble_use_preferred_conn_params(address_with_type.bda);
+  // maybe_chain_more_commands_after_read_remote_version_complete
 }
 
 void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
@@ -155,12 +147,10 @@ void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
   if (status != HCI_ERR_ADVERTISING_TIMEOUT) {
     btm_cb.ble_ctr_cb.set_connection_state_idle();
     btm_ble_clear_topology_mask(BTM_BLE_STATE_INIT_BIT);
-    btm_ble_disable_resolving_list(BTM_BLE_RL_INIT, true);
     connection_manager::on_connection_timed_out_from_shim(
         address_with_type.bda);
   } else {
     btm_cb.ble_ctr_cb.inq_var.adv_mode = BTM_BLE_ADV_DISABLE;
-    btm_ble_disable_resolving_list(BTM_BLE_RL_ADV, true);
   }
   btm_ble_update_mode_operation(HCI_ROLE_UNKNOWN, &address_with_type.bda,
                                 status);
@@ -180,4 +170,15 @@ void acl_ble_update_event_received(tHCI_STATUS status, uint16_t handle,
 
   gatt_notify_conn_update(p_dev_rec->ble.pseudo_addr, interval, latency,
                           timeout, status);
+}
+
+void acl_ble_data_length_change_event(uint16_t handle, uint16_t max_tx_octets,
+                                      uint16_t max_tx_time,
+                                      uint16_t max_rx_octets,
+                                      uint16_t max_rx_time) {
+  LOG_DEBUG(
+      "Data length change event received handle:0x%04x max_tx_octets:%hu "
+      "max_tx_time:%hu max_rx_octets:%hu max_rx_time:%hu",
+      handle, max_tx_octets, max_tx_time, max_rx_octets, max_rx_time);
+  l2cble_process_data_length_change_event(handle, max_tx_octets, max_rx_octets);
 }

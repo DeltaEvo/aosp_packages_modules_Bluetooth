@@ -342,7 +342,7 @@ void StructDef::GenRustFieldNames(std::ostream& s) const {
 }
 
 void StructDef::GenRustDeclarations(std::ostream& s) const {
-  s << "#[derive(Debug, Clone)] ";
+  s << "#[derive(Debug, Clone, PartialEq)] ";
   s << "pub struct " << name_ << "{";
 
   // Generate struct fields
@@ -384,7 +384,7 @@ void StructDef::GenRustImpls(std::ostream& s) const {
     }
 
     field->GenBoundsCheck(s, start_field_offset, end_field_offset, name_);
-    field->GenRustGetter(s, start_field_offset, end_field_offset);
+    field->GenRustGetter(s, start_field_offset, end_field_offset, name_);
   }
 
   fields = fields_.GetFieldsWithoutTypes({

@@ -76,16 +76,6 @@
 
 // Validate or respond to various conditional compilation flags
 
-#if BLE_PRIVACY_SPT != TRUE
-// Once BLE_PRIVACY_SPT is no longer exposed via bt_target.h
-// this check and error statement may be removed.
-#warning \
-    "#define BLE_PRIVACY_SPT FALSE preprocessor compilation flag is unsupported"
-#warning \
-    "  To disable LE privacy for a device use: #define BLE_LOCAL_PRIVACY_ENABLED FALSE"
-#error "*** Conditional Compilation Directive error"
-#endif
-
 #if SDP_RAW_DATA_INCLUDED != TRUE
 // Once SDP_RAW_DATA_INCLUDED is no longer exposed via bt_target.h
 // this check and error statement may be removed.
@@ -117,6 +107,15 @@ static_assert(
     "#define PAN_SUPPORTS_ROLE_PANU preprocessor compilation flag is "
     "unsupported"
     "  Pan profile always supports user as a client in the bluetooth stack"
+    "*** Conditional Compilation Directive error");
+
+// Once BTA_HH_INCLUDED is no longer exposed via bt_target.h
+// this check and error statement may be removed.
+static_assert(
+    BTA_HH_INCLUDED,
+    "#define BTA_HH_INCLUDED preprocessor compilation flag is "
+    "unsupported"
+    "  Host interface device profile is always enabled in the bluetooth stack"
     "*** Conditional Compilation Directive error");
 
 void main_thread_shut_down();
@@ -287,10 +286,10 @@ static void event_start_up_stack(UNUSED_ATTR void* context) {
 
   LOG_INFO("%s Gd shim module enabled", __func__);
   module_shut_down(get_local_module(GD_IDLE_MODULE));
+  get_btm_client_interface().lifecycle.btm_init();
   module_start_up(get_local_module(GD_SHIM_MODULE));
   module_start_up(get_local_module(BTIF_CONFIG_MODULE));
 
-  get_btm_client_interface().lifecycle.btm_init();
   l2c_init();
   sdp_init();
   gatt_init();
@@ -382,10 +381,10 @@ static void event_shut_down_stack(UNUSED_ATTR void* context) {
   l2c_free();
   sdp_free();
   get_btm_client_interface().lifecycle.btm_ble_free();
-  get_btm_client_interface().lifecycle.btm_free();
 
   LOG_INFO("%s Gd shim module disabled", __func__);
   module_shut_down(get_local_module(GD_SHIM_MODULE));
+  get_btm_client_interface().lifecycle.btm_free();
   module_start_up(get_local_module(GD_IDLE_MODULE));
 
   hack_future = future_new();

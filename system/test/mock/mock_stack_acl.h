@@ -275,14 +275,15 @@ extern struct acl_peer_supports_sniff_subrating
 struct acl_refresh_remote_address {
   std::function<bool(
       const RawAddress& identity_address, tBLE_ADDR_TYPE identity_address_type,
-      const RawAddress& bda, tBLE_ADDR_TYPE rra_type, const RawAddress& rpa)>
+      const RawAddress& bda, tBTM_SEC_BLE::tADDRESS_TYPE rra_type,
+      const RawAddress& rpa)>
       body{[](const RawAddress& identity_address,
               tBLE_ADDR_TYPE identity_address_type, const RawAddress& bda,
-              tBLE_ADDR_TYPE rra_type,
+              tBTM_SEC_BLE::tADDRESS_TYPE rra_type,
               const RawAddress& rpa) { return false; }};
   bool operator()(const RawAddress& identity_address,
                   tBLE_ADDR_TYPE identity_address_type, const RawAddress& bda,
-                  tBLE_ADDR_TYPE rra_type, const RawAddress& rpa) {
+                  tBTM_SEC_BLE::tADDRESS_TYPE rra_type, const RawAddress& rpa) {
     return body(identity_address, identity_address_type, bda, rra_type, rpa);
   };
 };
@@ -356,6 +357,19 @@ struct acl_get_connection_from_address {
   };
 };
 extern struct acl_get_connection_from_address acl_get_connection_from_address;
+// Name: btm_acl_for_bda
+// Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
+// Returns: tACL_CONN*
+struct btm_acl_for_bda {
+  std::function<tACL_CONN*(const RawAddress& bd_addr, tBT_TRANSPORT transport)>
+      body{[](const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+        return nullptr;
+      }};
+  tACL_CONN* operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+    return body(bd_addr, transport);
+  };
+};
+extern struct btm_acl_for_bda btm_acl_for_bda;
 // Name: acl_get_connection_from_handle
 // Params: uint16_t handle
 // Returns: tACL_CONN*
@@ -1157,15 +1171,6 @@ struct btm_read_remote_features_complete {
 };
 extern struct btm_read_remote_features_complete
     btm_read_remote_features_complete;
-// Name: btm_read_remote_features_complete_raw
-// Params: uint8_t* p
-// Returns: void
-struct btm_read_remote_features_complete_raw {
-  std::function<void(uint8_t* p)> body{[](uint8_t* p) { ; }};
-  void operator()(uint8_t* p) { body(p); };
-};
-extern struct btm_read_remote_features_complete_raw
-    btm_read_remote_features_complete_raw;
 // Name: btm_read_remote_version_complete
 // Params: tHCI_STATUS status, uint16_t handle, uint8_t lmp_version, uint16_t
 // manufacturer, uint16_t lmp_subversion Returns: void
@@ -1180,15 +1185,6 @@ struct btm_read_remote_version_complete {
   };
 };
 extern struct btm_read_remote_version_complete btm_read_remote_version_complete;
-// Name: btm_read_remote_version_complete_raw
-// Params: uint8_t* p
-// Returns: void
-struct btm_read_remote_version_complete_raw {
-  std::function<void(uint8_t* p)> body{[](uint8_t* p) { ; }};
-  void operator()(uint8_t* p) { body(p); };
-};
-extern struct btm_read_remote_version_complete_raw
-    btm_read_remote_version_complete_raw;
 // Name: btm_read_rssi_complete
 // Params: uint8_t* p
 // Returns: void

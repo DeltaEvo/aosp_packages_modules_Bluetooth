@@ -200,7 +200,7 @@ int RFCOMM_CreateConnection(uint16_t uuid, uint8_t scn, bool is_server,
   }
 
   // Assign port specific values
-  p_port->state = PORT_STATE_OPENING;
+  p_port->state = PORT_CONNECTION_STATE_OPENING;
   p_port->uuid = uuid;
   p_port->is_server = is_server;
   p_port->scn = scn;
@@ -267,12 +267,12 @@ int RFCOMM_RemoveConnection(uint16_t handle) {
   }
   p_port = &rfc_cb.port.port[handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     RFCOMM_TRACE_EVENT("RFCOMM_RemoveConnection() Not opened:%d", handle);
     return (PORT_SUCCESS);
   }
 
-  p_port->state = PORT_STATE_CLOSING;
+  p_port->state = PORT_CONNECTION_STATE_CLOSING;
 
   port_start_close(p_port);
 
@@ -299,7 +299,7 @@ int RFCOMM_RemoveServer(uint16_t handle) {
   /* Do not report any events to the client any more. */
   p_port->p_mgmt_callback = nullptr;
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     VLOG(1) << __func__ << ": handle " << handle << " not opened";
     return (PORT_SUCCESS);
   }
@@ -307,7 +307,7 @@ int RFCOMM_RemoveServer(uint16_t handle) {
 
   /* this port will be deallocated after closing */
   p_port->keep_port_handle = false;
-  p_port->state = PORT_STATE_CLOSING;
+  p_port->state = PORT_CONNECTION_STATE_CLOSING;
 
   port_start_close(p_port);
 
@@ -339,7 +339,7 @@ int PORT_SetEventCallback(uint16_t port_handle, tPORT_CALLBACK* p_port_cb) {
 
   p_port = &rfc_cb.port.port[port_handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
   }
 
@@ -399,7 +399,7 @@ int PORT_SetDataCOCallback(uint16_t port_handle,
 
   p_port = &rfc_cb.port.port[port_handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
   }
 
@@ -431,7 +431,7 @@ int PORT_SetEventMask(uint16_t port_handle, uint32_t mask) {
 
   p_port = &rfc_cb.port.port[port_handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
   }
 
@@ -466,7 +466,7 @@ int PORT_CheckConnection(uint16_t handle, RawAddress* bd_addr,
       (p_port->rfc.p_mcb ? p_port->rfc.p_mcb->peer_ready : -1),
       p_port->rfc.state);
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
   }
 
@@ -498,6 +498,8 @@ bool PORT_IsOpening(RawAddress* bd_addr) {
     if ((multiplexer_cb.state > RFC_MX_STATE_IDLE) &&
         (multiplexer_cb.state < RFC_MX_STATE_CONNECTED)) {
       *bd_addr = multiplexer_cb.bd_addr;
+      LOG_INFO(
+          "Found a rfc_mcb in the middle of opening a port, returning true");
       return true;
     }
 
@@ -513,15 +515,20 @@ bool PORT_IsOpening(RawAddress* bd_addr) {
         }
       }
 
+      LOG_INFO("RFC_MX_STATE_CONNECTED, found_port=%d, tRFC_PORT_STATE=%d",
+               found_port, p_port != nullptr ? p_port->rfc.state : 0);
       if ((!found_port) ||
           (found_port && (p_port->rfc.state < RFC_STATE_OPENED))) {
         /* Port is not established yet. */
         *bd_addr = multiplexer_cb.bd_addr;
+        LOG_INFO(
+            "In RFC_MX_STATE_CONNECTED but port is not established yet, "
+            "returning true");
         return true;
       }
     }
   }
-
+  LOG_INFO("false");
   return false;
 }
 
@@ -551,7 +558,7 @@ int PORT_SetState(uint16_t handle, tPORT_STATE* p_settings) {
 
   p_port = &rfc_cb.port.port[handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
   }
 
@@ -596,7 +603,7 @@ int PORT_GetState(uint16_t handle, tPORT_STATE* p_settings) {
 
   p_port = &rfc_cb.port.port[handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
   }
 
@@ -636,7 +643,7 @@ int PORT_FlowControl_MaxCredit(uint16_t handle, bool enable) {
 
   p_port = &rfc_cb.port.port[handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
   }
 
@@ -707,15 +714,22 @@ int PORT_ReadData(uint16_t handle, char* p_data, uint16_t max_len,
 
   p_port = &rfc_cb.port.port[handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     return (PORT_NOT_OPENED);
+  }
+
+  if (p_port->state == PORT_CONNECTION_STATE_OPENING) {
+    LOG_WARN("Trying to read a port in PORT_CONNECTION_STATE_OPENING state");
   }
 
   if (p_port->line_status) {
     return (PORT_LINE_ERR);
   }
 
-  if (fixed_queue_is_empty(p_port->rx.queue)) return (PORT_SUCCESS);
+  if (fixed_queue_is_empty(p_port->rx.queue)) {
+    LOG_WARN("Read on empty input queue");
+    return (PORT_SUCCESS);
+  }
 
   count = 0;
 
@@ -860,7 +874,7 @@ int PORT_WriteDataCO(uint16_t handle, int* p_len) {
   }
   p_port = &rfc_cb.port.port[handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     RFCOMM_TRACE_WARNING("PORT_WriteDataByFd() no port state:%d",
                          p_port->state);
     return (PORT_NOT_OPENED);
@@ -1019,9 +1033,13 @@ int PORT_WriteData(uint16_t handle, const char* p_data, uint16_t max_len,
   }
   p_port = &rfc_cb.port.port[handle - 1];
 
-  if (!p_port->in_use || (p_port->state == PORT_STATE_CLOSED)) {
+  if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
     RFCOMM_TRACE_WARNING("PORT_WriteData() no port state:%d", p_port->state);
     return (PORT_NOT_OPENED);
+  }
+
+  if (p_port->state == PORT_CONNECTION_STATE_OPENING) {
+    LOG_WARN("Write data received but port is in OPENING state");
   }
 
   if (!max_len || !p_port->peer_mtu) {
