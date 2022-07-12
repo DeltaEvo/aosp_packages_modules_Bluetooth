@@ -496,7 +496,7 @@ public class AdapterService extends Service {
                 PackageManager.FEATURE_LEANBACK_ONLY);
         mUserManager = getSystemService(UserManager.class);
         initNative(mUserManager.isGuestUser(), isCommonCriteriaMode(), configCompareResult,
-                getInitFlags(), isAtvDevice);
+                getInitFlags(), isAtvDevice, getApplicationInfo().dataDir);
         mNativeAvailable = true;
         mCallbacks = new RemoteCallbackList<IBluetoothCallback>();
         mAppOps = getSystemService(AppOpsManager.class);
@@ -2691,7 +2691,7 @@ public class AdapterService extends Service {
 
             ParcelUuid[] parcels = service.getRemoteUuids(device);
             if (parcels == null) {
-                parcels = new ParcelUuid[0];
+                return null;
             }
             return Arrays.asList(parcels);
         }
@@ -3881,7 +3881,7 @@ public class AdapterService extends Service {
         if (deviceProp != null && deviceProp.isConsolidated()) {
             return deviceProp.getIdentityAddress();
         } else {
-            return address;
+            return null;
         }
     }
 
@@ -5087,7 +5087,8 @@ public class AdapterService extends Service {
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, GD_LINK_POLICY_FLAG, false)) {
             initFlags.add(String.format("%s=%s", GD_LINK_POLICY_FLAG, "true"));
         }
-        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, GATT_ROBUST_CACHING_FLAG, true)) {
+        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
+                GATT_ROBUST_CACHING_FLAG, false)) {
             initFlags.add(String.format("%s=%s", GATT_ROBUST_CACHING_FLAG, "true"));
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
@@ -5409,7 +5410,8 @@ public class AdapterService extends Service {
     static native void classInitNative();
 
     native boolean initNative(boolean startRestricted, boolean isCommonCriteriaMode,
-            int configCompareResult, String[] initFlags, boolean isAtvDevice);
+            int configCompareResult, String[] initFlags, boolean isAtvDevice,
+            String userDataDirectory);
 
     native void cleanupNative();
 
