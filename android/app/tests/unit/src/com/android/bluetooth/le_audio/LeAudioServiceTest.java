@@ -215,6 +215,10 @@ public class LeAudioServiceTest {
 
     @After
     public void tearDown() throws Exception {
+        if ((mService == null) || (mAdapter == null)) {
+            return;
+        }
+
         mBondedDevices.clear();
         mGroupIntentQueue.clear();
         stopService();
@@ -300,6 +304,21 @@ public class LeAudioServiceTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             public void run() {
                 assertThat(mService.stop()).isTrue();
+            }
+        });
+    }
+
+    /**
+     * Test if stop during init is ok.
+     */
+    @Test
+    public void testStopStartStopService() throws Exception {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
+            public void run() {
+                assertThat(mService.stop()).isTrue();
+                assertThat(mService.start()).isTrue();
+                assertThat(mService.stop()).isTrue();
+                assertThat(mService.start()).isTrue();
             }
         });
     }

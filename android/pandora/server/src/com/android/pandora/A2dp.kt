@@ -48,11 +48,9 @@ class A2dp(val context: Context) : A2DPImplBase() {
   private val scope: CoroutineScope
   private val flow: Flow<Intent>
 
-  private val audioManager: AudioManager =
-    context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+  private val audioManager = context.getSystemService(AudioManager::class.java)!!
 
-  private val bluetoothManager =
-    context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+  private val bluetoothManager = context.getSystemService(BluetoothManager::class.java)!!
   private val bluetoothAdapter = bluetoothManager.adapter
   private val bluetoothA2dp = getProfileProxy<BluetoothA2dp>(context, BluetoothProfile.A2DP)
 
@@ -191,9 +189,7 @@ class A2dp(val context: Context) : A2DPImplBase() {
       if (!bluetoothA2dp.isA2dpPlaying(device)) {
         flow
           .filter { it.getAction() == BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED }
-          .filter {
-            it.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE).address == address
-          }
+          .filter { it.getBluetoothDeviceExtra().address == address }
           .map { it.getIntExtra(BluetoothA2dp.EXTRA_STATE, BluetoothAdapter.ERROR) }
           .filter { it == BluetoothA2dp.STATE_PLAYING }
           .first()
@@ -221,9 +217,7 @@ class A2dp(val context: Context) : A2DPImplBase() {
       val a2dpPlayingStateFlow =
         flow
           .filter { it.getAction() == BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED }
-          .filter {
-            it.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE).address == address
-          }
+          .filter { it.getBluetoothDeviceExtra().address == address }
           .map { it.getIntExtra(BluetoothA2dp.EXTRA_STATE, BluetoothAdapter.ERROR) }
 
       audioTrack!!.pause()
@@ -265,9 +259,7 @@ class A2dp(val context: Context) : A2DPImplBase() {
       val a2dpConnectionStateChangedFlow =
         flow
           .filter { it.getAction() == BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED }
-          .filter {
-            it.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE).address == address
-          }
+          .filter { it.getBluetoothDeviceExtra().address == address }
           .map { it.getIntExtra(BluetoothA2dp.EXTRA_STATE, BluetoothAdapter.ERROR) }
 
       bluetoothA2dp.disconnect(device)

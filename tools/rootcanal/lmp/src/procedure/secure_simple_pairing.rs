@@ -375,12 +375,12 @@ pub async fn initiate(ctx: &impl Context) -> Result<(), ()> {
             AuthenticationMethod::NumericComparaison => {
                 send_commitment(ctx, true).await;
 
-                let _user_confirmation = user_confirmation_request(ctx).await?;
+                user_confirmation_request(ctx).await?;
                 Ok(())
             }
             AuthenticationMethod::PasskeyEntry => {
                 if initiator.io_capability == hci::IoCapability::KeyboardOnly {
-                    let _user_passkey = user_passkey_request(ctx).await?;
+                    user_passkey_request(ctx).await?;
                 } else {
                     ctx.send_hci_event(
                         hci::UserPasskeyNotificationBuilder {
@@ -397,7 +397,7 @@ pub async fn initiate(ctx: &impl Context) -> Result<(), ()> {
             }
             AuthenticationMethod::OutOfBand => {
                 if initiator.oob_data_present != hci::OobDataPresent::NotPresent {
-                    let _remote_oob_data = remote_oob_data_request(ctx).await?;
+                    remote_oob_data_request(ctx).await?;
                 }
 
                 send_commitment(ctx, false).await;
@@ -617,4 +617,92 @@ pub async fn respond(ctx: &impl Context, request: lmp::IoCapabilityReqPacket) ->
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::procedure::Context;
+    use crate::test::{sequence, TestContext};
+    // simple pairing is part of authentication procedure
+    use super::super::authentication::initiate;
+    use super::super::authentication::respond;
+
+    #[test]
+    fn initiate_size() {
+        let context = crate::test::TestContext::new();
+        let procedure = super::initiate(&context);
+
+        fn assert_max_size<T>(_value: T, limit: usize) {
+            let type_name = std::any::type_name::<T>();
+            let size = std::mem::size_of::<T>();
+            println!("Size of {}: {}", type_name, size);
+            assert!(size < limit)
+        }
+
+        assert_max_size(procedure, 250);
+    }
+
+    #[test]
+    fn numeric_comparaison_initiator_success() {
+        let context = TestContext::new();
+        let procedure = initiate;
+
+        include!("../../test/SP/BV-06-C.in");
+    }
+
+    #[test]
+    fn numeric_comparaison_responder_success() {
+        let context = TestContext::new();
+        let procedure = respond;
+
+        include!("../../test/SP/BV-07-C.in");
+    }
+
+    #[test]
+    fn numeric_comparaison_initiator_failure_on_initiating_side() {
+        let context = TestContext::new();
+        let procedure = initiate;
+
+        include!("../../test/SP/BV-08-C.in");
+    }
+
+    #[test]
+    fn numeric_comparaison_responder_failure_on_initiating_side() {
+        let context = TestContext::new();
+        let procedure = respond;
+
+        include!("../../test/SP/BV-09-C.in");
+    }
+
+    #[test]
+    fn numeric_comparaison_initiator_failure_on_responding_side() {
+        let context = TestContext::new();
+        let procedure = initiate;
+
+        include!("../../test/SP/BV-10-C.in");
+    }
+
+    #[test]
+    fn numeric_comparaison_responder_failure_on_responding_side() {
+        let context = TestContext::new();
+        let procedure = respond;
+
+        include!("../../test/SP/BV-11-C.in");
+    }
+
+    #[test]
+    fn passkey_entry_initiator_success() {
+        let context = TestContext::new();
+        let procedure = initiate;
+
+        include!("../../test/SP/BV-12-C.in");
+    }
+
+    #[test]
+    fn passkey_entry_responder_success() {
+        let context = TestContext::new();
+        let procedure = respond;
+
+        include!("../../test/SP/BV-13-C.in");
+    }
 }

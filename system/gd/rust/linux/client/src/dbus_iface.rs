@@ -19,7 +19,7 @@ use btstack::uuid::Profile;
 use dbus::arg::RefArg;
 use dbus::nonblock::SyncConnection;
 
-use dbus_projection::{impl_dbus_arg_enum, ClientDBusProxy, DisconnectWatcher};
+use dbus_projection::{dbus_generated, impl_dbus_arg_enum, ClientDBusProxy, DisconnectWatcher};
 
 use dbus_macros::{
     dbus_method, dbus_propmap, generate_dbus_exporter, generate_dbus_interface_client,
@@ -102,7 +102,6 @@ pub struct BluetoothDeviceDBus {
     name: String,
 }
 
-#[allow(dead_code)]
 struct IBluetoothCallbackDBus {}
 
 impl RPCProxy for IBluetoothCallbackDBus {
@@ -159,7 +158,6 @@ impl IBluetoothCallback for IBluetoothCallbackDBus {
     fn on_bond_state_changed(&self, status: u32, address: String, state: u32) {}
 }
 
-#[allow(dead_code)]
 struct IBluetoothConnectionCallbackDBus {}
 
 impl RPCProxy for IBluetoothConnectionCallbackDBus {
@@ -501,7 +499,6 @@ impl IBluetoothManager for BluetoothManagerDBus {
     }
 }
 
-#[allow(dead_code)]
 struct IBluetoothManagerCallbackDBus {}
 
 impl RPCProxy for IBluetoothManagerCallbackDBus {
@@ -549,20 +546,22 @@ impl BluetoothGattDBus {
 
 #[generate_dbus_interface_client]
 impl IBluetoothGatt for BluetoothGattDBus {
-    fn register_scanner(&self, _callback: Box<dyn IScannerCallback + Send>) {
-        // TODO(b/200066804): implement
+    #[dbus_method("RegisterScannerCallback")]
+    fn register_scanner_callback(&mut self, _callback: Box<dyn IScannerCallback + Send>) -> u32 {
+        dbus_generated!()
     }
 
-    fn unregister_scanner(&self, _scanner_id: i32) {
-        // TODO(b/200066804): implement
+    #[dbus_method("UnregisterScannerCallback")]
+    fn unregister_scanner_callback(&mut self, _callback_id: u32) -> bool {
+        dbus_generated!()
     }
 
     fn start_scan(&self, _scanner_id: i32, _settings: ScanSettings, _filters: Vec<ScanFilter>) {
-        // TODO(b/200066804): implement
+        dbus_generated!()
     }
 
     fn stop_scan(&self, _scanner_id: i32) {
-        // TODO(b/200066804): implement
+        dbus_generated!()
     }
 
     #[dbus_method("RegisterClient")]
@@ -719,7 +718,6 @@ impl IBluetoothGatt for BluetoothGattDBus {
     }
 }
 
-#[allow(dead_code)]
 struct IBluetoothGattCallbackDBus {}
 
 impl RPCProxy for IBluetoothGattCallbackDBus {
@@ -842,7 +840,6 @@ impl ISuspend for SuspendDBus {
     }
 }
 
-#[allow(dead_code)]
 struct ISuspendCallbackDBus {}
 
 impl RPCProxy for ISuspendCallbackDBus {

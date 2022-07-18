@@ -118,6 +118,10 @@ public class VolumeControlServiceTest {
 
     @After
     public void tearDown() throws Exception {
+        if (mService == null) {
+            return;
+        }
+
         stopService();
         mTargetContext.unregisterReceiver(mVolumeControlIntentReceiver);
         mDeviceQueueMap.clear();
@@ -228,6 +232,20 @@ public class VolumeControlServiceTest {
                 .thenReturn(BluetoothProfile.CONNECTION_POLICY_ALLOWED);
         Assert.assertEquals("Setting device policy to POLICY_ALLOWED",
                 BluetoothProfile.CONNECTION_POLICY_ALLOWED,
+                mService.getConnectionPolicy(mDevice));
+    }
+
+    /**
+     * Test if getProfileConnectionPolicy works after the service is stopped.
+     */
+    @Test
+    public void testGetPolicyAfterStopped() {
+        mService.stop();
+        when(mDatabaseManager
+                .getProfileConnectionPolicy(mDevice, BluetoothProfile.VOLUME_CONTROL))
+                .thenReturn(BluetoothProfile.CONNECTION_POLICY_UNKNOWN);
+        Assert.assertEquals("Initial device policy",
+                BluetoothProfile.CONNECTION_POLICY_UNKNOWN,
                 mService.getConnectionPolicy(mDevice));
     }
 

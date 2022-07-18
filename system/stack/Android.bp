@@ -640,6 +640,7 @@ cc_test {
         "packages/modules/Bluetooth/system/utils/include",
     ],
     srcs: crypto_toolbox_srcs + [
+        ":TestCommonMainHandler",
         ":TestMockStackBtm",
         "gatt/gatt_db.cc",
         "gatt/gatt_sr_hash.cc",
@@ -688,6 +689,7 @@ cc_test {
         "test/common/mock_controller.cc",
         "test/common/mock_gatt_layer.cc",
         "test/common/mock_hcic_layer.cc",
+        ":TestCommonStackConfig"
     ],
     static_libs: [
         "libbt-common",
@@ -730,6 +732,7 @@ cc_test {
     include_dirs:[
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/internal_include"
     ],
     srcs: [
         "eatt/eatt.cc",
@@ -740,6 +743,8 @@ cc_test {
         "test/common/mock_l2cap_layer.cc",
         "test/gatt/mock_gatt_utils_ref.cc",
         "test/eatt/eatt_test.cc",
+        ":TestCommonMainHandler",
+        ":TestCommonStackConfig",
     ],
     shared_libs: [
         "libcutils",
@@ -830,6 +835,7 @@ cc_test {
         "metrics/stack_metrics_logging.cc",
         "test/btm/stack_btm_test.cc",
         "test/btm/peer_packet_types_test.cc",
+        "test/common/mock_eatt.cc",
     ],
     static_libs: [
         "libbt-common",
@@ -1032,6 +1038,8 @@ cc_test {
     ],
     srcs: [
         ":OsiCompatSources",
+        ":TestCommonMainHandler",
+        ":TestCommonStackConfig",
         ":TestMockBta",
         ":TestMockBtif",
         ":TestMockHci",

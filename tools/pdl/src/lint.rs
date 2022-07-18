@@ -25,7 +25,7 @@ pub trait Lintable {
 #[derive(Clone)]
 struct FieldPath<'d>(Vec<&'d Field>);
 
-/// Gather information about the full grammar declaration.
+/// Gather information about the full AST.
 struct Scope<'d> {
     // Collection of Group, Packet, Enum, Struct, Checksum, and CustomField declarations.
     typedef: HashMap<String, &'d Decl>,
@@ -687,20 +687,6 @@ fn lint_checksum(
                 // is checked.
                 None => (),
             };
-            // Check declaration order of checksum field.
-            match field_decl.and_then(|f| f.0.first()) {
-                Some(decl) if decl.loc().start > checksum_loc.start => result.push(
-                    Diagnostic::error()
-                        .with_message("invalid checksum start declaration")
-                        .with_labels(vec![
-                            checksum_loc
-                                .primary()
-                                .with_message("checksum start precedes checksum field"),
-                            decl.loc().secondary().with_message("checksum field is declared here"),
-                        ]),
-                ),
-                _ => (),
-            }
         }
         Some(field) => result.push(
             Diagnostic::error()
@@ -1226,7 +1212,7 @@ impl Decl {
     }
 }
 
-impl Grammar {
+impl File {
     fn scope<'d>(&'d self, result: &mut LintDiagnostics) -> Scope<'d> {
         let mut scope = Scope { typedef: HashMap::new(), scopes: HashMap::new() };
 
@@ -1250,7 +1236,7 @@ impl Grammar {
     }
 }
 
-impl Lintable for Grammar {
+impl Lintable for File {
     fn lint(&self) -> LintDiagnostics {
         let mut result = LintDiagnostics::new();
         let scope = self.scope(&mut result);
@@ -1270,7 +1256,7 @@ mod test {
     use crate::lint::Lintable;
     use crate::parser::parse_inline;
 
-    macro_rules! grammar {
+    macro_rules! parse {
         ($db:expr, $text:literal) => {
             parse_inline($db, "stdin".to_owned(), $text.to_owned()).expect("parsing failure")
         };
@@ -1279,7 +1265,7 @@ mod test {
     #[test]
     fn test_packet_redeclared() {
         let mut db = SourceDatabase::new();
-        let grammar = grammar!(
+        let file = parse!(
             &mut db,
             r#"
         little_endian_packets
@@ -1287,7 +1273,26 @@ mod test {
         packet Name { }
         "#
         );
-        let result = grammar.lint();
+        let result = file.lint();
         assert!(!result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn test_packet_checksum_start() {
+        let mut db = SourceDatabase::new();
+        let file = parse!(
+            &mut db,
+            r#"
+              little_endian_packets
+              checksum Checksum : 8 "Checksum"
+              packet P {
+                  _checksum_start_(crc),
+                  a: 16,
+                  crc: Checksum,
+              }
+            "#
+        );
+        let result = file.lint();
+        assert!(dbg!(result.diagnostics).is_empty());
     }
 }

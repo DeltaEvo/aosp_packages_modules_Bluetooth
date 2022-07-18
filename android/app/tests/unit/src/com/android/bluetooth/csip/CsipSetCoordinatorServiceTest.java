@@ -132,6 +132,14 @@ public class CsipSetCoordinatorServiceTest {
 
     @After
     public void tearDown() throws Exception {
+        if (mService == null) {
+            return;
+        }
+
+        if (Looper.myLooper() == null) {
+            return;
+        }
+
         stopService();
         mTargetContext.unregisterReceiver(mCsipSetCoordinatorIntentReceiver);
         TestUtils.clearAdapterService(mAdapterService);
@@ -201,6 +209,20 @@ public class CsipSetCoordinatorServiceTest {
                 .thenReturn(BluetoothProfile.CONNECTION_POLICY_ALLOWED);
         Assert.assertEquals("Setting device policy to POLICY_ALLOWED",
                 BluetoothProfile.CONNECTION_POLICY_ALLOWED,
+                mService.getConnectionPolicy(mTestDevice));
+    }
+
+    /**
+     * Test if getProfileConnectionPolicy works after the service is stopped.
+     */
+    @Test
+    public void testGetPolicyAfterStopped() {
+        mService.stop();
+        when(mDatabaseManager
+                .getProfileConnectionPolicy(mTestDevice, BluetoothProfile.CSIP_SET_COORDINATOR))
+                .thenReturn(BluetoothProfile.CONNECTION_POLICY_UNKNOWN);
+        Assert.assertEquals("Initial device policy",
+                BluetoothProfile.CONNECTION_POLICY_UNKNOWN,
                 mService.getConnectionPolicy(mTestDevice));
     }
 

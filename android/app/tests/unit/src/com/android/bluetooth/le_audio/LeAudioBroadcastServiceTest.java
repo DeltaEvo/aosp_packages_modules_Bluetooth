@@ -193,6 +193,10 @@ public class LeAudioBroadcastServiceTest {
 
     @After
     public void tearDown() throws Exception {
+        if (mService == null) {
+            return;
+        }
+
         stopService();
         mTargetContext.unregisterReceiver(mLeAudioIntentReceiver);
         TestUtils.clearAdapterService(mAdapterService);
@@ -239,7 +243,7 @@ public class LeAudioBroadcastServiceTest {
             BluetoothLeAudioContentMetadata meta) {
         mService.createBroadcast(meta, code);
 
-        verify(mNativeInterface, times(1)).createBroadcast(eq(meta.getRawMetadata()), eq(1),
+        verify(mNativeInterface, times(1)).createBroadcast(eq(meta.getRawMetadata()),
                 eq(code));
 
         // Check if broadcast is started automatically when created
@@ -321,8 +325,7 @@ public class LeAudioBroadcastServiceTest {
         BluetoothLeAudioContentMetadata meta = meta_builder.build();
         mService.createBroadcast(meta, code);
 
-        verify(mNativeInterface, times(1)).createBroadcast(eq(meta.getRawMetadata()), eq(1),
-                eq(code));
+        verify(mNativeInterface, times(1)).createBroadcast(eq(meta.getRawMetadata()), eq(code));
 
         LeAudioStackEvent create_event =
                 new LeAudioStackEvent(LeAudioStackEvent.EVENT_TYPE_BROADCAST_CREATED);
