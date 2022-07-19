@@ -22,12 +22,14 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::bluetooth::Bluetooth;
 use crate::bluetooth_gatt::BluetoothGatt;
 use crate::bluetooth_media::{BluetoothMedia, MediaActions};
+use crate::socket_manager::{BluetoothSocketManager, SocketActions};
 use crate::suspend::Suspend;
 use bt_topshim::{
     btif::BaseCallbacks,
     profiles::{
         a2dp::A2dpCallbacks, avrcp::AvrcpCallbacks, gatt::GattClientCallbacks,
-        gatt::GattServerCallbacks, hfp::HfpCallbacks, hid_host::HHCallbacks, sdp::SdpCallbacks,
+        gatt::GattScannerCallbacks, gatt::GattServerCallbacks, hfp::HfpCallbacks,
+        hid_host::HHCallbacks, sdp::SdpCallbacks,
     },
 };
 
@@ -39,6 +41,7 @@ pub enum Message {
     Base(BaseCallbacks),
     GattClient(GattClientCallbacks),
     GattServer(GattServerCallbacks),
+    LeScanner(GattScannerCallbacks),
     HidHost(HHCallbacks),
     Hfp(HfpCallbacks),
     Sdp(SdpCallbacks),
@@ -60,6 +63,9 @@ pub enum Message {
 
     // Scanner related
     ScannerCallbackDisconnected(u32),
+
+    SocketManagerActions(SocketActions),
+    SocketManagerCallbackDisconnected(u32),
 }
 
 /// Umbrella class for the Bluetooth stack.
@@ -78,6 +84,7 @@ impl Stack {
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
         bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
         suspend: Arc<Mutex<Box<Suspend>>>,
+        bluetooth_socketmgr: Arc<Mutex<Box<BluetoothSocketManager>>>,
     ) {
         loop {
             let m = rx.recv().await;
@@ -107,6 +114,10 @@ impl Stack {
                 Message::GattServer(m) => {
                     // TODO(b/193685149): dispatch GATT server callbacks.
                     debug!("Unhandled Message::GattServer: {:?}", m);
+                }
+
+                Message::LeScanner(m) => {
+                    bluetooth_gatt.lock().unwrap().dispatch_le_scanner_callbacks(m);
                 }
 
                 Message::Hfp(hf) => {
@@ -152,6 +163,13 @@ impl Stack {
 
                 Message::ScannerCallbackDisconnected(id) => {
                     bluetooth_gatt.lock().unwrap().remove_scanner_callback(id);
+                }
+
+                Message::SocketManagerActions(action) => {
+                    bluetooth_socketmgr.lock().unwrap().handle_actions(action);
+                }
+                Message::SocketManagerCallbackDisconnected(id) => {
+                    bluetooth_socketmgr.lock().unwrap().remove_callback(id);
                 }
             }
         }
