@@ -21,6 +21,7 @@ apex {
     manifest: "apex_manifest.json",
     bootclasspath_fragments: ["com.android.btservices-bootclasspath-fragment"],
     systemserverclasspath_fragments: ["com.android.btservices-systemserverclasspath-fragment"],
+    compat_configs: ["bluetooth-compat-config"],
     apps: ["Bluetooth"],
 
     multilib: {
@@ -55,6 +56,7 @@ apex {
     manifest: "apex_manifest.json",
     bootclasspath_fragments: ["com.android.btservices-bootclasspath-fragment"],
     systemserverclasspath_fragments: ["com.android.btservices-systemserverclasspath-fragment"],
+    compat_configs: ["bluetooth-compat-config"],
     apps: ["Bluetooth"],
 
     multilib: {
@@ -78,7 +80,7 @@ apex {
     ],
     key: "com.android.btservices.key",
     certificate: ":com.android.btservices.certificate",
-    updatable: false,
+    updatable: true,
     compressible: false,
 }
 
@@ -95,8 +97,11 @@ android_app_certificate {
 
 sdk {
     name: "btservices-module-sdk",
-    bootclasspath_fragments: ["com.android.btservices-bootclasspath-fragment"],
-    systemserverclasspath_fragments: ["com.android.btservices-systemserverclasspath-fragment"],
+    apexes: [
+        // Adds exportable dependencies of the APEX to the sdk,
+        // e.g. *classpath_fragments.
+        "com.android.btservices",
+    ],
 }
 
 // Encapsulate the contributions made by the com.android.bluetooth to the bootclasspath.
