@@ -27,6 +27,7 @@
 
 #define LOG_TAG "bluetooth"
 
+#include <base/logging.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +41,7 @@
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
+#include "osi/include/properties.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/acl_api.h"
@@ -49,8 +51,6 @@
 #include "stack/include/inq_hci_link_interface.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 namespace {
 constexpr char kBtmLogTag[] = "SCAN";
@@ -76,6 +76,30 @@ using bluetooth::Uuid;
 /* TRUE to enable DEBUG traces for btm_inq */
 #ifndef BTM_INQ_DEBUG
 #define BTM_INQ_DEBUG FALSE
+#endif
+
+#ifndef PROPERTY_PAGE_SCAN_TYPE
+#define PROPERTY_PAGE_SCAN_TYPE "bluetooth.core.classic.page_scan_type"
+#endif
+
+#ifndef PROPERTY_PAGE_SCAN_INTERVAL
+#define PROPERTY_PAGE_SCAN_INTERVAL "bluetooth.core.classic.page_scan_interval"
+#endif
+
+#ifndef PROPERTY_PAGE_SCAN_WINDOW
+#define PROPERTY_PAGE_SCAN_WINDOW "bluetooth.core.classic.page_scan_window"
+#endif
+
+#ifndef PROPERTY_INQ_SCAN_TYPE
+#define PROPERTY_INQ_SCAN_TYPE "bluetooth.core.classic.inq_scan_type"
+#endif
+
+#ifndef PROPERTY_INQ_SCAN_INTERVAL
+#define PROPERTY_INQ_SCAN_INTERVAL "bluetooth.core.classic.inq_scan_interval"
+#endif
+
+#ifndef PROPERTY_INQ_SCAN_WINDOW
+#define PROPERTY_INQ_SCAN_WINDOW "bluetooth.core.classic.inq_scan_window"
 #endif
 
 #define BTIF_DM_DEFAULT_INQ_MAX_DURATION 10
@@ -228,6 +252,11 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
     scan_mode |= HCI_INQUIRY_SCAN_ENABLED;
   }
 
+  window =
+      osi_property_get_int32(PROPERTY_INQ_SCAN_WINDOW, BTM_DEFAULT_DISC_WINDOW);
+  interval = osi_property_get_int32(PROPERTY_INQ_SCAN_INTERVAL,
+                                    BTM_DEFAULT_DISC_INTERVAL);
+
   /* Send down the inquiry scan window and period if changed */
   if ((window != btm_cb.btm_inq_vars.inq_scan_window) ||
       (interval != btm_cb.btm_inq_vars.inq_scan_period)) {
@@ -269,7 +298,12 @@ void BTM_EnableInterlacedInquiryScan() {
   }
 
   BTM_TRACE_API("BTM_EnableInterlacedInquiryScan");
+
+  uint16_t inq_scan_type =
+      osi_property_get_int32(PROPERTY_INQ_SCAN_TYPE, BTM_SCAN_TYPE_INTERLACED);
+
   if (!controller_get_interface()->supports_interlaced_inquiry_scan() ||
+      inq_scan_type != BTM_SCAN_TYPE_INTERLACED ||
       btm_cb.btm_inq_vars.inq_scan_type == BTM_SCAN_TYPE_INTERLACED) {
     return;
   }
@@ -285,7 +319,12 @@ void BTM_EnableInterlacedPageScan() {
   }
 
   BTM_TRACE_API("BTM_EnableInterlacedPageScan");
+
+  uint16_t page_scan_type =
+      osi_property_get_int32(PROPERTY_PAGE_SCAN_TYPE, BTM_SCAN_TYPE_INTERLACED);
+
   if (!controller_get_interface()->supports_interlaced_inquiry_scan() ||
+      page_scan_type != BTM_SCAN_TYPE_INTERLACED ||
       btm_cb.btm_inq_vars.page_scan_type == BTM_SCAN_TYPE_INTERLACED) {
     return;
   }
@@ -384,6 +423,11 @@ tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
     scan_mode |= HCI_PAGE_SCAN_ENABLED;
   }
 
+  window = osi_property_get_int32(PROPERTY_PAGE_SCAN_WINDOW,
+                                  BTM_DEFAULT_CONN_WINDOW);
+  interval = osi_property_get_int32(PROPERTY_PAGE_SCAN_INTERVAL,
+                                    BTM_DEFAULT_CONN_INTERVAL);
+
   if ((window != p_inq->page_scan_window) ||
       (interval != p_inq->page_scan_period)) {
     p_inq->page_scan_window = window;
@@ -459,18 +503,6 @@ void BTM_CancelInquiry(void) {
     p_inq->inq_counter++;
     btm_clr_inq_result_flt();
   }
-}
-
-void BTM_CancelInquiryNotifyWhenComplete(
-    std::function<void()> notify_when_complete_cb) {
-  if (btm_cb.notify_when_complete_cb) {
-    LOG_ERROR(
-        "Please do not overwrite a previous cancel inquiry notification "
-        "callback");
-    return;
-  }
-  btm_cb.notify_when_complete_cb = notify_when_complete_cb;
-  BTM_CancelInquiry();
 }
 
 /*******************************************************************************
@@ -1275,26 +1307,7 @@ void btm_sort_inq_result(void) {
  *
  ******************************************************************************/
 void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode) {
-  if (mode == 0) {
-    LOG_WARN("Inquiry completed but no modes were specified");
-    return;
-  }
-
-  // The mode parameters may be a bitmask with only 2 valid bits indicating
-  // completion
-  if (mode & ~(BTM_INQUIRY_ACTIVE_MASK)) {
-    LOG_WARN("Calling with illegal mode:0x%02x", mode);
-  }
-
-  if (mode == BTM_GENERAL_INQUIRY && btm_cb.notify_when_complete_cb) {
-    LOG_DEBUG(
-        "Cleaning up previous inquiry cancel with proper completion callback "
-        "inq_active:0x%02x inqparms.mode:0x%02x",
-        btm_cb.btm_inq_vars.inq_active, btm_cb.btm_inq_vars.inqparms.mode);
-    btm_cb.notify_when_complete_cb();
-    btm_cb.notify_when_complete_cb = {};
-    return;
-  }
+  tBTM_CMPL_CB* p_inq_cb = btm_cb.btm_inq_vars.p_inq_cmpl_cb;
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
 
   p_inq->inqparms.mode &= ~(mode);
@@ -1328,7 +1341,6 @@ void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode) {
       /* Clear the results callback if set */
       p_inq->p_inq_results_cb = NULL;
       p_inq->inq_active = BTM_INQUIRY_INACTIVE;
-      tBTM_CMPL_CB* p_inq_cb = btm_cb.btm_inq_vars.p_inq_cmpl_cb;
       p_inq->p_inq_cmpl_cb = NULL;
 
       /* If we have a callback registered for inquiry complete, call it */
@@ -1443,7 +1455,10 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
   uint16_t temp_evt_len;
 
   if (bda) {
+    rem_name.bd_addr = *bda;
     VLOG(2) << "BDA " << *bda;
+  } else {
+    rem_name.bd_addr = RawAddress::kEmpty;
   }
 
   VLOG(2) << "Inquire BDA " << p_inq->remname_bda;

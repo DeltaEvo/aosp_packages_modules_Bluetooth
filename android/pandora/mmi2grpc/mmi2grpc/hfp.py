@@ -22,6 +22,14 @@ from pandora.host_grpc import Host
 import sys
 import threading
 
+# Standard time to wait before asking for waitConnection
+WAIT_DELAY_BEFORE_CONNECTION = 2
+
+# The tests needs the MMI to accept pairing confirmation request.
+NEEDS_WAIT_CONNECTION_BEFORE_TEST = {
+    'HFP/AG/WBS/BV-01-I',
+}
+
 
 class HFPProxy(ProfileProxy):
 
@@ -29,6 +37,26 @@ class HFPProxy(ProfileProxy):
         super().__init__()
         self.hfp = HFP(channel)
         self.host = Host(channel)
+
+        self.connection = None
+
+    def asyncWaitConnection(self, pts_addr, delay=WAIT_DELAY_BEFORE_CONNECTION):
+        """
+        Send a WaitConnection in a grpc callback
+        """
+
+        def waitConnectionCallback(self, pts_addr):
+            self.connection = self.host.WaitConnection(address=pts_addr).connection
+
+        print(f'HFP placeholder mmi: asyncWaitConnection', file=sys.stderr)
+        th = threading.Timer(interval=delay, function=waitConnectionCallback, args=(self, pts_addr))
+        th.start()
+
+    def test_started(self, test: str, pts_addr: bytes, **kwargs):
+        if test in NEEDS_WAIT_CONNECTION_BEFORE_TEST:
+            self.asyncWaitConnection(pts_addr)
+
+        return "OK"
 
     @assert_description
     def TSC_delete_pairing_iut(self, pts_addr: bytes, **kwargs):
@@ -38,6 +66,18 @@ class HFPProxy(ProfileProxy):
         """
 
         self.host.DeletePairing(address=pts_addr)
+        return "OK"
+
+    @assert_description
+    def TSC_iut_enable_slc(self, pts_addr: bytes, **kwargs):
+        """
+        Click Ok, then initiate a service level connection from the
+        Implementation Under Test (IUT) to the PTS.
+        """
+
+        if not self.connection:
+            self.connection = self.host.Connect(address=pts_addr).connection
+        self.hfp.EnableSlc(connection=self.connection)
         return "OK"
 
     @assert_description
@@ -66,5 +106,5 @@ class HFPProxy(ProfileProxy):
         Implementation Under Test (IUT).
         """
 
-        self.hfp.DisableSlc(address=pts_addr)
+        self.hfp.DisableSlc(connection=self.connection)
         return "OK"

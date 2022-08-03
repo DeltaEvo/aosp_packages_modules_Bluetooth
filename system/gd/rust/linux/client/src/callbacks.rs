@@ -134,6 +134,8 @@ impl IBluetoothCallback for BtCallback {
             Some(_) => print_info!("Removed device: {:?}", remote_device),
             None => (),
         };
+
+        self.context.lock().unwrap().bonded_devices.remove(&remote_device.address);
     }
 
     fn on_discovering_changed(&self, discovering: bool) {
@@ -209,12 +211,17 @@ impl IBluetoothCallback for BtCallback {
             BtBondState::Bonding => (),
         }
 
+        let device =
+            BluetoothDevice { address: address.clone(), name: String::from("Classic device") };
+
         // If bonded, we should also automatically connect all enabled profiles
         if BtBondState::Bonded == state.into() {
-            self.context.lock().unwrap().connect_all_enabled_profiles(BluetoothDevice {
-                address,
-                name: String::from("Classic device"),
-            });
+            self.context.lock().unwrap().bonded_devices.insert(address.clone(), device.clone());
+            self.context.lock().unwrap().connect_all_enabled_profiles(device.clone());
+        }
+
+        if BtBondState::NotBonded == state.into() {
+            self.context.lock().unwrap().bonded_devices.remove(&address);
         }
     }
 }
@@ -316,7 +323,7 @@ impl ScannerCallback {
 }
 
 impl IScannerCallback for ScannerCallback {
-    fn on_scanner_registered(&self, uuid: Uuid128Bit, status: u8, scanner_id: u8) {
+    fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: u8) {
         if status != 0 {
             print_error!("Failed registering scanner, status = {}", status);
             return;
