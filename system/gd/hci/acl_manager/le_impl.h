@@ -647,7 +647,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       return;
     }
     if (connect_list.empty()) {
-      LOG_ERROR("Attempting to re-arm le connection state machine when filter accept list is empty");
+      LOG_INFO("Ignored request to re-arm le connection state machine when filter accept list is empty");
       return;
     }
     AddressWithType empty(Address::kEmpty, AddressType::RANDOM_DEVICE_ADDRESS);
@@ -669,7 +669,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     OwnAddressType own_address_type =
         static_cast<OwnAddressType>(le_address_manager_->GetCurrentAddress().GetAddressType());
     uint16_t conn_interval_min = 0x0018;
-    uint16_t conn_interval_max = 0x0030;
+    uint16_t conn_interval_max = 0x0028;
     uint16_t conn_latency = 0x0000;
     uint16_t supervision_timeout = 0x001f4;
     ASSERT(check_connection_parameters(conn_interval_min, conn_interval_max, conn_latency, supervision_timeout));
@@ -847,6 +847,11 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
   }
 
   void cancel_connect(AddressWithType address_with_type) {
+    // Remove any alarms for this peer, if any
+    if (create_connection_timeout_alarms_.find(address_with_type) != create_connection_timeout_alarms_.end()) {
+      create_connection_timeout_alarms_.at(address_with_type).Cancel();
+      create_connection_timeout_alarms_.erase(address_with_type);
+    }
     // the connection will be canceled by LeAddressManager.OnPause()
     remove_device_from_connect_list(address_with_type);
   }
