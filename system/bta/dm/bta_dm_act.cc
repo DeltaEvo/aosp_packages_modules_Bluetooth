@@ -873,11 +873,9 @@ void bta_dm_search_start(tBTA_DM_MSG* p_data) {
  ******************************************************************************/
 void bta_dm_search_cancel() {
   if (BTM_IsInquiryActive()) {
-    LOG_DEBUG("Cancelling search with inquiry active");
-    BTM_CancelInquiryNotifyWhenComplete([]() {
-      bta_dm_search_cancel_notify();
-      bta_dm_search_cmpl();
-    });
+    BTM_CancelInquiry();
+    bta_dm_search_cancel_notify();
+    bta_dm_search_cmpl();
   }
   /* If no Service Search going on then issue cancel remote name in case it is
      active */
@@ -1469,11 +1467,6 @@ void bta_dm_queue_disc(tBTA_DM_MSG* p_data) {
  ******************************************************************************/
 void bta_dm_execute_queued_request() {
   if (bta_dm_search_cb.p_pending_search) {
-    // Updated queued event to search event to trigger start search
-    if (bta_dm_search_cb.p_pending_search->hdr.event ==
-        BTA_DM_API_QUEUE_SEARCH_EVT) {
-      bta_dm_search_cb.p_pending_search->hdr.event = BTA_DM_API_SEARCH_EVT;
-    }
     LOG_INFO("%s Start pending search", __func__);
     bta_sys_sendmsg(bta_dm_search_cb.p_pending_search);
     bta_dm_search_cb.p_pending_search = NULL;
@@ -1481,9 +1474,6 @@ void bta_dm_execute_queued_request() {
     tBTA_DM_MSG* p_pending_discovery = (tBTA_DM_MSG*)fixed_queue_try_dequeue(
         bta_dm_search_cb.pending_discovery_queue);
     if (p_pending_discovery) {
-      if (p_pending_discovery->hdr.event == BTA_DM_API_QUEUE_DISCOVER_EVT) {
-        p_pending_discovery->hdr.event = BTA_DM_API_DISCOVER_EVT;
-      }
       LOG_INFO("%s Start pending discovery", __func__);
       bta_sys_sendmsg(p_pending_discovery);
     }
