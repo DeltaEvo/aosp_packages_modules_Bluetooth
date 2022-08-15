@@ -72,6 +72,15 @@ extern const btgatt_callbacks_t* bt_gatt_callbacks;
 /*******************************************************************************
  *  Constants & Macros
  ******************************************************************************/
+#define CLI_CBACK_WRAP_IN_JNI(P_CBACK, P_CBACK_WRAP)                 \
+  do {                                                               \
+    if (bt_gatt_callbacks && bt_gatt_callbacks->client->P_CBACK) {   \
+      BTIF_TRACE_API("HAL bt_gatt_callbacks->client->%s", #P_CBACK); \
+      do_in_jni_thread(P_CBACK_WRAP);                                \
+    } else {                                                         \
+      ASSERTC(0, "Callback is NULL", 0);                             \
+    }                                                                \
+  } while (0)
 
 #define CLI_CBACK_IN_JNI(P_CBACK, ...)                                         \
   do {                                                                         \
@@ -89,7 +98,7 @@ extern const btgatt_callbacks_t* bt_gatt_callbacks;
       LOG_WARN("%s: BTGATT not initialized", __func__); \
       return BT_STATUS_NOT_READY;                       \
     } else {                                            \
-      LOG_VERBOSE("%s", __func__);                      \
+      LOG_DEBUG("%s", __func__);                        \
     }                                                   \
   } while (0)
 
@@ -173,7 +182,8 @@ static void btif_gattc_upstreams_evt(uint16_t event, char* p_param) {
     }
 
     case BTA_GATTC_OPEN_EVT: {
-      DVLOG(1) << "BTA_GATTC_OPEN_EVT " << p_data->open.remote_bda;
+      LOG_DEBUG("BTA_GATTC_OPEN_EVT %s",
+                p_data->open.remote_bda.ToString().c_str());
       HAL_CBACK(bt_gatt_callbacks, client->open_cb, p_data->open.conn_id,
                 p_data->open.status, p_data->open.client_if,
                 p_data->open.remote_bda);
@@ -499,8 +509,17 @@ static bt_status_t btif_gattc_read_char_descr(int conn_id, uint16_t handle,
 
 void write_char_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
                    uint16_t len, const uint8_t* value, void* data) {
-  CLI_CBACK_IN_JNI(write_characteristic_cb, conn_id, status, handle, len,
-                   value);
+  std::vector<uint8_t> val(value, value + len);
+  CLI_CBACK_WRAP_IN_JNI(
+      write_characteristic_cb,
+      base::BindOnce(
+          [](write_characteristic_callback cb, uint16_t conn_id,
+             tGATT_STATUS status, uint16_t handle,
+             std::vector<uint8_t> moved_value) {
+            cb(conn_id, status, handle, moved_value.size(), moved_value.data());
+          },
+          bt_gatt_callbacks->client->write_characteristic_cb, conn_id, status,
+          handle, std::move(val)));
 }
 
 static bt_status_t btif_gattc_write_char(int conn_id, uint16_t handle,
@@ -519,7 +538,18 @@ static bt_status_t btif_gattc_write_char(int conn_id, uint16_t handle,
 
 void write_descr_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
                     uint16_t len, const uint8_t* value, void* data) {
-  CLI_CBACK_IN_JNI(write_descriptor_cb, conn_id, status, handle, len, value);
+  std::vector<uint8_t> val(value, value + len);
+
+  CLI_CBACK_WRAP_IN_JNI(
+      write_descriptor_cb,
+      base::BindOnce(
+          [](write_descriptor_callback cb, uint16_t conn_id,
+             tGATT_STATUS status, uint16_t handle,
+             std::vector<uint8_t> moved_value) {
+            cb(conn_id, status, handle, moved_value.size(), moved_value.data());
+          },
+          bt_gatt_callbacks->client->write_descriptor_cb, conn_id, status,
+          handle, std::move(val)));
 }
 
 static bt_status_t btif_gattc_write_char_descr(int conn_id, uint16_t handle,

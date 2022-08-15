@@ -125,12 +125,7 @@ void acl_ble_enhanced_connection_complete_from_shim(
     uint16_t conn_interval, uint16_t conn_latency, uint16_t conn_timeout,
     const RawAddress& local_rpa, const RawAddress& peer_rpa,
     tBLE_ADDR_TYPE peer_addr_type) {
-  if (!connection_manager::remove_unconditional_from_shim(
-          address_with_type.bda)) {
-    LOG_WARN(
-        "Unable to remove from legacy connection manager accept list addr:%s",
-        PRIVATE_ADDRESS(address_with_type.bda));
-  }
+  connection_manager::on_connection_complete(address_with_type.bda);
 
   tBLE_BD_ADDR resolved_address_with_type;
   const bool is_in_security_db = maybe_resolve_received_address(
@@ -152,8 +147,15 @@ void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
   if (status != HCI_ERR_ADVERTISING_TIMEOUT) {
     btm_cb.ble_ctr_cb.set_connection_state_idle();
     btm_ble_clear_topology_mask(BTM_BLE_STATE_INIT_BIT);
+    tBLE_BD_ADDR resolved_address_with_type;
+    maybe_resolve_received_address(address_with_type,
+                                   &resolved_address_with_type);
     connection_manager::on_connection_timed_out_from_shim(
-        address_with_type.bda);
+        resolved_address_with_type.bda);
+    LOG_WARN("LE connection fail peer:%s bd_addr:%s hci_status:%s",
+             PRIVATE_ADDRESS(address_with_type),
+             PRIVATE_ADDRESS(resolved_address_with_type.bda),
+             hci_status_code_text(status).c_str());
   } else {
     btm_cb.ble_ctr_cb.inq_var.adv_mode = BTM_BLE_ADV_DISABLE;
   }
