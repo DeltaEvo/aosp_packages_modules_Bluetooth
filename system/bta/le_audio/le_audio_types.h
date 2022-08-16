@@ -68,6 +68,9 @@ static const bluetooth::Uuid kPublishedAudioCapabilityServiceUuid =
 static const bluetooth::Uuid kAudioStreamControlServiceUuid =
     bluetooth::Uuid::From16Bit(0x184E);
 
+static const bluetooth::Uuid kTelephonyMediaAudioServiceUuid =
+    bluetooth::Uuid::From16Bit(0x1855);
+
 /* Published Audio Capabilities Service Characteristics */
 static const bluetooth::Uuid kSinkPublishedAudioCapabilityCharacteristicUuid =
     bluetooth::Uuid::From16Bit(0x2BC9);
@@ -92,6 +95,10 @@ static const bluetooth::Uuid kSourceAudioStreamEndpointUuid =
 static const bluetooth::Uuid
     kAudioStreamEndpointControlPointCharacteristicUuid =
         bluetooth::Uuid::From16Bit(0x2BC6);
+
+/* Telephony and Media Audio Service Characteristics */
+static const bluetooth::Uuid kTelephonyMediaAudioProfileRoleCharacteristicUuid =
+    bluetooth::Uuid::From16Bit(0x2B51);
 }  // namespace uuid
 
 namespace codec_spec_conf {
@@ -391,6 +398,9 @@ class LeAudioLtvMap {
       : values(std::move(values)) {}
 
   std::optional<std::vector<uint8_t>> Find(uint8_t type) const;
+  void Add(uint8_t type, std::vector<uint8_t> value) {
+    values.insert_or_assign(type, std::move(value));
+  }
   bool IsEmpty() const { return values.empty(); }
   void Clear() { values.clear(); }
   size_t Size() const { return values.size(); }
@@ -519,6 +529,7 @@ struct ase {
         active(false),
         reconfigure(false),
         data_path_state(AudioStreamDataPathState::IDLE),
+        configured_for_context_type(LeAudioContextType::UNINITIALIZED),
         preferred_phy(0),
         state(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {}
 
@@ -532,6 +543,7 @@ struct ase {
   bool active;
   bool reconfigure;
   AudioStreamDataPathState data_path_state;
+  LeAudioContextType configured_for_context_type;
 
   /* Codec configuration */
   LeAudioCodecId codec_id;

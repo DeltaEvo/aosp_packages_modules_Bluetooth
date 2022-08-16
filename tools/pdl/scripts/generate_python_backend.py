@@ -350,12 +350,30 @@ class FieldParser:
         """Parse body and payload fields."""
 
         size = core.get_payload_field_size(field)
+        offset_from_end = core.get_field_offset_from_end(field)
         self.consume_span_()
+
+        # The payload or body has a known size.
+        # Consume the payload and update the span in case
+        # fields are placed after the payload.
         if size:
             self.check_size_(f'{field.id}_size')
             self.append_(f"payload = span[:{field.id}_size]")
-        else:
+            self.append_(f"span = span[{field.id}_size:]")
+        # The payload or body is the last field of a packet,
+        # consume the remaining span.
+        elif offset_from_end == 0:
             self.append_(f"payload = span")
+            self.append_(f"span = bytes([])")
+        # The payload or body is followed by fields of static size.
+        # Consume the span that is not reserved for the following fields.
+        elif offset_from_end is not None:
+            if (offset_from_end % 8) != 0:
+                raise Exception('Payload field offset from end of packet is not a multiple of 8')
+            offset_from_end = int(offset_from_end / 8)
+            self.check_size_(f'{offset_from_end}')
+            self.append_(f"payload = span[:-{offset_from_end}]")
+            self.append_(f"span = span[-{offset_from_end}:]")
         self.append_(f"fields['payload'] = payload")
 
     def parse_checksum_field_(self, field: ast.ChecksumField):
@@ -447,7 +465,7 @@ class FieldParser:
             self.parse_typedef_field_(field)
 
         # Payload and body fields.
-        elif (isinstance(field, ast.PayloadField) or isinstance(field, ast.BodyField)):
+        elif isinstance(field, (ast.PayloadField, ast.BodyField)):
             self.parse_payload_field_(field)
 
         # Checksum fields.
@@ -477,7 +495,7 @@ def generate_packet_parser(packet: ast.Declaration) -> List[str]:
     """Generate the parse() function for a toplevel Packet or Struct
        declaration."""
 
-    parser = FieldParser(byteorder=packet.grammar.byteorder)
+    parser = FieldParser(byteorder=packet.file.byteorder)
     for f in packet.fields:
         parser.parse(f)
     parser.done()
@@ -513,7 +531,7 @@ def generate_derived_packet_parser(packet: ast.Declaration) -> List[str]:
     """Generate the parse() function for a derived Packet or Struct
        declaration."""
     print(f"Parsing packet {packet.id}", file=sys.stderr)
-    parser = FieldParser(byteorder=packet.grammar.byteorder)
+    parser = FieldParser(byteorder=packet.file.byteorder)
     for f in packet.fields:
         parser.parse(f)
     parser.done()
@@ -616,14 +634,12 @@ def generate_checksum_declaration_check(decl: ast.ChecksumDeclaration) -> str:
 
 
 def run(input: argparse.FileType, output: argparse.FileType, custom_type_location: Optional[str]):
-    #    with open(input) as pdl_json:
-    grammar = ast.Grammar.from_json(json.load(input))
-
-    core.desugar(grammar)
+    file = ast.File.from_json(json.load(input))
+    core.desugar(file)
 
     custom_types = []
     custom_type_checks = ""
-    for d in grammar.declarations:
+    for d in file.declarations:
         if isinstance(d, ast.CustomFieldDeclaration):
             custom_types.append(d.id)
             custom_type_checks += generate_custom_field_declaration_check(d)
@@ -639,7 +655,7 @@ def run(input: argparse.FileType, output: argparse.FileType, custom_type_locatio
     output.write(generate_prelude())
     output.write(custom_type_checks)
 
-    for d in grammar.declarations:
+    for d in file.declarations:
         if isinstance(d, ast.EnumDeclaration):
             output.write(generate_enum_declaration(d))
         elif isinstance(d, (ast.PacketDeclaration, ast.StructDeclaration)):

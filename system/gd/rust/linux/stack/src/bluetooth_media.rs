@@ -3,7 +3,8 @@
 use bt_topshim::btif::{BluetoothInterface, RawAddress};
 use bt_topshim::profiles::a2dp::{
     A2dp, A2dpCallbacks, A2dpCallbacksDispatcher, A2dpCodecBitsPerSample, A2dpCodecChannelMode,
-    A2dpCodecConfig, A2dpCodecSampleRate, BtavConnectionState, PresentationPosition,
+    A2dpCodecConfig, A2dpCodecSampleRate, BtavAudioState, BtavConnectionState,
+    PresentationPosition,
 };
 use bt_topshim::profiles::avrcp::{Avrcp, AvrcpCallbacks, AvrcpCallbacksDispatcher};
 use bt_topshim::profiles::hfp::{
@@ -25,7 +26,8 @@ use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
 use crate::bluetooth::{Bluetooth, BluetoothDevice, IBluetooth};
-use crate::Message;
+use crate::callbacks::Callbacks;
+use crate::{Message, RPCProxy};
 
 const DEFAULT_PROFILE_DISCOVERY_TIMEOUT_SEC: u64 = 5;
 
@@ -58,13 +60,15 @@ pub trait IBluetoothMedia {
     fn set_hfp_volume(&mut self, volume: u8, address: String);
     fn start_audio_request(&mut self);
     fn stop_audio_request(&mut self);
+    fn get_a2dp_audio_started(&mut self) -> bool;
+    fn get_hfp_audio_started(&mut self) -> bool;
     fn get_presentation_position(&mut self) -> PresentationPosition;
 
     fn start_sco_call(&mut self, address: String);
     fn stop_sco_call(&mut self, address: String);
 }
 
-pub trait IBluetoothMediaCallback {
+pub trait IBluetoothMediaCallback: RPCProxy {
     /// Triggered when a Bluetooth audio device is ready to be used. This should
     /// only be triggered once for a device and send an event to clients. If the
     /// device supports both HFP and A2DP, both should be ready when this is
@@ -119,15 +123,16 @@ pub enum MediaActions {
 pub struct BluetoothMedia {
     intf: Arc<Mutex<BluetoothInterface>>,
     initialized: bool,
-    callbacks: Arc<Mutex<Vec<(u32, Box<dyn IBluetoothMediaCallback + Send>)>>>,
-    callback_last_id: u32,
+    callbacks: Arc<Mutex<Callbacks<dyn IBluetoothMediaCallback + Send>>>,
     tx: Sender<Message>,
     adapter: Option<Arc<Mutex<Box<Bluetooth>>>>,
     a2dp: Option<A2dp>,
     avrcp: Option<Avrcp>,
     a2dp_states: HashMap<RawAddress, BtavConnectionState>,
+    a2dp_audio_state: BtavAudioState,
     hfp: Option<Hfp>,
     hfp_states: HashMap<RawAddress, BthfConnectionState>,
+    hfp_audio_state: BthfAudioState,
     selectable_caps: HashMap<RawAddress, Vec<A2dpCodecConfig>>,
     hfp_caps: HashMap<RawAddress, HfpCodecCapability>,
     device_added_tasks: Arc<Mutex<HashMap<RawAddress, Option<JoinHandle<()>>>>>,
@@ -139,15 +144,19 @@ impl BluetoothMedia {
         BluetoothMedia {
             intf,
             initialized: false,
-            callbacks: Arc::new(Mutex::new(vec![])),
-            callback_last_id: 0,
+            callbacks: Arc::new(Mutex::new(Callbacks::new(
+                tx.clone(),
+                Message::MediaCallbackDisconnected,
+            ))),
             tx,
             adapter: None,
             a2dp: None,
             avrcp: None,
             a2dp_states: HashMap::new(),
+            a2dp_audio_state: BtavAudioState::RemoteSuspend,
             hfp: None,
             hfp_states: HashMap::new(),
+            hfp_audio_state: BthfAudioState::Disconnected,
             selectable_caps: HashMap::new(),
             hfp_caps: HashMap::new(),
             device_added_tasks: Arc::new(Mutex::new(HashMap::new())),
@@ -173,18 +182,23 @@ impl BluetoothMedia {
                         self.notify_media_capability_added(addr);
                         self.a2dp_states.insert(addr, state);
                     }
-                    BtavConnectionState::Disconnected => match self.a2dp_states.remove(&addr) {
-                        Some(_) => self.notify_media_capability_removed(addr),
-                        None => {
-                            warn!("[{}]: Unknown address a2dp disconnected.", addr.to_string());
+                    BtavConnectionState::Disconnected => {
+                        self.a2dp_audio_state = BtavAudioState::RemoteSuspend;
+                        match self.a2dp_states.remove(&addr) {
+                            Some(_) => self.notify_media_capability_removed(addr),
+                            None => {
+                                warn!("[{}]: Unknown address a2dp disconnected.", addr.to_string());
+                            }
                         }
-                    },
+                    }
                     _ => {
                         self.a2dp_states.insert(addr, state);
                     }
                 }
             }
-            A2dpCallbacks::AudioState(_addr, _state) => {}
+            A2dpCallbacks::AudioState(_addr, state) => {
+                self.a2dp_audio_state = state;
+            }
             A2dpCallbacks::AudioConfig(addr, _config, _local_caps, selectable_caps) => {
                 self.selectable_caps.insert(addr, selectable_caps);
             }
@@ -196,12 +210,12 @@ impl BluetoothMedia {
         match cb {
             AvrcpCallbacks::AvrcpAbsoluteVolumeEnabled(supported) => {
                 self.absolute_volume = supported;
-                self.for_all_callbacks(|callback| {
+                self.callbacks.lock().unwrap().for_all_callbacks(|callback| {
                     callback.on_absolute_volume_supported_changed(supported);
                 });
             }
             AvrcpCallbacks::AvrcpAbsoluteVolumeUpdate(volume) => {
-                self.for_all_callbacks(|callback| {
+                self.callbacks.lock().unwrap().for_all_callbacks(|callback| {
                     callback.on_absolute_volume_changed(volume);
                 });
             }
@@ -229,15 +243,16 @@ impl BluetoothMedia {
                     }
                     BthfConnectionState::SlcConnected => {
                         info!("[{}]: hfp slc connected.", addr.to_string());
-                        let mut hfp_caps = HfpCodecCapability::CVSD;
-                        if self.hfp.as_mut().unwrap().get_wbs_supported() {
-                            hfp_caps = hfp_caps | HfpCodecCapability::MSBC;
+                        // The device may not support codec-negotiation,
+                        // in which case we shall assume it supports CVSD at this point.
+                        if !self.hfp_caps.contains_key(&addr) {
+                            self.hfp_caps.insert(addr, HfpCodecCapability::CVSD);
                         }
-                        self.hfp_caps.insert(addr, hfp_caps);
                         self.notify_media_capability_added(addr);
                     }
                     BthfConnectionState::Disconnected => {
                         info!("[{}]: hfp disconnected.", addr.to_string());
+                        self.hfp_caps.remove(&addr);
                         match self.hfp_states.remove(&addr) {
                             Some(_) => self.notify_media_capability_removed(addr),
                             None => {
@@ -263,6 +278,7 @@ impl BluetoothMedia {
                     warn!("[{}]: Unknown address hfp or slc not ready", addr.to_string());
                     return;
                 }
+
                 match state {
                     BthfAudioState::Connected => {
                         info!("[{}]: hfp audio connected.", addr.to_string());
@@ -277,13 +293,27 @@ impl BluetoothMedia {
                         info!("[{}]: hfp audio disconnecting.", addr.to_string());
                     }
                 }
+
+                self.hfp_audio_state = state;
             }
             HfpCallbacks::VolumeUpdate(volume, addr) => {
-                self.for_all_callbacks(|callback| {
+                self.callbacks.lock().unwrap().for_all_callbacks(|callback| {
                     callback.on_hfp_volume_changed(volume, addr.to_string());
                 });
             }
+            HfpCallbacks::CapsUpdate(wbs_supported, addr) => {
+                let hfp_caps = match wbs_supported {
+                    true => HfpCodecCapability::CVSD | HfpCodecCapability::MSBC,
+                    false => HfpCodecCapability::CVSD,
+                };
+
+                self.hfp_caps.insert(addr, hfp_caps);
+            }
         }
+    }
+
+    pub fn remove_callback(&mut self, id: u32) -> bool {
+        self.callbacks.lock().unwrap().remove_callback(id)
     }
 
     fn notify_media_capability_added(&self, addr: RawAddress) {
@@ -291,15 +321,15 @@ impl BluetoothMedia {
         fn dedup_added_cb(
             device_added_tasks: Arc<Mutex<HashMap<RawAddress, Option<JoinHandle<()>>>>>,
             addr: RawAddress,
-            callbacks: Arc<Mutex<Vec<(u32, Box<dyn IBluetoothMediaCallback + Send>)>>>,
+            callbacks: Arc<Mutex<Callbacks<dyn IBluetoothMediaCallback + Send>>>,
             device: BluetoothAudioDevice,
             is_delayed: bool,
         ) -> bool {
             // Closure used to lock and trigger the device added callbacks.
             let trigger_device_added = || {
-                for callback in &*callbacks.lock().unwrap() {
-                    callback.1.on_bluetooth_audio_device_added(device.clone());
-                }
+                callbacks.lock().unwrap().for_all_callbacks(|callback| {
+                    callback.on_bluetooth_audio_device_added(device.clone());
+                });
             };
             let mut guard = device_added_tasks.lock().unwrap();
             let task = guard.insert(addr, None);
@@ -390,18 +420,12 @@ impl BluetoothMedia {
                 // Abort what is pending
                 Some(handler) => handler.abort(),
                 // This addr has been added so tell audio server to remove it
-                None => self.for_all_callbacks(|callback| {
+                None => self.callbacks.lock().unwrap().for_all_callbacks(|callback| {
                     callback.on_bluetooth_audio_device_removed(addr.to_string());
                 }),
             }
         } else {
             warn!("[{}]: Device hasn't been added yet.", addr.to_string());
-        }
-    }
-
-    fn for_all_callbacks<F: Fn(&Box<dyn IBluetoothMediaCallback + Send>)>(&self, f: F) {
-        for callback in &*self.callbacks.lock().unwrap() {
-            f(&callback.1);
         }
     }
 
@@ -472,8 +496,7 @@ fn get_hfp_dispatcher(tx: Sender<Message>) -> HfpCallbacksDispatcher {
 
 impl IBluetoothMedia for BluetoothMedia {
     fn register_callback(&mut self, callback: Box<dyn IBluetoothMediaCallback + Send>) -> bool {
-        self.callback_last_id += 1;
-        self.callbacks.lock().unwrap().push((self.callback_last_id, callback));
+        let _id = self.callbacks.lock().unwrap().add_callback(callback);
         true
     }
 
@@ -605,6 +628,20 @@ impl IBluetoothMedia for BluetoothMedia {
             self.hfp.as_mut().unwrap().disconnect_audio(addr);
         } else {
             warn!("Can't stop sco call with: {}", address);
+        }
+    }
+
+    fn get_a2dp_audio_started(&mut self) -> bool {
+        match self.a2dp_audio_state {
+            BtavAudioState::Started => true,
+            _ => false,
+        }
+    }
+
+    fn get_hfp_audio_started(&mut self) -> bool {
+        match self.hfp_audio_state {
+            BthfAudioState::Connected => true,
+            _ => false,
         }
     }
 

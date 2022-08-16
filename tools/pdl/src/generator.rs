@@ -1,5 +1,12 @@
+// The `format-push-string` lint was briefly enabled present in Rust
+// 1.62. It is now moved the disabled "restriction" category instead.
+// See https://github.com/rust-lang/rust-clippy/issues/9077 for the
+// problems with this lint.
+//
+// Remove this when we use Rust 1.63 or later.
+#![allow(clippy::format_push_string)]
+
 use crate::ast;
-use anyhow::{anyhow, bail, Context, Result};
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::path::Path;
@@ -16,12 +23,9 @@ macro_rules! quote_block {
 }
 
 /// Generate the file preamble.
-fn generate_preamble(path: &Path) -> Result<String> {
+fn generate_preamble(path: &Path) -> String {
     let mut code = String::new();
-    let filename = path
-        .file_name()
-        .and_then(|path| path.to_str())
-        .ok_or_else(|| anyhow!("could not find filename in {:?}", path))?;
+    let filename = path.file_name().unwrap().to_str().expect("non UTF-8 filename");
     code.push_str(&format!("// @generated rust packets from {filename}\n\n"));
 
     code.push_str(&quote_block! {
@@ -67,58 +71,52 @@ fn generate_preamble(path: &Path) -> Result<String> {
         }
     });
 
-    Ok(code)
+    code
 }
 
 /// Round up the bit width to a Rust integer size.
-fn round_bit_width(width: usize) -> Result<usize> {
+fn round_bit_width(width: usize) -> usize {
     match width {
-        8 => Ok(8),
-        16 => Ok(16),
-        24 | 32 => Ok(32),
-        40 | 48 | 56 | 64 => Ok(64),
-        _ => bail!("unsupported field width: {width}"),
+        8 => 8,
+        16 => 16,
+        24 | 32 => 32,
+        40 | 48 | 56 | 64 => 64,
+        _ => todo!("unsupported field width: {width}"),
     }
 }
 
 /// Generate a Rust unsigned integer type large enough to hold
 /// integers of the given bit width.
-fn type_for_width(width: usize) -> Result<syn::Type> {
-    let rounded_width = round_bit_width(width)?;
-    syn::parse_str(&format!("u{rounded_width}")).map_err(anyhow::Error::from)
+fn type_for_width(width: usize) -> syn::Type {
+    let rounded_width = round_bit_width(width);
+    syn::parse_str(&format!("u{rounded_width}")).unwrap()
 }
 
-fn generate_field(
-    field: &ast::Field,
-    visibility: syn::Visibility,
-) -> Result<proc_macro2::TokenStream> {
+fn generate_field(field: &ast::Field, visibility: syn::Visibility) -> proc_macro2::TokenStream {
     match field {
         ast::Field::Scalar { id, width, .. } => {
             let field_name = format_ident!("{id}");
-            let field_type = type_for_width(*width)?;
-            Ok(quote! {
+            let field_type = type_for_width(*width);
+            quote! {
                 #visibility #field_name: #field_type
-            })
+            }
         }
         _ => todo!("unsupported field: {:?}", field),
     }
 }
 
-fn generate_field_getter(
-    packet_name: &syn::Ident,
-    field: &ast::Field,
-) -> Result<proc_macro2::TokenStream> {
+fn generate_field_getter(packet_name: &syn::Ident, field: &ast::Field) -> proc_macro2::TokenStream {
     match field {
         ast::Field::Scalar { id, width, .. } => {
             // TODO(mgeisler): refactor with generate_field above.
             let getter_name = format_ident!("get_{id}");
             let field_name = format_ident!("{id}");
-            let field_type = type_for_width(*width)?;
-            Ok(quote! {
+            let field_type = type_for_width(*width);
+            quote! {
                 pub fn #getter_name(&self) -> #field_type {
                     self.#packet_name.as_ref().#field_name
                 }
-            })
+            }
         }
         _ => todo!("unsupported field: {:?}", field),
     }
@@ -129,21 +127,29 @@ fn generate_field_parser(
     packet_name: &str,
     field: &ast::Field,
     offset: usize,
-) -> Result<proc_macro2::TokenStream> {
+) -> proc_macro2::TokenStream {
     match field {
         ast::Field::Scalar { id, width, .. } => {
             let field_name = format_ident!("{id}");
-            let type_width = round_bit_width(*width)?;
-            let field_type = type_for_width(*width)?;
+            let type_width = round_bit_width(*width);
+            let field_type = type_for_width(*width);
 
             let getter = match endianness_value {
                 ast::EndiannessValue::BigEndian => format_ident!("from_be_bytes"),
                 ast::EndiannessValue::LittleEndian => format_ident!("from_le_bytes"),
             };
 
+            // We need the padding on the MSB side of the payload, so
+            // for big-endian, we need to padding on the left, for
+            // little-endian we need it on the right.
+            let padding = vec![syn::Index::from(0); (type_width - width) / 8];
+            let (padding_before, padding_after) = match endianness_value {
+                ast::EndiannessValue::BigEndian => (padding, vec![]),
+                ast::EndiannessValue::LittleEndian => (vec![], padding),
+            };
+
             let wanted_len = syn::Index::from(offset + width / 8);
             let indices = (offset..offset + width / 8).map(syn::Index::from);
-            let padding = vec![syn::Index::from(0); (type_width - width) / 8];
             let mask = if *width != type_width {
                 Some(quote! {
                     let #field_name = #field_name & 0xfff;
@@ -152,7 +158,7 @@ fn generate_field_parser(
                 None
             };
 
-            Ok(quote! {
+            quote! {
                 // TODO(mgeisler): call a function instead to avoid
                 // generating so much code for this.
                 if bytes.len() < #wanted_len {
@@ -163,34 +169,36 @@ fn generate_field_parser(
                         got: bytes.len(),
                     });
                 }
-                let #field_name = #field_type::#getter([#(bytes[#indices]),* #(, #padding)*]);
+                let #field_name = #field_type::#getter([
+                    #(#padding_before,)* #(bytes[#indices]),* #(, #padding_after)*
+                ]);
                 #mask
-            })
+            }
         }
         _ => todo!("unsupported field: {:?}", field),
     }
 }
 
 fn generate_field_writer(
-    grammar: &ast::Grammar,
+    file: &ast::File,
     field: &ast::Field,
     offset: usize,
-) -> Result<proc_macro2::TokenStream> {
+) -> proc_macro2::TokenStream {
     match field {
         ast::Field::Scalar { id, width, .. } => {
             let field_name = format_ident!("{id}");
-            let bit_width = round_bit_width(*width)?;
+            let bit_width = round_bit_width(*width);
             let start = syn::Index::from(offset);
             let end = syn::Index::from(offset + bit_width / 8);
             let byte_width = syn::Index::from(bit_width / 8);
-            let writer = match grammar.endianness.value {
+            let writer = match file.endianness.value {
                 ast::EndiannessValue::BigEndian => format_ident!("to_be_bytes"),
                 ast::EndiannessValue::LittleEndian => format_ident!("to_le_bytes"),
             };
-            Ok(quote! {
+            quote! {
                 let #field_name = self.#field_name;
                 buffer[#start..#end].copy_from_slice(&#field_name.#writer()[0..#byte_width]);
-            })
+            }
         }
         _ => todo!("unsupported field: {:?}", field),
     }
@@ -205,13 +213,13 @@ fn get_field_size(field: &ast::Field) -> usize {
 
 /// Generate code for an `ast::Decl::Packet` enum value.
 fn generate_packet_decl(
-    grammar: &ast::Grammar,
+    file: &ast::File,
     packets: &HashMap<&str, &ast::Decl>,
     child_ids: &[&str],
     id: &str,
     fields: &[ast::Field],
     parent_id: &Option<String>,
-) -> Result<String> {
+) -> String {
     // TODO(mgeisler): use the convert_case crate to convert between
     // `FooBar` and `foo_bar` in the code below.
     let mut code = String::new();
@@ -257,10 +265,7 @@ fn generate_packet_decl(
             child: #data_child_ident,
         }
     });
-    let plain_fields = fields
-        .iter()
-        .map(|field| generate_field(field, parse_quote!()))
-        .collect::<Result<Vec<_>>>()?;
+    let plain_fields = fields.iter().map(|field| generate_field(field, parse_quote!()));
     code.push_str(&quote_block! {
         #[derive(Debug)]
         struct #data_name {
@@ -290,10 +295,7 @@ fn generate_packet_decl(
     });
 
     let builder_name = format_ident!("{id}Builder");
-    let pub_fields = fields
-        .iter()
-        .map(|field| generate_field(field, parse_quote!(pub)))
-        .collect::<Result<Vec<_>>>()?;
+    let pub_fields = fields.iter().map(|field| generate_field(field, parse_quote!(pub)));
     code.push_str(&quote_block! {
         #[derive(Debug)]
         pub struct #builder_name {
@@ -304,14 +306,11 @@ fn generate_packet_decl(
     // TODO(mgeisler): use the `Buf` trait instead of tracking
     // the offset manually.
     let mut offset = 0;
-    let field_parsers = fields
-        .iter()
-        .map(|field| {
-            let parser = generate_field_parser(&grammar.endianness.value, id, field, offset);
-            offset += get_field_size(field);
-            parser
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let field_parsers = fields.iter().map(|field| {
+        let parser = generate_field_parser(&file.endianness.value, id, field, offset);
+        offset += get_field_size(field);
+        parser
+    });
     let field_names = fields
         .iter()
         .map(|field| match field {
@@ -320,14 +319,11 @@ fn generate_packet_decl(
         })
         .collect::<Vec<_>>();
     let mut offset = 0;
-    let field_writers = fields
-        .iter()
-        .map(|field| {
-            let writer = generate_field_writer(grammar, field, offset);
-            offset += get_field_size(field);
-            writer
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let field_writers = fields.iter().map(|field| {
+        let writer = generate_field_writer(file, field, offset);
+        offset += get_field_size(field);
+        writer
+    });
 
     let total_field_size = syn::Index::from(fields.iter().map(get_field_size).sum::<usize>());
     let get_size_adjustment = (total_field_size.index > 0).then(|| {
@@ -404,10 +400,7 @@ fn generate_packet_decl(
             }
         }
     });
-    let field_getters = fields
-        .iter()
-        .map(|field| generate_field_getter(&ident, field))
-        .collect::<Result<Vec<_>>>()?;
+    let field_getters = fields.iter().map(|field| generate_field_getter(&ident, field));
     code.push_str(&quote_block! {
         impl #packet_name {
             pub fn parse(bytes: &[u8]) -> Result<Self> {
@@ -442,19 +435,19 @@ fn generate_packet_decl(
         }
     });
 
-    Ok(code)
+    code
 }
 
 fn generate_decl(
-    grammar: &ast::Grammar,
+    file: &ast::File,
     packets: &HashMap<&str, &ast::Decl>,
     children: &HashMap<&str, Vec<&str>>,
     decl: &ast::Decl,
-) -> Result<String> {
+) -> String {
     let empty: Vec<&str> = vec![];
     match decl {
         ast::Decl::Packet { id, fields, parent_id, .. } => generate_packet_decl(
-            grammar,
+            file,
             packets,
             children.get(id.as_str()).unwrap_or(&empty),
             id,
@@ -465,17 +458,16 @@ fn generate_decl(
     }
 }
 
-/// Generate Rust code from `grammar`.
+/// Generate Rust code from an AST.
 ///
 /// The code is not formatted, pipe it through `rustfmt` to get
 /// readable source code.
-pub fn generate_rust(sources: &ast::SourceDatabase, grammar: &ast::Grammar) -> Result<String> {
-    let source =
-        sources.get(grammar.file).with_context(|| format!("could not read {}", grammar.file))?;
+pub fn generate_rust(sources: &ast::SourceDatabase, file: &ast::File) -> String {
+    let source = sources.get(file.file).expect("could not read source");
 
     let mut children = HashMap::new();
     let mut packets = HashMap::new();
-    for decl in &grammar.declarations {
+    for decl in &file.declarations {
         if let ast::Decl::Packet { id, parent_id, .. } = decl {
             packets.insert(id.as_str(), decl);
             if let Some(parent_id) = parent_id {
@@ -486,16 +478,14 @@ pub fn generate_rust(sources: &ast::SourceDatabase, grammar: &ast::Grammar) -> R
 
     let mut code = String::new();
 
-    code.push_str(&generate_preamble(Path::new(source.name()))?);
+    code.push_str(&generate_preamble(Path::new(source.name())));
 
-    for decl in &grammar.declarations {
-        let decl_code = generate_decl(grammar, &packets, &children, decl)
-            .with_context(|| format!("failed to generating code for {:?}", decl))?;
-        code.push_str(&decl_code);
+    for decl in &file.declarations {
+        code.push_str(&generate_decl(file, &packets, &children, decl));
         code.push_str("\n\n");
     }
 
-    Ok(code)
+    code
 }
 
 #[cfg(test)]
@@ -503,28 +493,27 @@ mod tests {
     use super::*;
     use crate::ast;
     use crate::parser::parse_inline;
-    use crate::test_utils::{assert_eq_with_diff, rustfmt};
+    use crate::test_utils::{assert_eq_with_diff, assert_snapshot_eq, rustfmt};
 
     /// Parse a string fragment as a PDL file.
     ///
     /// # Panics
     ///
     /// Panics on parse errors.
-    pub fn parse_str(text: &str) -> ast::Grammar {
+    pub fn parse_str(text: &str) -> ast::File {
         let mut db = ast::SourceDatabase::new();
         parse_inline(&mut db, String::from("stdin"), String::from(text)).expect("parse error")
     }
 
     #[test]
     fn test_generate_preamble() {
-        let actual_code = generate_preamble(Path::new("some/path/foo.pdl")).unwrap();
-        let expected_code = include_str!("../test/generated/preamble.rs");
-        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
+        let actual_code = generate_preamble(Path::new("some/path/foo.pdl"));
+        assert_snapshot_eq("tests/generated/preamble.rs", &rustfmt(&actual_code));
     }
 
     #[test]
     fn test_generate_packet_decl_empty() {
-        let grammar = parse_str(
+        let file = parse_str(
             r#"
               big_endian_packets
               packet Foo {}
@@ -532,15 +521,14 @@ mod tests {
         );
         let packets = HashMap::new();
         let children = HashMap::new();
-        let decl = &grammar.declarations[0];
-        let actual_code = generate_decl(&grammar, &packets, &children, decl).unwrap();
-        let expected_code = include_str!("../test/generated/packet_decl_empty.rs");
-        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
+        let decl = &file.declarations[0];
+        let actual_code = generate_decl(&file, &packets, &children, decl);
+        assert_snapshot_eq("tests/generated/packet_decl_empty.rs", &rustfmt(&actual_code));
     }
 
     #[test]
     fn test_generate_packet_decl_little_endian() {
-        let grammar = parse_str(
+        let file = parse_str(
             r#"
               little_endian_packets
 
@@ -552,15 +540,17 @@ mod tests {
         );
         let packets = HashMap::new();
         let children = HashMap::new();
-        let decl = &grammar.declarations[0];
-        let actual_code = generate_decl(&grammar, &packets, &children, decl).unwrap();
-        let expected_code = include_str!("../test/generated/packet_decl_simple_little_endian.rs");
-        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
+        let decl = &file.declarations[0];
+        let actual_code = generate_decl(&file, &packets, &children, decl);
+        assert_snapshot_eq(
+            "tests/generated/packet_decl_simple_little_endian.rs",
+            &rustfmt(&actual_code),
+        );
     }
 
     #[test]
     fn test_generate_packet_decl_simple_big_endian() {
-        let grammar = parse_str(
+        let file = parse_str(
             r#"
               big_endian_packets
 
@@ -572,9 +562,97 @@ mod tests {
         );
         let packets = HashMap::new();
         let children = HashMap::new();
-        let decl = &grammar.declarations[0];
-        let actual_code = generate_decl(&grammar, &packets, &children, decl).unwrap();
-        let expected_code = include_str!("../test/generated/packet_decl_simple_big_endian.rs");
-        assert_eq_with_diff(&rustfmt(expected_code), &rustfmt(&actual_code));
+        let decl = &file.declarations[0];
+        let actual_code = generate_decl(&file, &packets, &children, decl);
+        assert_snapshot_eq(
+            "tests/generated/packet_decl_simple_big_endian.rs",
+            &rustfmt(&actual_code),
+        );
+    }
+
+    // Assert that an expression equals the given expression.
+    //
+    // Both expressions are wrapped in a `main` function (so we can
+    // format it with `rustfmt`) and a diff is be shown if they
+    // differ.
+    #[track_caller]
+    fn assert_expr_eq(left: proc_macro2::TokenStream, right: proc_macro2::TokenStream) {
+        let left = quote! {
+            fn main() { #left }
+        };
+        let right = quote! {
+            fn main() { #right }
+        };
+        assert_eq_with_diff(
+            "left",
+            &rustfmt(&left.to_string()),
+            "right",
+            &rustfmt(&right.to_string()),
+        );
+    }
+
+    #[test]
+    fn test_generate_field_parser_no_padding() {
+        let loc = ast::SourceRange::default();
+        let field = ast::Field::Scalar { loc, id: String::from("a"), width: 8 };
+
+        assert_expr_eq(
+            generate_field_parser(&ast::EndiannessValue::BigEndian, "Foo", &field, 10),
+            quote! {
+                if bytes.len() < 11 {
+                    return Err(Error::InvalidLengthError {
+                        obj: "Foo".to_string(),
+                        field: "a".to_string(),
+                        wanted: 11,
+                        got: bytes.len(),
+                    });
+                }
+                let a = u8::from_be_bytes([bytes[10]]);
+            },
+        );
+    }
+
+    #[test]
+    fn test_generate_field_parser_little_endian_padding() {
+        // Test with width != type width.
+        let loc = ast::SourceRange::default();
+        let field = ast::Field::Scalar { loc, id: String::from("a"), width: 24 };
+        assert_expr_eq(
+            generate_field_parser(&ast::EndiannessValue::LittleEndian, "Foo", &field, 10),
+            quote! {
+                if bytes.len() < 13 {
+                    return Err(Error::InvalidLengthError {
+                        obj: "Foo".to_string(),
+                        field: "a".to_string(),
+                        wanted: 13,
+                        got: bytes.len(),
+                    });
+                }
+                let a = u32::from_le_bytes([bytes[10], bytes[11], bytes[12], 0]);
+                let a = a & 0xfff;
+            },
+        );
+    }
+
+    #[test]
+    fn test_generate_field_parser_big_endian_padding() {
+        // Test with width != type width.
+        let loc = ast::SourceRange::default();
+        let field = ast::Field::Scalar { loc, id: String::from("a"), width: 24 };
+        assert_expr_eq(
+            generate_field_parser(&ast::EndiannessValue::BigEndian, "Foo", &field, 10),
+            quote! {
+                if bytes.len() < 13 {
+                    return Err(Error::InvalidLengthError {
+                        obj: "Foo".to_string(),
+                        field: "a".to_string(),
+                        wanted: 13,
+                        got: bytes.len(),
+                    });
+                }
+                let a = u32::from_be_bytes([0, bytes[10], bytes[11], bytes[12]]);
+                let a = a & 0xfff;
+            },
+        );
     }
 }

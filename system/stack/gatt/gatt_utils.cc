@@ -664,8 +664,16 @@ void gatt_rsp_timeout(void* data) {
     }
   }
 
-  LOG(WARNING) << __func__ << " disconnecting...";
-  gatt_disconnect(p_clcb->p_tcb);
+  auto eatt_channel = EattExtension::GetInstance()->FindEattChannelByCid(
+      p_clcb->p_tcb->peer_bda, p_clcb->cid);
+  if (eatt_channel) {
+    LOG_WARN("disconnecting EATT cid: %d", p_clcb->cid);
+    EattExtension::GetInstance()->Disconnect(p_clcb->p_tcb->peer_bda,
+                                             p_clcb->cid);
+  } else {
+    LOG_WARN("disconnecting GATT...");
+    gatt_disconnect(p_clcb->p_tcb);
+  }
 }
 
 extern void gatts_proc_srv_chg_ind_ack(tGATT_TCB tcb);
@@ -1398,7 +1406,12 @@ void gatt_sr_update_prep_cnt(tGATT_TCB& tcb, tGATT_IF gatt_if, bool is_inc,
 /** Cancel LE Create Connection request */
 bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, BT_TRANSPORT_LE);
-  if (!p_tcb) return true;
+  if (!p_tcb) {
+    LOG_WARN(
+        "Unable to cancel open for unknown connection gatt_if:%hhu peer:%s",
+        gatt_if, PRIVATE_ADDRESS(bda));
+    return true;
+  }
 
   if (gatt_get_ch_state(p_tcb) == GATT_CH_OPEN) {
     LOG(ERROR) << __func__ << ": link connected Too late to cancel";
@@ -1407,9 +1420,21 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
 
   gatt_update_app_use_link_flag(gatt_if, p_tcb, false, false);
 
-  if (p_tcb->app_hold_link.empty()) gatt_disconnect(p_tcb);
+  if (p_tcb->app_hold_link.empty()) {
+    LOG_DEBUG(
+        "Client reference count is zero disconnecting device gatt_if:%hhu "
+        "peer:%s",
+        gatt_if, PRIVATE_ADDRESS(bda));
+    gatt_disconnect(p_tcb);
+  }
 
-  connection_manager::direct_connect_remove(gatt_if, bda);
+  if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
+    BTM_AcceptlistRemove(bda);
+    LOG_INFO(
+        "GATT connection manager has no record but removed filter acceptlist "
+        "gatt_if:%hhu peer:%s",
+        gatt_if, PRIVATE_ADDRESS(bda));
+  }
   return true;
 }
 
@@ -1551,7 +1576,13 @@ void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
   VLOG(1) << __func__;
 
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, transport);
-  if (!p_tcb) return;
+  if (!p_tcb) {
+    LOG_ERROR(
+        "Disconnect for unknown connection bd_addr:%s reason:%s transport:%s",
+        PRIVATE_ADDRESS(bda), gatt_disconnection_reason_text(reason).c_str(),
+        bt_transport_text(transport).c_str());
+    return;
+  }
 
   gatt_set_ch_state(p_tcb, GATT_CH_CLOSE);
   for (uint8_t i = 0; i < GATT_CL_MAX_LCB; i++) {

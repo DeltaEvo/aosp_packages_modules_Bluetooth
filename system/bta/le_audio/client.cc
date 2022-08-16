@@ -32,6 +32,7 @@
 #include "client_parser.h"
 #include "codec_manager.h"
 #include "common/time_util.h"
+#include "content_control_id_keeper.h"
 #include "device/include/controller.h"
 #include "devices.h"
 #include "embdrv/lc3/include/lc3.h"
@@ -39,6 +40,7 @@
 #include "gd/common/strings.h"
 #include "le_audio_set_configuration_provider.h"
 #include "le_audio_types.h"
+#include "metrics_collector.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
@@ -60,6 +62,7 @@ using bluetooth::le_audio::GroupNodeStatus;
 using bluetooth::le_audio::GroupStatus;
 using bluetooth::le_audio::GroupStreamStatus;
 using le_audio::CodecManager;
+using le_audio::ContentControlIdKeeper;
 using le_audio::LeAudioDevice;
 using le_audio::LeAudioDeviceGroup;
 using le_audio::LeAudioDeviceGroups;
@@ -136,6 +139,72 @@ std::ostream& operator<<(std::ostream& os, const AudioState& audio_state) {
       break;
   }
   return os;
+}
+
+static std::string usageToString(audio_usage_t usage) {
+  switch (usage) {
+    case AUDIO_USAGE_UNKNOWN:
+      return "USAGE_UNKNOWN";
+    case AUDIO_USAGE_MEDIA:
+      return "USAGE_MEDIA";
+    case AUDIO_USAGE_VOICE_COMMUNICATION:
+      return "USAGE_VOICE_COMMUNICATION";
+    case AUDIO_USAGE_VOICE_COMMUNICATION_SIGNALLING:
+      return "USAGE_VOICE_COMMUNICATION_SIGNALLING";
+    case AUDIO_USAGE_ALARM:
+      return "USAGE_ALARM";
+    case AUDIO_USAGE_NOTIFICATION:
+      return "USAGE_NOTIFICATION";
+    case AUDIO_USAGE_NOTIFICATION_TELEPHONY_RINGTONE:
+      return "USAGE_NOTIFICATION_TELEPHONY_RINGTONE";
+    case AUDIO_USAGE_NOTIFICATION_COMMUNICATION_REQUEST:
+      return "USAGE_NOTIFICATION_COMMUNICATION_REQUEST";
+    case AUDIO_USAGE_NOTIFICATION_COMMUNICATION_INSTANT:
+      return "USAGE_NOTIFICATION_COMMUNICATION_INSTANT";
+    case AUDIO_USAGE_NOTIFICATION_COMMUNICATION_DELAYED:
+      return "USAGE_NOTIFICATION_COMMUNICATION_DELAYED";
+    case AUDIO_USAGE_NOTIFICATION_EVENT:
+      return "USAGE_NOTIFICATION_EVENT";
+    case AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY:
+      return "USAGE_ASSISTANCE_ACCESSIBILITY";
+    case AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE:
+      return "USAGE_ASSISTANCE_NAVIGATION_GUIDANCE";
+    case AUDIO_USAGE_ASSISTANCE_SONIFICATION:
+      return "USAGE_ASSISTANCE_SONIFICATION";
+    case AUDIO_USAGE_GAME:
+      return "USAGE_GAME";
+    case AUDIO_USAGE_ASSISTANT:
+      return "USAGE_ASSISTANT";
+    case AUDIO_USAGE_CALL_ASSISTANT:
+      return "USAGE_CALL_ASSISTANT";
+    case AUDIO_USAGE_EMERGENCY:
+      return "USAGE_EMERGENCY";
+    case AUDIO_USAGE_SAFETY:
+      return "USAGE_SAFETY";
+    case AUDIO_USAGE_VEHICLE_STATUS:
+      return "USAGE_VEHICLE_STATUS";
+    case AUDIO_USAGE_ANNOUNCEMENT:
+      return "USAGE_ANNOUNCEMENT";
+    default:
+      return "unknown usage ";
+  }
+}
+
+static std::string contentTypeToString(audio_content_type_t content_type) {
+  switch (content_type) {
+    case AUDIO_CONTENT_TYPE_UNKNOWN:
+      return "CONTENT_TYPE_UNKNOWN";
+    case AUDIO_CONTENT_TYPE_SPEECH:
+      return "CONTENT_TYPE_SPEECH";
+    case AUDIO_CONTENT_TYPE_MUSIC:
+      return "CONTENT_TYPE_MUSIC";
+    case AUDIO_CONTENT_TYPE_MOVIE:
+      return "CONTENT_TYPE_MOVIE";
+    case AUDIO_CONTENT_TYPE_SONIFICATION:
+      return "CONTENT_TYPE_SONIFICATION";
+    default:
+      return "unknown content type ";
+  }
 }
 
 namespace {
@@ -332,12 +401,8 @@ class LeAudioClientImpl : public LeAudioClient {
     group_remove_node(group, address);
   }
 
-  int GetCcid(le_audio::types::LeAudioContextType context_type) {
-    if (ccids_.count(context_type) == 0) {
-      return -1;
-    }
-
-    return ccids_[context_type];
+  int GetCcid(uint16_t context_type) {
+    return ContentControlIdKeeper::GetInstance()->GetCcid(context_type);
   }
 
   /* This callback happens if kLeAudioDeviceSetStateTimeoutMs timeout happens
@@ -388,7 +453,7 @@ class LeAudioClientImpl : public LeAudioClient {
       callbacks_->OnAudioConf(group->audio_directions_, group->group_id_,
                               group->snk_audio_locations_.to_ulong(),
                               group->src_audio_locations_.to_ulong(),
-                              new_group_updated_contexts->to_ulong());
+                              group->GetActiveContexts().to_ulong());
     }
   }
 
@@ -654,7 +719,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     bool result = groupStateMachine_->StartStream(
         group, static_cast<LeAudioContextType>(final_context_type),
-        GetCcid(static_cast<LeAudioContextType>(final_context_type)));
+        GetCcid(final_context_type));
     if (result)
       stream_setup_start_timestamp_ =
           bluetooth::common::time_get_os_boottime_us();
@@ -745,17 +810,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
   void SetCcidInformation(int ccid, int context_type) override {
     LOG_DEBUG("Ccid: %d, context type %d", ccid, context_type);
-
-    std::bitset<16> test{static_cast<uint16_t>(context_type)};
-    auto ctx_type =
-        static_cast<le_audio::types::LeAudioContextType>(context_type);
-    if (test.count() > 1 ||
-        ctx_type >= le_audio::types::LeAudioContextType::RFU) {
-      LOG_ERROR("Unknownd context type %d", context_type);
-      return;
-    }
-
-    ccids_[ctx_type] = ccid;
+    ContentControlIdKeeper::GetInstance()->SetCcid(context_type, ccid);
   }
 
   void StartAudioSession(LeAudioDeviceGroup* group,
@@ -926,6 +981,10 @@ class LeAudioClientImpl : public LeAudioClient {
       leAudioDevices_.Add(address, true);
     } else {
       leAudioDevice->connecting_actively_ = true;
+
+      le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
+          leAudioDevice->group_id_, address, ConnectionState::CONNECTING,
+          le_audio::ConnectionStatus::SUCCESS);
     }
 
     BTA_GATTC_Open(gatt_if_, address, true, false);
@@ -1127,9 +1186,13 @@ class LeAudioClientImpl : public LeAudioClient {
        * Read of available context during initial attribute discovery.
        * Group would be assigned once service search is completed.
        */
-      if (group)
-        group->UpdateActiveContextsMap(leAudioDevice->GetAvailableContexts());
-
+      if (group && group->UpdateActiveContextsMap(
+                       leAudioDevice->GetAvailableContexts())) {
+        callbacks_->OnAudioConf(group->audio_directions_, group->group_id_,
+                                group->snk_audio_locations_.to_ulong(),
+                                group->src_audio_locations_.to_ulong(),
+                                group->GetActiveContexts().to_ulong());
+      }
       return;
     }
 
@@ -1154,9 +1217,13 @@ class LeAudioClientImpl : public LeAudioClient {
        * Read of available context during initial attribute discovery.
        * Group would be assigned once service search is completed.
        */
-      if (group)
-        group->UpdateActiveContextsMap(leAudioDevice->GetAvailableContexts());
-
+      if (group && group->UpdateActiveContextsMap(
+                       leAudioDevice->GetAvailableContexts())) {
+        callbacks_->OnAudioConf(group->audio_directions_, group->group_id_,
+                                group->snk_audio_locations_.to_ulong(),
+                                group->src_audio_locations_.to_ulong(),
+                                group->GetActiveContexts().to_ulong());
+      }
       return;
     }
 
@@ -1285,6 +1352,9 @@ class LeAudioClientImpl : public LeAudioClient {
 
       if (ParseAseCtpNotification(*ntf, len, value))
         ControlPointNotificationHandler(*ntf);
+    } else if (hdl == leAudioDevice->tmap_role_hdl_) {
+      le_audio::client_parser::tmap::ParseTmapRole(leAudioDevice->tmap_role_,
+                                                   len, value);
     } else {
       LOG(ERROR) << __func__ << ", Unknown attribute read: " << loghex(hdl);
     }
@@ -1309,6 +1379,9 @@ class LeAudioClientImpl : public LeAudioClient {
       LOG(ERROR) << "Failed to connect to LeAudio leAudioDevice, status: "
                  << +status;
       callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
+      le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
+          leAudioDevice->group_id_, address, ConnectionState::CONNECTED,
+          le_audio::ConnectionStatus::FAILED);
       return;
     }
 
@@ -1355,6 +1428,9 @@ class LeAudioClientImpl : public LeAudioClient {
     }
 
     LOG(ERROR) << __func__ << " Encryption error";
+    le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
+        leAudioDevice->group_id_, address, ConnectionState::CONNECTED,
+        le_audio::ConnectionStatus::FAILED);
   }
 
   void RegisterKnownNotifications(LeAudioDevice* leAudioDevice) {
@@ -1410,6 +1486,9 @@ class LeAudioClientImpl : public LeAudioClient {
       BTA_GATTC_Close(leAudioDevice->conn_id_);
       if (leAudioDevice->connecting_actively_) {
         callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
+        le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
+            leAudioDevice->group_id_, address, ConnectionState::CONNECTED,
+            le_audio::ConnectionStatus::FAILED);
       }
       return;
     }
@@ -1457,6 +1536,10 @@ class LeAudioClientImpl : public LeAudioClient {
     leAudioDevice->conn_id_ = GATT_INVALID_CONN_ID;
     leAudioDevice->closing_stream_for_disconnection_ = false;
     leAudioDevice->encrypted_ = false;
+
+    le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
+        leAudioDevice->group_id_, address, ConnectionState::DISCONNECTED,
+        le_audio::ConnectionStatus::SUCCESS);
 
     if (leAudioDevice->removing_device_) {
       if (leAudioDevice->group_id_ != bluetooth::groups::kGroupUnknown) {
@@ -1567,6 +1650,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     const gatt::Service* pac_svc = nullptr;
     const gatt::Service* ase_svc = nullptr;
+    const gatt::Service* tmas_svc = nullptr;
 
     std::vector<uint16_t> csis_primary_handles;
     uint16_t cas_csis_included_handle = 0;
@@ -1597,6 +1681,10 @@ class LeAudioClientImpl : public LeAudioClient {
             break;
           }
         }
+      } else if (tmp.uuid == le_audio::uuid::kTelephonyMediaAudioServiceUuid) {
+        LOG_INFO(", Found Telephony and Media Audio service, handle: %04x",
+                 tmp.handle);
+        tmas_svc = &tmp;
       }
     }
 
@@ -1853,6 +1941,25 @@ class LeAudioClientImpl : public LeAudioClient {
       }
     }
 
+    if (tmas_svc) {
+      for (const gatt::Characteristic& charac : tmas_svc->characteristics) {
+        if (charac.uuid ==
+            le_audio::uuid::kTelephonyMediaAudioProfileRoleCharacteristicUuid) {
+          leAudioDevice->tmap_role_hdl_ = charac.value_handle;
+
+          /* Obtain initial state of TMAP role */
+          BtaGattQueue::ReadCharacteristic(conn_id,
+                                           leAudioDevice->tmap_role_hdl_,
+                                           OnGattReadRspStatic, NULL);
+
+          LOG_INFO(
+              ", Found Telephony and Media Profile characteristic, "
+              "handle: %04x",
+              leAudioDevice->tmap_role_hdl_);
+        }
+      }
+    }
+
     leAudioDevice->known_service_handles_ = true;
     leAudioDevice->notify_connected_after_read_ = true;
 
@@ -2009,6 +2116,9 @@ class LeAudioClientImpl : public LeAudioClient {
       btif_storage_set_leaudio_autoconnect(leAudioDevice->address_, true);
       leAudioDevice->first_connection_ = false;
     }
+    le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
+        leAudioDevice->group_id_, leAudioDevice->address_,
+        ConnectionState::CONNECTED, le_audio::ConnectionStatus::SUCCESS);
   }
 
   bool IsAseAcceptingAudioData(struct ase* ase) {
@@ -2865,8 +2975,10 @@ class LeAudioClientImpl : public LeAudioClient {
 
     /* Last suspends group - triggers group stop */
     if ((audio_receiver_state_ == AudioState::IDLE) ||
-        (audio_receiver_state_ == AudioState::READY_TO_RELEASE))
+        (audio_receiver_state_ == AudioState::READY_TO_RELEASE)) {
       OnAudioSuspend();
+      le_audio::MetricsCollector::Get()->OnStreamEnded(active_group_id_);
+    }
 
     DLOG(INFO) << __func__
                << " OUT: audio_receiver_state_: " << audio_receiver_state_
@@ -2964,6 +3076,8 @@ class LeAudioClientImpl : public LeAudioClient {
             if (alarm_is_scheduled(suspend_timeout_))
               alarm_cancel(suspend_timeout_);
             leAudioClientAudioSource->ConfirmStreamingRequest();
+            le_audio::MetricsCollector::Get()->OnStreamStarted(
+                active_group_id_, current_context_type_);
             break;
           case AudioState::RELEASING:
             /* Keep wainting. After release is done, Audio Hal will be notified
@@ -3170,6 +3284,10 @@ class LeAudioClientImpl : public LeAudioClient {
       return LeAudioContextType::CONVERSATIONAL;
 
     iter = find(available_contents.begin(), available_contents.end(),
+                LeAudioContextType::RINGTONE);
+    if (iter != available_contents.end()) return LeAudioContextType::RINGTONE;
+
+    iter = find(available_contents.begin(), available_contents.end(),
                 LeAudioContextType::GAME);
     if (iter != available_contents.end()) return LeAudioContextType::GAME;
 
@@ -3241,8 +3359,10 @@ class LeAudioClientImpl : public LeAudioClient {
         continue;
       }
 
-      LOG_INFO("%s: usage=%d, content_type=%d, gain=%f", __func__,
-               tracks->usage, tracks->content_type, tracks->gain);
+      LOG_INFO("%s: usage=%s(%d), content_type=%s(%d), gain=%f", __func__,
+               usageToString(tracks->usage).c_str(), tracks->usage,
+               contentTypeToString(tracks->content_type).c_str(),
+               tracks->content_type, tracks->gain);
 
       auto new_context =
           AudioContentToLeAudioContext(tracks->content_type, tracks->usage);
@@ -3497,7 +3617,7 @@ class LeAudioClientImpl : public LeAudioClient {
         callbacks_->OnAudioConf(group->audio_directions_, group->group_id_,
                                 group->snk_audio_locations_.to_ulong(),
                                 group->src_audio_locations_.to_ulong(),
-                                updated_contexts->to_ulong());
+                                group->GetActiveContexts().to_ulong());
       }
 
       group->SetPendingUpdateAvailableContexts(std::nullopt);
@@ -3535,6 +3655,8 @@ class LeAudioClientImpl : public LeAudioClient {
 
         stream_setup_end_timestamp_ =
             bluetooth::common::time_get_os_boottime_us();
+        le_audio::MetricsCollector::Get()->OnStreamStarted(
+            active_group_id_, current_context_type_);
         break;
       case GroupStreamStatus::SUSPENDED:
         stream_setup_end_timestamp_ = 0;
@@ -3564,7 +3686,9 @@ class LeAudioClientImpl : public LeAudioClient {
           SuspendedForReconfiguration();
           if (groupStateMachine_->ConfigureStream(
                   group, current_context_type_,
-                  GetCcid(current_context_type_))) {
+                  GetCcid(static_cast<
+                          std::underlying_type<LeAudioContextType>::type>(
+                      current_context_type_)))) {
             /* If configuration succeed wait for new status. */
             return;
           }
@@ -3605,10 +3729,6 @@ class LeAudioClientImpl : public LeAudioClient {
   AudioState audio_receiver_state_;
   /* Speaker(s) */
   AudioState audio_sender_state_;
-
-  /* Ccid informations */
-  std::map<le_audio::types::LeAudioContextType /* context */, int /*ccid */>
-      ccids_;
 
   /* Current stream configuration */
   LeAudioCodecConfiguration current_source_codec_config;
@@ -3667,6 +3787,7 @@ class LeAudioClientImpl : public LeAudioClient {
       leAudioClientAudioSink->Release(audio_sink_instance_);
       audio_sink_instance_ = nullptr;
     }
+    le_audio::MetricsCollector::Get()->OnStreamEnded(active_group_id_);
   }
 };
 
@@ -3910,6 +4031,7 @@ void LeAudioClient::Initialize(
 
   IsoManager::GetInstance()->RegisterCigCallbacks(stateMachineHciCallbacks);
   CodecManager::GetInstance()->Start(offloading_preference);
+  ContentControlIdKeeper::GetInstance()->Start();
 
   callbacks_->OnInitialized();
 }
@@ -3952,8 +4074,10 @@ void LeAudioClient::Cleanup(base::Callback<void()> cleanupCb) {
   }
 
   CodecManager::GetInstance()->Stop();
+  ContentControlIdKeeper::GetInstance()->Stop();
   LeAudioGroupStateMachine::Cleanup();
   IsoManager::GetInstance()->Stop();
+  le_audio::MetricsCollector::Get()->Flush();
 }
 
 void LeAudioClient::InitializeAudioClients(

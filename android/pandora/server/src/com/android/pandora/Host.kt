@@ -18,7 +18,11 @@ package com.android.pandora
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothDevice.TRANSPORT_LE
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -39,6 +43,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.runBlocking
 import pandora.HostGrpc.HostImplBase
 import pandora.HostProto.*
 
@@ -49,8 +57,7 @@ class Host(private val context: Context, private val server: Server) : HostImplB
   private val scope: CoroutineScope
   private val flow: Flow<Intent>
 
-  private val bluetoothManager =
-    context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+  private val bluetoothManager = context.getSystemService(BluetoothManager::class.java)!!
   private val bluetoothAdapter = bluetoothManager.adapter
 
   init {
@@ -75,29 +82,29 @@ class Host(private val context: Context, private val server: Server) : HostImplB
 
   override fun reset(request: Empty, responseObserver: StreamObserver<Empty>) {
     grpcUnary<Empty>(scope, responseObserver) {
-      Log.i(TAG, "reset")
+        Log.i(TAG, "reset")
 
-      bluetoothAdapter.clearBluetooth()
+        bluetoothAdapter.clearBluetooth()
 
-      val stateFlow =
-        flow.filter { it.getAction() == BluetoothAdapter.ACTION_STATE_CHANGED }.map {
-          it.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+        val stateFlow =
+          flow
+            .filter { it.getAction() == BluetoothAdapter.ACTION_STATE_CHANGED }
+            .map { it.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) }
+
+        if (bluetoothAdapter.isEnabled) {
+          bluetoothAdapter.disable()
+          stateFlow.filter { it == BluetoothAdapter.STATE_OFF }.first()
         }
 
-      if (bluetoothAdapter.isEnabled) {
-        bluetoothAdapter.disable()
-        stateFlow.filter { it == BluetoothAdapter.STATE_OFF }.first()
+        // TODO: b/234892968
+        delay(2000L)
+
+        bluetoothAdapter.enable()
+        stateFlow.filter { it == BluetoothAdapter.STATE_ON }.first()
+
+        // The last expression is the return value.
+        Empty.getDefaultInstance()
       }
-
-      // TODO: b/234892968
-      delay(2000L)
-
-      bluetoothAdapter.enable()
-      stateFlow.filter { it == BluetoothAdapter.STATE_ON }.first()
-
-      // The last expression is the return value.
-      Empty.getDefaultInstance()
-    }
       .invokeOnCompletion {
         Log.i(TAG, "Shutdown the gRPC Server")
         server.shutdownNow()
@@ -117,67 +124,121 @@ class Host(private val context: Context, private val server: Server) : HostImplB
     }
   }
 
+  private suspend fun waitPairingRequestIntent(bluetoothDevice: BluetoothDevice) {
+    Log.i(TAG, "waitPairingRequestIntent: device=$bluetoothDevice")
+    var pairingVariant =
+      flow
+        .filter { it.getAction() == BluetoothDevice.ACTION_PAIRING_REQUEST }
+        .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
+        .first()
+        .getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, BluetoothDevice.ERROR)
+
+    val confirmationCases =
+      intArrayOf(
+        BluetoothDevice.PAIRING_VARIANT_PASSKEY_CONFIRMATION,
+        BluetoothDevice.PAIRING_VARIANT_CONSENT,
+        BluetoothDevice.PAIRING_VARIANT_PIN,
+      )
+
+    if (pairingVariant in confirmationCases) {
+      bluetoothDevice.setPairingConfirmation(true)
+    }
+  }
+
+  private suspend fun waitBondIntent(bluetoothDevice: BluetoothDevice) {
+    // We only wait for bonding to be completed since we only need the ACL connection to be
+    // established with the peer device (on Android state connected is sent when all profiles
+    // have been connected).
+    Log.i(TAG, "waitBondIntent: device=$bluetoothDevice")
+    flow
+      .filter { it.getAction() == BluetoothDevice.ACTION_BOND_STATE_CHANGED }
+      .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
+      .map { it.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothAdapter.ERROR) }
+      .filter { it == BluetoothDevice.BOND_BONDED }
+      .first()
+  }
+
+  private suspend fun waitConnectionIntent(bluetoothDevice: BluetoothDevice) {
+    val acceptPairingJob = scope.launch { waitPairingRequestIntent(bluetoothDevice) }
+    waitBondIntent(bluetoothDevice)
+    if (acceptPairingJob.isActive) {
+      acceptPairingJob.cancel()
+    }
+  }
+
   override fun waitConnection(
     request: WaitConnectionRequest,
     responseObserver: StreamObserver<WaitConnectionResponse>
   ) {
     grpcUnary<WaitConnectionResponse>(scope, responseObserver) {
-      val address = MacAddress.fromBytes(request.address.toByteArray()).toString().uppercase()
-      Log.i(TAG, "waitConnection: address=$address")
+      val bluetoothDevice = request.address.toBluetoothDevice(bluetoothAdapter)
+
+      Log.i(TAG, "waitConnection: device=$bluetoothDevice")
 
       if (!bluetoothAdapter.isEnabled) {
         Log.e(TAG, "Bluetooth is not enabled, cannot waitConnection")
         throw Status.UNKNOWN.asException()
       }
 
-      // Start a new coroutine that will accept any pairing request from the device.
-      val acceptPairingJob =
-        scope.launch {
-          val pairingRequestIntent =
-            flow
-              .filter { it.getAction() == BluetoothDevice.ACTION_PAIRING_REQUEST }
-              .filter {
-                it.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE).address ==
-                  address
-              }
-              .first()
-
-          val bluetoothDevice =
-            pairingRequestIntent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-          val pairingVariant =
-            pairingRequestIntent.getIntExtra(
-              BluetoothDevice.EXTRA_PAIRING_VARIANT,
-              BluetoothDevice.ERROR
-            )
-
-          if (pairingVariant == BluetoothDevice.PAIRING_VARIANT_PASSKEY_CONFIRMATION ||
-              pairingVariant == BluetoothDevice.PAIRING_VARIANT_CONSENT ||
-              pairingVariant == BluetoothDevice.PAIRING_VARIANT_PIN
-          ) {
-            bluetoothDevice.setPairingConfirmation(true)
-          }
-        }
-
-      // We only wait for bonding to be completed since we only need the ACL connection to be
-      // established with the peer device (on Android state connected is sent when all profiles
-      // have been connected).
-      flow
-        .filter { it.getAction() == BluetoothDevice.ACTION_BOND_STATE_CHANGED }
-        .filter {
-          it.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE).address == address
-        }
-        .map { it.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothAdapter.ERROR) }
-        .filter { it == BluetoothDevice.BOND_BONDED }
-        .first()
-
-      // Cancel the accept pairing coroutine if still active.
-      if (acceptPairingJob.isActive) {
-        acceptPairingJob.cancel()
-      }
+      waitConnectionIntent(bluetoothDevice)
 
       WaitConnectionResponse.newBuilder()
-        .setConnection(Connection.newBuilder().setCookie(ByteString.copyFromUtf8(address)).build())
+        .setConnection(
+          Connection.newBuilder()
+            .setCookie(ByteString.copyFromUtf8(bluetoothDevice.address))
+            .build()
+        )
         .build()
+    }
+  }
+
+  override fun connect(request: ConnectRequest, responseObserver: StreamObserver<ConnectResponse>) {
+    grpcUnary<ConnectResponse>(scope, responseObserver) {
+      val bluetoothDevice = request.address.toBluetoothDevice(bluetoothAdapter)
+
+      Log.i(TAG, "connect: address=$bluetoothDevice")
+
+      if (!bluetoothDevice.isConnected()) {
+        bluetoothDevice.createBond()
+        waitConnectionIntent(bluetoothDevice)
+      }
+
+      ConnectResponse.newBuilder()
+        .setConnection(
+          Connection.newBuilder()
+            .setCookie(ByteString.copyFromUtf8(bluetoothDevice.address))
+            .build()
+        )
+        .build()
+    }
+  }
+
+  override fun deletePairing(
+    request: DeletePairingRequest,
+    responseObserver: StreamObserver<DeletePairingResponse>
+  ) {
+    grpcUnary<DeletePairingResponse>(scope, responseObserver) {
+      val bluetoothDevice = request.address.toBluetoothDevice(bluetoothAdapter)
+      Log.i(TAG, "DeletePairing: device=$bluetoothDevice")
+
+      if (bluetoothDevice.removeBond()) {
+        Log.i(TAG, "DeletePairing: device=$bluetoothDevice - wait BOND_NONE intent")
+        flow
+          .filter { it.getAction() == BluetoothDevice.ACTION_BOND_STATE_CHANGED }
+          .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
+          .filter {
+            it.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothAdapter.ERROR) ==
+              BluetoothDevice.BOND_NONE
+          }
+          .filter {
+            it.getIntExtra(BluetoothDevice.EXTRA_REASON, BluetoothAdapter.ERROR) ==
+              BluetoothDevice.BOND_SUCCESS
+          }
+          .first()
+      } else {
+        Log.i(TAG, "DeletePairing: device=$bluetoothDevice - Already unpaired")
+      }
+      DeletePairingResponse.getDefaultInstance()
     }
   }
 
@@ -186,10 +247,8 @@ class Host(private val context: Context, private val server: Server) : HostImplB
     responseObserver: StreamObserver<DisconnectResponse>
   ) {
     grpcUnary<DisconnectResponse>(scope, responseObserver) {
-      val address = request.connection.cookie.toByteArray().decodeToString()
-      Log.i(TAG, "disconnect: address=$address")
-
-      val bluetoothDevice = bluetoothAdapter.getRemoteDevice(address)
+      val bluetoothDevice = request.connection.toBluetoothDevice(bluetoothAdapter)
+      Log.i(TAG, "disconnect: device=$bluetoothDevice")
 
       if (!bluetoothDevice.isConnected()) {
         Log.e(TAG, "Device is not connected, cannot disconnect")
@@ -199,9 +258,7 @@ class Host(private val context: Context, private val server: Server) : HostImplB
       val connectionStateChangedFlow =
         flow
           .filter { it.getAction() == BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED }
-          .filter {
-            it.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE).address == address
-          }
+          .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
           .map { it.getIntExtra(BluetoothAdapter.EXTRA_CONNECTION_STATE, BluetoothAdapter.ERROR) }
 
       bluetoothDevice.disconnect()
@@ -209,5 +266,63 @@ class Host(private val context: Context, private val server: Server) : HostImplB
 
       DisconnectResponse.getDefaultInstance()
     }
+  }
+
+  override fun connectLE(
+      request: ConnectLERequest,
+      responseObserver: StreamObserver<ConnectLEResponse>
+  ) {
+    grpcUnary<ConnectLEResponse>(scope, responseObserver) {
+      val ptsAddress = request.address.decodeToString()
+      Log.i(TAG, "connect LE: $ptsAddress")
+      val device = scanLeDevice(ptsAddress)
+      GattInstance(device!!, TRANSPORT_LE, context).waitForState(BluetoothProfile.STATE_CONNECTED)
+      ConnectLEResponse.newBuilder()
+        .setConnection(
+          Connection.newBuilder()
+            .setCookie(ByteString.copyFromUtf8(device.address))
+            .build()
+        )
+        .build()
+    }
+  }
+
+  override fun disconnectLE(request: DisconnectLERequest, responseObserver: StreamObserver<Empty>) {
+    grpcUnary<Empty>(scope, responseObserver) {
+      val ptsAddress = request.connection.cookie.toByteArray().decodeToString()
+      Log.i(TAG, "disconnect: $ptsAddress")
+      GattInstance.get(ptsAddress).disconnectInstance()
+      Empty.getDefaultInstance()
+    }
+  }
+
+  private fun scanLeDevice(ptsAddress: String): BluetoothDevice? {
+    Log.d(TAG, "scanLeDevice")
+    var bluetoothDevice: BluetoothDevice? = null
+    runBlocking {
+      val flow = callbackFlow {
+        val leScanCallback =
+          object : ScanCallback() {
+            override fun onScanFailed(errorCode: Int) {
+              super.onScanFailed(errorCode)
+              Log.d(TAG, "onScanFailed: errorCode: $errorCode")
+              trySendBlocking(null)
+            }
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+              super.onScanResult(callbackType, result)
+              val deviceAddress = result.device.address
+              if (deviceAddress == ptsAddress) {
+                Log.d(TAG, "found device address: $deviceAddress")
+                trySendBlocking(result.device)
+              }
+            }
+          }
+          val bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
+          bluetoothLeScanner?.startScan(leScanCallback) ?: run { trySendBlocking(null) }
+          awaitClose { bluetoothLeScanner?.stopScan(leScanCallback) }
+      }
+      bluetoothDevice = flow.first()
+    }
+    return bluetoothDevice
   }
 }

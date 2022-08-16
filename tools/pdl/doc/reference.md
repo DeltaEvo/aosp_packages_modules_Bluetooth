@@ -54,6 +54,64 @@ packet Brew {
 }
 ```
 
+The endianess affects how fields of fractional bit-size (hence named bit-fields) are parsed or
+serialized. Such fields are grouped together to the next byte boundary, least
+significant bit first, and then byte-swapped to the required endianess before
+being written to memory, or after being read from memory.
+
+```
+packet Coffee {
+  a: 1,
+  b: 15,
+  c: 3,
+  d: 5,
+}
+
+// The first two field are laid out as a single
+// integer of 16-bits
+//     MSB                                   LSB
+//     16                  8                 0
+//     +---------------------------------------+
+//     | b14 ..                        .. b0 |a|
+//     +---------------------------------------+
+//
+// The file endianness is applied to this integer
+// to obtain the byte layout of the packet fields.
+//
+// Little endian layout
+//     MSB                                   LSB
+//     7    6    5    4    3    2    1    0
+//     +---------------------------------------+
+//  0  |            b[6:0]                | a  |
+//     +---------------------------------------+
+//  1  |               b[14:7]                 |
+//     +---------------------------------------+
+//  2  |          d             |       c      |
+//     +---------------------------------------+
+//
+// Big endian layout
+//     MSB                                   LSB
+//     7    6    5    4    3    2    1    0
+//     +---------------------------------------+
+//  0  |               b[14:7]                 |
+//     +---------------------------------------+
+//  1  |            b[6:0]                | a  |
+//     +---------------------------------------+
+//  2  |          d             |       c      |
+//     +---------------------------------------+
+```
+
+Fields which qualify as bit-fields are:
+- [Scalar](#fields-scalar) fields
+- [Size](#fields-size) fields
+- [Count](#fields-count) fields
+- [Fixed](#fields-fixed) fields
+- [Reserved](#fields-reserved) fields
+- [Typedef](#fields-typedef) fields, when the field type is an
+  [Enum](#enum)
+
+Fields that do not qualify as bit-fields _must_ start and end on a byte boundary.
+
 ## Identifiers
 
 - Identifiers can denote a field; an enumeration tag; or a declared type.

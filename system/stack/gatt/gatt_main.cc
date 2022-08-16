@@ -27,6 +27,7 @@
 #include "btif/include/btif_storage.h"
 #include "connection_manager.h"
 #include "device/include/interop.h"
+#include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
@@ -80,6 +81,7 @@ static const tL2CAP_APPL_INFO dyn_info = {gatt_l2cif_connect_ind_cback,
                                           gatt_l2cif_congest_cback,
                                           NULL,
                                           gatt_on_l2cap_error,
+                                          NULL,
                                           NULL,
                                           NULL,
                                           NULL};
@@ -249,10 +251,15 @@ bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
 bool gatt_disconnect(tGATT_TCB* p_tcb) {
   VLOG(1) << __func__;
 
-  if (!p_tcb) return false;
+  if (!p_tcb) {
+    LOG_WARN("Unable to disconnect an unknown device");
+    return false;
+  }
 
   tGATT_CH_STATE ch_state = gatt_get_ch_state(p_tcb);
   if (ch_state == GATT_CH_CLOSING) {
+    LOG_DEBUG("Device already in closing state peer:%s",
+              PRIVATE_ADDRESS(p_tcb->peer_bda));
     VLOG(1) << __func__ << " already in closing state";
     return true;
   }
@@ -262,8 +269,16 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
       L2CA_RemoveFixedChnl(L2CAP_ATT_CID, p_tcb->peer_bda);
       gatt_set_ch_state(p_tcb, GATT_CH_CLOSING);
     } else {
-      connection_manager::direct_connect_remove(CONN_MGR_ID_L2CAP,
-                                                p_tcb->peer_bda);
+      if (!connection_manager::direct_connect_remove(CONN_MGR_ID_L2CAP,
+                                                     p_tcb->peer_bda)) {
+        BTM_AcceptlistRemove(p_tcb->peer_bda);
+        LOG_INFO(
+            "GATT connection manager has no record but removed filter "
+            "acceptlist "
+            "gatt_if:%hhu peer:%s",
+            static_cast<uint8_t>(CONN_MGR_ID_L2CAP),
+            PRIVATE_ADDRESS(p_tcb->peer_bda));
+      }
       gatt_cleanup_upon_disc(p_tcb->peer_bda, GATT_CONN_TERMINATE_LOCAL_HOST,
                              p_tcb->transport);
     }
@@ -497,7 +512,10 @@ static void gatt_le_connect_cback(uint16_t chan, const RawAddress& bd_addr,
     }
   }
 
-  EattExtension::GetInstance()->Connect(bd_addr);
+  if (stack_config_get_interface()->get_pts_connect_eatt_before_encryption()) {
+    LOG_INFO(" Start EATT before encryption ");
+    EattExtension::GetInstance()->Connect(bd_addr);
+  }
 }
 
 /** This function is called to process the congestion callback from lcb */

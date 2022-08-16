@@ -46,9 +46,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .arg(Arg::with_name("debug").long("debug").short("d").help("Enables debug level logs"))
         .arg(Arg::from_usage("[init-flags] 'Fluoride INIT_ flags'").multiple(true))
+        .arg(
+            Arg::with_name("log-output")
+                .long("log-output")
+                .takes_value(true)
+                .possible_values(&["syslog", "stderr"])
+                .default_value("syslog")
+                .help("Select log output"),
+        )
         .get_matches();
 
     let is_debug = matches.is_present("debug");
+    let log_output = matches.value_of("log-output").unwrap_or("syslog");
 
     let adapter_index = match matches.value_of("hci") {
         Some(idx) => idx.parse::<i32>().unwrap_or(0),
@@ -61,26 +70,37 @@ fn main() -> Result<(), Box<dyn Error>> {
         None => vec![],
     };
 
+    // Set GD debug flag if debug is enabled.
+    if is_debug {
+        init_flags.push(String::from("INIT_logging_debug_enabled_for_all=true"));
+    }
+
     // Forward --hci to Fluoride.
     init_flags.push(format!("--hci={}", adapter_index));
 
-    let formatter = Formatter3164 {
-        facility: Facility::LOG_USER,
-        hostname: None,
-        process: "btadapterd".into(),
-        pid: 0,
-    };
+    let level_filter = if is_debug { LevelFilter::Debug } else { LevelFilter::Info };
 
-    let logger = syslog::unix(formatter).expect("could not connect to syslog");
-    let _ = log::set_boxed_logger(Box::new(BasicLogger::new(logger))).map(|()| {
-        log::set_max_level(if is_debug { LevelFilter::Debug } else { LevelFilter::Info })
-    });
+    if log_output == "stderr" {
+        env_logger::Builder::new().filter(None, level_filter).init();
+    } else {
+        let formatter = Formatter3164 {
+            facility: Facility::LOG_USER,
+            hostname: None,
+            process: "btadapterd".into(),
+            pid: 0,
+        };
+
+        let logger = syslog::unix(formatter).expect("could not connect to syslog");
+        let _ = log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
+            .map(|()| log::set_max_level(level_filter));
+    }
 
     let (tx, rx) = Stack::create_channel();
 
     let intf = Arc::new(Mutex::new(get_btinterface().unwrap()));
     let suspend = Arc::new(Mutex::new(Box::new(Suspend::new(intf.clone(), tx.clone()))));
-    let bluetooth_gatt = Arc::new(Mutex::new(Box::new(BluetoothGatt::new(intf.clone()))));
+    let bluetooth_gatt =
+        Arc::new(Mutex::new(Box::new(BluetoothGatt::new(intf.clone(), tx.clone()))));
     let bluetooth_media =
         Arc::new(Mutex::new(Box::new(BluetoothMedia::new(tx.clone(), intf.clone()))));
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
@@ -88,7 +108,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         intf.clone(),
         bluetooth_media.clone(),
     ))));
-    let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(intf.clone()))));
+    let bt_sock_mgr =
+        Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(intf.clone(), tx.clone()))));
 
     topstack::get_runtime().block_on(async {
         // Connect to D-Bus system bus.
@@ -126,6 +147,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             bluetooth_gatt.clone(),
             bluetooth_media.clone(),
             suspend.clone(),
+            bt_sock_mgr.clone(),
         ));
 
         // Set up the disconnect watcher to monitor client disconnects.

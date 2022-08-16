@@ -1,17 +1,20 @@
 use crate::dbus_iface::{
     export_bluetooth_callback_dbus_intf, export_bluetooth_connection_callback_dbus_intf,
     export_bluetooth_gatt_callback_dbus_intf, export_bluetooth_manager_callback_dbus_intf,
-    export_suspend_callback_dbus_intf,
+    export_scanner_callback_dbus_intf, export_suspend_callback_dbus_intf,
 };
 use crate::ClientContext;
-use crate::{console_yellow, print_info};
-use bt_topshim::btif::{BtBondState, BtPropertyType, BtSspVariant};
+use crate::{console_red, console_yellow, print_error, print_info};
+use bt_topshim::btif::{BtBondState, BtPropertyType, BtSspVariant, Uuid128Bit};
 use bt_topshim::profiles::gatt::GattStatus;
 use btstack::bluetooth::{
     BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
 };
-use btstack::bluetooth_gatt::{BluetoothGattService, IBluetoothGattCallback, LePhy};
+use btstack::bluetooth_gatt::{
+    BluetoothGattService, IBluetoothGattCallback, IScannerCallback, LePhy,
+};
 use btstack::suspend::ISuspendCallback;
+use btstack::uuid::UuidWrapper;
 use btstack::RPCProxy;
 use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
@@ -131,6 +134,8 @@ impl IBluetoothCallback for BtCallback {
             Some(_) => print_info!("Removed device: {:?}", remote_device),
             None => (),
         };
+
+        self.context.lock().unwrap().bonded_devices.remove(&remote_device.address);
     }
 
     fn on_discovering_changed(&self, discovering: bool) {
@@ -206,12 +211,17 @@ impl IBluetoothCallback for BtCallback {
             BtBondState::Bonding => (),
         }
 
+        let device =
+            BluetoothDevice { address: address.clone(), name: String::from("Classic device") };
+
         // If bonded, we should also automatically connect all enabled profiles
         if BtBondState::Bonded == state.into() {
-            self.context.lock().unwrap().connect_all_enabled_profiles(BluetoothDevice {
-                address,
-                name: String::from("Classic device"),
-            });
+            self.context.lock().unwrap().bonded_devices.insert(address.clone(), device.clone());
+            self.context.lock().unwrap().connect_all_enabled_profiles(device.clone());
+        }
+
+        if BtBondState::NotBonded == state.into() {
+            self.context.lock().unwrap().bonded_devices.remove(&address);
         }
     }
 }
@@ -285,6 +295,64 @@ impl RPCProxy for BtConnectionCallback {
     fn export_for_rpc(self: Box<Self>) {
         let cr = self.dbus_crossroads.clone();
         let iface = export_bluetooth_connection_callback_dbus_intf(
+            self.dbus_connection.clone(),
+            &mut cr.lock().unwrap(),
+            Arc::new(Mutex::new(DisconnectWatcher::new())),
+        );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
+    }
+}
+
+pub(crate) struct ScannerCallback {
+    objpath: String,
+    _context: Arc<Mutex<ClientContext>>,
+
+    dbus_connection: Arc<SyncConnection>,
+    dbus_crossroads: Arc<Mutex<Crossroads>>,
+}
+
+impl ScannerCallback {
+    pub(crate) fn new(
+        objpath: String,
+        _context: Arc<Mutex<ClientContext>>,
+        dbus_connection: Arc<SyncConnection>,
+        dbus_crossroads: Arc<Mutex<Crossroads>>,
+    ) -> Self {
+        Self { objpath, _context, dbus_connection, dbus_crossroads }
+    }
+}
+
+impl IScannerCallback for ScannerCallback {
+    fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: u8) {
+        if status != 0 {
+            print_error!("Failed registering scanner, status = {}", status);
+            return;
+        }
+
+        print_info!(
+            "Scanner callback registered, uuid = {}, id = {}",
+            UuidWrapper(&uuid),
+            scanner_id
+        );
+    }
+}
+
+impl RPCProxy for ScannerCallback {
+    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
+        0
+    }
+
+    fn get_object_id(&self) -> String {
+        self.objpath.clone()
+    }
+
+    fn unregister(&mut self, _id: u32) -> bool {
+        false
+    }
+
+    fn export_for_rpc(self: Box<Self>) {
+        let cr = self.dbus_crossroads.clone();
+        let iface = export_scanner_callback_dbus_intf(
             self.dbus_connection.clone(),
             &mut cr.lock().unwrap(),
             Arc::new(Mutex::new(DisconnectWatcher::new())),

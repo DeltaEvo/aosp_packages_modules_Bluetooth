@@ -33,6 +33,13 @@ const char* PTS_LE_CONN_UPDATED_DISABLED = "PTS_DisableConnUpdates";
 const char* PTS_DISABLE_SDP_LE_PAIR = "PTS_DisableSDPOnLEPair";
 const char* PTS_SMP_PAIRING_OPTIONS_KEY = "PTS_SmpOptions";
 const char* PTS_SMP_FAILURE_CASE_KEY = "PTS_SmpFailureCase";
+const char* PTS_FORCE_EATT_FOR_NOTIFICATIONS = "PTS_ForceEattForNotifications";
+const char* PTS_CONNECT_EATT_UNCONDITIONALLY =
+    "PTS_ConnectEattUncondictionally";
+const char* PTS_CONNECT_EATT_UNENCRYPTED = "PTS_ConnectEattUnencrypted";
+const char* PTS_BROADCAST_UNENCRYPTED = "PTS_BroadcastUnencrypted";
+const char* PTS_EATT_PERIPHERAL_COLLISION_SUPPORT =
+    "PTS_EattPeripheralCollionSupport";
 
 static std::unique_ptr<config_t> config;
 }  // namespace
@@ -110,12 +117,45 @@ static int get_pts_smp_failure_case(void) {
                         PTS_SMP_FAILURE_CASE_KEY, 0);
 }
 
+static bool get_pts_force_eatt_for_notifications(void) {
+  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
+                         PTS_FORCE_EATT_FOR_NOTIFICATIONS, false);
+}
+
+static bool get_pts_connect_eatt_unconditionally(void) {
+  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
+                         PTS_CONNECT_EATT_UNCONDITIONALLY, false);
+}
+
+static bool get_pts_connect_eatt_before_encryption(void) {
+  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
+                         PTS_CONNECT_EATT_UNENCRYPTED, false);
+}
+
+static bool get_pts_unencrypt_broadcast(void) {
+  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
+                         PTS_BROADCAST_UNENCRYPTED, false);
+}
+
+static bool get_pts_eatt_peripheral_collision_support(void) {
+  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
+                         PTS_EATT_PERIPHERAL_COLLISION_SUPPORT, false);
+}
+
 static config_t* get_all(void) { return config.get(); }
 
-const stack_config_t interface = {
-    get_trace_config_enabled,     get_pts_avrcp_test,
-    get_pts_secure_only_mode,     get_pts_conn_updates_disabled,
-    get_pts_crosskey_sdp_disable, get_pts_smp_options,
-    get_pts_smp_failure_case,     get_all};
+const stack_config_t interface = {get_trace_config_enabled,
+                                  get_pts_avrcp_test,
+                                  get_pts_secure_only_mode,
+                                  get_pts_conn_updates_disabled,
+                                  get_pts_crosskey_sdp_disable,
+                                  get_pts_smp_options,
+                                  get_pts_smp_failure_case,
+                                  get_pts_force_eatt_for_notifications,
+                                  get_pts_connect_eatt_unconditionally,
+                                  get_pts_connect_eatt_before_encryption,
+                                  get_pts_unencrypt_broadcast,
+                                  get_pts_eatt_peripheral_collision_support,
+                                  get_all};
 
 const stack_config_t* stack_config_get_interface(void) { return &interface; }

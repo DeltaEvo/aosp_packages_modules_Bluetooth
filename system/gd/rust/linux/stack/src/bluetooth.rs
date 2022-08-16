@@ -6,6 +6,7 @@ use bt_topshim::btif::{
     BtScanMode, BtSspVariant, BtState, BtStatus, BtTransport, RawAddress, Uuid, Uuid128Bit,
 };
 use bt_topshim::{
+    metrics,
     profiles::hid_host::{HHCallbacksDispatcher, HidHost},
     profiles::sdp::{BtSdpRecord, Sdp, SdpCallbacks, SdpCallbacksDispatcher},
     topstack,
@@ -25,8 +26,9 @@ use tokio::task::JoinHandle;
 use tokio::time;
 
 use crate::bluetooth_media::{BluetoothMedia, IBluetoothMedia, MediaActions};
+use crate::callbacks::Callbacks;
 use crate::uuid::{Profile, UuidHelper};
-use crate::{BluetoothCallbackType, Message, RPCProxy};
+use crate::{Message, RPCProxy};
 
 const DEFAULT_DISCOVERY_TIMEOUT_MS: u64 = 12800;
 const MIN_ADV_INSTANCES_FOR_MULTI_ADV: u8 = 5;
@@ -299,8 +301,8 @@ pub struct Bluetooth {
 
     bonded_devices: HashMap<String, BluetoothDeviceContext>,
     bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
-    callbacks: HashMap<u32, Box<dyn IBluetoothCallback + Send>>,
-    connection_callbacks: HashMap<u32, Box<dyn IBluetoothConnectionCallback + Send>>,
+    callbacks: Callbacks<dyn IBluetoothCallback + Send>,
+    connection_callbacks: Callbacks<dyn IBluetoothConnectionCallback + Send>,
     discovering_started: Instant,
     hh: Option<HidHost>,
     is_connectable: bool,
@@ -327,8 +329,11 @@ impl Bluetooth {
     ) -> Bluetooth {
         Bluetooth {
             bonded_devices: HashMap::new(),
-            callbacks: HashMap::new(),
-            connection_callbacks: HashMap::new(),
+            callbacks: Callbacks::new(tx.clone(), Message::AdapterCallbackDisconnected),
+            connection_callbacks: Callbacks::new(
+                tx.clone(),
+                Message::ConnectionCallbackDisconnected,
+            ),
             hh: None,
             bluetooth_media,
             discovering_started: Instant::now(),
@@ -378,24 +383,9 @@ impl Bluetooth {
     fn update_local_address(&mut self, addr: &RawAddress) {
         self.local_address = Some(*addr);
 
-        self.for_all_callbacks(|callback| {
+        self.callbacks.for_all_callbacks(|callback| {
             callback.on_address_changed(self.local_address.unwrap().to_string());
         });
-    }
-
-    fn for_all_callbacks<F: Fn(&Box<dyn IBluetoothCallback + Send>)>(&self, f: F) {
-        for (_, callback) in self.callbacks.iter() {
-            f(&callback);
-        }
-    }
-
-    fn for_all_connection_callbacks<F: Fn(&Box<dyn IBluetoothConnectionCallback + Send>)>(
-        &self,
-        f: F,
-    ) {
-        for (_, callback) in self.connection_callbacks.iter() {
-            f(&callback);
-        }
     }
 
     pub fn get_connectable(&self) -> bool {
@@ -421,15 +411,12 @@ impl Bluetooth {
         )) == 0
     }
 
-    pub(crate) fn callback_disconnected(&mut self, id: u32, cb_type: BluetoothCallbackType) {
-        match cb_type {
-            BluetoothCallbackType::Adapter => {
-                self.callbacks.remove(&id);
-            }
-            BluetoothCallbackType::Connection => {
-                self.connection_callbacks.remove(&id);
-            }
-        };
+    pub(crate) fn adapter_callback_disconnected(&mut self, id: u32) {
+        self.callbacks.remove_callback(id);
+    }
+
+    pub(crate) fn connection_callback_disconnected(&mut self, id: u32) {
+        self.connection_callbacks.remove_callback(id);
     }
 
     fn get_remote_device_if_found(&self, address: &str) -> Option<&BluetoothDeviceContext> {
@@ -506,7 +493,7 @@ impl Bluetooth {
         self.found_devices.retain(|_, d| is_fresh(d, &now));
 
         for d in stale_devices {
-            self.for_all_callbacks(|callback| {
+            self.callbacks.for_all_callbacks(|callback| {
                 callback.on_device_cleared(d.clone());
             });
         }
@@ -609,6 +596,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
     fn adapter_state_changed(&mut self, state: BtState) {
         let prev_state = self.state.clone();
         self.state = state;
+        metrics::adapter_state_changed(self.state.clone());
 
         // If it's the same state as before, no further action
         if self.state == prev_state {
@@ -669,12 +657,12 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     }
                 }
                 BluetoothProperty::BdName(bdname) => {
-                    self.for_all_callbacks(|callback| {
+                    self.callbacks.for_all_callbacks(|callback| {
                         callback.on_name_changed(bdname.clone());
                     });
                 }
                 BluetoothProperty::AdapterScanMode(mode) => {
-                    self.for_all_callbacks(|callback| {
+                    self.callbacks.for_all_callbacks(|callback| {
                         callback
                             .on_discoverable_changed(*mode == BtScanMode::ConnectableDiscoverable);
                     });
@@ -684,7 +672,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
             self.properties.insert(prop.get_type(), prop.clone());
 
-            self.for_all_callbacks(|callback| {
+            self.callbacks.for_all_callbacks(|callback| {
                 callback.on_adapter_property_changed(prop.get_type());
             });
         }
@@ -710,7 +698,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
         let device = self.found_devices.get(&address).unwrap();
 
-        self.for_all_callbacks(|callback| {
+        self.callbacks.for_all_callbacks(|callback| {
             callback.on_device_found(device.info.clone());
         });
     }
@@ -729,7 +717,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
             self.discovering_started = Instant::now();
         }
 
-        self.for_all_callbacks(|callback| {
+        self.callbacks.for_all_callbacks(|callback| {
             callback.on_discovering_changed(state == BtDiscoveryState::Started);
         });
 
@@ -751,7 +739,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
     ) {
         // Currently this supports many agent because we accept many callbacks.
         // TODO: We need a way to select the default agent.
-        self.for_all_callbacks(|callback| {
+        self.callbacks.for_all_callbacks(|callback| {
             callback.on_ssp_request(
                 BluetoothDevice::new(remote_addr.to_string(), remote_name.clone()),
                 cod,
@@ -766,7 +754,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
         status: BtStatus,
         addr: RawAddress,
         bond_state: BtBondState,
-        _fail_reason: i32,
+        fail_reason: i32,
     ) {
         let address = addr.to_string();
 
@@ -806,13 +794,26 @@ impl BtifBluetoothCallbacks for Bluetooth {
         }
 
         // Send bond state changed notifications
-        self.for_all_callbacks(|callback| {
+        self.callbacks.for_all_callbacks(|callback| {
             callback.on_bond_state_changed(
                 status.to_u32().unwrap(),
                 address.clone(),
                 bond_state.to_u32().unwrap(),
             );
         });
+
+        let device_type = match self.get_remote_device_if_found(&address) {
+            Some(d) => match d.properties.get(&BtPropertyType::TypeOfDevice) {
+                Some(prop) => match prop {
+                    BluetoothProperty::TypeOfDevice(type_of_device) => type_of_device.clone(),
+                    _ => BtDeviceType::Unknown,
+                },
+                _ => BtDeviceType::Unknown,
+            },
+            _ => BtDeviceType::Unknown,
+        };
+
+        metrics::bond_state_changed(addr, device_type, status, bond_state, fail_reason);
     }
 
     fn remote_device_properties_changed(
@@ -898,12 +899,12 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
                     match state {
                         BtAclState::Connected => {
-                            self.for_all_connection_callbacks(|callback| {
+                            self.connection_callbacks.for_all_callbacks(|callback| {
                                 callback.on_device_connected(device.clone());
                             });
                         }
                         BtAclState::Disconnected => {
-                            self.for_all_connection_callbacks(|callback| {
+                            self.connection_callbacks.for_all_callbacks(|callback| {
                                 callback.on_device_disconnected(device.clone());
                             });
                         }
@@ -917,52 +918,19 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
 // TODO: Add unit tests for this implementation
 impl IBluetooth for Bluetooth {
-    fn register_callback(&mut self, mut callback: Box<dyn IBluetoothCallback + Send>) {
-        let tx = self.tx.clone();
-
-        let id = callback.register_disconnect(Box::new(move |cb_id| {
-            let tx = tx.clone();
-            tokio::spawn(async move {
-                let _result = tx
-                    .send(Message::BluetoothCallbackDisconnected(
-                        cb_id,
-                        BluetoothCallbackType::Adapter,
-                    ))
-                    .await;
-            });
-        }));
-
-        self.callbacks.insert(id, callback);
+    fn register_callback(&mut self, callback: Box<dyn IBluetoothCallback + Send>) {
+        self.callbacks.add_callback(callback);
     }
 
     fn register_connection_callback(
         &mut self,
-        mut callback: Box<dyn IBluetoothConnectionCallback + Send>,
+        callback: Box<dyn IBluetoothConnectionCallback + Send>,
     ) -> u32 {
-        let tx = self.tx.clone();
-
-        let id = callback.register_disconnect(Box::new(move |cb_id| {
-            let tx = tx.clone();
-            tokio::spawn(async move {
-                let _ = tx
-                    .send(Message::BluetoothCallbackDisconnected(
-                        cb_id,
-                        BluetoothCallbackType::Connection,
-                    ))
-                    .await;
-            });
-        }));
-
-        self.connection_callbacks.insert(id, callback);
-
-        id
+        self.connection_callbacks.add_callback(callback)
     }
 
     fn unregister_connection_callback(&mut self, callback_id: u32) -> bool {
-        match self.connection_callbacks.get_mut(&callback_id) {
-            Some(cb) => cb.unregister(callback_id),
-            None => false,
-        }
+        self.connection_callbacks.remove_callback(callback_id)
     }
 
     fn enable(&mut self) -> bool {
@@ -1119,16 +1087,41 @@ impl IBluetooth for Bluetooth {
         let addr = RawAddress::from_string(device.address.clone());
 
         if addr.is_none() {
+            metrics::bond_create_attempt(RawAddress::default(), BtDeviceType::Unknown);
+            metrics::bond_state_changed(
+                RawAddress::default(),
+                BtDeviceType::Unknown,
+                BtStatus::InvalidParam,
+                BtBondState::NotBonded,
+                0,
+            );
             warn!("Can't create bond. Address {} is not valid", device.address);
             return false;
         }
 
         let address = addr.unwrap();
+        let device_type = self.get_remote_type(device);
+
+        // We explicitly log the attempt to start the bonding separate from logging the bond state.
+        // The start of the attempt is critical to help identify a bonding/pairing session.
+        metrics::bond_create_attempt(address, device_type.clone());
 
         // BREDR connection won't work when Inquiry is in progress.
         self.cancel_discovery();
 
-        self.intf.lock().unwrap().create_bond(&address, transport) == 0
+        let status = self.intf.lock().unwrap().create_bond(&address, transport);
+
+        if status != 0 {
+            metrics::bond_state_changed(
+                address,
+                device_type,
+                BtStatus::from(status as u32),
+                BtBondState::NotBonded,
+                0,
+            );
+            return false;
+        }
+        return true;
     }
 
     fn cancel_bond_process(&self, device: BluetoothDevice) -> bool {
