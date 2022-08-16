@@ -71,18 +71,16 @@ enum {
   BTA_DM_SEARCH_CMPL_EVT,
   BTA_DM_DISCOVERY_RESULT_EVT,
   BTA_DM_DISC_CLOSE_TOUT_EVT,
-  BTA_DM_API_QUEUE_SEARCH_EVT,
-  BTA_DM_API_QUEUE_DISCOVER_EVT
 };
 
-/* data type for BTA_DM_API_SEARCH_EVT and BTA_DM_API_QUEUE_SEARCH_EVT */
+/* data type for BTA_DM_API_SEARCH_EVT */
 typedef struct {
   BT_HDR_RIGID hdr;
   tBTA_SERVICE_MASK services;
   tBTA_DM_SEARCH_CBACK* p_cback;
 } tBTA_DM_API_SEARCH;
 
-/* data type for BTA_DM_API_DISCOVER_EVT and BTA_DM_API_QUEUE_DISCOVER_EVT */
+/* data type for BTA_DM_API_DISCOVER_EVT */
 typedef struct {
   BT_HDR_RIGID hdr;
   RawAddress bd_addr;
@@ -544,6 +542,8 @@ extern tBTA_DM_PEER_DEVICE* bta_dm_find_peer_device(
     const RawAddress& peer_addr);
 
 extern void bta_dm_clear_event_filter(void);
+
+extern void bta_dm_ble_reset_id(void);
 
 uint8_t bta_dm_search_get_state();
 void bta_dm_search_set_state(uint8_t state);

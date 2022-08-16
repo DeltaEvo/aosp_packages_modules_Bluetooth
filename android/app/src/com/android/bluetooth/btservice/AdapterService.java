@@ -148,13 +148,14 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.function.Predicate;
@@ -282,8 +283,7 @@ public class AdapterService extends Service {
     private boolean mQuietmode = false;
     private HashMap<String, CallerInfo> mBondAttemptCallerInfo = new HashMap<>();
 
-    private final Map<UUID, RfcommListenerData> mBluetoothServerSockets =
-            Collections.synchronizedMap(new HashMap<>());
+    private final Map<UUID, RfcommListenerData> mBluetoothServerSockets = new ConcurrentHashMap<>();
     private final Executor mSocketServersExecutor = r -> new Thread(r).start();
 
     private AlarmManager mAlarmManager;
@@ -496,7 +496,7 @@ public class AdapterService extends Service {
                 PackageManager.FEATURE_LEANBACK_ONLY);
         mUserManager = getSystemService(UserManager.class);
         initNative(mUserManager.isGuestUser(), isCommonCriteriaMode(), configCompareResult,
-                getInitFlags(), isAtvDevice);
+                getInitFlags(), isAtvDevice, getApplicationInfo().dataDir);
         mNativeAvailable = true;
         mCallbacks = new RemoteCallbackList<IBluetoothCallback>();
         mAppOps = getSystemService(AppOpsManager.class);
@@ -1491,11 +1491,11 @@ public class AdapterService extends Service {
     }
 
     private void stopRfcommServerSockets() {
-        synchronized (mBluetoothServerSockets) {
-            mBluetoothServerSockets.forEach((key, value) -> {
-                mBluetoothServerSockets.remove(key);
-                value.closeServerAndPendingSockets(mHandler);
-            });
+        Iterator<Map.Entry<UUID, RfcommListenerData>> socketsIterator =
+                mBluetoothServerSockets.entrySet().iterator();
+        while (socketsIterator.hasNext()) {
+            socketsIterator.next().getValue().closeServerAndPendingSockets(mHandler);
+            socketsIterator.remove();
         }
     }
 
@@ -2691,7 +2691,7 @@ public class AdapterService extends Service {
 
             ParcelUuid[] parcels = service.getRemoteUuids(device);
             if (parcels == null) {
-                parcels = new ParcelUuid[0];
+                return null;
             }
             return Arrays.asList(parcels);
         }
@@ -3679,9 +3679,17 @@ public class AdapterService extends Service {
                 receiver.propagateException(e);
             }
         }
+        @RequiresPermission(allOf = {
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+        })
         private boolean allowLowLatencyAudio(boolean allowed, BluetoothDevice device) {
             AdapterService service = getService();
-            if (service == null) {
+            if (service == null
+                    || !Utils.checkCallerIsSystemOrActiveUser(TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(
+                            service, Utils.getCallingAttributionSource(service),
+                                "AdapterService allowLowLatencyAudio")) {
                 return false;
             }
             enforceBluetoothPrivilegedPermission(service);
@@ -3697,12 +3705,24 @@ public class AdapterService extends Service {
                 receiver.propagateException(e);
             }
         }
-        public int startRfcommListener(
+        @RequiresPermission(allOf = {
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+        })
+        private int startRfcommListener(
                 String name,
                 ParcelUuid uuid,
                 PendingIntent pendingIntent,
                 AttributionSource attributionSource) {
-            return mService.startRfcommListener(name, uuid, pendingIntent, attributionSource);
+            AdapterService service = getService();
+            if (service == null
+                    || !Utils.checkCallerIsSystemOrActiveUser(TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(
+                            service, attributionSource, "AdapterService startRfcommListener")) {
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            return service.startRfcommListener(name, uuid, pendingIntent, attributionSource);
         }
 
         @Override
@@ -3714,8 +3734,20 @@ public class AdapterService extends Service {
                 receiver.propagateException(e);
             }
         }
-        public int stopRfcommListener(ParcelUuid uuid, AttributionSource attributionSource) {
-            return mService.stopRfcommListener(uuid, attributionSource);
+        @RequiresPermission(allOf = {
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+        })
+        private int stopRfcommListener(ParcelUuid uuid, AttributionSource attributionSource) {
+            AdapterService service = getService();
+            if (service == null
+                    || !Utils.checkCallerIsSystemOrActiveUser(TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(
+                            service, attributionSource, "AdapterService stopRfcommListener")) {
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            return service.stopRfcommListener(uuid, attributionSource);
         }
 
         @Override
@@ -3727,9 +3759,22 @@ public class AdapterService extends Service {
                 receiver.propagateException(e);
             }
         }
-        public IncomingRfcommSocketInfo retrievePendingSocketForServiceRecord(
+        @RequiresPermission(allOf = {
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+        })
+        private IncomingRfcommSocketInfo retrievePendingSocketForServiceRecord(
                 ParcelUuid uuid, AttributionSource attributionSource) {
-            return mService.retrievePendingSocketForServiceRecord(uuid, attributionSource);
+            AdapterService service = getService();
+            if (service == null
+                    || !Utils.checkCallerIsSystemOrActiveUser(TAG)
+                    || !Utils.checkConnectPermissionForDataDelivery(
+                            service, attributionSource,
+                            "AdapterService retrievePendingSocketForServiceRecord")) {
+                return null;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            return service.retrievePendingSocketForServiceRecord(uuid, attributionSource);
         }
 
         @Override
@@ -5087,7 +5132,8 @@ public class AdapterService extends Service {
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, GD_LINK_POLICY_FLAG, false)) {
             initFlags.add(String.format("%s=%s", GD_LINK_POLICY_FLAG, "true"));
         }
-        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, GATT_ROBUST_CACHING_FLAG, true)) {
+        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
+                GATT_ROBUST_CACHING_FLAG, false)) {
             initFlags.add(String.format("%s=%s", GATT_ROBUST_CACHING_FLAG, "true"));
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
@@ -5409,7 +5455,8 @@ public class AdapterService extends Service {
     static native void classInitNative();
 
     native boolean initNative(boolean startRestricted, boolean isCommonCriteriaMode,
-            int configCompareResult, String[] initFlags, boolean isAtvDevice);
+            int configCompareResult, String[] initFlags, boolean isAtvDevice,
+            String userDataDirectory);
 
     native void cleanupNative();
 

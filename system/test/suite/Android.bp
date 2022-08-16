@@ -92,6 +92,7 @@ cc_defaults {
         "liblc3",
         "libosi",
         "libstatslog_bt",
+        "libc++fs",
     ],
     header_libs: [
         "libhardware_headers",
@@ -109,7 +110,10 @@ cc_defaults {
 cc_test {
     name: "net_test_bluetooth",
     test_suites: ["device-tests"],
-    defaults: ["net_test_defaults"],
+    defaults: [
+        "net_test_defaults",
+        "mts_defaults",
+    ],
     srcs: [
         "adapter/adapter_unittest.cc",
         "gatt/gatt_test.cc",

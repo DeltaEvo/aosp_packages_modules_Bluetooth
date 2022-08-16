@@ -113,6 +113,7 @@ cc_binary {
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-utils",
+        "libc++fs",
         "libchrome",
         "libflatbuffers-cpp",
         "libFraunhoferAAC",
@@ -156,7 +157,10 @@ cc_binary {
 cc_test {
     name: "bluetoothtbd_test",
     test_suites: ["device-tests"],
-    defaults: ["fluoride_service_defaults"],
+    defaults: [
+        "fluoride_service_defaults",
+        "mts_defaults",
+    ],
     srcs: btserviceBaseTestSrc +
         btserviceDaemonSrc + [
             "test/main.cc",
@@ -190,6 +194,7 @@ cc_test {
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-utils",
+        "libc++fs",
         "libchrome",
         "libgmock",
         "liblog",

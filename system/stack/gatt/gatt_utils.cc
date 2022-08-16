@@ -21,14 +21,16 @@
  *  this file contains GATT utility functions
  *
  ******************************************************************************/
+#define LOG_TAG "gatt_utils"
+
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 
 #include <cstdint>
 
 #include "bt_target.h"  // Must be first to define build configuration
-#include "main/shim/shim.h"
 #include "osi/include/allocator.h"
+#include "osi/include/log.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/eatt/eatt.h"
 #include "stack/gatt/connection_manager.h"
@@ -257,7 +259,7 @@ bool gatt_find_the_connected_bda(uint8_t start_idx, RawAddress& bda,
                                  tBT_TRANSPORT* p_transport) {
   uint8_t i;
   bool found = false;
-  VLOG(1) << __func__ << " start_idx=" << +start_idx;
+  LOG_DEBUG("start_idx=%d", +start_idx);
 
   for (i = start_idx; i < GATT_MAX_PHY_CHANNEL; i++) {
     if (gatt_cb.tcb[i].in_use && gatt_cb.tcb[i].ch_state == GATT_CH_OPEN) {
@@ -265,11 +267,11 @@ bool gatt_find_the_connected_bda(uint8_t start_idx, RawAddress& bda,
       *p_found_idx = i;
       *p_transport = gatt_cb.tcb[i].transport;
       found = true;
-      VLOG(1) << " bda :" << bda;
+      LOG_DEBUG("bda: %s", bda.ToString().c_str());
       break;
     }
   }
-  VLOG(1) << StringPrintf(" found=%d found_idx=%d", found, i);
+  LOG_DEBUG("found=%d found_idx=%d", found, +i);
   return found;
 }
 
@@ -409,7 +411,7 @@ tGATT_TCB* gatt_get_tcb_by_idx(uint8_t tcb_idx) {
  ******************************************************************************/
 tGATT_TCB* gatt_find_tcb_by_addr(const RawAddress& bda,
                                  tBT_TRANSPORT transport) {
-  tGATT_TCB* p_tcb = NULL;
+  tGATT_TCB* p_tcb = nullptr;
   uint8_t i = 0;
 
   i = gatt_find_i_tcb_by_addr(bda, transport);
@@ -1395,7 +1397,12 @@ void gatt_sr_update_prep_cnt(tGATT_TCB& tcb, tGATT_IF gatt_if, bool is_inc,
 /** Cancel LE Create Connection request */
 bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, BT_TRANSPORT_LE);
-  if (!p_tcb) return true;
+  if (!p_tcb) {
+    LOG_WARN(
+        "Unable to cancel open for unknown connection gatt_if:%hhu peer:%s",
+        gatt_if, PRIVATE_ADDRESS(bda));
+    return true;
+  }
 
   if (gatt_get_ch_state(p_tcb) == GATT_CH_OPEN) {
     LOG(ERROR) << __func__ << ": link connected Too late to cancel";
@@ -1404,9 +1411,21 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
 
   gatt_update_app_use_link_flag(gatt_if, p_tcb, false, false);
 
-  if (p_tcb->app_hold_link.empty()) gatt_disconnect(p_tcb);
+  if (p_tcb->app_hold_link.empty()) {
+    LOG_DEBUG(
+        "Client reference count is zero disconnecting device gatt_if:%hhu "
+        "peer:%s",
+        gatt_if, PRIVATE_ADDRESS(bda));
+    gatt_disconnect(p_tcb);
+  }
 
-  connection_manager::direct_connect_remove(gatt_if, bda);
+  if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
+    BTM_AcceptlistRemove(bda);
+    LOG_INFO(
+        "GATT connection manager has no record but removed filter acceptlist "
+        "gatt_if:%hhu peer:%s",
+        gatt_if, PRIVATE_ADDRESS(bda));
+  }
   return true;
 }
 
@@ -1548,7 +1567,13 @@ void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
   VLOG(1) << __func__;
 
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, transport);
-  if (!p_tcb) return;
+  if (!p_tcb) {
+    LOG_ERROR(
+        "Disconnect for unknown connection bd_addr:%s reason:%s transport:%s",
+        PRIVATE_ADDRESS(bda), gatt_disconnection_reason_text(reason).c_str(),
+        bt_transport_text(transport).c_str());
+    return;
+  }
 
   gatt_set_ch_state(p_tcb, GATT_CH_CLOSE);
   for (uint8_t i = 0; i < GATT_CL_MAX_LCB; i++) {

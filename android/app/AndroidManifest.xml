@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.android.bluetooth.services"
+  package="com.android.bluetooth"
   android:sharedUserId="android.uid.bluetooth">
 
     <!-- Allows access to the Bluetooth Share Manager -->
@@ -29,7 +29,6 @@
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED"/>
     <uses-permission android:name="android.permission.BLUETOOTH_MAP"/>
     <uses-permission android:name="android.permission.CONTROL_INCALL_EXPERIENCE" />
-    <uses-permission android:name="android.permission.DUMP"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
@@ -54,7 +53,6 @@
     <uses-permission android:name="android.permission.NETWORK_FACTORY"/>
     <uses-permission android:name="android.permission.TETHER_PRIVILEGED"/>
     <uses-permission android:name="android.permission.MODIFY_PHONE_STATE"/>
-    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL"/>
     <uses-permission android:name="android.permission.BLUETOOTH_STACK"/>
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS"/>
     <uses-permission android:name="android.permission.MANAGE_USERS"/>
@@ -519,12 +517,9 @@
                 <action android:name="android.bluetooth.IBluetoothPbapClient"/>
             </intent-filter>
         </service>
-        <!--  Note: This service doesn't get started, it just indicates to the Authentication
-              framework that we can create accounts of a specific type. As such, its safe to
-              have as enabled on all targets and not just the ones that use PBAP Client  -->
         <service android:process="@string/process"
              android:name="com.android.bluetooth.pbapclient.AuthenticationService"
-             android:enabled="true"
+             android:enabled="false"
              android:exported="true">
             <intent-filter>
                 <action android:name="android.accounts.AccountAuthenticator"/>
