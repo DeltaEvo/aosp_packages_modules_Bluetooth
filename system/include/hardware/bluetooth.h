@@ -605,7 +605,8 @@ typedef struct {
    */
   int (*init)(bt_callbacks_t* callbacks, bool guest_mode,
               bool is_common_criteria_mode, int config_compare_result,
-              const char** init_flags, bool is_atv);
+              const char** init_flags, bool is_atv,
+              const char* user_data_directory);
 
   /** Enable Bluetooth. */
   int (*enable)();
@@ -832,6 +833,20 @@ typedef struct {
    *
    */
   int (*restore_filter_accept_list)();
+
+  /**
+   *
+   * Allow the device to be woken by HID devices
+   *
+   */
+  int (*allow_wake_by_hid)();
+
+  /**
+   *
+   * Tell the controller to allow all devices
+   *
+   */
+  int (*set_event_filter_connection_setup_all_devices)();
 } bt_interface_t;
 
 #define BLUETOOTH_INTERFACE_STRING "bluetoothInterface"

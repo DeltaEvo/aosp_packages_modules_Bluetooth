@@ -963,7 +963,8 @@ impl BluetoothInterface {
             is_common_criteria_mode,
             config_compare_result,
             flags,
-            is_atv
+            is_atv,
+            std::ptr::null()
         );
 
         self.is_init = init == 0;
@@ -1096,6 +1097,10 @@ impl BluetoothInterface {
         ccall!(self, disconnect_all_acls)
     }
 
+    pub fn allow_wake_by_hid(&self) -> i32 {
+        ccall!(self, allow_wake_by_hid)
+    }
+
     pub fn le_rand(&self) -> i32 {
         ccall!(self, le_rand)
     }
@@ -1110,6 +1115,10 @@ impl BluetoothInterface {
 
     pub fn set_event_filter_inquiry_result_all_devices(&self) -> i32 {
         ccall!(self, set_event_filter_inquiry_result_all_devices)
+    }
+
+    pub fn set_event_filter_connection_setup_all_devices(&self) -> i32 {
+        ccall!(self, set_event_filter_connection_setup_all_devices)
     }
 
     pub(crate) fn get_profile_interface(
