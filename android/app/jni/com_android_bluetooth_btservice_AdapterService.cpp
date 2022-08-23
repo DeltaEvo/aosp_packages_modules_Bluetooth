@@ -36,9 +36,6 @@
 #include <pthread.h>
 
 using bluetooth::Uuid;
-#ifndef DYNAMIC_LOAD_BLUETOOTH
-extern bt_interface_t bluetoothInterface;
-#endif
 
 namespace android {
 // Both
@@ -884,10 +881,6 @@ static bt_os_callouts_t sBluetoothOsCallouts = {
 };
 
 int hal_util_load_bt_library(const bt_interface_t** interface) {
-#ifndef DYNAMIC_LOAD_BLUETOOTH
-  *interface = &bluetoothInterface;
-  return 0;
-#else
   const char* sym = BLUETOOTH_INTERFACE_STRING;
   bt_interface_t* itf = nullptr;
 
@@ -917,7 +910,6 @@ error:
   if (handle) dlclose(handle);
 
   return -EINVAL;
-#endif
 }
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -991,8 +983,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
 static bool initNative(JNIEnv* env, jobject obj, jboolean isGuest,
                        jboolean isCommonCriteriaMode, int configCompareResult,
-                       jobjectArray initFlags, jboolean isAtvDevice,
-                       jstring userDataDirectory) {
+                       jobjectArray initFlags, jboolean isAtvDevice) {
   ALOGV("%s", __func__);
 
   android_bluetooth_UidTraffic.clazz =
@@ -1019,15 +1010,10 @@ static bool initNative(JNIEnv* env, jobject obj, jboolean isGuest,
     flags[i] = env->GetStringUTFChars(flagObjs[i], NULL);
   }
 
-  const char* user_data_directory =
-      env->GetStringUTFChars(userDataDirectory, NULL);
-
   int ret = sBluetoothInterface->init(
       &sBluetoothCallbacks, isGuest == JNI_TRUE ? 1 : 0,
       isCommonCriteriaMode == JNI_TRUE ? 1 : 0, configCompareResult, flags,
-      isAtvDevice == JNI_TRUE ? 1 : 0, user_data_directory);
-
-  env->ReleaseStringUTFChars(userDataDirectory, user_data_directory);
+      isAtvDevice == JNI_TRUE ? 1 : 0);
 
   for (int i = 0; i < flagCount; i++) {
     env->ReleaseStringUTFChars(flagObjs[i], flags[i]);
@@ -1818,8 +1804,7 @@ static jboolean allowLowLatencyAudioNative(JNIEnv* env, jobject obj,
 static JNINativeMethod sMethods[] = {
     /* name, signature, funcPtr */
     {"classInitNative", "()V", (void*)classInitNative},
-    {"initNative", "(ZZI[Ljava/lang/String;ZLjava/lang/String;)Z",
-     (void*)initNative},
+    {"initNative", "(ZZI[Ljava/lang/String;Z)Z", (void*)initNative},
     {"cleanupNative", "()V", (void*)cleanupNative},
     {"enableNative", "()Z", (void*)enableNative},
     {"disableNative", "()Z", (void*)disableNative},

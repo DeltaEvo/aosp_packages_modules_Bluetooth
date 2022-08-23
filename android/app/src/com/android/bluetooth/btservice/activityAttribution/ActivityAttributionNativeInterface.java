@@ -25,8 +25,6 @@ import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
 
-import java.util.Arrays;
-
 /** ActivityAttribution Native Interface to/from JNI. */
 public class ActivityAttributionNativeInterface {
     private static final boolean DBG = false;
@@ -75,7 +73,7 @@ public class ActivityAttributionNativeInterface {
     }
 
     private void onActivityLogsReady(byte[] logs) {
-        Log.i(TAG, "onActivityLogsReady() BTAA: " + Arrays.toString(logs));
+        Log.i(TAG, "onActivityLogsReady() BTAA: " + logs);
     }
 
     // Native methods that call into the JNI interface

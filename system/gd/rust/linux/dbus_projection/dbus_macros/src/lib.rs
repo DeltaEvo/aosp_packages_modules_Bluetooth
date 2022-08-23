@@ -962,16 +962,7 @@ pub fn generate_dbus_arg(_item: TokenStream) -> TokenStream {
                 let mut val = iter.next();
                 while !key.is_none() && !val.is_none() {
                     let k = key.unwrap().as_str().unwrap().to_string();
-                    let val_clone = val.unwrap().box_clone();
-                    let v = dbus::arg::Variant(
-                        val_clone
-                            .as_static_inner(0)
-                            .ok_or(Box::new(DBusArgError::new(String::from(format!(
-                                "{}.{} is not a variant",
-                                name, k
-                            )))))?
-                            .box_clone(),
-                    );
+                    let v = dbus::arg::Variant(val.unwrap().box_clone());
                     map.insert(k, v);
                     key = iter.next();
                     val = iter.next();
@@ -1219,9 +1210,9 @@ pub fn generate_dbus_arg(_item: TokenStream) -> TokenStream {
                     )?;
                     let v = V::from_dbus(
                         val,
-                        conn.clone(),
-                        remote.clone(),
-                        disconnect_watcher.clone()
+                        conn,
+                        remote,
+                        disconnect_watcher
                     )?;
                     map.insert(k, v);
                 }

@@ -40,13 +40,6 @@ const char* PTS_CONNECT_EATT_UNENCRYPTED = "PTS_ConnectEattUnencrypted";
 const char* PTS_BROADCAST_UNENCRYPTED = "PTS_BroadcastUnencrypted";
 const char* PTS_EATT_PERIPHERAL_COLLISION_SUPPORT =
     "PTS_EattPeripheralCollionSupport";
-const char* PTS_EATT_USE_FOR_ALL_SERVICES = "PTS_UseEattForAllServices";
-const char* PTS_L2CAP_ECOC_UPPER_TESTER = "PTS_L2capEcocUpperTester";
-const char* PTS_L2CAP_ECOC_MIN_KEY_SIZE = "PTS_L2capEcocMinKeySize";
-const char* PTS_L2CAP_ECOC_INITIAL_CHAN_CNT = "PTS_L2capEcocInitialChanCnt";
-const char* PTS_L2CAP_ECOC_CONNECT_REMAINING = "PTS_L2capEcocConnectRemaining";
-const char* PTS_L2CAP_ECOC_SEND_NUM_OF_SDU = "PTS_L2capEcocSendNumOfSdu";
-const char* PTS_L2CAP_ECOC_RECONFIGURE = "PTS_L2capEcocReconfigure";
 
 static std::unique_ptr<config_t> config;
 }  // namespace
@@ -60,7 +53,7 @@ static future_t* init() {
 #elif defined(OS_GENERIC)
   const char* path = "bt_stack.conf";
 #else  // !defined(OS_GENERIC)
-  const char* path = "/apex/com.android.btservices/etc/bluetooth/bt_stack.conf";
+  const char* path = "/etc/bluetooth/bt_stack.conf";
 #endif  // defined(OS_GENERIC)
   CHECK(path != NULL);
 
@@ -149,41 +142,6 @@ static bool get_pts_eatt_peripheral_collision_support(void) {
                          PTS_EATT_PERIPHERAL_COLLISION_SUPPORT, false);
 }
 
-static bool get_pts_use_eatt_for_all_services(void) {
-  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
-                         PTS_EATT_USE_FOR_ALL_SERVICES, false);
-}
-
-static bool get_pts_l2cap_ecoc_upper_tester(void) {
-  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
-                         PTS_L2CAP_ECOC_UPPER_TESTER, false);
-}
-
-static int get_pts_l2cap_ecoc_min_key_size(void) {
-  return config_get_int(*config, CONFIG_DEFAULT_SECTION,
-                        PTS_L2CAP_ECOC_MIN_KEY_SIZE, -1);
-}
-
-static int get_pts_l2cap_ecoc_initial_chan_cnt(void) {
-  return config_get_int(*config, CONFIG_DEFAULT_SECTION,
-                        PTS_L2CAP_ECOC_INITIAL_CHAN_CNT, -1);
-}
-
-static bool get_pts_l2cap_ecoc_connect_remaining(void) {
-  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
-                         PTS_L2CAP_ECOC_CONNECT_REMAINING, false);
-}
-
-static int get_pts_l2cap_ecoc_send_num_of_sdu(void) {
-  return config_get_int(*config, CONFIG_DEFAULT_SECTION,
-                        PTS_L2CAP_ECOC_SEND_NUM_OF_SDU, -1);
-}
-
-static bool get_pts_l2cap_ecoc_reconfigure(void) {
-  return config_get_bool(*config, CONFIG_DEFAULT_SECTION,
-                         PTS_L2CAP_ECOC_RECONFIGURE, false);
-}
-
 static config_t* get_all(void) { return config.get(); }
 
 const stack_config_t interface = {get_trace_config_enabled,
@@ -198,13 +156,6 @@ const stack_config_t interface = {get_trace_config_enabled,
                                   get_pts_connect_eatt_before_encryption,
                                   get_pts_unencrypt_broadcast,
                                   get_pts_eatt_peripheral_collision_support,
-                                  get_pts_use_eatt_for_all_services,
-                                  get_pts_l2cap_ecoc_upper_tester,
-                                  get_pts_l2cap_ecoc_min_key_size,
-                                  get_pts_l2cap_ecoc_initial_chan_cnt,
-                                  get_pts_l2cap_ecoc_connect_remaining,
-                                  get_pts_l2cap_ecoc_send_num_of_sdu,
-                                  get_pts_l2cap_ecoc_reconfigure,
                                   get_all};
 
 const stack_config_t* stack_config_get_interface(void) { return &interface; }

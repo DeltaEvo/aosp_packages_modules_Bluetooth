@@ -14,16 +14,14 @@ use bt_topshim::{
 
 use btif_macros::{btif_callback, btif_callbacks_dispatcher};
 
-use log::{debug, error, warn};
+use log::{debug, warn};
 use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot::Sender as OneShotSender;
 use tokio::task::JoinHandle;
 use tokio::time;
 
@@ -39,10 +37,6 @@ const MIN_ADV_INSTANCES_FOR_MULTI_ADV: u8 = 5;
 /// if they haven't already bonded or connected. Once this duration expires, the
 /// clear event should be sent to clients.
 const FOUND_DEVICE_FRESHNESS: Duration = Duration::from_secs(30);
-
-/// This is the value returned from Bluetooth Interface calls.
-// TODO(241930383): Add enum to topshim
-const BTM_SUCCESS: i32 = 0;
 
 /// Defines the adapter API.
 pub trait IBluetooth {
@@ -324,8 +318,6 @@ pub struct Bluetooth {
     uuid_helper: UuidHelper,
     /// Used to delay connection until we have SDP results.
     wait_to_connect: bool,
-    // Internal API members
-    internal_le_rand_queue: VecDeque<OneShotSender<u64>>,
 }
 
 impl Bluetooth {
@@ -358,8 +350,6 @@ impl Bluetooth {
             tx,
             uuid_helper: UuidHelper::new(),
             wait_to_connect: false,
-            // Internal API members
-            internal_le_rand_queue: VecDeque::<OneShotSender<u64>>::new(),
         }
     }
 
@@ -518,19 +508,6 @@ impl Bluetooth {
             }));
         }
     }
-
-    /// Makes an LE_RAND call to the Bluetooth interface.  This call is asynchronous, and uses an
-    /// asynchronous callback, but is synchonized on a |OneShotSender|
-    /// If generating a random isn't successful, a 0 will be sent to the callback.
-    pub fn le_rand(&mut self, promise: OneShotSender<u64>) {
-        if self.intf.lock().unwrap().le_rand() != BTM_SUCCESS {
-            debug!("Call to BTIF failed.");
-            // Send 0 to caller indicating failure to generate a RANDOM
-            let _ = promise.send(0);
-        } else {
-            self.internal_le_rand_queue.push_back(promise);
-        }
-    }
 }
 
 #[btif_callbacks_dispatcher(Bluetooth, dispatch_base_callbacks, BaseCallbacks)]
@@ -589,9 +566,6 @@ pub(crate) trait BtifBluetoothCallbacks {
         link_type: BtTransport,
         hci_reason: BtHciErrorCode,
     );
-
-    #[btif_callback(LeRandCallback)]
-    fn le_rand_cb(&mut self, random: u64);
 }
 
 #[btif_callbacks_dispatcher(Bluetooth, dispatch_sdp_callbacks, SdpCallbacks)]
@@ -938,14 +912,6 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 }
             }
             None => (),
-        };
-    }
-
-    fn le_rand_cb(&mut self, random: u64) {
-        debug!("Random: {:?}", random);
-        let _ = match self.internal_le_rand_queue.pop_back() {
-            Some(promise) => promise.send(random),
-            None => Ok(error!("LE Rand callback received but no sender available!")),
         };
     }
 }

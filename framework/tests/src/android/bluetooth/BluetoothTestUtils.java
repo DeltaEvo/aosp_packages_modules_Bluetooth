@@ -592,8 +592,7 @@ public class BluetoothTestUtils extends Assert {
 
         final IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
         mContext.registerReceiver(receiver, filter);
-        assertEquals(adapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE),
-                BluetoothStatusCodes.SUCCESS);
+        assertTrue(adapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE));
         boolean success = false;
         try {
             success = completionSemaphore.tryAcquire(DISCOVERABLE_UNDISCOVERABLE_TIMEOUT,
@@ -643,8 +642,7 @@ public class BluetoothTestUtils extends Assert {
 
         final IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
         mContext.registerReceiver(receiver, filter);
-        assertEquals(adapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE),
-                BluetoothStatusCodes.SUCCESS);
+        assertTrue(adapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE));
         boolean success = false;
         try {
             success = completionSemaphore.tryAcquire(DISCOVERABLE_UNDISCOVERABLE_TIMEOUT,

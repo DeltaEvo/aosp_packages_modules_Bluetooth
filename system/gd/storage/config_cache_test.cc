@@ -275,108 +275,32 @@ TEST(ConfigCacheTest, persistent_config_changed_callback_test) {
   ASSERT_EQ(num_change, 4);
 }
 
-TEST(ConfigCacheTest, fix_device_type_inconsistency_missing_devtype_no_keys_test) {
+TEST(ConfigCacheTest, fix_device_type_inconsistency_test) {
   ConfigCache config(100, Device::kLinkKeyProperties);
   config.SetProperty("A", "B", "C");
   config.SetProperty("AA:BB:CC:DD:EE:FF", "B", "C");
   config.SetProperty("AA:BB:CC:DD:EE:FF", "C", "D");
-
-  auto hadInconsistencies = config.FixDeviceTypeInconsistencies();
-
-  ASSERT_TRUE(hadInconsistencies);
+  ASSERT_TRUE(config.FixDeviceTypeInconsistencies());
   ASSERT_THAT(
       config.GetProperty("AA:BB:CC:DD:EE:FF", "DevType"),
       Optional(StrEq(std::to_string(bluetooth::hci::DeviceType::BR_EDR))));
-}
-
-TEST(ConfigCacheTest, fix_device_type_inconsistency_consistent_devtype_test) {
-  // arrange
-  ConfigCache config(100, Device::kLinkKeyProperties);
-  config.SetProperty("A", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "C", "D");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "DevType", std::to_string(bluetooth::hci::DeviceType::BR_EDR));
-
   config.SetProperty("CC:DD:EE:FF:00:11", "B", "AABBAABBCCDDEE");
   config.SetProperty("CC:DD:EE:FF:00:11", "DevType", std::to_string(bluetooth::hci::DeviceType::BR_EDR));
   config.SetProperty("CC:DD:EE:FF:00:11", "LinkKey", "AABBAABBCCDDEE");
-
-  // act
-  auto hadInconsistencies = config.FixDeviceTypeInconsistencies();
-
-  // assert
-  ASSERT_FALSE(hadInconsistencies);
+  ASSERT_FALSE(config.FixDeviceTypeInconsistencies());
   ASSERT_THAT(
       config.GetProperty("CC:DD:EE:FF:00:11", "DevType"),
       Optional(StrEq(std::to_string(bluetooth::hci::DeviceType::BR_EDR))));
-}
-
-TEST(ConfigCacheTest, fix_device_type_inconsistency_devtype_should_be_dual_test) {
-  // arrange
-  ConfigCache config(100, Device::kLinkKeyProperties);
-  config.SetProperty("A", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "C", "D");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "DevType", std::to_string(bluetooth::hci::DeviceType::BR_EDR));
-
-  config.SetProperty("CC:DD:EE:FF:00:11", "B", "AABBAABBCCDDEE");
-  config.SetProperty("CC:DD:EE:FF:00:11", "DevType", std::to_string(bluetooth::hci::DeviceType::BR_EDR));
-  config.SetProperty("CC:DD:EE:FF:00:11", "LinkKey", "AABBAABBCCDDEE");
   config.SetProperty("CC:DD:EE:FF:00:11", "LE_KEY_PENC", "AABBAABBCCDDEE");
-
-  // act
-  auto hadInconsistencies = config.FixDeviceTypeInconsistencies();
-
-  // assert
-  ASSERT_TRUE(hadInconsistencies);
+  ASSERT_TRUE(config.FixDeviceTypeInconsistencies());
   ASSERT_THAT(
       config.GetProperty("CC:DD:EE:FF:00:11", "DevType"),
       Optional(StrEq(std::to_string(bluetooth::hci::DeviceType::DUAL))));
-}
-
-TEST(ConfigCacheTest, fix_device_type_inconsistency_devtype_should_be_le_not_classic_test) {
-  // arrange
-  ConfigCache config(100, Device::kLinkKeyProperties);
-  config.SetProperty("A", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "C", "D");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "DevType", std::to_string(bluetooth::hci::DeviceType::BR_EDR));
-
-  config.SetProperty("CC:DD:EE:FF:00:11", "B", "AABBAABBCCDDEE");
-  config.SetProperty("CC:DD:EE:FF:00:11", "DevType", std::to_string(bluetooth::hci::DeviceType::BR_EDR));
-  config.SetProperty("CC:DD:EE:FF:00:11", "LE_KEY_PENC", "AABBAABBCCDDEE");
-
-  // act
-  auto hadInconsistencies = config.FixDeviceTypeInconsistencies();
-
-  // assert
-  ASSERT_TRUE(hadInconsistencies);
+  config.RemoveProperty("CC:DD:EE:FF:00:11", "LinkKey");
+  ASSERT_TRUE(config.FixDeviceTypeInconsistencies());
   ASSERT_THAT(
       config.GetProperty("CC:DD:EE:FF:00:11", "DevType"),
       Optional(StrEq(std::to_string(bluetooth::hci::DeviceType::LE))));
-}
-
-TEST(ConfigCacheTest, fix_device_type_inconsistency_devtype_dont_override_dual_test) {
-  // arrange
-  ConfigCache config(100, Device::kLinkKeyProperties);
-  config.SetProperty("A", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "B", "C");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "C", "D");
-  config.SetProperty("AA:BB:CC:DD:EE:FF", "DevType", std::to_string(bluetooth::hci::DeviceType::BR_EDR));
-
-  config.SetProperty("CC:DD:EE:FF:00:11", "B", "AABBAABBCCDDEE");
-  config.SetProperty("CC:DD:EE:FF:00:11", "DevType", std::to_string(bluetooth::hci::DeviceType::DUAL));
-  config.SetProperty("CC:DD:EE:FF:00:11", "LinkKey", "AABBAABBCCDDEE");
-  config.SetProperty("CC:DD:EE:FF:00:11", "LE_KEY_PENC", "AABBAABBCCDDEE");
-
-  // act
-  auto hadInconsistencies = config.FixDeviceTypeInconsistencies();
-
-  // assert
-  ASSERT_FALSE(hadInconsistencies);
-  ASSERT_THAT(
-      config.GetProperty("CC:DD:EE:FF:00:11", "DevType"),
-      Optional(StrEq(std::to_string(bluetooth::hci::DeviceType::DUAL))));
 }
 
 TEST(ConfigCacheTest, test_get_section_with_property) {

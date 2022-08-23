@@ -1,7 +1,0 @@
--allowaccessmodification
--keep,allowoptimization,allowaccessmodification class com.android.bluetooth.** { *; }
-
-# Required to support APIs only referenced indirectly via tests.
--keep class android.support.v4.media.MediaMetadataCompat { *; }
--keep class android.support.v4.media.MediaBrowserCompat$MediaItem { *; }
--keep class android.support.v4.media.MediaDescriptionCompat { *; }

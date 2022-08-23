@@ -205,7 +205,7 @@ public class MetricsLogger {
 
     private PendingIntent getDrainIntent() {
         Intent counterMetricsIntent = new Intent(BLUETOOTH_COUNTER_METRICS_ACTION);
-        counterMetricsIntent.setPackage(mContext.getPackageName());
+        counterMetricsIntent.setPackage("com.android.bluetooth");
         return PendingIntent.getBroadcast(
                 mContext, 0, counterMetricsIntent, PendingIntent.FLAG_IMMUTABLE);
     }

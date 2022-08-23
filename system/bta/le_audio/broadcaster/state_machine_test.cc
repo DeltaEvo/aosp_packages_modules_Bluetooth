@@ -72,8 +72,6 @@ class MockBroadcastStatMachineCallbacks
   MOCK_METHOD((void), OnOwnAddressResponse,
               (uint32_t broadcast_id, uint8_t addr_type, RawAddress addr),
               (override));
-  MOCK_METHOD((void), OnBigCreated, (const std::vector<uint16_t>& conn_handle),
-              (override));
 };
 
 class StateMachineTest : public Test {

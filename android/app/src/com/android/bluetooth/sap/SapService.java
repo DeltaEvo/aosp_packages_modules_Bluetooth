@@ -109,7 +109,6 @@ public class SapService extends ProfileService {
 
     public SapService() {
         mState = BluetoothSap.STATE_DISCONNECTED;
-        BluetoothSap.invalidateBluetoothGetConnectionStateCache();
     }
 
     /***
@@ -363,7 +362,6 @@ public class SapService extends ProfileService {
                             break;
                         }
                         mRemoteDevice = mConnSocket.getRemoteDevice();
-                        BluetoothSap.invalidateBluetoothGetConnectionStateCache();
                     }
                     if (mRemoteDevice == null) {
                         Log.i(TAG, "getRemoteDevice() = null");
@@ -527,7 +525,6 @@ public class SapService extends ProfileService {
             }
             int prevState = mState;
             mState = state;
-            BluetoothSap.invalidateBluetoothGetConnectionStateCache();
             Intent intent = new Intent(BluetoothSap.ACTION_CONNECTION_STATE_CHANGED);
             intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
             intent.putExtra(BluetoothProfile.EXTRA_STATE, mState);
@@ -599,8 +596,7 @@ public class SapService extends ProfileService {
 
     public int getConnectionState(BluetoothDevice device) {
         synchronized (this) {
-            if (getState() == BluetoothSap.STATE_CONNECTED && getRemoteDevice() != null
-                    && getRemoteDevice().equals(device)) {
+            if (getState() == BluetoothSap.STATE_CONNECTED && getRemoteDevice().equals(device)) {
                 return BluetoothProfile.STATE_CONNECTED;
             } else {
                 return BluetoothProfile.STATE_DISCONNECTED;
@@ -986,8 +982,8 @@ public class SapService extends ProfileService {
                 boolean defaultValue = false;
                 SapService service = getService(source);
                 if (service != null) {
-                    defaultValue = service.getConnectionState(device)
-                        == BluetoothProfile.STATE_CONNECTED;
+                    defaultValue = service.getState() == BluetoothSap.STATE_CONNECTED
+                            && service.getRemoteDevice().equals(device);
                 }
                 receiver.send(defaultValue);
             } catch (RuntimeException e) {

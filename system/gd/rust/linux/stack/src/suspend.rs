@@ -1,13 +1,11 @@
 //! Suspend/Resume API.
 
-use crate::bluetooth::Bluetooth;
 use crate::callbacks::Callbacks;
-use crate::{bluetooth_gatt::IBluetoothGatt, BluetoothGatt, Message, RPCProxy};
-use bt_topshim::{btif::BluetoothInterface, topstack};
+use crate::{Message, RPCProxy};
+use bt_topshim::btif::BluetoothInterface;
 use log::warn;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot::channel as OneShotChannel;
 
 /// Defines the Suspend/Resume API.
 ///
@@ -30,7 +28,7 @@ pub trait ISuspend {
     ///
     /// Returns a positive number identifying the suspend if it can be started. If there is already
     /// a suspend, that active suspend id is returned.
-    fn suspend(&self, suspend_type: SuspendType);
+    fn suspend(&self, suspend_type: SuspendType) -> u32;
 
     /// Undoes previous suspend preparation identified by `suspend_id`.
     ///
@@ -47,7 +45,7 @@ pub trait ISuspendCallback: RPCProxy {
     fn on_suspend_ready(&self, suspend_id: u32);
 
     /// Triggered when the stack has resumed the previous suspend.
-    fn on_resumed(&self, suspend_id: i32);
+    fn on_resumed(&self, suspend_id: u32);
 }
 
 #[derive(FromPrimitive, ToPrimitive)]
@@ -60,9 +58,7 @@ pub enum SuspendType {
 
 /// Implementation of the suspend API.
 pub struct Suspend {
-    bt: Arc<Mutex<Box<Bluetooth>>>,
     intf: Arc<Mutex<BluetoothInterface>>,
-    gatt: Arc<Mutex<Box<BluetoothGatt>>>,
     tx: Sender<Message>,
     callbacks: Callbacks<dyn ISuspendCallback + Send>,
     is_connected_suspend: bool,
@@ -70,16 +66,9 @@ pub struct Suspend {
 }
 
 impl Suspend {
-    pub fn new(
-        bt: Arc<Mutex<Box<Bluetooth>>>,
-        intf: Arc<Mutex<BluetoothInterface>>,
-        gatt: Arc<Mutex<Box<BluetoothGatt>>>,
-        tx: Sender<Message>,
-    ) -> Suspend {
+    pub fn new(intf: Arc<Mutex<BluetoothInterface>>, tx: Sender<Message>) -> Suspend {
         Self {
-            bt: bt,
             intf: intf,
-            gatt: gatt,
             tx: tx.clone(),
             callbacks: Callbacks::new(tx.clone(), Message::SuspendCallbackDisconnected),
             is_connected_suspend: false,
@@ -115,18 +104,8 @@ impl ISuspend for Suspend {
         self.remove_callback(callback_id)
     }
 
-    fn suspend(&self, suspend_type: SuspendType) {
-        // self.was_a2dp_connected = TODO(230604670): check if A2DP is connected
-        // self.current_advertiser_ids = TODO(224603198): save all advertiser ids
-        self.intf.lock().unwrap().clear_event_mask();
-        self.intf.lock().unwrap().clear_event_filter();
-        self.intf.lock().unwrap().clear_filter_accept_list();
-        // self.gatt.lock().unwrap().advertising_disable(); TODO(224602924): suspend all adv.
-        self.gatt.lock().unwrap().stop_scan(0);
-        self.intf.lock().unwrap().disconnect_all_acls();
-
-        // Handle wakeful cases (Connected/Other)
-        // Treat Other the same as Connected
+    fn suspend(&self, suspend_type: SuspendType) -> u32 {
+        let suspend_id = 1;
         match suspend_type {
             SuspendType::Connected => {
                 // TODO(231345733): API For allowing classic HID only
@@ -137,41 +116,37 @@ impl ISuspend for Suspend {
                 self.intf.lock().unwrap().clear_event_filter();
                 self.intf.lock().unwrap().clear_event_mask();
             }
-            _ => {
-                self.intf.lock().unwrap().allow_wake_by_hid();
+            SuspendType::Other => {
+                // TODO(231438120): Decide what to do about Other suspend type
+                // For now perform disconnected suspend flow
+                self.intf.lock().unwrap().clear_event_filter();
+                self.intf.lock().unwrap().clear_event_mask();
             }
         }
         self.intf.lock().unwrap().clear_filter_accept_list();
-        self.intf.lock().unwrap().disconnect_all_acls();
+        // TODO(231435700): self.intf.lock().unwrap().disconnect_all_acls();
         self.intf.lock().unwrap().le_rand();
-        // Wait on LE Rand before firing callbacks
-        let (p, mut c) = OneShotChannel::<u64>();
-        self.bt.lock().unwrap().le_rand(p);
-        let rt = topstack::get_runtime();
-        rt.block_on(async {
-            let _ = c.try_recv();
-        });
         self.callbacks.for_all_callbacks(|callback| {
-            callback.on_suspend_ready(1 as u32);
+            callback.on_suspend_ready(suspend_id);
         });
+        return 1;
     }
 
     fn resume(&self) -> bool {
+        let suspend_id = 1;
+        self.intf.lock().unwrap().set_event_filter_inquiry_result_all_devices();
         self.intf.lock().unwrap().set_default_event_mask();
-        //        self.intf.lock().unwrap().set_event_filter_inquiry_result_all_devices();
-        //        self.intf.lock().unwrap().set_event_filter_connection_setup_all_devices();
         if self.is_connected_suspend {
             if self.was_a2dp_connected {
                 // TODO(230604670): self.intf.lock().unwrap().restore_filter_accept_list();
-                // TODO(230604670): reconnect to a2dp device
+                // TODO(230604670): reconnect to a2dp device if connected before
             }
             // TODO(224603198): start all advertising again
         }
-
+        self.intf.lock().unwrap().le_rand();
         self.callbacks.for_all_callbacks(|callback| {
-            callback.on_resumed(1);
+            callback.on_resumed(suspend_id);
         });
-
-        true
+        return true;
     }
 }

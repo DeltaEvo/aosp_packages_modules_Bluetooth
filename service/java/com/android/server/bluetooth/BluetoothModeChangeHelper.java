@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.bluetooth;
+package com.android.server;
 
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothA2dp;

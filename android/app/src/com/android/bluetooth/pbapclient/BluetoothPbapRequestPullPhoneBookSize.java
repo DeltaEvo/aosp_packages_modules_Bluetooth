@@ -18,7 +18,7 @@ package com.android.bluetooth.pbapclient;
 
 import android.util.Log;
 
-import com.android.obex.HeaderSet;
+import com.android.bluetooth.obex.HeaderSet;
 
 final class BluetoothPbapRequestPullPhoneBookSize extends BluetoothPbapRequest {
 

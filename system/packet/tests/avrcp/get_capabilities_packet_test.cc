@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <android-base/silent_death_test.h>
 #include <gtest/gtest.h>
 
 #include "avrcp_test_packets.h"
@@ -86,23 +85,13 @@ TEST(GetCapabilityResponseBuilder, duplicateAddTest) {
 }
 
 // Test that trying to to add the wrong type of field to a builder causes death
-TEST(GetCapabilityResponseBuilderDeathTest, mismatchAddDeathTest) {
+TEST(GetCapabilityResponseBuilder, mismatchAddDeathTest) {
   auto builder = GetCapabilitiesResponseBuilder::MakeCompanyIdBuilder(0x000000);
-
-  {
-    // this will silent SIGABRT sent in ASSERT_DEATH below scop
-    ScopedSilentDeath _silentDeath;
-
-    ASSERT_DEATH(builder->AddEvent(Event::PLAYBACK_STATUS_CHANGED),
-                 "capability_ == Capability::EVENTS_SUPPORTED");
-  }
+  ASSERT_DEATH(builder->AddEvent(Event::PLAYBACK_STATUS_CHANGED),
+               "capability_ == Capability::EVENTS_SUPPORTED");
 
   builder = GetCapabilitiesResponseBuilder::MakeEventsSupportedBuilder(
       Event::PLAYBACK_STATUS_CHANGED);
-
-  // this will silent SIGABRT sent in ASSERT_DEATH below
-  ScopedSilentDeath _silentDeath;
-
   ASSERT_DEATH(builder->AddCompanyId(0x000000),
                "capability_ == Capability::COMPANY_ID");
 }

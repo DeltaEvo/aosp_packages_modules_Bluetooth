@@ -28,7 +28,6 @@ import android.graphics.BitmapFactory;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.audio_util.Image;
 
 import org.junit.After;
@@ -40,14 +39,20 @@ import java.io.InputStream;
 
 @RunWith(AndroidJUnit4.class)
 public class AvrcpCoverArtStorageTest {
+    private Context mTargetContext;
     private Resources mTestResources;
 
     private AvrcpCoverArtStorage mAvrcpCoverArtStorage;
 
     @Before
     public void setUp() throws Exception {
-        mTestResources = TestUtils.getTestApplicationResources(
-                InstrumentationRegistry.getTargetContext());
+        mTargetContext = InstrumentationRegistry.getTargetContext();
+        try {
+            mTestResources = mTargetContext.getPackageManager()
+                    .getResourcesForApplication("com.android.bluetooth.tests");
+        } catch (PackageManager.NameNotFoundException e) {
+            assertWithMessage("Setup Failure Unable to get resources" + e.toString()).fail();
+        }
 
         mAvrcpCoverArtStorage = new AvrcpCoverArtStorage(2);
     }
@@ -57,6 +62,7 @@ public class AvrcpCoverArtStorageTest {
         mAvrcpCoverArtStorage.clear();
         mAvrcpCoverArtStorage = null;
         mTestResources = null;
+        mTargetContext = null;
     }
 
     private CoverArt getCoverArt(int resId) {

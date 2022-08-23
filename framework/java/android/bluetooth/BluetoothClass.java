@@ -17,7 +17,6 @@
 package android.bluetooth;
 
 import android.annotation.Nullable;
-import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Build;
 import android.os.Parcel;
@@ -316,26 +315,21 @@ public final class BluetoothClass implements Parcelable {
         return Arrays.copyOfRange(bytes, 1, bytes.length);
     }
 
+    /** @hide */
+    @UnsupportedAppUsage
     public static final int PROFILE_HEADSET = 0;
-
+    /** @hide */
+    @UnsupportedAppUsage
     public static final int PROFILE_A2DP = 1;
-
     /** @hide */
-    @SystemApi
     public static final int PROFILE_OPP = 2;
-
+    /** @hide */
     public static final int PROFILE_HID = 3;
-
     /** @hide */
-    @SystemApi
     public static final int PROFILE_PANU = 4;
-
     /** @hide */
-    @SystemApi
     public static final int PROFILE_NAP = 5;
-
     /** @hide */
-    @SystemApi
     public static final int PROFILE_A2DP_SINK = 6;
 
     /**
@@ -344,9 +338,11 @@ public final class BluetoothClass implements Parcelable {
      * given class bits might support specified profile. It is not accurate for all
      * devices. It tries to err on the side of false positives.
      *
-     * @param profile the profile to be checked
-     * @return whether this device supports specified profile
+     * @param profile The profile to be checked
+     * @return True if this device might support specified profile.
+     * @hide
      */
+    @UnsupportedAppUsage
     public boolean doesClassMatch(int profile) {
         if (profile == PROFILE_A2DP) {
             if (hasService(Service.RENDER)) {

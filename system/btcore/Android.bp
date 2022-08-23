@@ -10,7 +10,7 @@ package {
 
 cc_defaults {
     name: "libbtcore_defaults",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     local_include_dirs: ["include"],
     include_dirs: [
         "packages/modules/Bluetooth/system",
@@ -23,9 +23,13 @@ cc_defaults {
         "src/osi_module.cc",
         "src/property.cc",
     ],
+    shared_libs: [
+        "liblog",
+    ],
     header_libs: ["libbluetooth_headers"],
     host_supported: true,
     apex_available: [
+        "//apex_available:platform",
         "com.android.bluetooth",
     ],
     target: {
@@ -37,12 +41,12 @@ cc_defaults {
 
 cc_library_static {
     name: "libbtcore",
-    visibility:[
-        "//packages/apps/Test/connectivity/sl4n",
-        "//packages/modules/Bluetooth:__subpackages__",
-    ],
     defaults: ["libbtcore_defaults"],
-    min_sdk_version: "Tiramisu"
+}
+
+cc_library_static {
+    name: "libbtcore-static",
+    defaults: ["libbtcore_defaults"],
 }
 
 cc_library_headers {
@@ -64,10 +68,7 @@ cc_library_headers {
 cc_test {
     name: "net_test_btcore",
     test_suites: ["device-tests"],
-    defaults: [
-        "fluoride_defaults",
-        "mts_defaults",
-    ],
+    defaults: ["fluoride_defaults"],
     local_include_dirs: ["include"],
     include_dirs: ["packages/modules/Bluetooth/system"],
     srcs: [
@@ -75,14 +76,12 @@ cc_test {
         "test/property_test.cc",
     ],
     shared_libs: [
-        "android.hardware.bluetooth@1.0",
-        "android.hardware.bluetooth@1.1",
         "liblog",
     ],
     static_libs: [
-        "libosi",
-        "libosi-AllocationTestHarness",
         "libbtcore",
+        "libosi-AllocationTestHarness",
+        "libosi",
     ],
     host_supported: true,
     test_options: {

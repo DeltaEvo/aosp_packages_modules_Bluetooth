@@ -36,6 +36,8 @@ class IPCHandlerBinder : public IPCHandler {
   void Stop() override;
 
  private:
+  IPCHandlerBinder() = default;
+
   // Notify the delegate that IPC has started.
   void NotifyStarted();
 };

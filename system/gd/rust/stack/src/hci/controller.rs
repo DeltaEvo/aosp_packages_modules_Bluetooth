@@ -252,7 +252,6 @@ macro_rules! supported_features {
 
         impl SupportedFeatures {
             fn new(supported: Vec<u64>) -> Self {
-                #[allow(clippy::get_first)]
                 Self {
                     $($id: *supported.get($page).unwrap_or(&0) & (1 << $bit) != 0,)*
                 }

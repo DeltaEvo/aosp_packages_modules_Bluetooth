@@ -15,8 +15,6 @@
 
 package com.android.bluetooth.map;
 
-import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
-
 import android.app.Activity;
 import android.os.Bundle;
 import android.widget.ExpandableListView;
@@ -40,7 +38,6 @@ public class BluetoothMapSettings extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addSystemFlags(SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
         /* set UI */
         setContentView(R.layout.bluetooth_map_settings);
         /* create structure for list of groups + items*/

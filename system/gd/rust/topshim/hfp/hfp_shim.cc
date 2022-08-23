@@ -30,6 +30,7 @@ namespace topshim {
 namespace rust {
 namespace internal {
 static HfpIntf* g_hfpif;
+static bool wbs_supported;
 
 static void connection_state_cb(bluetooth::headset::bthf_connection_state_t state, RawAddress* addr) {
   RustRawAddress raddr = rusty::CopyToRustAddress(*addr);
@@ -103,8 +104,7 @@ class DBusHeadsetCallbacks : public headset::Callbacks {
 
   void WbsCallback(headset::bthf_wbs_config_t wbs, RawAddress* bd_addr) override {
     LOG_INFO("WbsCallback %d from %s", wbs, bd_addr->ToString().c_str());
-    RustRawAddress raddr = rusty::CopyToRustAddress(*bd_addr);
-    rusty::hfp_caps_update_callback(wbs == headset::BTHF_WBS_YES, raddr);
+    internal::wbs_supported = (wbs == headset::BTHF_WBS_YES);
   }
 
   void AtChldCallback([[maybe_unused]] headset::bthf_chld_type_t chld, [[maybe_unused]] RawAddress* bd_addr) override {}
@@ -233,6 +233,10 @@ int HfpIntf::disconnect(RustRawAddress bt_addr) {
 int HfpIntf::disconnect_audio(RustRawAddress bt_addr) {
   RawAddress addr = rusty::CopyFromRustAddress(bt_addr);
   return intf_->DisconnectAudio(&addr);
+}
+
+bool HfpIntf::get_wbs_supported() {
+  return internal::wbs_supported;
 }
 
 void HfpIntf::cleanup() {}

@@ -501,10 +501,10 @@ public class VolumeControlService extends ProfileService {
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public int getConnectionState(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_CONNECT,
-                "Need BLUETOOTH_CONNECT permission");
+        enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
+                "Need BLUETOOTH_PRIVILEGED permission");
         synchronized (mStateMachines) {
             VolumeControlStateMachine sm = mStateMachines.get(device);
             if (sm == null) {

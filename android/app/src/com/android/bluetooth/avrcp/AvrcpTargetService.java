@@ -26,9 +26,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.Looper;
+import android.os.SystemProperties;
 import android.os.UserManager;
-import android.sysprop.BluetoothProperties;
 import android.text.TextUtils;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
@@ -135,7 +136,7 @@ public class AvrcpTargetService extends ProfileService {
                         Log.d(TAG, "request to disconnect device " + device);
                     }
                 }
-            } else if (action.equals(AudioManager.ACTION_VOLUME_CHANGED)) {
+            } else if (action.equals(AudioManager.VOLUME_CHANGED_ACTION)) {
                 int streamType = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_TYPE, -1);
                 if (streamType == AudioManager.STREAM_MUSIC) {
                     int volume = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_VALUE, 0);
@@ -232,7 +233,7 @@ public class AvrcpTargetService extends ProfileService {
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED);
         filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
-        filter.addAction(AudioManager.ACTION_VOLUME_CHANGED);
+        filter.addAction(AudioManager.VOLUME_CHANGED_ACTION);
         registerReceiver(mReceiver, filter);
 
         // Only allow the service to be used once it is initialized

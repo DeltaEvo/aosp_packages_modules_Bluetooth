@@ -28,7 +28,6 @@ import android.graphics.BitmapFactory;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.audio_util.Image;
 import com.android.bluetooth.avrcpcontroller.BipEncoding;
 import com.android.bluetooth.avrcpcontroller.BipImageDescriptor;
@@ -48,6 +47,7 @@ import java.util.Arrays;
 
 @RunWith(AndroidJUnit4.class)
 public class CoverArtTest {
+    private Context mTargetContext;
     private Resources mTestResources;
 
     private static final BipPixel PIXEL_THUMBNAIL = BipPixel.createFixed(200, 200);
@@ -61,8 +61,13 @@ public class CoverArtTest {
 
     @Before
     public void setUp() throws Exception {
-        mTestResources = TestUtils.getTestApplicationResources(
-                InstrumentationRegistry.getTargetContext());
+        mTargetContext = InstrumentationRegistry.getTargetContext();
+        try {
+            mTestResources = mTargetContext.getPackageManager()
+                    .getResourcesForApplication("com.android.bluetooth.tests");
+        } catch (PackageManager.NameNotFoundException e) {
+            assertWithMessage("Setup Failure Unable to get resources" + e.toString()).fail();
+        }
 
         m200by200Image = loadImage(com.android.bluetooth.tests.R.raw.image_200_200);
         m200by200ImageBlue = loadImage(com.android.bluetooth.tests.R.raw.image_200_200_blue);
@@ -77,6 +82,7 @@ public class CoverArtTest {
         m200by200ImageBlue = null;
         m200by200Image = null;
         mTestResources = null;
+        mTargetContext = null;
     }
 
     private Bitmap loadImage(int resId) {

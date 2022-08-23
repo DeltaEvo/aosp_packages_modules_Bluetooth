@@ -35,6 +35,7 @@ hash_map_utils_new_from_string_params(const char* params) {
   if (!str) return map;
 
   // Parse |str| and add extracted key-and-value pair(s) in |map|.
+  int items = 0;
   char* tmpstr;
   char* kvpair = strtok_r(str, ";", &tmpstr);
   while (kvpair && *kvpair) {
@@ -59,6 +60,8 @@ hash_map_utils_new_from_string_params(const char* params) {
 
     osi_free(key);
     osi_free(value);
+
+    items++;
   next_pair:
     kvpair = strtok_r(NULL, ";", &tmpstr);
   }

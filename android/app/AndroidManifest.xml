@@ -1,20 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.android.bluetooth"
-  android:sharedUserId="android.uid.bluetooth">
+     package="com.android.bluetooth"
+     android:sharedUserId="android.uid.bluetooth">
+
+    <original-package android:name="com.android.bluetooth"/>
 
     <!-- Allows access to the Bluetooth Share Manager -->
     <permission android:name="android.permission.ACCESS_BLUETOOTH_SHARE"
          android:label="@string/permlab_bluetoothShareManager"
          android:description="@string/permdesc_bluetoothShareManager"
-         android:protectionLevel="signature|privileged"/>
+         android:protectionLevel="signature"/>
 
     <!--  Allows temporarily acceptlisting Bluetooth addresses for sharing -->
     <permission android:name="com.android.permission.ALLOWLIST_BLUETOOTH_DEVICE"
          android:label="@string/permlab_bluetoothAcceptlist"
          android:description="@string/permdesc_bluetoothAcceptlist"
-         android:protectionLevel="signature|privileged"/>
+         android:protectionLevel="signature"/>
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.ACCESS_BLUETOOTH_SHARE"/>
@@ -29,6 +31,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED"/>
     <uses-permission android:name="android.permission.BLUETOOTH_MAP"/>
     <uses-permission android:name="android.permission.CONTROL_INCALL_EXPERIENCE" />
+    <uses-permission android:name="android.permission.DUMP"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
@@ -53,6 +56,7 @@
     <uses-permission android:name="android.permission.NETWORK_FACTORY"/>
     <uses-permission android:name="android.permission.TETHER_PRIVILEGED"/>
     <uses-permission android:name="android.permission.MODIFY_PHONE_STATE"/>
+    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL"/>
     <uses-permission android:name="android.permission.BLUETOOTH_STACK"/>
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS"/>
     <uses-permission android:name="android.permission.MANAGE_USERS"/>
@@ -75,13 +79,12 @@
     <uses-permission android:name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"/>
     <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS"/>
     <uses-permission android:name="android.permission.QUERY_AUDIO_STATE"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <uses-sdk android:minSdkVersion="14"/>
 
     <!-- For PBAP Owner Vcard Info -->
     <uses-permission android:name="android.permission.READ_PROFILE"/>
-    <application android:name="com.android.bluetooth.btservice.AdapterApp"
+    <application android:name=".btservice.AdapterApp"
          android:icon="@mipmap/bt_share"
          android:persistent="false"
          android:label="@string/app_name"
@@ -517,9 +520,12 @@
                 <action android:name="android.bluetooth.IBluetoothPbapClient"/>
             </intent-filter>
         </service>
+        <!--  Note: This service doesn't get started, it just indicates to the Authentication
+              framework that we can create accounts of a specific type. As such, its safe to
+              have as enabled on all targets and not just the ones that use PBAP Client  -->
         <service android:process="@string/process"
              android:name="com.android.bluetooth.pbapclient.AuthenticationService"
-             android:enabled="false"
+             android:enabled="true"
              android:exported="true">
             <intent-filter>
                 <action android:name="android.accounts.AccountAuthenticator"/>

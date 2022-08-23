@@ -96,11 +96,6 @@ class LeAudioTransport {
                                       uint8_t channels_count,
                                       uint32_t data_interval);
 
-  void LeAudioSetBroadcastConfig(
-      const ::le_audio::broadcast_offload_config& offload_config);
-
-  const LeAudioBroadcastConfiguration& LeAudioGetBroadcastConfig();
-
   bool IsPendingStartStream(void);
   void ClearPendingStartStream(void);
 
@@ -111,7 +106,6 @@ class LeAudioTransport {
   uint64_t total_bytes_processed_;
   timespec data_position_;
   PcmConfiguration pcm_config_;
-  LeAudioBroadcastConfiguration broadcast_config_;
   bool is_pending_start_request_;
 };
 
@@ -148,11 +142,6 @@ class LeAudioSinkTransport
   void LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz, uint8_t bit_rate,
                                       uint8_t channels_count,
                                       uint32_t data_interval);
-
-  void LeAudioSetBroadcastConfig(
-      const ::le_audio::broadcast_offload_config& offload_config);
-
-  const LeAudioBroadcastConfiguration& LeAudioGetBroadcastConfig();
 
   bool IsPendingStartStream(void);
   void ClearPendingStartStream(void);

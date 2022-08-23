@@ -30,7 +30,6 @@ import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
-import com.android.bluetooth.TestUtils;
 
 import org.junit.Assert;
 import org.junit.Assume;
@@ -50,6 +49,7 @@ public class PbapParserTest {
     private Resources mTestResources;
     private Context mTargetContext;
     private static final String TEST_ACCOUNT_NAME = "PBAPTESTACCOUNT";
+    private static final String TEST_PACKAGE_NAME = "com.android.bluetooth.tests";
 
     @Before
     public void setUp() {
@@ -58,7 +58,12 @@ public class PbapParserTest {
                 PbapClientService.isEnabled());
         mAccount = new Account(TEST_ACCOUNT_NAME,
                 mTargetContext.getString(com.android.bluetooth.R.string.pbap_account_type));
-        mTestResources = TestUtils.getTestApplicationResources(mTargetContext);
+        try {
+            mTestResources = mTargetContext.getPackageManager()
+                    .getResourcesForApplication(TEST_PACKAGE_NAME);
+        } catch (PackageManager.NameNotFoundException e) {
+            Assert.fail("Setup Failure Unable to get resources" + e.toString());
+        }
         cleanupCallLog();
         cleanupPhonebook();
     }

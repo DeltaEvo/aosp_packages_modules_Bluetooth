@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.bluetooth;
+package com.android.server;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -22,10 +22,9 @@ import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.os.UserManager;
 
-import com.android.server.SystemService;
 import com.android.server.SystemService.TargetUser;
 
-public class BluetoothService extends SystemService {
+class BluetoothService extends SystemService {
     private BluetoothManagerService mBluetoothManagerService;
     private boolean mInitialized = false;
 
@@ -65,12 +64,12 @@ public class BluetoothService extends SystemService {
         if (!mInitialized) {
             initialize();
         } else {
-            mBluetoothManagerService.handleOnSwitchUser(to.getUserHandle());
+            mBluetoothManagerService.handleOnSwitchUser(to.getUserIdentifier());
         }
     }
 
     @Override
     public void onUserUnlocking(@NonNull TargetUser user) {
-        mBluetoothManagerService.handleOnUnlockUser(user.getUserHandle());
+        mBluetoothManagerService.handleOnUnlockUser(user.getUserIdentifier());
     }
 }

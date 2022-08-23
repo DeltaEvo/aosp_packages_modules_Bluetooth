@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.bluetooth;
+package com.android.server;
 
 import android.content.AttributionSource;
 import android.content.Context;

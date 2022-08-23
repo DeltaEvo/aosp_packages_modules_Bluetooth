@@ -1,5 +1,4 @@
 package {
-    default_visibility: [":__subpackages__"],
     default_applicable_licenses: ["system_bt_license"],
 }
 

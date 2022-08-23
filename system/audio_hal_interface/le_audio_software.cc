@@ -40,7 +40,6 @@ using AudioConfiguration_2_1 =
     ::android::hardware::bluetooth::audio::V2_1::AudioConfiguration;
 using AudioConfigurationAIDL =
     ::aidl::android::hardware::bluetooth::audio::AudioConfiguration;
-using ::aidl::android::hardware::bluetooth::audio::LeAudioCodecConfiguration;
 
 using ::le_audio::CodecManager;
 using ::le_audio::set_configurations::AudioSetConfiguration;
@@ -171,9 +170,9 @@ void LeAudioClientInterface::Sink::StartSession() {
     AudioConfigurationAIDL audio_config;
     if (is_aidl_offload_encoding_session(is_broadcaster_)) {
       if (is_broadcaster_) {
+        aidl::le_audio::LeAudioBroadcastConfiguration le_audio_config = {};
         audio_config.set<AudioConfigurationAIDL::leAudioBroadcastConfig>(
-            get_aidl_transport_instance(is_broadcaster_)
-                ->LeAudioGetBroadcastConfig());
+            le_audio_config);
       } else {
         aidl::le_audio::LeAudioConfiguration le_audio_config = {};
         audio_config.set<AudioConfigurationAIDL::leAudioConfig>(
@@ -258,29 +257,18 @@ void LeAudioClientInterface::Sink::UpdateAudioConfigToHal(
       BluetoothAudioHalTransport::HIDL) {
     return;
   }
+  if (!is_aidl_offload_encoding_session(is_broadcaster_)) {
+    return;
+  }
 
-  if (is_broadcaster_ || !is_aidl_offload_encoding_session(is_broadcaster_)) {
+  if (is_broadcaster_) {
+    LOG(WARNING) << __func__ << ", broadcasting not supported";
     return;
   }
 
   get_aidl_client_interface(is_broadcaster_)
       ->UpdateAudioConfig(
           aidl::le_audio::offload_config_to_hal_audio_config(offload_config));
-}
-
-void LeAudioClientInterface::Sink::UpdateBroadcastAudioConfigToHal(
-    const ::le_audio::broadcast_offload_config& offload_config) {
-  if (HalVersionManager::GetHalTransport() ==
-      BluetoothAudioHalTransport::HIDL) {
-    return;
-  }
-
-  if (!is_broadcaster_ || !is_aidl_offload_encoding_session(is_broadcaster_)) {
-    return;
-  }
-
-  get_aidl_transport_instance(is_broadcaster_)
-      ->LeAudioSetBroadcastConfig(offload_config);
 }
 
 void LeAudioClientInterface::Sink::SuspendedForReconfiguration() {

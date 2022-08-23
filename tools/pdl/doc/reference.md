@@ -629,11 +629,13 @@ starting with a letter.
 ### Size Modifier
 
 > SIZE_MODIFIER:\
-> &nbsp;&nbsp; `+` INTVALUE
+> &nbsp;&nbsp; `+` | `-` | `*` | `/` DIGIT | `+` | `-` | `*` | `/`
 
-A size modifier alters the octet size of the field it is attached to.
-For example, `+ 2` defines that the size is 2 octet bigger than the
-actual field size.
+Part of a arithmetic expression where the missing part is a size
+
+For example:
+- `+ 2` defines that the size is 2 octet bigger than the real size
+- `* 8` defines that the size is 8 times bigger than the real size
 
 ### Comment
 

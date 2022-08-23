@@ -32,11 +32,9 @@ import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Build;
 import android.os.IBinder;
-import android.os.IpcDataCache;
 import android.os.RemoteException;
 import android.util.CloseGuard;
 import android.util.Log;
-import android.util.Pair;
 
 import com.android.modules.utils.SynchronousResultReceiver;
 
@@ -154,7 +152,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
                 service.getState(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -184,7 +182,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<BluetoothDevice> recv =
-                        SynchronousResultReceiver.get();
+                        new SynchronousResultReceiver();
                 service.getClient(mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -214,7 +212,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
                 service.isConnected(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -256,7 +254,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
                 service.disconnect(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -312,7 +310,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                        SynchronousResultReceiver.get();
+                        new SynchronousResultReceiver();
                 service.getConnectedDevices(mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -343,7 +341,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                        SynchronousResultReceiver.get();
+                        new SynchronousResultReceiver();
                 service.getDevicesMatchingConnectionStates(states, mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -356,65 +354,10 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     }
 
     /**
-     * There are several instances of IpcDataCache used in this class.
-     * BluetoothCache wraps up the common code.  All caches are created with a maximum of
-     * eight entries, and the key is in the bluetooth module.  The name is set to the api.
-     */
-    private static class BluetoothCache<Q, R> extends IpcDataCache<Q, R> {
-        BluetoothCache(String api, IpcDataCache.QueryHandler query) {
-            super(8, IpcDataCache.MODULE_BLUETOOTH, api, api, query);
-        }};
-
-    /** @hide */
-    public void disableBluetoothGetConnectionStateCache() {
-        mBluetoothConnectionCache.disableForCurrentProcess();
-    }
-
-    /** @hide */
-    public static void invalidateBluetoothGetConnectionStateCache() {
-        invalidateCache(GET_CONNECTION_STATE_API);
-    }
-
-    /**
-     * Invalidate a bluetooth cache.  This method is just a short-hand wrapper that
-     * enforces the bluetooth module.
-     */
-    private static void invalidateCache(@NonNull String api) {
-        IpcDataCache.invalidateCache(IpcDataCache.MODULE_BLUETOOTH, api);
-    }
-
-    private final IpcDataCache.QueryHandler<Pair<IBluetoothMap, BluetoothDevice>, Integer>
-            mBluetoothConnectionQuery = new IpcDataCache.QueryHandler<>() {
-                @RequiresBluetoothConnectPermission
-                @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-                @Override
-                public Integer apply(Pair<IBluetoothMap, BluetoothDevice> pairQuery) {
-                    if (DBG) {
-                        log("getConnectionState(" + pairQuery.second.getAnonymizedAddress()
-                                + ") uncached");
-                    }
-                    final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
-                    try {
-                        pairQuery.first
-                            .getConnectionState(pairQuery.second, mAttributionSource, recv);
-                        return recv.awaitResultNoInterrupt(getSyncTimeout())
-                            .getValue(BluetoothProfile.STATE_DISCONNECTED);
-                    } catch (RemoteException | TimeoutException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            };
-
-    private static final String GET_CONNECTION_STATE_API = "BluetoothMap_getConnectionState";
-
-    private final BluetoothCache<Pair<IBluetoothMap, BluetoothDevice>, Integer>
-            mBluetoothConnectionCache = new BluetoothCache<>(GET_CONNECTION_STATE_API,
-                mBluetoothConnectionQuery);
-
-    /**
      * Get connection state of device
      *
      * @return device connection state
+     *
      * @hide
      */
     @RequiresBluetoothConnectPermission
@@ -422,21 +365,21 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     public int getConnectionState(BluetoothDevice device) {
         if (DBG) log("getConnectionState(" + device + ")");
         final IBluetoothMap service = getService();
+        final int defaultValue = BluetoothProfile.STATE_DISCONNECTED;
         if (service == null) {
-            Log.w(TAG, "BT not enabled. Cannot get connection state");
+            Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                return mBluetoothConnectionCache.query(new Pair<>(service, device));
-            } catch (RuntimeException e) {
-                if (!(e.getCause() instanceof TimeoutException)
-                        && !(e.getCause() instanceof RemoteException)) {
-                    throw e;
-                }
+                final SynchronousResultReceiver<Integer> recv =
+                        new SynchronousResultReceiver();
+                service.getConnectionState(device, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             }
         }
-        return BluetoothProfile.STATE_DISCONNECTED;
+        return defaultValue;
     }
 
     /**
@@ -490,7 +433,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
                     && (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN
                         || connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
+                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
                 service.setConnectionPolicy(device, connectionPolicy, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -546,7 +489,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
                 service.getConnectionPolicy(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {

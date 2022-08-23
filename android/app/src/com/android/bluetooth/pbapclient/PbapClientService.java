@@ -129,8 +129,6 @@ public class PbapClientService extends ProfileService {
         mDatabaseManager = Objects.requireNonNull(AdapterService.getAdapterService().getDatabase(),
                 "DatabaseManager cannot be null when PbapClientService starts");
 
-        setComponentAvailable(AUTHENTICATOR_SERVICE, true);
-
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         // delay initial download until after the user is unlocked to add an account.
@@ -162,6 +160,7 @@ public class PbapClientService extends ProfileService {
         for (PbapClientStateMachine pbapClientStateMachine : mPbapClientStateMachineMap.values()) {
             pbapClientStateMachine.doQuit();
         }
+
         cleanupAuthenicationService();
         setComponentAvailable(AUTHENTICATOR_SERVICE, false);
         return true;

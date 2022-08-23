@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.android.server.bluetooth;
+package com.android.server;
 
 import android.provider.DeviceConfig;
-import android.util.Log;
+import android.util.Slog;
 
 import java.util.ArrayList;
 
@@ -30,7 +30,7 @@ import java.util.ArrayList;
  *   1. Bluetooth A2DP is connected.
  *   2. Bluetooth Hearing Aid profile is connected.
  */
-public class BluetoothDeviceConfigListener {
+class BluetoothDeviceConfigListener {
     private static final String TAG = "BluetoothDeviceConfigListener";
 
     private final BluetoothManagerService mService;
@@ -57,7 +57,7 @@ public class BluetoothDeviceConfigListener {
                         for (String name : properties.getKeyset()) {
                             flags.add(name + "='" + properties.getString(name, "") + "'");
                         }
-                        Log.d(TAG, "onPropertiesChanged: " + String.join(",", flags));
+                        Slog.d(TAG, "onPropertiesChanged: " + String.join(",", flags));
                     }
                     boolean foundInit = false;
                     for (String name : properties.getKeyset()) {

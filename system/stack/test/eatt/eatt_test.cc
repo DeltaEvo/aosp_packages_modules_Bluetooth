@@ -82,13 +82,9 @@ class EattTest : public testing::Test {
     eatt_instance_->Connect(test_address);
 
     if (collision) {
-      /* Collision should be handled only if all channels has been rejected in
-       * first place.*/
-      if (num_of_accepted_connections == 0) {
-        EXPECT_CALL(l2cap_interface_,
-                    ConnectCreditBasedReq(BT_PSM_EATT, test_address, _))
-            .Times(1);
-      }
+      EXPECT_CALL(l2cap_interface_,
+                  ConnectCreditBasedReq(BT_PSM_EATT, test_address, _))
+          .Times(1);
 
       l2cap_app_info_.pL2CA_CreditBasedCollisionInd_Cb(test_address);
     }
