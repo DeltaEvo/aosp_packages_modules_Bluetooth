@@ -56,6 +56,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.ContentObserver;
@@ -794,7 +795,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private boolean synchronousDisable(AttributionSource attributionSource)
             throws RemoteException, TimeoutException {
         if (mBluetooth == null) return false;
-        final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
         mBluetooth.disable(attributionSource, recv);
         return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(false);
     }
@@ -803,7 +804,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private boolean synchronousEnable(boolean quietMode, AttributionSource attributionSource)
             throws RemoteException, TimeoutException {
         if (mBluetooth == null) return false;
-        final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
         mBluetooth.enable(quietMode, attributionSource, recv);
         return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(false);
     }
@@ -812,7 +813,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private String synchronousGetAddress(AttributionSource attributionSource)
             throws RemoteException, TimeoutException {
         if (mBluetooth == null) return null;
-        final SynchronousResultReceiver<String> recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver<String> recv = SynchronousResultReceiver.get();
         mBluetooth.getAddressWithAttribution(attributionSource, recv);
         return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
@@ -821,7 +822,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private String synchronousGetName(AttributionSource attributionSource)
             throws RemoteException, TimeoutException {
         if (mBluetooth == null) return null;
-        final SynchronousResultReceiver<String> recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver<String> recv = SynchronousResultReceiver.get();
         mBluetooth.getName(attributionSource, recv);
         return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
@@ -830,7 +831,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private int synchronousGetState()
             throws RemoteException, TimeoutException {
         if (mBluetooth == null) return BluetoothAdapter.STATE_OFF;
-        final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
         mBluetooth.getState(recv);
         return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(BluetoothAdapter.STATE_OFF);
     }
@@ -839,7 +840,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private void synchronousOnBrEdrDown(AttributionSource attributionSource)
             throws RemoteException, TimeoutException {
         if (mBluetooth == null) return;
-        final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
         mBluetooth.onBrEdrDown(attributionSource, recv);
         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
@@ -848,7 +849,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private void synchronousOnLeServiceUp(AttributionSource attributionSource)
             throws RemoteException, TimeoutException {
         if (mBluetooth == null) return;
-        final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
         mBluetooth.onLeServiceUp(attributionSource, recv);
         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
@@ -857,7 +858,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private void synchronousRegisterCallback(IBluetoothCallback callback,
             AttributionSource attributionSource) throws RemoteException, TimeoutException {
         if (mBluetooth == null) return;
-        final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
         mBluetooth.registerCallback(callback, attributionSource, recv);
         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
@@ -866,7 +867,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private void synchronousUnregisterCallback(IBluetoothCallback callback,
             AttributionSource attributionSource) throws RemoteException, TimeoutException {
         if (mBluetooth == null) return;
-        final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+        final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
         mBluetooth.unregisterCallback(callback, attributionSource, recv);
         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
@@ -1223,7 +1224,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
         if (isBleAppPresent()) {
             // Need to stay at BLE ON. Disconnect all Gatt connections
             try {
-                final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
                 mBluetoothGatt.unregAll(attributionSource, recv);
                 recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
             } catch (RemoteException | TimeoutException e) {
@@ -2189,7 +2190,11 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
                         break;
                     }
                     if (msg.arg1 > 0) {
-                        mContext.unbindService(psc);
+                        try {
+                            mContext.unbindService(psc);
+                        } catch (IllegalArgumentException e) {
+                            Log.e(TAG, "Unable to unbind service with intent: " + psc.mIntent, e);
+                        }
                         psc.bindService(msg.arg1 - 1);
                     }
                     break;
@@ -2888,24 +2893,56 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
      */
     private void updateOppLauncherComponentState(UserHandle userHandle,
             boolean bluetoothSharingDisallowed) {
-        final ComponentName oppLauncherComponent = new ComponentName(
-                mContext.getPackageManager().getPackagesForUid(Process.BLUETOOTH_UID)[0],
-                "com.android.bluetooth.opp.BluetoothOppLauncherActivity");
-        int newState;
-        if (bluetoothSharingDisallowed) {
-            newState = PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
-        } else if (BluetoothProperties.isProfileOppEnabled().orElse(false)) {
-            newState = PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
-        } else {
-            newState = PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
-        }
         try {
-            mContext.createContextAsUser(userHandle, 0)
-                .getPackageManager()
-                .setComponentEnabledSetting(oppLauncherComponent, newState,
-                        PackageManager.DONT_KILL_APP);
+            int newState;
+            if (bluetoothSharingDisallowed) {
+                newState = PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+            } else if (BluetoothProperties.isProfileOppEnabled().orElse(false)) {
+                newState = PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
+            } else {
+                newState = PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
+            }
+
+            String launcherActivity = "com.android.bluetooth.opp.BluetoothOppLauncherActivity";
+
+            PackageManager packageManager = mContext.createContextAsUser(userHandle, 0)
+                                                        .getPackageManager();
+            var allPackages = packageManager.getPackagesForUid(Process.BLUETOOTH_UID);
+            for (String candidatePackage : allPackages) {
+                PackageInfo packageInfo;
+                try {
+                    // note: we need the package manager for the SYSTEM user, not our userHandle
+                    packageInfo = mContext.getPackageManager().getPackageInfo(
+                        candidatePackage,
+                        PackageManager.PackageInfoFlags.of(PackageManager.GET_ACTIVITIES));
+                } catch (PackageManager.NameNotFoundException e) {
+                    // ignore, try next package
+                    Log.e(TAG, "Could not find package " + candidatePackage);
+                    continue;
+                } catch (Exception e) {
+                    Log.e(TAG, "Error while loading package" + e);
+                    continue;
+                }
+                if (packageInfo.activities == null) {
+                    continue;
+                }
+                for (var activity : packageInfo.activities) {
+                    if (launcherActivity.equals(activity.name)) {
+                        final ComponentName oppLauncherComponent = new ComponentName(
+                                candidatePackage, launcherActivity
+                        );
+                        packageManager.setComponentEnabledSetting(
+                                oppLauncherComponent, newState, PackageManager.DONT_KILL_APP
+                        );
+                        return;
+                    }
+                }
+            }
+
+            Log.e(TAG,
+                    "Cannot toggle BluetoothOppLauncherActivity, could not find it in any package");
         } catch (Exception e) {
-            // The component was not found, do nothing.
+            Log.e(TAG, "updateOppLauncherComponentState failed: " + e);
         }
     }
 
