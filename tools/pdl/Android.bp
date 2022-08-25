@@ -33,6 +33,12 @@ rust_binary_host {
     defaults: ["pdl_defaults"],
 }
 
+python_binary_host {
+    name: "pypdl",
+    main: "scripts/pdl/parser.py",
+    srcs: ["scripts/pdl/parser.py"],
+}
+
 rust_test_host {
     name: "pdl_inline_tests",
     defaults: ["pdl_defaults"],
@@ -76,18 +82,35 @@ rust_test_host {
     ],
 }
 
+// Python generator.
+python_binary_host {
+    name: "pdl_python_generator",
+    main: "scripts/generate_python_backend.py",
+    srcs: [
+        "scripts/generate_python_backend.py",
+        "scripts/pdl/ast.py",
+        "scripts/pdl/core.py",
+    ]
+}
+
+// Defaults for PDL python backend generation.
+genrule_defaults {
+    name: "pdl_python_generator_defaults",
+    tools: [
+        ":pdl",
+        ":pdl_python_generator",
+    ],
+}
+
 // Generate the python parser+serializer backend for the
 // little endian test file located at tests/canonical/le_test_file.pdl.
 genrule {
     name: "pdl_python_generator_le_test_gen",
+    defaults: [ "pdl_python_generator_defaults" ],
     cmd: "$(location :pdl) $(in) |" +
-        " $(location scripts/generate_python_backend.py)" +
+        " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location tests.custom_types",
-    tools: [ ":pdl" ],
     tool_files: [
-        "scripts/generate_python_backend.py",
-        "scripts/pdl/core.py",
-        "scripts/pdl/ast.py",
         "tests/custom_types.py",
     ],
     srcs: [
@@ -102,14 +125,11 @@ genrule {
 // big endian test file located at tests/canonical/be_test_file.pdl.
 genrule {
     name: "pdl_python_generator_be_test_gen",
+    defaults: [ "pdl_python_generator_defaults" ],
     cmd: "$(location :pdl) $(in) |" +
-        " $(location scripts/generate_python_backend.py)" +
+        " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location tests.custom_types",
-    tools: [ ":pdl" ],
     tool_files: [
-        "scripts/generate_python_backend.py",
-        "scripts/pdl/core.py",
-        "scripts/pdl/ast.py",
         "tests/custom_types.py",
     ],
     srcs: [
@@ -135,7 +155,24 @@ python_test_host {
         "tests/canonical/le_test_vectors.json",
         "tests/canonical/be_test_vectors.json",
     ],
+    libs: [
+        "typing_extensions",
+    ],
     test_options: {
         unit_test: true,
     },
+}
+
+// Test the python parser against the rust parser
+// on selected PDL source files.
+python_test_host {
+    name: "pdl_python_parser_test",
+    main: "tests/python_parser_test.py",
+    srcs: ["tests/python_parser_test.py"],
+    data: [
+        ":pdl",
+        ":pypdl",
+        ":BluetoothHciPackets",
+        ":RootCanalLinkLayerPackets",
+    ],
 }

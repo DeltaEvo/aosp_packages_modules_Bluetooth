@@ -2,8 +2,9 @@
 
 use bt_topshim::btif::{
     BaseCallbacks, BaseCallbacksDispatcher, BluetoothInterface, BluetoothProperty, BtAclState,
-    BtBondState, BtDeviceType, BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType,
-    BtScanMode, BtSspVariant, BtState, BtStatus, BtTransport, RawAddress, Uuid, Uuid128Bit,
+    BtBondState, BtConnectionState, BtDeviceType, BtDiscoveryState, BtHciErrorCode, BtPinCode,
+    BtPropertyType, BtScanMode, BtSspVariant, BtState, BtStatus, BtTransport, RawAddress, Uuid,
+    Uuid128Bit,
 };
 use bt_topshim::{
     metrics,
@@ -14,14 +15,16 @@ use bt_topshim::{
 
 use btif_macros::{btif_callback, btif_callbacks_dispatcher};
 
-use log::{debug, warn};
+use log::{debug, error, warn};
 use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot::Sender as OneShotSender;
 use tokio::task::JoinHandle;
 use tokio::time;
 
@@ -37,6 +40,10 @@ const MIN_ADV_INSTANCES_FOR_MULTI_ADV: u8 = 5;
 /// if they haven't already bonded or connected. Once this duration expires, the
 /// clear event should be sent to clients.
 const FOUND_DEVICE_FRESHNESS: Duration = Duration::from_secs(30);
+
+/// This is the value returned from Bluetooth Interface calls.
+// TODO(241930383): Add enum to topshim
+const BTM_SUCCESS: i32 = 0;
 
 /// Defines the adapter API.
 pub trait IBluetooth {
@@ -121,7 +128,7 @@ pub trait IBluetooth {
     fn get_bonded_devices(&self) -> Vec<BluetoothDevice>;
 
     /// Gets the bond state of a single device.
-    fn get_bond_state(&self, device: BluetoothDevice) -> u32;
+    fn get_bond_state(&self, device: BluetoothDevice) -> BtBondState;
 
     /// Set pin on bonding device.
     fn set_pin(&self, device: BluetoothDevice, accept: bool, pin_code: Vec<u8>) -> bool;
@@ -147,8 +154,14 @@ pub trait IBluetooth {
     /// Gets the class of the remote device.
     fn get_remote_class(&self, device: BluetoothDevice) -> u32;
 
+    /// Gets whether the remote device is connected.
+    fn get_remote_connected(&self, device: BluetoothDevice) -> bool;
+
+    /// Returns a list of connected devices.
+    fn get_connected_devices(&self) -> Vec<BluetoothDevice>;
+
     /// Gets the connection state of a single device.
-    fn get_connection_state(&self, device: BluetoothDevice) -> u32;
+    fn get_connection_state(&self, device: BluetoothDevice) -> BtConnectionState;
 
     /// Gets the connection state of a specific profile.
     fn get_profile_connection_state(&self, profile: Profile) -> u32;
@@ -167,6 +180,18 @@ pub trait IBluetooth {
 
     /// Disconnect all profiles supported by device and enabled on adapter.
     fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool;
+}
+
+/// Adapter API for Bluetooth qualification and verification.
+///
+/// This interface is provided for testing and debugging.
+/// Clients should not use this interface for production.
+pub trait IBluetoothQA {
+    /// Returns whether the adapter is connectable.
+    fn get_connectable(&self) -> bool;
+
+    /// Sets connectability. Returns true on success, false otherwise.
+    fn set_connectable(&mut self, mode: bool) -> bool;
 }
 
 /// Serializable device used in various apis.
@@ -318,6 +343,8 @@ pub struct Bluetooth {
     uuid_helper: UuidHelper,
     /// Used to delay connection until we have SDP results.
     wait_to_connect: bool,
+    // Internal API members
+    internal_le_rand_queue: VecDeque<OneShotSender<u64>>,
 }
 
 impl Bluetooth {
@@ -350,6 +377,8 @@ impl Bluetooth {
             tx,
             uuid_helper: UuidHelper::new(),
             wait_to_connect: false,
+            // Internal API members
+            internal_le_rand_queue: VecDeque::<OneShotSender<u64>>::new(),
         }
     }
 
@@ -386,29 +415,6 @@ impl Bluetooth {
         self.callbacks.for_all_callbacks(|callback| {
             callback.on_address_changed(self.local_address.unwrap().to_string());
         });
-    }
-
-    pub fn get_connectable(&self) -> bool {
-        match self.properties.get(&BtPropertyType::AdapterScanMode) {
-            Some(prop) => match prop {
-                BluetoothProperty::AdapterScanMode(mode) => match *mode {
-                    BtScanMode::Connectable | BtScanMode::ConnectableDiscoverable => true,
-                    _ => false,
-                },
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-
-    pub fn set_connectable(&mut self, mode: bool) -> bool {
-        self.is_connectable = mode;
-        if mode && self.get_discoverable() {
-            return true;
-        }
-        self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::AdapterScanMode(
-            if mode { BtScanMode::Connectable } else { BtScanMode::None_ },
-        )) == 0
     }
 
     pub(crate) fn adapter_callback_disconnected(&mut self, id: u32) {
@@ -508,6 +514,19 @@ impl Bluetooth {
             }));
         }
     }
+
+    /// Makes an LE_RAND call to the Bluetooth interface.  This call is asynchronous, and uses an
+    /// asynchronous callback, but is synchonized on a |OneShotSender|
+    /// If generating a random isn't successful, a 0 will be sent to the callback.
+    pub fn le_rand(&mut self, promise: OneShotSender<u64>) {
+        if self.intf.lock().unwrap().le_rand() != BTM_SUCCESS {
+            debug!("Call to BTIF failed.");
+            // Send 0 to caller indicating failure to generate a RANDOM
+            let _ = promise.send(0);
+        } else {
+            self.internal_le_rand_queue.push_back(promise);
+        }
+    }
 }
 
 #[btif_callbacks_dispatcher(Bluetooth, dispatch_base_callbacks, BaseCallbacks)]
@@ -566,6 +585,9 @@ pub(crate) trait BtifBluetoothCallbacks {
         link_type: BtTransport,
         hci_reason: BtHciErrorCode,
     );
+
+    #[btif_callback(LeRandCallback)]
+    fn le_rand_cb(&mut self, random: u64);
 }
 
 #[btif_callbacks_dispatcher(Bluetooth, dispatch_sdp_callbacks, SdpCallbacks)]
@@ -914,6 +936,14 @@ impl BtifBluetoothCallbacks for Bluetooth {
             None => (),
         };
     }
+
+    fn le_rand_cb(&mut self, random: u64) {
+        debug!("Random: {:?}", random);
+        let _ = match self.internal_le_rand_queue.pop_back() {
+            Some(promise) => promise.send(random),
+            None => Ok(error!("LE Rand callback received but no sender available!")),
+        };
+    }
 }
 
 // TODO: Add unit tests for this implementation
@@ -1158,10 +1188,10 @@ impl IBluetooth for Bluetooth {
         devices
     }
 
-    fn get_bond_state(&self, device: BluetoothDevice) -> u32 {
+    fn get_bond_state(&self, device: BluetoothDevice) -> BtBondState {
         match self.bonded_devices.get(&device.address) {
-            Some(device) => device.bond_state.to_u32().unwrap(),
-            None => BtBondState::NotBonded.to_u32().unwrap(),
+            Some(device) => device.bond_state.clone(),
+            None => BtBondState::NotBonded,
         }
     }
 
@@ -1286,14 +1316,44 @@ impl IBluetooth for Bluetooth {
         }
     }
 
-    fn get_connection_state(&self, device: BluetoothDevice) -> u32 {
+    fn get_remote_connected(&self, device: BluetoothDevice) -> bool {
+        self.get_connection_state(device) != BtConnectionState::NotConnected
+    }
+
+    fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
+        let bonded_connected: HashMap<String, BluetoothDevice> = self
+            .bonded_devices
+            .iter()
+            .filter(|(_, v)| v.acl_state == BtAclState::Connected)
+            .map(|(k, v)| (k.clone(), v.info.clone()))
+            .collect();
+        let mut found_connected: Vec<BluetoothDevice> = self
+            .found_devices
+            .iter()
+            .filter(|(k, v)| {
+                v.acl_state == BtAclState::Connected
+                    && !bonded_connected.contains_key(&k.to_string())
+            })
+            .map(|(_, v)| v.info.clone())
+            .collect();
+
+        let mut all =
+            bonded_connected.iter().map(|(_, v)| v.clone()).collect::<Vec<BluetoothDevice>>();
+        all.append(&mut found_connected);
+
+        all
+    }
+
+    fn get_connection_state(&self, device: BluetoothDevice) -> BtConnectionState {
         let addr = RawAddress::from_string(device.address.clone());
 
         if addr.is_none() {
             warn!("Can't check connection state. Address {} is not valid.", device.address);
-            return 0;
+            return BtConnectionState::NotConnected;
         }
 
+        // The underlying api adds whether this is ENCRYPTED_BREDR or ENCRYPTED_LE.
+        // As long as it is non-zero, it is connected.
         self.intf.lock().unwrap().get_connection_state(&addr.unwrap())
     }
 
@@ -1458,5 +1518,30 @@ impl BtifSdpCallbacks for Bluetooth {
             "Sdp search result found: Status({:?}) Address({:?}) Uuid({:?})",
             status, address, uuid
         );
+    }
+}
+
+impl IBluetoothQA for Bluetooth {
+    fn get_connectable(&self) -> bool {
+        match self.properties.get(&BtPropertyType::AdapterScanMode) {
+            Some(prop) => match prop {
+                BluetoothProperty::AdapterScanMode(mode) => match *mode {
+                    BtScanMode::Connectable | BtScanMode::ConnectableDiscoverable => true,
+                    _ => false,
+                },
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn set_connectable(&mut self, mode: bool) -> bool {
+        self.is_connectable = mode;
+        if mode && self.get_discoverable() {
+            return true;
+        }
+        self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::AdapterScanMode(
+            if mode { BtScanMode::Connectable } else { BtScanMode::None_ },
+        )) == 0
     }
 }

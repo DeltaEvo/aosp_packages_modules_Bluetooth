@@ -26,10 +26,7 @@
 
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
-
-#ifdef OS_ANDROID
-#include <android/sysprop/BluetoothProperties.sysprop.h>
-#endif
+#include <log/log.h>
 
 #include "bt_target.h"
 #include "bta/include/bta_hearing_aid_api.h"
@@ -39,7 +36,6 @@
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
-#include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
@@ -558,6 +554,15 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
       /* Check how many channels remote side wants. */
       num_of_channels = (p_pkt_end - p) / sizeof(uint16_t);
+      if (num_of_channels > L2CAP_CREDIT_BASED_MAX_CIDS) {
+        android_errorWriteLog(0x534e4554, "232256974");
+        LOG_WARN("L2CAP - invalid number of channels requested: %d",
+                 num_of_channels);
+        l2cu_reject_credit_based_conn_req(p_lcb, id,
+                                          L2CAP_CREDIT_BASED_MAX_CIDS,
+                                          L2CAP_LE_RESULT_INVALID_PARAMETERS);
+        return;
+      }
 
       LOG_DEBUG(
           "Recv L2CAP_CMD_CREDIT_BASED_CONN_REQ with "
@@ -743,8 +748,17 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
       con_info.peer_mtu = mtu;
 
-      for (int i = 0; i < p_lcb->pending_ecoc_conn_cnt; i++) {
-        uint16_t cid = p_lcb->pending_ecoc_connection_cids[i];
+      /* Copy request data and clear it so user can perform another connect if
+       * needed in the callback. */
+      p_lcb->pending_ecoc_conn_cnt = 0;
+      uint16_t cids[L2CAP_CREDIT_BASED_MAX_CIDS];
+      std::copy_n(p_lcb->pending_ecoc_connection_cids,
+                  L2CAP_CREDIT_BASED_MAX_CIDS, cids);
+      std::fill_n(p_lcb->pending_ecoc_connection_cids,
+                  L2CAP_CREDIT_BASED_MAX_CIDS, 0);
+
+      for (int i = 0; i < num_of_channels; i++) {
+        uint16_t cid = cids[i];
         STREAM_TO_UINT16(rcid, p);
 
         if (rcid != 0) {
@@ -798,10 +812,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
                           &con_info);
         }
       }
-
-      p_lcb->pending_ecoc_conn_cnt = 0;
-      memset(p_lcb->pending_ecoc_connection_cids, 0,
-             L2CAP_CREDIT_BASED_MAX_CIDS);
 
       break;
     case L2CAP_CMD_CREDIT_BASED_RECONFIG_REQ: {
@@ -884,6 +894,11 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_CREDIT_BASED_RECONFIG_RES: {
       uint16_t result;
+      if (p + sizeof(uint16_t) > p_pkt_end) {
+        android_errorWriteLog(0x534e4554, "212694559");
+        LOG(ERROR) << "invalid read";
+        return;
+      }
       STREAM_TO_UINT16(result, p);
 
       L2CAP_TRACE_DEBUG(
@@ -1618,16 +1633,7 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr,
 void L2CA_AdjustConnectionIntervals(uint16_t* min_interval,
                                     uint16_t* max_interval,
                                     uint16_t floor_interval) {
-  // Allow for customization by systemprops for mainline
   uint16_t phone_min_interval = floor_interval;
-  #ifdef OS_ANDROID
-    phone_min_interval =
-        android::sysprop::BluetoothProperties::getGapLeConnMinLimit().value_or(
-            floor_interval);
-  #else
-    phone_min_interval = (uint16_t)osi_property_get_int32(
-      "bluetooth.core.gap.le.conn.min.limit", (int32_t)floor_interval);
-  #endif
 
   if (HearingAid::GetDeviceCount() > 0) {
     // When there are bonded Hearing Aid devices, we will constrained this

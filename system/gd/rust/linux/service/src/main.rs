@@ -98,7 +98,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (tx, rx) = Stack::create_channel();
 
     let intf = Arc::new(Mutex::new(get_btinterface().unwrap()));
-    let suspend = Arc::new(Mutex::new(Box::new(Suspend::new(intf.clone(), tx.clone()))));
     let bluetooth_gatt =
         Arc::new(Mutex::new(Box::new(BluetoothGatt::new(intf.clone(), tx.clone()))));
     let bluetooth_media =
@@ -108,8 +107,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         intf.clone(),
         bluetooth_media.clone(),
     ))));
-    let bt_sock_mgr =
-        Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(intf.clone(), tx.clone()))));
+    let suspend = Arc::new(Mutex::new(Box::new(Suspend::new(
+        bluetooth.clone(),
+        intf.clone(),
+        bluetooth_gatt.clone(),
+        tx.clone(),
+    ))));
+
+    let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(tx.clone()))));
 
     topstack::get_runtime().block_on(async {
         // Connect to D-Bus system bus.
@@ -172,6 +177,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
         );
+        let qa_iface = iface_bluetooth::export_bluetooth_qa_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
         let socket_mgr_iface = iface_bluetooth::export_socket_mgr_intf(
             conn.clone(),
             &mut cr.lock().unwrap(),
@@ -199,13 +209,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Create mixin object for Bluetooth + Suspend interfaces.
         let mixin = Box::new(iface_bluetooth::BluetoothMixin {
             adapter: bluetooth.clone(),
+            qa: bluetooth.clone(),
             suspend: suspend.clone(),
             socket_mgr: bt_sock_mgr.clone(),
         });
 
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "adapter"),
-            &[adapter_iface, socket_mgr_iface, suspend_iface],
+            &[adapter_iface, qa_iface, socket_mgr_iface, suspend_iface],
             mixin,
         );
 
@@ -232,6 +243,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             bluetooth.enable();
 
             bluetooth_gatt.lock().unwrap().init_profiles(tx.clone());
+            bt_sock_mgr.lock().unwrap().initialize(intf.clone());
         }
 
         // Serve clients forever.

@@ -333,6 +333,19 @@ enum class AudioStreamDataPathState {
   DATA_PATH_ESTABLISHED,
 };
 
+enum class CisType {
+  CIS_TYPE_BIDIRECTIONAL,
+  CIS_TYPE_UNIDIRECTIONAL_SINK,
+  CIS_TYPE_UNIDIRECTIONAL_SOURCE,
+};
+
+struct cis {
+  uint8_t id;
+  CisType type;
+  uint16_t conn_handle;
+  RawAddress addr;
+};
+
 enum class CodecLocation {
   HOST,
   ADSP,
@@ -401,6 +414,7 @@ class LeAudioLtvMap {
   void Add(uint8_t type, std::vector<uint8_t> value) {
     values.insert_or_assign(type, std::move(value));
   }
+  void Remove(uint8_t type) { values.erase(type); }
   bool IsEmpty() const { return values.empty(); }
   void Clear() { values.clear(); }
   size_t Size() const { return values.size(); }
@@ -653,6 +667,11 @@ static constexpr uint32_t kChannelAllocationStereo =
     codec_spec_conf::kLeAudioLocationFrontRight;
 
 /* Declarations */
+void get_cis_count(const AudioSetConfigurations* audio_set_configurations,
+                   types::LeAudioConfigurationStrategy strategy,
+                   int group_ase_snk_cnt, int group_ase_src_count,
+                   uint8_t* cis_count_bidir, uint8_t* cis_count_unidir_sink,
+                   uint8_t* cis_count_unidir_source);
 bool check_if_may_cover_scenario(
     const AudioSetConfigurations* audio_set_configurations, uint8_t group_size);
 bool check_if_may_cover_scenario(
@@ -684,6 +703,8 @@ struct stream_configuration {
   int sink_num_of_devices;
   /* cis_handle, audio location*/
   std::vector<std::pair<uint16_t, uint32_t>> sink_streams;
+  std::vector<std::pair<uint16_t, uint32_t>> sink_offloader_streams;
+  bool sink_offloader_changed;
 
   /* Source configuration */
   /* For now we have always same frequency for all the channels */
@@ -697,11 +718,14 @@ struct stream_configuration {
   int source_num_of_devices;
   /* cis_handle, audio location*/
   std::vector<std::pair<uint16_t, uint32_t>> source_streams;
+  std::vector<std::pair<uint16_t, uint32_t>> source_offloader_streams;
+  bool source_offloader_changed;
 };
 
 void AppendMetadataLtvEntryForCcidList(std::vector<uint8_t>& metadata,
-                                       int ccid);
+                                       const std::vector<uint8_t>& ccid_list);
 void AppendMetadataLtvEntryForStreamingContext(
-    std::vector<uint8_t>& metadata, types::LeAudioContextType context_type);
+    std::vector<uint8_t>& metadata, types::AudioContexts context_type);
 uint8_t GetMaxCodecFramesPerSduFromPac(const types::acs_ac_record* pac_record);
+uint32_t AdjustAllocationForOffloader(uint32_t allocation);
 }  // namespace le_audio

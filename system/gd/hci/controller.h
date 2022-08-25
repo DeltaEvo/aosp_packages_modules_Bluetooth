@@ -22,6 +22,20 @@
 #include "module.h"
 #include "os/handler.h"
 
+#define COD_MASK 0x07FF
+
+#define COD_UNCLASSIFIED ((0x1F) << 8)
+#define COD_HID_KEYBOARD 0x0540
+#define COD_HID_POINTING 0x0580
+#define COD_HID_COMBO 0x05C0
+#define COD_HID_MAJOR 0x0500
+#define COD_HID_MASK 0x0700
+#define COD_AV_HEADSETS 0x0404
+#define COD_AV_HANDSFREE 0x0408
+#define COD_AV_HEADPHONES 0x0418
+#define COD_AV_PORTABLE_AUDIO 0x041C
+#define COD_AV_HIFI_AUDIO 0x0428
+
 namespace bluetooth {
 namespace hci {
 
@@ -129,6 +143,8 @@ class Controller : public Module {
 
   virtual void LeRand(LeRandCallback cb);
 
+  virtual void AllowWakeByHid();
+
   virtual void SetEventFilterClearAll();
 
   virtual void SetEventFilterInquiryResultAllDevices();
@@ -185,6 +201,23 @@ class Controller : public Module {
 
   static constexpr uint64_t kDefaultEventMask = 0x3dbfffffffffffff;
   static constexpr uint64_t kDefaultLeEventMask = 0x000000004d02fe7f;
+
+  static constexpr uint64_t kLeEventMask52 = 0x00000003ffffffff;
+  static constexpr uint64_t kLeEventMask51 = 0x0000000000ffffff;
+  static constexpr uint64_t kLeEventMask42 = 0x00000000000003ff;
+  static constexpr uint64_t kLeEventMask41 = 0x000000000000003f;
+
+  static uint64_t MaskLeEventMask(HciVersion version, uint64_t mask) {
+    if (version >= HciVersion::V_5_2) {
+      return mask;
+    } else if (version >= HciVersion::V_5_1) {
+      return mask & kLeEventMask51;
+    } else if (version >= HciVersion::V_4_2) {
+      return mask & kLeEventMask42;
+    } else {
+      return mask & kLeEventMask41;
+    }
+  }
 
  protected:
   void ListDependencies(ModuleList* list) const override;

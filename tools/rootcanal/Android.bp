@@ -9,6 +9,7 @@ package {
     default_visibility: [
         "//device:__subpackages__",
         "//packages/modules/Bluetooth:__subpackages__",
+        "//tools/netsim:__subpackages__"
     ],
 }
 
@@ -95,6 +96,9 @@ cc_library_static {
     export_include_dirs: [
         "include",
         ".",
+    ],
+    export_generated_headers: [
+        "BluetoothGeneratedPackets_h"
     ],
     shared_libs: [
         "liblog",

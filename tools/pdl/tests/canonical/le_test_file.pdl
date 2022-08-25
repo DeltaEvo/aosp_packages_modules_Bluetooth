@@ -50,6 +50,16 @@ packet EmptyParent : ScalarParent {
     _payload_
 }
 
+packet PartialParent5 {
+    a: 5,
+    _payload_
+}
+
+packet PartialParent12 {
+    a: 12,
+    _payload_
+}
+
 // Packet bit fields
 
 // The parser must be able to handle bit fields with scalar values
@@ -303,15 +313,7 @@ packet Packet_Array_Field_UnsizedElement_ConstantSize {
 packet Packet_Array_Field_UnsizedElement_SizeModifier {
     _size_(array) : 4,
     _reserved_: 4,
-    array: UnsizedStruct[+8*2],
-}
-
-// The parser must support complex size modifiers on arrays whose size is
-// specified by a count field.
-packet Packet_Array_Field_UnsizedElement_CountModifier {
-    _count_(array) : 4,
-    _reserved_: 4,
-    array: UnsizedStruct[-8*2],
+    array: UnsizedStruct[+2],
 }
 
 // Packet inheritance
@@ -350,6 +352,34 @@ packet AliasedChild_A : EmptyParent (a = 2) {
 // through inheritance with no constraints
 packet AliasedChild_B : EmptyParent (a = 3) {
     c: 16,
+}
+
+// The parser must handle inheritance of packets with payloads starting
+// on a shifted byte boundary, as long as the first fields of the child
+// complete the bit fields.
+packet PartialChild5_A : PartialParent5 (a = 0) {
+    b: 11,
+}
+
+// The parser must handle inheritance of packets with payloads starting
+// on a shifted byte boundary, as long as the first fields of the child
+// complete the bit fields.
+packet PartialChild5_B : PartialParent5 (a = 1) {
+    c: 27,
+}
+
+// The parser must handle inheritance of packets with payloads starting
+// on a shifted byte boundary, as long as the first fields of the child
+// complete the bit fields.
+packet PartialChild12_A : PartialParent12 (a = 2) {
+    d: 4,
+}
+
+// The parser must handle inheritance of packets with payloads starting
+// on a shifted byte boundary, as long as the first fields of the child
+// complete the bit fields.
+packet PartialChild12_B : PartialParent12 (a = 3) {
+    e: 20,
 }
 
 // Struct bit fields
@@ -616,19 +646,8 @@ packet Struct_Array_Field_UnsizedElement_ConstantSize {
 struct Struct_Array_Field_UnsizedElement_SizeModifier_ {
     _size_(array) : 4,
     _reserved_: 4,
-    array: UnsizedStruct[+8*2],
+    array: UnsizedStruct[+2],
 }
 packet Struct_Array_Field_UnsizedElement_SizeModifier {
     s: Struct_Array_Field_UnsizedElement_SizeModifier_,
-}
-
-// The parser must support complex size modifiers on arrays whose size is
-// specified by a count field.
-struct Struct_Array_Field_UnsizedElement_CountModifier_ {
-    _count_(array) : 4,
-    _reserved_: 4,
-    array: UnsizedStruct[-8*2],
-}
-packet Struct_Array_Field_UnsizedElement_CountModifier {
-    s: Struct_Array_Field_UnsizedElement_CountModifier_,
 }

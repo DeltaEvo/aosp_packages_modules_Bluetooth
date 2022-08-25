@@ -19,11 +19,14 @@ rust_ffi {
     edition: "2018",
     proc_macros: ["libnum_derive"],
     rustlibs: [
-        "libbt_packets",
+        "libbt_packets_nonapex",
         "libbytes",
+        "libnum_bigint",
+        "libnum_integer",
         "libnum_traits",
         "libthiserror",
         "libpin_utils",
+        "librand",
     ],
     include_dirs: ["include"],
 }
@@ -55,8 +58,11 @@ rust_test_host {
     rustlibs: [
         "libbt_packets",
         "libbytes",
+        "libnum_bigint",
+        "libnum_integer",
         "libnum_traits",
         "libthiserror",
         "libpin_utils",
+        "librand",
     ],
 }

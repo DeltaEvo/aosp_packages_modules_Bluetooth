@@ -1,13 +1,14 @@
 //! D-Bus proxy implementations of the APIs.
 
 use bt_topshim::btif::{
-    BtDeviceType, BtPropertyType, BtSspVariant, BtStatus, BtTransport, Uuid, Uuid128Bit,
+    BtBondState, BtConnectionState, BtDeviceType, BtPropertyType, BtSspVariant, BtStatus,
+    BtTransport, Uuid, Uuid128Bit,
 };
 use bt_topshim::profiles::gatt::GattStatus;
 use bt_topshim::profiles::socket::SocketType;
 
 use btstack::bluetooth::{
-    BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
+    BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback, IBluetoothQA,
 };
 use btstack::bluetooth_gatt::{
     BluetoothGattCharacteristic, BluetoothGattDescriptor, BluetoothGattService,
@@ -49,6 +50,8 @@ fn make_object_path(idx: i32, name: &str) -> dbus::Path {
     dbus::Path::new(format!("/org/chromium/bluetooth/hci{}/{}", idx, name)).unwrap()
 }
 
+impl_dbus_arg_enum!(BtBondState);
+impl_dbus_arg_enum!(BtConnectionState);
 impl_dbus_arg_enum!(BtDeviceType);
 impl_dbus_arg_enum!(BtPropertyType);
 impl_dbus_arg_enum!(BtSspVariant);
@@ -127,19 +130,7 @@ pub struct BluetoothDeviceDBus {
 
 struct IBluetoothCallbackDBus {}
 
-impl RPCProxy for IBluetoothCallbackDBus {
-    // Dummy implementations just to satisfy impl RPCProxy requirements.
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-    fn get_object_id(&self) -> String {
-        String::from("")
-    }
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-    fn export_for_rpc(self: Box<Self>) {}
-}
+impl RPCProxy for IBluetoothCallbackDBus {}
 
 #[generate_dbus_exporter(
     export_bluetooth_callback_dbus_intf,
@@ -183,19 +174,7 @@ impl IBluetoothCallback for IBluetoothCallbackDBus {
 
 struct IBluetoothConnectionCallbackDBus {}
 
-impl RPCProxy for IBluetoothConnectionCallbackDBus {
-    // Dummy implementations just to satisfy impl RPCProxy requirements.
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-    fn get_object_id(&self) -> String {
-        String::from("")
-    }
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-    fn export_for_rpc(self: Box<Self>) {}
-}
+impl RPCProxy for IBluetoothConnectionCallbackDBus {}
 
 #[generate_dbus_exporter(
     export_bluetooth_connection_callback_dbus_intf,
@@ -211,18 +190,7 @@ impl IBluetoothConnectionCallback for IBluetoothConnectionCallbackDBus {
 
 struct IScannerCallbackDBus {}
 
-impl RPCProxy for IScannerCallbackDBus {
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-    fn get_object_id(&self) -> String {
-        String::from("")
-    }
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-    fn export_for_rpc(self: Box<Self>) {}
-}
+impl RPCProxy for IScannerCallbackDBus {}
 
 #[generate_dbus_exporter(
     export_scanner_callback_dbus_intf,
@@ -388,7 +356,7 @@ impl IBluetooth for BluetoothDBus {
     }
 
     #[dbus_method("GetBondState")]
-    fn get_bond_state(&self, device: BluetoothDevice) -> u32 {
+    fn get_bond_state(&self, device: BluetoothDevice) -> BtBondState {
         dbus_generated!()
     }
 
@@ -432,8 +400,18 @@ impl IBluetooth for BluetoothDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("GetRemoteConnected")]
+    fn get_remote_connected(&self, device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetConnectedDevices")]
+    fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetConnectionState")]
-    fn get_connection_state(&self, device: BluetoothDevice) -> u32 {
+    fn get_connection_state(&self, device: BluetoothDevice) -> BtConnectionState {
         dbus_generated!()
     }
 
@@ -464,6 +442,36 @@ impl IBluetooth for BluetoothDBus {
 
     #[dbus_method("DisconnectAllEnabledProfiles")]
     fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+}
+
+pub(crate) struct BluetoothQADBus {
+    client_proxy: ClientDBusProxy,
+}
+
+impl BluetoothQADBus {
+    pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> BluetoothQADBus {
+        BluetoothQADBus {
+            client_proxy: ClientDBusProxy::new(
+                conn.clone(),
+                String::from("org.chromium.bluetooth"),
+                make_object_path(index, "adapter"),
+                String::from("org.chromium.bluetooth.BluetoothQA"),
+            ),
+        }
+    }
+}
+
+#[generate_dbus_interface_client]
+impl IBluetoothQA for BluetoothQADBus {
+    #[dbus_method("GetConnectable")]
+    fn get_connectable(&self) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetConnectable")]
+    fn set_connectable(&mut self, mode: bool) -> bool {
         dbus_generated!()
     }
 }
@@ -548,19 +556,7 @@ impl IBluetoothManager for BluetoothManagerDBus {
 
 struct IBluetoothManagerCallbackDBus {}
 
-impl RPCProxy for IBluetoothManagerCallbackDBus {
-    // Placeholder implementations just to satisfy impl RPCProxy requirements.
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-    fn get_object_id(&self) -> String {
-        String::from("")
-    }
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-    fn export_for_rpc(self: Box<Self>) {}
-}
+impl RPCProxy for IBluetoothManagerCallbackDBus {}
 
 #[generate_dbus_exporter(
     export_bluetooth_manager_callback_dbus_intf,
@@ -631,6 +627,231 @@ impl IBluetoothGatt for BluetoothGattDBus {
 
     fn stop_scan(&self, _scanner_id: i32) {
         dbus_generated!()
+    }
+
+    // Advertising
+    fn register_advertiser(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn unregister_advertiser(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn get_own_address(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn set_parameters(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn set_data(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn advertising_enable(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn advertising_disable(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn set_periodic_advertising_parameters(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn set_periodic_advertising_data(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn set_periodic_advertising_enable(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn start_advertising(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    fn start_advertising_set(&self) {
+        // TODO(b/233128294): implement
+        todo!()
+    }
+
+    // Scanning
+
+    fn scan_filter_setup(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_add(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_clear(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_enable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_disable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn set_scan_parameters(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_config_storage(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_enable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_disable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_read_reports(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    // GATT Client
+    fn start_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn stop_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn cancel_create_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn transfer_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn transfer_set_info(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn sync_tx_parameters(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn execute_write(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn deregister_for_notification(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn get_device_type(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn test_command(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn get_gatt_db(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    // GATT Server
+    fn register_server(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn unregister_server(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_connect(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_disconnect(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn add_service(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn stop_service(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn delete_service(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn send_indication(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn send_response(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_set_preferred_phy(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_read_phy(&self) {
+        // TODO(b/193686564): implement
+        todo!()
     }
 
     #[dbus_method("RegisterClient")]
@@ -789,19 +1010,7 @@ impl IBluetoothGatt for BluetoothGattDBus {
 
 struct IBluetoothGattCallbackDBus {}
 
-impl RPCProxy for IBluetoothGattCallbackDBus {
-    // Placeholder implementations just to satisfy impl RPCProxy requirements.
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-    fn get_object_id(&self) -> String {
-        String::from("")
-    }
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-    fn export_for_rpc(self: Box<Self>) {}
-}
+impl RPCProxy for IBluetoothGattCallbackDBus {}
 
 #[generate_dbus_exporter(
     export_bluetooth_gatt_callback_dbus_intf,
@@ -1009,19 +1218,7 @@ impl IBluetoothSocketManager for BluetoothSocketManagerDBus {
 
 struct IBluetoothSocketManagerCallbacksDBus {}
 
-impl RPCProxy for IBluetoothSocketManagerCallbacksDBus {
-    // Placeholder implementations just to satisfy impl RPCProxy requirements.
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-    fn get_object_id(&self) -> String {
-        String::from("")
-    }
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-    fn export_for_rpc(self: Box<Self>) {}
-}
+impl RPCProxy for IBluetoothSocketManagerCallbacksDBus {}
 
 #[generate_dbus_exporter(export_socket_callback_dbus_intf, "org.chromium.bluetooth.SocketCallback")]
 impl IBluetoothSocketManagerCallbacks for IBluetoothSocketManagerCallbacksDBus {
@@ -1085,7 +1282,7 @@ impl ISuspend for SuspendDBus {
     }
 
     #[dbus_method("Suspend")]
-    fn suspend(&self, _suspend_type: SuspendType) -> u32 {
+    fn suspend(&self, _suspend_type: SuspendType) {
         dbus_generated!()
     }
 
@@ -1097,19 +1294,7 @@ impl ISuspend for SuspendDBus {
 
 struct ISuspendCallbackDBus {}
 
-impl RPCProxy for ISuspendCallbackDBus {
-    // Placeholder implementations just to satisfy impl RPCProxy requirements.
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-    fn get_object_id(&self) -> String {
-        String::from("")
-    }
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-    fn export_for_rpc(self: Box<Self>) {}
-}
+impl RPCProxy for ISuspendCallbackDBus {}
 
 #[generate_dbus_exporter(
     export_suspend_callback_dbus_intf,
@@ -1121,5 +1306,5 @@ impl ISuspendCallback for ISuspendCallbackDBus {
     #[dbus_method("OnSuspendReady")]
     fn on_suspend_ready(&self, suspend_id: u32) {}
     #[dbus_method("OnResumed")]
-    fn on_resumed(&self, suspend_id: u32) {}
+    fn on_resumed(&self, suspend_id: i32) {}
 }

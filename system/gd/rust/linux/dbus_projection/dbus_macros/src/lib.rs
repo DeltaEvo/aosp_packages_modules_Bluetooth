@@ -774,14 +774,7 @@ pub fn dbus_proxy_obj(attr: TokenStream, item: TokenStream) -> TokenStream {
     let gen = quote! {
         #ori_item
 
-        impl RPCProxy for #self_ty {
-            fn register_disconnect(&mut self, _disconnect_callback: Box<dyn Fn(u32) + Send>) -> u32 { 0 }
-            fn get_object_id(&self) -> String {
-                String::from("")
-            }
-            fn unregister(&mut self, _id: u32) -> bool { false }
-            fn export_for_rpc(self: Box<Self>) {}
-        }
+        impl RPCProxy for #self_ty {}
 
         struct #struct_ident {
             conn: std::sync::Arc<dbus::nonblock::SyncConnection>,
@@ -806,7 +799,6 @@ pub fn dbus_proxy_obj(attr: TokenStream, item: TokenStream) -> TokenStream {
             fn unregister(&mut self, id: u32) -> bool {
                 self.disconnect_watcher.lock().unwrap().remove(self.remote.clone(), id)
             }
-            fn export_for_rpc(self: Box<Self>) {}
         }
 
         impl DBusArg for Box<dyn #trait_ + Send> {
@@ -962,7 +954,16 @@ pub fn generate_dbus_arg(_item: TokenStream) -> TokenStream {
                 let mut val = iter.next();
                 while !key.is_none() && !val.is_none() {
                     let k = key.unwrap().as_str().unwrap().to_string();
-                    let v = dbus::arg::Variant(val.unwrap().box_clone());
+                    let val_clone = val.unwrap().box_clone();
+                    let v = dbus::arg::Variant(
+                        val_clone
+                            .as_static_inner(0)
+                            .ok_or(Box::new(DBusArgError::new(String::from(format!(
+                                "{}.{} is not a variant",
+                                name, k
+                            )))))?
+                            .box_clone(),
+                    );
                     map.insert(k, v);
                     key = iter.next();
                     val = iter.next();

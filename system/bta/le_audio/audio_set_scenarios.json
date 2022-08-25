@@ -37,7 +37,10 @@
                 "SingleDev_OneChanMonoSnk_16_2_Server_Preferred",
                 "SingleDev_OneChanMonoSnk_16_2_1",
                 "SingleDev_OneChanMonoSnk_16_1_Server_Preferred",
-                "SingleDev_OneChanMonoSnk_16_1_1"
+                "SingleDev_OneChanMonoSnk_16_1_1",
+                "DualDev_OneChanMonoSrc_16_2_Server_Preferred",
+                "SingleDev_OneChanStereoSrc_16_2_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_16_2_Server_Preferred"
             ]
         },
         {
@@ -91,10 +94,21 @@
                 "SingleDev_OneChanMonoSnk_OneChanMonoSrc_16_1_1",
                 "DualDev_OneChanMonoSrc_16_2_Server_Preferred",
                 "SingleDev_OneChanStereoSrc_16_2_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_48_4_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_48_3_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_48_2_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_48_1_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_32_2_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_32_1_Server_Preferred",
                 "SingleDev_OneChanMonoSrc_24_2_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_24_1_Server_Preferred",
                 "SingleDev_OneChanMonoSrc_16_2_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_16_1_Server_Preferred",
                 "VND_SingleDev_TwoChanStereoSnk_TwoChanStereoSrc_32khz_Server_Prefered_1",
-                "VND_SingleDev_TwoChanStereoSnk_TwoChanStereoSrc_32khz_60oct_R3_L22_1"
+                "VND_SingleDev_TwoChanStereoSnk_TwoChanStereoSrc_32khz_60oct_R3_L22_1",
+                "DualDev_OneChanMonoSnk_16_2_Server_Preferred",
+                "SingleDev_OneChanStereoSnk_16_2_Server_Preferred",
+                "SingleDev_OneChanMonoSnk_16_2_Server_Preferred"
             ]
         },
         {
@@ -152,6 +166,10 @@
                 "SingleDev_OneChanMonoSnk_48_2_2",
                 "SingleDev_OneChanMonoSnk_48_1_Server_Preferred",
                 "SingleDev_OneChanMonoSnk_48_1_2",
+                "SingleDev_OneChanMonoSnk_32_2_Server_Preferred",
+                "SingleDev_OneChanMonoSnk_32_2_2",
+                "SingleDev_OneChanMonoSnk_32_1_Server_Preferred",
+                "SingleDev_OneChanMonoSnk_32_1_2",
                 "SingleDev_OneChanMonoSnk_24_2_Server_Preferred",
                 "SingleDev_OneChanMonoSnk_24_2_2",
                 "SingleDev_OneChanMonoSnk_16_2_Server_Preferred",
@@ -163,7 +181,10 @@
                 "VND_SingleDev_TwoChanStereoSnk_48khz_100octs_Server_Preferred_1",
                 "VND_SingleDev_TwoChanStereoSnk_48khz_100octs_R15_L70_1",
                 "VND_SingleDev_OneChanStereoSnk_48khz_100octs_Server_Preferred_1",
-                "VND_SingleDev_OneChanStereoSnk_48khz_100octs_R15_L70_1"
+                "VND_SingleDev_OneChanStereoSnk_48khz_100octs_R15_L70_1",
+                "DualDev_OneChanMonoSrc_16_2_Server_Preferred",
+                "SingleDev_OneChanStereoSrc_16_2_Server_Preferred",
+                "SingleDev_OneChanMonoSrc_16_2_Server_Preferred"
             ]
         },
         {

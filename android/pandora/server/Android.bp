@@ -2,11 +2,20 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-android_test_helper_app {
-    name: "PandoraServer",
+java_library_static {
+    name: "PandoraServerLib",
+
     srcs: ["src/**/*.kt"],
+
     platform_apis: true,
-    certificate: "platform",
+
+    sdk_version: "core_platform",
+
+    libs: [
+        // Access to hidden apis in Bluetooth:
+        "framework-bluetooth.impl",
+        "framework",
+    ],
 
     static_libs: [
         "androidx.test.runner",
@@ -20,6 +29,15 @@ android_test_helper_app {
         "pandora-proto-java",
         "opencensus-java-contrib-grpc-metrics",
     ],
+}
+
+android_test_helper_app {
+    name: "PandoraServer",
+    certificate: "platform",
+
+    static_libs: [
+        "PandoraServerLib",
+    ],
 
     dex_preopt: {
         enabled: false,
@@ -28,15 +46,32 @@ android_test_helper_app {
         enabled: false,
     },
 
-    test_suites: ["device-tests"],
+    test_suites: [
+        "device-tests",
+        "mts-bluetooth",
+    ],
 }
 
 android_test {
     name: "pts-bot",
     required: ["PandoraServer"],
     test_config: "configs/PtsBotTest.xml",
-    data: ["configs/pts_bot_tests_config.json", ":mmi2grpc"],
+    data: [
+        "configs/pts_bot_tests_config.json",
+        ":mmi2grpc"
+    ],
     test_suites: ["device-tests"],
+}
+
+android_test {
+    name: "pts-bot-mts",
+    required: ["PandoraServer"],
+    test_config: "configs/PtsBotTestMts.xml",
+    data: [
+        "configs/pts_bot_tests_config.json",
+        ":mmi2grpc"
+    ],
+    test_suites: ["mts-bluetooth"],
 }
 
 java_library {
@@ -99,6 +134,7 @@ genrule {
          "    $(in)",
     srcs: [
         "proto/pandora/a2dp.proto",
+        "proto/pandora/avrcp.proto",
         "proto/pandora/gatt.proto",
         "proto/pandora/hfp.proto",
         "proto/pandora/host.proto",
@@ -107,6 +143,8 @@ genrule {
     out: [
         "pandora/a2dp_grpc.py",
         "pandora/a2dp_pb2.py",
+        "pandora/avrcp_grpc.py",
+        "pandora/avrcp_pb2.py",
         "pandora/gatt_grpc.py",
         "pandora/gatt_pb2.py",
         "pandora/hfp_grpc.py",
