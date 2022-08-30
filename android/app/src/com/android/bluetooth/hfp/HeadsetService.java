@@ -179,6 +179,7 @@ public class HeadsetService extends ProfileService {
         // Step 3: Initialize system interface
         mSystemInterface = HeadsetObjectsFactory.getInstance().makeSystemInterface(this);
         // Step 4: Initialize native interface
+        setHeadsetService(this);
         mMaxHeadsetConnections = mAdapterService.getMaxConnectedAudioDevices();
         mNativeInterface = HeadsetObjectsFactory.getInstance().getNativeInterface();
         // Add 1 to allow a pending device to be connecting or disconnecting
@@ -197,7 +198,6 @@ public class HeadsetService extends ProfileService {
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         registerReceiver(mHeadsetReceiver, filter);
         // Step 7: Mark service as started
-        setHeadsetService(this);
         mStarted = true;
         BluetoothDevice activeDevice = getActiveDevice();
         String deviceAddress = activeDevice != null ?
@@ -223,7 +223,6 @@ public class HeadsetService extends ProfileService {
                 AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS;
         mAdapterService.notifyActivityAttributionInfo(getAttributionSource(), deviceAddress);
         mStarted = false;
-        setHeadsetService(null);
         // Step 6: Tear down broadcast receivers
         unregisterReceiver(mHeadsetReceiver);
         synchronized (mStateMachines) {
@@ -256,6 +255,7 @@ public class HeadsetService extends ProfileService {
         }
         // Step 4: Destroy native interface
         mNativeInterface.cleanup();
+        setHeadsetService(null);
         // Step 3: Destroy system interface
         mSystemInterface.stop();
         // Step 2: Stop handler thread
@@ -484,20 +484,7 @@ public class HeadsetService extends ProfileService {
         }
 
         @Override
-        public boolean connect(BluetoothDevice device) {
-            if (mService == null) {
-                return false;
-            }
-            AttributionSource source = Utils.getCallingAttributionSource(mService);
-            HeadsetService service = getService(source);
-            if (service == null) {
-                return false;
-            }
-            return service.connect(device);
-        }
-
-        @Override
-        public void connectWithAttribution(BluetoothDevice device, AttributionSource source,
+        public void connect(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
                 HeadsetService service = getService(source);
@@ -512,20 +499,7 @@ public class HeadsetService extends ProfileService {
         }
 
         @Override
-        public boolean disconnect(BluetoothDevice device) {
-            if (mService == null) {
-                return false;
-            }
-            AttributionSource source = Utils.getCallingAttributionSource(mService);
-            HeadsetService service = getService(source);
-            if (service == null) {
-                return false;
-            }
-            return service.disconnect(device);
-        }
-
-        @Override
-        public void disconnectWithAttribution(BluetoothDevice device, AttributionSource source,
+        public void disconnect(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
                 HeadsetService service = getService(source);
@@ -540,20 +514,7 @@ public class HeadsetService extends ProfileService {
         }
 
         @Override
-        public List<BluetoothDevice> getConnectedDevices() {
-            if (mService == null) {
-                return new ArrayList<BluetoothDevice>(0);
-            }
-            AttributionSource source = Utils.getCallingAttributionSource(mService);
-            HeadsetService service = getService(source);
-            if (service == null) {
-                return new ArrayList<BluetoothDevice>(0);
-            }
-            return service.getConnectedDevices();
-        }
-
-        @Override
-        public void getConnectedDevicesWithAttribution(AttributionSource source,
+        public void getConnectedDevices(AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
                 HeadsetService service = getService(source);
@@ -583,20 +544,7 @@ public class HeadsetService extends ProfileService {
         }
 
         @Override
-        public int getConnectionState(BluetoothDevice device) {
-            if (mService == null) {
-                return BluetoothProfile.STATE_DISCONNECTED;
-            }
-            AttributionSource source = Utils.getCallingAttributionSource(mService);
-            HeadsetService service = getService(source);
-            if (service == null) {
-                return BluetoothProfile.STATE_DISCONNECTED;
-            }
-            return service.getConnectionState(device);
-        }
-
-        @Override
-        public void getConnectionStateWithAttribution(BluetoothDevice device,
+        public void getConnectionState(BluetoothDevice device,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
                 HeadsetService service = getService(source);
