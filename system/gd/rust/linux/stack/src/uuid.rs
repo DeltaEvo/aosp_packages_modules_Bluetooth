@@ -1,8 +1,9 @@
 //! Collection of Profile UUIDs and helpers to use them.
 
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Display, Formatter};
 
-use bt_topshim::btif::Uuid128Bit;
+use bt_topshim::btif::{Uuid, Uuid128Bit};
 
 // List of profile uuids
 pub const A2DP_SINK: &str = "0000110B-0000-1000-8000-00805F9B34FB";
@@ -67,6 +68,26 @@ pub enum Profile {
     GenericMediaControl,
     MediaControl,
     CoordinatedSet,
+}
+
+/// Wraps a reference of Uuid128Bit, which is the raw array of bytes of UUID.
+/// This is useful in implementing standard Rust traits which can't be implemented directly on
+/// built-in types (Rust's Orphan Rule).
+pub struct UuidWrapper<'a>(pub &'a Uuid128Bit);
+
+impl<'a> Display for UuidWrapper<'a> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Uuid::format(&self.0, f)
+    }
+}
+
+pub struct KnownUuidWrapper<'a>(pub &'a Uuid128Bit, pub &'a Profile);
+
+impl<'a> Display for KnownUuidWrapper<'a> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let _ = Uuid::format(&self.0, f);
+        write!(f, ": {:?}", self.1)
+    }
 }
 
 pub struct UuidHelper {
@@ -150,12 +171,17 @@ impl UuidHelper {
 
     /// Converts a UUID byte array into a formatted string.
     pub fn to_string(uuid: &Uuid128Bit) -> String {
-        return String::from(format!("{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
-            uuid[0], uuid[1], uuid[2], uuid[3],
-            uuid[4], uuid[5],
-            uuid[6], uuid[7],
-            uuid[8], uuid[9],
-            uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]));
+        UuidWrapper(&uuid).to_string()
+    }
+
+    /// If a uuid is known to be a certain service, convert it into a formatted
+    /// string that shows the service name. Else just format the uuid.
+    pub fn known_uuid_to_string(&self, uuid: &Uuid128Bit) -> String {
+        if let Some(p) = self.is_known_profile(uuid) {
+            return KnownUuidWrapper(&uuid, &p).to_string();
+        }
+
+        UuidHelper::to_string(uuid)
     }
 
     /// Converts a well-formatted UUID string to a UUID byte array.
@@ -186,6 +212,28 @@ impl UuidHelper {
 
         Some(uuid)
     }
+}
+
+// Temporary util that covers only basic string conversion.
+// TODO(b/193685325): Implement more UUID utils by using Uuid from gd/hci/uuid.h with cxx.
+pub fn parse_uuid_string<T: Into<String>>(uuid: T) -> Option<Uuid> {
+    let uuid = uuid.into();
+
+    if uuid.len() != 32 {
+        return None;
+    }
+
+    let mut raw = [0; 16];
+
+    for i in 0..16 {
+        let byte = u8::from_str_radix(&uuid[i * 2..i * 2 + 2], 16);
+        if byte.is_err() {
+            return None;
+        }
+        raw[i] = byte.unwrap();
+    }
+
+    Some(Uuid { uu: raw })
 }
 
 #[cfg(test)]

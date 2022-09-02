@@ -41,8 +41,10 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -100,12 +102,7 @@ public class MetadataTest {
         MockitoAnnotations.initMocks(this);
 
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        try {
-            mTestResources = mTargetContext.getPackageManager()
-                    .getResourcesForApplication("com.android.bluetooth.tests");
-        } catch (PackageManager.NameNotFoundException e) {
-            assertWithMessage("Setup Failure Unable to get resources" + e.toString()).fail();
-        }
+        mTestResources = TestUtils.getTestApplicationResources(mTargetContext);
 
         mTestBitmap = loadImage(com.android.bluetooth.tests.R.raw.image_200_200);
         mTestBitmap2 = loadImage(com.android.bluetooth.tests.R.raw.image_200_200_blue);
@@ -249,7 +246,7 @@ public class MetadataTest {
         assertThat(metadata.numTracks).isEqualTo(numTracks);
         assertThat(metadata.genre).isEqualTo(genre);
         assertThat(metadata.duration).isEqualTo(duration);
-        assertThat(metadata.image).isEqualTo(image);
+        Assert.assertTrue(Image.sameAs(metadata.image, image));
     }
 
     /**

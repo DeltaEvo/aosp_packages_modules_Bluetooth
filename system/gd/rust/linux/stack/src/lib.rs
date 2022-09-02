@@ -6,9 +6,15 @@
 #[macro_use]
 extern crate num_derive;
 
+pub mod battery_manager;
+pub mod battery_provider_manager;
 pub mod bluetooth;
+pub mod bluetooth_adv;
 pub mod bluetooth_gatt;
 pub mod bluetooth_media;
+pub mod callbacks;
+pub mod socket_manager;
+pub mod suspend;
 pub mod uuid;
 
 use log::debug;
@@ -19,19 +25,16 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::bluetooth::Bluetooth;
 use crate::bluetooth_gatt::BluetoothGatt;
 use crate::bluetooth_media::{BluetoothMedia, MediaActions};
+use crate::socket_manager::{BluetoothSocketManager, SocketActions};
+use crate::suspend::Suspend;
 use bt_topshim::{
     btif::BaseCallbacks,
     profiles::{
-        a2dp::A2dpCallbacks, avrcp::AvrcpCallbacks, gatt::GattClientCallbacks,
+        a2dp::A2dpCallbacks, avrcp::AvrcpCallbacks, gatt::GattAdvCallbacks,
+        gatt::GattAdvInbandCallbacks, gatt::GattClientCallbacks, gatt::GattScannerCallbacks,
         gatt::GattServerCallbacks, hfp::HfpCallbacks, hid_host::HHCallbacks, sdp::SdpCallbacks,
     },
 };
-
-#[derive(Clone, Debug)]
-pub enum BluetoothCallbackType {
-    Adapter,
-    Connection,
-}
 
 /// Message types that are sent to the stack main dispatch loop.
 pub enum Message {
@@ -41,15 +44,36 @@ pub enum Message {
     Base(BaseCallbacks),
     GattClient(GattClientCallbacks),
     GattServer(GattServerCallbacks),
+    LeScanner(GattScannerCallbacks),
+    LeAdvInband(GattAdvInbandCallbacks),
+    LeAdv(GattAdvCallbacks),
     HidHost(HHCallbacks),
     Hfp(HfpCallbacks),
     Sdp(SdpCallbacks),
 
     // Actions within the stack
     Media(MediaActions),
+    MediaCallbackDisconnected(u32),
 
     // Client callback disconnections
-    BluetoothCallbackDisconnected(u32, BluetoothCallbackType),
+    AdapterCallbackDisconnected(u32),
+    ConnectionCallbackDisconnected(u32),
+
+    // Update list of found devices and remove old instances.
+    DeviceFreshnessCheck,
+
+    // Suspend related
+    SuspendCallbackRegistered(u32),
+    SuspendCallbackDisconnected(u32),
+
+    // Scanner related
+    ScannerCallbackDisconnected(u32),
+
+    // Advertising related
+    AdvertiserCallbackDisconnected(u32),
+
+    SocketManagerActions(SocketActions),
+    SocketManagerCallbackDisconnected(u32),
 }
 
 /// Umbrella class for the Bluetooth stack.
@@ -67,6 +91,8 @@ impl Stack {
         bluetooth: Arc<Mutex<Box<Bluetooth>>>,
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
         bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
+        suspend: Arc<Mutex<Box<Suspend>>>,
+        bluetooth_socketmgr: Arc<Mutex<Box<BluetoothSocketManager>>>,
     ) {
         loop {
             let m = rx.recv().await;
@@ -98,6 +124,18 @@ impl Stack {
                     debug!("Unhandled Message::GattServer: {:?}", m);
                 }
 
+                Message::LeScanner(m) => {
+                    bluetooth_gatt.lock().unwrap().dispatch_le_scanner_callbacks(m);
+                }
+
+                Message::LeAdvInband(m) => {
+                    debug!("Received LeAdvInband message: {:?}. This is unexpected!", m);
+                }
+
+                Message::LeAdv(m) => {
+                    bluetooth_gatt.lock().unwrap().dispatch_le_adv_callbacks(m);
+                }
+
                 Message::Hfp(hf) => {
                     bluetooth_media.lock().unwrap().dispatch_hfp_callbacks(hf);
                 }
@@ -115,8 +153,43 @@ impl Stack {
                     bluetooth_media.lock().unwrap().dispatch_media_actions(action);
                 }
 
-                Message::BluetoothCallbackDisconnected(id, cb_type) => {
-                    bluetooth.lock().unwrap().callback_disconnected(id, cb_type);
+                Message::MediaCallbackDisconnected(cb_id) => {
+                    bluetooth_media.lock().unwrap().remove_callback(cb_id);
+                }
+
+                Message::AdapterCallbackDisconnected(id) => {
+                    bluetooth.lock().unwrap().adapter_callback_disconnected(id);
+                }
+
+                Message::ConnectionCallbackDisconnected(id) => {
+                    bluetooth.lock().unwrap().connection_callback_disconnected(id);
+                }
+
+                Message::DeviceFreshnessCheck => {
+                    bluetooth.lock().unwrap().trigger_freshness_check();
+                }
+
+                Message::SuspendCallbackRegistered(id) => {
+                    suspend.lock().unwrap().callback_registered(id);
+                }
+
+                Message::SuspendCallbackDisconnected(id) => {
+                    suspend.lock().unwrap().remove_callback(id);
+                }
+
+                Message::ScannerCallbackDisconnected(id) => {
+                    bluetooth_gatt.lock().unwrap().remove_scanner_callback(id);
+                }
+
+                Message::AdvertiserCallbackDisconnected(id) => {
+                    bluetooth_gatt.lock().unwrap().remove_adv_callback(id);
+                }
+
+                Message::SocketManagerActions(action) => {
+                    bluetooth_socketmgr.lock().unwrap().handle_actions(action);
+                }
+                Message::SocketManagerCallbackDisconnected(id) => {
+                    bluetooth_socketmgr.lock().unwrap().remove_callback(id);
                 }
             }
         }
@@ -130,14 +203,20 @@ impl Stack {
 /// `register_disconnect` to let others observe the disconnection event.
 pub trait RPCProxy {
     /// Registers disconnect observer that will be notified when the remote object is disconnected.
-    fn register_disconnect(&mut self, f: Box<dyn Fn(u32) + Send>) -> u32;
+    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
+        0
+    }
 
     /// Returns the ID of the object. For example this would be an object path in D-Bus RPC.
-    fn get_object_id(&self) -> String;
+    fn get_object_id(&self) -> String {
+        String::from("")
+    }
 
     /// Unregisters callback with this id.
-    fn unregister(&mut self, id: u32) -> bool;
+    fn unregister(&mut self, _id: u32) -> bool {
+        false
+    }
 
     /// Makes this object available for remote call.
-    fn export_for_rpc(self: Box<Self>);
+    fn export_for_rpc(self: Box<Self>) {}
 }

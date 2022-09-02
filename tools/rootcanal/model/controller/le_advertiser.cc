@@ -20,14 +20,16 @@ using namespace bluetooth::hci;
 using namespace std::literals;
 
 namespace rootcanal {
-void LeAdvertiser::Initialize(AddressWithType address,
+void LeAdvertiser::Initialize(OwnAddressType address_type,
+                              AddressWithType public_address,
                               AddressWithType peer_address,
                               LeScanningFilterPolicy filter_policy,
                               model::packets::AdvertisementType type,
                               const std::vector<uint8_t>& advertisement,
                               const std::vector<uint8_t>& scan_response,
                               std::chrono::steady_clock::duration interval) {
-  address_ = address;
+  own_address_type_ = address_type;
+  public_address_ = public_address;
   peer_address_ = peer_address;
   filter_policy_ = filter_policy;
   type_ = type;
@@ -35,23 +37,29 @@ void LeAdvertiser::Initialize(AddressWithType address,
   scan_response_ = scan_response;
   interval_ = interval;
   tx_power_ = kTxPowerUnavailable;
+  LOG_INFO("%s -> %s", public_address_.ToString().c_str(),
+           peer_address.ToString().c_str());
 }
 
 void LeAdvertiser::InitializeExtended(
-    unsigned advertising_handle, AddressType address_type,
-    AddressWithType peer_address, LeScanningFilterPolicy filter_policy,
+    unsigned advertising_handle, OwnAddressType address_type,
+    AddressWithType public_address, AddressWithType peer_address,
+    LeScanningFilterPolicy filter_policy,
     model::packets::AdvertisementType type,
-    std::chrono::steady_clock::duration interval, uint8_t tx_power) {
+    std::chrono::steady_clock::duration interval, uint8_t tx_power,
+    const std::function<bluetooth::hci::Address()>& get_address) {
+  get_address_ = get_address;
+  own_address_type_ = address_type;
+  public_address_ = public_address;
   advertising_handle_ = advertising_handle;
-  address_ = AddressWithType(address_.GetAddress(), address_type);
   peer_address_ = peer_address;
   filter_policy_ = filter_policy;
   type_ = type;
   interval_ = interval;
   tx_power_ = tx_power;
   LOG_INFO("%s -> %s type = %hhx interval = %d ms tx_power = 0x%hhx",
-           address_.ToString().c_str(), peer_address.ToString().c_str(), type_,
-           static_cast<int>(interval_.count()), tx_power);
+           public_address_.ToString().c_str(), peer_address.ToString().c_str(),
+           type_, static_cast<int>(interval_.count()), tx_power);
 }
 
 void LeAdvertiser::Clear() {
@@ -98,6 +106,34 @@ void LeAdvertiser::EnableExtended(std::chrono::milliseconds duration_ms) {
   Duration adv_direct_ind_interval_high = 3750us;  // 3.75ms
   Duration duration = duration_ms;
   TimePoint now = std::chrono::steady_clock::now();
+
+  bluetooth::hci::Address resolvable_address = get_address_();
+  switch (own_address_type_) {
+    case bluetooth::hci::OwnAddressType::PUBLIC_DEVICE_ADDRESS:
+      address_ = public_address_;
+      break;
+    case bluetooth::hci::OwnAddressType::RANDOM_DEVICE_ADDRESS:
+      address_ = AddressWithType(address_.GetAddress(),
+                                 AddressType::RANDOM_DEVICE_ADDRESS);
+      break;
+    case bluetooth::hci::OwnAddressType::RESOLVABLE_OR_PUBLIC_ADDRESS:
+      if (resolvable_address != Address::kEmpty) {
+        address_ = AddressWithType(resolvable_address,
+                                   AddressType::RANDOM_DEVICE_ADDRESS);
+      } else {
+        address_ = public_address_;
+      }
+      break;
+    case bluetooth::hci::OwnAddressType::RESOLVABLE_OR_RANDOM_ADDRESS:
+      if (resolvable_address != Address::kEmpty) {
+        address_ = AddressWithType(resolvable_address,
+                                   AddressType::RANDOM_DEVICE_ADDRESS);
+      } else {
+        address_ = AddressWithType(address_.GetAddress(),
+                                   AddressType::RANDOM_DEVICE_ADDRESS);
+      }
+      break;
+  }
 
   switch (type_) {
     // [Vol 6] Part B. 4.4.2.4.3 High duty cycle connectable directed
@@ -206,8 +242,8 @@ LeAdvertiser::GetScanResponse(bluetooth::hci::Address scanned,
   }
   switch (filter_policy_) {
     case bluetooth::hci::LeScanningFilterPolicy::
-        CONNECT_LIST_AND_INITIATORS_IDENTITY:
-    case bluetooth::hci::LeScanningFilterPolicy::CONNECT_LIST_ONLY:
+        FILTER_ACCEPT_LIST_AND_INITIATORS_IDENTITY:
+    case bluetooth::hci::LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY:
       LOG_WARN("ScanResponses don't handle connect list filters");
       return nullptr;
     case bluetooth::hci::LeScanningFilterPolicy::CHECK_INITIATORS_IDENTITY:
@@ -222,7 +258,7 @@ LeAdvertiser::GetScanResponse(bluetooth::hci::Address scanned,
     return model::packets::LeScanResponseBuilder::Create(
         address_.GetAddress(), peer_address_.GetAddress(),
         static_cast<model::packets::AddressType>(address_.GetAddressType()),
-        type_, advertisement_);
+        model::packets::AdvertisementType::SCAN_RESPONSE, scan_response_);
   } else {
     uint8_t tx_power_jittered = 2 + tx_power_ - (num_events_ & 0x03);
     return model::packets::RssiWrapperBuilder::Create(
@@ -230,7 +266,7 @@ LeAdvertiser::GetScanResponse(bluetooth::hci::Address scanned,
         model::packets::LeScanResponseBuilder::Create(
             address_.GetAddress(), peer_address_.GetAddress(),
             static_cast<model::packets::AddressType>(address_.GetAddressType()),
-            type_, advertisement_));
+            model::packets::AdvertisementType::SCAN_RESPONSE, scan_response_));
   }
 }
 

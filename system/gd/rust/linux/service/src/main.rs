@@ -1,3 +1,6 @@
+extern crate clap;
+
+use clap::{App, AppSettings, Arg};
 use dbus::{channel::MatchingReceiver, message::MatchRule};
 use dbus_crossroads::Crossroads;
 use dbus_tokio::connection;
@@ -9,34 +12,25 @@ use syslog::{BasicLogger, Facility, Formatter3164};
 
 use bt_topshim::{btif::get_btinterface, topstack};
 use btstack::{
+    battery_manager::BatteryManager,
+    battery_provider_manager::BatteryProviderManager,
     bluetooth::{get_bt_dispatcher, Bluetooth, IBluetooth},
     bluetooth_gatt::BluetoothGatt,
     bluetooth_media::BluetoothMedia,
+    socket_manager::BluetoothSocketManager,
+    suspend::Suspend,
     Stack,
 };
 use dbus_projection::DisconnectWatcher;
 
 mod dbus_arg;
+mod iface_battery_manager;
+mod iface_battery_provider_manager;
 mod iface_bluetooth;
 mod iface_bluetooth_gatt;
 mod iface_bluetooth_media;
 
 const DBUS_SERVICE_NAME: &str = "org.chromium.bluetooth";
-
-/// Check command line arguments for target hci adapter (--hci=N). If no adapter
-/// is set, default to 0.
-fn get_adapter_index(args: &Vec<String>) -> i32 {
-    for arg in args {
-        if arg.starts_with("--hci=") {
-            let num = (&arg[6..]).parse::<i32>();
-            if num.is_ok() {
-                return num.unwrap();
-            }
-        }
-    }
-
-    0
-}
 
 fn make_object_name(idx: i32, name: &str) -> String {
     String::from(format!("/org/chromium/bluetooth/hci{}/{}", idx, name))
@@ -44,45 +38,89 @@ fn make_object_name(idx: i32, name: &str) -> String {
 
 /// Runs the Bluetooth daemon serving D-Bus IPC.
 fn main() -> Result<(), Box<dyn Error>> {
-    let formatter = Formatter3164 {
-        facility: Facility::LOG_USER,
-        hostname: None,
-        process: "btadapterd".into(),
-        pid: 0,
+    let matches = App::new("Bluetooth Adapter Daemon")
+        // Allows multiple INIT_ flags to be given at the end of the arguments.
+        .setting(AppSettings::TrailingVarArg)
+        .arg(
+            Arg::with_name("hci")
+                .long("hci")
+                .value_name("HCI")
+                .takes_value(true)
+                .help("The HCI index"),
+        )
+        .arg(Arg::with_name("debug").long("debug").short("d").help("Enables debug level logs"))
+        .arg(Arg::from_usage("[init-flags] 'Fluoride INIT_ flags'").multiple(true))
+        .arg(
+            Arg::with_name("log-output")
+                .long("log-output")
+                .takes_value(true)
+                .possible_values(&["syslog", "stderr"])
+                .default_value("syslog")
+                .help("Select log output"),
+        )
+        .get_matches();
+
+    let is_debug = matches.is_present("debug");
+    let log_output = matches.value_of("log-output").unwrap_or("syslog");
+
+    let adapter_index = match matches.value_of("hci") {
+        Some(idx) => idx.parse::<i32>().unwrap_or(0),
+        None => 0,
     };
 
-    let logger = syslog::unix(formatter).expect("could not connect to syslog");
-    let _ = log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
-        .map(|()| log::set_max_level(LevelFilter::Info));
+    // The remaining flags are passed down to Fluoride as is.
+    let mut init_flags: Vec<String> = match matches.values_of("init-flags") {
+        Some(args) => args.map(|s| String::from(s)).collect(),
+        None => vec![],
+    };
+
+    // Set GD debug flag if debug is enabled.
+    if is_debug {
+        init_flags.push(String::from("INIT_logging_debug_enabled_for_all=true"));
+    }
+
+    // Forward --hci to Fluoride.
+    init_flags.push(format!("--hci={}", adapter_index));
+
+    let level_filter = if is_debug { LevelFilter::Debug } else { LevelFilter::Info };
+
+    if log_output == "stderr" {
+        env_logger::Builder::new().filter(None, level_filter).init();
+    } else {
+        let formatter = Formatter3164 {
+            facility: Facility::LOG_USER,
+            hostname: None,
+            process: "btadapterd".into(),
+            pid: 0,
+        };
+
+        let logger = syslog::unix(formatter).expect("could not connect to syslog");
+        let _ = log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
+            .map(|()| log::set_max_level(level_filter));
+    }
 
     let (tx, rx) = Stack::create_channel();
 
     let intf = Arc::new(Mutex::new(get_btinterface().unwrap()));
-    let bluetooth_gatt = Arc::new(Mutex::new(Box::new(BluetoothGatt::new(intf.clone()))));
+    let bluetooth_gatt =
+        Arc::new(Mutex::new(Box::new(BluetoothGatt::new(intf.clone(), tx.clone()))));
     let bluetooth_media =
         Arc::new(Mutex::new(Box::new(BluetoothMedia::new(tx.clone(), intf.clone()))));
+    let battery_provider_manager = Arc::new(Mutex::new(Box::new(BatteryProviderManager::new())));
+    let battery_manager = Arc::new(Mutex::new(Box::new(BatteryManager::new())));
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
         tx.clone(),
         intf.clone(),
         bluetooth_media.clone(),
     ))));
+    let suspend = Arc::new(Mutex::new(Box::new(Suspend::new(
+        bluetooth.clone(),
+        intf.clone(),
+        bluetooth_gatt.clone(),
+        tx.clone(),
+    ))));
 
-    // Args don't include arg[0] which is the binary name
-    let all_args = std::env::args().collect::<Vec<String>>();
-    let args = all_args[1..].to_vec();
-
-    let adapter_index = get_adapter_index(&args);
-
-    // Hold locks and initialize all interfaces.
-    {
-        intf.lock().unwrap().initialize(get_bt_dispatcher(tx.clone()), args);
-
-        let mut bluetooth = bluetooth.lock().unwrap();
-        bluetooth.init_profiles();
-        bluetooth.enable();
-
-        bluetooth_gatt.lock().unwrap().init_profiles(tx.clone());
-    }
+    let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(tx.clone()))));
 
     topstack::get_runtime().block_on(async {
         // Connect to D-Bus system bus.
@@ -99,13 +137,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         conn.request_name(DBUS_SERVICE_NAME, false, true, false).await?;
 
         // Prepare D-Bus interfaces.
-        let mut cr = Crossroads::new();
-        cr.set_async_support(Some((
+        let cr = Arc::new(Mutex::new(Crossroads::new()));
+        cr.lock().unwrap().set_async_support(Some((
             conn.clone(),
             Box::new(|x| {
                 tokio::spawn(x);
             }),
         )));
+
+        // Announce the exported adapter objects so that clients can properly detect the readiness
+        // of the adapter APIs.
+        cr.lock().unwrap().set_object_manager_support(Some(conn.clone()));
+        let object_manager = cr.lock().unwrap().object_manager();
+        cr.lock().unwrap().insert("/", &[object_manager], {});
 
         // Run the stack main dispatch loop.
         topstack::get_runtime().spawn(Stack::dispatch(
@@ -113,65 +157,126 @@ fn main() -> Result<(), Box<dyn Error>> {
             bluetooth.clone(),
             bluetooth_gatt.clone(),
             bluetooth_media.clone(),
+            suspend.clone(),
+            bt_sock_mgr.clone(),
         ));
 
         // Set up the disconnect watcher to monitor client disconnects.
         let disconnect_watcher = Arc::new(Mutex::new(DisconnectWatcher::new()));
         disconnect_watcher.lock().unwrap().setup_watch(conn.clone()).await;
 
-        // Register D-Bus method handlers of IBluetooth.
-        iface_bluetooth::export_bluetooth_dbus_obj(
-            make_object_name(adapter_index, "adapter"),
-            conn.clone(),
-            &mut cr,
-            bluetooth.clone(),
-            disconnect_watcher.clone(),
-        );
-        // Register D-Bus method handlers of IBluetoothGatt.
-        iface_bluetooth_gatt::export_bluetooth_gatt_dbus_obj(
-            make_object_name(adapter_index, "gatt"),
-            conn.clone(),
-            &mut cr,
-            bluetooth_gatt,
-            disconnect_watcher.clone(),
-        );
-
-        iface_bluetooth_media::export_bluetooth_media_dbus_obj(
-            make_object_name(adapter_index, "media"),
-            conn.clone(),
-            &mut cr,
-            bluetooth_media,
-            disconnect_watcher.clone(),
-        );
-
+        // Set up handling of D-Bus methods. This must be done before exporting interfaces so that
+        // clients that rely on InterfacesAdded signal can rely on us being ready to handle methods
+        // on those exported interfaces.
+        let cr_clone = cr.clone();
         conn.start_receive(
             MatchRule::new_method_call(),
             Box::new(move |msg, conn| {
-                cr.handle_message(msg, conn).unwrap();
+                cr_clone.lock().unwrap().handle_message(msg, conn).unwrap();
                 true
             }),
         );
+
+        // Register D-Bus method handlers of IBluetooth.
+        let adapter_iface = iface_bluetooth::export_bluetooth_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+        let qa_iface = iface_bluetooth::export_bluetooth_qa_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+        let socket_mgr_iface = iface_bluetooth::export_socket_mgr_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+        let suspend_iface = iface_bluetooth::export_suspend_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
+        // Register D-Bus method handlers of IBluetoothGatt.
+        let gatt_iface = iface_bluetooth_gatt::export_bluetooth_gatt_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
+        let media_iface = iface_bluetooth_media::export_bluetooth_media_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
+        let battery_provider_manager_iface =
+            iface_battery_provider_manager::export_battery_provider_manager_dbus_intf(
+                conn.clone(),
+                &mut cr.lock().unwrap(),
+                disconnect_watcher.clone(),
+            );
+
+        let battery_manager_iface = iface_battery_manager::export_battery_manager_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
+        // Create mixin object for Bluetooth + Suspend interfaces.
+        let mixin = Box::new(iface_bluetooth::BluetoothMixin {
+            adapter: bluetooth.clone(),
+            qa: bluetooth.clone(),
+            suspend: suspend.clone(),
+            socket_mgr: bt_sock_mgr.clone(),
+        });
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "adapter"),
+            &[adapter_iface, qa_iface, socket_mgr_iface, suspend_iface],
+            mixin,
+        );
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "gatt"),
+            &[gatt_iface],
+            bluetooth_gatt.clone(),
+        );
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "media"),
+            &[media_iface],
+            bluetooth_media.clone(),
+        );
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "battery_provider_manager"),
+            &[battery_provider_manager_iface],
+            battery_provider_manager.clone(),
+        );
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "battery__manager"),
+            &[battery_manager_iface],
+            battery_manager.clone(),
+        );
+
+        // Hold locks and initialize all interfaces. This must be done AFTER DBus is
+        // initialized so DBus can properly enforce user policies.
+        {
+            intf.lock().unwrap().initialize(get_bt_dispatcher(tx.clone()), init_flags);
+
+            bluetooth_media.lock().unwrap().set_adapter(bluetooth.clone());
+
+            let mut bluetooth = bluetooth.lock().unwrap();
+            bluetooth.init_profiles();
+            bluetooth.enable();
+
+            bluetooth_gatt.lock().unwrap().init_profiles(tx.clone());
+            bt_sock_mgr.lock().unwrap().initialize(intf.clone());
+        }
 
         // Serve clients forever.
         future::pending::<()>().await;
         unreachable!()
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::get_adapter_index;
-
-    #[test]
-    fn device_index_parsed() {
-        // A few failing cases
-        assert_eq!(get_adapter_index(&vec! {}), 0);
-        assert_eq!(get_adapter_index(&vec! {"--bar".to_string(), "--hci".to_string()}), 0);
-        assert_eq!(get_adapter_index(&vec! {"--hci=foo".to_string()}), 0);
-        assert_eq!(get_adapter_index(&vec! {"--hci=12t".to_string()}), 0);
-
-        // Some passing cases
-        assert_eq!(get_adapter_index(&vec! {"--hci=12".to_string()}), 12);
-        assert_eq!(get_adapter_index(&vec! {"--hci=1".to_string(), "--hci=2".to_string()}), 1);
-    }
 }

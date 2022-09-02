@@ -252,6 +252,7 @@ static void bta_hf_client_handle_ok(tBTA_HF_CLIENT_CB* client_cb) {
   switch (client_cb->at_cb.current_cmd) {
     case BTA_HF_CLIENT_AT_BIA:
     case BTA_HF_CLIENT_AT_BCC:
+    case BTA_HF_CLIENT_AT_BIEV:
       break;
     case BTA_HF_CLIENT_AT_BCS:
       bta_hf_client_start_at_hold_timer(client_cb);
@@ -332,6 +333,10 @@ static void bta_hf_client_handle_cind_list_item(tBTA_HF_CLIENT_CB* client_cb,
   uint8_t i = 0;
 
   APPL_TRACE_DEBUG("%s: %lu.%s <%lu:%lu>", __func__, index, name, min, max);
+
+  if (index >= BTA_HF_CLIENT_AT_INDICATOR_COUNT) {
+    return;
+  }
 
   /* look for a matching indicator on list of supported ones */
   for (i = 0; i < BTA_HF_CLIENT_AT_SUPPORTED_INDICATOR_COUNT; i++) {
@@ -812,9 +817,9 @@ void bta_hf_client_binp(tBTA_HF_CLIENT_CB* client_cb, char* number) {
   } while (0)
 
 /* skip rest of AT string up to <cr> */
-#define AT_SKIP_REST(buf)           \
-  do {                              \
-    while (*(buf) != '\r') (buf)++; \
+#define AT_SKIP_REST(buf)                             \
+  do {                                                \
+    while (*(buf) != '\r' && *(buf) != '\0') (buf)++; \
   } while (0)
 
 static char* bta_hf_client_parse_ok(tBTA_HF_CLIENT_CB* client_cb,

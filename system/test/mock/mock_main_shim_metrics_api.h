@@ -171,19 +171,19 @@ struct LogMetricReadTxPowerLevelResult {
 };
 extern struct LogMetricReadTxPowerLevelResult LogMetricReadTxPowerLevelResult;
 // Name: LogMetricSmpPairingEvent
-// Params: const RawAddress& raw_address, uint8_t smp_cmd,
+// Params: const RawAddress& raw_address, uint16_t smp_cmd,
 // android::bluetooth::DirectionEnum direction, uint8_t smp_fail_reason Returns:
 // void
 struct LogMetricSmpPairingEvent {
-  std::function<void(const RawAddress& raw_address, uint8_t smp_cmd,
+  std::function<void(const RawAddress& raw_address, uint16_t smp_cmd,
                      android::bluetooth::DirectionEnum direction,
-                     uint8_t smp_fail_reason)>
-      body{[](const RawAddress& raw_address, uint8_t smp_cmd,
+                     uint16_t smp_fail_reason)>
+      body{[](const RawAddress& raw_address, uint16_t smp_cmd,
               android::bluetooth::DirectionEnum direction,
-              uint8_t smp_fail_reason) {}};
-  void operator()(const RawAddress& raw_address, uint8_t smp_cmd,
+              uint16_t smp_fail_reason) {}};
+  void operator()(const RawAddress& raw_address, uint16_t smp_cmd,
                   android::bluetooth::DirectionEnum direction,
-                  uint8_t smp_fail_reason) {
+                  uint16_t smp_fail_reason) {
     body(raw_address, smp_cmd, direction, smp_fail_reason);
   };
 };
@@ -258,24 +258,27 @@ extern struct LogMetricSocketConnectionState LogMetricSocketConnectionState;
 // std::string& software_version Returns: void
 struct LogMetricManufacturerInfo {
   std::function<void(const RawAddress& raw_address,
+                     android::bluetooth::AddressTypeEnum address_type,
                      android::bluetooth::DeviceInfoSrcEnum source_type,
                      const std::string& source_name,
                      const std::string& manufacturer, const std::string& model,
                      const std::string& hardware_version,
                      const std::string& software_version)>
       body{[](const RawAddress& raw_address,
+              android::bluetooth::AddressTypeEnum address_type,
               android::bluetooth::DeviceInfoSrcEnum source_type,
               const std::string& source_name, const std::string& manufacturer,
               const std::string& model, const std::string& hardware_version,
               const std::string& software_version) {}};
   void operator()(const RawAddress& raw_address,
+                  android::bluetooth::AddressTypeEnum address_type,
                   android::bluetooth::DeviceInfoSrcEnum source_type,
                   const std::string& source_name,
                   const std::string& manufacturer, const std::string& model,
                   const std::string& hardware_version,
                   const std::string& software_version) {
-    body(raw_address, source_type, source_name, manufacturer, model,
-         hardware_version, software_version);
+    body(raw_address, address_type, source_type, source_name, manufacturer,
+         model, hardware_version, software_version);
   };
 };
 extern struct LogMetricManufacturerInfo LogMetricManufacturerInfo;

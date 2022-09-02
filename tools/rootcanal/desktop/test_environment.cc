@@ -16,12 +16,15 @@
 
 #include "test_environment.h"
 
+#include <filesystem>  // for exists
 #include <type_traits>  // for remove_extent_t
 #include <utility>      // for move
 #include <vector>       // for vector
 
-#include "model/devices/hci_socket_device.h"         // for HciSocketDevice
+#include "model/devices/baseband_sniffer.h"
 #include "model/devices/link_layer_socket_device.h"  // for LinkLayerSocketDevice
+#include "model/hci/hci_sniffer.h"                   // for HciSniffer
+#include "model/hci/hci_socket_transport.h"          // for HciSocketTransport
 #include "net/async_data_channel.h"                  // for AsyncDataChannel
 #include "net/async_data_channel_connector.h"  // for AsyncDataChannelConnector
 #include "os/log.h"  // for LOG_INFO, LOG_ERROR, LOG_WARN
@@ -31,7 +34,10 @@ namespace bluetooth {
 namespace root_canal {
 
 using rootcanal::AsyncTaskId;
-using rootcanal::HciSocketDevice;
+using rootcanal::BaseBandSniffer;
+using rootcanal::HciDevice;
+using rootcanal::HciSniffer;
+using rootcanal::HciSocketTransport;
 using rootcanal::LinkLayerSocketDevice;
 using rootcanal::TaskCallback;
 
@@ -57,12 +63,35 @@ void TestEnvironment::initialize(std::promise<void> barrier) {
   SetUpTestChannel();
   SetUpHciServer([this](std::shared_ptr<AsyncDataChannel> socket,
                         AsyncDataChannelServer* srv) {
-    test_model_.AddHciConnection(
-        HciSocketDevice::Create(socket, controller_properties_file_));
+    auto transport = HciSocketTransport::Create(socket);
+    if (enable_hci_sniffer_) {
+      transport = HciSniffer::Create(transport);
+    }
+    auto device = HciDevice::Create(transport, controller_properties_file_);
+    test_model_.AddHciConnection(device);
+    if (enable_hci_sniffer_) {
+      auto filename = device->GetAddress().ToString() + ".pcap";
+      for (auto i = 0; std::filesystem::exists(filename); i++) {
+        filename =
+            device->GetAddress().ToString() + "_" + std::to_string(i) + ".pcap";
+      }
+      auto file = std::make_shared<std::ofstream>(filename, std::ios::binary);
+      std::static_pointer_cast<HciSniffer>(transport)->SetOutputStream(file);
+    }
     srv->StartListening();
   });
   SetUpLinkLayerServer();
   SetUpLinkBleLayerServer();
+
+  if (enable_baseband_sniffer_) {
+    std::string filename = "baseband.pcap";
+    for (auto i = 0; std::filesystem::exists(filename); i++) {
+      filename = "baseband_" + std::to_string(i) + ".pcap";
+    }
+
+    test_model_.AddLinkLayerConnection(BaseBandSniffer::Create(filename),
+                                       Phy::Type::BR_EDR);
+  }
 
   LOG_INFO("%s: Finished", __func__);
 }

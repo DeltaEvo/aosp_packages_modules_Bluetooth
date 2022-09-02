@@ -80,6 +80,7 @@ void LogMetricLinkLayerConnectionEvent(
 
 void LogMetricManufacturerInfo(
     const Address& address,
+    android::bluetooth::AddressTypeEnum address_type,
     android::bluetooth::DeviceInfoSrcEnum source_type,
     const std::string& source_name,
     const std::string& manufacturer,
@@ -95,7 +96,7 @@ void LogMetricSdpAttribute(
     const char* attribute_value) {}
 
 void LogMetricSmpPairingEvent(
-    const Address& address, uint8_t smp_cmd, android::bluetooth::DirectionEnum direction, uint8_t smp_fail_reason) {}
+    const Address& address, uint16_t smp_cmd, android::bluetooth::DirectionEnum direction, uint16_t smp_fail_reason) {}
 
 void LogMetricA2dpPlaybackEvent(const Address& address, int playback_state, int audio_coding_mode) {}
 

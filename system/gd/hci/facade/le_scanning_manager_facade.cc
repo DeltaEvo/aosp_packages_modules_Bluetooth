@@ -124,8 +124,8 @@ class LeScanningManagerFacadeService : public LeScanningManagerFacade::Service, 
       uint16_t periodic_advertising_interval,
       std::vector<uint8_t> advertising_data) {
     AdvertisingReportMsg advertising_report_msg;
-    std::vector<LeExtendedAdvertisingReport> advertisements;
-    LeExtendedAdvertisingReport le_extended_advertising_report;
+    std::vector<LeExtendedAdvertisingResponse> advertisements;
+    LeExtendedAdvertisingResponse le_extended_advertising_report;
     le_extended_advertising_report.address_type_ = (DirectAdvertisingAddressType)address_type;
     le_extended_advertising_report.address_ = address;
     le_extended_advertising_report.advertising_data_ = advertising_data;
@@ -147,6 +147,30 @@ class LeScanningManagerFacadeService : public LeScanningManagerFacade::Service, 
   void OnFilterParamSetup(uint8_t available_spaces, ApcfAction action, uint8_t status){};
   void OnFilterConfigCallback(
       ApcfFilterType filter_type, uint8_t available_spaces, ApcfAction action, uint8_t status){};
+
+  void OnPeriodicSyncStarted(
+      int reg_id,
+      uint8_t status,
+      uint16_t sync_handle,
+      uint8_t advertising_sid,
+      AddressWithType address_with_type,
+      uint8_t phy,
+      uint16_t interval) override {
+    LOG_INFO("OnPeriodicSyncStarted in LeScanningManagerFacadeService");
+  };
+
+  void OnPeriodicSyncReport(
+      uint16_t sync_handle, int8_t tx_power, int8_t rssi, uint8_t status, std::vector<uint8_t> data) override {
+    LOG_INFO("OnPeriodicSyncReport in LeScanningManagerFacadeService");
+  };
+
+  void OnPeriodicSyncLost(uint16_t sync_handle) override {
+    LOG_INFO("OnPeriodicSyncLost in LeScanningManagerFacadeService");
+  };
+
+  void OnPeriodicSyncTransferred(int pa_source, uint8_t status, Address address) override {
+    LOG_INFO("OnPeriodicSyncTransferred in LeScanningManagerFacadeService");
+  };
 
   LeScanningManager* le_scanning_manager_;
   os::Handler* facade_handler_;

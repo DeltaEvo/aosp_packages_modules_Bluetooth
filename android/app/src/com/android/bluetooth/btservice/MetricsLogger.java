@@ -175,7 +175,7 @@ public class MetricsLogger {
     protected void drainBufferedCounters() {
         Log.i(TAG, "drainBufferedCounters().");
         synchronized (mLock) {
-            // send mCounters to westworld
+            // send mCounters to statsd
             for (int key : mCounters.keySet()) {
                 writeCounter(key, mCounters.get(key));
             }
@@ -205,7 +205,7 @@ public class MetricsLogger {
 
     private PendingIntent getDrainIntent() {
         Intent counterMetricsIntent = new Intent(BLUETOOTH_COUNTER_METRICS_ACTION);
-        counterMetricsIntent.setPackage("com.android.bluetooth");
+        counterMetricsIntent.setPackage(mContext.getPackageName());
         return PendingIntent.getBroadcast(
                 mContext, 0, counterMetricsIntent, PendingIntent.FLAG_IMMUTABLE);
     }

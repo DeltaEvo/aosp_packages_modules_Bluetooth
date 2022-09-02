@@ -172,14 +172,28 @@ static bool is_profile(const char* p1, const char* p2) {
  *
  ****************************************************************************/
 
+#ifdef OS_ANDROID
+const std::vector<std::string> get_allowed_bt_package_name(void);
+void handle_migration(const std::string& dst,
+                      const std::vector<std::string>& allowed_bt_package_name);
+#endif
+
 static int init(bt_callbacks_t* callbacks, bool start_restricted,
                 bool is_common_criteria_mode, int config_compare_result,
-                const char** init_flags, bool is_atv) {
+                const char** init_flags, bool is_atv,
+                const char* user_data_directory) {
   LOG_INFO(
       "%s: start restricted = %d ; common criteria mode = %d, config compare "
       "result = %d",
       __func__, start_restricted, is_common_criteria_mode,
       config_compare_result);
+
+#ifdef OS_ANDROID
+  if (user_data_directory != nullptr) {
+    handle_migration(std::string(user_data_directory),
+                     get_allowed_bt_package_name());
+  }
+#endif
 
   bluetooth::common::InitFlags::Load(init_flags);
 
@@ -421,9 +435,88 @@ static int clear_event_filter() {
   return BT_STATUS_SUCCESS;
 }
 
+static int clear_event_mask() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_clear_event_mask));
+  return BT_STATUS_SUCCESS;
+}
+
+static int clear_filter_accept_list() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(btif_dm_clear_filter_accept_list));
+  return BT_STATUS_SUCCESS;
+}
+
+static int disconnect_all_acls() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_disconnect_all_acls));
+  return BT_STATUS_SUCCESS;
+}
+
+static void le_rand_btif_cb(uint64_t random_number) {
+  LOG_VERBOSE("%s", __func__);
+  do_in_jni_thread(
+      FROM_HERE,
+      base::BindOnce(
+          [](uint64_t random) { HAL_CBACK(bt_hal_cbacks, le_rand_cb, random); },
+          random_number));
+}
+
+static int le_rand() {
+  LOG_VERBOSE("%s", __func__);
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(
+      FROM_HERE, base::BindOnce(btif_dm_le_rand, base::Bind(&le_rand_btif_cb)));
+  return BT_STATUS_SUCCESS;
+}
+
+static int set_event_filter_inquiry_result_all_devices() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(
+      FROM_HERE,
+      base::BindOnce(btif_dm_set_event_filter_inquiry_result_all_devices));
+  return BT_STATUS_SUCCESS;
+}
+
+static int set_default_event_mask() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_set_default_event_mask));
+  return BT_STATUS_SUCCESS;
+}
+
+static int restore_filter_accept_list() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(btif_dm_restore_filter_accept_list));
+  return BT_STATUS_SUCCESS;
+}
+
+static int allow_wake_by_hid() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_allow_wake_by_hid));
+  return BT_STATUS_SUCCESS;
+}
+
+static int set_event_filter_connection_setup_all_devices() {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  do_in_main_thread(
+      FROM_HERE,
+      base::BindOnce(btif_dm_set_event_filter_connection_setup_all_devices));
+  return BT_STATUS_SUCCESS;
+}
+
 static void dump(int fd, const char** arguments) {
   btif_debug_conn_dump(fd);
   btif_debug_bond_event_dump(fd);
+  btif_debug_linkkey_type_dump(fd);
   btif_debug_a2dp_dump(fd);
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
@@ -674,7 +767,16 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     set_dynamic_audio_buffer_size,
     generate_local_oob_data,
     allow_low_latency_audio,
-    clear_event_filter};
+    clear_event_filter,
+    clear_event_mask,
+    clear_filter_accept_list,
+    disconnect_all_acls,
+    le_rand,
+    set_event_filter_connection_setup_all_devices,
+    allow_wake_by_hid,
+    restore_filter_accept_list,
+    set_default_event_mask,
+    set_event_filter_inquiry_result_all_devices};
 
 // callback reporting helpers
 
@@ -869,6 +971,16 @@ void invoke_address_consolidate_cb(RawAddress main_bd_addr,
                      main_bd_addr, secondary_bd_addr));
 }
 
+void invoke_le_address_associate_cb(RawAddress main_bd_addr,
+                                    RawAddress secondary_bd_addr) {
+  do_in_jni_thread(
+      FROM_HERE, base::BindOnce(
+                     [](RawAddress main_bd_addr, RawAddress secondary_bd_addr) {
+                       HAL_CBACK(bt_hal_cbacks, le_address_associate_cb,
+                                 &main_bd_addr, &secondary_bd_addr);
+                     },
+                     main_bd_addr, secondary_bd_addr));
+}
 void invoke_acl_state_changed_cb(bt_status_t status, RawAddress bd_addr,
                                  bt_acl_state_t state, int transport_link_type,
                                  bt_hci_error_code_t hci_reason) {

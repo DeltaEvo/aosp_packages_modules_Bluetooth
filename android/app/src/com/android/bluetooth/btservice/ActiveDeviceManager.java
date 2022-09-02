@@ -220,6 +220,7 @@ class ActiveDeviceManager {
                         if (mHearingAidActiveDevice == null) {
                             // New connected device: select it as active
                             setA2dpActiveDevice(device);
+                            setLeAudioActiveDevice(null);
                             break;
                         }
                         break;
@@ -280,6 +281,7 @@ class ActiveDeviceManager {
                         if (mHearingAidActiveDevice == null) {
                             // New connected device: select it as active
                             setHfpActiveDevice(device);
+                            setLeAudioActiveDevice(null);
                             break;
                         }
                         break;

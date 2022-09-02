@@ -26,6 +26,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.BluetoothVolumeControl;
+import android.bluetooth.IBluetoothLeAudio;
 import android.bluetooth.IBluetoothVolumeControl;
 import android.bluetooth.IBluetoothVolumeControlCallback;
 import android.content.AttributionSource;
@@ -40,12 +41,15 @@ import android.os.HandlerThread;
 import android.os.ParcelUuid;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
+import com.android.bluetooth.btservice.storage.DatabaseManager;
+import com.android.bluetooth.le_audio.LeAudioService;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.SynchronousResultReceiver;
 
@@ -70,6 +74,7 @@ public class VolumeControlService extends ProfileService {
     private static VolumeControlService sVolumeControlService;
 
     private AdapterService mAdapterService;
+    private DatabaseManager mDatabaseManager;
     private HandlerThread mStateMachinesThread;
     private BluetoothDevice mPreviousAudioDevice;
 
@@ -178,11 +183,16 @@ public class VolumeControlService extends ProfileService {
     private final Map<BluetoothDevice, VolumeControlStateMachine> mStateMachines = new HashMap<>();
     private final Map<BluetoothDevice, VolumeControlOffsetDescriptor> mAudioOffsets =
                                                                             new HashMap<>();
+    private final Map<Integer, Integer> mGroupVolumeCache = new HashMap<>();
 
     private BroadcastReceiver mBondStateChangedReceiver;
     private BroadcastReceiver mConnectionStateChangedReceiver;
 
     private final ServiceFactory mFactory = new ServiceFactory();
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileVcpControllerEnabled().orElse(false);
+    }
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -205,10 +215,12 @@ public class VolumeControlService extends ProfileService {
             throw new IllegalStateException("start() called twice");
         }
 
-        // Get AdapterService, VolumeControlNativeInterface, AudioManager.
+        // Get AdapterService, VolumeControlNativeInterface, DatabaseManager, AudioManager.
         // None of them can be null.
         mAdapterService = Objects.requireNonNull(AdapterService.getAdapterService(),
                 "AdapterService cannot be null when VolumeControlService starts");
+        mDatabaseManager = Objects.requireNonNull(mAdapterService.getDatabase(),
+                "DatabaseManager cannot be null when VolumeControlService starts");
         mVolumeControlNativeInterface = Objects.requireNonNull(
                 VolumeControlNativeInterface.getInstance(),
                 "VolumeControlNativeInterface cannot be null when VolumeControlService starts");
@@ -237,6 +249,7 @@ public class VolumeControlService extends ProfileService {
         registerReceiver(mConnectionStateChangedReceiver, filter);
 
         mAudioOffsets.clear();
+        mGroupVolumeCache.clear();
         mCallbacks = new RemoteCallbackList<IBluetoothVolumeControlCallback>();
 
         // Mark service as started
@@ -291,6 +304,7 @@ public class VolumeControlService extends ProfileService {
         mVolumeControlNativeInterface = null;
 
         mAudioOffsets.clear();
+        mGroupVolumeCache.clear();
 
         // Clear AdapterService, VolumeControlNativeInterface
         mAudioManager = null;
@@ -412,6 +426,11 @@ public class VolumeControlService extends ProfileService {
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public boolean okToConnect(BluetoothDevice device) {
+        /* Make sure device is valid */
+        if (device == null) {
+            Log.e(TAG, "okToConnect: Invalid device");
+            return false;
+        }
         // Check if this is an incoming connection in Quiet mode.
         if (mAdapterService.isQuietModeEnabled()) {
             Log.e(TAG, "okToConnect: cannot connect to " + device + " : quiet mode enabled");
@@ -484,10 +503,10 @@ public class VolumeControlService extends ProfileService {
         }
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int getConnectionState(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
-                "Need BLUETOOTH_PRIVILEGED permission");
+        enforceCallingOrSelfPermission(BLUETOOTH_CONNECT,
+                "Need BLUETOOTH_CONNECT permission");
         synchronized (mStateMachines) {
             VolumeControlStateMachine sm = mStateMachines.get(device);
             if (sm == null) {
@@ -519,8 +538,7 @@ public class VolumeControlService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
         }
-        mAdapterService.getDatabase()
-                .setProfileConnectionPolicy(device, BluetoothProfile.VOLUME_CONTROL,
+        mDatabaseManager.setProfileConnectionPolicy(device, BluetoothProfile.VOLUME_CONTROL,
                         connectionPolicy);
         if (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
             connect(device);
@@ -534,8 +552,7 @@ public class VolumeControlService extends ProfileService {
     public int getConnectionPolicy(BluetoothDevice device) {
         enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
                 "Need BLUETOOTH_PRIVILEGED permission");
-        return mAdapterService.getDatabase()
-                .getProfileConnectionPolicy(device, BluetoothProfile.VOLUME_CONTROL);
+        return mDatabaseManager.getProfileConnectionPolicy(device, BluetoothProfile.VOLUME_CONTROL);
     }
 
     boolean isVolumeOffsetAvailable(BluetoothDevice device) {
@@ -568,21 +585,102 @@ public class VolumeControlService extends ProfileService {
     /**
      * {@hide}
      */
-    public void setVolumeGroup(int groupId, int volume) {
-        mVolumeControlNativeInterface.setVolumeGroup(groupId, volume);
+    public void setGroupVolume(int groupId, int volume) {
+        mGroupVolumeCache.put(groupId, volume);
+        mVolumeControlNativeInterface.setGroupVolume(groupId, volume);
+    }
+
+    /**
+     * {@hide}
+     * @param groupId
+     */
+    public int getGroupVolume(int groupId) {
+        return mGroupVolumeCache.getOrDefault(groupId,
+                        IBluetoothVolumeControl.VOLUME_CONTROL_UNKNOWN_VOLUME);
+    }
+
+    /**
+     * {@hide}
+     */
+    public void mute(BluetoothDevice device) {
+        mVolumeControlNativeInterface.mute(device);
+    }
+
+    /**
+     * {@hide}
+     */
+    public void muteGroup(int groupId) {
+        mVolumeControlNativeInterface.muteGroup(groupId);
+    }
+
+    /**
+     * {@hide}
+     */
+    public void unmute(BluetoothDevice device) {
+        mVolumeControlNativeInterface.unmute(device);
+    }
+
+    /**
+     * {@hide}
+     */
+    public void unmuteGroup(int groupId) {
+        mVolumeControlNativeInterface.unmuteGroup(groupId);
     }
 
     void handleVolumeControlChanged(BluetoothDevice device, int groupId,
                                     int volume, boolean mute, boolean isAutonomous) {
-        if (!isAutonomous) {
-            // If the change is triggered by Android device, the stream is already changed.
+
+        if (isAutonomous && device != null) {
+            Log.e(TAG, "We expect only group notification for autonomous updates");
             return;
         }
-        // TODO: Handle the other arguments: device, groupId, mute.
 
-        int streamType = getBluetoothContextualVolumeStream();
-        mAudioManager.setStreamVolume(streamType, getDeviceVolume(streamType, volume),
-                AudioManager.FLAG_SHOW_UI | AudioManager.FLAG_BLUETOOTH_ABS_VOLUME);
+        if (groupId == IBluetoothLeAudio.LE_AUDIO_GROUP_ID_INVALID) {
+            LeAudioService leAudioService = mFactory.getLeAudioService();
+            if (leAudioService == null) {
+                Log.e(TAG, "leAudioService not available");
+                return;
+            }
+            groupId = leAudioService.getGroupId(device);
+        }
+
+        if (groupId == IBluetoothLeAudio.LE_AUDIO_GROUP_ID_INVALID) {
+            Log.e(TAG, "Device not a part of the group");
+            return;
+        }
+
+        int groupVolume = getGroupVolume(groupId);
+
+        if (!isAutonomous) {
+            /* If the change is triggered by Android device, the stream is already changed.
+             * However it might be called with isAutonomous, one the first read of after
+             * reconnection. Make sure device has group volume. Also it might happen that
+             * remote side send us wrong value - lets check it.
+             */
+
+            if (groupVolume == volume) {
+                Log.i(TAG, " Volume:" + volume + " confirmed by remote side.");
+                return;
+            }
+
+            if (device != null && groupVolume
+                            != IBluetoothVolumeControl.VOLUME_CONTROL_UNKNOWN_VOLUME) {
+                Log.i(TAG, "Setting value:" + groupVolume + " to " + device);
+                mVolumeControlNativeInterface.setVolume(device, groupVolume);
+            } else {
+                Log.e(TAG, "Volume changed did not succeed. Volume: " + volume
+                                + " expected volume: " + groupVolume);
+            }
+        } else {
+            // TODO: Handle the other arguments: mute.
+
+            /* Received group notification for autonomous change. Update cache and audio system. */
+            mGroupVolumeCache.put(groupId, volume);
+
+            int streamType = getBluetoothContextualVolumeStream();
+            mAudioManager.setStreamVolume(streamType, getDeviceVolume(streamType, volume),
+                    AudioManager.FLAG_SHOW_UI | AudioManager.FLAG_BLUETOOTH_ABS_VOLUME);
+        }
     }
 
     int getDeviceVolume(int streamType, int bleVolume) {
@@ -921,6 +1019,10 @@ public class VolumeControlService extends ProfileService {
         public void connect(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 boolean defaultValue = false;
                 if (service != null) {
@@ -936,6 +1038,10 @@ public class VolumeControlService extends ProfileService {
         public void disconnect(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 boolean defaultValue = false;
                 if (service != null) {
@@ -951,6 +1057,9 @@ public class VolumeControlService extends ProfileService {
         public void getConnectedDevices(AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 List<BluetoothDevice> defaultValue = new ArrayList<>();
                 if (service != null) {
@@ -967,6 +1076,9 @@ public class VolumeControlService extends ProfileService {
         public void getDevicesMatchingConnectionStates(int[] states,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 List<BluetoothDevice> defaultValue = new ArrayList<>();
                 if (service != null) {
@@ -982,6 +1094,10 @@ public class VolumeControlService extends ProfileService {
         public void getConnectionState(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 int defaultValue = BluetoothProfile.STATE_DISCONNECTED;
                 if (service != null) {
@@ -997,6 +1113,10 @@ public class VolumeControlService extends ProfileService {
         public void setConnectionPolicy(BluetoothDevice device, int connectionPolicy,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 boolean defaultValue = false;
                 if (service != null) {
@@ -1012,6 +1132,10 @@ public class VolumeControlService extends ProfileService {
         public void getConnectionPolicy(BluetoothDevice device, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 int defaultValue = BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
                 if (service != null) {
@@ -1027,6 +1151,10 @@ public class VolumeControlService extends ProfileService {
         public void isVolumeOffsetAvailable(BluetoothDevice device,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 boolean defaultValue = false;
                 VolumeControlService service = getService(source);
                 if (service != null) {
@@ -1042,6 +1170,10 @@ public class VolumeControlService extends ProfileService {
         public void setVolumeOffset(BluetoothDevice device, int volumeOffset,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 if (service != null) {
                     service.setVolumeOffset(device, volumeOffset);
@@ -1053,12 +1185,103 @@ public class VolumeControlService extends ProfileService {
         }
 
         @Override
-        public void setVolumeGroup(int groupId, int volume, AttributionSource source,
+        public void setGroupVolume(int groupId, int volume, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
                 VolumeControlService service = getService(source);
                 if (service != null) {
-                    service.setVolumeGroup(groupId, volume);
+                    service.setGroupVolume(groupId, volume);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        @Override
+        public void getGroupVolume(int groupId, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                VolumeControlService service = getService(source);
+                if (service != null) {
+                    service.getGroupVolume(groupId);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+
+        @Override
+        public void mute(BluetoothDevice device,  AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                VolumeControlService service = getService(source);
+                if (service != null) {
+                    service.mute(device);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        @Override
+        public void muteGroup(int groupId, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                VolumeControlService service = getService(source);
+                if (service != null) {
+                    service.muteGroup(groupId);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        @Override
+        public void unmute(BluetoothDevice device,  AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                Objects.requireNonNull(device, "device cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                VolumeControlService service = getService(source);
+                if (service != null) {
+                    service.unmute(device);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        @Override
+        public void unmuteGroup(int groupId,  AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                VolumeControlService service = getService(source);
+                if (service != null) {
+                    service.unmuteGroup(groupId);
                 }
                 receiver.send(null);
             } catch (RuntimeException e) {
@@ -1069,38 +1292,44 @@ public class VolumeControlService extends ProfileService {
         @Override
         public void registerCallback(IBluetoothVolumeControlCallback callback,
                 AttributionSource source, SynchronousResultReceiver receiver) {
-            VolumeControlService service = getService(source);
-            if (service == null) {
-                throw new IllegalStateException("Service is unavailable");
-            }
-
-            enforceBluetoothPrivilegedPermission(service);
-
             try {
+                Objects.requireNonNull(callback, "callback cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                VolumeControlService service = getService(source);
+                if (service == null) {
+                    throw new IllegalStateException("Service is unavailable");
+                }
+
+                enforceBluetoothPrivilegedPermission(service);
+
                 service.mCallbacks.register(callback);
                 receiver.send(null);
             } catch (RuntimeException e) {
-                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-                throw new IllegalArgumentException(" Invalid callback");
+                receiver.propagateException(e);
             }
         }
 
         @Override
         public void unregisterCallback(IBluetoothVolumeControlCallback callback,
                 AttributionSource source, SynchronousResultReceiver receiver) {
-            VolumeControlService service = getService(source);
-            if (service == null) {
-                throw new IllegalStateException("Service is unavailable");
-            }
-
-            enforceBluetoothPrivilegedPermission(service);
-
             try {
+                Objects.requireNonNull(callback, "callback cannot be null");
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                VolumeControlService service = getService(source);
+                if (service == null) {
+                    throw new IllegalStateException("Service is unavailable");
+                }
+
+                enforceBluetoothPrivilegedPermission(service);
+
                 service.mCallbacks.unregister(callback);
                 receiver.send(null);
             } catch (RuntimeException e) {
-                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-                throw new IllegalArgumentException(" Invalid callback ");
+                receiver.propagateException(e);
             }
         }
     }
@@ -1119,6 +1348,10 @@ public class VolumeControlService extends ProfileService {
             ProfileService.println(sb, "    Device: " + device);
             ProfileService.println(sb, "    Volume offset cnt: " + descriptor.size());
             descriptor.dump(sb);
+        }
+        for (Map.Entry<Integer, Integer> entry : mGroupVolumeCache.entrySet()) {
+            ProfileService.println(sb, "    GroupId: " + entry.getKey() + " volume: "
+                            + entry.getValue());
         }
     }
 }

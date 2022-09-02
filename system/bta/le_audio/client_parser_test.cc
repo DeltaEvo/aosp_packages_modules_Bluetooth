@@ -500,8 +500,7 @@ TEST(LeAudioClientParserTest, testParsePacMultipleRecords) {
 }
 
 TEST(LeAudioClientParserTest, testParseAudioLocationsInvalidLength) {
-  types::AudioLocations locations =
-      codec_spec_conf::kLeAudioLocationMonoUnspecified;
+  types::AudioLocations locations = codec_spec_conf::kLeAudioLocationNotAllowed;
   const uint8_t value1[] = {
       0x01,
       0x02,
@@ -516,8 +515,7 @@ TEST(LeAudioClientParserTest, testParseAudioLocationsInvalidLength) {
 }
 
 TEST(LeAudioClientParserTest, testParseAudioLocations) {
-  types::AudioLocations locations =
-      codec_spec_conf::kLeAudioLocationMonoUnspecified;
+  types::AudioLocations locations = codec_spec_conf::kLeAudioLocationNotAllowed;
   const uint8_t value1[] = {0x01, 0x02, 0x03, 0x04};
   ParseAudioLocations(locations, sizeof(value1), value1);
   ASSERT_EQ(locations, 0x04030201u);
@@ -1646,6 +1644,26 @@ TEST(LeAudioClientParserTest, testPrepareAseCtpReleaseMultiple) {
 }
 
 }  // namespace ascs
+
+namespace tmap {
+
+TEST(LeAudioClientParserTest, testParseTmapRoleValid) {
+  std::bitset<16> role;
+  const uint8_t value[] = {0x3F, 0x00};
+
+  ASSERT_TRUE(ParseTmapRole(role, 2, value));
+
+  ASSERT_EQ(role, 0x003F);  // All possible TMAP roles
+}
+
+TEST(LeAudioClientParserTest, testParseTmapRoleInvalidLen) {
+  std::bitset<16> role;
+  const uint8_t value[] = {0x00, 0x3F};
+
+  ASSERT_FALSE(ParseTmapRole(role, 3, value));
+}
+
+}  // namespace tmap
 
 }  // namespace client_parser
 }  // namespace le_audio

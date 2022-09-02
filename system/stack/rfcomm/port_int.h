@@ -128,10 +128,10 @@ typedef struct {
   uint8_t handle;  // Starting from 1, unique for this object
   bool in_use; /* True when structure is allocated */
 
-#define PORT_STATE_CLOSED 0
-#define PORT_STATE_OPENING 1
-#define PORT_STATE_OPENED 2
-#define PORT_STATE_CLOSING 3
+#define PORT_CONNECTION_STATE_CLOSED 0
+#define PORT_CONNECTION_STATE_OPENING 1
+#define PORT_CONNECTION_STATE_OPENED 2
+#define PORT_CONNECTION_STATE_CLOSING 3
 
   uint8_t state; /* State of the application */
 
@@ -189,6 +189,8 @@ typedef struct {
   bool keep_port_handle;    /* true if port is not deallocated when closing */
   /* it is set to true for server when allocating port */
   uint16_t keep_mtu; /* Max MTU that port can receive by server */
+  uint16_t sec_mask; /* Bitmask of security requirements for this port */
+                     /* see the BTM_SEC_* values in btm_api_types.h */
 } tPORT;
 
 /* Define the PORT/RFCOMM control structure

@@ -31,8 +31,11 @@
 
 #include "bta_le_audio_api.h"
 #include "gap_api.h"
+#include "gatt_api.h"
+#include "gd/common/strings.h"
 #include "le_audio_types.h"
 #include "osi/include/allocator.h"
+#include "osi/include/log.h"
 
 using le_audio::types::acs_ac_record;
 
@@ -379,11 +382,24 @@ bool PrepareAseCtpEnable(const std::vector<struct ctp_enable>& confs,
                          std::vector<uint8_t>& value) {
   if (confs.size() == 0) return false;
 
+  if (confs.size() > UINT8_MAX) {
+    LOG_ERROR(" To many ASEs to update metadata");
+    return false;
+  }
+
   uint16_t msg_len = confs.size() * kCtpEnableMinLen + kAseNumSize + kCtpOpSize;
-  std::for_each(confs.begin(), confs.end(),
-                [&msg_len](const struct ctp_enable& conf) {
-                  msg_len += conf.metadata.size();
-                });
+  for (auto& conf : confs) {
+    if (msg_len > GATT_MAX_ATTR_LEN) {
+      LOG_ERROR(" Message length above GATT maximum");
+      return false;
+    }
+    if (conf.metadata.size() > UINT8_MAX) {
+      LOG_ERROR(" ase[%d] metadata length is invalid", conf.ase_id);
+      return false;
+    }
+
+    msg_len += conf.metadata.size();
+  }
   value.resize(msg_len);
 
   uint8_t* msg = value.data();
@@ -466,12 +482,25 @@ bool PrepareAseCtpUpdateMetadata(
     std::vector<uint8_t>& value) {
   if (confs.size() == 0) return false;
 
+  if (confs.size() > UINT8_MAX) {
+    LOG_ERROR(" To many ASEs to update metadata");
+    return false;
+  }
+
   uint16_t msg_len =
       confs.size() * kCtpUpdateMetadataMinLen + kAseNumSize + kCtpOpSize;
-  std::for_each(confs.begin(), confs.end(),
-                [&msg_len](const struct ctp_update_metadata& conf) {
-                  msg_len += conf.metadata.size();
-                });
+  for (auto& conf : confs) {
+    if (msg_len > GATT_MAX_ATTR_LEN) {
+      LOG_ERROR(" Message length above GATT maximum");
+      return false;
+    }
+    if (conf.metadata.size() > UINT8_MAX) {
+      LOG_ERROR(" ase[%d] metadata length is invalid", conf.ase_id);
+      return false;
+    }
+
+    msg_len += conf.metadata.size();
+  }
   value.resize(msg_len);
 
   uint8_t* msg = value.data();
@@ -627,6 +656,27 @@ bool ParseAvailableAudioContexts(struct acs_available_audio_contexts& contexts,
   return true;
 }
 }  // namespace pacs
+
+namespace tmap {
+
+bool ParseTmapRole(std::bitset<16>& role, uint16_t len, const uint8_t* value) {
+  if (len != kTmapRoleLen) {
+    LOG_ERROR(
+        ", Wrong len of Telephony Media Audio Profile Role, "
+        "characteristic");
+    return false;
+  }
+
+  STREAM_TO_UINT16(role, value);
+
+  LOG_INFO(
+      ", Telephony Media Audio Profile Role:"
+      "\n\tRole: %s",
+      role.to_string().c_str());
+
+  return true;
+}
+}  // namespace tmap
 
 }  // namespace client_parser
 }  // namespace le_audio

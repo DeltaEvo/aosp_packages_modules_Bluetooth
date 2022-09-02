@@ -36,6 +36,9 @@
 #include <pthread.h>
 
 using bluetooth::Uuid;
+#ifndef DYNAMIC_LOAD_BLUETOOTH
+extern bt_interface_t bluetoothInterface;
+#endif
 
 namespace android {
 // Both
@@ -68,6 +71,7 @@ static jmethodID method_pinRequestCallback;
 static jmethodID method_sspRequestCallback;
 static jmethodID method_bondStateChangeCallback;
 static jmethodID method_addressConsolidateCallback;
+static jmethodID method_leAddressAssociateCallback;
 static jmethodID method_aclStateChangeCallback;
 static jmethodID method_discoveryStateChangeCallback;
 static jmethodID method_linkQualityReportCallback;
@@ -330,6 +334,34 @@ static void address_consolidate_callback(RawAddress* main_bd_addr,
 
   sCallbackEnv->CallVoidMethod(sJniCallbacksObj,
                                method_addressConsolidateCallback,
+                               main_addr.get(), secondary_addr.get());
+}
+
+static void le_address_associate_callback(RawAddress* main_bd_addr,
+                                          RawAddress* secondary_bd_addr) {
+  CallbackEnv sCallbackEnv(__func__);
+
+  ScopedLocalRef<jbyteArray> main_addr(
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+  if (!main_addr.get()) {
+    ALOGE("Address allocation failed in %s", __func__);
+    return;
+  }
+  sCallbackEnv->SetByteArrayRegion(main_addr.get(), 0, sizeof(RawAddress),
+                                   (jbyte*)main_bd_addr);
+
+  ScopedLocalRef<jbyteArray> secondary_addr(
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+  if (!secondary_addr.get()) {
+    ALOGE("Address allocation failed in %s", __func__);
+    return;
+  }
+
+  sCallbackEnv->SetByteArrayRegion(secondary_addr.get(), 0, sizeof(RawAddress),
+                                   (jbyte*)secondary_bd_addr);
+
+  sCallbackEnv->CallVoidMethod(sJniCallbacksObj,
+                               method_leAddressAssociateCallback,
                                main_addr.get(), secondary_addr.get());
 }
 
@@ -623,6 +655,10 @@ static void switch_codec_callback(bool is_low_latency_buffer_size) {
                                (jboolean)is_low_latency_buffer_size);
 }
 
+static void le_rand_callback(uint64_t random) {
+  // Android doesn't support the LeRand API.
+}
+
 static void callback_thread_event(bt_cb_thread_evt event) {
   if (event == ASSOCIATE_JVM) {
     JavaVMAttachArgs args;
@@ -693,6 +729,7 @@ static bt_callbacks_t sBluetoothCallbacks = {sizeof(sBluetoothCallbacks),
                                              ssp_request_callback,
                                              bond_state_changed_callback,
                                              address_consolidate_callback,
+                                             le_address_associate_callback,
                                              acl_state_changed_callback,
                                              callback_thread_event,
                                              dut_mode_recv_callback,
@@ -701,7 +738,8 @@ static bt_callbacks_t sBluetoothCallbacks = {sizeof(sBluetoothCallbacks),
                                              link_quality_report_callback,
                                              generate_local_oob_data_callback,
                                              switch_buffer_size_callback,
-                                             switch_codec_callback};
+                                             switch_codec_callback,
+                                             le_rand_callback};
 
 // The callback to call when the wake alarm fires.
 static alarm_cb sAlarmCallback;
@@ -846,6 +884,10 @@ static bt_os_callouts_t sBluetoothOsCallouts = {
 };
 
 int hal_util_load_bt_library(const bt_interface_t** interface) {
+#ifndef DYNAMIC_LOAD_BLUETOOTH
+  *interface = &bluetoothInterface;
+  return 0;
+#else
   const char* sym = BLUETOOTH_INTERFACE_STRING;
   bt_interface_t* itf = nullptr;
 
@@ -875,6 +917,7 @@ error:
   if (handle) dlclose(handle);
 
   return -EINVAL;
+#endif
 }
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -914,6 +957,9 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_addressConsolidateCallback = env->GetMethodID(
       jniCallbackClass, "addressConsolidateCallback", "([B[B)V");
 
+  method_leAddressAssociateCallback = env->GetMethodID(
+      jniCallbackClass, "leAddressAssociateCallback", "([B[B)V");
+
   method_aclStateChangeCallback =
       env->GetMethodID(jniCallbackClass, "aclStateChangeCallback", "(I[BIII)V");
 
@@ -945,7 +991,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
 static bool initNative(JNIEnv* env, jobject obj, jboolean isGuest,
                        jboolean isCommonCriteriaMode, int configCompareResult,
-                       jobjectArray initFlags, jboolean isAtvDevice) {
+                       jobjectArray initFlags, jboolean isAtvDevice,
+                       jstring userDataDirectory) {
   ALOGV("%s", __func__);
 
   android_bluetooth_UidTraffic.clazz =
@@ -972,10 +1019,15 @@ static bool initNative(JNIEnv* env, jobject obj, jboolean isGuest,
     flags[i] = env->GetStringUTFChars(flagObjs[i], NULL);
   }
 
+  const char* user_data_directory =
+      env->GetStringUTFChars(userDataDirectory, NULL);
+
   int ret = sBluetoothInterface->init(
       &sBluetoothCallbacks, isGuest == JNI_TRUE ? 1 : 0,
       isCommonCriteriaMode == JNI_TRUE ? 1 : 0, configCompareResult, flags,
-      isAtvDevice == JNI_TRUE ? 1 : 0);
+      isAtvDevice == JNI_TRUE ? 1 : 0, user_data_directory);
+
+  env->ReleaseStringUTFChars(userDataDirectory, user_data_directory);
 
   for (int i = 0; i < flagCount; i++) {
     env->ReleaseStringUTFChars(flagObjs[i], flags[i]);
@@ -1766,7 +1818,8 @@ static jboolean allowLowLatencyAudioNative(JNIEnv* env, jobject obj,
 static JNINativeMethod sMethods[] = {
     /* name, signature, funcPtr */
     {"classInitNative", "()V", (void*)classInitNative},
-    {"initNative", "(ZZI[Ljava/lang/String;Z)Z", (void*)initNative},
+    {"initNative", "(ZZI[Ljava/lang/String;ZLjava/lang/String;)Z",
+     (void*)initNative},
     {"cleanupNative", "()V", (void*)cleanupNative},
     {"enableNative", "()Z", (void*)enableNative},
     {"disableNative", "()Z", (void*)disableNative},

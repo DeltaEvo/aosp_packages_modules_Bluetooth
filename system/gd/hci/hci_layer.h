@@ -17,7 +17,11 @@
 #pragma once
 
 #include <chrono>
+#include <list>
 #include <map>
+#include <memory>
+#include <string>
+#include <utility>
 
 #include "address.h"
 #include "class_of_device.h"
@@ -118,6 +122,10 @@ class HciLayer : public Module, public CommandInterface<CommandBuilder> {
       hci::ErrorCode hci_status, uint16_t handle, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version);
   virtual void RegisterLeMetaEventHandler(common::ContextualCallback<void(EventView)> event_handler);
 
+  std::list<common::ContextualCallback<void(uint16_t, ErrorCode)>> disconnect_handlers_;
+  std::list<common::ContextualCallback<void(hci::ErrorCode, uint16_t, uint8_t, uint16_t, uint16_t)>>
+      read_remote_version_handlers_;
+
  private:
   struct impl;
   struct hal_callbacks;
@@ -132,19 +140,16 @@ class HciLayer : public Module, public CommandInterface<CommandBuilder> {
 
     void EnqueueCommand(std::unique_ptr<T> command,
                         common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
-      hci_.EnqueueCommand(move(command), std::move(on_complete));
+      hci_.EnqueueCommand(std::move(command), std::move(on_complete));
     }
 
     void EnqueueCommand(std::unique_ptr<T> command,
                         common::ContextualOnceCallback<void(CommandStatusView)> on_status) override {
-      hci_.EnqueueCommand(move(command), std::move(on_status));
+      hci_.EnqueueCommand(std::move(command), std::move(on_status));
     }
     HciLayer& hci_;
   };
 
-  std::list<common::ContextualCallback<void(uint16_t, ErrorCode)>> disconnect_handlers_;
-  std::list<common::ContextualCallback<void(hci::ErrorCode, uint16_t, uint8_t, uint16_t, uint16_t)>>
-      read_remote_version_handlers_;
   std::mutex callback_handlers_guard_;
   void on_disconnection_complete(EventView event_view);
   void on_read_remote_version_complete(EventView event_view);

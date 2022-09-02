@@ -31,6 +31,7 @@
 #define LOG_TAG "bt_btm_pm"
 
 #include <base/strings/stringprintf.h>
+
 #include <cstdint>
 #include <unordered_map>
 
@@ -38,7 +39,6 @@
 #include "device/include/controller.h"
 #include "device/include/interop.h"
 #include "main/shim/dumpsys.h"
-#include "main/shim/link_policy.h"
 #include "main/shim/shim.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -125,16 +125,7 @@ tBTM_STATUS BTM_PmRegister(uint8_t mask, uint8_t* p_pm_id,
   if (bluetooth::shim::is_gd_link_policy_enabled()) {
     ASSERT(p_pm_id != nullptr);
     ASSERT(p_cb != nullptr);
-    if (mask & BTM_PM_DEREG) {
-      return (bluetooth::shim::UnregisterLinkPolicyClient(p_cb))
-                 ? (BTM_SUCCESS)
-                 : (BTM_NO_RESOURCES);
-    } else {
-      *p_pm_id = 0;
-      return (bluetooth::shim::RegisterLinkPolicyClient(p_cb))
-                 ? (BTM_SUCCESS)
-                 : (BTM_NO_RESOURCES);
-    }
+    return BTM_NO_RESOURCES;
   }
 
   /* de-register */
@@ -212,12 +203,6 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
     mode &= (~BTM_PM_MD_FORCE);
   }
 
-  if (bluetooth::shim::is_gd_link_policy_enabled()) {
-    tBTM_PM_PWR_MD power_mode_request = *p_mode;
-    power_mode_request.mode &= (~BTM_PM_MD_FORCE);
-    return bluetooth::shim::BTM_SetPowerMode(handle, power_mode_request);
-  }
-
   if (mode != BTM_PM_MD_ACTIVE) {
     const controller_t* controller = controller_get_interface();
     if ((mode == BTM_PM_MD_HOLD && !controller->supports_hold_mode()) ||
@@ -238,7 +223,7 @@ tBTM_STATUS BTM_SetPowerMode(uint8_t pm_id, const RawAddress& remote_bda,
          (p_mode->min <= p_cb->interval)) ||
         ((p_mode->mode & BTM_PM_MD_FORCE) == 0 &&
          (p_mode->max >= p_cb->interval))) {
-      LOG_INFO(
+      LOG_DEBUG(
           "Device is already in requested mode %d, interval: %d, max: %d, min: "
           "%d",
           p_mode->mode, p_cb->interval, p_mode->max, p_mode->min);
@@ -334,9 +319,10 @@ tBTM_STATUS BTM_SetSsrParams(const RawAddress& remote_bda, uint16_t max_lat,
     return BTM_UNKNOWN_ADDR;
   }
 
-  if (bluetooth::shim::is_gd_link_policy_enabled()) {
-    return bluetooth::shim::BTM_SetSsrParams(p_cb->handle_, max_lat, min_rmt_to,
-                                             min_loc_to);
+  const controller_t* controller = controller_get_interface();
+  if (!controller->supports_sniff_subrating()) {
+    LOG_INFO("No controller support for sniff subrating");
+    return BTM_SUCCESS;
   }
 
   if (p_cb->state == BTM_PM_ST_ACTIVE || p_cb->state == BTM_PM_ST_SNIFF) {
@@ -558,9 +544,12 @@ static tBTM_STATUS btm_pm_snd_md_req(uint16_t handle, uint8_t pm_id,
     LOG_DEBUG("Need to wake first");
     md_res.mode = BTM_PM_MD_ACTIVE;
   } else if (BTM_PM_MD_SNIFF == md_res.mode && p_cb->max_lat) {
-    LOG_DEBUG("Sending sniff subrating to controller");
-    send_sniff_subrating(handle, p_cb->bda_, p_cb->max_lat, p_cb->min_rmt_to,
-                         p_cb->min_loc_to);
+    const controller_t* controller = controller_get_interface();
+    if (controller->supports_sniff_subrating()) {
+      LOG_DEBUG("Sending sniff subrating to controller");
+      send_sniff_subrating(handle, p_cb->bda_, p_cb->max_lat, p_cb->min_rmt_to,
+                           p_cb->min_loc_to);
+    }
     p_cb->max_lat = 0;
   }
   /* Default is failure */
@@ -803,11 +792,6 @@ void btm_pm_on_sniff_subrating(tHCI_STATUS status, uint16_t handle,
                                uint16_t maximum_receive_latency,
                                uint16_t minimum_remote_timeout,
                                uint16_t minimum_local_timeout) {
-  if (bluetooth::shim::is_gd_link_policy_enabled()) {
-    return bluetooth::shim::btm_pm_on_sniff_subrating(
-        status, handle, maximum_transmit_latency, maximum_receive_latency,
-        minimum_remote_timeout, minimum_local_timeout);
-  }
   process_ssr_event(status, handle, maximum_transmit_latency,
                     maximum_receive_latency);
 }
@@ -904,11 +888,6 @@ tBTM_CONTRL_STATE BTM_PM_ReadControllerState(void) {
 
 void btm_pm_on_mode_change(tHCI_STATUS status, uint16_t handle,
                            tHCI_MODE current_mode, uint16_t interval) {
-  if (bluetooth::shim::is_gd_link_policy_enabled()) {
-    return bluetooth::shim::btm_pm_on_mode_change(status, handle, current_mode,
-                                                  interval);
-  }
-
   btm_sco_chk_pend_unpark(status, handle);
   btm_pm_proc_mode_change(status, handle, current_mode, interval);
 }

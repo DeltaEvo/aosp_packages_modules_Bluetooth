@@ -73,7 +73,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
 
   void GetOwnAddress(uint8_t advertiser_id, GetAddressCallback cb) override {
     LOG(INFO) << __func__ << " in shim layer";
-    address_callbacks_[advertiser_id] = cb;
+    address_callbacks_[advertiser_id] = jni_thread_wrapper(FROM_HERE, cb);
     bluetooth::shim::GetAdvertising()->GetOwnAddress(advertiser_id);
   }
 
@@ -399,9 +399,10 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     config.enable_scan_request_notifications =
         static_cast<bluetooth::hci::Enable>(
             params.scan_request_notification_enable);
-
-    // TODO set own_address_type based on address policy
     config.own_address_type = OwnAddressType::RANDOM_DEVICE_ADDRESS;
+    if (params.own_address_type == 0) {
+      config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+    }
   }
   std::map<uint8_t, GetAddressCallback> address_callbacks_;
 };

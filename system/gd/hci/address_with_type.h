@@ -73,7 +73,7 @@ class AddressWithType final {
   }
 
   bool operator<(const AddressWithType& rhs) const {
-    return address_ < rhs.address_ && address_type_ < rhs.address_type_;
+    return (address_ != rhs.address_) ? address_ < rhs.address_ : address_type_ < rhs.address_type_;
   }
   bool operator==(const AddressWithType& rhs) const {
     return address_ == rhs.address_ && address_type_ == rhs.address_type_;
@@ -91,14 +91,14 @@ class AddressWithType final {
     return !(*this == rhs);
   }
 
-  ConnectListAddressType ToConnectListAddressType() const {
+  FilterAcceptListAddressType ToFilterAcceptListAddressType() const {
     switch (address_type_) {
       case AddressType::PUBLIC_DEVICE_ADDRESS:
       case AddressType::PUBLIC_IDENTITY_ADDRESS:
-        return ConnectListAddressType::PUBLIC;
+        return FilterAcceptListAddressType::PUBLIC;
       case AddressType::RANDOM_DEVICE_ADDRESS:
       case AddressType::RANDOM_IDENTITY_ADDRESS:
-        return ConnectListAddressType::RANDOM;
+        return FilterAcceptListAddressType::RANDOM;
     }
   }
 

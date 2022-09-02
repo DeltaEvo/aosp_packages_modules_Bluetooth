@@ -38,7 +38,6 @@ struct Controller::impl {
     hci_->RegisterEventHandler(
         EventCode::NUMBER_OF_COMPLETED_PACKETS, handler->BindOn(this, &Controller::impl::NumberOfCompletedPackets));
 
-    le_set_event_mask(kDefaultLeEventMask);
     set_event_mask(kDefaultEventMask);
     write_le_host_support(Enable::ENABLED, Enable::DISABLED);
     hci_->EnqueueCommand(ReadLocalNameBuilder::Create(),
@@ -59,10 +58,13 @@ struct Controller::impl {
     // Wait for all extended features read
     std::promise<void> features_promise;
     auto features_future = features_promise.get_future();
+
     hci_->EnqueueCommand(ReadLocalExtendedFeaturesBuilder::Create(0x00),
                          handler->BindOnceOn(this, &Controller::impl::read_local_extended_features_complete_handler,
                                              std::move(features_promise)));
     features_future.wait();
+
+    le_set_event_mask(MaskLeEventMask(local_version_information_.hci_version_, kDefaultLeEventMask));
 
     hci_->EnqueueCommand(ReadBufferSizeBuilder::Create(),
                          handler->BindOnceOn(this, &Controller::impl::read_buffer_size_complete_handler));
@@ -78,7 +80,7 @@ struct Controller::impl {
     }
 
     hci_->EnqueueCommand(
-        LeReadConnectListSizeBuilder::Create(),
+        LeReadFilterAcceptListSizeBuilder::Create(),
         handler->BindOnceOn(this, &Controller::impl::le_read_connect_list_size_handler));
 
     if (is_supported(OpCode::LE_READ_RESOLVING_LIST_SIZE) && module_.SupportsBlePrivacy()) {
@@ -146,7 +148,7 @@ struct Controller::impl {
       LOG_INFO("LE_READ_PERIODIC_ADVERTISING_LIST_SIZE not supported, defaulting to 0");
       le_periodic_advertiser_list_size_ = 0;
     }
-    if (is_supported(OpCode::LE_SET_HOST_FEATURE)) {
+    if (is_supported(OpCode::LE_SET_HOST_FEATURE) && module_.SupportsBleConnectedIsochronousStreamCentral()) {
       hci_->EnqueueCommand(
           LeSetHostFeatureBuilder::Create(LeHostFeatureBits::CONNECTED_ISO_STREAM_HOST_SUPPORT, Enable::ENABLED),
           handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
@@ -352,11 +354,11 @@ struct Controller::impl {
   }
 
   void le_read_connect_list_size_handler(CommandCompleteView view) {
-    auto complete_view = LeReadConnectListSizeCompleteView::Create(view);
+    auto complete_view = LeReadFilterAcceptListSizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
-    le_connect_list_size_ = complete_view.GetConnectListSize();
+    le_connect_list_size_ = complete_view.GetFilterAcceptListSize();
   }
 
   void le_read_resolving_list_size_handler(CommandCompleteView view) {
@@ -511,6 +513,22 @@ struct Controller::impl {
                          module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<ResetCompleteView>));
   }
 
+  void le_rand(LeRandCallback cb) {
+    std::unique_ptr<LeRandBuilder> packet = LeRandBuilder::Create();
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnceOn(this, &Controller::impl::le_rand_cb<LeRandCompleteView>, cb));
+  }
+
+  template <class T>
+  void le_rand_cb(LeRandCallback cb, CommandCompleteView view) {
+    ASSERT(view.IsValid());
+    auto status_view = T::Create(view);
+    ASSERT(status_view.IsValid());
+    ASSERT(status_view.GetStatus() == ErrorCode::SUCCESS);
+    cb.Run(status_view.GetRandomNumber());
+  }
+
   void set_event_filter(std::unique_ptr<SetEventFilterBuilder> packet) {
     hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
                                                 this, &Controller::impl::check_status<SetEventFilterCompleteView>));
@@ -539,8 +557,18 @@ struct Controller::impl {
 
   void le_set_event_mask(uint64_t le_event_mask) {
     std::unique_ptr<LeSetEventMaskBuilder> packet = LeSetEventMaskBuilder::Create(le_event_mask);
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<LeSetEventMaskCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet), module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_le_set_event_mask_status));
+  }
+
+  void check_le_set_event_mask_status(CommandCompleteView view) {
+    ASSERT(view.IsValid());
+    auto status_view = LeSetEventMaskCompleteView::Create(view);
+    ASSERT(status_view.IsValid());
+    auto status = status_view.GetStatus();
+    if (status != ErrorCode::SUCCESS) {
+      LOG_WARN("Unexpected return status %s", ErrorCodeText(status).c_str());
+    }
   }
 
   template <class T>
@@ -709,10 +737,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_SET_SCAN_ENABLE)
       OP_CODE_MAPPING(LE_CREATE_CONNECTION)
       OP_CODE_MAPPING(LE_CREATE_CONNECTION_CANCEL)
-      OP_CODE_MAPPING(LE_READ_CONNECT_LIST_SIZE)
-      OP_CODE_MAPPING(LE_CLEAR_CONNECT_LIST)
-      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_CONNECT_LIST)
-      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_CONNECT_LIST)
+      OP_CODE_MAPPING(LE_READ_FILTER_ACCEPT_LIST_SIZE)
+      OP_CODE_MAPPING(LE_CLEAR_FILTER_ACCEPT_LIST)
+      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST)
+      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST)
       OP_CODE_MAPPING(LE_CONNECTION_UPDATE)
       OP_CODE_MAPPING(LE_SET_HOST_CHANNEL_CLASSIFICATION)
       OP_CODE_MAPPING(LE_READ_CHANNEL_MAP)
@@ -1020,6 +1048,21 @@ void Controller::Reset() {
   CallOn(impl_.get(), &impl::reset);
 }
 
+void Controller::LeRand(LeRandCallback cb) {
+  CallOn(impl_.get(), &impl::le_rand, cb);
+}
+
+void Controller::AllowWakeByHid() {
+  // Allow Classic HID
+  auto class_of_device = ClassOfDevice::FromUint32Legacy(COD_HID_MAJOR).value();
+  auto class_of_device_mask = ClassOfDevice::FromUint32Legacy(COD_HID_MASK).value();
+  auto auto_accept_flag = AutoAcceptFlag::AUTO_ACCEPT_ON_ROLE_SWITCH_ENABLED;
+  std::unique_ptr<SetEventFilterConnectionSetupClassOfDeviceBuilder> packet =
+      SetEventFilterConnectionSetupClassOfDeviceBuilder::Create(
+          class_of_device, class_of_device_mask, auto_accept_flag);
+  CallOn(impl_.get(), &impl::set_event_filter, std::move(packet));
+}
+
 void Controller::SetEventFilterClearAll() {
   std::unique_ptr<SetEventFilterClearAllBuilder> packet = SetEventFilterClearAllBuilder::Create();
   CallOn(impl_.get(), &impl::set_event_filter, std::move(packet));
@@ -1106,7 +1149,7 @@ uint64_t Controller::GetLeSupportedStates() const {
   return impl_->le_supported_states_;
 }
 
-uint8_t Controller::GetLeConnectListSize() const {
+uint8_t Controller::GetLeFilterAcceptListSize() const {
   return impl_->le_connect_list_size_;
 }
 

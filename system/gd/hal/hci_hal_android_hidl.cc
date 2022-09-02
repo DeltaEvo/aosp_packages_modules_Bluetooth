@@ -30,6 +30,7 @@
 #include "hal/snoop_logger.h"
 #include "os/alarm.h"
 #include "os/log.h"
+#include "os/system_properties.h"
 
 using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
@@ -77,6 +78,7 @@ class InternalHciCallbacks : public IBluetoothHciCallbacks {
   }
 
   void ResetCallback() {
+    LOG_INFO("callbacks have been reset!");
     callback_ = nullptr;
   }
 
@@ -86,6 +88,7 @@ class InternalHciCallbacks : public IBluetoothHciCallbacks {
 
   Return<void> initializationComplete(HidlStatus status) {
     common::StopWatch stop_watch(__func__);
+    LOG_INFO("initialization complete with status: %d", status);
     ASSERT(status == HidlStatus::SUCCESS);
     init_promise_->set_value();
     return Void();
@@ -210,6 +213,15 @@ class HciHalHidl : public HciHal {
     auto get_service_alarm = new os::Alarm(GetHandler());
     get_service_alarm->Schedule(
         BindOnce([] {
+          const std::string kBoardProperty = "ro.product.board";
+          const std::string kCuttlefishBoard = "cutf";
+          auto board_name = os::GetSystemProperty(kBoardProperty);
+          bool emulator = board_name.has_value() && board_name.value() == kCuttlefishBoard;
+          if (emulator) {
+            LOG_ERROR("board_name: %s", board_name.value().c_str());
+            LOG_ERROR("Unable to get a Bluetooth service after 500ms, start the HAL before starting Bluetooth");
+            return;
+          }
           LOG_ALWAYS_FATAL("Unable to get a Bluetooth service after 500ms, start the HAL before starting Bluetooth");
         }),
         std::chrono::milliseconds(500));
@@ -246,7 +258,10 @@ class HciHalHidl : public HciHal {
     if (!death_unlink.isOk()) {
       LOG_ERROR("Error unlinking death recipient from the Bluetooth HAL");
     }
-    bt_hci_->close();
+    auto close_status = bt_hci_->close();
+    if (!close_status.isOk()) {
+      LOG_ERROR("Error calling close on the Bluetooth HAL");
+    }
     callbacks_->ResetCallback();
     bt_hci_ = nullptr;
     bt_hci_1_1_ = nullptr;

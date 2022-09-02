@@ -52,6 +52,10 @@ TestModel::TestModel(
   model_user_id_ = get_user_id_();
 }
 
+TestModel::~TestModel() {
+  StopTimer();
+}
+
 void TestModel::SetTimerPeriod(std::chrono::milliseconds new_period) {
   timer_period_ = new_period;
 
@@ -94,8 +98,12 @@ void TestModel::Del(size_t dev_index) {
 
 size_t TestModel::AddPhy(Phy::Type phy_type) {
   size_t factory_id = phys_.size();
-  phys_.emplace_back(phy_type, factory_id);
+  phys_.push_back(std::move(CreatePhy(phy_type, factory_id)));
   return factory_id;
+}
+
+std::unique_ptr<PhyLayerFactory> TestModel::CreatePhy(Phy::Type phy_type, size_t factory_id) {
+  return std::make_unique<PhyLayerFactory>(phy_type, factory_id);
 }
 
 void TestModel::DelPhy(size_t phy_index) {
@@ -105,7 +113,7 @@ void TestModel::DelPhy(size_t phy_index) {
   }
   schedule_task_(
       model_user_id_, std::chrono::milliseconds(0),
-      [this, phy_index]() { phys_[phy_index].UnregisterAllPhyLayers(); });
+      [this, phy_index]() { phys_[phy_index]->UnregisterAllPhyLayers(); });
 }
 
 void TestModel::AddDeviceToPhy(size_t dev_index, size_t phy_index) {
@@ -118,7 +126,7 @@ void TestModel::AddDeviceToPhy(size_t dev_index, size_t phy_index) {
     return;
   }
   auto dev = devices_[dev_index];
-  dev->RegisterPhyLayer(phys_[phy_index].GetPhyLayer(
+  dev->RegisterPhyLayer(phys_[phy_index]->GetPhyLayer(
       [dev](model::packets::LinkLayerPacketView packet) {
         dev->IncomingPacket(std::move(packet));
       },
@@ -137,8 +145,8 @@ void TestModel::DelDeviceFromPhy(size_t dev_index, size_t phy_index) {
   schedule_task_(model_user_id_, std::chrono::milliseconds(0),
                  [this, dev_index, phy_index]() {
                    devices_[dev_index]->UnregisterPhyLayer(
-                       phys_[phy_index].GetType(),
-                       phys_[phy_index].GetFactoryId());
+                       phys_[phy_index]->GetType(),
+                       phys_[phy_index]->GetFactoryId());
                  });
 }
 
@@ -150,7 +158,7 @@ void TestModel::AddLinkLayerConnection(std::shared_ptr<Device> dev,
   AsyncUserId user_id = get_user_id_();
 
   for (size_t i = 0; i < phys_.size(); i++) {
-    if (phy_type == phys_[i].GetType()) {
+    if (phy_type == phys_[i]->GetType()) {
       AddDeviceToPhy(index, i);
     }
   }
@@ -171,15 +179,14 @@ void TestModel::AddRemote(const std::string& server, int port,
   AddLinkLayerConnection(dev, phy_type);
 }
 
-void TestModel::AddHciConnection(std::shared_ptr<HciSocketDevice> dev) {
+size_t TestModel::AddHciConnection(std::shared_ptr<HciDevice> dev) {
   size_t index = Add(std::static_pointer_cast<Device>(dev));
-  std::string addr = "da:4c:10:de:17:";  // Da HCI dev
-  std::stringstream stream;
-  stream << std::setfill('0') << std::setw(2) << std::hex << (index % 256);
-  addr += stream.str();
 
-  dev->Initialize({"IgnoredTypeName", addr});
-  LOG_INFO("initialized %s", addr.c_str());
+  uint8_t raw[] = {0xda, 0x4c, 0x10, 0xde, 0x17, uint8_t(index)};  // Da HCI dev
+  auto addr = Address{{raw[5], raw[4], raw[3], raw[2], raw[1], raw[0]}};
+  dev->SetAddress(addr);
+
+  LOG_INFO("initialized %s", addr.ToString().c_str());
   for (size_t i = 0; i < phys_.size(); i++) {
     AddDeviceToPhy(index, i);
   }
@@ -194,6 +201,7 @@ void TestModel::AddHciConnection(std::shared_ptr<HciSocketDevice> dev) {
         user_id, std::chrono::milliseconds(0),
         [this, index, user_id]() { OnConnectionClosed(index, user_id); });
   });
+  return index;
 }
 
 void TestModel::OnConnectionClosed(size_t index, AsyncUserId user_id) {
@@ -229,7 +237,7 @@ const std::string& TestModel::List() {
   list_string_ += " Phys: \r\n";
   for (size_t i = 0; i < phys_.size(); i++) {
     list_string_ += "  " + std::to_string(i) + ":";
-    list_string_ += phys_[i].ToString() + " \r\n";
+    list_string_ += phys_[i]->ToString() + " \r\n";
   }
   return list_string_;
 }

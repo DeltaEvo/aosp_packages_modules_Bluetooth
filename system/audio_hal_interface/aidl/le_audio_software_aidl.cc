@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "BTAudioClientLeAudioAIDL"
+#define LOG_TAG "BTAudioLeAudioAIDL"
 
 #include "le_audio_software_aidl.h"
 
@@ -52,14 +52,6 @@ static ChannelMode le_audio_channel_mode2audio_hal(uint8_t channels_count) {
       return ChannelMode::STEREO;
   }
   return ChannelMode::UNKNOWN;
-}
-
-bool is_source_hal_enabled() {
-  return LeAudioSourceTransport::interface != nullptr;
-}
-
-bool is_sink_hal_enabled() {
-  return LeAudioSinkTransport::interface != nullptr;
 }
 
 LeAudioTransport::LeAudioTransport(void (*flush)(void),
@@ -176,6 +168,31 @@ void LeAudioTransport::LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz,
   pcm_config_.dataIntervalUs = data_interval;
 }
 
+void LeAudioTransport::LeAudioSetBroadcastConfig(
+    const ::le_audio::broadcast_offload_config& offload_config) {
+  broadcast_config_.streamMap.resize(0);
+  for (auto& [handle, location] : offload_config.stream_map) {
+    Lc3Configuration lc3_config{
+        .pcmBitDepth = static_cast<int8_t>(offload_config.bits_per_sample),
+        .samplingFrequencyHz =
+            static_cast<int32_t>(offload_config.sampling_rate),
+        .frameDurationUs = static_cast<int32_t>(offload_config.frame_duration),
+        .octetsPerFrame = static_cast<int32_t>(offload_config.octets_per_frame),
+        .blocksPerSdu = static_cast<int8_t>(offload_config.blocks_per_sdu),
+    };
+    broadcast_config_.streamMap.push_back({
+        .streamHandle = handle,
+        .audioChannelAllocation = static_cast<int32_t>(location),
+        .leAudioCodecConfig = std::move(lc3_config),
+    });
+  }
+}
+
+const LeAudioBroadcastConfiguration&
+LeAudioTransport::LeAudioGetBroadcastConfig() {
+  return broadcast_config_;
+}
+
 bool LeAudioTransport::IsPendingStartStream(void) {
   return is_pending_start_request_;
 }
@@ -183,17 +200,36 @@ void LeAudioTransport::ClearPendingStartStream(void) {
   is_pending_start_request_ = false;
 }
 
-void flush_sink() {
-  if (!is_sink_hal_enabled()) return;
+inline void flush_unicast_sink() {
+  if (LeAudioSinkTransport::interface_unicast_ == nullptr) return;
 
-  LeAudioSinkTransport::interface->FlushAudioData();
+  LeAudioSinkTransport::interface_unicast_->FlushAudioData();
+}
+
+inline void flush_broadcast_sink() {
+  if (LeAudioSinkTransport::interface_broadcast_ == nullptr) return;
+
+  LeAudioSinkTransport::interface_broadcast_->FlushAudioData();
+}
+
+inline bool is_broadcaster_session(SessionType session_type) {
+  if (session_type ==
+          SessionType::LE_AUDIO_BROADCAST_HARDWARE_OFFLOAD_ENCODING_DATAPATH ||
+      session_type ==
+          SessionType::LE_AUDIO_BROADCAST_SOFTWARE_ENCODING_DATAPATH) {
+    return true;
+  }
+
+  return false;
 }
 
 LeAudioSinkTransport::LeAudioSinkTransport(SessionType session_type,
                                            StreamCallbacks stream_cb)
     : IBluetoothSinkTransportInstance(session_type, (AudioConfiguration){}) {
-  transport_ = new LeAudioTransport(flush_sink, std::move(stream_cb),
-                                    {16000, ChannelMode::STEREO, 16, 0});
+  transport_ = new LeAudioTransport(
+      is_broadcaster_session(session_type) ? flush_broadcast_sink
+                                           : flush_unicast_sink,
+      std::move(stream_cb), {16000, ChannelMode::STEREO, 16, 0});
 };
 
 LeAudioSinkTransport::~LeAudioSinkTransport() { delete transport_; }
@@ -248,6 +284,16 @@ void LeAudioSinkTransport::LeAudioSetSelectedHalPcmConfig(
                                              channels_count, data_interval);
 }
 
+void LeAudioSinkTransport::LeAudioSetBroadcastConfig(
+    const ::le_audio::broadcast_offload_config& offload_config) {
+  transport_->LeAudioSetBroadcastConfig(offload_config);
+}
+
+const LeAudioBroadcastConfiguration&
+LeAudioSinkTransport::LeAudioGetBroadcastConfig() {
+  return transport_->LeAudioGetBroadcastConfig();
+}
+
 bool LeAudioSinkTransport::IsPendingStartStream(void) {
   return transport_->IsPendingStartStream();
 }
@@ -265,7 +311,7 @@ LeAudioSourceTransport::LeAudioSourceTransport(SessionType session_type,
                                                StreamCallbacks stream_cb)
     : IBluetoothSourceTransportInstance(session_type, (AudioConfiguration){}) {
   transport_ = new LeAudioTransport(flush_source, std::move(stream_cb),
-                                    {16000, ChannelMode::MONO, 16, 0});
+                                    {16000, ChannelMode::STEREO, 16, 0});
 };
 
 LeAudioSourceTransport::~LeAudioSourceTransport() { delete transport_; }
@@ -348,11 +394,13 @@ std::unordered_map<int32_t, uint8_t> frame_duration_map{
 std::unordered_map<int32_t, uint16_t> octets_per_frame_map{
     {30, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen30},
     {40, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen40},
+    {60, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen60},
+    {80, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen80},
     {120, ::le_audio::codec_spec_conf::kLeAudioCodecLC3FrameLen120}};
 
 std::unordered_map<AudioLocation, uint32_t> audio_location_map{
     {AudioLocation::UNKNOWN,
-     ::le_audio::codec_spec_conf::kLeAudioLocationMonoUnspecified},
+     ::le_audio::codec_spec_conf::kLeAudioLocationFrontCenter},
     {AudioLocation::FRONT_LEFT,
      ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft},
     {AudioLocation::FRONT_RIGHT,

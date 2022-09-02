@@ -2,6 +2,7 @@ use crate::btif::{BluetoothInterface, RawAddress};
 use crate::topstack::get_dispatchers;
 
 use num_traits::cast::FromPrimitive;
+use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex};
 use topshim_macros::cb_variant;
 
@@ -37,10 +38,25 @@ impl From<u32> for BthfAudioState {
 }
 
 bitflags! {
+    #[derive(Default)]
     pub struct HfpCodecCapability: i32 {
         const UNSUPPORTED = 0b00;
         const CVSD = 0b01;
         const MSBC = 0b10;
+    }
+}
+
+impl TryInto<i32> for HfpCodecCapability {
+    type Error = ();
+    fn try_into(self) -> Result<i32, Self::Error> {
+        Ok(self.bits())
+    }
+}
+
+impl TryFrom<i32> for HfpCodecCapability {
+    type Error = ();
+    fn try_from(val: i32) -> Result<Self, Self::Error> {
+        Self::from_bits(val).ok_or(())
     }
 }
 
@@ -61,6 +77,7 @@ pub mod ffi {
         fn init(self: Pin<&mut HfpIntf>) -> i32;
         fn connect(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
         fn connect_audio(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
+        fn set_volume(self: Pin<&mut HfpIntf>, volume: i8, bt_addr: RustRawAddress) -> i32;
         fn disconnect(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
         fn disconnect_audio(self: Pin<&mut HfpIntf>, bt_addr: RustRawAddress) -> i32;
         fn cleanup(self: Pin<&mut HfpIntf>);
@@ -69,6 +86,8 @@ pub mod ffi {
     extern "Rust" {
         fn hfp_connection_state_callback(state: u32, addr: RustRawAddress);
         fn hfp_audio_state_callback(state: u32, addr: RustRawAddress);
+        fn hfp_volume_update_callback(volume: u8, addr: RustRawAddress);
+        fn hfp_caps_update_callback(wbs_supported: bool, addr: RustRawAddress);
     }
 }
 
@@ -88,6 +107,8 @@ impl Into<RawAddress> for ffi::RustRawAddress {
 pub enum HfpCallbacks {
     ConnectionState(BthfConnectionState, RawAddress),
     AudioState(BthfAudioState, RawAddress),
+    VolumeUpdate(u8, RawAddress),
+    CapsUpdate(bool, RawAddress),
 }
 
 pub struct HfpCallbacksDispatcher {
@@ -108,6 +129,22 @@ cb_variant!(
     HfpCb,
     hfp_audio_state_callback -> HfpCallbacks::AudioState,
     u32 -> BthfAudioState, ffi::RustRawAddress -> RawAddress, {
+        let _1 = _1.into();
+    }
+);
+
+cb_variant!(
+    HfpCb,
+    hfp_volume_update_callback -> HfpCallbacks::VolumeUpdate,
+    u8, ffi::RustRawAddress -> RawAddress, {
+        let _1 = _1.into();
+    }
+);
+
+cb_variant!(
+    HfpCb,
+    hfp_caps_update_callback -> HfpCallbacks::CapsUpdate,
+    bool, ffi::RustRawAddress -> RawAddress, {
         let _1 = _1.into();
     }
 );
@@ -144,6 +181,10 @@ impl Hfp {
 
     pub fn connect_audio(&mut self, addr: RawAddress) -> i32 {
         self.internal.pin_mut().connect_audio(addr.into())
+    }
+
+    pub fn set_volume(&mut self, volume: i8, addr: RawAddress) -> i32 {
+        self.internal.pin_mut().set_volume(volume, addr.into())
     }
 
     pub fn disconnect(&mut self, addr: RawAddress) {

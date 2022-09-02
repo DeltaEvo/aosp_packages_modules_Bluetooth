@@ -38,6 +38,10 @@ using shared_mutex_impl = std::shared_mutex;
 using shared_mutex_impl = std::shared_timed_mutex;
 #endif
 
+#ifndef DYNAMIC_LOAD_BLUETOOTH
+extern bt_interface_t bluetoothInterface;
+#endif
+
 namespace bluetooth {
 namespace hal {
 
@@ -152,6 +156,11 @@ void AddressConsolidateCallback(RawAddress* main_bd_addr,
   // Do nothing
 }
 
+void LeAddressAssociateCallback(RawAddress* main_bd_addr,
+                                RawAddress* secondary_bd_addr) {
+  // Do nothing
+}
+
 void AclStateChangedCallback(bt_status_t status, RawAddress* remote_bd_addr,
                              bt_acl_state_t state, int transport_link_type,
                              bt_hci_error_code_t hci_reason) {
@@ -246,6 +255,7 @@ bt_callbacks_t bt_callbacks = {
     SSPRequestCallback,
     BondStateChangedCallback,
     AddressConsolidateCallback,
+    LeAddressAssociateCallback,
     AclStateChangedCallback,
     ThreadEventCallback,
     nullptr, /* dut_mode_recv_cb */
@@ -255,6 +265,7 @@ bt_callbacks_t bt_callbacks = {
     nullptr /* generate_local_oob_data_cb */,
     SwitchBufferSizeCallback,
     SwitchCodecCallback,
+    nullptr /* le_rand_cb */,
 };
 
 bt_os_callouts_t bt_os_callouts = {sizeof(bt_os_callouts_t),
@@ -265,6 +276,12 @@ constexpr char kLibbluetooth[] = "libbluetooth.so";
 constexpr char kBluetoothInterfaceSym[] = "bluetoothInterface";
 
 int hal_util_load_bt_library_from_dlib(const bt_interface_t** interface) {
+#ifndef DYNAMIC_LOAD_BLUETOOTH
+  (void)kLibbluetooth;
+  (void)kBluetoothInterfaceSym;
+  *interface = &bluetoothInterface;
+  return 0;
+#else
   bt_interface_t* itf{nullptr};
 
   // Always try to load the default Bluetooth stack on GN builds.
@@ -296,6 +313,7 @@ error:
   if (handle) dlclose(handle);
 
   return -EINVAL;
+#endif
 }
 
 }  // namespace
@@ -342,7 +360,8 @@ class BluetoothInterfaceImpl : public BluetoothInterface {
 
     // Initialize the Bluetooth interface. Set up the adapter (Bluetooth DM) API
     // callbacks.
-    status = hal_iface_->init(&bt_callbacks, false, false, 0, nullptr, false);
+    status = hal_iface_->init(&bt_callbacks, false, false, 0, nullptr, false,
+                              nullptr);
     if (status != BT_STATUS_SUCCESS) {
       LOG(ERROR) << "Failed to initialize Bluetooth stack";
       return false;

@@ -859,6 +859,7 @@ void LogSocketConnectionState(
 }
 
 void LogManufacturerInfo(const RawAddress& address,
+                         android::bluetooth::AddressTypeEnum address_type,
                          android::bluetooth::DeviceInfoSrcEnum source_type,
                          const std::string& source_name,
                          const std::string& manufacturer,
@@ -875,16 +876,20 @@ void LogManufacturerInfo(const RawAddress& address,
   BytesField obfuscated_id_field(
       address.IsEmpty() ? nullptr : obfuscated_id.c_str(),
       address.IsEmpty() ? 0 : obfuscated_id.size());
-  int ret = stats_write(BLUETOOTH_DEVICE_INFO_REPORTED, obfuscated_id_field,
-                        source_type, source_name.c_str(), manufacturer.c_str(),
-                        model.c_str(), hardware_version.c_str(),
-                        software_version.c_str(), metric_id);
+  int ret = stats_write(
+      BLUETOOTH_DEVICE_INFO_REPORTED, obfuscated_id_field, source_type,
+      source_name.c_str(), manufacturer.c_str(), model.c_str(),
+      hardware_version.c_str(), software_version.c_str(), metric_id,
+      address_type, address.address[5], address.address[4], address.address[3]);
   if (ret < 0) {
     LOG(WARNING) << __func__ << ": failed for " << address << ", source_type "
                  << source_type << ", source_name " << source_name
                  << ", manufacturer " << manufacturer << ", model " << model
                  << ", hardware_version " << hardware_version
-                 << ", software_version " << software_version << ", error "
+                 << ", software_version " << software_version
+                 << " MAC address type " << address_type
+                 << " MAC address prefix " << address.address[5] << " "
+                 << address.address[4] << " " << address.address[3] << ", error "
                  << ret;
   }
 }
@@ -905,6 +910,62 @@ void LogBluetoothHalCrashReason(const RawAddress& address, uint32_t error_code,
     LOG(WARNING) << __func__ << ": failed for " << address << ", error_code "
                  << loghex(error_code) << ", vendor_error_code "
                  << loghex(vendor_error_code) << ", error " << ret;
+  }
+}
+
+void LogLeAudioConnectionSessionReported(
+    int32_t group_size, int32_t group_metric_id,
+    int64_t connection_duration_nanos,
+    std::vector<int64_t>& device_connecting_offset_nanos,
+    std::vector<int64_t>& device_connected_offset_nanos,
+    std::vector<int64_t>& device_connection_duration_nanos,
+    std::vector<int32_t>& device_connection_status,
+    std::vector<int32_t>& device_disconnection_status,
+    std::vector<RawAddress>& device_address,
+    std::vector<int64_t>& streaming_offset_nanos,
+    std::vector<int64_t>& streaming_duration_nanos,
+    std::vector<int32_t>& streaming_context_type) {
+  std::vector<int32_t> device_metric_id(device_address.size());
+  for (uint64_t i = 0; i < device_address.size(); i++) {
+    if (!device_address[i].IsEmpty()) {
+      device_metric_id[i] =
+          MetricIdAllocator::GetInstance().AllocateId(device_address[i]);
+    } else {
+      device_metric_id[i] = 0;
+    }
+  }
+  int ret = stats_write(
+      LE_AUDIO_CONNECTION_SESSION_REPORTED, group_size, group_metric_id,
+      connection_duration_nanos, device_connecting_offset_nanos,
+      device_connected_offset_nanos, device_connection_duration_nanos,
+      device_connection_status, device_disconnection_status, device_metric_id,
+      streaming_offset_nanos, streaming_duration_nanos, streaming_context_type);
+  if (ret < 0) {
+    LOG(WARNING) << __func__ << ": failed for group " << group_metric_id
+                 << "device_connecting_offset_nanos["
+                 << device_connecting_offset_nanos.size() << "], "
+                 << "device_connected_offset_nanos["
+                 << device_connected_offset_nanos.size() << "], "
+                 << "device_connection_duration_nanos["
+                 << device_connection_duration_nanos.size() << "], "
+                 << "device_connection_status["
+                 << device_connection_status.size() << "], "
+                 << "device_disconnection_status["
+                 << device_disconnection_status.size() << "], "
+                 << "device_metric_id[" << device_metric_id.size() << "], "
+                 << "streaming_offset_nanos[" << streaming_offset_nanos.size()
+                 << "], "
+                 << "streaming_duration_nanos["
+                 << streaming_duration_nanos.size() << "], "
+                 << "streaming_context_type[" << streaming_context_type.size()
+                 << "]";
+  }
+}
+
+void LogLeAudioBroadcastSessionReported(int64_t duration_nanos) {
+  int ret = stats_write(LE_AUDIO_BROADCAST_SESSION_REPORTED, duration_nanos);
+  if (ret < 0) {
+    LOG(WARNING) << __func__ << ": failed for duration=" << duration_nanos;
   }
 }
 

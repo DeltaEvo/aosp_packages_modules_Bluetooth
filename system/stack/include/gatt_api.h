@@ -247,7 +247,7 @@ inline std::string gatt_disconnection_reason_text(
 /* max legth of an attribute value
 */
 #ifndef GATT_MAX_ATTR_LEN
-#define GATT_MAX_ATTR_LEN 600
+#define GATT_MAX_ATTR_LEN 512
 #endif
 
 /* default GATT MTU size over LE link
@@ -518,6 +518,7 @@ enum {
   GATT_READ_BY_TYPE = 1,
   GATT_READ_BY_HANDLE,
   GATT_READ_MULTIPLE,
+  GATT_READ_MULTIPLE_VAR_LEN,
   GATT_READ_CHAR_VALUE,
   GATT_READ_PARTIAL,
   GATT_READ_MAX

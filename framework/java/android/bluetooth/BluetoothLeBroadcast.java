@@ -183,7 +183,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
                                     final IBluetoothLeAudio service = getService();
                                     if (service != null) {
                                         final SynchronousResultReceiver<Integer> recv =
-                                                new SynchronousResultReceiver();
+                                                SynchronousResultReceiver.get();
                                         service.registerLeBroadcastCallback(mCallback,
                                                 mAttributionSource, recv);
                                         recv.awaitResultNoInterrupt(getSyncTimeout())
@@ -442,7 +442,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
                     final IBluetoothLeAudio service = getService();
                     if (service != null) {
                         final SynchronousResultReceiver<Integer> recv =
-                                new SynchronousResultReceiver();
+                                SynchronousResultReceiver.get();
                         service.registerLeBroadcastCallback(mCallback, mAttributionSource, recv);
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                     }
@@ -485,7 +485,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
         if (DBG) log("unregisterCallback");
 
         synchronized (mCallbackExecutorMap) {
-            if (mCallbackExecutorMap.remove(callback) != null) {
+            if (mCallbackExecutorMap.remove(callback) == null) {
                 throw new IllegalArgumentException("This callback has not been registered");
             }
         }
@@ -495,7 +495,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             try {
                 final IBluetoothLeAudio service = getService();
                 if (service != null) {
-                    final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                    final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                     service.unregisterLeBroadcastCallback(mCallback, mAttributionSource, recv);
                     recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                 }
@@ -542,8 +542,8 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
      *
      * @param contentMetadata metadata for the default Broadcast subgroup
      * @param broadcastCode Encryption will be enabled when <var>broadcastCode</var> is not null
-     * @throws IllegalArgumentException if <var>contentMetadata</var> is null
      * @throws IllegalStateException if callback was not registered
+     * @throws NullPointerException if <var>contentMetadata</var> is null
      * @hide
      */
     @SystemApi
@@ -554,6 +554,8 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
     })
     public void startBroadcast(@NonNull BluetoothLeAudioContentMetadata contentMetadata,
             @Nullable byte[] broadcastCode) {
+        Objects.requireNonNull(contentMetadata, "contentMetadata cannot be null");
+
         if (DBG) log("startBroadcasting");
         final IBluetoothLeAudio service = getService();
         if (service == null) {
@@ -579,6 +581,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
      * @param broadcastId broadcastId as defined by the Basic Audio Profile
      * @param contentMetadata updated metadata for the default Broadcast subgroup
      * @throws IllegalStateException if callback was not registered
+     * @throws NullPointerException if <var>contentMetadata</var> is null
      * @hide
      */
     @SystemApi
@@ -589,6 +592,8 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
     })
     public void updateBroadcast(int broadcastId,
             @NonNull BluetoothLeAudioContentMetadata contentMetadata) {
+        Objects.requireNonNull(contentMetadata, "contentMetadata cannot be null");
+
         if (DBG) log("updateBroadcast");
         final IBluetoothLeAudio service = getService();
         if (service == null) {
@@ -657,7 +662,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.isPlaying(broadcastId, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (TimeoutException e) {
@@ -691,7 +696,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothLeBroadcastMetadata>> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getAllBroadcastMetadata(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (TimeoutException e) {
@@ -718,7 +723,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getMaximumNumberOfBroadcasts(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (TimeoutException e) {

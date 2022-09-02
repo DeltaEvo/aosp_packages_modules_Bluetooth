@@ -23,6 +23,7 @@
 #include <sys/types.h>
 
 #include "avrcp/avrcp.h"
+#include "base/callback.h"
 #include "bluetooth/uuid.h"
 #include "bt_transport.h"
 #include "raw_address.h"
@@ -213,6 +214,14 @@ typedef struct {
   bool le_periodic_advertising_sync_transfer_recipient_supported;
 } bt_local_le_features_t;
 
+/** Bluetooth Vendor and Product ID info */
+typedef struct {
+  uint8_t vendor_id_src;
+  uint16_t vendor_id;
+  uint16_t product_id;
+  uint16_t version;
+} bt_vendor_product_info_t;
+
 /* Stored the default/maximum/minimum buffer time for dynamic audio buffer.
  * For A2DP offload usage, the unit is millisecond.
  * For A2DP legacy usage, the unit is buffer queue size*/
@@ -339,6 +348,20 @@ typedef enum {
    */
   BT_PROPERTY_REMOTE_IS_COORDINATED_SET_MEMBER,
 
+  /**
+   * Description - Appearance as specified in Assigned Numbers.
+   * Access mode - GET.
+   * Data Type - uint16_t.
+   */
+  BT_PROPERTY_APPEARANCE,
+
+  /**
+   * Description - Peer devices' vendor and product ID.
+   * Access mode - GET.
+   * Data Type - bt_vendor_product_info_t.
+   */
+  BT_PROPERTY_VENDOR_PRODUCT_INFO,
+
   BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP = 0xFF,
 } bt_property_type_t;
 
@@ -458,6 +481,12 @@ typedef void (*bond_state_changed_callback)(bt_status_t status,
 typedef void (*address_consolidate_callback)(RawAddress* main_bd_addr,
                                              RawAddress* secondary_bd_addr);
 
+/** Bluetooth LE Address association callback */
+/* Callback for the upper layer to associate the LE-only device's RPA to the
+ * identity address */
+typedef void (*le_address_associate_callback)(RawAddress* main_bd_addr,
+                                              RawAddress* secondary_bd_addr);
+
 /** Bluetooth ACL connection state changed callback */
 typedef void (*acl_state_changed_callback)(bt_status_t status,
                                            RawAddress* remote_bd_addr,
@@ -476,6 +505,8 @@ typedef void (*switch_buffer_size_callback)(bool is_low_latency_buffer_size);
 
 /** Switch the codec callback */
 typedef void (*switch_codec_callback)(bool is_low_latency_buffer_size);
+
+typedef void (*le_rand_callback)(uint64_t random);
 
 typedef enum { ASSOCIATE_JVM, DISASSOCIATE_JVM } bt_cb_thread_evt;
 
@@ -527,6 +558,7 @@ typedef struct {
   ssp_request_callback ssp_request_cb;
   bond_state_changed_callback bond_state_changed_cb;
   address_consolidate_callback address_consolidate_cb;
+  le_address_associate_callback le_address_associate_cb;
   acl_state_changed_callback acl_state_changed_cb;
   callback_thread_event thread_evt_cb;
   dut_mode_recv_callback dut_mode_recv_cb;
@@ -536,6 +568,7 @@ typedef struct {
   generate_local_oob_data_callback generate_local_oob_data_cb;
   switch_buffer_size_callback switch_buffer_size_cb;
   switch_codec_callback switch_codec_cb;
+  le_rand_callback le_rand_cb;
 } bt_callbacks_t;
 
 typedef void (*alarm_cb)(void* data);
@@ -594,7 +627,8 @@ typedef struct {
    */
   int (*init)(bt_callbacks_t* callbacks, bool guest_mode,
               bool is_common_criteria_mode, int config_compare_result,
-              const char** init_flags, bool is_atv);
+              const char** init_flags, bool is_atv,
+              const char* user_data_directory);
 
   /** Enable Bluetooth. */
   int (*enable)();
@@ -780,6 +814,61 @@ typedef struct {
    * Set the event filter for the controller
    */
   int (*clear_event_filter)();
+
+  /**
+   * Call to clear event mask
+   */
+  int (*clear_event_mask)();
+
+  /**
+   * Call to clear out the filter accept list
+   */
+  int (*clear_filter_accept_list)();
+
+  /**
+   * Call to disconnect all ACL connections
+   */
+  int (*disconnect_all_acls)();
+
+  /**
+   * Call to retrieve a generated random
+   */
+  int (*le_rand)();
+
+  /**
+   *
+   * Floss: Set the event filter to inquiry result device all
+   *
+   */
+  int (*set_event_filter_inquiry_result_all_devices)();
+
+  /**
+   *
+   * Floss: Set the default event mask for Classic and LE
+   *
+   */
+  int (*set_default_event_mask)();
+
+  /**
+   *
+   * Floss: Restore the state of the for the filter accept list
+   *
+   */
+  int (*restore_filter_accept_list)();
+
+  /**
+   *
+   * Allow the device to be woken by HID devices
+   *
+   */
+  int (*allow_wake_by_hid)();
+
+  /**
+   *
+   * Tell the controller to allow all devices
+   *
+   */
+  int (*set_event_filter_connection_setup_all_devices)();
 } bt_interface_t;
 
 #define BLUETOOTH_INTERFACE_STRING "bluetoothInterface"

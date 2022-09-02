@@ -27,6 +27,8 @@
 namespace bluetooth {
 namespace hci {
 
+constexpr std::chrono::milliseconds kUnregisterSyncTimeoutInMs = std::chrono::milliseconds(10);
+
 class LeAddressManagerCallback {
  public:
   virtual ~LeAddressManagerCallback() = default;
@@ -72,20 +74,22 @@ class LeAddressManager {
   void AckResume(LeAddressManagerCallback* callback);
   virtual AddressPolicy Register(LeAddressManagerCallback* callback);
   virtual void Unregister(LeAddressManagerCallback* callback);
+  virtual bool UnregisterSync(
+      LeAddressManagerCallback* callback, std::chrono::milliseconds timeout = kUnregisterSyncTimeoutInMs);
   virtual AddressWithType GetCurrentAddress();  // What was set in SetRandomAddress()
   virtual AddressWithType GetAnotherAddress();  // A new random address without rotating.
 
-  uint8_t GetConnectListSize();
+  uint8_t GetFilterAcceptListSize();
   uint8_t GetResolvingListSize();
-  void AddDeviceToConnectList(ConnectListAddressType connect_list_address_type, Address address);
+  void AddDeviceToFilterAcceptList(FilterAcceptListAddressType connect_list_address_type, Address address);
   void AddDeviceToResolvingList(
       PeerAddressType peer_identity_address_type,
       Address peer_identity_address,
       const std::array<uint8_t, 16>& peer_irk,
       const std::array<uint8_t, 16>& local_irk);
-  void RemoveDeviceFromConnectList(ConnectListAddressType connect_list_address_type, Address address);
+  void RemoveDeviceFromFilterAcceptList(FilterAcceptListAddressType connect_list_address_type, Address address);
   void RemoveDeviceFromResolvingList(PeerAddressType peer_identity_address_type, Address peer_identity_address);
-  void ClearConnectList();
+  void ClearFilterAcceptList();
   void ClearResolvingList();
   void OnCommandComplete(CommandCompleteView view);
   std::chrono::milliseconds GetNextPrivateAddressIntervalMs();
@@ -130,6 +134,8 @@ class LeAddressManager {
   hci::Address generate_nrpa();
   void handle_next_command();
   void check_cached_commands();
+  template <class View>
+  void on_command_complete(CommandCompleteView view);
 
   common::Callback<void(std::unique_ptr<CommandBuilder>)> enqueue_command_;
   os::Handler* handler_;

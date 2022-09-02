@@ -114,6 +114,11 @@ static void l2c_csm_indicate_connection_open(tL2C_CCB* p_ccb) {
  *
  ******************************************************************************/
 void l2c_csm_execute(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
+  if (p_ccb == nullptr) {
+    LOG_WARN("CCB is null for event (%d)", event);
+    return;
+  }
+
   if (!l2cu_is_ccb_active(p_ccb)) {
     LOG_WARN("CCB not in use, event (%d) cannot be processed", event);
     return;
@@ -512,7 +517,7 @@ static void l2c_csm_term_w4_sec_comp(tL2C_CCB* p_ccb, tL2CEVT event,
 
             (*p_ccb->p_rcb->api.pL2CA_CreditBasedConnectInd_Cb)(
                 p_ccb->p_lcb->remote_bd_addr, pending_cids, p_ccb->p_rcb->psm,
-                p_ccb->peer_cfg.mtu, p_ccb->remote_id);
+                p_ccb->peer_conn_cfg.mtu, p_ccb->remote_id);
           } else {
             /* Handle BLE CoC */
             LOG_DEBUG("Calling Connect_Ind_Cb(), CID: 0x%04x",
@@ -796,6 +801,7 @@ static void l2c_csm_w4_l2cap_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
 static void l2c_csm_w4_l2ca_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
                                         void* p_data) {
   tL2C_CONN_INFO* p_ci;
+  tL2C_LCB* p_lcb = p_ccb->p_lcb;
   tL2CA_DISCONNECT_IND_CB* disconnect_ind =
       p_ccb->p_rcb->api.pL2CA_DisconnectInd_Cb;
   uint16_t local_cid = p_ccb->local_cid;
@@ -813,7 +819,7 @@ static void l2c_csm_w4_l2ca_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
 
     case L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP:
       p_ci = (tL2C_CONN_INFO*)p_data;
-      if (p_ccb->p_lcb && p_ccb->p_lcb->transport != BT_TRANSPORT_LE) {
+      if ((p_lcb == nullptr) || (p_lcb && p_lcb->transport != BT_TRANSPORT_LE)) {
         LOG_WARN("LE link doesn't exist");
         return;
       }
@@ -821,14 +827,14 @@ static void l2c_csm_w4_l2ca_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
                                            p_ci->l2cap_result);
       alarm_cancel(p_ccb->l2c_ccb_timer);
 
-      for (int i = 0; i < p_ccb->p_lcb->pending_ecoc_conn_cnt; i++) {
-        uint16_t cid = p_ccb->p_lcb->pending_ecoc_connection_cids[i];
+      for (int i = 0; i < p_lcb->pending_ecoc_conn_cnt; i++) {
+        uint16_t cid = p_lcb->pending_ecoc_connection_cids[i];
         if (cid == 0) {
             LOG_WARN("pending_ecoc_connection_cids[%d] is %d", i, cid);
             continue;
         }
 
-        tL2C_CCB* temp_p_ccb = l2cu_find_ccb_by_cid(p_ccb->p_lcb, cid);
+        tL2C_CCB* temp_p_ccb = l2cu_find_ccb_by_cid(p_lcb, cid);
         if (temp_p_ccb) {
           auto it = std::find(p_ci->lcids.begin(), p_ci->lcids.end(), cid);
           if (it != p_ci->lcids.end()) {
@@ -841,8 +847,8 @@ static void l2c_csm_w4_l2ca_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
             LOG_WARN("temp_p_ccb is NULL, pending_ecoc_connection_cids[%d] is %d", i, cid);
         }
       }
-      p_ccb->p_lcb->pending_ecoc_conn_cnt = 0;
-      memset(p_ccb->p_lcb->pending_ecoc_connection_cids, 0,
+      p_lcb->pending_ecoc_conn_cnt = 0;
+      memset(p_lcb->pending_ecoc_connection_cids, 0,
              L2CAP_CREDIT_BASED_MAX_CIDS);
 
       break;
@@ -882,19 +888,19 @@ static void l2c_csm_w4_l2ca_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
     case L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP_NEG:
       p_ci = (tL2C_CONN_INFO*)p_data;
       alarm_cancel(p_ccb->l2c_ccb_timer);
-      if (p_ccb->p_lcb != nullptr) {
-        if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE) {
+      if (p_lcb != nullptr) {
+        if (p_lcb->transport == BT_TRANSPORT_LE) {
           l2cu_send_peer_credit_based_conn_res(p_ccb, p_ci->lcids,
                                                p_ci->l2cap_result);
         }
-        for (int i = 0; i < p_ccb->p_lcb->pending_ecoc_conn_cnt; i++) {
-          uint16_t cid = p_ccb->p_lcb->pending_ecoc_connection_cids[i];
-          tL2C_CCB* temp_p_ccb = l2cu_find_ccb_by_cid(p_ccb->p_lcb, cid);
+        for (int i = 0; i < p_lcb->pending_ecoc_conn_cnt; i++) {
+          uint16_t cid = p_lcb->pending_ecoc_connection_cids[i];
+          tL2C_CCB* temp_p_ccb = l2cu_find_ccb_by_cid(p_lcb, cid);
           l2cu_release_ccb(temp_p_ccb);
         }
 
-        p_ccb->p_lcb->pending_ecoc_conn_cnt = 0;
-        memset(p_ccb->p_lcb->pending_ecoc_connection_cids, 0,
+        p_lcb->pending_ecoc_conn_cnt = 0;
+        memset(p_lcb->pending_ecoc_connection_cids, 0,
                L2CAP_CREDIT_BASED_MAX_CIDS);
       }
       break;
@@ -1244,7 +1250,7 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
   tL2CAP_CFG_INFO* p_cfg;
   tL2C_CHNL_STATE tempstate;
   uint8_t tempcfgdone;
-  uint8_t cfg_result;
+  uint8_t cfg_result = L2CAP_PEER_CFG_DISCONNECT;
   uint16_t credit = 0;
   tL2CAP_LE_CFG_INFO* p_le_cfg = (tL2CAP_LE_CFG_INFO*)p_data;
 
@@ -1264,11 +1270,12 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
       /* For ecoc reconfig is handled below in l2c_ble. In case of success
        * let us notify upper layer about the reconfig
        */
-      LOG_DEBUG("Calling LeReconfigCompleted_Cb(), CID: 0x%04x",
-                p_ccb->local_cid);
-
-      (*p_ccb->p_rcb->api.pL2CA_CreditBasedReconfigCompleted_Cb)(
-          p_ccb->p_lcb->remote_bd_addr, p_ccb->local_cid, false, p_le_cfg);
+      if (p_le_cfg) {
+        LOG_DEBUG("Calling LeReconfigCompleted_Cb(), CID: 0x%04x",
+                  p_ccb->local_cid);
+        (*p_ccb->p_rcb->api.pL2CA_CreditBasedReconfigCompleted_Cb)(
+            p_ccb->p_lcb->remote_bd_addr, p_ccb->local_cid, false, p_le_cfg);
+      }
       break;
 
     case L2CEVT_L2CAP_CONFIG_REQ: /* Peer config request   */
@@ -1285,8 +1292,9 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
 
       alarm_set_on_mloop(p_ccb->l2c_ccb_timer, L2CAP_CHNL_CFG_TIMEOUT_MS,
                          l2c_ccb_timer_timeout, p_ccb);
-
-      cfg_result = l2cu_process_peer_cfg_req(p_ccb, p_cfg);
+      if (p_cfg) {
+        cfg_result = l2cu_process_peer_cfg_req(p_ccb, p_cfg);
+      }
       if (cfg_result == L2CAP_PEER_CFG_OK) {
         (*p_ccb->p_rcb->api.pL2CA_ConfigInd_Cb)(p_ccb->local_cid, p_cfg);
         l2c_csm_send_config_rsp_ok(p_ccb);
@@ -1325,7 +1333,7 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
       break;
 
     case L2CEVT_L2CAP_DATA: /* Peer data packet rcvd    */
-      if ((p_ccb->p_rcb) && (p_ccb->p_rcb->api.pL2CA_DataInd_Cb)) {
+      if (p_data && (p_ccb->p_rcb) && (p_ccb->p_rcb->api.pL2CA_DataInd_Cb)) {
         p_ccb->metrics.rx(static_cast<BT_HDR*>(p_data)->len);
         (*p_ccb->p_rcb->api.pL2CA_DataInd_Cb)(p_ccb->local_cid,
                                               (BT_HDR*)p_data);
@@ -1351,18 +1359,22 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
       break;
 
     case L2CEVT_L2CA_DATA_WRITE: /* Upper layer data to send */
-      l2c_enqueue_peer_data(p_ccb, (BT_HDR*)p_data);
-      l2c_link_check_send_pkts(p_ccb->p_lcb, 0, NULL);
+      if (p_data) {
+        l2c_enqueue_peer_data(p_ccb, (BT_HDR*)p_data);
+        l2c_link_check_send_pkts(p_ccb->p_lcb, 0, NULL);
+      }
       break;
 
     case L2CEVT_L2CA_CREDIT_BASED_RECONFIG_REQ:
       p_ccb->chnl_state = CST_CONFIG;
       p_ccb->config_done &= ~OB_CFG_DONE;
 
-      l2cu_send_credit_based_reconfig_req(p_ccb, (tL2CAP_LE_CFG_INFO*)p_data);
+      if (p_data) {
+        l2cu_send_credit_based_reconfig_req(p_ccb, (tL2CAP_LE_CFG_INFO*)p_data);
 
-      alarm_set_on_mloop(p_ccb->l2c_ccb_timer, L2CAP_CHNL_CFG_TIMEOUT_MS,
-                         l2c_ccb_timer_timeout, p_ccb);
+        alarm_set_on_mloop(p_ccb->l2c_ccb_timer, L2CAP_CHNL_CFG_TIMEOUT_MS,
+                           l2c_ccb_timer_timeout, p_ccb);
+      }
       break;
 
     case L2CEVT_L2CA_CONFIG_REQ: /* Upper layer config req   */
@@ -1383,22 +1395,26 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
       break;
 
     case L2CEVT_L2CA_SEND_FLOW_CONTROL_CREDIT:
-      LOG_DEBUG("Sending credit");
-      credit = *(uint16_t*)p_data;
-      l2cble_send_flow_control_credit(p_ccb, credit);
+      if (p_data) {
+        LOG_DEBUG("Sending credit");
+        credit = *(uint16_t*)p_data;
+        l2cble_send_flow_control_credit(p_ccb, credit);
+      }
       break;
 
     case L2CEVT_L2CAP_RECV_FLOW_CONTROL_CREDIT:
-      credit = *(uint16_t*)p_data;
-      LOG_DEBUG("Credits received %d", credit);
-      if ((p_ccb->peer_conn_cfg.credits + credit) > L2CAP_LE_CREDIT_MAX) {
-        /* we have received credits more than max coc credits,
-         * so disconnecting the Le Coc Channel
-         */
-        l2cble_send_peer_disc_req(p_ccb);
-      } else {
-        p_ccb->peer_conn_cfg.credits += credit;
-        l2c_link_check_send_pkts(p_ccb->p_lcb, 0, NULL);
+      if (p_data) {
+        credit = *(uint16_t*)p_data;
+        LOG_DEBUG("Credits received %d", credit);
+        if ((p_ccb->peer_conn_cfg.credits + credit) > L2CAP_LE_CREDIT_MAX) {
+          /* we have received credits more than max coc credits,
+           * so disconnecting the Le Coc Channel
+           */
+          l2cble_send_peer_disc_req(p_ccb);
+        } else {
+          p_ccb->peer_conn_cfg.credits += credit;
+          l2c_link_check_send_pkts(p_ccb->p_lcb, 0, NULL);
+        }
       }
       break;
     default:
@@ -1604,6 +1620,10 @@ static const char* l2c_csm_get_event_name(tL2CEVT event) {
     case L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP: /* Upper layer credit based
                                                   connect response */
       return ("SEND_CREDIT_BASED_CONNECT_RSP");
+    case L2CEVT_L2CA_CREDIT_BASED_CONNECT_RSP_NEG: /* Upper layer credit based
+                                                      connect response
+                                                      (failed)*/
+      return ("SEND_CREDIT_BASED_CONNECT_RSP_NEG");
     case L2CEVT_L2CA_CREDIT_BASED_RECONFIG_REQ: /* Upper layer credit based
                                                    reconfig request */
       return ("SEND_CREDIT_BASED_RECONFIG_REQ");

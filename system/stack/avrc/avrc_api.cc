@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "avrc_int.h"
+#include "btif/include/btif_config.h"
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
 #include "osi/include/log.h"
@@ -1144,7 +1145,7 @@ uint16_t AVRC_MsgReq(uint8_t handle, uint8_t label, uint8_t ctype,
   AVRC_TRACE_DEBUG("%s handle = %u label = %u ctype = %u len = %d", __func__,
                    handle, label, ctype, p_pkt->len);
   /* Handle for AVRCP fragment */
-  bool is_new_avrcp = osi_property_get_bool("persist.bluetooth.enablenewavrcp", true);
+  bool is_new_avrcp = osi_property_get_bool("bluetooth.profile.avrcp.target.enabled", false);
   if (ctype >= AVRC_RSP_NOT_IMPL) cr = AVCT_RSP;
 
   if (p_pkt->event == AVRC_OP_VENDOR) {
@@ -1362,4 +1363,45 @@ uint16_t AVRC_PassRsp(uint8_t handle, uint8_t label, tAVRC_MSG_PASS* p_msg) {
   p_buf = avrc_pass_msg(p_msg);
   if (p_buf) return AVCT_MsgReq(handle, label, AVCT_RSP, p_buf);
   return AVRC_NO_RESOURCES;
+}
+
+/******************************************************************************
+ *
+ * Function         AVRC_SaveControllerVersion
+ *
+ * Description      Save AVRC controller version of peer device into bt_config.
+ *                  This version is used to send same AVRC target version to
+ *                  peer device to avoid version mismatch IOP issue.
+ *
+ *                  Input Parameters:
+ *                      bdaddr: BD address of peer device.
+ *
+ *                      version: AVRC controller version of peer device.
+ *
+ *                  Output Parameters:
+ *                      None.
+ *
+ * Returns          Nothing
+ *
+ *****************************************************************************/
+void AVRC_SaveControllerVersion(const RawAddress& bdaddr,
+                                uint16_t new_version) {
+  // store AVRC controller version into BT config
+  uint16_t old_version = 0;
+  size_t version_value_size = sizeof(old_version);
+  if (btif_config_get_bin(bdaddr.ToString(),
+                          AVRCP_CONTROLLER_VERSION_CONFIG_KEY,
+                          (uint8_t*)&old_version, &version_value_size) &&
+      new_version == old_version) {
+    LOG_INFO("AVRC controller version same as cached config");
+  } else if (btif_config_set_bin(
+                 bdaddr.ToString(), AVRCP_CONTROLLER_VERSION_CONFIG_KEY,
+                 (const uint8_t*)&new_version, sizeof(new_version))) {
+    btif_config_save();
+    LOG_INFO("store AVRC controller version %x for %s into config.",
+             new_version, bdaddr.ToString().c_str());
+  } else {
+    LOG_WARN("Failed to store AVRC controller version for %s",
+             bdaddr.ToString().c_str());
+  }
 }

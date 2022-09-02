@@ -109,6 +109,11 @@ void address_consolidate(RawAddress* main_bd_addr,
   LOG_INFO("%s", __func__);
 }
 
+void le_address_associate(RawAddress* main_bd_addr,
+                          RawAddress* secondary_bd_addr) {
+  LOG_INFO("%s", __func__);
+}
+
 /** Bluetooth ACL connection state changed callback */
 void acl_state_changed(bt_status_t status, RawAddress* remote_bd_addr,
                        bt_acl_state_t state, int transport_link_type,
@@ -171,6 +176,7 @@ bt_callbacks_t bt_callbacks{
     .ssp_request_cb = ssp_request,
     .bond_state_changed_cb = bond_state_changed,
     .address_consolidate_cb = address_consolidate,
+    .le_address_associate_cb = le_address_associate,
     .acl_state_changed_cb = acl_state_changed,
     .thread_evt_cb = thread_event,
     .dut_mode_recv_cb = dut_mode_recv,
@@ -215,7 +221,7 @@ void HeadlessStack::SetUp() {
   const bool is_atv = false;
   int status = bluetoothInterface.init(
       &bt_callbacks, start_restricted, is_common_criteria_mode,
-      config_compare_result, StackInitFlags(), is_atv);
+      config_compare_result, StackInitFlags(), is_atv, nullptr);
 
   (status == BT_STATUS_SUCCESS)
       ? LOG(INFO) << __func__ << " Initialized bluetooth callbacks"

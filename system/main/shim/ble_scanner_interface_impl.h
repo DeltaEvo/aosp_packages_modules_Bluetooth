@@ -63,16 +63,15 @@ class BleScannerInterfaceImpl : public ::BleScannerInterface,
   void BatchscanDisable(Callback cb) override;
   void BatchscanReadReports(int client_if, int scan_mode) override;
   void StartSync(uint8_t sid, RawAddress address, uint16_t skip,
-                 uint16_t timeout, StartSyncCb start_cb, SyncReportCb report_cb,
-                 SyncLostCb lost_cb) override;
+                 uint16_t timeout, int reg_id) override;
   void StopSync(uint16_t handle) override;
   void CancelCreateSync(uint8_t sid, RawAddress address) override;
   void TransferSync(RawAddress address, uint16_t service_data,
-                    uint16_t sync_handle, SyncTransferCb cb) override;
+                    uint16_t sync_handle, int pa_source) override;
   void TransferSetInfo(RawAddress address, uint16_t service_data,
-                       uint8_t adv_handle, SyncTransferCb cb) override;
+                       uint8_t adv_handle, int pa_source) override;
   void SyncTxParameters(RawAddress addr, uint8_t mode, uint16_t skip,
-                        uint16_t timeout, StartSyncCb start_cb) override;
+                        uint16_t timeout, int reg_id) override;
 
   // bluetooth::hci::ScanningCallback
   void RegisterCallbacks(ScanningCallbacks* callbacks);
@@ -101,6 +100,15 @@ class BleScannerInterfaceImpl : public ::BleScannerInterface,
                               uint8_t available_spaces,
                               bluetooth::hci::ApcfAction action,
                               uint8_t status) override;
+  void OnPeriodicSyncStarted(int reg_id, uint8_t status, uint16_t sync_handle,
+                             uint8_t advertising_sid,
+                             bluetooth::hci::AddressWithType address_with_type,
+                             uint8_t phy, uint16_t interval) override;
+  void OnPeriodicSyncReport(uint16_t sync_handle, int8_t tx_power, int8_t rssi,
+                            uint8_t status, std::vector<uint8_t> data) override;
+  void OnPeriodicSyncLost(uint16_t sync_handle) override;
+  void OnPeriodicSyncTransferred(int pa_source, uint8_t status,
+                                 bluetooth::hci::Address address) override;
   ::ScanningCallbacks* scanning_callbacks_ = default_scanning_callback;
 
  private:

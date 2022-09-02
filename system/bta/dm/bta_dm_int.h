@@ -71,18 +71,16 @@ enum {
   BTA_DM_SEARCH_CMPL_EVT,
   BTA_DM_DISCOVERY_RESULT_EVT,
   BTA_DM_DISC_CLOSE_TOUT_EVT,
-  BTA_DM_API_QUEUE_SEARCH_EVT,
-  BTA_DM_API_QUEUE_DISCOVER_EVT
 };
 
-/* data type for BTA_DM_API_SEARCH_EVT and BTA_DM_API_QUEUE_SEARCH_EVT */
+/* data type for BTA_DM_API_SEARCH_EVT */
 typedef struct {
   BT_HDR_RIGID hdr;
   tBTA_SERVICE_MASK services;
   tBTA_DM_SEARCH_CBACK* p_cback;
 } tBTA_DM_API_SEARCH;
 
-/* data type for BTA_DM_API_DISCOVER_EVT and BTA_DM_API_QUEUE_DISCOVER_EVT */
+/* data type for BTA_DM_API_DISCOVER_EVT */
 typedef struct {
   BT_HDR_RIGID hdr;
   RawAddress bd_addr;
@@ -133,7 +131,7 @@ typedef struct {
 /* data type for BTA_DM_SDP_RESULT_EVT */
 typedef struct {
   BT_HDR_RIGID hdr;
-  uint16_t sdp_result;
+  tSDP_RESULT sdp_result;
 } tBTA_DM_SDP_RESULT;
 
 typedef struct {
@@ -393,7 +391,6 @@ enum {
 };
 
 typedef struct {
-  DEV_CLASS dev_class; /* local device class */
   uint16_t page_timeout; /* timeout for page in slots */
   bool avoid_scatter; /* true to avoid scatternet when av is streaming (be the
                          central) */
@@ -545,6 +542,15 @@ extern tBTA_DM_PEER_DEVICE* bta_dm_find_peer_device(
     const RawAddress& peer_addr);
 
 extern void bta_dm_clear_event_filter(void);
+extern void bta_dm_clear_event_mask(void);
+extern void bta_dm_clear_filter_accept_list(void);
+extern void bta_dm_disconnect_all_acls(void);
+extern void bta_dm_le_rand(LeRandCallback cb);
+extern void bta_dm_set_event_filter_connection_setup_all_devices();
+extern void bta_dm_allow_wake_by_hid(std::vector<RawAddress> le_hid_devices);
+extern void bta_dm_restore_filter_accept_list();
+extern void bta_dm_set_default_event_mask();
+extern void bta_dm_set_event_filter_inquiry_result_all_devices();
 
 uint8_t bta_dm_search_get_state();
 void bta_dm_search_set_state(uint8_t state);

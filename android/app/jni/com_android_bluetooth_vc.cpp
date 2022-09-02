@@ -17,8 +17,6 @@
 
 #define LOG_TAG "BluetoothVolumeControlServiceJni"
 
-#define LOG_NDEBUG 0
-
 #include <string.h>
 #include <shared_mutex>
 
@@ -348,7 +346,7 @@ static void setVolumeNative(JNIEnv* env, jobject object, jbyteArray address,
   env->ReleaseByteArrayElements(address, addr, 0);
 }
 
-static void setVolumeGroupNative(JNIEnv* env, jobject object, jint group_id,
+static void setGroupVolumeNative(JNIEnv* env, jobject object, jint group_id,
                                  jint volume) {
   if (!sVolumeControlInterface) {
     LOG(ERROR) << __func__
@@ -357,6 +355,60 @@ static void setVolumeGroupNative(JNIEnv* env, jobject object, jint group_id,
   }
 
   sVolumeControlInterface->SetVolume(group_id, volume);
+}
+
+static void muteNative(JNIEnv* env, jobject object, jbyteArray address) {
+  if (!sVolumeControlInterface) {
+    LOG(ERROR) << __func__
+               << ": Failed to get the Bluetooth Volume Control Interface";
+    return;
+  }
+
+  jbyte* addr = env->GetByteArrayElements(address, nullptr);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+
+  RawAddress* tmpraw = (RawAddress*)addr;
+  sVolumeControlInterface->Mute(*tmpraw);
+  env->ReleaseByteArrayElements(address, addr, 0);
+}
+
+static void muteGroupNative(JNIEnv* env, jobject object, jint group_id) {
+  if (!sVolumeControlInterface) {
+    LOG(ERROR) << __func__
+               << ": Failed to get the Bluetooth Volume Control Interface";
+    return;
+  }
+  sVolumeControlInterface->Mute(group_id);
+}
+
+static void unmuteNative(JNIEnv* env, jobject object, jbyteArray address) {
+  if (!sVolumeControlInterface) {
+    LOG(ERROR) << __func__
+               << ": Failed to get the Bluetooth Volume Control Interface";
+    return;
+  }
+
+  jbyte* addr = env->GetByteArrayElements(address, nullptr);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+
+  RawAddress* tmpraw = (RawAddress*)addr;
+  sVolumeControlInterface->Unmute(*tmpraw);
+  env->ReleaseByteArrayElements(address, addr, 0);
+}
+
+static void unmuteGroupNative(JNIEnv* env, jobject object, jint group_id) {
+  if (!sVolumeControlInterface) {
+    LOG(ERROR) << __func__
+               << ": Failed to get the Bluetooth Volume Control Interface";
+    return;
+  }
+  sVolumeControlInterface->Unmute(group_id);
 }
 
 /* Native methods for exterbak audio outputs */
@@ -495,7 +547,11 @@ static JNINativeMethod sMethods[] = {
     {"disconnectVolumeControlNative", "([B)Z",
      (void*)disconnectVolumeControlNative},
     {"setVolumeNative", "([BI)V", (void*)setVolumeNative},
-    {"setVolumeGroupNative", "(II)V", (void*)setVolumeGroupNative},
+    {"setGroupVolumeNative", "(II)V", (void*)setGroupVolumeNative},
+    {"muteNative", "([B)V", (void*)muteNative},
+    {"muteGroupNative", "(I)V", (void*)muteGroupNative},
+    {"unmuteNative", "([B)V", (void*)unmuteNative},
+    {"unmuteGroupNative", "(I)V", (void*)unmuteGroupNative},
     {"getExtAudioOutVolumeOffsetNative", "([BI)Z",
      (void*)getExtAudioOutVolumeOffsetNative},
     {"setExtAudioOutVolumeOffsetNative", "([BII)Z",

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use dbus::channel::MatchingReceiver;
@@ -7,12 +7,18 @@ use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
 use tokio::sync::mpsc;
 
-use crate::callbacks::{BtCallback, BtConnectionCallback, BtManagerCallback};
+use crate::callbacks::{
+    AdvertisingSetCallback, BtCallback, BtConnectionCallback, BtManagerCallback, ScannerCallback,
+    SuspendCallback,
+};
 use crate::command_handler::CommandHandler;
-use crate::dbus_iface::{BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus};
+use crate::dbus_iface::{
+    BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, BluetoothQADBus, SuspendDBus,
+};
 use crate::editor::AsyncEditor;
 use bt_topshim::topstack;
 use btstack::bluetooth::{BluetoothDevice, IBluetooth};
+use btstack::suspend::ISuspend;
 use manager_service::iface_bluetooth_manager::IBluetoothManager;
 
 mod callbacks;
@@ -52,6 +58,9 @@ pub(crate) struct ClientContext {
     /// session starts so that previous results don't pollute current search.
     pub(crate) found_devices: HashMap<String, BluetoothDevice>,
 
+    /// List of bonded devices.
+    pub(crate) bonded_devices: HashMap<String, BluetoothDevice>,
+
     /// If set, the registered GATT client id. None otherwise.
     pub(crate) gatt_client_id: Option<i32>,
 
@@ -61,8 +70,14 @@ pub(crate) struct ClientContext {
     /// Proxy for adapter interface. Only exists when the default adapter is enabled.
     pub(crate) adapter_dbus: Option<BluetoothDBus>,
 
+    /// Proxy for adapter QA interface. Only exists when the default adapter is enabled.
+    pub(crate) qa_dbus: Option<BluetoothQADBus>,
+
     /// Proxy for GATT interface.
     pub(crate) gatt_dbus: Option<BluetoothGattDBus>,
+
+    /// Proxy for suspend interface.
+    pub(crate) suspend_dbus: Option<SuspendDBus>,
 
     /// Channel to send actions to take in the foreground
     fg: mpsc::Sender<ForegroundActions>,
@@ -72,6 +87,18 @@ pub(crate) struct ClientContext {
 
     /// Internal DBus crossroads object.
     dbus_crossroads: Arc<Mutex<Crossroads>>,
+
+    /// Identifies the callback to receive IScannerCallback method calls.
+    scanner_callback_id: Option<u32>,
+
+    /// Identifies the callback to receive IAdvertisingSetCallback method calls.
+    advertiser_callback_id: Option<u32>,
+
+    /// Keeps track of active LE scanners.
+    active_scanner_ids: HashSet<u8>,
+
+    /// Advertising sets started/registered. Map from reg_id to advertiser_id.
+    adv_sets: HashMap<i32, Option<i32>>,
 }
 
 impl ClientContext {
@@ -93,13 +120,20 @@ impl ClientContext {
             bonding_attempt: None,
             discovering_state: false,
             found_devices: HashMap::new(),
+            bonded_devices: HashMap::new(),
             gatt_client_id: None,
             manager_dbus,
             adapter_dbus: None,
+            qa_dbus: None,
             gatt_dbus: None,
+            suspend_dbus: None,
             fg: tx,
             dbus_connection,
             dbus_crossroads,
+            scanner_callback_id: None,
+            advertiser_callback_id: None,
+            active_scanner_ids: HashSet::new(),
+            adv_sets: HashMap::new(),
         }
     }
 
@@ -130,9 +164,12 @@ impl ClientContext {
 
         let dbus = BluetoothDBus::new(conn.clone(), idx);
         self.adapter_dbus = Some(dbus);
+        self.qa_dbus = Some(BluetoothQADBus::new(conn.clone(), idx));
 
         let gatt_dbus = BluetoothGattDBus::new(conn.clone(), idx);
         self.gatt_dbus = Some(gatt_dbus);
+
+        self.suspend_dbus = Some(SuspendDBus::new(conn.clone(), idx));
 
         // Trigger callback registration in the foreground
         let fg = self.fg.clone();
@@ -150,6 +187,15 @@ impl ClientContext {
         address
     }
 
+    // Foreground-only: Updates bonded devices.
+    fn update_bonded_devices(&mut self) {
+        let bonded_devices = self.adapter_dbus.as_ref().unwrap().get_bonded_devices();
+
+        for device in bonded_devices {
+            self.bonded_devices.insert(device.address.clone(), device.clone());
+        }
+    }
+
     fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) {
         let fg = self.fg.clone();
         tokio::spawn(async move {
@@ -162,6 +208,23 @@ impl ClientContext {
         tokio::spawn(async move {
             let _ = fg.send(ForegroundActions::RunCallback(callback)).await;
         });
+    }
+
+    fn get_devices(&self) -> Vec<String> {
+        let mut result: Vec<String> = vec![];
+
+        result.extend(
+            self.found_devices.keys().map(|key| String::from(key)).collect::<Vec<String>>(),
+        );
+        result.extend(
+            self.bonded_devices
+                .keys()
+                .filter(|key| !self.found_devices.contains_key(&String::from(*key)))
+                .map(|key| String::from(key))
+                .collect::<Vec<String>>(),
+        );
+
+        result
     }
 }
 
@@ -219,7 +282,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !context.lock().unwrap().manager_dbus.is_valid() {
             println!("Bluetooth manager doesn't seem to be working correctly.");
             println!("Check if service is running.");
-            println!("...");
+            return Ok(());
         }
 
         // TODO: Registering the callback should be done when btmanagerd is ready (detect with
@@ -234,8 +297,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Check if the default adapter is enabled. If yes, we should create the adapter proxy
         // right away.
         let default_adapter = context.lock().unwrap().default_adapter;
-        if context.lock().unwrap().manager_dbus.get_adapter_enabled(default_adapter) {
-            context.lock().unwrap().set_adapter_enabled(default_adapter, true);
+
+        {
+            let mut context_locked = context.lock().unwrap();
+            match context_locked.manager_dbus.rpc.get_adapter_enabled(default_adapter).await {
+                Ok(ret) => {
+                    if ret {
+                        context_locked.set_adapter_enabled(default_adapter, true);
+                    }
+                }
+                Err(e) => {
+                    panic!("Bluetooth Manager is not available. Exiting. D-Bus error: {}", e);
+                }
+            }
         }
 
         let mut handler = CommandHandler::new(context.clone());
@@ -258,14 +332,15 @@ async fn start_interactive_shell(
     mut rx: mpsc::Receiver<ForegroundActions>,
     context: Arc<Mutex<ClientContext>>,
 ) {
-    let command_list = handler.get_command_list().clone();
+    let command_rule_list = handler.get_command_rule_list().clone();
+    let context_for_closure = context.clone();
 
     let semaphore_fg = Arc::new(tokio::sync::Semaphore::new(1));
 
     // Async task to keep reading new lines from user
     let semaphore = semaphore_fg.clone();
     tokio::spawn(async move {
-        let editor = AsyncEditor::new(command_list);
+        let editor = AsyncEditor::new(command_rule_list, context_for_closure);
 
         loop {
             // Wait until ForegroundAction::Readline finishes its task.
@@ -312,32 +387,96 @@ async fn start_interactive_shell(
                     format!("/org/chromium/bluetooth/client/{}/bluetooth_callback", adapter);
                 let conn_cb_objpath: String =
                     format!("/org/chromium/bluetooth/client/{}/bluetooth_conn_callback", adapter);
+                let suspend_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/suspend_callback", adapter);
+                let scanner_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/scanner_callback", adapter);
+                let advertiser_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/advertising_set_callback", adapter);
 
                 let dbus_connection = context.lock().unwrap().dbus_connection.clone();
                 let dbus_crossroads = context.lock().unwrap().dbus_crossroads.clone();
 
-                context.lock().unwrap().adapter_dbus.as_mut().unwrap().register_callback(Box::new(
-                    BtCallback::new(
-                        cb_objpath,
-                        context.clone(),
-                        dbus_connection.clone(),
-                        dbus_crossroads.clone(),
-                    ),
-                ));
                 context
                     .lock()
                     .unwrap()
                     .adapter_dbus
                     .as_mut()
                     .unwrap()
+                    .rpc
+                    .register_callback(Box::new(BtCallback::new(
+                        cb_objpath.clone(),
+                        context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetooth::RegisterCallback");
+                context
+                    .lock()
+                    .unwrap()
+                    .adapter_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
                     .register_connection_callback(Box::new(BtConnectionCallback::new(
                         conn_cb_objpath,
                         context.clone(),
                         dbus_connection.clone(),
                         dbus_crossroads.clone(),
-                    )));
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetooth::RegisterConnectionCallback");
+
+                // Register callback listener for le-scan`commands.
+                let scanner_callback_id = context
+                    .lock()
+                    .unwrap()
+                    .gatt_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
+                    .register_scanner_callback(Box::new(ScannerCallback::new(
+                        scanner_cb_objpath.clone(),
+                        context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetoothGatt::RegisterScannerCallback");
+                context.lock().unwrap().scanner_callback_id = Some(scanner_callback_id);
+
+                let advertiser_callback_id = context
+                    .lock()
+                    .unwrap()
+                    .gatt_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
+                    .register_advertiser_callback(Box::new(AdvertisingSetCallback::new(
+                        advertiser_cb_objpath.clone(),
+                        context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetoothGatt::RegisterAdvertiserCallback");
+                context.lock().unwrap().advertiser_callback_id = Some(advertiser_callback_id);
+
+                // When adapter is ready, Suspend API is also ready. Register as an observer.
+                // TODO(b/224606285): Implement suspend debug utils in btclient.
+                context.lock().unwrap().suspend_dbus.as_mut().unwrap().register_callback(Box::new(
+                    SuspendCallback::new(
+                        suspend_cb_objpath,
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    ),
+                ));
+
                 context.lock().unwrap().adapter_ready = true;
                 let adapter_address = context.lock().unwrap().update_adapter_address();
+                context.lock().unwrap().update_bonded_devices();
+
                 print_info!("Adapter {} is ready", adapter_address);
             }
             ForegroundActions::Readline(result) => match result {

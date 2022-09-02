@@ -80,16 +80,11 @@ void BTA_DmSetDeviceName(const char* p_name) {
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback, bool is_bonding_or_sdp) {
+void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback) {
   tBTA_DM_API_SEARCH* p_msg =
       (tBTA_DM_API_SEARCH*)osi_calloc(sizeof(tBTA_DM_API_SEARCH));
 
-  /* Queue request if a device is bonding or performing service discovery */
-  if (is_bonding_or_sdp) {
-    p_msg->hdr.event = BTA_DM_API_QUEUE_SEARCH_EVT;
-  } else {
-    p_msg->hdr.event = BTA_DM_API_SEARCH_EVT;
-  }
+  p_msg->hdr.event = BTA_DM_API_SEARCH_EVT;
   p_msg->p_cback = p_cback;
 
   bta_sys_sendmsg(p_msg);
@@ -138,15 +133,11 @@ void BTA_DmSearchCancel(void) {
  *
  ******************************************************************************/
 void BTA_DmDiscover(const RawAddress& bd_addr, tBTA_DM_SEARCH_CBACK* p_cback,
-                    tBT_TRANSPORT transport, bool is_bonding_or_sdp) {
+                    tBT_TRANSPORT transport) {
   tBTA_DM_API_DISCOVER* p_msg =
       (tBTA_DM_API_DISCOVER*)osi_calloc(sizeof(tBTA_DM_API_DISCOVER));
 
-  if (is_bonding_or_sdp) {
-    p_msg->hdr.event = BTA_DM_API_QUEUE_DISCOVER_EVT;
-  } else {
-    p_msg->hdr.event = BTA_DM_API_DISCOVER_EVT;
-  }
+  p_msg->hdr.event = BTA_DM_API_DISCOVER_EVT;
   p_msg->bd_addr = bd_addr;
   p_msg->transport = transport;
   p_msg->p_cback = p_cback;
@@ -683,4 +674,48 @@ void BTA_VendorInit(void) { APPL_TRACE_API("BTA_VendorInit"); }
 void BTA_DmClearEventFilter(void) {
   APPL_TRACE_API("BTA_DmClearEventFilter");
   do_in_main_thread(FROM_HERE, base::Bind(bta_dm_clear_event_filter));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmLeRand
+ *
+ * Description      This function clears the event filter
+ *
+ * Returns          cb: callback to receive the resulting random number
+ *
+ ******************************************************************************/
+void BTA_DmLeRand(LeRandCallback cb) {
+  APPL_TRACE_API("BTA_DmLeRand");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_le_rand, cb));
+}
+
+void BTA_DmSetEventFilterConnectionSetupAllDevices() {
+  APPL_TRACE_API("BTA_DmSetEventFilterConnectionSetupAllDevices");
+  do_in_main_thread(
+      FROM_HERE,
+      base::Bind(bta_dm_set_event_filter_connection_setup_all_devices));
+}
+
+void BTA_DmAllowWakeByHid(std::vector<RawAddress> le_hid_devices) {
+  APPL_TRACE_API("BTA_DmAllowWakeByHid");
+  do_in_main_thread(FROM_HERE,
+                    base::Bind(bta_dm_allow_wake_by_hid, le_hid_devices));
+}
+
+void BTA_DmRestoreFilterAcceptList() {
+  APPL_TRACE_API("BTA_DmRestoreFilterAcceptList");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_restore_filter_accept_list));
+}
+
+void BTA_DmSetDefaultEventMask() {
+  APPL_TRACE_API("BTA_DmSetDefaultEventMask");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_set_default_event_mask));
+}
+
+void BTA_DmSetEventFilterInquiryResultAllDevices() {
+  APPL_TRACE_API("BTA_DmSetEventFilterInquiryResultAllDevices");
+  do_in_main_thread(
+      FROM_HERE,
+      base::Bind(bta_dm_set_event_filter_inquiry_result_all_devices));
 }

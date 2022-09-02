@@ -32,6 +32,7 @@ import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
@@ -81,6 +82,10 @@ public class HeadsetClientService extends ProfileService {
 
     public static final String HFP_CLIENT_STOP_TAG = "hfp_client_stop_tag";
 
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileHfpHfEnabled().orElse(false);
+    }
+
     @Override
     public IProfileServiceBinder initBinder() {
         return new BluetoothHeadsetClientBinder(this);
@@ -120,7 +125,7 @@ public class HeadsetClientService extends ProfileService {
                 mStateMachineMap.clear();
             }
 
-            IntentFilter filter = new IntentFilter(AudioManager.VOLUME_CHANGED_ACTION);
+            IntentFilter filter = new IntentFilter(AudioManager.ACTION_VOLUME_CHANGED);
             filter.addAction(Intent.ACTION_BATTERY_CHANGED);
             registerReceiver(mBroadcastReceiver, filter);
 
@@ -192,10 +197,10 @@ public class HeadsetClientService extends ProfileService {
             // not go through audio manager (audio mixer). see
             // ({@link HeadsetClientStateMachine#SET_SPEAKER_VOLUME} in
             // {@link HeadsetClientStateMachine} for details.
-            if (action.equals(AudioManager.VOLUME_CHANGED_ACTION)) {
+            if (action.equals(AudioManager.ACTION_VOLUME_CHANGED)) {
                 if (DBG) {
-                    Log.d(TAG, "Volume changed for stream: " + intent.getExtra(
-                            AudioManager.EXTRA_VOLUME_STREAM_TYPE));
+                    Log.d(TAG, "Volume changed for stream: " + intent.getIntExtra(
+                            AudioManager.EXTRA_VOLUME_STREAM_TYPE, -1));
                 }
                 int streamType = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_TYPE, -1);
                 if (streamType == AudioManager.STREAM_VOICE_CALL) {

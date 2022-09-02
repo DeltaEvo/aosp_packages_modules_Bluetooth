@@ -9,6 +9,7 @@ package {
     default_visibility: [
         "//device:__subpackages__",
         "//packages/modules/Bluetooth:__subpackages__",
+        "//tools/netsim:__subpackages__"
     ],
 }
 
@@ -24,6 +25,7 @@ cc_defaults {
         "-Wextra",
         "-Werror",
         "-fvisibility=hidden",
+        "-DROOTCANAL_LMP",
     ],
     local_include_dirs: [
         "include",
@@ -34,36 +36,15 @@ cc_defaults {
     ],
     generated_headers: [
         "RootCanalGeneratedPackets_h",
+        "RootCanalBrEdrBBGeneratedPackets_h",
         "BluetoothGeneratedPackets_h",
         "libbt_init_flags_bridge_header",
     ],
 }
 
-// Compile devices and device boutique into a single object to force the linker
-// to pick all the symbols for static registration to work
-cc_object {
-    name: "libbt-rootcanal-devices",
-    defaults: ["rootcanal_defaults"],
-    host_supported: true,
-    proprietary: true,
-    cflags: ["-fPIC"],
-    srcs: [
-        "model/devices/beacon.cc",
-        "model/devices/beacon_swarm.cc",
-        "model/devices/broken_adv.cc",
-        "model/devices/car_kit.cc",
-        "model/devices/classic.cc",
-        "model/devices/keyboard.cc",
-        "model/devices/loopback.cc",
-        "model/devices/scripted_beacon.cc",
-        "model/devices/sniffer.cc",
-        "model/setup/device_boutique.cc",
-    ],
-    static_libs: [
-        "libscriptedbeaconpayload-protos-lite",
-    ]
-}
-
+// This library should be added as `whole_static_libs`
+// as it uses static registration and all object
+// files needs to be linked
 cc_library_static {
     name: "libbt-rootcanal",
     defaults: ["rootcanal_defaults"],
@@ -78,16 +59,29 @@ cc_library_static {
         "model/controller/link_layer_controller.cc",
         "model/controller/sco_connection.cc",
         "model/controller/security_manager.cc",
+        "model/devices/baseband_sniffer.cc",
+        "model/devices/beacon.cc",
+        "model/devices/beacon_swarm.cc",
+        "model/devices/broken_adv.cc",
+        "model/devices/car_kit.cc",
+        "model/devices/classic.cc",
         "model/devices/device.cc",
         "model/devices/device_properties.cc",
-        "model/devices/h4_data_channel_packetizer.cc",
-        "model/devices/h4_packetizer.cc",
-        "model/devices/h4_parser.cc",
-        "model/devices/hci_protocol.cc",
-        "model/devices/hci_socket_device.cc",
+        "model/devices/hci_device.cc",
+        "model/devices/keyboard.cc",
         "model/devices/link_layer_socket_device.cc",
+        "model/devices/loopback.cc",
         "model/devices/remote_loopback_device.cc",
+        "model/devices/scripted_beacon.cc",
+        "model/devices/sniffer.cc",
+        "model/hci/h4_data_channel_packetizer.cc",
+        "model/hci/h4_packetizer.cc",
+        "model/hci/h4_parser.cc",
+        "model/hci/hci_protocol.cc",
+        "model/hci/hci_sniffer.cc",
+        "model/hci/hci_socket_transport.cc",
         "model/setup/async_manager.cc",
+        "model/setup/device_boutique.cc",
         "model/setup/phy_layer_factory.cc",
         "model/setup/test_channel_transport.cc",
         "model/setup/test_command_handler.cc",
@@ -98,17 +92,23 @@ cc_library_static {
         ":BluetoothPacketSources",
         ":BluetoothHciClassSources",
         ":BluetoothCryptoToolboxSources",
-        ":libbt-rootcanal-devices",
     ],
     export_include_dirs: [
         "include",
         ".",
     ],
+    export_generated_headers: [
+        "BluetoothGeneratedPackets_h"
+    ],
     shared_libs: [
         "liblog",
     ],
+    whole_static_libs: [
+        "liblmp",
+    ],
     static_libs: [
         "libjsoncpp",
+        "libscriptedbeaconpayload-protos-lite",
     ],
 }
 
@@ -130,6 +130,8 @@ cc_test_host {
         "clang_file_coverage",
         "clang_coverage_bin",
     ],
+    // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
+    isolated: false,
     srcs: [
         "test/async_manager_unittest.cc",
         "test/h4_parser_unittest.cc",
@@ -179,13 +181,16 @@ cc_binary_host {
     ],
     shared_libs: [
         "liblog",
-        "libbacktrace",
+        "libunwindstack",
+    ],
+    whole_static_libs: [
+        "libbt-rootcanal",
     ],
     static_libs: [
+        "libc++fs",
         "libjsoncpp",
         "libprotobuf-cpp-lite",
         "libscriptedbeaconpayload-protos-lite",
-        "libbt-rootcanal",
         "breakpad_client",
         "libgflags",
     ],
@@ -222,6 +227,27 @@ genrule {
     ],
 }
 
+filegroup {
+    name: "RootCanalLinkLayerPackets",
+    srcs: [
+        "packets/link_layer_packets.pdl",
+    ],
+}
+
+genrule {
+    name: "RootCanalBrEdrBBGeneratedPackets_h",
+    tools: [
+        "bluetooth_packetgen",
+    ],
+    cmd: "$(location bluetooth_packetgen) --root_namespace=bredr_bb --include=packages/modules/Bluetooth/tools/rootcanal/packets --out=$(genDir) $(in)",
+    srcs: [
+        "packets/bredr_bb.pdl",
+    ],
+    out: [
+        "bredr_bb.h",
+    ],
+}
+
 // bt_vhci_forwarder in cuttlefish depends on this H4Packetizer implementation.
 cc_library_static {
     name: "h4_packetizer_lib",
@@ -230,9 +256,9 @@ cc_library_static {
         "gd_defaults",
     ],
     srcs: [
-        "model/devices/h4_packetizer.cc",
-        "model/devices/h4_parser.cc",
-        "model/devices/hci_protocol.cc",
+        "model/hci/h4_packetizer.cc",
+        "model/hci/h4_parser.cc",
+        "model/hci/hci_protocol.cc",
     ],
 
     local_include_dirs: [

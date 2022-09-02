@@ -113,8 +113,46 @@ public class VolumeControlNativeInterface {
      * @param volume
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    public void setVolumeGroup(int groupId, int volume) {
-        setVolumeGroupNative(groupId, volume);
+    public void setGroupVolume(int groupId, int volume) {
+        setGroupVolumeNative(groupId, volume);
+    }
+
+     /**
+     * Mute the VolumeControl volume
+     * @param device
+     * @param unmute
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void mute(BluetoothDevice device) {
+        muteNative(getByteAddress(device));
+    }
+
+    /**
+     * Mute the VolumeControl volume in the group
+     * @param groupId
+     * @param unmute
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void muteGroup(int groupId) {
+        muteGroupNative(groupId);
+    }
+
+    /**
+     * Unmute the VolumeControl volume
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void unmute(BluetoothDevice device) {
+        unmuteNative(getByteAddress(device));
+    }
+
+     /**
+     * Unmute the VolumeControl volume group
+     * @param groupId
+     * @param unmute
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void unmuteGroup(int groupId) {
+        unmuteGroupNative(groupId);
     }
 
     /**
@@ -140,6 +178,10 @@ public class VolumeControlNativeInterface {
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public boolean setExtAudioOutVolumeOffset(BluetoothDevice device, int externalOutputId,
                                                     int offset) {
+        if (Utils.isPtsTestMode()) {
+            setVolumeNative(getByteAddress(device), offset);
+            return true;
+        }
         return setExtAudioOutVolumeOffsetNative(getByteAddress(device), externalOutputId, offset);
     }
 
@@ -332,7 +374,11 @@ public class VolumeControlNativeInterface {
     private native boolean connectVolumeControlNative(byte[] address);
     private native boolean disconnectVolumeControlNative(byte[] address);
     private native void setVolumeNative(byte[] address, int volume);
-    private native void setVolumeGroupNative(int groupId, int volume);
+    private native void setGroupVolumeNative(int groupId, int volume);
+    private native void muteNative(byte[] address);
+    private native void muteGroupNative(int groupId);
+    private native void unmuteNative(byte[] address);
+    private native void unmuteGroupNative(int groupId);
     private native boolean getExtAudioOutVolumeOffsetNative(byte[] address, int externalOutputId);
     private native boolean setExtAudioOutVolumeOffsetNative(byte[] address, int externalOutputId,
                                                                 int offset);

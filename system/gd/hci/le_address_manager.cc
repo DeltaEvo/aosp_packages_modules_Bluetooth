@@ -130,6 +130,7 @@ void LeAddressManager::SetPrivacyPolicyForInitiatorAddressForTest(
       minimum_rotation_time_ = minimum_rotation_time;
       maximum_rotation_time_ = maximum_rotation_time;
       address_rotation_alarm_ = std::make_unique<os::Alarm>(handler_);
+      set_random_address();
       break;
     case AddressPolicy::POLICY_NOT_SET:
       LOG_ALWAYS_FATAL("invalid parameters");
@@ -177,6 +178,14 @@ void LeAddressManager::unregister_client(LeAddressManagerCallback* callback) {
   }
 }
 
+bool LeAddressManager::UnregisterSync(LeAddressManagerCallback* callback, std::chrono::milliseconds timeout) {
+  handler_->BindOnceOn(this, &LeAddressManager::unregister_client, callback).Invoke();
+  std::promise<void> promise;
+  auto future = promise.get_future();
+  handler_->Post(common::BindOnce(&std::promise<void>::set_value, common::Unretained(&promise)));
+  return future.wait_for(timeout) == std::future_status::ready;
+}
+
 void LeAddressManager::AckPause(LeAddressManagerCallback* callback) {
   handler_->BindOnceOn(this, &LeAddressManager::ack_pause, callback).Invoke();
 }
@@ -201,9 +210,15 @@ AddressWithType LeAddressManager::GetAnotherAddress() {
 
 void LeAddressManager::pause_registered_clients() {
   for (auto& client : registered_clients_) {
-    if (client.second != ClientState::PAUSED && client.second != ClientState::WAITING_FOR_PAUSE) {
-      client.second = ClientState::WAITING_FOR_PAUSE;
-      client.first->OnPause();
+    switch (client.second) {
+      case ClientState::PAUSED:
+      case ClientState::WAITING_FOR_PAUSE:
+        break;
+      case WAITING_FOR_RESUME:
+      case RESUMED:
+        client.second = ClientState::WAITING_FOR_PAUSE;
+        client.first->OnPause();
+        break;
     }
   }
 }
@@ -219,14 +234,24 @@ void LeAddressManager::ack_pause(LeAddressManagerCallback* callback) {
   }
   registered_clients_.find(callback)->second = ClientState::PAUSED;
   for (auto client : registered_clients_) {
-    if (client.second != ClientState::PAUSED) {
-      // make sure all client paused
-      return;
+    switch (client.second) {
+      case ClientState::PAUSED:
+        break;
+      case ClientState::WAITING_FOR_PAUSE:
+        // make sure all client paused
+        LOG_DEBUG("Wait all clients paused, return");
+        return;
+      case WAITING_FOR_RESUME:
+      case RESUMED:
+        LOG_DEBUG("Trigger OnPause for client that not paused and not waiting for pause");
+        client.second = ClientState::WAITING_FOR_PAUSE;
+        client.first->OnPause();
+        return;
     }
   }
 
   if (address_policy_ != AddressPolicy::POLICY_NOT_SET) {
-    handle_next_command();
+    check_cached_commands();
   }
 }
 
@@ -349,7 +374,7 @@ std::chrono::milliseconds LeAddressManager::GetNextPrivateAddressIntervalMs() {
   return minimum_rotation_time_ + random_ms;
 }
 
-uint8_t LeAddressManager::GetConnectListSize() {
+uint8_t LeAddressManager::GetFilterAcceptListSize() {
   return connect_list_size_;
 }
 
@@ -377,9 +402,9 @@ void LeAddressManager::handle_next_command() {
   }
 }
 
-void LeAddressManager::AddDeviceToConnectList(
-    ConnectListAddressType connect_list_address_type, bluetooth::hci::Address address) {
-  auto packet_builder = hci::LeAddDeviceToConnectListBuilder::Create(connect_list_address_type, address);
+void LeAddressManager::AddDeviceToFilterAcceptList(
+    FilterAcceptListAddressType connect_list_address_type, bluetooth::hci::Address address) {
+  auto packet_builder = hci::LeAddDeviceToFilterAcceptListBuilder::Create(connect_list_address_type, address);
   Command command = {CommandType::ADD_DEVICE_TO_CONNECT_LIST, std::move(packet_builder)};
   handler_->BindOnceOn(this, &LeAddressManager::push_command, std::move(command)).Invoke();
 }
@@ -411,12 +436,16 @@ void LeAddressManager::AddDeviceToResolvingList(
   Command enable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, std::move(enable_builder)};
   cached_commands_.push(std::move(enable));
 
-  pause_registered_clients();
+  if (registered_clients_.empty()) {
+    handler_->BindOnceOn(this, &LeAddressManager::handle_next_command).Invoke();
+  } else {
+    handler_->BindOnceOn(this, &LeAddressManager::pause_registered_clients).Invoke();
+  }
 }
 
-void LeAddressManager::RemoveDeviceFromConnectList(
-    ConnectListAddressType connect_list_address_type, bluetooth::hci::Address address) {
-  auto packet_builder = hci::LeRemoveDeviceFromConnectListBuilder::Create(connect_list_address_type, address);
+void LeAddressManager::RemoveDeviceFromFilterAcceptList(
+    FilterAcceptListAddressType connect_list_address_type, bluetooth::hci::Address address) {
+  auto packet_builder = hci::LeRemoveDeviceFromFilterAcceptListBuilder::Create(connect_list_address_type, address);
   Command command = {CommandType::REMOVE_DEVICE_FROM_CONNECT_LIST, std::move(packet_builder)};
   handler_->BindOnceOn(this, &LeAddressManager::push_command, std::move(command)).Invoke();
 }
@@ -438,11 +467,15 @@ void LeAddressManager::RemoveDeviceFromResolvingList(
   Command enable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, std::move(enable_builder)};
   cached_commands_.push(std::move(enable));
 
-  pause_registered_clients();
+  if (registered_clients_.empty()) {
+    handler_->BindOnceOn(this, &LeAddressManager::handle_next_command).Invoke();
+  } else {
+    handler_->BindOnceOn(this, &LeAddressManager::pause_registered_clients).Invoke();
+  }
 }
 
-void LeAddressManager::ClearConnectList() {
-  auto packet_builder = hci::LeClearConnectListBuilder::Create();
+void LeAddressManager::ClearFilterAcceptList() {
+  auto packet_builder = hci::LeClearFilterAcceptListBuilder::Create();
   Command command = {CommandType::CLEAR_CONNECT_LIST, std::move(packet_builder)};
   handler_->BindOnceOn(this, &LeAddressManager::push_command, std::move(command)).Invoke();
 }
@@ -462,7 +495,25 @@ void LeAddressManager::ClearResolvingList() {
   Command enable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, std::move(enable_builder)};
   cached_commands_.push(std::move(enable));
 
-  pause_registered_clients();
+  handler_->BindOnceOn(this, &LeAddressManager::pause_registered_clients).Invoke();
+}
+
+template <class View>
+void LeAddressManager::on_command_complete(CommandCompleteView view) {
+  auto op_code = view.GetCommandOpCode();
+
+  auto complete_view = View::Create(view);
+  if (!complete_view.IsValid()) {
+    LOG_ERROR("Received %s complete with invalid packet", hci::OpCodeText(op_code).c_str());
+    return;
+  }
+  auto status = complete_view.GetStatus();
+  if (status != ErrorCode::SUCCESS) {
+    LOG_ERROR(
+        "Received %s complete with status %s",
+        hci::OpCodeText(op_code).c_str(),
+        ErrorCodeText(complete_view.GetStatus()).c_str());
+  }
 }
 
 void LeAddressManager::OnCommandComplete(bluetooth::hci::CommandCompleteView view) {
@@ -470,25 +521,67 @@ void LeAddressManager::OnCommandComplete(bluetooth::hci::CommandCompleteView vie
     LOG_ERROR("Received command complete with invalid packet");
     return;
   }
-  std::string op_code = OpCodeText(view.GetCommandOpCode());
-  LOG_INFO("Received command complete with op_code %s", op_code.c_str());
+  auto op_code = view.GetCommandOpCode();
+  LOG_INFO("Received command complete with op_code %s", OpCodeText(op_code).c_str());
 
-  // The command was sent before any client registered, we can make sure all the clients paused when command complete.
-  if (view.GetCommandOpCode() == OpCode::LE_SET_RANDOM_ADDRESS) {
-    if (address_policy_ == AddressPolicy::USE_STATIC_ADDRESS) {
-      LOG_INFO("Received LE_SET_RANDOM_ADDRESS complete and Address policy is USE_STATIC_ADDRESS, return");
-      return;
-    }
-    auto complete_view = LeSetRandomAddressCompleteView::Create(view);
-    if (!complete_view.IsValid()) {
-      LOG_ERROR("Received LE_SET_RANDOM_ADDRESS complete with invalid packet");
-    } else if (complete_view.IsValid() && complete_view.GetStatus() != ErrorCode::SUCCESS) {
-      LOG_ERROR(
-          "Received LE_SET_RANDOM_ADDRESS complete with status %s", ErrorCodeText(complete_view.GetStatus()).c_str());
-    } else {
-      LOG_INFO("update random address : %s", cached_address_.GetAddress().ToString().c_str());
-      le_address_ = cached_address_;
-    }
+  switch (op_code) {
+    case OpCode::LE_SET_RANDOM_ADDRESS: {
+      // The command was sent before any client registered, we can make sure all the clients paused when command
+      // complete.
+      if (address_policy_ == AddressPolicy::USE_STATIC_ADDRESS) {
+        LOG_INFO("Received LE_SET_RANDOM_ADDRESS complete and Address policy is USE_STATIC_ADDRESS, return");
+        return;
+      }
+      auto complete_view = LeSetRandomAddressCompleteView::Create(view);
+      if (!complete_view.IsValid()) {
+        LOG_ERROR("Received LE_SET_RANDOM_ADDRESS complete with invalid packet");
+      } else {
+        if (complete_view.GetStatus() != ErrorCode::SUCCESS) {
+          LOG_ERROR(
+              "Received LE_SET_RANDOM_ADDRESS complete with status %s",
+              ErrorCodeText(complete_view.GetStatus()).c_str());
+        } else {
+          LOG_INFO("update random address : %s", cached_address_.GetAddress().ToString().c_str());
+          le_address_ = cached_address_;
+        }
+      }
+    } break;
+
+    case OpCode::LE_SET_PRIVACY_MODE:
+      on_command_complete<LeSetPrivacyModeCompleteView>(view);
+      break;
+
+    case OpCode::LE_ADD_DEVICE_TO_RESOLVING_LIST:
+      on_command_complete<LeAddDeviceToResolvingListCompleteView>(view);
+      break;
+
+    case OpCode::LE_REMOVE_DEVICE_FROM_RESOLVING_LIST:
+      on_command_complete<LeRemoveDeviceFromResolvingListCompleteView>(view);
+      break;
+
+    case OpCode::LE_CLEAR_RESOLVING_LIST:
+      on_command_complete<LeClearResolvingListCompleteView>(view);
+      break;
+
+    case OpCode::LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST:
+      on_command_complete<LeAddDeviceToFilterAcceptListCompleteView>(view);
+      break;
+
+    case OpCode::LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST:
+      on_command_complete<LeRemoveDeviceFromFilterAcceptListCompleteView>(view);
+      break;
+
+    case OpCode::LE_SET_ADDRESS_RESOLUTION_ENABLE:
+      on_command_complete<LeSetAddressResolutionEnableCompleteView>(view);
+      break;
+
+    case OpCode::LE_CLEAR_FILTER_ACCEPT_LIST:
+      on_command_complete<LeClearFilterAcceptListCompleteView>(view);
+      break;
+
+    default:
+      LOG_ERROR("Received UNSUPPORTED command %s complete", hci::OpCodeText(op_code).c_str());
+      break;
   }
 
   handler_->BindOnceOn(this, &LeAddressManager::check_cached_commands).Invoke();
@@ -496,7 +589,8 @@ void LeAddressManager::OnCommandComplete(bluetooth::hci::CommandCompleteView vie
 
 void LeAddressManager::check_cached_commands() {
   for (auto client : registered_clients_) {
-    if (client.second != ClientState::PAUSED) {
+    if (client.second != ClientState::PAUSED && !cached_commands_.empty()) {
+      pause_registered_clients();
       return;
     }
   }

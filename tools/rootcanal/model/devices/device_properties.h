@@ -30,8 +30,10 @@ namespace rootcanal {
 using ::bluetooth::hci::Address;
 using ::bluetooth::hci::ClassOfDevice;
 using ::bluetooth::hci::EventCode;
+using ::bluetooth::hci::LLFeaturesBits;
 using ::bluetooth::hci::LMPFeaturesPage0Bits;
 using ::bluetooth::hci::LMPFeaturesPage1Bits;
+using ::bluetooth::hci::LMPFeaturesPage2Bits;
 
 static constexpr uint64_t Page0LmpFeatures() {
   LMPFeaturesPage0Bits features[] = {
@@ -94,6 +96,39 @@ static constexpr uint64_t Page0LmpFeatures() {
 static constexpr uint64_t Page1LmpFeatures() {
   LMPFeaturesPage1Bits features[] = {
       LMPFeaturesPage1Bits::SIMULTANEOUS_LE_AND_BR_HOST,
+  };
+
+  uint64_t value = 0;
+  for (unsigned i = 0; i < sizeof(features) / sizeof(*features); i++)
+    value |= static_cast<uint64_t>(features[i]);
+  return value;
+}
+
+static constexpr uint64_t Page2LmpFeatures() {
+  LMPFeaturesPage2Bits features[] = {
+      LMPFeaturesPage2Bits::SECURE_CONNECTIONS_CONTROLLER_SUPPORT,
+  };
+
+  uint64_t value = 0;
+  for (unsigned i = 0; i < sizeof(features) / sizeof(*features); i++)
+    value |= static_cast<uint64_t>(features[i]);
+  return value;
+}
+
+static constexpr uint64_t LlFeatures() {
+  LLFeaturesBits features[] = {
+      LLFeaturesBits::LE_ENCRYPTION,
+      LLFeaturesBits::CONNECTION_PARAMETERS_REQUEST_PROCEDURE,
+      LLFeaturesBits::EXTENDED_REJECT_INDICATION,
+      LLFeaturesBits::PERIPHERAL_INITIATED_FEATURES_EXCHANGE,
+      LLFeaturesBits::LE_PING,
+
+      LLFeaturesBits::EXTENDED_SCANNER_FILTER_POLICIES,
+      LLFeaturesBits::LE_EXTENDED_ADVERTISING,
+
+      // TODO: breaks AVD boot tests with LE audio
+      // LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_CENTRAL,
+      // LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_PERIPHERAL,
   };
 
   uint64_t value = 0;
@@ -278,6 +313,8 @@ class DeviceProperties {
 
   void SetEventMask(uint64_t mask) { event_mask_ = mask; }
 
+  bool SetLeHostFeature(uint8_t bit_number, uint8_t bit_value);
+
   bool IsUnmasked(EventCode event) const {
     uint64_t bit = UINT64_C(1) << (static_cast<uint8_t>(event) - 1);
     return (event_mask_ & bit) != 0;
@@ -387,7 +424,7 @@ class DeviceProperties {
   void SetLeEventMask(uint64_t mask) { le_event_mask_ = mask; }
 
   // Specification Version 4.2, Volume 2, Part E, Section 7.8.14
-  uint8_t GetLeConnectListSize() const { return le_connect_list_size_; }
+  uint8_t GetLeFilterAcceptListSize() const { return le_connect_list_size_; }
 
   // Specification Version 4.2, Volume 2, Part E, Section 7.8.27
   uint64_t GetLeSupportedStates() const { return le_supported_states_; }
@@ -403,7 +440,7 @@ class DeviceProperties {
   uint16_t GetLeResolvingListIgnoreReasons() const {
     return le_resolving_list_ignore_reasons_;
   }
-  uint16_t GetLeConnectListIgnoreReasons() const {
+  uint16_t GetLeFilterAcceptListIgnoreReasons() const {
     return le_connect_list_ignore_reasons_;
   }
 
@@ -427,8 +464,8 @@ class DeviceProperties {
   std::vector<uint8_t> supported_codecs_;
   std::vector<uint32_t> vendor_specific_codecs_;
   std::array<uint8_t, 64> supported_commands_;
-  std::array<uint64_t, 2> extended_features_{
-      {Page0LmpFeatures(), Page1LmpFeatures()}};
+  std::array<uint64_t, 3> extended_features_{
+      {Page0LmpFeatures(), Page1LmpFeatures(), Page2LmpFeatures()}};
   ClassOfDevice class_of_device_{{0, 0, 0}};
   std::vector<uint8_t> extended_inquiry_data_;
   std::array<uint8_t, 248> name_{};
@@ -445,7 +482,7 @@ class DeviceProperties {
   uint8_t num_le_data_packets_;
   uint8_t le_connect_list_size_;
   uint8_t le_resolving_list_size_;
-  uint64_t le_supported_features_{0x075b3fd8fe8ffeff};
+  uint64_t le_supported_features_{LlFeatures()};
   int8_t le_advertising_physical_channel_tx_power_{0x00};
   uint64_t le_supported_states_;
   uint64_t le_event_mask_{0x01f};

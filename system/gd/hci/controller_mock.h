@@ -117,7 +117,7 @@ class MockController : public Controller {
   MOCK_METHOD(uint64_t, GetLeSupportedStates, (), (const));
   MOCK_METHOD(LeBufferSize, GetControllerIsoBufferSize, (), (const));
   MOCK_METHOD(uint64_t, GetControllerLeLocalSupportedFeatures, (), (const));
-  MOCK_METHOD(uint8_t, GetLeConnectListSize, (), (const));
+  MOCK_METHOD(uint8_t, GetLeFilterAcceptListSize, (), (const));
   MOCK_METHOD(uint8_t, GetLeResolvingListSize, (), (const));
   MOCK_METHOD(LeMaximumDataLength, GetLeMaximumDataLength, (), (const));
   MOCK_METHOD(uint16_t, GetLeMaximumAdvertisingDataLength, (), (const));
@@ -126,6 +126,8 @@ class MockController : public Controller {
   MOCK_METHOD(uint8_t, GetLePeriodicAdvertiserListSize, (), (const));
   MOCK_METHOD(VendorCapabilities, GetVendorCapabilities, (), (const));
   MOCK_METHOD(bool, IsSupported, (OpCode op_code), (const));
+  MOCK_METHOD(void, LeRand, (LeRandCallback cb));
+  MOCK_METHOD(void, AllowWakeByHid, ());
 };
 
 }  // namespace testing

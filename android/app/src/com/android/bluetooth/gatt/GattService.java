@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.gatt;
 
+import static com.android.bluetooth.Utils.checkCallerTargetSdk;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
 import android.annotation.RequiresPermission;
@@ -30,6 +31,7 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.IBluetoothGatt;
 import android.bluetooth.IBluetoothGattCallback;
@@ -46,9 +48,9 @@ import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
-import android.companion.ICompanionDeviceManager;
+import android.companion.AssociationInfo;
+import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
-import android.content.Context;
 import android.content.Intent;
 import android.net.MacAddress;
 import android.os.Binder;
@@ -58,20 +60,22 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.sysprop.BluetoothProperties;
 import android.text.format.DateUtils;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AbstractionLayer;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.BluetoothAdapterProxy;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.util.NumberUtils;
 import com.android.internal.annotations.VisibleForTesting;
@@ -259,14 +263,19 @@ public class GattService extends ProfileService {
     private final HashMap<String, AtomicBoolean> mPermits = new HashMap<>();
 
     private AdapterService mAdapterService;
+    private BluetoothAdapterProxy mBluetoothAdapterProxy;
     private AdvertiseManager mAdvertiseManager;
     private PeriodicScanManager mPeriodicScanManager;
     private ScanManager mScanManager;
     private AppOpsManager mAppOps;
-    private ICompanionDeviceManager mCompanionManager;
+    private CompanionDeviceManager mCompanionManager;
     private String mExposureNotificationPackage;
     private Handler mTestModeHandler;
     private final Object mTestModeLock = new Object();
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileGattEnabled().orElse(true);
+    }
 
     /**
      */
@@ -292,9 +301,7 @@ public class GattService extends ProfileService {
      */
     private Set<String> mReliableQueue = new HashSet<String>();
 
-    static {
-        classInitNative();
-    }
+    private GattNativeInterface mNativeInterface;
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -310,15 +317,16 @@ public class GattService extends ProfileService {
         Settings.Global.putInt(
                 getContentResolver(), "bluetooth_sanitized_exposure_notification_supported", 1);
 
-        initializeNative();
+        mNativeInterface = GattObjectsFactory.getInstance().getNativeInterface();
+        mNativeInterface.init(this);
         mAdapterService = AdapterService.getAdapterService();
-        mCompanionManager = ICompanionDeviceManager.Stub.asInterface(
-                ServiceManager.getService(Context.COMPANION_DEVICE_SERVICE));
+        mBluetoothAdapterProxy = BluetoothAdapterProxy.getInstance();
+        mCompanionManager = getSystemService(CompanionDeviceManager.class);
         mAppOps = getSystemService(AppOpsManager.class);
         mAdvertiseManager = new AdvertiseManager(this, mAdapterService);
         mAdvertiseManager.start();
 
-        mScanManager = new ScanManager(this, mAdapterService);
+        mScanManager = new ScanManager(this, mAdapterService, mBluetoothAdapterProxy);
         mScanManager.start();
 
         mPeriodicScanManager = new PeriodicScanManager(mAdapterService);
@@ -339,15 +347,8 @@ public class GattService extends ProfileService {
         mServerMap.clear();
         mHandleMap.clear();
         mReliableQueue.clear();
-        if (mAdvertiseManager != null) {
-            mAdvertiseManager.cleanup();
-        }
-        if (mScanManager != null) {
-            mScanManager.cleanup();
-        }
-        if (mPeriodicScanManager != null) {
-            mPeriodicScanManager.cleanup();
-        }
+        cleanup();
+
         return true;
     }
 
@@ -356,7 +357,10 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "cleanup()");
         }
-        cleanupNative();
+        if (mNativeInterface != null) {
+            mNativeInterface.cleanup();
+            mNativeInterface = null;
+        }
         if (mAdvertiseManager != null) {
             mAdvertiseManager.cleanup();
         }
@@ -418,6 +422,15 @@ public class GattService extends ProfileService {
             return null;
         }
         return sGattService;
+    }
+
+    @VisibleForTesting
+    ScanManager getScanManager() {
+        if (mScanManager == null) {
+            Log.w(TAG, "getScanManager(): scan manager is null");
+            return null;
+        }
+        return mScanManager;
     }
 
     private static synchronized void setGattService(GattService instance) {
@@ -1771,6 +1784,16 @@ public class GattService extends ProfileService {
                     + ", originalAddress=" + originalAddress);
         }
 
+        String identityAddress = mAdapterService.getIdentityAddress(address);
+        if (!address.equals(identityAddress)) {
+            if (VDBG) {
+                Log.d(TAG, "found identityAddress of " + address + ", replace originalAddress as "
+                        + identityAddress);
+            }
+            originalAddress = identityAddress;
+        }
+
+
         byte[] legacyAdvData = Arrays.copyOfRange(advData, 0, 62);
 
         for (ScanClient client : mScanManager.getRegularScanQueue()) {
@@ -1838,13 +1861,6 @@ public class GattService extends ProfileService {
                             + hasPermission + " matches=" + matchResult.getMatches());
                 }
                 continue;
-            }
-
-            if (matchResult.getMatchOrigin() == MatchOrigin.ORIGINAL_ADDRESS) {
-                result = new ScanResult(BluetoothAdapter.getDefaultAdapter()
-                        .getRemoteDevice(originalAddress), eventType, primaryPhy, secondaryPhy,
-                        advertisingSid, txPower, rssi, periodicAdvInt, scanRecord,
-                        SystemClock.elapsedRealtimeNanos());
             }
 
             if ((settings.getCallbackType() & ScanSettings.CALLBACK_TYPE_ALL_MATCHES) == 0) {
@@ -1996,7 +2012,7 @@ public class GattService extends ProfileService {
             Log.d(TAG, "onConnected() - clientIf=" + clientIf + ", connId=" + connId + ", address="
                     + address);
         }
-
+        int connectionState = BluetoothProtoEnums.CONNECTION_STATE_DISCONNECTED;
         if (status == 0) {
             mClientMap.addConnection(clientIf, connId, address);
 
@@ -2006,12 +2022,16 @@ public class GattService extends ProfileService {
                     + address);
                 mPermits.putIfAbsent(address, new AtomicBoolean(true));
             }
+            connectionState = BluetoothProtoEnums.CONNECTION_STATE_CONNECTED;
+
         }
         ClientMap.App app = mClientMap.getById(clientIf);
         if (app != null) {
             app.callback.onClientConnectionState(status, clientIf,
                     (status == BluetoothGatt.GATT_SUCCESS), address);
         }
+        statsLogGattConnectionStateChange(
+                BluetoothProfile.GATT, address, clientIf, connectionState);
     }
 
     void onDisconnected(int clientIf, int connId, int status, String address)
@@ -2025,8 +2045,7 @@ public class GattService extends ProfileService {
         mClientMap.removeConnection(clientIf, connId);
         ClientMap.App app = mClientMap.getById(clientIf);
 
-        // Remove AtomicBoolean representing permit if no other connections rely on
-        // this remote device.
+        // Remove AtomicBoolean representing permit if no other connections rely on this remote device.
         if (!mClientMap.getConnectedDevices().contains(address)) {
             synchronized (mPermits) {
                 Log.d(TAG, "onDisconnected() - removing permit for address="
@@ -2038,6 +2057,9 @@ public class GattService extends ProfileService {
         if (app != null) {
             app.callback.onClientConnectionState(status, clientIf, false, address);
         }
+        statsLogGattConnectionStateChange(
+                BluetoothProfile.GATT, address, clientIf,
+                BluetoothProtoEnums.CONNECTION_STATE_DISCONNECTED);
     }
 
     void onClientPhyUpdate(int connId, int txPhy, int rxPhy, int status) throws RemoteException {
@@ -2185,7 +2207,7 @@ public class GattService extends ProfileService {
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
-                gattClientGetGattDbNative(connId);
+                mNativeInterface.gattClientGetGattDb(connId);
             }
         });
         t.start();
@@ -2303,8 +2325,8 @@ public class GattService extends ProfileService {
             try {
                 permissionCheck(connId, handle);
             } catch (SecurityException ex) {
-                // Only throws on T+ as this is an older API and did not throw prior to T
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // Only throws on apps with target SDK T+ as this old API did not throw prior to T
+                if (checkCallerTargetSdk(this, app.name, Build.VERSION_CODES.TIRAMISU)) {
                     throw ex;
                 }
                 Log.w(TAG, "onNotify() - permission check failed!");
@@ -2921,24 +2943,29 @@ public class GattService extends ProfileService {
         mScanManager.unregisterScanner(scannerId);
     }
 
-    private List<String> getAssociatedDevices(String callingPackage, UserHandle userHandle) {
+    private List<String> getAssociatedDevices(String callingPackage) {
         if (mCompanionManager == null) {
-            return new ArrayList<String>();
+            return Collections.emptyList();
         }
+
+        List<String> macAddresses = new ArrayList();
+
         final long identity = Binder.clearCallingIdentity();
         try {
-            return mCompanionManager.getAssociations(
-                    callingPackage, userHandle.getIdentifier());
+            for (AssociationInfo info : mCompanionManager.getAllAssociations()) {
+                if (info.getPackageName().equals(callingPackage) && !info.isSelfManaged()
+                    && info.getDeviceMacAddress() != null) {
+                    macAddresses.add(info.getDeviceMacAddress().toString());
+                }
+            }
         } catch (SecurityException se) {
             // Not an app with associated devices
-        } catch (RemoteException re) {
-            Log.e(TAG, "Cannot reach companion device service", re);
         } catch (Exception e) {
             Log.e(TAG, "Cannot check device associations for " + callingPackage, e);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
-        return new ArrayList<String>();
+        return macAddresses;
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
@@ -2966,7 +2993,7 @@ public class GattService extends ProfileService {
         scanClient.hasDisavowedLocation =
                 Utils.hasDisavowedLocationForScan(this, attributionSource, isTestModeEnabled());
 
-        scanClient.isQApp = Utils.isQApp(this, callingPackage);
+        scanClient.isQApp = checkCallerTargetSdk(this, callingPackage, Build.VERSION_CODES.Q);
         if (!scanClient.hasDisavowedLocation) {
             if (scanClient.isQApp) {
                 scanClient.hasLocationPermission = Utils.checkCallerHasFineLocation(
@@ -2982,7 +3009,7 @@ public class GattService extends ProfileService {
                 Utils.checkCallerHasNetworkSetupWizardPermission(this);
         scanClient.hasScanWithoutLocationPermission =
                 Utils.checkCallerHasScanWithoutLocationPermission(this);
-        scanClient.associatedDevices = getAssociatedDevices(callingPackage, scanClient.userHandle);
+        scanClient.associatedDevices = getAssociatedDevices(callingPackage);
 
         AppScanStats app = mScannerMap.getAppScanStatsById(scannerId);
         ScannerMap.App cbApp = mScannerMap.getById(scannerId);
@@ -3042,10 +3069,9 @@ public class GattService extends ProfileService {
         app.mHasDisavowedLocation =
                 Utils.hasDisavowedLocationForScan(this, attributionSource, isTestModeEnabled());
 
-        app.mIsQApp = Utils.isQApp(this, callingPackage);
         if (!app.mHasDisavowedLocation) {
             try {
-                if (app.mIsQApp) {
+                if (checkCallerTargetSdk(this, callingPackage, Build.VERSION_CODES.Q)) {
                     app.hasLocationPermission = Utils.checkCallerHasFineLocation(
                             this, attributionSource, app.mUserHandle);
                 } else {
@@ -3063,7 +3089,7 @@ public class GattService extends ProfileService {
                 Utils.checkCallerHasNetworkSetupWizardPermission(this);
         app.mHasScanWithoutLocationPermission =
                 Utils.checkCallerHasScanWithoutLocationPermission(this);
-        app.mAssociatedDevices = getAssociatedDevices(callingPackage, app.mUserHandle);
+        app.mAssociatedDevices = getAssociatedDevices(callingPackage);
         mScanManager.registerScanner(uuid);
 
         // If this fails, we should stop the scan immediately.
@@ -3079,7 +3105,7 @@ public class GattService extends ProfileService {
                 new ScanClient(scannerId, piInfo.settings, piInfo.filters);
         scanClient.hasLocationPermission = app.hasLocationPermission;
         scanClient.userHandle = app.mUserHandle;
-        scanClient.isQApp = app.mIsQApp;
+        scanClient.isQApp = checkCallerTargetSdk(this, app.name, Build.VERSION_CODES.Q);
         scanClient.eligibleForSanitizedExposureNotification =
                 app.mEligibleForSanitizedExposureNotification;
         scanClient.hasNetworkSettingsPermission = app.mHasNetworkSettingsPermission;
@@ -3349,7 +3375,8 @@ public class GattService extends ProfileService {
             Log.d(TAG, "registerClient() - UUID=" + uuid);
         }
         mClientMap.add(uuid, null, callback, null, this);
-        gattClientRegisterAppNative(uuid.getLeastSignificantBits(), uuid.getMostSignificantBits(), eatt_support);
+        mNativeInterface.gattClientRegisterApp(uuid.getLeastSignificantBits(),
+                uuid.getMostSignificantBits(), eatt_support);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3363,7 +3390,7 @@ public class GattService extends ProfileService {
             Log.d(TAG, "unregisterClient() - clientIf=" + clientIf);
         }
         mClientMap.remove(clientIf);
-        gattClientUnregisterAppNative(clientIf);
+        mNativeInterface.gattClientUnregisterApp(clientIf);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3378,7 +3405,12 @@ public class GattService extends ProfileService {
             Log.d(TAG, "clientConnect() - address=" + address + ", isDirect=" + isDirect
                     + ", opportunistic=" + opportunistic + ", phy=" + phy);
         }
-        gattClientConnectNative(clientIf, address, isDirect, transport, opportunistic, phy);
+        statsLogAppPackage(address, attributionSource.getPackageName());
+        statsLogGattConnectionStateChange(
+                BluetoothProfile.GATT, address, clientIf,
+                BluetoothProtoEnums.CONNECTION_STATE_CONNECTING);
+        mNativeInterface.gattClientConnect(clientIf, address, isDirect, transport, opportunistic,
+                phy);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3392,8 +3424,10 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "clientDisconnect() - address=" + address + ", connId=" + connId);
         }
-
-        gattClientDisconnectNative(clientIf, address, connId != null ? connId : 0);
+        statsLogGattConnectionStateChange(
+                BluetoothProfile.GATT, address, clientIf,
+                BluetoothProtoEnums.CONNECTION_STATE_DISCONNECTING);
+        mNativeInterface.gattClientDisconnect(clientIf, address, connId != null ? connId : 0);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3415,7 +3449,7 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "clientSetPreferredPhy() - address=" + address + ", connId=" + connId);
         }
-        gattClientSetPreferredPhyNative(clientIf, address, txPhy, rxPhy, phyOptions);
+        mNativeInterface.gattClientSetPreferredPhy(clientIf, address, txPhy, rxPhy, phyOptions);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3436,7 +3470,7 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "clientReadPhy() - address=" + address + ", connId=" + connId);
         }
-        gattClientReadPhyNative(clientIf, address);
+        mNativeInterface.gattClientReadPhy(clientIf, address);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3486,7 +3520,7 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "refreshDevice() - address=" + address);
         }
-        gattClientRefreshNative(clientIf, address);
+        mNativeInterface.gattClientRefresh(clientIf, address);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3502,7 +3536,7 @@ public class GattService extends ProfileService {
         }
 
         if (connId != null) {
-            gattClientSearchServiceNative(connId, true, 0, 0);
+            mNativeInterface.gattClientSearchService(connId, true, 0, 0);
         } else {
             Log.e(TAG, "discoverServices() - No connection for " + address + "...");
         }
@@ -3518,7 +3552,7 @@ public class GattService extends ProfileService {
 
         Integer connId = mClientMap.connIdByAddress(clientIf, address);
         if (connId != null) {
-            gattClientDiscoverServiceByUuidNative(connId, uuid.getLeastSignificantBits(),
+            mNativeInterface.gattClientDiscoverServiceByUuid(connId, uuid.getLeastSignificantBits(),
                     uuid.getMostSignificantBits());
         } else {
             Log.e(TAG, "discoverServiceByUuid() - No connection for " + address + "...");
@@ -3546,15 +3580,16 @@ public class GattService extends ProfileService {
         try {
             permissionCheck(connId, handle);
         } catch (SecurityException ex) {
-            // Only throws on T+ as this is an older API and did not throw prior to T
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            String callingPackage = attributionSource.getPackageName();
+            // Only throws on apps with target SDK T+ as this old API did not throw prior to T
+            if (checkCallerTargetSdk(this, callingPackage, Build.VERSION_CODES.TIRAMISU)) {
                 throw ex;
             }
             Log.w(TAG, "readCharacteristic() - permission check failed!");
             return;
         }
 
-        gattClientReadCharacteristicNative(connId, handle, authReq);
+        mNativeInterface.gattClientReadCharacteristic(connId, handle, authReq);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3578,16 +3613,18 @@ public class GattService extends ProfileService {
         try {
             permissionCheck(uuid);
         } catch (SecurityException ex) {
-            // Only throws on T+ as this is an older API and did not throw prior to T
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            String callingPackage = attributionSource.getPackageName();
+            // Only throws on apps with target SDK T+ as this old API did not throw prior to T
+            if (checkCallerTargetSdk(this, callingPackage, Build.VERSION_CODES.TIRAMISU)) {
                 throw ex;
             }
             Log.w(TAG, "readUsingCharacteristicUuid() - permission check failed!");
             return;
         }
 
-        gattClientReadUsingCharacteristicUuidNative(connId, uuid.getLeastSignificantBits(),
-                uuid.getMostSignificantBits(), startHandle, endHandle, authReq);
+        mNativeInterface.gattClientReadUsingCharacteristicUuid(connId,
+                uuid.getLeastSignificantBits(), uuid.getMostSignificantBits(), startHandle,
+                endHandle, authReq);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3630,7 +3667,7 @@ public class GattService extends ProfileService {
             atomicBoolean.set(false);
         }
 
-        gattClientWriteCharacteristicNative(connId, handle, writeType, authReq, value);
+        mNativeInterface.gattClientWriteCharacteristic(connId, handle, writeType, authReq, value);
         return BluetoothStatusCodes.SUCCESS;
     }
 
@@ -3655,15 +3692,16 @@ public class GattService extends ProfileService {
         try {
             permissionCheck(connId, handle);
         } catch (SecurityException ex) {
-            // Only throws on T+ as this is an older API and did not throw prior to T
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            String callingPackage = attributionSource.getPackageName();
+            // Only throws on apps with target SDK T+ as this old API did not throw prior to T
+            if (checkCallerTargetSdk(this, callingPackage, Build.VERSION_CODES.TIRAMISU)) {
                 throw ex;
             }
             Log.w(TAG, "readDescriptor() - permission check failed!");
             return;
         }
 
-        gattClientReadDescriptorNative(connId, handle, authReq);
+        mNativeInterface.gattClientReadDescriptor(connId, handle, authReq);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3684,7 +3722,7 @@ public class GattService extends ProfileService {
         }
         permissionCheck(connId, handle);
 
-        gattClientWriteDescriptorNative(connId, handle, authReq, value);
+        mNativeInterface.gattClientWriteDescriptor(connId, handle, authReq, value);
         return BluetoothStatusCodes.SUCCESS;
     }
 
@@ -3716,7 +3754,7 @@ public class GattService extends ProfileService {
 
         Integer connId = mClientMap.connIdByAddress(clientIf, address);
         if (connId != null) {
-            gattClientExecuteWriteNative(connId, execute);
+            mNativeInterface.gattClientExecuteWrite(connId, execute);
         }
     }
 
@@ -3741,15 +3779,16 @@ public class GattService extends ProfileService {
         try {
             permissionCheck(connId, handle);
         } catch (SecurityException ex) {
-            // Only throws on T+ as this is an older API and did not throw prior to T
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            String callingPackage = attributionSource.getPackageName();
+            // Only throws on apps with target SDK T+ as this old API did not throw prior to T
+            if (checkCallerTargetSdk(this, callingPackage, Build.VERSION_CODES.TIRAMISU)) {
                 throw ex;
             }
             Log.w(TAG, "registerForNotification() - permission check failed!");
             return;
         }
 
-        gattClientRegisterForNotificationsNative(clientIf, address, handle, enable);
+        mNativeInterface.gattClientRegisterForNotifications(clientIf, address, handle, enable);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3762,7 +3801,7 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "readRemoteRssi() - address=" + address);
         }
-        gattClientReadRemoteRssiNative(clientIf, address);
+        mNativeInterface.gattClientReadRemoteRssi(clientIf, address);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3777,7 +3816,7 @@ public class GattService extends ProfileService {
         }
         Integer connId = mClientMap.connIdByAddress(clientIf, address);
         if (connId != null) {
-            gattClientConfigureMTUNative(connId, mtu);
+            mNativeInterface.gattClientConfigureMTU(connId, mtu);
         } else {
             Log.e(TAG, "configureMTU() - No connection for " + address + "...");
         }
@@ -3827,8 +3866,8 @@ public class GattService extends ProfileService {
             Log.d(TAG, "connectionParameterUpdate() - address=" + address + "params="
                     + connectionPriority + " interval=" + minInterval + "/" + maxInterval);
         }
-        gattConnectionParameterUpdateNative(clientIf, address, minInterval, maxInterval, latency,
-                timeout, 0, 0);
+        mNativeInterface.gattConnectionParameterUpdate(clientIf, address, minInterval, maxInterval,
+                latency, timeout, 0, 0);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -3849,7 +3888,7 @@ public class GattService extends ProfileService {
 
 
         }
-        gattConnectionParameterUpdateNative(clientIf, address, minInterval, maxInterval,
+        mNativeInterface.gattConnectionParameterUpdate(clientIf, address, minInterval, maxInterval,
                                             peripheralLatency, supervisionTimeout,
                                             minConnectionEventLen, maxConnectionEventLen);
     }
@@ -3950,14 +3989,19 @@ public class GattService extends ProfileService {
         if (app == null) {
             return;
         }
-
+        int connectionState;
         if (connected) {
             mServerMap.addConnection(serverIf, connId, address);
+            connectionState = BluetoothProtoEnums.CONNECTION_STATE_CONNECTED;
         } else {
             mServerMap.removeConnection(serverIf, connId);
+            connectionState = BluetoothProtoEnums.CONNECTION_STATE_DISCONNECTED;
         }
 
         app.callback.onServerConnectionState((byte) 0, serverIf, connected, address);
+        statsLogAppPackage(address, app.name);
+        statsLogGattConnectionStateChange(
+                BluetoothProfile.GATT_SERVER, address, serverIf, connectionState);
     }
 
     void onServerReadCharacteristic(String address, int connId, int transId, int handle, int offset,
@@ -4153,7 +4197,8 @@ public class GattService extends ProfileService {
             Log.d(TAG, "registerServer() - UUID=" + uuid);
         }
         mServerMap.add(uuid, null, callback, null, this);
-        gattServerRegisterAppNative(uuid.getLeastSignificantBits(), uuid.getMostSignificantBits(), eatt_support);
+        mNativeInterface.gattServerRegisterApp(uuid.getLeastSignificantBits(),
+                uuid.getMostSignificantBits(), eatt_support);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4170,7 +4215,7 @@ public class GattService extends ProfileService {
         deleteServices(serverIf);
 
         mServerMap.remove(serverIf);
-        gattServerUnregisterAppNative(serverIf);
+        mNativeInterface.gattServerUnregisterApp(serverIf);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4184,7 +4229,7 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "serverConnect() - address=" + address);
         }
-        gattServerConnectNative(serverIf, address, isDirect, transport);
+        mNativeInterface.gattServerConnect(serverIf, address, isDirect, transport);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4199,7 +4244,7 @@ public class GattService extends ProfileService {
             Log.d(TAG, "serverDisconnect() - address=" + address + ", connId=" + connId);
         }
 
-        gattServerDisconnectNative(serverIf, address, connId != null ? connId : 0);
+        mNativeInterface.gattServerDisconnect(serverIf, address, connId != null ? connId : 0);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4221,7 +4266,7 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "serverSetPreferredPhy() - address=" + address + ", connId=" + connId);
         }
-        gattServerSetPreferredPhyNative(serverIf, address, txPhy, rxPhy, phyOptions);
+        mNativeInterface.gattServerSetPreferredPhy(serverIf, address, txPhy, rxPhy, phyOptions);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4242,7 +4287,7 @@ public class GattService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "serverReadPhy() - address=" + address + ", connId=" + connId);
         }
-        gattServerReadPhyNative(serverIf, address);
+        mNativeInterface.gattServerReadPhy(serverIf, address);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4289,7 +4334,7 @@ public class GattService extends ProfileService {
             }
         }
 
-        gattServerAddServiceNative(serverIf, db);
+        mNativeInterface.gattServerAddService(serverIf, db);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4303,7 +4348,7 @@ public class GattService extends ProfileService {
             Log.d(TAG, "removeService() - handle=" + handle);
         }
 
-        gattServerDeleteServiceNative(serverIf, handle);
+        mNativeInterface.gattServerDeleteService(serverIf, handle);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -4338,7 +4383,7 @@ public class GattService extends ProfileService {
         }
 
         Integer connId = mServerMap.connIdByAddress(serverIf, address);
-        gattServerSendResponseNative(serverIf, connId != null ? connId : 0, requestId,
+        mNativeInterface.gattServerSendResponse(serverIf, connId != null ? connId : 0, requestId,
                 (byte) status, handle, offset, value, (byte) 0);
         mHandleMap.deleteRequest(requestId);
     }
@@ -4361,9 +4406,9 @@ public class GattService extends ProfileService {
         }
 
         if (confirm) {
-            gattServerSendIndicationNative(serverIf, handle, connId, value);
+            mNativeInterface.gattServerSendIndication(serverIf, handle, connId, value);
         } else {
-            gattServerSendNotificationNative(serverIf, handle, connId, value);
+            mNativeInterface.gattServerSendNotification(serverIf, handle, connId, value);
         }
 
         return BluetoothStatusCodes.SUCCESS;
@@ -4411,7 +4456,7 @@ public class GattService extends ProfileService {
     }
 
     private int getDeviceType(BluetoothDevice device) {
-        int type = gattClientGetDeviceTypeNative(device.getAddress());
+        int type = mNativeInterface.gattClientGetDeviceType(device.getAddress());
         if (DBG) {
             Log.d(TAG, "getDeviceType() - device=" + device + ", type=" + type);
         }
@@ -4550,7 +4595,7 @@ public class GattService extends ProfileService {
                     continue;
                 }
 
-                gattServerStopServiceNative(serverIf, entry.handle);
+                mNativeInterface.gattServerStopService(serverIf, entry.handle);
                 return;
             }
         }
@@ -4576,7 +4621,7 @@ public class GattService extends ProfileService {
 
         /* Now actually delete the services.... */
         for (Integer handle : handleList) {
-            gattServerDeleteServiceNative(serverIf, handle);
+            mNativeInterface.gattServerDeleteService(serverIf, handle);
         }
     }
 
@@ -4631,6 +4676,31 @@ public class GattService extends ProfileService {
         }
     }
 
+    private void statsLogAppPackage(String address, String app) {
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
+                mAdapterService.getMetricId(device), app);
+        if (DBG) {
+            Log.d(TAG, "Gatt Logging: metric_id=" + mAdapterService.getMetricId(device)
+                    + ", app=" + app);
+        }
+    }
+
+    private void statsLogGattConnectionStateChange(
+            int profile, String address, int sessionIndex, int connectionState) {
+        BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address);
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.BLUETOOTH_CONNECTION_STATE_CHANGED, connectionState,
+                0 /* deprecated */, profile, new byte[0],
+                mAdapterService.getMetricId(device), sessionIndex);
+        if (DBG) {
+            Log.d(TAG, "Gatt Logging: metric_id=" + mAdapterService.getMetricId(device)
+                    + ", session_index=" + sessionIndex
+                    + ", connection state=" + connectionState);
+        }
+    }
+
     @Override
     public void dumpProto(BluetoothMetricsProto.BluetoothLog.Builder builder) {
         synchronized (mScanEvents) {
@@ -4641,111 +4711,16 @@ public class GattService extends ProfileService {
     /**************************************************************************
      * GATT Test functions
      *************************************************************************/
-
     void gattTestCommand(int command, UUID uuid1, String bda1, int p1, int p2, int p3, int p4,
             int p5) {
         if (bda1 == null) {
             bda1 = "00:00:00:00:00:00";
         }
         if (uuid1 != null) {
-            gattTestNative(command, uuid1.getLeastSignificantBits(), uuid1.getMostSignificantBits(),
-                    bda1, p1, p2, p3, p4, p5);
+            mNativeInterface.gattTest(command, uuid1.getLeastSignificantBits(),
+                    uuid1.getMostSignificantBits(), bda1, p1, p2, p3, p4, p5);
         } else {
-            gattTestNative(command, 0, 0, bda1, p1, p2, p3, p4, p5);
+            mNativeInterface.gattTest(command, 0, 0, bda1, p1, p2, p3, p4, p5);
         }
     }
-
-    private native void gattTestNative(int command, long uuid1Lsb, long uuid1Msb, String bda1,
-            int p1, int p2, int p3, int p4, int p5);
-
-    /**************************************************************************
-     * Native functions prototypes
-     *************************************************************************/
-
-    private static native void classInitNative();
-
-    private native void initializeNative();
-
-    private native void cleanupNative();
-
-    private native int gattClientGetDeviceTypeNative(String address);
-
-    private native void gattClientRegisterAppNative(long appUuidLsb, long appUuidMsb, boolean eatt_support);
-
-    private native void gattClientUnregisterAppNative(int clientIf);
-
-    private native void gattClientConnectNative(int clientIf, String address, boolean isDirect,
-            int transport, boolean opportunistic, int initiatingPhys);
-
-    private native void gattClientDisconnectNative(int clientIf, String address, int connId);
-
-    private native void gattClientSetPreferredPhyNative(int clientIf, String address, int txPhy,
-            int rxPhy, int phyOptions);
-
-    private native void gattClientReadPhyNative(int clientIf, String address);
-
-    private native void gattClientRefreshNative(int clientIf, String address);
-
-    private native void gattClientSearchServiceNative(int connId, boolean searchAll,
-            long serviceUuidLsb, long serviceUuidMsb);
-
-    private native void gattClientDiscoverServiceByUuidNative(int connId, long serviceUuidLsb,
-            long serviceUuidMsb);
-
-    private native void gattClientGetGattDbNative(int connId);
-
-    private native void gattClientReadCharacteristicNative(int connId, int handle, int authReq);
-
-    private native void gattClientReadUsingCharacteristicUuidNative(int connId, long uuidMsb,
-            long uuidLsb, int sHandle, int eHandle, int authReq);
-
-    private native void gattClientReadDescriptorNative(int connId, int handle, int authReq);
-
-    private native void gattClientWriteCharacteristicNative(int connId, int handle, int writeType,
-            int authReq, byte[] value);
-
-    private native void gattClientWriteDescriptorNative(int connId, int handle, int authReq,
-            byte[] value);
-
-    private native void gattClientExecuteWriteNative(int connId, boolean execute);
-
-    private native void gattClientRegisterForNotificationsNative(int clientIf, String address,
-            int handle, boolean enable);
-
-    private native void gattClientReadRemoteRssiNative(int clientIf, String address);
-
-    private native void gattClientConfigureMTUNative(int connId, int mtu);
-
-    private native void gattConnectionParameterUpdateNative(int clientIf, String address,
-            int minInterval, int maxInterval, int latency, int timeout, int minConnectionEventLen,
-            int maxConnectionEventLen);
-
-    private native void gattServerRegisterAppNative(long appUuidLsb, long appUuidMsb, boolean eatt_support);
-
-    private native void gattServerUnregisterAppNative(int serverIf);
-
-    private native void gattServerConnectNative(int serverIf, String address, boolean isDirect,
-            int transport);
-
-    private native void gattServerDisconnectNative(int serverIf, String address, int connId);
-
-    private native void gattServerSetPreferredPhyNative(int clientIf, String address, int txPhy,
-            int rxPhy, int phyOptions);
-
-    private native void gattServerReadPhyNative(int clientIf, String address);
-
-    private native void gattServerAddServiceNative(int serverIf, List<GattDbElement> service);
-
-    private native void gattServerStopServiceNative(int serverIf, int svcHandle);
-
-    private native void gattServerDeleteServiceNative(int serverIf, int svcHandle);
-
-    private native void gattServerSendIndicationNative(int serverIf, int attrHandle, int connId,
-            byte[] val);
-
-    private native void gattServerSendNotificationNative(int serverIf, int attrHandle, int connId,
-            byte[] val);
-
-    private native void gattServerSendResponseNative(int serverIf, int connId, int transId,
-            int status, int handle, int offset, byte[] val, int authReq);
 }

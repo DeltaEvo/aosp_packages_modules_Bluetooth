@@ -5,19 +5,28 @@ use btif_macros::{btif_callback, btif_callbacks_dispatcher};
 use bt_topshim::bindings::root::bluetooth::Uuid;
 use bt_topshim::btif::{BluetoothInterface, RawAddress, Uuid128Bit};
 use bt_topshim::profiles::gatt::{
-    BtGattDbElement, BtGattNotifyParams, BtGattReadParams, Gatt, GattClientCallbacks,
-    GattClientCallbacksDispatcher, GattScannerCallbacksDispatcher, GattServerCallbacksDispatcher,
-    GattStatus,
+    BtGattDbElement, BtGattNotifyParams, BtGattReadParams, Gatt, GattAdvCallbacks,
+    GattAdvCallbacksDispatcher, GattAdvInbandCallbacksDispatcher, GattClientCallbacks,
+    GattClientCallbacksDispatcher, GattScannerCallbacks, GattScannerCallbacksDispatcher,
+    GattServerCallbacksDispatcher, GattStatus,
 };
 use bt_topshim::topstack;
 
+use crate::bluetooth_adv::{
+    AdvertiseData, Advertisers, AdvertisingSetInfo, AdvertisingSetParameters,
+    IAdvertisingSetCallback, PeriodicAdvertisingParameters,
+};
+use crate::callbacks::Callbacks;
+use crate::uuid::parse_uuid_string;
+use crate::{Message, RPCProxy};
 use log::{debug, warn};
 use num_traits::cast::{FromPrimitive, ToPrimitive};
-use std::collections::HashSet;
+use num_traits::clamp;
+use rand::rngs::SmallRng;
+use rand::{RngCore, SeedableRng};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
-
-use crate::{Message, RPCProxy};
 
 struct Client {
     id: Option<i32>,
@@ -26,7 +35,7 @@ struct Client {
     is_congested: bool,
 
     // Queued on_characteristic_write callback.
-    congestion_queue: Vec<(String, i32, i32)>,
+    congestion_queue: Vec<(String, GattStatus, i32)>,
 }
 
 struct Connection {
@@ -136,13 +145,149 @@ impl ContextMap {
 }
 
 /// Defines the GATT API.
+// TODO(242083290): Split out interfaces.
 pub trait IBluetoothGatt {
-    fn register_scanner(&self, callback: Box<dyn IScannerCallback + Send>);
+    /// Registers an LE scanner callback.
+    ///
+    /// Returns the callback id.
+    fn register_scanner_callback(&mut self, callback: Box<dyn IScannerCallback + Send>) -> u32;
 
-    fn unregister_scanner(&self, scanner_id: i32);
+    /// Unregisters an LE scanner callback identified by the given id.
+    fn unregister_scanner_callback(&mut self, callback_id: u32) -> bool;
 
-    fn start_scan(&self, scanner_id: i32, settings: ScanSettings, filters: Vec<ScanFilter>);
-    fn stop_scan(&self, scanner_id: i32);
+    /// Registers LE scanner.
+    ///
+    /// `callback_id`: The callback to receive updates about the scanner state.
+    /// Returns the UUID of the registered scanner.
+    fn register_scanner(&mut self, callback_id: u32) -> Uuid128Bit;
+
+    /// Unregisters an LE scanner identified by the given scanner id.
+    fn unregister_scanner(&mut self, scanner_id: u8) -> bool;
+
+    /// Activate scan of the given scanner id.
+    fn start_scan(&mut self, scanner_id: u8, settings: ScanSettings, filters: Vec<ScanFilter>);
+
+    /// Deactivate scan of the given scanner id.
+    fn stop_scan(&mut self, scanner_id: u8);
+
+    fn scan_filter_setup(&self);
+
+    fn scan_filter_add(&self);
+
+    fn scan_filter_clear(&self);
+
+    fn scan_filter_enable(&self);
+
+    fn scan_filter_disable(&self);
+
+    fn set_scan_parameters(&self);
+
+    fn batch_scan_config_storage(&self);
+
+    fn batch_scan_enable(&self);
+
+    fn batch_scan_disable(&self);
+
+    fn batch_scan_read_reports(&self);
+
+    // Advertising
+
+    /// Registers callback for BLE advertising.
+    fn register_advertiser_callback(
+        &mut self,
+        callback: Box<dyn IAdvertisingSetCallback + Send>,
+    ) -> u32;
+
+    /// Unregisters callback for BLE advertising.
+    fn unregister_advertiser_callback(&mut self, callback_id: u32);
+
+    /// Creates a new BLE advertising set and start advertising.
+    ///
+    /// Returns the reg_id for the advertising set, which is used in the callback
+    /// `on_advertising_set_started` to identify the advertising set started.
+    ///
+    /// * `parameters` - Advertising set parameters.
+    /// * `advertise_data` - Advertisement data to be broadcasted.
+    /// * `scan_response` - Scan response.
+    /// * `periodic_parameters` - Periodic advertising parameters. If None, periodic advertising
+    ///     will not be started.
+    /// * `periodic_data` - Periodic advertising data.
+    /// * `duration` - Advertising duration, in 10 ms unit. Valid range is from 1 (10 ms) to
+    ///     65535 (655.35 sec). 0 means no advertising timeout.
+    /// * `max_ext_adv_events` - Maximum number of extended advertising events the controller
+    ///     shall attempt to send before terminating the extended advertising, even if the
+    ///     duration has not expired. Valid range is from 1 to 255. 0 means event count limitation.
+    /// * `callback_id` - Identifies callback registered in register_advertiser_callback.
+    fn start_advertising_set(
+        &mut self,
+        parameters: AdvertisingSetParameters,
+        advertise_data: AdvertiseData,
+        scan_response: Option<AdvertiseData>,
+        periodic_parameters: Option<PeriodicAdvertisingParameters>,
+        periodic_data: Option<AdvertiseData>,
+        duration: i32,
+        max_ext_adv_events: i32,
+        callback_id: u32,
+    ) -> i32;
+
+    /// Disposes a BLE advertising set.
+    fn stop_advertising_set(&mut self, advertiser_id: i32);
+
+    /// Queries address associated with the advertising set.
+    fn get_own_address(&mut self, advertiser_id: i32);
+
+    /// Enables or disables an advertising set.
+    fn enable_advertising_set(
+        &mut self,
+        advertiser_id: i32,
+        enable: bool,
+        duration: i32,
+        max_ext_adv_events: i32,
+    );
+
+    /// Updates advertisement data of the advertising set.
+    fn set_advertising_data(&mut self, advertiser_id: i32, data: AdvertiseData);
+
+    /// Updates scan response of the advertising set.
+    fn set_scan_response_data(&mut self, advertiser_id: i32, data: AdvertiseData);
+
+    /// Updates advertising parameters of the advertising set.
+    ///
+    /// It must be called when advertising is not active.
+    fn set_advertising_parameters(
+        &mut self,
+        advertiser_id: i32,
+        parameters: AdvertisingSetParameters,
+    );
+
+    /// Updates periodic advertising parameters.
+    fn set_periodic_advertising_parameters(
+        &mut self,
+        advertiser_id: i32,
+        parameters: PeriodicAdvertisingParameters,
+    );
+
+    /// Updates periodic advertisement data.
+    ///
+    /// It must be called after `set_periodic_advertising_parameters`, or after
+    /// advertising was started with periodic advertising data set.
+    fn set_periodic_advertising_data(&mut self, advertiser_id: i32, data: AdvertiseData);
+
+    /// Enables or disables periodic advertising.
+    fn set_periodic_advertising_enable(&mut self, advertiser_id: i32, enable: bool);
+
+    // GATT Client
+    fn start_sync(&self);
+
+    fn stop_sync(&self);
+
+    fn cancel_create_sync(&self);
+
+    fn transfer_sync(&self);
+
+    fn transfer_set_info(&self);
+
+    fn sync_tx_parameters(&self);
 
     /// Registers a GATT Client.
     fn register_client(
@@ -168,19 +313,6 @@ pub trait IBluetoothGatt {
 
     /// Disconnects a GATT connection.
     fn client_disconnect(&self, client_id: i32, addr: String);
-
-    /// Sets preferred PHY.
-    fn client_set_preferred_phy(
-        &self,
-        client_id: i32,
-        addr: String,
-        tx_phy: LePhy,
-        rx_phy: LePhy,
-        phy_options: i32,
-    );
-
-    /// Reads the PHY used by a peer.
-    fn client_read_phy(&mut self, client_id: i32, addr: String);
 
     /// Clears the attribute cache of a device.
     fn refresh_device(&self, client_id: i32, addr: String);
@@ -256,6 +388,52 @@ pub trait IBluetoothGatt {
         min_ce_len: u16,
         max_ce_len: u16,
     );
+
+    fn execute_write(&self);
+
+    fn deregister_for_notification(&self);
+
+    fn get_device_type(&self);
+
+    /// Sets preferred PHY.
+    fn client_set_preferred_phy(
+        &self,
+        client_id: i32,
+        addr: String,
+        tx_phy: LePhy,
+        rx_phy: LePhy,
+        phy_options: i32,
+    );
+
+    /// Reads the PHY used by a peer.
+    fn client_read_phy(&mut self, client_id: i32, addr: String);
+
+    fn test_command(&self);
+
+    fn get_gatt_db(&self);
+
+    // GATT Server
+    fn register_server(&self);
+
+    fn unregister_server(&self);
+
+    fn server_connect(&self);
+
+    fn server_disconnect(&self);
+
+    fn add_service(&self);
+
+    fn stop_service(&self);
+
+    fn delete_service(&self);
+
+    fn send_indication(&self);
+
+    fn send_response(&self);
+
+    fn server_set_preferred_phy(&self);
+
+    fn server_read_phy(&self);
 }
 
 #[derive(Debug, Default)]
@@ -342,12 +520,12 @@ impl BluetoothGattService {
 /// Callback for GATT Client API.
 pub trait IBluetoothGattCallback: RPCProxy {
     /// When the `register_client` request is done.
-    fn on_client_registered(&self, status: i32, client_id: i32);
+    fn on_client_registered(&self, status: GattStatus, client_id: i32);
 
     /// When there is a change in the state of a GATT client connection.
     fn on_client_connection_state(
         &self,
-        status: i32,
+        status: GattStatus,
         client_id: i32,
         connected: bool,
         addr: String,
@@ -360,31 +538,36 @@ pub trait IBluetoothGattCallback: RPCProxy {
     fn on_phy_read(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus);
 
     /// When GATT db is available.
-    fn on_search_complete(&self, addr: String, services: Vec<BluetoothGattService>, status: i32);
+    fn on_search_complete(
+        &self,
+        addr: String,
+        services: Vec<BluetoothGattService>,
+        status: GattStatus,
+    );
 
     /// The completion of IBluetoothGatt::read_characteristic.
-    fn on_characteristic_read(&self, addr: String, status: i32, handle: i32, value: Vec<u8>);
+    fn on_characteristic_read(&self, addr: String, status: GattStatus, handle: i32, value: Vec<u8>);
 
     /// The completion of IBluetoothGatt::write_characteristic.
-    fn on_characteristic_write(&self, addr: String, status: i32, handle: i32);
+    fn on_characteristic_write(&self, addr: String, status: GattStatus, handle: i32);
 
     /// When a reliable write is completed.
-    fn on_execute_write(&self, addr: String, status: i32);
+    fn on_execute_write(&self, addr: String, status: GattStatus);
 
     /// The completion of IBluetoothGatt::read_descriptor.
-    fn on_descriptor_read(&self, addr: String, status: i32, handle: i32, value: Vec<u8>);
+    fn on_descriptor_read(&self, addr: String, status: GattStatus, handle: i32, value: Vec<u8>);
 
     /// The completion of IBluetoothGatt::write_descriptor.
-    fn on_descriptor_write(&self, addr: String, status: i32, handle: i32);
+    fn on_descriptor_write(&self, addr: String, status: GattStatus, handle: i32);
 
     /// When notification or indication is received.
     fn on_notify(&self, addr: String, handle: i32, value: Vec<u8>);
 
     /// The completion of IBluetoothGatt::read_remote_rssi.
-    fn on_read_remote_rssi(&self, addr: String, rssi: i32, status: i32);
+    fn on_read_remote_rssi(&self, addr: String, rssi: i32, status: GattStatus);
 
     /// The completion of IBluetoothGatt::configure_mtu.
-    fn on_configure_mtu(&self, addr: String, mtu: i32, status: i32);
+    fn on_configure_mtu(&self, addr: String, mtu: i32, status: GattStatus);
 
     /// When a connection parameter changes.
     fn on_connection_updated(
@@ -393,17 +576,23 @@ pub trait IBluetoothGattCallback: RPCProxy {
         interval: i32,
         latency: i32,
         timeout: i32,
-        status: i32,
+        status: GattStatus,
     );
 
     /// When there is an addition, removal, or change of a GATT service.
     fn on_service_changed(&self, addr: String);
 }
 
-/// Interface for scanner callbacks to clients, passed to `IBluetoothGatt::register_scanner`.
-pub trait IScannerCallback {
+/// Interface for scanner callbacks to clients, passed to
+/// `IBluetoothGatt::register_scanner_callback`.
+pub trait IScannerCallback: RPCProxy {
     /// When the `register_scanner` request is done.
-    fn on_scanner_registered(&self, status: i32, scanner_id: i32);
+    fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus);
+
+    /// When an LE advertisement matching aggregate filters is detected. Since this callback is
+    /// shared among all scanner callbacks, clients may receive more advertisements than what is
+    /// requested to be filtered in.
+    fn on_scan_result(&self, scan_result: ScanResult);
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -474,6 +663,21 @@ pub struct ScanSettings {
     pub rssi_settings: RSSISettings,
 }
 
+/// Represents scan result
+#[derive(Debug)]
+pub struct ScanResult {
+    pub address: String,
+    pub addr_type: u8,
+    pub event_type: u16,
+    pub primary_phy: u8,
+    pub secondary_phy: u8,
+    pub advertising_sid: u8,
+    pub tx_power: i8,
+    pub rssi: i8,
+    pub periodic_adv_int: u16,
+    pub adv_data: Vec<u8>,
+}
+
 /// Represents a scan filter to be passed to `IBluetoothGatt::start_scan`.
 #[derive(Debug, Default)]
 pub struct ScanFilter {}
@@ -485,65 +689,137 @@ pub struct BluetoothGatt {
 
     context_map: ContextMap,
     reliable_queue: HashSet<String>,
+    scanner_callbacks: Callbacks<dyn IScannerCallback + Send>,
+    scanners: HashMap<Uuid, ScannerInfo>,
+    advertisers: Advertisers,
+
+    // Used for generating random UUIDs. SmallRng is chosen because it is fast, don't use this for
+    // cryptography.
+    small_rng: SmallRng,
 }
 
 impl BluetoothGatt {
     /// Constructs a new IBluetoothGatt implementation.
-    pub fn new(intf: Arc<Mutex<BluetoothInterface>>) -> BluetoothGatt {
+    pub fn new(intf: Arc<Mutex<BluetoothInterface>>, tx: Sender<Message>) -> BluetoothGatt {
         BluetoothGatt {
             intf: intf,
             gatt: None,
             context_map: ContextMap::new(),
             reliable_queue: HashSet::new(),
+            scanner_callbacks: Callbacks::new(tx.clone(), Message::ScannerCallbackDisconnected),
+            scanners: HashMap::new(),
+            small_rng: SmallRng::from_entropy(),
+            advertisers: Advertisers::new(tx.clone()),
         }
     }
 
     pub fn init_profiles(&mut self, tx: Sender<Message>) {
+        println!("woot woot");
         self.gatt = Gatt::new(&self.intf.lock().unwrap());
+
+        let tx_clone = tx.clone();
+        let gatt_client_callbacks_dispatcher = GattClientCallbacksDispatcher {
+            dispatch: Box::new(move |cb| {
+                let tx_clone = tx_clone.clone();
+                topstack::get_runtime().spawn(async move {
+                    let _ = tx_clone.send(Message::GattClient(cb)).await;
+                });
+            }),
+        };
+
+        let gatt_server_callbacks_dispatcher = GattServerCallbacksDispatcher {
+            dispatch: Box::new(move |cb| {
+                // TODO(b/193685149): Implement the callbacks
+                debug!("received Gatt server callback: {:?}", cb);
+            }),
+        };
+
+        let tx_clone = tx.clone();
+        let gatt_scanner_callbacks_dispatcher = GattScannerCallbacksDispatcher {
+            dispatch: Box::new(move |cb| {
+                let tx_clone = tx_clone.clone();
+                topstack::get_runtime().spawn(async move {
+                    let _ = tx_clone.send(Message::LeScanner(cb)).await;
+                });
+            }),
+        };
+
+        let tx_clone = tx.clone();
+        let gatt_adv_inband_callbacks_dispatcher = GattAdvInbandCallbacksDispatcher {
+            dispatch: Box::new(move |cb| {
+                let tx_clone = tx_clone.clone();
+                topstack::get_runtime().spawn(async move {
+                    let _ = tx_clone.send(Message::LeAdvInband(cb)).await;
+                });
+            }),
+        };
+
+        let tx_clone = tx.clone();
+        let gatt_adv_callbacks_dispatcher = GattAdvCallbacksDispatcher {
+            dispatch: Box::new(move |cb| {
+                let tx_clone = tx_clone.clone();
+                topstack::get_runtime().spawn(async move {
+                    let _ = tx_clone.send(Message::LeAdv(cb)).await;
+                });
+            }),
+        };
+
         self.gatt.as_mut().unwrap().initialize(
-            GattClientCallbacksDispatcher {
-                dispatch: Box::new(move |cb| {
-                    let tx_clone = tx.clone();
-                    topstack::get_runtime().spawn(async move {
-                        let _ = tx_clone.send(Message::GattClient(cb)).await;
-                    });
-                }),
-            },
-            GattServerCallbacksDispatcher {
-                dispatch: Box::new(move |cb| {
-                    // TODO(b/193685149): Implement the callbacks
-                    debug!("received Gatt server callback: {:?}", cb);
-                }),
-            },
-            GattScannerCallbacksDispatcher {
-                dispatch: Box::new(move |cb| {
-                    debug!("received Gatt scanner callback: {:?}", cb);
-                }),
-            },
+            gatt_client_callbacks_dispatcher,
+            gatt_server_callbacks_dispatcher,
+            gatt_scanner_callbacks_dispatcher,
+            gatt_adv_inband_callbacks_dispatcher,
+            gatt_adv_callbacks_dispatcher,
         );
     }
-}
 
-// Temporary util that covers only basic string conversion.
-// TODO(b/193685325): Implement more UUID utils by using Uuid from gd/hci/uuid.h with cxx.
-fn parse_uuid_string<T: Into<String>>(uuid: T) -> Option<Uuid> {
-    let uuid = uuid.into();
+    /// Remove a scanner callback and unregisters all scanners associated with that callback.
+    pub fn remove_scanner_callback(&mut self, callback_id: u32) -> bool {
+        let affected_scanner_ids: Vec<u8> = self
+            .scanners
+            .iter()
+            .filter(|(_uuid, scanner)| scanner.callback_id == callback_id)
+            .filter_map(|(_uuid, scanner)| {
+                if let Some(scanner_id) = scanner.scanner_id {
+                    Some(scanner_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
 
-    if uuid.len() != 32 {
-        return None;
-    }
-
-    let mut raw = [0; 16];
-
-    for i in 0..16 {
-        let byte = u8::from_str_radix(&uuid[i * 2..i * 2 + 2], 16);
-        if byte.is_err() {
-            return None;
+        // All scanners associated with the callback must be also unregistered.
+        for scanner_id in affected_scanner_ids {
+            self.unregister_scanner(scanner_id);
         }
-        raw[i] = byte.unwrap();
+
+        self.scanner_callbacks.remove_callback(callback_id)
     }
 
-    Some(Uuid { uu: raw })
+    // Update the topshim's scan state depending on the states of registered scanners. Scan is
+    // enabled if there is at least 1 active registered scanner.
+    fn update_scan(&mut self) {
+        if self.scanners.values().find(|scanner| scanner.is_active).is_some() {
+            self.gatt.as_mut().unwrap().scanner.start_scan();
+        } else {
+            self.gatt.as_mut().unwrap().scanner.stop_scan();
+        }
+    }
+
+    fn find_scanner_by_id(&mut self, scanner_id: u8) -> Option<&mut ScannerInfo> {
+        self.scanners.values_mut().find(|scanner| scanner.scanner_id == Some(scanner_id))
+    }
+
+    /// Remove an advertiser callback and unregisters all advertising sets associated with that callback.
+    pub fn remove_adv_callback(&mut self, callback_id: u32) -> bool {
+        self.advertisers.remove_callback(callback_id, self.gatt.as_mut().unwrap())
+    }
+
+    fn get_adapter_name(&self) -> String {
+        // TODO(b/233128394): initialize the adaptert from service and
+        // get local adapter name here.
+        String::new()
+    }
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -555,21 +831,321 @@ pub enum GattWriteRequestStatus {
     Busy = 2,
 }
 
+// This structure keeps track of the lifecycle of a scanner.
+struct ScannerInfo {
+    // The callback to which events about this scanner needs to be sent to.
+    // Another purpose of keeping track of the callback id is that when a callback is disconnected
+    // or unregistered we need to also unregister all scanners associated with that callback to
+    // prevent dangling unowned scanners.
+    callback_id: u32,
+    // If the scanner is registered successfully, this contains the scanner id, otherwise None.
+    scanner_id: Option<u8>,
+    // If one of scanners is active, we scan.
+    is_active: bool,
+}
+
 impl IBluetoothGatt for BluetoothGatt {
-    fn register_scanner(&self, _callback: Box<dyn IScannerCallback + Send>) {
-        // TODO(b/200066804): implement
+    fn register_scanner_callback(&mut self, callback: Box<dyn IScannerCallback + Send>) -> u32 {
+        self.scanner_callbacks.add_callback(callback)
     }
 
-    fn unregister_scanner(&self, _scanner_id: i32) {
-        // TODO(b/200066804): implement
+    fn unregister_scanner_callback(&mut self, callback_id: u32) -> bool {
+        self.remove_scanner_callback(callback_id)
     }
 
-    fn start_scan(&self, _scanner_id: i32, _settings: ScanSettings, _filters: Vec<ScanFilter>) {
-        // TODO(b/200066804): implement
+    fn register_scanner(&mut self, callback_id: u32) -> Uuid128Bit {
+        let mut bytes: [u8; 16] = [0; 16];
+        self.small_rng.fill_bytes(&mut bytes);
+        let uuid = Uuid { uu: bytes };
+
+        self.scanners.insert(uuid, ScannerInfo { callback_id, scanner_id: None, is_active: false });
+
+        // libbluetooth's register_scanner takes a UUID of the scanning application. This UUID does
+        // not correspond to higher level concept of "application" so we use random UUID that
+        // functions as a unique identifier of the scanner.
+        self.gatt.as_mut().unwrap().scanner.register_scanner(uuid);
+
+        uuid.uu
     }
 
-    fn stop_scan(&self, _scanner_id: i32) {
+    fn unregister_scanner(&mut self, scanner_id: u8) -> bool {
+        self.gatt.as_mut().unwrap().scanner.unregister(scanner_id);
+
+        // The unregistered scanner must also be stopped.
+        self.stop_scan(scanner_id);
+
+        self.scanners.retain(|_uuid, scanner| scanner.scanner_id != Some(scanner_id));
+
+        true
+    }
+
+    fn start_scan(&mut self, scanner_id: u8, _settings: ScanSettings, _filters: Vec<ScanFilter>) {
+        // Multiplexing scanners happens at this layer. The implementations of start_scan
+        // and stop_scan maintains the state of all registered scanners and based on the states
+        // update the scanning and/or filter states of libbluetooth.
+        // TODO(b/217274432): Honor settings and filters.
+        if let Some(scanner) = self.find_scanner_by_id(scanner_id) {
+            scanner.is_active = true;
+        } else {
+            log::warn!("Scanner {} not found", scanner_id);
+            return;
+        }
+
+        self.update_scan();
+    }
+
+    fn stop_scan(&mut self, scanner_id: u8) {
+        if let Some(scanner) = self.find_scanner_by_id(scanner_id) {
+            scanner.is_active = false;
+        } else {
+            log::warn!("Scanner {} not found", scanner_id);
+            return;
+        }
+
+        self.update_scan();
+    }
+
+    // Scanning
+
+    fn scan_filter_setup(&self) {
         // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_add(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_clear(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_enable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn scan_filter_disable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn set_scan_parameters(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_config_storage(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_enable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_disable(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    fn batch_scan_read_reports(&self) {
+        // TODO(b/200066804): implement
+        todo!()
+    }
+
+    // GATT Client
+    fn start_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn stop_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn cancel_create_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn transfer_sync(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn transfer_set_info(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn sync_tx_parameters(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn register_advertiser_callback(
+        &mut self,
+        callback: Box<dyn IAdvertisingSetCallback + Send>,
+    ) -> u32 {
+        self.advertisers.add_callback(callback)
+    }
+
+    fn unregister_advertiser_callback(&mut self, callback_id: u32) {
+        self.advertisers.remove_callback(callback_id, self.gatt.as_mut().unwrap());
+    }
+
+    fn start_advertising_set(
+        &mut self,
+        parameters: AdvertisingSetParameters,
+        advertise_data: AdvertiseData,
+        scan_response: Option<AdvertiseData>,
+        periodic_parameters: Option<PeriodicAdvertisingParameters>,
+        periodic_data: Option<AdvertiseData>,
+        duration: i32,
+        max_ext_adv_events: i32,
+        callback_id: u32,
+    ) -> i32 {
+        let device_name = self.get_adapter_name();
+        let params = parameters.into();
+        let adv_bytes = advertise_data.make_with(&device_name);
+        let scan_bytes =
+            if let Some(d) = scan_response { d.make_with(&device_name) } else { Vec::<u8>::new() };
+        let periodic_params = if let Some(p) = periodic_parameters {
+            p.into()
+        } else {
+            bt_topshim::profiles::gatt::PeriodicAdvertisingParameters::default()
+        };
+        let periodic_bytes =
+            if let Some(d) = periodic_data { d.make_with(&device_name) } else { Vec::<u8>::new() };
+        let adv_timeout = clamp(duration, 0, 0xffff) as u16;
+        let adv_events = clamp(max_ext_adv_events, 0, 0xff) as u8;
+
+        let s = AdvertisingSetInfo::new(callback_id);
+        let reg_id = s.reg_id();
+        self.advertisers.add(s);
+
+        self.gatt.as_mut().unwrap().advertiser.start_advertising_set(
+            reg_id,
+            params,
+            adv_bytes,
+            scan_bytes,
+            periodic_params,
+            periodic_bytes,
+            adv_timeout,
+            adv_events,
+        );
+        reg_id
+    }
+
+    fn stop_advertising_set(&mut self, advertiser_id: i32) {
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id);
+        if None == s {
+            return;
+        }
+        let s = s.unwrap().clone();
+
+        self.gatt.as_mut().unwrap().advertiser.unregister(s.adv_id());
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_advertising_set_stopped(advertiser_id);
+        }
+        self.advertisers.remove_by_advertiser_id(advertiser_id);
+    }
+
+    fn get_own_address(&mut self, advertiser_id: i32) {
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt.as_mut().unwrap().advertiser.get_own_address(s.adv_id());
+        }
+    }
+
+    fn enable_advertising_set(
+        &mut self,
+        advertiser_id: i32,
+        enable: bool,
+        duration: i32,
+        max_ext_adv_events: i32,
+    ) {
+        let adv_timeout = clamp(duration, 0, 0xffff) as u16;
+        let adv_events = clamp(max_ext_adv_events, 0, 0xff) as u8;
+
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt.as_mut().unwrap().advertiser.enable(
+                s.adv_id(),
+                enable,
+                adv_timeout,
+                adv_events,
+            );
+        }
+    }
+
+    fn set_advertising_data(&mut self, advertiser_id: i32, data: AdvertiseData) {
+        let device_name = self.get_adapter_name();
+        let bytes = data.make_with(&device_name);
+
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt.as_mut().unwrap().advertiser.set_data(s.adv_id(), false, bytes);
+        }
+    }
+
+    fn set_scan_response_data(&mut self, advertiser_id: i32, data: AdvertiseData) {
+        let device_name = self.get_adapter_name();
+        let bytes = data.make_with(&device_name);
+
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt.as_mut().unwrap().advertiser.set_data(s.adv_id(), true, bytes);
+        }
+    }
+
+    fn set_advertising_parameters(
+        &mut self,
+        advertiser_id: i32,
+        parameters: AdvertisingSetParameters,
+    ) {
+        let params = parameters.into();
+
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt.as_mut().unwrap().advertiser.set_parameters(s.adv_id(), params);
+        }
+    }
+
+    fn set_periodic_advertising_parameters(
+        &mut self,
+        advertiser_id: i32,
+        parameters: PeriodicAdvertisingParameters,
+    ) {
+        let params = parameters.into();
+
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt
+                .as_mut()
+                .unwrap()
+                .advertiser
+                .set_periodic_advertising_parameters(s.adv_id(), params);
+        }
+    }
+
+    fn set_periodic_advertising_data(&mut self, advertiser_id: i32, data: AdvertiseData) {
+        let device_name = self.get_adapter_name();
+        let bytes = data.make_with(&device_name);
+
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt.as_mut().unwrap().advertiser.set_periodic_advertising_data(s.adv_id(), bytes);
+        }
+    }
+
+    fn set_periodic_advertising_enable(&mut self, advertiser_id: i32, enable: bool) {
+        if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            self.gatt
+                .as_mut()
+                .unwrap()
+                .advertiser
+                .set_periodic_advertising_enable(s.adv_id(), enable);
+        }
     }
 
     fn register_client(
@@ -623,36 +1199,6 @@ impl IBluetoothGatt for BluetoothGatt {
             &RawAddress::from_string(address).unwrap(),
             conn_id.unwrap(),
         );
-    }
-
-    fn client_set_preferred_phy(
-        &self,
-        client_id: i32,
-        address: String,
-        tx_phy: LePhy,
-        rx_phy: LePhy,
-        phy_options: i32,
-    ) {
-        let conn_id = self.context_map.get_conn_id_from_address(client_id, &address);
-        if conn_id.is_none() {
-            return;
-        }
-
-        self.gatt.as_ref().unwrap().client.set_preferred_phy(
-            &RawAddress::from_string(address).unwrap(),
-            tx_phy.to_u8().unwrap(),
-            rx_phy.to_u8().unwrap(),
-            phy_options as u16,
-        );
-    }
-
-    fn client_read_phy(&mut self, client_id: i32, addr: String) {
-        let address = match RawAddress::from_string(addr.clone()) {
-            None => return,
-            Some(addr) => addr,
-        };
-
-        self.gatt.as_mut().unwrap().client.read_phy(client_id, &address);
     }
 
     fn refresh_device(&self, client_id: i32, addr: String) {
@@ -882,28 +1428,139 @@ impl IBluetoothGatt for BluetoothGatt {
             max_ce_len,
         );
     }
+
+    fn execute_write(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn deregister_for_notification(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn get_device_type(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn client_set_preferred_phy(
+        &self,
+        client_id: i32,
+        address: String,
+        tx_phy: LePhy,
+        rx_phy: LePhy,
+        phy_options: i32,
+    ) {
+        let conn_id = self.context_map.get_conn_id_from_address(client_id, &address);
+        if conn_id.is_none() {
+            return;
+        }
+
+        self.gatt.as_ref().unwrap().client.set_preferred_phy(
+            &RawAddress::from_string(address).unwrap(),
+            tx_phy.to_u8().unwrap(),
+            rx_phy.to_u8().unwrap(),
+            phy_options as u16,
+        );
+    }
+
+    fn client_read_phy(&mut self, client_id: i32, addr: String) {
+        let address = match RawAddress::from_string(addr.clone()) {
+            None => return,
+            Some(addr) => addr,
+        };
+
+        self.gatt.as_mut().unwrap().client.read_phy(client_id, &address);
+    }
+
+    fn test_command(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    fn get_gatt_db(&self) {
+        // TODO(b/193686094): implement
+        todo!()
+    }
+
+    // GATT Server
+    fn register_server(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn unregister_server(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_connect(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_disconnect(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn add_service(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn stop_service(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn delete_service(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn send_indication(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn send_response(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_set_preferred_phy(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
+
+    fn server_read_phy(&self) {
+        // TODO(b/193686564): implement
+        todo!()
+    }
 }
 
 #[btif_callbacks_dispatcher(BluetoothGatt, dispatch_gatt_client_callbacks, GattClientCallbacks)]
 pub(crate) trait BtifGattClientCallbacks {
     #[btif_callback(RegisterClient)]
-    fn register_client_cb(&mut self, status: i32, client_id: i32, app_uuid: Uuid);
+    fn register_client_cb(&mut self, status: GattStatus, client_id: i32, app_uuid: Uuid);
 
     #[btif_callback(Connect)]
-    fn connect_cb(&mut self, conn_id: i32, status: i32, client_id: i32, addr: RawAddress);
+    fn connect_cb(&mut self, conn_id: i32, status: GattStatus, client_id: i32, addr: RawAddress);
 
     #[btif_callback(Disconnect)]
-    fn disconnect_cb(&mut self, conn_id: i32, status: i32, client_id: i32, addr: RawAddress);
+    fn disconnect_cb(&mut self, conn_id: i32, status: GattStatus, client_id: i32, addr: RawAddress);
 
     #[btif_callback(SearchComplete)]
-    fn search_complete_cb(&mut self, conn_id: i32, status: i32);
+    fn search_complete_cb(&mut self, conn_id: i32, status: GattStatus);
 
     #[btif_callback(RegisterForNotification)]
     fn register_for_notification_cb(
         &mut self,
         conn_id: i32,
         registered: i32,
-        status: i32,
+        status: GattStatus,
         handle: u16,
     );
 
@@ -911,39 +1568,45 @@ pub(crate) trait BtifGattClientCallbacks {
     fn notify_cb(&mut self, conn_id: i32, data: BtGattNotifyParams);
 
     #[btif_callback(ReadCharacteristic)]
-    fn read_characteristic_cb(&mut self, conn_id: i32, status: i32, data: BtGattReadParams);
+    fn read_characteristic_cb(&mut self, conn_id: i32, status: GattStatus, data: BtGattReadParams);
 
     #[btif_callback(WriteCharacteristic)]
     fn write_characteristic_cb(
         &mut self,
         conn_id: i32,
-        status: i32,
+        status: GattStatus,
         handle: u16,
         len: u16,
         value: *const u8,
     );
 
     #[btif_callback(ReadDescriptor)]
-    fn read_descriptor_cb(&mut self, conn_id: i32, status: i32, data: BtGattReadParams);
+    fn read_descriptor_cb(&mut self, conn_id: i32, status: GattStatus, data: BtGattReadParams);
 
     #[btif_callback(WriteDescriptor)]
     fn write_descriptor_cb(
         &mut self,
         conn_id: i32,
-        status: i32,
+        status: GattStatus,
         handle: u16,
         len: u16,
         value: *const u8,
     );
 
     #[btif_callback(ExecuteWrite)]
-    fn execute_write_cb(&mut self, conn_id: i32, status: i32);
+    fn execute_write_cb(&mut self, conn_id: i32, status: GattStatus);
 
     #[btif_callback(ReadRemoteRssi)]
-    fn read_remote_rssi_cb(&mut self, client_id: i32, addr: RawAddress, rssi: i32, status: i32);
+    fn read_remote_rssi_cb(
+        &mut self,
+        client_id: i32,
+        addr: RawAddress,
+        rssi: i32,
+        status: GattStatus,
+    );
 
     #[btif_callback(ConfigureMtu)]
-    fn configure_mtu_cb(&mut self, conn_id: i32, status: i32, mtu: i32);
+    fn configure_mtu_cb(&mut self, conn_id: i32, status: GattStatus, mtu: i32);
 
     #[btif_callback(Congestion)]
     fn congestion_cb(&mut self, conn_id: i32, congested: bool);
@@ -952,7 +1615,7 @@ pub(crate) trait BtifGattClientCallbacks {
     fn get_gatt_db_cb(&mut self, conn_id: i32, elements: Vec<BtGattDbElement>, count: i32);
 
     #[btif_callback(PhyUpdated)]
-    fn phy_updated_cb(&mut self, conn_id: i32, tx_phy: u8, rx_phy: u8, status: u8);
+    fn phy_updated_cb(&mut self, conn_id: i32, tx_phy: u8, rx_phy: u8, status: GattStatus);
 
     #[btif_callback(ConnUpdated)]
     fn conn_updated_cb(
@@ -961,23 +1624,30 @@ pub(crate) trait BtifGattClientCallbacks {
         interval: u16,
         latency: u16,
         timeout: u16,
-        status: u8,
+        status: GattStatus,
     );
 
     #[btif_callback(ServiceChanged)]
     fn service_changed_cb(&self, conn_id: i32);
 
     #[btif_callback(ReadPhy)]
-    fn read_phy_cb(&mut self, client_id: i32, addr: RawAddress, tx_phy: u8, rx_phy: u8, status: u8);
+    fn read_phy_cb(
+        &mut self,
+        client_id: i32,
+        addr: RawAddress,
+        tx_phy: u8,
+        rx_phy: u8,
+        status: GattStatus,
+    );
 }
 
 impl BtifGattClientCallbacks for BluetoothGatt {
-    fn register_client_cb(&mut self, status: i32, client_id: i32, app_uuid: Uuid) {
+    fn register_client_cb(&mut self, status: GattStatus, client_id: i32, app_uuid: Uuid) {
         self.context_map.set_client_id(&app_uuid.uu, client_id);
 
         let client = self.context_map.get_by_uuid(&app_uuid.uu);
         if client.is_none() {
-            warn!("Warning: Client not registered for UUID {:?}", app_uuid.uu);
+            warn!("Warning: Client not registered for UUID {}", app_uuid);
             return;
         }
 
@@ -985,8 +1655,8 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         callback.on_client_registered(status, client_id);
     }
 
-    fn connect_cb(&mut self, conn_id: i32, status: i32, client_id: i32, addr: RawAddress) {
-        if status == 0 {
+    fn connect_cb(&mut self, conn_id: i32, status: GattStatus, client_id: i32, addr: RawAddress) {
+        if status == GattStatus::Success {
             self.context_map.add_connection(client_id, conn_id, &addr.to_string());
         }
 
@@ -998,15 +1668,18 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         client.unwrap().callback.on_client_connection_state(
             status,
             client_id,
-            match GattStatus::from_i32(status) {
-                None => false,
-                Some(gatt_status) => gatt_status == GattStatus::Success,
-            },
+            status == GattStatus::Success,
             addr.to_string(),
         );
     }
 
-    fn disconnect_cb(&mut self, conn_id: i32, status: i32, client_id: i32, addr: RawAddress) {
+    fn disconnect_cb(
+        &mut self,
+        conn_id: i32,
+        status: GattStatus,
+        client_id: i32,
+        addr: RawAddress,
+    ) {
         self.context_map.remove_connection(client_id, conn_id);
         let client = self.context_map.get_by_client_id(client_id);
         if client.is_none() {
@@ -1016,15 +1689,12 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         client.unwrap().callback.on_client_connection_state(
             status,
             client_id,
-            match GattStatus::from_i32(status) {
-                None => false,
-                Some(gatt_status) => gatt_status == GattStatus::Success,
-            },
+            status == GattStatus::Success,
             addr.to_string(),
         );
     }
 
-    fn search_complete_cb(&mut self, conn_id: i32, _status: i32) {
+    fn search_complete_cb(&mut self, conn_id: i32, _status: GattStatus) {
         // Gatt DB is ready!
         self.gatt.as_ref().unwrap().client.get_gatt_db(conn_id);
     }
@@ -1033,7 +1703,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         &mut self,
         _conn_id: i32,
         _registered: i32,
-        _status: i32,
+        _status: GattStatus,
         _handle: u16,
     ) {
         // No-op.
@@ -1052,7 +1722,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         );
     }
 
-    fn read_characteristic_cb(&mut self, conn_id: i32, status: i32, data: BtGattReadParams) {
+    fn read_characteristic_cb(&mut self, conn_id: i32, status: GattStatus, data: BtGattReadParams) {
         let address = self.context_map.get_address_by_conn_id(conn_id);
         if address.is_none() {
             return;
@@ -1074,7 +1744,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
     fn write_characteristic_cb(
         &mut self,
         conn_id: i32,
-        mut status: i32,
+        mut status: GattStatus,
         handle: u16,
         _len: u16,
         _value: *const u8,
@@ -1095,8 +1765,8 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         let client = client.unwrap();
 
         if client.is_congested {
-            if status == GattStatus::Congested.to_i32().unwrap() {
-                status = GattStatus::Success.to_i32().unwrap();
+            if status == GattStatus::Congested {
+                status = GattStatus::Success;
             }
 
             client.congestion_queue.push((address.unwrap().to_string(), status, handle as i32));
@@ -1110,7 +1780,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         );
     }
 
-    fn read_descriptor_cb(&mut self, conn_id: i32, status: i32, data: BtGattReadParams) {
+    fn read_descriptor_cb(&mut self, conn_id: i32, status: GattStatus, data: BtGattReadParams) {
         let address = self.context_map.get_address_by_conn_id(conn_id);
         if address.is_none() {
             return;
@@ -1132,7 +1802,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
     fn write_descriptor_cb(
         &mut self,
         conn_id: i32,
-        status: i32,
+        status: GattStatus,
         handle: u16,
         _len: u16,
         _value: *const u8,
@@ -1154,7 +1824,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         );
     }
 
-    fn execute_write_cb(&mut self, conn_id: i32, status: i32) {
+    fn execute_write_cb(&mut self, conn_id: i32, status: GattStatus) {
         let address = self.context_map.get_address_by_conn_id(conn_id);
         if address.is_none() {
             return;
@@ -1168,7 +1838,13 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         client.unwrap().callback.on_execute_write(address.unwrap().to_string(), status);
     }
 
-    fn read_remote_rssi_cb(&mut self, client_id: i32, addr: RawAddress, rssi: i32, status: i32) {
+    fn read_remote_rssi_cb(
+        &mut self,
+        client_id: i32,
+        addr: RawAddress,
+        rssi: i32,
+        status: GattStatus,
+    ) {
         let client = self.context_map.get_by_client_id(client_id);
         if client.is_none() {
             return;
@@ -1177,7 +1853,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         client.unwrap().callback.on_read_remote_rssi(addr.to_string(), rssi, status);
     }
 
-    fn configure_mtu_cb(&mut self, conn_id: i32, status: i32, mtu: i32) {
+    fn configure_mtu_cb(&mut self, conn_id: i32, status: GattStatus, mtu: i32) {
         let client = self.context_map.get_client_by_conn_id(conn_id);
         if client.is_none() {
             return;
@@ -1283,10 +1959,14 @@ impl BtifGattClientCallbacks for BluetoothGatt {
             }
         }
 
-        client.unwrap().callback.on_search_complete(address.unwrap().to_string(), db_out, 0);
+        client.unwrap().callback.on_search_complete(
+            address.unwrap().to_string(),
+            db_out,
+            GattStatus::Success,
+        );
     }
 
-    fn phy_updated_cb(&mut self, conn_id: i32, tx_phy: u8, rx_phy: u8, status: u8) {
+    fn phy_updated_cb(&mut self, conn_id: i32, tx_phy: u8, rx_phy: u8, status: GattStatus) {
         let client = self.context_map.get_client_by_conn_id(conn_id);
         if client.is_none() {
             return;
@@ -1301,7 +1981,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
             address.unwrap(),
             LePhy::from_u8(tx_phy).unwrap(),
             LePhy::from_u8(rx_phy).unwrap(),
-            GattStatus::from_u8(status).unwrap(),
+            status,
         );
     }
 
@@ -1311,7 +1991,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         addr: RawAddress,
         tx_phy: u8,
         rx_phy: u8,
-        status: u8,
+        status: GattStatus,
     ) {
         let client = self.context_map.get_by_client_id(client_id);
         if client.is_none() {
@@ -1322,7 +2002,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
             addr.to_string(),
             LePhy::from_u8(tx_phy).unwrap(),
             LePhy::from_u8(rx_phy).unwrap(),
-            GattStatus::from_u8(status).unwrap(),
+            status,
         );
     }
 
@@ -1332,7 +2012,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
         interval: u16,
         latency: u16,
         timeout: u16,
-        status: u8,
+        status: GattStatus,
     ) {
         let client = self.context_map.get_client_by_conn_id(conn_id);
         if client.is_none() {
@@ -1349,7 +2029,7 @@ impl BtifGattClientCallbacks for BluetoothGatt {
             interval as i32,
             latency as i32,
             timeout as i32,
-            status as i32,
+            status,
         );
     }
 
@@ -1368,6 +2048,287 @@ impl BtifGattClientCallbacks for BluetoothGatt {
     }
 }
 
+#[btif_callbacks_dispatcher(BluetoothGatt, dispatch_le_scanner_callbacks, GattScannerCallbacks)]
+pub(crate) trait BtifGattScannerCallbacks {
+    #[btif_callback(OnScannerRegistered)]
+    fn on_scanner_registered(&mut self, uuid: Uuid, scanner_id: u8, status: GattStatus);
+
+    #[btif_callback(OnScanResult)]
+    fn on_scan_result(
+        &mut self,
+        event_type: u16,
+        addr_type: u8,
+        bda: RawAddress,
+        primary_phy: u8,
+        secondary_phy: u8,
+        advertising_sid: u8,
+        tx_power: i8,
+        rssi: i8,
+        periodic_adv_int: u16,
+        adv_data: Vec<u8>,
+    );
+}
+
+impl BtifGattScannerCallbacks for BluetoothGatt {
+    fn on_scanner_registered(&mut self, uuid: Uuid, scanner_id: u8, status: GattStatus) {
+        log::debug!(
+            "on_scanner_registered UUID = {}, scanner_id = {}, status = {}",
+            uuid,
+            scanner_id,
+            status
+        );
+
+        if status != GattStatus::Success {
+            log::error!("Error registering scanner UUID {}", uuid);
+            self.scanners.remove(&uuid);
+            return;
+        }
+
+        let scanner_info = self.scanners.get_mut(&uuid);
+
+        if let Some(info) = scanner_info {
+            info.scanner_id = Some(scanner_id);
+            let callback = self.scanner_callbacks.get_by_id(info.callback_id);
+            if let Some(cb) = callback {
+                cb.on_scanner_registered(uuid.uu, scanner_id, status);
+            } else {
+                log::warn!("There is no callback for scanner UUID {}", uuid);
+            }
+        } else {
+            log::warn!(
+                "Scanner registered callback for non-existent scanner info, UUID = {}",
+                uuid
+            );
+        }
+    }
+
+    fn on_scan_result(
+        &mut self,
+        event_type: u16,
+        addr_type: u8,
+        address: RawAddress,
+        primary_phy: u8,
+        secondary_phy: u8,
+        advertising_sid: u8,
+        tx_power: i8,
+        rssi: i8,
+        periodic_adv_int: u16,
+        adv_data: Vec<u8>,
+    ) {
+        self.scanner_callbacks.for_all_callbacks(|callback| {
+            callback.on_scan_result(ScanResult {
+                address: address.to_string(),
+                addr_type,
+                event_type,
+                primary_phy,
+                secondary_phy,
+                advertising_sid,
+                tx_power,
+                rssi,
+                periodic_adv_int,
+                adv_data: adv_data.clone(),
+            });
+        });
+    }
+}
+
+#[btif_callbacks_dispatcher(BluetoothGatt, dispatch_le_adv_callbacks, GattAdvCallbacks)]
+pub(crate) trait BtifGattAdvCallbacks {
+    #[btif_callback(OnAdvertisingSetStarted)]
+    fn on_advertising_set_started(
+        &mut self,
+        reg_id: i32,
+        advertiser_id: u8,
+        tx_power: i8,
+        status: GattStatus,
+    );
+
+    #[btif_callback(OnAdvertisingEnabled)]
+    fn on_advertising_enabled(&mut self, adv_id: u8, enabled: bool, status: GattStatus);
+
+    #[btif_callback(OnAdvertisingDataSet)]
+    fn on_advertising_data_set(&mut self, adv_id: u8, status: GattStatus);
+
+    #[btif_callback(OnScanResponseDataSet)]
+    fn on_scan_response_data_set(&mut self, adv_id: u8, status: GattStatus);
+
+    #[btif_callback(OnAdvertisingParametersUpdated)]
+    fn on_advertising_parameters_updated(&mut self, adv_id: u8, tx_power: i8, status: GattStatus);
+
+    #[btif_callback(OnPeriodicAdvertisingParametersUpdated)]
+    fn on_periodic_advertising_parameters_updated(&mut self, adv_id: u8, status: GattStatus);
+
+    #[btif_callback(OnPeriodicAdvertisingDataSet)]
+    fn on_periodic_advertising_data_set(&mut self, adv_id: u8, status: GattStatus);
+
+    #[btif_callback(OnPeriodicAdvertisingEnabled)]
+    fn on_periodic_advertising_enabled(&mut self, adv_id: u8, enabled: bool, status: GattStatus);
+
+    #[btif_callback(OnOwnAddressRead)]
+    fn on_own_address_read(&mut self, adv_id: u8, addr_type: u8, address: RawAddress);
+}
+
+impl BtifGattAdvCallbacks for BluetoothGatt {
+    fn on_advertising_set_started(
+        &mut self,
+        reg_id: i32,
+        advertiser_id: u8,
+        tx_power: i8,
+        status: GattStatus,
+    ) {
+        debug!(
+            "on_advertising_set_started(): reg_id = {}, advertiser_id = {}, tx_power = {}, status = {:?}",
+            reg_id, advertiser_id, tx_power, status
+        );
+
+        if let Some(s) = self.advertisers.get_mut_by_reg_id(reg_id) {
+            s.advertiser_id = Some(advertiser_id.into());
+        } else {
+            return;
+        }
+        let s = self.advertisers.get_mut_by_reg_id(reg_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_advertising_set_started(reg_id, advertiser_id.into(), tx_power.into(), status);
+        }
+
+        if status != GattStatus::Success {
+            warn!(
+                "on_advertising_set_started(): failed! reg_id = {}, status = {:?}",
+                reg_id, status
+            );
+            self.advertisers.remove_by_reg_id(reg_id);
+        }
+    }
+
+    fn on_advertising_enabled(&mut self, adv_id: u8, enabled: bool, status: GattStatus) {
+        debug!(
+            "on_advertising_enabled(): adv_id = {}, enabled = {}, status = {:?}",
+            adv_id, enabled, status
+        );
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_advertising_enabled(advertiser_id, enabled, status);
+        }
+    }
+
+    fn on_advertising_data_set(&mut self, adv_id: u8, status: GattStatus) {
+        debug!("on_advertising_data_set(): adv_id = {}, status = {:?}", adv_id, status);
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_advertising_data_set(advertiser_id, status);
+        }
+    }
+
+    fn on_scan_response_data_set(&mut self, adv_id: u8, status: GattStatus) {
+        debug!("on_scan_response_data_set(): adv_id = {}, status = {:?}", adv_id, status);
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_scan_response_data_set(advertiser_id, status);
+        }
+    }
+
+    fn on_advertising_parameters_updated(&mut self, adv_id: u8, tx_power: i8, status: GattStatus) {
+        debug!(
+            "on_advertising_parameters_updated(): adv_id = {}, tx_power = {}, status = {:?}",
+            adv_id, tx_power, status
+        );
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_advertising_parameters_updated(advertiser_id, tx_power.into(), status);
+        }
+    }
+
+    fn on_periodic_advertising_parameters_updated(&mut self, adv_id: u8, status: GattStatus) {
+        debug!(
+            "on_periodic_advertising_parameters_updated(): adv_id = {}, status = {:?}",
+            adv_id, status
+        );
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_periodic_advertising_parameters_updated(advertiser_id, status);
+        }
+    }
+
+    fn on_periodic_advertising_data_set(&mut self, adv_id: u8, status: GattStatus) {
+        debug!("on_periodic_advertising_data_set(): adv_id = {}, status = {:?}", adv_id, status);
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_periodic_advertising_data_set(advertiser_id, status);
+        }
+    }
+
+    fn on_periodic_advertising_enabled(&mut self, adv_id: u8, enabled: bool, status: GattStatus) {
+        debug!(
+            "on_periodic_advertising_enabled(): adv_id = {}, enabled = {}, status = {:?}",
+            adv_id, enabled, status
+        );
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_periodic_advertising_enabled(advertiser_id, enabled, status);
+        }
+    }
+
+    fn on_own_address_read(&mut self, adv_id: u8, addr_type: u8, address: RawAddress) {
+        debug!(
+            "on_own_address_read(): adv_id = {}, addr_type = {}, address = {:?}",
+            adv_id, addr_type, address
+        );
+
+        let advertiser_id: i32 = adv_id.into();
+        if None == self.advertisers.get_by_advertiser_id(advertiser_id) {
+            return;
+        }
+        let s = self.advertisers.get_by_advertiser_id(advertiser_id).unwrap().clone();
+
+        if let Some(cb) = self.advertisers.get_callback(&s) {
+            cb.on_own_address_read(advertiser_id, addr_type.into(), address.to_string());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     struct TestBluetoothGattCallback {
@@ -1381,10 +2342,10 @@ mod tests {
     }
 
     impl IBluetoothGattCallback for TestBluetoothGattCallback {
-        fn on_client_registered(&self, _status: i32, _client_id: i32) {}
+        fn on_client_registered(&self, _status: GattStatus, _client_id: i32) {}
         fn on_client_connection_state(
             &self,
-            _status: i32,
+            _status: GattStatus,
             _client_id: i32,
             _connected: bool,
             _addr: String,
@@ -1406,32 +2367,39 @@ mod tests {
             &self,
             _addr: String,
             _services: Vec<BluetoothGattService>,
-            _status: i32,
+            _status: GattStatus,
         ) {
         }
 
         fn on_characteristic_read(
             &self,
             _addr: String,
-            _status: i32,
+            _status: GattStatus,
             _handle: i32,
             _value: Vec<u8>,
         ) {
         }
 
-        fn on_characteristic_write(&self, _addr: String, _status: i32, _handle: i32) {}
+        fn on_characteristic_write(&self, _addr: String, _status: GattStatus, _handle: i32) {}
 
-        fn on_execute_write(&self, _addr: String, _status: i32) {}
+        fn on_execute_write(&self, _addr: String, _status: GattStatus) {}
 
-        fn on_descriptor_read(&self, _addr: String, _status: i32, _handle: i32, _value: Vec<u8>) {}
+        fn on_descriptor_read(
+            &self,
+            _addr: String,
+            _status: GattStatus,
+            _handle: i32,
+            _value: Vec<u8>,
+        ) {
+        }
 
-        fn on_descriptor_write(&self, _addr: String, _status: i32, _handle: i32) {}
+        fn on_descriptor_write(&self, _addr: String, _status: GattStatus, _handle: i32) {}
 
         fn on_notify(&self, _addr: String, _handle: i32, _value: Vec<u8>) {}
 
-        fn on_read_remote_rssi(&self, _addr: String, _rssi: i32, _status: i32) {}
+        fn on_read_remote_rssi(&self, _addr: String, _rssi: i32, _status: GattStatus) {}
 
-        fn on_configure_mtu(&self, _addr: String, _mtu: i32, _status: i32) {}
+        fn on_configure_mtu(&self, _addr: String, _mtu: i32, _status: GattStatus) {}
 
         fn on_connection_updated(
             &self,
@@ -1439,7 +2407,7 @@ mod tests {
             _interval: i32,
             _latency: i32,
             _timeout: i32,
-            _status: i32,
+            _status: GattStatus,
         ) {
         }
 
@@ -1447,19 +2415,9 @@ mod tests {
     }
 
     impl RPCProxy for TestBluetoothGattCallback {
-        fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-            0
-        }
-
         fn get_object_id(&self) -> String {
             self.id.clone()
         }
-
-        fn unregister(&mut self, _id: u32) -> bool {
-            false
-        }
-
-        fn export_for_rpc(self: Box<Self>) {}
     }
 
     use super::*;

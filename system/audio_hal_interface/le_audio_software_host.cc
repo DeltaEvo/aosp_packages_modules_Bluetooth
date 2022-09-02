@@ -17,6 +17,7 @@
 
 #include "audio_hal_interface/hal_version_manager.h"
 #include "audio_hal_interface/le_audio_software.h"
+#include "bta/le_audio/codec_manager.h"
 
 namespace bluetooth {
 namespace audio {
@@ -30,7 +31,8 @@ get_offload_capabilities() {
 
 LeAudioClientInterface* LeAudioClientInterface::Get() { return nullptr; }
 
-bool LeAudioClientInterface::IsSinkAcquired() { return false; }
+bool LeAudioClientInterface::IsUnicastSinkAcquired() { return false; }
+bool LeAudioClientInterface::IsBroadcastSinkAcquired() { return false; }
 
 bool LeAudioClientInterface::ReleaseSink(LeAudioClientInterface::Sink* sink) {
   return false;
@@ -38,8 +40,14 @@ bool LeAudioClientInterface::ReleaseSink(LeAudioClientInterface::Sink* sink) {
 
 LeAudioClientInterface::Sink* LeAudioClientInterface::GetSink(
     StreamCallbacks stream_cb,
-    bluetooth::common::MessageLoopThread* message_loop) {
+    bluetooth::common::MessageLoopThread* message_loop,
+    bool is_broadcasting_session_type) {
   return nullptr;
+}
+
+void LeAudioClientInterface::Sink::UpdateBroadcastAudioConfigToHal(
+    ::le_audio::broadcast_offload_config const& config) {
+  return;
 }
 
 size_t LeAudioClientInterface::Sink::Read(uint8_t* p_buf, uint32_t len) {

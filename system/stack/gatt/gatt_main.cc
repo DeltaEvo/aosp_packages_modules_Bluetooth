@@ -27,6 +27,7 @@
 #include "btif/include/btif_storage.h"
 #include "connection_manager.h"
 #include "device/include/interop.h"
+#include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
@@ -82,6 +83,7 @@ static const tL2CAP_APPL_INFO dyn_info = {gatt_l2cif_connect_ind_cback,
                                           gatt_on_l2cap_error,
                                           NULL,
                                           NULL,
+                                          NULL,
                                           NULL};
 
 tGATT_CB gatt_cb;
@@ -125,6 +127,7 @@ void gatt_init(void) {
   gatt_cb.hdl_cfg.gap_start_hdl = GATT_GAP_START_HANDLE;
   gatt_cb.hdl_cfg.gmcs_start_hdl = GATT_GMCS_START_HANDLE;
   gatt_cb.hdl_cfg.gtbs_start_hdl = GATT_GTBS_START_HANDLE;
+  gatt_cb.hdl_cfg.tmas_start_hdl = GATT_TMAS_START_HANDLE;
   gatt_cb.hdl_cfg.app_start_hdl = GATT_APP_START_HANDLE;
 
   gatt_cb.hdl_list_info = new std::list<tGATT_HDL_LIST_ELEM>();
@@ -189,7 +192,7 @@ void gatt_find_in_device_record(const RawAddress& bd_addr,
 
   if (p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) {
     if (p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
-      *address_with_type = {.type = p_dev_rec->ble.ble_addr_type,
+      *address_with_type = {.type = p_dev_rec->ble.AddressType(),
                             .bda = bd_addr};
       return;
     }
@@ -248,10 +251,15 @@ bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
 bool gatt_disconnect(tGATT_TCB* p_tcb) {
   VLOG(1) << __func__;
 
-  if (!p_tcb) return false;
+  if (!p_tcb) {
+    LOG_WARN("Unable to disconnect an unknown device");
+    return false;
+  }
 
   tGATT_CH_STATE ch_state = gatt_get_ch_state(p_tcb);
   if (ch_state == GATT_CH_CLOSING) {
+    LOG_DEBUG("Device already in closing state peer:%s",
+              PRIVATE_ADDRESS(p_tcb->peer_bda));
     VLOG(1) << __func__ << " already in closing state";
     return true;
   }
@@ -261,8 +269,16 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
       L2CA_RemoveFixedChnl(L2CAP_ATT_CID, p_tcb->peer_bda);
       gatt_set_ch_state(p_tcb, GATT_CH_CLOSING);
     } else {
-      connection_manager::direct_connect_remove(CONN_MGR_ID_L2CAP,
-                                                p_tcb->peer_bda);
+      if (!connection_manager::direct_connect_remove(CONN_MGR_ID_L2CAP,
+                                                     p_tcb->peer_bda)) {
+        BTM_AcceptlistRemove(p_tcb->peer_bda);
+        LOG_INFO(
+            "GATT connection manager has no record but removed filter "
+            "acceptlist "
+            "gatt_if:%hhu peer:%s",
+            static_cast<uint8_t>(CONN_MGR_ID_L2CAP),
+            PRIVATE_ADDRESS(p_tcb->peer_bda));
+      }
       gatt_cleanup_upon_disc(p_tcb->peer_bda, GATT_CONN_TERMINATE_LOCAL_HOST,
                              p_tcb->transport);
     }
@@ -289,26 +305,27 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
  ******************************************************************************/
 bool gatt_update_app_hold_link_status(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
                                       bool is_add) {
+  LOG_DEBUG("gatt_if=%d, is_add=%d, peer_bda=%s", +gatt_if, is_add,
+            p_tcb->peer_bda.ToString().c_str());
   auto& holders = p_tcb->app_hold_link;
 
-  VLOG(1) << __func__;
   if (is_add) {
     auto ret = holders.insert(gatt_if);
     if (ret.second) {
-      VLOG(1) << "added gatt_if=" << +gatt_if;
+      LOG_DEBUG("added gatt_if=%d", +gatt_if);
     } else {
-      VLOG(1) << "attempt to add already existing gatt_if=" << +gatt_if;
+      LOG_DEBUG("attempt to add already existing gatt_if=%d", +gatt_if);
     }
     return true;
   }
 
   //! is_add
   if (!holders.erase(gatt_if)) {
-    VLOG(1) << "attempt to remove nonexisting gatt_if=" << +gatt_if;
+    LOG_WARN("attempt to remove non-existing gatt_if=%d", +gatt_if);
     return false;
   }
 
-  VLOG(1) << "removed gatt_if=" << +gatt_if;
+  LOG_INFO("removed gatt_if=%d", +gatt_if);
   return true;
 }
 
@@ -325,16 +342,23 @@ bool gatt_update_app_hold_link_status(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
  ******************************************************************************/
 void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
                                    bool is_add, bool check_acl_link) {
-  VLOG(1) << StringPrintf("%s: is_add=%d chk_link=%d", __func__, is_add,
-                          check_acl_link);
+  LOG_DEBUG("gatt_if=%d, is_add=%d chk_link=%d", +gatt_if, is_add,
+            check_acl_link);
 
-  if (!p_tcb) return;
+  if (!p_tcb) {
+    LOG_WARN("p_tcb is null");
+    return;
+  }
 
   // If we make no modification, i.e. kill app that was never connected to a
   // device, skip updating the device state.
-  if (!gatt_update_app_hold_link_status(gatt_if, p_tcb, is_add)) return;
+  if (!gatt_update_app_hold_link_status(gatt_if, p_tcb, is_add)) {
+    LOG_INFO("App status is not updated for gatt_if=%d", +gatt_if);
+    return;
+  }
 
   if (!check_acl_link) {
+    LOG_INFO("check_acl_link is false, no need to check");
     return;
   }
 
@@ -344,28 +368,37 @@ void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
 
   if (is_add) {
     if (p_tcb->att_lcid == L2CAP_ATT_CID && is_valid_handle) {
-      VLOG(1) << "disable link idle timer";
+      LOG_INFO("disable link idle timer for %s",
+               p_tcb->peer_bda.ToString().c_str());
       /* acl link is connected disable the idle timeout */
       GATT_SetIdleTimeout(p_tcb->peer_bda, GATT_LINK_NO_IDLE_TIMEOUT,
                           p_tcb->transport);
+    } else {
+      LOG_INFO("invalid handle %d or dynamic CID %d", is_valid_handle,
+               p_tcb->att_lcid);
     }
   } else {
     if (p_tcb->app_hold_link.empty()) {
       // acl link is connected but no application needs to use the link
       if (p_tcb->att_lcid == L2CAP_ATT_CID && is_valid_handle) {
-
         /* Drop EATT before closing ATT */
         EattExtension::GetInstance()->Disconnect(p_tcb->peer_bda);
 
         /* for fixed channel, set the timeout value to
            GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP seconds */
-        VLOG(1) << " start link idle timer = "
-                << GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP << " sec";
+        LOG_INFO(
+            "GATT fixed channel is no longer useful, start link idle timer for "
+            "%d seconds",
+            GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP);
         GATT_SetIdleTimeout(p_tcb->peer_bda, GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP,
                             p_tcb->transport);
-      } else
+      } else {
         // disconnect the dynamic channel
+        LOG_INFO("disconnect GATT dynamic channel");
         gatt_disconnect(p_tcb);
+      }
+    } else {
+      LOG_INFO("is_add=false, but some app is still using the ACL link");
     }
   }
 }
@@ -479,7 +512,10 @@ static void gatt_le_connect_cback(uint16_t chan, const RawAddress& bd_addr,
     }
   }
 
-  EattExtension::GetInstance()->Connect(bd_addr);
+  if (stack_config_get_interface()->get_pts_connect_eatt_before_encryption()) {
+    LOG_INFO(" Start EATT before encryption ");
+    EattExtension::GetInstance()->Connect(bd_addr);
+  }
 }
 
 /** This function is called to process the congestion callback from lcb */

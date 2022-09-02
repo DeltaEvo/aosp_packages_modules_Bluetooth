@@ -27,12 +27,16 @@
 
 #define LOG_TAG "bt_btif_hf"
 
+#include <base/logging.h>
+#include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
+
 #include <cstdint>
 #include <string>
 
 #include "bta/include/bta_ag_api.h"
 #include "bta/include/utl.h"
 #include "btif/include/btif_common.h"
+#include "btif/include/btif_metrics_logging.h"
 #include "btif/include/btif_profile_queue.h"
 #include "btif/include/btif_util.h"
 #include "common/metrics.h"
@@ -41,10 +45,9 @@
 #include "include/hardware/bt_hf.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/log.h"
+#include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/btm_api.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 namespace {
 constexpr char kBtmLogTag[] = "HFP";
@@ -339,6 +342,10 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
                          << ", report disconnect state for p_data bda.";
             bt_hf_callbacks->ConnectionStateCallback(
                 BTHF_CONNECTION_STATE_DISCONNECTED, &(p_data->open.bd_addr));
+            log_counter_metrics_btif(
+                android::bluetooth::CodePathCounterKeyEnum::
+                    HFP_COLLISON_AT_AG_OPEN,
+                1);
           }
           break;
         }
@@ -358,6 +365,9 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
           bt_hf_callbacks->ConnectionStateCallback(
               BTHF_CONNECTION_STATE_DISCONNECTED,
               &(btif_hf_cb[idx].connected_bda));
+          log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
+                                       HFP_COLLISON_AT_CONNECTING,
+                                   1);
           reset_control_block(&btif_hf_cb[idx]);
           btif_queue_advance();
         }
@@ -387,6 +397,9 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
         reset_control_block(&btif_hf_cb[idx]);
         bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
                                                  &connected_bda);
+        log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
+                                     HFP_SELF_INITIATED_AG_FAILED,
+                                 1);
         btif_queue_advance();
       }
       break;
@@ -406,6 +419,9 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
                                                &connected_bda);
       if (failed_to_setup_slc) {
         LOG(ERROR) << __func__ << ": failed to setup SLC for " << connected_bda;
+        log_counter_metrics_btif(
+            android::bluetooth::CodePathCounterKeyEnum::HFP_SLC_SETUP_FAILED,
+            1);
         btif_queue_advance();
       }
       break;
@@ -537,11 +553,10 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
     case BTA_AG_AT_BAC_EVT:
       BTIF_TRACE_DEBUG("AG Bitmap of peer-codecs %d", p_data->val.num);
       /* If the peer supports mSBC and the BTIF preferred codec is also mSBC,
-      then
-      we should set the BTA AG Codec to mSBC. This would trigger a +BCS to mSBC
-      at the time
-      of SCO connection establishment */
-      if (p_data->val.num & BTM_SCO_CODEC_MSBC) {
+       * then we should set the BTA AG Codec to mSBC. This would trigger a +BCS
+       * to mSBC at the time of SCO connection establishment */
+      if (hfp_hal_interface::get_wbs_supported() &&
+          (p_data->val.num & BTM_SCO_CODEC_MSBC)) {
         BTIF_TRACE_EVENT("%s: btif_hf override-Preferred Codec to MSBC",
                          __func__);
         BTA_AgSetCodec(btif_hf_cb[idx].handle, BTM_SCO_CODEC_MSBC);
@@ -1075,9 +1090,10 @@ bt_status_t HeadsetInterface::ClccResponse(
   if (index == 0) {
     ag_res.ok_flag = BTA_AG_OK_DONE;
   } else {
+    std::string cell_number(number ? number : "");
     BTIF_TRACE_EVENT(
         "clcc_response: [%d] dir %d state %d mode %d number = %s type = %d",
-        index, dir, state, mode, number, type);
+        index, dir, state, mode, PRIVATE_CELL(cell_number), type);
     int res_strlen = snprintf(ag_res.str, sizeof(ag_res.str), "%d,%d,%d,%d,%d",
                               index, dir, state, mode, mpty);
     if (number) {

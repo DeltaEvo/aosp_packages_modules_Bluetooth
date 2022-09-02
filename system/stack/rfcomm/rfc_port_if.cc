@@ -33,7 +33,6 @@
 #include "stack/rfcomm/rfc_int.h"
 
 tRFC_CB rfc_cb;
-std::unordered_map<uint32_t, uint16_t> rfcomm_security_records;
 std::unordered_map<uint16_t /* sci */, tRFC_MCB*> rfc_lcid_mcb;
 
 /*******************************************************************************
@@ -246,7 +245,7 @@ void RFCOMM_ControlReq(tRFC_MCB* p_mcb, uint8_t dlci, tPORT_CTRL* p_pars) {
     return;
   }
 
-  if ((p_port->state != PORT_STATE_OPENED) ||
+  if ((p_port->state != PORT_CONNECTION_STATE_OPENED) ||
       (p_port->rfc.state != RFC_STATE_OPENED))
     return;
 
@@ -274,7 +273,7 @@ void RFCOMM_FlowReq(tRFC_MCB* p_mcb, uint8_t dlci, bool enable) {
     return;
   }
 
-  if ((p_port->state != PORT_STATE_OPENED) ||
+  if ((p_port->state != PORT_CONNECTION_STATE_OPENED) ||
       (p_port->rfc.state != RFC_STATE_OPENED))
     return;
 
@@ -301,7 +300,7 @@ void RFCOMM_LineStatusReq(tRFC_MCB* p_mcb, uint8_t dlci, uint8_t status) {
     return;
   }
 
-  if ((p_port->state != PORT_STATE_OPENED) ||
+  if ((p_port->state != PORT_CONNECTION_STATE_OPENED) ||
       (p_port->rfc.state != RFC_STATE_OPENED))
     return;
 

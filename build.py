@@ -30,6 +30,7 @@ vendor repository as well.
 import argparse
 import multiprocessing
 import os
+import platform
 import shutil
 import six
 import subprocess
@@ -64,6 +65,7 @@ VALID_TARGETS = [
     'docs',  # Build Rust docs
     'main',  # Build the main C++ codebase
     'prepare',  # Prepare the output directory (gn gen + rust setup)
+    'rootcanal',  # Build Rust targets for RootCanal
     'rust',  # Build only the rust components + copy artifacts to output dir
     'test',  # Run the unit tests
     'tools',  # Build the host tools (i.e. packetgen)
@@ -227,6 +229,8 @@ class HostBuild():
             '{}/out/Default'.format(self.output_dir),
             '-C',
             'link-arg=-Wl,--allow-multiple-definition',
+            # exclude uninteresting warnings
+            '-A improper_ctypes_definitions -A improper_ctypes -A unknown_lints',
         ]
 
         return ' '.join(rust_flags)
@@ -246,6 +250,8 @@ class HostBuild():
         self.env['CARGO_HOME'] = os.path.join(self.output_dir, 'cargo_home')
         self.env['RUSTFLAGS'] = self._generate_rustflags()
         self.env['CXX_ROOT_PATH'] = os.path.join(self.platform_dir, 'bt')
+        self.env['CROS_SYSTEM_API_ROOT'] = os.path.join(self.platform_dir, 'system_api')
+        self.env['CXX_OUTDIR'] = self._gn_default_output()
 
     def run_command(self, target, args, cwd=None, env=None):
         """ Run command and stream the output.
@@ -428,6 +434,11 @@ class HostBuild():
         """
         self._rust_build()
 
+    def _target_rootcanal(self):
+        """ Build rust artifacts for RootCanal in an already prepared environment.
+        """
+        self.run_command('rust', ['cargo', 'build'], cwd=os.path.join(self.platform_dir, 'bt/tools/rootcanal'), env=self.env)
+
     def _target_main(self):
         """ Build the main GN artifacts in an already prepared environment.
         """
@@ -442,6 +453,7 @@ class HostBuild():
             rust_test_cmd = rust_test_cmd + [self.args.test_name]
 
         self.run_command('test', rust_test_cmd, cwd=os.path.join(self.platform_dir, 'bt'), env=self.env)
+        self.run_command('test', rust_test_cmd, cwd=os.path.join(self.platform_dir, 'bt/tools/rootcanal'), env=self.env)
 
         # Host tests second based on host test list
         for t in HOST_TESTS:
@@ -537,6 +549,8 @@ class HostBuild():
             self._target_prepare()
         elif self.target == 'tools':
             self._target_tools()
+        elif self.target == 'rootcanal':
+            self._target_rootcanal()
         elif self.target == 'rust':
             self._target_rust()
         elif self.target == 'docs':
@@ -606,6 +620,7 @@ class Bootstrap():
         # Symlink things
         symlinks = [
             (os.path.join(self.git_dir, 'platform2', 'common-mk'), os.path.join(self.staging_dir, 'common-mk')),
+            (os.path.join(self.git_dir, 'platform2', 'system_api'), os.path.join(self.staging_dir, 'system_api')),
             (os.path.join(self.git_dir, 'platform2', '.gn'), os.path.join(self.staging_dir, '.gn')),
             (os.path.join(self.bt_dir), os.path.join(self.staging_dir, 'bt')),
             (os.path.join(self.git_dir, 'rust_crates'), os.path.join(self.external_dir, 'rust')),
@@ -779,7 +794,7 @@ if __name__ == '__main__':
         help='Run bootstrap code to verify build env is ok to build.',
         default=False,
         action='store_true')
-    parser.add_argument('--no-clang', help='Use clang compiler.', default=False, action='store_true')
+    parser.add_argument('--no-clang', help='Don\'t use clang compiler.', default=False, action='store_true')
     parser.add_argument(
         '--no-strip', help='Skip stripping binaries during install.', default=False, action='store_true')
     parser.add_argument('--use', help='Set a specific use flag.')
@@ -796,6 +811,11 @@ if __name__ == '__main__':
 
     # Make sure we get absolute path + expanded path for bootstrap directory
     args.bootstrap_dir = os.path.abspath(os.path.expanduser(args.bootstrap_dir))
+
+    # Possible values for machine() come from 'uname -m'
+    # Since this script only runs on Linux, x86_64 machines must have this value
+    if platform.machine() != 'x86_64':
+        raise Exception("Only x86_64 machines are currently supported by this build script.")
 
     if args.run_bootstrap:
         bootstrap = Bootstrap(args.bootstrap_dir, os.path.dirname(__file__))

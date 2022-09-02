@@ -99,8 +99,6 @@ extern bool btm_ble_resume_bg_conn(void);
 extern void btm_ble_update_mode_operation(uint8_t link_role,
                                           const RawAddress* bda,
                                           tHCI_STATUS status);
-extern void btm_ble_bgconn_cancel_if_disconnected(const RawAddress& bd_addr);
-
 /* BLE address management */
 extern void btm_gen_resolvable_private_addr(
     base::Callback<void(const RawAddress& rpa)> cb);
@@ -123,12 +121,7 @@ extern bool btm_ble_addr_resolvable(const RawAddress& rpa,
                                     tBTM_SEC_DEV_REC* p_dev_rec);
 
 extern void btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC& p_dev_rec);
-extern bool btm_ble_resolving_list_load_dev(
-    tBTM_SEC_DEV_REC* p_dev_rec);  // DEPRECATED
 extern void btm_ble_resolving_list_remove_dev(tBTM_SEC_DEV_REC* p_dev_rec);
-extern void btm_ble_enable_resolving_list(uint8_t);
-extern bool btm_ble_disable_resolving_list(uint8_t rl_mask, bool to_resume);
-extern void btm_ble_enable_resolving_list_for_platform(uint8_t rl_mask);
 extern void btm_ble_resolving_list_init(uint8_t max_irk_list_sz);
 
 extern void btm_ble_adv_init(void);

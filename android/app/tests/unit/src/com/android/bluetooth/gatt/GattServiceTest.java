@@ -2,6 +2,10 @@ package com.android.bluetooth.gatt;
 
 import static org.mockito.Mockito.*;
 
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCallback;
 import android.content.Context;
 
 import androidx.test.InstrumentationRegistry;
@@ -22,6 +26,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Test cases for {@link GattService}.
@@ -30,21 +38,31 @@ import org.mockito.MockitoAnnotations;
 @RunWith(AndroidJUnit4.class)
 public class GattServiceTest {
     private static final int TIMES_UP_AND_DOWN = 3;
+    private static final int TIMEOUT_MS = 5_000;
     private Context mTargetContext;
     private GattService mService;
 
     @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
+    private BluetoothAdapter mAdapter;
     @Mock private AdapterService mAdapterService;
+    @Mock private GattObjectsFactory mFactory;
+    @Mock private GattNativeInterface mNativeInterface;
+    private BluetoothDevice mCurrentDevice;
 
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when GattService is not enabled",
-                mTargetContext.getResources().getBoolean(R.bool.profile_supported_gatt));
+        Assume.assumeTrue("Ignore test when GattService is not enabled", GattService.isEnabled());
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(true).when(mAdapterService).isStartedProfile(anyString());
+
+        GattObjectsFactory.setInstanceForTesting(mFactory);
+        doReturn(mNativeInterface).when(mFactory).getNativeInterface();
+
+        mAdapter = BluetoothAdapter.getDefaultAdapter();
+
         TestUtils.startService(mServiceRule, GattService.class);
         mService = GattService.getGattService();
         Assert.assertNotNull(mService);
@@ -52,7 +70,7 @@ public class GattServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!mTargetContext.getResources().getBoolean(R.bool.profile_supported_gatt)) {
+        if (!GattService.isEnabled()) {
             return;
         }
         doReturn(false).when(mAdapterService).isStartedProfile(anyString());
@@ -60,11 +78,13 @@ public class GattServiceTest {
         mService = GattService.getGattService();
         Assert.assertNull(mService);
         TestUtils.clearAdapterService(mAdapterService);
+        GattObjectsFactory.setInstanceForTesting(null);
     }
 
     @Test
     public void testInitialize() {
-        Assert.assertNotNull(GattService.getGattService());
+        Assert.assertEquals(mService, GattService.getGattService());
+        verify(mNativeInterface).init(eq(mService));
     }
 
     @Test

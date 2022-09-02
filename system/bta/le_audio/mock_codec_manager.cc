@@ -38,14 +38,21 @@ types::CodecLocation CodecManager::GetCodecLocation() const {
 }
 
 void CodecManager::UpdateActiveSourceAudioConfig(
-    const stream_configuration& stream_conf, uint16_t delay_ms) {
+    const stream_configuration& stream_conf, uint16_t delay_ms,
+    std::function<void(const ::le_audio::offload_config& config)>
+        update_receiver) {
   if (pimpl_)
-    return pimpl_->UpdateActiveSourceAudioConfig(stream_conf, delay_ms);
+    return pimpl_->UpdateActiveSourceAudioConfig(stream_conf, delay_ms,
+                                                 update_receiver);
 }
 
 void CodecManager::UpdateActiveSinkAudioConfig(
-    const stream_configuration& stream_conf, uint16_t delay_ms) {
-  if (pimpl_) return pimpl_->UpdateActiveSinkAudioConfig(stream_conf, delay_ms);
+    const stream_configuration& stream_conf, uint16_t delay_ms,
+    std::function<void(const ::le_audio::offload_config& config)>
+        update_receiver) {
+  if (pimpl_)
+    return pimpl_->UpdateActiveSinkAudioConfig(stream_conf, delay_ms,
+                                               update_receiver);
 }
 
 const set_configurations::AudioSetConfigurations*
@@ -54,11 +61,23 @@ CodecManager::GetOffloadCodecConfig(types::LeAudioContextType ctx_type) {
   return pimpl_->GetOffloadCodecConfig(ctx_type);
 }
 
+const ::le_audio::broadcast_offload_config*
+CodecManager::GetBroadcastOffloadConfig() {
+  if (!pimpl_) return nullptr;
+  return pimpl_->GetBroadcastOffloadConfig();
+}
+
+void CodecManager::UpdateBroadcastConnHandle(
+    const std::vector<uint16_t>& conn_handle,
+    std::function<void(const ::le_audio::broadcast_offload_config& config)>
+        update_receiver) {
+  if (pimpl_)
+    return pimpl_->UpdateBroadcastConnHandle(conn_handle, update_receiver);
+}
+
 void CodecManager::Start(
     const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>&
-        offloading_preference,
-    const std::vector<set_configurations::AudioSetConfiguration>&
-        adsp_capabilities) {
+        offloading_preference) {
   // It is needed here as CodecManager which is a singleton creates it, but in
   // this mock we want to destroy and recreate the mock on each test case.
   if (!pimpl_) {

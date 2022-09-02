@@ -58,7 +58,9 @@ class AclConnectionHandler {
       bluetooth::hci::Address addr) const;
   ScoLinkParameters GetScoLinkParameters(bluetooth::hci::Address addr) const;
 
-  bool CreatePendingLeConnection(bluetooth::hci::AddressWithType addr);
+  bool CreatePendingLeConnection(bluetooth::hci::AddressWithType peer,
+                                 bluetooth::hci::AddressWithType resolved_peer,
+                                 bluetooth::hci::AddressWithType local_address);
   bool HasPendingLeConnection(bluetooth::hci::AddressWithType addr) const;
   bool CancelPendingLeConnection(bluetooth::hci::AddressWithType addr);
 
@@ -75,13 +77,18 @@ class AclConnectionHandler {
   bluetooth::hci::AddressWithType GetAddress(uint16_t handle) const;
   bluetooth::hci::Address GetScoAddress(uint16_t handle) const;
   bluetooth::hci::AddressWithType GetOwnAddress(uint16_t handle) const;
+  bluetooth::hci::AddressWithType GetResolvedAddress(uint16_t handle) const;
 
   void Encrypt(uint16_t handle);
   bool IsEncrypted(uint16_t handle) const;
 
-  void SetAddress(uint16_t handle, bluetooth::hci::AddressWithType address);
-
   Phy::Type GetPhyType(uint16_t handle) const;
+
+  uint16_t GetAclLinkPolicySettings(uint16_t handle) const;
+  void SetAclLinkPolicySettings(uint16_t handle, uint16_t settings);
+
+  bluetooth::hci::Role GetAclRole(uint16_t handle) const;
+  void SetAclRole(uint16_t handle, bluetooth::hci::Role role);
 
   std::unique_ptr<bluetooth::hci::LeSetCigParametersCompleteBuilder>
   SetCigParameters(uint8_t id, uint32_t sdu_interval_m_to_s,
@@ -133,6 +140,12 @@ class AclConnectionHandler {
   bool authenticate_pending_classic_connection_{false};
   bool le_connection_pending_{false};
   bluetooth::hci::AddressWithType pending_le_connection_address_{
+      bluetooth::hci::Address::kEmpty,
+      bluetooth::hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+  bluetooth::hci::AddressWithType pending_le_connection_own_address_{
+      bluetooth::hci::Address::kEmpty,
+      bluetooth::hci::AddressType::PUBLIC_DEVICE_ADDRESS};
+  bluetooth::hci::AddressWithType pending_le_connection_resolved_address_{
       bluetooth::hci::Address::kEmpty,
       bluetooth::hci::AddressType::PUBLIC_DEVICE_ADDRESS};
 

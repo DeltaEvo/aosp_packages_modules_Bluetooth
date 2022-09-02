@@ -1,15 +1,22 @@
 use crate::dbus_iface::{
-    export_bluetooth_callback_dbus_obj, export_bluetooth_connection_callback_dbus_obj,
-    export_bluetooth_gatt_callback_dbus_obj, export_bluetooth_manager_callback_dbus_obj,
+    export_advertising_set_callback_dbus_intf, export_bluetooth_callback_dbus_intf,
+    export_bluetooth_connection_callback_dbus_intf, export_bluetooth_gatt_callback_dbus_intf,
+    export_bluetooth_manager_callback_dbus_intf, export_scanner_callback_dbus_intf,
+    export_suspend_callback_dbus_intf,
 };
 use crate::ClientContext;
-use crate::{console_yellow, print_info};
-use bt_topshim::btif::{BtBondState, BtSspVariant};
+use crate::{console_red, console_yellow, print_error, print_info};
+use bt_topshim::btif::{BtBondState, BtPropertyType, BtSspVariant, Uuid128Bit};
 use bt_topshim::profiles::gatt::GattStatus;
 use btstack::bluetooth::{
     BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
 };
-use btstack::bluetooth_gatt::{BluetoothGattService, IBluetoothGattCallback, LePhy};
+use btstack::bluetooth_adv::IAdvertisingSetCallback;
+use btstack::bluetooth_gatt::{
+    BluetoothGattService, IBluetoothGattCallback, IScannerCallback, LePhy, ScanResult,
+};
+use btstack::suspend::ISuspendCallback;
+use btstack::uuid::UuidWrapper;
 use btstack::RPCProxy;
 use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
@@ -53,28 +60,19 @@ impl IBluetoothManagerCallback for BtManagerCallback {
     }
 }
 
-impl manager_service::RPCProxy for BtManagerCallback {
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-
+impl RPCProxy for BtManagerCallback {
     fn get_object_id(&self) -> String {
         self.objpath.clone()
     }
 
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-
     fn export_for_rpc(self: Box<Self>) {
         let cr = self.dbus_crossroads.clone();
-        export_bluetooth_manager_callback_dbus_obj(
-            self.get_object_id(),
+        let iface = export_bluetooth_manager_callback_dbus_intf(
             self.dbus_connection.clone(),
             &mut cr.lock().unwrap(),
-            Arc::new(Mutex::new(self)),
             Arc::new(Mutex::new(DisconnectWatcher::new())),
         );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
     }
 }
 
@@ -99,9 +97,19 @@ impl BtCallback {
 }
 
 impl IBluetoothCallback for BtCallback {
+    fn on_adapter_property_changed(&self, _prop: BtPropertyType) {}
+
     fn on_address_changed(&self, addr: String) {
         print_info!("Address changed to {}", &addr);
         self.context.lock().unwrap().adapter_address = Some(addr);
+    }
+
+    fn on_name_changed(&self, name: String) {
+        print_info!("Name changed to {}", &name);
+    }
+
+    fn on_discoverable_changed(&self, discoverable: bool) {
+        print_info!("Discoverable changed to {}", &discoverable);
     }
 
     fn on_device_found(&self, remote_device: BluetoothDevice) {
@@ -115,12 +123,18 @@ impl IBluetoothCallback for BtCallback {
         print_info!("Found device: {:?}", remote_device);
     }
 
+    fn on_device_cleared(&self, remote_device: BluetoothDevice) {
+        match self.context.lock().unwrap().found_devices.remove(&remote_device.address) {
+            Some(_) => print_info!("Removed device: {:?}", remote_device),
+            None => (),
+        };
+
+        self.context.lock().unwrap().bonded_devices.remove(&remote_device.address);
+    }
+
     fn on_discovering_changed(&self, discovering: bool) {
         self.context.lock().unwrap().discovering_state = discovering;
 
-        if discovering {
-            self.context.lock().unwrap().found_devices.clear();
-        }
         print_info!("Discovering: {}", discovering);
     }
 
@@ -191,38 +205,34 @@ impl IBluetoothCallback for BtCallback {
             BtBondState::Bonding => (),
         }
 
+        let device =
+            BluetoothDevice { address: address.clone(), name: String::from("Classic device") };
+
         // If bonded, we should also automatically connect all enabled profiles
         if BtBondState::Bonded == state.into() {
-            self.context.lock().unwrap().connect_all_enabled_profiles(BluetoothDevice {
-                address,
-                name: String::from("Classic device"),
-            });
+            self.context.lock().unwrap().bonded_devices.insert(address.clone(), device.clone());
+            self.context.lock().unwrap().connect_all_enabled_profiles(device.clone());
+        }
+
+        if BtBondState::NotBonded == state.into() {
+            self.context.lock().unwrap().bonded_devices.remove(&address);
         }
     }
 }
 
 impl RPCProxy for BtCallback {
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-
     fn get_object_id(&self) -> String {
         self.objpath.clone()
     }
 
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
-    }
-
     fn export_for_rpc(self: Box<Self>) {
         let cr = self.dbus_crossroads.clone();
-        export_bluetooth_callback_dbus_obj(
-            self.get_object_id(),
+        let iface = export_bluetooth_callback_dbus_intf(
             self.dbus_connection.clone(),
             &mut cr.lock().unwrap(),
-            Arc::new(Mutex::new(self)),
             Arc::new(Mutex::new(DisconnectWatcher::new())),
         );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
     }
 }
 
@@ -256,27 +266,227 @@ impl IBluetoothConnectionCallback for BtConnectionCallback {
 }
 
 impl RPCProxy for BtConnectionCallback {
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-
     fn get_object_id(&self) -> String {
         self.objpath.clone()
     }
 
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
+    fn export_for_rpc(self: Box<Self>) {
+        let cr = self.dbus_crossroads.clone();
+        let iface = export_bluetooth_connection_callback_dbus_intf(
+            self.dbus_connection.clone(),
+            &mut cr.lock().unwrap(),
+            Arc::new(Mutex::new(DisconnectWatcher::new())),
+        );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
+    }
+}
+
+pub(crate) struct ScannerCallback {
+    objpath: String,
+    context: Arc<Mutex<ClientContext>>,
+
+    dbus_connection: Arc<SyncConnection>,
+    dbus_crossroads: Arc<Mutex<Crossroads>>,
+}
+
+impl ScannerCallback {
+    pub(crate) fn new(
+        objpath: String,
+        context: Arc<Mutex<ClientContext>>,
+        dbus_connection: Arc<SyncConnection>,
+        dbus_crossroads: Arc<Mutex<Crossroads>>,
+    ) -> Self {
+        Self { objpath, context, dbus_connection, dbus_crossroads }
+    }
+}
+
+impl IScannerCallback for ScannerCallback {
+    fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus) {
+        if status != GattStatus::Success {
+            print_error!("Failed registering scanner, status = {}", status);
+            return;
+        }
+
+        print_info!(
+            "Scanner callback registered, uuid = {}, id = {}",
+            UuidWrapper(&uuid),
+            scanner_id
+        );
+    }
+
+    fn on_scan_result(&self, scan_result: ScanResult) {
+        if self.context.lock().unwrap().active_scanner_ids.len() > 0 {
+            print_info!("Scan result: {:#?}", scan_result);
+        }
+    }
+}
+
+impl RPCProxy for ScannerCallback {
+    fn get_object_id(&self) -> String {
+        self.objpath.clone()
     }
 
     fn export_for_rpc(self: Box<Self>) {
         let cr = self.dbus_crossroads.clone();
-        export_bluetooth_connection_callback_dbus_obj(
-            self.get_object_id(),
+        let iface = export_scanner_callback_dbus_intf(
             self.dbus_connection.clone(),
             &mut cr.lock().unwrap(),
-            Arc::new(Mutex::new(self)),
             Arc::new(Mutex::new(DisconnectWatcher::new())),
         );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
+    }
+}
+
+pub(crate) struct AdvertisingSetCallback {
+    objpath: String,
+    context: Arc<Mutex<ClientContext>>,
+
+    dbus_connection: Arc<SyncConnection>,
+    dbus_crossroads: Arc<Mutex<Crossroads>>,
+}
+
+impl AdvertisingSetCallback {
+    pub(crate) fn new(
+        objpath: String,
+        context: Arc<Mutex<ClientContext>>,
+        dbus_connection: Arc<SyncConnection>,
+        dbus_crossroads: Arc<Mutex<Crossroads>>,
+    ) -> Self {
+        Self { objpath, context, dbus_connection, dbus_crossroads }
+    }
+}
+
+impl IAdvertisingSetCallback for AdvertisingSetCallback {
+    fn on_advertising_set_started(
+        &self,
+        reg_id: i32,
+        advertiser_id: i32,
+        tx_power: i32,
+        status: GattStatus,
+    ) {
+        print_info!(
+            "on_advertising_set_started: reg_id = {}, advertiser_id = {}, tx_power = {}, status = {}",
+            reg_id,
+            advertiser_id,
+            tx_power,
+            status
+        );
+        if status == GattStatus::Success {
+            if let Some(Some(ex_adv_id)) =
+                self.context.lock().unwrap().adv_sets.insert(reg_id, Some(advertiser_id))
+            {
+                print_error!(
+                    "on_advertising_set_started: previous advertising set ({}) registered ({}) is omitted",
+                    ex_adv_id,
+                    reg_id,
+                    );
+            }
+        } else {
+            print_error!(
+                "on_advertising_set_started: remove advertising set registered ({})",
+                reg_id
+            );
+            self.context.lock().unwrap().adv_sets.remove(&reg_id);
+        }
+    }
+
+    fn on_own_address_read(&self, advertiser_id: i32, address_type: i32, address: String) {
+        print_info!(
+            "on_own_address_read: advertiser_id = {}, address_type = {}, address = {}",
+            advertiser_id,
+            address_type,
+            address
+        );
+    }
+
+    fn on_advertising_set_stopped(&self, advertiser_id: i32) {
+        print_info!("on_advertising_set_stopped: advertiser_id = {}", advertiser_id);
+        self.context.lock().unwrap().adv_sets.retain(|_, val| *val != Some(advertiser_id));
+    }
+
+    fn on_advertising_enabled(&self, advertiser_id: i32, enable: bool, status: GattStatus) {
+        print_info!(
+            "on_advertising_enabled: advertiser_id = {}, enable = {}, status = {}",
+            advertiser_id,
+            enable,
+            status
+        );
+    }
+
+    fn on_advertising_data_set(&self, advertiser_id: i32, status: GattStatus) {
+        print_info!(
+            "on_advertising_data_set: advertiser_id = {}, status = {}",
+            advertiser_id,
+            status
+        );
+    }
+
+    fn on_scan_response_data_set(&self, advertiser_id: i32, status: GattStatus) {
+        print_info!(
+            "on_scan_response_data_set: advertiser_id = {}, status = {}",
+            advertiser_id,
+            status
+        );
+    }
+
+    fn on_advertising_parameters_updated(
+        &self,
+        advertiser_id: i32,
+        tx_power: i32,
+        status: GattStatus,
+    ) {
+        print_info!(
+            "on_advertising_parameters_updated: advertiser_id = {}, tx_power: {}, status = {}",
+            advertiser_id,
+            tx_power,
+            status
+        );
+    }
+
+    fn on_periodic_advertising_parameters_updated(&self, advertiser_id: i32, status: GattStatus) {
+        print_info!(
+            "on_periodic_advertising_parameters_updated: advertiser_id = {}, status = {}",
+            advertiser_id,
+            status
+        );
+    }
+
+    fn on_periodic_advertising_data_set(&self, advertiser_id: i32, status: GattStatus) {
+        print_info!(
+            "on_periodic_advertising_data_set: advertiser_id = {}, status = {}",
+            advertiser_id,
+            status
+        );
+    }
+
+    fn on_periodic_advertising_enabled(
+        &self,
+        advertiser_id: i32,
+        enable: bool,
+        status: GattStatus,
+    ) {
+        print_info!(
+            "on_periodic_advertising_enabled: advertiser_id = {}, enable = {}, status = {}",
+            advertiser_id,
+            enable,
+            status
+        );
+    }
+}
+
+impl RPCProxy for AdvertisingSetCallback {
+    fn get_object_id(&self) -> String {
+        self.objpath.clone()
+    }
+
+    fn export_for_rpc(self: Box<Self>) {
+        let cr = self.dbus_crossroads.clone();
+        let iface = export_advertising_set_callback_dbus_intf(
+            self.dbus_connection.clone(),
+            &mut cr.lock().unwrap(),
+            Arc::new(Mutex::new(DisconnectWatcher::new())),
+        );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
     }
 }
 
@@ -300,14 +510,14 @@ impl BtGattCallback {
 }
 
 impl IBluetoothGattCallback for BtGattCallback {
-    fn on_client_registered(&self, status: i32, client_id: i32) {
+    fn on_client_registered(&self, status: GattStatus, client_id: i32) {
         print_info!("GATT Client registered status = {}, client_id = {}", status, client_id);
         self.context.lock().unwrap().gatt_client_id = Some(client_id);
     }
 
     fn on_client_connection_state(
         &self,
-        status: i32,
+        status: GattStatus,
         client_id: i32,
         connected: bool,
         addr: String,
@@ -341,7 +551,12 @@ impl IBluetoothGattCallback for BtGattCallback {
         );
     }
 
-    fn on_search_complete(&self, addr: String, services: Vec<BluetoothGattService>, status: i32) {
+    fn on_search_complete(
+        &self,
+        addr: String,
+        services: Vec<BluetoothGattService>,
+        status: GattStatus,
+    ) {
         print_info!(
             "GATT DB Search complete: addr = {}, services = {:?}, status = {}",
             addr,
@@ -350,7 +565,13 @@ impl IBluetoothGattCallback for BtGattCallback {
         );
     }
 
-    fn on_characteristic_read(&self, addr: String, status: i32, handle: i32, value: Vec<u8>) {
+    fn on_characteristic_read(
+        &self,
+        addr: String,
+        status: GattStatus,
+        handle: i32,
+        value: Vec<u8>,
+    ) {
         print_info!(
             "GATT Characteristic read: addr = {}, status = {}, handle = {}, value = {:?}",
             addr,
@@ -360,7 +581,7 @@ impl IBluetoothGattCallback for BtGattCallback {
         );
     }
 
-    fn on_characteristic_write(&self, addr: String, status: i32, handle: i32) {
+    fn on_characteristic_write(&self, addr: String, status: GattStatus, handle: i32) {
         print_info!(
             "GATT Characteristic write: addr = {}, status = {}, handle = {}",
             addr,
@@ -369,11 +590,11 @@ impl IBluetoothGattCallback for BtGattCallback {
         );
     }
 
-    fn on_execute_write(&self, addr: String, status: i32) {
+    fn on_execute_write(&self, addr: String, status: GattStatus) {
         print_info!("GATT execute write addr = {}, status = {}", addr, status);
     }
 
-    fn on_descriptor_read(&self, addr: String, status: i32, handle: i32, value: Vec<u8>) {
+    fn on_descriptor_read(&self, addr: String, status: GattStatus, handle: i32, value: Vec<u8>) {
         print_info!(
             "GATT Descriptor read: addr = {}, status = {}, handle = {}, value = {:?}",
             addr,
@@ -383,7 +604,7 @@ impl IBluetoothGattCallback for BtGattCallback {
         );
     }
 
-    fn on_descriptor_write(&self, addr: String, status: i32, handle: i32) {
+    fn on_descriptor_write(&self, addr: String, status: GattStatus, handle: i32) {
         print_info!(
             "GATT Descriptor write: addr = {}, status = {}, handle = {}",
             addr,
@@ -396,11 +617,11 @@ impl IBluetoothGattCallback for BtGattCallback {
         print_info!("GATT Notification: addr = {}, handle = {}, value = {:?}", addr, handle, value);
     }
 
-    fn on_read_remote_rssi(&self, addr: String, rssi: i32, status: i32) {
+    fn on_read_remote_rssi(&self, addr: String, rssi: i32, status: GattStatus) {
         print_info!("Remote RSSI read: addr = {}, rssi = {}, status = {}", addr, rssi, status);
     }
 
-    fn on_configure_mtu(&self, addr: String, mtu: i32, status: i32) {
+    fn on_configure_mtu(&self, addr: String, mtu: i32, status: GattStatus) {
         print_info!("MTU configured: addr = {}, mtu = {}, status = {}", addr, mtu, status);
     }
 
@@ -410,7 +631,7 @@ impl IBluetoothGattCallback for BtGattCallback {
         interval: i32,
         latency: i32,
         timeout: i32,
-        status: i32,
+        status: GattStatus,
     ) {
         print_info!(
             "Connection updated: addr = {}, interval = {}, latency = {}, timeout = {}, status = {}",
@@ -428,26 +649,59 @@ impl IBluetoothGattCallback for BtGattCallback {
 }
 
 impl RPCProxy for BtGattCallback {
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-
     fn get_object_id(&self) -> String {
         self.objpath.clone()
     }
 
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
+    fn export_for_rpc(self: Box<Self>) {
+        let cr = self.dbus_crossroads.clone();
+        let iface = export_bluetooth_gatt_callback_dbus_intf(
+            self.dbus_connection.clone(),
+            &mut cr.lock().unwrap(),
+            Arc::new(Mutex::new(DisconnectWatcher::new())),
+        );
+
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
+    }
+}
+
+/// Callback container for suspend interface callbacks.
+pub(crate) struct SuspendCallback {
+    objpath: String,
+
+    dbus_connection: Arc<SyncConnection>,
+    dbus_crossroads: Arc<Mutex<Crossroads>>,
+}
+
+impl SuspendCallback {
+    pub(crate) fn new(
+        objpath: String,
+        dbus_connection: Arc<SyncConnection>,
+        dbus_crossroads: Arc<Mutex<Crossroads>>,
+    ) -> Self {
+        Self { objpath, dbus_connection, dbus_crossroads }
+    }
+}
+
+impl ISuspendCallback for SuspendCallback {
+    // TODO(b/224606285): Implement suspend utils in btclient.
+    fn on_callback_registered(&self, _callback_id: u32) {}
+    fn on_suspend_ready(&self, _suspend_id: u32) {}
+    fn on_resumed(&self, _suspend_id: i32) {}
+}
+
+impl RPCProxy for SuspendCallback {
+    fn get_object_id(&self) -> String {
+        self.objpath.clone()
     }
 
     fn export_for_rpc(self: Box<Self>) {
         let cr = self.dbus_crossroads.clone();
-        export_bluetooth_gatt_callback_dbus_obj(
-            self.get_object_id(),
+        let iface = export_suspend_callback_dbus_intf(
             self.dbus_connection.clone(),
             &mut cr.lock().unwrap(),
-            Arc::new(Mutex::new(self)),
             Arc::new(Mutex::new(DisconnectWatcher::new())),
         );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
     }
 }

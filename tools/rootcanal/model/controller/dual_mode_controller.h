@@ -29,7 +29,9 @@
 #include "link_layer_controller.h"
 #include "model/devices/device.h"
 #include "model/setup/async_manager.h"
+#ifndef ROOTCANAL_LMP
 #include "security_manager.h"
+#endif /* !ROOTCANAL_LMP */
 
 namespace rootcanal {
 
@@ -62,8 +64,6 @@ class DualModeController : public Device {
   ~DualModeController() = default;
 
   // Device methods.
-  virtual void Initialize(const std::vector<std::string>& args) override;
-
   virtual std::string GetTypeString() const override;
 
   virtual void IncomingPacket(
@@ -110,6 +110,9 @@ class DualModeController : public Device {
 
   // Set the device's address.
   void SetAddress(Address address) override;
+
+  // Get the device's address.
+  const Address& GetAddress();
 
   // Controller commands. For error codes, see the Bluetooth Core Specification,
   // Version 4.2, Volume 2, Part D (page 370).
@@ -219,6 +222,12 @@ class DualModeController : public Device {
   // 7.1.36
   void IoCapabilityRequestNegativeReply(CommandView args);
 
+  // 7.1.45
+  void EnhancedSetupSynchronousConnection(CommandView args);
+
+  // 7.1.46
+  void EnhancedAcceptSynchronousConnection(CommandView args);
+
   // 7.1.53
   void RemoteOobExtendedDataRequestReply(CommandView args);
 
@@ -239,6 +248,9 @@ class DualModeController : public Device {
 
   // 7.2.7
   void RoleDiscovery(CommandView args);
+
+  // 7.2.9
+  void ReadLinkPolicySettings(CommandView args);
 
   // 7.2.10
   void WriteLinkPolicySettings(CommandView args);
@@ -369,6 +381,9 @@ class DualModeController : public Device {
   // 7.3.63
   void SendKeypressNotification(CommandView args);
 
+  // 7.3.66
+  void EnhancedFlush(CommandView args);
+
   // 7.3.69
   void SetEventMaskPage2(CommandView args);
 
@@ -466,16 +481,16 @@ class DualModeController : public Device {
   void LeConnectionCancel(CommandView args);
 
   // 7.8.14
-  void LeReadConnectListSize(CommandView args);
+  void LeReadFilterAcceptListSize(CommandView args);
 
   // 7.8.15
-  void LeClearConnectList(CommandView args);
+  void LeClearFilterAcceptList(CommandView args);
 
   // 7.8.16
-  void LeAddDeviceToConnectList(CommandView args);
+  void LeAddDeviceToFilterAcceptList(CommandView args);
 
   // 7.8.17
-  void LeRemoveDeviceFromConnectList(CommandView args);
+  void LeRemoveDeviceFromFilterAcceptList(CommandView args);
 
   // 7.8.21
   void LeReadRemoteFeatures(CommandView args);
@@ -588,6 +603,9 @@ class DualModeController : public Device {
   void LeSetupIsoDataPath(CommandView packet_view);
   void LeRemoveIsoDataPath(CommandView packet_view);
 
+  // 7.8.115
+  void LeSetHostFeature(CommandView packet_view);
+
   // Vendor-specific Commands
 
   void LeVendorSleepMode(CommandView args);
@@ -641,7 +659,9 @@ class DualModeController : public Device {
 
   bluetooth::hci::LoopbackMode loopback_mode_;
 
+#ifndef ROOTCANAL_LMP
   SecurityManager security_manager_;
+#endif /* ROOTCANAL_LMP */
 
   DualModeController(const DualModeController& cmdPckt) = delete;
   DualModeController& operator=(const DualModeController& cmdPckt) = delete;

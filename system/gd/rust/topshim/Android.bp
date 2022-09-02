@@ -43,7 +43,10 @@ rust_library_host_rlib {
 
 cc_library_static {
     name: "libbt_topshim_cxx",
-    defaults: ["gd_ffi_defaults"],
+    defaults: [
+        "gd_ffi_defaults",
+        "libchrome_support_defaults",
+    ],
     header_libs: ["libbt_callbacks_cxx_headers"],
     srcs: [
         "btav/btav_shim.cc",
@@ -62,9 +65,6 @@ cc_library_static {
         "cxx-bridge-header"
     ],
     generated_sources: ["libbt_topshim_bridge_code"],
-    shared_libs: [
-        "libchrome",
-    ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
@@ -126,6 +126,8 @@ rust_bindgen {
         "--allowlist-type=btgatt_.*",
         "--allowlist-type=bluetooth_sdp.*",
         "--allowlist-type=btsdp.*",
+        "--allowlist-type=btsock_.*",
+        "--allowlist-type=sock_connect_signal_t",
         "--enable-cxx-namespaces",
         "--opaque-type=std::.*",
         "--with-derive-default",

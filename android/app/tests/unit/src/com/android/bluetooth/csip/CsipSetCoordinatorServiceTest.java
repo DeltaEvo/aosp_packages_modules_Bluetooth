@@ -40,6 +40,7 @@ import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeoutException;
@@ -56,6 +57,8 @@ import org.mockito.MockitoAnnotations;
 @MediumTest
 @RunWith(AndroidJUnit4.class)
 public class CsipSetCoordinatorServiceTest {
+    private final String mFlagDexmarker = System.getProperty("dexmaker.share_classloader", "false");
+
     public final ServiceTestRule mServiceRule = new ServiceTestRule();
     private Context mTargetContext;
     private BluetoothAdapter mAdapter;
@@ -72,16 +75,15 @@ public class CsipSetCoordinatorServiceTest {
     @Mock private AdapterService mAdapterService;
     @Mock private DatabaseManager mDatabaseManager;
     @Mock private CsipSetCoordinatorNativeInterface mCsipSetCoordinatorNativeInterface;
-    @Mock private CsipSetCoordinatorService mCsipSetCoordinatorService;
     @Mock private IBluetoothCsipSetCoordinatorLockCallback mCsipSetCoordinatorLockCallback;
 
     @Before
     public void setUp() throws Exception {
-        mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when CsipSetCoordinatorService is not enabled",
-                mTargetContext.getResources().getBoolean(
-                        R.bool.profile_supported_csip_set_coordinator));
+        if (!mFlagDexmarker.equals("true")) {
+            System.setProperty("dexmaker.share_classloader", "true");
+        }
 
+        mTargetContext = InstrumentationRegistry.getTargetContext();
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
@@ -135,6 +137,18 @@ public class CsipSetCoordinatorServiceTest {
 
     @After
     public void tearDown() throws Exception {
+        if (!mFlagDexmarker.equals("true")) {
+            System.setProperty("dexmaker.share_classloader", mFlagDexmarker);
+        }
+
+        if (Looper.myLooper() == null) {
+            return;
+        }
+
+        if (mService == null) {
+            return;
+        }
+
         stopService();
         mTargetContext.unregisterReceiver(mCsipSetCoordinatorIntentReceiver);
         TestUtils.clearAdapterService(mAdapterService);
@@ -208,6 +222,20 @@ public class CsipSetCoordinatorServiceTest {
     }
 
     /**
+     * Test if getProfileConnectionPolicy works after the service is stopped.
+     */
+    @Test
+    public void testGetPolicyAfterStopped() {
+        mService.stop();
+        when(mDatabaseManager
+                .getProfileConnectionPolicy(mTestDevice, BluetoothProfile.CSIP_SET_COORDINATOR))
+                .thenReturn(BluetoothProfile.CONNECTION_POLICY_UNKNOWN);
+        Assert.assertEquals("Initial device policy",
+                BluetoothProfile.CONNECTION_POLICY_UNKNOWN,
+                mService.getConnectionPolicy(mTestDevice));
+    }
+
+    /**
      * Test okToConnect method using various test cases
      */
     @Test
@@ -250,35 +278,49 @@ public class CsipSetCoordinatorServiceTest {
      */
     @Test
     public void testGroupLockSetNative() {
-        int group = 0x02;
+        int group_id = 0x01;
+        int group_size = 0x01;
+        long uuidLsb = 0x01;
+        long uuidMsb = 0x01;
+        UUID uuid = new UUID(uuidMsb, uuidLsb);
 
-        UUID lock_uuid = mService.lockGroup(group, mCsipSetCoordinatorLockCallback);
+        doCallRealMethod()
+                .when(mCsipSetCoordinatorNativeInterface)
+                .onDeviceAvailable(any(byte[].class), anyInt(), anyInt(), anyInt(), anyLong(),
+                        anyLong());
+        mCsipSetCoordinatorNativeInterface.onDeviceAvailable(
+                getByteAddress(mTestDevice), group_id, group_size, 1, uuidLsb, uuidMsb);
+        Assert.assertFalse(mService.isGroupLocked(group_id));
+
+        UUID lock_uuid = mService.lockGroup(group_id, mCsipSetCoordinatorLockCallback);
         Assert.assertNotNull(lock_uuid);
-        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group), eq(true));
+        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group_id), eq(true));
+        Assert.assertTrue(mService.isGroupLocked(group_id));
 
         doCallRealMethod()
                 .when(mCsipSetCoordinatorNativeInterface)
                 .onGroupLockChanged(anyInt(), anyBoolean(), anyInt());
         mCsipSetCoordinatorNativeInterface.onGroupLockChanged(
-                group, true, IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_SUCCESS);
+                group_id, true, IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_SUCCESS);
 
         try {
             verify(mCsipSetCoordinatorLockCallback, times(1))
-                    .onGroupLockSet(group, BluetoothStatusCodes.SUCCESS,
+                    .onGroupLockSet(group_id, BluetoothStatusCodes.SUCCESS,
                         true);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
 
         mService.unlockGroup(lock_uuid);
-        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group), eq(false));
+        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group_id), eq(false));
 
         mCsipSetCoordinatorNativeInterface.onGroupLockChanged(
-                group, false, IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_SUCCESS);
+                group_id, false, IBluetoothCsipSetCoordinator.CSIS_GROUP_LOCK_SUCCESS);
+        Assert.assertFalse(mService.isGroupLocked(group_id));
 
         try {
             verify(mCsipSetCoordinatorLockCallback, times(1))
-                    .onGroupLockSet(group, BluetoothStatusCodes.SUCCESS,
+                    .onGroupLockSet(group_id, BluetoothStatusCodes.SUCCESS,
                         false);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -291,14 +333,27 @@ public class CsipSetCoordinatorServiceTest {
      */
     @Test
     public void testGroupExclusiveLockSet() {
-        int group = 0x02;
+        int group_id = 0x01;
+        int group_size = 0x01;
+        long uuidLsb = 0x01;
+        long uuidMsb = 0x01;
+        UUID uuid = new UUID(uuidMsb, uuidLsb);
 
-        UUID lock_uuid = mService.lockGroup(group, mCsipSetCoordinatorLockCallback);
-        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group), eq(true));
+        doCallRealMethod()
+                .when(mCsipSetCoordinatorNativeInterface)
+                .onDeviceAvailable(any(byte[].class), anyInt(), anyInt(), anyInt(), anyLong(),
+                        anyLong());
+        mCsipSetCoordinatorNativeInterface.onDeviceAvailable(
+                getByteAddress(mTestDevice), group_id, group_size, 1, uuidLsb, uuidMsb);
+        Assert.assertFalse(mService.isGroupLocked(group_id));
+
+        UUID lock_uuid = mService.lockGroup(group_id, mCsipSetCoordinatorLockCallback);
+        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group_id), eq(true));
         Assert.assertNotNull(lock_uuid);
+        Assert.assertTrue(mService.isGroupLocked(group_id));
 
-        lock_uuid = mService.lockGroup(group, mCsipSetCoordinatorLockCallback);
-        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group), eq(true));
+        lock_uuid = mService.lockGroup(group_id, mCsipSetCoordinatorLockCallback);
+        verify(mCsipSetCoordinatorNativeInterface, times(1)).groupLockSet(eq(group_id), eq(true));
 
         doCallRealMethod()
                 .when(mCsipSetCoordinatorNativeInterface)
@@ -306,7 +361,7 @@ public class CsipSetCoordinatorServiceTest {
 
         try {
             verify(mCsipSetCoordinatorLockCallback, times(1))
-                    .onGroupLockSet(group,
+                    .onGroupLockSet(group_id,
                     BluetoothStatusCodes.ERROR_CSIP_GROUP_LOCKED_BY_OTHER, true);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -415,16 +470,17 @@ public class CsipSetCoordinatorServiceTest {
     @Test
     public void testStackEventDeviceAvailable() {
         int group_id = 0x01;
-        int group_size = 0x01;
+        int group_size = 0x03;
         long uuidLsb = 0x01;
         long uuidMsb = 0x01;
         UUID uuid = new UUID(uuidMsb, uuidLsb);
 
         doCallRealMethod()
                 .when(mCsipSetCoordinatorNativeInterface)
-                .onDeviceAvailable(any(byte[].class), anyInt(), anyInt(), anyLong(), anyLong());
+                .onDeviceAvailable(any(byte[].class), anyInt(), anyInt(), anyInt(), anyLong(),
+                        anyLong());
         mCsipSetCoordinatorNativeInterface.onDeviceAvailable(
-                getByteAddress(mTestDevice), group_id, group_size, uuidLsb, uuidMsb);
+                getByteAddress(mTestDevice), group_id, group_size, 0x02, uuidLsb, uuidMsb);
 
         Intent intent = TestUtils.waitForIntent(TIMEOUT_MS, mIntentQueue.get(mTestDevice));
         Assert.assertNotNull(intent);
@@ -438,6 +494,20 @@ public class CsipSetCoordinatorServiceTest {
         Assert.assertEquals(uuid,
                 intent.getSerializableExtra(
                         BluetoothCsipSetCoordinator.EXTRA_CSIS_GROUP_TYPE_UUID));
+
+        // Another device with the highest rank
+        mCsipSetCoordinatorNativeInterface.onDeviceAvailable(
+                getByteAddress(mTestDevice2), group_id, group_size, 0x01, uuidLsb, uuidMsb);
+
+        // Yet another device with the lowest rank
+        mCsipSetCoordinatorNativeInterface.onDeviceAvailable(
+                getByteAddress(mTestDevice3), group_id, group_size, 0x03, uuidLsb, uuidMsb);
+
+        // Verify if the list of devices is sorted, with the lowest rank value devices first
+        List<BluetoothDevice> devices = mService.getGroupDevicesOrdered(group_id);
+        Assert.assertEquals(0, devices.indexOf(mTestDevice2));
+        Assert.assertEquals(1, devices.indexOf(mTestDevice));
+        Assert.assertEquals(2, devices.indexOf(mTestDevice3));
     }
 
     /**

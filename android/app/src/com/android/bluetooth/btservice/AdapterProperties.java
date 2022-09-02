@@ -19,6 +19,7 @@ package com.android.bluetooth.btservice;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 
+import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dpSink;
 import android.bluetooth.BluetoothAdapter;
@@ -69,7 +70,7 @@ class AdapterProperties {
 
     private static final String MAX_CONNECTED_AUDIO_DEVICES_PROPERTY =
             "persist.bluetooth.maxconnectedaudiodevices";
-    static final int MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOND = 1;
+    private static final int MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOUND = 1;
     private static final int MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND = 5;
     private static final String A2DP_OFFLOAD_SUPPORTED_PROPERTY =
             "ro.bluetooth.a2dp_offload.supported";
@@ -200,7 +201,7 @@ class AdapterProperties {
     AdapterProperties(AdapterService service) {
         mService = service;
         mAdapter = BluetoothAdapter.getDefaultAdapter();
-        //invalidateBluetoothCaches();
+        invalidateBluetoothCaches();
     }
 
     public void init(RemoteDevices remoteDevices) {
@@ -216,7 +217,7 @@ class AdapterProperties {
                         configDefaultMaxConnectedAudioDevices);
         // Make sure the final value of max connected audio devices is within allowed range
         mMaxConnectedAudioDevices = Math.min(Math.max(propertyOverlayedMaxConnectedAudioDevices,
-                MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOND), MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND);
+                MAX_CONNECTED_AUDIO_DEVICES_LOWER_BOUND), MAX_CONNECTED_AUDIO_DEVICES_UPPER_BOUND);
         Log.i(TAG, "init(), maxConnectedAudioDevices, default="
                 + configDefaultMaxConnectedAudioDevices + ", propertyOverlayed="
                 + propertyOverlayedMaxConnectedAudioDevices + ", finalValue="
@@ -242,7 +243,7 @@ class AdapterProperties {
         filter.addAction(BluetoothPbapClient.ACTION_CONNECTION_STATE_CHANGED);
         mService.registerReceiver(mReceiver, filter);
         mReceiverRegistered = true;
-        //invalidateBluetoothCaches();
+        invalidateBluetoothCaches();
     }
 
     public void cleanup() {
@@ -254,14 +255,18 @@ class AdapterProperties {
         }
         mService = null;
         mBondedDevices.clear();
-        //invalidateBluetoothCaches();
+        invalidateBluetoothCaches();
     }
-    /*
+
     private static void invalidateGetProfileConnectionStateCache() {
         BluetoothAdapter.invalidateGetProfileConnectionStateCache();
     }
     private static void invalidateIsOffloadedFilteringSupportedCache() {
         BluetoothAdapter.invalidateIsOffloadedFilteringSupportedCache();
+    }
+    private static void invalidateBluetoothGetConnectionStateCache() {
+        BluetoothMap.invalidateBluetoothGetConnectionStateCache();
+        BluetoothSap.invalidateBluetoothGetConnectionStateCache();
     }
     private static void invalidateGetConnectionStateCache() {
         BluetoothAdapter.invalidateGetAdapterConnectionStateCache();
@@ -274,8 +279,8 @@ class AdapterProperties {
         invalidateIsOffloadedFilteringSupportedCache();
         invalidateGetConnectionStateCache();
         invalidateGetBondStateCache();
+        invalidateBluetoothGetConnectionStateCache();
     }
-     */
 
     @Override
     public Object clone() throws CloneNotSupportedException {
@@ -413,7 +418,7 @@ class AdapterProperties {
      */
     void setConnectionState(int connectionState) {
         mConnectionState = connectionState;
-        //invalidateGetConnectionStateCache();
+        invalidateGetConnectionStateCache();
     }
 
     /**
@@ -424,7 +429,7 @@ class AdapterProperties {
     }
 
     /**
-     * @param mState the mState to set
+     * @param state the mState to set
      */
     void setState(int state) {
         debugLog("Setting state to " + BluetoothAdapter.nameForState(state));
@@ -598,8 +603,8 @@ class AdapterProperties {
      * @param codec the codecs to set
      * @param size the size to set
      */
-    boolean setBufferLengthMillis(int codec, int value) {
-        return mService.setBufferLengthMillisNative(codec, value);
+    boolean setBufferLengthMillis(int codec, int size) {
+        return mService.setBufferLengthMillisNative(codec, size);
     }
 
     /**
@@ -647,7 +652,7 @@ class AdapterProperties {
                     debugLog("Failed to remove device: " + device);
                 }
             }
-            //invalidateGetBondStateCache();
+            invalidateGetBondStateCache();
         } catch (Exception ee) {
             Log.w(TAG, "onBondStateChanged: Exception ", ee);
         }
@@ -683,16 +688,21 @@ class AdapterProperties {
         return mDiscovering;
     }
 
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     private void sendConnectionStateChange(int profile, Intent connIntent) {
         BluetoothDevice device = connIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         int prevState = connIntent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
         int state = connIntent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
+        if (state == BluetoothProfile.STATE_CONNECTING) {
+            BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
+                    mService.getMetricId(device), device.getName());
+        }
         Log.d(TAG,
                 "PROFILE_CONNECTION_STATE_CHANGE: profile=" + profile + ", device=" + device + ", "
                         + prevState + " -> " + state);
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_CONNECTION_STATE_CHANGED, state,
                 0 /* deprecated */, profile, mService.obfuscateAddress(device),
-                mService.getMetricId(device));
+                mService.getMetricId(device), 0);
 
         if (!isNormalStateTransition(prevState, state)) {
             Log.w(TAG,
@@ -702,6 +712,7 @@ class AdapterProperties {
         sendConnectionStateChange(device, profile, state, prevState);
     }
 
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     void sendConnectionStateChange(BluetoothDevice device, int profile, int state, int prevState) {
         if (!validateProfileConnectionState(state) || !validateProfileConnectionState(prevState)) {
             // Previously, an invalid state was broadcast anyway,
@@ -876,10 +887,11 @@ class AdapterProperties {
 
         if (update) {
             mProfileConnectionState.put(profile, new Pair<Integer, Integer>(newHashState, numDev));
-            //invalidateGetProfileConnectionStateCache();
+            invalidateGetProfileConnectionStateCache();
         }
     }
 
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     void adapterPropertyChangedCallback(int[] types, byte[][] values) {
         Intent intent;
         int type;
@@ -950,8 +962,7 @@ class AdapterProperties {
 
                     case AbstractionLayer.BT_PROPERTY_LOCAL_LE_FEATURES:
                         updateFeatureSupport(val);
-                        mService.updateLeAudioProfileServiceState(
-                                mIsLeConnectedIsochronousStreamCentralSupported);
+                        mService.updateLeAudioProfileServiceState();
                         break;
 
                     case AbstractionLayer.BT_PROPERTY_DYNAMIC_AUDIO_BUFFER:
@@ -1028,7 +1039,7 @@ class AdapterProperties {
                 + mIsLeIsochronousBroadcasterSupported
                 + " mIsLePeriodicAdvertisingSyncTransferRecipientSupported = "
                 + mIsLePeriodicAdvertisingSyncTransferRecipientSupported);
-        //invalidateIsOffloadedFilteringSupportedCache();
+        invalidateIsOffloadedFilteringSupportedCache();
     }
 
     private void updateDynamicAudioBufferSupport(byte[] val) {
@@ -1061,7 +1072,7 @@ class AdapterProperties {
             // Reset adapter and profile connection states
             setConnectionState(BluetoothAdapter.STATE_DISCONNECTED);
             mProfileConnectionState.clear();
-            //invalidateGetProfileConnectionStateCache();
+            invalidateGetProfileConnectionStateCache();
             mProfilesConnected = 0;
             mProfilesConnecting = 0;
             mProfilesDisconnecting = 0;
@@ -1100,6 +1111,7 @@ class AdapterProperties {
         }
     }
 
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         writer.println(TAG);
         writer.println("  " + "Name: " + getName());

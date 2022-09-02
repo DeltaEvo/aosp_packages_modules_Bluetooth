@@ -397,8 +397,6 @@ typedef struct {
 #define L2CAP_GET_PRIORITY_QUOTA(pri) \
   ((L2CAP_NUM_CHNL_PRIORITY - (pri)) * L2CAP_CHNL_PRIORITY_WEIGHT)
 
-#define L2CAP_CREDIT_BASED_MAX_CIDS 5
-
 /* CCBs within the same LCB are served in round robin with priority It will make
  * sure that low priority channel (for example, HF signaling on RFCOMM) can be
  * sent to the headset even if higher priority channel (for example, AV media
@@ -478,8 +476,6 @@ typedef struct t_l2c_linkcb {
       sent_not_acked = 0;
   }
 
-  bool partial_segment_being_sent; /* Set true when a partial segment */
-                                   /* is being sent. */
   bool w4_info_rsp;                /* true when info request is active */
   uint32_t peer_ext_fea;           /* Peer's extended features mask */
   list_t* link_xmit_data_q;        /* Link transmit data buffer queue */

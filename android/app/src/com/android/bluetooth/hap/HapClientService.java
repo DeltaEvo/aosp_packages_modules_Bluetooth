@@ -42,14 +42,15 @@ import android.os.HandlerThread;
 import android.os.ParcelUuid;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
+import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
-import com.android.bluetooth.le_audio.LeAudioService;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.SynchronousResultReceiver;
 
@@ -79,6 +80,7 @@ public class HapClientService extends ProfileService {
     @VisibleForTesting
     HapClientNativeInterface mHapClientNativeInterface;
     private AdapterService mAdapterService;
+    private DatabaseManager mDatabaseManager;
     private HandlerThread mStateMachinesThread;
     private BroadcastReceiver mBondStateChangedReceiver;
     private BroadcastReceiver mConnectionStateChangedReceiver;
@@ -93,6 +95,10 @@ public class HapClientService extends ProfileService {
 
     @VisibleForTesting
     ServiceFactory mFactory = new ServiceFactory();
+
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileHapClientEnabled().orElse(false);
+    }
 
     private static synchronized void setHapClient(HapClientService instance) {
         if (DBG) {
@@ -147,10 +153,12 @@ public class HapClientService extends ProfileService {
             throw new IllegalStateException("start() called twice");
         }
 
-        // Get AdapterService, HapClientNativeInterface, AudioManager.
+        // Get AdapterService, HapClientNativeInterface, DatabaseManager, AudioManager.
         // None of them can be null.
         mAdapterService = Objects.requireNonNull(AdapterService.getAdapterService(),
                 "AdapterService cannot be null when HapClientService starts");
+        mDatabaseManager = Objects.requireNonNull(mAdapterService.getDatabase(),
+                "DatabaseManager cannot be null when HapClientService starts");
         mHapClientNativeInterface = Objects.requireNonNull(
                 HapClientNativeInterface.getInstance(),
                 "HapClientNativeInterface cannot be null when HapClientService starts");
@@ -168,7 +176,7 @@ public class HapClientService extends ProfileService {
         filter = new IntentFilter();
         filter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         mConnectionStateChangedReceiver = new ConnectionStateChangedReceiver();
-        registerReceiver(mConnectionStateChangedReceiver, filter);
+        registerReceiver(mConnectionStateChangedReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
 
         mCallbacks = new RemoteCallbackList<IBluetoothHapClientCallback>();
 
@@ -364,8 +372,7 @@ public class HapClientService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
         }
-        mAdapterService.getDatabase()
-                .setProfileConnectionPolicy(device, BluetoothProfile.HAP_CLIENT,
+        mDatabaseManager.setProfileConnectionPolicy(device, BluetoothProfile.HAP_CLIENT,
                         connectionPolicy);
         if (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
             connect(device);
@@ -388,8 +395,7 @@ public class HapClientService extends ProfileService {
      * @hide
      */
     public int getConnectionPolicy(BluetoothDevice device) {
-        return mAdapterService.getDatabase()
-                .getProfileConnectionPolicy(device, BluetoothProfile.HAP_CLIENT);
+        return mDatabaseManager.getProfileConnectionPolicy(device, BluetoothProfile.HAP_CLIENT);
     }
 
     /**
@@ -616,22 +622,21 @@ public class HapClientService extends ProfileService {
      * @param presetIndex is an index of one of the available presets
      */
     public void selectPresetForGroup(int groupId, int presetIndex) {
-        int status = BluetoothStatusCodes.ERROR_UNKNOWN;
+        int status = BluetoothStatusCodes.SUCCESS;
 
-        if ((presetIndex == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE)
-                || (groupId == BluetoothCsipSetCoordinator.GROUP_ID_INVALID)) {
-            if (presetIndex == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) {
-                status = BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX;
-            } else {
-                status = BluetoothStatusCodes.ERROR_CSIP_INVALID_GROUP_ID;
-            }
+        if (!isGroupIdValid(groupId)) {
+            status = BluetoothStatusCodes.ERROR_CSIP_INVALID_GROUP_ID;
+        } else if (!isPresetIndexValid(groupId, presetIndex)) {
+            status = BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX;
+        }
 
+        if (status != BluetoothStatusCodes.SUCCESS) {
             if (mCallbacks != null) {
                 int n = mCallbacks.beginBroadcast();
                 for (int i = 0; i < n; i++) {
                     try {
-                        mCallbacks.getBroadcastItem(i).onPresetSelectionForGroupFailed(groupId,
-                                BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX);
+                        mCallbacks.getBroadcastItem(i)
+                                .onPresetSelectionForGroupFailed(groupId, status);
                     } catch (RemoteException e) {
                         continue;
                     }
@@ -691,6 +696,12 @@ public class HapClientService extends ProfileService {
         BluetoothHapPresetInfo defaultValue = null;
         if (presetIndex == BluetoothHapClient.PRESET_INDEX_UNAVAILABLE) return defaultValue;
 
+        if (Utils.isPtsTestMode()) {
+            /* We want native to be called for PTS testing even we have all
+             * the data in the cache here
+             */
+            mHapClientNativeInterface.getPresetInfo(device, presetIndex);
+        }
         List<BluetoothHapPresetInfo> current_presets = mPresetsMap.get(device);
         if (current_presets != null) {
             for (BluetoothHapPresetInfo preset : current_presets) {
@@ -895,6 +906,8 @@ public class HapClientService extends ProfileService {
 
     private boolean isPresetIndexValid(int groupId, int presetIndex) {
         List<BluetoothDevice> all_group_devices = getGroupDevices(groupId);
+        if (all_group_devices.isEmpty()) return false;
+
         for (BluetoothDevice device : all_group_devices) {
             if (!isPresetIndexValid(device, presetIndex)) return false;
         }
@@ -910,7 +923,7 @@ public class HapClientService extends ProfileService {
             List<Integer> groups = csipClient.getAllGroupIds(BluetoothUuid.CAP);
             return groups.contains(groupId);
         }
-        return true;
+        return false;
     }
 
     /**
@@ -954,8 +967,7 @@ public class HapClientService extends ProfileService {
 
         if (!isGroupIdValid(groupId)) {
             status = BluetoothStatusCodes.ERROR_CSIP_INVALID_GROUP_ID;
-        }
-        if (!isPresetIndexValid(groupId, presetIndex)) {
+        } else if (!isPresetIndexValid(groupId, presetIndex)) {
             status = BluetoothStatusCodes.ERROR_HAP_INVALID_PRESET_INDEX;
         }
         if (status != BluetoothStatusCodes.SUCCESS) {
@@ -1042,11 +1054,10 @@ public class HapClientService extends ProfileService {
     private List<BluetoothDevice> getGroupDevices(int groupId) {
         List<BluetoothDevice> devices = new ArrayList<>();
 
-        // TODO: Fix missing CSIS service API to decouple from LeAudioService
-        LeAudioService le_audio_service = mFactory.getLeAudioService();
-        if (le_audio_service != null) {
+        CsipSetCoordinatorService csipClient = mFactory.getCsipSetCoordinatorService();
+        if (csipClient != null) {
             if (groupId != BluetoothLeAudio.GROUP_ID_INVALID) {
-                devices = le_audio_service.getGroupDevices(groupId);
+                devices = csipClient.getGroupDevicesOrdered(groupId);
             }
         }
         return devices;

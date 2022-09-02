@@ -43,6 +43,11 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
                                    public LeAudioClientCallbacks {
   ~LeAudioClientInterfaceImpl() = default;
 
+  void OnInitialized(void) {
+    do_in_jni_thread(FROM_HERE, Bind(&LeAudioClientCallbacks::OnInitialized,
+                                     Unretained(callbacks)));
+  }
+
   void OnConnectionState(ConnectionState state,
                          const RawAddress& address) override {
     do_in_jni_thread(FROM_HERE, Bind(&LeAudioClientCallbacks::OnConnectionState,
@@ -106,7 +111,7 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
     this->callbacks = callbacks;
 
     for (auto codec : offloading_preference) {
-      LOG_DEBUG("supported codec: %s", codec.ToString().c_str());
+      LOG_INFO("supported codec: %s", codec.ToString().c_str());
     }
 
     LeAudioClient::InitializeAudioSetConfigurationProvider();
@@ -151,8 +156,6 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
     do_in_main_thread(FROM_HERE,
                       Bind(&LeAudioClient::Disconnect,
                            Unretained(LeAudioClient::Get()), address));
-    do_in_jni_thread(
-        FROM_HERE, Bind(&btif_storage_set_leaudio_autoconnect, address, false));
   }
 
   void GroupAddNode(const int group_id, const RawAddress& address) override {
@@ -186,6 +189,14 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
                       Bind(&LeAudioClient::SetCodecConfigPreference,
                            Unretained(LeAudioClient::Get()), group_id,
                            input_codec_config, output_codec_config));
+  }
+
+  void SetCcidInformation(int ccid, int context_type) {
+    DVLOG(2) << __func__ << " ccid: " << ccid << " context_type"
+             << context_type;
+    do_in_main_thread(
+        FROM_HERE, Bind(&LeAudioClient::SetCcidInformation,
+                        Unretained(LeAudioClient::Get()), ccid, context_type));
   }
 
  private:

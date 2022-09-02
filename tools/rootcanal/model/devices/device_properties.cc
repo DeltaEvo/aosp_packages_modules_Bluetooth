@@ -51,9 +51,9 @@ DeviceProperties::DeviceProperties(const std::string& file_name)
       sco_data_packet_size_(255),
       num_acl_data_packets_(10),
       num_sco_data_packets_(10),
-      version_(static_cast<uint8_t>(bluetooth::hci::HciVersion::V_4_1)),
+      version_(static_cast<uint8_t>(bluetooth::hci::HciVersion::V_5_3)),
       revision_(0),
-      lmp_pal_version_(static_cast<uint8_t>(bluetooth::hci::LmpVersion::V_4_1)),
+      lmp_pal_version_(static_cast<uint8_t>(bluetooth::hci::LmpVersion::V_5_3)),
       manufacturer_name_(0),
       lmp_pal_subversion_(0),
       le_data_packet_length_(27),
@@ -74,7 +74,6 @@ DeviceProperties::DeviceProperties(const std::string& file_name)
   // Use SetSupportedComands() to change what's supported.
   for (int i = 35; i < 64; i++) supported_commands_[i] = 0x00;
 
-  le_supported_features_ = 0x1f;
   le_supported_states_ = 0x3ffffffffff;
   le_vendor_cap_ = {};
 
@@ -120,6 +119,25 @@ DeviceProperties::DeviceProperties(const std::string& file_name)
                &le_connect_list_ignore_reasons_);
   ParseUint16t(root["LeResolvingListIgnoreReasons"],
                &le_resolving_list_ignore_reasons_);
+}
+
+bool DeviceProperties::SetLeHostFeature(uint8_t bit_number, uint8_t bit_value) {
+  if (bit_number >= 64 || bit_value > 1) return false;
+
+  uint64_t bit_mask = UINT64_C(1) << bit_number;
+  if (bit_mask !=
+          static_cast<uint64_t>(
+              LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_HOST_SUPPORT) &&
+      bit_mask != static_cast<uint64_t>(
+                      LLFeaturesBits::CONNECTION_SUBRATING_HOST_SUPPORT))
+    return false;
+
+  if (bit_value == 0)
+    le_supported_features_ &= ~bit_mask;
+  else if (bit_value == 1)
+    le_supported_features_ |= bit_mask;
+
+  return true;
 }
 
 }  // namespace rootcanal
