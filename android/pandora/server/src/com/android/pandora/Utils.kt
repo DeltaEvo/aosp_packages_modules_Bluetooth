@@ -97,15 +97,13 @@ fun <T> grpcUnary(
   scope: CoroutineScope,
   responseObserver: StreamObserver<T>,
   timeout: Long = 60,
-  block: suspend () -> T
+  block: suspend CoroutineScope.() -> T
 ): Job {
   return scope.launch {
     try {
-      withTimeout(timeout * 1000) {
-        val response = block()
-        responseObserver.onNext(response)
-        responseObserver.onCompleted()
-      }
+      val response = withTimeout(timeout * 1000, block)
+      responseObserver.onNext(response)
+      responseObserver.onCompleted()
     } catch (e: Throwable) {
       e.printStackTrace()
       responseObserver.onError(e)
@@ -173,7 +171,7 @@ fun <T, U> grpcBidirectionalStream(
     }
 
     override fun onCompleted() {
-      // no-op
+      job.cancel()
     }
 
     override fun onError(e: Throwable) {
