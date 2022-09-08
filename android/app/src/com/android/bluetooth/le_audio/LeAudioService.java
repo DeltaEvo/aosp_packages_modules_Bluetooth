@@ -1645,6 +1645,8 @@ public class LeAudioService extends ProfileService {
 
             final String action = intent.getAction();
             if (action.equals(AudioManager.RINGER_MODE_CHANGED_ACTION)) {
+                if (!Utils.isPtsTestMode()) return;
+
                 int ringerMode = intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, -1);
 
                 if (ringerMode < 0 || ringerMode == mStoredRingerMode) return;
@@ -1706,6 +1708,18 @@ public class LeAudioService extends ProfileService {
         }
         return mDeviceAudioLocationMap.getOrDefault(device,
                 BluetoothLeAudio.AUDIO_LOCATION_INVALID);
+    }
+
+    /**
+     * Set In Call state
+     * @param inCall True if device in call (any state), false otherwise.
+     */
+    public void setInCall(boolean inCall) {
+        if (!mLeAudioNativeIsInitialized) {
+            Log.e(TAG, "Le Audio not initialized properly.");
+            return;
+        }
+        mLeAudioNativeInterface.setInCall(inCall);
     }
 
     /**
@@ -2394,6 +2408,25 @@ public class LeAudioService extends ProfileService {
                 enforceBluetoothPrivilegedPermission(service);
                 result = service.groupAddNode(group_id, device);
                 receiver.send(result);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        @Override
+        public void setInCall(boolean inCall, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                Objects.requireNonNull(source, "source cannot be null");
+                Objects.requireNonNull(receiver, "receiver cannot be null");
+
+                LeAudioService service = getService(source);
+                if (service == null) {
+                    throw new IllegalStateException("service is null");
+                }
+                enforceBluetoothPrivilegedPermission(service);
+                service.setInCall(inCall);
+                receiver.send(null);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }

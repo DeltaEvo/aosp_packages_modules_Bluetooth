@@ -8,7 +8,10 @@ use bt_topshim::btif::{
 };
 use bt_topshim::{
     metrics,
-    profiles::hid_host::{HHCallbacksDispatcher, HidHost},
+    profiles::hid_host::{
+        BthhConnectionState, BthhHidInfo, BthhProtocolMode, BthhStatus, HHCallbacks,
+        HHCallbacksDispatcher, HidHost,
+    },
     profiles::sdp::{BtSdpRecord, Sdp, SdpCallbacks, SdpCallbacksDispatcher},
     topstack,
 };
@@ -478,8 +481,11 @@ impl Bluetooth {
     /// Check whether found devices are still fresh. If they're outside the
     /// freshness window, send a notification to clear the device from clients.
     pub(crate) fn trigger_freshness_check(&mut self) {
-        // Drop previous joinhandle
-        self.freshness_check = None;
+        if let Some(ref handle) = self.freshness_check {
+            // Abort and drop the previous JoinHandle.
+            handle.abort();
+            self.freshness_check = None;
+        }
 
         // A found device is considered fresh if:
         // * It was last seen less than |FOUND_DEVICE_FRESHNESS| ago.
@@ -624,6 +630,27 @@ pub(crate) trait BtifBluetoothCallbacks {
 
     #[btif_callback(LeRandCallback)]
     fn le_rand_cb(&mut self, random: u64);
+}
+
+#[btif_callbacks_dispatcher(Bluetooth, dispatch_hid_host_callbacks, HHCallbacks)]
+pub(crate) trait BtifHHCallbacks {
+    #[btif_callback(ConnectionState)]
+    fn connection_state(&mut self, address: RawAddress, state: BthhConnectionState);
+
+    #[btif_callback(HidInfo)]
+    fn hid_info(&mut self, address: RawAddress, info: BthhHidInfo);
+
+    #[btif_callback(ProtocolMode)]
+    fn protocol_mode(&mut self, address: RawAddress, status: BthhStatus, mode: BthhProtocolMode);
+
+    #[btif_callback(IdleTime)]
+    fn idle_time(&mut self, address: RawAddress, status: BthhStatus, idle_rate: i32);
+
+    #[btif_callback(GetReport)]
+    fn get_report(&mut self, address: RawAddress, status: BthhStatus, data: Vec<u8>, size: i32);
+
+    #[btif_callback(Handshake)]
+    fn handshake(&mut self, address: RawAddress, status: BthhStatus);
 }
 
 #[btif_callbacks_dispatcher(Bluetooth, dispatch_sdp_callbacks, SdpCallbacks)]
@@ -1537,7 +1564,7 @@ impl IBluetooth for Bluetooth {
                                 self.hh.as_ref().unwrap().disconnect(&mut addr.unwrap());
                             }
 
-                            Profile::A2dpSink | Profile::A2dpSource => {
+                            Profile::A2dpSink | Profile::A2dpSource | Profile::Hfp => {
                                 let txl = self.tx.clone();
                                 let address = device.address.clone();
                                 topstack::get_runtime().spawn(async move {
@@ -1573,6 +1600,41 @@ impl BtifSdpCallbacks for Bluetooth {
             "Sdp search result found: Status({:?}) Address({:?}) Uuid({:?})",
             status, address, uuid
         );
+    }
+}
+
+impl BtifHHCallbacks for Bluetooth {
+    fn connection_state(&mut self, address: RawAddress, state: BthhConnectionState) {
+        debug!("Hid host connection state updated: Address({:?}) State({:?})", address, state);
+    }
+
+    fn hid_info(&mut self, address: RawAddress, info: BthhHidInfo) {
+        debug!("Hid host info updated: Address({:?}) Info({:?})", address, info);
+    }
+
+    fn protocol_mode(&mut self, address: RawAddress, status: BthhStatus, mode: BthhProtocolMode) {
+        debug!(
+            "Hid host protocol mode updated: Address({:?}) Status({:?}) Mode({:?})",
+            address, status, mode
+        );
+    }
+
+    fn idle_time(&mut self, address: RawAddress, status: BthhStatus, idle_rate: i32) {
+        debug!(
+            "Hid host idle time updated: Address({:?}) Status({:?}) Idle Rate({:?})",
+            address, status, idle_rate
+        );
+    }
+
+    fn get_report(&mut self, address: RawAddress, status: BthhStatus, _data: Vec<u8>, size: i32) {
+        debug!(
+            "Hid host got report: Address({:?}) Status({:?}) Report Size({:?})",
+            address, status, size
+        );
+    }
+
+    fn handshake(&mut self, address: RawAddress, status: BthhStatus) {
+        debug!("Hid host handshake: Address({:?}) Status({:?})", address, status);
     }
 }
 
