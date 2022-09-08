@@ -67,7 +67,6 @@ cc_library_shared {
     static_libs: [
         "libbluetooth-types",
         "libbluetooth",
-        "libc++fs",
     ],
     cflags: [
         "-Wall",

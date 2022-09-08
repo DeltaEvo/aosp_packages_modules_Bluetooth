@@ -312,8 +312,14 @@ void btgattc_write_characteristic_cb(int conn_id, int status, uint16_t handle,
   if (!sCallbackEnv.valid()) return;
 
   ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(), NULL);
-  jb.reset(sCallbackEnv->NewByteArray(len));
-  sCallbackEnv->SetByteArrayRegion(jb.get(), 0, len, (jbyte*)value);
+  if (status == 0) {  // Success
+    jb.reset(sCallbackEnv->NewByteArray(len));
+    sCallbackEnv->SetByteArrayRegion(jb.get(), 0, len, (jbyte*)value);
+  } else {
+    uint8_t value = 0;
+    jb.reset(sCallbackEnv->NewByteArray(1));
+    sCallbackEnv->SetByteArrayRegion(jb.get(), 0, 1, (jbyte*)&value);
+  }
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onWriteCharacteristic,
                                conn_id, status, handle, jb.get());
 }
@@ -350,8 +356,14 @@ void btgattc_write_descriptor_cb(int conn_id, int status, uint16_t handle,
   if (!sCallbackEnv.valid()) return;
 
   ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(), NULL);
-  jb.reset(sCallbackEnv->NewByteArray(len));
-  sCallbackEnv->SetByteArrayRegion(jb.get(), 0, len, (jbyte*)value);
+  if (status == 0) {  // Success
+    jb.reset(sCallbackEnv->NewByteArray(len));
+    sCallbackEnv->SetByteArrayRegion(jb.get(), 0, len, (jbyte*)value);
+  } else {
+    uint8_t value = 0;
+    jb.reset(sCallbackEnv->NewByteArray(1));
+    sCallbackEnv->SetByteArrayRegion(jb.get(), 0, 1, (jbyte*)&value);
+  }
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onWriteDescriptor, conn_id,
                                status, handle, jb.get());
 }

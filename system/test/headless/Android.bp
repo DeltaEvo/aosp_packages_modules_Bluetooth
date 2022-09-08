@@ -61,7 +61,6 @@ cc_test {
         "libbt_shim_ffi",
         "libbt-stack",
         "libbt-utils",
-        "libc++fs",
         "libflatbuffers-cpp",
         "libFraunhoferAAC",
         "libg722codec",

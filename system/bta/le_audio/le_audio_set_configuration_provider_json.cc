@@ -40,16 +40,15 @@ using ::le_audio::CodecManager;
 #ifdef OS_ANDROID
 static const std::vector<
     std::pair<const char* /*schema*/, const char* /*content*/>>
-    kLeAudioSetConfigs = {
-        {"/apex/com.android.btservices/etc/bluetooth/le_audio/"
-         "audio_set_configurations.bfbs",
-         "/apex/com.android.btservices/etc/bluetooth/le_audio/"
-         "audio_set_configurations.json"}};
+    kLeAudioSetConfigs = {{"/apex/com.android.bluetooth/etc/bluetooth/le_audio/"
+                           "audio_set_configurations.bfbs",
+                           "/apex/com.android.bluetooth/etc/bluetooth/le_audio/"
+                           "audio_set_configurations.json"}};
 static const std::vector<
     std::pair<const char* /*schema*/, const char* /*content*/>>
-    kLeAudioSetScenarios = {{"/apex/com.android.btservices/etc/bluetooth/"
+    kLeAudioSetScenarios = {{"/apex/com.android.bluetooth/etc/bluetooth/"
                              "le_audio/audio_set_scenarios.bfbs",
-                             "/apex/com.android.btservices/etc/bluetooth/"
+                             "/apex/com.android.bluetooth/etc/bluetooth/"
                              "le_audio/audio_set_scenarios.json"}};
 #else
 static const std::vector<
