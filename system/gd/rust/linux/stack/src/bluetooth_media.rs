@@ -45,8 +45,14 @@ pub trait IBluetoothMedia {
     fn cleanup(&mut self) -> bool;
 
     fn connect(&mut self, address: String);
-    fn set_active_device(&mut self, address: String);
     fn disconnect(&mut self, address: String);
+
+    // Set the device as the active A2DP device
+    fn set_active_device(&mut self, address: String);
+
+    // Set the device as the active HFP device
+    fn set_hfp_active_device(&mut self, address: String);
+
     fn set_audio_config(
         &mut self,
         sample_rate: i32,
@@ -73,7 +79,7 @@ pub trait IBluetoothMedia {
 
     fn get_presentation_position(&mut self) -> PresentationPosition;
 
-    fn start_sco_call(&mut self, address: String);
+    fn start_sco_call(&mut self, address: String, sco_offload: bool);
     fn stop_sco_call(&mut self, address: String);
 }
 
@@ -608,22 +614,6 @@ impl IBluetoothMedia for BluetoothMedia {
         true
     }
 
-    fn set_active_device(&mut self, address: String) {
-        let addr = match RawAddress::from_string(address.clone()) {
-            None => {
-                warn!("Invalid device address {}", address);
-                return;
-            }
-            Some(addr) => addr,
-        };
-
-        match self.a2dp.as_mut() {
-            Some(a2dp) => a2dp.set_active_device(addr),
-            None => warn!("Uninitialized A2DP to set active device"),
-        }
-        self.uinput.set_active_device(addr.to_string());
-    }
-
     fn disconnect(&mut self, address: String) {
         let addr = match RawAddress::from_string(address.clone()) {
             None => {
@@ -647,6 +637,39 @@ impl IBluetoothMedia for BluetoothMedia {
             Some(avrcp) => avrcp.disconnect(addr),
             None => warn!("Uninitialized AVRCP to disconnect {}", address),
         };
+    }
+
+    fn set_active_device(&mut self, address: String) {
+        let addr = match RawAddress::from_string(address.clone()) {
+            None => {
+                warn!("Invalid device address {}", address);
+                return;
+            }
+            Some(addr) => addr,
+        };
+
+        match self.a2dp.as_mut() {
+            Some(a2dp) => a2dp.set_active_device(addr),
+            None => warn!("Uninitialized A2DP to set active device"),
+        }
+        self.uinput.set_active_device(addr.to_string());
+    }
+
+    fn set_hfp_active_device(&mut self, address: String) {
+        let addr = match RawAddress::from_string(address.clone()) {
+            None => {
+                warn!("Invalid device address {}", address);
+                return;
+            }
+            Some(addr) => addr,
+        };
+
+        match self.hfp.as_mut() {
+            Some(hfp) => {
+                hfp.set_active_device(addr);
+            }
+            None => warn!("Uninitialized HFP to set active device"),
+        }
     }
 
     fn set_audio_config(
@@ -734,7 +757,7 @@ impl IBluetoothMedia for BluetoothMedia {
         };
     }
 
-    fn start_sco_call(&mut self, address: String) {
+    fn start_sco_call(&mut self, address: String, sco_offload: bool) {
         let addr = match RawAddress::from_string(address.clone()) {
             None => {
                 warn!("Can't start sco call with: {}", address);
@@ -752,7 +775,7 @@ impl IBluetoothMedia for BluetoothMedia {
             Some(hfp) => hfp,
         };
 
-        match hfp.connect_audio(addr) {
+        match hfp.connect_audio(addr, sco_offload) {
             0 => {
                 info!("SCO connect_audio status success.");
             }
