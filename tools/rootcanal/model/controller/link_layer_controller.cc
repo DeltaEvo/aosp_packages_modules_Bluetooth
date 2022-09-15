@@ -741,7 +741,7 @@ void LinkLayerController::IncomingRemoteNameRequestResponse(
 
   if (IsEventUnmasked(EventCode::REMOTE_NAME_REQUEST_COMPLETE)) {
     send_event_(bluetooth::hci::RemoteNameRequestCompleteBuilder::Create(
-        ErrorCode::SUCCESS, packet.GetSourceAddress(), name_));
+        ErrorCode::SUCCESS, packet.GetSourceAddress(), view.GetName()));
   }
 }
 
@@ -2128,7 +2128,7 @@ void LinkLayerController::IncomingLeScanResponsePacket(
 
   if (le_scan_enable_ == bluetooth::hci::OpCode::LE_SET_EXTENDED_SCAN_ENABLE &&
       IsLeEventUnmasked(SubeventCode::EXTENDED_ADVERTISING_REPORT)) {
-    bluetooth::hci::LeExtendedAdvertisingResponse report{};
+    bluetooth::hci::LeExtendedAdvertisingResponseRaw report{};
     report.address_ = incoming.GetSourceAddress();
     report.address_type_ =
         static_cast<bluetooth::hci::DirectAdvertisingAddressType>(address_type);
@@ -2141,8 +2141,8 @@ void LinkLayerController::IncomingLeScanResponsePacket(
     report.tx_power_ = 0x7F;
     report.advertising_data_ = ad;
     report.rssi_ = rssi;
-    send_event_(
-        bluetooth::hci::LeExtendedAdvertisingReportBuilder::Create({report}));
+    send_event_(bluetooth::hci::LeExtendedAdvertisingReportRawBuilder::Create(
+        {report}));
   }
 }
 
@@ -2426,8 +2426,11 @@ AsyncTaskId LinkLayerController::ScheduleTask(milliseconds delay_ms,
                                               const TaskCallback& callback) {
   if (schedule_task_) {
     return schedule_task_(delay_ms, callback);
-  } else {
+  } else if (delay_ms == milliseconds::zero()) {
     callback();
+    return 0;
+  } else {
+    LOG_ERROR("Unable to schedule task on delay");
     return 0;
   }
 }
@@ -3327,7 +3330,7 @@ ErrorCode LinkLayerController::SetLeExtendedScanResponseData(
 
 ErrorCode LinkLayerController::SetLeExtendedAdvertisingParameters(
     uint8_t set, uint16_t interval_min, uint16_t interval_max,
-    bluetooth::hci::LegacyAdvertisingProperties type,
+    bluetooth::hci::LegacyAdvertisingEventProperties type,
     bluetooth::hci::OwnAddressType own_address_type,
     bluetooth::hci::PeerAddressType peer_address_type, Address peer,
     bluetooth::hci::AdvertisingFilterPolicy filter_policy, uint8_t tx_power) {
@@ -3347,20 +3350,20 @@ ErrorCode LinkLayerController::SetLeExtendedAdvertisingParameters(
 
   AddressWithType directed_address{};
   switch (type) {
-    case bluetooth::hci::LegacyAdvertisingProperties::ADV_IND:
+    case bluetooth::hci::LegacyAdvertisingEventProperties::ADV_IND:
       ad_type = model::packets::AdvertisementType::ADV_IND;
       break;
-    case bluetooth::hci::LegacyAdvertisingProperties::ADV_NONCONN_IND:
+    case bluetooth::hci::LegacyAdvertisingEventProperties::ADV_NONCONN_IND:
       ad_type = model::packets::AdvertisementType::ADV_NONCONN_IND;
       break;
-    case bluetooth::hci::LegacyAdvertisingProperties::ADV_SCAN_IND:
+    case bluetooth::hci::LegacyAdvertisingEventProperties::ADV_SCAN_IND:
       ad_type = model::packets::AdvertisementType::ADV_SCAN_IND;
       break;
-    case bluetooth::hci::LegacyAdvertisingProperties::ADV_DIRECT_IND_HIGH:
+    case bluetooth::hci::LegacyAdvertisingEventProperties::ADV_DIRECT_IND_HIGH:
       ad_type = model::packets::AdvertisementType::ADV_DIRECT_IND;
       directed_address = peer_address;
       break;
-    case bluetooth::hci::LegacyAdvertisingProperties::ADV_DIRECT_IND_LOW:
+    case bluetooth::hci::LegacyAdvertisingEventProperties::ADV_DIRECT_IND_LOW:
       ad_type = model::packets::AdvertisementType::SCAN_RESPONSE;
       directed_address = peer_address;
       break;
@@ -4214,8 +4217,7 @@ void LinkLayerController::CheckExpiringConnection(uint16_t handle) {
   }
 
   if (connections_.HasLinkExpired(handle)) {
-    connections_.Disconnect(handle);
-    SendDisconnectionCompleteEvent(handle, ErrorCode::CONNECTION_TIMEOUT);
+    Disconnect(handle, ErrorCode::CONNECTION_TIMEOUT);
     return;
   }
 
