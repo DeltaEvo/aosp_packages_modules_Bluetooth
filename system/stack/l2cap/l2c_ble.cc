@@ -26,6 +26,7 @@
 
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
+#include <log/log.h>
 
 #include "bt_target.h"
 #include "bta/include/bta_hearing_aid_api.h"
@@ -35,6 +36,7 @@
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
+#include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
@@ -522,6 +524,15 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
       /* Check how many channels remote side wants. */
       num_of_channels = (p_pkt_end - p) / sizeof(uint16_t);
+      if (num_of_channels > L2CAP_CREDIT_BASED_MAX_CIDS) {
+        android_errorWriteLog(0x534e4554, "232256974");
+        LOG_WARN("L2CAP - invalid number of channels requested: %d",
+                 num_of_channels);
+        l2cu_reject_credit_based_conn_req(p_lcb, id,
+                                          L2CAP_CREDIT_BASED_MAX_CIDS,
+                                          L2CAP_LE_RESULT_INVALID_PARAMETERS);
+        return;
+      }
 
       LOG_DEBUG(
           "Recv L2CAP_CMD_CREDIT_BASED_CONN_REQ with "
@@ -1576,7 +1587,9 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr,
 void L2CA_AdjustConnectionIntervals(uint16_t* min_interval,
                                     uint16_t* max_interval,
                                     uint16_t floor_interval) {
-  uint16_t phone_min_interval = floor_interval;
+  // Allow for customization by systemprops for mainline
+  uint16_t phone_min_interval = (uint16_t)osi_property_get_int32(
+      "bluetooth.core.gap.le.conn.min.limit", (int32_t)floor_interval);
 
   if (HearingAid::GetDeviceCount() > 0) {
     // When there are bonded Hearing Aid devices, we will constrained this

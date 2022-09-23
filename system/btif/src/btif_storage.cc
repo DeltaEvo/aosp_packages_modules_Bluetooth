@@ -896,6 +896,13 @@ bt_status_t btif_storage_remove_bonded_device(
 
   /* write bonded info immediately */
   btif_config_flush();
+
+  /* Check the length of the paired devices, and if 0 then reset IRK */
+  auto paired_devices = btif_config_get_paired_devices();
+  if (paired_devices.empty()) {
+    LOG_INFO("Last paired device removed, resetting IRK");
+    BTA_DmBleResetId();
+  }
   return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
 
@@ -945,6 +952,10 @@ static void remove_devices_with_sample_ltk() {
 void btif_storage_load_consolidate_devices(void) {
   btif_bonded_devices_t bonded_devices;
   btif_in_fetch_bonded_devices(&bonded_devices, 1);
+  std::unordered_set<RawAddress> bonded_addresses;
+  for (uint16_t i = 0; i < bonded_devices.num_devices; i++) {
+    bonded_addresses.insert(bonded_devices.devices[i]);
+  }
 
   std::vector<std::pair<RawAddress, RawAddress>> consolidated_devices;
   for (uint16_t i = 0; i < bonded_devices.num_devices; i++) {
@@ -953,7 +964,9 @@ void btif_storage_load_consolidate_devices(void) {
     if (btif_storage_get_ble_bonding_key(
             bonded_devices.devices[i], BTM_LE_KEY_PID, (uint8_t*)&key,
             sizeof(tBTM_LE_PID_KEYS)) == BT_STATUS_SUCCESS) {
-      if (bonded_devices.devices[i] != key.pid_key.identity_addr) {
+      if (bonded_devices.devices[i] != key.pid_key.identity_addr &&
+          bonded_addresses.find(key.pid_key.identity_addr) !=
+              bonded_addresses.end()) {
         LOG_INFO("found consolidated device %s %s",
                  bonded_devices.devices[i].ToString().c_str(),
                  key.pid_key.identity_addr.ToString().c_str());
@@ -1273,7 +1286,10 @@ bt_status_t btif_storage_add_ble_local_key(const Octet16& key,
       return BT_STATUS_FAIL;
   }
   int ret = btif_config_set_bin("Adapter", name, key.data(), key.size());
-  btif_config_save();
+  // Had to change this to flush to get it to work on test.
+  // Seems to work in the real world on a phone... but not sure why there's a
+  // race in test. Investigate b/239828132
+  btif_config_flush();
   return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
 
