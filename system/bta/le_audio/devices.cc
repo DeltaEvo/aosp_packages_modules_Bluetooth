@@ -189,6 +189,16 @@ void LeAudioDeviceGroup::Deactivate(void) {
   }
 }
 
+le_audio::types::CigState LeAudioDeviceGroup::GetCigState(void) {
+  return cig_state_;
+}
+
+void LeAudioDeviceGroup::SetCigState(le_audio::types::CigState state) {
+  LOG_VERBOSE("%s -> %s", bluetooth::common::ToString(cig_state_).c_str(),
+              bluetooth::common::ToString(state).c_str());
+  cig_state_ = state;
+}
+
 bool LeAudioDeviceGroup::Activate(LeAudioContextType context_type) {
   for (auto leAudioDevice : leAudioDevices_) {
     if (leAudioDevice.expired()) continue;
@@ -1694,6 +1704,11 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
 
   if (offloader_streams_target_allocation->size() == 0) {
     *is_initial = true;
+  } else if (*is_initial) {
+    // As multiple CISes phone call case, the target_allocation already have the
+    // previous data, but the is_initial flag not be cleared. We need to clear
+    // here to avoid make duplicated target allocation stream map.
+    offloader_streams_target_allocation->clear();
   }
 
   offloader_streams_current_allocation->clear();
@@ -1768,6 +1783,10 @@ bool LeAudioDeviceGroup::IsPendingConfiguration(void) {
 
 void LeAudioDeviceGroup::SetPendingConfiguration(void) {
   stream_conf.pending_configuration = true;
+}
+
+void LeAudioDeviceGroup::ClearPendingConfiguration(void) {
+  stream_conf.pending_configuration = false;
 }
 
 bool LeAudioDeviceGroup::IsConfigurationSupported(
