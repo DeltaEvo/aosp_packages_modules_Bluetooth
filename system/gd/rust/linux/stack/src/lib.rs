@@ -8,6 +8,7 @@ extern crate num_derive;
 
 pub mod battery_manager;
 pub mod battery_provider_manager;
+pub mod battery_service;
 pub mod bluetooth;
 pub mod bluetooth_adv;
 pub mod bluetooth_gatt;
@@ -22,7 +23,9 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::bluetooth::Bluetooth;
+use crate::battery_manager::BatteryManager;
+use crate::battery_service::{BatteryService, GattBatteryCallbacks};
+use crate::bluetooth::{Bluetooth, IBluetooth};
 use crate::bluetooth_gatt::BluetoothGatt;
 use crate::bluetooth_media::{BluetoothMedia, MediaActions};
 use crate::socket_manager::{BluetoothSocketManager, SocketActions};
@@ -39,6 +42,9 @@ use bt_topshim::{
 
 /// Message types that are sent to the stack main dispatch loop.
 pub enum Message {
+    // Shuts down the stack.
+    Shutdown,
+
     // Callbacks from libbluetooth
     A2dp(A2dpCallbacks),
     Avrcp(AvrcpCallbacks),
@@ -77,6 +83,11 @@ pub enum Message {
     SocketManagerActions(SocketActions),
     SocketManagerCallbackDisconnected(u32),
 
+    // Battery related
+    BatteryServiceCallbackDisconnected(u32),
+    BatteryServiceCallbacks(GattBatteryCallbacks),
+    BatteryManagerCallbackDisconnected(u32),
+
     GattClientCallbackDisconnected(u32),
 }
 
@@ -106,6 +117,8 @@ impl Stack {
         mut rx: Receiver<Message>,
         bluetooth: Arc<Mutex<Box<Bluetooth>>>,
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
+        battery_service: Arc<Mutex<Box<BatteryService>>>,
+        battery_manager: Arc<Mutex<Box<BatteryManager>>>,
         bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
         suspend: Arc<Mutex<Box<Suspend>>>,
         bluetooth_socketmgr: Arc<Mutex<Box<BluetoothSocketManager>>>,
@@ -119,6 +132,10 @@ impl Stack {
             }
 
             match m.unwrap() {
+                Message::Shutdown => {
+                    bluetooth.lock().unwrap().disable();
+                }
+
                 Message::A2dp(a) => {
                     bluetooth_media.lock().unwrap().dispatch_a2dp_callbacks(a);
                 }
@@ -209,6 +226,15 @@ impl Stack {
                 }
                 Message::SocketManagerCallbackDisconnected(id) => {
                     bluetooth_socketmgr.lock().unwrap().remove_callback(id);
+                }
+                Message::BatteryServiceCallbackDisconnected(id) => {
+                    battery_service.lock().unwrap().remove_callback(id);
+                }
+                Message::BatteryServiceCallbacks(callback) => {
+                    battery_service.lock().unwrap().handle_callback(callback);
+                }
+                Message::BatteryManagerCallbackDisconnected(id) => {
+                    battery_manager.lock().unwrap().remove_callback(id);
                 }
                 Message::GattClientCallbackDisconnected(id) => {
                     bluetooth_gatt.lock().unwrap().remove_client_callback(id);
