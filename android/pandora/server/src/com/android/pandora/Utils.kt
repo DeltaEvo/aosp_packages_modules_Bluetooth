@@ -29,6 +29,7 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.protobuf.ByteString
+import io.grpc.stub.ServerCallStreamObserver
 import io.grpc.stub.StreamObserver
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -52,6 +53,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import pandora.HostProto.Connection
+import pandora.HostProto.InternalConnectionRef
+import pandora.HostProto.Transport
 
 fun shell(cmd: String): String {
   val fd = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(cmd)
@@ -137,7 +140,6 @@ fun <T> grpcUnary(
  * Example usage:
  * ```
  * override fun grpcMethod(
- *   request: TypeOfRequest,
  *   responseObserver: StreamObserver<TypeOfResponse> {
  *     grpcBidirectionalStream(scope, responseObserver) {
  *       block
@@ -196,6 +198,56 @@ fun <T, U> grpcBidirectionalStream(
 }
 
 /**
+ * Creates a gRPC coroutine in a given coroutine scope which executes a given suspended function
+ * taking in a Flow of gRPC requests and returning a Flow of gRPC responses and sends it on a given
+ * gRPC stream observer.
+ *
+ * @param T the type of gRPC response.
+ * @param scope coroutine scope used to run the coroutine.
+ * @param responseObserver the gRPC stream observer on which to send the response.
+ * @param block the suspended function producing the response Flow.
+ * @return a StreamObserver for the incoming requests.
+ *
+ * Example usage:
+ * ```
+ * override fun grpcMethod(
+ *   request: TypeOfRequest,
+ *   responseObserver: StreamObserver<TypeOfResponse> {
+ *     grpcServerStream(scope, responseObserver) {
+ *       block
+ *     }
+ *   }
+ * }
+ * ```
+ */
+@kotlinx.coroutines.ExperimentalCoroutinesApi
+fun <T> grpcServerStream(
+  scope: CoroutineScope,
+  responseObserver: StreamObserver<T>,
+  block: CoroutineScope.() -> Flow<T>
+) {
+  val serverCallStreamObserver = responseObserver as ServerCallStreamObserver<T>
+
+  val job =
+    scope.launch {
+      block()
+        .onEach { responseObserver.onNext(it) }
+        .onCompletion { error ->
+          if (error == null) {
+            responseObserver.onCompleted()
+          }
+        }
+        .catch {
+          it.printStackTrace()
+          responseObserver.onError(it)
+        }
+        .launchIn(this)
+    }
+
+  serverCallStreamObserver.setOnCancelHandler { job.cancel() }
+}
+
+/**
  * Synchronous method to get a Bluetooth profile proxy.
  *
  * @param T the type of profile proxy (e.g. BluetoothA2dp)
@@ -230,11 +282,11 @@ fun <T> getProfileProxy(context: Context, profile: Int): T {
   if (proxy == null) {
     Log.w(TAG, "profile proxy $profile is null")
   }
-  return proxy as T
+  return proxy!! as T
 }
 
 fun Intent.getBluetoothDeviceExtra(): BluetoothDevice =
-  this.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+  this.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)!!
 
 fun ByteString.decodeAsMacAddressToString(): String =
   MacAddress.fromBytes(this.toByteArray()).toString().uppercase()
@@ -243,6 +295,24 @@ fun ByteString.toBluetoothDevice(adapter: BluetoothAdapter): BluetoothDevice =
   adapter.getRemoteDevice(this.decodeAsMacAddressToString())
 
 fun Connection.toBluetoothDevice(adapter: BluetoothAdapter): BluetoothDevice =
-  adapter.getRemoteDevice(this.cookie.toByteArray().decodeToString())
+  adapter.getRemoteDevice(address)
 
-fun BluetoothDevice.toByteArray(): ByteArray = MacAddress.fromString(this.address).toByteArray()
+val Connection.address: String
+  get() = InternalConnectionRef.parseFrom(this.cookie).address.decodeAsMacAddressToString()
+
+val Connection.transport: Transport
+  get() = InternalConnectionRef.parseFrom(this.cookie).transport
+
+fun newConnection(device: BluetoothDevice, transport: Transport) =
+  Connection.newBuilder()
+    .setCookie(
+      InternalConnectionRef.newBuilder()
+        .setAddress(device.toByteString())
+        .setTransport(transport)
+        .build()
+        .toByteString()
+    )
+    .build()!!
+
+fun BluetoothDevice.toByteString() =
+  ByteString.copyFrom(MacAddress.fromString(this.address).toByteArray())!!

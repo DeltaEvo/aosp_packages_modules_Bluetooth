@@ -285,9 +285,6 @@ ControllerProperties::ControllerProperties(const std::string& file_name)
   ParseUint(root, "ManufacturerName", company_identifier);
 
   ParseHex64(root["LeSupportedFeatures"], &le_features);
-  ParseUint(root, "LeConnectListIgnoreReasons", le_connect_list_ignore_reasons);
-  ParseUint(root, "LeResolvingListIgnoreReasons",
-            le_resolving_list_ignore_reasons);
 
   // Configuration options.
 
@@ -310,6 +307,7 @@ ControllerProperties::ControllerProperties(const std::string& file_name)
   ParseUint(root, "total_num_le_acl_data_packets ",
             total_num_le_acl_data_packets);
   ParseUint(root, "total_num_iso_data_packets ", total_num_iso_data_packets);
+  ParseUint(root, "num_supported_iac", num_supported_iac);
 
   ParseUintArray(root, "lmp_features", lmp_features);
   ParseUintVector(root, "supported_standard_codecs", supported_standard_codecs);

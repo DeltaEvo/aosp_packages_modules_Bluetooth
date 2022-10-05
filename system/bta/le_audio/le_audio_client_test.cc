@@ -148,6 +148,7 @@ bool get_pts_connect_eatt_before_encryption(void) { return false; }
 bool get_pts_unencrypt_broadcast(void) { return false; }
 bool get_pts_eatt_peripheral_collision_support(void) { return false; }
 bool get_pts_force_le_audio_multiple_contexts_metadata(void) { return false; }
+bool get_pts_le_audio_disable_ases_before_stopping(void) { return false; }
 config_t* get_all(void) { return nullptr; }
 
 stack_config_t mock_stack_config{
@@ -169,6 +170,8 @@ stack_config_t mock_stack_config{
         get_pts_eatt_peripheral_collision_support,
     .get_pts_force_le_audio_multiple_contexts_metadata =
         get_pts_force_le_audio_multiple_contexts_metadata,
+    .get_pts_le_audio_disable_ases_before_stopping =
+        get_pts_le_audio_disable_ases_before_stopping,
     .get_all = get_all,
 };
 const stack_config_t* stack_config_get_interface(void) {
@@ -677,8 +680,9 @@ class UnicastTestNoInit : public Test {
             return false;
           }
 
-          group->Configure(group->GetContextType(),
-                           static_cast<uint16_t>(group->GetContextType()), {});
+          group->Configure(
+              group->GetCurrentContextType(),
+              static_cast<uint16_t>(group->GetCurrentContextType()), {});
           if (!group->CigAssignCisIds(leAudioDevice)) return false;
           group->CigAssignCisConnHandlesToAses(leAudioDevice);
 
@@ -761,15 +765,6 @@ class UnicastTestNoInit : public Test {
                               types::LeAudioContextType context_type,
                               types::AudioContexts metadata_context_type,
                               std::vector<uint8_t> ccid_list) {
-          if (group->GetState() ==
-              types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-            if (group->GetContextType() != context_type) {
-              /* TODO: Switch context of group */
-              group->SetContextType(context_type);
-            }
-            return true;
-          }
-
           /* Do what ReleaseCisIds(group) does: start */
           LeAudioDevice* leAudioDevice = group->GetFirstDevice();
           while (leAudioDevice != nullptr) {
@@ -790,7 +785,6 @@ class UnicastTestNoInit : public Test {
           if (group->GetState() ==
               types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
             group->CigGenerateCisIds(context_type);
-            group->SetContextType(context_type);
 
             std::vector<uint16_t> conn_handles;
             for (uint8_t i = 0; i < (uint8_t)(group->cises_.size()); i++) {

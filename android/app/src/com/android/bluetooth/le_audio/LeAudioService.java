@@ -415,7 +415,7 @@ public class LeAudioService extends ProfileService {
         sLeAudioService = instance;
     }
 
-    private int getGroupVolume(int groupId) {
+    private int getAudioDeviceGroupVolume(int groupId) {
         if (mVolumeControlService == null) {
             mVolumeControlService = mServiceFactory.getVolumeControlService();
             if (mVolumeControlService == null) {
@@ -424,7 +424,7 @@ public class LeAudioService extends ProfileService {
             }
         }
 
-        return mVolumeControlService.getGroupVolume(groupId);
+        return mVolumeControlService.getAudioDeviceGroupVolume(groupId);
     }
 
     public boolean connect(BluetoothDevice device) {
@@ -926,7 +926,7 @@ public class LeAudioService extends ProfileService {
             }
             int volume = IBluetoothVolumeControl.VOLUME_CONTROL_UNKNOWN_VOLUME;
             if (mActiveAudioOutDevice != null) {
-                volume = getGroupVolume(groupId);
+                volume = getAudioDeviceGroupVolume(groupId);
             }
 
             mAudioManager.handleBluetoothActiveDeviceChanged(mActiveAudioOutDevice,
@@ -1076,7 +1076,7 @@ public class LeAudioService extends ProfileService {
             }
 
             if (DBG) {
-                Log.d(TAG, "connect(): " + device);
+                Log.d(TAG, "connect(): " + storedDevice);
             }
 
             synchronized (mStateMachines) {
@@ -1248,8 +1248,13 @@ public class LeAudioService extends ProfileService {
                                 break;
                             case LeAudioStackEvent.CONNECTION_STATE_CONNECTED:
                             case LeAudioStackEvent.CONNECTION_STATE_CONNECTING:
-                                if (descriptor != null) {
-                                    if (DBG) Log.d(TAG, "Removing from lost devices : " + device);
+                                if (descriptor != null
+                                        && Objects.equals(
+                                                descriptor.mLostLeadDeviceWhileStreaming,
+                                                device)) {
+                                    if (DBG) {
+                                        Log.d(TAG, "Removing from lost devices : " + device);
+                                    }
                                     descriptor.mLostLeadDeviceWhileStreaming = null;
                                     /* Try to connect other devices from the group */
                                     connectSet(device);
@@ -1928,6 +1933,13 @@ public class LeAudioService extends ProfileService {
     }
 
     private void notifyGroupNodeAdded(BluetoothDevice device, int groupId) {
+        if (mVolumeControlService == null) {
+            mVolumeControlService = mServiceFactory.getVolumeControlService();
+        }
+        if (mVolumeControlService != null) {
+            mVolumeControlService.handleGroupNodeAdded(groupId, device);
+        }
+
         if (mLeAudioCallbacks != null) {
             int n = mLeAudioCallbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
