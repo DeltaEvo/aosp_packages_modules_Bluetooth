@@ -177,11 +177,13 @@ init_flags!(
         gd_core,
         gd_l2cap,
         gd_link_policy,
+        gd_remote_name_request,
         gd_rust,
         gd_security,
         hci_adapter: i32,
         irk_rotation,
         logging_debug_enabled_for_all,
+        pass_phy_update_callback = true,
         sdp_serialization = true,
     }
     // extra_fields are not a 1 to 1 match with "INIT_*" flags

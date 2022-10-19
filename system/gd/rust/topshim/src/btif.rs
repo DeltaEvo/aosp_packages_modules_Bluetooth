@@ -258,6 +258,12 @@ impl Into<u32> for BtStatus {
     }
 }
 
+impl Into<i32> for BtStatus {
+    fn into(self) -> i32 {
+        self.to_i32().unwrap_or_default()
+    }
+}
+
 impl From<bindings::bt_bdname_t> for String {
     fn from(item: bindings::bt_bdname_t) -> Self {
         ascii_to_string(&item.name, item.name.len())
@@ -341,20 +347,26 @@ impl TryFrom<Vec<u8>> for Uuid {
         match value.len() {
             2 => {
                 uu[2..4].copy_from_slice(&value[0..2]);
-                Ok(Uuid { uu })
+                Ok(Uuid::from(uu))
             }
             4 => {
                 uu[0..4].copy_from_slice(&value[0..4]);
-                Ok(Uuid { uu })
+                Ok(Uuid::from(uu))
             }
             16 => {
                 uu.copy_from_slice(&value[0..16]);
-                Ok(Uuid { uu })
+                Ok(Uuid::from(uu))
             }
             _ => {
                 Err("Vector size must be exactly 2 (16 bit UUID), 4 (32 bit UUID), or 16 (128 bit UUID).")
             }
         }
+    }
+}
+
+impl From<[u8; 16]> for Uuid {
+    fn from(value: [u8; 16]) -> Self {
+        Self { uu: value }
     }
 }
 
@@ -365,9 +377,14 @@ impl Hash for Uuid {
 }
 
 impl Uuid {
+    /// Creates a Uuid from little endian slice of bytes
+    pub fn try_from_little_endian(value: &[u8]) -> std::result::Result<Uuid, &'static str> {
+        Uuid::try_from(value.iter().rev().cloned().collect::<Vec<u8>>())
+    }
+
     /// Formats this UUID to a human-readable representation.
     pub fn format(uuid: &Uuid128Bit, f: &mut Formatter) -> Result {
-        write!(f, "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+        write!(f, "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
             uuid[0], uuid[1], uuid[2], uuid[3],
             uuid[4], uuid[5],
             uuid[6], uuid[7],
@@ -1217,6 +1234,12 @@ impl BluetoothInterface {
     }
 }
 
+pub trait ToggleableProfile {
+    fn is_enabled(&self) -> bool;
+    fn enable(&mut self) -> bool;
+    fn disable(&mut self) -> bool;
+}
+
 pub fn get_btinterface() -> Option<BluetoothInterface> {
     let mut ret: Option<BluetoothInterface> = None;
     let mut ifptr: *const bindings::bt_interface_t = std::ptr::null();
@@ -1314,7 +1337,7 @@ mod tests {
 
         {
             let orig_record = BtServiceRecord {
-                uuid: Uuid { uu: [0; 16] },
+                uuid: Uuid::from([0; 16]),
                 channel: 3,
                 name: "FooBar".to_string(),
             };

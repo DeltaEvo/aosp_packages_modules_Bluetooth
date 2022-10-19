@@ -10,8 +10,10 @@ use bt_topshim::profiles::socket::SocketType;
 use btstack::bluetooth::{
     BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback, IBluetoothQA,
 };
+use btstack::bluetooth_admin::{IBluetoothAdmin, IBluetoothAdminPolicyCallback, PolicyEffect};
 use btstack::bluetooth_adv::{
-    AdvertiseData, AdvertisingSetParameters, IAdvertisingSetCallback, PeriodicAdvertisingParameters,
+    AdvertiseData, AdvertisingSetParameters, IAdvertisingSetCallback, ManfId,
+    PeriodicAdvertisingParameters,
 };
 use btstack::bluetooth_gatt::{
     BluetoothGattCharacteristic, BluetoothGattDescriptor, BluetoothGattService,
@@ -548,6 +550,11 @@ impl IBluetooth for BluetoothDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("GetRemoteWakeAllowed")]
+    fn get_remote_wake_allowed(&self, _device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetConnectedDevices")]
     fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
         dbus_generated!()
@@ -807,10 +814,10 @@ struct AdvertisingSetParametersDBus {
 
 #[dbus_propmap(AdvertiseData)]
 pub struct AdvertiseDataDBus {
-    service_uuids: Vec<String>,
-    solicit_uuids: Vec<String>,
+    service_uuids: Vec<Uuid>,
+    solicit_uuids: Vec<Uuid>,
     transport_discovery_data: Vec<Vec<u8>>,
-    manufacturer_data: HashMap<i32, Vec<u8>>,
+    manufacturer_data: HashMap<ManfId, Vec<u8>>,
     service_data: HashMap<String, Vec<u8>>,
     include_tx_power_level: bool,
     include_device_name: bool,
@@ -820,6 +827,101 @@ pub struct AdvertiseDataDBus {
 pub struct PeriodicAdvertisingParametersDBus {
     pub include_tx_power: bool,
     pub interval: i32,
+}
+
+pub(crate) struct BluetoothAdminDBusRPC {
+    client_proxy: ClientDBusProxy,
+}
+
+pub(crate) struct BluetoothAdminDBus {
+    client_proxy: ClientDBusProxy,
+    pub rpc: BluetoothAdminDBusRPC,
+}
+
+impl BluetoothAdminDBus {
+    fn make_client_proxy(conn: Arc<SyncConnection>, index: i32) -> ClientDBusProxy {
+        ClientDBusProxy::new(
+            conn,
+            String::from("org.chromium.bluetooth"),
+            make_object_path(index, "admin"),
+            String::from("org.chromium.bluetooth.BluetoothAdmin"),
+        )
+    }
+
+    pub(crate) fn new(conn: Arc<SyncConnection>, index: i32) -> BluetoothAdminDBus {
+        BluetoothAdminDBus {
+            client_proxy: Self::make_client_proxy(conn.clone(), index),
+            rpc: BluetoothAdminDBusRPC {
+                client_proxy: Self::make_client_proxy(conn.clone(), index),
+            },
+        }
+    }
+}
+
+#[generate_dbus_interface_client(BluetoothAdminDBusRPC)]
+impl IBluetoothAdmin for BluetoothAdminDBus {
+    #[dbus_method("IsServiceAllowed")]
+    fn is_service_allowed(&self, uuid: Uuid128Bit) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetAllowedServices")]
+    fn set_allowed_services(&mut self, services: Vec<Uuid128Bit>) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetAllowedServices")]
+    fn get_allowed_services(&self) -> Vec<Uuid128Bit> {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetDevicePolicyEffect")]
+    fn get_device_policy_effect(&self, device: BluetoothDevice) -> Option<PolicyEffect> {
+        dbus_generated!()
+    }
+
+    #[dbus_method("RegisterAdminPolicyCallback")]
+    fn register_admin_policy_callback(
+        &mut self,
+        callback: Box<dyn IBluetoothAdminPolicyCallback + Send>,
+    ) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("UnregisterAdminPolicyCallback")]
+    fn unregister_admin_policy_callback(&mut self, callback_id: u32) -> bool {
+        dbus_generated!()
+    }
+}
+
+#[dbus_propmap(PolicyEffect)]
+pub struct PolicyEffectDBus {
+    pub service_blocked: Vec<Uuid128Bit>,
+    pub affected: bool,
+}
+
+struct IBluetoothAdminPolicyCallbackDBus {}
+
+impl RPCProxy for IBluetoothAdminPolicyCallbackDBus {}
+
+#[generate_dbus_exporter(
+    export_admin_policy_callback_dbus_intf,
+    "org.chromium.bluetooth.AdminPolicyCallback"
+)]
+impl IBluetoothAdminPolicyCallback for IBluetoothAdminPolicyCallbackDBus {
+    #[dbus_method("OnServiceAllowlistChanged")]
+    fn on_service_allowlist_changed(&self, allowed_list: Vec<Uuid128Bit>) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("OnDevicePolicyEffectChanged")]
+    fn on_device_policy_effect_changed(
+        &self,
+        device: BluetoothDevice,
+        new_policy_effect: Option<PolicyEffect>,
+    ) {
+        dbus_generated!()
+    }
 }
 
 pub(crate) struct BluetoothGattDBusRPC {
@@ -854,6 +956,11 @@ impl BluetoothGattDBus {
 #[generate_dbus_interface_client(BluetoothGattDBusRPC)]
 impl IBluetoothGatt for BluetoothGattDBus {
     // Scanning
+
+    #[dbus_method("IsMsftSupported")]
+    fn is_msft_supported(&self) -> bool {
+        dbus_generated!()
+    }
 
     #[dbus_method("RegisterScannerCallback")]
     fn register_scanner_callback(&mut self, _callback: Box<dyn IScannerCallback + Send>) -> u32 {
@@ -1442,12 +1549,12 @@ impl ISuspend for SuspendDBus {
     }
 
     #[dbus_method("Suspend")]
-    fn suspend(&self, _suspend_type: SuspendType) {
+    fn suspend(&mut self, _suspend_type: SuspendType, suspend_id: i32) {
         dbus_generated!()
     }
 
     #[dbus_method("Resume")]
-    fn resume(&self) -> bool {
+    fn resume(&mut self) -> bool {
         dbus_generated!()
     }
 }
@@ -1464,7 +1571,7 @@ impl ISuspendCallback for ISuspendCallbackDBus {
     #[dbus_method("OnCallbackRegistered")]
     fn on_callback_registered(&self, callback_id: u32) {}
     #[dbus_method("OnSuspendReady")]
-    fn on_suspend_ready(&self, suspend_id: u32) {}
+    fn on_suspend_ready(&self, suspend_id: i32) {}
     #[dbus_method("OnResumed")]
     fn on_resumed(&self, suspend_id: i32) {}
 }

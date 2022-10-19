@@ -10,12 +10,14 @@ mod ffi {
         fn gd_core_is_enabled() -> bool;
         fn gd_l2cap_is_enabled() -> bool;
         fn gd_link_policy_is_enabled() -> bool;
+        fn gd_remote_name_request_is_enabled() -> bool;
         fn gd_rust_is_enabled() -> bool;
         fn gd_security_is_enabled() -> bool;
         fn get_hci_adapter() -> i32;
         fn irk_rotation_is_enabled() -> bool;
         fn is_debug_logging_enabled_for_tag(tag: &str) -> bool;
         fn logging_debug_enabled_for_all_is_enabled() -> bool;
+        fn pass_phy_update_callback_is_enabled() -> bool;
         fn sdp_serialization_is_enabled() -> bool;
     }
 }

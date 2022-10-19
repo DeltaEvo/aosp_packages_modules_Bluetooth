@@ -12,24 +12,37 @@ use crate::dbus_arg::{DBusArg, DBusArgError};
 
 impl_dbus_arg_enum!(SuspendType);
 
-pub struct SuspendDBus {
+#[derive(Clone)]
+pub struct SuspendDBusRPC {
     client_proxy: ClientDBusProxy,
 }
 
+pub struct SuspendDBus {
+    client_proxy: ClientDBusProxy,
+    pub rpc: SuspendDBusRPC,
+}
+
 impl SuspendDBus {
+    fn make_client_proxy(conn: Arc<SyncConnection>, path: dbus::Path<'static>) -> ClientDBusProxy {
+        ClientDBusProxy::new(
+            conn.clone(),
+            String::from("org.chromium.bluetooth"),
+            path,
+            String::from("org.chromium.bluetooth.Suspend"),
+        )
+    }
+
     pub(crate) fn new(conn: Arc<SyncConnection>, path: dbus::Path<'static>) -> SuspendDBus {
         SuspendDBus {
-            client_proxy: ClientDBusProxy::new(
-                conn.clone(),
-                String::from("org.chromium.bluetooth"),
-                path,
-                String::from("org.chromium.bluetooth.Suspend"),
-            ),
+            client_proxy: Self::make_client_proxy(conn.clone(), path.clone()),
+            rpc: SuspendDBusRPC {
+                client_proxy: Self::make_client_proxy(conn.clone(), path.clone()),
+            },
         }
     }
 }
 
-#[generate_dbus_interface_client]
+#[generate_dbus_interface_client(SuspendDBusRPC)]
 impl ISuspend for SuspendDBus {
     #[dbus_method("RegisterCallback")]
     fn register_callback(&mut self, callback: Box<dyn ISuspendCallback + Send>) -> bool {
@@ -42,12 +55,12 @@ impl ISuspend for SuspendDBus {
     }
 
     #[dbus_method("Suspend")]
-    fn suspend(&self, _suspend_type: SuspendType) {
+    fn suspend(&mut self, _suspend_type: SuspendType, suspend_id: i32) {
         dbus_generated!()
     }
 
     #[dbus_method("Resume")]
-    fn resume(&self) -> bool {
+    fn resume(&mut self) -> bool {
         dbus_generated!()
     }
 }
@@ -65,7 +78,7 @@ impl ISuspendCallback for ISuspendCallbackDBus {
     #[dbus_method("OnCallbackRegistered")]
     fn on_callback_registered(&self, callback_id: u32) {}
     #[dbus_method("OnSuspendReady")]
-    fn on_suspend_ready(&self, suspend_id: u32) {}
+    fn on_suspend_ready(&self, suspend_id: i32) {}
     #[dbus_method("OnResumed")]
     fn on_resumed(&self, suspend_id: i32) {}
 }

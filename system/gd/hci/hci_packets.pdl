@@ -94,7 +94,7 @@ packet Acl {
 enum PacketStatusFlag : 2 {
   CORRECTLY_RECEIVED = 0,
   POSSIBLY_INCOMPLETE = 1,
-  NO_DATA = 2,
+  NO_DATA_RECEIVED = 2,
   PARTIALLY_LOST = 3,
 }
 
@@ -777,6 +777,7 @@ enum SubeventCode : 8 {
 // Vendor specific events
 enum VseSubeventCode : 8 {
   BLE_THRESHOLD = 0x54,
+  BLE_STCHANGE = 0x55,
   BLE_TRACKING = 0x56,
   DEBUG_INFO = 0x57,
   BQR_EVENT = 0x58,
@@ -4845,6 +4846,7 @@ enum ApcfOpcode : 8 {
   MANUFACTURER_DATA = 0x06,
   SERVICE_DATA = 0x07,
   AD_TYPE = 0x08,
+  READ_EXTENDED_FEATURES = 0xFF,
 }
 
 // https://source.android.com/devices/bluetooth/hci_requirements#advertising-packet-content-filter
@@ -5010,6 +5012,22 @@ packet LeAdvFilterADType : LeAdvFilter (apcf_opcode = AD_TYPE) {
 packet LeAdvFilterADTypeComplete : LeAdvFilterComplete (apcf_opcode = AD_TYPE) {
   apcf_action : ApcfAction,
   apcf_available_spaces : 8,
+}
+
+packet LeAdvFilterReadExtendedFeatures : LeAdvFilter (apcf_opcode = READ_EXTENDED_FEATURES) {
+}
+
+test LeAdvFilterReadExtendedFeatures {
+  "\x57\xfd\x01\xff",
+}
+
+packet LeAdvFilterReadExtendedFeaturesComplete : LeAdvFilterComplete (apcf_opcode = READ_EXTENDED_FEATURES) {
+  ad_type_filter : 1,
+  _reserved_ : 15,
+}
+
+test LeAdvFilterReadExtendedFeaturesComplete {
+  "\x0e\x07\x01\x57\xfd\x00\xff\x01\x00",
 }
 
 packet LeEnergyInfo : VendorCommand (op_code = LE_ENERGY_INFO) {
@@ -5654,7 +5672,7 @@ enum DirectAdvertisingAddressType : 8 {
   PUBLIC_IDENTITY_ADDRESS = 0x02,
   RANDOM_IDENTITY_ADDRESS = 0x03,
   CONTROLLER_UNABLE_TO_RESOLVE = 0xFE,
-  NO_ADDRESS = 0xFF,
+  NO_ADDRESS_PROVIDED = 0xFF,
 }
 
 enum DirectAdvertisingEventType : 8 {
@@ -5981,6 +5999,17 @@ packet LEAdvertisementTrackingEvent : VendorSpecificEvent (subevent_code = BLE_T
   advertiser_address : Address,
   advertiser_address_type : 8,
   _body_,
+}
+
+enum VseStateChangeReason : 8 {
+  CONNECTION_RECEIVED = 0x00,
+}
+
+packet LEAdvertiseStateChangeEvent : VendorSpecificEvent (subevent_code = BLE_STCHANGE) {
+  advertising_instance : 8,
+  state_change_reason : VseStateChangeReason,
+  connection_handle : 12,
+  reserved : 4,
 }
 
 packet LEAdvertisementTrackingWithInfoEvent : LEAdvertisementTrackingEvent {

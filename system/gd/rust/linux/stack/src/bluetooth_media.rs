@@ -1,12 +1,16 @@
 //! Anything related to audio and media API.
 
-use bt_topshim::btif::{BluetoothInterface, BtConnectionDirection, BtStatus, RawAddress};
+use bt_topshim::btif::{
+    BluetoothInterface, BtConnectionDirection, BtStatus, RawAddress, ToggleableProfile,
+};
 use bt_topshim::profiles::a2dp::{
     A2dp, A2dpCallbacks, A2dpCallbacksDispatcher, A2dpCodecBitsPerSample, A2dpCodecChannelMode,
     A2dpCodecConfig, A2dpCodecSampleRate, BtavAudioState, BtavConnectionState,
     PresentationPosition,
 };
-use bt_topshim::profiles::avrcp::{Avrcp, AvrcpCallbacks, AvrcpCallbacksDispatcher};
+use bt_topshim::profiles::avrcp::{
+    Avrcp, AvrcpCallbacks, AvrcpCallbacksDispatcher, PlayerMetadata,
+};
 use bt_topshim::profiles::hfp::{
     BthfAudioState, BthfConnectionState, Hfp, HfpCallbacks, HfpCallbacksDispatcher,
     HfpCodecCapability,
@@ -84,6 +88,17 @@ pub trait IBluetoothMedia {
     // Start the SCO setup to connect audio
     fn start_sco_call(&mut self, address: String, sco_offload: bool, force_cvsd: bool);
     fn stop_sco_call(&mut self, address: String);
+
+    /// Set the current playback status: e.g., playing, paused, stopped, etc. The method is a copy
+    /// of the existing CRAS API, hence not following Floss API conventions.
+    fn set_player_playback_status(&mut self, status: String);
+    /// Set the position of the current media in microseconds. The method is a copy of the existing
+    /// CRAS API, hence not following Floss API conventions.
+    fn set_player_posistion(&mut self, position: i64);
+    /// Set the media metadata, including title, artist, album, and length. The method is a
+    /// copy of the existing CRAS API, hence not following Floss API conventions. PlayerMetadata is
+    /// a custom data type that requires special handlng.
+    fn set_player_metadata(&mut self, metadata: PlayerMetadata);
 }
 
 pub trait IBluetoothMediaCallback: RPCProxy {
@@ -162,6 +177,7 @@ pub struct BluetoothMedia {
     device_added_tasks: Arc<Mutex<HashMap<RawAddress, Option<(JoinHandle<()>, Instant)>>>>,
     absolute_volume: bool,
     uinput: UInput,
+    delay_enable_profiles: HashSet<uuid::Profile>,
     connected_profiles: HashMap<RawAddress, HashSet<uuid::Profile>>,
     disconnecting_devices: HashSet<RawAddress>,
 }
@@ -190,6 +206,7 @@ impl BluetoothMedia {
             device_added_tasks: Arc::new(Mutex::new(HashMap::new())),
             absolute_volume: false,
             uinput: UInput::new(),
+            delay_enable_profiles: HashSet::new(),
             connected_profiles: HashMap::new(),
             disconnecting_devices: HashSet::new(),
         }
@@ -235,6 +252,78 @@ impl BluetoothMedia {
 
     pub fn set_adapter(&mut self, adapter: Arc<Mutex<Box<Bluetooth>>>) {
         self.adapter = Some(adapter);
+    }
+
+    pub fn enable_profile(&mut self, profile: &Profile) {
+        match profile {
+            &Profile::A2dpSource => {
+                if let Some(a2dp) = &mut self.a2dp {
+                    a2dp.enable();
+                }
+            }
+            &Profile::AvrcpTarget => {
+                if let Some(avrcp) = &mut self.avrcp {
+                    avrcp.enable();
+                }
+            }
+            &Profile::Hfp => {
+                if let Some(hfp) = &mut self.hfp {
+                    hfp.enable();
+                }
+            }
+            _ => {
+                warn!("Tried to enable {} in bluetooth_media", profile);
+                return;
+            }
+        }
+
+        if self.is_profile_enabled(profile).unwrap() {
+            self.delay_enable_profiles.remove(profile);
+        } else {
+            self.delay_enable_profiles.insert(profile.clone());
+        }
+    }
+
+    pub fn disable_profile(&mut self, profile: &Profile) {
+        match profile {
+            &Profile::A2dpSource => {
+                if let Some(a2dp) = &mut self.a2dp {
+                    a2dp.disable();
+                }
+            }
+            &Profile::AvrcpTarget => {
+                if let Some(avrcp) = &mut self.avrcp {
+                    avrcp.disable();
+                }
+            }
+            &Profile::Hfp => {
+                if let Some(hfp) = &mut self.hfp {
+                    hfp.disable();
+                }
+            }
+            _ => {
+                warn!("Tried to disable {} in bluetooth_media", profile);
+                return;
+            }
+        }
+
+        self.delay_enable_profiles.remove(profile);
+    }
+
+    pub fn is_profile_enabled(&self, profile: &Profile) -> Option<bool> {
+        match profile {
+            &Profile::A2dpSource => {
+                Some(self.a2dp.as_ref().map_or(false, |a2dp| a2dp.is_enabled()))
+            }
+            &Profile::AvrcpTarget => {
+                Some(self.avrcp.as_ref().map_or(false, |avrcp| avrcp.is_enabled()))
+            }
+            &Profile::Hfp => Some(self.hfp.as_ref().map_or(false, |hfp| hfp.is_enabled())),
+            _ => {
+                warn!("Tried to query enablement status of {} in bluetooth_media", profile);
+                None
+            }
+        }
     }
 
     pub fn dispatch_a2dp_callbacks(&mut self, cb: A2dpCallbacks) {
@@ -660,16 +749,14 @@ impl BluetoothMedia {
             let audio_profiles =
                 vec![uuid::Profile::A2dpSink, uuid::Profile::Hfp, uuid::Profile::AvrcpController];
 
-            let uuid_helper = uuid::UuidHelper::new();
-
             adapter
                 .lock()
                 .unwrap()
                 .get_remote_uuids(device)
                 .into_iter()
-                .map(|u| uuid_helper.is_known_profile(&u))
+                .map(|u| uuid::UuidHelper::is_known_profile(&u))
                 .filter(|u| u.is_some())
-                .map(|u| *u.unwrap())
+                .map(|u| u.unwrap())
                 .filter(|u| audio_profiles.contains(&u))
                 .collect()
         } else {
@@ -751,6 +838,15 @@ impl IBluetoothMedia for BluetoothMedia {
         let hfp_dispatcher = get_hfp_dispatcher(self.tx.clone());
         self.hfp = Some(Hfp::new(&self.intf.lock().unwrap()));
         self.hfp.as_mut().unwrap().initialize(hfp_dispatcher);
+
+        for profile in self.delay_enable_profiles.clone() {
+            self.enable_profile(&profile);
+        }
+
+        // Default to enable AVRCP since btadapterd will crash when connecting a headset while
+        // avrcp is disabled.
+        // TODO: fix b/251692015
+        self.enable_profile(&Profile::AvrcpTarget);
 
         true
     }
@@ -1218,4 +1314,8 @@ impl IBluetoothMedia for BluetoothMedia {
             data_position_nsec: position.data_position_nsec,
         }
     }
+
+    fn set_player_playback_status(&mut self, _status: String) {}
+    fn set_player_posistion(&mut self, _position: i64) {}
+    fn set_player_metadata(&mut self, _metadata: PlayerMetadata) {}
 }

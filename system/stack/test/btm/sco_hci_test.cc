@@ -58,6 +58,7 @@ class ScoHciWithOpenCleanTest : public ScoHciTest {
  public:
  protected:
   void SetUp() override {
+    ScoHciTest::SetUp();
     mock_uipc_init_ret = std::make_unique<tUIPC_STATE>();
     bluetooth::audio::sco::open();
   }
@@ -75,19 +76,23 @@ TEST_F(ScoHciTest, ScoOverHciOpenFail) {
   bluetooth::audio::sco::open();
   ASSERT_EQ(mock_function_count_map["UIPC_Init"], 1);
   ASSERT_EQ(mock_function_count_map["UIPC_Open"], 0);
+  bluetooth::audio::sco::cleanup();
+
+  // UIPC is nullptr and shouldn't require an actual call of UIPC_Close;
+  ASSERT_EQ(mock_function_count_map["UIPC_Close"], 0);
 }
 
-TEST_F(ScoHciTest, ScoOverHciOpenClean) {
-  mock_uipc_init_ret = std::make_unique<tUIPC_STATE>();
-  bluetooth::audio::sco::open();
+TEST_F(ScoHciWithOpenCleanTest, ScoOverHciOpenClean) {
   ASSERT_EQ(mock_function_count_map["UIPC_Init"], 1);
   ASSERT_EQ(mock_function_count_map["UIPC_Open"], 1);
+  ASSERT_EQ(mock_uipc_init_ret, nullptr);
 
   mock_uipc_init_ret = std::make_unique<tUIPC_STATE>();
   // Double open will override uipc
   bluetooth::audio::sco::open();
   ASSERT_EQ(mock_function_count_map["UIPC_Init"], 2);
   ASSERT_EQ(mock_function_count_map["UIPC_Open"], 2);
+  ASSERT_EQ(mock_uipc_init_ret, nullptr);
 
   bluetooth::audio::sco::cleanup();
   ASSERT_EQ(mock_function_count_map["UIPC_Close"], 1);
@@ -105,6 +110,11 @@ TEST_F(ScoHciTest, ScoOverHciReadNoOpen) {
 
 TEST_F(ScoHciWithOpenCleanTest, ScoOverHciRead) {
   uint8_t buf[100];
+  // The UPIC should be ready
+  ASSERT_EQ(mock_function_count_map["UIPC_Init"], 1);
+  ASSERT_EQ(mock_function_count_map["UIPC_Open"], 1);
+  ASSERT_EQ(mock_uipc_init_ret, nullptr);
+
   mock_uipc_read_ret = sizeof(buf);
   ASSERT_EQ(bluetooth::audio::sco::read(buf, sizeof(buf)), mock_uipc_read_ret);
   ASSERT_EQ(mock_function_count_map["UIPC_Read"], 1);
@@ -118,6 +128,11 @@ TEST_F(ScoHciTest, ScoOverHciWriteNoOpen) {
 
 TEST_F(ScoHciWithOpenCleanTest, ScoOverHciWrite) {
   uint8_t buf[100];
+  // The UPIC should be ready
+  ASSERT_EQ(mock_function_count_map["UIPC_Init"], 1);
+  ASSERT_EQ(mock_function_count_map["UIPC_Open"], 1);
+  ASSERT_EQ(mock_uipc_init_ret, nullptr);
+
   ASSERT_EQ(bluetooth::audio::sco::write(buf, sizeof(buf)), sizeof(buf));
   ASSERT_EQ(mock_function_count_map["UIPC_Send"], 1);
 
