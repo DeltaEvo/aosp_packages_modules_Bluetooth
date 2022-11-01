@@ -448,7 +448,12 @@ public final class BluetoothHeadset implements BluetoothProfile {
                 Log.e(TAG, "", re);
             }
         }
-        mServiceListener = null;
+
+        if (mServiceListener != null) {
+            ServiceListener listener = mServiceListener;
+            mServiceListener = null;
+            listener.onServiceDisconnected(BluetoothProfile.HEADSET);
+        }
         doUnbind();
         mCloseGuard.close();
     }
