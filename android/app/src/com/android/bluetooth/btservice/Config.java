@@ -19,6 +19,7 @@ package com.android.bluetooth.btservice;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.res.Resources;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.bluetooth.R;
@@ -59,7 +60,13 @@ public class Config {
 
     private static final String FEATURE_HEARING_AID = "settings_bluetooth_hearing_aid";
     private static final String FEATURE_BATTERY = "settings_bluetooth_battery";
-    private static long sSupportedMask = 0;
+
+    private static final String LE_AUDIO_DYNAMIC_SWITCH_PROPERTY =
+            "ro.bluetooth.leaudio_switcher.supported";
+    private static final String LE_AUDIO_BROADCAST_DYNAMIC_SWITCH_PROPERTY =
+            "ro.bluetooth.leaudio_broadcast_switcher.supported";
+    private static final String LE_AUDIO_DYNAMIC_ENABLED_PROPERTY =
+            "persist.bluetooth.leaudio_switcher.enabled";
 
     private static class ProfileConfig {
         Class mClass;
@@ -159,6 +166,24 @@ public class Config {
     private static boolean sIsGdEnabledUptoScanningLayer = false;
 
     static void init(Context ctx) {
+        if (LeAudioService.isBroadcastEnabled()) {
+            updateSupportedProfileMask(
+                    true, LeAudioService.class, BluetoothProfile.LE_AUDIO_BROADCAST);
+        }
+
+        final boolean leAudioDynamicSwitchSupported =
+                SystemProperties.getBoolean(LE_AUDIO_DYNAMIC_SWITCH_PROPERTY, false);
+
+        if (leAudioDynamicSwitchSupported) {
+            final String leAudioDynamicEnabled = SystemProperties
+                    .get(LE_AUDIO_DYNAMIC_ENABLED_PROPERTY, "none");
+            if (leAudioDynamicEnabled.equals("true")) {
+                setLeAudioProfileStatus(true);
+            } else if (leAudioDynamicEnabled.equals("false")) {
+                setLeAudioProfileStatus(false);
+            }
+        }
+
         ArrayList<Class> profiles = new ArrayList<>(PROFILE_SERVICES_AND_FLAGS.length);
         for (ProfileConfig config : PROFILE_SERVICES_AND_FLAGS) {
             Log.i(TAG, "init: profile=" + config.mClass.getSimpleName() + ", enabled="
@@ -177,6 +202,24 @@ public class Config {
             return;
         }
         sIsGdEnabledUptoScanningLayer = resources.getBoolean(R.bool.enable_gd_up_to_scanning_layer);
+    }
+
+    static void setLeAudioProfileStatus(Boolean enable) {
+        setProfileEnabled(CsipSetCoordinatorService.class, enable);
+        setProfileEnabled(HapClientService.class, enable);
+        setProfileEnabled(LeAudioService.class, enable);
+        setProfileEnabled(TbsService.class, enable);
+        setProfileEnabled(McpService.class, enable);
+        setProfileEnabled(VolumeControlService.class, enable);
+
+        final boolean broadcastDynamicSwitchSupported =
+                SystemProperties.getBoolean(LE_AUDIO_BROADCAST_DYNAMIC_SWITCH_PROPERTY, false);
+
+        if (broadcastDynamicSwitchSupported) {
+            setProfileEnabled(BassClientService.class, enable);
+            updateSupportedProfileMask(
+                    enable, LeAudioService.class, BluetoothProfile.LE_AUDIO_BROADCAST);
+        }
     }
 
     /**
@@ -198,8 +241,17 @@ public class Config {
         sSupportedProfiles = profilesList.toArray(new Class[profilesList.size()]);
     }
 
-    static void addSupportedProfile(int supportedProfile) {
-        sSupportedMask |= (1 << supportedProfile);
+    static void updateSupportedProfileMask(Boolean enable, Class profile, int supportedProfile) {
+        for (ProfileConfig config : PROFILE_SERVICES_AND_FLAGS) {
+            if (config.mClass == profile) {
+                if (enable) {
+                    config.mMask |= 1 << supportedProfile;
+                } else {
+                    config.mMask &= ~(1 << supportedProfile);
+                }
+                return;
+            }
+        }
     }
 
     static HashSet<Class> geLeAudioUnicastProfiles() {
@@ -225,7 +277,7 @@ public class Config {
     }
 
     static long getSupportedProfilesBitMask() {
-        long mask = sSupportedMask;
+        long mask = 0;
         for (final Class profileClass : getSupportedProfiles()) {
             mask |= getProfileMask(profileClass);
         }
