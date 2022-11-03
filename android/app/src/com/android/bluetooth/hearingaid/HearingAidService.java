@@ -818,7 +818,6 @@ public class HearingAidService extends ProfileService {
                         BluetoothMetricsProto.ProfileId.HEARING_AID);
             }
             if (!mHiSyncIdConnectedMap.getOrDefault(myHiSyncId, false)) {
-                setActiveDevice(device);
                 mHiSyncIdConnectedMap.put(myHiSyncId, true);
             }
         }
@@ -858,10 +857,15 @@ public class HearingAidService extends ProfileService {
     @VisibleForTesting
     static class BluetoothHearingAidBinder extends IBluetoothHearingAid.Stub
             implements IProfileServiceBinder {
+        @VisibleForTesting
+        boolean mIsTesting = false;
         private HearingAidService mService;
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private HearingAidService getService(AttributionSource source) {
+            if (mIsTesting) {
+                return mService;
+            }
             if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
                     || !Utils.checkServiceAvailable(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
