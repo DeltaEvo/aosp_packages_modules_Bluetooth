@@ -10,6 +10,9 @@ package {
 
 cc_defaults {
     name: "gd_defaults",
+    defaults: [
+        "fluoride_common_options",
+    ],
     tidy_checks: [
         "-performance-unnecessary-value-param",
     ],
@@ -42,14 +45,12 @@ cc_defaults {
         "-fvisibility=hidden",
         "-DLOG_NDEBUG=1",
         "-DGOOGLE_PROTOBUF_NO_RTTI",
-        "-Wno-unused-parameter",
         "-Wno-unused-result",
     ],
     conlyflags: [
         "-std=c99",
     ],
     header_libs: ["jni_headers"],
-
 }
 
 // Enables code coverage for a set of source files. Must be combined with
@@ -216,6 +217,9 @@ cc_library {
     defaults: [
         "libbluetooth_gd_defaults",
     ],
+    apex_available: [
+        "com.android.bluetooth",
+    ],
     min_sdk_version: "31",
 }
 
@@ -225,10 +229,24 @@ cc_library {
         "libbluetooth_gd_defaults",
     ],
     srcs: [
-        ":BluetoothOsSources_fuzz",
+        ":BluetoothOsSources_fake_timer",
     ],
     cflags: [
         "-DFUZZ_TARGET",
+        "-DUSE_FAKE_TIMERS",
+    ],
+}
+
+cc_library {
+    name: "libbluetooth_gd_unit_tests",
+    defaults: [
+        "libbluetooth_gd_defaults",
+    ],
+    srcs: [
+        ":BluetoothOsSources_fake_timer",
+    ],
+    cflags: [
+        "-DUSE_FAKE_TIMERS",
     ],
 }
 
@@ -334,12 +352,16 @@ cc_test {
             srcs: [
                 ":BluetoothHalTestSources_hci_host",
                 ":BluetoothOsTestSources_host",
+                ":BluetoothHostTestingLogCapture",
+                ":BluetoothHostTestingLogCaptureTest",
             ],
         },
         android: {
             srcs: [
                 ":BluetoothHalTestSources_hci_android_hidl",
                 ":BluetoothOsTestSources_android",
+                ":BluetoothAndroidTestingLogCapture",
+                ":BluetoothAndroidTestingLogCaptureTest",
             ],
             static_libs: [
                 "android.system.suspend.control-V1-ndk",
@@ -384,7 +406,7 @@ cc_test {
         "libbluetooth-dumpsys-test",
         "libbluetooth-dumpsys-unittest",
         "libbluetooth-protos",
-        "libbluetooth_gd",
+        "libbluetooth_gd_unit_tests",
         "libc++fs",
         "libflatbuffers-cpp",
         "libgmock",
@@ -486,6 +508,7 @@ cc_defaults {
     ],
     cflags: [
         "-DFUZZ_TARGET",
+        "-DUSE_FAKE_TIMERS",
     ],
     target: {
         android: {
@@ -610,6 +633,24 @@ rust_library {
     ],
     apex_available: [
         "com.android.bluetooth",
+    ],
+    min_sdk_version: "30",
+}
+
+rust_library {
+    name: "libbt_packets_nonapex",
+    defaults: ["gd_rust_defaults"],
+    crate_name: "bt_packets",
+    srcs: ["rust/packets/lib.rs", ":BluetoothGeneratedPackets_rust"],
+    edition: "2018",
+    vendor_available : true,
+    host_supported: true,
+    proc_macros: ["libnum_derive"],
+    rustlibs: [
+        "libbytes",
+        "libnum_traits",
+        "libthiserror",
+        "liblog_rust",
     ],
     min_sdk_version: "30",
 }

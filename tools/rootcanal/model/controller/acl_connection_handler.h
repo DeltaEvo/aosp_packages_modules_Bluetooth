@@ -67,7 +67,8 @@ class AclConnectionHandler {
   uint16_t CreateConnection(bluetooth::hci::Address addr,
                             bluetooth::hci::Address own_addr);
   uint16_t CreateLeConnection(bluetooth::hci::AddressWithType addr,
-                              bluetooth::hci::AddressWithType own_addr);
+                              bluetooth::hci::AddressWithType own_addr,
+                              bluetooth::hci::Role role);
   bool Disconnect(uint16_t handle);
   bool HasHandle(uint16_t handle) const;
   bool HasScoHandle(uint16_t handle) const;
@@ -83,6 +84,12 @@ class AclConnectionHandler {
   bool IsEncrypted(uint16_t handle) const;
 
   Phy::Type GetPhyType(uint16_t handle) const;
+
+  uint16_t GetAclLinkPolicySettings(uint16_t handle) const;
+  void SetAclLinkPolicySettings(uint16_t handle, uint16_t settings);
+
+  bluetooth::hci::Role GetAclRole(uint16_t handle) const;
+  void SetAclRole(uint16_t handle, bluetooth::hci::Role role);
 
   std::unique_ptr<bluetooth::hci::LeSetCigParametersCompleteBuilder>
   SetCigParameters(uint8_t id, uint32_t sdu_interval_m_to_s,
@@ -123,6 +130,14 @@ class AclConnectionHandler {
   GroupParameters GetGroupParameters(uint8_t id) const;
 
   std::vector<uint16_t> GetAclHandles() const;
+
+  void ResetLinkTimer(uint16_t handle);
+  std::chrono::steady_clock::duration TimeUntilLinkNearExpiring(
+      uint16_t handle) const;
+  bool IsLinkNearExpiring(uint16_t handle) const;
+  std::chrono::steady_clock::duration TimeUntilLinkExpired(
+      uint16_t handle) const;
+  bool HasLinkExpired(uint16_t handle) const;
 
  private:
   std::unordered_map<uint16_t, AclConnection> acl_connections_;
