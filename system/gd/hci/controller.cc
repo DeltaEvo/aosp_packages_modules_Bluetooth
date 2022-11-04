@@ -23,6 +23,7 @@
 
 #include "common/init_flags.h"
 #include "hci/hci_layer.h"
+#include "os/metrics.h"
 
 namespace bluetooth {
 namespace hci {
@@ -146,7 +147,7 @@ struct Controller::impl {
       LOG_INFO("LE_READ_PERIODIC_ADVERTISING_LIST_SIZE not supported, defaulting to 0");
       le_periodic_advertiser_list_size_ = 0;
     }
-    if (is_supported(OpCode::LE_SET_HOST_FEATURE)) {
+    if (is_supported(OpCode::LE_SET_HOST_FEATURE) && module_.SupportsBleConnectedIsochronousStreamCentral()) {
       hci_->EnqueueCommand(
           LeSetHostFeatureBuilder::Create(LeHostFeatureBits::CONNECTED_ISO_STREAM_HOST_SUPPORT, Enable::ENABLED),
           handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
@@ -244,6 +245,12 @@ struct Controller::impl {
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
 
     local_version_information_ = complete_view.GetLocalVersionInformation();
+    bluetooth::os::LogMetricBluetoothLocalVersions(
+        local_version_information_.manufacturer_name_,
+        static_cast<uint8_t>(local_version_information_.lmp_version_),
+        local_version_information_.lmp_subversion_,
+        static_cast<uint8_t>(local_version_information_.hci_version_),
+        local_version_information_.hci_revision_);
   }
 
   void read_local_supported_commands_complete_handler(CommandCompleteView view) {
@@ -261,7 +268,7 @@ struct Controller::impl {
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
     uint8_t page_number = complete_view.GetPageNumber();
     extended_lmp_features_array_.push_back(complete_view.GetExtendedLmpFeatures());
-
+    bluetooth::os::LogMetricBluetoothLocalSupportedFeatures(page_number, complete_view.GetExtendedLmpFeatures());
     // Query all extended features
     if (page_number < complete_view.GetMaximumPageNumber()) {
       page_number++;
@@ -754,10 +761,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_SET_PHY)
       OP_CODE_MAPPING(LE_ENHANCED_RECEIVER_TEST)
       OP_CODE_MAPPING(LE_ENHANCED_TRANSMITTER_TEST)
-      OP_CODE_MAPPING(LE_SET_EXTENDED_ADVERTISING_RANDOM_ADDRESS)
+      OP_CODE_MAPPING(LE_SET_ADVERTISING_SET_RANDOM_ADDRESS)
       OP_CODE_MAPPING(LE_SET_EXTENDED_ADVERTISING_PARAMETERS)
       OP_CODE_MAPPING(LE_SET_EXTENDED_ADVERTISING_DATA)
-      OP_CODE_MAPPING(LE_SET_EXTENDED_ADVERTISING_SCAN_RESPONSE)
+      OP_CODE_MAPPING(LE_SET_EXTENDED_SCAN_RESPONSE_DATA)
       OP_CODE_MAPPING(LE_SET_EXTENDED_ADVERTISING_ENABLE)
       OP_CODE_MAPPING(LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH)
       OP_CODE_MAPPING(LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS)
