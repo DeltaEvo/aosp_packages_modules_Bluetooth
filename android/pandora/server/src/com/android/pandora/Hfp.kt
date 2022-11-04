@@ -54,6 +54,7 @@ class Hfp(val context: Context) : HFPImplBase() {
   }
 
   fun deinit() {
+    bluetoothAdapter.closeProfileProxy(BluetoothProfile.HEADSET, bluetoothHfp)
     scope.cancel()
   }
 
@@ -73,6 +74,17 @@ class Hfp(val context: Context) : HFPImplBase() {
 
       bluetoothHfp.setConnectionPolicy(device, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN)
 
+      Empty.getDefaultInstance()
+    }
+  }
+
+  override fun setBatteryLevel(
+    request: SetBatteryLevelRequest,
+    responseObserver: StreamObserver<Empty>
+  ) {
+    grpcUnary<Empty>(scope, responseObserver) {
+      val action = "android.intent.action.BATTERY_CHANGED"
+      shell("am broadcast -a $action --ei level ${request.batteryPercentage} --ei scale 100")
       Empty.getDefaultInstance()
     }
   }
