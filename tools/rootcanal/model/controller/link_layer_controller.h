@@ -20,8 +20,8 @@
 #include "hci/hci_packets.h"
 #include "include/phy.h"
 #include "model/controller/acl_connection_handler.h"
+#include "model/controller/controller_properties.h"
 #include "model/controller/le_advertiser.h"
-#include "model/devices/device_properties.h"
 #include "model/setup/async_manager.h"
 #include "packets/link_layer_packets.h"
 
@@ -29,6 +29,7 @@
 extern "C" {
 struct LinkManager;
 }
+#include "lmp.h"
 #else
 #include "security_manager.h"
 #endif /* ROOTCANAL_LMP */
@@ -37,14 +38,20 @@ namespace rootcanal {
 
 using ::bluetooth::hci::Address;
 using ::bluetooth::hci::AddressType;
+using ::bluetooth::hci::AuthenticationEnable;
+using ::bluetooth::hci::ClassOfDevice;
 using ::bluetooth::hci::ErrorCode;
+using ::bluetooth::hci::FilterAcceptListAddressType;
 using ::bluetooth::hci::OpCode;
+using ::bluetooth::hci::PageScanRepetitionMode;
 
 class LinkLayerController {
  public:
   static constexpr size_t kIrkSize = 16;
 
-  LinkLayerController(const DeviceProperties& properties);
+  LinkLayerController(const Address& address,
+                      const ControllerProperties& properties);
+
   ErrorCode SendCommandToRemoteByAddress(
       OpCode opcode, bluetooth::packet::PacketView<true> args,
       const Address& remote);
@@ -97,6 +104,9 @@ class LinkLayerController {
   ErrorCode AuthenticationRequested(uint16_t handle);
 #endif /* ROOTCANAL_LMP */
 
+  std::vector<bluetooth::hci::Lap> const& ReadCurrentIacLap() const;
+  void WriteCurrentIacLap(std::vector<bluetooth::hci::Lap> iac_lap);
+
   ErrorCode AcceptConnectionRequest(const Address& addr, bool try_role_switch);
   void MakePeripheralConnection(const Address& addr, bool try_role_switch);
   ErrorCode RejectConnectionRequest(const Address& addr, uint8_t reason);
@@ -105,15 +115,17 @@ class LinkLayerController {
                              uint8_t page_scan_mode, uint16_t clock_offset,
                              uint8_t allow_role_switch);
   ErrorCode CreateConnectionCancel(const Address& addr);
-  ErrorCode Disconnect(uint16_t handle, uint8_t reason);
+  ErrorCode Disconnect(uint16_t handle, ErrorCode reason);
 
  private:
-  void SendDisconnectionCompleteEvent(uint16_t handle, uint8_t reason);
+  void SendDisconnectionCompleteEvent(uint16_t handle, ErrorCode reason);
 
   void IncomingPacketWithRssi(model::packets::LinkLayerPacketView incoming,
                               uint8_t rssi);
 
  public:
+  const Address& GetAddress() const;
+
   void IncomingPacket(model::packets::LinkLayerPacketView incoming);
 
   void TimerTick();
@@ -172,7 +184,7 @@ class LinkLayerController {
 
   ErrorCode SetLeExtendedAdvertisingParameters(
       uint8_t set, uint16_t interval_min, uint16_t interval_max,
-      bluetooth::hci::LegacyAdvertisingProperties type,
+      bluetooth::hci::LegacyAdvertisingEventProperties type,
       bluetooth::hci::OwnAddressType own_address_type,
       bluetooth::hci::PeerAddressType peer_address_type, Address peer,
       bluetooth::hci::AdvertisingFilterPolicy filter_policy, uint8_t tx_power);
@@ -191,28 +203,25 @@ class LinkLayerController {
   ErrorCode LeRemoteConnectionParameterRequestNegativeReply(
       uint16_t connection_handle, bluetooth::hci::ErrorCode reason);
   uint16_t HandleLeConnection(AddressWithType addr, AddressWithType own_addr,
-                              uint8_t role, uint16_t connection_interval,
+                              bluetooth::hci::Role role,
+                              uint16_t connection_interval,
                               uint16_t connection_latency,
                               uint16_t supervision_timeout,
                               bool send_le_channel_selection_algorithm_event);
 
-  bool ListBusy(uint16_t ignore_mask);
-
   bool FilterAcceptListBusy();
-  ErrorCode LeFilterAcceptListClear();
-  ErrorCode LeFilterAcceptListAddDevice(Address addr, AddressType addr_type);
-  ErrorCode LeFilterAcceptListRemoveDevice(Address addr, AddressType addr_type);
-  bool LeFilterAcceptListContainsDevice(Address addr, AddressType addr_type);
-  bool LeFilterAcceptListFull();
+  bool LeFilterAcceptListContainsDevice(
+      FilterAcceptListAddressType address_type, Address address);
+  bool LeFilterAcceptListContainsDevice(AddressType address_type,
+                                        Address address);
+
   bool ResolvingListBusy();
-  ErrorCode LeSetAddressResolutionEnable(bool enable);
-  ErrorCode LeResolvingListClear();
-  ErrorCode LeResolvingListAddDevice(Address addr, AddressType addr_type,
-                                     std::array<uint8_t, kIrkSize> peerIrk,
-                                     std::array<uint8_t, kIrkSize> localIrk);
-  ErrorCode LeResolvingListRemoveDevice(Address addr, AddressType addr_type);
-  bool LeResolvingListContainsDevice(Address addr, AddressType addr_type);
-  bool LeResolvingListFull();
+  bool LeResolvingListContainsDevice(AddressType peer_identity_address_type,
+                                     Address peer_identity_address);
+  bool LeResolvingListContainsDevice(
+      bluetooth::hci::PeerAddressType peer_identity_address_type,
+      Address peer_identity_address);
+
   void LeSetPrivacyMode(AddressType address_type, Address addr, uint8_t mode);
 
   void LeReadIsoTxSync(uint16_t handle);
@@ -286,7 +295,8 @@ class LinkLayerController {
   void SetLeScanWindow(uint16_t le_scan_window) {
     le_scan_window_ = le_scan_window;
   }
-  void SetLeScanFilterPolicy(uint8_t le_scan_filter_policy) {
+  void SetLeScanFilterPolicy(
+      bluetooth::hci::LeScanningFilterPolicy le_scan_filter_policy) {
     le_scan_filter_policy_ = le_scan_filter_policy;
   }
   void SetLeFilterDuplicates(uint8_t le_scan_filter_duplicates) {
@@ -322,7 +332,8 @@ class LinkLayerController {
   void SetLeMaximumCeLength(uint16_t max) {
     le_connection_maximum_ce_length_ = max;
   }
-  void SetLeInitiatorFilterPolicy(uint8_t le_initiator_filter_policy) {
+  void SetLeInitiatorFilterPolicy(
+      bluetooth::hci::InitiatorFilterPolicy le_initiator_filter_policy) {
     le_initiator_filter_policy_ = le_initiator_filter_policy;
   }
   void SetLePeerAddressType(uint8_t peer_address_type) {
@@ -341,8 +352,14 @@ class LinkLayerController {
   void SetInquiryMaxResponses(uint8_t max);
   void Inquiry();
 
+  bool GetInquiryScanEnable() { return inquiry_scan_enable_; }
   void SetInquiryScanEnable(bool enable);
+
+  bool GetPageScanEnable() { return page_scan_enable_; }
   void SetPageScanEnable(bool enable);
+
+  uint16_t GetPageTimeout();
+  void SetPageTimeout(uint16_t page_timeout);
 
   ErrorCode ChangeConnectionPacketType(uint16_t handle, uint16_t types);
   ErrorCode ChangeConnectionLinkKey(uint16_t handle);
@@ -356,8 +373,9 @@ class LinkLayerController {
   ErrorCode QosSetup(uint16_t handle, uint8_t service_type, uint32_t token_rate,
                      uint32_t peak_bandwidth, uint32_t latency,
                      uint32_t delay_variation);
-  ErrorCode RoleDiscovery(uint16_t handle);
-  ErrorCode SwitchRole(Address bd_addr, uint8_t role);
+  ErrorCode RoleDiscovery(uint16_t handle, bluetooth::hci::Role* role);
+  ErrorCode SwitchRole(Address bd_addr, bluetooth::hci::Role role);
+  ErrorCode ReadLinkPolicySettings(uint16_t handle, uint16_t* settings);
   ErrorCode WriteLinkPolicySettings(uint16_t handle, uint16_t settings);
   ErrorCode FlowSpecification(uint16_t handle, uint8_t flow_direction,
                               uint8_t service_type, uint32_t token_rate,
@@ -365,6 +383,7 @@ class LinkLayerController {
                               uint32_t peak_bandwidth, uint32_t access_latency);
   ErrorCode WriteLinkSupervisionTimeout(uint16_t handle, uint16_t timeout);
   ErrorCode WriteDefaultLinkPolicySettings(uint16_t settings);
+  void CheckExpiringConnection(uint16_t handle);
   uint16_t ReadDefaultLinkPolicySettings();
 
   void ReadLocalOobData();
@@ -384,6 +403,46 @@ class LinkLayerController {
   bool HasAclConnection();
 
   void HandleIso(bluetooth::hci::IsoView iso);
+
+  // LE Commands
+
+  // HCI LE Set Random Address command (Vol 4, Part E § 7.8.4).
+  ErrorCode LeSetRandomAddress(Address random_address);
+
+  // HCI LE Set Host Feature command (Vol 4, Part E § 7.8.115).
+  ErrorCode LeSetHostFeature(uint8_t bit_number, uint8_t bit_value);
+
+  // LE Filter Accept List
+
+  // HCI command LE_Clear_Filter_Accept_List (Vol 4, Part E § 7.8.15).
+  ErrorCode LeClearFilterAcceptList();
+
+  // HCI command LE_Add_Device_To_Filter_Accept_List (Vol 4, Part E § 7.8.16).
+  ErrorCode LeAddDeviceToFilterAcceptList(
+      FilterAcceptListAddressType address_type, Address address);
+
+  // HCI command LE_Remove_Device_From_Filter_Accept_List (Vol 4, Part E
+  // § 7.8.17).
+  ErrorCode LeRemoveDeviceFromFilterAcceptList(
+      FilterAcceptListAddressType address_type, Address address);
+
+  // LE Address Resolving
+
+  // HCI command LE_Add_Device_To_Resolving_List (Vol 4, Part E § 7.8.38).
+  ErrorCode LeAddDeviceToResolvingList(AddressType peer_identity_address_type,
+                                       Address peer_address,
+                                       std::array<uint8_t, kIrkSize> peer_irk,
+                                       std::array<uint8_t, kIrkSize> local_irk);
+
+  // HCI command LE_Remove_Device_From_Resolving_List (Vol 4, Part E § 7.8.39).
+  ErrorCode LeRemoveDeviceFromResolvingList(
+      AddressType peer_identity_address_type, Address peer_identity_address);
+
+  // HCI command LE_Clear_Resolving_List (Vol 4, Part E § 7.8.40).
+  ErrorCode LeClearResolvingList();
+
+  // HCI command LE_Set_Address_Resolution_Enable (Vol 4, Part E § 7.8.44).
+  ErrorCode LeSetAddressResolutionEnable(bool enable);
 
  protected:
   void SendLeLinkLayerPacketWithRssi(
@@ -424,8 +483,12 @@ class LinkLayerController {
       model::packets::LinkLayerPacketView packet);
   void IncomingIsoConnectionResponsePacket(
       model::packets::LinkLayerPacketView packet);
-  void IncomingLeAdvertisementPacket(model::packets::LinkLayerPacketView packet,
-                                     uint8_t rssi);
+
+  void IncomingLeLegacyAdvertisingPdu(
+      model::packets::LinkLayerPacketView packet, uint8_t rssi);
+  void IncomingLeExtendedAdvertisingPdu(
+      model::packets::LinkLayerPacketView packet, uint8_t rssi);
+
   void IncomingLeConnectPacket(model::packets::LinkLayerPacketView packet);
   void IncomingLeConnectCompletePacket(
       model::packets::LinkLayerPacketView packet);
@@ -472,8 +535,248 @@ class LinkLayerController {
       model::packets::LinkLayerPacketView packet);
   void IncomingScoDisconnect(model::packets::LinkLayerPacketView packet);
 
+  void IncomingPingRequest(model::packets::LinkLayerPacketView packet);
+
+ public:
+  bool IsEventUnmasked(bluetooth::hci::EventCode event) const;
+  bool IsLeEventUnmasked(bluetooth::hci::SubeventCode subevent) const;
+
+  // TODO
+  // The Clock Offset should be specific to an ACL connection.
+  // Returning a proper value is not that important.
+  uint32_t GetClockOffset() const { return 0; }
+
+  // TODO
+  // The Page Scan Repetition Mode should be specific to an ACL connection or
+  // a paging session.
+  PageScanRepetitionMode GetPageScanRepetitionMode() const {
+    return page_scan_repetition_mode_;
+  }
+
+  // TODO
+  // The Encryption Key Size should be specific to an ACL connection.
+  uint8_t GetEncryptionKeySize() const { return min_encryption_key_size_; }
+
+  bool GetScoFlowControlEnable() const { return sco_flow_control_enable_; }
+  AuthenticationEnable GetAuthenticationEnable() {
+    return authentication_enable_;
+  }
+  std::array<uint8_t, 248> const& GetName() { return name_; }
+
+  uint64_t GetLeSupportedFeatures() const {
+    return properties_.le_features | le_host_supported_features_;
+  }
+
+  uint8_t GetLeAdvertisingTxPower() const {
+    // Return the advertising TX power for the legacy advertiser.
+    // The value is selected by the controller.
+    // TODO check the values configured for extended advertisers.
+    return le_advertising_tx_power_;
+  }
+
+  uint16_t GetConnectionAcceptTimeout() const {
+    return connection_accept_timeout_;
+  }
+
+  uint16_t GetVoiceSetting() const { return voice_setting_; }
+  const ClassOfDevice& GetClassOfDevice() const { return class_of_device_; }
+
+  uint8_t GetMaxLmpFeaturesPageNumber() {
+    return properties_.lmp_features.size() - 1;
+  }
+
+  uint64_t GetLmpFeatures(uint8_t page_number = 0) {
+    return page_number == 1 ? host_supported_features_
+                            : properties_.lmp_features[page_number];
+  }
+
+  void SetClassOfDevice(ClassOfDevice class_of_device) {
+    class_of_device_ = class_of_device;
+  }
+
+  void SetClassOfDevice(uint32_t class_of_device) {
+    class_of_device_.cod[0] = class_of_device & 0xff;
+    class_of_device_.cod[1] = (class_of_device >> 8) & 0xff;
+    class_of_device_.cod[2] = (class_of_device >> 16) & 0xff;
+  }
+
+  void SetExtendedInquiryData(
+      std::vector<uint8_t> const& extended_inquiry_data) {
+    extended_inquiry_data_ = extended_inquiry_data;
+  }
+
+  void SetAuthenticationEnable(AuthenticationEnable enable) {
+    authentication_enable_ = enable;
+  }
+
+  void SetScoFlowControlEnable(bool enable) {
+    sco_flow_control_enable_ = enable;
+  }
+  void SetVoiceSetting(uint16_t voice_setting) {
+    voice_setting_ = voice_setting;
+  }
+  void SetEventMask(uint64_t event_mask) { event_mask_ = event_mask; }
+  void SetLeEventMask(uint64_t le_event_mask) {
+    le_event_mask_ = le_event_mask;
+  }
+
+  void SetName(std::vector<uint8_t> const& name);
+
+  void SetLeHostSupport(bool enable);
+  void SetSecureSimplePairingSupport(bool enable);
+  void SetSecureConnectionsSupport(bool enable);
+  void SetLeAdvertisingParameters(
+      uint16_t interval_min, uint16_t interval_max,
+      bluetooth::hci::AdvertisingType advertising_type,
+      uint8_t own_address_type, uint8_t peer_address_type, Address peer_address,
+      uint8_t channel_map,
+      bluetooth::hci::AdvertisingFilterPolicy filter_policy);
+  void SetConnectionAcceptTimeout(uint16_t timeout) {
+    connection_accept_timeout_ = timeout;
+  }
+  void SetLeScanResponseData(const std::vector<uint8_t>& data) {
+    le_scan_response_data_ = data;
+  }
+  void SetLeAdvertisingData(const std::vector<uint8_t>& data) {
+    le_advertising_data_ = data;
+  }
+
+  uint16_t GetLeAdvertisingIntervalMin() const {
+    return le_advertising_interval_min_;
+  }
+
+  uint16_t GetLeAdvertisingIntervalMax() const {
+    return le_advertising_interval_max_;
+  }
+
+  uint8_t GetLeAdvertisingOwnAddressType() const {
+    return le_advertising_own_address_type_;
+  }
+
+  uint8_t GetLeAdvertisingPeerAddressType() const {
+    return le_advertising_peer_address_type_;
+  }
+
+  Address GetLeAdvertisingPeerAddress() const {
+    return le_advertising_peer_address_;
+  }
+
+  uint8_t GetLeAdvertisingChannelMap() const {
+    return le_advertising_channel_map_;
+  }
+
+  bluetooth::hci::AdvertisingFilterPolicy GetLeAdvertisingFilterPolicy() const {
+    return le_advertising_filter_policy_;
+  }
+
+  const std::vector<uint8_t>& GetLeAdvertisingData() const {
+    return le_advertising_data_;
+  }
+
+  const std::vector<uint8_t>& GetLeScanResponseData() const {
+    return le_scan_response_data_;
+  }
+
  private:
-  const DeviceProperties& properties_;
+  const Address& address_;
+  const ControllerProperties& properties_;
+
+  // Host Supported Features (Vol 2, Part C § 3.3 Feature Mask Definition).
+  // Page 1 of the LMP feature mask.
+  uint64_t host_supported_features_;
+  bool le_host_support_{false};
+  bool secure_simple_pairing_host_support_{false};
+  bool secure_connections_host_support_{false};
+
+  // Le Host Supported Features (Vol 4, Part E § 7.8.3).
+  // Specifies the bits indicating Host support.
+  uint64_t le_host_supported_features_;
+  bool connected_isochronous_stream_host_support_{false};
+  bool connection_subrating_host_support_{false};
+
+  // LE Random Address (Vol 4, Part E § 7.8.4).
+  Address random_address_{Address::kEmpty};
+
+  // HCI configuration parameters.
+  //
+  // Provide the current HCI Configuration Parameters as defined in section
+  // Vol 4, Part E § 6 of the core specification.
+
+  // Scan Enable (Vol 4, Part E § 6.1).
+  bool page_scan_enable_{false};
+  bool inquiry_scan_enable_{false};
+
+  // Inquiry Scan Interval and Window
+  // (Vol 4, Part E § 6.2, 6.3).
+  uint16_t inquiry_scan_interval_{0x1000};
+  uint16_t inquiry_scan_window_{0x0012};
+
+  // Page Timeout (Vol 4, Part E § 6.6).
+  uint16_t page_timeout_{0x2000};
+
+  // Connection Accept Timeout (Vol 4, Part E § 6.7).
+  uint16_t connection_accept_timeout_{0x1FA0};
+
+  // Page Scan Interval and Window
+  // (Vol 4, Part E § 6.8, 6.9).
+  uint16_t page_scan_interval_{0x0800};
+  uint16_t page_scan_window_{0x0012};
+
+  // Voice Setting (Vol 4, Part E § 6.12).
+  uint16_t voice_setting_{0x0060};
+
+  // Authentication Enable (Vol 4, Part E § 6.16).
+  AuthenticationEnable authentication_enable_;
+
+  // Default Link Policy Settings (Vol 4, Part E § 6.18).
+  uint8_t default_link_policy_settings_;
+
+  // Synchronous Flow Control Enable (Vol 4, Part E § 6.22).
+  bool sco_flow_control_enable_{false};
+
+  // Local Name (Vol 4, Part E § 6.23).
+  std::array<uint8_t, 248> name_;
+
+  // Class of Device (Vol 4, Part E § 6.26).
+  ClassOfDevice class_of_device_{{0, 0, 0}};
+
+  // Other configuration parameters.
+
+  // Current IAC LAP (Vol 4, Part E § 7.3.44).
+  std::vector<bluetooth::hci::Lap> current_iac_lap_list_{};
+
+  // Min Encryption Key Size (Vol 4, Part E § 7.3.102).
+  uint8_t min_encryption_key_size_{16};
+
+  // Event Mask (Vol 4, Part E § 7.3.1) and
+  // LE Event Mask (Vol 4, Part E § 7.8.1).
+  uint64_t event_mask_{0x00001fffffffffff};
+  uint64_t le_event_mask_{0x01f};
+
+  // Page Scan Repetition Mode (Vol 2 Part B § 8.3.1 Page Scan substate).
+  // The Page Scan Repetition Mode depends on the selected Page Scan Interval.
+  PageScanRepetitionMode page_scan_repetition_mode_{PageScanRepetitionMode::R0};
+
+  std::vector<uint8_t> extended_inquiry_data_;
+  std::vector<uint8_t> le_scan_response_data_;
+  std::vector<uint8_t> le_advertising_data_;
+
+  // The value is implementation defined.
+  int8_t le_advertising_tx_power_{-10};
+
+  // Note: the advertising parameters are initially set to the default
+  // values of the parameters of the HCI command LE Set Advertising Parameters.
+  uint16_t le_advertising_interval_min_{0x0800};   // 1.28s
+  uint16_t le_advertising_interval_max_{0x0800};   // 1.28s
+  bluetooth::hci::AdvertisingType le_advertising_type_{
+      bluetooth::hci::AdvertisingType::ADV_IND};
+  uint8_t le_advertising_own_address_type_{0x0};   // Public Device Address
+  uint8_t le_advertising_peer_address_type_{0x0};  // Public Device Address
+  Address le_advertising_peer_address_{};
+  uint8_t le_advertising_channel_map_{0x7};    // All channels enabled
+  bluetooth::hci::AdvertisingFilterPolicy le_advertising_filter_policy_{
+      bluetooth::hci::AdvertisingFilterPolicy::ALL_DEVICES};
+
   AclConnectionHandler connections_;
 
   // Callbacks to schedule tasks.
@@ -499,18 +802,20 @@ class LinkLayerController {
   uint32_t oob_id_ = 1;
   uint32_t key_id_ = 1;
 
-  // LE state
-  struct ConnectListEntry {
+  struct FilterAcceptListEntry {
+    FilterAcceptListAddressType address_type;
     Address address;
-    AddressType address_type;
   };
-  std::vector<ConnectListEntry> le_connect_list_;
+
+  std::vector<FilterAcceptListEntry> le_filter_accept_list_;
+
   struct ResolvingListEntry {
-    Address address;
-    AddressType address_type;
+    AddressType peer_identity_address_type;
+    Address peer_identity_address;
     std::array<uint8_t, kIrkSize> peer_irk;
     std::array<uint8_t, kIrkSize> local_irk;
   };
+
   std::vector<ResolvingListEntry> le_resolving_list_;
   bool le_resolving_list_enabled_{false};
 
@@ -522,7 +827,7 @@ class LinkLayerController {
   uint8_t le_scan_type_{};
   uint16_t le_scan_interval_{};
   uint16_t le_scan_window_{};
-  uint8_t le_scan_filter_policy_{};
+  bluetooth::hci::LeScanningFilterPolicy le_scan_filter_policy_{};
   uint8_t le_scan_filter_duplicates_{};
   bluetooth::hci::OwnAddressType le_address_type_{};
 
@@ -535,7 +840,7 @@ class LinkLayerController {
   uint16_t le_connection_supervision_timeout_{};
   uint16_t le_connection_minimum_ce_length_{};
   uint16_t le_connection_maximum_ce_length_{};
-  uint8_t le_initiator_filter_policy_{};
+  bluetooth::hci::InitiatorFilterPolicy le_initiator_filter_policy_{};
 
   Address le_peer_address_{};
   uint8_t le_peer_address_type_{};
@@ -543,19 +848,19 @@ class LinkLayerController {
   // Classic state
 #ifdef ROOTCANAL_LMP
   std::unique_ptr<const LinkManager, void (*)(const LinkManager*)> lm_;
+  struct LinkManagerOps ops_;
 #else
   SecurityManager security_manager_{10};
 #endif /* ROOTCANAL_LMP */
+
+  AsyncTaskId page_timeout_task_id_ = kInvalidTaskId;
+
   std::chrono::steady_clock::time_point last_inquiry_;
   model::packets::InquiryType inquiry_mode_{
       model::packets::InquiryType::STANDARD};
   AsyncTaskId inquiry_timer_task_id_ = kInvalidTaskId;
   uint64_t inquiry_lap_{};
   uint8_t inquiry_max_responses_{};
-  uint16_t default_link_policy_settings_ = 0;
-
-  bool page_scans_enabled_{false};
-  bool inquiry_scans_enabled_{false};
 };
 
 }  // namespace rootcanal

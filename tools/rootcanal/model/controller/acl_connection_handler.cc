@@ -127,20 +127,22 @@ uint16_t AclConnectionHandler::CreateConnection(Address addr,
         AclConnection{
             AddressWithType{addr, AddressType::PUBLIC_DEVICE_ADDRESS},
             AddressWithType{own_addr, AddressType::PUBLIC_DEVICE_ADDRESS},
-            AddressWithType(), Phy::Type::BR_EDR});
+            AddressWithType(), Phy::Type::BR_EDR,
+            bluetooth::hci::Role::CENTRAL});
     return handle;
   }
   return kReservedHandle;
 }
 
 uint16_t AclConnectionHandler::CreateLeConnection(AddressWithType addr,
-                                                  AddressWithType own_addr) {
+                                                  AddressWithType own_addr,
+                                                  bluetooth::hci::Role role) {
   AddressWithType resolved_peer = pending_le_connection_resolved_address_;
   if (CancelPendingLeConnection(addr)) {
     uint16_t handle = GetUnusedHandle();
-    acl_connections_.emplace(
-        handle,
-        AclConnection{addr, own_addr, resolved_peer, Phy::Type::LOW_ENERGY});
+    acl_connections_.emplace(handle,
+                             AclConnection{addr, own_addr, resolved_peer,
+                                           Phy::Type::LOW_ENERGY, role});
     return handle;
   }
   return kReservedHandle;
@@ -221,6 +223,24 @@ Phy::Type AclConnectionHandler::GetPhyType(uint16_t handle) const {
     return Phy::Type::BR_EDR;
   }
   return acl_connections_.at(handle).GetPhyType();
+}
+
+uint16_t AclConnectionHandler::GetAclLinkPolicySettings(uint16_t handle) const {
+  return acl_connections_.at(handle).GetLinkPolicySettings();
+};
+
+void AclConnectionHandler::SetAclLinkPolicySettings(uint16_t handle,
+                                                    uint16_t settings) {
+  acl_connections_.at(handle).SetLinkPolicySettings(settings);
+}
+
+bluetooth::hci::Role AclConnectionHandler::GetAclRole(uint16_t handle) const {
+  return acl_connections_.at(handle).GetRole();
+};
+
+void AclConnectionHandler::SetAclRole(uint16_t handle,
+                                      bluetooth::hci::Role role) {
+  acl_connections_.at(handle).SetRole(role);
 }
 
 std::unique_ptr<bluetooth::hci::LeSetCigParametersCompleteBuilder>
@@ -544,6 +564,28 @@ std::vector<uint16_t> AclConnectionHandler::GetAclHandles() const {
     keys.push_back(pair.first);
   }
   return keys;
+}
+
+void AclConnectionHandler::ResetLinkTimer(uint16_t handle) {
+  acl_connections_.at(handle).ResetLinkTimer();
+}
+
+std::chrono::steady_clock::duration
+AclConnectionHandler::TimeUntilLinkNearExpiring(uint16_t handle) const {
+  return acl_connections_.at(handle).TimeUntilNearExpiring();
+}
+
+bool AclConnectionHandler::IsLinkNearExpiring(uint16_t handle) const {
+  return acl_connections_.at(handle).IsNearExpiring();
+}
+
+std::chrono::steady_clock::duration AclConnectionHandler::TimeUntilLinkExpired(
+    uint16_t handle) const {
+  return acl_connections_.at(handle).TimeUntilExpired();
+}
+
+bool AclConnectionHandler::HasLinkExpired(uint16_t handle) const {
+  return acl_connections_.at(handle).HasExpired();
 }
 
 }  // namespace rootcanal
