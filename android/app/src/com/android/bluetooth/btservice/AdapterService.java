@@ -169,6 +169,7 @@ public class AdapterService extends Service {
     private static final int MIN_OFFLOADED_FILTERS = 10;
     private static final int MIN_OFFLOADED_SCAN_STORAGE_BYTES = 1024;
     private static final Duration PENDING_SOCKET_HANDOFF_TIMEOUT = Duration.ofMinutes(1);
+    private static final Duration GENERATE_LOCAL_OOB_DATA_TIMEOUT = Duration.ofSeconds(2);
 
     private final Object mEnergyInfoLock = new Object();
     private int mStackReportedState;
@@ -749,8 +750,9 @@ public class AdapterService extends Service {
             nonSupportedProfiles.add(BassClientService.class);
         }
 
-        if (isLeAudioBroadcastSourceSupported()) {
-            Config.addSupportedProfile(BluetoothProfile.LE_AUDIO_BROADCAST);
+        if (!isLeAudioBroadcastSourceSupported()) {
+            Config.updateSupportedProfileMask(
+                    false, LeAudioService.class, BluetoothProfile.LE_AUDIO_BROADCAST);
         }
 
         if (!nonSupportedProfiles.isEmpty()) {
@@ -3399,7 +3401,8 @@ public class AdapterService extends Service {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
             }
 
-            if (service.isLeAudioBroadcastSourceSupported()) {
+            long supportBitMask = Config.getSupportedProfilesBitMask();
+            if ((supportBitMask & (1 << BluetoothProfile.LE_AUDIO_BROADCAST)) != 0) {
                 return BluetoothStatusCodes.FEATURE_SUPPORTED;
             }
 
@@ -3905,7 +3908,7 @@ public class AdapterService extends Service {
 
     public byte[] getByteIdentityAddress(BluetoothDevice device) {
         DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
-        if (deviceProp != null && deviceProp.isConsolidated()) {
+        if (deviceProp != null && deviceProp.getIdentityAddress() != null) {
             return Utils.getBytesFromAddress(deviceProp.getIdentityAddress());
         } else {
             return Utils.getByteAddress(device);
@@ -3923,7 +3926,7 @@ public class AdapterService extends Service {
     public String getIdentityAddress(String address) {
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address.toUpperCase());
         DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
-        if (deviceProp != null && deviceProp.isConsolidated()) {
+        if (deviceProp != null && deviceProp.getIdentityAddress() != null) {
             return deviceProp.getIdentityAddress();
         } else {
             return address;
@@ -3999,13 +4002,29 @@ public class AdapterService extends Service {
         if (mOobDataCallbackQueue.peek() != null) {
             try {
                 callback.onError(BluetoothStatusCodes.ERROR_ANOTHER_ACTIVE_OOB_REQUEST);
-                return;
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to make callback", e);
             }
+            return;
         }
         mOobDataCallbackQueue.offer(callback);
+        mHandler.postDelayed(() -> removeFromOobDataCallbackQueue(callback),
+                GENERATE_LOCAL_OOB_DATA_TIMEOUT.toMillis());
         generateLocalOobDataNative(transport);
+    }
+
+    private synchronized void removeFromOobDataCallbackQueue(IBluetoothOobDataCallback callback) {
+        if (callback == null) {
+            return;
+        }
+
+        if (mOobDataCallbackQueue.peek() == callback) {
+            try {
+                mOobDataCallbackQueue.poll().onError(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to make OobDataCallback to remove callback from queue", e);
+            }
+        }
     }
 
     /* package */ synchronized void notifyOobDataCallback(int transport, OobData oobData) {
@@ -4656,8 +4675,7 @@ public class AdapterService extends Service {
      * @return true, if the LE audio broadcast source is supported
      */
     public boolean isLeAudioBroadcastSourceSupported() {
-        return  BluetoothProperties.isProfileBapBroadcastSourceEnabled().orElse(false)
-                && mAdapterProperties.isLePeriodicAdvertisingSupported()
+        return  mAdapterProperties.isLePeriodicAdvertisingSupported()
                 && mAdapterProperties.isLeExtendedAdvertisingSupported()
                 && mAdapterProperties.isLeIsochronousBroadcasterSupported();
     }
@@ -4672,6 +4690,10 @@ public class AdapterService extends Service {
             && mAdapterProperties.isLeExtendedAdvertisingSupported()
             && (mAdapterProperties.isLePeriodicAdvertisingSyncTransferSenderSupported()
                 || mAdapterProperties.isLePeriodicAdvertisingSyncTransferRecipientSupported());
+    }
+
+    public long getSupportedProfilesBitMask() {
+        return Config.getSupportedProfilesBitMask();
     }
 
     /**
@@ -5079,7 +5101,10 @@ public class AdapterService extends Service {
     private static final String GD_L2CAP_FLAG = "INIT_gd_l2cap";
     private static final String GD_RUST_FLAG = "INIT_gd_rust";
     private static final String GD_LINK_POLICY_FLAG = "INIT_gd_link_policy";
-    private static final String GATT_ROBUST_CACHING_FLAG = "INIT_gatt_robust_caching";
+    private static final String GATT_ROBUST_CACHING_CLIENT_FLAG = "INIT_gatt_robust_caching_client";
+    private static final String GATT_ROBUST_CACHING_SERVER_FLAG = "INIT_gatt_robust_caching_server";
+    private static final String IRK_ROTATION_FLAG = "INIT_irk_rotation";
+    private static final String PASS_PHY_UPDATE_CALLBACK_FLAG = "INIT_pass_phy_update_callback";
 
     /**
      * Logging flags logic (only applies to DEBUG and VERBOSE levels):
@@ -5133,8 +5158,19 @@ public class AdapterService extends Service {
             initFlags.add(String.format("%s=%s", GD_LINK_POLICY_FLAG, "true"));
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
-                GATT_ROBUST_CACHING_FLAG, false)) {
-            initFlags.add(String.format("%s=%s", GATT_ROBUST_CACHING_FLAG, "true"));
+                GATT_ROBUST_CACHING_CLIENT_FLAG, true)) {
+            initFlags.add(String.format("%s=%s", GATT_ROBUST_CACHING_CLIENT_FLAG, "true"));
+        }
+        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
+                GATT_ROBUST_CACHING_SERVER_FLAG, false)) {
+            initFlags.add(String.format("%s=%s", GATT_ROBUST_CACHING_SERVER_FLAG, "true"));
+        }
+        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, IRK_ROTATION_FLAG, false)) {
+            initFlags.add(String.format("%s=%s", IRK_ROTATION_FLAG, "true"));
+        }
+        if (DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_BLUETOOTH, PASS_PHY_UPDATE_CALLBACK_FLAG, true)) {
+            initFlags.add(String.format("%s=%s", PASS_PHY_UPDATE_CALLBACK_FLAG, "true"));
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
                 LOGGING_DEBUG_ENABLED_FOR_ALL_FLAG, false)) {
@@ -5221,33 +5257,30 @@ public class AdapterService extends Service {
         }
     }
 
-    public static int getScanQuotaCount() {
-        if (sAdapterService == null) {
-            return DeviceConfigListener.DEFAULT_SCAN_QUOTA_COUNT;
-        }
-
-        synchronized (sAdapterService.mDeviceConfigLock) {
-            return sAdapterService.mScanQuotaCount;
-        }
-    }
-
-    public static long getScanQuotaWindowMillis() {
-        if (sAdapterService == null) {
-            return DeviceConfigListener.DEFAULT_SCAN_QUOTA_WINDOW_MILLIS;
-        }
-
-        synchronized (sAdapterService.mDeviceConfigLock) {
-            return sAdapterService.mScanQuotaWindowMillis;
+    /**
+     * Returns scan quota count.
+     */
+    public int getScanQuotaCount() {
+        synchronized (mDeviceConfigLock) {
+            return mScanQuotaCount;
         }
     }
 
-    public static long getScanTimeoutMillis() {
-        if (sAdapterService == null) {
-            return DeviceConfigListener.DEFAULT_SCAN_TIMEOUT_MILLIS;
+    /**
+     * Returns scan quota window in millis.
+     */
+    public long getScanQuotaWindowMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScanQuotaWindowMillis;
         }
+    }
 
-        synchronized (sAdapterService.mDeviceConfigLock) {
-            return sAdapterService.mScanTimeoutMillis;
+    /**
+     * Returns scan timeout in millis.
+     */
+    public long getScanTimeoutMillis() {
+        synchronized (mDeviceConfigLock) {
+            return mScanTimeoutMillis;
         }
     }
 
