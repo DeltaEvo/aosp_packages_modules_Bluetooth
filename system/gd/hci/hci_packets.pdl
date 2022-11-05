@@ -777,6 +777,7 @@ enum SubeventCode : 8 {
 // Vendor specific events
 enum VseSubeventCode : 8 {
   BLE_THRESHOLD = 0x54,
+  BLE_STCHANGE = 0x55,
   BLE_TRACKING = 0x56,
   DEBUG_INFO = 0x57,
   BQR_EVENT = 0x58,
@@ -829,6 +830,7 @@ enum ErrorCode: 8 {
   LINK_LAYER_COLLISION = 0x23,
   ENCRYPTION_MODE_NOT_ACCEPTABLE = 0x25,
   ROLE_SWITCH_FAILED = 0x35,
+  HOST_BUSY = 0x38,
   CONTROLLER_BUSY = 0x3A,
   ADVERTISING_TIMEOUT = 0x3C,
   CONNECTION_FAILED_ESTABLISHMENT = 0x3E,
@@ -5437,6 +5439,23 @@ packet ExtendedInquiryResult : Event (event_code = EXTENDED_INQUIRY_RESULT) {
   _padding_[240],
 }
 
+packet ExtendedInquiryResultRaw : Event (event_code = EXTENDED_INQUIRY_RESULT) {
+  _fixed_ = 0x01 : 8,
+  address : Address,
+  page_scan_repetition_mode : PageScanRepetitionMode,
+  _reserved_ : 8,
+  class_of_device : ClassOfDevice,
+  clock_offset : 15,
+  _reserved_ : 1,
+  rssi : 8,
+  extended_inquiry_response : 8[],
+  // Extended inquiry Result is always 255 bytes long
+  // padded GapData with zeroes as necessary
+  // Refer to BLUETOOTH CORE SPECIFICATION Version 5.2 | Vol 3, Part C Section 8 on page 1340
+  _padding_[240],
+}
+
+
 packet EncryptionKeyRefreshComplete : Event (event_code = ENCRYPTION_KEY_REFRESH_COMPLETE) {
   status : ErrorCode,
   connection_handle : 12,
@@ -5980,6 +5999,17 @@ packet LEAdvertisementTrackingEvent : VendorSpecificEvent (subevent_code = BLE_T
   advertiser_address : Address,
   advertiser_address_type : 8,
   _body_,
+}
+
+enum VseStateChangeReason : 8 {
+  CONNECTION_RECEIVED = 0x00,
+}
+
+packet LEAdvertiseStateChangeEvent : VendorSpecificEvent (subevent_code = BLE_STCHANGE) {
+  advertising_instance : 8,
+  state_change_reason : VseStateChangeReason,
+  connection_handle : 12,
+  reserved : 4,
 }
 
 packet LEAdvertisementTrackingWithInfoEvent : LEAdvertisementTrackingEvent {
