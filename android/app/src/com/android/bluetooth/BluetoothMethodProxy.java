@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.android.bluetooth.pbap;
+package com.android.bluetooth;
 
 import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.util.Log;
 
-import com.android.bluetooth.Utils;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.HeaderSet;
 
@@ -31,22 +31,22 @@ import java.io.IOException;
 /**
  * Proxy class for method calls to help with unit testing
  */
-public class BluetoothPbapMethodProxy {
-    private static final String TAG = BluetoothPbapMethodProxy.class.getSimpleName();
-    private static BluetoothPbapMethodProxy sInstance;
+public class BluetoothMethodProxy {
+    private static final String TAG = BluetoothMethodProxy.class.getSimpleName();
+    private static BluetoothMethodProxy sInstance;
     private static final Object INSTANCE_LOCK = new Object();
 
-    private BluetoothPbapMethodProxy() {}
+    private BluetoothMethodProxy() {}
 
     /**
      * Get the singleton instance of proxy
      *
      * @return the singleton instance, guaranteed not null
      */
-    public static BluetoothPbapMethodProxy getInstance() {
+    public static BluetoothMethodProxy getInstance() {
         synchronized (INSTANCE_LOCK) {
             if (sInstance == null) {
-                sInstance = new BluetoothPbapMethodProxy();
+                sInstance = new BluetoothMethodProxy();
             }
         }
         return sInstance;
@@ -58,7 +58,7 @@ public class BluetoothPbapMethodProxy {
      * @param proxy a test instance of the BluetoothPbapMethodCallProxy
      */
     @VisibleForTesting
-    public static void setInstanceForTesting(BluetoothPbapMethodProxy proxy) {
+    public static void setInstanceForTesting(BluetoothMethodProxy proxy) {
         Utils.enforceInstrumentationTestMode();
         synchronized (INSTANCE_LOCK) {
             Log.d(TAG, "setInstanceForTesting(), set to " + proxy);
@@ -73,6 +73,23 @@ public class BluetoothPbapMethodProxy {
             final String[] projection, final String selection, final String[] selectionArgs,
             final String sortOrder) {
         return contentResolver.query(contentUri, projection, selection, selectionArgs, sortOrder);
+    }
+
+    /**
+     * Proxies {@link ContentResolver#delete(Uri, String, String[])}.
+     */
+    public int contentResolverDelete(ContentResolver contentResolver, final Uri url,
+            final String where,
+            final String[] selectionArgs) {
+        return contentResolver.delete(url, where, selectionArgs);
+    }
+
+    /**
+     * Proxies {@link ContentResolver#update(Uri, ContentValues, String, String[])}.
+     */
+    public int contentResolverUpdate(ContentResolver contentResolver, final Uri contentUri,
+            final ContentValues contentValues, String where, String[] selectionArgs) {
+        return contentResolver.update(contentUri, contentValues, where, selectionArgs);
     }
 
     /**

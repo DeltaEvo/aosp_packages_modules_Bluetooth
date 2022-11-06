@@ -205,11 +205,11 @@ public class AdapterService extends Service {
     static final String LOCAL_MAC_ADDRESS_PERM = android.Manifest.permission.LOCAL_MAC_ADDRESS;
     static final String RECEIVE_MAP_PERM = android.Manifest.permission.RECEIVE_BLUETOOTH_MAP;
 
-    private static final String PHONEBOOK_ACCESS_PERMISSION_PREFERENCE_FILE =
+    static final String PHONEBOOK_ACCESS_PERMISSION_PREFERENCE_FILE =
             "phonebook_access_permission";
-    private static final String MESSAGE_ACCESS_PERMISSION_PREFERENCE_FILE =
+    static final String MESSAGE_ACCESS_PERMISSION_PREFERENCE_FILE =
             "message_access_permission";
-    private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
+    static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
 
@@ -750,8 +750,9 @@ public class AdapterService extends Service {
             nonSupportedProfiles.add(BassClientService.class);
         }
 
-        if (isLeAudioBroadcastSourceSupported()) {
-            Config.addSupportedProfile(BluetoothProfile.LE_AUDIO_BROADCAST);
+        if (!isLeAudioBroadcastSourceSupported()) {
+            Config.updateSupportedProfileMask(
+                    false, LeAudioService.class, BluetoothProfile.LE_AUDIO_BROADCAST);
         }
 
         if (!nonSupportedProfiles.isEmpty()) {
@@ -3400,7 +3401,8 @@ public class AdapterService extends Service {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
             }
 
-            if (service.isLeAudioBroadcastSourceSupported()) {
+            long supportBitMask = Config.getSupportedProfilesBitMask();
+            if ((supportBitMask & (1 << BluetoothProfile.LE_AUDIO_BROADCAST)) != 0) {
                 return BluetoothStatusCodes.FEATURE_SUPPORTED;
             }
 
@@ -4673,8 +4675,7 @@ public class AdapterService extends Service {
      * @return true, if the LE audio broadcast source is supported
      */
     public boolean isLeAudioBroadcastSourceSupported() {
-        return  BluetoothProperties.isProfileBapBroadcastSourceEnabled().orElse(false)
-                && mAdapterProperties.isLePeriodicAdvertisingSupported()
+        return  mAdapterProperties.isLePeriodicAdvertisingSupported()
                 && mAdapterProperties.isLeExtendedAdvertisingSupported()
                 && mAdapterProperties.isLeIsochronousBroadcasterSupported();
     }
@@ -4689,6 +4690,10 @@ public class AdapterService extends Service {
             && mAdapterProperties.isLeExtendedAdvertisingSupported()
             && (mAdapterProperties.isLePeriodicAdvertisingSyncTransferSenderSupported()
                 || mAdapterProperties.isLePeriodicAdvertisingSyncTransferRecipientSupported());
+    }
+
+    public long getSupportedProfilesBitMask() {
+        return Config.getSupportedProfilesBitMask();
     }
 
     /**
@@ -5099,6 +5104,7 @@ public class AdapterService extends Service {
     private static final String GATT_ROBUST_CACHING_CLIENT_FLAG = "INIT_gatt_robust_caching_client";
     private static final String GATT_ROBUST_CACHING_SERVER_FLAG = "INIT_gatt_robust_caching_server";
     private static final String IRK_ROTATION_FLAG = "INIT_irk_rotation";
+    private static final String PASS_PHY_UPDATE_CALLBACK_FLAG = "INIT_pass_phy_update_callback";
 
     /**
      * Logging flags logic (only applies to DEBUG and VERBOSE levels):
@@ -5161,6 +5167,10 @@ public class AdapterService extends Service {
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, IRK_ROTATION_FLAG, false)) {
             initFlags.add(String.format("%s=%s", IRK_ROTATION_FLAG, "true"));
+        }
+        if (DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_BLUETOOTH, PASS_PHY_UPDATE_CALLBACK_FLAG, true)) {
+            initFlags.add(String.format("%s=%s", PASS_PHY_UPDATE_CALLBACK_FLAG, "true"));
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
                 LOGGING_DEBUG_ENABLED_FOR_ALL_FLAG, false)) {
