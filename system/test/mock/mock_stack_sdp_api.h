@@ -255,6 +255,15 @@ struct SDP_GetNumDiRecords {
 };
 extern struct SDP_GetNumDiRecords SDP_GetNumDiRecords;
 
+// Name:SDP_Dumpsys
+// Params: int fd
+// Returns: void
+struct SDP_Dumpsys {
+  std::function<void(int fd)> body{[](int /* fd */) {}};
+  void operator()(int fd) { body(fd); }
+};
+extern struct SDP_Dumpsys SDP_Dumpsys;
+
 }  // namespace stack_sdp_api
 }  // namespace mock
 }  // namespace test

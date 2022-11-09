@@ -23,6 +23,7 @@
 #include "include/macros.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/sdp_api.h"
 #include "stack/include/sdpdefs.h"
 #include "stack/sdp/internal/sdp_api.h"
 #include "stack/sdp/sdpint.h"
@@ -414,4 +415,15 @@ TEST_F(StackSdpInitTest, sdpu_dump_all_ccb) {
   ASSERT_EQ(nullptr, sdp_conn_originate(addr5));
 
   sdpu_dump_all_ccb();
+}
+
+TEST_F(StackSdpInitTest, SDP_Dumpsys) { SDP_Dumpsys(1); }
+
+TEST_F(StackSdpInitTest, SDP_Dumpsys_ccb) {
+  ASSERT_NE(nullptr, sdp_conn_originate(addr));
+  ASSERT_NE(nullptr, sdp_conn_originate(addr2));
+  ASSERT_NE(nullptr, sdp_conn_originate(addr3));
+  ASSERT_NE(nullptr, sdp_conn_originate(addr4));
+  ASSERT_EQ(nullptr, sdp_conn_originate(addr5));
+  SDP_Dumpsys(1);
 }
