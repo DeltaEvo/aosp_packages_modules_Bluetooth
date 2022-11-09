@@ -48,8 +48,10 @@ import android.net.Uri;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemProperties;
+import android.util.EventLog;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.R;
 
 import java.io.File;
@@ -78,12 +80,18 @@ public class BluetoothOppUtility {
             new ConcurrentHashMap<Uri, BluetoothOppSendFileInfo>();
 
     public static boolean isBluetoothShareUri(Uri uri) {
-        return uri.toString().startsWith(BluetoothShare.CONTENT_URI.toString());
+        if (uri.toString().startsWith(BluetoothShare.CONTENT_URI.toString())
+                && !uri.getAuthority().equals(BluetoothShare.CONTENT_URI.getAuthority())) {
+            EventLog.writeEvent(0x534e4554, "225880741", -1, "");
+        }
+        return uri.getAuthority().equals(BluetoothShare.CONTENT_URI.getAuthority());
     }
 
     public static BluetoothOppTransferInfo queryRecord(Context context, Uri uri) {
         BluetoothOppTransferInfo info = new BluetoothOppTransferInfo();
-        Cursor cursor = context.getContentResolver().query(uri, null, null, null, null);
+        Cursor cursor = BluetoothMethodProxy.getInstance().contentResolverQuery(
+                context.getContentResolver(), uri, null, null, null, null
+        );
         if (cursor != null) {
             if (cursor.moveToFirst()) {
                 fillRecord(context, cursor, info);
@@ -152,10 +160,14 @@ public class BluetoothOppUtility {
     public static ArrayList<String> queryTransfersInBatch(Context context, Long timeStamp) {
         ArrayList<String> uris = new ArrayList();
         final String where = BluetoothShare.TIMESTAMP + " == " + timeStamp;
-        Cursor metadataCursor =
-                context.getContentResolver().query(BluetoothShare.CONTENT_URI, new String[]{
-                        BluetoothShare._DATA
-                }, where, null, BluetoothShare._ID);
+        Cursor metadataCursor = BluetoothMethodProxy.getInstance().contentResolverQuery(
+                context.getContentResolver(),
+                BluetoothShare.CONTENT_URI,
+                new String[]{BluetoothShare._DATA},
+                where,
+                null,
+                BluetoothShare._ID
+        );
 
         if (metadataCursor == null) {
             return null;
@@ -195,8 +207,10 @@ public class BluetoothOppUtility {
         }
 
         Uri path = null;
-        Cursor metadataCursor = context.getContentResolver().query(uri, new String[]{
-                BluetoothShare.URI}, null, null, null);
+        Cursor metadataCursor = BluetoothMethodProxy.getInstance().contentResolverQuery(
+                context.getContentResolver(), uri, new String[]{BluetoothShare.URI},
+                null, null, null
+        );
         if (metadataCursor != null) {
             try {
                 if (metadataCursor.moveToFirst()) {
@@ -302,7 +316,8 @@ public class BluetoothOppUtility {
     public static void updateVisibilityToHidden(Context context, Uri uri) {
         ContentValues updateValues = new ContentValues();
         updateValues.put(BluetoothShare.VISIBILITY, BluetoothShare.VISIBILITY_HIDDEN);
-        context.getContentResolver().update(uri, updateValues, null, null);
+        BluetoothMethodProxy.getInstance().contentResolverUpdate(context.getContentResolver(), uri,
+                updateValues, null, null);
     }
 
     /**

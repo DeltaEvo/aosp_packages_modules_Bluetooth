@@ -630,6 +630,21 @@ void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
     return;
   }
 
+  /* if we are trying to drop encryption on an encrypted connection, drop the
+   * connection */
+  if (p->is_encrypted && !encr_enable) {
+    android_errorWriteLog(0x534e4554, "251436534");
+    LOG(ERROR) << __func__
+               << " attempting to decrypt encrypted connection, disconnecting. "
+                  "handle: "
+               << loghex(handle);
+
+    acl_disconnect_from_handle(handle, HCI_ERR_HOST_REJECT_SECURITY,
+                               "stack::btu::btu_hcif::read_drop_encryption "
+                               "Connection Already Encrypted");
+    return;
+  }
+
   p->is_encrypted = encr_enable;
 
   /* Process Role Switch if active */
@@ -2737,35 +2752,6 @@ void acl_packets_completed(uint16_t handle, uint16_t credits) {
   l2c_packets_completed(handle, credits);
   bluetooth::hci::IsoManager::GetInstance()->HandleGdNumComplDataPkts(handle,
                                                                       credits);
-}
-
-static void acl_parse_num_completed_pkts(uint8_t* p, uint8_t evt_len) {
-  if (evt_len == 0) {
-    LOG_ERROR("Received num completed packets with zero length");
-    return;
-  }
-
-  uint8_t num_handles{0};
-  STREAM_TO_UINT8(num_handles, p);
-
-  if (num_handles > evt_len / (2 * sizeof(uint16_t))) {
-    android_errorWriteLog(0x534e4554, "141617601");
-    num_handles = evt_len / (2 * sizeof(uint16_t));
-  }
-
-  for (uint8_t xx = 0; xx < num_handles; xx++) {
-    uint16_t handle{0};
-    uint16_t num_packets{0};
-    STREAM_TO_UINT16(handle, p);
-    handle = HCID_GET_HANDLE(handle);
-    STREAM_TO_UINT16(num_packets, p);
-    acl_packets_completed(handle, num_packets);
-  }
-}
-
-void acl_process_num_completed_pkts(uint8_t* p, uint8_t evt_len) {
-  acl_parse_num_completed_pkts(p, evt_len);
-  bluetooth::hci::IsoManager::GetInstance()->HandleNumComplDataPkts(p, evt_len);
 }
 
 void acl_process_supported_features(uint16_t handle, uint64_t features) {

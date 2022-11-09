@@ -536,12 +536,9 @@ void bta_gattc_conn(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
       p_clcb->p_srcb->state != BTA_GATTC_SERV_IDLE) {
     if (p_clcb->p_srcb->state == BTA_GATTC_SERV_IDLE) {
       p_clcb->p_srcb->state = BTA_GATTC_SERV_LOAD;
-      // Consider the case that if GATT Server is changed, but no service
-      // changed indication is received, the database might be out of date. So
-      // if robust caching is enabled, any time when connection is established,
-      // always check the db hash first, not just load the stored database.
+      // For bonded devices, read cache directly, and back to connected state.
       gatt::Database db = bta_gattc_cache_load(p_clcb->p_srcb->server_bda);
-      if (!bta_gattc_is_robust_caching_enabled() && !db.IsEmpty()) {
+      if (!db.IsEmpty() && btm_sec_is_a_bonded_dev(p_clcb->p_srcb->server_bda)) {
         p_clcb->p_srcb->gatt_database = db;
         p_clcb->p_srcb->state = BTA_GATTC_SERV_IDLE;
         bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_SUCCESS);
@@ -714,7 +711,7 @@ void bta_gattc_restart_discover(tBTA_GATTC_CLCB* p_clcb,
 
 /** Configure MTU size on the GATT connection */
 void bta_gattc_cfg_mtu(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
-  if (!bta_gattc_enqueue(p_clcb, p_data)) return;
+  if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
   tGATT_STATUS status =
       GATTC_ConfigureMTU(p_clcb->bta_conn_id, p_data->api_mtu.mtu);
@@ -726,6 +723,7 @@ void bta_gattc_cfg_mtu(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
     bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_CONFIG, status,
                            NULL);
+    bta_gattc_continue(p_clcb);
   }
 }
 
@@ -770,6 +768,26 @@ void bta_gattc_start_discover(tBTA_GATTC_CLCB* p_clcb,
       p_clcb->p_srcb->srvc_hdl_chg = false;
       p_clcb->p_srcb->update_count = 0;
       p_clcb->p_srcb->state = BTA_GATTC_SERV_DISC_ACT;
+
+      /* This is workaround for the embedded devices being already on the market
+       * and having a serious problem with handle Read By Type with
+       * GATT_UUID_DATABASE_HASH. With this workaround, Android will assume that
+       * embedded device having LMP version lower than 5.1 (0x0a), it does not
+       * support GATT Caching.
+       */
+      uint8_t lmp_version = 0;
+      if (!BTM_ReadRemoteVersion(p_clcb->bda, &lmp_version, nullptr, nullptr)) {
+        LOG_WARN("Could not read remote version for %s",
+                 p_clcb->bda.ToString().c_str());
+      }
+
+      if (lmp_version < 0x0a) {
+        LOG_WARN(
+            " Device LMP version 0x%02x < Bluetooth 5.1. Ignore database cache "
+            "read.",
+            lmp_version);
+        p_clcb->p_srcb->srvc_hdl_db_hash = false;
+      }
 
       /* read db hash if db hash characteristic exists */
       if (bta_gattc_is_robust_caching_enabled() &&
@@ -838,6 +856,8 @@ void bta_gattc_disc_cmpl(tBTA_GATTC_CLCB* p_clcb,
      * referenced by p_clcb->p_q_cmd
      */
     if (p_q_cmd != p_clcb->p_q_cmd) osi_free_and_reset((void**)&p_q_cmd);
+  } else {
+    bta_gattc_continue(p_clcb);
   }
 
   if (p_clcb->p_rcb->p_cback) {
@@ -849,7 +869,7 @@ void bta_gattc_disc_cmpl(tBTA_GATTC_CLCB* p_clcb,
 
 /** Read an attribute */
 void bta_gattc_read(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
-  if (!bta_gattc_enqueue(p_clcb, p_data)) return;
+  if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
   tGATT_STATUS status;
   if (p_data->api_read.handle != 0) {
@@ -876,13 +896,14 @@ void bta_gattc_read(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
     bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_READ, status,
                            NULL);
+    bta_gattc_continue(p_clcb);
   }
 }
 
 /** read multiple */
 void bta_gattc_read_multi(tBTA_GATTC_CLCB* p_clcb,
                           const tBTA_GATTC_DATA* p_data) {
-  if (!bta_gattc_enqueue(p_clcb, p_data)) return;
+  if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
   tGATT_READ_PARAM read_param;
   memset(&read_param, 0, sizeof(tGATT_READ_PARAM));
@@ -901,12 +922,13 @@ void bta_gattc_read_multi(tBTA_GATTC_CLCB* p_clcb,
 
     bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_READ, status,
                            NULL);
+    bta_gattc_continue(p_clcb);
   }
 }
 
 /** Write an attribute */
 void bta_gattc_write(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
-  if (!bta_gattc_enqueue(p_clcb, p_data)) return;
+  if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
   tGATT_STATUS status = GATT_SUCCESS;
   tGATT_VALUE attr;
@@ -930,12 +952,13 @@ void bta_gattc_write(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
     bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_WRITE, status,
                            NULL);
+    bta_gattc_continue(p_clcb);
   }
 }
 
 /** send execute write */
 void bta_gattc_execute(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
-  if (!bta_gattc_enqueue(p_clcb, p_data)) return;
+  if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
   tGATT_STATUS status =
       GATTC_ExecuteWrite(p_clcb->bta_conn_id, p_data->api_exec.is_execute);
@@ -945,6 +968,7 @@ void bta_gattc_execute(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
     bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_EXE_WRITE, status,
                            NULL);
+    bta_gattc_continue(p_clcb);
   }
 }
 

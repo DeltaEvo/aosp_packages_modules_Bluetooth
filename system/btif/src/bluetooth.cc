@@ -172,28 +172,16 @@ static bool is_profile(const char* p1, const char* p2) {
  *
  ****************************************************************************/
 
-#ifdef OS_ANDROID
-const std::vector<std::string> get_allowed_bt_package_name(void);
-void handle_migration(const std::string& dst,
-                      const std::vector<std::string>& allowed_bt_package_name);
-#endif
-
 static int init(bt_callbacks_t* callbacks, bool start_restricted,
                 bool is_common_criteria_mode, int config_compare_result,
                 const char** init_flags, bool is_atv,
                 const char* user_data_directory) {
+  (void)user_data_directory;
   LOG_INFO(
       "%s: start restricted = %d ; common criteria mode = %d, config compare "
       "result = %d",
       __func__, start_restricted, is_common_criteria_mode,
       config_compare_result);
-
-#ifdef OS_ANDROID
-  if (user_data_directory != nullptr) {
-    handle_migration(std::string(user_data_directory),
-                     get_allowed_bt_package_name());
-  }
-#endif
 
   bluetooth::common::InitFlags::Load(init_flags);
 
@@ -887,6 +875,16 @@ void invoke_address_consolidate_cb(RawAddress main_bd_addr,
                      main_bd_addr, secondary_bd_addr));
 }
 
+void invoke_le_address_associate_cb(RawAddress main_bd_addr,
+                                    RawAddress secondary_bd_addr) {
+  do_in_jni_thread(
+      FROM_HERE, base::BindOnce(
+                     [](RawAddress main_bd_addr, RawAddress secondary_bd_addr) {
+                       HAL_CBACK(bt_hal_cbacks, le_address_associate_cb,
+                                 &main_bd_addr, &secondary_bd_addr);
+                     },
+                     main_bd_addr, secondary_bd_addr));
+}
 void invoke_acl_state_changed_cb(bt_status_t status, RawAddress bd_addr,
                                  bt_acl_state_t state, int transport_link_type,
                                  bt_hci_error_code_t hci_reason) {
