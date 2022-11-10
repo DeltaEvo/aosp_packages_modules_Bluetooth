@@ -205,11 +205,11 @@ public class AdapterService extends Service {
     static final String LOCAL_MAC_ADDRESS_PERM = android.Manifest.permission.LOCAL_MAC_ADDRESS;
     static final String RECEIVE_MAP_PERM = android.Manifest.permission.RECEIVE_BLUETOOTH_MAP;
 
-    private static final String PHONEBOOK_ACCESS_PERMISSION_PREFERENCE_FILE =
+    static final String PHONEBOOK_ACCESS_PERMISSION_PREFERENCE_FILE =
             "phonebook_access_permission";
-    private static final String MESSAGE_ACCESS_PERMISSION_PREFERENCE_FILE =
+    static final String MESSAGE_ACCESS_PERMISSION_PREFERENCE_FILE =
             "message_access_permission";
-    private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
+    static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
 
@@ -5105,6 +5105,8 @@ public class AdapterService extends Service {
     private static final String GATT_ROBUST_CACHING_SERVER_FLAG = "INIT_gatt_robust_caching_server";
     private static final String IRK_ROTATION_FLAG = "INIT_irk_rotation";
     private static final String PASS_PHY_UPDATE_CALLBACK_FLAG = "INIT_pass_phy_update_callback";
+    private static final String BTM_DM_FLUSH_DISCOVERY_QUEUE_ON_SEARCH_CANCEL =
+                                    "INIT_btm_dm_flush_discovery_queue_on_search_cancel";
 
     /**
      * Logging flags logic (only applies to DEBUG and VERBOSE levels):
@@ -5171,6 +5173,12 @@ public class AdapterService extends Service {
         if (DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_BLUETOOTH, PASS_PHY_UPDATE_CALLBACK_FLAG, true)) {
             initFlags.add(String.format("%s=%s", PASS_PHY_UPDATE_CALLBACK_FLAG, "true"));
+        }
+        if (DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_BLUETOOTH,
+                BTM_DM_FLUSH_DISCOVERY_QUEUE_ON_SEARCH_CANCEL, false)) {
+            initFlags.add(String.format("%s=%s",
+                    BTM_DM_FLUSH_DISCOVERY_QUEUE_ON_SEARCH_CANCEL, "true"));
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH,
                 LOGGING_DEBUG_ENABLED_FOR_ALL_FLAG, false)) {
