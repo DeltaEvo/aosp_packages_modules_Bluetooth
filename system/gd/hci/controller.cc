@@ -23,6 +23,7 @@
 
 #include "common/init_flags.h"
 #include "hci/hci_layer.h"
+#include "os/metrics.h"
 
 namespace bluetooth {
 namespace hci {
@@ -244,6 +245,12 @@ struct Controller::impl {
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
 
     local_version_information_ = complete_view.GetLocalVersionInformation();
+    bluetooth::os::LogMetricBluetoothLocalVersions(
+        local_version_information_.manufacturer_name_,
+        static_cast<uint8_t>(local_version_information_.lmp_version_),
+        local_version_information_.lmp_subversion_,
+        static_cast<uint8_t>(local_version_information_.hci_version_),
+        local_version_information_.hci_revision_);
   }
 
   void read_local_supported_commands_complete_handler(CommandCompleteView view) {
@@ -261,7 +268,7 @@ struct Controller::impl {
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
     uint8_t page_number = complete_view.GetPageNumber();
     extended_lmp_features_array_.push_back(complete_view.GetExtendedLmpFeatures());
-
+    bluetooth::os::LogMetricBluetoothLocalSupportedFeatures(page_number, complete_view.GetExtendedLmpFeatures());
     // Query all extended features
     if (page_number < complete_view.GetMaximumPageNumber()) {
       page_number++;
@@ -815,6 +822,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CONTROLLER_DELAY)
       OP_CODE_MAPPING(CONFIGURE_DATA_PATH)
       OP_CODE_MAPPING(ENHANCED_FLUSH)
+      OP_CODE_MAPPING(LE_SET_DATA_RELATED_ADDRESS_CHANGES)
+      OP_CODE_MAPPING(LE_SET_DEFAULT_SUBRATE)
+      OP_CODE_MAPPING(LE_SUBRATE_REQUEST)
+      OP_CODE_MAPPING(SET_MIN_ENCRYPTION_KEY_SIZE)
 
       // deprecated
       case OpCode::ADD_SCO_CONNECTION:
