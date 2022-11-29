@@ -24,6 +24,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.*
 import android.net.MacAddress
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -179,7 +180,7 @@ fun <T, U> grpcBidirectionalStream(
     override fun onNext(req: T) {
       // Note: this should be made a blocking call, and the handler should run in a separate thread
       // so we get flow control - but for now we can live with this
-      if (!inputChannel.offer(req)) {
+      if (inputChannel.trySend(req).isFailure) {
         job.cancel(CancellationException("too many incoming requests, buffer exceeded"))
         responseObserver.onError(
           CancellationException("too many incoming requests, buffer exceeded")
@@ -318,3 +319,24 @@ fun newConnection(device: BluetoothDevice, transport: Transport) =
 
 fun BluetoothDevice.toByteString() =
   ByteString.copyFrom(MacAddress.fromString(this.address).toByteArray())!!
+
+/** Creates Audio track instance and returns the reference. */
+fun buildAudioTrack(): AudioTrack? {
+  return AudioTrack.Builder()
+    .setAudioAttributes(
+      AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+        .build()
+    )
+    .setAudioFormat(
+      AudioFormat.Builder()
+        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+        .setSampleRate(44100)
+        .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+        .build()
+    )
+    .setTransferMode(AudioTrack.MODE_STREAM)
+    .setBufferSizeInBytes(44100 * 2 * 2)
+    .build()
+}
