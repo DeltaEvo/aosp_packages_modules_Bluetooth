@@ -100,14 +100,14 @@ public class LeAudioService extends ProfileService {
     private static final int AUDIO_DIRECTION_NONE = 0x00;
 
     /**
-     * Indicates group audio support for input direction
-     */
-    private static final int AUDIO_DIRECTION_INPUT_BIT = 0x01;
-
-    /**
      * Indicates group audio support for output direction
      */
-    private static final int AUDIO_DIRECTION_OUTPUT_BIT = 0x02;
+    private static final int AUDIO_DIRECTION_OUTPUT_BIT = 0x01;
+
+    /**
+     * Indicates group audio support for input direction
+     */
+    private static final int AUDIO_DIRECTION_INPUT_BIT = 0x02;
 
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
@@ -378,6 +378,9 @@ public class LeAudioService extends ProfileService {
                 // Do not rethrow as we are shutting down anyway
             }
         }
+
+        mAudioManager.unregisterAudioDeviceCallback(mAudioManagerAddAudioDeviceCallback);
+        mAudioManager.unregisterAudioDeviceCallback(mAudioManagerRemoveAudioDeviceCallback);
 
         mAdapterService = null;
         mAudioManager = null;
