@@ -16,15 +16,19 @@
 
 package com.android.bluetooth;
 
+import android.bluetooth.BluetoothAdapter;
 import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.HeaderSet;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
 /**
@@ -32,10 +36,11 @@ import java.io.IOException;
  */
 public class BluetoothMethodProxy {
     private static final String TAG = BluetoothMethodProxy.class.getSimpleName();
-    private static BluetoothMethodProxy sInstance;
     private static final Object INSTANCE_LOCK = new Object();
+    private static BluetoothMethodProxy sInstance;
 
-    private BluetoothMethodProxy() {}
+    private BluetoothMethodProxy() {
+    }
 
     /**
      * Get the singleton instance of proxy
@@ -73,6 +78,39 @@ public class BluetoothMethodProxy {
             final String sortOrder) {
         return contentResolver.query(contentUri, projection, selection, selectionArgs, sortOrder);
     }
+
+    /**
+     * Proxies {@link ContentResolver#update(Uri, ContentValues, String, String[])}.
+     */
+    public int contentResolverUpdate(ContentResolver contentResolver, final Uri contentUri,
+            final ContentValues contentValues, String where, String[] selectionArgs) {
+        return contentResolver.update(contentUri, contentValues, where, selectionArgs);
+    }
+
+    /**
+     * Proxies {@link ContentResolver#delete(Uri, String, String[])}.
+     */
+    public int contentResolverDelete(ContentResolver contentResolver, final Uri url,
+            final String where,
+            final String[] selectionArgs) {
+        return contentResolver.delete(url, where, selectionArgs);
+    }
+
+    /**
+     * Proxies {@link BluetoothAdapter#isEnabled()}.
+     */
+    public boolean bluetoothAdapterIsEnabled(BluetoothAdapter adapter) {
+        return adapter.isEnabled();
+    }
+
+    /**
+     * Proxies {@link ContentResolver#openFileDescriptor(Uri, String)}.
+     */
+    public ParcelFileDescriptor contentResolverOpenFileDescriptor(ContentResolver contentResolver,
+            final Uri uri, final String mode) throws FileNotFoundException {
+        return contentResolver.openFileDescriptor(uri, mode);
+    }
+
 
     /**
      * Proxies {@link HeaderSet#getHeader}.

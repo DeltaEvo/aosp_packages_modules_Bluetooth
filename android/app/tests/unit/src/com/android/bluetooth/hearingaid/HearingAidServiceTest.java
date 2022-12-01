@@ -180,6 +180,15 @@ public class HearingAidServiceTest {
         Assert.assertEquals(newState, intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1));
         Assert.assertEquals(prevState, intent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE,
                 -1));
+        if (newState == BluetoothProfile.STATE_CONNECTED) {
+            // ActiveDeviceManager calls setActiveDevice when connected.
+            mService.setActiveDevice(device);
+        } else if (newState == BluetoothProfile.STATE_DISCONNECTED
+                && mService.getConnectedDevices().isEmpty()) {
+            // ActiveDeviceManager calls setActiveDevice(null) when all devices are disconnected.
+            mService.setActiveDevice(null);
+        }
+
     }
 
     private void verifyNoConnectionStateIntent(int timeoutMs, BluetoothDevice device) {
