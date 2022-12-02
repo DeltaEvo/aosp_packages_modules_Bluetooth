@@ -65,15 +65,8 @@ static void btif_a2dp_data_cb([[maybe_unused]] tUIPC_CH_ID ch_id,
       break;
 
     case UIPC_CLOSE_EVT:
-      /*
-       * Send stop request only if we are actively streaming and haven't
-       * received a stop request. Potentially, the audioflinger detached
-       * abnormally.
-       */
-      if (btif_a2dp_source_is_streaming()) {
-        /* Post stop event and wait for audio path to stop */
-        btif_av_stream_stop(RawAddress::kEmpty);
-      }
+      /* Post stop event and wait for audio path to stop */
+      btif_av_stream_stop(RawAddress::kEmpty);
       break;
 
     default:
@@ -242,6 +235,8 @@ void end_session() {
 
   // Reset remote delay. New value will be set when new session starts.
   remote_delay_report_ = 0;
+
+  a2dp_pending_cmd_ = A2DP_CTRL_CMD_NONE;
 }
 
 void set_audio_low_latency_mode_allowed(bool allowed){

@@ -373,19 +373,18 @@ pub fn generate_dbus_interface_client(attr: TokenStream, item: TokenStream) -> T
                                         path
                                     };
                             };
-
-                            input_list = quote! {
-                                #input_list
-                                #ident,
-                            };
                         } else {
                             // Convert every parameter to its corresponding type recognized by
                             // the D-Bus library.
-                            input_list = quote! {
-                                #input_list
-                                <#arg_type as DBusArg>::to_dbus(#ident).unwrap(),
+                            object_conversions = quote! {
+                                #object_conversions
+                                    let #ident = <#arg_type as DBusArg>::to_dbus(#ident).unwrap();
                             };
                         }
+                        input_list = quote! {
+                            #input_list
+                            #ident,
+                        };
                     }
                 }
             }
@@ -983,7 +982,10 @@ pub fn generate_dbus_arg(_item: TokenStream) -> TokenStream {
                 _name: String,
             ) -> Result<Self::RustType, Box<dyn Error>> {
                 let mut vec: Vec<T> = vec![];
-                let mut iter = arg.as_iter().unwrap();
+                let mut iter = arg.as_iter().ok_or(Box::new(DBusArgError::new(format!(
+                    "Failed parsing array for `{}`",
+                    _name
+                ))))?;
                 let mut val = iter.next();
                 while !val.is_none() {
                     let arg = val.unwrap().box_clone();

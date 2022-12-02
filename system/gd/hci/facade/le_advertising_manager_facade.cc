@@ -109,7 +109,7 @@ bool AdvertisingConfigFromProto(const AdvertisingConfig& config_proto, hci::Exte
       config->connectable = true;
       config->scannable = true;
     } break;
-    case AdvertisingType::ADV_DIRECT_IND: {
+    case AdvertisingType::ADV_DIRECT_IND_HIGH: {
       config->connectable = true;
       config->directed = true;
       config->high_duty_directed_connectable = true;
@@ -331,7 +331,8 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
       ::grpc::ServerContext* context,
       const EnablePeriodicAdvertisingRequest* request,
       ::google::protobuf::Empty* response) override {
-    le_advertising_manager_->EnablePeriodicAdvertising(request->advertiser_id(), request->enable());
+    le_advertising_manager_->EnablePeriodicAdvertising(
+        request->advertiser_id(), request->enable(), request->include_adi());
     return ::grpc::Status::OK;
   }
 

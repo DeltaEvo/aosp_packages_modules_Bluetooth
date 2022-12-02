@@ -138,7 +138,8 @@ class CsisClientImpl : public CsisClient {
   std::shared_ptr<bluetooth::csis::CsisGroup> AssignCsisGroup(
       const RawAddress& address, int group_id,
       bool create_group_if_non_existing, const bluetooth::Uuid& uuid) {
-    LOG_DEBUG("Device: %s, group_id: %d", address.ToString().c_str(), group_id);
+    LOG_DEBUG("Device: %s, group_id: %d", ADDRESS_TO_LOGGABLE_CSTR(address),
+              group_id);
     auto csis_group = FindCsisGroup(group_id);
     if (!csis_group) {
       if (create_group_if_non_existing) {
@@ -325,7 +326,7 @@ class CsisClientImpl : public CsisClient {
     CsisLockState target_lock_state = csis_group->GetTargetLockState();
 
     LOG_DEBUG("Device %s, target lock: %d, status: 0x%02x",
-              device->addr.ToString().c_str(), (int)target_lock_state,
+              ADDRESS_TO_LOGGABLE_CSTR(device->addr), (int)target_lock_state,
               (int)status);
     if (target_lock_state == CsisLockState::CSIS_STATE_UNSET) return;
 
@@ -1169,9 +1170,16 @@ class CsisClientImpl : public CsisClient {
   }
 
   void CsisActiveObserverSet(bool enable) {
-    LOG(INFO) << __func__ << " CSIS Discovery SET: " << enable;
+    bool is_ad_type_filter_supported =
+        bluetooth::shim::is_ad_type_filter_supported();
+    LOG_INFO("CSIS Discovery SET: %d, is_ad_type_filter_supported: %d", enable,
+             is_ad_type_filter_supported);
+    if (is_ad_type_filter_supported) {
+      bluetooth::shim::set_ad_type_rsi_filter(enable);
+    } else {
+      bluetooth::shim::set_empty_filter(enable);
+    }
 
-    bluetooth::shim::set_ad_type_rsi_filter(enable);
     BTA_DmBleCsisObserve(
         enable, [](tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH* p_data) {
           /* If there's no instance we are most likely shutting
@@ -1203,7 +1211,31 @@ class CsisClientImpl : public CsisClient {
     }
   }
 
+  void CheckForGroupInInqDb(const std::shared_ptr<CsisGroup>& csis_group) {
+    // Check if last inquiry already found devices with RSI matching this group
+    for (tBTM_INQ_INFO* inq_ent = BTM_InqDbFirst(); inq_ent != nullptr;
+         inq_ent = BTM_InqDbNext(inq_ent)) {
+      RawAddress rsi = inq_ent->results.ble_ad_rsi;
+      if (!csis_group->IsRsiMatching(rsi)) continue;
+
+      RawAddress address = inq_ent->results.remote_bd_addr;
+      auto device = FindDeviceByAddress(address);
+      if (device && csis_group->IsDeviceInTheGroup(device)) {
+        // InqDb will also contain existing devices, already in group - skip
+        // them
+        continue;
+      }
+
+      LOG_INFO("Device %s from inquiry cache match to group id %d",
+               address.ToString().c_str(), csis_group->GetGroupId());
+      callbacks_->OnSetMemberAvailable(address, csis_group->GetGroupId());
+      break;
+    }
+  }
+
   void CsisActiveDiscovery(std::shared_ptr<CsisGroup> csis_group) {
+    CheckForGroupInInqDb(csis_group);
+
     if ((csis_group->GetDiscoveryState() !=
          CsisDiscoveryState::CSIS_DISCOVERY_IDLE)) {
       LOG(ERROR) << __func__
@@ -1224,7 +1256,8 @@ class CsisClientImpl : public CsisClient {
 
     auto csis_device = FindDeviceByAddress(result->bd_addr);
     if (csis_device) {
-      LOG_DEBUG("Drop known device %s", result->bd_addr.ToString().c_str());
+      LOG_DEBUG("Drop known device %s",
+                ADDRESS_TO_LOGGABLE_CSTR(result->bd_addr));
       return;
     }
 
@@ -1236,7 +1269,8 @@ class CsisClientImpl : public CsisClient {
       for (auto& rsi : all_rsi) {
         if (group->IsRsiMatching(rsi)) {
           LOG_INFO("Device %s match to group id %d",
-                   result->bd_addr.ToString().c_str(), group->GetGroupId());
+                   ADDRESS_TO_LOGGABLE_CSTR(result->bd_addr),
+                   group->GetGroupId());
           if (group->GetDesiredSize() > 0 &&
               (group->GetCurrentSize() == group->GetDesiredSize())) {
             LOG_WARN(

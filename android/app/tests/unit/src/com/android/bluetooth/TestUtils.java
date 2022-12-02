@@ -186,6 +186,9 @@ public class TestUtils {
         verify(adapterService, timeout(SERVICE_TOGGLE_TIMEOUT_MS)).onProfileServiceStateChanged(
                 profile.capture(), eq(BluetoothAdapter.STATE_OFF));
         Assert.assertEquals(profileServiceClass.getName(), profile.getValue().getClass().getName());
+        ArgumentCaptor<ProfileService> profile2 = ArgumentCaptor.forClass(profileServiceClass);
+        verify(adapterService, timeout(SERVICE_TOGGLE_TIMEOUT_MS)).removeProfile(profile2.capture());
+        Assert.assertEquals(profileServiceClass.getName(), profile2.getValue().getClass().getName());
     }
 
     /**
@@ -205,18 +208,13 @@ public class TestUtils {
     }
 
     public static Resources getTestApplicationResources(Context context) {
-        for (String name: context.getPackageManager().getPackagesForUid(Process.BLUETOOTH_UID)) {
-            if (name.contains(".android.bluetooth.tests")) {
-                try {
-                    return context.getPackageManager().getResourcesForApplication(name);
-                } catch (PackageManager.NameNotFoundException e) {
-                    assertWithMessage("Setup Failure: Unable to get test application resources"
-                            + e.toString()).fail();
-                }
-            }
+        try {
+            return context.getPackageManager().getResourcesForApplication("com.android.bluetooth.tests");
+        } catch (PackageManager.NameNotFoundException e) {
+            assertWithMessage("Setup Failure: Unable to get test application resources"
+                    + e.toString()).fail();
+            return null;
         }
-        assertWithMessage("Could not find tests package").fail();
-        return null;
     }
 
     /**

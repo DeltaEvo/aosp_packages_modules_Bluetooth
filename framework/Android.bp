@@ -5,7 +5,6 @@ package {
 java_defaults {
     name: "bluetooth-module-sdk-version-defaults",
     min_sdk_version: "current",
-    target_sdk_version: "current",
 }
 
 filegroup {
@@ -46,8 +45,6 @@ java_library {
     defaults: ["framework-bluetooth-defaults"],
     sdk_version: "module_current",
     libs: ["framework-annotations-lib"],
-    // java_api_finder must accompany `srcs` (`srcs` defined in `framework-bluetooth-defaults`)
-    plugins: ["java_api_finder"],
     installable: false,
 }
 

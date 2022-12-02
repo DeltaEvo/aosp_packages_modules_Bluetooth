@@ -33,8 +33,9 @@ void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc);
 void btm_acl_connected(const RawAddress& bda, uint16_t handle,
                        tHCI_STATUS status, uint8_t enc_mode);
 void on_acl_br_edr_connected(const RawAddress& bda, uint16_t handle,
-                             uint8_t enc_mode);
-void on_acl_br_edr_failed(const RawAddress& bda, tHCI_STATUS status);
+                             uint8_t enc_mode, bool locally_initiated);
+void on_acl_br_edr_failed(const RawAddress& bda, tHCI_STATUS status,
+                          bool locally_initiated);
 void btm_acl_disconnected(tHCI_STATUS status, uint16_t handle,
                           tHCI_STATUS reason);
 void btm_acl_iso_disconnected(uint16_t handle, tHCI_STATUS reason);
@@ -67,7 +68,6 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble);
 
 void acl_rcv_acl_data(BT_HDR* p_msg);
 void acl_link_segments_xmitted(BT_HDR* p_msg);
-void acl_process_num_completed_pkts(uint8_t* p, uint8_t evt_len);
 void acl_packets_completed(uint16_t handle, uint16_t num_packets);
 void acl_process_supported_features(uint16_t handle, uint64_t features);
 void acl_process_extended_features(uint16_t handle, uint8_t current_page_number,

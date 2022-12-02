@@ -1,19 +1,21 @@
 use crate::dbus_iface::{
-    export_advertising_set_callback_dbus_intf, export_bluetooth_callback_dbus_intf,
-    export_bluetooth_connection_callback_dbus_intf, export_bluetooth_gatt_callback_dbus_intf,
-    export_bluetooth_manager_callback_dbus_intf, export_scanner_callback_dbus_intf,
-    export_socket_callback_dbus_intf, export_suspend_callback_dbus_intf,
+    export_admin_policy_callback_dbus_intf, export_advertising_set_callback_dbus_intf,
+    export_bluetooth_callback_dbus_intf, export_bluetooth_connection_callback_dbus_intf,
+    export_bluetooth_gatt_callback_dbus_intf, export_bluetooth_manager_callback_dbus_intf,
+    export_scanner_callback_dbus_intf, export_socket_callback_dbus_intf,
+    export_suspend_callback_dbus_intf,
 };
 use crate::ClientContext;
 use crate::{console_red, console_yellow, print_error, print_info};
 use bt_topshim::btif::{BtBondState, BtPropertyType, BtSspVariant, BtStatus, Uuid128Bit};
-use bt_topshim::profiles::gatt::GattStatus;
+use bt_topshim::profiles::gatt::{AdvertisingStatus, GattStatus, LePhy};
 use btstack::bluetooth::{
     BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
 };
+use btstack::bluetooth_admin::{IBluetoothAdminPolicyCallback, PolicyEffect};
 use btstack::bluetooth_adv::IAdvertisingSetCallback;
 use btstack::bluetooth_gatt::{
-    BluetoothGattService, IBluetoothGattCallback, IScannerCallback, LePhy, ScanResult,
+    BluetoothGattService, IBluetoothGattCallback, IScannerCallback, ScanResult,
 };
 use btstack::socket_manager::{
     BluetoothServerSocket, BluetoothSocket, IBluetoothSocketManager,
@@ -21,7 +23,7 @@ use btstack::socket_manager::{
 };
 use btstack::suspend::ISuspendCallback;
 use btstack::uuid::UuidWrapper;
-use btstack::RPCProxy;
+use btstack::{RPCProxy, SuspendMode};
 use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
 use dbus_projection::DisconnectWatcher;
@@ -61,6 +63,10 @@ impl IBluetoothManagerCallback for BtManagerCallback {
 
     fn on_hci_enabled_changed(&self, hci_interface: i32, enabled: bool) {
         self.context.lock().unwrap().set_adapter_enabled(hci_interface, enabled);
+    }
+
+    fn on_default_adapter_changed(&self, hci_interface: i32) {
+        print_info!("hci{} is now the default", hci_interface);
     }
 }
 
@@ -150,7 +156,7 @@ impl IBluetoothCallback for BtCallback {
         passkey: u32,
     ) {
         match variant {
-            BtSspVariant::PasskeyNotification => {
+            BtSspVariant::PasskeyNotification | BtSspVariant::PasskeyConfirmation => {
                 print_info!(
                     "Device [{}: {}] would like to pair, enter passkey on remote device: {:06}",
                     &remote_device.address,
@@ -182,9 +188,6 @@ impl IBluetoothCallback for BtCallback {
             }
             BtSspVariant::PasskeyEntry => {
                 println!("Got PasskeyEntry but it is not supported...");
-            }
-            BtSspVariant::PasskeyConfirmation => {
-                println!("Got PasskeyConfirmation but there's nothing to do...");
             }
         }
     }
@@ -323,6 +326,10 @@ impl IScannerCallback for ScannerCallback {
             print_info!("Scan result: {:#?}", scan_result);
         }
     }
+
+    fn on_suspend_mode_change(&self, _suspend_mode: SuspendMode) {
+        // No-op, not interesting for btclient.
+    }
 }
 
 impl RPCProxy for ScannerCallback {
@@ -333,6 +340,57 @@ impl RPCProxy for ScannerCallback {
     fn export_for_rpc(self: Box<Self>) {
         let cr = self.dbus_crossroads.clone();
         let iface = export_scanner_callback_dbus_intf(
+            self.dbus_connection.clone(),
+            &mut cr.lock().unwrap(),
+            Arc::new(Mutex::new(DisconnectWatcher::new())),
+        );
+        cr.lock().unwrap().insert(self.get_object_id(), &[iface], Arc::new(Mutex::new(self)));
+    }
+}
+
+pub(crate) struct AdminCallback {
+    objpath: String,
+
+    dbus_connection: Arc<SyncConnection>,
+    dbus_crossroads: Arc<Mutex<Crossroads>>,
+}
+
+impl AdminCallback {
+    pub(crate) fn new(
+        objpath: String,
+        dbus_connection: Arc<SyncConnection>,
+        dbus_crossroads: Arc<Mutex<Crossroads>>,
+    ) -> Self {
+        Self { objpath, dbus_connection, dbus_crossroads }
+    }
+}
+
+impl IBluetoothAdminPolicyCallback for AdminCallback {
+    fn on_service_allowlist_changed(&self, allowlist: Vec<Uuid128Bit>) {
+        print_info!("new allowlist: {:?}", allowlist);
+    }
+
+    fn on_device_policy_effect_changed(
+        &self,
+        device: BluetoothDevice,
+        new_policy_effect: Option<PolicyEffect>,
+    ) {
+        print_info!(
+            "new device policy effect. Device: {:?}. New Effect: {:?}",
+            device,
+            new_policy_effect
+        );
+    }
+}
+
+impl RPCProxy for AdminCallback {
+    fn get_object_id(&self) -> String {
+        self.objpath.clone()
+    }
+
+    fn export_for_rpc(self: Box<Self>) {
+        let cr = self.dbus_crossroads.clone();
+        let iface = export_admin_policy_callback_dbus_intf(
             self.dbus_connection.clone(),
             &mut cr.lock().unwrap(),
             Arc::new(Mutex::new(DisconnectWatcher::new())),
@@ -366,31 +424,29 @@ impl IAdvertisingSetCallback for AdvertisingSetCallback {
         reg_id: i32,
         advertiser_id: i32,
         tx_power: i32,
-        status: GattStatus,
+        status: AdvertisingStatus,
     ) {
         print_info!(
-            "on_advertising_set_started: reg_id = {}, advertiser_id = {}, tx_power = {}, status = {}",
+            "on_advertising_set_started: reg_id = {}, advertiser_id = {}, tx_power = {}, status = {:?}",
             reg_id,
             advertiser_id,
             tx_power,
             status
         );
-        if status == GattStatus::Success {
-            if let Some(Some(ex_adv_id)) =
-                self.context.lock().unwrap().adv_sets.insert(reg_id, Some(advertiser_id))
-            {
-                print_error!(
-                    "on_advertising_set_started: previous advertising set ({}) registered ({}) is omitted",
-                    ex_adv_id,
-                    reg_id,
-                    );
-            }
-        } else {
+
+        let mut context = self.context.lock().unwrap();
+        if status != AdvertisingStatus::Success {
             print_error!(
-                "on_advertising_set_started: remove advertising set registered ({})",
+                "on_advertising_set_started: removing advertising set registered ({})",
                 reg_id
             );
-            self.context.lock().unwrap().adv_sets.remove(&reg_id);
+            context.adv_sets.remove(&reg_id);
+            return;
+        }
+        if let Some(s) = context.adv_sets.get_mut(&reg_id) {
+            s.adv_id = Some(advertiser_id);
+        } else {
+            print_error!("on_advertising_set_started: invalid callback for reg_id={}", reg_id);
         }
     }
 
@@ -405,29 +461,28 @@ impl IAdvertisingSetCallback for AdvertisingSetCallback {
 
     fn on_advertising_set_stopped(&self, advertiser_id: i32) {
         print_info!("on_advertising_set_stopped: advertiser_id = {}", advertiser_id);
-        self.context.lock().unwrap().adv_sets.retain(|_, val| *val != Some(advertiser_id));
     }
 
-    fn on_advertising_enabled(&self, advertiser_id: i32, enable: bool, status: GattStatus) {
+    fn on_advertising_enabled(&self, advertiser_id: i32, enable: bool, status: AdvertisingStatus) {
         print_info!(
-            "on_advertising_enabled: advertiser_id = {}, enable = {}, status = {}",
+            "on_advertising_enabled: advertiser_id = {}, enable = {}, status = {:?}",
             advertiser_id,
             enable,
             status
         );
     }
 
-    fn on_advertising_data_set(&self, advertiser_id: i32, status: GattStatus) {
+    fn on_advertising_data_set(&self, advertiser_id: i32, status: AdvertisingStatus) {
         print_info!(
-            "on_advertising_data_set: advertiser_id = {}, status = {}",
+            "on_advertising_data_set: advertiser_id = {}, status = {:?}",
             advertiser_id,
             status
         );
     }
 
-    fn on_scan_response_data_set(&self, advertiser_id: i32, status: GattStatus) {
+    fn on_scan_response_data_set(&self, advertiser_id: i32, status: AdvertisingStatus) {
         print_info!(
-            "on_scan_response_data_set: advertiser_id = {}, status = {}",
+            "on_scan_response_data_set: advertiser_id = {}, status = {:?}",
             advertiser_id,
             status
         );
@@ -437,27 +492,31 @@ impl IAdvertisingSetCallback for AdvertisingSetCallback {
         &self,
         advertiser_id: i32,
         tx_power: i32,
-        status: GattStatus,
+        status: AdvertisingStatus,
     ) {
         print_info!(
-            "on_advertising_parameters_updated: advertiser_id = {}, tx_power: {}, status = {}",
+            "on_advertising_parameters_updated: advertiser_id = {}, tx_power: {}, status = {:?}",
             advertiser_id,
             tx_power,
             status
         );
     }
 
-    fn on_periodic_advertising_parameters_updated(&self, advertiser_id: i32, status: GattStatus) {
+    fn on_periodic_advertising_parameters_updated(
+        &self,
+        advertiser_id: i32,
+        status: AdvertisingStatus,
+    ) {
         print_info!(
-            "on_periodic_advertising_parameters_updated: advertiser_id = {}, status = {}",
+            "on_periodic_advertising_parameters_updated: advertiser_id = {}, status = {:?}",
             advertiser_id,
             status
         );
     }
 
-    fn on_periodic_advertising_data_set(&self, advertiser_id: i32, status: GattStatus) {
+    fn on_periodic_advertising_data_set(&self, advertiser_id: i32, status: AdvertisingStatus) {
         print_info!(
-            "on_periodic_advertising_data_set: advertiser_id = {}, status = {}",
+            "on_periodic_advertising_data_set: advertiser_id = {}, status = {:?}",
             advertiser_id,
             status
         );
@@ -467,14 +526,18 @@ impl IAdvertisingSetCallback for AdvertisingSetCallback {
         &self,
         advertiser_id: i32,
         enable: bool,
-        status: GattStatus,
+        status: AdvertisingStatus,
     ) {
         print_info!(
-            "on_periodic_advertising_enabled: advertiser_id = {}, enable = {}, status = {}",
+            "on_periodic_advertising_enabled: advertiser_id = {}, enable = {}, status = {:?}",
             advertiser_id,
             enable,
             status
         );
+    }
+
+    fn on_suspend_mode_change(&self, suspend_mode: SuspendMode) {
+        print_info!("on_suspend_mode_change: advertising suspend_mode = {:?}", suspend_mode);
     }
 }
 
@@ -516,7 +579,7 @@ impl BtGattCallback {
 impl IBluetoothGattCallback for BtGattCallback {
     fn on_client_registered(&self, status: GattStatus, client_id: i32) {
         print_info!("GATT Client registered status = {}, client_id = {}", status, client_id);
-        self.context.lock().unwrap().gatt_client_id = Some(client_id);
+        self.context.lock().unwrap().gatt_client_context.client_id = Some(client_id);
     }
 
     fn on_client_connection_state(
@@ -736,17 +799,17 @@ impl IBluetoothSocketManagerCallbacks for BtSocketManagerCallback {
 
     fn on_handle_incoming_connection(
         &mut self,
-        listener_id: SocketId,
-        connection: BluetoothSocket,
+        _listener_id: SocketId,
+        _connection: BluetoothSocket,
     ) {
         todo!();
     }
 
     fn on_outgoing_connection_result(
         &mut self,
-        connecting_id: SocketId,
-        result: BtStatus,
-        socket: Option<BluetoothSocket>,
+        _connecting_id: SocketId,
+        _result: BtStatus,
+        _socket: Option<BluetoothSocket>,
     ) {
         todo!();
     }
@@ -789,7 +852,7 @@ impl SuspendCallback {
 impl ISuspendCallback for SuspendCallback {
     // TODO(b/224606285): Implement suspend utils in btclient.
     fn on_callback_registered(&self, _callback_id: u32) {}
-    fn on_suspend_ready(&self, _suspend_id: u32) {}
+    fn on_suspend_ready(&self, _suspend_id: i32) {}
     fn on_resumed(&self, _suspend_id: i32) {}
 }
 

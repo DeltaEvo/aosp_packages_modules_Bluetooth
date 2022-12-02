@@ -89,8 +89,10 @@ bt_interface_t fake_bt_iface = {
     nullptr, /* set_event_filter_connection_setup_all_devices */
     nullptr, /* allow_wake_by_hid */
     nullptr, /* restore_filter_accept_list */
-    nullptr, /* set_default_event_mask */
+    nullptr, /* set_default_event_mask_except */
     nullptr, /* set_event_filter_inquiry_result_all_devices */
+    nullptr, /* get_wbs_supported */
+    nullptr, /* metadata_changed */
 };
 
 }  // namespace
@@ -156,10 +158,12 @@ void FakeBluetoothInterface::NotifyAdapterLocalLeFeaturesPropertyChanged(
 
 void FakeBluetoothInterface::NotifyAclStateChangedCallback(
     bt_status_t status, const RawAddress& remote_bdaddr, bt_acl_state_t state,
-    int transport_link_type, bt_hci_error_code_t hci_reason) {
+    int transport_link_type, bt_hci_error_code_t hci_reason,
+    bt_conn_direction_t direction) {
   for (auto& observer : observers_) {
     observer.AclStateChangedCallback(status, remote_bdaddr, state,
-                                     transport_link_type, hci_reason);
+                                     transport_link_type, hci_reason,
+                                     direction);
   }
 }
 

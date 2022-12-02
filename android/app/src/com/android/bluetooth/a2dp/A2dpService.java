@@ -20,6 +20,8 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
 import static com.android.bluetooth.Utils.checkCallerTargetSdk;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
+import static com.android.bluetooth.Utils.enforceCdmAssociation;
+import static com.android.bluetooth.Utils.hasBluetoothPrivilegedPermission;
 
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothA2dp;
@@ -32,6 +34,7 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.BufferConstraints;
 import android.bluetooth.IBluetoothA2dp;
+import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -39,6 +42,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.BluetoothProfileConnectionInfo;
+import android.os.Binder;
 import android.os.Build;
 import android.os.HandlerThread;
 import android.sysprop.BluetoothProperties;
@@ -83,6 +87,7 @@ public class A2dpService extends ProfileService {
     ServiceFactory mFactory = new ServiceFactory();
     private AudioManager mAudioManager;
     private A2dpCodecConfig mA2dpCodecConfig;
+    private CompanionDeviceManager mCompanionDeviceManager;
 
     @GuardedBy("mStateMachines")
     private BluetoothDevice mActiveDevice;
@@ -135,6 +140,7 @@ public class A2dpService extends ProfileService {
         mDatabaseManager = Objects.requireNonNull(mAdapterService.getDatabase(),
                 "DatabaseManager cannot be null when A2dpService starts");
         mAudioManager = getSystemService(AudioManager.class);
+        mCompanionDeviceManager = getSystemService(CompanionDeviceManager.class);
         Objects.requireNonNull(mAudioManager,
                                "AudioManager cannot be null when A2dpService starts");
 
@@ -491,32 +497,13 @@ public class A2dpService extends ProfileService {
                 previousActiveDevice = mActiveDevice;
             }
 
-            int prevActiveConnectionState = getConnectionState(previousActiveDevice);
-
-            // As per b/202602952, if we remove the active device due to a disconnection,
-            // we need to check if another device is connected and set it active instead.
-            // Calling this before any other active related calls has the same effect as
-            // a classic active device switch.
-            BluetoothDevice fallbackdevice = getFallbackDevice();
-            if (fallbackdevice != null && prevActiveConnectionState
-                    != BluetoothProfile.STATE_CONNECTED) {
-                setActiveDevice(fallbackdevice);
-                return;
-            }
-
             // This needs to happen before we inform the audio manager that the device
             // disconnected. Please see comment in updateAndBroadcastActiveDevice() for why.
             updateAndBroadcastActiveDevice(null);
 
-            // Make sure the Audio Manager knows the previous Active device is disconnected.
-            // However, if A2DP is still connected and not forcing stop audio for that remote
-            // device, the user has explicitly switched the output to the local device and music
-            // should continue playing. Otherwise, the remote device has been indeed disconnected
-            // and audio should be suspended before switching the output to the local device.
-            boolean stopAudio = forceStopPlayingAudio || (prevActiveConnectionState
-                        != BluetoothProfile.STATE_CONNECTED);
+            // Make sure the Audio Manager knows the previous Active device is removed.
             mAudioManager.handleBluetoothActiveDeviceChanged(null, previousActiveDevice,
-                    BluetoothProfileConnectionInfo.createA2dpInfo(!stopAudio, -1));
+                    BluetoothProfileConnectionInfo.createA2dpInfo(!forceStopPlayingAudio, -1));
 
             synchronized (mStateMachines) {
                 // Make sure the Active device in native layer is set to null and audio is off
@@ -560,10 +547,22 @@ public class A2dpService extends ProfileService {
      * @return true on success, otherwise false
      */
     public boolean setActiveDevice(BluetoothDevice device) {
+        return setActiveDevice(device, false);
+    }
+
+    /**
+     * Set the active device.
+     *
+     * @param device the active device
+     * @param hasFallbackDevice whether it has fallback device when the {@code device}
+     *                          is {@code null}.
+     * @return true on success, otherwise false
+     */
+    public boolean setActiveDevice(BluetoothDevice device, boolean hasFallbackDevice) {
         synchronized (mActiveSwitchingGuard) {
             if (device == null) {
                 // Remove active device and continue playing audio only if necessary.
-                removeActiveDevice(false);
+                removeActiveDevice(!hasFallbackDevice);
                 return true;
             }
 
@@ -1219,10 +1218,9 @@ public class A2dpService extends ProfileService {
         if (toState == BluetoothProfile.STATE_CONNECTED && (mMaxConnectedAudioDevices == 1)) {
             setActiveDevice(device);
         }
-        // Check if the active device is not connected anymore
-        if (isActiveDevice(device) && (fromState == BluetoothProfile.STATE_CONNECTED)) {
-            setActiveDevice(null);
-        }
+
+        // When disconnected, ActiveDeviceManager will call setActiveDevice(null)
+
         // Check if the device is disconnected - if unbond, remove the state machine
         if (toState == BluetoothProfile.STATE_DISCONNECTED) {
             if (mAdapterService.getBondState(device) == BluetoothDevice.BOND_NONE) {
@@ -1258,7 +1256,7 @@ public class A2dpService extends ProfileService {
     /**
      * Retrieves the most recently connected device in the A2DP connected devices list.
      */
-    private BluetoothDevice getFallbackDevice() {
+    public BluetoothDevice getFallbackDevice() {
         DatabaseManager dbManager = mAdapterService.getDatabase();
         return dbManager != null ? dbManager
             .getMostRecentlyConnectedDevicesInList(getConnectedDevices())
@@ -1275,8 +1273,8 @@ public class A2dpService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private A2dpService getService(AttributionSource source) {
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
-                    || !Utils.checkServiceAvailable(mService, TAG)
+            if (!Utils.checkServiceAvailable(mService, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
                 return null;
             }
@@ -1479,6 +1477,10 @@ public class A2dpService extends ProfileService {
             A2dpService service = getService(source);
             if (service == null) {
                 return;
+            }
+            if (!hasBluetoothPrivilegedPermission(service)) {
+                enforceCdmAssociation(service.mCompanionDeviceManager, service,
+                        source.getPackageName(), Binder.getCallingUid(), device);
             }
             service.setCodecConfigPreference(device, codecConfig);
         }

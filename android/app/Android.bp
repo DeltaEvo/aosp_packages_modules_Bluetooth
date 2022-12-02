@@ -63,17 +63,12 @@ cc_library_shared {
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system/types",
+        "packages/modules/Bluetooth/system/gd",
     ],
     static_libs: [
         "libbluetooth-types",
         "libbluetooth",
         "libc++fs",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-        "-Wextra",
-        "-Wno-unused-parameter",
     ],
     sanitize: {
         scs: true,
@@ -104,6 +99,7 @@ android_app {
         "framework-bluetooth-pre-jarjar",
         "framework-statsd.stubs.module_lib",
         "framework-tethering.stubs.module_lib",
+        "framework-configinfrastructure",
         "framework-connectivity.stubs.module_lib",
         "framework-mediaprovider",
         "unsupportedappusage",
@@ -160,6 +156,7 @@ android_app {
     errorprone: {
         javacflags: [
             // "-Xep:AndroidFrameworkRequiresPermission:ERROR",
+            "-Xep:AlmostJavadoc:ERROR",
         ],
     },
     min_sdk_version: "Tiramisu",

@@ -214,6 +214,7 @@ public class BatteryService extends ProfileService {
             BatteryStateMachine sm = getOrCreateStateMachine(device);
             if (sm == null) {
                 Log.e(TAG, "Cannot connect to " + device + " : no state machine");
+                return false;
             }
             sm.sendMessage(BatteryStateMachine.CONNECT);
         }
@@ -542,8 +543,8 @@ public class BatteryService extends ProfileService {
         private BatteryService getService(AttributionSource source) {
             BatteryService service = mServiceRef.get();
 
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
-                    || !Utils.checkServiceAvailable(service, TAG)
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }

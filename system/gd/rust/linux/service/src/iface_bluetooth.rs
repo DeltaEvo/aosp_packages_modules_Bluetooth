@@ -316,8 +316,18 @@ impl IBluetooth for IBluetoothDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("GetRemoteAppearance")]
+    fn get_remote_appearance(&self, _device: BluetoothDevice) -> u16 {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetRemoteConnected")]
     fn get_remote_connected(&self, _device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteWakeAllowed")]
+    fn get_remote_wake_allowed(&self, _device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 
@@ -358,6 +368,11 @@ impl IBluetooth for IBluetoothDBus {
 
     #[dbus_method("DisconnectAllEnabledProfiles")]
     fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("IsWbsSupported")]
+    fn is_wbs_supported(&self) -> bool {
         dbus_generated!()
     }
 }
@@ -549,12 +564,12 @@ impl ISuspend for ISuspendDBus {
     }
 
     #[dbus_method("Suspend")]
-    fn suspend(&self, suspend_type: SuspendType) {
+    fn suspend(&mut self, suspend_type: SuspendType, suspend_id: i32) {
         dbus_generated!()
     }
 
     #[dbus_method("Resume")]
-    fn resume(&self) -> bool {
+    fn resume(&mut self) -> bool {
         dbus_generated!()
     }
 }
@@ -569,7 +584,7 @@ impl ISuspendCallback for SuspendCallbackDBus {
         dbus_generated!()
     }
     #[dbus_method("OnSuspendReady")]
-    fn on_suspend_ready(&self, suspend_id: u32) {
+    fn on_suspend_ready(&self, suspend_id: i32) {
         dbus_generated!()
     }
     #[dbus_method("OnResumed")]

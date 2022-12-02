@@ -43,6 +43,7 @@
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_ble_int.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
@@ -684,6 +685,11 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
     return (BTM_WRONG_MODE);
 }
 
+bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
+  return (p_dev_rec == nullptr) ? false : p_dev_rec->is_name_known();
+}
+
 /*******************************************************************************
  *
  * Function         BTM_InqDbRead
@@ -1155,7 +1161,8 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
 
     /* Check if this address has already been processed for this inquiry */
     if (btm_inq_find_bdaddr(bda)) {
-      /* BTM_TRACE_DEBUG("BDA seen before %s", bda.ToString().c_str()); */
+      /* BTM_TRACE_DEBUG("BDA seen before %s", ADDRESS_TO_LOGGABLE_CSTR(bda));
+       */
 
       /* By default suppose no update needed */
       i_rssi = (int8_t)rssi;

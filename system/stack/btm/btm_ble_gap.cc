@@ -41,6 +41,7 @@
 #include "main/shim/shim.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
+#include "osi/include/properties.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_ble_int_types.h"
@@ -79,6 +80,12 @@ extern const tBLE_BD_ADDR convert_to_address_with_type(
   BTM_VSC_CHIP_CAPABILITY_RSP_LEN
 #define BTM_VSC_CHIP_CAPABILITY_RSP_LEN_M_RELEASE 15
 #define BTM_VSC_CHIP_CAPABILITY_RSP_LEN_S_RELEASE 25
+
+/* Sysprop paths for scan parameters */
+static const char kPropertyInquiryScanInterval[] =
+    "bluetooth.core.le.inquiry_scan_interval";
+static const char kPropertyInquiryScanWindow[] =
+    "bluetooth.core.le.inquiry_scan_window";
 
 namespace {
 
@@ -805,7 +812,7 @@ bool BTM_BleConfigPrivacy(bool privacy_mode) {
 
   GAP_BleAttrDBUpdate(GATT_UUID_GAP_CENTRAL_ADDR_RESOL, &gap_ble_attr_value);
 
-    bluetooth::shim::ACL_ConfigureLePrivacy(privacy_mode);
+  bluetooth::shim::ACL_ConfigureLePrivacy(privacy_mode);
   return true;
 }
 
@@ -898,7 +905,8 @@ static void sync_queue_cleanup(remove_sync_node_t* p_param) {
         sync_request->address == p_param->address) {
       LOG_INFO("%s: removing connection request SID=%04X, bd_addr=%s, busy=%d",
                __func__, sync_request->sid,
-               sync_request->address.ToString().c_str(), sync_request->busy);
+               ADDRESS_TO_LOGGABLE_CSTR(sync_request->address),
+               sync_request->busy);
       list_remove(sync_queue, sync_request);
     }
   }
@@ -936,7 +944,7 @@ static void btm_queue_sync_next() {
   sync_node_t* p_head = (sync_node_t*)list_front(sync_queue);
 
   LOG_INFO("%s: executing sync request SID=%04X, bd_addr=%s", __func__,
-           p_head->sid, p_head->address.ToString().c_str());
+           p_head->sid, ADDRESS_TO_LOGGABLE_CSTR(p_head->address));
   if (p_head->busy) {
     LOG_DEBUG("BUSY");
     return;
@@ -967,7 +975,7 @@ static void btm_ble_sync_queue_handle(uint16_t event, char* param) {
 
 void btm_queue_start_sync_req(uint8_t sid, RawAddress address, uint16_t skip,
                               uint16_t timeout) {
-  LOG_DEBUG("address = %s, sid = %d", address.ToString().c_str(), sid);
+  LOG_DEBUG("address = %s, sid = %d", ADDRESS_TO_LOGGABLE_CSTR(address), sid);
   sync_node_t node = {};
   node.sid = sid;
   node.address = address;
@@ -1443,7 +1451,7 @@ void btm_ble_periodic_adv_sync_tx_rcvd(uint8_t* p, uint16_t param_len) {
       " sync_handle = %u, adv_sid = %u, address_type = %u, addr = %s,"
       " adv_phy = %u, pa_int = %u, clk_acc = %u",
       status, conn_handle, service_data, sync_handle, adv_sid, address_type,
-      addr.ToString().c_str(), adv_phy, pa_int, clk_acc);
+      ADDRESS_TO_LOGGABLE_CSTR(addr), adv_phy, pa_int, clk_acc);
   if (syncRcvdCbRegistered) {
     sync_rcvd_cb.Run(status, sync_handle, adv_sid, address_type, addr, adv_phy,
                      pa_int);
@@ -1994,23 +2002,25 @@ tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
   BTM_BleAdvFilterParamSetup(BTM_BLE_SCAN_COND_ADD, static_cast<tBTM_BLE_PF_FILT_INDEX>(0),
                  std::move(adv_filt_param), base::Bind(btm_ble_scan_filt_param_cfg_evt));
 
+  uint16_t scan_interval = osi_property_get_int32(kPropertyInquiryScanInterval,
+                                                  BTM_BLE_LOW_LATENCY_SCAN_INT);
+  uint16_t scan_window = osi_property_get_int32(kPropertyInquiryScanWindow,
+                                                BTM_BLE_LOW_LATENCY_SCAN_WIN);
+
   if (!p_ble_cb->is_ble_scan_active()) {
     cache.ClearAll();
     btm_send_hci_set_scan_params(
-        BTM_BLE_SCAN_MODE_ACTI, BTM_BLE_LOW_LATENCY_SCAN_INT,
-        BTM_BLE_LOW_LATENCY_SCAN_WIN,
+        BTM_BLE_SCAN_MODE_ACTI, scan_interval, scan_window,
         btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, SP_ADV_ALL);
     p_ble_cb->inq_var.scan_type = BTM_BLE_SCAN_MODE_ACTI;
     btm_ble_start_scan();
-  } else if ((p_ble_cb->inq_var.scan_interval !=
-              BTM_BLE_LOW_LATENCY_SCAN_INT) ||
-             (p_ble_cb->inq_var.scan_window != BTM_BLE_LOW_LATENCY_SCAN_WIN)) {
+  } else if ((p_ble_cb->inq_var.scan_interval != scan_interval) ||
+             (p_ble_cb->inq_var.scan_window != scan_window)) {
     BTM_TRACE_DEBUG("%s, restart LE scan with low latency scan params",
                     __func__);
     btm_send_hci_scan_enable(BTM_BLE_SCAN_DISABLE, BTM_BLE_DUPLICATE_ENABLE);
     btm_send_hci_set_scan_params(
-        BTM_BLE_SCAN_MODE_ACTI, BTM_BLE_LOW_LATENCY_SCAN_INT,
-        BTM_BLE_LOW_LATENCY_SCAN_WIN,
+        BTM_BLE_SCAN_MODE_ACTI, scan_interval, scan_window,
         btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, SP_ADV_ALL);
     btm_send_hci_scan_enable(BTM_BLE_SCAN_ENABLE, BTM_BLE_DUPLICATE_DISABLE);
   }
@@ -2267,8 +2277,13 @@ static void btm_ble_appearance_to_cod(uint16_t appearance, uint8_t* dev_class) {
       dev_class[1] = BTM_COD_MAJOR_AUDIO;
       dev_class[2] = BTM_COD_MINOR_UNCLASSIFIED;
       break;
+    case BTM_BLE_APPEARANCE_GENERIC_WEARABLE_AUDIO_DEVICE:
     case BTM_BLE_APPEARANCE_WEARABLE_AUDIO_DEVICE_EARBUD:
-      dev_class[1] = BTM_COD_MAJOR_AUDIO;
+    case BTM_BLE_APPEARANCE_WEARABLE_AUDIO_DEVICE_HEADSET:
+    case BTM_BLE_APPEARANCE_WEARABLE_AUDIO_DEVICE_HEADPHONES:
+    case BTM_BLE_APPEARANCE_WEARABLE_AUDIO_DEVICE_NECK_BAND:
+      dev_class[0] = (BTM_COD_SERVICE_AUDIO | BTM_COD_SERVICE_RENDERING) >> 8;
+      dev_class[1] = (BTM_COD_MAJOR_AUDIO | BTM_COD_SERVICE_LE_AUDIO);
       dev_class[2] = BTM_COD_MINOR_WEARABLE_HEADSET;
       break;
     case BTM_BLE_APPEARANCE_GENERIC_BARCODE_SCANNER:
@@ -2404,6 +2419,14 @@ void btm_ble_update_inq_result(tINQ_DB_ENT* p_i, uint8_t addr_type,
           }
         }
       }
+    }
+  }
+
+  if (!data.empty()) {
+    const uint8_t* p_rsi =
+        AdvertiseDataParser::GetFieldByType(data, BTM_BLE_AD_TYPE_RSI, &len);
+    if (p_rsi != nullptr && len == 6) {
+      STREAM_TO_BDADDR(p_cur->ble_ad_rsi, p_rsi);
     }
   }
 

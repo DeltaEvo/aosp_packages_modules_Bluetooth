@@ -8,7 +8,7 @@ use btstack::RPCProxy;
 
 use crate::dbus_arg::{DBusArg, DBusArgError, RefArgToRust};
 use crate::iface_bluetooth_manager::{
-    AdapterWithEnabled, IBluetoothManager, IBluetoothManagerCallback,
+    AdapterWithEnabled, BluetoothManagerMixin, IBluetoothManager, IBluetoothManagerCallback,
 };
 
 #[dbus_propmap(AdapterWithEnabled)]
@@ -20,7 +20,12 @@ pub struct AdapterWithEnabledDbus {
 /// D-Bus projection of IBluetoothManager.
 struct BluetoothManagerDBus {}
 
-#[generate_dbus_exporter(export_bluetooth_manager_dbus_intf, "org.chromium.bluetooth.Manager")]
+#[generate_dbus_exporter(
+    export_bluetooth_manager_dbus_intf,
+    "org.chromium.bluetooth.Manager",
+    BluetoothManagerMixin,
+    manager
+)]
 impl IBluetoothManager for BluetoothManagerDBus {
     #[dbus_method("Start")]
     fn start(&mut self, hci_interface: i32) {
@@ -56,6 +61,16 @@ impl IBluetoothManager for BluetoothManagerDBus {
     fn get_available_adapters(&mut self) -> Vec<AdapterWithEnabled> {
         dbus_generated!()
     }
+
+    #[dbus_method("GetDefaultAdapter")]
+    fn get_default_adapter(&mut self) -> i32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetDesiredDefaultAdapter")]
+    fn set_desired_default_adapter(&mut self, hci_interface: i32) {
+        dbus_generated!()
+    }
 }
 
 /// D-Bus projection of IBluetoothManagerCallback.
@@ -68,4 +83,7 @@ impl IBluetoothManagerCallback for BluetoothManagerCallbackDBus {
 
     #[dbus_method("OnHciEnabledChanged")]
     fn on_hci_enabled_changed(&self, hci_interface: i32, enabled: bool) {}
+
+    #[dbus_method("OnDefaultAdapterChanged")]
+    fn on_default_adapter_changed(&self, hci_interface: i32) {}
 }

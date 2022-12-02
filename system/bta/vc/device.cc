@@ -30,7 +30,7 @@
 using namespace bluetooth::vc::internal;
 
 void VolumeControlDevice::Disconnect(tGATT_IF gatt_if) {
-  LOG(INFO) << __func__ << ": " << this->ToString();
+  LOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(address);
 
   if (IsConnected()) {
     if (volume_state_handle != 0)
@@ -415,10 +415,8 @@ bool VolumeControlDevice::IsEncryptionEnabled() {
   return BTM_IsEncrypted(address, BT_TRANSPORT_LE);
 }
 
-bool VolumeControlDevice::EnableEncryption(tBTM_SEC_CALLBACK* callback) {
-  int result = BTM_SetEncryption(address, BT_TRANSPORT_LE, callback, nullptr,
+void VolumeControlDevice::EnableEncryption() {
+  int result = BTM_SetEncryption(address, BT_TRANSPORT_LE, nullptr, nullptr,
                                  BTM_BLE_SEC_ENCRYPT);
   LOG(INFO) << __func__ << ": result=" << +result;
-  // TODO: should we care about the result??
-  return true;
 }

@@ -10,7 +10,7 @@ package {
 filegroup {
     name: "BluetoothCommonSources",
     srcs: [
-        "init_flags.cc",
+        "audit_log.cc",
         "metric_id_manager.cc",
         "strings.cc",
         "stop_watch.cc",
@@ -20,8 +20,6 @@ filegroup {
 filegroup {
     name: "BluetoothCommonTestSources",
     srcs: [
-        ":BluetoothCommonTestingLogCapture",
-        ":BluetoothCommonTestingLogCaptureTest",
         "bidi_queue_unittest.cc",
         "blocking_queue_unittest.cc",
         "byte_array_test.cc",

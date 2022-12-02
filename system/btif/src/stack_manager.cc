@@ -21,6 +21,7 @@
 #include "btif/include/stack_manager.h"
 
 #include <hardware/bluetooth.h>
+
 #include <cstdlib>
 #include <cstring>
 
@@ -29,6 +30,7 @@
 #include "btif_api.h"
 #include "btif_common.h"
 #include "common/message_loop_thread.h"
+#include "core_callbacks.h"
 #include "main/shim/shim.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
@@ -133,13 +135,23 @@ static bool stack_is_initialized;
 // If running, the stack is fully up and able to bluetooth.
 static bool stack_is_running;
 
-static void event_init_stack(void* context);
-static void event_start_up_stack(void* context);
-static void event_shut_down_stack(void* context);
-static void event_clean_up_stack(std::promise<void> promise);
+static void event_init_stack(semaphore_t* semaphore,
+                             bluetooth::core::CoreInterface* interface);
+static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
+                                 ProfileStartCallback startProfiles,
+                                 ProfileStopCallback stopProfiles);
+static void event_shut_down_stack(ProfileStopCallback stopProfiles);
+static void event_clean_up_stack(std::promise<void> promise,
+                                 ProfileStopCallback stopProfiles);
 
 static void event_signal_stack_up(void* context);
 static void event_signal_stack_down(void* context);
+
+static bluetooth::core::CoreInterface* interfaceToProfiles;
+
+bluetooth::core::CoreInterface* GetInterfaceToProfiles() {
+  return interfaceToProfiles;
+}
 
 // Unvetted includes/imports, etc which should be removed or vetted in the
 // future
@@ -148,35 +160,40 @@ static future_t* hack_future;
 
 // Interface functions
 
-static void init_stack() {
+static void init_stack(bluetooth::core::CoreInterface* interface) {
   // This is a synchronous process. Post it to the thread though, so
   // state modification only happens there. Using the thread to perform
   // all stack operations ensures that the operations are done serially
   // and do not overlap.
   semaphore_t* semaphore = semaphore_new(0);
-  management_thread.DoInThread(FROM_HERE,
-                               base::Bind(event_init_stack, semaphore));
+  management_thread.DoInThread(
+      FROM_HERE,
+      base::Bind(event_init_stack, semaphore, base::Unretained(interface)));
   semaphore_wait(semaphore);
   semaphore_free(semaphore);
 }
 
-static void start_up_stack_async() {
-  management_thread.DoInThread(FROM_HERE,
-                               base::Bind(event_start_up_stack, nullptr));
+static void start_up_stack_async(bluetooth::core::CoreInterface* interface,
+                                 ProfileStartCallback startProfiles,
+                                 ProfileStopCallback stopProfiles) {
+  management_thread.DoInThread(
+      FROM_HERE,
+      base::Bind(event_start_up_stack, interface, startProfiles, stopProfiles));
 }
 
-static void shut_down_stack_async() {
+static void shut_down_stack_async(ProfileStopCallback stopProfiles) {
   management_thread.DoInThread(FROM_HERE,
-                               base::Bind(event_shut_down_stack, nullptr));
+                               base::Bind(event_shut_down_stack, stopProfiles));
 }
 
-static void clean_up_stack() {
+static void clean_up_stack(ProfileStopCallback stopProfiles) {
   // This is a synchronous process. Post it to the thread though, so
   // state modification only happens there.
   std::promise<void> promise;
   auto future = promise.get_future();
   management_thread.DoInThread(
-      FROM_HERE, base::BindOnce(event_clean_up_stack, std::move(promise)));
+      FROM_HERE,
+      base::BindOnce(event_clean_up_stack, std::move(promise), stopProfiles));
 
   auto status =
       future.wait_for(std::chrono::milliseconds(BT_STACK_CLEANUP_WAIT_MS));
@@ -233,14 +250,16 @@ inline const module_t* get_local_module(const char* name) {
 }
 
 // Synchronous function to initialize the stack
-static void event_init_stack(void* context) {
-  semaphore_t* semaphore = (semaphore_t*)context;
-
+static void event_init_stack(semaphore_t* semaphore,
+                             bluetooth::core::CoreInterface* interface) {
   LOG_INFO("is initializing the stack");
 
   if (stack_is_initialized) {
     LOG_INFO("found the stack already in initialized state");
   } else {
+    // all callbacks out of libbluetooth-core happen via this interface
+    interfaceToProfiles = interface;
+
     module_management_start();
 
     module_init(get_local_module(OSI_MODULE));
@@ -262,23 +281,26 @@ static void event_init_stack(void* context) {
   if (semaphore) semaphore_post(semaphore);
 }
 
-static void ensure_stack_is_initialized() {
+static void ensure_stack_is_initialized(
+    bluetooth::core::CoreInterface* interface) {
   if (!stack_is_initialized) {
     LOG_WARN("%s found the stack was uninitialized. Initializing now.",
              __func__);
     // No semaphore needed since we are calling it directly
-    event_init_stack(nullptr);
+    event_init_stack(nullptr, interface);
   }
 }
 
 // Synchronous function to start up the stack
-static void event_start_up_stack(UNUSED_ATTR void* context) {
+static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
+                                 ProfileStartCallback startProfiles,
+                                 ProfileStopCallback stopProfiles) {
   if (stack_is_running) {
     LOG_INFO("%s stack already brought up", __func__);
     return;
   }
 
-  ensure_stack_is_initialized();
+  ensure_stack_is_initialized(interface);
 
   LOG_INFO("%s is bringing up the stack", __func__);
   future_t* local_hack_future = future_new();
@@ -297,21 +319,12 @@ static void event_start_up_stack(UNUSED_ATTR void* context) {
   get_btm_client_interface().lifecycle.btm_ble_init();
 
   RFCOMM_Init();
-#if (BNEP_INCLUDED == TRUE)
-  BNEP_Init();
-#if (PAN_INCLUDED == TRUE)
-  PAN_Init();
-#endif /* PAN */
-#endif /* BNEP Included */
-  A2DP_Init();
-  AVRC_Init();
   GAP_Init();
-#if (HID_HOST_INCLUDED == TRUE)
-  HID_HostInit();
-#endif
+
+  startProfiles();
 
   bta_sys_init();
-  bta_ar_init();
+
   module_init(get_local_module(BTE_LOGMSG_MODULE));
 
   main_thread_start_up();
@@ -330,7 +343,7 @@ static void event_start_up_stack(UNUSED_ATTR void* context) {
   if (future_await(local_hack_future) != FUTURE_SUCCESS) {
     LOG_ERROR("%s failed to start up the stack", __func__);
     stack_is_running = true;  // So stack shutdown actually happens
-    event_shut_down_stack(nullptr);
+    event_shut_down_stack(stopProfiles);
     return;
   }
 
@@ -340,7 +353,7 @@ static void event_start_up_stack(UNUSED_ATTR void* context) {
 }
 
 // Synchronous function to shut down the stack
-static void event_shut_down_stack(UNUSED_ATTR void* context) {
+static void event_shut_down_stack(ProfileStopCallback stopProfiles) {
   if (!stack_is_running) {
     LOG_INFO("%s stack is already brought down", __func__);
     return;
@@ -356,8 +369,7 @@ static void event_shut_down_stack(UNUSED_ATTR void* context) {
   do_in_main_thread(FROM_HERE, base::Bind(&btm_ble_scanner_cleanup));
 
   btif_dm_on_disable();
-  btif_sock_cleanup();
-  btif_pan_cleanup();
+  stopProfiles();
 
   do_in_main_thread(FROM_HERE, base::Bind(bta_dm_disable));
 
@@ -393,22 +405,23 @@ static void event_shut_down_stack(UNUSED_ATTR void* context) {
   LOG_INFO("%s finished", __func__);
 }
 
-static void ensure_stack_is_not_running() {
+static void ensure_stack_is_not_running(ProfileStopCallback stopProfiles) {
   if (stack_is_running) {
     LOG_WARN("%s found the stack was still running. Bringing it down now.",
              __func__);
-    event_shut_down_stack(nullptr);
+    event_shut_down_stack(stopProfiles);
   }
 }
 
 // Synchronous function to clean up the stack
-static void event_clean_up_stack(std::promise<void> promise) {
+static void event_clean_up_stack(std::promise<void> promise,
+                                 ProfileStopCallback stopProfiles) {
   if (!stack_is_initialized) {
     LOG_INFO("%s found the stack already in a clean state", __func__);
     goto cleanup;
   }
 
-  ensure_stack_is_not_running();
+  ensure_stack_is_not_running(stopProfiles);
 
   LOG_INFO("%s is cleaning up the stack", __func__);
   stack_is_initialized = false;
@@ -433,11 +446,13 @@ static void event_signal_stack_up(UNUSED_ATTR void* context) {
   // Notify BTIF connect queue that we've brought up the stack. It's
   // now time to dispatch all the pending profile connect requests.
   btif_queue_connect_next();
-  invoke_adapter_state_changed_cb(BT_STATE_ON);
+  GetInterfaceToProfiles()->events->invoke_adapter_state_changed_cb(
+      BT_STATE_ON);
 }
 
 static void event_signal_stack_down(UNUSED_ATTR void* context) {
-  invoke_adapter_state_changed_cb(BT_STATE_OFF);
+  GetInterfaceToProfiles()->events->invoke_adapter_state_changed_cb(
+      BT_STATE_OFF);
   future_ready(stack_manager_get_hack_future(), FUTURE_SUCCESS);
 }
 

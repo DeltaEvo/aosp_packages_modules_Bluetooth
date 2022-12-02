@@ -479,6 +479,56 @@ public final class BluetoothAdapter {
      */
     public static final int SCAN_MODE_CONNECTABLE_DISCOVERABLE = 23;
 
+
+    /**
+     * Used as parameter for {@link #setBluetoothHciSnoopLoggingMode}, indicates that
+     * the Bluetooth HCI snoop logging should be disabled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int BT_SNOOP_LOG_MODE_DISABLED = 0;
+
+    /**
+     * Used as parameter for {@link #setBluetoothHciSnoopLoggingMode}, indicates that
+     * the Bluetooth HCI snoop logging should be enabled without collecting potential
+     * Personally Identifiable Information and packet data.
+     *
+     * See {@link #BT_SNOOP_LOG_MODE_FULL} to enable logging of all information available.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int BT_SNOOP_LOG_MODE_FILTERED = 1;
+
+    /**
+     * Used as parameter for {@link #setSnoopLogMode}, indicates that the Bluetooth HCI snoop
+     * logging should be enabled.
+     *
+     * See {@link #BT_SNOOP_LOG_MODE_FILTERED} to enable logging with filtered information.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int BT_SNOOP_LOG_MODE_FULL = 2;
+
+    /** @hide */
+    @IntDef(value = {
+            BT_SNOOP_LOG_MODE_DISABLED,
+            BT_SNOOP_LOG_MODE_FILTERED,
+            BT_SNOOP_LOG_MODE_FULL
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface BluetoothSnoopLogMode {}
+
+    /** @hide */
+    @IntDef(value = {
+            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.ERROR_UNKNOWN,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SetSnoopLogModeStatusCode {}
+
     /**
      * Device only has a display.
      *
@@ -1035,7 +1085,8 @@ public final class BluetoothAdapter {
      * @throws IllegalArgumentException if address is invalid
      */
     @RequiresNoPermission
-    public @NonNull BluetoothDevice getRemoteLeDevice(@NonNull String address,
+    @NonNull
+    public BluetoothDevice getRemoteLeDevice(@NonNull String address,
             @AddressType int addressType) {
         final BluetoothDevice res = new BluetoothDevice(address, addressType);
         res.setAttributionSource(mAttributionSource);
@@ -3244,16 +3295,22 @@ public final class BluetoothAdapter {
         if (!pendingIntent.isImmutable()) {
             throw new IllegalArgumentException("The provided PendingIntent is not immutable");
         }
+        mServiceLock.readLock().lock();
         try {
-            final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
-            mService.startRfcommListener(
-                    name, new ParcelUuid(uuid), pendingIntent, mAttributionSource, recv);
-            return recv.awaitResultNoInterrupt(getSyncTimeout())
-                .getValue(BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND);
+            if (mService != null) {
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                mService.startRfcommListener(
+                        name, new ParcelUuid(uuid), pendingIntent, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout())
+                    .getValue(BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND);
+            }
         } catch (RemoteException | TimeoutException e) {
             Log.e(TAG, "Failed to transact RFCOMM listener start request", e);
             return BluetoothStatusCodes.ERROR_TIMEOUT;
+        } finally {
+            mServiceLock.readLock().unlock();
         }
+        return BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND;
     }
 
     /**
@@ -3273,15 +3330,21 @@ public final class BluetoothAdapter {
     })
     @RfcommListenerResult
     public int stopRfcommServer(@NonNull UUID uuid) {
+        mServiceLock.readLock().lock();
         try {
-            final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
-            mService.stopRfcommListener(new ParcelUuid(uuid), mAttributionSource, recv);
-            return recv.awaitResultNoInterrupt(getSyncTimeout())
-                .getValue(BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND);
+            if (mService != null) {
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                mService.stopRfcommListener(new ParcelUuid(uuid), mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout())
+                    .getValue(BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND);
+            }
         } catch (RemoteException | TimeoutException e) {
             Log.e(TAG, "Failed to transact RFCOMM listener stop request", e);
             return BluetoothStatusCodes.ERROR_TIMEOUT;
+        } finally {
+            mServiceLock.readLock().unlock();
         }
+        return BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND;
     }
 
     /**
@@ -3306,17 +3369,22 @@ public final class BluetoothAdapter {
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
     public @NonNull BluetoothSocket retrieveConnectedRfcommSocket(@NonNull UUID uuid) {
-        IncomingRfcommSocketInfo socketInfo;
+        IncomingRfcommSocketInfo socketInfo = null;
 
+        mServiceLock.readLock().lock();
         try {
-            final SynchronousResultReceiver<IncomingRfcommSocketInfo> recv =
-                    SynchronousResultReceiver.get();
-            mService.retrievePendingSocketForServiceRecord(new ParcelUuid(uuid),
-                    mAttributionSource, recv);
-            socketInfo = recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+            if (mService != null) {
+                final SynchronousResultReceiver<IncomingRfcommSocketInfo> recv =
+                        SynchronousResultReceiver.get();
+                mService.retrievePendingSocketForServiceRecord(new ParcelUuid(uuid),
+                        mAttributionSource, recv);
+                socketInfo = recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+            }
         } catch (RemoteException | TimeoutException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             return null;
+        } finally {
+            mServiceLock.readLock().unlock();
         }
         if (socketInfo == null) {
             return null;
@@ -3594,8 +3662,8 @@ public final class BluetoothAdapter {
      * @return true on success, false on error
      */
     @SuppressLint({
-        "AndroidFrameworkRequiresPermission",
-        "AndroidFrameworkBluetoothPermission"
+            "AndroidFrameworkRequiresPermission",
+            "AndroidFrameworkBluetoothPermission"
     })
     public boolean getProfileProxy(Context context, BluetoothProfile.ServiceListener listener,
             int profile) {
@@ -4235,14 +4303,18 @@ public final class BluetoothAdapter {
 
     /*package*/ IBluetooth getBluetoothService() {
         synchronized (sServiceLock) {
-            if (sProxyServiceStateCallbacks.isEmpty()) {
-                throw new IllegalStateException(
-                        "Anonymous service access requires at least one lifecycle in process");
-            }
             return sService;
         }
     }
 
+    /**
+     * Registers a IBluetoothManagerCallback and returns the cached
+     * Bluetooth service proxy object.
+     *
+     * TODO: rename this API to registerBlueoothManagerCallback or something?
+     * the current name does not match what it does very well.
+     *
+     * /
     @UnsupportedAppUsage
     /*package*/ IBluetooth getBluetoothService(IBluetoothManagerCallback cb) {
         Objects.requireNonNull(cb);
@@ -5026,5 +5098,50 @@ public final class BluetoothAdapter {
                 return BluetoothProfile.PRIORITY_UNDEFINED;
         }
         return BluetoothProfile.PRIORITY_UNDEFINED;
+    }
+
+    /**
+     * Sets the desired mode of the HCI snoop logging applied at Bluetooth startup.
+     *
+     * Please note that Bluetooth needs to be restarted in order for the change
+     * to take effect.
+     *
+     * @param mode
+     * @return status code indicating whether the logging mode was successfully set
+     * @throws IllegalArgumentException if the mode is not a valid logging mode
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @SetSnoopLogModeStatusCode
+    public int setBluetoothHciSnoopLoggingMode(@BluetoothSnoopLogMode int mode) {
+        if (mode != BT_SNOOP_LOG_MODE_DISABLED && mode != BT_SNOOP_LOG_MODE_FILTERED
+                && mode != BT_SNOOP_LOG_MODE_FULL) {
+            throw new IllegalArgumentException("Invalid Bluetooth HCI snoop log mode param value");
+        }
+        try {
+            return mManagerService.setBtHciSnoopLogMode(mode);
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        }
+        return BluetoothStatusCodes.ERROR_UNKNOWN;
+    }
+
+    /**
+     * Gets the current desired mode of HCI snoop logging applied at Bluetooth startup.
+     *
+     * @return the current HCI snoop logging mode applied at Bluetooth startup
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @BluetoothSnoopLogMode
+    public int getBluetoothHciSnoopLoggingMode() {
+        try {
+            return mManagerService.getBtHciSnoopLogMode();
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        }
+        return BT_SNOOP_LOG_MODE_DISABLED;
     }
 }

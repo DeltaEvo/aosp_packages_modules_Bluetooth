@@ -69,9 +69,9 @@ class LeAddressManager {
       crypto_toolbox::Octet16 rotation_irk,
       std::chrono::milliseconds minimum_rotation_time,
       std::chrono::milliseconds maximum_rotation_time);
-  AddressPolicy GetAddressPolicy();
-  void AckPause(LeAddressManagerCallback* callback);
-  void AckResume(LeAddressManagerCallback* callback);
+  virtual AddressPolicy GetAddressPolicy();
+  virtual void AckPause(LeAddressManagerCallback* callback);
+  virtual void AckResume(LeAddressManagerCallback* callback);
   virtual AddressPolicy Register(LeAddressManagerCallback* callback);
   virtual void Unregister(LeAddressManagerCallback* callback);
   virtual bool UnregisterSync(
@@ -93,6 +93,11 @@ class LeAddressManager {
   void ClearResolvingList();
   void OnCommandComplete(CommandCompleteView view);
   std::chrono::milliseconds GetNextPrivateAddressIntervalMs();
+
+  // Unsynchronized check for testing purposes
+  size_t NumberCachedCommands() const {
+    return cached_commands_.size();
+  }
 
  private:
   enum ClientState {

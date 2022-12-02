@@ -49,6 +49,7 @@ using std::unique_ptr;
 static void fail_if_reset_complete_not_success(CommandCompleteView complete) {
   auto reset_complete = ResetCompleteView::Create(complete);
   ASSERT(reset_complete.IsValid());
+  LOG_DEBUG("Reset completed with status: %s", ErrorCodeText(ErrorCode::SUCCESS).c_str());
   ASSERT(reset_complete.GetStatus() == ErrorCode::SUCCESS);
 }
 
@@ -238,8 +239,8 @@ struct HciLayer::impl {
     command_queue_.clear();
     command_credits_ = 1;
     waiting_command_ = OpCode::NONE;
-    enqueue_command(
-        ControllerDebugInfoBuilder::Create(), module_.GetHandler()->BindOnce(&fail_if_reset_complete_not_success));
+    // Ignore the response, since we don't know what might come back.
+    enqueue_command(ControllerDebugInfoBuilder::Create(), module_.GetHandler()->BindOnce([](CommandCompleteView) {}));
     // Don't time out for this one;
     if (hci_timeout_alarm_ != nullptr) {
       hci_timeout_alarm_->Cancel();
@@ -391,9 +392,9 @@ struct HciLayer::impl {
       auto view = VendorSpecificEventView::Create(event);
       ASSERT(view.IsValid());
       if (view.GetSubeventCode() == VseSubeventCode::BQR_EVENT) {
-        auto bqr_quality_view = BqrLinkQualityEventView::Create(BqrEventView::Create(view));
-        auto inflammation = BqrRootInflammationEventView::Create(bqr_quality_view);
-        if (bqr_quality_view.IsValid() && inflammation.IsValid()) {
+        auto bqr_event = BqrEventView::Create(view);
+        auto inflammation = BqrRootInflammationEventView::Create(bqr_event);
+        if (bqr_event.IsValid() && inflammation.IsValid()) {
           handle_root_inflammation(inflammation.GetVendorSpecificErrorCode());
           return;
         }

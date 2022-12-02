@@ -108,7 +108,6 @@ REQUIRED_APT_PACKAGES = [
     'libevent-dev',
     'libevent-dev',
     'libflatbuffers-dev',
-    'libflatbuffers1',
     'libgl1-mesa-dev',
     'libglib2.0-dev',
     'libgtest-dev',
@@ -183,7 +182,7 @@ class HostBuild():
         self.jobs = self.args.jobs
         if not self.jobs:
             self.jobs = multiprocessing.cpu_count()
-            print("Number of jobs = {}".format(self.jobs))
+            sys.stderr.write("Number of jobs = {}\n".format(self.jobs))
 
         # Normalize bootstrap dir and make sure it exists
         self.bootstrap_dir = os.path.abspath(self.args.bootstrap_dir)
@@ -192,9 +191,13 @@ class HostBuild():
         # Output and platform directories are based on bootstrap
         self.output_dir = os.path.join(self.bootstrap_dir, 'output')
         self.platform_dir = os.path.join(self.bootstrap_dir, 'staging')
+        self.bt_dir = os.path.join(self.platform_dir, 'bt')
         self.sysroot = self.args.sysroot
         self.libdir = self.args.libdir
         self.install_dir = os.path.join(self.output_dir, 'install')
+
+        assert os.path.samefile(self.bt_dir,
+                                os.path.dirname(__file__)), "Please rerun bootstrap for the current project!"
 
         # If default target isn't set, build everything
         self.target = 'all'
@@ -246,12 +249,23 @@ class HostBuild():
         os.makedirs(os.path.join(cargo_home, 'bin'), exist_ok=True)
 
         # Configure Rust env variables
-        self.env['CARGO_TARGET_DIR'] = self.output_dir
-        self.env['CARGO_HOME'] = os.path.join(self.output_dir, 'cargo_home')
-        self.env['RUSTFLAGS'] = self._generate_rustflags()
-        self.env['CXX_ROOT_PATH'] = os.path.join(self.platform_dir, 'bt')
-        self.env['CROS_SYSTEM_API_ROOT'] = os.path.join(self.platform_dir, 'system_api')
-        self.env['CXX_OUTDIR'] = self._gn_default_output()
+        self.custom_env = {}
+        self.custom_env['CARGO_TARGET_DIR'] = self.output_dir
+        self.custom_env['CARGO_HOME'] = os.path.join(self.output_dir, 'cargo_home')
+        self.custom_env['RUSTFLAGS'] = self._generate_rustflags()
+        self.custom_env['CXX_ROOT_PATH'] = os.path.join(self.platform_dir, 'bt')
+        self.custom_env['CROS_SYSTEM_API_ROOT'] = os.path.join(self.platform_dir, 'system_api')
+        self.custom_env['CXX_OUTDIR'] = self._gn_default_output()
+        self.env.update(self.custom_env)
+
+    def print_env(self):
+        """ Print the custom environment variables that are used in build.
+
+        Useful so that external tools can mimic the environment to be the same
+        as build.py, e.g. rust-analyzer.
+        """
+        for k, v in self.custom_env.items():
+            print("export {}='{}'".format(k, v))
 
     def run_command(self, target, args, cwd=None, env=None):
         """ Run command and stream the output.
@@ -405,7 +419,11 @@ class HostBuild():
     def _rust_build(self):
         """ Run `cargo build` from platform2/bt directory.
         """
-        self.run_command('rust', ['cargo', 'build'], cwd=os.path.join(self.platform_dir, 'bt'), env=self.env)
+        cmd = ['cargo', 'build']
+        if not self.args.rust_debug:
+            cmd.append('--release')
+
+        self.run_command('rust', cmd, cwd=os.path.join(self.platform_dir, 'bt'), env=self.env)
 
     def _target_prepare(self):
         """ Target to prepare the output directory for building.
@@ -437,7 +455,11 @@ class HostBuild():
     def _target_rootcanal(self):
         """ Build rust artifacts for RootCanal in an already prepared environment.
         """
-        self.run_command('rust', ['cargo', 'build'], cwd=os.path.join(self.platform_dir, 'bt/tools/rootcanal'), env=self.env)
+        cmd = ['cargo', 'build']
+        if not self.args.rust_debug:
+            cmd.append('--release')
+
+        self.run_command('rust', cmd, cwd=os.path.join(self.platform_dir, 'bt/tools/rootcanal'), env=self.env)
 
     def _target_main(self):
         """ Build the main GN artifacts in an already prepared environment.
@@ -449,8 +471,11 @@ class HostBuild():
         """
         # Rust tests first
         rust_test_cmd = ['cargo', 'test']
+        if not self.args.rust_debug:
+            rust_test_cmd.append('--release')
+
         if self.args.test_name:
-            rust_test_cmd = rust_test_cmd + [self.args.test_name]
+            rust_test_cmd = rust_test_cmd + [self.args.test_name, "--", "--test-threads=1", "--nocapture"]
 
         self.run_command('test', rust_test_cmd, cwd=os.path.join(self.platform_dir, 'bt'), env=self.env)
         self.run_command('test', rust_test_cmd, cwd=os.path.join(self.platform_dir, 'bt/tools/rootcanal'), env=self.env)
@@ -522,10 +547,16 @@ class HostBuild():
         shutil.rmtree(self.output_dir)
 
         # Remove Cargo.lock that may have become generated
-        try:
-            os.remove(os.path.join(self.platform_dir, 'bt', 'Cargo.lock'))
-        except FileNotFoundError:
-            pass
+        cargo_lock_files = [
+            os.path.join(self.platform_dir, 'bt', 'Cargo.lock'),
+            os.path.join(self.platform_dir, 'bt', 'tools', 'rootcanal', 'Cargo.lock'),
+        ]
+        for lock_file in cargo_lock_files:
+            try:
+                os.remove(lock_file)
+                print('Removed {}'.format(lock_file))
+            except FileNotFoundError:
+                pass
 
     def _target_all(self):
         """ Build all common targets (skipping doc, test, and clean).
@@ -794,6 +825,8 @@ if __name__ == '__main__':
         help='Run bootstrap code to verify build env is ok to build.',
         default=False,
         action='store_true')
+    parser.add_argument(
+        '--print-env', help='Print environment variables used for build.', default=False, action='store_true')
     parser.add_argument('--no-clang', help='Don\'t use clang compiler.', default=False, action='store_true')
     parser.add_argument(
         '--no-strip', help='Skip stripping binaries during install.', default=False, action='store_true')
@@ -807,6 +840,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--no-vendored-rust', help='Do not use vendored rust crates', default=False, action='store_true')
     parser.add_argument('--verbose', help='Verbose logs for build.')
+    parser.add_argument('--rust-debug', help='Build Rust code as debug.', default=False, action='store_true')
     args = parser.parse_args()
 
     # Make sure we get absolute path + expanded path for bootstrap directory
@@ -820,6 +854,9 @@ if __name__ == '__main__':
     if args.run_bootstrap:
         bootstrap = Bootstrap(args.bootstrap_dir, os.path.dirname(__file__))
         bootstrap.bootstrap()
+    elif args.print_env:
+        build = HostBuild(args)
+        build.print_env()
     else:
         build = HostBuild(args)
         build.build()

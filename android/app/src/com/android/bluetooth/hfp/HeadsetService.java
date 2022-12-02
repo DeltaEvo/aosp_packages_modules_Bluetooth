@@ -479,7 +479,7 @@ public class HeadsetService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private HeadsetService getService(AttributionSource source) {
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
+            if (!Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkServiceAvailable(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
                 return null;
@@ -1399,8 +1399,9 @@ public class HeadsetService extends ProfileService {
                 LeAudioService leAudioService = mFactory.getLeAudioService();
                 if (leAudioService != null) {
                     Log.i(TAG, "Make sure there is no le audio device active.");
-                    leAudioService.setActiveDevice(null);
+                    leAudioService.setInactiveForHfpHandover(mActiveDevice);
                 }
+
                 broadcastActiveDevice(mActiveDevice);
                 int connectStatus = connectAudio(mActiveDevice);
                 if (connectStatus != BluetoothStatusCodes.SUCCESS) {
@@ -1432,7 +1433,7 @@ public class HeadsetService extends ProfileService {
         }
     }
 
-    int connectAudio() {
+    public int connectAudio() {
         synchronized (mStateMachines) {
             BluetoothDevice device = mActiveDevice;
             if (device == null) {
@@ -1876,7 +1877,12 @@ public class HeadsetService extends ProfileService {
         return true;
     }
 
-    boolean isInbandRingingEnabled() {
+    /**
+     * Checks if headset devices are able to get inband ringing.
+     *
+     * @return True if inband ringing is enabled.
+     */
+    public boolean isInbandRingingEnabled() {
         boolean isInbandRingingSupported = getResources().getBoolean(
                 com.android.bluetooth.R.bool.config_bluetooth_hfp_inband_ringing_support);
         return isInbandRingingSupported && !SystemProperties.getBoolean(
@@ -1896,8 +1902,7 @@ public class HeadsetService extends ProfileService {
     public void onConnectionStateChangedFromStateMachine(BluetoothDevice device, int fromState,
             int toState) {
         synchronized (mStateMachines) {
-            List<BluetoothDevice> audioConnectableDevices =
-                    getDevicesMatchingConnectionStates(CONNECTING_CONNECTED_STATES);
+            List<BluetoothDevice> audioConnectableDevices = getConnectedDevices();
             if (fromState != BluetoothProfile.STATE_CONNECTED
                     && toState == BluetoothProfile.STATE_CONNECTED) {
                 if (audioConnectableDevices.size() > 1) {
@@ -2125,7 +2130,7 @@ public class HeadsetService extends ProfileService {
     /**
      * Retrieves the most recently connected device in the A2DP connected devices list.
      */
-    private BluetoothDevice getFallbackDevice() {
+    public BluetoothDevice getFallbackDevice() {
         DatabaseManager dbManager = mAdapterService.getDatabase();
         return dbManager != null ? dbManager
             .getMostRecentlyConnectedDevicesInList(getConnectedDevices())

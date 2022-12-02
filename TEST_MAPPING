@@ -63,7 +63,28 @@
       "name" : "net_test_btif_hf_client_service"
     },
     {
+      "name" : "libaptx_enc_tests"
+    },
+    {
+      "name" : "libaptxhd_enc_tests"
+    },
+    {
       "name" : "net_test_stack_btm"
+    },
+    {
+      "name" : "CtsBluetoothTestCases"
+    },
+    {
+      "name" : "BluetoothInstrumentationTests"
+    },
+    {
+      "name" : "GoogleBluetoothInstrumentationTests"
+    },
+    {
+      "name" : "FrameworkBluetoothTests"
+    },
+    {
+      "name" : "ServiceBluetoothTests"
     }
   ]
 }

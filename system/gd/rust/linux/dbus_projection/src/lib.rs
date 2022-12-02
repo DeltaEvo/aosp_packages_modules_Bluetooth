@@ -140,15 +140,11 @@ impl DisconnectWatcher {
             return false;
         }
 
-        match self.callbacks.lock().unwrap().get(&address).and_then(|m| m.get(&target_id)) {
+        let mut callbacks = self.callbacks.lock().unwrap();
+        match callbacks.get(&address).and_then(|m| m.get(&target_id)) {
             Some(cb) => {
                 cb(target_id);
-                let _ = self
-                    .callbacks
-                    .lock()
-                    .unwrap()
-                    .get_mut(&address)
-                    .and_then(|m| m.remove(&target_id));
+                let _ = callbacks.get_mut(&address).and_then(|m| m.remove(&target_id));
                 true
             }
             None => false,
@@ -158,6 +154,7 @@ impl DisconnectWatcher {
 
 /// A client proxy to conveniently call API methods generated with the
 /// [`generate_dbus_interface_client`](dbus_macros::generate_dbus_interface_client) macro.
+#[derive(Clone)]
 pub struct ClientDBusProxy {
     conn: Arc<SyncConnection>,
     bus_name: String,

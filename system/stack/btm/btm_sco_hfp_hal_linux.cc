@@ -67,7 +67,7 @@ struct mgmt_ev_cmd_complete {
   uint8_t data[];
 } __attribute__((packed));
 
-#define MGMT_OP_GET_SCO_CODEC_CAPABILITES 0x0057
+#define MGMT_OP_GET_SCO_CODEC_CAPABILITIES 0x0057
 #define MGMT_SCO_CODEC_CVSD 0x1
 #define MGMT_SCO_CODEC_MSBC_TRANSPARENT 0x2
 #define MGMT_SCO_CODEC_MSBC 0x3
@@ -96,7 +96,7 @@ void cache_codec_capabilities(struct mgmt_rp_get_codec_capabilities* rp) {
     cached_codec_info c = {
         .inner =
             {
-                .codec = static_cast<codec>(mc->codec - 1),
+                .codec = static_cast<codec>(1 << (mc->codec - 1)),
                 .data_path = mc->data_path,
                 .data = mc->data_length == 0
                             ? std::vector<uint8_t>{}
@@ -151,7 +151,7 @@ int btsocket_open_mgmt(uint16_t hci) {
 int mgmt_get_codec_capabilities(int fd, uint16_t hci) {
   // Write read codec capabilities
   struct mgmt_pkt ev;
-  ev.opcode = MGMT_OP_GET_SCO_CODEC_CAPABILITES;
+  ev.opcode = MGMT_OP_GET_SCO_CODEC_CAPABILITIES;
   ev.index = HCI_DEV_NONE;
   ev.len = sizeof(struct mgmt_cp_get_codec_capabilities) + 3;
 
@@ -174,7 +174,7 @@ int mgmt_get_codec_capabilities(int fd, uint16_t hci) {
     if (ret > 0) {
       RETRY_ON_INTR(ret = write(fd, &ev, MGMT_PKT_HDR_SIZE + ev.len));
       if (ret < 0) {
-        LOG_DEBUG("Failed to call MGMT_OP_GET_SCO_CODEC_CAPABILITES: %d",
+        LOG_DEBUG("Failed to call MGMT_OP_GET_SCO_CODEC_CAPABILITIES: %d",
                   -errno);
         return -errno;
       };
@@ -205,7 +205,7 @@ int mgmt_get_codec_capabilities(int fd, uint16_t hci) {
         if (ev.opcode == MGMT_EV_COMMAND_COMPLETE) {
           struct mgmt_ev_cmd_complete* cc =
               reinterpret_cast<struct mgmt_ev_cmd_complete*>(ev.data);
-          if (cc->opcode == MGMT_OP_GET_SCO_CODEC_CAPABILITES &&
+          if (cc->opcode == MGMT_OP_GET_SCO_CODEC_CAPABILITIES &&
               cc->status == 0) {
             struct mgmt_rp_get_codec_capabilities* rp =
                 reinterpret_cast<struct mgmt_rp_get_codec_capabilities*>(
@@ -328,8 +328,9 @@ bool get_offload_enabled() { return offload_supported && offload_enabled; }
 
 // Set offload enable/disable
 bool enable_offload(bool enable) {
-  if (!offload_supported) {
-    LOG_ERROR("%s: Hardware does not support SCO-offload.", __func__);
+  if (!offload_supported && enable) {
+    LOG_ERROR("%s: Cannot enable SCO-offload since it is not supported.",
+              __func__);
     return false;
   }
   offload_enabled = enable;
@@ -440,12 +441,12 @@ void notify_sco_connection_change(RawAddress device, bool is_connected,
     LOG_ERROR(
         "Failed to notify HAL of connection change: hci %d, device %s, "
         "connected %d, codec %d",
-        hci, device.ToString().c_str(), is_connected, codec);
+        hci, ADDRESS_TO_LOGGABLE_CSTR(device), is_connected, codec);
   } else {
     LOG_INFO(
         "Notified HAL of connection change: hci %d, device %s, connected %d, "
         "codec %d",
-        hci, device.ToString().c_str(), is_connected, codec);
+        hci, ADDRESS_TO_LOGGABLE_CSTR(device), is_connected, codec);
   }
 
   close(fd);

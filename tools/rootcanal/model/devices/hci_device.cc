@@ -16,17 +16,28 @@
 
 #include "hci_device.h"
 
-#include "os/log.h"
+#include "log.h"
 
 namespace rootcanal {
 
 HciDevice::HciDevice(std::shared_ptr<HciTransport> transport,
                      const std::string& properties_filename)
     : DualModeController(properties_filename), transport_(transport) {
-  properties_.SetPageScanRepetitionMode(0);
-  properties_.SetClassOfDevice(0x600420);
-  properties_.SetExtendedInquiryData({
-      12,  // length
+  link_layer_controller_.SetLocalName(std::vector<uint8_t>({
+      'g',
+      'D',
+      'e',
+      'v',
+      'i',
+      'c',
+      'e',
+      '-',
+      'H',
+      'C',
+      'I',
+  }));
+  link_layer_controller_.SetExtendedInquiryResponse(std::vector<uint8_t>({
+      12,  // Length
       9,   // Type: Device Name
       'g',
       'D',
@@ -39,21 +50,7 @@ HciDevice::HciDevice(std::shared_ptr<HciTransport> transport,
       'h',
       'c',
       'i',
-
-  });
-  properties_.SetName({
-      'g',
-      'D',
-      'e',
-      'v',
-      'i',
-      'c',
-      'e',
-      '-',
-      'H',
-      'C',
-      'I',
-  });
+  }));
 
   RegisterEventChannel([this](std::shared_ptr<std::vector<uint8_t>> packet) {
     transport_->SendEvent(*packet);

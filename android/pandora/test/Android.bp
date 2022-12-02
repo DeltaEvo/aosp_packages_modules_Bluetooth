@@ -23,7 +23,7 @@ python_test_host {
         "connect.py",
     ],
     libs: [
-        "libavatar",
+        "libavatar_experimental",
     ],
     required: ["PandoraServer"],
     test_suites: ["general-tests"],
@@ -31,4 +31,15 @@ python_test_host {
         unit_test: false,
     },
     data: ["config.yml"],
+}
+
+python_binary_host {
+    name: "avatar_runner",
+    main: "runner.py",
+    srcs: [
+        "runner.py",
+    ],
+    libs: [
+        "libavatar_experimental",
+    ],
 }

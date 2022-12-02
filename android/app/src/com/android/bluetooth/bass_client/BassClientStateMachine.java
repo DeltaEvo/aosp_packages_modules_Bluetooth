@@ -58,6 +58,7 @@ package com.android.bluetooth.bass_client;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
+import android.annotation.Nullable;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -106,6 +107,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 @VisibleForTesting
@@ -161,8 +163,8 @@ public class BassClientStateMachine extends StateMachine {
     private boolean mDiscoveryInitiated = false;
     @VisibleForTesting
     BassClientService mService;
-
-    private BluetoothGattCharacteristic mBroadcastScanControlPoint;
+    @VisibleForTesting
+    BluetoothGattCharacteristic mBroadcastScanControlPoint;
     private boolean mFirstTimeBisDiscovery = false;
     private int mPASyncRetryCounter = 0;
     private ScanResult mScanRes = null;
@@ -178,7 +180,6 @@ public class BassClientStateMachine extends StateMachine {
     private final Map<Integer, Boolean> mPendingRemove = new HashMap();
     // Psync and PAST interfaces
     private PeriodicAdvertisingManager mPeriodicAdvManager;
-    private boolean mAutoAssist = false;
     private boolean mAutoTriggered = false;
     private boolean mNoStopScanOffload = false;
     private boolean mDefNoPAS = false;
@@ -186,8 +187,8 @@ public class BassClientStateMachine extends StateMachine {
     private int mBroadcastSourceIdLength = 3;
     private byte mNextSourceId = 0;
     private boolean mAllowReconnect = false;
-
-    BluetoothGatt mBluetoothGatt = null;
+    @VisibleForTesting
+    BluetoothGattTestableWrapper mBluetoothGatt = null;
     BluetoothGattCallback mGattCallback = null;
 
     BassClientStateMachine(BluetoothDevice device, BassClientService svc, Looper looper,
@@ -458,11 +459,11 @@ public class BassClientStateMachine extends StateMachine {
                 subGroup.addChannel(channel.build());
             }
             byte[] arrayCodecId = baseLevel2.codecId;
-            long codeId = (long) ((arrayCodecId[4] & 0xff) << 32
+            long codeId = ((long) (arrayCodecId[4] & 0xff)) << 32
                     | (arrayCodecId[3] & 0xff) << 24
                     | (arrayCodecId[2] & 0xff) << 16
                     | (arrayCodecId[1] & 0xff) << 8
-                    | (arrayCodecId[0] & 0xff));
+                    | (arrayCodecId[0] & 0xff);
             subGroup.setCodecId(codeId);
             subGroup.setCodecSpecificConfig(BluetoothLeAudioCodecConfigMetadata.
                     fromRawBytes(baseLevel2.codecConfigInfo));
@@ -592,10 +593,20 @@ public class BassClientStateMachine extends StateMachine {
                     mPeriodicAdvManager.transferSync(mDevice, serviceData, syncHandle);
                 }
             } else {
-                Log.e(TAG, "There is no valid sync handle for this Source");
-                if (mAutoAssist) {
-                    //initiate Auto Assist procedure for this device
-                    mService.getBassUtils().triggerAutoAssist(recvState);
+                if (mService.isLocalBroadcast(mPendingMetadata)) {
+                    int advHandle = mPendingMetadata.getSourceAdvertisingSid();
+                    serviceData = 0x000000FF & recvState.getSourceId();
+                    serviceData = serviceData << 8;
+                    // Address we set in the Source Address can differ from the address in the air
+                    serviceData = serviceData
+                            | BassConstants.ADV_ADDRESS_DONT_MATCHES_SOURCE_ADV_ADDRESS;
+                    log("Initiate local broadcast PAST for: " + mDevice
+                            + ", advSID/Handle: " +  advHandle
+                            + ", serviceData: " + serviceData);
+                    mPeriodicAdvManager.transferSetInfo(mDevice, serviceData,
+                            advHandle, mPeriodicAdvCallback);
+                } else {
+                    Log.e(TAG, "There is no valid sync handle for this Source");
                 }
             }
         } else if (state == BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_SYNCHRONIZED
@@ -736,6 +747,7 @@ public class BassClientStateMachine extends StateMachine {
                     BassConstants.BCAST_RCVR_STATE_SRC_ADDR_SIZE);
             byte sourceAddressType = receiverState[BassConstants
                     .BCAST_RCVR_STATE_SRC_ADDR_TYPE_IDX];
+            BassUtils.reverse(sourceAddress);
             String address = Utils.getAddressStringFromByte(sourceAddress);
             BluetoothDevice device = btAdapter.getRemoteLeDevice(
                     address, sourceAddressType);
@@ -988,7 +1000,7 @@ public class BassClientStateMachine extends StateMachine {
                     m.arg1 = status;
                     sendMessage(m);
                 }
-            };
+    };
 
     /**
      * Connects to the GATT server of the device.
@@ -1001,11 +1013,16 @@ public class BassClientStateMachine extends StateMachine {
             mGattCallback = new GattCallback();
         }
 
-        mBluetoothGatt = mDevice.connectGatt(mService, autoConnect,
+        BluetoothGatt gatt = mDevice.connectGatt(mService, autoConnect,
                 mGattCallback, BluetoothDevice.TRANSPORT_LE,
                 (BluetoothDevice.PHY_LE_1M_MASK
                         | BluetoothDevice.PHY_LE_2M_MASK
                         | BluetoothDevice.PHY_LE_CODED_MASK), null);
+
+        if (gatt != null) {
+            mBluetoothGatt = new BluetoothGattTestableWrapper(gatt);
+        }
+
         return mBluetoothGatt != null;
     }
 
@@ -1253,7 +1270,9 @@ public class BassClientStateMachine extends StateMachine {
         stream.write(metaData.getSourceAddressType());
 
         // Advertiser_Address
-        stream.write(Utils.getBytesFromAddress(advSource.getAddress()), 0, 6);
+        byte[] bcastSourceAddr = Utils.getBytesFromAddress(advSource.getAddress());
+        BassUtils.reverse(bcastSourceAddr);
+        stream.write(bcastSourceAddr, 0, 6);
         log("Address bytes: " + advSource.getAddress());
 
         // Advertising_SID
@@ -1453,6 +1472,12 @@ public class BassClientStateMachine extends StateMachine {
             removeDeferredMessages(CONNECT);
             if (mLastConnectionState == BluetoothProfile.STATE_CONNECTED) {
                 log("CONNECTED->CONNECTED: Ignore");
+                // Broadcast for testing purpose only
+                if (Utils.isInstrumentationTestMode()) {
+                    Intent intent = new Intent("android.bluetooth.bass_client.NOTIFY_TEST");
+                    mService.sendBroadcast(intent, BLUETOOTH_CONNECT,
+                            Utils.getTempAllowlistBroadcastOptions());
+                }
             } else {
                 broadcastConnectionState(mDevice, mLastConnectionState,
                         BluetoothProfile.STATE_CONNECTED);
@@ -1712,12 +1737,20 @@ public class BassClientStateMachine extends StateMachine {
         }
     }
 
+    // public for testing, but private for non-testing
     @VisibleForTesting
     class ConnectedProcessing extends State {
         @Override
         public void enter() {
             log("Enter ConnectedProcessing(" + mDevice + "): "
                     + messageWhatToString(getCurrentMessage().what));
+
+            // Broadcast for testing purpose only
+            if (Utils.isInstrumentationTestMode()) {
+                Intent intent = new Intent("android.bluetooth.bass_client.NOTIFY_TEST");
+                mService.sendBroadcast(intent, BLUETOOTH_CONNECT,
+                        Utils.getTempAllowlistBroadcastOptions());
+            }
         }
         @Override
         public void exit() {
@@ -2011,4 +2044,81 @@ public class BassClientStateMachine extends StateMachine {
         }
         Log.d(TAG, builder.toString());
     }
+
+    /** Mockable wrapper of {@link BluetoothGatt}. */
+    @VisibleForTesting
+    public static class BluetoothGattTestableWrapper {
+        public final BluetoothGatt mWrappedBluetoothGatt;
+
+        BluetoothGattTestableWrapper(BluetoothGatt bluetoothGatt) {
+            mWrappedBluetoothGatt = bluetoothGatt;
+        }
+
+        /** See {@link BluetoothGatt#getServices()}. */
+        public List<BluetoothGattService> getServices() {
+            return mWrappedBluetoothGatt.getServices();
+        }
+
+        /** See {@link BluetoothGatt#getService(UUID)}. */
+        @Nullable
+        public BluetoothGattService getService(UUID uuid) {
+            return mWrappedBluetoothGatt.getService(uuid);
+        }
+
+        /** See {@link BluetoothGatt#discoverServices()}. */
+        public boolean discoverServices() {
+            return mWrappedBluetoothGatt.discoverServices();
+        }
+
+        /**
+         * See {@link BluetoothGatt#readCharacteristic(
+         * BluetoothGattCharacteristic)}.
+         */
+        public boolean readCharacteristic(BluetoothGattCharacteristic characteristic) {
+            return mWrappedBluetoothGatt.readCharacteristic(characteristic);
+        }
+
+        /**
+         * See {@link BluetoothGatt#writeCharacteristic(
+         * BluetoothGattCharacteristic, byte[], int)} .
+         */
+        public boolean writeCharacteristic(BluetoothGattCharacteristic characteristic) {
+            return mWrappedBluetoothGatt.writeCharacteristic(characteristic);
+        }
+
+        /** See {@link BluetoothGatt#readDescriptor(BluetoothGattDescriptor)}. */
+        public boolean readDescriptor(BluetoothGattDescriptor descriptor) {
+            return mWrappedBluetoothGatt.readDescriptor(descriptor);
+        }
+
+        /**
+         * See {@link BluetoothGatt#writeDescriptor(BluetoothGattDescriptor,
+         * byte[])}.
+         */
+        public boolean writeDescriptor(BluetoothGattDescriptor descriptor) {
+            return mWrappedBluetoothGatt.writeDescriptor(descriptor);
+        }
+
+        /** See {@link BluetoothGatt#requestMtu(int)}. */
+        public boolean requestMtu(int mtu) {
+            return mWrappedBluetoothGatt.requestMtu(mtu);
+        }
+
+        /** See {@link BluetoothGatt#setCharacteristicNotification}. */
+        public boolean setCharacteristicNotification(
+                BluetoothGattCharacteristic characteristic, boolean enable) {
+            return mWrappedBluetoothGatt.setCharacteristicNotification(characteristic, enable);
+        }
+
+        /** See {@link BluetoothGatt#disconnect()}. */
+        public void disconnect() {
+            mWrappedBluetoothGatt.disconnect();
+        }
+
+        /** See {@link BluetoothGatt#close()}. */
+        public void close() {
+            mWrappedBluetoothGatt.close();
+        }
+    }
+
 }

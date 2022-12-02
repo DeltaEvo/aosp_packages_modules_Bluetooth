@@ -126,6 +126,9 @@ static const interop_addr_entry_t interop_addr_database[] = {
     // Toyota Prius - 2015
     {{{0xfc, 0xc2, 0xde, 0, 0, 0}}, 3, INTEROP_DISABLE_ROLE_SWITCH},
 
+    // Toyota Prius - b/231092023
+    {{{0x9c, 0xdf, 0x03, 0, 0, 0}}, 3, INTEROP_DISABLE_ROLE_SWITCH},
+
     // OBU II Bluetooth dongle
     {{{0x00, 0x04, 0x3e, 0, 0, 0}}, 3, INTEROP_DISABLE_ROLE_SWITCH},
 
@@ -149,9 +152,6 @@ static const interop_addr_entry_t interop_addr_database[] = {
 
     // AirPods 2 - unacceptably loud volume
     {{{0x9c, 0x64, 0x8b, 0, 0, 0}}, 3, INTEROP_DISABLE_ABSOLUTE_VOLUME},
-
-    // Phonak AG - volume level not change
-    {{{0x00, 0x0f, 0x59, 0, 0, 0}}, 3, INTEROP_DISABLE_ABSOLUTE_VOLUME},
 
     // for skip name request,
     // because BR/EDR address and ADV random address are the same
@@ -187,6 +187,22 @@ static const interop_addr_entry_t interop_addr_database[] = {
 
     // Toyota Camry 2018 Carkit HFP AT+BIND missing
     {{{0x94, 0xb2, 0xcc, 0x30, 0, 0}}, 4, INTEROP_SLC_SKIP_BIND_COMMAND},
+
+    // BMW Carkit
+    {{{0x00, 0x0a, 0x08, 0, 0, 0}}, 3, INTEROP_AVRCP_1_3_ONLY},
+};
+
+typedef struct {
+  RawAddress addr_start;
+  RawAddress addr_end;
+  interop_feature_t feature;
+} interop_addr_range_entry_t;
+
+static const interop_addr_range_entry_t interop_addr_range_database[] = {
+    // Phonak AG - volume level not change
+    {{{0x00, 0x0f, 0x59, 0x50, 0x00, 0x00}},
+     {{0x00, 0x0f, 0x59, 0x6f, 0xff, 0xff}},
+     INTEROP_DISABLE_ABSOLUTE_VOLUME},
 };
 
 typedef struct {

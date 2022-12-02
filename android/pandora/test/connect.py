@@ -21,6 +21,14 @@ from grpc import RpcError
 
 from avatar.controllers import pandora_device
 
+import google.protobuf.descriptor_pool
+
+# Reset protobuf descriptor_pool as we are reimporting
+# a module with the same package
+google.protobuf.descriptor_pool.Default().__init__()
+
+from pandora_experimental.host_grpc import Host
+
 
 class ExampleTest(base_test.BaseTestClass):
 
@@ -30,7 +38,7 @@ class ExampleTest(base_test.BaseTestClass):
         self.ref = self.pandora_devices[1]
 
     def setup_test(self):
-        self.dut.host.HardReset()
+        Host(self.dut.channel).FactoryReset()
         # TODO: wait for server
         time.sleep(3)
 
@@ -44,7 +52,8 @@ class ExampleTest(base_test.BaseTestClass):
 if __name__ == '__main__':
     # MoblyBinaryHostTest pass test_runner arguments after a "--"
     # to make it work with rewrite argv to skip the "--"
-    index = sys.argv.index('--')
-    sys.argv = sys.argv[:1] + sys.argv[index + 1:]
+    if '--' in sys.argv:
+        index = sys.argv.index('--')
+        sys.argv = sys.argv[:1] + sys.argv[index + 1:]
     logging.basicConfig(level=logging.DEBUG)
     test_runner.main()

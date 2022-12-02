@@ -92,7 +92,7 @@ typedef enum {
   BT_STATUS_FAIL,
   BT_STATUS_NOT_READY,
   BT_STATUS_NOMEM,
-  BT_STATUS_BUSY,
+  BT_STATUS_BUSY, /* retryable error */
   BT_STATUS_DONE, /* request already completed */
   BT_STATUS_UNSUPPORTED,
   BT_STATUS_PARM_INVALID,
@@ -175,6 +175,13 @@ typedef enum {
   BT_ACL_STATE_CONNECTED,
   BT_ACL_STATE_DISCONNECTED
 } bt_acl_state_t;
+
+/** Bluetooth ACL connection direction */
+typedef enum {
+  BT_CONN_DIRECTION_UNKNOWN,
+  BT_CONN_DIRECTION_OUTGOING,
+  BT_CONN_DIRECTION_INCOMING
+} bt_conn_direction_t;
 
 /** Bluetooth SDP service record */
 typedef struct {
@@ -492,7 +499,8 @@ typedef void (*acl_state_changed_callback)(bt_status_t status,
                                            RawAddress* remote_bd_addr,
                                            bt_acl_state_t state,
                                            int transport_link_type,
-                                           bt_hci_error_code_t hci_reason);
+                                           bt_hci_error_code_t hci_reason,
+                                           bt_conn_direction_t direction);
 
 /** Bluetooth link quality report callback */
 typedef void (*link_quality_report_callback)(
@@ -844,10 +852,11 @@ typedef struct {
 
   /**
    *
-   * Floss: Set the default event mask for Classic and LE
+   * Floss: Set the default event mask for Classic and LE except the given
+   *        values (they will be disabled in the final set mask).
    *
    */
-  int (*set_default_event_mask)();
+  int (*set_default_event_mask_except)(uint64_t mask, uint64_t le_mask);
 
   /**
    *
@@ -869,6 +878,24 @@ typedef struct {
    *
    */
   int (*set_event_filter_connection_setup_all_devices)();
+
+  /**
+   *
+   * Is wbs supported by the controller
+   *
+   */
+  bool (*get_wbs_supported)();
+
+  /**
+   * Data passed from BluetoothDevice.metadata_changed
+   *
+   * @param remote_bd_addr remote address
+   * @param key Metadata key
+   * @param value Metadata value
+   */
+  void (*metadata_changed)(const RawAddress& remote_bd_addr, int key,
+                           std::vector<uint8_t> value);
+
 } bt_interface_t;
 
 #define BLUETOOTH_INTERFACE_STRING "bluetoothInterface"

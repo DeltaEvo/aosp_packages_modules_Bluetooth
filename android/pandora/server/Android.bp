@@ -7,8 +7,6 @@ java_library_static {
 
     srcs: ["src/**/*.kt"],
 
-    platform_apis: true,
-
     sdk_version: "core_platform",
 
     libs: [
@@ -24,6 +22,7 @@ java_library_static {
         "grpc-java-lite",
         "guava",
         "opencensus-java-api",
+        "kotlin-test",
         "kotlinx_coroutines",
         "pandora-grpc-java",
         "pandora-proto-java",
@@ -33,7 +32,6 @@ java_library_static {
 
 android_test_helper_app {
     name: "PandoraServer",
-    certificate: "platform",
 
     static_libs: [
         "PandoraServerLib",
@@ -47,6 +45,7 @@ android_test_helper_app {
     },
 
     test_suites: [
+        "general-tests",
         "device-tests",
         "mts-bluetooth",
     ],
@@ -72,86 +71,4 @@ android_test {
         ":mmi2grpc"
     ],
     test_suites: ["mts-bluetooth"],
-}
-
-java_library {
-    name: "pandora-grpc-java",
-    visibility: ["//visibility:private"],
-    srcs: [
-        "proto/pandora/*.proto",
-    ],
-    static_libs: [
-        "grpc-java-lite",
-        "guava",
-        "javax_annotation-api_1.3.2",
-        "libprotobuf-java-lite",
-        "opencensus-java-api",
-        "pandora-proto-java",
-    ],
-    proto: {
-        include_dirs: [
-            "external/protobuf/src",
-            "packages/modules/Bluetooth/android/pandora/server/proto",
-        ],
-        plugin: "grpc-java-plugin",
-        output_params: [
-           "lite",
-        ],
-    },
-}
-
-java_library {
-    name: "pandora-proto-java",
-    visibility: ["//visibility:private"],
-    srcs: [
-        "proto/pandora/*.proto",
-        ":libprotobuf-internal-protos",
-    ],
-    static_libs: [
-        "libprotobuf-java-lite",
-    ],
-    proto: {
-        type: "lite",
-        include_dirs: [
-            "external/protobuf/src",
-            "packages/modules/Bluetooth/android/pandora/server/proto",
-        ],
-    },
-}
-
-genrule {
-    name: "pandora-grpc-python",
-    tools: [
-        "aprotoc",
-        "protoc-gen-mmi2grpc-python"
-    ],
-    cmd: "$(location aprotoc)" +
-         "    -Ipackages/modules/Bluetooth/android/pandora/server/proto" +
-         "    -Iexternal/protobuf/src" +
-         "    --plugin=protoc-gen-grpc=$(location protoc-gen-mmi2grpc-python)" +
-         "    --grpc_out=$(genDir)" +
-         "    --python_out=$(genDir)" +
-         "    $(in)",
-    srcs: [
-        "proto/pandora/a2dp.proto",
-        "proto/pandora/avrcp.proto",
-        "proto/pandora/gatt.proto",
-        "proto/pandora/hfp.proto",
-        "proto/pandora/host.proto",
-        "proto/pandora/security.proto",
-    ],
-    out: [
-        "pandora/a2dp_grpc.py",
-        "pandora/a2dp_pb2.py",
-        "pandora/avrcp_grpc.py",
-        "pandora/avrcp_pb2.py",
-        "pandora/gatt_grpc.py",
-        "pandora/gatt_pb2.py",
-        "pandora/hfp_grpc.py",
-        "pandora/hfp_pb2.py",
-        "pandora/host_grpc.py",
-        "pandora/host_pb2.py",
-        "pandora/security_grpc.py",
-        "pandora/security_pb2.py",
-    ]
 }

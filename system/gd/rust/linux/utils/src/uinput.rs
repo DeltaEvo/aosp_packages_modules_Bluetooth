@@ -16,15 +16,18 @@ const AVC_FORWARD: u8 = 0x4B;
 const AVC_BACKWARD: u8 = 0x4C;
 
 // Supported uinput keys
-const KEY_PLAYPAUSE: libc::c_uint = 164;
-const KEY_STOPCD: libc::c_uint = 166;
-const KEY_REWIND: libc::c_uint = 168;
-const KEY_FASTFORWAED: libc::c_uint = 208;
 const KEY_NEXTSONG: libc::c_uint = 163;
 const KEY_PREVIOUSSONG: libc::c_uint = 165;
+const KEY_STOPCD: libc::c_uint = 166;
+const KEY_REWIND: libc::c_uint = 168;
+const KEY_PLAYCD: libc::c_uint = 200;
+const KEY_PAUSECD: libc::c_uint = 201;
+const KEY_FASTFORWAED: libc::c_uint = 208;
 
 // uinput setup constants
 const UINPUT_MAX_NAME_SIZE: usize = 80;
+const UINPUT_SUFFIX: &str = " (AVRCP)";
+const UINPUT_SUFFIX_SIZE: usize = UINPUT_SUFFIX.len();
 const ABS_MAX: usize = 0x3F;
 const BUS_BLUETOOTH: u16 = 0x05;
 const UINPUT_IOCTL_BASE: libc::c_char = 'U' as libc::c_char;
@@ -53,9 +56,9 @@ struct KeyMap {
 }
 
 const KEY_MAP: [KeyMap; 7] = [
-    KeyMap { avc: AVC_PLAY, uinput: KEY_PLAYPAUSE },
+    KeyMap { avc: AVC_PLAY, uinput: KEY_PLAYCD },
     KeyMap { avc: AVC_STOP, uinput: KEY_STOPCD },
-    KeyMap { avc: AVC_PAUSE, uinput: KEY_PLAYPAUSE },
+    KeyMap { avc: AVC_PAUSE, uinput: KEY_PAUSECD },
     KeyMap { avc: AVC_REWIND, uinput: KEY_REWIND },
     KeyMap { avc: AVC_FAST_FORWAED, uinput: KEY_FASTFORWAED },
     KeyMap { avc: AVC_FORWARD, uinput: KEY_NEXTSONG },
@@ -157,7 +160,8 @@ impl UInputDev {
     #[allow(temporary_cstring_as_ptr)]
     fn init(&mut self, mut name: String, addr: String) -> Result<(), String> {
         // Truncate the device name if over the max size allowed.
-        name.truncate(UINPUT_MAX_NAME_SIZE);
+        name.truncate(UINPUT_MAX_NAME_SIZE - UINPUT_SUFFIX_SIZE);
+        name.push_str(UINPUT_SUFFIX);
         for (i, ch) in name.chars().enumerate() {
             self.device.name[i] = ch as libc::c_char;
         }

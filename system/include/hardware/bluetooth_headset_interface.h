@@ -18,6 +18,7 @@
 
 #include <raw_address.h>
 
+#include "bluetooth.h"
 #include "bluetooth_headset_callbacks.h"
 #include "bt_hf.h"
 
@@ -62,9 +63,10 @@ class Interface {
    * Create an audio connection
    *
    * @param bd_addr remote device address
+   * @param focre_cvsd whether force to use fallback CVSD codec
    * @return BT_STATUS_SUCCESS on success
    */
-  virtual bt_status_t ConnectAudio(RawAddress* bd_addr) = 0;
+  virtual bt_status_t ConnectAudio(RawAddress* bd_addr, bool force_cvsd) = 0;
 
   /**
    * Close the audio connection

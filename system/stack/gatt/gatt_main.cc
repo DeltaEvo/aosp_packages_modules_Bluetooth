@@ -22,11 +22,14 @@
  *
  ******************************************************************************/
 
+#include <base/logging.h>
+
 #include "bt_target.h"
 #include "bt_utils.h"
 #include "btif/include/btif_storage.h"
 #include "connection_manager.h"
 #include "device/include/interop.h"
+#include "gd/common/init_flags.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "osi/include/allocator.h"
@@ -39,8 +42,6 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 using base::StringPrintf;
 using bluetooth::eatt::EattExtension;
@@ -113,7 +114,10 @@ void gatt_init(void) {
   fixed_reg.pL2CA_FixedConn_Cb = gatt_le_connect_cback;
   fixed_reg.pL2CA_FixedData_Cb = gatt_le_data_ind;
   fixed_reg.pL2CA_FixedCong_Cb = gatt_le_cong_cback; /* congestion callback */
-  fixed_reg.default_idle_tout = 0xffff; /* 0xffff default idle timeout */
+  fixed_reg.default_idle_tout =
+      bluetooth::common::init_flags::finite_att_timeout_is_enabled()
+          ? 2 /* We allow 2s for GATT clients to connect once the link is up */
+          : L2CAP_NO_IDLE_TIMEOUT;
 
   L2CA_RegisterFixedChannel(L2CAP_ATT_CID, &fixed_reg);
 
@@ -306,7 +310,7 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
 bool gatt_update_app_hold_link_status(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
                                       bool is_add) {
   LOG_DEBUG("gatt_if=%d, is_add=%d, peer_bda=%s", +gatt_if, is_add,
-            p_tcb->peer_bda.ToString().c_str());
+            ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda));
   auto& holders = p_tcb->app_hold_link;
 
   if (is_add) {
@@ -369,7 +373,7 @@ void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
   if (is_add) {
     if (p_tcb->att_lcid == L2CAP_ATT_CID && is_valid_handle) {
       LOG_INFO("disable link idle timer for %s",
-               p_tcb->peer_bda.ToString().c_str());
+               ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda));
       /* acl link is connected disable the idle timeout */
       GATT_SetIdleTimeout(p_tcb->peer_bda, GATT_LINK_NO_IDLE_TIMEOUT,
                           p_tcb->transport);

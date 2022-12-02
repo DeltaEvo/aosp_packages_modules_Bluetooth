@@ -372,9 +372,12 @@ public final class Utils {
      */
     public static boolean isPackageNameAccurate(Context context, String callingPackage,
             int callingUid) {
+        UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
+
         // Verifies the integrity of the calling package name
         try {
-            int packageUid = context.getPackageManager().getPackageUid(callingPackage, 0);
+            int packageUid = context.createContextAsUser(callingUser, 0)
+                    .getPackageManager().getPackageUid(callingPackage, 0);
             if (packageUid != callingUid) {
                 Log.e(TAG, "isPackageNameAccurate: App with package name " + callingPackage
                         + " is UID " + packageUid + " but caller is " + callingUid);
@@ -616,7 +619,7 @@ public final class Utils {
         return false;
     }
 
-    public static boolean checkCallerIsSystemOrActiveUser() {
+    private static boolean checkCallerIsSystemOrActiveUser() {
         int callingUid = Binder.getCallingUid();
         UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
 
@@ -637,7 +640,7 @@ public final class Utils {
         return checkCallerIsSystemOrActiveUser(tag + "." + method + "()");
     }
 
-    public static boolean checkCallerIsSystemOrActiveOrManagedUser(Context context) {
+    private static boolean checkCallerIsSystemOrActiveOrManagedUser(Context context) {
         if (context == null) {
             return checkCallerIsSystemOrActiveUser();
         }

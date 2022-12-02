@@ -1,4 +1,6 @@
 extern crate clap;
+#[macro_use]
+extern crate lazy_static;
 
 use clap::{App, AppSettings, Arg};
 use dbus::{channel::MatchingReceiver, message::MatchRule};
@@ -6,31 +8,39 @@ use dbus_crossroads::Crossroads;
 use dbus_tokio::connection;
 use futures::future;
 use log::LevelFilter;
+use nix::sys::signal;
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
 use syslog::{BasicLogger, Facility, Formatter3164};
+use tokio::time;
 
 use bt_topshim::{btif::get_btinterface, topstack};
 use btstack::{
     battery_manager::BatteryManager,
     battery_provider_manager::BatteryProviderManager,
+    battery_service::BatteryService,
     bluetooth::{get_bt_dispatcher, Bluetooth, IBluetooth},
+    bluetooth_admin::BluetoothAdmin,
     bluetooth_gatt::BluetoothGatt,
     bluetooth_media::BluetoothMedia,
     socket_manager::BluetoothSocketManager,
     suspend::Suspend,
-    Stack,
+    Message, Stack,
 };
 use dbus_projection::DisconnectWatcher;
+use tokio::sync::mpsc::Sender;
 
 mod dbus_arg;
 mod iface_battery_manager;
 mod iface_battery_provider_manager;
 mod iface_bluetooth;
+mod iface_bluetooth_admin;
 mod iface_bluetooth_gatt;
 mod iface_bluetooth_media;
 
 const DBUS_SERVICE_NAME: &str = "org.chromium.bluetooth";
+const ADMIN_SETTINGS_FILE_PATH: &str = "/var/lib/bluetooth/admin_policy.json";
 
 fn make_object_name(idx: i32, name: &str) -> String {
     String::from(format!("/org/chromium/bluetooth/hci{}/{}", idx, name))
@@ -48,6 +58,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .takes_value(true)
                 .help("The HCI index"),
         )
+        .arg(
+            Arg::with_name("index")
+                .long("index")
+                .value_name("INDEX")
+                .takes_value(true)
+                .help("The Virtual index"),
+        )
         .arg(Arg::with_name("debug").long("debug").short("d").help("Enables debug level logs"))
         .arg(Arg::from_usage("[init-flags] 'Fluoride INIT_ flags'").multiple(true))
         .arg(
@@ -63,10 +80,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let is_debug = matches.is_present("debug");
     let log_output = matches.value_of("log-output").unwrap_or("syslog");
 
-    let adapter_index = match matches.value_of("hci") {
-        Some(idx) => idx.parse::<i32>().unwrap_or(0),
-        None => 0,
-    };
+    let adapter_index = matches.value_of("index").map_or(0, |idx| idx.parse::<i32>().unwrap_or(0));
+    let hci_index = matches.value_of("hci").map_or(0, |idx| idx.parse::<i32>().unwrap_or(0));
 
     // The remaining flags are passed down to Fluoride as is.
     let mut init_flags: Vec<String> = match matches.values_of("init-flags") {
@@ -80,7 +95,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Forward --hci to Fluoride.
-    init_flags.push(format!("--hci={}", adapter_index));
+    init_flags.push(format!("--hci={}", hci_index));
 
     let level_filter = if is_debug { LevelFilter::Debug } else { LevelFilter::Info };
 
@@ -100,18 +115,34 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let (tx, rx) = Stack::create_channel();
+    let sig_notifier = Arc::new((Mutex::new(false), Condvar::new()));
 
     let intf = Arc::new(Mutex::new(get_btinterface().unwrap()));
     let bluetooth_gatt =
         Arc::new(Mutex::new(Box::new(BluetoothGatt::new(intf.clone(), tx.clone()))));
     let bluetooth_media =
         Arc::new(Mutex::new(Box::new(BluetoothMedia::new(tx.clone(), intf.clone()))));
-    let battery_provider_manager = Arc::new(Mutex::new(Box::new(BatteryProviderManager::new())));
-    let battery_manager = Arc::new(Mutex::new(Box::new(BatteryManager::new())));
+    let battery_provider_manager =
+        Arc::new(Mutex::new(Box::new(BatteryProviderManager::new(tx.clone()))));
+    let battery_service = Arc::new(Mutex::new(Box::new(BatteryService::new(
+        bluetooth_gatt.clone(),
+        battery_provider_manager.clone(),
+        tx.clone(),
+    ))));
+    let battery_manager = Arc::new(Mutex::new(Box::new(BatteryManager::new(
+        battery_provider_manager.clone(),
+        tx.clone(),
+    ))));
+    let bluetooth_admin = Arc::new(Mutex::new(Box::new(BluetoothAdmin::new(
+        String::from(ADMIN_SETTINGS_FILE_PATH),
+        tx.clone(),
+    ))));
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
         tx.clone(),
         intf.clone(),
         bluetooth_media.clone(),
+        sig_notifier.clone(),
+        bluetooth_admin.clone(),
     ))));
     let suspend = Arc::new(Mutex::new(Box::new(Suspend::new(
         bluetooth.clone(),
@@ -156,9 +187,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             rx,
             bluetooth.clone(),
             bluetooth_gatt.clone(),
+            battery_service.clone(),
+            battery_manager.clone(),
+            battery_provider_manager.clone(),
             bluetooth_media.clone(),
             suspend.clone(),
             bt_sock_mgr.clone(),
+            bluetooth_admin.clone(),
         ));
 
         // Set up the disconnect watcher to monitor client disconnects.
@@ -225,6 +260,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             disconnect_watcher.clone(),
         );
 
+        let admin_iface = iface_bluetooth_admin::export_bluetooth_admin_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
         // Create mixin object for Bluetooth + Suspend interfaces.
         let mixin = Box::new(iface_bluetooth::BluetoothMixin {
             adapter: bluetooth.clone(),
@@ -244,6 +285,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             &[gatt_iface],
             bluetooth_gatt.clone(),
         );
+
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "media"),
             &[media_iface],
@@ -255,9 +297,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             battery_provider_manager.clone(),
         );
         cr.lock().unwrap().insert(
-            make_object_name(adapter_index, "battery__manager"),
+            make_object_name(adapter_index, "battery_manager"),
             &[battery_manager_iface],
             battery_manager.clone(),
+        );
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "admin"),
+            &[admin_iface],
+            bluetooth_admin.clone(),
         );
 
         // Hold locks and initialize all interfaces. This must be done AFTER DBus is
@@ -267,17 +315,65 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let adapter = bluetooth.clone();
             bluetooth_media.lock().unwrap().set_adapter(adapter.clone());
+            bluetooth_admin.lock().unwrap().set_adapter(adapter.clone());
 
             let mut bluetooth = bluetooth.lock().unwrap();
             bluetooth.init_profiles();
             bluetooth.enable();
 
             bluetooth_gatt.lock().unwrap().init_profiles(tx.clone(), adapter.clone());
+            // TODO(b/247093293): Gatt topshim api is only usable some
+            // time after init. Investigate why this delay is needed
+            // and make it a blocking part of init before removing
+            // this.
+            tokio::spawn(async move {
+                time::sleep(Duration::from_millis(500)).await;
+                battery_service.lock().unwrap().init();
+            });
             bt_sock_mgr.lock().unwrap().initialize(intf.clone());
+
+            // Install SIGTERM handler so that we can properly shutdown
+            *SIG_DATA.lock().unwrap() = Some((tx.clone(), sig_notifier.clone()));
+
+            let sig_action = signal::SigAction::new(
+                signal::SigHandler::Handler(handle_sigterm),
+                signal::SaFlags::empty(),
+                signal::SigSet::empty(),
+            );
+
+            unsafe {
+                signal::sigaction(signal::SIGTERM, &sig_action).unwrap();
+            }
         }
 
         // Serve clients forever.
         future::pending::<()>().await;
         unreachable!()
     })
+}
+
+lazy_static! {
+    /// Data needed for signal handling.
+    static ref SIG_DATA: Mutex<Option<(Sender<Message>, Arc<(Mutex<bool>, Condvar)>)>> = Mutex::new(None);
+}
+
+extern "C" fn handle_sigterm(_signum: i32) {
+    let guard = SIG_DATA.lock().unwrap();
+    if let Some((tx, notifier)) = guard.as_ref() {
+        log::debug!("Handling SIGTERM by disabling the adapter!");
+        let txl = tx.clone();
+        tokio::spawn(async move {
+            // Send the shutdown message here.
+            let _ = txl.send(Message::Shutdown).await;
+        });
+
+        let guard = notifier.0.lock().unwrap();
+        if *guard {
+            log::debug!("Waiting for stack to turn off for 2s");
+            let _ = notifier.1.wait_timeout(guard, std::time::Duration::from_millis(2000));
+        }
+    }
+
+    log::debug!("Sigterm completed");
+    std::process::exit(0);
 }

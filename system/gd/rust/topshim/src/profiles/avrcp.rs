@@ -1,14 +1,24 @@
-use crate::btif::{BluetoothInterface, RawAddress};
+use crate::btif::{BluetoothInterface, BtStatus, RawAddress, ToggleableProfile};
 use crate::topstack::get_dispatchers;
 
 use std::sync::{Arc, Mutex};
-use topshim_macros::cb_variant;
+use topshim_macros::{cb_variant, profile_enabled_or};
+
+use log::warn;
+
+#[derive(Debug, Default)]
+pub struct PlayerMetadata {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub length_us: i64,
+}
 
 #[cxx::bridge(namespace = bluetooth::topshim::rust)]
 pub mod ffi {
-    #[derive(Debug, Copy, Clone)]
-    pub struct RustRawAddress {
-        address: [u8; 6],
+    unsafe extern "C++" {
+        include!("gd/rust/topshim/common/type_alias.h");
+        type RawAddress = crate::btif::RawAddress;
     }
 
     unsafe extern "C++" {
@@ -20,29 +30,26 @@ pub mod ffi {
 
         fn init(self: Pin<&mut AvrcpIntf>);
         fn cleanup(self: Pin<&mut AvrcpIntf>);
-        fn connect(self: Pin<&mut AvrcpIntf>, bt_addr: RustRawAddress) -> i32;
-        fn disconnect(self: Pin<&mut AvrcpIntf>, bt_addr: RustRawAddress) -> i32;
+        fn connect(self: Pin<&mut AvrcpIntf>, bt_addr: RawAddress) -> u32;
+        fn disconnect(self: Pin<&mut AvrcpIntf>, bt_addr: RawAddress) -> u32;
         fn set_volume(self: Pin<&mut AvrcpIntf>, volume: i8);
+        fn set_playback_status(self: Pin<&mut AvrcpIntf>, status: &String);
+        fn set_position(self: Pin<&mut AvrcpIntf>, position_us: i64);
+        fn set_metadata(
+            self: Pin<&mut AvrcpIntf>,
+            title: &String,
+            artist: &String,
+            album: &String,
+            length_us: i64,
+        );
 
     }
     extern "Rust" {
-        fn avrcp_device_connected(addr: RustRawAddress, absolute_volume_enabled: bool);
-        fn avrcp_device_disconnected(addr: RustRawAddress);
+        fn avrcp_device_connected(addr: RawAddress, absolute_volume_enabled: bool);
+        fn avrcp_device_disconnected(addr: RawAddress);
         fn avrcp_absolute_volume_update(volume: u8);
         fn avrcp_send_key_event(key: u8, state: u8);
-        fn avrcp_set_active_device(addr: RustRawAddress);
-    }
-}
-
-impl From<RawAddress> for ffi::RustRawAddress {
-    fn from(addr: RawAddress) -> Self {
-        ffi::RustRawAddress { address: addr.val }
-    }
-}
-
-impl Into<RawAddress> for ffi::RustRawAddress {
-    fn into(self) -> RawAddress {
-        RawAddress { val: self.address }
+        fn avrcp_set_active_device(addr: RawAddress);
     }
 }
 
@@ -74,16 +81,12 @@ type AvrcpCb = Arc<Mutex<AvrcpCallbacksDispatcher>>;
 cb_variant!(
     AvrcpCb,
     avrcp_device_connected -> AvrcpCallbacks::AvrcpDeviceConnected,
-    ffi::RustRawAddress -> RawAddress, bool, {
-        let _0 = _0.into();
-});
+    RawAddress, bool);
 
 cb_variant!(
     AvrcpCb,
     avrcp_device_disconnected -> AvrcpCallbacks::AvrcpDeviceDisconnected,
-    ffi::RustRawAddress -> RawAddress, {
-        let _0 = _0.into();
-});
+    RawAddress);
 
 cb_variant!(
     AvrcpCb,
@@ -100,17 +103,35 @@ cb_variant!(
 cb_variant!(
     AvrcpCb,
     avrcp_set_active_device -> AvrcpCallbacks::AvrcpSetActiveDevice,
-    ffi::RustRawAddress -> RawAddress, {
-        let _0 = _0.into();
-});
+    RawAddress);
 
 pub struct Avrcp {
     internal: cxx::UniquePtr<ffi::AvrcpIntf>,
     _is_init: bool,
+    _is_enabled: bool,
 }
 
 // For *const u8 opaque btif
 unsafe impl Send for Avrcp {}
+
+impl ToggleableProfile for Avrcp {
+    fn is_enabled(&self) -> bool {
+        self._is_enabled
+    }
+
+    fn enable(&mut self) -> bool {
+        self.internal.pin_mut().init();
+        self._is_enabled = true;
+        true
+    }
+
+    #[profile_enabled_or(false)]
+    fn disable(&mut self) -> bool {
+        self.internal.pin_mut().cleanup();
+        self._is_enabled = false;
+        true
+    }
+}
 
 impl Avrcp {
     pub fn new(intf: &BluetoothInterface) -> Avrcp {
@@ -119,31 +140,59 @@ impl Avrcp {
             avrcpif = ffi::GetAvrcpProfile(intf.as_raw_ptr());
         }
 
-        Avrcp { internal: avrcpif, _is_init: false }
+        Avrcp { internal: avrcpif, _is_init: false, _is_enabled: false }
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        self._is_init
     }
 
     pub fn initialize(&mut self, callbacks: AvrcpCallbacksDispatcher) -> bool {
         if get_dispatchers().lock().unwrap().set::<AvrcpCb>(Arc::new(Mutex::new(callbacks))) {
             panic!("Tried to set dispatcher for Avrcp callbacks while it already exists");
         }
-        self.internal.pin_mut().init();
+        self._is_init = true;
         true
     }
 
+    #[profile_enabled_or(BtStatus::NotReady)]
+    pub fn connect(&mut self, addr: RawAddress) -> BtStatus {
+        BtStatus::from(self.internal.pin_mut().connect(addr.into()))
+    }
+
+    #[profile_enabled_or(BtStatus::NotReady)]
+    pub fn disconnect(&mut self, addr: RawAddress) -> BtStatus {
+        BtStatus::from(self.internal.pin_mut().disconnect(addr.into()))
+    }
+
+    #[profile_enabled_or]
+    pub fn set_volume(&mut self, volume: i8) {
+        self.internal.pin_mut().set_volume(volume);
+    }
+
+    #[profile_enabled_or(false)]
     pub fn cleanup(&mut self) -> bool {
         self.internal.pin_mut().cleanup();
         true
     }
 
-    pub fn connect(&mut self, addr: RawAddress) {
-        self.internal.pin_mut().connect(addr.into());
+    #[profile_enabled_or]
+    pub fn set_playback_status(&mut self, status: &String) {
+        self.internal.pin_mut().set_playback_status(status);
     }
 
-    pub fn disconnect(&mut self, addr: RawAddress) {
-        self.internal.pin_mut().disconnect(addr.into());
+    #[profile_enabled_or]
+    pub fn set_position(&mut self, position_us: i64) {
+        self.internal.pin_mut().set_position(position_us);
     }
 
-    pub fn set_volume(&mut self, volume: i8) {
-        self.internal.pin_mut().set_volume(volume);
+    #[profile_enabled_or]
+    pub fn set_metadata(&mut self, metadata: &PlayerMetadata) {
+        self.internal.pin_mut().set_metadata(
+            &metadata.title,
+            &metadata.artist,
+            &metadata.album,
+            metadata.length_us,
+        );
     }
 }

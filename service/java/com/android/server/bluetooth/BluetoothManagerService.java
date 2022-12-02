@@ -43,11 +43,10 @@ import android.bluetooth.BluetoothHearingAid;
 import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
+import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.IBluetooth;
 import android.bluetooth.IBluetoothCallback;
 import android.bluetooth.IBluetoothGatt;
-import android.bluetooth.IBluetoothHeadset;
-import android.bluetooth.IBluetoothLeCallControl;
 import android.bluetooth.IBluetoothManager;
 import android.bluetooth.IBluetoothManagerCallback;
 import android.bluetooth.IBluetoothProfileServiceConnection;
@@ -229,6 +228,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     private final ReentrantReadWriteLock mBluetoothLock = new ReentrantReadWriteLock();
     private boolean mBinding;
     private boolean mUnbinding;
+    private List<Integer> mSupportedProfileList = new ArrayList<>();
 
     private BluetoothModeChangeHelper mBluetoothModeChangeHelper;
 
@@ -931,6 +931,25 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
     }
 
+    @GuardedBy("mBluetoothLock")
+    private List<Integer> synchronousGetSupportedProfiles(AttributionSource attributionSource)
+            throws RemoteException, TimeoutException {
+        final ArrayList<Integer> supportedProfiles = new ArrayList<Integer>();
+        if (mBluetooth == null) return supportedProfiles;
+        final SynchronousResultReceiver<Long> recv = SynchronousResultReceiver.get();
+        mBluetooth.getSupportedProfiles(attributionSource, recv);
+        final long supportedProfilesBitMask =
+                recv.awaitResultNoInterrupt(getSyncTimeout()).getValue((long) 0);
+
+        for (int i = 0; i <= BluetoothProfile.MAX_PROFILE_ID; i++) {
+            if ((supportedProfilesBitMask & (1 << i)) != 0) {
+                supportedProfiles.add(i);
+            }
+        }
+
+        return supportedProfiles;
+    }
+
     /**
      * Sends the current foreground user id to the Bluetooth process. This user id is used to
      * determine if Binder calls are coming from the active user.
@@ -1359,20 +1378,23 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
         synchronized (mReceiver) {
             mQuietEnableExternal = false;
             mEnableExternal = true;
-            if (isAirplaneModeOn() && isApmEnhancementOn()) {
-                setSettingsSecureInt(BLUETOOTH_APM_STATE, BLUETOOTH_ON_APM);
-                setSettingsSecureInt(APM_USER_TOGGLED_BLUETOOTH, USED);
-                if (isFirstTimeNotification(APM_BT_ENABLED_NOTIFICATION)) {
-                    final long callingIdentity = Binder.clearCallingIdentity();
-                    try {
-                        mBluetoothAirplaneModeListener.sendApmNotification(
-                                "bluetooth_enabled_apm_title",
-                                "bluetooth_enabled_apm_message",
-                                APM_BT_ENABLED_NOTIFICATION);
-                    } catch (Exception e) {
-                        Log.e(TAG, "APM enhancement BT enabled notification not shown");
-                    } finally {
-                        Binder.restoreCallingIdentity(callingIdentity);
+            if (isAirplaneModeOn()) {
+                mBluetoothAirplaneModeListener.updateBluetoothToggledTime();
+                if (isApmEnhancementOn()) {
+                    setSettingsSecureInt(BLUETOOTH_APM_STATE, BLUETOOTH_ON_APM);
+                    setSettingsSecureInt(APM_USER_TOGGLED_BLUETOOTH, USED);
+                    if (isFirstTimeNotification(APM_BT_ENABLED_NOTIFICATION)) {
+                        final long callingIdentity = Binder.clearCallingIdentity();
+                        try {
+                            mBluetoothAirplaneModeListener.sendApmNotification(
+                                    "bluetooth_enabled_apm_title",
+                                    "bluetooth_enabled_apm_message",
+                                    APM_BT_ENABLED_NOTIFICATION);
+                        } catch (Exception e) {
+                            Log.e(TAG, "APM enhancement BT enabled notification not shown");
+                        } finally {
+                            Binder.restoreCallingIdentity(callingIdentity);
+                        }
                     }
                 }
             }
@@ -1416,9 +1438,12 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
         }
 
         synchronized (mReceiver) {
-            if (isAirplaneModeOn() && isApmEnhancementOn()) {
-                setSettingsSecureInt(BLUETOOTH_APM_STATE, BLUETOOTH_OFF_APM);
-                setSettingsSecureInt(APM_USER_TOGGLED_BLUETOOTH, USED);
+            if (isAirplaneModeOn()) {
+                mBluetoothAirplaneModeListener.updateBluetoothToggledTime();
+                if (isApmEnhancementOn()) {
+                    setSettingsSecureInt(BLUETOOTH_APM_STATE, BLUETOOTH_OFF_APM);
+                    setSettingsSecureInt(APM_USER_TOGGLED_BLUETOOTH, USED);
+                }
             }
 
             if (persist) {
@@ -1515,7 +1540,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
     }
 
     @Override
-    public boolean bindBluetoothProfileService(int bluetoothProfile,
+    public boolean bindBluetoothProfileService(int bluetoothProfile, String serviceName,
             IBluetoothProfileServiceConnection proxy) {
         if (mState != BluetoothAdapter.STATE_ON) {
             if (DBG) {
@@ -1525,23 +1550,19 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
             return false;
         }
         synchronized (mProfileServices) {
-            ProfileServiceConnections psc = mProfileServices.get(new Integer(bluetoothProfile));
-            Intent intent;
-            if (bluetoothProfile == BluetoothProfile.HEADSET
-                    && BluetoothProperties.isProfileHfpAgEnabled().orElse(false)) {
-                intent = new Intent(IBluetoothHeadset.class.getName());
-            } else if (bluetoothProfile == BluetoothProfile.LE_CALL_CONTROL
-                    && BluetoothProperties.isProfileCcpServerEnabled().orElse(false)) {
-                intent = new Intent(IBluetoothLeCallControl.class.getName());
-            } else {
+            if (!mSupportedProfileList.contains(bluetoothProfile)) {
+                Log.w(TAG, "Cannot bind profile: "  + bluetoothProfile
+                        + ", not in supported profiles list");
                 return false;
             }
+            ProfileServiceConnections psc =
+                    mProfileServices.get(Integer.valueOf(bluetoothProfile));
             if (psc == null) {
                 if (DBG) {
                     Log.d(TAG, "Creating new ProfileServiceConnections object for" + " profile: "
                             + bluetoothProfile);
                 }
-                psc = new ProfileServiceConnections(intent);
+                psc = new ProfileServiceConnections(new Intent(serviceName));
                 if (!psc.bindService(DEFAULT_REBIND_COUNT)) {
                     return false;
                 }
@@ -2320,6 +2341,14 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
                         //Inform BluetoothAdapter instances that service is up
                         sendBluetoothServiceUpCallback();
 
+                        // Get the supported profiles list
+                        try {
+                            mSupportedProfileList = synchronousGetSupportedProfiles(
+                                    mContext.getAttributionSource());
+                        } catch (RemoteException | TimeoutException e) {
+                            Log.e(TAG, "Unable to get the supported profiles list", e);
+                        }
+
                         //Do enable request
                         try {
                             if (!synchronousEnable(mQuietEnable, mContext.getAttributionSource())) {
@@ -2398,6 +2427,7 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
                                 break;
                             }
                             mBluetooth = null;
+                            mSupportedProfileList.clear();
                         } else if (msg.arg1 == SERVICE_IBLUETOOTHGATT) {
                             mBluetoothGatt = null;
                             break;
@@ -2985,16 +3015,13 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
 
             // Bluetooth OPP activities that should always be enabled,
             // even when Bluetooth is turned OFF.
-            ArrayList<String> baseBluetoothOppActivities = new ArrayList<String>() {
-                {
+            List<String> baseBluetoothOppActivities = List.of(
                     // Base sharing activity
-                    add("com.android.bluetooth.opp.BluetoothOppLauncherActivity");
+                    "com.android.bluetooth.opp.BluetoothOppLauncherActivity",
                     // BT enable activities
-                    add("com.android.bluetooth.opp.BluetoothOppBtEnableActivity");
-                    add("com.android.bluetooth.opp.BluetoothOppBtEnablingActivity");
-                    add("com.android.bluetooth.opp.BluetoothOppBtErrorActivity");
-                }
-            };
+                    "com.android.bluetooth.opp.BluetoothOppBtEnableActivity",
+                    "com.android.bluetooth.opp.BluetoothOppBtEnablingActivity",
+                    "com.android.bluetooth.opp.BluetoothOppBtErrorActivity");
 
             PackageManager systemPackageManager = mContext.getPackageManager();
             PackageManager userPackageManager = mContext.createContextAsUser(userHandle, 0)
@@ -3346,5 +3373,52 @@ public class BluetoothManagerService extends IBluetoothManager.Stub {
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
+    }
+
+    /**
+     * Sets Bluetooth HCI snoop log mode
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @Override
+    public int setBtHciSnoopLogMode(int mode) {
+        mContext.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
+                "Need BLUETOOTH_PRIVILEGED permission");
+        switch (mode) {
+            case BluetoothAdapter.BT_SNOOP_LOG_MODE_DISABLED:
+                BluetoothProperties.snoop_log_mode(
+                        BluetoothProperties.snoop_log_mode_values.DISABLED);
+                break;
+            case BluetoothAdapter.BT_SNOOP_LOG_MODE_FILTERED:
+                BluetoothProperties.snoop_log_mode(
+                        BluetoothProperties.snoop_log_mode_values.FILTERED);
+                break;
+            case BluetoothAdapter.BT_SNOOP_LOG_MODE_FULL:
+                BluetoothProperties.snoop_log_mode(
+                        BluetoothProperties.snoop_log_mode_values.FULL);
+                break;
+            default:
+                BluetoothProperties.snoop_log_mode(
+                        BluetoothProperties.snoop_log_mode_values.EMPTY);
+                return BluetoothStatusCodes.ERROR_UNKNOWN;
+        }
+        return BluetoothStatusCodes.SUCCESS;
+    }
+
+    /**
+     * Gets Bluetooth HCI snoop log mode
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @Override
+    public int getBtHciSnoopLogMode() {
+        mContext.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
+                "Need BLUETOOTH_PRIVILEGED permission");
+        BluetoothProperties.snoop_log_mode_values mode = BluetoothProperties.snoop_log_mode()
+                .orElse(BluetoothProperties.snoop_log_mode_values.DISABLED);
+        if (mode == BluetoothProperties.snoop_log_mode_values.FILTERED) {
+            return BluetoothAdapter.BT_SNOOP_LOG_MODE_FILTERED;
+        } else if (mode == BluetoothProperties.snoop_log_mode_values.FULL) {
+            return BluetoothAdapter.BT_SNOOP_LOG_MODE_FULL;
+        }
+        return BluetoothAdapter.BT_SNOOP_LOG_MODE_DISABLED;
     }
 }

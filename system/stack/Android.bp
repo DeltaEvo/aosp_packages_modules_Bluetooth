@@ -208,6 +208,8 @@ cc_library_static {
     whole_static_libs: [
         "libldacBT_abr",
         "libldacBT_enc",
+        "libaptx_enc",
+        "libaptxhd_enc",
     ],
     host_supported: true,
     min_sdk_version: "Tiramisu"
@@ -626,11 +628,7 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
-        "a2dp/a2dp_vendor_aptx_encoder.cc",
-        "a2dp/a2dp_vendor_aptx_hd_encoder.cc",
         "a2dp/a2dp_vendor_ldac_decoder.cc",
-        "test/a2dp/a2dp_vendor_aptx_encoder_test.cc",
-        "test/a2dp/a2dp_vendor_aptx_hd_encoder_test.cc",
         "test/a2dp/a2dp_vendor_ldac_decoder_test.cc",
         "test/a2dp/misc_fake.cc",
     ],
@@ -827,7 +825,10 @@ cc_test {
         ":BluetoothBtaaSources_host",
         ":BluetoothHalSources_hci_host",
         ":BluetoothOsSources_host",
+        ":TestCommonLogMsg",
         ":TestCommonMainHandler",
+        ":TestCommonMockFunctions",
+        ":TestCommonStackConfig",
         ":TestMockBta",
         ":TestMockBtif",
         ":TestMockDevice",
@@ -840,6 +841,7 @@ cc_test {
         ":TestMockStackHcic",
         ":TestMockStackL2cap",
         ":TestMockStackSmp",
+        ":TestMockUdrv",
         "acl/acl.cc",
         "acl/ble_acl.cc",
         "acl/btm_acl.cc",
@@ -871,6 +873,7 @@ cc_test {
         "btm/hfp_msbc_encoder.cc",
         "btm/hfp_msbc_decoder.cc",
         "metrics/stack_metrics_logging.cc",
+        "test/btm/sco_hci_test.cc",
         "test/btm/stack_btm_test.cc",
         "test/btm/peer_packet_types_test.cc",
         "test/common/mock_eatt.cc",
@@ -893,14 +896,9 @@ cc_test {
         "libprotobuf-cpp-lite",
     ],
     sanitize: {
-        address: true,
-        all_undefined: true,
-        cfi: true,
-        integer_overflow: true,
-        scs: true,
-        diag: {
-            undefined : true
-        },
+      hwaddress: true,
+      integer_overflow: true,
+      scs: true,
     },
 }
 
@@ -1286,7 +1284,12 @@ cc_test {
 // Bluetooth stack connection multiplexing
 cc_test {
     name: "net_test_stack_sdp",
-    defaults: ["fluoride_defaults"],
+    test_suites: ["device-tests"],
+    host_supported: true,
+    defaults: [
+        "fluoride_defaults",
+        "mts_defaults",
+    ],
     local_include_dirs: [
         "include",
         "test/common",
@@ -1300,10 +1303,18 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
+        ":TestMockBtif",
+        ":TestMockOsi",
+        ":TestMockStackL2cap",
+        ":TestMockStackMetrics",
+        "sdp/sdp_api.cc",
+        "sdp/sdp_discovery.cc",
+        "sdp/sdp_server.cc",
+        "sdp/sdp_db.cc",
         "sdp/sdp_main.cc",
         "sdp/sdp_utils.cc",
-        "test/common/mock_btif_config.cc",
-        "test/stack_sdp_utils_test.cc",
+        "test/sdp/stack_sdp_test.cc",
+        "test/sdp/stack_sdp_utils_test.cc",
     ],
     shared_libs: [
         "libcutils",

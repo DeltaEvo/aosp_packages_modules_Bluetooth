@@ -30,6 +30,8 @@
 
 #include "bt_target.h"
 #include "bta/include/bta_hearing_aid_api.h"
+#include "btif/include/core_callbacks.h"
+#include "btif/include/stack_manager.h"
 #include "device/include/controller.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
@@ -158,10 +160,11 @@ bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable) {
     return false;
   }
 
-  if (enable)
+  if (enable) {
     p_lcb->conn_update_mask &= ~L2C_BLE_CONN_UPDATE_DISABLE;
-  else
+  } else {
     p_lcb->conn_update_mask |= L2C_BLE_CONN_UPDATE_DISABLE;
+  }
 
   l2cble_start_conn_update(p_lcb);
 
@@ -1516,7 +1519,7 @@ void l2cble_sec_comp(const RawAddress* bda, tBT_TRANSPORT transport,
 
   if (!p_lcb) {
     L2CAP_TRACE_WARNING("%s: security complete for unknown device. bda=%s",
-                        __func__, bda->ToString().c_str());
+                        __func__, ADDRESS_TO_LOGGABLE_CSTR(*bda));
     return;
   }
 
@@ -1635,7 +1638,8 @@ void L2CA_AdjustConnectionIntervals(uint16_t* min_interval,
                                     uint16_t floor_interval) {
   uint16_t phone_min_interval = floor_interval;
 
-  if (HearingAid::GetDeviceCount() > 0) {
+  if (GetInterfaceToProfiles()
+          ->profileSpecific_HACK->GetHearingAidDeviceCount()) {
     // When there are bonded Hearing Aid devices, we will constrained this
     // minimum interval.
     phone_min_interval = BTM_BLE_CONN_INT_MIN_HEARINGAID;

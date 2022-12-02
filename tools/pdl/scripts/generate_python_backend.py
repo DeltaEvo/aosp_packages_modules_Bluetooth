@@ -39,7 +39,7 @@ def generate_prelude() -> str:
 
         @dataclass
         class Packet:
-            payload: Optional[bytes] = field(repr=False, default_factory=bytes)
+            payload: Optional[bytes] = field(repr=False, default_factory=bytes, compare=False)
 
             @classmethod
             def parse_all(cls, span: bytes) -> 'Packet':
@@ -86,7 +86,7 @@ def generate_prelude() -> str:
                         val.show(prefix=pp)
 
                     # Array fields.
-                    elif typ.__origin__ == list:
+                    elif getattr(typ, '__origin__', None) == list:
                         print(f'{p}{name:{align}}')
                         last = len(val) - 1
                         align = 5
@@ -94,6 +94,10 @@ def generate_prelude() -> str:
                             n_p  = pp + ('├── ' if idx != last else '└── ')
                             n_pp = pp + ('│   ' if idx != last else '    ')
                             print_val(n_p, n_pp, f'[{idx}]', align, typ.__args__[0], val[idx])
+
+                    # Custom fields.
+                    elif inspect.isclass(typ):
+                        print(f'{p}{name:{align}} = {repr(val)}')
 
                     else:
                         print(f'{p}{name:{align}} = ##{typ}##')
@@ -155,7 +159,7 @@ class FieldParser:
     def parse_array_element_dynamic_(self, field: ast.ArrayField, span: str):
         """Parse a single array field element of variable size."""
         if isinstance(field.type, ast.StructDeclaration):
-            self.append_(f"    element, span = {field.type_id}.parse({span})")
+            self.append_(f"    element, {span} = {field.type_id}.parse({span})")
             self.append_(f"    {field.id}.append(element)")
         else:
             raise Exception(f'Unexpected array element type {field.type_id} {field.width}')
@@ -177,6 +181,8 @@ class FieldParser:
         """Parse the selected array field."""
         array_size = core.get_array_field_size(field)
         element_width = core.get_array_element_size(field)
+        padded_size = field.padded_size
+
         if element_width:
             if element_width % 8 != 0:
                 raise Exception('Array element size is not a multiple of 8')
@@ -201,6 +207,12 @@ class FieldParser:
         # Apply the size modifier.
         if field.size_modifier and size:
             self.append_(f"{size} = {size} - {field.size_modifier}")
+
+        # Parse from the padded array if padding is present.
+        if padded_size:
+            self.check_size_(padded_size)
+            self.append_(f"remaining_span = span[{padded_size}:]")
+            self.append_(f"span = span[:{padded_size}]")
 
         # The element width is not known, but the array full octet size
         # is known by size field. Parse elements item by item as a vector.
@@ -262,6 +274,10 @@ class FieldParser:
             self.append_(f"fields['{field.id}'] = {field.id}")
             if size is not None:
                 self.append_(f"span = span[{size}:]")
+
+        # Drop the padding
+        if padded_size:
+            self.append_(f"span = remaining_span")
 
     def parse_bit_field_(self, field: ast.Field):
         """Parse the selected field as a bit field.
@@ -340,13 +356,6 @@ class FieldParser:
                 span = f'span[{self.offset}:{end_offset}]'
                 self.unchecked_append_(f"fields['{field.id}'] = {field.type_id}.parse_all({span})")
             self.offset = end_offset
-
-    def parse_padding_field_(self, field: ast.PaddingField):
-        """Parse a padding field. The value is ignored."""
-
-        if self.shift != 0:
-            raise Exception('Padding field does not start on an octet boundary')
-        self.offset += field.width
 
     def parse_payload_field_(self, field: Union[ast.BodyField, ast.PayloadField]):
         """Parse body and payload fields."""
@@ -471,7 +480,7 @@ class FieldParser:
 
         # Padding fields.
         elif isinstance(field, ast.PaddingField):
-            self.parse_padding_field_(field)
+            pass
 
         # Array fields.
         elif isinstance(field, ast.ArrayField):
@@ -535,6 +544,9 @@ class FieldSerializer:
 
     def serialize_array_field_(self, field: ast.ArrayField):
         """Serialize the selected array field."""
+        if field.padded_size:
+            self.append_(f"_{field.id}_start = len(_span)")
+
         if field.width == 8:
             self.append_(f"_span.extend(self.{field.id})")
         else:
@@ -542,6 +554,9 @@ class FieldSerializer:
             self.indent_()
             self.serialize_array_element_(field)
             self.unindent_()
+
+        if field.padded_size:
+            self.append_(f"_span.extend([0] * ({field.padded_size} - len(_span) + _{field.id}_start))")
 
     def serialize_bit_field_(self, field: ast.Field):
         """Serialize the selected field as a bit field.
@@ -584,7 +599,7 @@ class FieldSerializer:
                 self.append_(f"    raise Exception(\"Invalid payload length\")")
                 array_size = "_size"
             elif isinstance(value_field, ast.ArrayField) and value_field.width:
-                array_size = f"(len(self.{value_field.id}) * {int(value_field.width / 8)})"
+                array_size = f"(len(self.{value_field.id}) * {int(value_field.width / 8)}{size_modifier})"
             elif isinstance(value_field, ast.ArrayField):
                 self.append_(f"_size = sum([elt.size for elt in self.{value_field.id}]){size_modifier}")
                 array_size = "_size"
@@ -648,13 +663,6 @@ class FieldSerializer:
         else:
             self.append_(f"_span.extend(self.{field.id}.serialize())")
 
-    def serialize_padding_field_(self, field: ast.PaddingField):
-        """Serialize a padding field. The value is zero."""
-
-        if self.shift != 0:
-            raise Exception('Padding field does not start on an octet boundary')
-        self.append_(f"_span.extend([0] * {field.width})")
-
     def serialize_payload_field_(self, field: Union[ast.BodyField, ast.PayloadField]):
         """Serialize body and payload fields."""
 
@@ -696,7 +704,7 @@ class FieldSerializer:
 
         # Padding fields.
         elif isinstance(field, ast.PaddingField):
-            self.serialize_padding_field_(field)
+            pass
 
         # Array fields.
         elif isinstance(field, ast.ArrayField):
@@ -751,36 +759,43 @@ def generate_packet_parser(packet: ast.Declaration) -> List[str]:
     if packet_shift and packet.file.byteorder == 'big':
         raise Exception(f"Big-endian packet {packet.id} has an unsupported body shift")
 
+    # Convert the packet constraints to a boolean expression.
+    validation = []
+    if packet.constraints:
+        cond = []
+        for c in packet.constraints:
+            if c.value is not None:
+                cond.append(f"fields['{c.id}'] != {hex(c.value)}")
+            else:
+                field = core.get_packet_field(packet, c.id)
+                cond.append(f"fields['{c.id}'] != {field.type_id}.{c.tag_id}")
+
+        validation = [f"if {' or '.join(cond)}:", "    raise Exception(\"Invalid constraint field values\")"]
+
+    # Parse fields iteratively.
     parser = FieldParser(byteorder=packet.file.byteorder, shift=packet_shift)
     for f in packet.fields:
         parser.parse(f)
     parser.done()
+
+    # Specialize to child packets.
     children = core.get_derived_packets(packet)
     decl = [] if packet.parent_id else ['fields = {\'payload\': None}']
+    specialization = []
 
     if len(children) != 0:
-        # Generate dissector on constrained fields, continue parsing the
-        # child packets.
-        code = decl + parser.code
-        op = 'if'
-        for constraints, child in children:
-            cond = []
-            for c in constraints:
-                if c.value is not None:
-                    cond.append(f"fields['{c.id}'] == {hex(c.value)}")
-                else:
-                    field = core.get_packet_field(packet, c.id)
-                    cond.append(f"fields['{c.id}'] == {field.type_id}.{c.tag_id}")
-            cond = ' and '.join(cond)
-            code.append(f"{op} {cond}:")
-            code.append(f"    return {child.id}.parse(fields, payload)")
-            op = 'elif'
+        # Try parsing every child packet successively until one is
+        # successfully parsed. Return a parsing error if none is valid.
+        # Return parent packet if no child packet matches.
+        # TODO: order child packets by decreasing size in case no constraint
+        # is given for specialization.
+        for _, child in children:
+            specialization.append("try:")
+            specialization.append(f"    return {child.id}.parse(fields.copy(), payload)")
+            specialization.append("except Exception as exn:")
+            specialization.append("    pass")
 
-        code.append("else:")
-        code.append(f"    return {packet.id}(**fields), span")
-        return code
-    else:
-        return decl + parser.code + [f"return {packet.id}(**fields), span"]
+    return decl + validation + parser.code + specialization + [f"return {packet.id}(**fields), span"]
 
 
 def generate_packet_size_getter(packet: ast.Declaration) -> List[str]:
@@ -818,6 +833,30 @@ def generate_packet_size_getter(packet: ast.Declaration) -> List[str]:
         assert False
 
 
+def generate_packet_post_init(decl: ast.Declaration) -> List[str]:
+    """Generate __post_init__ function to set constraint field values."""
+
+    # Gather all constraints from parent packets.
+    constraints = []
+    current = decl
+    while current.parent_id:
+        constraints.extend(current.constraints)
+        current = current.parent
+
+    if constraints:
+        code = []
+        for c in constraints:
+            if c.value is not None:
+                code.append(f"self.{c.id} = {c.value}")
+            else:
+                field = core.get_packet_field(decl, c.id)
+                code.append(f"self.{c.id} = {field.type_id}.{c.tag_id}")
+        return code
+
+    else:
+        return ["pass"]
+
+
 def generate_enum_declaration(decl: ast.EnumDeclaration) -> str:
     """Generate the implementation of an enum type."""
 
@@ -830,8 +869,7 @@ def generate_enum_declaration(decl: ast.EnumDeclaration) -> str:
 
         class {enum_name}(enum.IntEnum):
             {tag_decls}
-        """).format(
-        enum_name=enum_name, tag_decls=indent(tag_decls, 1))
+        """).format(enum_name=enum_name, tag_decls=indent(tag_decls, 1))
 
 
 def generate_packet_declaration(packet: ast.Declaration) -> str:
@@ -842,22 +880,23 @@ def generate_packet_declaration(packet: ast.Declaration) -> str:
     field_decls = []
     for f in packet.fields:
         if isinstance(f, ast.ScalarField):
-            field_decls.append(f"{f.id}: int = 0")
+            field_decls.append(f"{f.id}: int = field(kw_only=True, default=0)")
         elif isinstance(f, ast.TypedefField):
             if isinstance(f.type, ast.EnumDeclaration):
-                field_decls.append(f"{f.id}: {f.type_id} = {f.type_id}.{f.type.tags[0].id}")
+                field_decls.append(
+                    f"{f.id}: {f.type_id} = field(kw_only=True, default={f.type_id}.{f.type.tags[0].id})")
             elif isinstance(f.type, ast.ChecksumDeclaration):
-                field_decls.append(f"{f.id}: int = 0")
+                field_decls.append(f"{f.id}: int = field(kw_only=True, default=0)")
             elif isinstance(f.type, (ast.StructDeclaration, ast.CustomFieldDeclaration)):
-                field_decls.append(f"{f.id}: {f.type_id} = field(default_factory={f.type_id})")
+                field_decls.append(f"{f.id}: {f.type_id} = field(kw_only=True, default_factory={f.type_id})")
             else:
                 raise Exception("Unsupported typedef field type")
         elif isinstance(f, ast.ArrayField) and f.width == 8:
-            field_decls.append(f"{f.id}: bytearray = field(default_factory=bytearray)")
+            field_decls.append(f"{f.id}: bytearray = field(kw_only=True, default_factory=bytearray)")
         elif isinstance(f, ast.ArrayField) and f.width:
-            field_decls.append(f"{f.id}: List[int] = field(default_factory=list)")
+            field_decls.append(f"{f.id}: List[int] = field(kw_only=True, default_factory=list)")
         elif isinstance(f, ast.ArrayField) and f.type_id:
-            field_decls.append(f"{f.id}: List[{f.type_id}] = field(default_factory=list)")
+            field_decls.append(f"{f.id}: List[{f.type_id}] = field(kw_only=True, default_factory=list)")
 
     if packet.parent_id:
         parent_name = packet.parent_id
@@ -870,12 +909,16 @@ def generate_packet_declaration(packet: ast.Declaration) -> str:
 
     parser = generate_packet_parser(packet)
     size = generate_packet_size_getter(packet)
+    post_init = generate_packet_post_init(packet)
 
     return dedent("""\
 
         @dataclass
         class {packet_name}({parent_name}):
             {field_decls}
+
+            def __post_init__(self):
+                {post_init}
 
             @staticmethod
             def parse({parent_fields}span: bytes) -> Tuple['{packet_name}', bytes]:
@@ -887,14 +930,14 @@ def generate_packet_declaration(packet: ast.Declaration) -> str:
             @property
             def size(self) -> int:
                 {size}
-        """).format(
-        packet_name=packet_name,
-        parent_name=parent_name,
-        parent_fields=parent_fields,
-        field_decls=indent(field_decls, 1),
-        parser=indent(parser, 2),
-        serializer=indent(serializer, 2),
-        size=indent(size, 2))
+        """).format(packet_name=packet_name,
+                    parent_name=parent_name,
+                    parent_fields=parent_fields,
+                    field_decls=indent(field_decls, 1),
+                    post_init=indent(post_init, 2),
+                    parser=indent(parser, 2),
+                    serializer=indent(serializer, 2),
+                    size=indent(size, 2))
 
 
 def generate_custom_field_declaration_check(decl: ast.CustomFieldDeclaration) -> str:
@@ -960,8 +1003,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', type=argparse.FileType('r'), default=sys.stdin, help='Input PDL-JSON source')
     parser.add_argument('--output', type=argparse.FileType('w'), default=sys.stdout, help='Output Python file')
-    parser.add_argument(
-        '--custom-type-location', type=str, required=False, help='Module of declaration of custom types')
+    parser.add_argument('--custom-type-location',
+                        type=str,
+                        required=False,
+                        help='Module of declaration of custom types')
     return run(**vars(parser.parse_args()))
 
 

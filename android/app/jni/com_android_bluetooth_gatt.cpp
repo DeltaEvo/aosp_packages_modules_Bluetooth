@@ -199,8 +199,9 @@ static std::shared_mutex callbacks_mutex;
  */
 
 void btgattc_register_app_cb(int status, int clientIf, const Uuid& app_uuid) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onClientRegistered, status,
                                clientIf, UUID_PARAMS(app_uuid));
 }
@@ -212,8 +213,9 @@ void btgattc_scan_result_cb(uint16_t event_type, uint8_t addr_type,
                             uint16_t periodic_adv_int,
                             std::vector<uint8_t> adv_data,
                             RawAddress* original_bda) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), bda));
@@ -233,8 +235,9 @@ void btgattc_scan_result_cb(uint16_t event_type, uint8_t addr_type,
 
 void btgattc_open_cb(int conn_id, int status, int clientIf,
                      const RawAddress& bda) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -244,8 +247,9 @@ void btgattc_open_cb(int conn_id, int status, int clientIf,
 
 void btgattc_close_cb(int conn_id, int status, int clientIf,
                       const RawAddress& bda) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -254,8 +258,9 @@ void btgattc_close_cb(int conn_id, int status, int clientIf,
 }
 
 void btgattc_search_complete_cb(int conn_id, int status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onSearchCompleted, conn_id,
                                status);
@@ -263,16 +268,18 @@ void btgattc_search_complete_cb(int conn_id, int status) {
 
 void btgattc_register_for_notification_cb(int conn_id, int registered,
                                           int status, uint16_t handle) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onRegisterForNotifications,
                                conn_id, status, registered, handle);
 }
 
 void btgattc_notify_cb(int conn_id, const btgatt_notify_params_t& p_data) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(
       sCallbackEnv.get(), bdaddr2newjstr(sCallbackEnv.get(), &p_data.bda));
@@ -288,8 +295,9 @@ void btgattc_notify_cb(int conn_id, const btgatt_notify_params_t& p_data) {
 
 void btgattc_read_characteristic_cb(int conn_id, int status,
                                     btgatt_read_params_t* p_data) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(), NULL);
   if (status == 0) {  // Success
@@ -308,8 +316,9 @@ void btgattc_read_characteristic_cb(int conn_id, int status,
 
 void btgattc_write_characteristic_cb(int conn_id, int status, uint16_t handle,
                                      uint16_t len, const uint8_t* value) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(), NULL);
   jb.reset(sCallbackEnv->NewByteArray(len));
@@ -319,8 +328,9 @@ void btgattc_write_characteristic_cb(int conn_id, int status, uint16_t handle,
 }
 
 void btgattc_execute_write_cb(int conn_id, int status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onExecuteCompleted,
                                conn_id, status);
@@ -328,8 +338,9 @@ void btgattc_execute_write_cb(int conn_id, int status) {
 
 void btgattc_read_descriptor_cb(int conn_id, int status,
                                 const btgatt_read_params_t& p_data) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(), NULL);
   if (p_data.value.len != 0) {
@@ -346,8 +357,9 @@ void btgattc_read_descriptor_cb(int conn_id, int status,
 
 void btgattc_write_descriptor_cb(int conn_id, int status, uint16_t handle,
                                  uint16_t len, const uint8_t* value) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(), NULL);
   jb.reset(sCallbackEnv->NewByteArray(len));
@@ -358,8 +370,9 @@ void btgattc_write_descriptor_cb(int conn_id, int status, uint16_t handle,
 
 void btgattc_remote_rssi_cb(int client_if, const RawAddress& bda, int rssi,
                             int status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -369,23 +382,26 @@ void btgattc_remote_rssi_cb(int client_if, const RawAddress& bda, int rssi,
 }
 
 void btgattc_configure_mtu_cb(int conn_id, int status, int mtu) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onConfigureMTU, conn_id,
                                status, mtu);
 }
 
 void btgattc_congestion_cb(int conn_id, bool congested) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onClientCongestion,
                                conn_id, congested);
 }
 
 void btgattc_batchscan_reports_cb(int client_if, int status, int report_format,
                                   int num_records, std::vector<uint8_t> data) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(),
                                 sCallbackEnv->NewByteArray(data.size()));
   sCallbackEnv->SetByteArrayRegion(jb.get(), 0, data.size(),
@@ -396,15 +412,17 @@ void btgattc_batchscan_reports_cb(int client_if, int status, int report_format,
 }
 
 void btgattc_batchscan_threshold_cb(int client_if) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj,
                                method_onBatchScanThresholdCrossed, client_if);
 }
 
 void btgattc_track_adv_event_cb(btgatt_track_adv_info_t* p_adv_track_info) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(
       sCallbackEnv.get(),
@@ -506,8 +524,9 @@ void fillGattDbElementArray(JNIEnv* env, jobject* array,
 
 void btgattc_get_gatt_db_cb(int conn_id, const btgatt_db_element_t* db,
                             int count) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   jclass arrayListclazz = sCallbackEnv->FindClass("java/util/ArrayList");
   ScopedLocalRef<jobject> array(
@@ -525,8 +544,9 @@ void btgattc_get_gatt_db_cb(int conn_id, const btgatt_db_element_t* db,
 
 void btgattc_phy_updated_cb(int conn_id, uint8_t tx_phy, uint8_t rx_phy,
                             uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onClientPhyUpdate, conn_id,
                                tx_phy, rx_phy, status);
@@ -534,16 +554,18 @@ void btgattc_phy_updated_cb(int conn_id, uint8_t tx_phy, uint8_t rx_phy,
 
 void btgattc_conn_updated_cb(int conn_id, uint16_t interval, uint16_t latency,
                              uint16_t timeout, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onClientConnUpdate,
                                conn_id, interval, latency, timeout, status);
 }
 
 void btgattc_service_changed_cb(int conn_id) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServiceChanged, conn_id);
 }
@@ -583,16 +605,18 @@ static const btgatt_client_callbacks_t sGattClientCallbacks = {
  */
 
 void btgatts_register_app_cb(int status, int server_if, const Uuid& uuid) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServerRegistered, status,
                                server_if, UUID_PARAMS(uuid));
 }
 
 void btgatts_connection_cb(int conn_id, int server_if, int connected,
                            const RawAddress& bda) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -603,8 +627,9 @@ void btgatts_connection_cb(int conn_id, int server_if, int connected,
 void btgatts_service_added_cb(int status, int server_if,
                               const btgatt_db_element_t* service,
                               size_t service_count) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   jclass arrayListclazz = sCallbackEnv->FindClass("java/util/ArrayList");
   ScopedLocalRef<jobject> array(
@@ -620,15 +645,17 @@ void btgatts_service_added_cb(int status, int server_if,
 }
 
 void btgatts_service_stopped_cb(int status, int server_if, int srvc_handle) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServiceStopped, status,
                                server_if, srvc_handle);
 }
 
 void btgatts_service_deleted_cb(int status, int server_if, int srvc_handle) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServiceDeleted, status,
                                server_if, srvc_handle);
 }
@@ -637,8 +664,9 @@ void btgatts_request_read_characteristic_cb(int conn_id, int trans_id,
                                             const RawAddress& bda,
                                             int attr_handle, int offset,
                                             bool is_long) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -650,8 +678,9 @@ void btgatts_request_read_characteristic_cb(int conn_id, int trans_id,
 void btgatts_request_read_descriptor_cb(int conn_id, int trans_id,
                                         const RawAddress& bda, int attr_handle,
                                         int offset, bool is_long) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -666,8 +695,9 @@ void btgatts_request_write_characteristic_cb(int conn_id, int trans_id,
                                              bool need_rsp, bool is_prep,
                                              const uint8_t* value,
                                              size_t length) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -685,8 +715,9 @@ void btgatts_request_write_descriptor_cb(int conn_id, int trans_id,
                                          int offset, bool need_rsp,
                                          bool is_prep, const uint8_t* value,
                                          size_t length) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -701,8 +732,9 @@ void btgatts_request_write_descriptor_cb(int conn_id, int trans_id,
 
 void btgatts_request_exec_write_cb(int conn_id, int trans_id,
                                    const RawAddress& bda, int exec_write) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -711,37 +743,42 @@ void btgatts_request_exec_write_cb(int conn_id, int trans_id,
 }
 
 void btgatts_response_confirmation_cb(int status, int handle) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onResponseSendCompleted,
                                status, handle);
 }
 
 void btgatts_indication_sent_cb(int conn_id, int status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onNotificationSent,
                                conn_id, status);
 }
 
 void btgatts_congestion_cb(int conn_id, bool congested) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServerCongestion,
                                conn_id, congested);
 }
 
 void btgatts_mtu_changed_cb(int conn_id, int mtu) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServerMtuChanged,
                                conn_id, mtu);
 }
 
 void btgatts_phy_updated_cb(int conn_id, uint8_t tx_phy, uint8_t rx_phy,
                             uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServerPhyUpdate, conn_id,
                                tx_phy, rx_phy, status);
@@ -749,8 +786,9 @@ void btgatts_phy_updated_cb(int conn_id, uint8_t tx_phy, uint8_t rx_phy,
 
 void btgatts_conn_updated_cb(int conn_id, uint16_t interval, uint16_t latency,
                              uint16_t timeout, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServerConnUpdate,
                                conn_id, interval, latency, timeout, status);
@@ -772,7 +810,8 @@ static const btgatt_server_callbacks_t sGattServerCallbacks = {
     btgatts_congestion_cb,
     btgatts_mtu_changed_cb,
     btgatts_phy_updated_cb,
-    btgatts_conn_updated_cb};
+    btgatts_conn_updated_cb,
+};
 
 /**
  * GATT callbacks
@@ -890,15 +929,17 @@ class JniScanningCallbacks : ScanningCallbacks {
 
   void OnScannerRegistered(const Uuid app_uuid, uint8_t scannerId,
                            uint8_t status) {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mCallbacksObj) return;
     sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onScannerRegistered,
                                  status, scannerId, UUID_PARAMS(app_uuid));
   }
 
   void OnSetScannerParameterComplete(uint8_t scannerId, uint8_t status) {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mCallbacksObj) return;
     sCallbackEnv->CallVoidMethod(
         mCallbacksObj, method_onScanParamSetupCompleted, status, scannerId);
   }
@@ -907,8 +948,9 @@ class JniScanningCallbacks : ScanningCallbacks {
                     uint8_t primary_phy, uint8_t secondary_phy,
                     uint8_t advertising_sid, int8_t tx_power, int8_t rssi,
                     uint16_t periodic_adv_int, std::vector<uint8_t> adv_data) {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
     ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                     bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -932,8 +974,9 @@ class JniScanningCallbacks : ScanningCallbacks {
   }
 
   void OnTrackAdvFoundLost(AdvertisingTrackInfo track_info) {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
     ScopedLocalRef<jstring> address(
         sCallbackEnv.get(),
@@ -973,8 +1016,9 @@ class JniScanningCallbacks : ScanningCallbacks {
 
   void OnBatchScanReports(int client_if, int status, int report_format,
                           int num_records, std::vector<uint8_t> data) {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mCallbacksObj) return;
     ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(),
                                   sCallbackEnv->NewByteArray(data.size()));
     sCallbackEnv->SetByteArrayRegion(jb.get(), 0, data.size(),
@@ -986,8 +1030,9 @@ class JniScanningCallbacks : ScanningCallbacks {
   }
 
   void OnBatchScanThresholdCrossed(int client_if) {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mCallbacksObj) return;
     sCallbackEnv->CallVoidMethod(mCallbacksObj,
                                  method_onBatchScanThresholdCrossed, client_if);
   }
@@ -996,6 +1041,7 @@ class JniScanningCallbacks : ScanningCallbacks {
                              uint8_t sid, uint8_t address_type,
                              RawAddress address, uint8_t phy,
                              uint16_t interval) override {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
     if (!sCallbackEnv.valid()) return;
     if (!mPeriodicScanCallbacksObj) {
@@ -1013,8 +1059,9 @@ class JniScanningCallbacks : ScanningCallbacks {
   void OnPeriodicSyncReport(uint16_t sync_handle, int8_t tx_power, int8_t rssi,
                             uint8_t data_status,
                             std::vector<uint8_t> data) override {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mPeriodicScanCallbacksObj) return;
 
     ScopedLocalRef<jbyteArray> jb(sCallbackEnv.get(),
                                   sCallbackEnv->NewByteArray(data.size()));
@@ -1027,8 +1074,9 @@ class JniScanningCallbacks : ScanningCallbacks {
   }
 
   void OnPeriodicSyncLost(uint16_t sync_handle) override {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
-    if (!sCallbackEnv.valid()) return;
+    if (!sCallbackEnv.valid() || !mPeriodicScanCallbacksObj) return;
 
     sCallbackEnv->CallVoidMethod(mPeriodicScanCallbacksObj, method_onSyncLost,
                                  sync_handle);
@@ -1036,6 +1084,7 @@ class JniScanningCallbacks : ScanningCallbacks {
 
   void OnPeriodicSyncTransferred(int pa_source, uint8_t status,
                                  RawAddress address) override {
+    std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
     if (!sCallbackEnv.valid()) return;
     if (!mPeriodicScanCallbacksObj) {
@@ -1168,6 +1217,7 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 static const bt_interface_t* btIf;
 
 static void initializeNative(JNIEnv* env, jobject object) {
+  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
   if (btIf) return;
 
   btIf = getBluetoothInterface();
@@ -1210,6 +1260,8 @@ static void initializeNative(JNIEnv* env, jobject object) {
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
+  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
+
   if (!btIf) return;
 
   if (sGattIf != NULL) {
@@ -1250,8 +1302,9 @@ static void gattClientUnregisterAppNative(JNIEnv* env, jobject object,
 
 void btgattc_register_scanner_cb(const Uuid& app_uuid, uint8_t scannerId,
                                  uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onScannerRegistered,
                                status, scannerId, UUID_PARAMS(app_uuid));
 }
@@ -1305,8 +1358,9 @@ static void gattClientSetPreferredPhyNative(JNIEnv* env, jobject object,
 
 static void readClientPhyCb(uint8_t clientIf, RawAddress bda, uint8_t tx_phy,
                             uint8_t rx_phy, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -1451,8 +1505,9 @@ static void gattClientReadRemoteRssiNative(JNIEnv* env, jobject object,
 }
 
 void set_scan_params_cmpl_cb(int client_if, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onScanParamSetupCompleted,
                                status, client_if);
 }
@@ -1468,8 +1523,9 @@ static void gattSetScanParametersNative(JNIEnv* env, jobject object,
 
 void scan_filter_param_cb(uint8_t client_if, uint8_t avbl_space, uint8_t action,
                           uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj,
                                method_onScanFilterParamsConfigured, action,
                                status, client_if, avbl_space);
@@ -1547,8 +1603,9 @@ static void gattClientScanFilterParamClearAllNative(JNIEnv* env, jobject object,
 static void scan_filter_cfg_cb(uint8_t client_if, uint8_t filt_type,
                                uint8_t avbl_space, uint8_t action,
                                uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onScanFilterConfig, action,
                                status, client_if, filt_type, avbl_space);
 }
@@ -1697,8 +1754,9 @@ static void gattClientScanFilterClearNative(JNIEnv* env, jobject object,
 }
 
 void scan_enable_cb(uint8_t client_if, uint8_t action, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onScanFilterEnableDisabled,
                                action, status, client_if);
 }
@@ -1729,8 +1787,9 @@ static void gattConnectionParameterUpdateNative(JNIEnv* env, jobject object,
 }
 
 void batchscan_cfg_storage_cb(uint8_t client_if, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(
       mCallbacksObj, method_onBatchScanStorageConfigured, status, client_if);
 }
@@ -1746,8 +1805,9 @@ static void gattClientConfigBatchScanStorageNative(
 }
 
 void batchscan_enable_cb(uint8_t client_if, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onBatchScanStartStopped,
                                0 /* unused */, status, client_if);
 }
@@ -1820,8 +1880,9 @@ static void gattServerSetPreferredPhyNative(JNIEnv* env, jobject object,
 
 static void readServerPhyCb(uint8_t serverIf, RawAddress bda, uint8_t tx_phy,
                             uint8_t rx_phy, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
 
   ScopedLocalRef<jstring> address(sCallbackEnv.get(),
                                   bdaddr2newjstr(sCallbackEnv.get(), &bda));
@@ -2000,7 +2061,7 @@ static void advertiseClassInitNative(JNIEnv* env, jclass clazz) {
 }
 
 static void advertiseInitializeNative(JNIEnv* env, jobject object) {
-  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
+  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
   if (mAdvertiseCallbacksObj != NULL) {
     ALOGW("Cleaning up Advertise callback object");
     env->DeleteGlobalRef(mAdvertiseCallbacksObj);
@@ -2011,7 +2072,7 @@ static void advertiseInitializeNative(JNIEnv* env, jobject object) {
 }
 
 static void advertiseCleanupNative(JNIEnv* env, jobject object) {
-  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
+  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
   if (mAdvertiseCallbacksObj != NULL) {
     env->DeleteGlobalRef(mAdvertiseCallbacksObj);
     mAdvertiseCallbacksObj = NULL;
@@ -2090,6 +2151,7 @@ static PeriodicAdvertisingParameters parsePeriodicParams(JNIEnv* env,
   uint16_t interval = env->CallIntMethod(i, methodId);
 
   p.enable = true;
+  p.include_adi = false;
   p.min_interval = interval;
   p.max_interval = interval + 16; /* 20ms difference betwen min and max */
   uint16_t props = 0;
@@ -2100,8 +2162,9 @@ static PeriodicAdvertisingParameters parsePeriodicParams(JNIEnv* env,
 
 static void ble_advertising_set_started_cb(int reg_id, uint8_t advertiser_id,
                                            int8_t tx_power, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mAdvertiseCallbacksObj,
                                method_onAdvertisingSetStarted, reg_id,
                                advertiser_id, tx_power, status);
@@ -2109,8 +2172,9 @@ static void ble_advertising_set_started_cb(int reg_id, uint8_t advertiser_id,
 
 static void ble_advertising_set_timeout_cb(uint8_t advertiser_id,
                                            uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mAdvertiseCallbacksObj,
                                method_onAdvertisingEnabled, advertiser_id,
                                false, status);
@@ -2160,8 +2224,9 @@ static void stopAdvertisingSetNative(JNIEnv* env, jobject object,
 
 static void getOwnAddressCb(uint8_t advertiser_id, uint8_t address_type,
                             RawAddress address) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
 
   ScopedLocalRef<jstring> addr(sCallbackEnv.get(),
                                bdaddr2newjstr(sCallbackEnv.get(), &address));
@@ -2178,15 +2243,17 @@ static void getOwnAddressNative(JNIEnv* env, jobject object,
 
 static void callJniCallback(jmethodID method, uint8_t advertiser_id,
                             uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mAdvertiseCallbacksObj, method, advertiser_id,
                                status);
 }
 
 static void enableSetCb(uint8_t advertiser_id, bool enable, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mAdvertiseCallbacksObj,
                                method_onAdvertisingEnabled, advertiser_id,
                                enable, status);
@@ -2224,8 +2291,9 @@ static void setScanResponseDataNative(JNIEnv* env, jobject object,
 
 static void setAdvertisingParametersNativeCb(uint8_t advertiser_id,
                                              uint8_t status, int8_t tx_power) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mAdvertiseCallbacksObj,
                                method_onAdvertisingParametersUpdated,
                                advertiser_id, tx_power, status);
@@ -2268,8 +2336,9 @@ static void setPeriodicAdvertisingDataNative(JNIEnv* env, jobject object,
 
 static void enablePeriodicSetCb(uint8_t advertiser_id, bool enable,
                                 uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
-  if (!sCallbackEnv.valid()) return;
+  if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
   sCallbackEnv->CallVoidMethod(mAdvertiseCallbacksObj,
                                method_onPeriodicAdvertisingEnabled,
                                advertiser_id, enable, status);
@@ -2280,8 +2349,9 @@ static void setPeriodicAdvertisingEnableNative(JNIEnv* env, jobject object,
                                                jboolean enable) {
   if (!sGattIf) return;
 
+  bool include_adi = false;
   sGattIf->advertiser->SetPeriodicAdvertisingEnable(
-      advertiser_id, enable,
+      advertiser_id, enable, include_adi,
       base::Bind(&enablePeriodicSetCb, advertiser_id, enable));
 }
 
@@ -2295,6 +2365,7 @@ static void periodicScanClassInitNative(JNIEnv* env, jclass clazz) {
 }
 
 static void periodicScanInitializeNative(JNIEnv* env, jobject object) {
+  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
   if (mPeriodicScanCallbacksObj != NULL) {
     ALOGW("Cleaning up periodic scan callback object");
     env->DeleteGlobalRef(mPeriodicScanCallbacksObj);
@@ -2305,6 +2376,7 @@ static void periodicScanInitializeNative(JNIEnv* env, jobject object) {
 }
 
 static void periodicScanCleanupNative(JNIEnv* env, jobject object) {
+  std::unique_lock<std::shared_mutex> lock(callbacks_mutex);
   if (mPeriodicScanCallbacksObj != NULL) {
     env->DeleteGlobalRef(mPeriodicScanCallbacksObj);
     mPeriodicScanCallbacksObj = NULL;

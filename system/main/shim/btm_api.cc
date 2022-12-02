@@ -37,6 +37,7 @@
 #include "main/shim/shim.h"
 #include "main/shim/stack.h"
 #include "osi/include/allocator.h"
+#include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
@@ -461,7 +462,7 @@ class ShimBondListener : public bluetooth::security::ISecurityManagerListener {
         LinkKey key;  // Never want to send the key to the stack
         (*bta_callbacks_->p_link_key_callback)(
             bluetooth::ToRawAddress(device.GetAddress()), 0, name, key,
-            BTM_LKEY_TYPE_COMBINATION);
+            BTM_LKEY_TYPE_COMBINATION, false /* is_ctkd */);
       }
       if (*bta_callbacks_->p_auth_complete_callback) {
         (*bta_callbacks_->p_auth_complete_callback)(
@@ -1348,12 +1349,13 @@ tBTM_STATUS bluetooth::shim::BTM_ClearFilterAcceptList() {
 }
 
 tBTM_STATUS bluetooth::shim::BTM_DisconnectAllAcls() {
-  Stack::GetInstance()->GetAcl()->Shutdown();
+  Stack::GetInstance()->GetAcl()->DisconnectAllForSuspend();
+//  Stack::GetInstance()->GetAcl()->Shutdown();
   return BTM_SUCCESS;
 }
 
 tBTM_STATUS bluetooth::shim::BTM_LeRand(LeRandCallback cb) {
-  controller_get_interface()->le_rand(cb);
+  Stack::GetInstance()->GetAcl()->LeRand(cb);
   return BTM_SUCCESS;
 }
 
@@ -1364,13 +1366,19 @@ tBTM_STATUS bluetooth::shim::BTM_SetEventFilterConnectionSetupAllDevices() {
 }
 
 tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
-    std::vector<RawAddress> le_hid_devices) {
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
   // Autoplumbed
   controller_get_interface()->allow_wake_by_hid();
   // Allow BLE HID
   for (auto hid_address : le_hid_devices) {
-    Stack::GetInstance()->GetAcl()->AddDeviceToFilterAcceptList(
-        ToAddressWithType(hid_address, BLE_ADDR_PUBLIC));
+    std::promise<bool> accept_promise;
+    auto accept_future = accept_promise.get_future();
+
+    Stack::GetInstance()->GetAcl()->AcceptLeConnectionFrom(
+        ToAddressWithType(hid_address.first, hid_address.second),
+        /*is_direct=*/false, std::move(accept_promise));
+
+    accept_future.wait();
   }
   return BTM_SUCCESS;
 }
@@ -1381,14 +1389,20 @@ tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList() {
   return BTM_SUCCESS;
 }
 
-tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMask() {
+tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMaskExcept(uint64_t mask,
+                                                           uint64_t le_mask) {
   // Autoplumbed
-  controller_get_interface()->set_default_event_mask();
+  controller_get_interface()->set_default_event_mask_except(mask, le_mask);
   return BTM_SUCCESS;
 }
 
 tBTM_STATUS bluetooth::shim::BTM_SetEventFilterInquiryResultAllDevices() {
   // Autoplumbed
   controller_get_interface()->set_event_filter_inquiry_result_all_devices();
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_BleResetId() {
+  btm_ble_reset_id();
   return BTM_SUCCESS;
 }

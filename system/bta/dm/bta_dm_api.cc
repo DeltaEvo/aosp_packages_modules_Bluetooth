@@ -678,6 +678,34 @@ void BTA_DmClearEventFilter(void) {
 
 /*******************************************************************************
  *
+ * Function         BTA_DmClearEventMask
+ *
+ * Description      This function clears the event mask
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmClearEventMask(void) {
+  APPL_TRACE_API("BTA_DmClearEventMask");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_clear_event_mask));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmClearEventMask
+ *
+ * Description      This function clears the filter accept list
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmClearFilterAcceptList(void) {
+  APPL_TRACE_API("BTA_DmClearFilterAcceptList");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_clear_filter_accept_list));
+}
+
+/*******************************************************************************
+ *
  * Function         BTA_DmLeRand
  *
  * Description      This function clears the event filter
@@ -690,6 +718,20 @@ void BTA_DmLeRand(LeRandCallback cb) {
   do_in_main_thread(FROM_HERE, base::Bind(bta_dm_le_rand, cb));
 }
 
+/*******************************************************************************
+ *
+ * Function         BTA_DmDisconnectAllAcls
+ *
+ * Description      This function will disconnect all LE and Classic ACLs.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmDisconnectAllAcls() {
+  APPL_TRACE_API("BTA_DmLeRand");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_disconnect_all_acls));
+}
+
 void BTA_DmSetEventFilterConnectionSetupAllDevices() {
   APPL_TRACE_API("BTA_DmSetEventFilterConnectionSetupAllDevices");
   do_in_main_thread(
@@ -697,7 +739,8 @@ void BTA_DmSetEventFilterConnectionSetupAllDevices() {
       base::Bind(bta_dm_set_event_filter_connection_setup_all_devices));
 }
 
-void BTA_DmAllowWakeByHid(std::vector<RawAddress> le_hid_devices) {
+void BTA_DmAllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
   APPL_TRACE_API("BTA_DmAllowWakeByHid");
   do_in_main_thread(FROM_HERE,
                     base::Bind(bta_dm_allow_wake_by_hid, le_hid_devices));
@@ -708,9 +751,10 @@ void BTA_DmRestoreFilterAcceptList() {
   do_in_main_thread(FROM_HERE, base::Bind(bta_dm_restore_filter_accept_list));
 }
 
-void BTA_DmSetDefaultEventMask() {
-  APPL_TRACE_API("BTA_DmSetDefaultEventMask");
-  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_set_default_event_mask));
+void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask) {
+  APPL_TRACE_API("BTA_DmSetDefaultEventMaskExcept");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_set_default_event_mask_except,
+                                          mask, le_mask));
 }
 
 void BTA_DmSetEventFilterInquiryResultAllDevices() {
@@ -718,4 +762,18 @@ void BTA_DmSetEventFilterInquiryResultAllDevices() {
   do_in_main_thread(
       FROM_HERE,
       base::Bind(bta_dm_set_event_filter_inquiry_result_all_devices));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmBleResetId
+ *
+ * Description      This function resets the ble keys such as IRK
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmBleResetId(void) {
+  APPL_TRACE_API("BTA_DmBleResetId");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_ble_reset_id));
 }

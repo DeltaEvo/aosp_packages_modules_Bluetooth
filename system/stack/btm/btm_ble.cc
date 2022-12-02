@@ -32,6 +32,7 @@
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
+#include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/security_device_record.h"
@@ -55,6 +56,11 @@ extern bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                                      const RawAddress& new_pseudo_addr);
 extern void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
                                     uint8_t tx_phy, uint8_t rx_phy);
+
+
+#ifndef PROPERTY_BLE_PRIVACY_ENABLED
+#define PROPERTY_BLE_PRIVACY_ENABLED "bluetooth.core.gap.le.privacy.enabled"
+#endif
 
 /******************************************************************************/
 /* External Function to be called by other modules                            */
@@ -82,7 +88,7 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
     p_dev_rec->conn_params.peripheral_latency = BTM_BLE_CONN_PARAM_UNDEF;
 
     LOG_DEBUG("Device added, handle=0x%x, p_dev_rec=%p, bd_addr=%s",
-              p_dev_rec->ble_hci_handle, p_dev_rec, bd_addr.ToString().c_str());
+              p_dev_rec->ble_hci_handle, p_dev_rec, PRIVATE_ADDRESS(bd_addr));
   }
 
   memset(p_dev_rec->sec_bd_name, 0, sizeof(tBTM_BD_NAME));
@@ -1166,8 +1172,9 @@ void btm_sec_save_le_key(const RawAddress& bd_addr, tBTM_LE_KEY_TYPE key_type,
         BTM_TRACE_DEBUG(
             "%s: BTM_LE_KEY_PID key_type=0x%x save peer IRK, change bd_addr=%s "
             "to id_addr=%s id_addr_type=0x%x",
-            __func__, p_rec->ble.key_type, p_rec->bd_addr.ToString().c_str(),
-            p_keys->pid_key.identity_addr.ToString().c_str(),
+            __func__, p_rec->ble.key_type,
+            ADDRESS_TO_LOGGABLE_CSTR(p_rec->bd_addr),
+            ADDRESS_TO_LOGGABLE_CSTR(p_keys->pid_key.identity_addr),
             p_keys->pid_key.identity_addr_type);
         /* update device record address as identity address */
         p_rec->bd_addr = p_keys->pid_key.identity_addr;
@@ -2058,6 +2065,11 @@ static void btm_ble_reset_id_impl(const Octet16& rand1, const Octet16& rand2) {
   /* proceed generate ER */
   btm_cb.devcb.ble_encryption_key_value = rand2;
   btm_notify_new_key(BTM_BLE_KEY_TYPE_ER);
+
+  /* if privacy is enabled, update the irk and RPA in the LE address manager */
+  if (btm_cb.ble_ctr_cb.privacy_mode != BTM_PRIVACY_NONE) {
+    BTM_BleConfigPrivacy(true);
+  }
 }
 
 struct reset_id_data {

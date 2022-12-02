@@ -9,16 +9,15 @@ package {
 
 rust_defaults {
     name: "pdl_defaults",
-    srcs: ["src/main.rs"],
     // LINT.IfChange
     rustlibs: [
+        "libclap",
         "libcodespan_reporting",
         "libpest",
         "libproc_macro2",
         "libquote",
         "libserde",
         "libserde_json",
-        "libstructopt",
         "libsyn",
         "libtempfile",
     ],
@@ -31,37 +30,13 @@ rust_defaults {
 rust_binary_host {
     name: "pdl",
     defaults: ["pdl_defaults"],
-}
-
-python_binary_host {
-    name: "pypdl",
-    main: "scripts/pdl/parser.py",
-    srcs: ["scripts/pdl/parser.py"],
-}
-
-rust_test_host {
-    name: "pdl_inline_tests",
-    defaults: ["pdl_defaults"],
-    test_suites: ["general-tests"],
-    enabled: false, // rustfmt is only available on x86.
-    arch: {
-        x86_64: {
-            enabled: true,
-        },
-    },
-    data: [
-        ":rustfmt",
-        ":rustfmt.toml",
-        "tests/generated/preamble.rs",
-        "tests/generated/packet_decl_empty.rs",
-        "tests/generated/packet_decl_simple_little_endian.rs",
-        "tests/generated/packet_decl_simple_big_endian.rs",
-    ],
+    srcs: ["src/main.rs"],
 }
 
 rust_test_host {
     name: "pdl_tests",
-    srcs: ["tests/pdl_tests.rs"],
+    defaults: ["pdl_defaults"],
+    srcs: ["src/main.rs"],
     test_suites: ["general-tests"],
     enabled: false, // rustfmt is only available on x86.
     arch: {
@@ -69,28 +44,129 @@ rust_test_host {
             enabled: true,
         },
     },
-    // LINT.IfChange
-    rustlibs: [
-        "libtempfile",
-    ],
-    // LINT.ThenChange(Cargo.toml)
     data: [
-        ":bluetooth_packetgen",
-        ":pdl",
         ":rustfmt",
         ":rustfmt.toml",
+        "tests/generated/generate_chunk_read_8bit.rs",
+        "tests/generated/generate_chunk_read_16bit_be.rs",
+        "tests/generated/generate_chunk_read_16bit_le.rs",
+        "tests/generated/generate_chunk_read_24bit_be.rs",
+        "tests/generated/generate_chunk_read_24bit_le.rs",
+        "tests/generated/generate_chunk_read_multiple_fields.rs",
+        "tests/generated/packet_decl_complex_big_endian.rs",
+        "tests/generated/packet_decl_complex_little_endian.rs",
+        "tests/generated/packet_decl_empty.rs",
+        "tests/generated/packet_decl_simple_big_endian.rs",
+        "tests/generated/packet_decl_simple_little_endian.rs",
+        "tests/generated/preamble.rs",
     ],
 }
 
-// Python generator.
-python_binary_host {
-    name: "pdl_python_generator",
-    main: "scripts/generate_python_backend.py",
-    srcs: [
-        "scripts/generate_python_backend.py",
-        "scripts/pdl/ast.py",
-        "scripts/pdl/core.py",
-    ]
+genrule_defaults {
+    name: "pdl_rust_generator_defaults",
+    tools: [
+        ":pdl",
+        ":rustfmt",
+    ],
+}
+
+// Generate the Rust parser+serializer backends.
+genrule {
+    name: "pdl_le_backend",
+    defaults: ["pdl_rust_generator_defaults"],
+    cmd: "$(location :pdl) --output-format rust $(in) | $(location :rustfmt) > $(out)",
+    srcs: ["tests/canonical/le_rust_test_file.pdl"],
+    out: ["le_backend.rs"],
+}
+
+genrule {
+    name: "pdl_be_backend",
+    defaults: ["pdl_rust_generator_defaults"],
+    cmd: "$(location :pdl) --output-format rust $(in) | $(location :rustfmt) > $(out)",
+    srcs: ["tests/canonical/be_rust_test_file.pdl"],
+    out: ["be_backend.rs"],
+}
+
+rust_defaults {
+    name: "pdl_backend_defaults",
+    rustlibs: [
+        "libbytes",
+        "libnum_traits",
+        "libtempfile",
+        "libthiserror",
+    ],
+    proc_macros: ["libnum_derive"],
+}
+
+rust_library_host {
+    name: "libpdl_le_backend",
+    crate_name: "pdl_le_backend",
+    srcs: [":pdl_le_backend"],
+    defaults: ["pdl_backend_defaults"],
+}
+
+rust_library_host {
+    name: "libpdl_be_backend",
+    crate_name: "pdl_be_backend",
+    srcs: [":pdl_be_backend"],
+    defaults: ["pdl_backend_defaults"],
+}
+
+rust_binary_host {
+    name: "pdl_generate_tests",
+    srcs: ["src/bin/generate-canonical-tests.rs"],
+    rustlibs: [
+        "libproc_macro2",
+        "libquote",
+        "libserde",
+        "libserde_json",
+        "libsyn",
+        "libtempfile",
+    ],
+}
+
+genrule_defaults {
+    name: "pdl_rust_generator_src_defaults",
+    tools: [
+        ":pdl_generate_tests",
+        ":rustfmt",
+    ],
+}
+
+genrule {
+    name: "pdl_rust_generator_tests_le_src",
+    cmd: "$(location :pdl_generate_tests) $(in) pdl_le_backend | $(location :rustfmt) > $(out)",
+    srcs: ["tests/canonical/le_test_vectors.json"],
+    out: ["le_canonical.rs"],
+    defaults: ["pdl_rust_generator_src_defaults"],
+}
+
+genrule {
+    name: "pdl_rust_generator_tests_be_src",
+    cmd: "$(location :pdl_generate_tests) $(in) pdl_be_backend | $(location :rustfmt) > $(out)",
+    srcs: ["tests/canonical/be_test_vectors.json"],
+    out: ["be_canonical.rs"],
+    defaults: ["pdl_rust_generator_src_defaults"],
+}
+
+rust_test_host {
+    name: "pdl_rust_generator_tests_le",
+    srcs: [":pdl_rust_generator_tests_le_src"],
+    test_suites: ["general-tests"],
+    rustlibs: [
+        "libnum_traits",
+        "libpdl_le_backend",
+    ],
+}
+
+rust_test_host {
+    name: "pdl_rust_generator_tests_be",
+    srcs: [":pdl_rust_generator_tests_be_src"],
+    test_suites: ["general-tests"],
+    rustlibs: [
+        "libnum_traits",
+        "libpdl_be_backend",
+    ],
 }
 
 // Defaults for PDL python backend generation.
@@ -106,7 +182,7 @@ genrule_defaults {
 // little endian test file located at tests/canonical/le_test_file.pdl.
 genrule {
     name: "pdl_python_generator_le_test_gen",
-    defaults: [ "pdl_python_generator_defaults" ],
+    defaults: ["pdl_python_generator_defaults"],
     cmd: "$(location :pdl) $(in) |" +
         " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location tests.custom_types",
@@ -125,7 +201,7 @@ genrule {
 // big endian test file located at tests/canonical/be_test_file.pdl.
 genrule {
     name: "pdl_python_generator_be_test_gen",
-    defaults: [ "pdl_python_generator_defaults" ],
+    defaults: ["pdl_python_generator_defaults"],
     cmd: "$(location :pdl) $(in) |" +
         " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location tests.custom_types",
@@ -146,20 +222,25 @@ python_test_host {
     name: "pdl_python_generator_test",
     main: "tests/python_generator_test.py",
     srcs: [
-        "tests/python_generator_test.py",
-        "tests/custom_types.py",
-        ":pdl_python_generator_le_test_gen",
         ":pdl_python_generator_be_test_gen",
+        ":pdl_python_generator_le_test_gen",
+        "tests/custom_types.py",
+        "tests/python_generator_test.py",
     ],
     data: [
-        "tests/canonical/le_test_vectors.json",
         "tests/canonical/be_test_vectors.json",
+        "tests/canonical/le_test_vectors.json",
     ],
     libs: [
         "typing_extensions",
     ],
     test_options: {
         unit_test: true,
+    },
+    version: {
+        py3: {
+            embedded_launcher: true,
+        },
     },
 }
 
@@ -170,9 +251,9 @@ python_test_host {
     main: "tests/python_parser_test.py",
     srcs: ["tests/python_parser_test.py"],
     data: [
-        ":pdl",
-        ":pypdl",
         ":BluetoothHciPackets",
         ":RootCanalLinkLayerPackets",
+        ":pdl",
+        ":pypdl",
     ],
 }

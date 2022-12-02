@@ -161,13 +161,18 @@ static int le_rand() { return 0; }
 
 static int set_event_filter_inquiry_result_all_devices() { return 0; }
 
-static int set_default_event_mask() { return 0; }
+static int set_default_event_mask_except(uint64_t mask, uint64_t le_mask) {
+  return 0;
+}
 
 static int restore_filter_accept_list() { return 0; }
 
 static int allow_wake_by_hid() { return 0; }
 
 static int set_event_filter_connection_setup_all_devices() { return 0; }
+
+static void metadata_changed(const RawAddress& remote_bd_addr, int key,
+                             std::vector<uint8_t> value) {}
 
 EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     sizeof(bluetoothInterface),
@@ -217,8 +222,9 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     set_event_filter_connection_setup_all_devices,
     allow_wake_by_hid,
     restore_filter_accept_list,
-    set_default_event_mask,
-    set_event_filter_inquiry_result_all_devices};
+    set_default_event_mask_except,
+    set_event_filter_inquiry_result_all_devices,
+    metadata_changed};
 
 // callback reporting helpers
 
@@ -262,7 +268,8 @@ void invoke_le_address_associate_cb(RawAddress main_bd_addr,
 
 void invoke_acl_state_changed_cb(bt_status_t status, RawAddress bd_addr,
                                  bt_acl_state_t state, int transport_link_type,
-                                 bt_hci_error_code_t hci_reason) {}
+                                 bt_hci_error_code_t hci_reason,
+                                 bt_conn_direction_t direction) {}
 
 void invoke_thread_evt_cb(bt_cb_thread_evt event) {}
 

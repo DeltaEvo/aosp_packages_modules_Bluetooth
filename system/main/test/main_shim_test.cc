@@ -88,6 +88,11 @@ struct bluetooth::hci::LeScanningManager::impl
     : public bluetooth::hci::LeAddressManagerCallback {};
 
 namespace {
+constexpr double kMaxAbsoluteError = .0000001;
+constexpr double kTicksInMs = 20479.375;
+constexpr double kTicksInSec = 20.479375;
+constexpr uint16_t kTicks = 32767;
+
 std::map<std::string, std::promise<uint16_t>> mock_function_handle_promise_map;
 
 // Utility to provide a file descriptor for /dev/null when possible, but
@@ -122,10 +127,12 @@ void mock_on_send_data_upwards(BT_HDR*) {}
 void mock_on_packets_completed(uint16_t handle, uint16_t num_packets) {}
 
 void mock_connection_classic_on_connected(const RawAddress& bda,
-                                          uint16_t handle, uint8_t enc_mode) {}
+                                          uint16_t handle, uint8_t enc_mode,
+                                          bool locally_initiated) {}
 
 void mock_connection_classic_on_failed(const RawAddress& bda,
-                                       tHCI_STATUS status) {}
+                                       tHCI_STATUS status,
+                                       bool locally_initiated) {}
 
 void mock_connection_classic_on_disconnected(tHCI_STATUS status,
                                              uint16_t handle,
@@ -141,7 +148,7 @@ void mock_connection_le_on_connected(
     tBLE_ADDR_TYPE peer_addr_type) {}
 void mock_connection_le_on_failed(const tBLE_BD_ADDR& address_with_type,
                                   uint16_t handle, bool enhanced,
-                                  tHCI_STATUS status) {}
+                                  tHCI_STATUS status, bool locally_initiated) {}
 static std::promise<uint16_t> mock_connection_le_on_disconnected_promise;
 void mock_connection_le_on_disconnected(tHCI_STATUS status, uint16_t handle,
                                         tHCI_STATUS reason) {
@@ -751,4 +758,14 @@ TEST_F(MainShimTestWithClassicConnection, read_extended_feature) {
 
 TEST_F(MainShimTest, acl_dumpsys) {
   MakeAcl()->Dump(std::make_unique<DevNullOrStdErr>()->Fd());
+}
+
+TEST_F(MainShimTest, ticks_to_milliseconds) {
+  ASSERT_THAT(kTicksInMs,
+              DoubleNear(ticks_to_milliseconds(kTicks), kMaxAbsoluteError));
+}
+
+TEST_F(MainShimTest, ticks_to_seconds) {
+  ASSERT_THAT(kTicksInSec,
+              DoubleNear(ticks_to_seconds(kTicks), kMaxAbsoluteError));
 }

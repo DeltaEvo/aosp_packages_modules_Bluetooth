@@ -22,7 +22,7 @@ pub struct SourceLocation {
     pub column: usize,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize)]
 pub struct SourceRange {
     pub file: FileId,
     pub start: SourceLocation,
@@ -36,14 +36,14 @@ pub struct Comment {
     pub text: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EndiannessValue {
     LittleEndian,
     BigEndian,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Copy, Clone, Serialize)]
 #[serde(tag = "kind", rename = "endianness_declaration")]
 pub struct Endianness {
     pub loc: SourceRange,
@@ -73,7 +73,7 @@ pub enum Field {
     #[serde(rename = "checksum_field")]
     Checksum { loc: SourceRange, field_id: String },
     #[serde(rename = "padding_field")]
-    Padding { loc: SourceRange, width: usize },
+    Padding { loc: SourceRange, size: usize },
     #[serde(rename = "size_field")]
     Size { loc: SourceRange, field_id: String, width: usize },
     #[serde(rename = "count_field")]

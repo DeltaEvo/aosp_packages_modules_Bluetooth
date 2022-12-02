@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 
 #include "hci/address_with_type.h"
@@ -29,7 +30,8 @@ using ::bluetooth::hci::AddressWithType;
 class AclConnection {
  public:
   AclConnection(AddressWithType address, AddressWithType own_address,
-                AddressWithType resolved_address, Phy::Type phy_type);
+                AddressWithType resolved_address, Phy::Type phy_type,
+                bluetooth::hci::Role role);
 
   virtual ~AclConnection() = default;
 
@@ -57,6 +59,16 @@ class AclConnection {
 
   void SetRole(bluetooth::hci::Role role);
 
+  void ResetLinkTimer();
+
+  std::chrono::steady_clock::duration TimeUntilNearExpiring() const;
+
+  bool IsNearExpiring() const;
+
+  std::chrono::steady_clock::duration TimeUntilExpired() const;
+
+  bool HasExpired() const;
+
  private:
   AddressWithType address_;
   AddressWithType own_address_;
@@ -67,6 +79,8 @@ class AclConnection {
   bool encrypted_{false};
   uint16_t link_policy_settings_{0};
   bluetooth::hci::Role role_{bluetooth::hci::Role::CENTRAL};
+  std::chrono::steady_clock::time_point last_packet_timestamp_;
+  std::chrono::steady_clock::duration timeout_;
 };
 
 }  // namespace rootcanal

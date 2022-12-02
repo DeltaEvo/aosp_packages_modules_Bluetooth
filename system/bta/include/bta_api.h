@@ -225,6 +225,7 @@ typedef enum : uint8_t {
   BTA_DM_BLE_SC_CR_LOC_OOB_EVT = 31, /* SMP SC Create Local OOB request event */
   BTA_DM_REPORT_BONDING_EVT = 32,    /*handle for pin or key missing*/
   BTA_DM_LE_ADDR_ASSOC_EVT = 33,     /* identity address association event */
+  BTA_DM_LINK_UP_FAILED_EVT = 34,    /* Create connection failed event */
 } tBTA_DM_SEC_EVT;
 
 /* Structure associated with BTA_DM_PIN_REQ_EVT */
@@ -305,6 +306,7 @@ typedef struct {
       fail_reason; /* The HCI reason/error code for when success=false */
   tBLE_ADDR_TYPE addr_type; /* Peer device address type */
   tBT_DEVICE_TYPE dev_type;
+  bool is_ctkd; /* True if key is derived using CTKD procedure */
 } tBTA_DM_AUTH_CMPL;
 
 /* Structure associated with BTA_DM_LINK_UP_EVT */
@@ -313,10 +315,18 @@ typedef struct {
   tBT_TRANSPORT transport_link_type;
 } tBTA_DM_LINK_UP;
 
+/* Structure associated with BTA_DM_LINK_UP_FAILED_EVT */
+typedef struct {
+  RawAddress bd_addr; /* BD address peer device. */
+  tBT_TRANSPORT transport_link_type;
+  tHCI_STATUS status; /* The HCI error code associated with this event */
+} tBTA_DM_LINK_UP_FAILED;
+
 /* Structure associated with BTA_DM_LINK_DOWN_EVT */
 typedef struct {
   RawAddress bd_addr; /* BD address peer device. */
   tBT_TRANSPORT transport_link_type;
+  tHCI_STATUS status;
 } tBTA_DM_LINK_DOWN;
 
 #define BTA_AUTH_SP_YES                                                       \
@@ -393,7 +403,8 @@ typedef struct {
 typedef union {
   tBTA_DM_PIN_REQ pin_req;        /* PIN request. */
   tBTA_DM_AUTH_CMPL auth_cmpl;    /* Authentication complete indication. */
-  tBTA_DM_LINK_UP link_up;        /* ACL connection down event */
+  tBTA_DM_LINK_UP link_up;        /* ACL connection up event */
+  tBTA_DM_LINK_UP_FAILED link_up_failed; /* ACL connection up failure event */
   tBTA_DM_LINK_DOWN link_down;    /* ACL connection down event */
   tBTA_DM_SP_CFM_REQ cfm_req;     /* user confirm request */
   tBTA_DM_SP_KEY_NOTIF key_notif; /* passkey notification */
@@ -419,11 +430,12 @@ typedef void(tBTA_DM_SEC_CBACK)(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data);
 #define BTA_DM_INQ_RES_EVT 0  /* Inquiry result for a peer device. */
 #define BTA_DM_INQ_CMPL_EVT 1 /* Inquiry complete. */
 #define BTA_DM_DISC_RES_EVT 2 /* Discovery result for a peer device. */
-#define BTA_DM_DISC_BLE_RES_EVT \
-  3 /* Discovery result for BLE GATT based servoce on a peer device. */
+#define BTA_DM_GATT_OVER_LE_RES_EVT \
+  3 /* GATT services over LE transport discovered */
 #define BTA_DM_DISC_CMPL_EVT 4          /* Discovery complete. */
 #define BTA_DM_SEARCH_CANCEL_CMPL_EVT 6 /* Search cancelled */
 #define BTA_DM_DID_RES_EVT 7            /* Vendor/Product ID search result */
+#define BTA_DM_GATT_OVER_SDP_RES_EVT 8  /* GATT services over SDP discovered */
 
 typedef uint8_t tBTA_DM_SEARCH_EVT;
 
@@ -1222,6 +1234,39 @@ extern void BTA_VendorInit(void);
  ******************************************************************************/
 extern void BTA_DmClearEventFilter(void);
 
+/*******************************************************************************
+ *
+ * Function         BTA_DmClearEventMask
+ *
+ * Description      This function clears the event mask
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmClearEventMask(void);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmDisconnectAllAcls
+ *
+ * Description      This function will disconnect all LE and Classic ACLs.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmDisconnectAllAcls(void);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmClearFilterAcceptList
+ *
+ * Description      This function clears the filter accept list
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmClearFilterAcceptList(void);
+
 using LeRandCallback = base::Callback<void(uint64_t)>;
 /*******************************************************************************
  *
@@ -1254,7 +1299,8 @@ extern void BTA_DmSetEventFilterConnectionSetupAllDevices();
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmAllowWakeByHid(std::vector<RawAddress> le_hid_devices);
+extern void BTA_DmAllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
 
 /*******************************************************************************
  *
@@ -1269,14 +1315,17 @@ extern void BTA_DmRestoreFilterAcceptList();
 
 /*******************************************************************************
  *
- * Function        BTA_DmSetDefaultEventMask
+ * Function       BTA_DmSetDefaultEventMaskExcept
  *
- * Description    Floss: Set the default event mask for Classic and LE
+ * Description    Floss: Set the default event mask for Classic and LE except
+ *                the given values (they will be disabled in the final set
+ *                mask).
  *
- * Parameters
+ * Parameters     Bits set for event mask and le event mask that should be
+ *                disabled in the final value.
  *
  *******************************************************************************/
-extern void BTA_DmSetDefaultEventMask();
+extern void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
 
 /*******************************************************************************
  *
@@ -1288,5 +1337,16 @@ extern void BTA_DmSetDefaultEventMask();
  *
  *******************************************************************************/
 extern void BTA_DmSetEventFilterInquiryResultAllDevices();
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmBleResetId
+ *
+ * Description      This function resets the ble keys such as IRK
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmBleResetId(void);
 
 #endif /* BTA_API_H */

@@ -6,7 +6,8 @@ use bt_topshim::profiles::gatt::{
 };
 use bt_topshim::profiles::gatt::{
     GattAdvCallbacksDispatcher, GattAdvInbandCallbacksDispatcher, GattClientCallbacksDispatcher,
-    GattScannerCallbacksDispatcher, GattServerCallbacksDispatcher,
+    GattScannerCallbacksDispatcher, GattScannerInbandCallbacksDispatcher,
+    GattServerCallbacksDispatcher,
 };
 use bt_topshim_facade_protobuf::empty::Empty;
 //use bt_topshim_facade_protobuf::facade::{
@@ -68,6 +69,11 @@ impl GattServiceImpl {
                     println!("received Gatt scanner callback: {:?}", cb);
                 }),
             },
+            GattScannerInbandCallbacksDispatcher {
+                dispatch: Box::new(move |cb| {
+                    println!("received Gatt scanner inband callback: {:?}", cb);
+                }),
+            },
             GattAdvInbandCallbacksDispatcher {
                 dispatch: Box::new(move |cb| {
                     println!("received Gatt advertiser inband callback: {:?}", cb);
@@ -84,7 +90,7 @@ impl GattServiceImpl {
     }
 
     fn create_raw_address(&self) -> RawAddress {
-        RawAddress { val: [0; 6] }
+        RawAddress { address: [0; 6] }
     }
 
     fn create_advertise_parameters(&self) -> AdvertiseParameters {
@@ -103,7 +109,8 @@ impl GattServiceImpl {
 
     fn create_periodic_advertising_parameters(&self) -> PeriodicAdvertisingParameters {
         PeriodicAdvertisingParameters {
-            enable: 0,
+            enable: false,
+            include_adi: false,
             min_interval: 0,
             max_interval: 0,
             periodic_advertising_properties: 0,
@@ -126,7 +133,7 @@ impl GattServiceImpl {
     }
 
     fn create_uuid(&self) -> Uuid {
-        Uuid { uu: [0; 16] }
+        Uuid::from([0; 16])
     }
 }
 
@@ -277,7 +284,7 @@ impl GattService for GattServiceImpl {
         sink: UnarySink<Empty>,
     ) {
         let advertiser = &mut self.gatt.lock().unwrap().advertiser;
-        advertiser.set_periodic_advertising_enable(0, true);
+        advertiser.set_periodic_advertising_enable(0, true, false);
         ctx.spawn(async move {
             sink.success(Empty::default()).await.unwrap();
         })
