@@ -100,14 +100,14 @@ public class LeAudioService extends ProfileService {
     private static final int AUDIO_DIRECTION_NONE = 0x00;
 
     /**
-     * Indicates group audio support for input direction
-     */
-    private static final int AUDIO_DIRECTION_INPUT_BIT = 0x01;
-
-    /**
      * Indicates group audio support for output direction
      */
-    private static final int AUDIO_DIRECTION_OUTPUT_BIT = 0x02;
+    private static final int AUDIO_DIRECTION_OUTPUT_BIT = 0x01;
+
+    /**
+     * Indicates group audio support for input direction
+     */
+    private static final int AUDIO_DIRECTION_INPUT_BIT = 0x02;
 
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
@@ -2264,8 +2264,8 @@ public class LeAudioService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private LeAudioService getService(AttributionSource source) {
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
-                    || !Utils.checkServiceAvailable(mService, TAG)
+            if (!Utils.checkServiceAvailable(mService, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
                 return null;
             }
