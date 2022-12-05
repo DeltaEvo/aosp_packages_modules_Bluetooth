@@ -24,11 +24,12 @@
 
 #include <base/strings/string_number_conversions.h>
 
+#include "audio_hal_client/audio_hal_client.h"
 #include "bt_types.h"
 #include "bta_api.h"
 #include "bta_le_audio_api.h"
-#include "client_audio.h"
 #include "client_parser.h"
+#include "gd/common/strings.h"
 
 namespace le_audio {
 using types::acs_ac_record;
@@ -546,8 +547,7 @@ void AppendMetadataLtvEntryForStreamingContext(
                       types::kLeAudioMetadataStreamingAudioContextLen);
   UINT8_TO_STREAM(streaming_context_ltv_entry_buf,
                   types::kLeAudioMetadataTypeStreamingAudioContext);
-  UINT16_TO_STREAM(streaming_context_ltv_entry_buf,
-                   static_cast<uint16_t>(context_type.to_ulong()));
+  UINT16_TO_STREAM(streaming_context_ltv_entry_buf, context_type.value());
 
   metadata.insert(metadata.end(), streaming_context_ltv_entry.begin(),
                   streaming_context_ltv_entry.end());
@@ -654,6 +654,9 @@ std::ostream& operator<<(std::ostream& os, const LeAudioContextType& context) {
     case LeAudioContextType::RINGTONE:
       os << "RINGTONE";
       break;
+    case LeAudioContextType::ALERTS:
+      os << "ALERTS";
+      break;
     case LeAudioContextType::EMERGENCYALARM:
       os << "EMERGENCYALARM";
       break;
@@ -663,5 +666,50 @@ std::ostream& operator<<(std::ostream& os, const LeAudioContextType& context) {
   }
   return os;
 }
+
+AudioContexts operator|(std::underlying_type<LeAudioContextType>::type lhs,
+                        const LeAudioContextType rhs) {
+  using T = std::underlying_type<LeAudioContextType>::type;
+  return AudioContexts(lhs | static_cast<T>(rhs));
+}
+
+AudioContexts& operator|=(AudioContexts& lhs, AudioContexts const& rhs) {
+  lhs = AudioContexts(lhs.value() | rhs.value());
+  return lhs;
+}
+
+AudioContexts& operator&=(AudioContexts& lhs, AudioContexts const& rhs) {
+  lhs = AudioContexts(lhs.value() & rhs.value());
+  return lhs;
+}
+
+std::string ToHexString(const LeAudioContextType& value) {
+  using T = std::underlying_type<LeAudioContextType>::type;
+  return bluetooth::common::ToHexString(static_cast<T>(value));
+}
+
+std::string AudioContexts::to_string() const {
+  std::stringstream s;
+  for (auto ctx : le_audio::types::kLeAudioContextAllTypesArray) {
+    if (test(ctx)) {
+      if (s.tellp() != 0) s << " | ";
+      s << ctx;
+    }
+  }
+  s << " (" << bluetooth::common::ToHexString(mValue) << ")";
+  return s.str();
+}
+
+std::ostream& operator<<(std::ostream& os, const AudioContexts& contexts) {
+  os << contexts.to_string();
+  return os;
+}
+
+/* Bidirectional getter trait for AudioContexts bidirectional pair */
+template <>
+AudioContexts get_bidirectional(BidirectionalPair<AudioContexts> p) {
+  return p.sink | p.source;
+}
+
 }  // namespace types
 }  // namespace le_audio
