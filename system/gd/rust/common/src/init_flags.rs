@@ -74,6 +74,7 @@ macro_rules! init_flags {
 
 init_flags!(
     flags: {
+        sdp_serialization,
         gd_core,
         gd_security,
         gd_l2cap,
@@ -83,6 +84,7 @@ init_flags!(
         gd_rust,
         gd_link_policy,
         irk_rotation,
+        sdp_skip_rnr_if_known,
         pass_phy_update_callback
     },
     dependencies: {
