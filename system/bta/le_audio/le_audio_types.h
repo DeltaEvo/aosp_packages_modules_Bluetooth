@@ -407,6 +407,10 @@ class AudioContexts {
 
   AudioContexts& operator=(AudioContexts&& other) = default;
   AudioContexts& operator=(const AudioContexts&) = default;
+  bool operator==(const AudioContexts& other) const {
+    return value() == other.value();
+  };
+  constexpr AudioContexts operator~() const { return AudioContexts(~value()); }
 };
 
 AudioContexts operator|(std::underlying_type<LeAudioContextType>::type lhs,
@@ -421,6 +425,10 @@ constexpr AudioContexts operator^(const AudioContexts& lhs,
 constexpr AudioContexts operator|(const AudioContexts& lhs,
                                   const AudioContexts& rhs) {
   return AudioContexts(lhs.value() | rhs.value());
+}
+constexpr AudioContexts operator&(const AudioContexts& lhs,
+                                  const AudioContexts& rhs) {
+  return AudioContexts(lhs.value() & rhs.value());
 }
 constexpr AudioContexts operator|(const LeAudioContextType& lhs,
                                   const LeAudioContextType& rhs) {
@@ -437,6 +445,18 @@ constexpr AudioContexts operator|(const AudioContexts& lhs,
 }
 
 std::string ToHexString(const types::LeAudioContextType& value);
+
+template <typename T>
+struct BidirectionalPair {
+  T sink;
+  T source;
+};
+
+template <typename T>
+T get_bidirectional(BidirectionalPair<T> p);
+
+template <>
+AudioContexts get_bidirectional(BidirectionalPair<AudioContexts> p);
 
 /* Configuration strategy */
 enum class LeAudioConfigurationStrategy : uint8_t {

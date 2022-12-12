@@ -168,7 +168,9 @@ class LeAudioDevice {
                      const std::vector<uint8_t>& ccid_list);
   void SetSupportedContexts(types::AudioContexts snk_contexts,
                             types::AudioContexts src_contexts);
-  types::AudioContexts GetAvailableContexts(void);
+  types::AudioContexts GetAvailableContexts(
+      int direction = (types::kLeAudioDirectionSink |
+                       types::kLeAudioDirectionSource));
   types::AudioContexts SetAvailableContexts(types::AudioContexts snk_cont_val,
                                             types::AudioContexts src_cont_val);
   void DeactivateAllAses(void);
@@ -181,10 +183,8 @@ class LeAudioDevice {
                          const std::vector<uint8_t>& ccid_list);
 
  private:
-  types::AudioContexts avail_snk_contexts_;
-  types::AudioContexts avail_src_contexts_;
-  types::AudioContexts supp_snk_context_;
-  types::AudioContexts supp_src_context_;
+  types::BidirectionalPair<types::AudioContexts> avail_contexts_;
+  types::BidirectionalPair<types::AudioContexts> supp_contexts_;
 };
 
 /* LeAudioDevices class represents a wraper helper over all devices in le audio
@@ -202,7 +202,7 @@ class LeAudioDevices {
   LeAudioDevice* FindByCisConnHdl(uint8_t cig_id, uint16_t conn_hdl);
   size_t Size(void);
   void Dump(int fd, int group_id);
-  void Cleanup(void);
+  void Cleanup(tGATT_IF client_if);
 
  private:
   std::vector<std::shared_ptr<LeAudioDevice>> leAudioDevices_;
@@ -313,7 +313,7 @@ class LeAudioDeviceGroup {
       LeAudioDevice* leAudioDevice,
       const set_configurations::AudioSetConfiguration* audio_set_conf);
   std::optional<LeAudioCodecConfiguration> GetCodecConfigurationByDirection(
-      types::LeAudioContextType group_context_type, uint8_t direction);
+      types::LeAudioContextType group_context_type, uint8_t direction) const;
   bool IsContextSupported(types::LeAudioContextType group_context_type);
   bool IsMetadataChanged(types::AudioContexts group_context_type,
                          const std::vector<uint8_t>& ccid_list);
@@ -362,7 +362,7 @@ class LeAudioDeviceGroup {
   }
 
   bool IsInTransition(void);
-  bool IsReleasing(void);
+  bool IsReleasingOrIdle(void);
   void Dump(int fd, int active_group_id);
 
  private:

@@ -4,6 +4,7 @@ mod ffi {
         fn load(flags: Vec<String>);
         fn set_all_for_testing();
 
+        fn sdp_serialization_is_enabled() -> bool;
         fn gd_core_is_enabled() -> bool;
         fn gd_security_is_enabled() -> bool;
         fn gd_l2cap_is_enabled() -> bool;
@@ -14,6 +15,7 @@ mod ffi {
         fn gd_link_policy_is_enabled() -> bool;
         fn irk_rotation_is_enabled() -> bool;
         fn pass_phy_update_callback_is_enabled() -> bool;
+        fn sdp_skip_rnr_if_known_is_enabled() -> bool;
     }
 }
 

@@ -41,6 +41,7 @@ using bluetooth::hci::kIsoCigPhy1M;
 using bluetooth::hci::kIsoCigPhy2M;
 using bluetooth::hci::iso_manager::kIsoSca0To20Ppm;
 using le_audio::AudioSetConfigurationProvider;
+using le_audio::DeviceConnectState;
 using le_audio::set_configurations::CodecCapabilitySetting;
 using le_audio::types::ase;
 using le_audio::types::AseState;
@@ -856,7 +857,7 @@ bool LeAudioDeviceGroup::IsInTransition(void) {
   return target_state_ != current_state_;
 }
 
-bool LeAudioDeviceGroup::IsReleasing(void) {
+bool LeAudioDeviceGroup::IsReleasingOrIdle(void) {
   return target_state_ == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
 }
 
@@ -1235,6 +1236,8 @@ bool LeAudioDeviceGroup::IsConfigurationSupported(
     return false;
   }
 
+  auto required_snk_strategy = GetGroupStrategy();
+
   /* TODO For now: set ase if matching with first pac.
    * 1) We assume as well that devices will match requirements in order
    *    e.g. 1 Device - 1 Requirement, 2 Device - 2 Requirement etc.
@@ -1258,6 +1261,14 @@ bool LeAudioDeviceGroup::IsConfigurationSupported(
         "strategy: %d",
         +required_device_cnt, +ent.ase_cnt, +max_required_ase_per_dev,
         static_cast<int>(strategy));
+
+    if (ent.direction == types::kLeAudioDirectionSink &&
+        strategy != required_snk_strategy) {
+      LOG_INFO(" Sink strategy mismatch (%d!=%d)",
+               static_cast<int>(required_snk_strategy),
+               static_cast<int>(strategy));
+      return false;
+    }
 
     for (auto* device = GetFirstDeviceWithActiveContext(context_type);
          device != nullptr && required_device_cnt > 0;
@@ -1323,7 +1334,7 @@ bool LeAudioDeviceGroup::IsConfigurationSupported(
   return true;
 }
 
-uint32_t GetFirstLeft(const types::AudioLocations audio_locations) {
+static uint32_t GetFirstLeft(const types::AudioLocations& audio_locations) {
   uint32_t audio_location_ulong = audio_locations.to_ulong();
 
   if (audio_location_ulong & codec_spec_conf::kLeAudioLocationFrontLeft)
@@ -1356,11 +1367,11 @@ uint32_t GetFirstLeft(const types::AudioLocations audio_locations) {
   if (audio_location_ulong & codec_spec_conf::kLeAudioLocationLeftSurround)
     return codec_spec_conf::kLeAudioLocationLeftSurround;
 
-  LOG_ASSERT(0) << __func__ << " shall not happen";
+  LOG_WARN("Can't find device able to render left audio channel");
   return 0;
 }
 
-uint32_t GetFirstRight(const types::AudioLocations audio_locations) {
+static uint32_t GetFirstRight(const types::AudioLocations& audio_locations) {
   uint32_t audio_location_ulong = audio_locations.to_ulong();
 
   if (audio_location_ulong & codec_spec_conf::kLeAudioLocationFrontRight)
@@ -1394,47 +1405,41 @@ uint32_t GetFirstRight(const types::AudioLocations audio_locations) {
   if (audio_location_ulong & codec_spec_conf::kLeAudioLocationRightSurround)
     return codec_spec_conf::kLeAudioLocationRightSurround;
 
-  LOG_ASSERT(0) << __func__ << " shall not happen";
+  LOG_WARN("Can't find device able to render right audio channel");
   return 0;
 }
 
 uint32_t PickAudioLocation(types::LeAudioConfigurationStrategy strategy,
-                           types::AudioLocations audio_locations,
-                           types::AudioLocations* group_audio_locations) {
-  DLOG(INFO) << __func__ << " strategy: " << (int)strategy
-             << " locations: " << +audio_locations.to_ulong()
-             << " group locations: " << +group_audio_locations->to_ulong();
+                           types::AudioLocations device_locations,
+                           types::AudioLocations* group_locations) {
+  LOG_DEBUG("strategy: %d, locations: %lx, group locations: %lx", (int)strategy,
+            device_locations.to_ulong(), group_locations->to_ulong());
+
+  auto is_left_not_yet_assigned =
+      !(group_locations->to_ulong() & codec_spec_conf::kLeAudioLocationAnyLeft);
+  auto is_right_not_yet_assigned = !(group_locations->to_ulong() &
+                                     codec_spec_conf::kLeAudioLocationAnyRight);
+  uint32_t left_device_loc = GetFirstLeft(device_locations);
+  uint32_t right_device_loc = GetFirstRight(device_locations);
 
   switch (strategy) {
     case types::LeAudioConfigurationStrategy::MONO_ONE_CIS_PER_DEVICE:
     case types::LeAudioConfigurationStrategy::STEREO_TWO_CISES_PER_DEVICE:
-      if ((audio_locations.to_ulong() &
-           codec_spec_conf::kLeAudioLocationAnyLeft) &&
-          !(group_audio_locations->to_ulong() &
-            codec_spec_conf::kLeAudioLocationAnyLeft)) {
-        uint32_t left_location = GetFirstLeft(audio_locations);
-        *group_audio_locations |= left_location;
-        return left_location;
+      if (left_device_loc && is_left_not_yet_assigned) {
+        *group_locations |= left_device_loc;
+        return left_device_loc;
       }
 
-      if ((audio_locations.to_ulong() &
-           codec_spec_conf::kLeAudioLocationAnyRight) &&
-          !(group_audio_locations->to_ulong() &
-            codec_spec_conf::kLeAudioLocationAnyRight)) {
-        uint32_t right_location = GetFirstRight(audio_locations);
-        *group_audio_locations |= right_location;
-        return right_location;
+      if (right_device_loc && is_right_not_yet_assigned) {
+        *group_locations |= right_device_loc;
+        return right_device_loc;
       }
       break;
+
     case types::LeAudioConfigurationStrategy::STEREO_ONE_CIS_PER_DEVICE:
-      if ((audio_locations.to_ulong() &
-           codec_spec_conf::kLeAudioLocationAnyLeft) &&
-          (audio_locations.to_ulong() &
-           codec_spec_conf::kLeAudioLocationAnyRight)) {
-        uint32_t left_location = GetFirstLeft(audio_locations);
-        uint32_t right_location = GetFirstRight(audio_locations);
-        *group_audio_locations |= left_location | right_location;
-        return left_location | right_location;
+      if (left_device_loc && right_device_loc) {
+        *group_locations |= left_device_loc | right_device_loc;
+        return left_device_loc | right_device_loc;
       }
       break;
     default:
@@ -1442,12 +1447,15 @@ uint32_t PickAudioLocation(types::LeAudioConfigurationStrategy strategy,
       return 0;
   }
 
-  LOG_ALWAYS_FATAL(
-      "%s: Shall never exit switch statement, strategy: %hhu, "
-      "locations: %lx, group_locations: %lx",
-      __func__, strategy, audio_locations.to_ulong(),
-      group_audio_locations->to_ulong());
-  return 0;
+  LOG_ERROR(
+      "Can't find device for left/right channel. Strategy: %hhu, "
+      "device_locations: %lx, group_locations: %lx.",
+      strategy, device_locations.to_ulong(), group_locations->to_ulong());
+
+  /* Return either any left or any right audio location. It might result with
+   * multiple devices within the group having the same location.
+   */
+  return left_device_loc ? left_device_loc : right_device_loc;
 }
 
 bool LeAudioDevice::ConfigureAses(
@@ -1513,7 +1521,16 @@ bool LeAudioDevice::ConfigureAses(
     ase->retrans_nb = ent.qos.retransmission_number;
     ase->max_transport_latency = ent.qos.max_transport_latency;
 
-    ase->metadata = GetMetadata(metadata_context_type, ccid_list);
+    /* Filter multidirectional audio context for each ase direction */
+    auto directional_audio_context =
+        metadata_context_type & GetAvailableContexts(ase->direction);
+    if (directional_audio_context.any()) {
+      ase->metadata = GetMetadata(directional_audio_context, ccid_list);
+    } else {
+      ase->metadata =
+          GetMetadata(AudioContexts(LeAudioContextType::UNSPECIFIED),
+                      std::vector<uint8_t>());
+    }
 
     DLOG(INFO) << __func__ << " device=" << address_
                << ", activated ASE id=" << +ase->id
@@ -1622,9 +1639,9 @@ LeAudioDeviceGroup::GetActiveConfiguration(void) {
 
 std::optional<LeAudioCodecConfiguration>
 LeAudioDeviceGroup::GetCodecConfigurationByDirection(
-    types::LeAudioContextType group_context_type, uint8_t direction) {
+    types::LeAudioContextType group_context_type, uint8_t direction) const {
   const set_configurations::AudioSetConfiguration* audio_set_conf =
-      available_context_to_configuration_map[group_context_type];
+      available_context_to_configuration_map.at(group_context_type);
   LeAudioCodecConfiguration group_config = {0, 0, 0, 0};
   if (!audio_set_conf) return std::nullopt;
 
@@ -2395,8 +2412,8 @@ uint8_t LeAudioDevice::GetPhyBitmask(void) {
 
 void LeAudioDevice::SetSupportedContexts(AudioContexts snk_contexts,
                                          AudioContexts src_contexts) {
-  supp_snk_context_ = snk_contexts;
-  supp_src_context_ = src_contexts;
+  supp_contexts_.sink = snk_contexts;
+  supp_contexts_.source = src_contexts;
 }
 
 void LeAudioDevice::Dump(int fd) {
@@ -2438,8 +2455,14 @@ void LeAudioDevice::DisconnectAcl(void) {
   }
 }
 
-AudioContexts LeAudioDevice::GetAvailableContexts(void) {
-  return avail_snk_contexts_ | avail_src_contexts_;
+types::AudioContexts LeAudioDevice::GetAvailableContexts(int direction) {
+  if (direction ==
+      (types::kLeAudioDirectionSink | types::kLeAudioDirectionSource)) {
+    return get_bidirectional(avail_contexts_);
+  } else if (direction == types::kLeAudioDirectionSink) {
+    return avail_contexts_.sink;
+  }
+  return avail_contexts_.source;
 }
 
 /* Returns XOR of updated sink and source bitset context types */
@@ -2447,18 +2470,19 @@ AudioContexts LeAudioDevice::SetAvailableContexts(AudioContexts snk_contexts,
                                                   AudioContexts src_contexts) {
   AudioContexts updated_contexts;
 
-  updated_contexts = snk_contexts ^ avail_snk_contexts_;
-  updated_contexts |= src_contexts ^ avail_src_contexts_;
+  updated_contexts = snk_contexts ^ avail_contexts_.sink;
+  updated_contexts |= src_contexts ^ avail_contexts_.source;
 
   LOG_DEBUG(
-      "\n\t avail_snk_contexts_: %s \n\t avail_src_contexts_: %s  \n\t "
+      "\n\t avail_contexts_.sink: %s \n\t avail_contexts_.source: %s  \n\t "
       "snk_contexts: %s \n\t src_contexts: %s \n\t updated_contexts: %s",
-      avail_snk_contexts_.to_string().c_str(),
-      avail_src_contexts_.to_string().c_str(), snk_contexts.to_string().c_str(),
-      src_contexts.to_string().c_str(), updated_contexts.to_string().c_str());
+      avail_contexts_.sink.to_string().c_str(),
+      avail_contexts_.source.to_string().c_str(),
+      snk_contexts.to_string().c_str(), src_contexts.to_string().c_str(),
+      updated_contexts.to_string().c_str());
 
-  avail_snk_contexts_ = snk_contexts;
-  avail_src_contexts_ = src_contexts;
+  avail_contexts_.sink = snk_contexts;
+  avail_contexts_.source = src_contexts;
 
   return updated_contexts;
 }
@@ -2679,9 +2703,16 @@ void LeAudioDevices::Dump(int fd, int group_id) {
   }
 }
 
-void LeAudioDevices::Cleanup(void) {
+void LeAudioDevices::Cleanup(tGATT_IF client_if) {
   for (auto const& device : leAudioDevices_) {
-    if (device->conn_id_ != GATT_INVALID_CONN_ID) {
+    auto connection_state = device->GetConnectionState();
+    if (connection_state == DeviceConnectState::DISCONNECTED) {
+      continue;
+    }
+
+    if (connection_state == DeviceConnectState::CONNECTING_AUTOCONNECT) {
+      BTA_GATTC_CancelOpen(client_if, device->address_, false);
+    } else {
       BtaGattQueue::Clean(device->conn_id_);
       BTA_GATTC_Close(device->conn_id_);
       device->DisconnectAcl();
