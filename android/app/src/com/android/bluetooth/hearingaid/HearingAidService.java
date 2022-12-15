@@ -571,24 +571,13 @@ public class HearingAidService extends ProfileService {
      * @return true on success, otherwise false
      */
     public boolean setActiveDevice(BluetoothDevice device) {
-        return setActiveDevice(device, false);
-    }
-
-    /**
-     * Set the active device.
-     * @param device the new active device
-     * @param hasFallbackDevice whether it has fallback device when the {@code device}
-     *                          is {@code null}.
-     * @return true on success, otherwise false
-     */
-    public boolean setActiveDevice(BluetoothDevice device, boolean hasFallbackDevice) {
         if (DBG) {
             Log.d(TAG, "setActiveDevice:" + device);
         }
         synchronized (mStateMachines) {
             if (device == null) {
                 if (mActiveDeviceHiSyncId != BluetoothHearingAid.HI_SYNC_ID_INVALID) {
-                    reportActiveDevice(null, hasFallbackDevice);
+                    reportActiveDevice(null);
                     mActiveDeviceHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
                 }
                 return true;
@@ -601,7 +590,7 @@ public class HearingAidService extends ProfileService {
                     BluetoothHearingAid.HI_SYNC_ID_INVALID);
             if (deviceHiSyncId != mActiveDeviceHiSyncId) {
                 mActiveDeviceHiSyncId = deviceHiSyncId;
-                reportActiveDevice(device, false);
+                reportActiveDevice(device);
             }
         }
         return true;
@@ -712,7 +701,7 @@ public class HearingAidService extends ProfileService {
      * Report the active device change to the active device manager and the media framework.
      * @param device the new active device; or null if no active device
      */
-    private void reportActiveDevice(BluetoothDevice device, boolean hasFallbackDevice) {
+    private void reportActiveDevice(BluetoothDevice device) {
         if (DBG) {
             Log.d(TAG, "reportActiveDevice(" + device + ")");
         }
@@ -727,7 +716,8 @@ public class HearingAidService extends ProfileService {
                 | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
         sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
 
-        boolean stopAudio = device == null && !hasFallbackDevice;
+        boolean stopAudio = device == null
+                && (getConnectionState(mPreviousAudioDevice) != BluetoothProfile.STATE_CONNECTED);
         if (DBG) {
             Log.d(TAG, "Hearing Aid audio: " + mPreviousAudioDevice + " -> " + device
                     + ". Stop audio: " + stopAudio);
@@ -832,7 +822,7 @@ public class HearingAidService extends ProfileService {
             }
         }
         if (fromState == BluetoothProfile.STATE_CONNECTED && getConnectedDevices().isEmpty()) {
-            // When disconnected, ActiveDeviceManager will call setActiveDevice(null)
+            setActiveDevice(null);
             long myHiSyncId = getHiSyncId(device);
             mHiSyncIdConnectedMap.put(myHiSyncId, false);
         }
