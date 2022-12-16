@@ -74,9 +74,9 @@ public class BluetoothMapService extends ProfileService {
      * DEBUG log: "setprop log.tag.BluetoothMapService VERBOSE"
      */
 
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    public static final boolean VERBOSE = false;
+    public static final boolean VERBOSE = Log.isLoggable(TAG, Log.VERBOSE);
 
     /**
      * The component names for the owned provider and activity
@@ -1215,8 +1215,8 @@ public class BluetoothMapService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private BluetoothMapService getService(AttributionSource source) {
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
-                    || !Utils.checkServiceAvailable(mService, TAG)
+            if (!Utils.checkServiceAvailable(mService, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
                 return null;
             }

@@ -52,8 +52,10 @@ import android.os.ParcelUuid;
 import android.os.Process;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.BluetoothObexTransport;
 import com.android.bluetooth.Utils;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.ObexTransport;
 
 import java.io.IOException;
@@ -69,11 +71,14 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
 
     private static final boolean V = Constants.VERBOSE;
 
-    private static final int TRANSPORT_ERROR = 10;
+    @VisibleForTesting
+    static final int TRANSPORT_ERROR = 10;
 
-    private static final int TRANSPORT_CONNECTED = 11;
+    @VisibleForTesting
+    static final int TRANSPORT_CONNECTED = 11;
 
-    private static final int SOCKET_ERROR_RETRY = 13;
+    @VisibleForTesting
+    static final int SOCKET_ERROR_RETRY = 13;
 
     private static final int CONNECT_WAIT_TIMEOUT = 45000;
 
@@ -202,7 +207,8 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
     /*
      * Receives events from mConnectThread & mSession back in the main thread.
      */
-    private class EventHandler extends Handler {
+    @VisibleForTesting
+    class EventHandler extends Handler {
         EventHandler(Looper looper) {
             super(looper);
         }
@@ -389,7 +395,8 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
         ContentValues updateValues = new ContentValues();
         updateValues.put(BluetoothShare.USER_CONFIRMATION,
                 BluetoothShare.USER_CONFIRMATION_TIMEOUT);
-        mContext.getContentResolver().update(contentUri, updateValues, null, null);
+        BluetoothMethodProxy.getInstance().contentResolverUpdate(mContext.getContentResolver(),
+                contentUri, updateValues, null, null);
     }
 
     private void markBatchFailed(int failReason) {
@@ -415,7 +422,8 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
             }
             if (mCurrentShare.mDirection == BluetoothShare.DIRECTION_INBOUND
                     && mCurrentShare.mUri != null) {
-                mContext.getContentResolver().delete(mCurrentShare.mUri, null, null);
+                BluetoothMethodProxy.getInstance().contentResolverDelete(
+                        mContext.getContentResolver(), mCurrentShare.mUri, null, null);
             }
         }
 
@@ -442,10 +450,12 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
                     }
                 } else {
                     if (info.mStatus < 200 && info.mUri != null) {
-                        mContext.getContentResolver().delete(info.mUri, null, null);
+                        BluetoothMethodProxy.getInstance().contentResolverDelete(
+                                mContext.getContentResolver(), info.mUri, null, null);
                     }
                 }
-                mContext.getContentResolver().update(contentUri, updateValues, null, null);
+                BluetoothMethodProxy.getInstance().contentResolverUpdate(
+                        mContext.getContentResolver(), contentUri, updateValues, null, null);
                 Constants.sendIntentIfCompleted(mContext, contentUri, info.mStatus);
             }
             info = mBatch.getPendingShare();
@@ -480,7 +490,7 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
          * normally it's impossible to reach here if BT is disabled. Just check
          * for safety
          */
-        if (!mAdapter.isEnabled()) {
+        if (!BluetoothMethodProxy.getInstance().bluetoothAdapterIsEnabled(mAdapter)) {
             Log.e(TAG, "Can't start transfer when Bluetooth is disabled for " + mBatch.mId);
             markBatchFailed(BluetoothShare.STATUS_UNKNOWN_ERROR);
             mBatch.mStatus = Constants.BATCH_STATUS_FAILED;
@@ -663,7 +673,8 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
         }
     }
 
-    private SocketConnectThread mConnectThread;
+    @VisibleForTesting
+    SocketConnectThread mConnectThread;
 
     private class SocketConnectThread extends Thread {
         private final String mHost;
@@ -865,7 +876,8 @@ public class BluetoothOppTransfer implements BluetoothOppBatch.BluetoothOppBatch
         Uri contentUri = Uri.parse(BluetoothShare.CONTENT_URI + "/" + share.mId);
         ContentValues updateValues = new ContentValues();
         updateValues.put(BluetoothShare.DIRECTION, share.mDirection);
-        mContext.getContentResolver().update(contentUri, updateValues, null, null);
+        BluetoothMethodProxy.getInstance().contentResolverUpdate(mContext.getContentResolver(),
+                contentUri, updateValues, null, null);
     }
 
     /*

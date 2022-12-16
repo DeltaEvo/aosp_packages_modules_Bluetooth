@@ -53,6 +53,7 @@ import android.util.Log;
 
 import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.R;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.File;
 import java.io.IOException;
@@ -64,6 +65,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -76,7 +78,8 @@ public class BluetoothOppUtility {
     /** Whether the device has the "nosdcard" characteristic, or null if not-yet-known. */
     private static Boolean sNoSdCard = null;
 
-    private static final ConcurrentHashMap<Uri, BluetoothOppSendFileInfo> sSendFileMap =
+    @VisibleForTesting
+    static final ConcurrentHashMap<Uri, BluetoothOppSendFileInfo> sSendFileMap =
             new ConcurrentHashMap<Uri, BluetoothOppSendFileInfo>();
 
     public static boolean isBluetoothShareUri(Uri uri) {
@@ -84,7 +87,7 @@ public class BluetoothOppUtility {
                 && !uri.getAuthority().equals(BluetoothShare.CONTENT_URI.getAuthority())) {
             EventLog.writeEvent(0x534e4554, "225880741", -1, "");
         }
-        return uri.getAuthority().equals(BluetoothShare.CONTENT_URI.getAuthority());
+        return Objects.equals(uri.getAuthority(), BluetoothShare.CONTENT_URI.getAuthority());
     }
 
     public static BluetoothOppTransferInfo queryRecord(Context context, Uri uri) {
@@ -238,7 +241,8 @@ public class BluetoothOppUtility {
             if (V) {
                 Log.d(TAG, "This uri will be deleted: " + uri);
             }
-            context.getContentResolver().delete(uri, null, null);
+            BluetoothMethodProxy.getInstance().contentResolverDelete(context.getContentResolver(),
+                    uri, null, null);
             return;
         }
 
@@ -277,7 +281,8 @@ public class BluetoothOppUtility {
         String readOnlyMode = "r";
         ParcelFileDescriptor pfd = null;
         try {
-            pfd = resolver.openFileDescriptor(uri, readOnlyMode);
+            pfd = BluetoothMethodProxy.getInstance()
+                    .contentResolverOpenFileDescriptor(resolver, uri, readOnlyMode);
             return true;
         } catch (IOException e) {
             e.printStackTrace();
