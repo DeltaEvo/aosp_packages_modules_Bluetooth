@@ -22,11 +22,13 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.ParcelFileDescriptor;
+import android.provider.Telephony;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -34,6 +36,8 @@ import com.android.obex.HeaderSet;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Set;
 
 /**
  * Proxy class for method calls to help with unit testing
@@ -133,6 +137,23 @@ public class BluetoothMethodProxy {
     }
 
     /**
+     * Proxies {@link ContentResolver#openAssetFileDescriptor(Uri, String)}.
+     */
+    public AssetFileDescriptor contentResolverOpenAssetFileDescriptor(
+            ContentResolver contentResolver, final Uri uri, final String mode)
+            throws FileNotFoundException {
+        return contentResolver.openAssetFileDescriptor(uri, mode);
+    }
+
+    /**
+     * Proxies {@link ContentResolver#openInputStream(Uri)}.
+     */
+    public InputStream contentResolverOpenInputStream(ContentResolver contentResolver,
+            final Uri uri) throws FileNotFoundException {
+        return contentResolver.openInputStream(uri);
+    }
+
+    /**
      * Proxies {@link Context#sendBroadcast(Intent)}.
      */
     public void contextSendBroadcast(Context context, @RequiresPermission Intent intent) {
@@ -151,5 +172,12 @@ public class BluetoothMethodProxy {
      */
     public <T> T getSystemService(Context context, Class<T> serviceClass) {
         return context.getSystemService(serviceClass);
+    }
+
+    /**
+     * Proxies {@link Telephony.Threads#getOrCreateThreadId(Context, Set <String>)}.
+     */
+    public long telephonyGetOrCreateThreadId(Context context, Set<String> recipients) {
+        return Telephony.Threads.getOrCreateThreadId(context, recipients);
     }
 }
