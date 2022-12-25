@@ -77,6 +77,7 @@ static constexpr char kNotifyUpperLayerAboutGroupBeingInIdleDuringCall[] =
     "persist.bluetooth.leaudio.notify.idle.during.call";
 const char* test_flags[] = {
     "INIT_logging_debug_enabled_for_all=true",
+    "INIT_leaudio_targeted_announcement_reconnection_mode=true",
     nullptr,
 };
 
@@ -533,7 +534,7 @@ class UnicastTestNoInit : public Test {
         }));
 
     global_conn_id = 1;
-    ON_CALL(mock_gatt_interface_, Open(_, _, true, _))
+    ON_CALL(mock_gatt_interface_, Open(_, _, BTM_BLE_DIRECT_CONNECTION, _))
         .WillByDefault(
             Invoke([&](tGATT_IF client_if, const RawAddress& remote_bda,
                        bool is_direct, bool opportunistic) {
@@ -1267,18 +1268,24 @@ class UnicastTestNoInit : public Test {
     SetUpMockGroups();
     SetUpMockGatt();
 
+    supported_snk_context_types_ = 0xffff;
+    supported_src_context_types_ = 0xffff;
     le_audio::AudioSetConfigurationProvider::Initialize();
     ASSERT_FALSE(LeAudioClient::IsLeAudioClientRunning());
   }
 
   void TearDown() override {
     if (is_audio_unicast_source_acquired) {
-      EXPECT_CALL(*mock_le_audio_source_hal_client_, Stop).Times(1);
+      if (unicast_source_hal_cb_ != nullptr) {
+        EXPECT_CALL(*mock_le_audio_source_hal_client_, Stop).Times(1);
+      }
       EXPECT_CALL(*mock_le_audio_source_hal_client_, OnDestroyed()).Times(1);
     }
 
     if (is_audio_unicast_sink_acquired) {
-      EXPECT_CALL(*mock_le_audio_sink_hal_client_, Stop).Times(1);
+      if (unicast_sink_hal_cb_ != nullptr) {
+        EXPECT_CALL(*mock_le_audio_sink_hal_client_, Stop).Times(1);
+      }
       EXPECT_CALL(*mock_le_audio_sink_hal_client_, OnDestroyed()).Times(1);
     }
 
@@ -1447,7 +1454,9 @@ class UnicastTestNoInit : public Test {
     ON_CALL(mock_btm_interface_, BTM_IsEncrypted(address, _))
         .WillByDefault(DoAll(Return(isEncrypted)));
 
-    EXPECT_CALL(mock_gatt_interface_, Open(gatt_if, address, true, _)).Times(1);
+    EXPECT_CALL(mock_gatt_interface_,
+                Open(gatt_if, address, BTM_BLE_DIRECT_CONNECTION, _))
+        .Times(1);
 
     do_in_main_thread(
         FROM_HERE, base::Bind(&LeAudioClient::Connect,
@@ -1881,14 +1890,19 @@ class UnicastTestNoInit : public Test {
       ascs->start = 0x0090;
       uint16_t handle = 0x0091;
       for (int i = 0; i < add_ascs_cnt; i++) {
-        ascs->sink_ase_char[i] = handle;
-        handle += 2;
-        ascs->sink_ase_ccc[i] = handle;
-        handle++;
-        ascs->source_ase_char[i] = handle;
-        handle += 2;
-        ascs->source_ase_ccc[i] = handle;
-        handle++;
+        if (sink_audio_allocation != 0) {
+          ascs->sink_ase_char[i] = handle;
+          handle += 2;
+          ascs->sink_ase_ccc[i] = handle;
+          handle++;
+        }
+
+        if (source_audio_allocation != 0) {
+          ascs->source_ase_char[i] = handle;
+          handle += 2;
+          ascs->source_ase_ccc[i] = handle;
+          handle++;
+        }
       }
       ascs->ctp_char = handle;
       handle += 2;
@@ -2060,20 +2074,20 @@ class UnicastTestNoInit : public Test {
                 } else if (handle == pacs->avail_contexts_char + 1) {
                   value = {
                       // Sink Avail Contexts
-                      0xff,
-                      0xff,
+                      (uint8_t)(supported_snk_context_types_ >> 8),
+                      (uint8_t)(supported_snk_context_types_),
                       // Source Avail Contexts
-                      0xff,
-                      0xff,
+                      (uint8_t)(supported_src_context_types_ >> 8),
+                      (uint8_t)(supported_src_context_types_),
                   };
                 } else if (handle == pacs->supp_contexts_char + 1) {
                   value = {
                       // Sink Avail Contexts
-                      0xff,
-                      0xff,
+                      (uint8_t)(supported_snk_context_types_ >> 8),
+                      (uint8_t)(supported_snk_context_types_),
                       // Source Avail Contexts
-                      0xff,
-                      0xff,
+                      (uint8_t)(supported_src_context_types_ >> 8),
+                      (uint8_t)(supported_src_context_types_),
                   };
                 }
                 cb(conn_id, GATT_SUCCESS, handle, value.size(), value.data(),
@@ -2243,6 +2257,9 @@ class UnicastTestNoInit : public Test {
   MockIsoManager* mock_iso_manager_;
   bluetooth::hci::iso_manager::CigCallbacks* cig_callbacks_ = nullptr;
   uint16_t iso_con_counter_ = 1;
+
+  uint16_t supported_snk_context_types_ = 0xffff;
+  uint16_t supported_src_context_types_ = 0xffff;
 
   bluetooth::storage::MockBtifStorageInterface mock_btif_storage_;
 
@@ -2429,7 +2446,9 @@ TEST_F(UnicastTest, ConnectRemoteDisconnectOneEarbud) {
               OnConnectionState(ConnectionState::DISCONNECTED, test_address0))
       .Times(1);
   /* For remote disconnection, expect stack to try background re-connect */
-  EXPECT_CALL(mock_gatt_interface_, Open(gatt_if, test_address0, false, _))
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address0,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
       .Times(1);
 
   EXPECT_CALL(mock_audio_hal_client_callbacks_,
@@ -2594,7 +2613,9 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGrouped) {
       .Times(1);
   ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address0, _))
       .WillByDefault(DoAll(Return(true)));
-  EXPECT_CALL(mock_gatt_interface_, Open(gatt_if, test_address0, false, _))
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address0,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
       .Times(1);
 
   // Expect stored device1 to connect automatically
@@ -2603,7 +2624,9 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGrouped) {
       .Times(1);
   ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address1, _))
       .WillByDefault(DoAll(Return(true)));
-  EXPECT_CALL(mock_gatt_interface_, Open(gatt_if, test_address1, false, _))
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address1,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
       .Times(1);
 
   ON_CALL(mock_groups_module_, GetGroupId(_, _))
@@ -2723,7 +2746,9 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGroupedDifferently) {
       .Times(1);
   ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address0, _))
       .WillByDefault(DoAll(Return(true)));
-  EXPECT_CALL(mock_gatt_interface_, Open(gatt_if, test_address0, false, _))
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address0,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
       .Times(1);
 
   // Expect stored device1 to NOT connect automatically
@@ -2732,7 +2757,9 @@ TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGroupedDifferently) {
       .Times(0);
   ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address1, _))
       .WillByDefault(DoAll(Return(true)));
-  EXPECT_CALL(mock_gatt_interface_, Open(gatt_if, test_address1, false, _))
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address1,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
       .Times(0);
 
   // Initialize
@@ -3217,6 +3244,36 @@ TEST_F(UnicastTest, EarbudsTwsStyleStreaming) {
   Mock::VerifyAndClearExpectations(&mock_le_audio_source_hal_client_);
 }
 
+TEST_F(UnicastTest, SpeakerFailedConversationalStreaming) {
+  const RawAddress test_address0 = GetTestAddress(0);
+  int group_id = bluetooth::groups::kGroupUnknown;
+
+  supported_src_context_types_ = 0;
+  supported_snk_context_types_ = 0x0004;
+
+  SetSampleDatabaseEarbudsValid(
+      1, test_address0, codec_spec_conf::kLeAudioLocationStereo,
+      0, default_channel_cnt,
+      default_channel_cnt, 0x0004,
+      /* source sample freq 16khz */ false /*add_csis*/, true /*add_cas*/,
+      true /*add_pacs*/, default_ase_cnt /*add_ascs_cnt*/, 1 /*set_size*/,
+      0 /*rank*/);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnGroupNodeStatus(test_address0, _, GroupNodeStatus::ADDED))
+      .WillOnce(DoAll(SaveArg<1>(&group_id)));
+
+  ConnectLeAudio(test_address0);
+  ASSERT_NE(group_id, bluetooth::groups::kGroupUnknown);
+
+  // Audio sessions are started only when device gets active
+  LeAudioClient::Get()->GroupSetActive(group_id);
+
+  /* Nothing to do - expect no crash */
+}
+
 TEST_F(UnicastTest, SpeakerStreaming) {
   const RawAddress test_address0 = GetTestAddress(0);
   int group_id = bluetooth::groups::kGroupUnknown;
@@ -3677,7 +3734,9 @@ TEST_F(UnicastTest, TwoEarbuds2ndDisconnected) {
     InjectCisDisconnected(group_id, ase.cis_conn_hdl);
   }
 
-  EXPECT_CALL(mock_gatt_interface_, Open(_, device->address_, false, false))
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(_, device->address_,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, false))
       .Times(1);
 
   auto conn_id = device->conn_id_;
