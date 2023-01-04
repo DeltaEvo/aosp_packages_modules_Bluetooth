@@ -100,7 +100,8 @@ public class HapClientService extends ProfileService {
         return BluetoothProperties.isProfileHapClientEnabled().orElse(false);
     }
 
-    private static synchronized void setHapClient(HapClientService instance) {
+    @VisibleForTesting
+    static synchronized void setHapClient(HapClientService instance) {
         if (DBG) {
             Log.d(TAG, "setHapClient(): set to: " + instance);
         }
@@ -267,6 +268,8 @@ public class HapClientService extends ProfileService {
                 return;
             }
             if (sm.getConnectionState() != BluetoothProfile.STATE_DISCONNECTED) {
+                Log.i(TAG, "Disconnecting device because it was unbonded.");
+                disconnect(device);
                 return;
             }
             removeStateMachine(device);
