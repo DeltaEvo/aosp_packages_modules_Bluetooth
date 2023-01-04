@@ -894,7 +894,8 @@ tGATT_STATUS GATTC_Read(uint16_t conn_id, tGATT_READ_TYPE type,
   }
 
   /* start security check */
-  if (gatt_security_check_start(p_clcb)) p_tcb->pending_enc_clcb.push(p_clcb);
+  if (gatt_security_check_start(p_clcb))
+    p_tcb->pending_enc_clcb.push_back(p_clcb);
   return GATT_SUCCESS;
 }
 
@@ -943,7 +944,8 @@ tGATT_STATUS GATTC_Write(uint16_t conn_id, tGATT_WRITE_TYPE type,
     p->offset = 0;
   }
 
-  if (gatt_security_check_start(p_clcb)) p_tcb->pending_enc_clcb.push(p_clcb);
+  if (gatt_security_check_start(p_clcb))
+    p_tcb->pending_enc_clcb.push_back(p_clcb);
   return GATT_SUCCESS;
 }
 
@@ -1037,17 +1039,27 @@ tGATT_STATUS GATTC_SendHandleValueConfirm(uint16_t conn_id, uint16_t cid) {
  *
  * Parameter        bd_addr:   target device bd address.
  *                  idle_tout: timeout value in seconds.
+ *                  transport: transport option.
+ *                  is_active: whether we should use this as a signal that an
+ *                             active client now exists (which changes link
+ *                             timeout logic, see
+ *                             t_l2c_linkcb.with_active_local_clients for
+ *                             details).
  *
  * Returns          void
  *
  ******************************************************************************/
 void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
-                         tBT_TRANSPORT transport) {
+                         tBT_TRANSPORT transport, bool is_active) {
   bool status = false;
 
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bd_addr, transport);
   if (p_tcb != nullptr) {
     status = L2CA_SetLeGattTimeout(bd_addr, idle_tout);
+
+    if (is_active) {
+      status &= L2CA_MarkLeLinkAsActive(bd_addr);
+    }
 
     if (idle_tout == GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP) {
       L2CA_SetIdleTimeoutByBdAddr(
@@ -1055,8 +1067,8 @@ void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
     }
   }
 
-  LOG_INFO("idle_timeout=%d, status=%d, (1-OK 0-not performed)", idle_tout,
-           +status);
+  LOG_INFO("idle_timeout=%d, is_active=%d, status=%d (1-OK 0-not performed)",
+           idle_tout, is_active, +status);
 }
 
 /*******************************************************************************
@@ -1239,29 +1251,32 @@ void GATT_StartIf(tGATT_IF gatt_if) {
  *
  * Parameters       gatt_if: applicaiton interface
  *                  bd_addr: peer device address.
- *                  is_direct: is a direct conenection or a background auto
- *                             connection
+ *                  connection_type: is a direct conenection or a background
+ *                  auto connection or targeted announcements
  *
  * Returns          true if connection started; false if connection start
  *                  failure.
  *
  ******************************************************************************/
-bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct,
-                  tBT_TRANSPORT transport, bool opportunistic) {
+bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                  bool opportunistic) {
   uint8_t phy = controller_get_interface()->get_le_all_initiating_phys();
-  return GATT_Connect(gatt_if, bd_addr, is_direct, transport, opportunistic,
-                      phy);
+  return GATT_Connect(gatt_if, bd_addr, connection_type, transport,
+                      opportunistic, phy);
 }
 
-bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct,
-                  tBT_TRANSPORT transport, bool opportunistic,
-                  uint8_t initiating_phys) {
+bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                  bool opportunistic, uint8_t initiating_phys) {
   /* Make sure app is registered */
   tGATT_REG* p_reg = gatt_get_regcb(gatt_if);
   if (!p_reg) {
     LOG_ERROR("Unable to find registered app gatt_if=%d", +gatt_if);
     return false;
   }
+
+  bool is_direct = (connection_type == BTM_BLE_DIRECT_CONNECTION);
 
   if (!is_direct && transport != BT_TRANSPORT_LE) {
     LOG_WARN("Unsupported transport for background connection gatt_if=%d",
@@ -1290,8 +1305,14 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct,
                bd_addr.ToString().c_str(), +gatt_if);
       ret = false;
     } else {
-      LOG_DEBUG("Adding to accept list device:%s", PRIVATE_ADDRESS(bd_addr));
-      ret = connection_manager::background_connect_add(gatt_if, bd_addr);
+      LOG_DEBUG("Adding to background connect to device:%s",
+                PRIVATE_ADDRESS(bd_addr));
+      if (connection_type == BTM_BLE_BKG_CONNECT_ALLOW_LIST) {
+        ret = connection_manager::background_connect_add(gatt_if, bd_addr);
+      } else {
+        ret = connection_manager::background_connect_targeted_announcement_add(
+            gatt_if, bd_addr);
+      }
     }
   }
 
