@@ -236,7 +236,7 @@ class CsisClientImpl : public CsisClient {
       device->connecting_actively = true;
     }
 
-    BTA_GATTC_Open(gatt_if_, address, true, false);
+    BTA_GATTC_Open(gatt_if_, address, BTM_BLE_DIRECT_CONNECTION, false);
   }
 
   void Disconnect(const RawAddress& addr) override {
@@ -525,6 +525,16 @@ class CsisClientImpl : public CsisClient {
     }
   }
 
+  int GetDesiredSize(int group_id) override {
+    auto csis_group = FindCsisGroup(group_id);
+    if (!csis_group) {
+      LOG_INFO("Unknown group %d", group_id);
+      return -1;
+    }
+
+    return csis_group->GetDesiredSize();
+  }
+
   bool SerializeSets(const RawAddress& addr, std::vector<uint8_t>& out) const {
     auto device = FindDeviceByAddress(addr);
     if (device == nullptr) {
@@ -644,7 +654,7 @@ class CsisClientImpl : public CsisClient {
     }
 
     if (autoconnect) {
-      BTA_GATTC_Open(gatt_if_, addr, false, false);
+      BTA_GATTC_Open(gatt_if_, addr, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
     }
   }
 
