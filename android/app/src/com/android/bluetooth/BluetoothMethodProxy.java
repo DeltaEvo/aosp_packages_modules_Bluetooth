@@ -16,12 +16,14 @@
 
 package com.android.bluetooth;
 
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.PeriodicAdvertisingCallback;
 import android.bluetooth.le.PeriodicAdvertisingManager;
 import android.bluetooth.le.ScanResult;
+import android.content.ContentProviderClient;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -36,6 +38,9 @@ import android.os.ParcelFileDescriptor;
 import android.provider.Telephony;
 import android.util.Log;
 
+import com.android.bluetooth.gatt.AppAdvertiseStats;
+import com.android.bluetooth.gatt.ContextMap;
+import com.android.bluetooth.gatt.GattService;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.HeaderSet;
 
@@ -159,6 +164,14 @@ public class BluetoothMethodProxy {
     }
 
     /**
+     * Proxies {@link ContentResolver#acquireUnstableContentProviderClient(String)}.
+     */
+    public ContentProviderClient contentResolverAcquireUnstableContentProviderClient(
+            ContentResolver contentResolver, @NonNull String name) {
+        return contentResolver.acquireUnstableContentProviderClient(name);
+    }
+
+    /**
      * Proxies {@link Context#sendBroadcast(Intent)}.
      */
     public void contextSendBroadcast(Context context, @RequiresPermission Intent intent) {
@@ -211,5 +224,13 @@ public class BluetoothMethodProxy {
             PeriodicAdvertisingManager manager, BluetoothDevice bda, int serviceData,
             int advHandle, PeriodicAdvertisingCallback callback) {
         manager.transferSetInfo(bda, serviceData, advHandle, callback);
+    }
+
+    /**
+     * Proxies {@link AppAdvertiseStats}.
+     */
+    public AppAdvertiseStats createAppAdvertiseStats(int appUid, int id, String name,
+            ContextMap map, GattService service) {
+        return new AppAdvertiseStats(appUid, id, name, map, service);
     }
 }
