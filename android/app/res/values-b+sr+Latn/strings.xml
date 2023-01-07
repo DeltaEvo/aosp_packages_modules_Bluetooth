@@ -109,16 +109,8 @@
     <string name="transfer_clear_dlg_msg" msgid="586117930961007311">"Sve stavke će biti izbrisane sa liste."</string>
     <string name="outbound_noti_title" msgid="2045560896819618979">"Deljenje preko Bluetooth-a: poslate datoteke"</string>
     <string name="inbound_noti_title" msgid="3730993443609581977">"Deljenje preko Bluetooth-a: primljene datoteke"</string>
-    <plurals name="noti_caption_unsuccessful" formatted="false" msgid="6511510339394311097">
-      <item quantity="one"><xliff:g id="UNSUCCESSFUL_NUMBER_1">%1$d</xliff:g> neuspešna.</item>
-      <item quantity="few"><xliff:g id="UNSUCCESSFUL_NUMBER_1">%1$d</xliff:g> neuspešne.</item>
-      <item quantity="other"><xliff:g id="UNSUCCESSFUL_NUMBER_1">%1$d</xliff:g> neuspešnih.</item>
-    </plurals>
-    <plurals name="noti_caption_success" formatted="false" msgid="2452887423660955489">
-      <item quantity="one"><xliff:g id="SUCCESSFUL_NUMBER_1">%1$d</xliff:g> uspešna, %2$s</item>
-      <item quantity="few"><xliff:g id="SUCCESSFUL_NUMBER_1">%1$d</xliff:g> uspešne, %2$s</item>
-      <item quantity="other"><xliff:g id="SUCCESSFUL_NUMBER_1">%1$d</xliff:g> uspešnih, %2$s</item>
-    </plurals>
+    <string name="noti_caption_unsuccessful" msgid="6679288016450410835">"{count,plural, =1{# neuspešno.}one{# neuspešno.}few{# neuspešna.}other{# neuspešnih.}}"</string>
+    <string name="noti_caption_success" msgid="7652777514009569713">"{count,plural, =1{# uspešno, %1$s}one{# uspešno, %1$s}few{# uspešna, %1$s}other{# uspešnih, %1$s}}"</string>
     <string name="transfer_menu_clear_all" msgid="3014459758656427076">"Obriši listu"</string>
     <string name="transfer_menu_open" msgid="5193344638774400131">"Otvori"</string>
     <string name="transfer_menu_clear" msgid="7213491281898188730">"Obriši sa liste"</string>
@@ -137,9 +129,9 @@
     <string name="bluetooth_opp_file_limit_exceeded" msgid="6612109860149473930">"Ne mogu da se prenose datoteke veće od 4 GB"</string>
     <string name="bluetooth_connect_action" msgid="2319449093046720209">"Poveži sa Bluetooth-om"</string>
     <string name="bluetooth_enabled_apm_title" msgid="6914461147844949044">"Bluetooth je uključen u režimu rada u avionu"</string>
-    <string name="bluetooth_enabled_apm_message" msgid="8990667142380927316">"Ako odlučite da ne isključujete Bluetooth, ostaće uključen sledeći put kada budete u režimu rada u avionu"</string>
+    <string name="bluetooth_enabled_apm_message" msgid="8409900562494838113">"Ako odlučite da ne isključujete Bluetooth, telefon će zapamtiti da ga ne isključuje sledeći put kada budete u režimu rada u avionu"</string>
     <string name="bluetooth_stays_on_title" msgid="39720820955212918">"Bluetooth se ne isključuje"</string>
-    <string name="bluetooth_stays_on_message" msgid="2770176686603189536">"Telefon pamti da ne treba da isključuje Bluetooth u režimu rada u avionu. Da biste to promenili, isključite Bluetooth."</string>
+    <string name="bluetooth_stays_on_message" msgid="7142453371222249965">"Telefon pamti da ne treba da isključuje Bluetooth u režimu rada u avionu. Isključite Bluetooth ako ne želite da ostane uključen."</string>
     <string name="bluetooth_and_wifi_stays_on_title" msgid="5821932798860821244">"WiFi i Bluetooth ostaju uključeni"</string>
-    <string name="bluetooth_and_wifi_stays_on_message" msgid="4120501683284996436">"Telefon pamti da ne treba da isključuje WiFi i Bluetooth u režimu rada u avionu. Da biste to promenili, isključite ih."</string>
+    <string name="bluetooth_and_wifi_stays_on_message" msgid="2390749828997719812">"Telefon pamti da ne treba da isključuje WiFi i Bluetooth u režimu rada u avionu. Isključite WiFi i Bluetooth ako ne želite da ostanu uključeni."</string>
 </resources>
