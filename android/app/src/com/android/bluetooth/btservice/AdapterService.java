@@ -247,13 +247,7 @@ public class AdapterService extends Service {
         return sAdapterService;
     }
 
-    /**
-     * Sets AdapterService for testing.
-     *
-     * @hide
-     */
-    @VisibleForTesting
-    public static synchronized void setAdapterService(AdapterService instance) {
+    private static synchronized void setAdapterService(AdapterService instance) {
         Log.d(TAG, "setAdapterService() - trying to set service to " + instance);
         if (instance == null) {
             return;
@@ -4655,6 +4649,8 @@ public class AdapterService extends Service {
             case /*HCI_ERR_ILLEGAL_PARAMETER_FMT*/ 0x12:
                 return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_BAD_PARAMETERS;
             case /*HCI_ERR_PEER_USER*/ 0x13:
+                return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE_REQUEST;
+            case /*HCI_ERR_REMOTE_POWER_OFF*/ 0x15:
                 return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE_REQUEST;
             case /*HCI_ERR_CONN_CAUSE_LOCAL_HOST*/ 0x16:
                 return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_LOCAL_REQUEST;

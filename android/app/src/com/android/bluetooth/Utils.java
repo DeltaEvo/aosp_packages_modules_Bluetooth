@@ -408,9 +408,6 @@ public final class Utils {
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public static void enforceBluetoothPrivilegedPermission(Context context) {
-        if (isInstrumentationTestMode()) {
-            return;
-        }
         context.enforceCallingOrSelfPermission(
                 android.Manifest.permission.BLUETOOTH_PRIVILEGED,
                 "Need BLUETOOTH PRIVILEGED permission");
@@ -418,9 +415,6 @@ public final class Utils {
 
     @RequiresPermission(android.Manifest.permission.LOCAL_MAC_ADDRESS)
     public static void enforceLocalMacAddressPermission(Context context) {
-        if (isInstrumentationTestMode()) {
-            return;
-        }
         context.enforceCallingOrSelfPermission(
                 android.Manifest.permission.LOCAL_MAC_ADDRESS,
                 "Need LOCAL_MAC_ADDRESS permission");
@@ -428,9 +422,6 @@ public final class Utils {
 
     @RequiresPermission(android.Manifest.permission.DUMP)
     public static void enforceDumpPermission(Context context) {
-        if (isInstrumentationTestMode()) {
-            return;
-        }
         context.enforceCallingOrSelfPermission(
                 android.Manifest.permission.DUMP,
                 "Need DUMP permission");
