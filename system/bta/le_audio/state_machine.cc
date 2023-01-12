@@ -214,7 +214,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
       case AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING: {
         /* This case just updates the metadata for the stream, in case
-         * stream configuration is satisfied
+         * stream configuration is satisfied. We can do that already for
+         * all the devices in a group, without any state transitions.
          */
         if (!group->IsMetadataChanged(metadata_context_type, ccid_list))
           return true;
@@ -225,8 +226,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           return false;
         }
 
-        PrepareAndSendUpdateMetadata(group, leAudioDevice,
-                                     metadata_context_type, ccid_list);
+        while (leAudioDevice) {
+          PrepareAndSendUpdateMetadata(group, leAudioDevice,
+                                       metadata_context_type, ccid_list);
+          leAudioDevice = group->GetNextActiveDevice(leAudioDevice);
+        }
         break;
       }
 
@@ -610,6 +614,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                                       LeAudioDevice* leAudioDevice) {
     FreeLinkQualityReports(leAudioDevice);
     leAudioDevice->conn_id_ = GATT_INVALID_CONN_ID;
+    /* mark ASEs as not used. */
+    leAudioDevice->DeactivateAllAses();
 
     if (!group) {
       LOG(ERROR) << __func__
@@ -617,9 +623,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                  << " group_id: " << leAudioDevice->group_id_;
       return;
     }
-
-    /* mark ASEs as not used. */
-    leAudioDevice->DeactivateAllAses();
 
     /* If group is in Idle and not transitioning, just update the current group
      * audio context availability which could change due to disconnected group
@@ -805,11 +808,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     if (event->reason != HCI_ERR_CONN_CAUSE_LOCAL_HOST) {
       RemoveDataPathByCisHandle(leAudioDevice, event->cis_conn_hdl);
       // Make sure we won't stay in STREAMING state
-      if (ases_pair.sink) {
+      if (ases_pair.sink &&
+          ases_pair.sink->state == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
         ases_pair.sink->state =
             AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED;
       }
-      if (ases_pair.source) {
+      if (ases_pair.source && ases_pair.source->state ==
+                                  AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
         ases_pair.source->state =
             AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED;
       }

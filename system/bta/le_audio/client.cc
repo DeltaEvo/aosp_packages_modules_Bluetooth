@@ -253,6 +253,15 @@ class LeAudioClientImpl : public LeAudioClient {
     LeAudioGroupStateMachine::Initialize(state_machine_callbacks_);
     groupStateMachine_ = LeAudioGroupStateMachine::Get();
 
+    if (bluetooth::common::InitFlags::
+            IsTargetedAnnouncementReconnectionMode()) {
+      LOG_INFO(" Reconnection mode: TARGETED_ANNOUNCEMENTS");
+      reconnection_mode_ = BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS;
+    } else {
+      LOG_INFO(" Reconnection mode: ALLOW_LIST");
+      reconnection_mode_ = BTM_BLE_BKG_CONNECT_ALLOW_LIST;
+    }
+
     BTA_GATTC_AppRegister(
         le_audio_gattc_callback,
         base::Bind(
@@ -277,6 +286,19 @@ class LeAudioClientImpl : public LeAudioClient {
     auto group = aseGroups_.FindById(active_group_id_);
     if (!group) {
       LOG_ERROR("Invalid group: %d", active_group_id_);
+      return;
+    }
+
+    /* For sonification events we don't really need to reconfigure to HQ
+     * configuration, but if the previous configuration was for HQ Media,
+     * we might want to go back to that scenario.
+     */
+
+    if ((configuration_context_type_ != LeAudioContextType::MEDIA) &&
+        (configuration_context_type_ != LeAudioContextType::GAME)) {
+      LOG_INFO(
+          "Keeping the old configuration as no HQ Media playback is needed "
+          "right now.");
       return;
     }
 
@@ -361,6 +383,16 @@ class LeAudioClientImpl : public LeAudioClient {
     group_add_node(group_id, address);
   }
 
+  /* If device participates in streaming the group, it has to be stopped and
+   * group needs to be reconfigured if needed to new configuration without
+   * considering this removing device.
+   */
+  void SetDeviceAsRemovePendingAndStopGroup(LeAudioDevice* leAudioDevice) {
+    LOG_INFO("device %s", leAudioDevice->address_.ToString().c_str());
+    leAudioDevice->SetConnectionState(DeviceConnectState::PENDING_REMOVAL);
+    GroupStop(leAudioDevice->group_id_);
+  }
+
   void OnGroupMemberAddedCb(const RawAddress& address, int group_id) {
     LOG(INFO) << __func__ << " address: " << address
               << " group_id: " << group_id;
@@ -388,8 +420,9 @@ class LeAudioClientImpl : public LeAudioClient {
 
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
     if (!leAudioDevice) return;
-    if (leAudioDevice->group_id_ == bluetooth::groups::kGroupUnknown) {
-      LOG(INFO) << __func__ << " device already not assigned to the group.";
+    if (leAudioDevice->group_id_ != group_id) {
+      LOG_WARN("Device: %s not assigned to the group.",
+               leAudioDevice->address_.ToString().c_str());
       return;
     }
 
@@ -398,6 +431,11 @@ class LeAudioClientImpl : public LeAudioClient {
       LOG(INFO) << __func__
                 << " device not in the group: " << leAudioDevice->address_
                 << ", " << group_id;
+      return;
+    }
+
+    if (leAudioDevice->HaveActiveAse()) {
+      SetDeviceAsRemovePendingAndStopGroup(leAudioDevice);
       return;
     }
 
@@ -690,6 +728,11 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
+    if (leAudioDevice->HaveActiveAse()) {
+      SetDeviceAsRemovePendingAndStopGroup(leAudioDevice);
+      return;
+    }
+
     group_remove_node(group, address, true);
   }
 
@@ -714,14 +757,15 @@ class LeAudioClientImpl : public LeAudioClient {
           /* Highest priority first */
           LeAudioContextType::CONVERSATIONAL,
           LeAudioContextType::RINGTONE,
-          LeAudioContextType::GAME,
           LeAudioContextType::LIVE,
           LeAudioContextType::VOICEASSISTANTS,
+          LeAudioContextType::GAME,
           LeAudioContextType::MEDIA,
           LeAudioContextType::EMERGENCYALARM,
           LeAudioContextType::ALERTS,
           LeAudioContextType::INSTRUCTIONAL,
           LeAudioContextType::NOTIFICATIONS,
+          LeAudioContextType::SOUNDEFFECTS,
       };
       for (auto ct : context_priority_list) {
         if (metadata_context_type.test(ct)) {
@@ -1063,8 +1107,16 @@ class LeAudioClientImpl : public LeAudioClient {
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
     if (!leAudioDevice) {
       leAudioDevices_.Add(address, DeviceConnectState::CONNECTING_BY_USER);
-
     } else {
+      auto current_connect_state = leAudioDevice->GetConnectionState();
+      if ((current_connect_state == DeviceConnectState::CONNECTED) ||
+          (current_connect_state == DeviceConnectState::CONNECTING_BY_USER)) {
+        LOG_ERROR("Device %s is in invalid state: %s",
+                  leAudioDevice->address_.ToString().c_str(),
+                  bluetooth::common::ToString(current_connect_state).c_str());
+
+        return;
+      }
       leAudioDevice->SetConnectionState(DeviceConnectState::CONNECTING_BY_USER);
 
       le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
@@ -1072,7 +1124,7 @@ class LeAudioClientImpl : public LeAudioClient {
           le_audio::ConnectionStatus::SUCCESS);
     }
 
-    BTA_GATTC_Open(gatt_if_, address, true, false);
+    BTA_GATTC_Open(gatt_if_, address, BTM_BLE_DIRECT_CONNECTION, false);
   }
 
   std::vector<RawAddress> GetGroupDevices(const int group_id) override {
@@ -1164,12 +1216,12 @@ class LeAudioClientImpl : public LeAudioClient {
       LOG_WARN("Could not load ases");
     }
 
-    if (autoconnect) {
-      leAudioDevice->SetConnectionState(
-          DeviceConnectState::CONNECTING_AUTOCONNECT);
-      leAudioDevice->autoconnect_flag_ = true;
-      BTA_GATTC_Open(gatt_if_, address, false, false);
-    }
+    leAudioDevice->autoconnect_flag_ = autoconnect;
+    /* When adding from storage, make sure that autoconnect is used
+     * by all the devices in the group.
+     */
+    leAudioDevices_.SetInitialGroupAutoconnectState(
+        group_id, gatt_if_, reconnection_mode_, autoconnect);
   }
 
   bool GetHandlesForStorage(const RawAddress& addr, std::vector<uint8_t>& out) {
@@ -1209,13 +1261,14 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    DLOG(INFO) << __func__ << "Add " << leAudioDevice->address_
+    DLOG(INFO) << __func__ << " Add " << leAudioDevice->address_
                << " to background connect to connected group: "
                << leAudioDevice->group_id_;
 
     leAudioDevice->SetConnectionState(
         DeviceConnectState::CONNECTING_AUTOCONNECT);
-    BTA_GATTC_Open(gatt_if_, leAudioDevice->address_, false, false);
+    BTA_GATTC_Open(gatt_if_, leAudioDevice->address_, reconnection_mode_,
+                   false);
   }
 
   void Disconnect(const RawAddress& address) override {
@@ -1237,12 +1290,33 @@ class LeAudioClientImpl : public LeAudioClient {
     BTA_GATTC_CancelOpen(0, address, false);
 
     if (leAudioDevice->conn_id_ != GATT_INVALID_CONN_ID) {
-      /* User is disconnecting the device, we shall remove the autoconnect flag
+      /* User is disconnecting the device, we shall remove the autoconnect
+       * flag for this device and all others
        */
-      btif_storage_set_leaudio_autoconnect(address, false);
-      leAudioDevice->autoconnect_flag_ = false;
+      LOG_INFO("Removing autoconnect flag for group_id %d",
+               leAudioDevice->group_id_);
 
       auto group = aseGroups_.FindById(leAudioDevice->group_id_);
+
+      if (leAudioDevice->autoconnect_flag_) {
+        btif_storage_set_leaudio_autoconnect(address, false);
+        leAudioDevice->autoconnect_flag_ = false;
+      }
+
+      if (group) {
+        /* Remove devices from auto connect mode */
+        for (auto dev = group->GetFirstDevice(); dev;
+             dev = group->GetNextDevice(dev)) {
+          if (dev->GetConnectionState() ==
+              DeviceConnectState::CONNECTING_AUTOCONNECT) {
+            btif_storage_set_leaudio_autoconnect(address, false);
+            dev->autoconnect_flag_ = false;
+            BTA_GATTC_CancelOpen(gatt_if_, address, false);
+            dev->SetConnectionState(DeviceConnectState::DISCONNECTED);
+          }
+        }
+      }
+
       if (group &&
           group->GetState() ==
               le_audio::types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
@@ -1781,11 +1855,15 @@ class LeAudioClientImpl : public LeAudioClient {
       leAudioDevices_.Remove(address);
       return;
     }
-    /* Attempt background re-connect if disconnect was not intended locally */
-    if (reason != GATT_CONN_TERMINATE_LOCAL_HOST) {
+    /* Attempt background re-connect if disconnect was not intended locally
+     * or if autoconnect is set and device got disconnected because of some
+     * issues
+     */
+    if (reason != GATT_CONN_TERMINATE_LOCAL_HOST ||
+        leAudioDevice->autoconnect_flag_) {
       leAudioDevice->SetConnectionState(
           DeviceConnectState::CONNECTING_AUTOCONNECT);
-      BTA_GATTC_Open(gatt_if_, address, false, false);
+      BTA_GATTC_Open(gatt_if_, address, reconnection_mode_, false);
     } else {
       leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
     }
@@ -2299,6 +2377,11 @@ class LeAudioClientImpl : public LeAudioClient {
         audio_receiver_state_ == AudioState::IDLE) {
       DLOG(INFO) << __func__
                  << " Device not streaming but active - nothing to do";
+      return;
+    }
+
+    if (!stream_conf->conf) {
+      LOG_INFO("Configuration not yet set. Nothing to do now");
       return;
     }
 
@@ -2981,6 +3064,10 @@ class LeAudioClientImpl : public LeAudioClient {
 
   void Dump(int fd) {
     dprintf(fd, "  Active group: %d\n", active_group_id_);
+    dprintf(fd, "    reconnection mode: %s \n",
+            (reconnection_mode_ == BTM_BLE_BKG_CONNECT_ALLOW_LIST
+                 ? " Allow List"
+                 : " Targeted Announcements"));
     dprintf(fd, "    configuration: %s  (0x%08hx)\n",
             bluetooth::common::ToString(configuration_context_type_).c_str(),
             configuration_context_type_);
@@ -3474,14 +3561,15 @@ class LeAudioClientImpl : public LeAudioClient {
            * call volume slider while not in a call.
            * LeAudioContextType::RINGTONE,
            */
-          LeAudioContextType::GAME,
           LeAudioContextType::LIVE,
           LeAudioContextType::VOICEASSISTANTS,
+          LeAudioContextType::GAME,
           LeAudioContextType::MEDIA,
           LeAudioContextType::EMERGENCYALARM,
           LeAudioContextType::ALERTS,
           LeAudioContextType::INSTRUCTIONAL,
           LeAudioContextType::NOTIFICATIONS,
+          LeAudioContextType::SOUNDEFFECTS,
       };
       for (auto ct : context_priority_list) {
         if (available_remote_contexts.test(ct)) {
@@ -3633,6 +3721,28 @@ class LeAudioClientImpl : public LeAudioClient {
     /* Choose the right configuration context */
     auto new_configuration_context =
         ChooseConfigurationContextType(new_metadata_context_types_);
+
+    /* For the following contexts we don't actually need HQ audio:
+     * LeAudioContextType::NOTIFICATIONS
+     * LeAudioContextType::SOUNDEFFECTS
+     * LeAudioContextType::INSTRUCTIONAL
+     * LeAudioContextType::ALERTS
+     * LeAudioContextType::EMERGENCYALARM
+     * So do not reconfigure if the remote sink is already available at any
+     * quality and these are the only contributors to the current audio stream.
+     */
+    auto no_reconfigure_contexts =
+        LeAudioContextType::NOTIFICATIONS | LeAudioContextType::SOUNDEFFECTS |
+        LeAudioContextType::INSTRUCTIONAL | LeAudioContextType::ALERTS |
+        LeAudioContextType::EMERGENCYALARM;
+    if ((new_metadata_context_types_ & ~no_reconfigure_contexts).none() &&
+        IsDirectionAvailableForCurrentConfiguration(
+            group, le_audio::types::kLeAudioDirectionSink)) {
+      LOG_INFO(
+          "There is no need to reconfigure for the sonification events. Keep "
+          "the configuration unchanged.");
+      new_configuration_context = configuration_context_type_;
+    }
 
     LOG_DEBUG("new_configuration_context= %s",
               ToString(new_configuration_context).c_str());
@@ -3993,6 +4103,21 @@ class LeAudioClientImpl : public LeAudioClient {
     }
   }
 
+  void HandlePendingDeviceRemove(LeAudioDeviceGroup* group) {
+    for (auto device = group->GetFirstDevice(); device != nullptr;
+         device = group->GetNextDevice(device)) {
+      if (device->GetConnectionState() == DeviceConnectState::PENDING_REMOVAL) {
+        if (device->closing_stream_for_disconnection_) {
+          device->closing_stream_for_disconnection_ = false;
+          LOG_INFO("Disconnecting group id: %d, address: %s", group->group_id_,
+                   device->address_.ToString().c_str());
+          DisconnectDevice(device);
+        }
+        group_remove_node(group, device->address_, true);
+      }
+    }
+  }
+
   void HandlePendingDeviceDisconnection(LeAudioDeviceGroup* group) {
     LOG_DEBUG();
     auto leAudioDevice = group->GetFirstDevice();
@@ -4172,6 +4297,7 @@ class LeAudioClientImpl : public LeAudioClient {
         if (group) {
           NotifyUpperLayerGroupTurnedIdleDuringCall(group->group_id_);
           HandlePendingAvailableContextsChange(group);
+          HandlePendingDeviceRemove(group);
           HandlePendingDeviceDisconnection(group);
         }
         break;
@@ -4211,6 +4337,10 @@ class LeAudioClientImpl : public LeAudioClient {
   AudioState audio_sender_state_;
   /* Keep in call state. */
   bool in_call_;
+
+  /* Reconnection mode */
+  tBTM_BLE_CONN_TYPE reconnection_mode_;
+
   static constexpr char kNotifyUpperLayerAboutGroupBeingInIdleDuringCall[] =
       "persist.bluetooth.leaudio.notify.idle.during.call";
 
@@ -4283,7 +4413,7 @@ class LeAudioClientImpl : public LeAudioClient {
 void le_audio_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
   if (!p_data || !instance) return;
 
-  DLOG(INFO) << __func__ << " event = " << +event;
+  LOG_DEBUG("event = %d", static_cast<int>(event));
 
   switch (event) {
     case BTA_GATTC_DEREG_EVT:

@@ -236,7 +236,7 @@ class CsisClientImpl : public CsisClient {
       device->connecting_actively = true;
     }
 
-    BTA_GATTC_Open(gatt_if_, address, true, false);
+    BTA_GATTC_Open(gatt_if_, address, BTM_BLE_DIRECT_CONNECTION, false);
   }
 
   void Disconnect(const RawAddress& addr) override {
@@ -525,6 +525,16 @@ class CsisClientImpl : public CsisClient {
     }
   }
 
+  int GetDesiredSize(int group_id) override {
+    auto csis_group = FindCsisGroup(group_id);
+    if (!csis_group) {
+      LOG_INFO("Unknown group %d", group_id);
+      return -1;
+    }
+
+    return csis_group->GetDesiredSize();
+  }
+
   bool SerializeSets(const RawAddress& addr, std::vector<uint8_t>& out) const {
     auto device = FindDeviceByAddress(addr);
     if (device == nullptr) {
@@ -644,7 +654,7 @@ class CsisClientImpl : public CsisClient {
     }
 
     if (autoconnect) {
-      BTA_GATTC_Open(gatt_if_, addr, false, false);
+      BTA_GATTC_Open(gatt_if_, addr, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
     }
   }
 
@@ -974,7 +984,11 @@ class CsisClientImpl : public CsisClient {
       return;
     }
 
-    csis_group->SetDesiredSize(value[0]);
+    auto new_size = value[0];
+    csis_group->SetDesiredSize(new_size);
+    if (new_size > csis_group->GetCurrentSize()) {
+      CsisActiveDiscovery(csis_group);
+    }
   }
 
   void OnCsisLockReadRsp(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
@@ -1117,14 +1131,14 @@ class CsisClientImpl : public CsisClient {
   std::vector<RawAddress> GetAllRsiFromAdvertising(
       const tBTA_DM_INQ_RES* result) {
     const uint8_t* p_service_data = result->p_eir;
-    uint16_t remaining_data_len = result->eir_len;
     std::vector<RawAddress> devices;
     uint8_t service_data_len = 0;
 
     while ((p_service_data = AdvertiseDataParser::GetFieldByType(
                 p_service_data + service_data_len,
-                (remaining_data_len -= service_data_len), BTM_BLE_AD_TYPE_RSI,
-                &service_data_len))) {
+                result->eir_len - (p_service_data - result->p_eir) -
+                    service_data_len,
+                BTM_BLE_AD_TYPE_RSI, &service_data_len))) {
       RawAddress bda;
       STREAM_TO_BDADDR(bda, p_service_data);
       devices.push_back(std::move(bda));

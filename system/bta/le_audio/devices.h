@@ -46,6 +46,10 @@ enum class DeviceConnectState : uint8_t {
   REMOVING,
   /* Disconnecting */
   DISCONNECTING,
+  /* Device will be removed after scheduled action is finished: One of such
+   * action is taking Stream to IDLE
+   */
+  PENDING_REMOVAL,
   /* 2 states below are used when user creates connection. Connect API is
      called. */
   CONNECTING_BY_USER,
@@ -200,6 +204,9 @@ class LeAudioDevices {
   std::shared_ptr<LeAudioDevice> GetByAddress(const RawAddress& address);
   LeAudioDevice* FindByConnId(uint16_t conn_id);
   LeAudioDevice* FindByCisConnHdl(uint8_t cig_id, uint16_t conn_hdl);
+  void SetInitialGroupAutoconnectState(int group_id, int gatt_if,
+                                       tBTM_BLE_CONN_TYPE reconnection_mode,
+                                       bool current_dev_autoconnect_flag);
   size_t Size(void);
   void Dump(int fd, int group_id);
   void Cleanup(tGATT_IF client_if);
