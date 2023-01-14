@@ -142,10 +142,12 @@ public class BluetoothMapContentObserver {
     private BluetoothMapMasInstance mMasInstance = null;
     private int mMasId;
     private boolean mEnableSmsMms = false;
-    private boolean mObserverRegistered = false;
+    @VisibleForTesting
+    boolean mObserverRegistered = false;
     @VisibleForTesting
     BluetoothMapAccountItem mAccount;
-    private String mAuthority = null;
+    @VisibleForTesting
+    String mAuthority = null;
 
     // Default supported feature bit mask is 0x1f
     private int mMapSupportedFeatures = BluetoothMapUtils.MAP_FEATURE_DEFAULT_BITMASK;
@@ -1975,7 +1977,8 @@ public class BluetoothMapContentObserver {
         }
     }
 
-    private void handleContactListChanges(Uri uri) {
+    @VisibleForTesting
+    void handleContactListChanges(Uri uri) {
         if (uri.getAuthority().equals(mAuthority)) {
             try {
                 if (V) {
@@ -2951,7 +2954,8 @@ public class BluetoothMapContentObserver {
         if (handle != -1) {
             String whereClause = " _id= " + handle;
             Uri uri = Mms.CONTENT_URI;
-            Cursor queryResult = resolver.query(uri, null, whereClause, null, null);
+            Cursor queryResult = BluetoothMethodProxy.getInstance().contentResolverQuery(resolver,
+                    uri, null, whereClause, null, null);
             try {
                 if (queryResult != null) {
                     if (queryResult.getCount() > 0) {
@@ -2959,7 +2963,8 @@ public class BluetoothMapContentObserver {
                         ContentValues data = new ContentValues();
                         /* set folder to be outbox */
                         data.put(Mms.MESSAGE_BOX, folder);
-                        resolver.update(uri, data, whereClause, null);
+                        BluetoothMethodProxy.getInstance().contentResolverUpdate(resolver, uri,
+                                data, whereClause, null);
                         if (D) {
                             Log.d(TAG, "moved MMS message to " + getMmsFolderName(folder));
                         }
@@ -3578,7 +3583,7 @@ public class BluetoothMapContentObserver {
             if (D) {
                 Log.d(TAG, "Transparent in use - delete");
             }
-            resolver.delete(uri, null, null);
+            BluetoothMethodProxy.getInstance().contentResolverDelete(resolver, uri, null, null);
         } else if (result == Activity.RESULT_OK) {
             /* This will trigger a notification */
             moveMmsToFolder(handle, resolver, Mms.MESSAGE_BOX_SENT);
@@ -3653,7 +3658,7 @@ public class BluetoothMapContentObserver {
             /* Delete from DB */
             ContentResolver resolver = context.getContentResolver();
             if (resolver != null) {
-                resolver.delete(uri, null, null);
+                BluetoothMethodProxy.getInstance().contentResolverDelete(resolver, uri, null, null);
             } else {
                 Log.w(TAG, "Unable to get resolver");
             }
