@@ -300,6 +300,7 @@ public class AdapterService extends Service {
     private ActiveDeviceManager mActiveDeviceManager;
     private DatabaseManager mDatabaseManager;
     private SilenceDeviceManager mSilenceDeviceManager;
+    private CompanionManager mBtCompanionManager;
     private AppOpsManager mAppOps;
 
     private BluetoothSocketManagerBinder mBluetoothSocketManagerBinder;
@@ -441,6 +442,7 @@ public class AdapterService extends Service {
                         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_LOCAL_IO_CAPS_BLE);
                         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_DYNAMIC_AUDIO_BUFFER);
                         mAdapterStateMachine.sendMessage(AdapterState.BREDR_STARTED);
+                        mBtCompanionManager.loadCompanionInfo();
                     }
                     break;
                 case BluetoothAdapter.STATE_OFF:
@@ -541,6 +543,8 @@ public class AdapterService extends Service {
         mSilenceDeviceManager = new SilenceDeviceManager(this, new ServiceFactory(),
                 Looper.getMainLooper());
         mSilenceDeviceManager.start();
+
+        mBtCompanionManager = new CompanionManager(this, new ServiceFactory());
 
         mBluetoothSocketManagerBinder = new BluetoothSocketManagerBinder(this);
 
@@ -712,7 +716,7 @@ public class AdapterService extends Service {
     void stopProfileServices() {
         // Make sure to stop classic background tasks now
         cancelDiscoveryNative();
-        mAdapterProperties.setScanMode(AbstractionLayer.BT_SCAN_MODE_NONE);
+        mAdapterProperties.setScanMode(BluetoothAdapter.SCAN_MODE_NONE);
 
         Class[] supportedProfileServices = Config.getSupportedProfiles();
         // TODO(b/228875190): GATT is assumed supported. If we support no profiles then just move on
@@ -1557,6 +1561,32 @@ public class AdapterService extends Service {
     }
 
     /**
+     *  Get an metadata of given device and key
+     *
+     *  @param device Bluetooth device
+     *  @param key Metadata key
+     *  @param value Metadata value
+     *  @return if metadata is set successfully
+     */
+    public boolean setMetadata(BluetoothDevice device, int key, byte[] value) {
+        if (value == null || value.length > BluetoothDevice.METADATA_MAX_LENGTH) {
+            return false;
+        }
+        return mDatabaseManager.setCustomMeta(device, key, value);
+    }
+
+    /**
+     *  Get an metadata of given device and key
+     *
+     *  @param device Bluetooth device
+     *  @param key Metadata key
+     *  @return value of given device and key combination
+     */
+    public byte[] getMetadata(BluetoothDevice device, int key) {
+        return mDatabaseManager.getCustomMeta(device, key);
+    }
+
+    /**
      * Handlers for incoming service calls
      */
     private AdapterServiceBinder mBinder;
@@ -1967,7 +1997,7 @@ public class AdapterService extends Service {
             }
             enforceBluetoothPrivilegedPermission(service);
 
-            return service.mAdapterProperties.setScanMode(convertScanModeToHal(mode))
+            return service.mAdapterProperties.setScanMode(mode)
                     ? BluetoothStatusCodes.SUCCESS : BluetoothStatusCodes.ERROR_UNKNOWN;
         }
 
@@ -3169,6 +3199,10 @@ public class AdapterService extends Service {
 
             if (service.mBluetoothKeystoreService != null) {
                 service.mBluetoothKeystoreService.factoryReset();
+            }
+
+            if (service.mBtCompanionManager != null) {
+                service.mBtCompanionManager.factoryReset();
             }
 
             return service.factoryResetNative();
@@ -4863,7 +4897,7 @@ public class AdapterService extends Service {
                 source.getUid(), source.getPackageName(), deviceAddress);
     }
 
-    private static int convertScanModeToHal(int mode) {
+    static int convertScanModeToHal(int mode) {
         switch (mode) {
             case BluetoothAdapter.SCAN_MODE_NONE:
                 return AbstractionLayer.BT_SCAN_MODE_NONE;
@@ -5456,6 +5490,22 @@ public class AdapterService extends Service {
             return 0;
         }
         return getMetricIdNative(Utils.getByteAddress(device));
+    }
+
+    public CompanionManager getCompanionManager() {
+        return mBtCompanionManager;
+    }
+
+    /**
+     *  Call for the AdapterService receives bond state change
+     *
+     *  @param device Bluetooth device
+     *  @param state bond state
+     */
+    public void onBondStateChanged(BluetoothDevice device, int state) {
+        if (mBtCompanionManager != null) {
+            mBtCompanionManager.onBondStateChanged(device, state);
+        }
     }
 
     /**
