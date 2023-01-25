@@ -5179,6 +5179,8 @@ public class AdapterService extends Service {
     private static final String PASS_PHY_UPDATE_CALLBACK_FLAG = "INIT_pass_phy_update_callback";
     private static final String BTM_DM_FLUSH_DISCOVERY_QUEUE_ON_SEARCH_CANCEL =
                                     "INIT_btm_dm_flush_discovery_queue_on_search_cancel";
+    private static final String BTA_DM_CLEAR_CONN_ID_ON_CLIENT_CLOSE =
+                                    "INIT_bta_dm_clear_conn_id_on_client_close";
 
     /**
      * Logging flags logic (only applies to DEBUG and VERBOSE levels):
@@ -5270,6 +5272,9 @@ public class AdapterService extends Service {
         }
         if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, BTAA_HCI_LOG_FLAG, true)) {
             initFlags.add(String.format("%s=%s", BTAA_HCI_LOG_FLAG, "true"));
+        }
+        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, BTA_DM_CLEAR_CONN_ID_ON_CLIENT_CLOSE, true)) {
+            initFlags.add(String.format("%s=%s", BTA_DM_CLEAR_CONN_ID_ON_CLIENT_CLOSE, "true"));
         }
         return initFlags.toArray(new String[0]);
     }
