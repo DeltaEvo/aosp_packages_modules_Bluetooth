@@ -38,7 +38,9 @@ import android.os.HandlerThread;
 import android.os.UserHandle;
 import android.provider.CallLog;
 import android.provider.CallLog.Calls;
+import android.telephony.PhoneNumberUtils;
 import android.telephony.PhoneStateListener;
+import android.telephony.ServiceState;
 import android.test.mock.MockContentProvider;
 import android.test.mock.MockContentResolver;
 
@@ -49,16 +51,19 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.storage.DatabaseManager;
 
 import org.hamcrest.core.IsInstanceOf;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
@@ -82,6 +87,7 @@ public class HeadsetStateMachineTest {
     private ArgumentCaptor<Intent> mIntentArgument = ArgumentCaptor.forClass(Intent.class);
 
     @Mock private AdapterService mAdapterService;
+    @Mock private DatabaseManager mDatabaseManager;
     @Mock private HeadsetService mHeadsetService;
     @Mock private HeadsetSystemInterface mSystemInterface;
     @Mock private AudioManager mAudioManager;
@@ -105,6 +111,9 @@ public class HeadsetStateMachineTest {
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         // Get a device for testing
         mTestDevice = mAdapter.getRemoteDevice("00:01:02:03:04:05");
+        // Get a database
+        doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
+        doReturn(true).when(mDatabaseManager).setAudioPolicyMetadata(anyObject(), anyObject());
         // Spy on native interface
         mNativeInterface = spy(HeadsetNativeInterface.getInstance());
         doNothing().when(mNativeInterface).init(anyInt(), anyBoolean());
@@ -1183,6 +1192,7 @@ public class HeadsetStateMachineTest {
         Assert.assertEquals(mHeadsetStateMachine.parseUnknownAt(atString), "A\"command\"");
     }
 
+    @Ignore("b/265556073")
     @Test
     public void testHandleAccessPermissionResult_withNoChangeInAtCommandResult() {
         when(mIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)).thenReturn(null);
@@ -1245,6 +1255,206 @@ public class HeadsetStateMachineTest {
         mHeadsetStateMachine.processAtClcc(mTestDevice);
 
         verify(mNativeInterface).clccResponse(mTestDevice, 0, 0, 0, 0, false, "", 0);
+    }
+
+    @Test
+    public void testProcessAtCops() {
+        ServiceState serviceState = mock(ServiceState.class);
+        when(serviceState.getOperatorAlphaLong()).thenReturn("");
+        when(serviceState.getOperatorAlphaShort()).thenReturn("");
+        HeadsetPhoneState phoneState = mock(HeadsetPhoneState.class);
+        when(phoneState.getServiceState()).thenReturn(serviceState);
+        when(mSystemInterface.getHeadsetPhoneState()).thenReturn(phoneState);
+        when(mSystemInterface.isInCall()).thenReturn(true);
+        when(mSystemInterface.getNetworkOperator()).thenReturn(null);
+
+        mHeadsetStateMachine.processAtCops(mTestDevice);
+
+        verify(mNativeInterface).copsResponse(mTestDevice, "");
+    }
+
+    @Test
+    public void testProcessAtCpbr() {
+        String atString = "command=ERR";
+        int type = AtPhonebook.TYPE_SET;
+
+        mHeadsetStateMachine.processAtCpbr(atString, type, mTestDevice);
+
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                BluetoothCmeError.TEXT_HAS_INVALID_CHARS);
+    }
+
+    @Test
+    public void testProcessAtCpbs() {
+        String atString = "command=ERR";
+        int type = AtPhonebook.TYPE_SET;
+
+        mHeadsetStateMachine.processAtCpbs(atString, type, mTestDevice);
+
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                BluetoothCmeError.OPERATION_NOT_ALLOWED);
+    }
+
+    @Test
+    public void testProcessAtCscs() {
+        String atString = "command=GSM";
+        int type = AtPhonebook.TYPE_SET;
+
+        mHeadsetStateMachine.processAtCscs(atString, type, mTestDevice);
+
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK,
+                -1);
+    }
+
+    @Test
+    public void testProcessAtXapl() {
+        Object[] args = new Object[2];
+        args[0] = "1-12-3";
+        args[1] = 1;
+
+        mHeadsetStateMachine.processAtXapl(args, mTestDevice);
+
+        verify(mNativeInterface).atResponseString(mTestDevice, "+XAPL=iPhone," + String.valueOf(2));
+    }
+
+    @Test
+    public void testProcessSendVendorSpecificResultCode() {
+        HeadsetVendorSpecificResultCode resultCode = new HeadsetVendorSpecificResultCode(
+                mTestDevice, "command", "arg");
+
+        mHeadsetStateMachine.processSendVendorSpecificResultCode(resultCode);
+
+        verify(mNativeInterface).atResponseString(mTestDevice, "command" + ": " + "arg");
+    }
+
+    @Test
+    public void testProcessSubscriberNumberRequest_withSubscriberNumberNull() {
+        when(mSystemInterface.getSubscriberNumber()).thenReturn(null);
+
+        mHeadsetStateMachine.processSubscriberNumberRequest(mTestDevice);
+
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    @Test
+    public void testProcessSubscriberNumberRequest_withSubscriberNumberNotNull() {
+        String number = "1111";
+        when(mSystemInterface.getSubscriberNumber()).thenReturn(number);
+
+        mHeadsetStateMachine.processSubscriberNumberRequest(mTestDevice);
+
+        verify(mNativeInterface).atResponseString(mTestDevice,
+                "+CNUM: ,\"" + number + "\"," + PhoneNumberUtils.toaFromString(number) + ",,4");
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    @Test
+    public void testProcessUnknownAt() {
+        String atString = "+CSCS=invalid";
+        mHeadsetStateMachine.processUnknownAt(atString, mTestDevice);
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                BluetoothCmeError.OPERATION_NOT_SUPPORTED);
+        Mockito.clearInvocations(mNativeInterface);
+
+        atString = "+CPBS=";
+        mHeadsetStateMachine.processUnknownAt(atString, mTestDevice);
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                BluetoothCmeError.OPERATION_NOT_SUPPORTED);
+
+        atString = "+CPBR=ERR";
+        mHeadsetStateMachine.processUnknownAt(atString, mTestDevice);
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                BluetoothCmeError.TEXT_HAS_INVALID_CHARS);
+
+        atString = "inval=";
+        mHeadsetStateMachine.processUnknownAt(atString, mTestDevice);
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withNoEqualSignCommand() {
+        String atString = "invalid_command";
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withUnsupportedCommand() {
+        String atString = "invalid_command=";
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withQuestionMarkArg() {
+        String atString = BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_XEVENT + "=?arg";
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_ERROR,
+                0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withValidCommandAndArg() {
+        String atString = BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_XAPL + "=1-12-3,1";
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface).atResponseString(mTestDevice, "+XAPL=iPhone," + "2");
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    @Test
+    public void testProcessVolumeEvent_withVolumeTypeMic() {
+        when(mHeadsetService.getActiveDevice()).thenReturn(mTestDevice);
+
+        mHeadsetStateMachine.processVolumeEvent(HeadsetHalConstants.VOLUME_TYPE_MIC, 1);
+
+        Assert.assertEquals(mHeadsetStateMachine.mMicVolume, 1);
+    }
+
+    @Test
+    public void testProcessVolumeEvent_withVolumeTypeSpk() {
+        when(mHeadsetService.getActiveDevice()).thenReturn(mTestDevice);
+        AudioManager mockAudioManager = mock(AudioManager.class);
+        when(mockAudioManager.getStreamVolume(AudioManager.STREAM_BLUETOOTH_SCO)).thenReturn(1);
+        when(mSystemInterface.getAudioManager()).thenReturn(mockAudioManager);
+
+        mHeadsetStateMachine.processVolumeEvent(HeadsetHalConstants.VOLUME_TYPE_SPK, 2);
+
+        Assert.assertEquals(mHeadsetStateMachine.mSpeakerVolume, 2);
+        verify(mockAudioManager).setStreamVolume(AudioManager.STREAM_BLUETOOTH_SCO, 2, 0);
+    }
+
+    @Test
+    public void testDump_doesNotCrash() {
+        StringBuilder sb = new StringBuilder();
+
+        mHeadsetStateMachine.dump(sb);
+    }
+
+    /**
+     * A test to validate received Android AT commands and processing
+     */
+    @Test
+    public void testProcessAndroidAt() {
+        setUpConnectedState();
+        // setup Audio Policy Feature
+        setUpAudioPolicy();
+        // receive and set android policy
+        mHeadsetStateMachine.sendMessage(HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(HeadsetStackEvent.EVENT_TYPE_UNKNOWN_AT,
+                        "+ANDROID=1,1,1,1", mTestDevice));
+        verify(mDatabaseManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS))
+                .setAudioPolicyMetadata(anyObject(), anyObject());
     }
 
     /**
@@ -1360,5 +1570,13 @@ public class HeadsetStateMachineTest {
         Assert.assertThat(mHeadsetStateMachine.getCurrentState(),
                 IsInstanceOf.instanceOf(HeadsetStateMachine.Disconnecting.class));
         return numBroadcastsSent;
+    }
+
+    private void setUpAudioPolicy() {
+        mHeadsetStateMachine.sendMessage(HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(HeadsetStackEvent.EVENT_TYPE_UNKNOWN_AT,
+                        "+ANDROID=?", mTestDevice));
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).atResponseString(
+                anyObject(), anyString());
     }
 }

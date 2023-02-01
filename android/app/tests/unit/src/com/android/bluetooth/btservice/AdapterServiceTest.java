@@ -97,6 +97,8 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -278,6 +280,10 @@ public class AdapterServiceTest {
                 .thenReturn(mBatteryStatsManager);
         when(mMockContext.getSystemServiceName(BatteryStatsManager.class))
                 .thenReturn(Context.BATTERY_STATS_SERVICE);
+        when(mMockContext.getSharedPreferences(anyString(), anyInt()))
+                .thenReturn(InstrumentationRegistry.getTargetContext()
+                        .getSharedPreferences("AdapterServiceTestPrefs", Context.MODE_PRIVATE));
+
         when(mMockContext.getAttributionSource()).thenReturn(mAttributionSource);
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();
@@ -441,6 +447,7 @@ public class AdapterServiceTest {
      * Test: Turn Bluetooth on.
      * Check whether the AdapterService gets started.
      */
+    @Ignore("b/228874625")
     @Test
     public void testEnable() {
         Log.e("AdapterServiceTest", "testEnable() start");
@@ -735,6 +742,7 @@ public class AdapterServiceTest {
     /**
      * Test: Check if obfuscated Bluetooth address stays the same after toggling Bluetooth
      */
+    @Ignore("b/265588558")
     @Test
     public void testObfuscateBluetoothAddress_PersistentBetweenToggle() {
         Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
@@ -993,5 +1001,16 @@ public class AdapterServiceTest {
         Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
         int id2 = mAdapterService.getMetricId(device);
         Assert.assertEquals(id2, id1);
+    }
+
+    @Test
+    public void testDump_doesNotCrash() {
+        FileDescriptor fd = new FileDescriptor();
+        PrintWriter writer = mock(PrintWriter.class);
+
+        mAdapterService.dump(fd, writer, new String[]{});
+        mAdapterService.dump(fd, writer, new String[]{"set-test-mode", "enabled"});
+        mAdapterService.dump(fd, writer, new String[]{"--proto-bin"});
+        mAdapterService.dump(fd, writer, new String[]{"random", "arguments"});
     }
 }

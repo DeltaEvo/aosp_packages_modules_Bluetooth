@@ -410,6 +410,7 @@ class AudioContexts {
   bool operator==(const AudioContexts& other) const {
     return value() == other.value();
   };
+  constexpr AudioContexts operator~() const { return AudioContexts(~value()); }
 };
 
 AudioContexts operator|(std::underlying_type<LeAudioContextType>::type lhs,
@@ -424,6 +425,10 @@ constexpr AudioContexts operator^(const AudioContexts& lhs,
 constexpr AudioContexts operator|(const AudioContexts& lhs,
                                   const AudioContexts& rhs) {
   return AudioContexts(lhs.value() | rhs.value());
+}
+constexpr AudioContexts operator&(const AudioContexts& lhs,
+                                  const AudioContexts& rhs) {
+  return AudioContexts(lhs.value() & rhs.value());
 }
 constexpr AudioContexts operator|(const LeAudioContextType& lhs,
                                   const LeAudioContextType& rhs) {
@@ -622,6 +627,13 @@ struct ase {
         data_path_state(AudioStreamDataPathState::IDLE),
         configured_for_context_type(LeAudioContextType::UNINITIALIZED),
         preferred_phy(0),
+        max_sdu_size(0),
+        retrans_nb(0),
+        max_transport_latency(0),
+        pres_delay_min(0),
+        pres_delay_max(0),
+        preferred_pres_delay_min(0),
+        preferred_pres_delay_max(0),
         state(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {}
 
   struct hdl_pair hdls;
@@ -746,11 +758,12 @@ static constexpr uint32_t kChannelAllocationStereo =
     codec_spec_conf::kLeAudioLocationFrontRight;
 
 /* Declarations */
-void get_cis_count(const AudioSetConfigurations* audio_set_configurations,
+void get_cis_count(const AudioSetConfigurations& audio_set_configurations,
+                   int expected_device_cnt,
                    types::LeAudioConfigurationStrategy strategy,
                    int group_ase_snk_cnt, int group_ase_src_count,
-                   uint8_t* cis_count_bidir, uint8_t* cis_count_unidir_sink,
-                   uint8_t* cis_count_unidir_source);
+                   uint8_t& cis_count_bidir, uint8_t& cis_count_unidir_sink,
+                   uint8_t& cis_count_unidir_source);
 bool check_if_may_cover_scenario(
     const AudioSetConfigurations* audio_set_configurations, uint8_t group_size);
 bool check_if_may_cover_scenario(
