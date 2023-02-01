@@ -287,6 +287,8 @@ filegroup {
   name: "TestMockBtif",
   srcs: [
       ":TestCommonJniThread",
+      ":TestCommonCoreInterface",
+      ":TestMockBluetoothInterface",
       "mock/mock_btif*.cc",
   ],
 }
@@ -351,6 +353,13 @@ filegroup {
   name: "TestMockStackGap",
   srcs: [
       "mock/mock_stack_gap*.cc",
+  ],
+}
+
+filegroup {
+  name: "TestMockStackEatt",
+  srcs: [
+      "mock/mock_stack_eatt*.cc",
   ],
 }
 
@@ -432,6 +441,20 @@ filegroup {
 }
 
 filegroup {
+  name: "TestCommonCoreInterface",
+  srcs: [
+      "common/core_interface.cc",
+  ],
+}
+
+filegroup {
+  name: "TestCommonLogMsg",
+  srcs: [
+      "common/log_msg.cc",
+  ],
+}
+
+filegroup {
   name: "TestMockBluetoothInterface",
   srcs: [
       "mock/mock_bluetooth_interface.cc",
@@ -450,4 +473,23 @@ filegroup {
   srcs: [
       "mock/mock_legacy_hci_iterface.cc"
   ],
+}
+
+cc_defaults {
+    name: "mts_defaults",
+    target: {
+        android: {
+            test_config_template: ":BluetoothTestConfigTemplate",
+            test_suites: ["mts-bluetooth",],
+        },
+    },
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
 }

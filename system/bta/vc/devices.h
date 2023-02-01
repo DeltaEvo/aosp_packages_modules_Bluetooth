@@ -24,6 +24,7 @@
 
 #include "bta/include/bta_gatt_api.h"
 #include "bta/vc/types.h"
+#include "common/interfaces/ILoggable.h"
 #include "include/hardware/bt_vc.h"
 #include "types/raw_address.h"
 
@@ -31,7 +32,7 @@ namespace bluetooth {
 namespace vc {
 namespace internal {
 
-class VolumeControlDevice {
+class VolumeControlDevice : public bluetooth::common::IRedactableLoggable {
  public:
   RawAddress address;
   /* This is true only during first connection to profile, until we store the
@@ -83,11 +84,21 @@ class VolumeControlDevice {
 
   ~VolumeControlDevice() = default;
 
+  // TODO: remove
   inline std::string ToString() { return address.ToString(); }
+
+  std::string ToStringForLogging() const override {
+    return address.ToStringForLogging();
+  }
+
+  std::string ToRedactedStringForLogging() const override {
+    return address.ToRedactedStringForLogging();
+  }
 
   void DebugDump(int fd) {
     std::stringstream stream;
-    stream << "   == device address: " << address << " == \n";
+    stream << "   == device address: " << ADDRESS_TO_LOGGABLE_STR(address)
+           << " == \n";
 
     if (connection_id == GATT_INVALID_CONN_ID)
       stream << "    Not connected\n";
@@ -108,6 +119,8 @@ class VolumeControlDevice {
   bool IsConnected() { return connection_id != GATT_INVALID_CONN_ID; }
 
   void Disconnect(tGATT_IF gatt_if);
+
+  void DeregisterNotifications(tGATT_IF gatt_if);
 
   bool UpdateHandles(void);
 
@@ -130,13 +143,14 @@ class VolumeControlDevice {
                                         GATT_WRITE_OP_CB cb, void* cb_data);
   bool IsEncryptionEnabled();
 
-  bool EnableEncryption(tBTM_SEC_CALLBACK* callback);
+  void EnableEncryption();
 
   bool EnqueueInitialRequests(tGATT_IF gatt_if, GATT_READ_OP_CB chrc_read_cb,
                               GATT_WRITE_OP_CB cccd_write_cb);
   void EnqueueRemainingRequests(tGATT_IF gatt_if, GATT_READ_OP_CB chrc_read_cb,
                                 GATT_WRITE_OP_CB cccd_write_cb);
   bool VerifyReady(uint16_t handle);
+  bool IsReady() { return device_ready; }
 
  private:
   /*

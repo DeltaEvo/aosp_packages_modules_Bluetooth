@@ -23,8 +23,7 @@
 #include <regex>
 
 #include "device_boutique.h"
-#include "os/log.h"
-#include "osi/include/osi.h"
+#include "log.h"
 #include "phy.h"
 
 using std::vector;
@@ -63,25 +62,16 @@ void TestCommandHandler::AddDefaults() {
   AddDeviceToPhy({"1", "2"});
 
   // Add default test devices and add the devices to the phys
+  //
   // Add({"beacon", "be:ac:10:00:00:01", "1000"});
   // AddDeviceToPhy({"2", "1"});
-
-  // Add({"keyboard", "cc:1c:eb:0a:12:d1", "500"});
-  // AddDeviceToPhy({"3", "1"});
-
-  // Add({"classic", "c1:a5:51:c0:00:01", "22"});
+  //
+  // Add({"sniffer", "ca:12:1c:17:00:01"});
+  // AddDeviceToPhy({"3", "2"});
+  //
+  // Add({"sniffer", "3c:5a:b4:04:05:06"});
   // AddDeviceToPhy({"4", "2"});
 
-  // Add({"car_kit", "ca:12:1c:17:00:01", "238"});
-  // AddDeviceToPhy({"5", "2"});
-
-  // Add({"sniffer", "ca:12:1c:17:00:01"});
-  // AddDeviceToPhy({"6", "2"});
-
-  // Add({"sniffer", "3c:5a:b4:04:05:06"});
-  // AddDeviceToPhy({"7", "2"});
-  // Add({"remote_loopback_device", "10:0d:00:ba:c1:06"});
-  // AddDeviceToPhy({"8", "2"});
   List({});
 
   SetTimerPeriod({"10"});
@@ -99,7 +89,7 @@ void TestCommandHandler::HandleCommand(const std::string& name,
 }
 
 void TestCommandHandler::FromFile(const std::string& file_name) {
-  if (file_name.size() == 0) {
+  if (file_name.empty()) {
     return;
   }
 
@@ -129,7 +119,7 @@ void TestCommandHandler::RegisterSendResponse(
 }
 
 void TestCommandHandler::Add(const vector<std::string>& args) {
-  if (args.size() < 1) {
+  if (args.empty()) {
     response_string_ = "TestCommandHandler 'add' takes an argument";
     send_response_(response_string_);
     return;
@@ -226,7 +216,6 @@ void TestCommandHandler::AddDeviceToPhy(const vector<std::string>& args) {
       "TestCommandHandler 'add_device_to_phy' called with device " +
       std::to_string(dev_index) + " and phy " + std::to_string(phy_index);
   send_response_(response_string_);
-  return;
 }
 
 void TestCommandHandler::DelDeviceFromPhy(const vector<std::string>& args) {
@@ -243,11 +232,10 @@ void TestCommandHandler::DelDeviceFromPhy(const vector<std::string>& args) {
       "TestCommandHandler 'del_device_from_phy' called with device " +
       std::to_string(dev_index) + " and phy " + std::to_string(phy_index);
   send_response_(response_string_);
-  return;
 }
 
 void TestCommandHandler::List(const vector<std::string>& args) {
-  if (args.size() > 0) {
+  if (!args.empty()) {
     LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
     return;
   }
@@ -288,7 +276,7 @@ void TestCommandHandler::SetTimerPeriod(const vector<std::string>& args) {
 }
 
 void TestCommandHandler::StartTimer(const vector<std::string>& args) {
-  if (args.size() > 0) {
+  if (!args.empty()) {
     LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
   }
   model_.StartTimer();
@@ -297,7 +285,7 @@ void TestCommandHandler::StartTimer(const vector<std::string>& args) {
 }
 
 void TestCommandHandler::StopTimer(const vector<std::string>& args) {
-  if (args.size() > 0) {
+  if (!args.empty()) {
     LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
   }
   model_.StopTimer();
@@ -306,7 +294,7 @@ void TestCommandHandler::StopTimer(const vector<std::string>& args) {
 }
 
 void TestCommandHandler::Reset(const std::vector<std::string>& args) {
-  if (args.size() > 0) {
+  if (!args.empty()) {
     LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
   }
   model_.Reset();

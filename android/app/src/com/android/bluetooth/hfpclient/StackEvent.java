@@ -21,6 +21,8 @@ package com.android.bluetooth.hfpclient;
 
 import android.bluetooth.BluetoothDevice;
 
+import com.android.internal.annotations.VisibleForTesting;
+
 public class StackEvent {
     // Type of event that signifies a native event and consumed by state machine
     public static final int STACK_EVENT = 100;
@@ -49,6 +51,9 @@ public class StackEvent {
     public static final int EVENT_TYPE_RING_INDICATION = 21;
     public static final int EVENT_TYPE_UNKNOWN_EVENT = 22;
 
+    public static final int CMD_RESULT_TYPE_OK = 0;
+    public static final int CMD_RESULT_TYPE_CME_ERROR = 7;
+
     public int type = EVENT_TYPE_NONE;
     public int valueInt = 0;
     public int valueInt2 = 0;
@@ -76,7 +81,8 @@ public class StackEvent {
     }
 
     // for debugging only
-    private static String eventTypeToString(int type) {
+    @VisibleForTesting
+    static String eventTypeToString(int type) {
         switch (type) {
             case EVENT_TYPE_NONE:
                 return "EVENT_TYPE_NONE";

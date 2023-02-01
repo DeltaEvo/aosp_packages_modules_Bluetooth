@@ -15,15 +15,21 @@
  */
 package com.android.bluetooth;
 
+import static com.google.common.truth.Truth.assertWithMessage;
+
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.MessageQueue;
+import android.os.Process;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.rule.ServiceTestRule;
@@ -180,6 +186,9 @@ public class TestUtils {
         verify(adapterService, timeout(SERVICE_TOGGLE_TIMEOUT_MS)).onProfileServiceStateChanged(
                 profile.capture(), eq(BluetoothAdapter.STATE_OFF));
         Assert.assertEquals(profileServiceClass.getName(), profile.getValue().getClass().getName());
+        ArgumentCaptor<ProfileService> profile2 = ArgumentCaptor.forClass(profileServiceClass);
+        verify(adapterService, timeout(SERVICE_TOGGLE_TIMEOUT_MS)).removeProfile(profile2.capture());
+        Assert.assertEquals(profileServiceClass.getName(), profile2.getValue().getClass().getName());
     }
 
     /**
@@ -196,6 +205,16 @@ public class TestUtils {
                 bluetoothAdapter.getRemoteDevice(String.format("00:01:02:03:04:%02X", id));
         Assert.assertNotNull(testDevice);
         return testDevice;
+    }
+
+    public static Resources getTestApplicationResources(Context context) {
+        try {
+            return context.getPackageManager().getResourcesForApplication("com.android.bluetooth.tests");
+        } catch (PackageManager.NameNotFoundException e) {
+            assertWithMessage("Setup Failure: Unable to get test application resources"
+                    + e.toString()).fail();
+            return null;
+        }
     }
 
     /**

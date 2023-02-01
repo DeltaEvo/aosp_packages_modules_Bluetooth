@@ -192,7 +192,7 @@ void BTM_reset_complete() {
 
   btm_pm_reset();
 
-  l2c_link_init();
+  l2c_link_init(controller->get_acl_buffer_count_classic());
 
   // setup the random number generator
   std::srand(std::time(nullptr));
@@ -689,6 +689,11 @@ tBTM_STATUS BTM_EnableTestMode(void) {
  ******************************************************************************/
 tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
                                     tBTM_CMPL_CB* p_cb) {
+  /* Read and Write STORED link key stems from a legacy use-case and is no
+   * longer expected to be used. Disable explicitly for Floss and queue overall
+   * deletion from Fluoride.
+   */
+#if !defined(TARGET_FLOSS)
   /* Check if the previous command is completed */
   if (btm_cb.devcb.p_stored_link_key_cmpl_cb) return (BTM_BUSY);
 
@@ -706,6 +711,7 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
   } else {
     btsnd_hcic_delete_stored_key(*bd_addr, delete_all_flag);
   }
+#endif
 
   return (BTM_SUCCESS);
 }

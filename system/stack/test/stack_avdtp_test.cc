@@ -17,9 +17,11 @@
 //#include <dlfcn.h>
 #include <gtest/gtest.h>
 
+#include "osi/include/allocator.h"
 #include "stack/avdt/avdt_int.h"
 #include "stack/include/avdt_api.h"
 #include "stack/test/common/mock_stack_avdt_msg.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -29,72 +31,79 @@
 // Global trace level referred in the code under test
 uint8_t appl_trace_level = BT_TRACE_LEVEL_VERBOSE;
 
-void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) { }
-
-// All mock requires this symbol to count calling times
-std::map<std::string, int> mock_function_count_map;
-
 class StackAvdtpTest : public ::testing::Test {
  protected:
   StackAvdtpTest() = default;
 
   virtual ~StackAvdtpTest() = default;
  protected:
-  static AvdtpRcb _reg;
-  static uint8_t _expected_stream_event;
-
-  uint8_t scb_handle_;
+  static AvdtpRcb reg_ctrl_block_;
+  static uint8_t callback_event_;
+  static uint8_t scb_handle_;
 
  protected:
-  static void _avdtcallback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
-   uint8_t event, tAVDT_CTRL* p_data, uint8_t scb_index) {
+  static void AvdtConnCallback(uint8_t handle, const RawAddress& bd_addr,
+                               uint8_t event, tAVDT_CTRL* p_data,
+                               uint8_t scb_index) {
     mock_function_count_map[__func__]++;
+    callback_event_ = event;
   }
 
-  static void _streamcallback(uint8_t handle, const RawAddress& bd_addr,
-   uint8_t event, tAVDT_CTRL* p_data,
-   uint8_t scb_index) {
+  static void StreamCtrlCallback(uint8_t handle, const RawAddress& bd_addr,
+                                 uint8_t event, tAVDT_CTRL* p_data,
+                                 uint8_t scb_index) {
     mock_function_count_map[__func__]++;
-    ASSERT_EQ(event, _expected_stream_event);
-  };
+    callback_event_ = event;
+  }
+
+  static void AvdtReportCallback(uint8_t handle, AVDT_REPORT_TYPE type,
+                                 tAVDT_REPORT_DATA* p_data) {
+    mock_function_count_map[__func__]++;
+  }
 
   static void SetUpTestCase() {
-    _reg.ctrl_mtu = 672;
-    _reg.ret_tout = 4;
-    _reg.sig_tout = 4;
-    _reg.idle_tout = 10;
-    _reg.scb_index = 0;
-    AVDT_Register(&_reg, _avdtcallback);
-  }
+    reg_ctrl_block_.ctrl_mtu = 672;
+    reg_ctrl_block_.ret_tout = 4;
+    reg_ctrl_block_.sig_tout = 4;
+    reg_ctrl_block_.idle_tout = 10;
+    reg_ctrl_block_.scb_index = 0;
+    AVDT_Register(&reg_ctrl_block_, AvdtConnCallback);
 
-  static void TearDownTestCase() {
-    AVDT_Deregister();
-  }
-
-  void SetUp() override {
     uint8_t peer_id = 1;
     scb_handle_ = 0;
-    _expected_stream_event = 0;
-    AvdtpStreamConfig avdtp_stream_config;
+    AvdtpStreamConfig avdtp_stream_config{};
     avdtp_stream_config.cfg.psc_mask = AVDT_PSC_DELAY_RPT;
+    avdtp_stream_config.p_avdt_ctrl_cback = StreamCtrlCallback;
+    avdtp_stream_config.p_report_cback = AvdtReportCallback;
     avdtp_stream_config.tsep = AVDT_TSEP_SNK;
-    avdtp_stream_config.p_avdt_ctrl_cback = _streamcallback;
-    mock_function_count_map["_streamcallback"] = 0;
-
+    // We have to reuse the stream since there is only AVDT_NUM_SEPS *
+    // AVDT_NUM_LINKS
     ASSERT_EQ(AVDT_CreateStream(peer_id, &scb_handle_, avdtp_stream_config), AVDT_SUCCESS);
   }
 
-  void TearDown() override {
-    ASSERT_EQ(AVDT_RemoveStream(scb_handle_), AVDT_SUCCESS);
+  static void TearDownTestCase() { AVDT_Deregister(); }
+
+  void SetUp() override {
+    callback_event_ = AVDT_MAX_EVT + 1;
+    reset_mock_function_count_map();
   }
 
-  void StreamCallBackExpect(uint8_t event) {
-    _expected_stream_event = event;
+  void TearDown() override {
+    auto pscb = avdt_scb_by_hdl(scb_handle_);
+    tAVDT_SCB_EVT data;
+    // clean up the SCB state
+    avdt_scb_event(pscb, AVDT_SCB_MSG_ABORT_RSP_EVT, &data);
+    avdt_scb_event(pscb, AVDT_SCB_TC_CLOSE_EVT, &data);
+    ASSERT_EQ(AVDT_RemoveStream(scb_handle_), AVDT_SUCCESS);
+    // fallback to default settings (delay report + sink)
+    pscb->stream_config.cfg.psc_mask = AVDT_PSC_DELAY_RPT;
+    pscb->stream_config.tsep = AVDT_TSEP_SNK;
   }
 };
 
-AvdtpRcb StackAvdtpTest::_reg{};
-uint8_t StackAvdtpTest::_expected_stream_event = 0;
+AvdtpRcb StackAvdtpTest::reg_ctrl_block_{};
+uint8_t StackAvdtpTest::callback_event_ = AVDT_MAX_EVT + 1;
+uint8_t StackAvdtpTest::scb_handle_ = 0;
 
 TEST_F(StackAvdtpTest, test_delay_report_as_accept) {
   // Get SCB ready to send response
@@ -108,24 +117,21 @@ TEST_F(StackAvdtpTest, test_delay_report_as_accept) {
 
   mock_avdt_msg_send_cmd_clear_history();
   mock_avdt_msg_send_rsp_clear_history();
-  mock_function_count_map["avdt_msg_send_rsp"] = 0;
-  mock_function_count_map["avdt_msg_send_cmd"] = 0;
   ASSERT_EQ(AVDT_ConfigRsp(scb_handle_, label, err_code, category), AVDT_SUCCESS);
 
   // Config response sent
-  ASSERT_EQ(mock_function_count_map["avdt_msg_send_rsp"], 1);
+  ASSERT_EQ(get_func_call_count("avdt_msg_send_rsp"), 1);
   ASSERT_EQ(mock_avdt_msg_send_rsp_get_sig_id_at(0), AVDT_SIG_SETCONFIG);
 
   // Delay report command sent
-  ASSERT_EQ(mock_function_count_map["avdt_msg_send_cmd"], 1);
+  ASSERT_EQ(get_func_call_count("avdt_msg_send_cmd"), 1);
   ASSERT_EQ(mock_avdt_msg_send_cmd_get_sig_id_at(0), AVDT_SIG_DELAY_RPT);
 
   // Delay report confirmed
   tAVDT_SCB_EVT data;
-  ASSERT_EQ(mock_function_count_map["_streamcallback"], 0);
-  StreamCallBackExpect(AVDT_DELAY_REPORT_CFM_EVT);
+  ASSERT_EQ(get_func_call_count("StreamCtrlCallback"), 0);
   avdt_scb_hdl_delay_rpt_rsp(pscb, &data);
-  ASSERT_EQ(mock_function_count_map["_streamcallback"], 1);
+  ASSERT_EQ(callback_event_, AVDT_DELAY_REPORT_CFM_EVT);
 }
 
 TEST_F(StackAvdtpTest, test_no_delay_report_if_not_sink) {
@@ -140,11 +146,11 @@ TEST_F(StackAvdtpTest, test_no_delay_report_if_not_sink) {
   uint8_t label = 0;
   uint8_t err_code = 0;
   uint8_t category = 0;
-  mock_function_count_map["avdt_msg_send_rsp"] = 0;
-  mock_function_count_map["avdt_msg_send_cmd"] = 0;
   ASSERT_EQ(AVDT_ConfigRsp(scb_handle_, label, err_code, category), AVDT_SUCCESS);
-  ASSERT_EQ(mock_function_count_map["avdt_msg_send_rsp"], 1); // Config response sent
-  ASSERT_EQ(mock_function_count_map["avdt_msg_send_cmd"], 0); // Delay report command not sent
+  ASSERT_EQ(get_func_call_count("avdt_msg_send_rsp"),
+            1);  // Config response sent
+  ASSERT_EQ(get_func_call_count("avdt_msg_send_cmd"),
+            0);  // Delay report command not sent
 }
 
 TEST_F(StackAvdtpTest, test_no_delay_report_if_not_enabled) {
@@ -159,25 +165,153 @@ TEST_F(StackAvdtpTest, test_no_delay_report_if_not_enabled) {
   uint8_t label = 0;
   uint8_t err_code = 0;
   uint8_t category = 0;
-  mock_function_count_map["avdt_msg_send_rsp"] = 0;
-  mock_function_count_map["avdt_msg_send_cmd"] = 0;
   ASSERT_EQ(AVDT_ConfigRsp(scb_handle_, label, err_code, category), AVDT_SUCCESS);
-  ASSERT_EQ(mock_function_count_map["avdt_msg_send_rsp"], 1); // Config response sent
-  ASSERT_EQ(mock_function_count_map["avdt_msg_send_cmd"], 0); // Delay report command not sent
+  ASSERT_EQ(get_func_call_count("avdt_msg_send_rsp"),
+            1);  // Config response sent
+  ASSERT_EQ(get_func_call_count("avdt_msg_send_cmd"),
+            0);  // Delay report command not sent
 }
 
 TEST_F(StackAvdtpTest, test_delay_report_as_init) {
   auto pscb = avdt_scb_by_hdl(scb_handle_);
+  pscb->in_use = true;
 
   tAVDT_SCB_EVT data;
-
-  mock_function_count_map["avdt_msg_send_cmd"] = 0;
 
   // Delay report -> Open command
   mock_avdt_msg_send_cmd_clear_history();
   avdt_scb_event(pscb, AVDT_SCB_MSG_SETCONFIG_RSP_EVT, &data);
-  ASSERT_EQ(mock_function_count_map["avdt_msg_send_cmd"], 2);
+  ASSERT_EQ(get_func_call_count("avdt_msg_send_cmd"), 2);
   ASSERT_EQ(mock_avdt_msg_send_cmd_get_sig_id_at(0), AVDT_SIG_DELAY_RPT);
   ASSERT_EQ(mock_avdt_msg_send_cmd_get_sig_id_at(1), AVDT_SIG_OPEN);
 }
 
+TEST_F(StackAvdtpTest, test_SR_reporting_handler) {
+  constexpr uint8_t sender_report_packet[] = {
+      // Header
+      0x80, 0xc8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      // Sender Info
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      // Report Block #1
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  uint16_t packet_length = sizeof(sender_report_packet);
+  tAVDT_SCB_EVT data;
+  auto pscb = avdt_scb_by_hdl(scb_handle_);
+
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = packet_length, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, sender_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // no payload
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, sender_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // only reporting header
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = 8, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, sender_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // reporting header + sender info
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = 28, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, sender_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 2);
+}
+
+TEST_F(StackAvdtpTest, test_RR_reporting_handler) {
+  constexpr uint8_t receiver_report_packet[] = {
+      // Header
+      0x80, 0xc9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      // Report Block #1
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  uint16_t packet_length = sizeof(receiver_report_packet);
+  tAVDT_SCB_EVT data;
+  auto pscb = avdt_scb_by_hdl(scb_handle_);
+
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = packet_length, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, receiver_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // no payload
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, receiver_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // only reporting header
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = 8, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, receiver_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // reporting header + report block
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = 32, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, receiver_report_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 2);
+}
+
+TEST_F(StackAvdtpTest, test_SDES_reporting_handler) {
+  constexpr uint8_t source_description_packet[] = {// Header
+                                                   0x80, 0xca, 0x00, 0x00,
+                                                   // Chunk #1
+                                                   0x00, 0x00, 0x00, 0x00,
+                                                   // SDES Item (CNAME=1)
+                                                   0x01, 0x05, 0x00, 0x00, 0x00,
+                                                   0x00, 0x00, 0x00};
+  uint16_t packet_length = sizeof(source_description_packet);
+  tAVDT_SCB_EVT data;
+  auto pscb = avdt_scb_by_hdl(scb_handle_);
+
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = packet_length, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, source_description_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // no payload
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, source_description_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // only reporting header
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = 4, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, source_description_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // SDES Item (CNAME) with empty value
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = 10, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, source_description_packet, packet_length);
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+
+  // SDES Item (not CNAME) which is not supported
+  data.p_pkt = (BT_HDR*)osi_calloc(sizeof(BT_HDR) + packet_length);
+  *data.p_pkt = {.len = 10, .layer_specific = AVDT_CHAN_REPORT};
+  memcpy(data.p_pkt->data, source_description_packet, packet_length);
+  *(data.p_pkt->data + 8) = 0x02;
+  *(data.p_pkt->data + 9) = 0x00;
+  avdt_scb_hdl_pkt(pscb, &data);
+  ASSERT_EQ(get_func_call_count("AvdtReportCallback"), 1);
+}

@@ -25,6 +25,7 @@
 
 #include "a2dp_vendor.h"
 #include "a2dp_vendor_aptx_hd.h"
+#include "aptXHDbtenc.h"
 #include "common/time_util.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
@@ -35,26 +36,11 @@
 // Encoder for aptX-HD Source Codec
 //
 
-//
-// The aptX-HD encoder shared library, and the functions to use
-//
-static const char* APTX_HD_ENCODER_LIB_NAME = "libaptXHD_encoder.so";
-static void* aptx_hd_encoder_lib_handle = NULL;
-
-static const char* APTX_HD_ENCODER_INIT_NAME = "aptxhdbtenc_init";
-typedef int (*tAPTX_HD_ENCODER_INIT)(void* state, short endian);
-
-static const char* APTX_HD_ENCODER_ENCODE_STEREO_NAME =
-    "aptxhdbtenc_encodestereo";
-typedef int (*tAPTX_HD_ENCODER_ENCODE_STEREO)(void* state, void* pcmL,
-                                              void* pcmR, void* buffer);
-
-static const char* APTX_HD_ENCODER_SIZEOF_PARAMS_NAME = "SizeofAptxhdbtenc";
-typedef int (*tAPTX_HD_ENCODER_SIZEOF_PARAMS)(void);
-
-static tAPTX_HD_ENCODER_INIT aptx_hd_encoder_init_func;
-static tAPTX_HD_ENCODER_ENCODE_STEREO aptx_hd_encoder_encode_stereo_func;
-static tAPTX_HD_ENCODER_SIZEOF_PARAMS aptx_hd_encoder_sizeof_params_func;
+static const tAPTX_HD_API aptx_hd_api = {
+    .init_func = aptxhdbtenc_init,
+    .encode_stereo_func = aptxhdbtenc_encodestereo,
+    .sizeof_params_func = SizeofAptxhdbtenc,
+};
 
 // offset
 #if (BTA_AV_CO_CP_SCMS_T == TRUE)
@@ -112,56 +98,29 @@ static size_t aptx_hd_encode_24bit(tAPTX_HD_FRAMING_PARAMS* framing_params,
                                    size_t* data_out_index, uint32_t* data32_in,
                                    uint8_t* data_out);
 
-bool A2DP_VendorLoadEncoderAptxHd(void) {
-  if (aptx_hd_encoder_lib_handle != NULL) return true;  // Already loaded
+/*******************************************************************************
+ *
+ * Function         A2DP_VendorLoadEncoderAptxHd
+ *
+ * Description      This function will try to load the aptx HD encoder library.
+ *
+ * Returns          LOAD_SUCCESS on success
+ *                  LOAD_ERROR_MISSING_CODEC on missing library
+ *                  LOAD_ERROR_VERSION_MISMATCH on symbol loading error
+ *
+ ******************************************************************************/
+tLOADING_CODEC_STATUS A2DP_VendorLoadEncoderAptxHd(void) {
+  // Nothing to do - the library is statically linked
+  return LOAD_SUCCESS;
+}
 
-  // Open the encoder library
-  aptx_hd_encoder_lib_handle = dlopen(APTX_HD_ENCODER_LIB_NAME, RTLD_NOW);
-  if (aptx_hd_encoder_lib_handle == NULL) {
-    LOG_ERROR("%s: cannot open aptX-HD encoder library %s: %s", __func__,
-              APTX_HD_ENCODER_LIB_NAME, dlerror());
-    return false;
-  }
-
-  aptx_hd_encoder_init_func = (tAPTX_HD_ENCODER_INIT)dlsym(
-      aptx_hd_encoder_lib_handle, APTX_HD_ENCODER_INIT_NAME);
-  if (aptx_hd_encoder_init_func == NULL) {
-    LOG_ERROR("%s: cannot find function '%s' in the encoder library: %s",
-              __func__, APTX_HD_ENCODER_INIT_NAME, dlerror());
-    A2DP_VendorUnloadEncoderAptxHd();
-    return false;
-  }
-
-  aptx_hd_encoder_encode_stereo_func = (tAPTX_HD_ENCODER_ENCODE_STEREO)dlsym(
-      aptx_hd_encoder_lib_handle, APTX_HD_ENCODER_ENCODE_STEREO_NAME);
-  if (aptx_hd_encoder_encode_stereo_func == NULL) {
-    LOG_ERROR("%s: cannot find function '%s' in the encoder library: %s",
-              __func__, APTX_HD_ENCODER_ENCODE_STEREO_NAME, dlerror());
-    A2DP_VendorUnloadEncoderAptxHd();
-    return false;
-  }
-
-  aptx_hd_encoder_sizeof_params_func = (tAPTX_HD_ENCODER_SIZEOF_PARAMS)dlsym(
-      aptx_hd_encoder_lib_handle, APTX_HD_ENCODER_SIZEOF_PARAMS_NAME);
-  if (aptx_hd_encoder_sizeof_params_func == NULL) {
-    LOG_ERROR("%s: cannot find function '%s' in the encoder library: %s",
-              __func__, APTX_HD_ENCODER_SIZEOF_PARAMS_NAME, dlerror());
-    A2DP_VendorUnloadEncoderAptxHd();
-    return false;
-  }
-
+bool A2DP_VendorCopyAptxHdApi(tAPTX_HD_API& external_api) {
+  external_api = aptx_hd_api;
   return true;
 }
 
 void A2DP_VendorUnloadEncoderAptxHd(void) {
-  aptx_hd_encoder_init_func = NULL;
-  aptx_hd_encoder_encode_stereo_func = NULL;
-  aptx_hd_encoder_sizeof_params_func = NULL;
-
-  if (aptx_hd_encoder_lib_handle != NULL) {
-    dlclose(aptx_hd_encoder_lib_handle);
-    aptx_hd_encoder_lib_handle = NULL;
-  }
+  // nothing to do
 }
 
 void a2dp_vendor_aptx_hd_encoder_init(
@@ -186,9 +145,9 @@ void a2dp_vendor_aptx_hd_encoder_init(
 #endif
 
   a2dp_aptx_hd_encoder_cb.aptx_hd_encoder_state =
-      osi_malloc(aptx_hd_encoder_sizeof_params_func());
+      osi_malloc(aptx_hd_api.sizeof_params_func());
   if (a2dp_aptx_hd_encoder_cb.aptx_hd_encoder_state != NULL) {
-    aptx_hd_encoder_init_func(a2dp_aptx_hd_encoder_cb.aptx_hd_encoder_state, 0);
+    aptx_hd_api.init_func(a2dp_aptx_hd_encoder_cb.aptx_hd_encoder_state, 0);
   } else {
     LOG_ERROR("%s: Cannot allocate aptX-HD encoder state", __func__);
     // TODO: Return an error?
@@ -429,7 +388,7 @@ static size_t aptx_hd_encode_24bit(tAPTX_HD_FRAMING_PARAMS* framing_params,
       p += 3;
     }
 
-    aptx_hd_encoder_encode_stereo_func(
+    aptx_hd_api.encode_stereo_func(
         a2dp_aptx_hd_encoder_cb.aptx_hd_encoder_state, &pcmL, &pcmR,
         &encoded_sample);
 

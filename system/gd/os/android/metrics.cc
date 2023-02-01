@@ -22,8 +22,10 @@
 
 #include <statslog_bt.h>
 
+#include "common/audit_log.h"
 #include "common/metric_id_manager.h"
 #include "common/strings.h"
+#include "hci/hci_packets.h"
 #include "os/log.h"
 
 namespace bluetooth {
@@ -32,6 +34,8 @@ namespace os {
 
 using bluetooth::common::MetricIdManager;
 using bluetooth::hci::Address;
+using bluetooth::hci::ErrorCode;
+using bluetooth::hci::EventCode;
 
 /**
  * nullptr and size 0 represent missing value for obfuscated_id
@@ -73,7 +77,7 @@ void LogMetricLinkLayerConnectionEvent(
         common::ToHexString(hci_cmd).c_str(),
         common::ToHexString(hci_event).c_str(),
         common::ToHexString(hci_ble_event).c_str(),
-        address ? address->ToString().c_str() : "(NULL)",
+        address ? ADDRESS_TO_LOGGABLE_CSTR(*address) : "(NULL)",
         connection_handle,
         common::ToHexString(link_type).c_str(),
         ret);
@@ -114,7 +118,7 @@ void LogMetricA2dpAudioUnderrunEvent(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, encoding_interval_nanos %s, num_missing_pcm_bytes %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         std::to_string(encoding_interval_nanos).c_str(),
         num_missing_pcm_bytes,
         ret);
@@ -145,7 +149,7 @@ void LogMetricA2dpAudioOverrunEvent(
     LOG_WARN(
         "Failed to log for %s, encoding_interval_nanos %s, num_dropped_buffers %d, "
         "num_dropped_encoded_frames %d, num_dropped_encoded_bytes %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         std::to_string(encoding_interval_nanos).c_str(),
         num_dropped_buffers,
         num_dropped_encoded_frames,
@@ -164,7 +168,7 @@ void LogMetricA2dpPlaybackEvent(const Address& address, int playback_state, int 
   if (ret < 0) {
     LOG_WARN(
         "Failed to log for %s, playback_state %d, audio_coding_mode %d,error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         playback_state,
         audio_coding_mode,
         ret);
@@ -180,7 +184,7 @@ void LogMetricReadRssiResult(const Address& address, uint16_t handle, uint32_t c
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, handle %d, status %s, rssi %d dBm, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(cmd_status).c_str(),
         rssi,
@@ -204,7 +208,7 @@ void LogMetricReadFailedContactCounterResult(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, handle %d, status %s, failed_contact_counter %d packets, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(cmd_status).c_str(),
         failed_contact_counter,
@@ -223,7 +227,7 @@ void LogMetricReadTxPowerLevelResult(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, handle %d, status %s, transmit_power_level %d packets, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(cmd_status).c_str(),
         transmit_power_level,
@@ -232,7 +236,7 @@ void LogMetricReadTxPowerLevelResult(
 }
 
 void LogMetricSmpPairingEvent(
-    const Address& address, uint8_t smp_cmd, android::bluetooth::DirectionEnum direction, uint8_t smp_fail_reason) {
+    const Address& address, uint16_t smp_cmd, android::bluetooth::DirectionEnum direction, uint16_t smp_fail_reason) {
   int metric_id = 0;
   if (!address.IsEmpty()) {
     metric_id = MetricIdManager::GetInstance().AllocateId(address);
@@ -242,7 +246,7 @@ void LogMetricSmpPairingEvent(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, smp_cmd %s, direction %d, smp_fail_reason %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         common::ToHexString(smp_cmd).c_str(),
         direction,
         common::ToHexString(smp_fail_reason).c_str(),
@@ -276,7 +280,7 @@ void LogMetricClassicPairingEvent(
     LOG_WARN(
         "Failed for %s, handle %d, hci_cmd %s, hci_event %s, cmd_status %s, "
         "reason %s, event_value %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(hci_cmd).c_str(),
         common::ToHexString(hci_event).c_str(),
@@ -284,6 +288,10 @@ void LogMetricClassicPairingEvent(
         common::ToHexString(reason_code).c_str(),
         std::to_string(event_value).c_str(),
         ret);
+  }
+
+  if (static_cast<EventCode>(hci_event) == EventCode::SIMPLE_PAIRING_COMPLETE) {
+    common::LogConnectionAdminAuditEvent("Pairing", address, static_cast<ErrorCode>(cmd_status));
   }
 }
 
@@ -303,7 +311,7 @@ void LogMetricSdpAttribute(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, protocol_uuid %s, attribute_id %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         common::ToHexString(protocol_uuid).c_str(),
         common::ToHexString(attribute_id).c_str(),
         ret);
@@ -340,7 +348,7 @@ void LogMetricSocketConnectionState(
     LOG_WARN(
         "Failed for %s, port %d, type %d, state %d, tx_bytes %s, rx_bytes %s, uid %d, server_port %d, "
         "socket_role %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         port,
         type,
         connection_state,
@@ -385,7 +393,7 @@ void LogMetricManufacturerInfo(
         "Failed for %s, source_type %d, source_name %s, manufacturer %s, model %s, "
         "hardware_version %s, "
         "software_version %s, MAC address type %d MAC address prefix %d %d %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         source_type,
         source_name.c_str(),
         manufacturer.c_str(),
@@ -409,9 +417,79 @@ void LogMetricBluetoothHalCrashReason(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, error_code %s, vendor_error_code %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         common::ToHexString(error_code).c_str(),
         common::ToHexString(vendor_error_code).c_str(),
+        ret);
+  }
+}
+
+void LogMetricBluetoothLocalSupportedFeatures(uint32_t page_num, uint64_t features) {
+  int ret = stats_write(BLUETOOTH_LOCAL_SUPPORTED_FEATURES_REPORTED, page_num, features);
+  if (ret < 0) {
+    LOG_WARN(
+        "Failed for LogMetricBluetoothLocalSupportedFeatures, "
+        "page_num %d, features %s, error %d",
+        page_num,
+        std::to_string(features).c_str(),
+        ret);
+  }
+}
+
+void LogMetricBluetoothLocalVersions(
+    uint32_t lmp_manufacturer_name,
+    uint8_t lmp_version,
+    uint32_t lmp_subversion,
+    uint8_t hci_version,
+    uint32_t hci_revision) {
+  int ret = stats_write(
+      BLUETOOTH_LOCAL_VERSIONS_REPORTED, lmp_manufacturer_name, lmp_version, lmp_subversion, hci_version, hci_revision);
+  if (ret < 0) {
+    LOG_WARN(
+        "Failed for LogMetricBluetoothLocalVersions, "
+        "lmp_manufacturer_name %d, lmp_version %hhu, lmp_subversion %d, hci_version %hhu, hci_revision %d, error %d",
+        lmp_manufacturer_name,
+        lmp_version,
+        lmp_subversion,
+        hci_version,
+        hci_revision,
+        ret);
+  }
+}
+
+void LogMetricBluetoothDisconnectionReasonReported(
+    uint32_t reason, const Address& address, uint32_t connection_handle) {
+  int metric_id = 0;
+  if (!address.IsEmpty()) {
+    metric_id = MetricIdManager::GetInstance().AllocateId(address);
+  }
+  int ret = stats_write(BLUETOOTH_DISCONNECTION_REASON_REPORTED, reason, metric_id, connection_handle);
+  if (ret < 0) {
+    LOG_WARN(
+        "Failed for LogMetricBluetoothDisconnectionReasonReported, "
+        "reason %d, metric_id %d, connection_handle %d, error %d",
+        reason,
+        metric_id,
+        connection_handle,
+        ret);
+  }
+}
+
+void LogMetricBluetoothRemoteSupportedFeatures(
+    const Address& address, uint32_t page, uint64_t features, uint32_t connection_handle) {
+  int metric_id = 0;
+  if (!address.IsEmpty()) {
+    metric_id = MetricIdManager::GetInstance().AllocateId(address);
+  }
+  int ret = stats_write(BLUETOOTH_REMOTE_SUPPORTED_FEATURES_REPORTED, metric_id, page, features, connection_handle);
+  if (ret < 0) {
+    LOG_WARN(
+        "Failed for LogMetricBluetoothRemoteSupportedFeatures, "
+        "metric_id %d, page %d, features %s, connection_handle %d, error %d",
+        metric_id,
+        page,
+        std::to_string(features).c_str(),
+        connection_handle,
         ret);
   }
 }

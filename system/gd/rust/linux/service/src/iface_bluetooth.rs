@@ -1,19 +1,21 @@
-extern crate bt_shim;
-
 use bt_topshim::btif::{
-    BtDeviceType, BtPropertyType, BtSspVariant, BtStatus, BtTransport, Uuid, Uuid128Bit,
+    BtBondState, BtConnectionState, BtDeviceType, BtPropertyType, BtSspVariant, BtStatus,
+    BtTransport, Uuid, Uuid128Bit,
 };
 use bt_topshim::profiles::socket::SocketType;
+use bt_topshim::profiles::ProfileConnectionState;
+
+use bt_topshim::profiles::hid_host::BthhReportType;
 
 use btstack::bluetooth::{
     Bluetooth, BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
+    IBluetoothQA,
 };
 use btstack::socket_manager::{
     BluetoothServerSocket, BluetoothSocket, BluetoothSocketManager, CallbackId,
     IBluetoothSocketManager, IBluetoothSocketManagerCallbacks, SocketId, SocketResult,
 };
 use btstack::suspend::{ISuspend, ISuspendCallback, Suspend, SuspendType};
-use btstack::uuid::Profile;
 use btstack::RPCProxy;
 
 use dbus::arg::RefArg;
@@ -51,6 +53,7 @@ impl_dbus_arg_from_into!(BtStatus, u32);
 /// what is listed in the `generate_dbus_exporter` invocation.
 pub struct BluetoothMixin {
     pub adapter: Arc<Mutex<Box<Bluetooth>>>,
+    pub qa: Arc<Mutex<Box<Bluetooth>>>,
     pub suspend: Arc<Mutex<Box<Suspend>>>,
     pub socket_mgr: Arc<Mutex<Box<BluetoothSocketManager>>>,
 }
@@ -110,11 +113,13 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
     }
 }
 
+impl_dbus_arg_enum!(BtBondState);
+impl_dbus_arg_enum!(BtConnectionState);
 impl_dbus_arg_enum!(BtDeviceType);
 impl_dbus_arg_enum!(BtPropertyType);
 impl_dbus_arg_enum!(BtSspVariant);
 impl_dbus_arg_enum!(BtTransport);
-impl_dbus_arg_enum!(Profile);
+impl_dbus_arg_enum!(ProfileConnectionState);
 
 #[allow(dead_code)]
 struct BluetoothConnectionCallbackDBus {}
@@ -212,7 +217,7 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("SetDiscoverable")]
-    fn set_discoverable(&self, mode: bool, duration: u32) -> bool {
+    fn set_discoverable(&mut self, mode: bool, duration: u32) -> bool {
         dbus_generated!()
     }
 
@@ -267,7 +272,7 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("GetBondState")]
-    fn get_bond_state(&self, device: BluetoothDevice) -> u32 {
+    fn get_bond_state(&self, device: BluetoothDevice) -> BtBondState {
         dbus_generated!()
     }
 
@@ -311,13 +316,33 @@ impl IBluetooth for IBluetoothDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("GetRemoteAppearance")]
+    fn get_remote_appearance(&self, _device: BluetoothDevice) -> u16 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteConnected")]
+    fn get_remote_connected(&self, _device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetRemoteWakeAllowed")]
+    fn get_remote_wake_allowed(&self, _device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetConnectedDevices")]
+    fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetConnectionState")]
-    fn get_connection_state(&self, device: BluetoothDevice) -> u32 {
+    fn get_connection_state(&self, device: BluetoothDevice) -> BtConnectionState {
         dbus_generated!()
     }
 
     #[dbus_method("GetProfileConnectionState")]
-    fn get_profile_connection_state(&self, profile: Profile) -> u32 {
+    fn get_profile_connection_state(&self, profile: Uuid128Bit) -> ProfileConnectionState {
         dbus_generated!()
     }
 
@@ -343,6 +368,11 @@ impl IBluetooth for IBluetoothDBus {
 
     #[dbus_method("DisconnectAllEnabledProfiles")]
     fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("IsWbsSupported")]
+    fn is_wbs_supported(&self) -> bool {
         dbus_generated!()
     }
 }
@@ -534,12 +564,12 @@ impl ISuspend for ISuspendDBus {
     }
 
     #[dbus_method("Suspend")]
-    fn suspend(&self, suspend_type: SuspendType) -> u32 {
+    fn suspend(&mut self, suspend_type: SuspendType, suspend_id: i32) {
         dbus_generated!()
     }
 
     #[dbus_method("Resume")]
-    fn resume(&self) -> bool {
+    fn resume(&mut self) -> bool {
         dbus_generated!()
     }
 }
@@ -554,11 +584,59 @@ impl ISuspendCallback for SuspendCallbackDBus {
         dbus_generated!()
     }
     #[dbus_method("OnSuspendReady")]
-    fn on_suspend_ready(&self, suspend_id: u32) {
+    fn on_suspend_ready(&self, suspend_id: i32) {
         dbus_generated!()
     }
     #[dbus_method("OnResumed")]
-    fn on_resumed(&self, suspend_id: u32) {
+    fn on_resumed(&self, suspend_id: i32) {
+        dbus_generated!()
+    }
+}
+
+impl_dbus_arg_enum!(BthhReportType);
+
+#[allow(dead_code)]
+struct IBluetoothQADBus {}
+
+#[generate_dbus_exporter(
+    export_bluetooth_qa_dbus_intf,
+    "org.chromium.bluetooth.BluetoothQA",
+    BluetoothMixin,
+    qa
+)]
+impl IBluetoothQA for IBluetoothQADBus {
+    #[dbus_method("GetConnectable")]
+    fn get_connectable(&self) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetConnectable")]
+    fn set_connectable(&mut self, mode: bool) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetHIDReport")]
+    fn get_hid_report(
+        &mut self,
+        addr: String,
+        report_type: BthhReportType,
+        report_id: u8,
+    ) -> BtStatus {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetHIDReport")]
+    fn set_hid_report(
+        &mut self,
+        addr: String,
+        report_type: BthhReportType,
+        report: String,
+    ) -> BtStatus {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SendHIDData")]
+    fn send_hid_data(&mut self, addr: String, data: String) -> BtStatus {
         dbus_generated!()
     }
 }

@@ -2,23 +2,40 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-android_test_helper_app {
-    name: "PandoraServer",
+java_library_static {
+    name: "PandoraServerLib",
+
     srcs: ["src/**/*.kt"],
-    platform_apis: true,
-    certificate: "platform",
+
+    sdk_version: "core_platform",
+
+    libs: [
+        // Access to hidden apis in Bluetooth:
+        "framework-bluetooth.impl",
+        "framework",
+    ],
 
     static_libs: [
         "androidx.test.runner",
         "androidx.test.core",
+        "androidx.test.uiautomator_uiautomator",
         "grpc-java-netty-shaded-test",
         "grpc-java-lite",
         "guava",
         "opencensus-java-api",
+        "kotlin-test",
         "kotlinx_coroutines",
-        "pandora-grpc-java",
-        "pandora-proto-java",
+        "pandora_experimental-grpc-java",
+        "pandora_experimental-proto-java",
         "opencensus-java-contrib-grpc-metrics",
+    ],
+}
+
+android_test_helper_app {
+    name: "PandoraServer",
+
+    static_libs: [
+        "PandoraServerLib",
     ],
 
     dex_preopt: {
@@ -28,92 +45,34 @@ android_test_helper_app {
         enabled: false,
     },
 
-    test_suites: ["device-tests"],
+    test_suites: [
+        "general-tests",
+        "device-tests",
+        "mts-bluetooth",
+    ],
+    min_sdk_version: "Tiramisu",
 }
 
 android_test {
     name: "pts-bot",
     required: ["PandoraServer"],
     test_config: "configs/PtsBotTest.xml",
-    data: ["configs/pts_bot_tests_config.json", ":mmi2grpc"],
+    data: [
+        "configs/pts_bot_tests_config.json",
+        ":mmi2grpc"
+    ],
     test_suites: ["device-tests"],
+    min_sdk_version: "Tiramisu",
 }
 
-java_library {
-    name: "pandora-grpc-java",
-    visibility: ["//visibility:private"],
-    srcs: [
-        "proto/pandora/*.proto",
+android_test {
+    name: "pts-bot-mts",
+    required: ["PandoraServer"],
+    test_config: "configs/PtsBotTestMts.xml",
+    data: [
+        "configs/pts_bot_tests_config.json",
+        ":mmi2grpc"
     ],
-    static_libs: [
-        "grpc-java-lite",
-        "guava",
-        "javax_annotation-api_1.3.2",
-        "libprotobuf-java-lite",
-        "opencensus-java-api",
-        "pandora-proto-java",
-    ],
-    proto: {
-        include_dirs: [
-            "external/protobuf/src",
-            "packages/modules/Bluetooth/android/pandora/server/proto",
-        ],
-        plugin: "grpc-java-plugin",
-        output_params: [
-           "lite",
-        ],
-    },
-}
-
-java_library {
-    name: "pandora-proto-java",
-    visibility: ["//visibility:private"],
-    srcs: [
-        "proto/pandora/*.proto",
-        ":libprotobuf-internal-protos",
-    ],
-    static_libs: [
-        "libprotobuf-java-lite",
-    ],
-    proto: {
-        type: "lite",
-        include_dirs: [
-            "external/protobuf/src",
-            "packages/modules/Bluetooth/android/pandora/server/proto",
-        ],
-    },
-}
-
-genrule {
-    name: "pandora-grpc-python",
-    tools: [
-        "aprotoc",
-        "protoc-gen-mmi2grpc-python"
-    ],
-    cmd: "$(location aprotoc)" +
-         "    -Ipackages/modules/Bluetooth/android/pandora/server/proto" +
-         "    -Iexternal/protobuf/src" +
-         "    --plugin=protoc-gen-grpc=$(location protoc-gen-mmi2grpc-python)" +
-         "    --grpc_out=$(genDir)" +
-         "    --python_out=$(genDir)" +
-         "    $(in)",
-    srcs: [
-        "proto/pandora/a2dp.proto",
-        "proto/pandora/gatt.proto",
-        "proto/pandora/hfp.proto",
-        "proto/pandora/host.proto",
-        "proto/pandora/sm.proto",
-    ],
-    out: [
-        "pandora/a2dp_grpc.py",
-        "pandora/a2dp_pb2.py",
-        "pandora/gatt_grpc.py",
-        "pandora/gatt_pb2.py",
-        "pandora/hfp_grpc.py",
-        "pandora/hfp_pb2.py",
-        "pandora/host_grpc.py",
-        "pandora/host_pb2.py",
-        "pandora/sm_grpc.py",
-        "pandora/sm_pb2.py",
-    ]
+    test_suites: ["mts-bluetooth"],
+    min_sdk_version: "Tiramisu",
 }

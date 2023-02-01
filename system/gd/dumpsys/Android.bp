@@ -143,8 +143,7 @@ cc_library {
         "BluetoothGeneratedDumpsysBundledSchema_cc",
     ],
     apex_available: [
-        "//apex_available:platform",
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }
@@ -178,6 +177,7 @@ cc_library {
 cc_test {
     name: "bluetooth_flatbuffer_tests",
     test_suites: ["device-tests"],
+    defaults: ["fluoride_common_options", "mts_defaults"],
     host_supported: true,
     test_options: {
         unit_test: true,
@@ -192,9 +192,5 @@ cc_test {
     generated_headers: [
         "BluetoothFlatbufferTestData_h",
     ],
-    cflags: [
-        "-Werror",
-        "-Wall",
-        "-Wextra",
-    ],
+    min_sdk_version: "30",
 }

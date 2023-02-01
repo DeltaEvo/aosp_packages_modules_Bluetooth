@@ -42,11 +42,6 @@ import java.util.List;
 
 
 public class BroadcastScanActivity extends AppCompatActivity {
-    // Integer key used for sending/receiving receiver ID.
-    public static final String EXTRA_BASS_RECEIVER_ID = "receiver_id";
-
-    private static final int BIS_ALL = 0xFFFFFFFF;
-
     private BluetoothDevice device;
     private BroadcastScanViewModel mViewModel;
     private BroadcastItemsAdapter adapter;
@@ -112,7 +107,8 @@ public class BroadcastScanActivity extends AppCompatActivity {
                                        + broadcastId, Toast.LENGTH_SHORT).show();
                         metadata = builder.setEncrypted(false).build();
                     } else {
-                        if (code_input_text.getText().length() != 16) {
+                        if ((code_input_text.getText().length() > 16) ||
+                                (code_input_text.getText().length() < 4)) {
                             Toast.makeText(recyclerView.getContext(),
                                            "Invalid Broadcast code length",
                                            Toast.LENGTH_SHORT).show();

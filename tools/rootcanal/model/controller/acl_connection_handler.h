@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <set>
 #include <unordered_map>
@@ -24,6 +25,7 @@
 #include "hci/address.h"
 #include "hci/address_with_type.h"
 #include "isochronous_connection_handler.h"
+#include "model/setup/async_manager.h"
 #include "phy.h"
 #include "sco_connection.h"
 
@@ -33,8 +35,11 @@ static constexpr uint16_t kReservedHandle = 0xF00;
 class AclConnectionHandler {
  public:
   AclConnectionHandler() = default;
-
   virtual ~AclConnectionHandler() = default;
+
+  // Reset the connection manager state, stopping any pending
+  // SCO connections.
+  void Reset(std::function<void(AsyncTaskId)> stopStream);
 
   bool CreatePendingConnection(bluetooth::hci::Address addr,
                                bool authenticate_on_connect);
@@ -47,12 +52,15 @@ class AclConnectionHandler {
   bool IsLegacyScoConnection(bluetooth::hci::Address addr) const;
   void CreateScoConnection(bluetooth::hci::Address addr,
                            ScoConnectionParameters const& parameters,
-                           ScoState state, bool legacy = false);
+                           ScoState state, ScoDatapath datapath,
+                           bool legacy = false);
   void CancelPendingScoConnection(bluetooth::hci::Address addr);
   bool AcceptPendingScoConnection(bluetooth::hci::Address addr,
-                                  ScoLinkParameters const& parameters);
+                                  ScoLinkParameters const& parameters,
+                                  std::function<AsyncTaskId()> startStream);
   bool AcceptPendingScoConnection(bluetooth::hci::Address addr,
-                                  ScoConnectionParameters const& parameters);
+                                  ScoConnectionParameters const& parameters,
+                                  std::function<AsyncTaskId()> startStream);
   uint16_t GetScoHandle(bluetooth::hci::Address addr) const;
   ScoConnectionParameters GetScoConnectionParameters(
       bluetooth::hci::Address addr) const;
@@ -67,8 +75,9 @@ class AclConnectionHandler {
   uint16_t CreateConnection(bluetooth::hci::Address addr,
                             bluetooth::hci::Address own_addr);
   uint16_t CreateLeConnection(bluetooth::hci::AddressWithType addr,
-                              bluetooth::hci::AddressWithType own_addr);
-  bool Disconnect(uint16_t handle);
+                              bluetooth::hci::AddressWithType own_addr,
+                              bluetooth::hci::Role role);
+  bool Disconnect(uint16_t handle, std::function<void(AsyncTaskId)> stopStream);
   bool HasHandle(uint16_t handle) const;
   bool HasScoHandle(uint16_t handle) const;
 
@@ -84,14 +93,20 @@ class AclConnectionHandler {
 
   Phy::Type GetPhyType(uint16_t handle) const;
 
+  uint16_t GetAclLinkPolicySettings(uint16_t handle) const;
+  void SetAclLinkPolicySettings(uint16_t handle, uint16_t settings);
+
+  bluetooth::hci::Role GetAclRole(uint16_t handle) const;
+  void SetAclRole(uint16_t handle, bluetooth::hci::Role role);
+
   std::unique_ptr<bluetooth::hci::LeSetCigParametersCompleteBuilder>
   SetCigParameters(uint8_t id, uint32_t sdu_interval_m_to_s,
                    uint32_t sdu_interval_s_to_m,
                    bluetooth::hci::ClockAccuracy accuracy,
                    bluetooth::hci::Packing packing,
                    bluetooth::hci::Enable framing,
-                   uint16_t max_transport_latency_m_to_s_,
-                   uint16_t max_transport_latency_s_to_m_,
+                   uint16_t max_transport_latency_m_to_s,
+                   uint16_t max_transport_latency_s_to_m,
                    std::vector<bluetooth::hci::CisParametersConfig>& streams);
 
   void CreatePendingCis(bluetooth::hci::CreateCisConfig config);
@@ -123,6 +138,14 @@ class AclConnectionHandler {
   GroupParameters GetGroupParameters(uint8_t id) const;
 
   std::vector<uint16_t> GetAclHandles() const;
+
+  void ResetLinkTimer(uint16_t handle);
+  std::chrono::steady_clock::duration TimeUntilLinkNearExpiring(
+      uint16_t handle) const;
+  bool IsLinkNearExpiring(uint16_t handle) const;
+  std::chrono::steady_clock::duration TimeUntilLinkExpired(
+      uint16_t handle) const;
+  bool HasLinkExpired(uint16_t handle) const;
 
  private:
   std::unordered_map<uint16_t, AclConnection> acl_connections_;

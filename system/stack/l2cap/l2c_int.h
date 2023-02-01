@@ -47,9 +47,10 @@
 
 #define L2CAP_MIN_MTU 48 /* Minimum acceptable MTU is 48 bytes */
 
+#define MAX_ACTIVE_AVDT_CONN 2
+
 constexpr uint16_t L2CAP_CREDIT_BASED_MIN_MTU = 64;
 constexpr uint16_t L2CAP_CREDIT_BASED_MIN_MPS = 64;
-#define L2CAP_NO_IDLE_TIMEOUT 0xFFFF
 
 /*
  * Timeout values (in milliseconds).
@@ -429,6 +430,13 @@ typedef struct t_l2c_linkcb {
   tL2C_LINK_STATE link_state;
 
   alarm_t* l2c_lcb_timer; /* Timer entry for timeout evt */
+
+  //  This tracks if the link has ever either (a)
+  //  been used for a dynamic channel (EATT or L2CAP CoC), or (b) has been a
+  //  GATT client. If false, the local device is just a GATT server, so for
+  //  backwards compatibility we never do a link timeout.
+  bool with_active_local_clients{false};
+
  private:
   uint16_t handle_; /* The handle used with LM */
   friend void l2cu_set_lcb_handle(struct t_l2c_linkcb& p_lcb, uint16_t handle);
@@ -495,6 +503,19 @@ typedef struct t_l2c_linkcb {
     return false;
   }
 
+  bool use_latency_mode = false;
+  tL2CAP_LATENCY preset_acl_latency = L2CAP_LATENCY_NORMAL;
+  tL2CAP_LATENCY acl_latency = L2CAP_LATENCY_NORMAL;
+  bool is_normal_latency() const { return acl_latency == L2CAP_LATENCY_NORMAL; }
+  bool is_low_latency() const { return acl_latency == L2CAP_LATENCY_LOW; }
+  bool set_latency(tL2CAP_LATENCY latency) {
+    if (acl_latency != latency) {
+      acl_latency = latency;
+      return true;
+    }
+    return false;
+  }
+
   tL2C_CCB* p_fixed_ccbs[L2CAP_NUM_FIXED_CHNLS];
 
  private:
@@ -523,6 +544,19 @@ typedef struct t_l2c_linkcb {
   uint16_t timeout;
   uint16_t min_ce_len;
   uint16_t max_ce_len;
+
+#define L2C_BLE_SUBRATE_REQ_DISABLE 0x1  // disable subrate req
+#define L2C_BLE_NEW_SUBRATE_PARAM 0x2    // new subrate req parameter to be set
+#define L2C_BLE_SUBRATE_REQ_PENDING 0x4  // waiting for subrate to be completed
+
+  /* subrate req params */
+  uint16_t subrate_min;
+  uint16_t subrate_max;
+  uint16_t max_latency;
+  uint16_t cont_num;
+  uint16_t supervision_tout;
+
+  uint8_t subrate_req_mask;
 
   /* each priority group is limited burst transmission */
   /* round robin service for the same priority channels */
@@ -642,6 +676,12 @@ typedef struct {
   uint16_t peer_mtu;     /* Peer MTU */
 } tL2C_CONN_INFO;
 
+typedef struct {
+  bool is_active;     /* is channel active */
+  uint16_t local_cid; /* Remote CID */
+  tL2C_CCB* p_ccb;    /* CCB */
+} tL2C_AVDT_CHANNEL_INFO;
+
 typedef void(tL2C_FCR_MGMT_EVT_HDLR)(uint8_t, tL2C_CCB*);
 
 /* The offset in a buffer that L2CAP will use when building commands.
@@ -678,6 +718,8 @@ extern tL2C_LCB* l2cu_find_lcb_by_handle(uint16_t handle);
 extern bool l2cu_set_acl_priority(const RawAddress& bd_addr,
                                   tL2CAP_PRIORITY priority,
                                   bool reset_after_rs);
+extern bool l2cu_set_acl_latency(const RawAddress& bd_addr,
+                                 tL2CAP_LATENCY latency);
 
 extern void l2cu_enqueue_ccb(tL2C_CCB* p_ccb);
 extern void l2cu_dequeue_ccb(tL2C_CCB* p_ccb);
@@ -851,5 +893,11 @@ extern tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr,
 extern void l2cble_update_data_length(tL2C_LCB* p_lcb);
 
 extern void l2cu_process_fixed_disc_cback(tL2C_LCB* p_lcb);
+
+extern void l2cble_process_subrate_change_evt(uint16_t handle, uint8_t status,
+                                              uint16_t subrate_factor,
+                                              uint16_t peripheral_latency,
+                                              uint16_t cont_num,
+                                              uint16_t timeout);
 
 #endif

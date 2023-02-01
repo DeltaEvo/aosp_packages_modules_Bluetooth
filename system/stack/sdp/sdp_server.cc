@@ -23,15 +23,23 @@
  *
  ******************************************************************************/
 
+#include <base/location.h>
 #include <base/logging.h>
 #include <log/log.h>
 #include <string.h>  // memcpy
 
 #include <cstdint>
 
+// include before bta_hfp_api for pre-defined variable
+#include "btif/include/btif_storage.h"
+
+// remaining includes
+#include "bta/include/bta_hfp_api.h"
 #include "btif/include/btif_config.h"
+#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "osi/include/allocator.h"
+#include "osi/include/properties.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/avrc_defs.h"
 #include "stack/include/bt_hdr.h"
@@ -42,6 +50,10 @@
 #define SDP_MAX_SERVICE_RSPHDR_LEN 12
 #define SDP_MAX_SERVATTR_RSPHDR_LEN 10
 #define SDP_MAX_ATTR_RSPHDR_LEN 10
+#define PROFILE_VERSION_POSITION 7
+#define SDP_PROFILE_DESC_LENGTH 8
+#define HFP_PROFILE_MINOR_VERSION_6 0x06
+#define HFP_PROFILE_MINOR_VERSION_7 0x07
 
 /******************************************************************************/
 /*            L O C A L    F U N C T I O N     P R O T O T Y P E S            */
@@ -57,7 +69,9 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
                                             uint16_t param_len, uint8_t* p_req,
                                             uint8_t* p_req_end);
-
+bool sdp_dynamic_change_hfp_version(const tSDP_ATTRIBUTE* p_attr,
+                                    const RawAddress& remote_address);
+void hfp_fallback(bool& is_hfp_fallback, const tSDP_ATTRIBUTE* p_attr);
 /******************************************************************************/
 /*                E R R O R   T E X T   S T R I N G S                         */
 /*                                                                            */
@@ -96,6 +110,58 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 #define SDP_TEXT_BAD_MAX_RECORDS_LIST NULL
 #endif
 
+/*************************************************************************************
+**
+** Function        sdp_dynamic_change_hfp_version
+**
+** Description     Checks if UUID is AG_HANDSFREE, attribute id
+**                 is Profile descriptor list and remote BD address
+**                 matches device Allow list, change hfp version to 1.7
+**
+** Returns         BOOLEAN
+**
++***************************************************************************************/
+bool sdp_dynamic_change_hfp_version(const tSDP_ATTRIBUTE* p_attr,
+                                    const RawAddress& remote_address) {
+  if ((p_attr->id != ATTR_ID_BT_PROFILE_DESC_LIST) ||
+      (p_attr->len < SDP_PROFILE_DESC_LENGTH)) {
+    return false;
+  }
+  /* As per current DB implementation UUID is condidered as 16 bit */
+  if (((p_attr->value_ptr[3] << SDP_PROFILE_DESC_LENGTH) |
+       (p_attr->value_ptr[4])) != UUID_SERVCLASS_HF_HANDSFREE) {
+    return false;
+  }
+  bool is_allowlisted_1_7 =
+      interop_match_addr_or_name(INTEROP_HFP_1_7_ALLOWLIST, &remote_address,
+                                 &btif_storage_get_remote_device_property);
+  /* For PTS we should update AG's HFP version as 1.7 */
+  if (!(is_allowlisted_1_7) &&
+      !(osi_property_get_bool("vendor.bt.pts.certification", false))) {
+    return false;
+  }
+  p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_7;
+  SDP_TRACE_INFO("%s SDP Change HFP Version = %d for %s", __func__,
+                 p_attr->value_ptr[PROFILE_VERSION_POSITION],
+                 ADDRESS_TO_LOGGABLE_CSTR(remote_address));
+  return true;
+}
+/******************************************************************************
+ *
+ * Function         hfp_fallback
+ *
+ * Description      Update HFP version back to 1.6
+ *
+ * Returns          void
+ *
+ *****************************************************************************/
+void hfp_fallback(bool& is_hfp_fallback, const tSDP_ATTRIBUTE* p_attr) {
+  /* Update HFP version back to 1.6 */
+  p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_6;
+  SDP_TRACE_INFO("Restore HFP version to 1.6");
+  is_hfp_fallback = false;
+}
+
 /*******************************************************************************
  *
  * Function         sdp_server_handle_client_req
@@ -118,8 +184,6 @@ void sdp_server_handle_client_req(tCONN_CB* p_ccb, BT_HDR* p_msg) {
                      sdp_conn_timer_timeout, p_ccb);
 
   if (p_req + sizeof(pdu_id) + sizeof(trans_num) > p_req_end) {
-    android_errorWriteLog(0x534e4554, "69384124");
-    android_errorWriteLog(0x534e4554, "169342531");
     trans_num = 0;
     sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX,
                             SDP_TEXT_BAD_HEADER);
@@ -133,8 +197,6 @@ void sdp_server_handle_client_req(tCONN_CB* p_ccb, BT_HDR* p_msg) {
   BE_STREAM_TO_UINT16(trans_num, p_req);
 
   if (p_req + sizeof(param_len) > p_req_end) {
-    android_errorWriteLog(0x534e4554, "69384124");
-    android_errorWriteLog(0x534e4554, "169342531");
     sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX,
                             SDP_TEXT_BAD_HEADER);
     return;
@@ -202,7 +264,6 @@ static void process_service_search(tCONN_CB* p_ccb, uint16_t trans_num,
 
   /* Get the max replies we can send. Cap it at our max anyways. */
   if (p_req + sizeof(max_replies) + sizeof(uint8_t) > p_req_end) {
-    android_errorWriteLog(0x534e4554, "69384124");
     sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_REQ_SYNTAX,
                             SDP_TEXT_BAD_MAX_RECORDS_LIST);
     return;
@@ -222,6 +283,11 @@ static void process_service_search(tCONN_CB* p_ccb, uint16_t trans_num,
   }
 
   /* Check if this is a continuation request */
+  if (p_req + 1 > p_req_end) {
+    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
+                            SDP_TEXT_BAD_CONT_LEN);
+    return;
+  }
   if (*p_req) {
     if (*p_req++ != SDP_CONTINUATION_LEN ||
         (p_req + sizeof(cont_offset) > p_req_end)) {
@@ -321,10 +387,10 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   const tSDP_RECORD* p_rec;
   const tSDP_ATTRIBUTE* p_attr;
   bool is_cont = false;
+  bool is_hfp_fallback = false;
   uint16_t attr_len;
 
   if (p_req + sizeof(rec_handle) + sizeof(max_list_len) > p_req_end) {
-    android_errorWriteLog(0x534e4554, "69384124");
     sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_SERV_REC_HDL,
                             SDP_TEXT_BAD_HANDLE);
     return;
@@ -362,7 +428,6 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
   if (max_list_len < 4) {
     sdpu_build_n_send_error(p_ccb, trans_num, SDP_ILLEGAL_PARAMETER, NULL);
-    android_errorWriteLog(0x534e4554, "68776054");
     return;
   }
 
@@ -371,6 +436,11 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   p_ccb->rsp_list = (uint8_t*)osi_malloc(max_list_len);
 
   /* Check if this is a continuation request */
+  if (p_req + 1 > p_req_end) {
+    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
+                            SDP_TEXT_BAD_CONT_LEN);
+    return;
+  }
   if (*p_req) {
     if (*p_req++ != SDP_CONTINUATION_LEN ||
         (p_req + sizeof(cont_offset) > p_req_end)) {
@@ -403,8 +473,12 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
   bool is_service_avrc_target = false;
   const tSDP_ATTRIBUTE* p_attr_service_id;
+  const tSDP_ATTRIBUTE* p_attr_profile_desc_list_id;
+  uint16_t avrc_sdp_version = 0;
   p_attr_service_id = sdp_db_find_attr_in_rec(
       p_rec, ATTR_ID_SERVICE_CLASS_ID_LIST, ATTR_ID_SERVICE_CLASS_ID_LIST);
+  p_attr_profile_desc_list_id = sdp_db_find_attr_in_rec(
+      p_rec, ATTR_ID_BT_PROFILE_DESC_LIST, ATTR_ID_BT_PROFILE_DESC_LIST);
   if (p_attr_service_id) {
     is_service_avrc_target = sdpu_is_service_id_avrc_target(p_attr_service_id);
   }
@@ -412,10 +486,23 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   for (xx = p_ccb->cont_info.next_attr_index; xx < attr_seq.num_attr; xx++) {
     p_attr = sdp_db_find_attr_in_rec(p_rec, attr_seq.attr_entry[xx].start,
                                      attr_seq.attr_entry[xx].end);
-
     if (p_attr) {
       if (is_service_avrc_target) {
         sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
+        if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
+            bluetooth::common::init_flags::
+                dynamic_avrcp_version_enhancement_is_enabled()) {
+          avrc_sdp_version = sdpu_is_avrcp_profile_description_list(
+              p_attr_profile_desc_list_id);
+          SDP_TRACE_ERROR("avrc_sdp_version in SDP records %x",
+                          avrc_sdp_version);
+          sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address),
+                                        avrc_sdp_version);
+        }
+      }
+      if (bluetooth::common::init_flags::hfp_dynamic_version_is_enabled()) {
+        is_hfp_fallback =
+            sdp_dynamic_change_hfp_version(p_attr, p_ccb->device_address);
       }
       /* Check if attribute fits. Assume 3-byte value type/length */
       rem_len = max_list_len - (int16_t)(p_rsp - &p_ccb->rsp_list[0]);
@@ -431,7 +518,6 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
       /* if there is a partial attribute pending to be sent */
       if (p_ccb->cont_info.attr_offset) {
         if (attr_len < p_ccb->cont_info.attr_offset) {
-          android_errorWriteLog(0x534e4554, "79217770");
           LOG(ERROR) << "offset is bigger than attribute length";
           sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
                                   SDP_TEXT_BAD_CONT_LEN);
@@ -472,7 +558,13 @@ static void process_service_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
         xx--;
       }
+      if (is_hfp_fallback) {
+        hfp_fallback(is_hfp_fallback, p_attr);
+      }
     }
+  }
+  if (is_hfp_fallback) {
+    hfp_fallback(is_hfp_fallback, p_attr);
   }
   /* If all the attributes have been accomodated in p_rsp,
      reset next_attr_index */
@@ -567,6 +659,7 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   const tSDP_ATTRIBUTE* p_attr;
   bool maxxed_out = false, is_cont = false;
   uint8_t* p_seq_start;
+  bool is_hfp_fallback = false;
   uint16_t seq_len, attr_len;
 
   /* Extract the UUID sequence to search for */
@@ -599,7 +692,6 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
   if (max_list_len < 4) {
     sdpu_build_n_send_error(p_ccb, trans_num, SDP_ILLEGAL_PARAMETER, NULL);
-    android_errorWriteLog(0x534e4554, "68817966");
     return;
   }
 
@@ -608,6 +700,11 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
   p_ccb->rsp_list = (uint8_t*)osi_malloc(max_list_len);
 
   /* Check if this is a continuation request */
+  if (p_req + 1 > p_req_end) {
+    sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
+                            SDP_TEXT_BAD_CONT_LEN);
+    return;
+  }
   if (*p_req) {
     if (*p_req++ != SDP_CONTINUATION_LEN ||
         (p_req + sizeof(uint16_t) > p_req_end)) {
@@ -659,8 +756,12 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
     bool is_service_avrc_target = false;
     const tSDP_ATTRIBUTE* p_attr_service_id;
+    const tSDP_ATTRIBUTE* p_attr_profile_desc_list_id;
+    uint16_t avrc_sdp_version = 0;
     p_attr_service_id = sdp_db_find_attr_in_rec(
         p_rec, ATTR_ID_SERVICE_CLASS_ID_LIST, ATTR_ID_SERVICE_CLASS_ID_LIST);
+    p_attr_profile_desc_list_id = sdp_db_find_attr_in_rec(
+        p_rec, ATTR_ID_BT_PROFILE_DESC_LIST, ATTR_ID_BT_PROFILE_DESC_LIST);
     if (p_attr_service_id) {
       is_service_avrc_target =
           sdpu_is_service_id_avrc_target(p_attr_service_id);
@@ -673,6 +774,20 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
       if (p_attr) {
         if (is_service_avrc_target) {
           sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
+          if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
+              bluetooth::common::init_flags::
+                  dynamic_avrcp_version_enhancement_is_enabled()) {
+            avrc_sdp_version = sdpu_is_avrcp_profile_description_list(
+                p_attr_profile_desc_list_id);
+            SDP_TRACE_ERROR("avrc_sdp_version in SDP records %x",
+                            avrc_sdp_version);
+            sdpu_set_avrc_target_features(p_attr, &(p_ccb->device_address),
+                                          avrc_sdp_version);
+          }
+        }
+        if (bluetooth::common::init_flags::hfp_dynamic_version_is_enabled()) {
+          is_hfp_fallback =
+              sdp_dynamic_change_hfp_version(p_attr, p_ccb->device_address);
         }
         /* Check if attribute fits. Assume 3-byte value type/length */
         rem_len = max_list_len - (int16_t)(p_rsp - &p_ccb->rsp_list[0]);
@@ -689,7 +804,6 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
         /* if there is a partial attribute pending to be sent */
         if (p_ccb->cont_info.attr_offset) {
           if (attr_len < p_ccb->cont_info.attr_offset) {
-            android_errorWriteLog(0x534e4554, "79217770");
             LOG(ERROR) << "offset is bigger than attribute length";
             sdpu_build_n_send_error(p_ccb, trans_num, SDP_INVALID_CONT_STATE,
                                     SDP_TEXT_BAD_CONT_LEN);
@@ -733,7 +847,13 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
 
           xx--;
         }
+        if (is_hfp_fallback) {
+          hfp_fallback(is_hfp_fallback, p_attr);
+        }
       }
+    }
+    if (is_hfp_fallback) {
+      hfp_fallback(is_hfp_fallback, p_attr);
     }
 
     /* Go back and put the type and length into the buffer */

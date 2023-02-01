@@ -1,4 +1,5 @@
 use bt_topshim::profiles::a2dp::{A2dpCodecConfig, PresentationPosition};
+use bt_topshim::profiles::avrcp::PlayerMetadata;
 use bt_topshim::profiles::hfp::HfpCodecCapability;
 use btstack::bluetooth_media::{BluetoothAudioDevice, IBluetoothMedia, IBluetoothMediaCallback};
 use btstack::RPCProxy;
@@ -70,6 +71,11 @@ impl IBluetoothMediaCallback for BluetoothMediaCallbackDBus {
     fn on_hfp_volume_changed(&self, volume: u8, addr: String) {
         dbus_generated!()
     }
+
+    #[dbus_method("OnHfpAudioDisconnected")]
+    fn on_hfp_audio_disconnected(&self, addr: String) {
+        dbus_generated!()
+    }
 }
 
 #[allow(dead_code)]
@@ -81,6 +87,60 @@ pub struct PresentationPositionDBus {
     total_bytes_read: u64,
     data_position_sec: i64,
     data_position_nsec: i32,
+}
+
+impl DBusArg for PlayerMetadata {
+    type DBusType = dbus::arg::PropMap;
+    fn from_dbus(
+        data: dbus::arg::PropMap,
+        _conn: Option<std::sync::Arc<dbus::nonblock::SyncConnection>>,
+        _remote: Option<dbus::strings::BusName<'static>>,
+        _disconnect_watcher: Option<
+            std::sync::Arc<std::sync::Mutex<dbus_projection::DisconnectWatcher>>,
+        >,
+    ) -> Result<PlayerMetadata, Box<dyn std::error::Error>> {
+        let mut metadata = PlayerMetadata::default();
+
+        for (key, variant) in data {
+            if variant.arg_type() != dbus::arg::ArgType::Variant {
+                return Err(Box::new(DBusArgError::new(format!("{} must be a variant", key))));
+            }
+            match key.as_str() {
+                "title" => {
+                    metadata.title = String::ref_arg_to_rust(
+                        variant.as_static_inner(0).unwrap(),
+                        String::from("PlayerMetadata::Title"),
+                    )?
+                }
+                "artist" => {
+                    metadata.artist = String::ref_arg_to_rust(
+                        variant.as_static_inner(0).unwrap(),
+                        String::from("PlayerMetadata::Artist"),
+                    )?
+                }
+                "album" => {
+                    metadata.album = String::ref_arg_to_rust(
+                        variant.as_static_inner(0).unwrap(),
+                        String::from("PlayerMetadata::Album"),
+                    )?
+                }
+                "length" => {
+                    metadata.length_us = i64::ref_arg_to_rust(
+                        variant.as_static_inner(0).unwrap(),
+                        String::from("PlayerMetadata::Length"),
+                    )?
+                }
+                _ => {}
+            }
+        }
+        return Ok(metadata);
+    }
+
+    fn to_dbus(
+        _metadata: PlayerMetadata,
+    ) -> Result<dbus::arg::PropMap, Box<dyn std::error::Error>> {
+        Ok(std::collections::HashMap::new())
+    }
 }
 
 #[generate_dbus_exporter(export_bluetooth_media_dbus_intf, "org.chromium.bluetooth.BluetoothMedia")]
@@ -105,13 +165,18 @@ impl IBluetoothMedia for IBluetoothMediaDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("Disconnect")]
+    fn disconnect(&mut self, address: String) {
+        dbus_generated!()
+    }
+
     #[dbus_method("SetActiveDevice")]
     fn set_active_device(&mut self, address: String) {
         dbus_generated!()
     }
 
-    #[dbus_method("Disconnect")]
-    fn disconnect(&mut self, address: String) {
+    #[dbus_method("SetHfpActiveDevice")]
+    fn set_hfp_active_device(&mut self, address: String) {
         dbus_generated!()
     }
 
@@ -136,12 +201,12 @@ impl IBluetoothMedia for IBluetoothMediaDBus {
     }
 
     #[dbus_method("StartAudioRequest")]
-    fn start_audio_request(&mut self) {
+    fn start_audio_request(&mut self) -> bool {
         dbus_generated!()
     }
 
     #[dbus_method("GetA2dpAudioStarted")]
-    fn get_a2dp_audio_started(&mut self) -> bool {
+    fn get_a2dp_audio_started(&mut self, address: String) -> bool {
         dbus_generated!()
     }
 
@@ -151,12 +216,12 @@ impl IBluetoothMedia for IBluetoothMediaDBus {
     }
 
     #[dbus_method("StartScoCall")]
-    fn start_sco_call(&mut self, address: String) {
+    fn start_sco_call(&mut self, address: String, sco_offload: bool, force_cvsd: bool) -> bool {
         dbus_generated!()
     }
 
-    #[dbus_method("GetHfpAudioStarted")]
-    fn get_hfp_audio_started(&mut self) -> bool {
+    #[dbus_method("GetHfpAudioFinalCodecs")]
+    fn get_hfp_audio_final_codecs(&mut self, address: String) -> u8 {
         dbus_generated!()
     }
 
@@ -167,6 +232,24 @@ impl IBluetoothMedia for IBluetoothMediaDBus {
 
     #[dbus_method("GetPresentationPosition")]
     fn get_presentation_position(&mut self) -> PresentationPosition {
+        dbus_generated!()
+    }
+
+    // Temporary AVRCP-related meida DBUS APIs. The following APIs intercept between Chrome CRAS
+    // and cras_server as an expedited solution for AVRCP implementation. The APIs are subject to
+    // change when retiring Chrome CRAS.
+    #[dbus_method("SetPlayerPlaybackStatus")]
+    fn set_player_playback_status(&mut self, status: String) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetPlayerPosition")]
+    fn set_player_position(&mut self, position_us: i64) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SetPlayerMetadata")]
+    fn set_player_metadata(&mut self, metadata: PlayerMetadata) {
         dbus_generated!()
     }
 }

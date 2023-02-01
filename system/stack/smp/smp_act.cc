@@ -23,6 +23,8 @@
 #include "btif/include/btif_api.h"
 #include "btif/include/btif_common.h"
 #include "btif/include/btif_storage.h"
+#include "btif/include/core_callbacks.h"
+#include "btif/include/stack_manager.h"
 #include "device/include/interop.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/shim.h"
@@ -505,7 +507,6 @@ void smp_proc_pair_fail(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   SMP_TRACE_DEBUG("%s", __func__);
 
   if (p_cb->rcvd_cmd_len < 2) {
-    android_errorWriteLog(0x534e4554, "111214739");
     SMP_TRACE_WARNING("%s: rcvd_cmd_len %d too short: must be at least 2",
                       __func__, p_cb->rcvd_cmd_len);
     p_cb->status = SMP_INVALID_PARAMETERS;
@@ -526,7 +527,7 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(p_cb->pairing_bda);
 
   SMP_TRACE_DEBUG("%s: pairing_bda=%s", __func__,
-                  p_cb->pairing_bda.ToString().c_str());
+                  ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   /* erase all keys if it is peripheral proc pairing req */
   if (p_dev_rec && (p_cb->role == HCI_ROLE_PERIPHERAL))
@@ -537,7 +538,6 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   if (smp_command_has_invalid_length(p_cb)) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_INVALID_PARAMETERS;
-    android_errorWriteLog(0x534e4554, "111850706");
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
     return;
   }
@@ -573,7 +573,7 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       p_cb->local_i_key = p_cb->peer_i_key;
       p_cb->local_r_key = p_cb->peer_r_key;
 
-      p_cb->cb_evt = SMP_SEC_REQUEST_EVT;
+      p_cb->cb_evt =  SMP_IO_CAP_REQ_EVT;
     } else /* update local i/r key according to pairing request */
     {
       /* pairing started with this side (peripheral) sending Security Request */
@@ -712,7 +712,6 @@ void smp_process_pairing_public_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   memcpy(pt.y, p_cb->peer_publ_key.y, BT_OCTET32_LEN);
 
   if (!memcmp(p_cb->peer_publ_key.x, p_cb->loc_publ_key.x, BT_OCTET32_LEN)) {
-    android_errorWriteLog(0x534e4554, "174886838");
     SMP_TRACE_WARNING("Remote and local public keys can't match");
     tSMP_INT_DATA smp;
     smp.status = SMP_PAIR_AUTH_FAIL;
@@ -721,7 +720,6 @@ void smp_process_pairing_public_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   }
 
   if (!ECC_ValidatePoint(pt)) {
-    android_errorWriteLog(0x534e4554, "72377774");
     tSMP_INT_DATA smp;
     smp.status = SMP_PAIR_AUTH_FAIL;
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp);
@@ -832,7 +830,6 @@ void smp_br_process_pairing_command(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   if (smp_command_has_invalid_length(p_cb)) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_INVALID_PARAMETERS;
-    android_errorWriteLog(0x534e4554, "111213909");
     smp_br_state_machine_event(p_cb, SMP_BR_AUTH_CMPL_EVT, &smp_int_data);
     return;
   }
@@ -971,7 +968,6 @@ void smp_proc_enc_info(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   if (smp_command_has_invalid_parameters(p_cb)) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_INVALID_PARAMETERS;
-    android_errorWriteLog(0x534e4554, "111937065");
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
     return;
   }
@@ -988,7 +984,6 @@ void smp_proc_central_id(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   SMP_TRACE_DEBUG("%s", __func__);
 
   if (p_cb->rcvd_cmd_len < 11) {  // 1(Code) + 2(EDIV) + 8(Rand)
-    android_errorWriteLog(0x534e4554, "111937027");
     SMP_TRACE_ERROR("%s: Invalid command length: %d, should be at least 11",
                     __func__, p_cb->rcvd_cmd_len);
     return;
@@ -1023,7 +1018,6 @@ void smp_proc_id_info(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   if (smp_command_has_invalid_parameters(p_cb)) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_INVALID_PARAMETERS;
-    android_errorWriteLog(0x534e4554, "111937065");
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
     return;
   }
@@ -1041,7 +1035,6 @@ void smp_proc_id_addr(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   if (smp_command_has_invalid_parameters(p_cb)) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_INVALID_PARAMETERS;
-    android_errorWriteLog(0x534e4554, "111214770");
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
     return;
   }
@@ -1051,7 +1044,7 @@ void smp_proc_id_addr(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   tBTM_LE_KEY_VALUE pid_key = {
       .pid_key = {},
   };
-  ;
+
   STREAM_TO_UINT8(pid_key.pid_key.identity_addr_type, p);
   STREAM_TO_BDADDR(pid_key.pid_key.identity_addr, p);
   pid_key.pid_key.irk = p_cb->tk;
@@ -1079,7 +1072,6 @@ void smp_proc_srk_info(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   if (smp_command_has_invalid_parameters(p_cb)) {
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_INVALID_PARAMETERS;
-    android_errorWriteLog(0x534e4554, "111214470");
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
     return;
   }
@@ -1307,7 +1299,6 @@ void smp_key_distribution(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
               "%s BR key is higher security than existing LE keys, don't "
               "derive LK from LTK",
               __func__);
-          android_errorWriteLog(0x534e4554, "158854097");
         } else {
           smp_derive_link_key_from_long_term_key(p_cb, NULL);
         }
@@ -1358,7 +1349,7 @@ void smp_decide_association_model(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
         smp_int_data.status = SMP_PAIR_AUTH_FAIL;
         int_evt = SMP_AUTH_CMPL_EVT;
       } else {
-        if (!is_atv_device() &&
+        if (!GetInterfaceToProfiles()->config->isAndroidTVDevice() &&
             (p_cb->local_io_capability == SMP_IO_CAP_IO ||
              p_cb->local_io_capability == SMP_IO_CAP_KBDISP)) {
           /* display consent dialog if this device has a display */
@@ -1749,7 +1740,7 @@ void smp_process_peer_nonce(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       }
 
       if (p_cb->selected_association_model == SMP_MODEL_SEC_CONN_JUSTWORKS) {
-        if (!is_atv_device() &&
+        if (!GetInterfaceToProfiles()->config->isAndroidTVDevice() &&
             (p_cb->local_io_capability == SMP_IO_CAP_IO ||
              p_cb->local_io_capability == SMP_IO_CAP_KBDISP)) {
           /* display consent dialog */
@@ -2023,7 +2014,7 @@ void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable) {
 
   if (smp_cb.pairing_bda == bda) {
     LOG_DEBUG("SMP encryption enable:%hhu device:%s", encr_enable,
-              PRIVATE_ADDRESS(bda));
+              ADDRESS_TO_LOGGABLE_CSTR(bda));
 
     /* encryption completed with STK, remember the key size now, could be
      * overwritten when key exchange happens                                 */
@@ -2041,7 +2032,7 @@ void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable) {
   } else {
     LOG_WARN(
         "SMP state machine busy so skipping encryption enable:%hhu device:%s",
-        encr_enable, PRIVATE_ADDRESS(bda));
+        encr_enable, ADDRESS_TO_LOGGABLE_CSTR(bda));
   }
 }
 

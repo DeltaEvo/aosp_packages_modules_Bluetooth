@@ -71,6 +71,7 @@ typedef enum : uint8_t {
   BTA_GATTC_CONGEST_EVT = 24,       /* Congestion event */
   BTA_GATTC_PHY_UPDATE_EVT = 25,    /* PHY change event */
   BTA_GATTC_CONN_UPDATE_EVT = 26,   /* Connection parameters update event */
+  BTA_GATTC_SUBRATE_CHG_EVT = 27,   /* Subrate Change event */
 } tBTA_GATTC_EVT;
 
 #define CASE_RETURN_TEXT(code) \
@@ -95,6 +96,7 @@ inline std::string gatt_client_event_text(const tBTA_GATTC_EVT& event) {
     CASE_RETURN_TEXT(BTA_GATTC_CONGEST_EVT);
     CASE_RETURN_TEXT(BTA_GATTC_PHY_UPDATE_EVT);
     CASE_RETURN_TEXT(BTA_GATTC_CONN_UPDATE_EVT);
+    CASE_RETURN_TEXT(BTA_GATTC_SUBRATE_CHG_EVT);
     default:
       return base::StringPrintf("UNKNOWN[%hhu]", event);
   }
@@ -234,6 +236,16 @@ typedef struct {
   uint16_t conn_id;
 } tBTA_GATTC_SERVICE_CHANGED;
 
+typedef struct {
+  tGATT_IF server_if;
+  uint16_t conn_id;
+  uint16_t subrate_factor;
+  uint16_t latency;
+  uint16_t cont_num;
+  uint16_t timeout;
+  tGATT_STATUS status;
+} tBTA_GATTC_SUBRATE_CHG;
+
 typedef union {
   tGATT_STATUS status;
 
@@ -253,6 +265,7 @@ typedef union {
   tBTA_GATTC_PHY_UPDATE phy_update;
   tBTA_GATTC_CONN_UPDATE conn_update;
   tBTA_GATTC_SERVICE_CHANGED service_changed;
+  tBTA_GATTC_SUBRATE_CHG subrate_chg;
 } tBTA_GATTC;
 
 /* GATTC enable callback function */
@@ -284,6 +297,7 @@ typedef void(tBTA_GATTC_CBACK)(tBTA_GATTC_EVT event, tBTA_GATTC* p_data);
 #define BTA_GATTS_CONGEST_EVT 20
 #define BTA_GATTS_PHY_UPDATE_EVT 21
 #define BTA_GATTS_CONN_UPDATE_EVT 22
+#define BTA_GATTS_SUBRATE_CHG_EVT 23
 
 typedef uint8_t tBTA_GATTS_EVT;
 
@@ -369,6 +383,16 @@ typedef struct {
   tGATT_STATUS status;
 } tBTA_GATTS_CONN_UPDATE;
 
+typedef struct {
+  tGATT_IF server_if;
+  uint16_t conn_id;
+  uint16_t subrate_factor;
+  uint16_t latency;
+  uint16_t cont_num;
+  uint16_t timeout;
+  tGATT_STATUS status;
+} tBTA_GATTS_SUBRATE_CHG;
+
 /* GATTS callback data */
 typedef union {
   tBTA_GATTS_REG_OPER reg_oper;
@@ -382,6 +406,7 @@ typedef union {
   tBTA_GATTS_PHY_UPDATE phy_update; /* BTA_GATTS_PHY_UPDATE_EVT callback data */
   tBTA_GATTS_CONN_UPDATE
       conn_update; /* BTA_GATTS_CONN_UPDATE_EVT callback data */
+  tBTA_GATTS_SUBRATE_CHG subrate_chg; /* BTA_GATTS_SUBRATE_CHG_EVT */
 } tBTA_GATTS;
 
 /* GATTS enable callback function */
@@ -445,15 +470,17 @@ extern void BTA_GATTC_AppDeregister(tGATT_IF client_if);
  *
  * Parameters       client_if: server interface.
  *                  remote_bda: remote device BD address.
- *                  is_direct: direct connection or background auto connection
+ *                  connection_type: connection type used for the peer device
  *                  initiating_phys: LE PHY to use, optional
  *
  ******************************************************************************/
 extern void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
-                           bool is_direct, bool opportunistic);
+                           tBTM_BLE_CONN_TYPE connection_type,
+                           bool opportunistic);
 extern void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
-                           bool is_direct, tBT_TRANSPORT transport,
-                           bool opportunistic, uint8_t initiating_phys);
+                           tBTM_BLE_CONN_TYPE connection_type,
+                           tBT_TRANSPORT transport, bool opportunistic,
+                           uint8_t initiating_phys);
 
 /*******************************************************************************
  *

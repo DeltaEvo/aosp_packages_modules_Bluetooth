@@ -118,6 +118,11 @@
 #define AVRC_VERSION_PROPERTY "persist.bluetooth.avrcpversion"
 #endif
 
+/* Configurable avrcp control version key */
+#ifndef AVRC_CONTROL_VERSION_PROPERTY
+#define AVRC_CONTROL_VERSION_PROPERTY "persist.bluetooth.avrcpcontrolversion"
+#endif
+
 #ifndef AVRC_1_6_STRING
 #define AVRC_1_6_STRING "avrcp16"
 #endif
@@ -147,6 +152,10 @@
 /* Avrcp controller version key for bt_config.conf */
 #ifndef AVRCP_CONTROLLER_VERSION_CONFIG_KEY
 #define AVRCP_CONTROLLER_VERSION_CONFIG_KEY "AvrcpControllerVersion"
+#endif
+
+#ifndef AV_REM_CTRL_FEATURES_CONFIG_KEY
+#define AV_REM_CTRL_FEATURES_CONFIG_KEY "AvrcpPeerFeatures"
 #endif
 
 /* Supported categories */
@@ -179,6 +188,14 @@
 #define AVRC_META_FAIL AVRC_FAIL
 #define AVRC_METADATA_CMD 0x0000
 #define AVRC_METADATA_RESP 0x0001
+
+#define AVRCP_SUPPORTED_FEATURES_POSITION 1
+#define AVRCP_BROWSE_SUPPORT_BITMASK 0x40
+#define AVRCP_MULTI_PLAYER_SUPPORT_BITMASK 0x80
+#define AVRCP_CA_SUPPORT_BITMASK 0x01
+
+#define AVRCP_FEAT_CA_BIT 0x0180
+#define AVRCP_FEAT_BRW_BIT 0x0040
 
 /*****************************************************************************
  *  data type definitions
@@ -236,6 +253,17 @@ typedef struct {
 /*****************************************************************************
  *  external function declarations
  ****************************************************************************/
+
+/******************************************************************************
+ *
+ * Function         AVRC_GetControlProfileVersion
+ *
+ * Description      Get the overlaid AVRCP control profile version
+ *
+ * Returns          The AVRCP control profile version
+ *
+ *****************************************************************************/
+extern uint16_t AVRC_GetControlProfileVersion();
 
 /******************************************************************************
  *

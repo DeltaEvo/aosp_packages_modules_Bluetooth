@@ -226,7 +226,7 @@ btif_hf_client_cb_t* btif_hf_client_get_cb_by_handle(uint16_t handle) {
  *
  ******************************************************************************/
 btif_hf_client_cb_t* btif_hf_client_get_cb_by_bda(const RawAddress& bd_addr) {
-  VLOG(1) << __func__ << " incoming addr " << bd_addr;
+  VLOG(1) << __func__ << " incoming addr " << ADDRESS_TO_LOGGABLE_CSTR(bd_addr);
 
   for (int i = 0; i < HF_CLIENT_MAX_DEVICES; i++) {
     // Block is valid only if it is allocated i.e. state is not DISCONNECTED
@@ -313,12 +313,10 @@ static bt_status_t connect_int(RawAddress* bd_addr, uint16_t uuid) {
    * The handle is valid until we have called BTA_HfClientClose or the LL
    * has notified us of channel close due to remote closing, error etc.
    */
-  BTA_HfClientOpen(cb->peer_bda, &cb->handle);
-
-  return BT_STATUS_SUCCESS;
+  return BTA_HfClientOpen(cb->peer_bda, &cb->handle);
 }
 
-static bt_status_t connect(RawAddress* bd_addr) {
+static bt_status_t connect(const RawAddress* bd_addr) {
   BTIF_TRACE_EVENT("HFP Client version is  %s", btif_hf_client_version);
   CHECK_BTHF_CLIENT_INIT();
   return btif_queue_connect(UUID_SERVCLASS_HF_HANDSFREE, bd_addr, connect_int);
@@ -745,6 +743,27 @@ static bt_status_t send_at_cmd(const RawAddress* bd_addr, int cmd, int val1,
   return BT_STATUS_SUCCESS;
 }
 
+/*******************************************************************************
+ *
+ * Function         send_hfp_audio_policy
+ *
+ * Description      Send requested audio policies to remote device.
+ *
+ * Returns          bt_status_t
+ *
+ ******************************************************************************/
+static bt_status_t send_android_at(const RawAddress* bd_addr, const char* arg) {
+  btif_hf_client_cb_t* cb = btif_hf_client_get_cb_by_bda(*bd_addr);
+  if (cb == NULL || !is_connected(cb)) return BT_STATUS_FAIL;
+
+  CHECK_BTHF_CLIENT_SLC_CONNECTED(cb);
+
+  BTIF_TRACE_EVENT("%s: val1 %s", __func__, arg);
+  BTA_HfClientSendAT(cb->handle, BTA_HF_CLIENT_AT_CMD_ANDROID, 0, 0, arg);
+
+  return BT_STATUS_SUCCESS;
+}
+
 static const bthf_client_interface_t bthfClientInterface = {
     .size = sizeof(bthf_client_interface_t),
     .init = init,
@@ -765,6 +784,7 @@ static const bthf_client_interface_t bthfClientInterface = {
     .request_last_voice_tag_number = request_last_voice_tag_number,
     .cleanup = cleanup,
     .send_at_cmd = send_at_cmd,
+    .send_android_at = send_android_at,
 };
 
 static void process_ind_evt(tBTA_HF_CLIENT_IND* ind) {
@@ -859,7 +879,7 @@ static void btif_hf_client_upstreams_evt(uint16_t event, char* p_param) {
             "%s: HF CLient open failed, but another device connected. "
             "status=%d state=%d connected device=%s",
             __func__, p_data->open.status, cb->state,
-            cb->peer_bda.ToString().c_str());
+            ADDRESS_TO_LOGGABLE_CSTR(cb->peer_bda));
         break;
       }
 

@@ -56,7 +56,8 @@ hci::GapData GapDataFromProto(const GapDataMsg& gap_data_proto) {
   return gap_data;
 }
 
-bool AdvertisingConfigFromProto(const AdvertisingConfig& config_proto, hci::ExtendedAdvertisingConfig* config) {
+bool AdvertisingConfigFromProto(
+    const AdvertisingConfig& config_proto, hci::AdvertisingConfig* config) {
   for (const auto& elem : config_proto.advertisement()) {
     config->advertisement.push_back(GapDataFromProto(elem));
   }
@@ -109,7 +110,7 @@ bool AdvertisingConfigFromProto(const AdvertisingConfig& config_proto, hci::Exte
       config->connectable = true;
       config->scannable = true;
     } break;
-    case AdvertisingType::ADV_DIRECT_IND: {
+    case AdvertisingType::ADV_DIRECT_IND_HIGH: {
       config->connectable = true;
       config->directed = true;
       config->high_duty_directed_connectable = true;
@@ -129,7 +130,7 @@ bool AdvertisingConfigFromProto(const AdvertisingConfig& config_proto, hci::Exte
 }
 
 bool ExtendedAdvertisingConfigFromProto(
-    const ExtendedAdvertisingConfig& config_proto, hci::ExtendedAdvertisingConfig* config) {
+    const ExtendedAdvertisingConfig& config_proto, hci::AdvertisingConfig* config) {
   if (!AdvertisingConfigFromProto(config_proto.advertising_config(), config)) {
     LOG_WARN("Error parsing advertising config");
     return false;
@@ -217,7 +218,7 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
 
   ::grpc::Status CreateAdvertiser(::grpc::ServerContext* context, const CreateAdvertiserRequest* request,
                                   CreateAdvertiserResponse* response) override {
-    hci::ExtendedAdvertisingConfig config = {};
+    hci::AdvertisingConfig config = {};
     if (!AdvertisingConfigFromProto(request->config(), &config)) {
       LOG_WARN("Error parsing advertising config %s", request->SerializeAsString().c_str());
       response->set_advertiser_id(LeAdvertisingManager::kInvalidId);
@@ -245,7 +246,7 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
   ::grpc::Status ExtendedCreateAdvertiser(::grpc::ServerContext* context,
                                           const ExtendedCreateAdvertiserRequest* request,
                                           ExtendedCreateAdvertiserResponse* response) override {
-    hci::ExtendedAdvertisingConfig config = {};
+    hci::AdvertisingConfig config = {};
     if (!ExtendedAdvertisingConfigFromProto(request->config(), &config)) {
       LOG_WARN("Error parsing advertising config %s", request->SerializeAsString().c_str());
       response->set_advertiser_id(LeAdvertisingManager::kInvalidId);
@@ -292,7 +293,7 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
       ::grpc::ServerContext* context,
       const SetParametersRequest* request,
       ::google::protobuf::Empty* response) override {
-    hci::ExtendedAdvertisingConfig config = {};
+    hci::AdvertisingConfig config = {};
     if (!AdvertisingConfigFromProto(request->config(), &config)) {
       LOG_WARN("Error parsing advertising config %s", request->SerializeAsString().c_str());
       return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT, "Error while parsing advertising config");
@@ -331,7 +332,8 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
       ::grpc::ServerContext* context,
       const EnablePeriodicAdvertisingRequest* request,
       ::google::protobuf::Empty* response) override {
-    le_advertising_manager_->EnablePeriodicAdvertising(request->advertiser_id(), request->enable());
+    le_advertising_manager_->EnablePeriodicAdvertising(
+        request->advertiser_id(), request->enable(), request->include_adi());
     return ::grpc::Status::OK;
   }
 
@@ -449,7 +451,8 @@ class LeAdvertisingManagerFacadeService : public LeAdvertisingManagerFacade::Ser
   };
 
   void OnOwnAddressRead(uint8_t advertiser_id, uint8_t address_type, Address address) {
-    LOG_INFO("OnOwnAddressRead Address:%s, address_type:%d", address.ToString().c_str(), address_type);
+    LOG_INFO("OnOwnAddressRead Address:%s, address_type:%d",
+              ADDRESS_TO_LOGGABLE_CSTR(address), address_type);
     AddressMsg msg;
     msg.set_message_type(AdvertisingCallbackMsgType::OWN_ADDRESS_READ);
     msg.set_advertiser_id(advertiser_id);

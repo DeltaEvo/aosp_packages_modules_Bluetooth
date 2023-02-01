@@ -1,3 +1,4 @@
+use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 use std::convert::{TryFrom, TryInto};
 use std::ffi::CString;
@@ -5,10 +6,9 @@ use std::fs::File;
 use std::os::unix::io::FromRawFd;
 
 use crate::bindings::root as bindings;
-use crate::btif::{
-    BluetoothInterface, BtStatus, FfiAddress, RawAddress, SupportedProfiles, Uuid, Uuid128Bit,
-};
-use crate::{cast_to_ffi_address, ccall};
+use crate::btif::{BluetoothInterface, BtStatus, RawAddress, SupportedProfiles, Uuid, Uuid128Bit};
+use crate::ccall;
+use crate::utils::{LTCheckedPtr, LTCheckedPtrMut};
 
 #[derive(Clone, Debug, FromPrimitive, ToPrimitive)]
 #[repr(u32)]
@@ -156,25 +156,25 @@ impl BtSocket {
         calling_uid: i32,
     ) -> (BtStatus, Result<File, FdError>) {
         let mut sockfd: i32 = -1;
+        let sockfd_ptr = LTCheckedPtrMut::from_ref(&mut sockfd);
+
         let uuid = match service_uuid {
-            Some(uu) => Some(Uuid { uu }),
+            Some(uu) => Some(Uuid::from(uu)),
             None => None,
         };
-
-        let uuid_ptr = match uuid {
-            Some(u) => &u as *const Uuid,
-            None => std::ptr::null(),
-        };
+        let uuid_ptr = LTCheckedPtr::from(&uuid);
 
         let name = CString::new(service_name).expect("Service name has null in it.");
+        let name_ptr = LTCheckedPtr::from(&name);
+
         let status: BtStatus = ccall!(
             self,
             listen,
             sock_type.into(),
-            name.as_ptr(),
-            uuid_ptr,
+            name_ptr.into(),
+            uuid_ptr.into(),
             channel,
-            &mut sockfd,
+            sockfd_ptr.into(),
             flags,
             calling_uid
         )
@@ -193,26 +193,24 @@ impl BtSocket {
         calling_uid: i32,
     ) -> (BtStatus, Result<File, FdError>) {
         let mut sockfd: i32 = -1;
+        let sockfd_ptr = LTCheckedPtrMut::from_ref(&mut sockfd);
+
         let uuid = match service_uuid {
-            Some(uu) => Some(Uuid { uu }),
+            Some(uu) => Some(Uuid::from(uu)),
             None => None,
         };
+        let uuid_ptr = LTCheckedPtr::from(&uuid);
 
-        let uuid_ptr = match uuid {
-            Some(u) => &u as *const Uuid,
-            None => std::ptr::null(),
-        };
-
-        let ffi_addr = cast_to_ffi_address!(&addr as *const RawAddress);
+        let addr_ptr = LTCheckedPtr::from_ref(&addr);
 
         let status: BtStatus = ccall!(
             self,
             connect,
-            ffi_addr,
+            addr_ptr.into(),
             sock_type.into(),
-            uuid_ptr,
+            uuid_ptr.into(),
             channel,
-            &mut sockfd,
+            sockfd_ptr.into(),
             flags,
             calling_uid
         )
@@ -222,8 +220,7 @@ impl BtSocket {
     }
 
     pub fn request_max_tx_data_length(&self, addr: RawAddress) {
-        let ffi_addr = cast_to_ffi_address!(&addr as *const RawAddress);
-        ccall!(self, request_max_tx_data_length, ffi_addr);
+        ccall!(self, request_max_tx_data_length, &addr);
     }
 }
 
@@ -247,7 +244,7 @@ mod tests {
         assert_eq!(false, ConnectionComplete::try_from(size_no_match.as_slice()).is_ok());
 
         // Valid input with various values.
-        let raw_addr = RawAddress { val: [0x1, 0x2, 0x3, 0x4, 0x5, 0x6] };
+        let raw_addr = RawAddress { address: [0x1, 0x2, 0x3, 0x4, 0x5, 0x6] };
         let mut valid: Vec<u8> = vec![];
         valid.extend(u16::to_ne_bytes(20));
         valid.extend(raw_addr.to_byte_arr());

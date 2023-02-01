@@ -86,6 +86,9 @@ public:
  // Ask the controller for specific data parameters
  virtual void SetLeSuggestedDefaultDataParameters(uint16_t octets, uint16_t time);
 
+ virtual void LeSetDefaultSubrate(
+     uint16_t subrate_min, uint16_t subrate_max, uint16_t max_latency, uint16_t cont_num, uint16_t sup_tout);
+
  virtual void SetPrivacyPolicyForInitiatorAddress(
      LeAddressManager::AddressPolicy address_policy,
      AddressWithType fixed_address,
@@ -126,12 +129,21 @@ public:
  virtual void WriteDefaultLinkPolicySettings(uint16_t default_link_policy_settings);
 
  // Callback from Advertising Manager to notify the advitiser (local) address
- virtual void OnAdvertisingSetTerminated(ErrorCode status, uint16_t conn_handle, hci::AddressWithType adv_address);
+ virtual void OnAdvertisingSetTerminated(
+     ErrorCode status,
+     uint16_t conn_handle,
+     uint8_t adv_set_id,
+     hci::AddressWithType adv_address,
+     bool is_discoverable);
 
  // In order to avoid circular dependency use setter rather than module dependency.
  virtual void SetSecurityModule(security::SecurityModule* security_module);
 
  virtual LeAddressManager* GetLeAddressManager();
+
+ // Virtual ACL disconnect emitted during suspend.
+ virtual void OnClassicSuspendInitiatedDisconnect(uint16_t handle, ErrorCode reason);
+ virtual void OnLeSuspendInitiatedDisconnect(uint16_t handle, ErrorCode reason);
 
  static const ModuleFactory Factory;
 

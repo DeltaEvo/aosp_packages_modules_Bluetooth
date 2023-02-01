@@ -214,11 +214,26 @@ public class BatteryService extends ProfileService {
             BatteryStateMachine sm = getOrCreateStateMachine(device);
             if (sm == null) {
                 Log.e(TAG, "Cannot connect to " + device + " : no state machine");
+                return false;
             }
             sm.sendMessage(BatteryStateMachine.CONNECT);
         }
 
         return true;
+    }
+
+    /**
+     * Connects to the battery service of the given device if possible.
+     * If it's impossible, it doesn't try without logging errors.
+     */
+    public boolean connectIfPossible(BluetoothDevice device) {
+        if (device == null
+                || getConnectionPolicy(device) == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN
+                || !Utils.arrayContains(
+                        mAdapterService.getRemoteUuids(device), BluetoothUuid.BATTERY)) {
+            return false;
+        }
+        return connect(device);
     }
 
     /**
@@ -527,9 +542,12 @@ public class BatteryService extends ProfileService {
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private BatteryService getService(AttributionSource source) {
             BatteryService service = mServiceRef.get();
+            if (Utils.isInstrumentationTestMode()) {
+                return service;
+            }
 
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
-                    || !Utils.checkServiceAvailable(service, TAG)
+            if (!Utils.checkServiceAvailable(service, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(service, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return null;
             }

@@ -1,3 +1,4 @@
+use crate::lint;
 use codespan_reporting::diagnostic;
 use codespan_reporting::files;
 use serde::Serialize;
@@ -22,7 +23,7 @@ pub struct SourceLocation {
     pub column: usize,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize)]
 pub struct SourceRange {
     pub file: FileId,
     pub start: SourceLocation,
@@ -36,14 +37,14 @@ pub struct Comment {
     pub text: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EndiannessValue {
     LittleEndian,
     BigEndian,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Copy, Clone, Serialize)]
 #[serde(tag = "kind", rename = "endianness_declaration")]
 pub struct Endianness {
     pub loc: SourceRange,
@@ -58,7 +59,7 @@ pub struct Tag {
     pub value: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind", rename = "constraint")]
 pub struct Constraint {
     pub id: String,
@@ -67,17 +68,19 @@ pub struct Constraint {
     pub tag_id: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind")]
 pub enum Field {
     #[serde(rename = "checksum_field")]
     Checksum { loc: SourceRange, field_id: String },
     #[serde(rename = "padding_field")]
-    Padding { loc: SourceRange, width: usize },
+    Padding { loc: SourceRange, size: usize },
     #[serde(rename = "size_field")]
     Size { loc: SourceRange, field_id: String, width: usize },
     #[serde(rename = "count_field")]
     Count { loc: SourceRange, field_id: String, width: usize },
+    #[serde(rename = "elementsize_field")]
+    ElementSize { loc: SourceRange, field_id: String, width: usize },
     #[serde(rename = "body_field")]
     Body { loc: SourceRange },
     #[serde(rename = "payload_field")]
@@ -240,7 +243,7 @@ impl Decl {
         }
     }
 
-    pub fn id(&self) -> Option<&String> {
+    pub fn id(&self) -> Option<&str> {
         match self {
             Decl::Test { .. } => None,
             Decl::Checksum { id, .. }
@@ -259,6 +262,7 @@ impl Field {
             Field::Checksum { loc, .. }
             | Field::Padding { loc, .. }
             | Field::Size { loc, .. }
+            | Field::ElementSize { loc, .. }
             | Field::Count { loc, .. }
             | Field::Body { loc, .. }
             | Field::Payload { loc, .. }
@@ -271,11 +275,12 @@ impl Field {
         }
     }
 
-    pub fn id(&self) -> Option<&String> {
+    pub fn id(&self) -> Option<&str> {
         match self {
             Field::Checksum { .. }
             | Field::Padding { .. }
             | Field::Size { .. }
+            | Field::ElementSize { .. }
             | Field::Count { .. }
             | Field::Body { .. }
             | Field::Payload { .. }
@@ -285,6 +290,36 @@ impl Field {
             Field::Array { id, .. } | Field::Scalar { id, .. } | Field::Typedef { id, .. } => {
                 Some(id)
             }
+        }
+    }
+
+    pub fn is_bitfield(&self, scope: &lint::Scope<'_>) -> bool {
+        match self {
+            Field::Size { .. }
+            | Field::Count { .. }
+            | Field::Fixed { .. }
+            | Field::Reserved { .. }
+            | Field::Scalar { .. } => true,
+            Field::Typedef { type_id, .. } => {
+                let field = scope.typedef.get(type_id.as_str());
+                matches!(field, Some(Decl::Enum { .. }))
+            }
+            _ => false,
+        }
+    }
+
+    pub fn width(&self, scope: &lint::Scope<'_>) -> Option<usize> {
+        match self {
+            Field::Scalar { width, .. }
+            | Field::Size { width, .. }
+            | Field::Count { width, .. }
+            | Field::Reserved { width, .. } => Some(*width),
+            Field::Typedef { type_id, .. } => match scope.typedef.get(type_id.as_str()) {
+                Some(Decl::Enum { width, .. }) => Some(*width),
+                _ => None,
+            },
+            // TODO(mgeisler): padding, arrays, etc.
+            _ => None,
         }
     }
 }

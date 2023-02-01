@@ -26,7 +26,6 @@
 #include "common/metric_id_allocator.h"
 #include "common/time_util.h"
 #include "gd/common/callback.h"
-#include "gd/neighbor/name.h"
 #include "gd/os/log.h"
 #include "gd/security/security_module.h"
 #include "gd/security/ui.h"
@@ -37,6 +36,7 @@
 #include "main/shim/shim.h"
 #include "main/shim/stack.h"
 #include "osi/include/allocator.h"
+#include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
@@ -461,7 +461,7 @@ class ShimBondListener : public bluetooth::security::ISecurityManagerListener {
         LinkKey key;  // Never want to send the key to the stack
         (*bta_callbacks_->p_link_key_callback)(
             bluetooth::ToRawAddress(device.GetAddress()), 0, name, key,
-            BTM_LKEY_TYPE_COMBINATION);
+            BTM_LKEY_TYPE_COMBINATION, false /* is_ctkd */);
       }
       if (*bta_callbacks_->p_auth_complete_callback) {
         (*bta_callbacks_->p_auth_complete_callback)(
@@ -724,6 +724,15 @@ void bluetooth::shim::BTM_BleOpportunisticObserve(
     btm_cb.ble_ctr_cb.p_opportunistic_obs_results_cb = p_results_cb;
   } else {
     btm_cb.ble_ctr_cb.p_opportunistic_obs_results_cb = nullptr;
+  }
+}
+
+void bluetooth::shim::BTM_BleTargetAnnouncementObserve(
+    bool enable, tBTM_INQ_RESULTS_CB* p_results_cb) {
+  if (enable) {
+    btm_cb.ble_ctr_cb.p_target_announcement_obs_results_cb = p_results_cb;
+  } else {
+    btm_cb.ble_ctr_cb.p_target_announcement_obs_results_cb = nullptr;
   }
 }
 
@@ -999,25 +1008,6 @@ bool bluetooth::shim::BTM_ReadConnectedTransportAddress(
   LOG_INFO("UNIMPLEMENTED %s", __func__);
   CHECK(remote_bda != nullptr);
   return false;
-}
-
-void bluetooth::shim::BTM_BleReceiverTest(uint8_t rx_freq,
-                                          tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_cmd_cmpl_cback != nullptr);
-}
-
-void bluetooth::shim::BTM_BleTransmitterTest(uint8_t tx_freq,
-                                             uint8_t test_data_len,
-                                             uint8_t packet_payload,
-                                             tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_cmd_cmpl_cback != nullptr);
-}
-
-void bluetooth::shim::BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_cmd_cmpl_cback != nullptr);
 }
 
 bool bluetooth::shim::BTM_UseLeLink(const RawAddress& raw_address) {
@@ -1348,14 +1338,37 @@ tBTM_STATUS bluetooth::shim::BTM_ClearFilterAcceptList() {
 }
 
 tBTM_STATUS bluetooth::shim::BTM_DisconnectAllAcls() {
-  for (uint16_t i = 0; i < 0xfffe; i++) {
-    btm_sec_disconnect(i, HCI_SUCCESS, "");
-  }
+  Stack::GetInstance()->GetAcl()->DisconnectAllForSuspend();
+//  Stack::GetInstance()->GetAcl()->Shutdown();
   return BTM_SUCCESS;
 }
 
 tBTM_STATUS bluetooth::shim::BTM_LeRand(LeRandCallback cb) {
-  controller_get_interface()->le_rand(cb);
+  Stack::GetInstance()->GetAcl()->LeRand(cb);
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetEventFilterConnectionSetupAllDevices() {
+  // Autoplumbed
+  controller_get_interface()->set_event_filter_connection_setup_all_devices();
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
+  // Autoplumbed
+  controller_get_interface()->allow_wake_by_hid();
+  // Allow BLE HID
+  for (auto hid_address : le_hid_devices) {
+    std::promise<bool> accept_promise;
+    auto accept_future = accept_promise.get_future();
+
+    Stack::GetInstance()->GetAcl()->AcceptLeConnectionFrom(
+        ToAddressWithType(hid_address.first, hid_address.second),
+        /*is_direct=*/false, std::move(accept_promise));
+
+    accept_future.wait();
+  }
   return BTM_SUCCESS;
 }
 
@@ -1365,14 +1378,20 @@ tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList() {
   return BTM_SUCCESS;
 }
 
-tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMask() {
+tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMaskExcept(uint64_t mask,
+                                                           uint64_t le_mask) {
   // Autoplumbed
-  controller_get_interface()->set_default_event_mask();
+  controller_get_interface()->set_default_event_mask_except(mask, le_mask);
   return BTM_SUCCESS;
 }
 
 tBTM_STATUS bluetooth::shim::BTM_SetEventFilterInquiryResultAllDevices() {
   // Autoplumbed
   controller_get_interface()->set_event_filter_inquiry_result_all_devices();
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_BleResetId() {
+  btm_ble_reset_id();
   return BTM_SUCCESS;
 }

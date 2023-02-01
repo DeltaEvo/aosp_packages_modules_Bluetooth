@@ -124,6 +124,23 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
 void BTM_BleOpportunisticObserve(bool enable,
                                  tBTM_INQ_RESULTS_CB* p_results_cb);
 
+/*******************************************************************************
+ *
+ * Function         BTM_BleTargetAnnouncementObserve
+ *
+ * Description      Register/Unregister client interested in the targeted
+ *                  announcements. Not that it is client responsible for parsing
+ *                  advertising data.
+ *
+ * Parameters       start: start or stop observe.
+ *                  p_results_cb: callback for results.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTM_BleTargetAnnouncementObserve(bool enable,
+                                      tBTM_INQ_RESULTS_CB* p_results_cb);
+
 void BTM_EnableInterlacedInquiryScan();
 
 void BTM_EnableInterlacedPageScan();
@@ -533,46 +550,6 @@ void BTM_ReadDevInfo(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
  ******************************************************************************/
 bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
                                        tBT_TRANSPORT transport);
-
-/*******************************************************************************
- *
- * Function         BTM_BleReceiverTest
- *
- * Description      This function is called to start the LE Receiver test
- *
- * Parameter       rx_freq - Frequency Range
- *               p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback);
-
-/*******************************************************************************
- *
- * Function         BTM_BleTransmitterTest
- *
- * Description      This function is called to start the LE Transmitter test
- *
- * Parameter       tx_freq - Frequency Range
- *                       test_data_len - Length in bytes of payload data in each
- *                                       packet
- *                       packet_payload - Pattern to use in the payload
- *                       p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
-                            uint8_t packet_payload,
-                            tBTM_CMPL_CB* p_cmd_cmpl_cback);
-
-/*******************************************************************************
- *
- * Function         BTM_BleTestEnd
- *
- * Description     This function is called to stop the in-progress TX or RX test
- *
- * Parameter       p_cmd_cmpl_cback - Command complete callback
- *
- ******************************************************************************/
-void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback);
 
 /*******************************************************************************
  *
@@ -1871,6 +1848,29 @@ tBTM_STATUS BTM_LeRand(LeRandCallback);
 
 /*******************************************************************************
  *
+ * Function        BTM_SetEventFilterConnectionSetupAllDevices
+ *
+ * Description    Tell the controller to allow all devices
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetEventFilterConnectionSetupAllDevices(void);
+
+/*******************************************************************************
+ *
+ * Function        BTM_AllowWakeByHid
+ *
+ * Description     Allow the device to be woken by HID devices
+ *
+ * Parameters      std::vector of RawAddress
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_AllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
+
+/*******************************************************************************
+ *
  * Function        BTM_RestoreFilterAcceptList
  *
  * Description    Floss: Restore the state of the for the filter accept list
@@ -1882,14 +1882,17 @@ tBTM_STATUS BTM_RestoreFilterAcceptList(void);
 
 /*******************************************************************************
  *
- * Function        BTM_SetDefaultEventMask
+ * Function        BTM_SetDefaultEventMaskExcept
  *
- * Description    Floss: Set the default event mask for Classic and LE
+ * Description    Floss: Set the default event mask for Classic and LE except
+ *                the given values (they will be disabled in the final set
+ *                mask).
  *
- * Parameters
+ * Parameters     Bits set for event mask and le event mask that should be
+ *                disabled in the final value.
  *
  *******************************************************************************/
-tBTM_STATUS BTM_SetDefaultEventMask(void);
+tBTM_STATUS BTM_SetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
 
 /*******************************************************************************
  *
@@ -1901,6 +1904,15 @@ tBTM_STATUS BTM_SetDefaultEventMask(void);
  *
  *******************************************************************************/
 tBTM_STATUS BTM_SetEventFilterInquiryResultAllDevices(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_BleResetId
+ *
+ * Description      Resets the local BLE keys
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_BleResetId(void);
 
 /**
  * Send remote name request to GD shim Name module

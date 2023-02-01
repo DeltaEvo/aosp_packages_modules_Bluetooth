@@ -38,17 +38,19 @@ using ::bluetooth::hci::Address;
 class TestModel {
  public:
   TestModel(
-      std::function<AsyncUserId()> getNextUserId,
+      std::function<AsyncUserId()> get_user_id,
       std::function<AsyncTaskId(AsyncUserId, std::chrono::milliseconds,
                                 const TaskCallback&)>
-          evtScheduler,
+          event_scheduler,
       std::function<AsyncTaskId(AsyncUserId, std::chrono::milliseconds,
                                 std::chrono::milliseconds, const TaskCallback&)>
-          periodicEvtScheduler,
-      std::function<void(AsyncUserId)> cancel_user_tasks,
+          periodic_event_scheduler,
+      std::function<void(AsyncUserId)> cancel_tasks_from_user,
       std::function<void(AsyncTaskId)> cancel,
       std::function<std::shared_ptr<Device>(const std::string&, int, Phy::Type)>
-          connect_to_remote);
+          connect_to_remote,
+      std::array<uint8_t, 5> bluetooth_address_prefix = {0xda, 0x4c, 0x10, 0xde,
+                                                         0x17});
   virtual ~TestModel();
 
   TestModel(TestModel& model) = delete;
@@ -66,7 +68,8 @@ class TestModel {
   size_t AddPhy(Phy::Type phy_type);
 
   // Allow derived classes to use custom phy layer
-  virtual std::unique_ptr<PhyLayerFactory> CreatePhy(Phy::Type phy_type, size_t phy_index);
+  virtual std::unique_ptr<PhyLayerFactory> CreatePhy(Phy::Type phy_type,
+                                                     size_t factory_id);
 
   // Remove phy by index
   void DelPhy(size_t phy_index);
@@ -107,6 +110,10 @@ class TestModel {
   std::vector<std::unique_ptr<PhyLayerFactory>> phys_;
   std::vector<std::shared_ptr<Device>> devices_;
   std::string list_string_;
+
+  // Prefix used to generate public device addresses for hosts
+  // connecting over TCP.
+  std::array<uint8_t, 5> bluetooth_address_prefix_;
 
   // Callbacks to schedule tasks.
   std::function<AsyncUserId()> get_user_id_;

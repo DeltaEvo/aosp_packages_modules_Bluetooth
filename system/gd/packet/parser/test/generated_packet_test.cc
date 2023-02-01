@@ -568,7 +568,7 @@ TEST(GeneratedPacketTest, testFixedSizeByteArray) {
   for (uint32_t i = 0; i < word_array_size; i++) word_array[i] = i;
 
   auto packet = PacketWithFixedArraysOfBytesBuilder::Create(byte_array, word_array);
-  ASSERT_EQ(2 * (256 / 8), packet->size());
+  ASSERT_EQ((size_t)(2 * (256 / 8)), packet->size());
 
   std::shared_ptr<std::vector<uint8_t>> packet_bytes = std::make_shared<std::vector<uint8_t>>();
   BitInserter it(*packet_bytes);
@@ -1118,7 +1118,7 @@ TEST(GeneratedPacketTest, testOneArrayOfStructAndAnotherStruct) {
   auto view = OneArrayOfStructAndAnotherStructView::Create(packet_bytes_view);
   ASSERT_TRUE(view.IsValid());
   auto one = view.GetOne();
-  ASSERT_EQ(one.array_.size(), 3);
+  ASSERT_EQ(one.array_.size(), 3ul);
   ASSERT_EQ(one.another_.id_, 4);
   ASSERT_EQ(one.another_.count_, 0x0804);
 }
@@ -1493,8 +1493,7 @@ vector<uint8_t> one_four_byte_struct{
 };
 
 TEST(GeneratedPacketTest, testOneFourByteStruct) {
-  FourByteStruct four_byte_struct;
-  four_byte_struct.four_bytes_ = 0xd4d3d2d1;
+  FourByteStruct four_byte_struct(0xd4d3d2d1);
 
   auto packet = OneFourByteStructBuilder::Create(four_byte_struct);
   ASSERT_EQ(one_four_byte_struct.size(), packet->size());
@@ -1521,8 +1520,7 @@ vector<uint8_t> generic_struct_two{
 };
 
 TEST(GeneratedPacketTest, testOneGenericStructTwo) {
-  TwoByteStruct two_byte_struct;
-  two_byte_struct.two_bytes_ = 0x0201;
+  TwoByteStruct two_byte_struct(0x0201);
   std::unique_ptr<TwoByteStruct> two_byte_struct_ptr = std::make_unique<TwoByteStruct>(two_byte_struct);
 
   auto packet = OneGenericStructBuilder::Create(std::move(two_byte_struct_ptr));
@@ -1558,8 +1556,7 @@ vector<uint8_t> generic_struct_four{
 };
 
 TEST(GeneratedPacketTest, testOneGenericStructFour) {
-  FourByteStruct four_byte_struct;
-  four_byte_struct.four_bytes_ = 0x04030201;
+  FourByteStruct four_byte_struct(0x04030201);
   std::unique_ptr<FourByteStruct> four_byte_struct_p = std::make_unique<FourByteStruct>(four_byte_struct);
   ASSERT_EQ(four_byte_struct.four_bytes_, four_byte_struct_p->four_bytes_);
 
@@ -1599,17 +1596,13 @@ TEST(GeneratedPacketTest, testOneGenericStructArray) {
   std::vector<std::unique_ptr<UnusedParentStruct>> parent_vector;
   std::unique_ptr<FourByteStruct> fbs;
   std::unique_ptr<TwoByteStruct> tbs;
-  fbs = std::make_unique<FourByteStruct>();
-  fbs->four_bytes_ = 0xa4a3a2a1;
+  fbs = std::make_unique<FourByteStruct>(0xa4a3a2a1);
   parent_vector.push_back(std::move(fbs));
-  fbs = std::make_unique<FourByteStruct>();
-  fbs->four_bytes_ = 0xb4b3b2b2;
+  fbs = std::make_unique<FourByteStruct>(0xb4b3b2b2);
   parent_vector.push_back(std::move(fbs));
-  tbs = std::make_unique<TwoByteStruct>();
-  tbs->two_bytes_ = 0xc2c3;
+  tbs = std::make_unique<TwoByteStruct>(0xc2c3);
   parent_vector.push_back(std::move(tbs));
-  fbs = std::make_unique<FourByteStruct>();
-  fbs->four_bytes_ = 0xd4d3d2d4;
+  fbs = std::make_unique<FourByteStruct>(0xd4d3d2d4);
   parent_vector.push_back(std::move(fbs));
 
   std::vector<std::unique_ptr<UnusedParentStruct>> vector_copy;
@@ -1656,17 +1649,13 @@ TEST(GeneratedPacketTest, testOneGenericStructFourArray) {
   std::array<std::unique_ptr<UnusedParentStruct>, 4> parent_vector;
   std::unique_ptr<FourByteStruct> fbs;
   std::unique_ptr<TwoByteStruct> tbs;
-  fbs = std::make_unique<FourByteStruct>();
-  fbs->four_bytes_ = 0xa4a3a2a1;
+  fbs = std::make_unique<FourByteStruct>(0xa4a3a2a1);
   parent_vector[0] = std::move(fbs);
-  fbs = std::make_unique<FourByteStruct>();
-  fbs->four_bytes_ = 0xb4b3b2b2;
+  fbs = std::make_unique<FourByteStruct>(0xb4b3b2b2);
   parent_vector[1] = std::move(fbs);
-  tbs = std::make_unique<TwoByteStruct>();
-  tbs->two_bytes_ = 0xc2c3;
+  tbs = std::make_unique<TwoByteStruct>(0xc2c3);
   parent_vector[2] = std::move(tbs);
-  fbs = std::make_unique<FourByteStruct>();
-  fbs->four_bytes_ = 0xd4d3d2d4;
+  fbs = std::make_unique<FourByteStruct>(0xd4d3d2d4);
   parent_vector[3] = std::move(fbs);
 
   std::array<std::unique_ptr<UnusedParentStruct>, 4> vector_copy;
@@ -1901,7 +1890,7 @@ TEST(GeneratedPacketTest, testOneGenericStructArrayNoZeroEmpty) {
   too_few_bytes = std::make_shared<std::vector<uint8_t>>(a_two_byte_struct);
   view = OneGenericStructArrayNoZeroView::Create(PacketView<kLittleEndian>(too_few_bytes));
   ASSERT_TRUE(view.IsValid());
-  ASSERT_EQ(1, view.GetAnArray().size());
+  ASSERT_EQ(1ul, view.GetAnArray().size());
 }
 
 TEST(GeneratedPacketTest, testToStringOutput) {

@@ -271,7 +271,8 @@ void bta_hh_le_open_conn(tBTA_HH_DEV_CB* p_cb, const RawAddress& remote_bda) {
   bta_hh_cb.le_cb_index[BTA_HH_GET_LE_CB_IDX(p_cb->hid_handle)] = p_cb->index;
   p_cb->in_use = true;
 
-  BTA_GATTC_Open(bta_hh_cb.gatt_if, remote_bda, true, false);
+  BTA_GATTC_Open(bta_hh_cb.gatt_if, remote_bda, BTM_BLE_DIRECT_CONNECTION,
+                 false);
 }
 
 /*******************************************************************************
@@ -1159,7 +1160,7 @@ static void bta_hh_le_close(const tBTA_GATTC_CLOSE& gattc_data) {
   tBTA_HH_DEV_CB* p_cb = bta_hh_le_find_dev_cb_by_bda(gattc_data.remote_bda);
   if (p_cb == nullptr) {
     LOG_WARN("Received close event with unknown device:%s",
-             PRIVATE_ADDRESS(gattc_data.remote_bda));
+             ADDRESS_TO_LOGGABLE_CSTR(gattc_data.remote_bda));
     return;
   }
   p_cb->conn_id = GATT_INVALID_CONN_ID;
@@ -1607,7 +1608,7 @@ void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
                  base::StringPrintf(
                      "%s reason %s", (p_cb->is_le_device) ? "le" : "classic",
                      gatt_disconnection_reason_text(le_close->reason).c_str()));
-  LOG_WARN("Open failed for device:%s", PRIVATE_ADDRESS(p_cb->addr));
+  LOG_WARN("Open failed for device:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->addr));
 
   /* open failure in the middle of service discovery, clear all services */
   if (p_cb->disc_active & BTA_HH_LE_DISC_HIDS) {
@@ -1681,7 +1682,7 @@ void bta_hh_gatt_close(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
       case GATT_CONN_TIMEOUT:
         LOG_DEBUG(
             "gd_acl: add into acceptlist for reconnection device:%s reason:%s",
-            PRIVATE_ADDRESS(p_cb->addr),
+            ADDRESS_TO_LOGGABLE_CSTR(p_cb->addr),
             gatt_disconnection_reason_text(le_close->reason).c_str());
         // gd removes from bg list after successful connection
         // Correct the cached state to allow re-add to acceptlist.
@@ -1698,7 +1699,7 @@ void bta_hh_gatt_close(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
         LOG_DEBUG(
             "gd_acl: SKIP add into acceptlist for reconnection device:%s "
             "reason:%s",
-            PRIVATE_ADDRESS(p_cb->addr),
+            ADDRESS_TO_LOGGABLE_CSTR(p_cb->addr),
             gatt_disconnection_reason_text(le_close->reason).c_str());
         break;
     }
@@ -2011,13 +2012,15 @@ static void bta_hh_le_add_dev_bg_conn(tBTA_HH_DEV_CB* p_cb, bool check_bond) {
 
   if (!p_cb->in_bg_conn && to_add) {
     /* add device into BG connection to accept remote initiated connection */
-    BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->addr, false, false);
+    BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->addr,
+                   BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
     p_cb->in_bg_conn = true;
   } else {
     // Let the lower layers manage acceptlist and do not cache
     // at the higher layer
     p_cb->in_bg_conn = true;
-    BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->addr, false, false);
+    BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->addr,
+                   BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
   }
 }
 
@@ -2069,7 +2072,7 @@ uint8_t bta_hh_le_add_device(tBTA_HH_DEV_CB* p_cb,
 void bta_hh_le_remove_dev_bg_conn(tBTA_HH_DEV_CB* p_dev_cb) {
   if (p_dev_cb->in_bg_conn) {
     LOG_DEBUG("Removing from background connection device:%s",
-              PRIVATE_ADDRESS(p_dev_cb->addr));
+              ADDRESS_TO_LOGGABLE_CSTR(p_dev_cb->addr));
     p_dev_cb->in_bg_conn = false;
 
     BTA_GATTC_CancelOpen(bta_hh_cb.gatt_if, p_dev_cb->addr, false);

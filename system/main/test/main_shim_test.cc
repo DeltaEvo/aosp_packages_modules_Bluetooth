@@ -14,12 +14,15 @@
  *  limitations under the License.
  */
 
+#include <fcntl.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <cstdio>
 #include <future>
 #include <map>
+#include <optional>
 
 #include "btaa/activity_attribution.h"
 #include "btif/include/btif_hh.h"
@@ -86,8 +89,31 @@ struct bluetooth::hci::LeScanningManager::impl
     : public bluetooth::hci::LeAddressManagerCallback {};
 
 namespace {
+constexpr double kMaxAbsoluteError = .0000001;
+constexpr double kTicksInMs = 20479.375;
+constexpr double kTicksInSec = 20.479375;
+constexpr uint16_t kTicks = 32767;
+
 std::map<std::string, std::promise<uint16_t>> mock_function_handle_promise_map;
-}
+
+// Utility to provide a file descriptor for /dev/null when possible, but
+// defaulting to STDERR when not possible.
+class DevNullOrStdErr {
+ public:
+  DevNullOrStdErr() { fd_ = open("/dev/null", O_CLOEXEC | O_WRONLY); }
+  ~DevNullOrStdErr() {
+    if (fd_ != -1) {
+      close(fd_);
+    }
+    fd_ = -1;
+  }
+  int Fd() const { return (fd_ == -1) ? STDERR_FILENO : fd_; }
+
+ private:
+  int fd_{-1};
+};
+
+}  // namespace
 
 uint8_t mock_get_ble_acceptlist_size() { return 123; }
 
@@ -102,10 +128,12 @@ void mock_on_send_data_upwards(BT_HDR*) {}
 void mock_on_packets_completed(uint16_t handle, uint16_t num_packets) {}
 
 void mock_connection_classic_on_connected(const RawAddress& bda,
-                                          uint16_t handle, uint8_t enc_mode) {}
+                                          uint16_t handle, uint8_t enc_mode,
+                                          bool locally_initiated) {}
 
 void mock_connection_classic_on_failed(const RawAddress& bda,
-                                       tHCI_STATUS status) {}
+                                       tHCI_STATUS status,
+                                       bool locally_initiated) {}
 
 void mock_connection_classic_on_disconnected(tHCI_STATUS status,
                                              uint16_t handle,
@@ -118,10 +146,11 @@ void mock_connection_le_on_connected(
     const tBLE_BD_ADDR& address_with_type, uint16_t handle, tHCI_ROLE role,
     uint16_t conn_interval, uint16_t conn_latency, uint16_t conn_timeout,
     const RawAddress& local_rpa, const RawAddress& peer_rpa,
-    tBLE_ADDR_TYPE peer_addr_type) {}
+    tBLE_ADDR_TYPE peer_addr_type, bool can_read_discoverable_characteristics) {
+}
 void mock_connection_le_on_failed(const tBLE_BD_ADDR& address_with_type,
                                   uint16_t handle, bool enhanced,
-                                  tHCI_STATUS status) {}
+                                  tHCI_STATUS status, bool locally_initiated) {}
 static std::promise<uint16_t> mock_connection_le_on_disconnected_promise;
 void mock_connection_le_on_disconnected(tHCI_STATUS status, uint16_t handle,
                                         tHCI_STATUS reason) {
@@ -189,7 +218,6 @@ struct hci_t;
 const hci_t* hci_layer_get_interface() { return nullptr; }
 struct packet_fragmenter_t;
 const packet_fragmenter_t* packet_fragmenter_get_interface() { return nullptr; }
-void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) {}
 
 template <typename T>
 class MockEnQueue : public os::IQueueEnqueue<T> {
@@ -266,12 +294,12 @@ class MockClassicAclConnection
 class MockLeAclConnection
     : public bluetooth::hci::acl_manager::LeAclConnection {
  public:
-  MockLeAclConnection(uint16_t handle, hci::AddressWithType local_address,
-                      hci::AddressWithType remote_address, hci::Role role) {
+  MockLeAclConnection(uint16_t handle,
+                      hci::acl_manager::RoleSpecificData role_specific_data,
+                      hci::AddressWithType remote_address) {
     handle_ = handle;
-    local_address_ = local_address;
+    role_specific_data_ = role_specific_data;
     remote_address_ = remote_address;
-    role_ = role;
   }
 
   void RegisterCallbacks(
@@ -628,7 +656,7 @@ TEST_F(MainShimTest, DISABLED_BleScannerInterfaceImpl_OnScanResult) {
   }
 
   ASSERT_EQ(2 * 2048UL, do_in_jni_thread_task_queue.size());
-  ASSERT_EQ(0, mock_function_count_map["btm_ble_process_adv_addr"]);
+  ASSERT_EQ(0, get_func_call_count("btm_ble_process_adv_addr"));
 
   run_all_jni_thread_task();
 }
@@ -658,9 +686,10 @@ TEST_F(MainShimTest, DISABLED_LeShimAclConnection_local_disconnect) {
 
   // Simulate LE connection successful
   uint16_t handle = 0x1234;
-  hci::Role role;
-  auto connection = std::make_unique<MockLeAclConnection>(handle, local_address,
-                                                          remote_address, role);
+  auto connection = std::make_unique<MockLeAclConnection>(
+      handle,
+      hci::acl_manager::DataAsPeripheral{local_address, std::nullopt, true},
+      remote_address);
   auto raw_connection = connection.get();
   acl->OnLeConnectSuccess(remote_address, std::move(connection));
   ASSERT_EQ(nullptr, connection);
@@ -727,4 +756,18 @@ TEST_F(MainShimTestWithClassicConnection, read_extended_feature) {
   }
 
   raw_connection_->read_remote_extended_features_function_ = {};
+}
+
+TEST_F(MainShimTest, acl_dumpsys) {
+  MakeAcl()->Dump(std::make_unique<DevNullOrStdErr>()->Fd());
+}
+
+TEST_F(MainShimTest, ticks_to_milliseconds) {
+  ASSERT_THAT(kTicksInMs,
+              DoubleNear(ticks_to_milliseconds(kTicks), kMaxAbsoluteError));
+}
+
+TEST_F(MainShimTest, ticks_to_seconds) {
+  ASSERT_THAT(kTicksInSec,
+              DoubleNear(ticks_to_seconds(kTicks), kMaxAbsoluteError));
 }

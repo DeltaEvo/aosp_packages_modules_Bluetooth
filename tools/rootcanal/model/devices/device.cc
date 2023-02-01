@@ -21,9 +21,7 @@
 namespace rootcanal {
 
 std::string Device::ToString() const {
-  std::string dev = GetTypeString() + "@" + properties_.GetAddress().ToString();
-
-  return dev;
+  return GetTypeString() + "@" + address_.ToString();
 }
 
 void Device::RegisterPhyLayer(std::shared_ptr<PhyLayer> phy) {
@@ -50,27 +48,21 @@ void Device::UnregisterPhyLayer(Phy::Type phy_type, uint32_t factory_id) {
   }
 }
 
-bool Device::IsAdvertisementAvailable() const {
-  return (advertising_interval_ms_ > std::chrono::milliseconds(0)) &&
-         (std::chrono::steady_clock::now() >=
-          last_advertisement_ + advertising_interval_ms_);
-}
-
 void Device::SendLinkLayerPacket(
-    std::shared_ptr<model::packets::LinkLayerPacketBuilder> to_send,
-    Phy::Type phy_type) {
+    std::shared_ptr<model::packets::LinkLayerPacketBuilder> packet,
+    Phy::Type phy_type, int8_t tx_power) {
   for (auto phy : phy_layers_) {
     if (phy != nullptr && phy->GetType() == phy_type) {
-      phy->Send(to_send);
+      phy->Send(packet, tx_power);
     }
   }
 }
 
-void Device::SendLinkLayerPacket(model::packets::LinkLayerPacketView to_send,
-                                 Phy::Type phy_type) {
+void Device::SendLinkLayerPacket(model::packets::LinkLayerPacketView packet,
+                                 Phy::Type phy_type, int8_t tx_power) {
   for (auto phy : phy_layers_) {
     if (phy != nullptr && phy->GetType() == phy_type) {
-      phy->Send(to_send);
+      phy->Send(packet, tx_power);
     }
   }
 }
@@ -83,10 +75,6 @@ void Device::Close() {
 
 void Device::RegisterCloseCallback(std::function<void()> close_callback) {
   close_callback_ = close_callback;
-}
-
-void Device::SetAddress(Address) {
-  LOG_INFO("%s does not implement %s", GetTypeString().c_str(), __func__);
 }
 
 }  // namespace rootcanal

@@ -43,6 +43,7 @@
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_ble_int.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
@@ -684,6 +685,11 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
     return (BTM_WRONG_MODE);
 }
 
+bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
+  return (p_dev_rec == nullptr) ? false : p_dev_rec->is_name_known();
+}
+
 /*******************************************************************************
  *
  * Function         BTM_InqDbRead
@@ -799,7 +805,7 @@ tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda) {
  *
  ******************************************************************************/
 void btm_inq_db_reset(void) {
-  tBTM_REMOTE_DEV_NAME rem_name;
+  tBTM_REMOTE_DEV_NAME rem_name = {};
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
   uint8_t num_responses;
   uint8_t temp_inq_active;
@@ -829,6 +835,7 @@ void btm_inq_db_reset(void) {
 
     if (p_inq->p_remname_cmpl_cb) {
       rem_name.status = BTM_DEV_RESET;
+      rem_name.hci_status = HCI_SUCCESS;
 
       (*p_inq->p_remname_cmpl_cb)(&rem_name);
       p_inq->p_remname_cmpl_cb = NULL;
@@ -1100,12 +1107,14 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
   uint16_t clock_offset;
   const uint8_t* p_eir_data = NULL;
 
-#if (BTM_INQ_DEBUG == TRUE)
-  BTM_TRACE_DEBUG("btm_process_inq_results inq_active:0x%x state:%d",
-                  btm_cb.btm_inq_vars.inq_active, btm_cb.btm_inq_vars.state);
-#endif
+  LOG_DEBUG("Received inquiry result inq_active:0x%x state:%d",
+            btm_cb.btm_inq_vars.inq_active, btm_cb.btm_inq_vars.state);
+
   /* Only process the results if the BR inquiry is still active */
-  if (!(p_inq->inq_active & BTM_BR_INQ_ACTIVE_MASK)) return;
+  if (!(p_inq->inq_active & BTM_BR_INQ_ACTIVE_MASK)) {
+    LOG_INFO("Inquiry is inactive so dropping inquiry result");
+    return;
+  }
 
   STREAM_TO_UINT8(num_resp, p);
 
@@ -1118,7 +1127,6 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
 
     constexpr uint16_t extended_inquiry_result_size = 254;
     if (hci_evt_len - 1 != extended_inquiry_result_size) {
-      android_errorWriteLog(0x534e4554, "141620271");
       BTM_TRACE_ERROR("%s: can't fit %d results in %d bytes", __func__,
                       num_resp, hci_evt_len);
       return;
@@ -1127,7 +1135,6 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
              inq_res_mode == BTM_INQ_RESULT_WITH_RSSI) {
     constexpr uint16_t inquiry_result_size = 14;
     if (hci_evt_len < num_resp * inquiry_result_size) {
-      android_errorWriteLog(0x534e4554, "141620271");
       BTM_TRACE_ERROR("%s: can't fit %d results in %d bytes", __func__,
                       num_resp, hci_evt_len);
       return;
@@ -1155,7 +1162,8 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
 
     /* Check if this address has already been processed for this inquiry */
     if (btm_inq_find_bdaddr(bda)) {
-      /* BTM_TRACE_DEBUG("BDA seen before %s", bda.ToString().c_str()); */
+      /* BTM_TRACE_DEBUG("BDA seen before %s", ADDRESS_TO_LOGGABLE_CSTR(bda));
+       */
 
       /* By default suppose no update needed */
       i_rssi = (int8_t)rssi;
@@ -1250,7 +1258,7 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
         (p_inq_results_cb)((tBTM_INQ_RESULTS*)p_cur, p_eir_data,
                            HCI_EXT_INQ_RESPONSE_LEN);
       } else {
-        BTM_TRACE_DEBUG("No callback is registered");
+        LOG_WARN("No callback is registered for inquiry result");
       }
     }
   }
@@ -1484,6 +1492,7 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
       rem_name.length = (evt_len < BD_NAME_LEN) ? evt_len : BD_NAME_LEN;
       rem_name.remote_bd_name[rem_name.length] = 0;
       rem_name.status = BTM_SUCCESS;
+      rem_name.hci_status = hci_status;
       temp_evt_len = rem_name.length;
 
       while (temp_evt_len > 0) {
@@ -1491,12 +1500,11 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
         temp_evt_len--;
       }
       rem_name.remote_bd_name[rem_name.length] = 0;
-    }
-
-    /* If processing a stand alone remote name then report the error in the
-       callback */
-    else {
+    } else {
+      /* If processing a stand alone remote name then report the error in the
+         callback */
       rem_name.status = BTM_BAD_VALUE_RET;
+      rem_name.hci_status = hci_status;
       rem_name.length = 0;
       rem_name.remote_bd_name[0] = 0;
     }

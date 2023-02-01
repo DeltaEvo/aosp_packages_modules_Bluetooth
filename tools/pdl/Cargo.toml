@@ -2,19 +2,32 @@
 name = "pdl"
 version = "0.1.0"
 edition = "2021"
+default-run = "pdl"
 
 [workspace]
 
+[features]
+default = ["serde"]
+
 [dependencies]
-codespan-reporting = "*"
-pest = "*"
-pest_derive = "*"
-proc-macro2 = "*"
-quote = "*"
-serde = { version = "*", features = ["default", "derive", "serde_derive", "std"] }
-serde_json = "*"
-structopt = "*"
-syn = "*"
+codespan-reporting = "0.11.1"
+pest = "2.4.0"
+pest_derive = "2.4.0"
+proc-macro2 = "1.0.46"
+quote = "1.0.21"
+serde_json = "1.0.86"
+clap = { version = "3.2.22", features = ["derive"] }
+syn = "1.0.102"
+
+[dependencies.serde]
+version = "1.0.145"
+features = ["default", "derive", "serde_derive", "std", "rc"]
+optional = true
 
 [dev-dependencies]
-tempfile = "*"
+tempfile = "3.3.0"
+bytes = "1.2.1"
+num-derive = "0.3.3"
+num-traits = "0.2.15"
+thiserror = "1.0.37"
+paste = "1.0.6"

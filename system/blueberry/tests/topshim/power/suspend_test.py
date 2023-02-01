@@ -14,8 +14,6 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-import asyncio
-
 from blueberry.tests.gd.cert.truth import assertThat
 from blueberry.tests.topshim.lib.topshim_base_test import TopshimBaseTest
 from blueberry.tests.topshim.lib.adapter_client import AdapterClient
@@ -25,35 +23,80 @@ from mobly import test_runner
 
 class SuspendTest(TopshimBaseTest):
 
-    async def __verify_disconnected_suspend(self):
+    def __verify_no_wake_suspend(self):
         # Start suspend work
-        await self.dut_adapter.clear_event_filter()
-        await self.dut_adapter.clear_event_mask()
-        await self.dut_adapter.clear_filter_accept_list()
-        # TODO(optedoblivion): Find a better way to disconnect active ACLs
-        # await self.dut_adapter.disconnect_all_acls()
-        random = await self.dut_adapter.le_rand()
-        return random
+        self.dut().clear_event_mask()
+        self.dut().clear_event_filter()
+        self.dut().clear_filter_accept_list()
+        self.dut().stop_advertising()
+        self.dut().stop_scanning()
+        self.dut().disconnect_all_acls()
+        self.dut().le_rand()
 
-    async def __verify_disconnected_resume(self):
+    def __verify_no_wake_resume(self):
         # Start resume work
-        await self.dut_adapter.set_event_filter_inquiry_result_all_devices()
-        await self.dut_adapter.set_default_event_mask()
-        await self.dut_adapter.restore_filter_accept_list()
-        random = await self.dut_adapter.le_rand()
-        return random
+        self.dut().set_default_event_mask_except(0, 0)
+        self.dut().set_event_filter_inquiry_result_all_devices()
+        self.dut().set_event_filter_connection_setup_all_devices()
+        self.dut().le_rand()
 
-    def test_disconnected_suspend(self):
-        asyncio.get_event_loop().run_until_complete(self.__verify_disconnected_suspend())
+    def __verify_wakeful_suspend(self, is_a2dp_connected):
+        self.dut().clear_event_mask()
+        self.dut().clear_event_filter()
+        self.dut().clear_filter_accept_list()
+        self.dut().stop_advertising()
+        self.dut().stop_scanning()
+        if is_a2dp_connected:
+            # self.media_server.disconnect_a2dp()
+            pass
+        self.dut().disconnect_all_acls()
+        self.dut().allow_wake_by_hid()
+        self.dut().le_rand()
 
-    def test_disconnected_resume(self):
-        asyncio.get_event_loop().run_until_complete(self.__verify_disconnected_resume())
+    def __verify_wakeful_resume(self, was_a2dp_connected):
+        # Start resume work
+        self.dut().set_default_event_mask_except(0, 0)
+        self.dut().set_event_filter_inquiry_result_all_devices()
+        self.dut().set_event_filter_connection_setup_all_devices()
+        if was_a2dp_connected:
+            # restore filter accept list?
+            self.dut().restore_filter_accept_list()
+            # reconnect a2dp
+            # self.media_server.reconnect_last_a2dp()
+            # self.gatt.restart_all_previous_advertising()
+        self.dut().start_advertising()
+        self.dut().le_rand()
 
-    def test_disconnected_suspend_then_resume(self):
-        asyncio.get_event_loop().run_until_complete(self.__verify_disconnected_suspend())
-        asyncio.get_event_loop().run_until_complete(self.__verify_disconnected_resume())
+    def test_no_wake_suspend(self):
+        self.__verify_no_wake_suspend()
 
-    def test_disconnected_suspend_then_resume_then_suspend(self):
-        asyncio.get_event_loop().run_until_complete(self.__verify_disconnected_suspend())
-        asyncio.get_event_loop().run_until_complete(self.__verify_disconnected_resume())
-        asyncio.get_event_loop().run_until_complete(self.__verify_disconnected_suspend())
+    def test_no_wake_resume(self):
+        self.__verify_no_wake_resume()
+
+    def test_no_wake_suspend_then_resume(self):
+        self.__verify_no_wake_suspend()
+        self.__verify_no_wake_resume()
+
+    def test_no_wake_suspend_then_resume_then_suspend(self):
+        self.__verify_no_wake_suspend()
+        self.__verify_no_wake_resume()
+        self.__verify_no_wake_suspend()
+
+    def test_wakeful_suspend_no_a2dp(self):
+        self.__verify_wakeful_suspend(False)
+
+    def test_wakeful_resume_no_a2dp(self):
+        self.__verify_wakeful_resume(False)
+
+    def test_wakeful_suspend_then_resume_no_a2dp(self):
+        self.__verify_wakeful_suspend(False)
+        self.__verify_wakeful_resume(False)
+
+    def test_wakeful_suspend_then_resume_then_suspend_no_a2dp(self):
+        self.__verify_wakeful_suspend(False)
+        self.__verify_wakeful_resume(False)
+        self.__verify_wakeful_suspend(False)
+
+
+if __name__ == "__main__":
+    test_runner.main()

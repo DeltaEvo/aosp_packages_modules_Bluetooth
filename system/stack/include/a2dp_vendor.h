@@ -21,12 +21,21 @@
 #ifndef A2DP_VENDOR_H
 #define A2DP_VENDOR_H
 
+#include <dlfcn.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
+#include <vector>
+
 #include "a2dp_codec_api.h"
 #include "stack/include/bt_hdr.h"
+
+typedef enum {
+  LOAD_SUCCESS,
+  LOAD_ERROR_MISSING_CODEC,
+  LOAD_ERROR_VERSION_MISMATCH,
+} tLOADING_CODEC_STATUS;
 
 /* Offset for A2DP vendor codec */
 #define A2DP_VENDOR_CODEC_START_IDX 3

@@ -18,7 +18,6 @@
 #include "security/pairing/classic_pairing_handler.h"
 
 #include "common/bind.h"
-#include "neighbor/name.h"
 
 namespace bluetooth {
 namespace security {
@@ -98,7 +97,7 @@ void ClassicPairingHandler::OnPinEntry(const bluetooth::hci::AddressWithType& ad
   for (size_t i = 0; i < 16 && i < pin.size(); i++) {
     padded_pin[i] = pin[i];
   }
-  LOG_INFO("%s", address.GetAddress().ToString().c_str());
+  LOG_INFO("%s", ADDRESS_TO_LOGGABLE_CSTR(address.GetAddress()));
   GetChannel()->SendCommand(hci::PinCodeRequestReplyBuilder::Create(address.GetAddress(), pin.size(), padded_pin));
 }
 

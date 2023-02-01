@@ -18,6 +18,7 @@ package android.bluetooth;
 
 import static android.bluetooth.BluetoothUtils.getSyncTimeout;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -38,6 +39,8 @@ import android.util.Log;
 
 import com.android.modules.utils.SynchronousResultReceiver;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
@@ -100,11 +103,29 @@ public final class BluetoothHearingAid implements BluetoothProfile {
     public static final String ACTION_ACTIVE_DEVICE_CHANGED =
             "android.bluetooth.hearingaid.profile.action.ACTIVE_DEVICE_CHANGED";
 
+    /** @hide */
+    @IntDef(prefix = "SIDE_", value = {
+            SIDE_UNKNOWN,
+            SIDE_LEFT,
+            SIDE_RIGHT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DeviceSide {}
+
+    /**
+     * Indicates the device side could not be read.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int SIDE_UNKNOWN = -1;
+
     /**
      * This device represents Left Hearing Aid.
      *
      * @hide
      */
+    @SystemApi
     public static final int SIDE_LEFT = IBluetoothHearingAid.SIDE_LEFT;
 
     /**
@@ -112,13 +133,32 @@ public final class BluetoothHearingAid implements BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     public static final int SIDE_RIGHT = IBluetoothHearingAid.SIDE_RIGHT;
+
+    /** @hide */
+    @IntDef(prefix = "MODE_", value = {
+            MODE_UNKNOWN,
+            MODE_MONAURAL,
+            MODE_BINAURAL
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DeviceMode {}
+
+    /**
+     * Indicates the device mode could not be read.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int MODE_UNKNOWN = -1;
 
     /**
      * This device is Monaural.
      *
      * @hide
      */
+    @SystemApi
     public static final int MODE_MONAURAL = IBluetoothHearingAid.MODE_MONAURAL;
 
     /**
@@ -126,6 +166,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
      *
      * @hide
      */
+    @SystemApi
     public static final int MODE_BINAURAL = IBluetoothHearingAid.MODE_BINAURAL;
 
     /**
@@ -158,7 +199,9 @@ public final class BluetoothHearingAid implements BluetoothProfile {
         mProfileConnector.connect(context, listener);
     }
 
-    /*package*/ void close() {
+    /** @hide */
+    @Override
+    public void close() {
         mProfileConnector.disconnect();
     }
 
@@ -194,7 +237,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.connect(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -240,7 +283,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.disconnect(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -266,7 +309,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getConnectedDevices(mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -284,8 +327,8 @@ public final class BluetoothHearingAid implements BluetoothProfile {
     @Override
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    public @NonNull List<BluetoothDevice> getDevicesMatchingConnectionStates(
-    @NonNull int[] states) {
+    @NonNull
+    public List<BluetoothDevice> getDevicesMatchingConnectionStates(@NonNull int[] states) {
         if (VDBG) log("getDevicesMatchingStates()");
         final IBluetoothHearingAid service = getService();
         final List<BluetoothDevice> defaultValue = new ArrayList<BluetoothDevice>();
@@ -295,7 +338,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getDevicesMatchingConnectionStates(states, mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -313,8 +356,8 @@ public final class BluetoothHearingAid implements BluetoothProfile {
     @Override
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    public @BluetoothProfile.BtProfileState int getConnectionState(
-    @NonNull BluetoothDevice device) {
+    @BluetoothProfile.BtProfileState
+    public int getConnectionState(@NonNull BluetoothDevice device) {
         if (VDBG) log("getState(" + device + ")");
         final IBluetoothHearingAid service = getService();
         final int defaultValue = BluetoothProfile.STATE_DISCONNECTED;
@@ -323,7 +366,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getConnectionState(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -365,7 +408,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && ((device == null) || isValidDevice(device))) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.setActiveDevice(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -397,7 +440,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getActiveDevices(mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -461,7 +504,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
                     && (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN
                         || connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.setConnectionPolicy(device, connectionPolicy, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -518,7 +561,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getConnectionPolicy(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -570,7 +613,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
                 service.setVolume(volume, mAttributionSource, recv);
                 recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
             } catch (RemoteException | TimeoutException e) {
@@ -597,7 +640,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
     })
     public long getHiSyncId(@NonNull BluetoothDevice device) {
         if (VDBG) log("getHiSyncId(" + device + ")");
-        verifyDeviceNotNull(device, "getConnectionPolicy");
+        verifyDeviceNotNull(device, "getHiSyncId");
         final IBluetoothHearingAid service = getService();
         final long defaultValue = HI_SYNC_ID_INVALID;
         if (service == null) {
@@ -605,7 +648,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Long> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Long> recv = SynchronousResultReceiver.get();
                 service.getHiSyncId(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -619,22 +662,26 @@ public final class BluetoothHearingAid implements BluetoothProfile {
      * Get the side of the device.
      *
      * @param device Bluetooth device.
-     * @return SIDE_LEFT or SIDE_RIGHT
+     * @return the {@code SIDE_LEFT}, {@code SIDE_RIGHT} of the device, or {@code SIDE_UNKNOWN} if
+     *         one is not available.
      * @hide
      */
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    public int getDeviceSide(BluetoothDevice device) {
+    @DeviceSide
+    public int getDeviceSide(@NonNull BluetoothDevice device) {
         if (VDBG) log("getDeviceSide(" + device + ")");
+        verifyDeviceNotNull(device, "getDeviceSide");
         final IBluetoothHearingAid service = getService();
-        final int defaultValue = SIDE_LEFT;
+        final int defaultValue = SIDE_UNKNOWN;
         if (service == null) {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getDeviceSide(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -648,22 +695,26 @@ public final class BluetoothHearingAid implements BluetoothProfile {
      * Get the mode of the device.
      *
      * @param device Bluetooth device
-     * @return MODE_MONAURAL or MODE_BINAURAL
+     * @return the {@code MODE_MONAURAL}, {@code MODE_BINAURAL} of the device, or
+     *         {@code MODE_UNKNOWN} if one is not available.
      * @hide
      */
+    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    public int getDeviceMode(BluetoothDevice device) {
+    @DeviceMode
+    public int getDeviceMode(@NonNull  BluetoothDevice device) {
         if (VDBG) log("getDeviceMode(" + device + ")");
+        verifyDeviceNotNull(device, "getDeviceMode");
         final IBluetoothHearingAid service = getService();
-        final int defaultValue = MODE_MONAURAL;
+        final int defaultValue = MODE_UNKNOWN;
         if (service == null) {
             Log.w(TAG, "Proxy not attached to service");
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getDeviceMode(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {

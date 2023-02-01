@@ -18,7 +18,7 @@
 
 #include <type_traits>  // for remove_extent_t
 
-#include "os/log.h"               // for ASSERT, LOG_INFO, LOG_ERROR, LOG_WARN
+#include "log.h"                  // for ASSERT, LOG_INFO, LOG_ERROR, LOG_WARN
 #include "packet/bit_inserter.h"  // for BitInserter
 #include "packet/iterator.h"      // for Iterator
 #include "packet/packet_view.h"   // for PacketView, kLittleEndian
@@ -99,7 +99,7 @@ void LinkLayerSocketDevice::Close() {
 }
 
 void LinkLayerSocketDevice::IncomingPacket(
-    model::packets::LinkLayerPacketView packet) {
+    model::packets::LinkLayerPacketView packet, int8_t /*rssi*/) {
   auto size_packet = bluetooth::packet::RawBuilder();
   size_packet.AddOctets4(packet.size());
   std::vector<uint8_t> size_bytes;

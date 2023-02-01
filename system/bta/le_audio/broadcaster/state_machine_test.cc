@@ -27,6 +27,7 @@
 #include "mock_iso_manager.h"
 #include "stack/include/ble_advertiser.h"
 #include "state_machine.h"
+#include "test/common/mock_functions.h"
 
 using namespace bluetooth::hci::iso_manager;
 
@@ -36,8 +37,6 @@ using testing::_;
 using testing::Mock;
 using testing::SaveArg;
 using testing::Test;
-
-std::map<std::string, int> mock_function_count_map;
 
 // Disables most likely false-positives from base::SplitString()
 extern "C" const char* __asan_default_options() {
@@ -79,7 +78,7 @@ class MockBroadcastStatMachineCallbacks
 class StateMachineTest : public Test {
  protected:
   void SetUp() override {
-    mock_function_count_map.clear();
+    reset_mock_function_count_map();
     BleAdvertisingManager::Initialize(nullptr);
 
     ble_advertising_manager_ = BleAdvertisingManager::Get();
@@ -244,10 +243,8 @@ class StateMachineTest : public Test {
 
     static uint8_t broadcast_id_lsb = 1;
 
-    auto context_int = static_cast<
-        std::underlying_type<le_audio::types::LeAudioContextType>::type>(
-        context);
-    auto codec_qos_pair = getStreamConfigForContext(context_int);
+    auto codec_qos_pair =
+        getStreamConfigForContext(types::AudioContexts(context));
     auto broadcast_id = broadcast_id_lsb++;
     pending_broadcasts_.push_back(BroadcastStateMachine::CreateInstance({
         .broadcast_id = broadcast_id,

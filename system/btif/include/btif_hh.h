@@ -45,6 +45,14 @@
 #define BTIF_HH_MAX_POLLING_ATTEMPTS 10
 #define BTIF_HH_POLLING_SLEEP_DURATION_US 5000
 
+#ifndef ENABLE_UHID_SET_REPORT
+#if defined(OS_ANDROID) || defined(TARGET_FLOSS)
+#define ENABLE_UHID_SET_REPORT 1
+#else
+#define ENABLE_UHID_SET_REPORT 0
+#endif
+#endif
+
 /*******************************************************************************
  *  Type definitions and return values
  ******************************************************************************/
@@ -94,9 +102,9 @@ typedef struct {
   uint8_t hh_keep_polling;
   alarm_t* vup_timer;
   fixed_queue_t* get_rpt_id_queue;
-#ifdef OS_ANDROID
+#if ENABLE_UHID_SET_REPORT
   fixed_queue_t* set_rpt_id_queue;
-#endif  // OS_ANDROID
+#endif  // ENSABLE_UHID_SET_REPORT
   uint8_t get_rpt_snt;
   bool local_vup;  // Indicated locally initiated VUP
 } btif_hh_device_t;
@@ -142,5 +150,7 @@ extern void btif_hh_getreport(btif_hh_device_t* p_dev,
                               bthh_report_type_t r_type, uint8_t reportId,
                               uint16_t bufferSize);
 extern void btif_hh_service_registration(bool enable);
+
+extern void DumpsysHid(int fd);
 
 #endif

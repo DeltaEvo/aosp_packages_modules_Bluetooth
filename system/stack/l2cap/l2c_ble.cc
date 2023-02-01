@@ -26,20 +26,19 @@
 
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
-
-#ifdef OS_ANDROID
-#include <android/sysprop/BluetoothProperties.sysprop.h>
-#endif
+#include <log/log.h>
 
 #include "bt_target.h"
 #include "bta/include/bta_hearing_aid_api.h"
+#include "btif/include/core_callbacks.h"
+#include "btif/include/stack_manager.h"
 #include "device/include/controller.h"
+#include "main/shim/acl_api.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
-#include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
@@ -65,6 +64,7 @@ extern tBTM_CB btm_cb;
 using base::StringPrintf;
 
 static void l2cble_start_conn_update(tL2C_LCB* p_lcb);
+static void l2cble_start_subrate_change(tL2C_LCB* p_lcb);
 extern void gatt_notify_conn_update(const RawAddress& remote, uint16_t interval,
                                     uint16_t latency, uint16_t timeout,
                                     tHCI_STATUS status);
@@ -162,10 +162,13 @@ bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable) {
     return false;
   }
 
-  if (enable)
+  if (enable) {
     p_lcb->conn_update_mask &= ~L2C_BLE_CONN_UPDATE_DISABLE;
-  else
+    p_lcb->subrate_req_mask &= ~L2C_BLE_SUBRATE_REQ_DISABLE;
+  } else {
     p_lcb->conn_update_mask |= L2C_BLE_CONN_UPDATE_DISABLE;
+    p_lcb->subrate_req_mask |= L2C_BLE_SUBRATE_REQ_DISABLE;
+  }
 
   l2cble_start_conn_update(p_lcb);
 
@@ -270,6 +273,13 @@ bool l2cble_conn_comp(uint16_t handle, uint8_t role, const RawAddress& bda,
   p_lcb->latency = conn_latency;
   p_lcb->conn_update_mask = L2C_BLE_NOT_DEFAULT_PARAM;
 
+  p_lcb->subrate_req_mask = 0;
+  p_lcb->subrate_min = 1;
+  p_lcb->subrate_max = 1;
+  p_lcb->max_latency = 0;
+  p_lcb->cont_num = 0;
+  p_lcb->supervision_tout = 0;
+
   p_lcb->peer_chnl_mask[0] = L2CAP_FIXED_CHNL_ATT_BIT |
                              L2CAP_FIXED_CHNL_BLE_SIG_BIT |
                              L2CAP_FIXED_CHNL_SMP_BIT;
@@ -316,7 +326,10 @@ static void l2cble_start_conn_update(tL2C_LCB* p_lcb) {
   // verify if this call is needed at all and remove it otherwise.
   btm_find_or_alloc_dev(p_lcb->remote_bd_addr);
 
-  if (p_lcb->conn_update_mask & L2C_BLE_UPDATE_PENDING) return;
+  if ((p_lcb->conn_update_mask & L2C_BLE_UPDATE_PENDING) ||
+      (p_lcb->subrate_req_mask & L2C_BLE_SUBRATE_REQ_PENDING)) {
+    return;
+  }
 
   if (p_lcb->conn_update_mask & L2C_BLE_CONN_UPDATE_DISABLE) {
     /* application requests to disable parameters update.
@@ -409,8 +422,10 @@ void l2cble_process_conn_update_evt(uint16_t handle, uint8_t status,
 
   l2cble_start_conn_update(p_lcb);
 
-  L2CAP_TRACE_DEBUG("%s: conn_update_mask=%d", __func__,
-                    p_lcb->conn_update_mask);
+  l2cble_start_subrate_change(p_lcb);
+
+  L2CAP_TRACE_DEBUG("%s: conn_update_mask=%d , subrate_req_mask=%d", __func__,
+                    p_lcb->conn_update_mask, p_lcb->subrate_req_mask);
 }
 
 /*******************************************************************************
@@ -462,7 +477,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
   p_pkt_end = p + pkt_len;
 
   if (p + 4 > p_pkt_end) {
-    android_errorWriteLog(0x534e4554, "80261585");
     LOG(ERROR) << "invalid read";
     return;
   }
@@ -500,7 +514,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_BLE_UPDATE_REQ:
       if (p + 8 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -558,6 +571,14 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
       /* Check how many channels remote side wants. */
       num_of_channels = (p_pkt_end - p) / sizeof(uint16_t);
+      if (num_of_channels > L2CAP_CREDIT_BASED_MAX_CIDS) {
+        LOG_WARN("L2CAP - invalid number of channels requested: %d",
+                 num_of_channels);
+        l2cu_reject_credit_based_conn_req(p_lcb, id,
+                                          L2CAP_CREDIT_BASED_MAX_CIDS,
+                                          L2CAP_LE_RESULT_INVALID_PARAMETERS);
+        return;
+      }
 
       LOG_DEBUG(
           "Recv L2CAP_CMD_CREDIT_BASED_CONN_REQ with "
@@ -699,7 +720,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
        * all the channels has been rejected
        */
       if (con_info.l2cap_result == L2CAP_LE_RESULT_NO_PSM ||
-          con_info.l2cap_result == L2CAP_LE_RESULT_NO_RESOURCES ||
           con_info.l2cap_result ==
               L2CAP_LE_RESULT_INSUFFICIENT_AUTHENTICATION ||
           con_info.l2cap_result == L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP ||
@@ -743,8 +763,17 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
       con_info.peer_mtu = mtu;
 
-      for (int i = 0; i < p_lcb->pending_ecoc_conn_cnt; i++) {
-        uint16_t cid = p_lcb->pending_ecoc_connection_cids[i];
+      /* Copy request data and clear it so user can perform another connect if
+       * needed in the callback. */
+      p_lcb->pending_ecoc_conn_cnt = 0;
+      uint16_t cids[L2CAP_CREDIT_BASED_MAX_CIDS];
+      std::copy_n(p_lcb->pending_ecoc_connection_cids,
+                  L2CAP_CREDIT_BASED_MAX_CIDS, cids);
+      std::fill_n(p_lcb->pending_ecoc_connection_cids,
+                  L2CAP_CREDIT_BASED_MAX_CIDS, 0);
+
+      for (int i = 0; i < num_of_channels; i++) {
+        uint16_t cid = cids[i];
         STREAM_TO_UINT16(rcid, p);
 
         if (rcid != 0) {
@@ -798,10 +827,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
                           &con_info);
         }
       }
-
-      p_lcb->pending_ecoc_conn_cnt = 0;
-      memset(p_lcb->pending_ecoc_connection_cids, 0,
-             L2CAP_CREDIT_BASED_MAX_CIDS);
 
       break;
     case L2CAP_CMD_CREDIT_BASED_RECONFIG_REQ: {
@@ -884,6 +909,10 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_CREDIT_BASED_RECONFIG_RES: {
       uint16_t result;
+      if (p + sizeof(uint16_t) > p_pkt_end) {
+        LOG(ERROR) << "invalid read";
+        return;
+      }
       STREAM_TO_UINT16(result, p);
 
       L2CAP_TRACE_DEBUG(
@@ -914,7 +943,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_BLE_CREDIT_BASED_CONN_REQ:
       if (p + 10 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -1010,7 +1038,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       if (p_ccb) {
         L2CAP_TRACE_DEBUG("I remember the connection req");
         if (p + 10 > p_pkt_end) {
-          android_errorWriteLog(0x534e4554, "80261585");
           LOG(ERROR) << "invalid read";
           return;
         }
@@ -1061,7 +1088,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_BLE_FLOW_CTRL_CREDIT:
       if (p + 4 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -1081,7 +1107,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_DISC_REQ:
       if (p + 4 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "74121659");
         return;
       }
       STREAM_TO_UINT16(lcid, p);
@@ -1100,7 +1125,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_DISC_RSP:
       if (p + 4 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -1376,7 +1400,7 @@ void l2cble_process_data_length_change_event(uint16_t handle,
 
   if (is_legal_tx_data_len(tx_data_len)) {
     LOG_DEBUG("Received data length change event for device:%s tx_data_len:%hu",
-              PRIVATE_ADDRESS(p_lcb->remote_bd_addr), tx_data_len);
+              ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr), tx_data_len);
     p_lcb->tx_data_len = tx_data_len;
     BTM_LogHistory(kBtmLogTag, p_lcb->remote_bd_addr, "LE Data length change",
                    base::StringPrintf("tx_octets:%hu", tx_data_len));
@@ -1384,7 +1408,7 @@ void l2cble_process_data_length_change_event(uint16_t handle,
     LOG_WARN(
         "Received illegal data length change event for device:%s "
         "tx_data_len:%hu",
-        PRIVATE_ADDRESS(p_lcb->remote_bd_addr), tx_data_len);
+        ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr), tx_data_len);
   }
   /* ignore rx_data len for now */
 }
@@ -1501,7 +1525,7 @@ void l2cble_sec_comp(const RawAddress* bda, tBT_TRANSPORT transport,
 
   if (!p_lcb) {
     L2CAP_TRACE_WARNING("%s: security complete for unknown device. bda=%s",
-                        __func__, bda->ToString().c_str());
+                        __func__, ADDRESS_TO_LOGGABLE_CSTR(*bda));
     return;
   }
 
@@ -1618,18 +1642,10 @@ tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr,
 void L2CA_AdjustConnectionIntervals(uint16_t* min_interval,
                                     uint16_t* max_interval,
                                     uint16_t floor_interval) {
-  // Allow for customization by systemprops for mainline
   uint16_t phone_min_interval = floor_interval;
-  #ifdef OS_ANDROID
-    phone_min_interval =
-        android::sysprop::BluetoothProperties::getGapLeConnMinLimit().value_or(
-            floor_interval);
-  #else
-    phone_min_interval = (uint16_t)osi_property_get_int32(
-      "bluetooth.core.gap.le.conn.min.limit", (int32_t)floor_interval);
-  #endif
 
-  if (HearingAid::GetDeviceCount() > 0) {
+  if (GetInterfaceToProfiles()
+          ->profileSpecific_HACK->GetHearingAidDeviceCount()) {
     // When there are bonded Hearing Aid devices, we will constrained this
     // minimum interval.
     phone_min_interval = BTM_BLE_CONN_INT_MIN_HEARINGAID;
@@ -1691,4 +1707,187 @@ void l2cble_use_preferred_conn_params(const RawAddress& bda) {
         p_dev_rec->conn_params.peripheral_latency,
         p_dev_rec->conn_params.supervision_tout, 0, 0);
   }
+}
+
+/*******************************************************************************
+ *
+ *  Function        l2cble_start_subrate_change
+ *
+ *  Description     Start the BLE subrate change process based on
+ *                  status.
+ *
+ *  Parameters:     lcb : l2cap link control block
+ *
+ *  Return value:   none
+ *
+ ******************************************************************************/
+static void l2cble_start_subrate_change(tL2C_LCB* p_lcb) {
+  if (!BTM_IsAclConnectionUp(p_lcb->remote_bd_addr, BT_TRANSPORT_LE)) {
+    LOG(ERROR) << "No known connection ACL for "
+               << ADDRESS_TO_LOGGABLE_STR(p_lcb->remote_bd_addr);
+    return;
+  }
+
+  btm_find_or_alloc_dev(p_lcb->remote_bd_addr);
+
+  L2CAP_TRACE_DEBUG("%s: subrate_req_mask=%d conn_update_mask=%d", __func__,
+                    p_lcb->subrate_req_mask, p_lcb->conn_update_mask);
+
+  if (p_lcb->subrate_req_mask & L2C_BLE_SUBRATE_REQ_PENDING) {
+    L2CAP_TRACE_DEBUG("%s: returning L2C_BLE_SUBRATE_REQ_PENDING ", __func__);
+    return;
+  }
+
+  if (p_lcb->subrate_req_mask & L2C_BLE_SUBRATE_REQ_DISABLE) {
+    L2CAP_TRACE_DEBUG("%s: returning L2C_BLE_SUBRATE_REQ_DISABLE ", __func__);
+    return;
+  }
+
+  /* application allows to do update, if we were delaying one do it now */
+  if (!(p_lcb->subrate_req_mask & L2C_BLE_NEW_SUBRATE_PARAM) ||
+      (p_lcb->conn_update_mask & L2C_BLE_UPDATE_PENDING) ||
+      (p_lcb->conn_update_mask & L2C_BLE_NEW_CONN_PARAM)) {
+    L2CAP_TRACE_DEBUG("%s: returning L2C_BLE_NEW_SUBRATE_PARAM", __func__);
+    return;
+  }
+
+  if (!controller_get_interface()->supports_ble_connection_subrating_host() ||
+      !controller_get_interface()->supports_ble_connection_subrating() ||
+      !acl_peer_supports_ble_connection_subrating(p_lcb->remote_bd_addr) ||
+      !acl_peer_supports_ble_connection_subrating_host(p_lcb->remote_bd_addr)) {
+    L2CAP_TRACE_DEBUG(
+        "%s: returning L2C_BLE_NEW_SUBRATE_PARAM local_host_sup=%d, "
+        "local_conn_subrarte_sup=%d, peer_subrate_sup=%d, peer_host_sup=%d",
+        __func__,
+        controller_get_interface()->supports_ble_connection_subrating_host(),
+        controller_get_interface()->supports_ble_connection_subrating(),
+        acl_peer_supports_ble_connection_subrating(p_lcb->remote_bd_addr),
+        acl_peer_supports_ble_connection_subrating_host(p_lcb->remote_bd_addr));
+    return;
+  }
+
+  L2CAP_TRACE_DEBUG("%s: Sending HCI cmd for subrate req", __func__);
+  bluetooth::shim::ACL_LeSubrateRequest(
+      p_lcb->Handle(), p_lcb->subrate_min, p_lcb->subrate_max,
+      p_lcb->max_latency, p_lcb->cont_num, p_lcb->supervision_tout);
+
+  p_lcb->subrate_req_mask |= L2C_BLE_SUBRATE_REQ_PENDING;
+  p_lcb->subrate_req_mask &= ~L2C_BLE_NEW_SUBRATE_PARAM;
+  p_lcb->conn_update_mask |= L2C_BLE_NOT_DEFAULT_PARAM;
+}
+
+/*******************************************************************************
+ *
+ *  Function        L2CA_SetDefaultSubrate
+ *
+ *  Description     BLE Set Default Subrate
+ *
+ *  Parameters:     Subrate parameters
+ *
+ *  Return value:   void
+ *
+ ******************************************************************************/
+void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max,
+                            uint16_t max_latency, uint16_t cont_num,
+                            uint16_t timeout) {
+  VLOG(1) << __func__ << " subrate_min=" << subrate_min
+          << ", subrate_max=" << subrate_max << ", max_latency=" << max_latency
+          << ", cont_num=" << cont_num << ", timeout=" << timeout;
+
+  bluetooth::shim::ACL_LeSetDefaultSubrate(subrate_min, subrate_max,
+                                           max_latency, cont_num, timeout);
+}
+
+/*******************************************************************************
+ *
+ *  Function        L2CA_SubrateRequest
+ *
+ *  Description     BLE Subrate request.
+ *
+ *  Parameters:     Subrate parameters
+ *
+ *  Return value:   true if update started
+ *
+ ******************************************************************************/
+bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min,
+                         uint16_t subrate_max, uint16_t max_latency,
+                         uint16_t cont_num, uint16_t timeout) {
+  tL2C_LCB* p_lcb;
+
+  /* See if we have a link control block for the remote device */
+  p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
+
+  /* If we don't have one, create one and accept the connection. */
+  if (!p_lcb || !BTM_IsAclConnectionUp(rem_bda, BT_TRANSPORT_LE)) {
+    LOG(WARNING) << __func__ << " - unknown BD_ADDR "
+                 << ADDRESS_TO_LOGGABLE_STR(rem_bda);
+    return (false);
+  }
+
+  if (p_lcb->transport != BT_TRANSPORT_LE) {
+    LOG(WARNING) << __func__ << " - BD_ADDR "
+                 << ADDRESS_TO_LOGGABLE_STR(rem_bda) << " not LE";
+    return (false);
+  }
+
+  VLOG(1) << __func__ << ": BD_ADDR=" << ADDRESS_TO_LOGGABLE_STR(rem_bda)
+          << ", subrate_min=" << subrate_min << ", subrate_max=" << subrate_max
+          << ", max_latency=" << max_latency << ", cont_num=" << cont_num
+          << ", timeout=" << timeout;
+
+  p_lcb->subrate_min = subrate_min;
+  p_lcb->subrate_max = subrate_max;
+  p_lcb->max_latency = max_latency;
+  p_lcb->cont_num = cont_num;
+  p_lcb->subrate_req_mask |= L2C_BLE_NEW_SUBRATE_PARAM;
+  p_lcb->supervision_tout = timeout;
+
+  l2cble_start_subrate_change(p_lcb);
+
+  return (true);
+}
+
+/*******************************************************************************
+ *
+ * Function         l2cble_process_subrate_change_evt
+ *
+ * Description      This function enables LE subrating
+ *                  after a successful subrate change process is
+ *                  done.
+ *
+ * Parameters:      LE connection handle
+ *                  status
+ *                  subrate factor
+ *                  peripheral latency
+ *                  continuation number
+ *                  supervision timeout
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void l2cble_process_subrate_change_evt(uint16_t handle, uint8_t status,
+                                       uint16_t subrate_factor,
+                                       uint16_t peripheral_latency,
+                                       uint16_t cont_num, uint16_t timeout) {
+  L2CAP_TRACE_DEBUG("%s", __func__);
+
+  /* See if we have a link control block for the remote device */
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
+  if (!p_lcb) {
+    L2CAP_TRACE_WARNING("%s: Invalid handle: %d", __func__, handle);
+    return;
+  }
+
+  p_lcb->subrate_req_mask &= ~L2C_BLE_SUBRATE_REQ_PENDING;
+
+  if (status != HCI_SUCCESS) {
+    L2CAP_TRACE_WARNING("%s: Error status: %d", __func__, status);
+  }
+
+  l2cble_start_conn_update(p_lcb);
+
+  l2cble_start_subrate_change(p_lcb);
+
+  L2CAP_TRACE_DEBUG("%s: conn_update_mask=%d , subrate_req_mask=%d", __func__,
+                    p_lcb->conn_update_mask, p_lcb->subrate_req_mask);
 }

@@ -8,16 +8,25 @@ package {
 }
 
 filegroup {
+    name: "BluetoothHciPacketSources",
+    srcs: [
+        "address.cc",
+        "class_of_device.cc",
+    ],
+    visibility: ["//visibility:public"],
+}
+
+filegroup {
     name: "BluetoothHciSources",
     srcs: [
+        ":BluetoothHciPacketSources",
         "acl_manager/acl_connection.cc",
+        "acl_manager/acl_scheduler.cc",
         "acl_manager/classic_acl_connection.cc",
         "acl_manager/le_acl_connection.cc",
         "acl_manager/round_robin_scheduler.cc",
         "acl_manager/acl_fragmenter.cc",
         "acl_manager.cc",
-        "address.cc",
-        "class_of_device.cc",
         "controller.cc",
         "hci_layer.cc",
         "hci_metrics_logging.cc",
@@ -25,6 +34,8 @@ filegroup {
         "le_advertising_manager.cc",
         "le_scanning_manager.cc",
         "link_key.cc",
+        "msft.cc",
+        "remote_name_request.cc",
         "uuid.cc",
         "vendor_specific_event_manager.cc",
     ],
@@ -33,28 +44,29 @@ filegroup {
 filegroup {
     name: "BluetoothHciUnitTestSources",
     srcs: [
-        "acl_manager/le_impl_test.cc",
         "acl_builder_test.cc",
+        "acl_manager_test.cc",
         "acl_manager_unittest.cc",
+        "acl_manager/acl_scheduler_test.cc",
+        "acl_manager/classic_acl_connection_test.cc",
+        "acl_manager/le_acl_connection_test.cc",
+        "acl_manager/le_impl_test.cc",
+        "acl_manager/round_robin_scheduler_test.cc",
         "address_unittest.cc",
         "address_with_type_test.cc",
         "class_of_device_unittest.cc",
-        "hci_packets_test.cc",
-        "uuid_unittest.cc",
-        "le_periodic_sync_manager_test.cc"
-    ],
-}
-
-filegroup {
-    name: "BluetoothHciTestSources",
-    srcs: [
-        "acl_manager/round_robin_scheduler_test.cc",
-        "acl_manager_test.cc",
         "controller_test.cc",
+        "controller_unittest.cc",
+        "hci_layer_fake.cc",
         "hci_layer_test.cc",
-        "le_address_manager_test.cc",
-        "le_advertising_manager_test.cc",
+        "hci_layer_unittest.cc",
+        "hci_packets_test.cc",
+        "remote_name_request_test.cc",
+        "uuid_unittest.cc",
+        "le_periodic_sync_manager_test.cc",
         "le_scanning_manager_test.cc",
+        "le_advertising_manager_test.cc",
+        "le_address_manager_test.cc",
     ],
 }
 

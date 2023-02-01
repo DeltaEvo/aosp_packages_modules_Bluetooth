@@ -29,9 +29,7 @@ intvalue = @{ digit+ }
 hexvalue = @{ ("0x"|"0X") ~ hexdigit+ }
 integer = @{ hexvalue | intvalue }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-size_modifier = @{
-    ("+"|"-"|"*"|"/") ~ (digit|"+"|"-"|"*"|"/")+
-}
+size_modifier = @{ "+" ~ intvalue }
 
 endianness_declaration = { "little_endian_packets" | "big_endian_packets" }
 
@@ -50,6 +48,7 @@ checksum_field = { "_checksum_start_" ~ "(" ~ identifier ~ ")" }
 padding_field = { "_padding_" ~ "[" ~ integer ~ "]" }
 size_field = { "_size_" ~ "(" ~ (identifier|payload_identifier|body_identifier)  ~ ")" ~ ":" ~ integer }
 count_field = { "_count_" ~ "(" ~ identifier ~ ")" ~ ":" ~ integer }
+elementsize_field = { "_elementsize_" ~ "(" ~ identifier ~ ")" ~ ":" ~ integer }
 body_field = @{ "_body_" }
 payload_field = { "_payload_" ~ (":" ~ "[" ~ size_modifier ~ "]")? }
 fixed_field = { "_fixed_" ~ "=" ~ (
@@ -69,6 +68,7 @@ field = _{
     padding_field |
     size_field |
     count_field |
+    elementsize_field |
     body_field |
     payload_field |
     fixed_field |
@@ -310,8 +310,8 @@ fn parse_field(node: Node<'_>, context: &Context) -> Result<ast::Field, String> 
             ast::Field::Checksum { loc, field_id }
         }
         Rule::padding_field => {
-            let width = parse_integer(&mut children)?;
-            ast::Field::Padding { loc, width }
+            let size = parse_integer(&mut children)?;
+            ast::Field::Padding { loc, size }
         }
         Rule::size_field => {
             let field_id = match children.next() {
@@ -328,6 +328,11 @@ fn parse_field(node: Node<'_>, context: &Context) -> Result<ast::Field, String> 
             let field_id = parse_identifier(&mut children)?;
             let width = parse_integer(&mut children)?;
             ast::Field::Count { loc, field_id, width }
+        }
+        Rule::elementsize_field => {
+            let field_id = parse_identifier(&mut children)?;
+            let width = parse_integer(&mut children)?;
+            ast::Field::ElementSize { loc, field_id, width }
         }
         Rule::body_field => ast::Field::Body { loc },
         Rule::payload_field => {

@@ -16,6 +16,8 @@
 
 package com.android.pandora
 
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.util.Log
 import io.grpc.Server as GrpcServer
@@ -28,40 +30,98 @@ class Server(context: Context) {
   private val GRPC_PORT = 8999
 
   private var host: Host
-  private var a2dp: A2dp
+  private var a2dp: A2dp? = null
+  private var a2dpSink: A2dpSink? = null
+  private var avrcp: Avrcp
   private var gatt: Gatt
-  private var hfp: Hfp
-  private var sm: Sm
+  private var hfp: Hfp? = null
+  private var hfpHandsfree: HfpHandsfree? = null
+  private var hid: Hid
+  private var l2cap: L2cap
+  private var mediaplayer: MediaPlayer
+  private var pbap: Pbap
+  private var rfcomm: Rfcomm
+  private var pan: Pan
+  private var security: Security
+  private var securityStorage: SecurityStorage
+  private var androidInternal: AndroidInternal
   private var grpcServer: GrpcServer
 
   init {
-    host = Host(context, this)
-    a2dp = A2dp(context)
+    security = Security(context)
+    host = Host(context, security, this)
+    avrcp = Avrcp(context)
     gatt = Gatt(context)
-    hfp = Hfp(context)
-    sm = Sm(context)
-    grpcServer =
+    hid = Hid(context)
+    l2cap = L2cap(context)
+    mediaplayer = MediaPlayer(context)
+    pbap = Pbap(context)
+    rfcomm = Rfcomm(context)
+    pan = Pan(context)
+    securityStorage = SecurityStorage(context)
+    androidInternal = AndroidInternal(context)
+
+    val grpcServerBuilder =
       NettyServerBuilder.forPort(GRPC_PORT)
         .addService(host)
-        .addService(a2dp)
+        .addService(avrcp)
         .addService(gatt)
-        .addService(hfp)
-        .addService(sm)
-        .build()
+        .addService(hid)
+        .addService(l2cap)
+        .addService(mediaplayer)
+        .addService(pbap)
+        .addService(rfcomm)
+        .addService(pan)
+        .addService(security)
+        .addService(securityStorage)
+        .addService(androidInternal)
+
+    val bluetoothAdapter = context.getSystemService(BluetoothManager::class.java)!!.adapter
+    val is_a2dp_source = bluetoothAdapter.getSupportedProfiles().contains(BluetoothProfile.A2DP)
+    if (is_a2dp_source) {
+      a2dp = A2dp(context)
+      grpcServerBuilder.addService(a2dp!!)
+    } else {
+      a2dpSink = A2dpSink(context)
+      grpcServerBuilder.addService(a2dpSink!!)
+    }
+
+    val is_hfp_hf = bluetoothAdapter.getSupportedProfiles().contains(BluetoothProfile.HEADSET_CLIENT)
+    if (is_hfp_hf) {
+      hfpHandsfree = HfpHandsfree(context)
+      grpcServerBuilder.addService(hfpHandsfree!!)
+    } else {
+      hfp = Hfp(context)
+      grpcServerBuilder.addService(hfp!!)
+    }
+
+    grpcServer = grpcServerBuilder.build()
 
     Log.d(TAG, "Starting Pandora Server")
     grpcServer.start()
     Log.d(TAG, "Pandora Server started at $GRPC_PORT")
   }
 
-  fun shutdownNow() {
-    host.deinit()
-    a2dp.deinit()
-    gatt.deinit()
-    hfp.deinit()
-    sm.deinit()
-    grpcServer.shutdownNow()
-  }
+  fun shutdown() = grpcServer.shutdown()
 
   fun awaitTermination() = grpcServer.awaitTermination()
+
+  fun deinit() {
+    host.deinit()
+    a2dp?.deinit()
+    a2dpSink?.deinit()
+    avrcp.deinit()
+    gatt.deinit()
+    hfp?.deinit()
+    hfpHandsfree?.deinit()
+    hid.deinit()
+    l2cap.deinit()
+    mediaplayer.deinit()
+    pbap.deinit()
+    rfcomm.deinit()
+    pan.deinit()
+    security.deinit()
+    securityStorage.deinit()
+    androidInternal.deinit()
+  }
 }

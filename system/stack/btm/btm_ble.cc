@@ -25,13 +25,17 @@
 
 #define LOG_TAG "bt_btm_ble"
 
+#include <base/logging.h>
+
 #include <cstdint>
 
+#include "btif/include/btif_storage.h"
 #include "device/include/controller.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
+#include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/security_device_record.h"
@@ -47,14 +51,17 @@
 #include "stack/include/smp_api.h"
 #include "types/raw_address.h"
 
-#include <base/logging.h>
-
 extern tBTM_CB btm_cb;
 
 extern bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                                      const RawAddress& new_pseudo_addr);
 extern void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
                                     uint8_t tx_phy, uint8_t rx_phy);
+
+
+#ifndef PROPERTY_BLE_PRIVACY_ENABLED
+#define PROPERTY_BLE_PRIVACY_ENABLED "bluetooth.core.gap.le.privacy.enabled"
+#endif
 
 /******************************************************************************/
 /* External Function to be called by other modules                            */
@@ -82,7 +89,7 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
     p_dev_rec->conn_params.peripheral_latency = BTM_BLE_CONN_PARAM_UNDEF;
 
     LOG_DEBUG("Device added, handle=0x%x, p_dev_rec=%p, bd_addr=%s",
-              p_dev_rec->ble_hci_handle, p_dev_rec, bd_addr.ToString().c_str());
+              p_dev_rec->ble_hci_handle, p_dev_rec, ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
   }
 
   memset(p_dev_rec->sec_bd_name, 0, sizeof(tBTM_BD_NAME));
@@ -103,6 +110,33 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
     LOG_DEBUG("InqDb device_type =0x%x  addr_type=0x%x",
               p_info->results.device_type, p_info->results.ble_addr_type);
   }
+}
+
+/*******************************************************************************
+ *
+ * Function         BTM_GetRemoteDeviceName
+ *
+ * Description      This function is called to get the dev name of remote device
+ *                  from NV
+ *
+ * Returns          TRUE if success; otherwise failed.
+ *
+ ******************************************************************************/
+bool BTM_GetRemoteDeviceName(const RawAddress& bd_addr, BD_NAME bd_name) {
+  BTM_TRACE_DEBUG("%s", __func__);
+  bool ret = FALSE;
+  bt_bdname_t bdname;
+  bt_property_t prop_name;
+  BTIF_STORAGE_FILL_PROPERTY(&prop_name, BT_PROPERTY_BDNAME,
+                             sizeof(bt_bdname_t), &bdname);
+
+  if (btif_storage_get_remote_device_property(&bd_addr, &prop_name) ==
+      BT_STATUS_SUCCESS) {
+    APPL_TRACE_DEBUG("%s, NV name = %s", __func__, bdname.name);
+    strncpy((char*)bd_name, (char*)bdname.name, BD_NAME_LEN + 1);
+    ret = TRUE;
+  }
+  return ret;
 }
 
 /*******************************************************************************
@@ -137,7 +171,7 @@ void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
     return;
   }
 
-  LOG_DEBUG("Adding BLE key device:%s key_type:%hhu", PRIVATE_ADDRESS(bd_addr),
+  LOG_DEBUG("Adding BLE key device:%s key_type:%hhu", ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
             key_type);
 
   btm_sec_save_le_key(bd_addr, key_type, p_le_key, false);
@@ -564,81 +598,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
 
 /*******************************************************************************
  *
- * Function         BTM_BleReceiverTest
- *
- * Description      This function is called to start the LE Receiver test
- *
- * Parameter       rx_freq - Frequency Range
- *               p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleReceiverTest(rx_freq, p_cmd_cmpl_cback);
-  }
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
-
-  btsnd_hcic_ble_receiver_test(rx_freq);
-}
-
-/*******************************************************************************
- *
- * Function         BTM_BleTransmitterTest
- *
- * Description      This function is called to start the LE Transmitter test
- *
- * Parameter       tx_freq - Frequency Range
- *                       test_data_len - Length in bytes of payload data in each
- *                                       packet
- *                       packet_payload - Pattern to use in the payload
- *                       p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
-                            uint8_t packet_payload,
-                            tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTransmitterTest(
-        tx_freq, test_data_len, packet_payload, p_cmd_cmpl_cback);
-  }
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
-  btsnd_hcic_ble_transmitter_test(tx_freq, test_data_len, packet_payload);
-}
-
-/*******************************************************************************
- *
- * Function         BTM_BleTestEnd
- *
- * Description      This function is called to stop the in-progress TX or RX
- *                  test
- *
- * Parameter       p_cmd_cmpl_cback - Command complete callback
- *
- ******************************************************************************/
-void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTestEnd(p_cmd_cmpl_cback);
-  }
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
-
-  btsnd_hcic_ble_test_end();
-}
-
-/*******************************************************************************
- * Internal Functions
- ******************************************************************************/
-void btm_ble_test_command_complete(uint8_t* p) {
-  tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_le_test_cmd_cmpl_cb;
-
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = NULL;
-
-  if (p_cb) {
-    (*p_cb)(p);
-  }
-}
-
-/*******************************************************************************
- *
  * Function         BTM_UseLeLink
  *
  * Description      This function is to select the underlying physical link to
@@ -985,10 +944,17 @@ tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
   }
 
   if (ble_sec_act == BTM_BLE_SEC_NONE) {
-    return result;
+    if (bluetooth::common::init_flags::queue_l2cap_coc_while_encrypting_is_enabled()) {
+      if (sec_act != BTM_SEC_ENC_PENDING) {
+        return result;
+      }
+    } else {
+      return result;
+    }
+  } else {
+    l2cble_update_sec_act(bd_addr, sec_act);
   }
 
-  l2cble_update_sec_act(bd_addr, sec_act);
   BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, p_callback, p_ref_data,
                     ble_sec_act);
 
@@ -1166,8 +1132,9 @@ void btm_sec_save_le_key(const RawAddress& bd_addr, tBTM_LE_KEY_TYPE key_type,
         BTM_TRACE_DEBUG(
             "%s: BTM_LE_KEY_PID key_type=0x%x save peer IRK, change bd_addr=%s "
             "to id_addr=%s id_addr_type=0x%x",
-            __func__, p_rec->ble.key_type, p_rec->bd_addr.ToString().c_str(),
-            p_keys->pid_key.identity_addr.ToString().c_str(),
+            __func__, p_rec->ble.key_type,
+            ADDRESS_TO_LOGGABLE_CSTR(p_rec->bd_addr),
+            ADDRESS_TO_LOGGABLE_CSTR(p_keys->pid_key.identity_addr),
             p_keys->pid_key.identity_addr_type);
         /* update device record address as identity address */
         p_rec->bd_addr = p_keys->pid_key.identity_addr;
@@ -1579,13 +1546,30 @@ void btm_ble_ltk_request_reply(const RawAddress& bda, bool use_stk,
   BTM_TRACE_ERROR("key size = %d", p_rec->ble.keys.key_size);
   if (use_stk) {
     btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, stk);
-  } else /* calculate LTK using peer device  */
-  {
-    if (p_rec->ble.key_type & BTM_LE_KEY_LENC)
-      btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, p_rec->ble.keys.lltk);
-    else
-      btsnd_hcic_ble_ltk_req_neg_reply(btm_cb.enc_handle);
+    return;
   }
+  /* calculate LTK using peer device  */
+  if (p_rec->ble.key_type & BTM_LE_KEY_LENC) {
+    btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, p_rec->ble.keys.lltk);
+    return;
+  }
+
+  p_rec = btm_find_dev_with_lenc(bda);
+  if (!p_rec) {
+    btsnd_hcic_ble_ltk_req_neg_reply(btm_cb.enc_handle);
+    return;
+  }
+
+  LOG_INFO("Found second sec_dev_rec for device that have LTK");
+  /* This can happen when remote established LE connection using RPA to this
+   * device, but then pair with us using Classing transport while still keeping
+   * LE connection. If remote attempts to encrypt the LE connection, we might
+   * end up here. We will eventually consolidate both entries, this is to avoid
+   * race conditions. */
+
+  LOG_ASSERT(p_rec->ble.key_type & BTM_LE_KEY_LENC);
+  p_cb->key_size = p_rec->ble.keys.key_size;
+  btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, p_rec->ble.keys.lltk);
 }
 
 /*******************************************************************************
@@ -1707,7 +1691,8 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
  ******************************************************************************/
 void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
                        uint8_t role, tBLE_ADDR_TYPE addr_type,
-                       bool addr_matched) {
+                       bool addr_matched,
+                       bool can_read_discoverable_characteristics) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
   if (!p_dev_rec) {
     LOG_INFO("Creating new device record for new ble connection");
@@ -1732,6 +1717,7 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
   p_dev_rec->ble_hci_handle = handle;
   p_dev_rec->device_type |= BT_DEVICE_TYPE_BLE;
   p_dev_rec->role_central = (role == HCI_ROLE_CENTRAL) ? true : false;
+  p_dev_rec->can_read_discoverable = can_read_discoverable_characteristics;
 
   if (!addr_matched) {
     p_dev_rec->ble.active_addr_type = tBTM_SEC_BLE::BTM_BLE_ADDR_PSEUDO;
@@ -1740,13 +1726,6 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
     }
   }
   btm_cb.ble_ctr_cb.inq_var.directed_conn = BTM_BLE_ADV_IND_EVT;
-}
-
-void btm_ble_connected_from_address_with_type(
-    const tBLE_BD_ADDR& address_with_type, uint16_t handle, uint8_t enc_mode,
-    uint8_t role, bool addr_matched) {
-  btm_ble_connected(address_with_type.bda, handle, enc_mode, role,
-                    address_with_type.type, addr_matched);
 }
 
 /*****************************************************************************
@@ -1814,7 +1793,6 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
           p_dev_rec = btm_find_dev(bd_addr);
           if (p_dev_rec == NULL) {
             BTM_TRACE_ERROR("%s: p_dev_rec is NULL", __func__);
-            android_errorWriteLog(0x534e4554, "120612744");
             return BTM_SUCCESS;
           }
           BTM_TRACE_DEBUG(
@@ -2058,6 +2036,11 @@ static void btm_ble_reset_id_impl(const Octet16& rand1, const Octet16& rand2) {
   /* proceed generate ER */
   btm_cb.devcb.ble_encryption_key_value = rand2;
   btm_notify_new_key(BTM_BLE_KEY_TYPE_ER);
+  
+  /* if privacy is enabled, update the irk and RPA in the LE address manager */
+  if (btm_cb.ble_ctr_cb.privacy_mode != BTM_PRIVACY_NONE) {
+    BTM_BleConfigPrivacy(true);
+  }
 }
 
 struct reset_id_data {

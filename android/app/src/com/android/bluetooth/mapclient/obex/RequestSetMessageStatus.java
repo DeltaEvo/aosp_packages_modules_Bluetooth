@@ -18,8 +18,9 @@ package com.android.bluetooth.mapclient;
 
 import android.util.Log;
 
-import com.android.bluetooth.obex.ClientSession;
-import com.android.bluetooth.obex.HeaderSet;
+import com.android.bluetooth.ObexAppParameters;
+import com.android.obex.ClientSession;
+import com.android.obex.HeaderSet;
 
 import java.io.IOException;
 

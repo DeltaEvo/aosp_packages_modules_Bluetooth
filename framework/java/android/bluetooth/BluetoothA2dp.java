@@ -47,7 +47,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
-
 /**
  * This class provides the public APIs to control the Bluetooth A2DP
  * profile.
@@ -144,10 +143,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * <li> {@link BluetoothDevice#EXTRA_DEVICE} - The remote device if the device is currently
      * connected, otherwise it is not included.</li>
      * </ul>
-     *
-     * @hide
      */
-    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
@@ -293,8 +289,12 @@ public final class BluetoothA2dp implements BluetoothProfile {
         mProfileConnector.connect(context, listener);
     }
 
+    /**
+     * @hide
+     */
     @UnsupportedAppUsage
-    /*package*/ void close() {
+    @Override
+    public void close() {
         mProfileConnector.disconnect();
     }
 
@@ -336,8 +336,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
-                service.connectWithAttribution(device, mAttributionSource, recv);
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
+                service.connect(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -382,8 +382,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
-                service.disconnectWithAttribution(device, mAttributionSource, recv);
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
+                service.disconnect(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -408,8 +408,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                        new SynchronousResultReceiver();
-                service.getConnectedDevicesWithAttribution(mAttributionSource, recv);
+                        SynchronousResultReceiver.get();
+                service.getConnectedDevices(mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
                         mAttributionSource);
@@ -436,8 +436,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                        new SynchronousResultReceiver();
-                service.getDevicesMatchingConnectionStatesWithAttribution(states,
+                        SynchronousResultReceiver.get();
+                service.getDevicesMatchingConnectionStates(states,
                         mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -464,8 +464,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
-                service.getConnectionStateWithAttribution(device, mAttributionSource, recv);
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                service.getConnectionState(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -506,7 +506,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && ((device == null) || isValidDevice(device))) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.setActiveDevice(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -538,7 +538,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<BluetoothDevice> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getActiveDevice(mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
@@ -601,7 +601,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
                     && (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN
                         || connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.setConnectionPolicy(device, connectionPolicy, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -656,7 +656,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getConnectionPolicy(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -682,7 +682,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.isAvrcpAbsoluteVolumeSupported(recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -736,7 +736,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.isA2dpPlaying(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -770,20 +770,18 @@ public final class BluetoothA2dp implements BluetoothProfile {
     }
 
     /**
-     * Gets the current codec status (configuration and capability).
+     * Retrieves the current codec configuration and the capabilities of the remote {@code device}.
      *
-     * @param device the remote Bluetooth device.
-     * @return the current codec status
-     * @hide
+     * <p>This method also requires {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED}
+     * permission in API level {@link android.os.Build.VERSION_CODES#TIRAMISU} or older.
+     *
+     * @param device the remote Bluetooth device
+     * @return       the current codec status of the remote Bluetooth device
      */
-    @SystemApi
     @Nullable
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(allOf = {
-            android.Manifest.permission.BLUETOOTH_CONNECT,
-            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-    })
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public BluetoothCodecStatus getCodecStatus(@NonNull BluetoothDevice device) {
         if (DBG) Log.d(TAG, "getCodecStatus(" + device + ")");
         verifyDeviceNotNull(device, "getCodecStatus");
@@ -795,7 +793,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
         } else if (isEnabled() && isValidDevice(device)) {
             try {
                 final SynchronousResultReceiver<BluetoothCodecStatus> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getCodecStatus(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -806,19 +804,27 @@ public final class BluetoothA2dp implements BluetoothProfile {
     }
 
     /**
-     * Sets the codec configuration preference.
+     * Sets the preferred codec configuration of remote {@code device}.
      *
-     * @param device the remote Bluetooth device.
-     * @param codecConfig the codec configuration preference
-     * @hide
+     * The configuration must contain only selectable parameters in order to be used.
+     * See {@link #getCodecStatus} and {@link BluetoothCodecStatus#isCodecConfigSelectable}.
+     *
+     * <p>This method requires the calling app to be associated with Companion Device Manager (see
+     * {@link android.companion.CompanionDeviceManager#associate(AssociationRequest,
+     * android.companion.CompanionDeviceManager.Callback, Handler)}) and have the
+     * {@link android.Manifest.permission#BLUETOOTH_CONNECT} permission. Alternatively, if the
+     * caller has the {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED} permission, they can
+     * bypass the Companion Device Manager association requirement.
+     *
+     * <p>This method also requires {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED}
+     * permission in API level {@link android.os.Build.VERSION_CODES#TIRAMISU} or older.
+     *
+     * @param device      the remote Bluetooth device
+     * @param codecConfig the preferred codec configuration preference
      */
-    @SystemApi
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(allOf = {
-            android.Manifest.permission.BLUETOOTH_CONNECT,
-            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-    })
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public void setCodecConfigPreference(@NonNull BluetoothDevice device,
                                          @NonNull BluetoothCodecConfig codecConfig) {
         if (DBG) Log.d(TAG, "setCodecConfigPreference(" + device + ")");
@@ -941,7 +947,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public @OptionalCodecsSupportStatus int isOptionalCodecsSupported(
+    @OptionalCodecsSupportStatus
+    public int isOptionalCodecsSupported(
             @NonNull BluetoothDevice device) {
         if (DBG) log("isOptionalCodecsSupported(" + device + ")");
         verifyDeviceNotNull(device, "isOptionalCodecsSupported");
@@ -952,7 +959,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.isOptionalCodecsSupported(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -978,7 +985,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public @OptionalCodecsPreferenceStatus int isOptionalCodecsEnabled(
+    @OptionalCodecsPreferenceStatus
+    public int isOptionalCodecsEnabled(
             @NonNull BluetoothDevice device) {
         if (DBG) log("isOptionalCodecsEnabled(" + device + ")");
         verifyDeviceNotNull(device, "isOptionalCodecsEnabled");
@@ -989,7 +997,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled() && isValidDevice(device)) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.isOptionalCodecsEnabled(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -1065,7 +1073,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getDynamicBufferSupport(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -1101,7 +1109,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<BufferConstraints> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getBufferConstraints(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
@@ -1140,7 +1148,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.setBufferLengthMillis(codec, value, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {

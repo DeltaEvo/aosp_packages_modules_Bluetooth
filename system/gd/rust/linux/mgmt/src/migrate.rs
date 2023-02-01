@@ -235,7 +235,13 @@ fn floss_to_bluez_addr_type(str: String) -> Result<String, String> {
 fn reverse_endianness(str: String, uppercase: bool) -> Result<String, String> {
     // Handling for LE_KEY_PID
     // In Floss, LE_KEY_PID = IRK + Identity Address Type (8) + Identity Address
-    let s = String::from(&str[0..32]);
+    let mut len = 32;
+    if str.len() < len {
+        // Logging to observe crash behavior, can clean up and remove if not an error
+        warn!("Link key too small: {}", str);
+        len = str.len();
+    }
+    let s = String::from(&str[0..len]);
 
     match u128::from_str_radix(&s, 16) {
         Ok(x) => {
@@ -354,16 +360,16 @@ fn convert_from_bluez_device(
             continue;
         }
 
-        let mut map: HashMap<&str, DeviceKey> = if is_hid_file {
+        let mut map: HashMap<&str, Vec<DeviceKey>> = if is_hid_file {
             match sec.as_str() {
                 REPORT_MAP_SECTION_NAME => [(
                     "report_map",
-                    DeviceKey::new("HidDescriptor", KeyAction::Apply(Converter::Base64ToHex)),
+                    vec![DeviceKey::new("HidDescriptor", KeyAction::Apply(Converter::Base64ToHex))],
                 )]
                 .into(),
                 GENERAL_SECTION_NAME => [
-                    ("bcdhid", DeviceKey::new("HidVersion", KeyAction::WrapOk)),
-                    ("bcountrycode", DeviceKey::new("HidCountryCode", KeyAction::WrapOk)),
+                    ("bcdhid", vec![DeviceKey::new("HidVersion", KeyAction::WrapOk)]),
+                    ("bcountrycode", vec![DeviceKey::new("HidCountryCode", KeyAction::WrapOk)]),
                 ]
                 .into(),
                 _ => [].into(),
@@ -372,42 +378,73 @@ fn convert_from_bluez_device(
             // info file
             match sec.as_str() {
                 GENERAL_SECTION_NAME => [
-                    ("Name", DeviceKey::new("Name", KeyAction::WrapOk)),
-                    ("Class", DeviceKey::new("DevClass", KeyAction::Apply(Converter::HexToDec))),
+                    ("Name", vec![DeviceKey::new("Name", KeyAction::WrapOk)]),
+                    (
+                        "Class",
+                        vec![DeviceKey::new("DevClass", KeyAction::Apply(Converter::HexToDec))],
+                    ),
+                    (
+                        "Appearance",
+                        vec![DeviceKey::new("Appearance", KeyAction::Apply(Converter::HexToDec))],
+                    ),
                     (
                         "SupportedTechnologies",
-                        DeviceKey::new("DevType", KeyAction::Apply(Converter::TypeB2F)),
+                        vec![DeviceKey::new("DevType", KeyAction::Apply(Converter::TypeB2F))],
                     ),
                     (
                         "Services",
-                        DeviceKey::new(
+                        vec![DeviceKey::new(
                             "Service",
                             KeyAction::Apply(Converter::ReplaceSemiColonWithSpace),
-                        ),
+                        )],
                     ),
                     (
                         "AddressType",
-                        DeviceKey::new("AddrType", KeyAction::Apply(Converter::AddrTypeB2F)),
+                        vec![DeviceKey::new("AddrType", KeyAction::Apply(Converter::AddrTypeB2F))],
                     ),
                 ]
                 .into(),
                 LINKKEY_SECTION_NAME => [
                     (
                         "Key",
-                        DeviceKey::new(
+                        vec![DeviceKey::new(
                             "LinkKey",
                             KeyAction::Apply(Converter::ReverseEndianLowercase),
-                        ),
+                        )],
                     ),
-                    ("Type", DeviceKey::new("LinkKeyType", KeyAction::WrapOk)),
-                    ("PINLength", DeviceKey::new("PinLength", KeyAction::WrapOk)),
+                    ("Type", vec![DeviceKey::new("LinkKeyType", KeyAction::WrapOk)]),
+                    ("PINLength", vec![DeviceKey::new("PinLength", KeyAction::WrapOk)]),
                 ]
                 .into(),
                 DEVICEID_SECTION_NAME => [
-                    ("Source", DeviceKey::new("SdpDiVendorIdSource", KeyAction::WrapOk)),
-                    ("Vendor", DeviceKey::new("SdpDiManufacturer", KeyAction::WrapOk)),
-                    ("Product", DeviceKey::new("SdpDiModel", KeyAction::WrapOk)),
-                    ("Version", DeviceKey::new("SdpDiHardwareVersion", KeyAction::WrapOk)),
+                    (
+                        "Source",
+                        vec![
+                            DeviceKey::new("SdpDiVendorIdSource", KeyAction::WrapOk),
+                            DeviceKey::new("VendorIdSource", KeyAction::WrapOk),
+                        ],
+                    ),
+                    (
+                        "Vendor",
+                        vec![
+                            DeviceKey::new("SdpDiManufacturer", KeyAction::WrapOk),
+                            DeviceKey::new("VendorId", KeyAction::WrapOk),
+                        ],
+                    ),
+                    (
+                        "Product",
+                        vec![
+                            DeviceKey::new("SdpDiModel", KeyAction::WrapOk),
+                            DeviceKey::new("ProductId", KeyAction::WrapOk),
+                        ],
+                    ),
+                    (
+                        "Version",
+                        vec![
+                            DeviceKey::new("SdpDiHardwareVersion", KeyAction::WrapOk),
+                            DeviceKey::new("ProductVersion", KeyAction::WrapOk),
+                        ],
+                    ),
                 ]
                 .into(),
                 _ => [].into(),
@@ -417,20 +454,22 @@ fn convert_from_bluez_device(
         // Do the conversion for all keys found in BlueZ
         for (k, v) in props {
             match map.get_mut(k.as_str()) {
-                Some(key) => {
-                    let new_val = match key.apply_action(v.unwrap_or_default()) {
-                        Ok(val) => val,
-                        Err(err) => {
-                            error!(
-                                "Error converting BlueZ conf to Floss conf: {}. \
-                                    Dropping conversion for device {}",
-                                err, addr
-                            );
-                            floss_conf.remove_section(addr_lower.as_str());
-                            return false;
-                        }
-                    };
-                    floss_conf.set(addr_lower.as_str(), key.key.clone(), Some(new_val));
+                Some(keys) => {
+                    for key in keys {
+                        let new_val = match key.apply_action(v.clone().unwrap_or_default()) {
+                            Ok(val) => val,
+                            Err(err) => {
+                                error!(
+                                    "Error converting BlueZ conf to Floss conf: {}. \
+                                        Dropping conversion for device {}",
+                                    err, addr
+                                );
+                                floss_conf.remove_section(addr_lower.as_str());
+                                return false;
+                            }
+                        };
+                        floss_conf.set(addr_lower.as_str(), key.key.clone(), Some(new_val));
+                    }
                 }
                 None => {
                     debug!("No key match: {}", k);
@@ -494,6 +533,7 @@ pub fn migrate_bluez_devices() {
                 for (sec, props) in ini {
                     // Drop devices that don't exist in BlueZ
                     if sec.contains(":") && !devices.contains(&sec) {
+                        info!("Dropping a device in Floss that doesn't exist in BlueZ");
                         continue;
                     }
                     // Keep keys that weren't transferrable
@@ -512,7 +552,7 @@ pub fn migrate_bluez_devices() {
         // Write contents to file
         match conf.write(FLOSS_CONF_FILE) {
             Ok(_) => {
-                debug!("Successfully migrated devices from BlueZ to Floss for adapter {}", adapter);
+                info!("Successfully migrated devices from BlueZ to Floss for adapter {}", adapter);
             }
             Err(err) => {
                 error!(
@@ -596,6 +636,13 @@ fn convert_floss_conf(filename: &str) {
             ),
         ),
         (
+            "Appearance",
+            DeviceKey::new(
+                "Appearance",
+                KeyAction::ApplyToSection(Converter::DecToHex, GENERAL_SECTION_NAME),
+            ),
+        ),
+        (
             "DevType",
             DeviceKey::new(
                 "SupportedTechnologies",
@@ -630,19 +677,10 @@ fn convert_floss_conf(filename: &str) {
         ("LinkKeyType", DeviceKey::new("Type", KeyAction::ToSection(LINKKEY_SECTION_NAME))),
         ("PinLength", DeviceKey::new("PINLength", KeyAction::ToSection(LINKKEY_SECTION_NAME))),
         // DeviceID
-        (
-            "SdpDiVendorIdSource",
-            DeviceKey::new("Source", KeyAction::ToSection(DEVICEID_SECTION_NAME)),
-        ),
-        (
-            "SdpDiManufacturer",
-            DeviceKey::new("Vendor", KeyAction::ToSection(DEVICEID_SECTION_NAME)),
-        ),
-        ("SdpDiModel", DeviceKey::new("Product", KeyAction::ToSection(DEVICEID_SECTION_NAME))),
-        (
-            "SdpDiHardwareVersion",
-            DeviceKey::new("Version", KeyAction::ToSection(DEVICEID_SECTION_NAME)),
-        ),
+        ("VendorIdSource", DeviceKey::new("Source", KeyAction::ToSection(DEVICEID_SECTION_NAME))),
+        ("VendorId", DeviceKey::new("Vendor", KeyAction::ToSection(DEVICEID_SECTION_NAME))),
+        ("ProductId", DeviceKey::new("Product", KeyAction::ToSection(DEVICEID_SECTION_NAME))),
+        ("ProductVersion", DeviceKey::new("Version", KeyAction::ToSection(DEVICEID_SECTION_NAME))),
         (
             "LE_KEY_PID",
             DeviceKey::new(
@@ -912,6 +950,20 @@ mod tests {
     }
 
     #[test]
+    fn test_reverseendian() {
+        let mut key = DeviceKey::new("", KeyAction::Apply(Converter::ReverseEndianLowercase));
+        assert_eq!(
+            key.apply_action("00112233445566778899AABBCCDDEEFF".to_string()),
+            Ok("ffeeddccbbaa99887766554433221100".to_string())
+        );
+        // Link key too small shouldn't panic
+        assert_eq!(
+            key.apply_action("00112233445566778899AABBCCDDEE".to_string()),
+            Ok("eeddccbbaa9988776655443322110000".to_string())
+        );
+    }
+
+    #[test]
     fn test_replacespacewithsemicolon() {
         // UUID example
         let mut key = DeviceKey::new("", KeyAction::Apply(Converter::ReplaceSpaceWithSemiColon));
@@ -995,6 +1047,7 @@ mod tests {
 
         assert_eq!(conf.get(test_addr, "Name"), Some(String::from("Test Device")));
         assert_eq!(conf.get(test_addr, "DevClass"), Some(String::from("2360344")));
+        assert_eq!(conf.get(test_addr, "Appearance"), Some(String::from("962")));
         assert_eq!(conf.get(test_addr, "DevType"), Some(String::from("1")));
         assert_eq!(
             conf.get(test_addr, "Service"),
@@ -1015,6 +1068,11 @@ mod tests {
         assert_eq!(conf.get(test_addr, "SdpDiManufacturer"), Some(String::from("100")));
         assert_eq!(conf.get(test_addr, "SdpDiModel"), Some(String::from("22222")));
         assert_eq!(conf.get(test_addr, "SdpDiHardwareVersion"), Some(String::from("3")));
+
+        assert_eq!(conf.get(test_addr, "VendorIdSource"), Some(String::from("1")));
+        assert_eq!(conf.get(test_addr, "VendorId"), Some(String::from("100")));
+        assert_eq!(conf.get(test_addr, "ProductId"), Some(String::from("22222")));
+        assert_eq!(conf.get(test_addr, "ProductVersion"), Some(String::from("3")));
 
         assert_eq!(
             conf.get(test_addr, "LE_KEY_PID"),

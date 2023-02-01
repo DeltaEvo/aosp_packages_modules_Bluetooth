@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "btm_api.h"
+#include "btm_ble_int.h"
 #include "device/include/controller.h"
 #include "l2c_api.h"
 #include "main/shim/btm_api.h"
@@ -71,7 +72,7 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
     LOG_DEBUG(
         "Caching new record from config file device:%s link_key_type:%x "
         "name:%s",
-        PRIVATE_ADDRESS(bd_addr), key_type, bd_name);
+        ADDRESS_TO_LOGGABLE_CSTR(bd_addr), key_type, bd_name);
 
     p_dev_rec->bd_addr = bd_addr;
     p_dev_rec->hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_BR_EDR);
@@ -82,7 +83,7 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
   } else {
     LOG_DEBUG(
         "Caching existing record from config file device:%s link_key_type:%x",
-        PRIVATE_ADDRESS(bd_addr), key_type);
+        ADDRESS_TO_LOGGABLE_CSTR(bd_addr), key_type);
 
     /* "Bump" timestamp for existing record */
     p_dev_rec->timestamp = btm_cb.dev_rec_count++;
@@ -102,14 +103,14 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
 
   if (bd_name && bd_name[0]) {
     LOG_DEBUG("  Remote name known for device:%s name:%s",
-              PRIVATE_ADDRESS(bd_addr), bd_name);
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr), bd_name);
     p_dev_rec->sec_flags |= BTM_SEC_NAME_KNOWN;
     strlcpy((char*)p_dev_rec->sec_bd_name, (char*)bd_name,
             BTM_MAX_REM_BD_NAME_LEN + 1);
   }
 
   if (p_link_key) {
-    LOG_DEBUG("  Link key known for device:%s", PRIVATE_ADDRESS(bd_addr));
+    LOG_DEBUG("  Link key known for device:%s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     p_dev_rec->sec_flags |= BTM_SEC_LINK_KEY_KNOWN;
     p_dev_rec->link_key = *p_link_key;
     p_dev_rec->link_key_type = key_type;
@@ -157,7 +158,7 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
   if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE) ||
       BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR)) {
     LOG_WARN("%s FAILED: Cannot Delete when connection to %s is active",
-             __func__, PRIVATE_ADDRESS(bd_addr));
+             __func__, ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     return false;
   }
 
@@ -167,7 +168,7 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
 
     if (p_dev_rec->ble.in_controller_list & BTM_ACCEPTLIST_BIT) {
       LOG_INFO("Remove device %s from filter accept list before delete record",
-               PRIVATE_ADDRESS(bd_addr));
+               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
       BTM_AcceptlistRemove(p_dev_rec->bd_addr);
     }
 
@@ -176,10 +177,10 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
     wipe_secrets_and_remove(p_dev_rec);
     /* Tell controller to get rid of the link key, if it has one stored */
     BTM_DeleteStoredLinkKey(&bda, NULL);
-    LOG_INFO("%s %s complete", __func__, PRIVATE_ADDRESS(bd_addr));
+    LOG_INFO("%s %s complete", __func__, ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
   } else {
     LOG_WARN("%s Unable to delete link key for unknown device %s", __func__,
-             PRIVATE_ADDRESS(bd_addr));
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
   }
 
   return true;
@@ -237,7 +238,7 @@ tBTM_SEC_DEV_REC* btm_sec_alloc_dev(const RawAddress& bd_addr) {
 
   tBTM_SEC_DEV_REC* p_dev_rec = btm_sec_allocate_dev_rec();
 
-  LOG_DEBUG("Allocated device record bd_addr:%s", PRIVATE_ADDRESS(bd_addr));
+  LOG_DEBUG("Allocated device record bd_addr:%s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
   /* Check with the BT manager if details about remote device are known */
   /* outgoing connection */
@@ -372,6 +373,32 @@ tBTM_SEC_DEV_REC* btm_find_dev(const RawAddress& bd_addr) {
   return NULL;
 }
 
+static bool has_lenc_and_address_is_equal(void* data, void* context) {
+  tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
+  if (!(p_dev_rec->ble.key_type & BTM_LE_KEY_LENC)) return false;
+
+  return is_address_equal(data, context);
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_find_dev_with_lenc
+ *
+ * Description      Look for the record in the device database with LTK and
+ *                  specified BD address
+ *
+ * Returns          Pointer to the record or NULL
+ *
+ ******************************************************************************/
+tBTM_SEC_DEV_REC* btm_find_dev_with_lenc(const RawAddress& bd_addr) {
+  if (btm_cb.sec_dev_rec == nullptr) return nullptr;
+
+  list_node_t* n = list_foreach(btm_cb.sec_dev_rec, has_lenc_and_address_is_equal,
+                                (void*)&bd_addr);
+  if (n) return static_cast<tBTM_SEC_DEV_REC*>(list_node(n));
+
+  return NULL;
+}
 /*******************************************************************************
  *
  * Function         btm_consolidate_dev
@@ -424,6 +451,63 @@ void btm_consolidate_dev(tBTM_SEC_DEV_REC* p_target_rec) {
 
         /* remove the combined record */
         wipe_secrets_and_remove(p_dev_rec);
+      }
+    }
+  }
+}
+
+/* combine security records of established LE connections after Classic pairing
+ * succeeded. */
+void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
+  tBTM_SEC_DEV_REC* p_target_rec = btm_find_dev(bd_addr);
+  if (!p_target_rec) {
+    LOG_ERROR("No security record for just bonded device!?!?");
+    return;
+  }
+
+  if (p_target_rec->ble_hci_handle != HCI_INVALID_HANDLE) {
+    LOG_INFO("Not consolidating - already have LE connection");
+    return;
+  }
+
+  LOG_INFO("%s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+
+  list_node_t* end = list_end(btm_cb.sec_dev_rec);
+  list_node_t* node = list_begin(btm_cb.sec_dev_rec);
+  while (node != end) {
+    tBTM_SEC_DEV_REC* p_dev_rec =
+        static_cast<tBTM_SEC_DEV_REC*>(list_node(node));
+
+    // we do list_remove in some cases, must grab next before removing
+    node = list_next(node);
+
+    if (p_target_rec == p_dev_rec) continue;
+
+    /* an RPA device entry is a duplicate of the target record */
+    if (btm_ble_addr_resolvable(p_dev_rec->bd_addr, p_target_rec)) {
+      if (p_dev_rec->ble_hci_handle == HCI_INVALID_HANDLE) {
+        LOG_INFO("already disconnected - erasing entry %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->bd_addr));
+        wipe_secrets_and_remove(p_dev_rec);
+        continue;
+      }
+
+      LOG_INFO(
+          "Found existing LE connection to just bonded device on %s handle 0x%04x",
+          ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->bd_addr), p_dev_rec->ble_hci_handle);
+
+      RawAddress ble_conn_addr = p_dev_rec->bd_addr;
+      p_target_rec->ble_hci_handle = p_dev_rec->ble_hci_handle;
+
+      /* remove the old LE record */
+      wipe_secrets_and_remove(p_dev_rec);
+
+      /* To avoid race conditions between central/peripheral starting encryption
+       * at same time, initiate it just from central. */
+      if (L2CA_GetBleConnRole(ble_conn_addr) == HCI_ROLE_CENTRAL) {
+        LOG_INFO("Will encrypt existing connection");
+        BTM_SetEncryption(ble_conn_addr, BT_TRANSPORT_LE, nullptr, nullptr,
+                          BTM_BLE_SEC_ENCRYPT);
       }
     }
   }

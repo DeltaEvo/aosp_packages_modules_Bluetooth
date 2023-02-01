@@ -111,8 +111,9 @@ impl LinkManager {
         from: hci::Address,
         packet: lmp::PacketPacket,
     ) -> Result<(), LinkManagerError> {
-        let link = self.get_link(from).ok_or(LinkManagerError::UnknownPeer)?;
-        link.ingest_lmp(packet);
+        if let Some(link) = self.get_link(from) {
+            link.ingest_lmp(packet);
+        };
         Ok(())
     }
 
@@ -123,8 +124,9 @@ impl LinkManager {
             .or_else(|| hci::command_remote_device_address(&command));
 
         if let Some(peer) = peer {
-            let link = self.get_link(peer).ok_or(LinkManagerError::UnknownPeer)?;
-            link.ingest_hci(command);
+            if let Some(link) = self.get_link(peer) {
+                link.ingest_hci(command);
+            };
             Ok(())
         } else {
             Err(LinkManagerError::UnhandledHciPacket)
@@ -193,13 +195,13 @@ impl procedure::Context for LinkContext {
 
     fn send_hci_event<E: Into<hci::EventPacket>>(&self, event: E) {
         if let Some(manager) = self.manager.upgrade() {
-            manager.ops.send_hci_event(&*event.into().to_vec())
+            manager.ops.send_hci_event(&event.into().to_vec())
         }
     }
 
     fn send_lmp_packet<P: Into<lmp::PacketPacket>>(&self, packet: P) {
         if let Some(manager) = self.manager.upgrade() {
-            manager.ops.send_lmp_packet(self.peer_address(), &*packet.into().to_vec())
+            manager.ops.send_lmp_packet(self.peer_address(), &packet.into().to_vec())
         }
     }
 

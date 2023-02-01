@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.audio_util;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.mockito.Mockito.*;
 
 import android.content.Context;
@@ -36,6 +38,7 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -57,7 +60,6 @@ import java.util.List;
 public class MediaPlayerWrapperTest {
     private static final int MSG_TIMEOUT = 0;
 
-    private Context mTargetContext;
     private Resources mTestResources;
     private HandlerThread mThread;
     private MediaMetadata.Builder mTestMetadata;
@@ -90,13 +92,8 @@ public class MediaPlayerWrapperTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
-        mTargetContext = InstrumentationRegistry.getTargetContext();
-        try {
-            mTestResources = mTargetContext.getPackageManager()
-                    .getResourcesForApplication("com.android.bluetooth.tests");
-        } catch (PackageManager.NameNotFoundException e) {
-            Assert.fail("Setup Failure Unable to get resources" + e.toString());
-        }
+        mTestResources = TestUtils.getTestApplicationResources(
+                InstrumentationRegistry.getTargetContext());
         mTestBitmap = loadImage(com.android.bluetooth.tests.R.raw.image_200_200);
 
         when(mMockResources.getBoolean(R.bool.avrcp_target_cover_art_uri_images)).thenReturn(true);
@@ -721,5 +718,145 @@ public class MediaPlayerWrapperTest {
         // Verify that there are no timeout messages pending and there were no timeouts
         Assert.assertFalse(wrapper.getTimeoutHandler().hasMessages(MSG_TIMEOUT));
         verify(mFailHandler, never()).onTerribleFailure(any(), any(), anyBoolean());
+    }
+
+    @Test
+    public void pauseCurrent() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        wrapper.pauseCurrent();
+
+        verify(transportControls).pause();
+    }
+
+    @Test
+    public void playCurrent() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        wrapper.playCurrent();
+
+        verify(transportControls).play();
+    }
+
+    @Test
+    public void playItemFromQueue() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        when(mMockController.getQueue()).thenReturn(new ArrayList<>());
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        long queueItemId = 4;
+        wrapper.playItemFromQueue(queueItemId);
+
+        verify(transportControls).skipToQueueItem(queueItemId);
+    }
+
+    @Test
+    public void rewind() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        wrapper.rewind();
+
+        verify(transportControls).rewind();
+    }
+
+    @Test
+    public void seekTo() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        long position = 50;
+        wrapper.seekTo(position);
+
+        verify(transportControls).seekTo(position);
+    }
+
+    @Test
+    public void setPlaybackSpeed() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        float speed = 2.0f;
+        wrapper.setPlaybackSpeed(speed);
+
+        verify(transportControls).setPlaybackSpeed(speed);
+    }
+
+    @Test
+    public void skipToNext() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        wrapper.skipToNext();
+
+        verify(transportControls).skipToNext();
+    }
+
+    @Test
+    public void skipToPrevious() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        wrapper.skipToPrevious();
+
+        verify(transportControls).skipToPrevious();
+    }
+
+    @Test
+    public void stopCurrent() {
+        MediaController.TransportControls transportControls
+                = mock(MediaController.TransportControls.class);
+        when(mMockController.getTransportControls()).thenReturn(transportControls);
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        wrapper.stopCurrent();
+
+        verify(transportControls).stop();
+    }
+
+    @Test
+    public void toggleRepeat_andToggleShuffle_doesNotCrash() {
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        wrapper.toggleRepeat(true);
+        wrapper.toggleRepeat(false);
+        wrapper.toggleShuffle(true);
+        wrapper.toggleShuffle(false);
+    }
+
+    @Test
+    public void toString_doesNotCrash() {
+        MediaPlayerWrapper wrapper =
+                MediaPlayerWrapperFactory.wrap(mMockContext, mMockController, mThread.getLooper());
+
+        assertThat(wrapper.toString()).isNotEmpty();
     }
 }

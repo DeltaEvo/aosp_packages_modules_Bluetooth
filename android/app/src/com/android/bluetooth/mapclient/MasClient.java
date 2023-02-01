@@ -26,10 +26,11 @@ import android.os.Message;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothObexTransport;
-import com.android.bluetooth.obex.ClientSession;
-import com.android.bluetooth.obex.HeaderSet;
-import com.android.bluetooth.obex.ResponseCodes;
+import com.android.bluetooth.ObexAppParameters;
 import com.android.internal.util.StateMachine;
+import com.android.obex.ClientSession;
+import com.android.obex.HeaderSet;
+import com.android.obex.ResponseCodes;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -193,6 +194,20 @@ public class MasClient {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Invokes {@link Request#abort} and removes it from the Handler's message queue.
+     *
+     * @param request The {@link Request} to abort.
+     */
+    public void abortRequest(Request request) {
+        if (DBG) {
+            Log.d(TAG, "abortRequest called with: " + request);
+        }
+
+        request.abort();
+        mHandler.removeMessages(REQUEST, request);
     }
 
     public void shutdown() {

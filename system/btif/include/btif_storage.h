@@ -38,9 +38,40 @@
     (p_prop)->val = (p_v);                            \
   } while (0)
 
+#define BTIF_STORAGE_PATH_REMOTE_SERVICE "Service"
+
+#define STORAGE_BDADDR_STRING_SZ (18) /* 00:11:22:33:44:55 */
+#define STORAGE_UUID_STRING_SIZE \
+  (36 + 1) /* 00001200-0000-1000-8000-00805f9b34fb; */
+#define STORAGE_PINLEN_STRING_MAX_SIZE (2)  /* ascii pinlen max chars */
+#define STORAGE_KEYTYPE_STRING_MAX_SIZE (1) /* ascii keytype max chars */
+
+#define STORAGE_KEY_TYPE_MAX (10)
+
 /*******************************************************************************
  *  Functions
  ******************************************************************************/
+
+/*******************************************************************************
+ *
+ * Function         btif_in_fetch_bonded_devices
+ *
+ * Description      Helper function to fetch the bonded devices
+ *                  from NVRAM
+ *
+ * Returns          BT_STATUS_SUCCESS if successful, BT_STATUS_FAIL otherwise
+ *
+ ******************************************************************************/
+bt_status_t btif_in_fetch_bonded_device(const std::string& bdstr);
+
+typedef struct {
+  uint32_t num_devices;
+  RawAddress devices[BTM_SEC_MAX_DEVICE_RECORDS];
+} btif_bonded_devices_t;
+
+bt_status_t btif_in_fetch_bonded_ble_device(
+    const std::string& remote_bd_addr, int add,
+    btif_bonded_devices_t* p_bonded_devices);
 
 /*******************************************************************************
  *
@@ -241,6 +272,18 @@ bt_status_t btif_storage_load_bonded_hid_info(void);
  ******************************************************************************/
 bt_status_t btif_storage_remove_hid_info(const RawAddress& remote_bd_addr);
 
+/*******************************************************************************
+ *
+ * Function         btif_storage_get_hid_device_addresses
+ *
+ * Description      BTIF storage API - Finds all bonded HID devices
+ *
+ * Returns          std::vector of RawAddress
+ *
+ ******************************************************************************/
+std::vector<std::pair<RawAddress, uint8_t>>
+btif_storage_get_hid_device_addresses(void);
+
 /** Loads information about bonded hearing aid devices */
 void btif_storage_load_bonded_hearing_aids();
 
@@ -284,6 +327,25 @@ bool btif_storage_get_hearing_aid_prop(
 /** Store Le Audio device autoconnect flag */
 void btif_storage_set_leaudio_autoconnect(const RawAddress& addr,
                                           bool autoconnect);
+
+/** Store PACs information */
+void btif_storage_leaudio_update_pacs_bin(const RawAddress& addr);
+
+/** Store ASEs information */
+void btif_storage_leaudio_update_ase_bin(const RawAddress& addr);
+
+/** Store Handles information */
+void btif_storage_leaudio_update_handles_bin(const RawAddress& addr);
+
+/** Store Le Audio device audio locations */
+void btif_storage_set_leaudio_audio_location(const RawAddress& addr,
+                                             uint32_t sink_location,
+                                             uint32_t source_location);
+
+/** Store Le Audio device context types */
+void btif_storage_set_leaudio_supported_context_types(
+    const RawAddress& addr, uint16_t sink_supported_context_type,
+    uint16_t source_supported_context_type);
 
 /** Remove Le Audio device from the storage */
 void btif_storage_remove_leaudio(const RawAddress& address);

@@ -18,9 +18,9 @@ package {
 
 python_test_host {
     name: "avatar",
-    main: "connect.py",
+    main: "example.py",
     srcs: [
-        "connect.py",
+        "example.py",
     ],
     libs: [
         "libavatar",
@@ -31,4 +31,15 @@ python_test_host {
         unit_test: false,
     },
     data: ["config.yml"],
+}
+
+python_binary_host {
+    name: "avatar_runner",
+    main: "runner.py",
+    srcs: [
+        "runner.py",
+    ],
+    libs: [
+        "libavatar"
+    ],
 }

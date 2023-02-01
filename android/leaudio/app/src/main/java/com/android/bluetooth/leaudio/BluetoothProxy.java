@@ -42,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -416,10 +417,6 @@ public class BluetoothProxy {
                 LeAudioDeviceStateWrapper valid_device = valid_device_opt.get();
                 LeAudioDeviceStateWrapper.BassData svc_data = valid_device.bassData;
 
-                // TODO: Is the receiver_id same with BluetoothLeBroadcastReceiveState.getSourceId()?
-                //       If not, find getSourceId() usages and fix the issues.
-//                rstate.receiver_id = intent.getIntExtra(
-//                        BluetoothBroadcastAudioScan.EXTRA_BASS_RECEIVER_ID, -1);
                 /**
                  * From "Introducing-Bluetooth-LE-Audio-book" 8.6.3.1:
                  *
@@ -435,8 +432,6 @@ public class BluetoothProxy {
                  */
 
                 /**
-                 * From BluetoothBroadcastAudioScan.EXTRA_BASS_RECEIVER_ID:
-                 *
                  * Broadcast receiver's endpoint identifier.
                  */
                 synchronized(this) {
@@ -816,7 +811,7 @@ public class BluetoothProxy {
         Boolean current_state = bluetoothAdapter.isEnabled();
 
         // Force the update since event may not come if bt was already enabled
-        if (enabledBluetoothMutable.getValue() != current_state)
+        if (!Objects.equals(enabledBluetoothMutable.getValue(), current_state))
             enabledBluetoothMutable.setValue(current_state);
 
         return current_state;

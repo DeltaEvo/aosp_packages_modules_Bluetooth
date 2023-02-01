@@ -29,8 +29,9 @@ import com.android.bluetooth.IObexConnectionHandler;
 import com.android.bluetooth.ObexServerSockets;
 import com.android.bluetooth.map.BluetoothMapContentObserver.Msg;
 import com.android.bluetooth.map.BluetoothMapUtils.TYPE;
-import com.android.bluetooth.obex.ServerSession;
 import com.android.bluetooth.sdp.SdpManager;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.obex.ServerSession;
 
 import java.io.IOException;
 import java.util.Calendar;
@@ -39,8 +40,10 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class BluetoothMapMasInstance implements IObexConnectionHandler {
-    private final String mTag;
-    private static volatile int sInstanceCounter = 0;
+    @VisibleForTesting
+    final String mTag;
+    @VisibleForTesting
+    static volatile int sInstanceCounter = 0;
 
     private static final boolean D = BluetoothMapService.DEBUG;
     private static final boolean V = BluetoothMapService.VERBOSE;
@@ -146,7 +149,8 @@ public class BluetoothMapMasInstance implements IObexConnectionHandler {
     }
 
     /* Needed only for test */
-    protected BluetoothMapMasInstance() {
+    @VisibleForTesting
+    BluetoothMapMasInstance() {
         mTag = "BluetoothMapMasInstance" + sInstanceCounter++;
     }
 

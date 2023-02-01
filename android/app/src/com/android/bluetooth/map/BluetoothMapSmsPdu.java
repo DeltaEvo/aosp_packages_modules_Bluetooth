@@ -24,7 +24,6 @@ import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import com.android.bluetooth.util.GsmAlphabet;
-import com.android.internal.telephony.SmsConstants;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -57,20 +56,17 @@ public class BluetoothMapSmsPdu {
      */
     private static final int MESSAGE_TYPE_DELIVER = 0x01;
 
-    /* We need to handle the SC-address mentioned in errata 4335.
+    /**
+     * We need to handle the SC-address mentioned in errata 4335.
      * Since the definition could be read in three different ways, I have asked
      * the car working group for clarification, and are awaiting confirmation that
      * this clarification will go into the MAP spec:
-     *  "The native format should be <sc_addr><tpdu> where <sc_addr> is <length><ton><1..10 octet
-      *  of address>
-     *   coded according to 24.011. The IEI is not to be used, as the fixed order of the data
-     *   makes a type 4 LV
-     *   information element sufficient. <length> is a single octet which value is the length of
-     *   the value-field
-     *   in octets including both the <ton> and the <address>."
-     * */
-
-
+     *    The native format should be <sc_addr><tpdu> where <sc_addr> is <length><ton><1..10 octet
+     *    of address> coded according to 24.011. The IEI is not to be used, as the fixed order of
+     *    the data makes a type 4 LV information element sufficient. <length> is a single octet
+     *    which value is the length of the value-field in octets including both the <ton> and the
+     *    <address>.
+     */
     public static class SmsPdu {
         private byte[] mData;
         private byte[] mScAddress = {0};
@@ -778,6 +774,66 @@ public class BluetoothMapSmsPdu {
             }
         }
         return tableValue;
+    }
+
+    private static class SmsConstants {
+        /** User data text encoding code unit size */
+        public static final int ENCODING_UNKNOWN = 0;
+        public static final int ENCODING_7BIT = 1;
+        public static final int ENCODING_8BIT = 2;
+        public static final int ENCODING_16BIT = 3;
+
+        /** The maximum number of payload septets per message */
+        public static final int MAX_USER_DATA_SEPTETS = 160;
+
+        /**
+         * The maximum number of payload septets per message if a user data header
+         * is present.  This assumes the header only contains the
+         * CONCATENATED_8_BIT_REFERENCE element.
+         */
+        public static final int MAX_USER_DATA_SEPTETS_WITH_HEADER = 153;
+
+        /**
+         * This value is not defined in global standard. Only in Korea, this is used.
+         */
+        public static final int ENCODING_KSC5601 = 4;
+
+        /** The maximum number of payload bytes per message */
+        public static final int MAX_USER_DATA_BYTES = 140;
+
+        /**
+         * The maximum number of payload bytes per message if a user data header
+         * is present.  This assumes the header only contains the
+         * CONCATENATED_8_BIT_REFERENCE element.
+         */
+        public static final int MAX_USER_DATA_BYTES_WITH_HEADER = 134;
+
+        /**
+         * SMS Class enumeration.
+         * See TS 23.038.
+         */
+        public enum MessageClass{
+            UNKNOWN,
+            CLASS_0,
+            CLASS_1,
+            CLASS_2,
+            CLASS_3;
+        }
+
+        /**
+         * Indicates unknown format SMS message.
+         */
+        public static final String FORMAT_UNKNOWN = "unknown";
+
+        /**
+         * Indicates a 3GPP format SMS message.
+         */
+        public static final String FORMAT_3GPP = "3gpp";
+
+        /**
+         * Indicates a 3GPP2 format SMS message.
+         */
+        public static final String FORMAT_3GPP2 = "3gpp2";
     }
 
 }

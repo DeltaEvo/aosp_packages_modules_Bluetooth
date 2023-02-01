@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use clap::{value_t, App, Arg};
+
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use dbus::channel::MatchingReceiver;
@@ -7,17 +9,25 @@ use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
 use tokio::sync::mpsc;
 
+use crate::bt_adv::AdvSet;
+use crate::bt_gatt::GattClientContext;
 use crate::callbacks::{
-    BtCallback, BtConnectionCallback, BtManagerCallback, ScannerCallback, SuspendCallback,
+    AdminCallback, AdvertisingSetCallback, BtCallback, BtConnectionCallback, BtManagerCallback,
+    BtSocketManagerCallback, ScannerCallback, SuspendCallback,
 };
 use crate::command_handler::CommandHandler;
-use crate::dbus_iface::{BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, SuspendDBus};
+use crate::dbus_iface::{
+    BluetoothAdminDBus, BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, BluetoothQADBus,
+    BluetoothSocketManagerDBus, SuspendDBus,
+};
 use crate::editor::AsyncEditor;
 use bt_topshim::topstack;
 use btstack::bluetooth::{BluetoothDevice, IBluetooth};
 use btstack::suspend::ISuspend;
 use manager_service::iface_bluetooth_manager::IBluetoothManager;
 
+mod bt_adv;
+mod bt_gatt;
 mod callbacks;
 mod command_handler;
 mod console;
@@ -58,20 +68,26 @@ pub(crate) struct ClientContext {
     /// List of bonded devices.
     pub(crate) bonded_devices: HashMap<String, BluetoothDevice>,
 
-    /// If set, the registered GATT client id. None otherwise.
-    pub(crate) gatt_client_id: Option<i32>,
-
     /// Proxy for manager interface.
     pub(crate) manager_dbus: BluetoothManagerDBus,
 
     /// Proxy for adapter interface. Only exists when the default adapter is enabled.
     pub(crate) adapter_dbus: Option<BluetoothDBus>,
 
+    /// Proxy for adapter QA interface. Only exists when the default adapter is enabled.
+    pub(crate) qa_dbus: Option<BluetoothQADBus>,
+
     /// Proxy for GATT interface.
     pub(crate) gatt_dbus: Option<BluetoothGattDBus>,
 
+    /// Proxy for Admin interface.
+    pub(crate) admin_dbus: Option<BluetoothAdminDBus>,
+
     /// Proxy for suspend interface.
     pub(crate) suspend_dbus: Option<SuspendDBus>,
+
+    /// Proxy for socket manager interface.
+    pub(crate) socket_manager_dbus: Option<BluetoothSocketManagerDBus>,
 
     /// Channel to send actions to take in the foreground
     fg: mpsc::Sender<ForegroundActions>,
@@ -84,6 +100,27 @@ pub(crate) struct ClientContext {
 
     /// Identifies the callback to receive IScannerCallback method calls.
     scanner_callback_id: Option<u32>,
+
+    /// Identifies the callback to receive IAdvertisingSetCallback method calls.
+    advertiser_callback_id: Option<u32>,
+
+    /// Identifies the callback to receive IBluetoothAdminPolicyCallback method calls.
+    admin_callback_id: Option<u32>,
+
+    /// Keeps track of active LE scanners.
+    active_scanner_ids: HashSet<u8>,
+
+    /// Keeps track of advertising sets registered. Map from reg_id to AdvSet.
+    adv_sets: HashMap<i32, AdvSet>,
+
+    /// Identifies the callback to receive IBluetoothSocketManagerCallback method calls.
+    socket_manager_callback_id: Option<u32>,
+
+    /// Is btclient running in restricted mode?
+    is_restricted: bool,
+
+    /// Data of GATT client preference.
+    gatt_client_context: GattClientContext,
 }
 
 impl ClientContext {
@@ -91,6 +128,7 @@ impl ClientContext {
         dbus_connection: Arc<SyncConnection>,
         dbus_crossroads: Arc<Mutex<Crossroads>>,
         tx: mpsc::Sender<ForegroundActions>,
+        is_restricted: bool,
     ) -> ClientContext {
         // Manager interface is almost always available but adapter interface
         // requires that the specific adapter is enabled.
@@ -106,15 +144,24 @@ impl ClientContext {
             discovering_state: false,
             found_devices: HashMap::new(),
             bonded_devices: HashMap::new(),
-            gatt_client_id: None,
             manager_dbus,
             adapter_dbus: None,
+            qa_dbus: None,
             gatt_dbus: None,
+            admin_dbus: None,
             suspend_dbus: None,
+            socket_manager_dbus: None,
             fg: tx,
             dbus_connection,
             dbus_crossroads,
             scanner_callback_id: None,
+            advertiser_callback_id: None,
+            admin_callback_id: None,
+            active_scanner_ids: HashSet::new(),
+            adv_sets: HashMap::new(),
+            socket_manager_callback_id: None,
+            is_restricted,
+            gatt_client_context: GattClientContext::new(),
         }
     }
 
@@ -145,9 +192,16 @@ impl ClientContext {
 
         let dbus = BluetoothDBus::new(conn.clone(), idx);
         self.adapter_dbus = Some(dbus);
+        self.qa_dbus = Some(BluetoothQADBus::new(conn.clone(), idx));
 
         let gatt_dbus = BluetoothGattDBus::new(conn.clone(), idx);
         self.gatt_dbus = Some(gatt_dbus);
+
+        let admin_dbus = BluetoothAdminDBus::new(conn.clone(), idx);
+        self.admin_dbus = Some(admin_dbus);
+
+        let socket_manager_dbus = BluetoothSocketManagerDBus::new(conn.clone(), idx);
+        self.socket_manager_dbus = Some(socket_manager_dbus);
 
         self.suspend_dbus = Some(SuspendDBus::new(conn.clone(), idx));
 
@@ -219,7 +273,12 @@ enum ForegroundActions {
 
 /// Runs a command line program that interacts with a Bluetooth stack.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Process command line arguments.
+    let matches = App::new("btclient")
+        .arg(Arg::with_name("restricted").long("restricted").takes_value(false))
+        .arg(Arg::with_name("command").short("c").long("command").takes_value(true))
+        .get_matches();
+    let command = value_t!(matches, "command", String);
+    let is_restricted = matches.is_present("restricted");
 
     topstack::get_runtime().block_on(async move {
         // Connect to D-Bus system bus.
@@ -253,8 +312,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (tx, rx) = mpsc::channel::<ForegroundActions>(10);
 
         // Create the context needed for handling commands
-        let context =
-            Arc::new(Mutex::new(ClientContext::new(conn.clone(), cr.clone(), tx.clone())));
+        let context = Arc::new(Mutex::new(ClientContext::new(
+            conn.clone(),
+            cr.clone(),
+            tx.clone(),
+            is_restricted,
+        )));
 
         // Check if manager interface is valid. We only print some help text before failing on the
         // first actual access to the interface (so we can also capture the actual reason the
@@ -294,14 +357,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut handler = CommandHandler::new(context.clone());
 
-        let args: Vec<String> = std::env::args().collect();
-
         // Allow command line arguments to be read
-        if args.len() > 1 {
-            handler.process_cmd_line(&args[1], &args[2..].to_vec());
-        } else {
-            start_interactive_shell(handler, tx, rx, context).await;
-        }
+        match command {
+            Ok(command) => {
+                let mut iter = command.split(' ').map(String::from);
+                handler.process_cmd_line(
+                    &iter.next().unwrap_or(String::from("")),
+                    &iter.collect::<Vec<String>>(),
+                );
+            }
+            _ => {
+                start_interactive_shell(handler, tx, rx, context).await?;
+            }
+        };
         return Result::Ok(());
     })
 }
@@ -311,7 +379,7 @@ async fn start_interactive_shell(
     tx: mpsc::Sender<ForegroundActions>,
     mut rx: mpsc::Receiver<ForegroundActions>,
     context: Arc<Mutex<ClientContext>>,
-) {
+) -> Result<(), Box<dyn std::error::Error>> {
     let command_rule_list = handler.get_command_rule_list().clone();
     let context_for_closure = context.clone();
 
@@ -319,9 +387,9 @@ async fn start_interactive_shell(
 
     // Async task to keep reading new lines from user
     let semaphore = semaphore_fg.clone();
+    let editor = AsyncEditor::new(command_rule_list, context_for_closure)
+        .map_err(|x| format!("creating async editor failed: {x}"))?;
     tokio::spawn(async move {
-        let editor = AsyncEditor::new(command_rule_list, context_for_closure);
-
         loop {
             // Wait until ForegroundAction::Readline finishes its task.
             let permit = semaphore.acquire().await;
@@ -337,7 +405,7 @@ async fn start_interactive_shell(
         }
     });
 
-    loop {
+    'readline: loop {
         let m = rx.recv().await;
 
         if m.is_none() {
@@ -371,6 +439,12 @@ async fn start_interactive_shell(
                     format!("/org/chromium/bluetooth/client/{}/suspend_callback", adapter);
                 let scanner_cb_objpath: String =
                     format!("/org/chromium/bluetooth/client/{}/scanner_callback", adapter);
+                let advertiser_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/advertising_set_callback", adapter);
+                let admin_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/admin_callback", adapter);
+                let socket_manager_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/socket_manager_callback", adapter);
 
                 let dbus_connection = context.lock().unwrap().dbus_connection.clone();
                 let dbus_crossroads = context.lock().unwrap().dbus_crossroads.clone();
@@ -424,6 +498,57 @@ async fn start_interactive_shell(
                     .expect("D-Bus error on IBluetoothGatt::RegisterScannerCallback");
                 context.lock().unwrap().scanner_callback_id = Some(scanner_callback_id);
 
+                let advertiser_callback_id = context
+                    .lock()
+                    .unwrap()
+                    .gatt_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
+                    .register_advertiser_callback(Box::new(AdvertisingSetCallback::new(
+                        advertiser_cb_objpath.clone(),
+                        context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetoothGatt::RegisterAdvertiserCallback");
+                context.lock().unwrap().advertiser_callback_id = Some(advertiser_callback_id);
+
+                let admin_callback_id = context
+                    .lock()
+                    .unwrap()
+                    .admin_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
+                    .register_admin_policy_callback(Box::new(AdminCallback::new(
+                        admin_cb_objpath.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetoothAdmin::RegisterAdminCallback");
+                context.lock().unwrap().admin_callback_id = Some(admin_callback_id);
+
+                let socket_manager_callback_id = context
+                    .lock()
+                    .unwrap()
+                    .socket_manager_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
+                    .register_callback(Box::new(BtSocketManagerCallback::new(
+                        socket_manager_cb_objpath.clone(),
+                        context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetoothSocketManager::RegisterCallback");
+                context.lock().unwrap().socket_manager_callback_id =
+                    Some(socket_manager_callback_id);
+
                 // When adapter is ready, Suspend API is also ready. Register as an observer.
                 // TODO(b/224606285): Implement suspend debug utils in btclient.
                 context.lock().unwrap().suspend_dbus.as_mut().unwrap().register_callback(Box::new(
@@ -441,20 +566,42 @@ async fn start_interactive_shell(
                 print_info!("Adapter {} is ready", adapter_address);
             }
             ForegroundActions::Readline(result) => match result {
+                Err(rustyline::error::ReadlineError::Interrupted) => {
+                    // Ctrl-C cancels the currently typed line, do nothing and ready to do next
+                    // readline again.
+                    semaphore_fg.add_permits(1);
+                }
                 Err(_err) => {
                     break;
                 }
                 Ok(line) => {
-                    let command_vec =
-                        line.split(" ").map(|s| String::from(s)).collect::<Vec<String>>();
-                    let cmd = &command_vec[0];
-                    if cmd.eq("quit") {
+                    // Currently Chrome OS uses Rust 1.60 so use the 1-time loop block to
+                    // workaround this.
+                    // With Rust 1.65 onwards we can convert this loop hack into a named block:
+                    // https://blog.rust-lang.org/2022/11/03/Rust-1.65.0.html#break-from-labeled-blocks
+                    // TODO: Use named block when Android and Chrome OS Rust upgrade Rust to 1.65.
+                    loop {
+                        let args = match shell_words::split(line.as_str()) {
+                            Ok(words) => words,
+                            Err(e) => {
+                                print_error!("Error parsing arguments: {}", e);
+                                break;
+                            }
+                        };
+
+                        let (cmd, rest) = match args.split_first() {
+                            Some(pair) => pair,
+                            None => break,
+                        };
+
+                        if cmd == "quit" {
+                            break 'readline;
+                        }
+
+                        handler.process_cmd_line(cmd, &rest.to_vec());
                         break;
                     }
-                    handler.process_cmd_line(
-                        &String::from(cmd),
-                        &command_vec[1..command_vec.len()].to_vec(),
-                    );
+
                     // Ready to do readline again.
                     semaphore_fg.add_permits(1);
                 }
@@ -465,4 +612,5 @@ async fn start_interactive_shell(
     semaphore_fg.close();
 
     print_info!("Client exiting");
+    Ok(())
 }

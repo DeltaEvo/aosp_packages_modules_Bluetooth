@@ -83,7 +83,9 @@ struct L2CA_DisconnectLECocReq L2CA_DisconnectLECocReq;
 struct L2CA_GetRemoteCid L2CA_GetRemoteCid;
 struct L2CA_SetIdleTimeoutByBdAddr L2CA_SetIdleTimeoutByBdAddr;
 struct L2CA_SetTraceLevel L2CA_SetTraceLevel;
+struct L2CA_UseLatencyMode L2CA_UseLatencyMode;
 struct L2CA_SetAclPriority L2CA_SetAclPriority;
+struct L2CA_SetAclLatency L2CA_SetAclLatency;
 struct L2CA_SetTxPriority L2CA_SetTxPriority;
 struct L2CA_GetPeerFeatures L2CA_GetPeerFeatures;
 struct L2CA_RegisterFixedChannel L2CA_RegisterFixedChannel;
@@ -91,11 +93,14 @@ struct L2CA_ConnectFixedChnl L2CA_ConnectFixedChnl;
 struct L2CA_SendFixedChnlData L2CA_SendFixedChnlData;
 struct L2CA_RemoveFixedChnl L2CA_RemoveFixedChnl;
 struct L2CA_SetLeGattTimeout L2CA_SetLeGattTimeout;
+struct L2CA_MarkLeLinkAsActive L2CA_MarkLeLinkAsActive;
 struct L2CA_DataWrite L2CA_DataWrite;
 struct L2CA_LECocDataWrite L2CA_LECocDataWrite;
 struct L2CA_SetChnlFlushability L2CA_SetChnlFlushability;
 struct L2CA_FlushChannel L2CA_FlushChannel;
 struct L2CA_IsLinkEstablished L2CA_IsLinkEstablished;
+struct L2CA_SetMediaStreamChannel L2CA_SetMediaStreamChannel;
+struct L2CA_isMediaChannel L2CA_isMediaChannel;
 
 }  // namespace stack_l2cap_api
 }  // namespace mock
@@ -210,9 +215,18 @@ uint8_t L2CA_SetTraceLevel(uint8_t new_level) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_SetTraceLevel(new_level);
 }
+bool L2CA_UseLatencyMode(const RawAddress& bd_addr, bool use_latency_mode) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_UseLatencyMode(bd_addr,
+                                                          use_latency_mode);
+}
 bool L2CA_SetAclPriority(const RawAddress& bd_addr, tL2CAP_PRIORITY priority) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_SetAclPriority(bd_addr, priority);
+}
+bool L2CA_SetAclLatency(const RawAddress& bd_addr, tL2CAP_LATENCY latency) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_SetAclLatency(bd_addr, latency);
 }
 bool L2CA_SetTxPriority(uint16_t cid, tL2CAP_CHNL_PRIORITY priority) {
   mock_function_count_map[__func__]++;
@@ -248,6 +262,10 @@ bool L2CA_SetLeGattTimeout(const RawAddress& rem_bda, uint16_t idle_tout) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_SetLeGattTimeout(rem_bda, idle_tout);
 }
+bool L2CA_MarkLeLinkAsActive(const RawAddress& rem_bda) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_MarkLeLinkAsActive(rem_bda);
+}
 uint8_t L2CA_DataWrite(uint16_t cid, BT_HDR* p_data) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_DataWrite(cid, p_data);
@@ -270,6 +288,17 @@ bool L2CA_IsLinkEstablished(const RawAddress& bd_addr,
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_IsLinkEstablished(bd_addr,
                                                              transport);
+}
+void L2CA_SetMediaStreamChannel(uint16_t local_media_cid, bool status) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_SetMediaStreamChannel(
+      local_media_cid, status);
+}
+bool L2CA_isMediaChannel(uint16_t handle, uint16_t channel_id,
+                         bool is_local_cid) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_isMediaChannel(handle, channel_id,
+                                                          is_local_cid);
 }
 
 // END mockcify generation

@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "hci/address.h"
-#include "model/devices/device_properties.h"
 #include "model/setup/phy_layer.h"
 #include "packets/link_layer_packets.h"
 
@@ -35,9 +34,7 @@ using ::bluetooth::hci::Address;
 //  - Provide Get*() and Set*() functions for device attributes.
 class Device {
  public:
-  Device(const std::string properties_filename = "")
-      : last_advertisement_(std::chrono::steady_clock::now()),
-        properties_(properties_filename) {}
+  Device() { ASSERT(Address::FromString("BB:BB:BB:BB:BB:AD", address_)); }
   virtual ~Device() = default;
 
   // Return a string representation of the type of device.
@@ -46,22 +43,11 @@ class Device {
   // Return the string representation of the device.
   virtual std::string ToString() const;
 
-  // Decide whether to accept a connection request
-  // May need to be extended to check peer address & type, and other
-  // connection parameters.
-  // Return true if the device accepts the connection request.
-  virtual bool LeConnect() { return false; }
-
   // Set the device's Bluetooth address.
-  virtual void SetAddress(Address address);
+  void SetAddress(Address address) { address_.address = address.address; }
 
-  // Set the advertisement interval in milliseconds.
-  void SetAdvertisementInterval(std::chrono::milliseconds ms) {
-    advertising_interval_ms_ = ms;
-  }
-
-  // Returns true if the host could see an advertisement about now.
-  virtual bool IsAdvertisementAvailable() const;
+  // Get the device's Bluetooth address.
+  const Address& GetAddress() const { return address_; }
 
   // Let the device know that time has passed.
   virtual void TimerTick() {}
@@ -72,31 +58,27 @@ class Device {
 
   void UnregisterPhyLayer(Phy::Type phy_type, uint32_t factory_id);
 
-  virtual void IncomingPacket(model::packets::LinkLayerPacketView){};
+  virtual void IncomingPacket(model::packets::LinkLayerPacketView packet,
+                              int8_t rssi){};
 
   virtual void SendLinkLayerPacket(
       std::shared_ptr<model::packets::LinkLayerPacketBuilder> packet,
-      Phy::Type phy_type);
+      Phy::Type phy_type, int8_t tx_power = 0);
+
   virtual void SendLinkLayerPacket(model::packets::LinkLayerPacketView packet,
-                                   Phy::Type phy_type);
+                                   Phy::Type phy_type, int8_t tx_power = 0);
 
   virtual void Close();
 
-  void RegisterCloseCallback(std::function<void()>);
+  void RegisterCloseCallback(std::function<void()> close_callback);
 
  protected:
+  // List phy layers this device is listening on.
   std::vector<std::shared_ptr<PhyLayer>> phy_layers_;
 
-  std::chrono::steady_clock::time_point last_advertisement_;
-
-  // The time between page scans.
-  std::chrono::milliseconds page_scan_delay_ms_{};
-
-  // The spec defines the advertising interval as a 16-bit value, but since it
-  // is never sent in packets, we use std::chrono::milliseconds.
-  std::chrono::milliseconds advertising_interval_ms_{};
-
-  DeviceProperties properties_;
+  // Unique device address. Used as public device address for
+  // Bluetooth activities.
+  Address address_;
 
   // Callback to be invoked when this device is closed.
   std::function<void()> close_callback_;

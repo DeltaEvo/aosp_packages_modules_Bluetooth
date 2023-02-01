@@ -226,14 +226,16 @@ static void btif_a2dp_sink_startup_delayed() {
 
 bool btif_a2dp_sink_start_session(const RawAddress& peer_address,
                                   std::promise<void> peer_ready_promise) {
-  LOG(INFO) << __func__ << ": peer_address=" << peer_address;
+  LOG(INFO) << __func__ << ": peer_address="
+            << ADDRESS_TO_LOGGABLE_STR(peer_address);
   if (btif_a2dp_sink_cb.worker_thread.DoInThread(
           FROM_HERE, base::BindOnce(btif_a2dp_sink_start_session_delayed,
                                     std::move(peer_ready_promise)))) {
     return true;
   } else {
     // cannot set promise but triggers crash
-    LOG(FATAL) << __func__ << ": peer_address=" << peer_address
+    LOG(FATAL) << __func__ << ": peer_address="
+               << ADDRESS_TO_LOGGABLE_STR(peer_address)
                << " fails to context switch";
     return false;
   }
@@ -250,8 +252,9 @@ static void btif_a2dp_sink_start_session_delayed(
 bool btif_a2dp_sink_restart_session(const RawAddress& old_peer_address,
                                     const RawAddress& new_peer_address,
                                     std::promise<void> peer_ready_promise) {
-  LOG(INFO) << __func__ << ": old_peer_address=" << old_peer_address
-            << " new_peer_address=" << new_peer_address;
+  LOG(INFO) << __func__ << ": old_peer_address="
+            << ADDRESS_TO_LOGGABLE_STR(old_peer_address)
+            << " new_peer_address=" << ADDRESS_TO_LOGGABLE_STR(new_peer_address);
 
   CHECK(!new_peer_address.IsEmpty());
 
@@ -262,7 +265,7 @@ bool btif_a2dp_sink_restart_session(const RawAddress& old_peer_address,
   if (!bta_av_co_set_active_peer(new_peer_address)) {
     LOG(ERROR) << __func__
                << ": Cannot stream audio: cannot set active peer to "
-               << new_peer_address;
+               << ADDRESS_TO_LOGGABLE_STR(new_peer_address);
     peer_ready_promise.set_value();
     return false;
   }
@@ -276,7 +279,8 @@ bool btif_a2dp_sink_restart_session(const RawAddress& old_peer_address,
 }
 
 bool btif_a2dp_sink_end_session(const RawAddress& peer_address) {
-  LOG_INFO("%s: peer_address=%s", __func__, peer_address.ToString().c_str());
+  LOG_INFO("%s: peer_address=%s", __func__,
+           ADDRESS_TO_LOGGABLE_CSTR(peer_address));
   btif_a2dp_sink_cb.worker_thread.DoInThread(
       FROM_HERE, base::BindOnce(btif_a2dp_sink_end_session_delayed));
   return true;
@@ -386,8 +390,8 @@ static void btif_a2dp_sink_command_ready(BT_HDR_RIGID* p_msg) {
       break;
   }
 
-  osi_free(p_msg);
   LOG_VERBOSE("%s: %s DONE", __func__, dump_media_event(p_msg->event));
+  osi_free(p_msg);
 }
 
 void btif_a2dp_sink_update_decoder(const uint8_t* p_codec_info) {

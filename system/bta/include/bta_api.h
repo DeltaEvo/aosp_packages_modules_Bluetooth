@@ -58,6 +58,29 @@ typedef enum : uint8_t {
   BTA_WRONG_MODE = 5,
 } tBTA_STATUS;
 
+#ifndef CASE_RETURN_TEXT
+#define CASE_RETURN_TEXT(code) \
+  case code:                   \
+    return #code
+#endif
+
+inline std::string bta_status_text(const tBTA_STATUS& status) {
+  switch (status) {
+    CASE_RETURN_TEXT(BTA_SUCCESS);
+    CASE_RETURN_TEXT(BTA_FAILURE);
+    CASE_RETURN_TEXT(BTA_PENDING);
+    CASE_RETURN_TEXT(BTA_BUSY);
+    CASE_RETURN_TEXT(BTA_NO_RESOURCES);
+    CASE_RETURN_TEXT(BTA_WRONG_MODE);
+    default:
+      return base::StringPrintf("UNKNOWN[%d]", status);
+  }
+}
+
+#undef CASE_RETURN_TEXT
+
+using tSDP_DISC_WAIT = int;
+
 /*
  * Service ID
  */
@@ -225,6 +248,7 @@ typedef enum : uint8_t {
   BTA_DM_BLE_SC_CR_LOC_OOB_EVT = 31, /* SMP SC Create Local OOB request event */
   BTA_DM_REPORT_BONDING_EVT = 32,    /*handle for pin or key missing*/
   BTA_DM_LE_ADDR_ASSOC_EVT = 33,     /* identity address association event */
+  BTA_DM_LINK_UP_FAILED_EVT = 34,    /* Create connection failed event */
 } tBTA_DM_SEC_EVT;
 
 /* Structure associated with BTA_DM_PIN_REQ_EVT */
@@ -305,18 +329,28 @@ typedef struct {
       fail_reason; /* The HCI reason/error code for when success=false */
   tBLE_ADDR_TYPE addr_type; /* Peer device address type */
   tBT_DEVICE_TYPE dev_type;
+  bool is_ctkd; /* True if key is derived using CTKD procedure */
 } tBTA_DM_AUTH_CMPL;
 
 /* Structure associated with BTA_DM_LINK_UP_EVT */
 typedef struct {
   RawAddress bd_addr; /* BD address peer device. */
   tBT_TRANSPORT transport_link_type;
+  uint16_t acl_handle;
 } tBTA_DM_LINK_UP;
+
+/* Structure associated with BTA_DM_LINK_UP_FAILED_EVT */
+typedef struct {
+  RawAddress bd_addr; /* BD address peer device. */
+  tBT_TRANSPORT transport_link_type;
+  tHCI_STATUS status; /* The HCI error code associated with this event */
+} tBTA_DM_LINK_UP_FAILED;
 
 /* Structure associated with BTA_DM_LINK_DOWN_EVT */
 typedef struct {
   RawAddress bd_addr; /* BD address peer device. */
   tBT_TRANSPORT transport_link_type;
+  tHCI_STATUS status;
 } tBTA_DM_LINK_DOWN;
 
 #define BTA_AUTH_SP_YES                                                       \
@@ -393,7 +427,8 @@ typedef struct {
 typedef union {
   tBTA_DM_PIN_REQ pin_req;        /* PIN request. */
   tBTA_DM_AUTH_CMPL auth_cmpl;    /* Authentication complete indication. */
-  tBTA_DM_LINK_UP link_up;        /* ACL connection down event */
+  tBTA_DM_LINK_UP link_up;        /* ACL connection up event */
+  tBTA_DM_LINK_UP_FAILED link_up_failed; /* ACL connection up failure event */
   tBTA_DM_LINK_DOWN link_down;    /* ACL connection down event */
   tBTA_DM_SP_CFM_REQ cfm_req;     /* user confirm request */
   tBTA_DM_SP_KEY_NOTIF key_notif; /* passkey notification */
@@ -419,10 +454,12 @@ typedef void(tBTA_DM_SEC_CBACK)(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data);
 #define BTA_DM_INQ_RES_EVT 0  /* Inquiry result for a peer device. */
 #define BTA_DM_INQ_CMPL_EVT 1 /* Inquiry complete. */
 #define BTA_DM_DISC_RES_EVT 2 /* Discovery result for a peer device. */
-#define BTA_DM_DISC_BLE_RES_EVT \
-  3 /* Discovery result for BLE GATT based servoce on a peer device. */
+#define BTA_DM_GATT_OVER_LE_RES_EVT \
+  3 /* GATT services over LE transport discovered */
 #define BTA_DM_DISC_CMPL_EVT 4          /* Discovery complete. */
 #define BTA_DM_SEARCH_CANCEL_CMPL_EVT 6 /* Search cancelled */
+#define BTA_DM_DID_RES_EVT 7            /* Vendor/Product ID search result */
+#define BTA_DM_GATT_OVER_SDP_RES_EVT 8  /* GATT services over SDP discovered */
 
 typedef uint8_t tBTA_DM_SEARCH_EVT;
 
@@ -477,6 +514,15 @@ typedef struct {
       services; /* GATT based Services UUID found on peer device. */
 } tBTA_DM_DISC_BLE_RES;
 
+/* Structure associated with tBTA_DM_DID_RES */
+typedef struct {
+  RawAddress bd_addr; /* BD address peer device. */
+  uint8_t vendor_id_src;
+  uint16_t vendor_id;
+  uint16_t product_id;
+  uint16_t version;
+} tBTA_DM_DID_RES;
+
 /* Union of all search callback structures */
 typedef union {
   tBTA_DM_INQ_RES inq_res;   /* Inquiry result for a peer device. */
@@ -484,6 +530,7 @@ typedef union {
   tBTA_DM_DISC_RES disc_res; /* Discovery result for a peer device. */
   tBTA_DM_DISC_BLE_RES
       disc_ble_res;             /* discovery result for GATT based service */
+  tBTA_DM_DID_RES did_res;      /* Vendor and Product ID of peer device */
 } tBTA_DM_SEARCH;
 
 /* Search callback */
@@ -548,7 +595,7 @@ enum {
 
 #ifndef BTA_DM_PM_PARK_IDX
 #define BTA_DM_PM_PARK_IDX \
-  6 /* the actual index to bta_dm_pm_md[] for PARK mode */
+  7 /* the actual index to bta_dm_pm_md[] for PARK mode */
 #endif
 
 #ifndef BTA_DM_PM_SNIFF_A2DP_IDX
@@ -1211,6 +1258,39 @@ extern void BTA_VendorInit(void);
  ******************************************************************************/
 extern void BTA_DmClearEventFilter(void);
 
+/*******************************************************************************
+ *
+ * Function         BTA_DmClearEventMask
+ *
+ * Description      This function clears the event mask
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmClearEventMask(void);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmDisconnectAllAcls
+ *
+ * Description      This function will disconnect all LE and Classic ACLs.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmDisconnectAllAcls(void);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmClearFilterAcceptList
+ *
+ * Description      This function clears the filter accept list
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmClearFilterAcceptList(void);
+
 using LeRandCallback = base::Callback<void(uint64_t)>;
 /*******************************************************************************
  *
@@ -1225,6 +1305,29 @@ extern void BTA_DmLeRand(LeRandCallback cb);
 
 /*******************************************************************************
  *
+ * Function        BTA_DmSetEventFilterConnectionSetupAllDevices
+ *
+ * Description    Tell the controller to allow all devices
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+extern void BTA_DmSetEventFilterConnectionSetupAllDevices();
+
+/*******************************************************************************
+ *
+ * Function        BTA_DmAllowWakeByHid
+ *
+ * Description    Allow the device to be woken by HID devices
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+extern void BTA_DmAllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
+
+/*******************************************************************************
+ *
  * Function        BTA_DmRestoreFilterAcceptList
  *
  * Description    Floss: Restore the state of the for the filter accept list
@@ -1236,14 +1339,17 @@ extern void BTA_DmRestoreFilterAcceptList();
 
 /*******************************************************************************
  *
- * Function        BTA_DmSetDefaultEventMask
+ * Function       BTA_DmSetDefaultEventMaskExcept
  *
- * Description    Floss: Set the default event mask for Classic and LE
+ * Description    Floss: Set the default event mask for Classic and LE except
+ *                the given values (they will be disabled in the final set
+ *                mask).
  *
- * Parameters
+ * Parameters     Bits set for event mask and le event mask that should be
+ *                disabled in the final value.
  *
  *******************************************************************************/
-extern void BTA_DmSetDefaultEventMask();
+extern void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
 
 /*******************************************************************************
  *
@@ -1256,4 +1362,46 @@ extern void BTA_DmSetDefaultEventMask();
  *******************************************************************************/
 extern void BTA_DmSetEventFilterInquiryResultAllDevices();
 
+/*******************************************************************************
+ *
+ * Function         BTA_DmBleResetId
+ *
+ * Description      This function resets the ble keys such as IRK
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmBleResetId(void);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmBleSubrateRequest
+ *
+ * Description      subrate request, can only be used when connection is up.
+ *
+ * Parameters:      bd_addr       - BD address of the peer
+ *                  subrate_min   - subrate min
+ *                  subrate_max   - subrate max
+ *                  max_latency   - max latency
+ *                  cont_num      - continuation number
+ *                  timeout       - supervision timeout
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmBleSubrateRequest(const RawAddress& bd_addr,
+                                    uint16_t subrate_min, uint16_t subrate_max,
+                                    uint16_t max_latency, uint16_t cont_num,
+                                    uint16_t timeout);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmCheckLeAudioCapable
+ *
+ * Description      Checks if device should be considered as LE Audio capable
+ *
+ * Returns          True if Le Audio capable device, false otherwise
+ *
+ ******************************************************************************/
+extern bool BTA_DmCheckLeAudioCapable(const RawAddress& address);
 #endif /* BTA_API_H */

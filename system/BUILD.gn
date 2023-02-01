@@ -64,6 +64,7 @@ if (defined(use.android) && use.android) {
   group("android_bluetooth_tests") {
     deps = [
       "//bt/system/device:net_test_device",
+      "//bt/system/device:net_test_device_iot_config",
       "//bt/system/hci:net_test_hci",
       "//bt/system/osi:net_test_osi",
       "//bt/system/test/suite:net_test_bluetooth",
@@ -77,6 +78,7 @@ config("target_defaults") {
     "//bt/system/linux_include",
     "//bt/system/types",
     "//bt/system/include",
+    "//bt/system/gd",
 
     # For flatbuffer generated headers
     "${root_gen_dir}/bt/system/gd/",
@@ -120,7 +122,9 @@ config("target_defaults") {
     "TARGET_FLOSS",
     "EXPORT_SYMBOL=__attribute__((visibility(\"default\")))",
     "FALLTHROUGH_INTENDED=[[clang::fallthrough]]",
-    "BTIF_HF_FEATURES=0x00000640",
+    # BTA_AG_FEAT_ECS (Enhanced Call Status 0x040) |
+    # BTA_AG_FEAT_CODEC (Codec Negotiation 0x200)
+    "BTIF_HF_FEATURES=0x00000240",
   ]
 
   if (!(defined(use.bt_nonstandard_codecs) && use.bt_nonstandard_codecs)) {

@@ -77,6 +77,11 @@ public final class BluetoothCodecConfig implements Parcelable {
     public static final int SOURCE_CODEC_TYPE_LC3 = 5;
 
     /**
+     * Source codec type Opus.
+     */
+    private static final int SOURCE_CODEC_TYPE_OPUS = 6;
+
+    /**
      * Source codec type invalid. This is the default value used for codec
      * type.
      */
@@ -85,7 +90,7 @@ public final class BluetoothCodecConfig implements Parcelable {
     /**
      * Represents the count of valid source codec types.
      */
-    private static final int SOURCE_CODEC_TYPE_MAX = 6;
+    private static final int SOURCE_CODEC_TYPE_MAX = 7;
 
     /** @hide */
     @IntDef(prefix = "CODEC_PRIORITY_", value = {
@@ -219,6 +224,36 @@ public final class BluetoothCodecConfig implements Parcelable {
      */
     public static final int CHANNEL_MODE_STEREO = 0x1 << 1;
 
+    /** @hide */
+    @IntDef(prefix = "CODEC_SPECIFIC_1_LDAC_", value = {
+            CODEC_SPECIFIC_1_LDAC_QUALITY_HIGH,
+            CODEC_SPECIFIC_1_LDAC_QUALITY_MID,
+            CODEC_SPECIFIC_1_LDAC_QUALITY_LOW,
+            CODEC_SPECIFIC_1_LDAC_QUALITY_ADAPTIVE
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CodecSpecific1Ldac {}
+
+    /**
+     * Codec specific value for LDAC high quality bitrate.
+     */
+    public static final int CODEC_SPECIFIC_1_LDAC_QUALITY_HIGH = 1000;
+
+    /**
+     * Codec specific value for LDAC medium quality bitrate.
+     */
+    public static final int CODEC_SPECIFIC_1_LDAC_QUALITY_MID = 1001;
+
+    /**
+     * Codec specific value for LDAC low quality bitrate.
+     */
+    public static final int CODEC_SPECIFIC_1_LDAC_QUALITY_LOW = 1002;
+
+    /**
+     * Codec specific value for LDAC adaptive bitrate.
+     */
+    public static final int CODEC_SPECIFIC_1_LDAC_QUALITY_ADAPTIVE = 1003;
+
     private final @SourceCodecType int mCodecType;
     private @CodecPriority int mCodecPriority;
     private final @SampleRate int mSampleRate;
@@ -241,7 +276,6 @@ public final class BluetoothCodecConfig implements Parcelable {
      * @param codecSpecific2 the specific value 2
      * @param codecSpecific3 the specific value 3
      * @param codecSpecific4 the specific value 4
-     * values to 0.
      * @hide
      */
     @UnsupportedAppUsage
@@ -413,16 +447,15 @@ public final class BluetoothCodecConfig implements Parcelable {
         return 0;
     }
 
-    public static final @android.annotation.NonNull Parcelable.Creator<BluetoothCodecConfig> CREATOR =
-            new Parcelable.Creator<BluetoothCodecConfig>() {
-                public BluetoothCodecConfig createFromParcel(Parcel in) {
-                    return new BluetoothCodecConfig(in);
-                }
+    public static final @NonNull Creator<BluetoothCodecConfig> CREATOR = new Creator<>() {
+        public BluetoothCodecConfig createFromParcel(Parcel in) {
+            return new BluetoothCodecConfig(in);
+        }
 
-                public BluetoothCodecConfig[] newArray(int size) {
-                    return new BluetoothCodecConfig[size];
-                }
-            };
+        public BluetoothCodecConfig[] newArray(int size) {
+            return new BluetoothCodecConfig[size];
+        }
+    };
 
     /**
      * Flattens the object to a parcel
@@ -462,7 +495,9 @@ public final class BluetoothCodecConfig implements Parcelable {
             case SOURCE_CODEC_TYPE_LDAC:
                 return "LDAC";
             case SOURCE_CODEC_TYPE_LC3:
-              return "LC3";
+                return "LC3";
+            case SOURCE_CODEC_TYPE_OPUS:
+                return "Opus";
             case SOURCE_CODEC_TYPE_INVALID:
                 return "INVALID CODEC";
             default:
@@ -712,9 +747,11 @@ public final class BluetoothCodecConfig implements Parcelable {
             case SOURCE_CODEC_TYPE_AAC:
             case SOURCE_CODEC_TYPE_LDAC:
             case SOURCE_CODEC_TYPE_LC3:
-              if (mCodecSpecific1 != other.mCodecSpecific1) {
-                return false;
-              }
+            case SOURCE_CODEC_TYPE_OPUS:
+                if (mCodecSpecific1 != other.mCodecSpecific1) {
+                    return false;
+                }
+            // fall through
             default:
                 return true;
         }

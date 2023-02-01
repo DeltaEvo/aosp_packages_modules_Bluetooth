@@ -16,8 +16,9 @@
 
 package com.android.bluetooth.avrcpcontroller;
 
-import com.android.bluetooth.obex.ClientSession;
-import com.android.bluetooth.obex.HeaderSet;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.obex.ClientSession;
+import com.android.obex.HeaderSet;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,7 +30,8 @@ import java.io.InputStream;
 public class RequestGetImage extends BipRequest {
     // Expected inputs
     private final String mImageHandle;
-    private final BipImageDescriptor mImageDescriptor;
+    @VisibleForTesting
+    final BipImageDescriptor mImageDescriptor;
 
     // Expected return type
     private static final String TYPE = "x-bt/img-img";

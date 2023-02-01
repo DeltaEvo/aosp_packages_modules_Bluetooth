@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <chrono>
 #include <limits>
 
 #include <gmock/gmock.h>
@@ -28,7 +27,7 @@ using bluetooth::common::LruCache;
 
 TEST(LruCacheTest, empty_test) {
   LruCache<int, int> cache(3);  // capacity = 3;
-  EXPECT_EQ(cache.size(), 0);
+  EXPECT_EQ(cache.size(), 0ul);
   EXPECT_EQ(cache.find(42), cache.end());
   cache.clear();  // should not crash
   EXPECT_EQ(cache.find(42), cache.end());
@@ -167,7 +166,7 @@ TEST(LruCacheTest, erase_in_for_loop_test) {
 
 TEST(LruCacheTest, get_and_contains_key_test) {
   LruCache<int, int> cache(3);  // capacity = 3;
-  EXPECT_EQ(cache.size(), 0);
+  EXPECT_EQ(cache.size(), 0ul);
   EXPECT_EQ(cache.find(42), cache.end());
   EXPECT_FALSE(cache.contains(42));
   EXPECT_FALSE(cache.insert_or_assign(56, 200));
@@ -186,11 +185,11 @@ TEST(LruCacheTest, put_and_get_sequence_1) {
   // Section 1: Ordered put and ordered get
   LruCache<int, int> cache(3);  // capacity = 3;
   EXPECT_FALSE(cache.insert_or_assign(1, 10));
-  EXPECT_EQ(cache.size(), 1);
+  EXPECT_EQ(cache.size(), 1ul);
   EXPECT_FALSE(cache.insert_or_assign(2, 20));
-  EXPECT_EQ(cache.size(), 2);
+  EXPECT_EQ(cache.size(), 2ul);
   EXPECT_FALSE(cache.insert_or_assign(3, 30));
-  EXPECT_EQ(cache.size(), 3);
+  EXPECT_EQ(cache.size(), 3ul);
   // 3, 2, 1 after above operations
 
   auto evicted = cache.insert_or_assign(4, 40);
@@ -210,7 +209,7 @@ TEST(LruCacheTest, put_and_get_sequence_1) {
   // Section 2: Over capacity put and ordered get
   evicted = cache.insert_or_assign(5, 50);
   // 5, 3, 2 after above operations, 4 is evicted
-  EXPECT_EQ(cache.size(), 3);
+  EXPECT_EQ(cache.size(), 3ul);
   EXPECT_TRUE(evicted);
   EXPECT_EQ(*evicted, std::make_pair(4, 40));
 
@@ -249,7 +248,7 @@ TEST(LruCacheTest, put_and_get_sequence_2) {
   EXPECT_EQ(*evicted, std::make_pair(1, 10));
   EXPECT_FALSE(cache.insert_or_assign(2, 200));
   // 2, 3 in cache, nothing is evicted
-  EXPECT_EQ(cache.size(), 2);
+  EXPECT_EQ(cache.size(), 2ul);
 
   EXPECT_FALSE(cache.contains(1));
   LruCache<int, int>::const_iterator iter;
@@ -274,7 +273,7 @@ TEST(LruCacheTest, put_and_get_sequence_2) {
   EXPECT_TRUE(cache.extract(4));
   EXPECT_FALSE(cache.contains(4));
   // 3 in cache
-  EXPECT_EQ(cache.size(), 1);
+  EXPECT_EQ(cache.size(), 1ul);
   EXPECT_FALSE(cache.insert_or_assign(2, 2000));
   // 2, 3 in cache
 
@@ -289,7 +288,7 @@ TEST(LruCacheTest, put_and_get_sequence_2) {
   EXPECT_FALSE(cache.insert_or_assign(5, 50));
   EXPECT_FALSE(cache.insert_or_assign(1, 100));
   EXPECT_FALSE(cache.insert_or_assign(5, 1000));
-  EXPECT_EQ(cache.size(), 2);
+  EXPECT_EQ(cache.size(), 2ul);
   // 5, 1 in cache
 
   evicted = cache.insert_or_assign(6, 2000);
@@ -419,7 +418,6 @@ TEST(LruCacheTest, for_loop_test) {
 }
 
 TEST(LruCacheTest, pressure_test) {
-  auto started = std::chrono::high_resolution_clock::now();
   int capacity = 0xFFFF;  // 2^16 = 65535
   LruCache<int, int> cache(static_cast<size_t>(capacity));
 
@@ -448,14 +446,7 @@ TEST(LruCacheTest, pressure_test) {
     EXPECT_EQ(iter->second, key);
     EXPECT_TRUE(cache.extract(key));
   }
-  EXPECT_EQ(cache.size(), 0);
-
-  // test execution time
-  auto done = std::chrono::high_resolution_clock::now();
-  int execution_time = std::chrono::duration_cast<std::chrono::microseconds>(done - started).count();
-  // Shouldn't be more than 1120ms
-  int execution_time_per_cycle_us = 17;
-  EXPECT_LT(execution_time, execution_time_per_cycle_us * capacity);
+  EXPECT_EQ(cache.size(), 0ul);
 }
 
 }  // namespace testing

@@ -27,6 +27,8 @@ namespace hci {
 
 class PeriodicAdvertisingParameters {
  public:
+  bool enable;
+  bool include_adi;
   uint16_t min_interval;
   uint16_t max_interval;
   uint16_t properties;
@@ -46,11 +48,8 @@ class AdvertisingConfig {
   uint8_t channel_map;
   AdvertisingFilterPolicy filter_policy;
   uint8_t tx_power;  // -127 to +20 (0x7f is no preference)
-};
-
-class ExtendedAdvertisingConfig : public AdvertisingConfig {
- public:
   bool connectable = false;
+  bool discoverable = false;
   bool scannable = false;
   bool directed = false;
   bool high_duty_directed_connectable = false;
@@ -64,8 +63,7 @@ class ExtendedAdvertisingConfig : public AdvertisingConfig {
   Enable enable_scan_request_notifications = Enable::DISABLED;
   std::vector<GapData> periodic_data;
   PeriodicAdvertisingParameters periodic_advertising_parameters;
-  ExtendedAdvertisingConfig() = default;
-  ExtendedAdvertisingConfig(const AdvertisingConfig& config);
+  AdvertisingConfig() = default;
 };
 
 using AdvertiserId = uint8_t;
@@ -109,7 +107,7 @@ class LeAdvertisingManager : public bluetooth::Module {
 
   AdvertiserId ExtendedCreateAdvertiser(
       int reg_id,
-      const ExtendedAdvertisingConfig config,
+      const AdvertisingConfig config,
       const common::Callback<void(Address, AddressType)>& scan_callback,
       const common::Callback<void(ErrorCode, uint8_t, uint8_t)>& set_terminated_callback,
       uint16_t duration,
@@ -118,19 +116,19 @@ class LeAdvertisingManager : public bluetooth::Module {
 
   void StartAdvertising(
       AdvertiserId advertiser_id,
-      const ExtendedAdvertisingConfig config,
+      const AdvertisingConfig config,
       uint16_t duration,
-      const base::Callback<void(uint8_t /* status */)>& status_callback,
-      const base::Callback<void(uint8_t /* status */)>& timeout_callback,
+      base::OnceCallback<void(uint8_t /* status */)> status_callback,
+      base::OnceCallback<void(uint8_t /* status */)> timeout_callback,
       const common::Callback<void(Address, AddressType)>& scan_callback,
       const common::Callback<void(ErrorCode, uint8_t, uint8_t)>& set_terminated_callback,
       os::Handler* handler);
 
   void GetOwnAddress(uint8_t advertiser_id);
 
-  void RegisterAdvertiser(base::Callback<void(uint8_t /* inst_id */, uint8_t /* status */)> callback);
+  void RegisterAdvertiser(base::OnceCallback<void(uint8_t /* inst_id */, uint8_t /* status */)> callback);
 
-  void SetParameters(AdvertiserId advertiser_id, ExtendedAdvertisingConfig config);
+  void SetParameters(AdvertiserId advertiser_id, AdvertisingConfig config);
 
   void SetData(AdvertiserId advertiser_id, bool set_scan_rsp, std::vector<GapData> data);
 
@@ -141,7 +139,7 @@ class LeAdvertisingManager : public bluetooth::Module {
 
   void SetPeriodicData(AdvertiserId advertiser_id, std::vector<GapData> data);
 
-  void EnablePeriodicAdvertising(AdvertiserId advertiser_id, bool enable);
+  void EnablePeriodicAdvertising(AdvertiserId advertiser_id, bool enable, bool include_adi);
 
   void RemoveAdvertiser(AdvertiserId advertiser_id);
 

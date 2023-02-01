@@ -22,6 +22,8 @@
  *
  ******************************************************************************/
 
+#include <base/logging.h>
+#include <log/log.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -36,8 +38,6 @@
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
 #include "types/bluetooth/uuid.h"
-
-#include <base/logging.h>
 
 using base::StringPrintf;
 using bluetooth::Uuid;
@@ -121,6 +121,19 @@ static tGATT_STATUS gatts_check_attr_readability(const tGATT_ATTR& attr,
       (key_size < min_key_size)) {
     LOG(ERROR) << __func__ << ": GATT_INSUF_KEY_SIZE";
     return GATT_INSUF_KEY_SIZE;
+  }
+
+  if (perm & GATT_PERM_READ_IF_ENCRYPTED_OR_DISCOVERABLE) {
+    if (sec_flag.can_read_discoverable_characteristics) {
+      // no checks here
+    } else {
+      if (!sec_flag.is_link_key_known || !sec_flag.is_encrypted) {
+        return GATT_INSUF_AUTHENTICATION;
+      }
+      if (key_size < min_key_size) {
+        return GATT_INSUF_KEY_SIZE;
+      }
+    }
   }
 
   if (read_long && attr.uuid.Is16Bit()) {
@@ -237,6 +250,11 @@ static tGATT_STATUS read_attr_value(tGATT_ATTR& attr16, uint16_t offset,
     uint16_t char_ext_prop =
         attr16.p_value ? attr16.p_value->char_ext_prop : 0x0000;
     *p_len = 2;
+
+    if (mtu < *p_len) {
+      return GATT_NO_RESOURCES;
+    }
+
     UINT16_TO_STREAM(p, char_ext_prop);
     *p_data = p;
     return GATT_SUCCESS;

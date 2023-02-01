@@ -22,18 +22,19 @@
  *
  ******************************************************************************/
 
+#include <base/logging.h>
+
 #include <cstdint>
 #include <cstring>
 
 #include "bta/ag/bta_ag_int.h"
 #include "bta/include/bta_dm_api.h"
 #include "btif/include/btif_config.h"
+#include "device/include/device_iot_config.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/l2c_api.h"
 #include "stack/include/port_api.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 /*****************************************************************************
  *  Constants
@@ -222,6 +223,10 @@ void bta_ag_disc_int_res(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
 
       /* send ourselves sdp ok event */
       event = BTA_AG_DISC_OK_EVT;
+
+      DEVICE_IOT_CONFIG_ADDR_SET_HEX_IF_GREATER(
+          p_scb->peer_addr, IOT_CONF_KEY_HFP_VERSION, p_scb->peer_version,
+          IOT_CONF_BYTE_NUM_2);
     }
   }
 
@@ -269,6 +274,9 @@ void bta_ag_disc_acp_res(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
       data.disc_result.status == SDP_DB_FULL) {
     /* get attributes */
     bta_ag_sdp_find_attr(p_scb, bta_ag_svc_mask[p_scb->conn_service]);
+    DEVICE_IOT_CONFIG_ADDR_SET_HEX_IF_GREATER(
+        p_scb->peer_addr, IOT_CONF_KEY_HFP_VERSION, p_scb->peer_version,
+        IOT_CONF_BYTE_NUM_2);
   }
 
   /* free discovery db */
@@ -461,7 +469,7 @@ void bta_ag_rfc_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
             p_scb->peer_addr.ToString(), HFP_VERSION_CONFIG_KEY,
             (uint8_t*)&p_scb->peer_version, &version_value_size)) {
       APPL_TRACE_WARNING("%s: Failed read cached peer HFP version for %s",
-                         __func__, p_scb->peer_addr.ToString().c_str());
+                         __func__, ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
       p_scb->peer_version = HFP_HSP_VERSION_UNKNOWN;
     }
     size_t sdp_features_size = sizeof(p_scb->peer_sdp_features);
@@ -471,12 +479,12 @@ void bta_ag_rfc_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
       bool sdp_wbs_support = p_scb->peer_sdp_features & BTA_AG_FEAT_WBS_SUPPORT;
       if (!p_scb->received_at_bac && sdp_wbs_support) {
         p_scb->codec_updated = true;
-        p_scb->peer_codecs = BTM_SCO_CODEC_CVSD & BTM_SCO_CODEC_MSBC;
+        p_scb->peer_codecs = BTM_SCO_CODEC_CVSD | BTM_SCO_CODEC_MSBC;
         p_scb->sco_codec = UUID_CODEC_MSBC;
       }
     } else {
       APPL_TRACE_WARNING("%s: Failed read cached peer HFP SDP features for %s",
-                         __func__, p_scb->peer_addr.ToString().c_str());
+                         __func__, ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
     }
   }
 
@@ -520,6 +528,7 @@ void bta_ag_rfc_acp_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
 
   /* get bd addr of peer */
   uint16_t lcid = 0;
+  uint16_t hfp_version = 0;
   RawAddress dev_addr = RawAddress::kEmpty;
   int status = PORT_CheckConnection(data.rfc.port_handle, &dev_addr, &lcid);
   if (status != PORT_SUCCESS) {
@@ -583,6 +592,16 @@ void bta_ag_rfc_acp_open(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
   bta_ag_close_servers(
       p_scb, (p_scb->reg_services & ~bta_ag_svc_mask[p_scb->conn_service]));
 
+  size_t version_value_size = sizeof(hfp_version);
+  bool get_version =
+      btif_config_get_bin(p_scb->peer_addr.ToString(), HFP_VERSION_CONFIG_KEY,
+                          (uint8_t*)&hfp_version, &version_value_size);
+
+  if (p_scb->conn_service == BTA_AG_HFP && get_version) {
+    DEVICE_IOT_CONFIG_ADDR_SET_HEX_IF_GREATER(p_scb->peer_addr,
+                                              IOT_CONF_KEY_HFP_VERSION,
+                                              hfp_version, IOT_CONF_BYTE_NUM_2);
+  }
   /* do service discovery to get features */
   bta_ag_do_disc(p_scb, bta_ag_svc_mask[p_scb->conn_service]);
 

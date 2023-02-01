@@ -162,10 +162,6 @@ typedef struct tBTM_DEVCB {
 
   DEV_CLASS dev_class; /* Local device class                   */
 
-  tBTM_CMPL_CB*
-      p_le_test_cmd_cmpl_cb; /* Callback function to be called when
-                             LE test mode command has been sent successfully */
-
   RawAddress read_tx_pwr_addr; /* read TX power target address     */
 
   tBTM_BLE_LOCAL_ID_KEYS id_keys;   /* local BLE ID keys */
@@ -341,7 +337,12 @@ typedef struct tBTM_CB {
 #endif
     security_mode = initial_security_mode;
     pairing_bda = RawAddress::kAny;
-    sec_dev_rec = list_new(osi_free);
+    sec_dev_rec = list_new([](void* ptr) {
+      // Invoke destructor for all record objects and reset to default
+      // initialized value so memory may be properly freed
+      *((tBTM_SEC_DEV_REC*)ptr) = {};
+      osi_free(ptr);
+    });
 
     /* Initialize BTM component structures */
     btm_inq_vars.Init(); /* Inquiry Database and Structures */

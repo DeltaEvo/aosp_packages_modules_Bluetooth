@@ -36,8 +36,7 @@ rust_library {
         "libnum_derive",
     ],
     apex_available: [
-        "//apex_available:platform",
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
     target: {
@@ -55,7 +54,10 @@ rust_library {
 
 rust_test_host {
     name: "libbluetooth_rs_test",
-    defaults: ["gd_rust_defaults"],
+    defaults: [
+        "gd_rust_defaults",
+        "mts_defaults",
+    ],
     srcs: ["src/lib.rs"],
     test_suites: ["general-tests"],
     edition: "2018",
@@ -101,7 +103,11 @@ genrule {
 
 cc_library_static {
     name: "libbt_hidl_hal_cxx",
-    defaults: ["rust_static_cc_lib_defaults", "gd_ffi_defaults"],
+    defaults: [
+        "rust_static_cc_lib_defaults",
+        "gd_ffi_defaults",
+        "fluoride_common_options",
+    ],
     srcs: ["src/hal/ffi/hidl.cc"],
     local_include_dirs: ["src/hal/ffi"],
     include_dirs: ["packages/modules/Bluetooth/system"],
@@ -114,8 +120,7 @@ cc_library_static {
         "libutils",
     ],
     apex_available: [
-        "//apex_available:platform",
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }

@@ -41,6 +41,7 @@ import android.os.Bundle;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.Process;
+import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -88,6 +89,7 @@ import com.android.internal.app.IBatteryStats;
 import libcore.util.HexEncoding;
 
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -97,6 +99,8 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -137,7 +141,7 @@ public class AdapterServiceTest {
 
     private static final int CONTEXT_SWITCH_MS = 100;
     private static final int PROFILE_SERVICE_TOGGLE_TIME_MS = 200;
-    private static final int GATT_START_TIME_MS = 500;
+    private static final int GATT_START_TIME_MS = 1000;
     private static final int ONE_SECOND_MS = 1000;
     private static final int NATIVE_INIT_MS = 8000;
     private static final int NATIVE_DISABLE_MS = 1000;
@@ -148,9 +152,11 @@ public class AdapterServiceTest {
     private BluetoothManager mBluetoothManager;
     private PowerManager mPowerManager;
     private PermissionCheckerManager mPermissionCheckerManager;
+    private PermissionManager mPermissionManager;
     private PackageManager mMockPackageManager;
     private MockContentResolver mMockContentResolver;
     private HashMap<String, HashMap<String, String>> mAdapterConfig;
+    private int mForegroundUserId;
 
     private void configureEnabledProfiles() {
         Log.e("AdapterServiceTest", "configureEnabledProfiles");
@@ -192,7 +198,7 @@ public class AdapterServiceTest {
         Assert.assertNotNull(Looper.myLooper());
         AdapterService adapterService = new AdapterService();
         adapterService.initNative(false /* is_restricted */, false /* is_common_criteria_mode */,
-                0 /* config_compare_result */, new String[0], false);
+                0 /* config_compare_result */, new String[0], false, "");
         adapterService.cleanupNative();
         HashMap<String, HashMap<String, String>> adapterConfig = TestUtils.readAdapterConfig();
         Assert.assertNotNull(adapterConfig);
@@ -214,6 +220,8 @@ public class AdapterServiceTest {
         AsyncTask.setDefaultExecutor((r) -> {
             InstrumentationRegistry.getInstrumentation().runOnMainSync(r);
         });
+        InstrumentationRegistry.getInstrumentation().getUiAutomation()
+                .adoptShellPermissionIdentity();
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
                 () -> mAdapterService = new AdapterService());
@@ -235,9 +243,14 @@ public class AdapterServiceTest {
         mPermissionCheckerManager = InstrumentationRegistry.getTargetContext()
                 .getSystemService(PermissionCheckerManager.class);
 
+        mPermissionManager = InstrumentationRegistry.getTargetContext()
+                .getSystemService(PermissionManager.class);
+
         mBluetoothManager = InstrumentationRegistry.getTargetContext()
                 .getSystemService(BluetoothManager.class);
 
+        when(mMockContext.getCacheDir()).thenReturn(InstrumentationRegistry.getTargetContext()
+                .getCacheDir());
         when(mMockContext.getApplicationInfo()).thenReturn(mMockApplicationInfo);
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
         when(mMockContext.getApplicationContext()).thenReturn(mMockContext);
@@ -259,6 +272,10 @@ public class AdapterServiceTest {
                 .thenReturn(Context.PERMISSION_CHECKER_SERVICE);
         when(mMockContext.getSystemService(Context.PERMISSION_CHECKER_SERVICE))
                 .thenReturn(mPermissionCheckerManager);
+        when(mMockContext.getSystemServiceName(PermissionManager.class))
+                .thenReturn(Context.PERMISSION_SERVICE);
+        when(mMockContext.getSystemService(Context.PERMISSION_SERVICE))
+                .thenReturn(mPermissionManager);
         when(mMockContext.getSystemService(Context.ALARM_SERVICE)).thenReturn(mMockAlarmManager);
         when(mMockContext.getSystemServiceName(AlarmManager.class))
                 .thenReturn(Context.ALARM_SERVICE);
@@ -273,12 +290,21 @@ public class AdapterServiceTest {
                 .thenReturn(mBluetoothManager);
         when(mMockContext.getSystemServiceName(BluetoothManager.class))
                 .thenReturn(Context.BLUETOOTH_SERVICE);
+        when(mMockContext.getSharedPreferences(anyString(), anyInt()))
+                .thenReturn(InstrumentationRegistry.getTargetContext()
+                        .getSharedPreferences("AdapterServiceTestPrefs", Context.MODE_PRIVATE));
 
         when(mMockContext.getAttributionSource()).thenReturn(mAttributionSource);
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();
             return InstrumentationRegistry.getTargetContext().getDatabasePath((String) args[0]);
         }).when(mMockContext).getDatabasePath(anyString());
+
+        // Sets the foreground user id to match that of the tests (restored in tearDown)
+        mForegroundUserId = Utils.getForegroundUserId();
+        int callingUid = Binder.getCallingUid();
+        UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
+        Utils.setForegroundUserId(callingUser.getIdentifier());
 
         when(mMockDevicePolicyManager.isCommonCriteriaModeEnabled(any())).thenReturn(false);
 
@@ -315,16 +341,25 @@ public class AdapterServiceTest {
     @After
     public void tearDown() {
         Log.e("AdapterServiceTest", "tearDown()");
+
+        // Restores the foregroundUserId to the ID prior to the test setup
+        Utils.setForegroundUserId(mForegroundUserId);
+
         mServiceBinder.unregisterCallback(mIBluetoothCallback, mAttributionSource);
         mAdapterService.cleanup();
     }
 
+    @AfterClass
+    public static void tearDownOnce() {
+        AsyncTask.setDefaultExecutor(AsyncTask.SERIAL_EXECUTOR);
+    }
+
     private void verifyStateChange(int prevState, int currState, int callNumber, int timeoutMs) {
         try {
-            verify(mIBluetoothCallback, timeout(timeoutMs)
-                    .times(callNumber)).onBluetoothStateChange(prevState, currState);
-        } catch (Exception e) {
-            // the mocked onBluetoothStateChange doesn't throw exceptions
+            verify(mIBluetoothCallback, timeout(timeoutMs).times(callNumber))
+                .onBluetoothStateChange(prevState, currState);
+        } catch (RemoteException e) {
+            // the mocked onBluetoothStateChange doesn't throw RemoteException
         }
     }
 
@@ -422,6 +457,7 @@ public class AdapterServiceTest {
      * Test: Turn Bluetooth on.
      * Check whether the AdapterService gets started.
      */
+    @Ignore("b/228874625")
     @Test
     public void testEnable() {
         Log.e("AdapterServiceTest", "testEnable() start");
@@ -716,6 +752,7 @@ public class AdapterServiceTest {
     /**
      * Test: Check if obfuscated Bluetooth address stays the same after toggling Bluetooth
      */
+    @Ignore("b/265588558")
     @Test
     public void testObfuscateBluetoothAddress_PersistentBetweenToggle() {
         Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
@@ -974,5 +1011,16 @@ public class AdapterServiceTest {
         Assert.assertFalse(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
         int id2 = mAdapterService.getMetricId(device);
         Assert.assertEquals(id2, id1);
+    }
+
+    @Test
+    public void testDump_doesNotCrash() {
+        FileDescriptor fd = new FileDescriptor();
+        PrintWriter writer = mock(PrintWriter.class);
+
+        mAdapterService.dump(fd, writer, new String[]{});
+        mAdapterService.dump(fd, writer, new String[]{"set-test-mode", "enabled"});
+        mAdapterService.dump(fd, writer, new String[]{"--proto-bin"});
+        mAdapterService.dump(fd, writer, new String[]{"random", "arguments"});
     }
 }

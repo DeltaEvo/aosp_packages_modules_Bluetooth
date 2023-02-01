@@ -75,10 +75,12 @@ import java.util.Objects;
         public long timestamp;
         public boolean isOpportunisticScan;
         public boolean isTimeout;
+        public boolean isDowngraded;
         public boolean isBackgroundScan;
         public boolean isFilterScan;
         public boolean isCallbackScan;
         public boolean isBatchScan;
+        public boolean isAutoBatchScan;
         public int results;
         public int scannerId;
         public int scanMode;
@@ -91,10 +93,12 @@ import java.util.Objects;
             this.timestamp = timestamp;
             this.isOpportunisticScan = false;
             this.isTimeout = false;
+            this.isDowngraded = false;
             this.isBackgroundScan = false;
             this.isFilterScan = isFilterScan;
             this.isCallbackScan = isCallbackScan;
             this.isBatchScan = false;
+            this.isAutoBatchScan = false;
             this.scanMode = scanMode;
             this.scanCallbackType = scanCallbackType;
             this.results = 0;
@@ -163,12 +167,36 @@ import java.util.Objects;
         results++;
     }
 
-    boolean isScanning() {
+    synchronized boolean isScanning() {
         return !mOngoingScans.isEmpty();
     }
 
-    LastScan getScanFromScannerId(int scannerId) {
+    synchronized LastScan getScanFromScannerId(int scannerId) {
         return mOngoingScans.get(scannerId);
+    }
+
+    synchronized boolean isScanTimeout(int scannerId) {
+        LastScan scan = getScanFromScannerId(scannerId);
+        if (scan == null) {
+            return false;
+        }
+        return scan.isTimeout;
+    }
+
+    synchronized boolean isScanDowngraded(int scannerId) {
+        LastScan scan = getScanFromScannerId(scannerId);
+        if (scan == null) {
+            return false;
+        }
+        return scan.isDowngraded;
+    }
+
+    synchronized boolean isAutoBatchScan(int scannerId) {
+        LastScan scan = getScanFromScannerId(scannerId);
+        if (scan == null) {
+            return false;
+        }
+        return scan.isAutoBatchScan;
     }
 
     synchronized void recordScanStart(ScanSettings settings, List<ScanFilter> filters,
@@ -334,6 +362,24 @@ import java.util.Objects;
         }
     }
 
+    synchronized void setScanDowngrade(int scannerId, boolean isDowngrade) {
+        if (!isScanning()) {
+            return;
+        }
+
+        LastScan scan = getScanFromScannerId(scannerId);
+        if (scan != null) {
+            scan.isDowngraded = isDowngrade;
+        }
+    }
+
+    synchronized void setAutoBatchScan(int scannerId, boolean isBatchScan) {
+        LastScan scan = getScanFromScannerId(scannerId);
+        if (scan != null) {
+            scan.isAutoBatchScan = isBatchScan;
+        }
+    }
+
     synchronized boolean isScanningTooFrequently() {
         if (mLastScans.size() < mAdapterService.getScanQuotaCount()) {
             return false;
@@ -448,6 +494,8 @@ import java.util.Objects;
                 return "FIRST_MATCH";
             case ScanSettings.CALLBACK_TYPE_MATCH_LOST:
                 return "LOST";
+            case ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH:
+                return "ALL_MATCHES_AUTO_BATCH";
             default:
                 return callbackType == (ScanSettings.CALLBACK_TYPE_FIRST_MATCH
                     | ScanSettings.CALLBACK_TYPE_MATCH_LOST) ? "[FIRST_MATCH | LOST]" : "UNKNOWN: "
@@ -562,6 +610,8 @@ import java.util.Objects;
                 }
                 if (scan.isBatchScan) {
                     sb.append("Batch Scan");
+                } else if (scan.isAutoBatchScan) {
+                    sb.append("Auto Batch Scan");
                 } else {
                     sb.append("Regular Scan");
                 }
@@ -610,6 +660,8 @@ import java.util.Objects;
                 }
                 if (scan.isBatchScan) {
                     sb.append("Batch Scan");
+                } else if (scan.isAutoBatchScan) {
+                    sb.append("Auto Batch Scan");
                 } else {
                     sb.append("Regular Scan");
                 }

@@ -27,14 +27,14 @@
  ***********************************************************************************/
 #define LOG_TAG "BTIF_HD"
 
+#include "btif/include/btif_hd.h"
+
 #include <cstdint>
 
 #include "bt_target.h"  // Must be first to define build configuration
-
 #include "bta/include/bta_hd_api.h"
 #include "btif/include/btif_common.h"
-#include "btif/include/btif_hd.h"
-#include "btif/include/btif_storage.h"
+#include "btif/include/btif_profile_storage.h"
 #include "btif/include/btif_util.h"
 #include "include/hardware/bt_hd.h"
 #include "osi/include/allocator.h"
@@ -66,7 +66,7 @@ static tBTA_HD_APP_INFO app_info;
 static tBTA_HD_QOS_INFO in_qos;
 static tBTA_HD_QOS_INFO out_qos;
 
-static void intr_data_copy_cb(uint16_t event, char* p_dst, char* p_src) {
+static void intr_data_copy_cb(uint16_t event, char* p_dst, const char* p_src) {
   tBTA_HD_INTR_DATA* p_dst_data = (tBTA_HD_INTR_DATA*)p_dst;
   tBTA_HD_INTR_DATA* p_src_data = (tBTA_HD_INTR_DATA*)p_src;
   uint8_t* p_data;
@@ -84,7 +84,7 @@ static void intr_data_copy_cb(uint16_t event, char* p_dst, char* p_src) {
   p_dst_data->p_data = p_data;
 }
 
-static void set_report_copy_cb(uint16_t event, char* p_dst, char* p_src) {
+static void set_report_copy_cb(uint16_t event, char* p_dst, const char* p_src) {
   tBTA_HD_SET_REPORT* p_dst_data = (tBTA_HD_SET_REPORT*)p_dst;
   tBTA_HD_SET_REPORT* p_src_data = (tBTA_HD_SET_REPORT*)p_src;
   uint8_t* p_data;
@@ -200,7 +200,7 @@ static void btif_hd_upstreams_evt(uint16_t event, char* p_param) {
     case BTA_HD_OPEN_EVT: {
       RawAddress* addr = (RawAddress*)&p_data->conn.bda;
       BTIF_TRACE_WARNING("BTA_HD_OPEN_EVT, address=%s",
-                         addr->ToString().c_str());
+                         ADDRESS_TO_LOGGABLE_CSTR(*addr));
       /* Check if the connection is from hid host and not hid device */
       if (check_cod_hid(addr)) {
         /* Incoming connection from hid device, reject it */
@@ -393,14 +393,9 @@ static bt_status_t register_app(bthd_app_param_t* p_app_param,
 
   if (btif_hd_cb.app_registered) {
     BTIF_TRACE_WARNING("%s: application already registered", __func__);
-    return BT_STATUS_BUSY;
+    return BT_STATUS_DONE;
   }
 
-  if (strlen(p_app_param->name) >= BTIF_HD_APP_NAME_LEN ||
-      strlen(p_app_param->description) >= BTIF_HD_APP_DESCRIPTION_LEN ||
-      strlen(p_app_param->provider) >= BTIF_HD_APP_PROVIDER_LEN) {
-    android_errorWriteLog(0x534e4554, "113037220");
-  }
   app_info.p_name = (char*)osi_calloc(BTIF_HD_APP_NAME_LEN);
   strlcpy(app_info.p_name, p_app_param->name, BTIF_HD_APP_NAME_LEN);
   app_info.p_description = (char*)osi_calloc(BTIF_HD_APP_DESCRIPTION_LEN);

@@ -23,30 +23,92 @@
 #include "device/include/esco_parameters.h"
 #include "stack/include/btm_api_types.h"
 
+#define BTM_MSBC_CODE_SIZE 240
+
 constexpr uint16_t kMaxScoLinks = static_cast<uint16_t>(BTM_MAX_SCO_LINKS);
 
-// SCO-over-HCI audio related definitions
+/* SCO-over-HCI audio related definitions */
 namespace bluetooth::audio::sco {
 
-// Initialize SCO-over-HCI socket (UIPC); the client is audio server.
+/* Initialize SCO-over-HCI socket (UIPC); the client is audio server */
 void init();
 
-// Open the socket when there is SCO connection open
+/* Open the socket when there is SCO connection open */
 void open();
 
-// Clean up the socket when the SCO connection is done
+/* Clean up the socket when the SCO connection is done */
 void cleanup();
 
-// Read from the socket (audio server) for SCO Tx
+/* Read PCM data from the socket (audio server) for SCO Tx */
 size_t read(uint8_t* p_buf, uint32_t len);
 
-// Write to the socket from SCO Rx
+/* Write PCM data to the socket from SCO Rx */
 size_t write(const uint8_t* buf, uint32_t len);
 }  // namespace bluetooth::audio::sco
 
-/* Define the structures needed by sco
- */
+/* SCO-over-HCI audio HFP WBS related definitions */
+namespace bluetooth::audio::sco::wbs {
 
+/* Initialize struct used for storing WBS related information.
+ * Args:
+ *    pkt_size - Length of the SCO packet. It is determined based on the BT-USB
+ *    adapter's capability and alt mode setting. The value should be queried
+ *    from HAL interface. It will be used to determine the size of the SCO
+ *    packet buffer. Currently, the stack only supports 60 and 72.
+ * Returns:
+ *    The selected packet size. Will fallback to the typical mSBC packet
+ *    length(60) if the pkt_size argument is not supported.
+ */
+size_t init(size_t pkt_size);
+
+/* Clean up when the SCO connection is done */
+void cleanup();
+
+/* Try to enqueue a packet to a buffer.
+ * Args:
+ *    data - Pointer to received packet data bytes.
+ *    pkt_size - Length of input packet. Passing packet with inconsistent size
+ *        from the pkt_size set in init() will fail the call.
+ * Returns:
+ *    The length of enqueued bytes. 0 if failed.
+ */
+size_t enqueue_packet(const uint8_t* data, size_t pkt_size);
+
+/* Try to decode mSBC frames from the packets in the buffer.
+ * Args:
+ *    output - Pointer to the decoded PCM bytes caller can read from.
+ * Returns:
+ *    The length of decoded bytes. 0 if failed.
+ */
+size_t decode(const uint8_t** output);
+
+/* Try to encode PCM data into one SCO packet and put the packets in the buffer.
+ * Args:
+ *    data - Pointer to the input PCM bytes for the encoder to encode.
+ *    len - Length of the input data.
+ * Returns:
+ *    The length of input data that is encoded. 0 if failed.
+ */
+size_t encode(int16_t* data, size_t len);
+
+/* Dequeue a SCO packet with encoded mSBC data if possible. The length of the
+ * packet is determined by the pkt_size set by the init().
+ * Args:
+ *    output - Pointer to output mSBC packets encoded by the encoder.
+ * Returns:
+ *    The length of dequeued packet. 0 if failed.
+ */
+size_t dequeue_packet(const uint8_t** output);
+
+}  // namespace bluetooth::audio::sco::wbs
+
+#ifndef CASE_RETURN_TEXT
+#define CASE_RETURN_TEXT(code) \
+  case code:                   \
+    return #code
+#endif
+
+/* Define the structures needed by sco */
 typedef enum : uint16_t {
   SCO_ST_UNUSED = 0,
   SCO_ST_LISTENING = 1,
@@ -61,26 +123,22 @@ typedef enum : uint16_t {
 
 inline std::string sco_state_text(const tSCO_STATE& state) {
   switch (state) {
-    case SCO_ST_UNUSED:
-      return std::string("unused");
-    case SCO_ST_LISTENING:
-      return std::string("listening");
-    case SCO_ST_W4_CONN_RSP:
-      return std::string("connect_response");
-    case SCO_ST_CONNECTING:
-      return std::string("connecting");
-    case SCO_ST_CONNECTED:
-      return std::string("connected");
-    case SCO_ST_DISCONNECTING:
-      return std::string("disconnecting");
-    case SCO_ST_PEND_UNPARK:
-      return std::string("pending_unpark");
-    case SCO_ST_PEND_ROLECHANGE:
-      return std::string("pending_role_change");
-    case SCO_ST_PEND_MODECHANGE:
-      return std::string("pending_mode_change");
+    CASE_RETURN_TEXT(SCO_ST_UNUSED);
+    CASE_RETURN_TEXT(SCO_ST_LISTENING);
+    CASE_RETURN_TEXT(SCO_ST_W4_CONN_RSP);
+    CASE_RETURN_TEXT(SCO_ST_CONNECTING);
+    CASE_RETURN_TEXT(SCO_ST_CONNECTED);
+    CASE_RETURN_TEXT(SCO_ST_DISCONNECTING);
+    CASE_RETURN_TEXT(SCO_ST_PEND_UNPARK);
+    CASE_RETURN_TEXT(SCO_ST_PEND_ROLECHANGE);
+    CASE_RETURN_TEXT(SCO_ST_PEND_MODECHANGE);
+    default:
+      return std::string("unknown_sco_state: ") +
+       std::to_string(static_cast<uint16_t>(state));
   }
 }
+
+#undef CASE_RETURN_TEXT
 
 /* Define the structure that contains (e)SCO data */
 typedef struct {
@@ -90,8 +148,7 @@ typedef struct {
   uint8_t hci_status;
 } tBTM_ESCO_INFO;
 
-/* Define the structure used for SCO Management
- */
+/* Define the structure used for SCO Management */
 typedef struct {
   tBTM_ESCO_INFO esco;    /* Current settings             */
   tBTM_SCO_CB* p_conn_cb; /* Callback for when connected  */
@@ -161,8 +218,8 @@ typedef struct {
 extern void btm_sco_chk_pend_rolechange(uint16_t hci_handle);
 extern void btm_sco_disc_chk_pend_for_modechange(uint16_t hci_handle);
 
-// Visible for test only
+/* Visible for test only */
 BT_HDR* btm_sco_make_packet(std::vector<uint8_t> data, uint16_t sco_handle);
 
-// Send a SCO packet
+/* Send a SCO packet */
 void btm_send_sco_packet(std::vector<uint8_t> data);

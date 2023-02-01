@@ -48,8 +48,11 @@ import android.os.Process;
 import android.text.format.Formatter;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
+
+import com.google.common.annotations.VisibleForTesting;
 
 import java.util.HashMap;
 
@@ -58,7 +61,7 @@ import java.util.HashMap;
  * where there is an ongoing transfer, incoming transfer need confirm and
  * complete (successful or failed) transfer.
  */
-class BluetoothOppNotification {
+public class BluetoothOppNotification {
     private static final String TAG = "BluetoothOppNotification";
     private static final boolean V = Constants.VERBOSE;
 
@@ -111,9 +114,11 @@ class BluetoothOppNotification {
 
     public static final int NOTIFICATION_ID_PROGRESS = -1000004;
 
-    private static final int NOTIFICATION_ID_OUTBOUND_COMPLETE = -1000005;
+    @VisibleForTesting
+    static final int NOTIFICATION_ID_OUTBOUND_COMPLETE = -1000005;
 
-    private static final int NOTIFICATION_ID_INBOUND_COMPLETE = -1000006;
+    @VisibleForTesting
+    static final int NOTIFICATION_ID_INBOUND_COMPLETE = -1000006;
 
     private boolean mUpdateCompleteNotification = true;
 
@@ -147,7 +152,7 @@ class BluetoothOppNotification {
      * @param ctx The context to use to obtain access to the Notification
      *            Service
      */
-    BluetoothOppNotification(Context ctx) {
+    public BluetoothOppNotification(Context ctx) {
         mContext = ctx;
         mNotificationMgr = mContext.getSystemService(NotificationManager.class);
         mNotificationChannel = new NotificationChannel(OPP_NOTIFICATION_CHANNEL,
@@ -242,11 +247,11 @@ class BluetoothOppNotification {
         }
     }
 
-    private void updateActiveNotification() {
+    @VisibleForTesting
+    void updateActiveNotification() {
         // Active transfers
-        Cursor cursor =
-                mContentResolver.query(BluetoothShare.CONTENT_URI, null, WHERE_RUNNING, null,
-                        BluetoothShare._ID);
+        Cursor cursor = BluetoothMethodProxy.getInstance().contentResolverQuery(mContentResolver,
+                BluetoothShare.CONTENT_URI, null, WHERE_RUNNING, null, BluetoothShare._ID);
         if (cursor == null) {
             return;
         }
@@ -388,16 +393,16 @@ class BluetoothOppNotification {
             b.setLocalOnly(true);
 
             Intent intent = new Intent(Constants.ACTION_LIST);
-            intent.setClassName(Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+            intent.setClassName(mContext, BluetoothOppReceiver.class.getName());
             intent.setDataAndNormalize(Uri.parse(BluetoothShare.CONTENT_URI + "/" + item.id));
-
             b.setContentIntent(PendingIntent.getBroadcast(mContext, 0, intent,
                         PendingIntent.FLAG_IMMUTABLE));
             mNotificationMgr.notify(NOTIFICATION_ID_PROGRESS, b.build());
         }
     }
 
-    private void updateCompletedNotification() {
+    @VisibleForTesting
+    void updateCompletedNotification() {
         long timeStamp = 0;
         int outboundSuccNumber = 0;
         int outboundFailNumber = 0;
@@ -407,9 +412,9 @@ class BluetoothOppNotification {
         int inboundFailNumber = 0;
 
         // Creating outbound notification
-        Cursor cursor =
-                mContentResolver.query(BluetoothShare.CONTENT_URI, null, WHERE_COMPLETED_OUTBOUND,
-                        null, BluetoothShare.TIMESTAMP + " DESC");
+        Cursor cursor = BluetoothMethodProxy.getInstance()
+                .contentResolverQuery(mContentResolver, BluetoothShare.CONTENT_URI, null,
+                        WHERE_COMPLETED_OUTBOUND, null, BluetoothShare.TIMESTAMP + " DESC");
         if (cursor == null) {
             return;
         }
@@ -441,9 +446,9 @@ class BluetoothOppNotification {
             String caption = BluetoothOppUtility.formatResultText(outboundSuccNumber,
                     outboundFailNumber, mContext);
             Intent contentIntent = new Intent(Constants.ACTION_OPEN_OUTBOUND_TRANSFER).setClassName(
-                    Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+                    mContext, BluetoothOppReceiver.class.getName());
             Intent deleteIntent = new Intent(Constants.ACTION_COMPLETE_HIDE).setClassName(
-                    Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+                    mContext, BluetoothOppReceiver.class.getName());
             Notification outNoti =
                     new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL).setOnlyAlertOnce(
                             true)
@@ -455,8 +460,6 @@ class BluetoothOppNotification {
                                             android.R.color
                                                     .system_notification_accent_color,
                                             mContext.getTheme()))
-                            // TODO(b/171825892) Please replace FLAG_MUTABLE_UNAUDITED below
-                            // with either FLAG_IMMUTABLE (recommended) or FLAG_MUTABLE.
                             .setContentIntent(
                                     PendingIntent.getBroadcast(mContext, 0, contentIntent,
                                         PendingIntent.FLAG_IMMUTABLE))
@@ -477,8 +480,9 @@ class BluetoothOppNotification {
         }
 
         // Creating inbound notification
-        cursor = mContentResolver.query(BluetoothShare.CONTENT_URI, null, WHERE_COMPLETED_INBOUND,
-                null, BluetoothShare.TIMESTAMP + " DESC");
+        cursor = BluetoothMethodProxy.getInstance()
+                .contentResolverQuery(mContentResolver, BluetoothShare.CONTENT_URI, null,
+                        WHERE_COMPLETED_INBOUND, null, BluetoothShare.TIMESTAMP + " DESC");
         if (cursor == null) {
             return;
         }
@@ -507,9 +511,9 @@ class BluetoothOppNotification {
             String caption = BluetoothOppUtility.formatResultText(inboundSuccNumber,
                     inboundFailNumber, mContext);
             Intent contentIntent = new Intent(Constants.ACTION_OPEN_INBOUND_TRANSFER).setClassName(
-                    Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+                    mContext, BluetoothOppReceiver.class.getName());
             Intent deleteIntent = new Intent(Constants.ACTION_COMPLETE_HIDE).setClassName(
-                    Constants.THIS_PACKAGE_NAME, BluetoothOppReceiver.class.getName());
+                    mContext, BluetoothOppReceiver.class.getName());
             Notification inNoti =
                     new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL).setOnlyAlertOnce(
                             true)
@@ -542,9 +546,10 @@ class BluetoothOppNotification {
         }
     }
 
-    private void updateIncomingFileConfirmNotification() {
-        Cursor cursor =
-                mContentResolver.query(BluetoothShare.CONTENT_URI, null, WHERE_CONFIRM_PENDING,
+    @VisibleForTesting
+    void updateIncomingFileConfirmNotification() {
+        Cursor cursor = BluetoothMethodProxy.getInstance().contentResolverQuery(mContentResolver,
+                BluetoothShare.CONTENT_URI, null, WHERE_CONFIRM_PENDING,
                         null, BluetoothShare._ID);
 
         if (cursor == null) {
@@ -557,22 +562,18 @@ class BluetoothOppNotification {
             Uri contentUri = Uri.parse(BluetoothShare.CONTENT_URI + "/" + info.mID);
             String fileNameSafe = info.mFileName.replaceAll("\\s", "_");
             Intent baseIntent = new Intent().setDataAndNormalize(contentUri)
-                    .setClassName(Constants.THIS_PACKAGE_NAME,
+                    .setClassName(mContext,
                             BluetoothOppReceiver.class.getName());
             Notification.Action actionDecline =
                     new Notification.Action.Builder(Icon.createWithResource(mContext,
                             R.drawable.ic_decline),
                             mContext.getText(R.string.incoming_file_confirm_cancel),
-                            // TODO(b/171825892) Please replace FLAG_MUTABLE_UNAUDITED below
-                            // with either FLAG_IMMUTABLE (recommended) or FLAG_MUTABLE.
                             PendingIntent.getBroadcast(mContext, 0,
                                     new Intent(baseIntent).setAction(Constants.ACTION_DECLINE),
                                     PendingIntent.FLAG_IMMUTABLE)).build();
             Notification.Action actionAccept = new Notification.Action.Builder(
                     Icon.createWithResource(mContext,R.drawable.ic_accept),
                     mContext.getText(R.string.incoming_file_confirm_ok),
-                    // TODO(b/171825892) Please replace FLAG_MUTABLE_UNAUDITED below
-                    // with either FLAG_IMMUTABLE (recommended) or FLAG_MUTABLE.
                     PendingIntent.getBroadcast(mContext, 0,
                             new Intent(baseIntent).setAction(Constants.ACTION_ACCEPT),
                             PendingIntent.FLAG_IMMUTABLE)).build();
@@ -583,8 +584,6 @@ class BluetoothOppNotification {
                             .setWhen(info.mTimeStamp)
                             .addAction(actionDecline)
                             .addAction(actionAccept)
-                            // TODO(b/171825892) Please replace FLAG_MUTABLE_UNAUDITED below
-                            // with either FLAG_IMMUTABLE (recommended) or FLAG_MUTABLE.
                             .setContentIntent(PendingIntent.getBroadcast(mContext, 0,
                                     new Intent(baseIntent).setAction(
                                             Constants.ACTION_INCOMING_FILE_CONFIRM),
@@ -612,8 +611,6 @@ class BluetoothOppNotification {
                             true)
                             .setOngoing(true)
                             .setWhen(info.mTimeStamp)
-                            // TODO(b/171825892) Please replace FLAG_MUTABLE_UNAUDITED below
-                            // with either FLAG_IMMUTABLE (recommended) or FLAG_MUTABLE.
                             .setContentIntent(PendingIntent.getBroadcast(mContext, 0,
                                     new Intent(baseIntent).setAction(
                                             Constants.ACTION_INCOMING_FILE_CONFIRM),

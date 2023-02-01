@@ -56,23 +56,18 @@ impl Completer for BtHelper {
     ) -> Result<(usize, Vec<String>), ReadlineError> {
         let slice = &line[..pos];
         let candidates = self.get_candidates(slice.to_string().clone());
-        let mut completions = candidates
-            .iter()
-            .map(|c| {
-                if candidates.len() == 1 {
-                    // If only one candidate, Completer will replace the input by
-                    // the returned string. Return the complete string here to avoid
-                    // input being replaced by the suggested word.
-                    slice.to_string() + &c.suggest_word[c.matched_len..] + " "
-                } else {
-                    c.suggest_word.clone()
-                }
-            })
-            .collect::<Vec<String>>();
+        let mut completions =
+            candidates.iter().map(|c| c.suggest_word.clone() + " ").collect::<Vec<String>>();
 
         completions.sort();
 
-        Ok((0, completions))
+        // |start| points to the starting position of the current token
+        let start = match slice.rfind(' ') {
+            Some(x) => x + 1,
+            None => 0,
+        };
+
+        Ok((start, completions))
     }
 }
 
@@ -89,10 +84,17 @@ impl BtHelper {
         let mut result = HashSet::<CommandCandidate>::new();
 
         for rule in self.command_rules.iter() {
-            for (i, (rule_token, cmd_token)) in rule.split(" ").zip(cmd.split(" ")).enumerate() {
+            let n_splits = cmd.split(" ").count();
+            // The tokens should have empty strings removed from them, except the last one.
+            let tokens = cmd
+                .split(" ")
+                .enumerate()
+                .filter_map(|(i, token)| (i == n_splits - 1 || token != "").then(|| token));
+
+            let n_cmd = tokens.clone().count();
+            for (i, (rule_token, cmd_token)) in rule.split(" ").zip(tokens).enumerate() {
                 let mut candidates = Vec::<String>::new();
                 let mut match_some = false;
-                let n_cmd = cmd.split(" ").count();
 
                 for opt in rule_token.replace("<", "").replace(">", "").split("|") {
                     if opt.eq("address") {
@@ -176,16 +178,16 @@ impl AsyncEditor {
     pub(crate) fn new(
         command_rules: Vec<String>,
         client_context: Arc<Mutex<ClientContext>>,
-    ) -> AsyncEditor {
+    ) -> rustyline::Result<AsyncEditor> {
         let builder = Config::builder()
             .auto_add_history(true)
             .history_ignore_dups(true)
             .completion_type(CompletionType::List);
         let config = builder.build();
-        let mut rl = rustyline::Editor::with_config(config);
+        let mut rl = rustyline::Editor::with_config(config)?;
         let helper = BtHelper { command_rules, client_context };
         rl.set_helper(Some(helper));
-        AsyncEditor { rl: Arc::new(Mutex::new(rl)) }
+        Ok(AsyncEditor { rl: Arc::new(Mutex::new(rl)) })
     }
 
     /// Does async readline().

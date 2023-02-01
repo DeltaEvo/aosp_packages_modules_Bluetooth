@@ -3,11 +3,15 @@
 //! This crate provides the API implementation of the Fluoride/GD Bluetooth
 //! stack, independent of any RPC projection.
 
-#[macro_use]
-extern crate num_derive;
-
+pub mod async_helper;
+pub mod battery_manager;
+pub mod battery_provider_manager;
+pub mod battery_service;
 pub mod bluetooth;
+pub mod bluetooth_admin;
+pub mod bluetooth_adv;
 pub mod bluetooth_gatt;
+pub mod bluetooth_logging;
 pub mod bluetooth_media;
 pub mod callbacks;
 pub mod socket_manager;
@@ -15,26 +19,41 @@ pub mod suspend;
 pub mod uuid;
 
 use log::debug;
+use num_derive::{FromPrimitive, ToPrimitive};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::bluetooth::Bluetooth;
-use crate::bluetooth_gatt::BluetoothGatt;
+use crate::battery_manager::{BatteryManager, BatterySet};
+use crate::battery_provider_manager::BatteryProviderManager;
+use crate::battery_service::{BatteryService, BatteryServiceActions};
+use crate::bluetooth::{
+    dispatch_base_callbacks, dispatch_hid_host_callbacks, dispatch_sdp_callbacks, Bluetooth,
+    BluetoothDevice, DelayedActions, IBluetooth,
+};
+use crate::bluetooth_admin::{BluetoothAdmin, IBluetoothAdmin};
+use crate::bluetooth_gatt::{
+    dispatch_gatt_client_callbacks, dispatch_gatt_server_callbacks, dispatch_le_adv_callbacks,
+    dispatch_le_scanner_callbacks, dispatch_le_scanner_inband_callbacks, BluetoothGatt,
+};
 use crate::bluetooth_media::{BluetoothMedia, MediaActions};
 use crate::socket_manager::{BluetoothSocketManager, SocketActions};
 use crate::suspend::Suspend;
 use bt_topshim::{
-    btif::BaseCallbacks,
+    btif::{BaseCallbacks, BtTransport},
     profiles::{
-        a2dp::A2dpCallbacks, avrcp::AvrcpCallbacks, gatt::GattClientCallbacks,
-        gatt::GattScannerCallbacks, gatt::GattServerCallbacks, hfp::HfpCallbacks,
+        a2dp::A2dpCallbacks, avrcp::AvrcpCallbacks, gatt::GattAdvCallbacks,
+        gatt::GattAdvInbandCallbacks, gatt::GattClientCallbacks, gatt::GattScannerCallbacks,
+        gatt::GattScannerInbandCallbacks, gatt::GattServerCallbacks, hfp::HfpCallbacks,
         hid_host::HHCallbacks, sdp::SdpCallbacks,
     },
 };
 
 /// Message types that are sent to the stack main dispatch loop.
 pub enum Message {
+    // Shuts down the stack.
+    Shutdown,
+
     // Callbacks from libbluetooth
     A2dp(A2dpCallbacks),
     Avrcp(AvrcpCallbacks),
@@ -42,6 +61,9 @@ pub enum Message {
     GattClient(GattClientCallbacks),
     GattServer(GattServerCallbacks),
     LeScanner(GattScannerCallbacks),
+    LeScannerInband(GattScannerInbandCallbacks),
+    LeAdvInband(GattAdvInbandCallbacks),
+    LeAdv(GattAdvCallbacks),
     HidHost(HHCallbacks),
     Hfp(HfpCallbacks),
     Sdp(SdpCallbacks),
@@ -54,18 +76,54 @@ pub enum Message {
     AdapterCallbackDisconnected(u32),
     ConnectionCallbackDisconnected(u32),
 
-    // Update list of found devices and remove old instances.
-    DeviceFreshnessCheck,
+    // Some delayed actions for the adapter.
+    DelayedAdapterActions(DelayedActions),
+
+    // Follows IBluetooth's on_device_(dis)connected callback but doesn't require depending on
+    // Bluetooth.
+    OnAclConnected(BluetoothDevice, BtTransport),
+    OnAclDisconnected(BluetoothDevice),
 
     // Suspend related
     SuspendCallbackRegistered(u32),
     SuspendCallbackDisconnected(u32),
+    SuspendReady(i32),
+    ResumeReady(i32),
 
     // Scanner related
     ScannerCallbackDisconnected(u32),
 
+    // Advertising related
+    AdvertiserCallbackDisconnected(u32),
+
     SocketManagerActions(SocketActions),
     SocketManagerCallbackDisconnected(u32),
+
+    // Battery related
+    BatteryProviderManagerCallbackDisconnected(u32),
+    BatteryProviderManagerBatteryUpdated(String, BatterySet),
+    BatteryServiceCallbackDisconnected(u32),
+    BatteryService(BatteryServiceActions),
+    BatteryServiceRefresh,
+    BatteryManagerCallbackDisconnected(u32),
+
+    GattClientCallbackDisconnected(u32),
+    GattServerCallbackDisconnected(u32),
+
+    // Admin policy related
+    AdminCallbackDisconnected(u32),
+}
+
+/// Represents suspend mode of a module.
+///
+/// Being in suspend mode means that the module pauses some activities if required for suspend and
+/// some subsequent API calls will be blocked with a retryable error.
+#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Clone)]
+pub enum SuspendMode {
+    Normal = 0,
+    Suspending = 1,
+    Suspended = 2,
+    Resuming = 3,
 }
 
 /// Umbrella class for the Bluetooth stack.
@@ -82,9 +140,13 @@ impl Stack {
         mut rx: Receiver<Message>,
         bluetooth: Arc<Mutex<Box<Bluetooth>>>,
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
+        battery_service: Arc<Mutex<Box<BatteryService>>>,
+        battery_manager: Arc<Mutex<Box<BatteryManager>>>,
+        battery_provider_manager: Arc<Mutex<Box<BatteryProviderManager>>>,
         bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
         suspend: Arc<Mutex<Box<Suspend>>>,
         bluetooth_socketmgr: Arc<Mutex<Box<BluetoothSocketManager>>>,
+        bluetooth_admin: Arc<Mutex<Box<BluetoothAdmin>>>,
     ) {
         loop {
             let m = rx.recv().await;
@@ -95,6 +157,10 @@ impl Stack {
             }
 
             match m.unwrap() {
+                Message::Shutdown => {
+                    bluetooth.lock().unwrap().disable();
+                }
+
                 Message::A2dp(a) => {
                     bluetooth_media.lock().unwrap().dispatch_a2dp_callbacks(a);
                 }
@@ -104,33 +170,47 @@ impl Stack {
                 }
 
                 Message::Base(b) => {
-                    bluetooth.lock().unwrap().dispatch_base_callbacks(b);
+                    dispatch_base_callbacks(bluetooth.lock().unwrap().as_mut(), b.clone());
+                    dispatch_base_callbacks(suspend.lock().unwrap().as_mut(), b);
                 }
 
                 Message::GattClient(m) => {
-                    bluetooth_gatt.lock().unwrap().dispatch_gatt_client_callbacks(m);
+                    dispatch_gatt_client_callbacks(bluetooth_gatt.lock().unwrap().as_mut(), m);
                 }
 
                 Message::GattServer(m) => {
-                    // TODO(b/193685149): dispatch GATT server callbacks.
-                    debug!("Unhandled Message::GattServer: {:?}", m);
+                    dispatch_gatt_server_callbacks(bluetooth_gatt.lock().unwrap().as_mut(), m);
                 }
 
                 Message::LeScanner(m) => {
-                    bluetooth_gatt.lock().unwrap().dispatch_le_scanner_callbacks(m);
+                    dispatch_le_scanner_callbacks(bluetooth_gatt.lock().unwrap().as_mut(), m);
+                }
+
+                Message::LeScannerInband(m) => {
+                    dispatch_le_scanner_inband_callbacks(
+                        bluetooth_gatt.lock().unwrap().as_mut(),
+                        m,
+                    );
+                }
+
+                Message::LeAdvInband(m) => {
+                    debug!("Received LeAdvInband message: {:?}. This is unexpected!", m);
+                }
+
+                Message::LeAdv(m) => {
+                    dispatch_le_adv_callbacks(bluetooth_gatt.lock().unwrap().as_mut(), m);
                 }
 
                 Message::Hfp(hf) => {
                     bluetooth_media.lock().unwrap().dispatch_hfp_callbacks(hf);
                 }
 
-                Message::HidHost(_h) => {
-                    // TODO(abps) - Handle hid host callbacks
-                    debug!("Received HH callback");
+                Message::HidHost(h) => {
+                    dispatch_hid_host_callbacks(bluetooth.lock().unwrap().as_mut(), h);
                 }
 
                 Message::Sdp(s) => {
-                    bluetooth.lock().unwrap().dispatch_sdp_callbacks(s);
+                    dispatch_sdp_callbacks(bluetooth.lock().unwrap().as_mut(), s);
                 }
 
                 Message::Media(action) => {
@@ -149,8 +229,27 @@ impl Stack {
                     bluetooth.lock().unwrap().connection_callback_disconnected(id);
                 }
 
-                Message::DeviceFreshnessCheck => {
-                    bluetooth.lock().unwrap().trigger_freshness_check();
+                Message::DelayedAdapterActions(action) => {
+                    bluetooth.lock().unwrap().handle_delayed_actions(action);
+                }
+
+                // Any service needing an updated list of devices can have an
+                // update method triggered from here rather than needing a
+                // reference to Bluetooth.
+                Message::OnAclConnected(device, transport) => {
+                    battery_service
+                        .lock()
+                        .unwrap()
+                        .handle_action(BatteryServiceActions::Connect(device, transport));
+                }
+
+                // For battery service, use this to clean up internal handles. GATT connection is
+                // already dropped if ACL disconnect has occurred.
+                Message::OnAclDisconnected(device) => {
+                    battery_service
+                        .lock()
+                        .unwrap()
+                        .handle_action(BatteryServiceActions::Disconnect(device));
                 }
 
                 Message::SuspendCallbackRegistered(id) => {
@@ -161,8 +260,20 @@ impl Stack {
                     suspend.lock().unwrap().remove_callback(id);
                 }
 
+                Message::SuspendReady(suspend_id) => {
+                    suspend.lock().unwrap().suspend_ready(suspend_id);
+                }
+
+                Message::ResumeReady(suspend_id) => {
+                    suspend.lock().unwrap().resume_ready(suspend_id);
+                }
+
                 Message::ScannerCallbackDisconnected(id) => {
                     bluetooth_gatt.lock().unwrap().remove_scanner_callback(id);
+                }
+
+                Message::AdvertiserCallbackDisconnected(id) => {
+                    bluetooth_gatt.lock().unwrap().remove_adv_callback(id);
                 }
 
                 Message::SocketManagerActions(action) => {
@@ -170,6 +281,36 @@ impl Stack {
                 }
                 Message::SocketManagerCallbackDisconnected(id) => {
                     bluetooth_socketmgr.lock().unwrap().remove_callback(id);
+                }
+                Message::BatteryProviderManagerBatteryUpdated(remote_address, battery_set) => {
+                    battery_manager
+                        .lock()
+                        .unwrap()
+                        .handle_battery_updated(remote_address, battery_set);
+                }
+                Message::BatteryProviderManagerCallbackDisconnected(id) => {
+                    battery_provider_manager.lock().unwrap().remove_battery_provider_callback(id);
+                }
+                Message::BatteryServiceCallbackDisconnected(id) => {
+                    battery_service.lock().unwrap().remove_callback(id);
+                }
+                Message::BatteryService(action) => {
+                    battery_service.lock().unwrap().handle_action(action);
+                }
+                Message::BatteryServiceRefresh => {
+                    battery_service.lock().unwrap().refresh_all_devices();
+                }
+                Message::BatteryManagerCallbackDisconnected(id) => {
+                    battery_manager.lock().unwrap().remove_callback(id);
+                }
+                Message::GattClientCallbackDisconnected(id) => {
+                    bluetooth_gatt.lock().unwrap().remove_client_callback(id);
+                }
+                Message::GattServerCallbackDisconnected(id) => {
+                    bluetooth_gatt.lock().unwrap().remove_server_callback(id);
+                }
+                Message::AdminCallbackDisconnected(id) => {
+                    bluetooth_admin.lock().unwrap().unregister_admin_policy_callback(id);
                 }
             }
         }
@@ -183,14 +324,20 @@ impl Stack {
 /// `register_disconnect` to let others observe the disconnection event.
 pub trait RPCProxy {
     /// Registers disconnect observer that will be notified when the remote object is disconnected.
-    fn register_disconnect(&mut self, f: Box<dyn Fn(u32) + Send>) -> u32;
+    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
+        0
+    }
 
     /// Returns the ID of the object. For example this would be an object path in D-Bus RPC.
-    fn get_object_id(&self) -> String;
+    fn get_object_id(&self) -> String {
+        String::from("")
+    }
 
     /// Unregisters callback with this id.
-    fn unregister(&mut self, id: u32) -> bool;
+    fn unregister(&mut self, _id: u32) -> bool {
+        false
+    }
 
     /// Makes this object available for remote call.
-    fn export_for_rpc(self: Box<Self>);
+    fn export_for_rpc(self: Box<Self>) {}
 }

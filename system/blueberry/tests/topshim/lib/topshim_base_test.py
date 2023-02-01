@@ -32,6 +32,12 @@ from blueberry.tests.gd.cert.os_utils import TerminalColor
 from blueberry.tests.gd.cert.tracelogger import TraceLogger
 from blueberry.tests.gd.cert.truth import assertThat
 from blueberry.tests.topshim.lib.adapter_client import AdapterClient
+from blueberry.tests.topshim.lib.async_closable import asyncSafeClose
+from blueberry.tests.topshim.lib.gatt_client import GattClient
+from blueberry.tests.topshim.lib.hf_client_client import HfClientClient
+from blueberry.tests.topshim.lib.hfp_client import HfpClient
+from blueberry.tests.topshim.lib.security_client import SecurityClient
+from blueberry.tests.topshim.lib.topshim_device import TopshimDevice
 
 from mobly import asserts
 from mobly import base_test
@@ -66,8 +72,8 @@ def _setup_class_core(verbose_mode, log_path_base, controller_configs):
     rootcanal_hci_port = int(rootcanal_config.get("hci_port", "6402"))
     rootcanal_link_layer_port = int(rootcanal_config.get("link_layer_port", "6403"))
 
-    info['make_rootcanal_ports_available'] = make_ports_available((rootcanal_test_port, rootcanal_hci_port,
-                                                                   rootcanal_link_layer_port))
+    info['make_rootcanal_ports_available'] = make_ports_available(
+        (rootcanal_test_port, rootcanal_hci_port, rootcanal_link_layer_port))
     if not make_ports_available((rootcanal_test_port, rootcanal_hci_port, rootcanal_link_layer_port)):
         return info
 
@@ -75,13 +81,12 @@ def _setup_class_core(verbose_mode, log_path_base, controller_configs):
     rootcanal_cmd = [rootcanal, str(rootcanal_test_port), str(rootcanal_hci_port), str(rootcanal_link_layer_port)]
     info['rootcanal_cmd'] = rootcanal_cmd
 
-    rootcanal_process = subprocess.Popen(
-        rootcanal_cmd,
-        cwd=get_gd_root(),
-        env=os.environ.copy(),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        universal_newlines=True)
+    rootcanal_process = subprocess.Popen(rootcanal_cmd,
+                                         cwd=get_gd_root(),
+                                         env=os.environ.copy(),
+                                         stdout=subprocess.PIPE,
+                                         stderr=subprocess.STDOUT,
+                                         universal_newlines=True)
 
     info['rootcanal_process'] = rootcanal_process
     if rootcanal_process:
@@ -94,11 +99,10 @@ def _setup_class_core(verbose_mode, log_path_base, controller_configs):
         info['is_subprocess_alive'] = False
         return info
 
-    info['rootcanal_logger'] = AsyncSubprocessLogger(
-        rootcanal_process, [rootcanal_logpath],
-        log_to_stdout=verbose_mode,
-        tag="rootcanal",
-        color=TerminalColor.MAGENTA)
+    info['rootcanal_logger'] = AsyncSubprocessLogger(rootcanal_process, [rootcanal_logpath],
+                                                     log_to_stdout=verbose_mode,
+                                                     tag="rootcanal",
+                                                     color=TerminalColor.MAGENTA)
 
     # Modify the device config to include the correct root-canal port
     for gd_device_config in info['controller_configs'].get("GdDevice"):
@@ -156,16 +160,41 @@ def dump_crashes_core(dut, cert, rootcanal_running, rootcanal_process, rootcanal
 
 class TopshimBaseTest(base_test.BaseTestClass):
 
-    dut_adapter = None
+    __dut = None
+    __cert = None
 
-    async def _setup_adapter(self):
-        self.dut_adapter = AdapterClient(port=self.dut_port)
-        started = await self.dut_adapter._verify_adapter_started()
+    async def __setup_adapter(self):
+        dut_adapter = AdapterClient(port=self.dut_port)
+        cert_adapter = AdapterClient(port=self.cert_port)
+        started = await dut_adapter._verify_adapter_started()
         assertThat(started).isTrue()
+        started = started and await cert_adapter._verify_adapter_started()
+        assertThat(started).isTrue()
+        self.__dut = TopshimDevice(dut_adapter, GattClient(port=self.dut_port),
+                                   SecurityClient(dut_adapter, port=self.dut_port),
+                                   HfpClient(port=self.dut_port),
+                                   HfClientClient(port=self.dut_port))
+        self.__cert = TopshimDevice(cert_adapter, GattClient(port=self.cert_port),
+                                    SecurityClient(cert_adapter, port=self.cert_port),
+                                    HfpClient(port=self.cert_port),
+                                    HfClientClient(port=self.cert_port))
         return started
 
-    async def _teardown_adapter(self):
-        await self.dut_adapter.terminate()
+    async def __teardown_adapter(self):
+        await asyncSafeClose(self.__dut)
+        await asyncSafeClose(self.__cert)
+
+    def dut(self):
+        """
+        Get a handle on the DUT device
+        """
+        return self.__dut
+
+    def cert(self):
+        """
+        Get a handle on the CERT device
+        """
+        return self.__cert
 
     def setup_class(self):
         """
@@ -177,10 +206,9 @@ class TopshimBaseTest(base_test.BaseTestClass):
         for config in self.controller_configs[CONTROLLER_CONFIG_NAME]:
             config['verbose_mode'] = self.verbose_mode
 
-        self.info = _setup_class_core(
-            verbose_mode=self.verbose_mode,
-            log_path_base=self.log_path_base,
-            controller_configs=self.controller_configs)
+        self.info = _setup_class_core(verbose_mode=self.verbose_mode,
+                                      log_path_base=self.log_path_base,
+                                      controller_configs=self.controller_configs)
         self.rootcanal_running = self.info['rootcanal_running']
         self.rootcanal_logpath = self.info['rootcanal_logpath']
         self.rootcanal_process = self.info['rootcanal_process']
@@ -190,8 +218,8 @@ class TopshimBaseTest(base_test.BaseTestClass):
         asserts.assert_true(self.info['make_rootcanal_ports_available'], "Failed to make root canal ports available")
 
         self.log.debug("Running %s" % " ".join(self.info['rootcanal_cmd']))
-        asserts.assert_true(
-            self.info['is_rootcanal_process_started'], msg="Cannot start root-canal at " + str(self.info['rootcanal']))
+        asserts.assert_true(self.info['is_rootcanal_process_started'],
+                            msg="Cannot start root-canal at " + str(self.info['rootcanal']))
         asserts.assert_true(self.info['is_subprocess_alive'], msg="root-canal stopped immediately after running")
 
         self.controller_configs = self.info['controller_configs']
@@ -200,12 +228,11 @@ class TopshimBaseTest(base_test.BaseTestClass):
         self.cert_port = controllers[0].grpc_port
         self.dut_port = controllers[1].grpc_port
         asyncio.set_event_loop(asyncio.new_event_loop())
-        asyncio.get_event_loop().run_until_complete(self._setup_adapter())
+        asyncio.get_event_loop().run_until_complete(self.__setup_adapter())
 
     def teardown_class(self):
-        _teardown_class_core(
-            rootcanal_running=self.rootcanal_running,
-            rootcanal_process=self.rootcanal_process,
-            rootcanal_logger=self.rootcanal_logger,
-            subprocess_wait_timeout_seconds=1)
-        asyncio.get_event_loop().run_until_complete(self._teardown_adapter())
+        _teardown_class_core(rootcanal_running=self.rootcanal_running,
+                             rootcanal_process=self.rootcanal_process,
+                             rootcanal_logger=self.rootcanal_logger,
+                             subprocess_wait_timeout_seconds=1)
+        asyncio.get_event_loop().run_until_complete(self.__teardown_adapter())

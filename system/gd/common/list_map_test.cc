@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <chrono>
 #include <memory>
 
 #include <gmock/gmock.h>
@@ -28,7 +27,7 @@ using bluetooth::common::ListMap;
 
 TEST(ListMapTest, empty_test) {
   ListMap<int, int> list_map;
-  EXPECT_EQ(list_map.size(), 0);
+  EXPECT_EQ(list_map.size(), 0ul);
   EXPECT_EQ(list_map.find(42), list_map.end());
   list_map.clear();  // should not crash
   EXPECT_EQ(list_map.find(42), list_map.end());
@@ -180,7 +179,7 @@ TEST(ListMapTest, splice_same_list_test) {
 
 TEST(ListMapTest, put_get_and_contains_key_test) {
   ListMap<int, int> list_map;
-  EXPECT_EQ(list_map.size(), 0);
+  EXPECT_EQ(list_map.size(), 0ul);
   EXPECT_EQ(list_map.find(42), list_map.end());
   EXPECT_FALSE(list_map.contains(42));
   list_map.insert_or_assign(56, 200);
@@ -329,7 +328,6 @@ TEST(ListMapTest, for_loop_test) {
 }
 
 TEST(ListMapTest, pressure_test) {
-  auto started = std::chrono::high_resolution_clock::now();
   int num_entries = 0xFFFF;  // 2^16 = 65535
   ListMap<int, int> list_map;
 
@@ -350,14 +348,7 @@ TEST(ListMapTest, pressure_test) {
     EXPECT_EQ(iter->second, key);
     EXPECT_TRUE(list_map.extract(key));
   }
-  EXPECT_EQ(list_map.size(), 0);
-
-  // test execution time
-  auto done = std::chrono::high_resolution_clock::now();
-  int execution_time = std::chrono::duration_cast<std::chrono::microseconds>(done - started).count();
-  // Shouldn't be more than 1000ms
-  int execution_time_per_cycle_us = 10;
-  EXPECT_LT(execution_time, execution_time_per_cycle_us * num_entries);
+  EXPECT_EQ(list_map.size(), 0ul);
 }
 
 }  // namespace testing

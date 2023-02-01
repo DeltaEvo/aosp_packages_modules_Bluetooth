@@ -295,7 +295,7 @@ public class MediaControlProfileTest {
 
         testHandleTrackPositionSetRequest(-duration, duration, times++);
         testHandleTrackPositionSetRequest(duration + duration, duration, times++);
-        testHandleTrackPositionSetRequest(Math.round(duration / 2), duration, times++);
+        testHandleTrackPositionSetRequest(duration / 2, duration, times++);
 
         actions = 0;
         bob.setActions(actions);
@@ -464,5 +464,10 @@ public class MediaControlProfileTest {
         testGetSupportedPlayingOrder(true, false);
         testGetSupportedPlayingOrder(false, true);
         testGetSupportedPlayingOrder(false, false);
+    }
+
+    @Test
+    public void testDumpDoesNotCrash() {
+        mMediaControlProfile.dump(new StringBuilder());
     }
 }

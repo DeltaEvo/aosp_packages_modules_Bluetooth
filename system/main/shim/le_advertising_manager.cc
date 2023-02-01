@@ -80,7 +80,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
   void SetParameters(uint8_t advertiser_id, AdvertiseParameters params,
                      ParametersCallback cb) override {
     LOG(INFO) << __func__ << " in shim layer";
-    bluetooth::hci::ExtendedAdvertisingConfig config{};
+    bluetooth::hci::AdvertisingConfig config{};
     parse_parameter(config, params);
     bluetooth::shim::GetAdvertising()->SetParameters(advertiser_id, config);
   }
@@ -125,7 +125,7 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                         MultiAdvCb timeout_cb) override {
     LOG(INFO) << __func__ << " in shim layer";
 
-    bluetooth::hci::ExtendedAdvertisingConfig config{};
+    bluetooth::hci::AdvertisingConfig config{};
     parse_parameter(config, params);
 
     size_t offset = 0;
@@ -171,14 +171,10 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
                            IdStatusCallback timeout_cb) {
     LOG(INFO) << __func__ << " in shim layer";
 
-    bluetooth::hci::ExtendedAdvertisingConfig config{};
+    bluetooth::hci::AdvertisingConfig config{};
     parse_parameter(config, params);
-    bluetooth::hci::PeriodicAdvertisingParameters periodic_parameters;
-    periodic_parameters.max_interval = periodic_params.max_interval;
-    periodic_parameters.min_interval = periodic_params.min_interval;
-    periodic_parameters.properties =
-        periodic_params.periodic_advertising_properties;
-    config.periodic_advertising_parameters = periodic_parameters;
+    parse_periodic_advertising_parameter(config.periodic_advertising_parameters,
+                                         periodic_params);
 
     size_t offset = 0;
     while (offset < advertise_data.size()) {
@@ -271,10 +267,11 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
   }
 
   void SetPeriodicAdvertisingEnable(int advertiser_id, bool enable,
+                                    bool include_adi,
                                     StatusCallback cb) override {
     LOG(INFO) << __func__ << " in shim layer";
-    bluetooth::shim::GetAdvertising()->EnablePeriodicAdvertising(advertiser_id,
-                                                                 enable);
+    bluetooth::shim::GetAdvertising()->EnablePeriodicAdvertising(
+        advertiser_id, enable, include_adi);
   }
 
   void RegisterCallbacks(AdvertisingCallbacks* callbacks) {
@@ -381,10 +378,11 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
   AdvertisingCallbacks* advertising_callbacks_;
 
  private:
-  void parse_parameter(bluetooth::hci::ExtendedAdvertisingConfig& config,
+  void parse_parameter(bluetooth::hci::AdvertisingConfig& config,
                        AdvertiseParameters params) {
     config.connectable = params.advertising_event_properties & 0x01;
     config.scannable = params.advertising_event_properties & 0x02;
+    config.discoverable = params.advertising_event_properties & 0x04;
     config.legacy_pdus = params.advertising_event_properties & 0x10;
     config.anonymous = params.advertising_event_properties & 0x20;
     config.include_tx_power = params.advertising_event_properties & 0x40;
@@ -399,10 +397,22 @@ class BleAdvertiserInterfaceImpl : public BleAdvertiserInterface,
     config.enable_scan_request_notifications =
         static_cast<bluetooth::hci::Enable>(
             params.scan_request_notification_enable);
-
-    // TODO set own_address_type based on address policy
     config.own_address_type = OwnAddressType::RANDOM_DEVICE_ADDRESS;
+    if (params.own_address_type == 0) {
+      config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+    }
   }
+
+  void parse_periodic_advertising_parameter(
+      bluetooth::hci::PeriodicAdvertisingParameters& config,
+      PeriodicAdvertisingParameters periodic_params) {
+    config.max_interval = periodic_params.max_interval;
+    config.min_interval = periodic_params.min_interval;
+    config.properties = periodic_params.periodic_advertising_properties;
+    config.enable = periodic_params.enable;
+    config.include_adi = periodic_params.include_adi;
+  }
+
   std::map<uint8_t, GetAddressCallback> address_callbacks_;
 };
 

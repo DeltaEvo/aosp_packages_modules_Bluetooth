@@ -1,4 +1,4 @@
-use btstack::suspend::{ISuspend, ISuspendCallback, SuspendType};
+use btstack::suspend::{ISuspendCallback, SuspendType};
 use btstack::RPCProxy;
 use dbus::channel::MatchingReceiver;
 use dbus::message::MatchRule;
@@ -115,7 +115,7 @@ impl ISuspendCallback for SuspendCallback {
         log::debug!("Suspend callback registered, callback_id = {}", callback_id);
     }
 
-    fn on_suspend_ready(&self, suspend_id: u32) {
+    fn on_suspend_ready(&self, suspend_id: i32) {
         // Received when adapter is ready to suspend. Tell powerd that suspend is ready.
         log::debug!("Suspend ready, adapter suspend_id = {}", suspend_id);
 
@@ -136,7 +136,7 @@ impl ISuspendCallback for SuspendCallback {
         }
     }
 
-    fn on_resumed(&self, suspend_id: u32) {
+    fn on_resumed(&self, suspend_id: i32) {
         // Received when adapter is ready to suspend. This is just for our information and powerd
         // doesn't need to know about this.
         log::debug!("Suspend resumed, adapter suspend_id = {}", suspend_id);
@@ -144,16 +144,8 @@ impl ISuspendCallback for SuspendCallback {
 }
 
 impl RPCProxy for SuspendCallback {
-    fn register_disconnect(&mut self, _f: Box<dyn Fn(u32) + Send>) -> u32 {
-        0
-    }
-
     fn get_object_id(&self) -> String {
         self.objpath.clone()
-    }
-
-    fn unregister(&mut self, _id: u32) -> bool {
-        false
     }
 
     fn export_for_rpc(self: Box<Self>) {
@@ -449,15 +441,23 @@ impl PowerdSuspendManager {
         {
             // Anonymous block to contain locked `self.context` which needs to be called multiple
             // times in the `if let` block below. Prevent deadlock by locking only once.
-            let context_locked = self.context.lock().unwrap();
-            if let Some(adapter_suspend_dbus) = &context_locked.adapter_suspend_dbus {
-                let adapter_suspend_id =
-                    adapter_suspend_dbus.suspend(match suspend_imminent.get_reason() {
-                        SuspendImminent_Reason::IDLE => SuspendType::Connected,
-                        SuspendImminent_Reason::LID_CLOSED => SuspendType::Disconnected,
-                        SuspendImminent_Reason::OTHER => SuspendType::Other,
-                    });
-                log::debug!("Adapter suspend id = {}", adapter_suspend_id);
+            let mut context_locked = self.context.lock().unwrap();
+            if let Some(adapter_suspend_dbus) = &mut context_locked.adapter_suspend_dbus {
+                let mut suspend_dbus_rpc = adapter_suspend_dbus.rpc.clone();
+                tokio::spawn(async move {
+                    let result = suspend_dbus_rpc
+                        .suspend(
+                            match suspend_imminent.get_reason() {
+                                SuspendImminent_Reason::IDLE => SuspendType::AllowWakeFromHid,
+                                SuspendImminent_Reason::LID_CLOSED => SuspendType::NoWakesAllowed,
+                                SuspendImminent_Reason::OTHER => SuspendType::Other,
+                            },
+                            suspend_imminent.get_suspend_id(),
+                        )
+                        .await;
+
+                    log::debug!("Adapter suspend call, success = {}", result.is_ok());
+                });
             } else {
                 // If there is no adapter, that means Bluetooth is not active and we should always
                 // tell powerd that we are ready to suspend.
@@ -488,8 +488,11 @@ impl PowerdSuspendManager {
         self.context.lock().unwrap().pending_suspend_imminent = None;
 
         if let Some(adapter_suspend_dbus) = &self.context.lock().unwrap().adapter_suspend_dbus {
-            let success = adapter_suspend_dbus.resume();
-            log::debug!("Adapter resume is successful = {}", success);
+            let mut suspend_dbus_rpc = adapter_suspend_dbus.rpc.clone();
+            tokio::spawn(async move {
+                let result = suspend_dbus_rpc.resume().await;
+                log::debug!("Adapter resume call, success = {}", result.unwrap_or(false));
+            });
         } else {
             log::debug!("Adapter is not available, nothing to resume.");
         }
@@ -505,14 +508,21 @@ impl PowerdSuspendManager {
         let crossroads = self.context.lock().unwrap().dbus_crossroads.clone();
 
         if let Some(adapter_suspend_dbus) = &mut self.context.lock().unwrap().adapter_suspend_dbus {
-            let suspend_cb_objpath: String =
-                format!("/org/chromium/bluetooth/Manager/suspend_callback");
-            adapter_suspend_dbus.register_callback(Box::new(SuspendCallback::new(
-                suspend_cb_objpath,
-                conn,
-                crossroads,
-                self.context.clone(),
-            )));
+            let mut suspend_dbus_rpc = adapter_suspend_dbus.rpc.clone();
+            let context = self.context.clone();
+            tokio::spawn(async move {
+                let suspend_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/Manager/suspend_callback");
+                let status = suspend_dbus_rpc
+                    .register_callback(Box::new(SuspendCallback::new(
+                        suspend_cb_objpath,
+                        conn,
+                        crossroads,
+                        context.clone(),
+                    )))
+                    .await;
+                log::debug!("Suspend::RegisterCallback success = {}", status.unwrap_or(false));
+            });
         }
     }
 

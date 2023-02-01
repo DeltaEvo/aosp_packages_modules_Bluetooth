@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2016-2017 The Linux Foundation
  * Copyright (C) 2012 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,27 +16,28 @@
  */
 
 #define LOG_TAG "BluetoothServiceJni"
-#include "com_android_bluetooth.h"
-#include "hardware/bt_sock.h"
-#include "utils/Log.h"
-#include "utils/misc.h"
-
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <hardware/bluetooth.h>
+#include <nativehelper/JNIPlatformHelp.h>
 #include <pthread.h>
 #include <string.h>
-
-#include <fcntl.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
 
-#include <hardware/bluetooth.h>
-#include <nativehelper/JNIPlatformHelp.h>
 #include <mutex>
 
-#include <pthread.h>
+#include "com_android_bluetooth.h"
+#include "hardware/bt_sock.h"
+#include "os/logging/log_redaction.h"
+#include "utils/Log.h"
+#include "utils/misc.h"
 
 using bluetooth::Uuid;
+#ifndef DYNAMIC_LOAD_BLUETOOTH
+extern bt_interface_t bluetoothInterface;
+#endif
 
 namespace android {
 // Both
@@ -56,6 +58,9 @@ namespace android {
 #define TRANSPORT_AUTO 0
 #define TRANSPORT_BREDR 1
 #define TRANSPORT_LE 2
+
+#define BLE_ADDR_PUBLIC 0x00
+#define BLE_ADDR_RANDOM 0x01
 
 const jint INVALID_FD = -1;
 
@@ -365,7 +370,9 @@ static void le_address_associate_callback(RawAddress* main_bd_addr,
 static void acl_state_changed_callback(bt_status_t status, RawAddress* bd_addr,
                                        bt_acl_state_t state,
                                        int transport_link_type,
-                                       bt_hci_error_code_t hci_reason) {
+                                       bt_hci_error_code_t hci_reason,
+                                       bt_conn_direction_t direction,
+                                       uint16_t acl_handle) {
   if (!bd_addr) {
     ALOGE("Address is null in %s", __func__);
     return;
@@ -385,7 +392,8 @@ static void acl_state_changed_callback(bt_status_t status, RawAddress* bd_addr,
 
   sCallbackEnv->CallVoidMethod(sJniCallbacksObj, method_aclStateChangeCallback,
                                (jint)status, addr.get(), (jint)state,
-                               (jint)transport_link_type, (jint)hci_reason);
+                               (jint)transport_link_type, (jint)hci_reason,
+                               (jint)acl_handle);
 }
 
 static void discovery_state_changed_callback(bt_discovery_state_t state) {
@@ -681,11 +689,6 @@ static void dut_mode_recv_callback(uint16_t opcode, uint8_t* buf, uint8_t len) {
 
 }
 
-static void le_test_mode_recv_callback(bt_status_t status,
-                                       uint16_t packet_count) {
-  ALOGV("%s: status:%d packet_count:%d ", __func__, status, packet_count);
-}
-
 static void energy_info_recv_callback(bt_activity_energy_info* p_energy_info,
                                       bt_uid_traffic_t* uid_data) {
   CallbackEnv sCallbackEnv(__func__);
@@ -730,7 +733,6 @@ static bt_callbacks_t sBluetoothCallbacks = {sizeof(sBluetoothCallbacks),
                                              acl_state_changed_callback,
                                              callback_thread_event,
                                              dut_mode_recv_callback,
-                                             le_test_mode_recv_callback,
                                              energy_info_recv_callback,
                                              link_quality_report_callback,
                                              generate_local_oob_data_callback,
@@ -881,6 +883,10 @@ static bt_os_callouts_t sBluetoothOsCallouts = {
 };
 
 int hal_util_load_bt_library(const bt_interface_t** interface) {
+#ifndef DYNAMIC_LOAD_BLUETOOTH
+  *interface = &bluetoothInterface;
+  return 0;
+#else
   const char* sym = BLUETOOTH_INTERFACE_STRING;
   bt_interface_t* itf = nullptr;
 
@@ -910,6 +916,7 @@ error:
   if (handle) dlclose(handle);
 
   return -EINVAL;
+#endif
 }
 
 static void classInitNative(JNIEnv* env, jclass clazz) {
@@ -952,8 +959,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_leAddressAssociateCallback = env->GetMethodID(
       jniCallbackClass, "leAddressAssociateCallback", "([B[B)V");
 
-  method_aclStateChangeCallback =
-      env->GetMethodID(jniCallbackClass, "aclStateChangeCallback", "(I[BIII)V");
+  method_aclStateChangeCallback = env->GetMethodID(
+      jniCallbackClass, "aclStateChangeCallback", "(I[BIIII)V");
 
   method_linkQualityReportCallback = env->GetMethodID(
       jniCallbackClass, "linkQualityReportCallback", "(JIIIIII)V");
@@ -983,7 +990,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
 static bool initNative(JNIEnv* env, jobject obj, jboolean isGuest,
                        jboolean isCommonCriteriaMode, int configCompareResult,
-                       jobjectArray initFlags, jboolean isAtvDevice) {
+                       jobjectArray initFlags, jboolean isAtvDevice,
+                       jstring userDataDirectory) {
   ALOGV("%s", __func__);
 
   android_bluetooth_UidTraffic.clazz =
@@ -1010,10 +1018,15 @@ static bool initNative(JNIEnv* env, jobject obj, jboolean isGuest,
     flags[i] = env->GetStringUTFChars(flagObjs[i], NULL);
   }
 
+  const char* user_data_directory =
+      env->GetStringUTFChars(userDataDirectory, NULL);
+
   int ret = sBluetoothInterface->init(
       &sBluetoothCallbacks, isGuest == JNI_TRUE ? 1 : 0,
       isCommonCriteriaMode == JNI_TRUE ? 1 : 0, configCompareResult, flags,
-      isAtvDevice == JNI_TRUE ? 1 : 0);
+      isAtvDevice == JNI_TRUE ? 1 : 0, user_data_directory);
+
+  env->ReleaseStringUTFChars(userDataDirectory, user_data_directory);
 
   for (int i = 0; i < flagCount; i++) {
     env->ReleaseStringUTFChars(flagObjs[i], flags[i]);
@@ -1111,7 +1124,7 @@ static jboolean cancelDiscoveryNative(JNIEnv* env, jobject obj) {
 }
 
 static jboolean createBondNative(JNIEnv* env, jobject obj, jbyteArray address,
-                                 jint transport) {
+                                 jint addrType, jint transport) {
   ALOGV("%s", __func__);
 
   if (!sBluetoothInterface) return JNI_FALSE;
@@ -1122,7 +1135,13 @@ static jboolean createBondNative(JNIEnv* env, jobject obj, jbyteArray address,
     return JNI_FALSE;
   }
 
-  int ret = sBluetoothInterface->create_bond((RawAddress*)addr, transport);
+  uint8_t addr_type = (uint8_t)addrType;
+  int ret = BT_STATUS_SUCCESS;
+  if (addr_type == BLE_ADDR_RANDOM) {
+    ret = sBluetoothInterface->create_bond_le((RawAddress*)addr, addr_type);
+  } else {
+    ret = sBluetoothInterface->create_bond((RawAddress*)addr, transport);
+  }
   env->ReleaseByteArrayElements(address, addr, 0);
   return (ret == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
@@ -1795,16 +1814,232 @@ static jboolean allowLowLatencyAudioNative(JNIEnv* env, jobject obj,
     jniThrowIOException(env, EINVAL);
     return false;
   }
+
   RawAddress addr_obj = {};
   addr_obj.FromOctets((uint8_t*)addr);
   sBluetoothInterface->allow_low_latency_audio(allowed, addr_obj);
   return true;
 }
 
+static void metadataChangedNative(JNIEnv* env, jobject obj, jbyteArray address,
+                                  jint key, jbyteArray value) {
+  ALOGV("%s", __func__);
+  if (!sBluetoothInterface) return;
+  jbyte* addr = env->GetByteArrayElements(address, nullptr);
+  if (addr == nullptr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+  RawAddress addr_obj = {};
+  addr_obj.FromOctets((uint8_t*)addr);
+
+  if (value == NULL) {
+    ALOGE("metadataChangedNative() ignoring NULL array");
+    return;
+  }
+
+  uint16_t len = (uint16_t)env->GetArrayLength(value);
+  jbyte* p_value = env->GetByteArrayElements(value, NULL);
+  if (p_value == NULL) return;
+
+  std::vector<uint8_t> val_vec(reinterpret_cast<uint8_t*>(p_value),
+                               reinterpret_cast<uint8_t*>(p_value + len));
+  env->ReleaseByteArrayElements(value, p_value, 0);
+
+  sBluetoothInterface->metadata_changed(addr_obj, key, std::move(val_vec));
+  return;
+}
+
+static jboolean isLogRedactionEnabled(JNIEnv* env, jobject obj) {
+  ALOGV("%s", __func__);
+  return bluetooth::os::should_log_be_redacted();
+}
+
+static jboolean interopMatchAddrNative(JNIEnv* env, jclass clazz,
+                                       jstring feature_name, jstring address) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) {
+    ALOGW("%s: sBluetoothInterface is null.", __func__);
+    return JNI_FALSE;
+  }
+
+  const char* tmp_addr = env->GetStringUTFChars(address, NULL);
+  if (!tmp_addr) {
+    ALOGW("%s: address is null.", __func__);
+    return JNI_FALSE;
+  }
+  RawAddress bdaddr;
+  bool success = RawAddress::FromString(tmp_addr, bdaddr);
+
+  env->ReleaseStringUTFChars(address, tmp_addr);
+
+  if (!success) {
+    ALOGW("%s: address is invalid.", __func__);
+    return JNI_FALSE;
+  }
+
+  const char* feature_name_str = env->GetStringUTFChars(feature_name, NULL);
+  if (!feature_name_str) {
+    ALOGW("%s: feature name is null.", __func__);
+    return JNI_FALSE;
+  }
+
+  bool matched =
+      sBluetoothInterface->interop_match_addr(feature_name_str, &bdaddr);
+  env->ReleaseStringUTFChars(feature_name, feature_name_str);
+
+  return matched ? JNI_TRUE : JNI_FALSE;
+}
+
+static jboolean interopMatchNameNative(JNIEnv* env, jclass clazz,
+                                       jstring feature_name, jstring name) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) {
+    ALOGW("%s: sBluetoothInterface is null.", __func__);
+    return JNI_FALSE;
+  }
+
+  const char* feature_name_str = env->GetStringUTFChars(feature_name, NULL);
+  if (!feature_name_str) {
+    ALOGW("%s: feature name is null.", __func__);
+    return JNI_FALSE;
+  }
+
+  const char* name_str = env->GetStringUTFChars(name, NULL);
+  if (!name_str) {
+    ALOGW("%s: name is null.", __func__);
+    env->ReleaseStringUTFChars(feature_name, feature_name_str);
+    return JNI_FALSE;
+  }
+
+  bool matched =
+      sBluetoothInterface->interop_match_name(feature_name_str, name_str);
+  env->ReleaseStringUTFChars(feature_name, feature_name_str);
+  env->ReleaseStringUTFChars(name, name_str);
+
+  return matched ? JNI_TRUE : JNI_FALSE;
+}
+
+static jboolean interopMatchAddrOrNameNative(JNIEnv* env, jclass clazz,
+                                             jstring feature_name,
+                                             jstring address) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) {
+    ALOGW("%s: sBluetoothInterface is null.", __func__);
+    return JNI_FALSE;
+  }
+
+  const char* tmp_addr = env->GetStringUTFChars(address, NULL);
+  if (!tmp_addr) {
+    ALOGW("%s: address is null.", __func__);
+    return JNI_FALSE;
+  }
+  RawAddress bdaddr;
+  bool success = RawAddress::FromString(tmp_addr, bdaddr);
+
+  env->ReleaseStringUTFChars(address, tmp_addr);
+
+  if (!success) {
+    ALOGW("%s: address is invalid.", __func__);
+    return JNI_FALSE;
+  }
+
+  const char* feature_name_str = env->GetStringUTFChars(feature_name, NULL);
+  if (!feature_name_str) {
+    ALOGW("%s: feature name is null.", __func__);
+    return JNI_FALSE;
+  }
+
+  bool matched = sBluetoothInterface->interop_match_addr_or_name(
+      feature_name_str, &bdaddr);
+  env->ReleaseStringUTFChars(feature_name, feature_name_str);
+
+  return matched ? JNI_TRUE : JNI_FALSE;
+}
+
+static void interopDatabaseAddRemoveAddrNative(JNIEnv* env, jclass clazz,
+                                               jboolean do_add,
+                                               jstring feature_name,
+                                               jstring address, jint length) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) {
+    ALOGW("%s: sBluetoothInterface is null.", __func__);
+    return;
+  }
+
+  if ((do_add == JNI_TRUE) && (length <= 0 || length > 6)) {
+    ALOGE("%s: address length %d is invalid, valid length is [1,6]", __func__,
+          length);
+    return;
+  }
+
+  const char* tmp_addr = env->GetStringUTFChars(address, NULL);
+  if (!tmp_addr) {
+    ALOGW("%s: address is null.", __func__);
+    return;
+  }
+  RawAddress bdaddr;
+  bool success = RawAddress::FromString(tmp_addr, bdaddr);
+
+  env->ReleaseStringUTFChars(address, tmp_addr);
+
+  if (!success) {
+    ALOGW("%s: address is invalid.", __func__);
+    return;
+  }
+
+  const char* feature_name_str = env->GetStringUTFChars(feature_name, NULL);
+  if (!feature_name_str) {
+    ALOGW("%s: feature name is null.", __func__);
+    return;
+  }
+
+  sBluetoothInterface->interop_database_add_remove_addr(
+      (do_add == JNI_TRUE), feature_name_str, &bdaddr, (int)length);
+
+  env->ReleaseStringUTFChars(feature_name, feature_name_str);
+}
+
+static void interopDatabaseAddRemoveNameNative(JNIEnv* env, jclass clazz,
+                                               jboolean do_add,
+                                               jstring feature_name,
+                                               jstring name) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) {
+    ALOGW("%s: sBluetoothInterface is null.", __func__);
+    return;
+  }
+
+  const char* feature_name_str = env->GetStringUTFChars(feature_name, NULL);
+  if (!feature_name_str) {
+    ALOGW("%s: feature name is null.", __func__);
+    return;
+  }
+
+  const char* name_str = env->GetStringUTFChars(name, NULL);
+  if (!name_str) {
+    ALOGW("%s: name is null.", __func__);
+    env->ReleaseStringUTFChars(feature_name, feature_name_str);
+    return;
+  }
+
+  sBluetoothInterface->interop_database_add_remove_name(
+      (do_add == JNI_TRUE), feature_name_str, name_str);
+
+  env->ReleaseStringUTFChars(feature_name, feature_name_str);
+  env->ReleaseStringUTFChars(name, name_str);
+}
+
 static JNINativeMethod sMethods[] = {
     /* name, signature, funcPtr */
     {"classInitNative", "()V", (void*)classInitNative},
-    {"initNative", "(ZZI[Ljava/lang/String;Z)Z", (void*)initNative},
+    {"initNative", "(ZZI[Ljava/lang/String;ZLjava/lang/String;)Z",
+     (void*)initNative},
     {"cleanupNative", "()V", (void*)cleanupNative},
     {"enableNative", "()Z", (void*)enableNative},
     {"disableNative", "()Z", (void*)disableNative},
@@ -1815,7 +2050,7 @@ static JNINativeMethod sMethods[] = {
     {"setDevicePropertyNative", "([BI[B)Z", (void*)setDevicePropertyNative},
     {"startDiscoveryNative", "()Z", (void*)startDiscoveryNative},
     {"cancelDiscoveryNative", "()Z", (void*)cancelDiscoveryNative},
-    {"createBondNative", "([BI)Z", (void*)createBondNative},
+    {"createBondNative", "([BII)Z", (void*)createBondNative},
     {"createBondOutOfBandNative",
      "([BILandroid/bluetooth/OobData;Landroid/bluetooth/OobData;)Z",
      (void*)createBondOutOfBandNative},
@@ -1842,6 +2077,20 @@ static JNINativeMethod sMethods[] = {
     {"requestMaximumTxDataLengthNative", "([B)V",
      (void*)requestMaximumTxDataLengthNative},
     {"allowLowLatencyAudioNative", "(Z[B)Z", (void*)allowLowLatencyAudioNative},
+    {"metadataChangedNative", "([BI[B)V", (void*)metadataChangedNative},
+    {"isLogRedactionEnabled", "()Z", (void*)isLogRedactionEnabled},
+    {"interopMatchAddrNative", "(Ljava/lang/String;Ljava/lang/String;)Z",
+     (void*)interopMatchAddrNative},
+    {"interopMatchNameNative", "(Ljava/lang/String;Ljava/lang/String;)Z",
+     (void*)interopMatchNameNative},
+    {"interopMatchAddrOrNameNative", "(Ljava/lang/String;Ljava/lang/String;)Z",
+     (void*)interopMatchAddrOrNameNative},
+    {"interopDatabaseAddRemoveAddrNative",
+     "(ZLjava/lang/String;Ljava/lang/String;I)V",
+     (void*)interopDatabaseAddRemoveAddrNative},
+    {"interopDatabaseAddRemoveNameNative",
+     "(ZLjava/lang/String;Ljava/lang/String;)V",
+     (void*)interopDatabaseAddRemoveNameNative},
 };
 
 int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {

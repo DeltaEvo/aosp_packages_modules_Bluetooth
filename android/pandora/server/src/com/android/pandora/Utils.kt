@@ -24,20 +24,49 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.*
 import android.net.MacAddress
+import android.os.ParcelFileDescriptor
+import android.util.Log
+import androidx.test.platform.app.InstrumentationRegistry
+import com.google.protobuf.Any
 import com.google.protobuf.ByteString
+import io.grpc.stub.ServerCallStreamObserver
 import io.grpc.stub.StreamObserver
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.util.concurrent.CancellationException
+import java.util.stream.Collectors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import pandora.AndroidProto.InternalConnectionRef
 import pandora.HostProto.Connection
+
+private const val TAG = "PandoraUtils"
+private val alphanumeric = ('A'..'Z') + ('a'..'z') + ('0'..'9')
+
+val intentQueue = ArrayList<Intent>()
+
+fun shell(cmd: String): String {
+  val fd = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(cmd)
+  val input_stream = ParcelFileDescriptor.AutoCloseInputStream(fd)
+  return BufferedReader(InputStreamReader(input_stream)).lines().collect(Collectors.joining("\n"))
+}
 
 /**
  * Creates a cold flow of intents based on an intent filter. If used multiple times in a same class,
@@ -52,6 +81,7 @@ fun intentFlow(context: Context, intentFilter: IntentFilter) = callbackFlow {
   val broadcastReceiver: BroadcastReceiver =
     object : BroadcastReceiver() {
       override fun onReceive(context: Context, intent: Intent) {
+        intentQueue.add(intent)
         trySendBlocking(intent)
       }
     }
@@ -93,16 +123,135 @@ fun <T> grpcUnary(
 ): Job {
   return scope.launch {
     try {
-      withTimeout(timeout * 1000) {
-        val response = block()
-        responseObserver.onNext(response)
-        responseObserver.onCompleted()
-      }
+      val response = withTimeout(timeout * 1000) { block() }
+      responseObserver.onNext(response)
+      responseObserver.onCompleted()
     } catch (e: Throwable) {
       e.printStackTrace()
       responseObserver.onError(e)
     }
   }
+}
+
+/**
+ * Creates a gRPC coroutine in a given coroutine scope which executes a given suspended function
+ * taking in a Flow of gRPC requests and returning a Flow of gRPC responses and sends it on a given
+ * gRPC stream observer.
+ *
+ * @param T the type of gRPC response.
+ * @param scope coroutine scope used to run the coroutine.
+ * @param responseObserver the gRPC stream observer on which to send the response.
+ * @param block the suspended function transforming the request Flow to the response Flow.
+ * @return a StreamObserver for the incoming requests.
+ *
+ * Example usage:
+ * ```
+ * override fun grpcMethod(
+ *   responseObserver: StreamObserver<TypeOfResponse> {
+ *     grpcBidirectionalStream(scope, responseObserver) {
+ *       block
+ *     }
+ *   }
+ * }
+ * ```
+ */
+@kotlinx.coroutines.ExperimentalCoroutinesApi
+fun <T, U> grpcBidirectionalStream(
+  scope: CoroutineScope,
+  responseObserver: StreamObserver<U>,
+  block: CoroutineScope.(Flow<T>) -> Flow<U>
+): StreamObserver<T> {
+
+  val inputChannel = Channel<T>()
+
+  val job =
+    scope.launch {
+      block(inputChannel.consumeAsFlow())
+        .onEach { responseObserver.onNext(it) }
+        .onCompletion { error ->
+          if (error == null) {
+            responseObserver.onCompleted()
+          }
+        }
+        .catch {
+          it.printStackTrace()
+          responseObserver.onError(it)
+        }
+        .launchIn(this)
+    }
+
+  return object : StreamObserver<T> {
+    override fun onNext(req: T) {
+      // Note: this should be made a blocking call, and the handler should run in a separate thread
+      // so we get flow control - but for now we can live with this
+      if (inputChannel.trySend(req).isFailure) {
+        job.cancel(CancellationException("too many incoming requests, buffer exceeded"))
+        responseObserver.onError(
+          CancellationException("too many incoming requests, buffer exceeded")
+        )
+      }
+    }
+
+    override fun onCompleted() {
+      // stop the input flow, but keep the job running
+      inputChannel.close()
+    }
+
+    override fun onError(e: Throwable) {
+      job.cancel()
+      e.printStackTrace()
+    }
+  }
+}
+
+/**
+ * Creates a gRPC coroutine in a given coroutine scope which executes a given suspended function
+ * taking in a Flow of gRPC requests and returning a Flow of gRPC responses and sends it on a given
+ * gRPC stream observer.
+ *
+ * @param T the type of gRPC response.
+ * @param scope coroutine scope used to run the coroutine.
+ * @param responseObserver the gRPC stream observer on which to send the response.
+ * @param block the suspended function producing the response Flow.
+ * @return a StreamObserver for the incoming requests.
+ *
+ * Example usage:
+ * ```
+ * override fun grpcMethod(
+ *   request: TypeOfRequest,
+ *   responseObserver: StreamObserver<TypeOfResponse> {
+ *     grpcServerStream(scope, responseObserver) {
+ *       block
+ *     }
+ *   }
+ * }
+ * ```
+ */
+@kotlinx.coroutines.ExperimentalCoroutinesApi
+fun <T> grpcServerStream(
+  scope: CoroutineScope,
+  responseObserver: StreamObserver<T>,
+  block: CoroutineScope.() -> Flow<T>
+) {
+  val serverCallStreamObserver = responseObserver as ServerCallStreamObserver<T>
+
+  val job =
+    scope.launch {
+      block()
+        .onEach { responseObserver.onNext(it) }
+        .onCompletion { error ->
+          if (error == null) {
+            responseObserver.onCompleted()
+          }
+        }
+        .catch {
+          it.printStackTrace()
+          responseObserver.onError(it)
+        }
+        .launchIn(this)
+    }
+
+  serverCallStreamObserver.setOnCancelHandler { job.cancel() }
 }
 
 /**
@@ -137,21 +286,71 @@ fun <T> getProfileProxy(context: Context, profile: Int): T {
     }
     proxy = withTimeoutOrNull(5_000) { flow.first() }
   }
+  if (proxy == null) {
+    Log.w(TAG, "profile proxy $profile is null")
+  }
   return proxy!! as T
 }
 
 fun Intent.getBluetoothDeviceExtra(): BluetoothDevice =
-  this.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+  this.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)!!
 
-fun ByteString.decodeToString(): String =
+fun ByteString.decodeAsMacAddressToString(): String =
   MacAddress.fromBytes(this.toByteArray()).toString().uppercase()
 
 fun ByteString.toBluetoothDevice(adapter: BluetoothAdapter): BluetoothDevice =
-  adapter.getRemoteDevice(this.decodeToString())
+  adapter.getRemoteDevice(this.decodeAsMacAddressToString())
 
 fun Connection.toBluetoothDevice(adapter: BluetoothAdapter): BluetoothDevice =
-  adapter.getRemoteDevice(this.cookie.toByteArray().decodeToString())
+  adapter.getRemoteDevice(this.address)
 
-fun String.toByteArray(): ByteArray = MacAddress.fromString(this).toByteArray()
+val Connection.address: String
+  get() = InternalConnectionRef.parseFrom(this.cookie.value).address.decodeAsMacAddressToString()
 
-fun BluetoothDevice.toByteArray(): ByteArray = this.address.toByteArray()
+val Connection.transport: Int
+  get() = InternalConnectionRef.parseFrom(this.cookie.value).transport
+
+fun BluetoothDevice.toByteString() =
+  ByteString.copyFrom(MacAddress.fromString(this.address).toByteArray())!!
+
+fun BluetoothDevice.toConnection(transport: Int): Connection {
+  val internal_connection_ref =
+    InternalConnectionRef.newBuilder()
+      .setAddress(ByteString.copyFrom(MacAddress.fromString(this.address).toByteArray()))
+      .setTransport(transport)
+      .build()
+  val cookie = Any.newBuilder().setValue(internal_connection_ref.toByteString()).build()
+
+  return Connection.newBuilder().setCookie(cookie).build()
+}
+
+/** Creates Audio track instance and returns the reference. */
+fun buildAudioTrack(): AudioTrack? {
+  return AudioTrack.Builder()
+    .setAudioAttributes(
+      AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+        .build()
+    )
+    .setAudioFormat(
+      AudioFormat.Builder()
+        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+        .setSampleRate(44100)
+        .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+        .build()
+    )
+    .setTransferMode(AudioTrack.MODE_STREAM)
+    .setBufferSizeInBytes(44100 * 2 * 2)
+    .build()
+}
+
+/**
+ * Generates Alpha-numeric string of given length.
+ *
+ * @param length required string size.
+ * @return a generated string
+ */
+fun generateAlphanumericString(length: Int): String {
+  return buildString { repeat(length) { append(alphanumeric.random()) } }
+}

@@ -21,6 +21,7 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAssignedNumbers;
+import android.bluetooth.BluetoothAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
@@ -43,6 +44,7 @@ import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
@@ -88,7 +90,7 @@ public class HeadsetStateMachine extends StateMachine {
     static final int VOICE_RECOGNITION_START = 5;
     static final int VOICE_RECOGNITION_STOP = 6;
 
-    // message.obj is an intent AudioManager.VOLUME_CHANGED_ACTION
+    // message.obj is an intent AudioManager.ACTION_VOLUME_CHANGED
     // EXTRA_VOLUME_STREAM_TYPE is STREAM_BLUETOOTH_SCO
     static final int INTENT_SCO_VOLUME_CHANGED = 7;
     static final int INTENT_CONNECTION_ACCESS_REPLY = 8;
@@ -134,10 +136,13 @@ public class HeadsetStateMachine extends StateMachine {
     private final AdapterService mAdapterService;
     private final HeadsetNativeInterface mNativeInterface;
     private final HeadsetSystemInterface mSystemInterface;
+    private DatabaseManager mDatabaseManager;
 
     // Runtime states
-    private int mSpeakerVolume;
-    private int mMicVolume;
+    @VisibleForTesting
+    int mSpeakerVolume;
+    @VisibleForTesting
+    int mMicVolume;
     private boolean mDeviceSilenced;
     private HeadsetAgIndicatorEnableState mAgIndicatorEnableState;
     // The timestamp when the device entered connecting/connected state
@@ -146,11 +151,16 @@ public class HeadsetStateMachine extends StateMachine {
     private boolean mHasNrecEnabled = false;
     private boolean mHasWbsEnabled = false;
     // AT Phone book keeps a group of states used by AT+CPBR commands
-    private final AtPhonebook mPhonebook;
+    @VisibleForTesting
+    final AtPhonebook mPhonebook;
     // HSP specific
     private boolean mNeedDialingOutReply;
     // Audio disconnect timeout retry count
     private int mAudioDisconnectRetry = 0;
+
+    static final int HFP_SET_AUDIO_POLICY = 1;
+
+    private BluetoothAudioPolicy mHsClientAudioPolicy;
 
     // Keys are AT commands, and values are the company IDs.
     private static final Map<String, Integer> VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID;
@@ -184,7 +194,21 @@ public class HeadsetStateMachine extends StateMachine {
         mSystemInterface =
                 Objects.requireNonNull(systemInterface, "systemInterface cannot be null");
         mAdapterService = Objects.requireNonNull(adapterService, "AdapterService cannot be null");
+        mDatabaseManager = Objects.requireNonNull(
+            AdapterService.getAdapterService().getDatabase(),
+            "DatabaseManager cannot be null when HeadsetClientStateMachine is created");
         mDeviceSilenced = false;
+
+        BluetoothAudioPolicy storedAudioPolicy = mDatabaseManager.getAudioPolicyMetadata(device);
+        if (storedAudioPolicy == null) {
+            Log.w(TAG, "Audio Policy not created in database! Creating...");
+            mHsClientAudioPolicy = new BluetoothAudioPolicy.Builder().build();
+            mDatabaseManager.setAudioPolicyMetadata(device, mHsClientAudioPolicy);
+        } else {
+            Log.i(TAG, "Audio Policy found in database!");
+            mHsClientAudioPolicy = storedAudioPolicy;
+        }
+
         // Create phonebook helper
         mPhonebook = new AtPhonebook(mHeadsetService, mNativeInterface);
         // Initialize state machine
@@ -238,6 +262,8 @@ public class HeadsetStateMachine extends StateMachine {
         ProfileService.println(sb, "  mMicVolume: " + mMicVolume);
         ProfileService.println(sb,
                 "  mConnectingTimestampMs(uptimeMillis): " + mConnectingTimestampMs);
+        ProfileService.println(sb, "  mHsClientAudioPolicy: " + mHsClientAudioPolicy.toString());
+
         ProfileService.println(sb, "  StateMachine: " + this);
         // Dump the state machine logs
         StringWriter stringWriter = new StringWriter();
@@ -1516,7 +1542,8 @@ public class HeadsetStateMachine extends StateMachine {
     /*
      * Put the AT command, company ID, arguments, and device in an Intent and broadcast it.
      */
-    private void broadcastVendorSpecificEventIntent(String command, int companyId, int commandType,
+    @VisibleForTesting
+    void broadcastVendorSpecificEventIntent(String command, int companyId, int commandType,
             Object[] arguments, BluetoothDevice device) {
         log("broadcastVendorSpecificEventIntent(" + command + ")");
         Intent intent = new Intent(BluetoothHeadset.ACTION_VENDOR_SPECIFIC_HEADSET_EVENT);
@@ -1540,7 +1567,8 @@ public class HeadsetStateMachine extends StateMachine {
         am.setBluetoothHeadsetProperties(getCurrentDeviceName(), mHasNrecEnabled, mHasWbsEnabled);
     }
 
-    private String parseUnknownAt(String atString) {
+    @VisibleForTesting
+    String parseUnknownAt(String atString) {
         StringBuilder atCommand = new StringBuilder(atString.length());
 
         for (int i = 0; i < atString.length(); i++) {
@@ -1561,7 +1589,8 @@ public class HeadsetStateMachine extends StateMachine {
         return atCommand.toString();
     }
 
-    private int getAtCommandType(String atCommand) {
+    @VisibleForTesting
+    int getAtCommandType(String atCommand) {
         int commandType = AtPhonebook.TYPE_UNKNOWN;
         String atString = null;
         atCommand = atCommand.trim();
@@ -1642,7 +1671,8 @@ public class HeadsetStateMachine extends StateMachine {
         }
     }
 
-    private void processVolumeEvent(int volumeType, int volume) {
+    @VisibleForTesting
+    void processVolumeEvent(int volumeType, int volume) {
         // Only current active device can change SCO volume
         if (!mDevice.equals(mHeadsetService.getActiveDevice())) {
             Log.w(TAG, "processVolumeEvent, ignored because " + mDevice + " is not active");
@@ -1691,7 +1721,8 @@ public class HeadsetStateMachine extends StateMachine {
     }
 
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    private void processAtChld(int chld, BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtChld(int chld, BluetoothDevice device) {
         if (mSystemInterface.processChld(chld)) {
             mNativeInterface.atResponseCode(device, HeadsetHalConstants.AT_RESPONSE_OK, 0);
         } else {
@@ -1700,7 +1731,8 @@ public class HeadsetStateMachine extends StateMachine {
     }
 
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    private void processSubscriberNumberRequest(BluetoothDevice device) {
+    @VisibleForTesting
+    void processSubscriberNumberRequest(BluetoothDevice device) {
         String number = mSystemInterface.getSubscriberNumber();
         if (number != null) {
             mNativeInterface.atResponseString(device,
@@ -1735,7 +1767,8 @@ public class HeadsetStateMachine extends StateMachine {
     }
 
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    private void processAtCops(BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtCops(BluetoothDevice device) {
         // Get operator name suggested by Telephony
         String operatorName = null;
         ServiceState serviceState = mSystemInterface.getHeadsetPhoneState().getServiceState();
@@ -1756,7 +1789,8 @@ public class HeadsetStateMachine extends StateMachine {
     }
 
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    private void processAtClcc(BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtClcc(BluetoothDevice device) {
         if (mHeadsetService.isVirtualCallStarted()) {
             // In virtual call, send our phone number instead of remote phone number
             String phoneNumber = mSystemInterface.getSubscriberNumber();
@@ -1777,7 +1811,8 @@ public class HeadsetStateMachine extends StateMachine {
         }
     }
 
-    private void processAtCscs(String atString, int type, BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtCscs(String atString, int type, BluetoothDevice device) {
         log("processAtCscs - atString = " + atString);
         if (mPhonebook != null) {
             mPhonebook.handleCscsCommand(atString, type, device);
@@ -1787,7 +1822,8 @@ public class HeadsetStateMachine extends StateMachine {
         }
     }
 
-    private void processAtCpbs(String atString, int type, BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtCpbs(String atString, int type, BluetoothDevice device) {
         log("processAtCpbs - atString = " + atString);
         if (mPhonebook != null) {
             mPhonebook.handleCpbsCommand(atString, type, device);
@@ -1797,7 +1833,8 @@ public class HeadsetStateMachine extends StateMachine {
         }
     }
 
-    private void processAtCpbr(String atString, int type, BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtCpbr(String atString, int type, BluetoothDevice device) {
         log("processAtCpbr - atString = " + atString);
         if (mPhonebook != null) {
             mPhonebook.handleCpbrCommand(atString, type, device);
@@ -1811,7 +1848,8 @@ public class HeadsetStateMachine extends StateMachine {
      * Find a character ch, ignoring quoted sections.
      * Return input.length() if not found.
      */
-    private static int findChar(char ch, String input, int fromIndex) {
+    @VisibleForTesting
+    static int findChar(char ch, String input, int fromIndex) {
         for (int i = fromIndex; i < input.length(); i++) {
             char c = input.charAt(i);
             if (c == '"') {
@@ -1831,7 +1869,8 @@ public class HeadsetStateMachine extends StateMachine {
      * Integer arguments are turned into Integer objects. Otherwise a String
      * object is used.
      */
-    private static Object[] generateArgs(String input) {
+    @VisibleForTesting
+    static Object[] generateArgs(String input) {
         int i = 0;
         int j;
         ArrayList<Object> out = new ArrayList<Object>();
@@ -1856,7 +1895,8 @@ public class HeadsetStateMachine extends StateMachine {
      * @param atString AT command after the "AT+" prefix
      * @param device Remote device that has sent this command
      */
-    private void processVendorSpecificAt(String atString, BluetoothDevice device) {
+    @VisibleForTesting
+    void processVendorSpecificAt(String atString, BluetoothDevice device) {
         log("processVendorSpecificAt - atString = " + atString);
 
         // Currently we accept only SET type commands.
@@ -1892,12 +1932,126 @@ public class HeadsetStateMachine extends StateMachine {
     }
 
     /**
+     * Process Android specific AT commands.
+     *
+     * @param atString AT command after the "AT+" prefix. Starts with "ANDROID"
+     * @param device Remote device that has sent this command
+     */
+    private void processAndroidAt(String atString, BluetoothDevice device) {
+        log("processAndroidSpecificAt - atString = " + atString);
+
+        if (atString.equals("+ANDROID=?")) {
+            // feature request type command
+            processAndroidAtFeatureRequest(device);
+        } else if (atString.startsWith("+ANDROID=")) {
+            // set type command
+            int equalIndex = atString.indexOf("=");
+            String arg = atString.substring(equalIndex + 1);
+
+            if (arg.isEmpty()) {
+                Log.e(TAG, "Command Invalid!");
+                mNativeInterface.atResponseCode(device, HeadsetHalConstants.AT_RESPONSE_ERROR, 0);
+                return;
+            }
+
+            Object[] args = generateArgs(arg);
+
+            if (!(args[0] instanceof Integer)) {
+                Log.e(TAG, "Type ID is invalid");
+                mNativeInterface.atResponseCode(device, HeadsetHalConstants.AT_RESPONSE_ERROR, 0);
+                return;
+            }
+
+            int type = (Integer) args[0];
+
+            if (type == HFP_SET_AUDIO_POLICY) {
+                processAndroidAtSetAudioPolicy(args, device);
+            } else {
+                Log.w(TAG, "Undefined AT+ANDROID command");
+                mNativeInterface.atResponseCode(device, HeadsetHalConstants.AT_RESPONSE_ERROR, 0);
+                return;
+            }
+        } else {
+            Log.e(TAG, "Undefined AT+ANDROID command");
+            mNativeInterface.atResponseCode(device, HeadsetHalConstants.AT_RESPONSE_ERROR, 0);
+            return;
+        }
+        mNativeInterface.atResponseCode(device, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    private void processAndroidAtFeatureRequest(BluetoothDevice device) {
+        /*
+            replying with +ANDROID=1
+            here, 1 is the feature id for audio policy
+
+            currently we only support one type of feature
+        */
+        mNativeInterface.atResponseString(device,
+                BluetoothHeadset.VENDOR_RESULT_CODE_COMMAND_ANDROID
+                + ": " + HFP_SET_AUDIO_POLICY);
+    }
+
+    /**
+     * Process AT+ANDROID AT command
+     *
+     * @param args command arguments after the equal sign
+     * @param device Remote device that has sent this command
+     */
+    private void processAndroidAtSetAudioPolicy(Object[] args, BluetoothDevice device) {
+        if (args.length != 4) {
+            Log.e(TAG, "processAndroidAtSetAudioPolicy() args length must be 4: "
+                    + String.valueOf(args.length));
+            return;
+        }
+        if (!(args[1] instanceof Integer) || !(args[2] instanceof Integer)
+                || !(args[3] instanceof Integer)) {
+            Log.e(TAG, "processAndroidAtSetAudioPolicy() argument types not matched");
+            return;
+        }
+
+        if (!mDevice.equals(device)) {
+            Log.e(TAG, "processAndroidAtSetAudioPolicy(): argument device " + device
+                    + " doesn't match mDevice " + mDevice);
+            return;
+        }
+
+        int callEstablishPolicy = (Integer) args[1];
+        int connectingTimePolicy = (Integer) args[2];
+        int inbandPolicy = (Integer) args[3];
+
+        setHfpCallAudioPolicy(new BluetoothAudioPolicy.Builder()
+                .setCallEstablishPolicy(callEstablishPolicy)
+                .setConnectingTimePolicy(connectingTimePolicy)
+                .setInBandRingtonePolicy(inbandPolicy)
+                .build());
+    }
+
+    /**
+     * sets the audio policy of the client device and stores in the database
+     *
+     * @param policies policies to be set and stored
+     */
+    public void setHfpCallAudioPolicy(BluetoothAudioPolicy policies) {
+        mHsClientAudioPolicy = policies;
+        mDatabaseManager.setAudioPolicyMetadata(mDevice, policies);
+    }
+
+    /**
+     * get the audio policy of the client device
+     *
+     */
+    public BluetoothAudioPolicy getHfpCallAudioPolicy() {
+        return mHsClientAudioPolicy;
+    }
+
+    /**
      * Process AT+XAPL AT command
      *
      * @param args command arguments after the equal sign
      * @param device Remote device that has sent this command
      */
-    private void processAtXapl(Object[] args, BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtXapl(Object[] args, BluetoothDevice device) {
         if (args.length != 2) {
             Log.w(TAG, "processAtXapl() args length must be 2: " + String.valueOf(args.length));
             return;
@@ -1926,7 +2080,8 @@ public class HeadsetStateMachine extends StateMachine {
         mNativeInterface.atResponseString(device, "+XAPL=iPhone," + String.valueOf(2));
     }
 
-    private void processUnknownAt(String atString, BluetoothDevice device) {
+    @VisibleForTesting
+    void processUnknownAt(String atString, BluetoothDevice device) {
         if (device == null) {
             Log.w(TAG, "processUnknownAt device is null");
             return;
@@ -1940,6 +2095,8 @@ public class HeadsetStateMachine extends StateMachine {
             processAtCpbs(atCommand.substring(5), commandType, device);
         } else if (atCommand.startsWith("+CPBR")) {
             processAtCpbr(atCommand.substring(5), commandType, device);
+        } else if (atCommand.startsWith("+ANDROID")) {
+            processAndroidAt(atCommand, device);
         } else {
             processVendorSpecificAt(atCommand, device);
         }
@@ -2028,12 +2185,14 @@ public class HeadsetStateMachine extends StateMachine {
         }
     }
 
-    private void processAtBiev(int indId, int indValue, BluetoothDevice device) {
+    @VisibleForTesting
+    void processAtBiev(int indId, int indValue, BluetoothDevice device) {
         log("processAtBiev: ind_id=" + indId + ", ind_value=" + indValue);
         sendIndicatorIntent(device, indId, indValue);
     }
 
-    private void processSendClccResponse(HeadsetClccResponse clcc) {
+    @VisibleForTesting
+    void processSendClccResponse(HeadsetClccResponse clcc) {
         if (!hasMessages(CLCC_RSP_TIMEOUT)) {
             return;
         }
@@ -2044,7 +2203,8 @@ public class HeadsetStateMachine extends StateMachine {
                 clcc.mMode, clcc.mMpty, clcc.mNumber, clcc.mType);
     }
 
-    private void processSendVendorSpecificResultCode(HeadsetVendorSpecificResultCode resultCode) {
+    @VisibleForTesting
+    void processSendVendorSpecificResultCode(HeadsetVendorSpecificResultCode resultCode) {
         String stringToSend = resultCode.mCommand + ": ";
         if (resultCode.mArg != null) {
             stringToSend += resultCode.mArg;
@@ -2105,7 +2265,8 @@ public class HeadsetStateMachine extends StateMachine {
         return builder.toString();
     }
 
-    private void handleAccessPermissionResult(Intent intent) {
+    @VisibleForTesting
+    void handleAccessPermissionResult(Intent intent) {
         log("handleAccessPermissionResult");
         BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         if (!mPhonebook.getCheckingAccessPermission()) {

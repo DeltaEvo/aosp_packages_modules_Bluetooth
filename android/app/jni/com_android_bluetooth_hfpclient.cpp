@@ -16,7 +16,6 @@
  */
 
 #define LOG_TAG "BluetoothHeadsetClientServiceJni"
-#define LOG_NDEBUG 0
 
 #include "com_android_bluetooth.h"
 #include "hardware/bt_hf_client.h"
@@ -171,7 +170,6 @@ static void current_operator_cb(const RawAddress* bd_addr, const char* name) {
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(name)) {
-    android_errorWriteLog(0x534e4554, "109838537");
     ALOGE("%s: name is not a valid UTF string.", __func__);
     name = null_str;
   }
@@ -247,7 +245,6 @@ static void clip_cb(const RawAddress* bd_addr, const char* number) {
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    android_errorWriteLog(0x534e4554, "109838537");
     ALOGE("%s: number is not a valid UTF string.", __func__);
     number = null_str;
   }
@@ -268,7 +265,6 @@ static void call_waiting_cb(const RawAddress* bd_addr, const char* number) {
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    android_errorWriteLog(0x534e4554, "109838537");
     ALOGE("%s: number is not a valid UTF string.", __func__);
     number = null_str;
   }
@@ -293,7 +289,6 @@ static void current_calls_cb(const RawAddress* bd_addr, int index,
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    android_errorWriteLog(0x534e4554, "109838537");
     ALOGE("%s: number is not a valid UTF string.", __func__);
     number = null_str;
   }
@@ -339,7 +334,6 @@ static void subscriber_info_cb(const RawAddress* bd_addr, const char* name,
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(name)) {
-    android_errorWriteLog(0x534e4554, "109838537");
     ALOGE("%s: name is not a valid UTF string.", __func__);
     name = null_str;
   }
@@ -373,7 +367,6 @@ static void last_voice_tag_number_cb(const RawAddress* bd_addr,
 
   const char null_str[] = "";
   if (!sCallbackEnv.isValidUtf(number)) {
-    android_errorWriteLog(0x534e4554, "109838537");
     ALOGE("%s: number is not a valid UTF string.", __func__);
     number = null_str;
   }
@@ -547,7 +540,8 @@ static jboolean connectNative(JNIEnv* env, jobject object, jbyteArray address) {
     return JNI_FALSE;
   }
 
-  bt_status_t status = sBluetoothHfpClientInterface->connect((RawAddress*)addr);
+  bt_status_t status =
+      sBluetoothHfpClientInterface->connect((const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed AG connection, status: %d", status);
   }
@@ -886,6 +880,37 @@ static jboolean sendATCmdNative(JNIEnv* env, jobject object, jbyteArray address,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
+static jboolean sendAndroidAtNative(JNIEnv* env, jobject object,
+                                    jbyteArray address, jstring arg_str) {
+  std::shared_lock<std::shared_mutex> lock(interface_mutex);
+  if (!sBluetoothHfpClientInterface) return JNI_FALSE;
+
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  const char* arg = NULL;
+  if (arg_str != NULL) {
+    arg = env->GetStringUTFChars(arg_str, NULL);
+  }
+
+  bt_status_t status = sBluetoothHfpClientInterface->send_android_at(
+      (const RawAddress*)addr, arg);
+
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("FAILED to control volume, status: %d", status);
+  }
+
+  if (arg != NULL) {
+    env->ReleaseStringUTFChars(arg_str, arg);
+  }
+
+  env->ReleaseByteArrayElements(address, addr, 0);
+  return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initializeNative", "()V", (void*)initializeNative},
@@ -910,6 +935,8 @@ static JNINativeMethod sMethods[] = {
     {"requestLastVoiceTagNumberNative", "([B)Z",
      (void*)requestLastVoiceTagNumberNative},
     {"sendATCmdNative", "([BIIILjava/lang/String;)Z", (void*)sendATCmdNative},
+    {"sendAndroidAtNative", "([BLjava/lang/String;)Z",
+     (void*)sendAndroidAtNative},
 };
 
 int register_com_android_bluetooth_hfpclient(JNIEnv* env) {

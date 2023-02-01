@@ -100,6 +100,10 @@ void BTM_BleOpportunisticObserve(bool enable,
                                  tBTM_INQ_RESULTS_CB* p_results_cb) {
   mock_function_count_map[__func__]++;
 }
+void BTM_BleTargetAnnouncementObserve(bool enable,
+                                      tBTM_INQ_RESULTS_CB* p_results_cb) {
+  mock_function_count_map[__func__]++;
+}
 tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda,
                                      tBTM_CMPL_CB* p_cb) {
   mock_function_count_map[__func__]++;
@@ -113,15 +117,7 @@ tBTM_STATUS btm_ble_set_discoverability(uint16_t combined_mode) {
   mock_function_count_map[__func__]++;
   return BTM_SUCCESS;
 }
-tBTM_STATUS btm_ble_start_adv(void) {
-  mock_function_count_map[__func__]++;
-  return BTM_SUCCESS;
-}
 tBTM_STATUS btm_ble_start_inquiry(uint8_t duration) {
-  mock_function_count_map[__func__]++;
-  return BTM_SUCCESS;
-}
-tBTM_STATUS btm_ble_stop_adv(void) {
   mock_function_count_map[__func__]++;
   return BTM_SUCCESS;
 }
@@ -196,9 +192,7 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda,
 void btm_ble_set_adv_flag(uint16_t connect_mode, uint16_t disc_mode) {
   mock_function_count_map[__func__]++;
 }
-void btm_ble_start_scan() { mock_function_count_map[__func__]++; }
 void btm_ble_stop_inquiry(void) { mock_function_count_map[__func__]++; }
-void btm_ble_stop_scan(void) { mock_function_count_map[__func__]++; }
 void btm_ble_update_dmt_flag_bits(uint8_t* adv_flag_value,
                                   const uint16_t connect_mode,
                                   const uint16_t disc_mode) {

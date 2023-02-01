@@ -18,11 +18,13 @@ package com.android.bluetooth.mapclient;
 
 import android.util.Log;
 
+import com.android.bluetooth.ObexAppParameters;
 import com.android.bluetooth.ObexServerSockets;
-import com.android.bluetooth.obex.HeaderSet;
-import com.android.bluetooth.obex.Operation;
-import com.android.bluetooth.obex.ResponseCodes;
-import com.android.bluetooth.obex.ServerRequestHandler;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.obex.HeaderSet;
+import com.android.obex.Operation;
+import com.android.obex.ResponseCodes;
+import com.android.obex.ServerRequestHandler;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -33,7 +35,8 @@ class MnsObexServer extends ServerRequestHandler {
     private static final String TAG = "MnsObexServer";
     private static final boolean VDBG = MapClientService.VDBG;
 
-    private static final byte[] MNS_TARGET = new byte[]{
+    @VisibleForTesting
+    static final byte[] MNS_TARGET = new byte[]{
             (byte) 0xbb,
             0x58,
             0x2b,
@@ -52,7 +55,8 @@ class MnsObexServer extends ServerRequestHandler {
             0x66
     };
 
-    private static final String TYPE = "x-bt/MAP-event-report";
+    @VisibleForTesting
+    static final String TYPE = "x-bt/MAP-event-report";
 
     private final WeakReference<MceStateMachine> mStateMachineReference;
     private final ObexServerSockets mObexServerSockets;

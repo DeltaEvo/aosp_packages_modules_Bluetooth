@@ -31,10 +31,12 @@
 #include "gd/common/strings.h"
 #include "gd/hal/hci_hal.h"
 #include "gd/hci/acl_manager.h"
+#include "gd/hci/acl_manager/acl_scheduler.h"
 #include "gd/hci/controller.h"
 #include "gd/hci/hci_layer.h"
 #include "gd/hci/le_advertising_manager.h"
 #include "gd/hci/le_scanning_manager.h"
+#include "gd/hci/msft.h"
 #include "gd/hci/vendor_specific_event_manager.h"
 #include "gd/l2cap/classic/l2cap_classic_module.h"
 #include "gd/l2cap/le/l2cap_le_module.h"
@@ -42,7 +44,6 @@
 #include "gd/neighbor/connectability.h"
 #include "gd/neighbor/discoverability.h"
 #include "gd/neighbor/inquiry.h"
-#include "gd/neighbor/name.h"
 #include "gd/neighbor/name_db.h"
 #include "gd/neighbor/page.h"
 #include "gd/neighbor/scan.h"
@@ -146,6 +147,7 @@ void Stack::StartEverything() {
   modules.add<sysprops::SyspropsModule>();
 
   modules.add<hci::Controller>();
+  modules.add<hci::acl_manager::AclScheduler>();
   modules.add<hci::AclManager>();
   if (common::init_flags::gd_l2cap_is_enabled()) {
     modules.add<l2cap::classic::L2capClassicModule>();
@@ -156,6 +158,7 @@ void Stack::StartEverything() {
     modules.add<security::SecurityModule>();
   }
   modules.add<hci::LeAdvertisingManager>();
+  modules.add<hci::MsftExtensionManager>();
   modules.add<hci::LeScanningManager>();
   if (common::init_flags::btaa_hci_is_enabled()) {
     modules.add<activity_attribution::ActivityAttribution>();
@@ -165,7 +168,6 @@ void Stack::StartEverything() {
     modules.add<neighbor::ConnectabilityModule>();
     modules.add<neighbor::DiscoverabilityModule>();
     modules.add<neighbor::InquiryModule>();
-    modules.add<neighbor::NameModule>();
     modules.add<neighbor::NameDbModule>();
     modules.add<neighbor::PageModule>();
     modules.add<neighbor::ScanModule>();
@@ -313,6 +315,11 @@ os::Handler* Stack::GetHandler() {
 bool Stack::IsDumpsysModuleStarted() const {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   return GetStackManager()->IsStarted<Dumpsys>();
+}
+
+void Stack::LockForDumpsys(std::function<void()> dumpsys_callback) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  dumpsys_callback();
 }
 
 }  // namespace shim

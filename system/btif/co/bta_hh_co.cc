@@ -34,6 +34,7 @@
 #include "bta_hh_api.h"
 #include "btif_hh.h"
 #include "btif_util.h"
+#include "device/include/controller.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
 #include "osi/include/osi.h"
@@ -157,7 +158,12 @@ static int uhid_read_event(btif_hh_device_t* p_dev) {
       if (p_dev->get_rpt_id_queue) {
         uint32_t* get_rpt_id = (uint32_t*)osi_malloc(sizeof(uint32_t));
         *get_rpt_id = ev.u.feature.id;
-        fixed_queue_enqueue(p_dev->get_rpt_id_queue, (void*)get_rpt_id);
+        auto ok = fixed_queue_try_enqueue(p_dev->get_rpt_id_queue, (void*)get_rpt_id);
+        if (!ok) {
+            LOG_ERROR("get_rpt_id_queue is full, dropping event %d", *get_rpt_id);
+            osi_free(get_rpt_id);
+            return -EFAULT;
+        }
       }
       if (ev.u.feature.rtype == UHID_FEATURE_REPORT)
         btif_hh_getreport(p_dev, BTHH_FEATURE_REPORT, ev.u.feature.rnum, 0);
@@ -165,7 +171,7 @@ static int uhid_read_event(btif_hh_device_t* p_dev) {
         APPL_TRACE_ERROR("%s: UHID_FEATURE: Invalid report type = %d", __func__,
                          ev.u.feature.rtype);
       break;
-#ifdef OS_ANDROID  // Host kernel does not support UHID_SET_REPORT
+#if ENABLE_UHID_SET_REPORT
     case UHID_SET_REPORT: {
       bool sent = true;
 
@@ -196,11 +202,16 @@ static int uhid_read_event(btif_hh_device_t* p_dev) {
       if (sent && p_dev->set_rpt_id_queue) {
         uint32_t* set_rpt_id = (uint32_t*)osi_malloc(sizeof(uint32_t));
         *set_rpt_id = ev.u.set_report.id;
-        fixed_queue_enqueue(p_dev->set_rpt_id_queue, (void*)set_rpt_id);
+        auto ok = fixed_queue_try_enqueue(p_dev->set_rpt_id_queue, (void*)set_rpt_id);
+        if (!ok) {
+            LOG_ERROR("set_rpt_id_queue is full, dropping event %d", *set_rpt_id);
+            osi_free(set_rpt_id);
+            return -EFAULT;
+        }
       }
       break;
     }
-#endif  // ifdef OS_ANDROID
+#endif  // ENABLE_UHID_SET_REPORT
     default:
       APPL_TRACE_DEBUG("Invalid event from uhid-dev: %u\n", ev.type);
   }
@@ -348,7 +359,7 @@ void bta_hh_co_open(uint8_t dev_handle, uint8_t sub_class,
       APPL_TRACE_WARNING(
           "%s: Found an existing device with the same handle dev_status=%d, "
           "address=%s, attr_mask=0x%04x, sub_class=0x%02x, app_id=%d",
-          __func__, p_dev->dev_status, p_dev->bd_addr.ToString().c_str(),
+          __func__, p_dev->dev_status, ADDRESS_TO_LOGGABLE_CSTR(p_dev->bd_addr),
           p_dev->attr_mask, p_dev->sub_class, p_dev->app_id);
 
       if (p_dev->fd < 0) {
@@ -407,10 +418,10 @@ void bta_hh_co_open(uint8_t dev_handle, uint8_t sub_class,
   p_dev->dev_status = BTHH_CONN_STATE_CONNECTED;
   p_dev->get_rpt_id_queue = fixed_queue_new(SIZE_MAX);
   CHECK(p_dev->get_rpt_id_queue);
-#ifdef OS_ANDROID  // Host kernel does not support UHID_SET_REPORT
+#if ENABLE_UHID_SET_REPORT
   p_dev->set_rpt_id_queue = fixed_queue_new(SIZE_MAX);
   CHECK(p_dev->set_rpt_id_queue);
-#endif  // OS_ANDROID
+#endif  // ENABLE_UHID_SET_REPORT
 
   APPL_TRACE_DEBUG("%s: Return device status %d", __func__, p_dev->dev_status);
 }
@@ -444,11 +455,11 @@ void bta_hh_co_close(uint8_t dev_handle, uint8_t app_id) {
     fixed_queue_flush(p_dev->get_rpt_id_queue, osi_free);
     fixed_queue_free(p_dev->get_rpt_id_queue, NULL);
     p_dev->get_rpt_id_queue = NULL;
-#ifdef OS_ANDROID  // Host kernel does not support UHID_SET_REPORT
+#if ENABLE_UHID_SET_REPORT
     fixed_queue_flush(p_dev->set_rpt_id_queue, osi_free);
     fixed_queue_free(p_dev->set_rpt_id_queue, nullptr);
     p_dev->set_rpt_id_queue = nullptr;
-#endif  // S_ANDROID
+#endif  // ENABLE_UHID_SET_REPORT
     if (p_dev->dev_status != BTHH_CONN_STATE_UNKNOWN &&
         p_dev->dev_handle == dev_handle) {
       APPL_TRACE_WARNING(
@@ -551,8 +562,17 @@ void bta_hh_co_send_hid_info(btif_hh_device_t* p_dev, const char* dev_name,
   memset(&ev, 0, sizeof(ev));
   ev.type = UHID_CREATE;
   strlcpy((char*)ev.u.create.name, dev_name, sizeof(ev.u.create.name));
+  // TODO (b/258090765) fix: ToString -> ToColonSepHexString
   snprintf((char*)ev.u.create.uniq, sizeof(ev.u.create.uniq), "%s",
            p_dev->bd_addr.ToString().c_str());
+
+  // Write controller address to phys field to correlate the hid device with a
+  // specific bluetooth controller.
+  const controller_t* controller = controller_get_interface();
+  // TODO (b/258090765) fix: ToString -> ToColonSepHexString
+  snprintf((char*)ev.u.create.phys, sizeof(ev.u.create.phys), "%s",
+           controller->get_address()->ToString().c_str());
+
   ev.u.create.rd_size = dscp_len;
   ev.u.create.rd_data = p_dscp;
   ev.u.create.bus = BUS_BLUETOOTH;
@@ -587,7 +607,7 @@ void bta_hh_co_send_hid_info(btif_hh_device_t* p_dev, const char* dev_name,
  *
  ******************************************************************************/
 void bta_hh_co_set_rpt_rsp(uint8_t dev_handle, uint8_t status) {
-#ifdef OS_ANDROID  // Host kernel does not support UHID_SET_REPORT
+#if ENABLE_UHID_SET_REPORT
   LOG_VERBOSE("dev_handle = %d", dev_handle);
 
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_handle(dev_handle);
@@ -604,7 +624,7 @@ void bta_hh_co_set_rpt_rsp(uint8_t dev_handle, uint8_t status) {
   // Send the HID set report reply to the kernel.
   if (p_dev->fd >= 0) {
     uint32_t* set_rpt_id =
-        (uint32_t*)fixed_queue_dequeue(p_dev->set_rpt_id_queue);
+        (uint32_t*)fixed_queue_try_dequeue(p_dev->set_rpt_id_queue);
     if (set_rpt_id) {
       struct uhid_event ev = {};
 
@@ -619,7 +639,7 @@ void bta_hh_co_set_rpt_rsp(uint8_t dev_handle, uint8_t status) {
   }
 #else
   LOG_ERROR("Error: UHID_SET_REPORT_REPLY not supported");
-#endif  // OS_ANDROID
+#endif  // ENABLE_UHID_SET_REPORT
 }
 
 /*******************************************************************************
@@ -654,7 +674,11 @@ void bta_hh_co_get_rpt_rsp(uint8_t dev_handle, uint8_t status, uint8_t* p_rpt,
   // Send the HID report to the kernel.
   if (p_dev->fd >= 0 && p_dev->get_rpt_snt > 0 && p_dev->get_rpt_snt--) {
     uint32_t* get_rpt_id =
-        (uint32_t*)fixed_queue_dequeue(p_dev->get_rpt_id_queue);
+        (uint32_t*)fixed_queue_try_dequeue(p_dev->get_rpt_id_queue);
+    if (get_rpt_id == nullptr) {
+      APPL_TRACE_WARNING("%s: Error: UHID_GET_REPORT queue is empty", __func__);
+      return;
+    }
     memset(&ev, 0, sizeof(ev));
     ev.type = UHID_FEATURE_ANSWER;
     ev.u.feature_answer.id = *get_rpt_id;
@@ -708,8 +732,8 @@ void bta_hh_le_co_rpt_info(const RawAddress& remote_bda,
     btif_config_set_bin(bdstr, "HidReport", (const uint8_t*)sReportCache,
                         idx * sizeof(tBTA_HH_RPT_CACHE_ENTRY));
     btif_config_set_int(bdstr, "HidReportVersion", BTA_HH_CACHE_REPORT_VERSION);
-    BTIF_TRACE_DEBUG("%s() - Saving report; dev=%s, idx=%d", __func__, bdstr,
-                     idx);
+    BTIF_TRACE_DEBUG("%s() - Saving report; dev=%s, idx=%d", __func__,
+                     ADDRESS_TO_LOGGABLE_CSTR(remote_bda), idx);
   }
 }
 
@@ -752,7 +776,7 @@ tBTA_HH_RPT_CACHE_ENTRY* bta_hh_le_co_cache_load(const RawAddress& remote_bda,
   *p_num_rpt = len / sizeof(tBTA_HH_RPT_CACHE_ENTRY);
 
   BTIF_TRACE_DEBUG("%s() - Loaded %d reports; dev=%s", __func__, *p_num_rpt,
-                   bdstr);
+                   ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
 
   return sReportCache;
 }
@@ -775,5 +799,6 @@ void bta_hh_le_co_reset_rpt_cache(const RawAddress& remote_bda,
 
   btif_config_remove(bdstr, "HidReport");
   btif_config_remove(bdstr, "HidReportVersion");
-  BTIF_TRACE_DEBUG("%s() - Reset cache for bda %s", __func__, bdstr);
+  BTIF_TRACE_DEBUG("%s() - Reset cache for bda %s", __func__,
+                   ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
 }

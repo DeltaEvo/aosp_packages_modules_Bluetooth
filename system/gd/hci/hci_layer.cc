@@ -49,6 +49,7 @@ using std::unique_ptr;
 static void fail_if_reset_complete_not_success(CommandCompleteView complete) {
   auto reset_complete = ResetCompleteView::Create(complete);
   ASSERT(reset_complete.IsValid());
+  LOG_DEBUG("Reset completed with status: %s", ErrorCodeText(ErrorCode::SUCCESS).c_str());
   ASSERT(reset_complete.GetStatus() == ErrorCode::SUCCESS);
 }
 
@@ -238,8 +239,8 @@ struct HciLayer::impl {
     command_queue_.clear();
     command_credits_ = 1;
     waiting_command_ = OpCode::NONE;
-    enqueue_command(
-        ControllerDebugInfoBuilder::Create(), module_.GetHandler()->BindOnce(&fail_if_reset_complete_not_success));
+    // Ignore the response, since we don't know what might come back.
+    enqueue_command(ControllerDebugInfoBuilder::Create(), module_.GetHandler()->BindOnce([](CommandCompleteView) {}));
     // Don't time out for this one;
     if (hci_timeout_alarm_ != nullptr) {
       hci_timeout_alarm_->Cancel();
@@ -300,19 +301,6 @@ struct HciLayer::impl {
 
   void unregister_event(EventCode event) {
     event_handlers_.erase(event);
-  }
-
-  void register_le_meta_event(ContextualCallback<void(EventView)> handler) {
-    ASSERT_LOG(
-        event_handlers_.count(EventCode::LE_META_EVENT) == 0,
-        "Can not register a second handler for %02hhx (%s)",
-        EventCode::LE_META_EVENT,
-        EventCodeText(EventCode::LE_META_EVENT).c_str());
-    event_handlers_[EventCode::LE_META_EVENT] = handler;
-  }
-
-  void unregister_le_meta_event() {
-    unregister_event(EventCode::LE_META_EVENT);
   }
 
   void register_le_event(SubeventCode event, ContextualCallback<void(LeMetaEventView)> handler) {
@@ -391,19 +379,34 @@ struct HciLayer::impl {
       auto view = VendorSpecificEventView::Create(event);
       ASSERT(view.IsValid());
       if (view.GetSubeventCode() == VseSubeventCode::BQR_EVENT) {
-        auto bqr_quality_view = BqrLinkQualityEventView::Create(BqrEventView::Create(view));
-        auto inflammation = BqrRootInflammationEventView::Create(bqr_quality_view);
-        if (bqr_quality_view.IsValid() && inflammation.IsValid()) {
+        auto bqr_event = BqrEventView::Create(view);
+        auto inflammation = BqrRootInflammationEventView::Create(bqr_event);
+        if (bqr_event.IsValid() && inflammation.IsValid()) {
           handle_root_inflammation(inflammation.GetVendorSpecificErrorCode());
           return;
         }
       }
     }
-    if (event_handlers_.find(event_code) == event_handlers_.end()) {
-      LOG_WARN("Unhandled event of type 0x%02hhx (%s)", event_code, EventCodeText(event_code).c_str());
-      return;
+    switch (event_code) {
+      case EventCode::COMMAND_COMPLETE:
+        on_command_complete(event);
+        break;
+      case EventCode::COMMAND_STATUS:
+        on_command_status(event);
+        break;
+      case EventCode::LE_META_EVENT:
+        on_le_meta_event(event);
+        break;
+      default:
+        if (event_handlers_.find(event_code) == event_handlers_.end()) {
+          LOG_WARN(
+              "Unhandled event of type 0x%02hhx (%s)",
+              event_code,
+              EventCodeText(event_code).c_str());
+        } else {
+          event_handlers_[event_code].Invoke(event);
+        }
     }
-    event_handlers_[event_code].Invoke(event);
   }
 
   void on_le_meta_event(EventView event) {
@@ -510,10 +513,6 @@ void HciLayer::EnqueueCommand(
 
 void HciLayer::RegisterEventHandler(EventCode event, ContextualCallback<void(EventView)> handler) {
   CallOn(impl_, &impl::register_event, event, handler);
-}
-
-void HciLayer::RegisterLeMetaEventHandler(ContextualCallback<void(EventView)> handler) {
-  CallOn(impl_, &impl::register_le_meta_event, handler);
 }
 
 void HciLayer::UnregisterEventHandler(EventCode event) {
@@ -672,10 +671,8 @@ void HciLayer::Start() {
   Handler* handler = GetHandler();
   impl_->acl_queue_.GetDownEnd()->RegisterDequeue(handler, BindOn(impl_, &impl::on_outbound_acl_ready));
   impl_->sco_queue_.GetDownEnd()->RegisterDequeue(handler, BindOn(impl_, &impl::on_outbound_sco_ready));
-  impl_->iso_queue_.GetDownEnd()->RegisterDequeue(handler, BindOn(impl_, &impl::on_outbound_iso_ready));
-  RegisterEventHandler(EventCode::COMMAND_COMPLETE, handler->BindOn(impl_, &impl::on_command_complete));
-  RegisterEventHandler(EventCode::COMMAND_STATUS, handler->BindOn(impl_, &impl::on_command_status));
-  RegisterLeMetaEventHandler(handler->BindOn(impl_, &impl::on_le_meta_event));
+  impl_->iso_queue_.GetDownEnd()->RegisterDequeue(
+      handler, BindOn(impl_, &impl::on_outbound_iso_ready));
   RegisterEventHandler(EventCode::DISCONNECTION_COMPLETE, handler->BindOn(this, &HciLayer::on_disconnection_complete));
   RegisterEventHandler(
       EventCode::READ_REMOTE_VERSION_INFORMATION_COMPLETE,
@@ -684,8 +681,8 @@ void HciLayer::Start() {
   RegisterEventHandler(EventCode::PAGE_SCAN_REPETITION_MODE_CHANGE, drop_packet);
   RegisterEventHandler(EventCode::MAX_SLOTS_CHANGE, drop_packet);
 
-  EnqueueCommand(ResetBuilder::Create(), handler->BindOnce(&fail_if_reset_complete_not_success));
   hal->registerIncomingPacketCallback(hal_callbacks_);
+  EnqueueCommand(ResetBuilder::Create(), handler->BindOnce(&fail_if_reset_complete_not_success));
 }
 
 void HciLayer::Stop() {

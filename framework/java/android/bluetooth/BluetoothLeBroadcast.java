@@ -183,7 +183,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
                                     final IBluetoothLeAudio service = getService();
                                     if (service != null) {
                                         final SynchronousResultReceiver<Integer> recv =
-                                                new SynchronousResultReceiver();
+                                                SynchronousResultReceiver.get();
                                         service.registerLeBroadcastCallback(mCallback,
                                                 mAttributionSource, recv);
                                         recv.awaitResultNoInterrupt(getSyncTimeout())
@@ -380,7 +380,8 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public @NonNull List<BluetoothDevice> getDevicesMatchingConnectionStates(
+    @NonNull
+    public List<BluetoothDevice> getDevicesMatchingConnectionStates(
             @NonNull int[] states) {
         throw new UnsupportedOperationException("LE Audio Broadcasts are not connection-oriented.");
     }
@@ -442,7 +443,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
                     final IBluetoothLeAudio service = getService();
                     if (service != null) {
                         final SynchronousResultReceiver<Integer> recv =
-                                new SynchronousResultReceiver();
+                                SynchronousResultReceiver.get();
                         service.registerLeBroadcastCallback(mCallback, mAttributionSource, recv);
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                     }
@@ -495,7 +496,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             try {
                 final IBluetoothLeAudio service = getService();
                 if (service != null) {
-                    final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                    final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                     service.unregisterLeBroadcastCallback(mCallback, mAttributionSource, recv);
                     recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
                 }
@@ -662,7 +663,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Boolean> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
                 service.isPlaying(broadcastId, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (TimeoutException e) {
@@ -696,7 +697,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
         } else if (isEnabled()) {
             try {
                 final SynchronousResultReceiver<List<BluetoothLeBroadcastMetadata>> recv =
-                        new SynchronousResultReceiver();
+                        SynchronousResultReceiver.get();
                 service.getAllBroadcastMetadata(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (TimeoutException e) {
@@ -723,7 +724,7 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
             if (DBG) log(Log.getStackTraceString(new Throwable()));
         } else if (isEnabled()) {
             try {
-                final SynchronousResultReceiver<Integer> recv = new SynchronousResultReceiver();
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
                 service.getMaximumNumberOfBroadcasts(mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (TimeoutException e) {

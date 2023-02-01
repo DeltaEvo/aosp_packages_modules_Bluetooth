@@ -30,6 +30,7 @@
 #include "btif/include/btif_common.h"
 #include "hci/address.h"
 #include "hci/le_scanning_manager.h"
+#include "hci/msft.h"
 #include "include/hardware/ble_scanner.h"
 #include "main/shim/ble_scanner_interface_impl.h"
 #include "main/shim/dumpsys.h"
@@ -51,10 +52,13 @@ using bluetooth::ToRawAddress;
 
 namespace {
 constexpr char kBtmLogTag[] = "SCAN";
+constexpr uint16_t kAllowServiceDataFilter = 0x0040;
+constexpr uint16_t kAllowADTypeFilter = 0x80;
+constexpr uint8_t kFilterLogicOr = 0x00;
+constexpr uint8_t kFilterLogicAnd = 0x01;
+constexpr uint8_t kLowestRssiValue = 129;
 constexpr uint16_t kAllowAllFilter = 0x00;
 constexpr uint16_t kListLogicOr = 0x01;
-constexpr uint8_t kFilterLogicOr = 0x00;
-constexpr uint8_t kLowestRssiValue = 129;
 
 class DefaultScanningCallback : public ::ScanningCallbacks {
   void OnScannerRegistered(const bluetooth::Uuid app_uuid, uint8_t scanner_id,
@@ -148,8 +152,7 @@ void BleScannerInterfaceImpl::Unregister(int scanner_id) {
 
   /** Start or stop LE device scanning */
 void BleScannerInterfaceImpl::Scan(bool start) {
-  LOG(INFO) << __func__ << " in shim layer "
-            << ((start) ? "started" : "stopped");
+  LOG(INFO) << __func__ << " in shim layer " <<  ((start) ? "started" : "stopped");
   bluetooth::shim::GetScanning()->Scan(start);
   BTM_LogHistory(
       kBtmLogTag, RawAddress::kEmpty,
@@ -241,7 +244,66 @@ void BleScannerInterfaceImpl::ScanFilterEnable(bool enable, EnableCallback cb) {
                    base::Bind(cb, action, btm_status_value(BTM_SUCCESS)));
 }
 
-  /** Sets the LE scan interval and window in units of N*0.625 msec */
+/** Is MSFT Extension supported? */
+bool BleScannerInterfaceImpl::IsMsftSupported() {
+  LOG_INFO("in shim layer");
+
+  return bluetooth::shim::GetMsftExtensionManager()->SupportsMsftExtensions();
+}
+
+/** Adds MSFT filter */
+void BleScannerInterfaceImpl::MsftAdvMonitorAdd(MsftAdvMonitor monitor,
+                                                MsftAdvMonitorAddCallback cb) {
+  LOG_INFO("in shim layer");
+  msft_callbacks_.Add = cb;
+  bluetooth::shim::GetMsftExtensionManager()->MsftAdvMonitorAdd(
+      monitor, base::Bind(&BleScannerInterfaceImpl::OnMsftAdvMonitorAdd,
+                          base::Unretained(this)));
+}
+
+/** Removes MSFT filter */
+void BleScannerInterfaceImpl::MsftAdvMonitorRemove(
+    uint8_t monitor_handle, MsftAdvMonitorRemoveCallback cb) {
+  LOG_INFO("in shim layer");
+  msft_callbacks_.Remove = cb;
+  bluetooth::shim::GetMsftExtensionManager()->MsftAdvMonitorRemove(
+      monitor_handle,
+      base::Bind(&BleScannerInterfaceImpl::OnMsftAdvMonitorRemove,
+                 base::Unretained(this)));
+}
+
+/** Enable / disable MSFT scan filter */
+void BleScannerInterfaceImpl::MsftAdvMonitorEnable(
+    bool enable, MsftAdvMonitorEnableCallback cb) {
+  LOG_INFO("in shim layer");
+  msft_callbacks_.Enable = cb;
+  bluetooth::shim::GetMsftExtensionManager()->MsftAdvMonitorEnable(
+      enable, base::Bind(&BleScannerInterfaceImpl::OnMsftAdvMonitorEnable,
+                         base::Unretained(this)));
+}
+
+/** Callback of adding MSFT filter */
+void BleScannerInterfaceImpl::OnMsftAdvMonitorAdd(
+    uint8_t monitor_handle, bluetooth::hci::ErrorCode status) {
+  LOG_INFO("in shim layer");
+  msft_callbacks_.Add.Run(monitor_handle, (uint8_t)status);
+}
+
+/** Callback of removing MSFT filter */
+void BleScannerInterfaceImpl::OnMsftAdvMonitorRemove(
+    bluetooth::hci::ErrorCode status) {
+  LOG_INFO("in shim layer");
+  msft_callbacks_.Remove.Run((uint8_t)status);
+}
+
+/** Callback of enabling / disabling MSFT scan filter */
+void BleScannerInterfaceImpl::OnMsftAdvMonitorEnable(
+    bluetooth::hci::ErrorCode status) {
+  LOG_INFO("in shim layer");
+  msft_callbacks_.Enable.Run((uint8_t)status);
+}
+
+/** Sets the LE scan interval and window in units of N*0.625 msec */
 void BleScannerInterfaceImpl::SetScanParameters(int scanner_id,
                                                 int scan_interval,
                                                 int scan_window, Callback cb) {
@@ -611,6 +673,7 @@ bool BleScannerInterfaceImpl::parse_filter_command(
   advertising_packet_content_filter_command.company = apcf_command.company;
   advertising_packet_content_filter_command.company_mask =
       apcf_command.company_mask;
+  advertising_packet_content_filter_command.ad_type = apcf_command.ad_type;
   advertising_packet_content_filter_command.data.assign(
       apcf_command.data.begin(), apcf_command.data.end());
   advertising_packet_content_filter_command.data_mask.assign(
@@ -727,6 +790,34 @@ void bluetooth::shim::init_scanning_manager() {
       ->Init();
 }
 
+bool bluetooth::shim::is_ad_type_filter_supported() {
+  return bluetooth::shim::GetScanning()->IsAdTypeFilterSupported();
+}
+
+void bluetooth::shim::set_ad_type_rsi_filter(bool enable) {
+  bluetooth::hci::AdvertisingFilterParameter advertising_filter_parameter;
+  bluetooth::shim::GetScanning()->ScanFilterParameterSetup(
+      bluetooth::hci::ApcfAction::DELETE, 0x00, advertising_filter_parameter);
+  if (enable) {
+    std::vector<bluetooth::hci::AdvertisingPacketContentFilterCommand> filters =
+        {};
+    bluetooth::hci::AdvertisingPacketContentFilterCommand filter{};
+    filter.filter_type = bluetooth::hci::ApcfFilterType::AD_TYPE;
+    filter.ad_type = BTM_BLE_AD_TYPE_RSI;
+    filters.push_back(filter);
+    bluetooth::shim::GetScanning()->ScanFilterAdd(0x00, filters);
+
+    advertising_filter_parameter.delivery_mode =
+        bluetooth::hci::DeliveryMode::IMMEDIATE;
+    advertising_filter_parameter.feature_selection = kAllowADTypeFilter;
+    advertising_filter_parameter.list_logic_type = kAllowADTypeFilter;
+    advertising_filter_parameter.filter_logic_type = kFilterLogicOr;
+    advertising_filter_parameter.rssi_high_thresh = kLowestRssiValue;
+    bluetooth::shim::GetScanning()->ScanFilterParameterSetup(
+        bluetooth::hci::ApcfAction::ADD, 0x00, advertising_filter_parameter);
+  }
+}
+
 void bluetooth::shim::set_empty_filter(bool enable) {
   bluetooth::hci::AdvertisingFilterParameter advertising_filter_parameter;
   bluetooth::shim::GetScanning()->ScanFilterParameterSetup(
@@ -742,4 +833,46 @@ void bluetooth::shim::set_empty_filter(bool enable) {
     bluetooth::shim::GetScanning()->ScanFilterParameterSetup(
         bluetooth::hci::ApcfAction::ADD, 0x00, advertising_filter_parameter);
   }
+}
+
+void bluetooth::shim::set_target_announcements_filter(bool enable) {
+  uint8_t filter_index = 0x03;
+
+  LOG_DEBUG(" enable %d", enable);
+
+  bluetooth::hci::AdvertisingFilterParameter advertising_filter_parameter = {};
+  bluetooth::shim::GetScanning()->ScanFilterParameterSetup(
+      bluetooth::hci::ApcfAction::DELETE, filter_index,
+      advertising_filter_parameter);
+
+  if (!enable) return;
+
+  advertising_filter_parameter.delivery_mode =
+      bluetooth::hci::DeliveryMode::IMMEDIATE;
+  advertising_filter_parameter.feature_selection = kAllowServiceDataFilter;
+  advertising_filter_parameter.list_logic_type = kListLogicOr;
+  advertising_filter_parameter.filter_logic_type = kFilterLogicAnd;
+  advertising_filter_parameter.rssi_high_thresh = kLowestRssiValue;
+
+  /* Add targeted announcements filter on index 4 */
+  std::vector<bluetooth::hci::AdvertisingPacketContentFilterCommand>
+      cap_bap_filter = {};
+
+  bluetooth::hci::AdvertisingPacketContentFilterCommand cap_filter{};
+  cap_filter.filter_type = bluetooth::hci::ApcfFilterType::SERVICE_DATA;
+  cap_filter.data = {0x53, 0x18, 0x01};
+  cap_filter.data_mask = {0x53, 0x18, 0xFF};
+  cap_bap_filter.push_back(cap_filter);
+
+  bluetooth::hci::AdvertisingPacketContentFilterCommand bap_filter{};
+  bap_filter.filter_type = bluetooth::hci::ApcfFilterType::SERVICE_DATA;
+  bap_filter.data = {0x4e, 0x18, 0x01};
+  bap_filter.data_mask = {0x4e, 0x18, 0xFF};
+
+  cap_bap_filter.push_back(bap_filter);
+  bluetooth::shim::GetScanning()->ScanFilterAdd(filter_index, cap_bap_filter);
+
+  bluetooth::shim::GetScanning()->ScanFilterParameterSetup(
+      bluetooth::hci::ApcfAction::ADD, filter_index,
+      advertising_filter_parameter);
 }
