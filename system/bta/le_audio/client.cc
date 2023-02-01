@@ -460,6 +460,8 @@ class LeAudioClientImpl : public LeAudioClient {
         ToString(group->GetTargetState()).c_str());
     group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
 
+    group->PrintDebugState();
+
     /* There is an issue with a setting up stream or any other operation which
      * are gatt operations. It means peer is not responsable. Lets close ACL
      */
@@ -483,6 +485,12 @@ class LeAudioClientImpl : public LeAudioClient {
 
   void UpdateContextAndLocations(LeAudioDeviceGroup* group,
                                  LeAudioDevice* leAudioDevice) {
+    if (leAudioDevice->GetConnectionState() != DeviceConnectState::CONNECTED) {
+      LOG_DEBUG("%s not yet connected ",
+                leAudioDevice->address_.ToString().c_str());
+      return;
+    }
+
     /* Make sure location and direction are updated for the group. */
     auto location_update = group->ReloadAudioLocations();
     group->ReloadAudioDirections();
@@ -1108,13 +1116,12 @@ class LeAudioClientImpl : public LeAudioClient {
     if (!leAudioDevice) {
       leAudioDevices_.Add(address, DeviceConnectState::CONNECTING_BY_USER);
     } else {
-      if (leAudioDevice->GetConnectionState() !=
-          DeviceConnectState::DISCONNECTED) {
-        LOG_ERROR(
-            "Device %s is in invalid state: %s",
-            leAudioDevice->address_.ToString().c_str(),
-            bluetooth::common::ToString(leAudioDevice->GetConnectionState())
-                .c_str());
+      auto current_connect_state = leAudioDevice->GetConnectionState();
+      if ((current_connect_state == DeviceConnectState::CONNECTED) ||
+          (current_connect_state == DeviceConnectState::CONNECTING_BY_USER)) {
+        LOG_ERROR("Device %s is in invalid state: %s",
+                  leAudioDevice->address_.ToString().c_str(),
+                  bluetooth::common::ToString(current_connect_state).c_str());
 
         return;
       }
@@ -1911,19 +1918,43 @@ class LeAudioClientImpl : public LeAudioClient {
     return iter == charac.descriptors.end() ? 0 : (*iter).handle;
   }
 
-  void OnServiceChangeEvent(const RawAddress& address) {
-    LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
+  void ClearDeviceInformationAndStartSearch(LeAudioDevice* leAudioDevice) {
     if (!leAudioDevice) {
-      DLOG(ERROR) << __func__
-                  << ", skipping unknown leAudioDevice, address: " << address;
+      LOG_WARN("leAudioDevice is null");
       return;
     }
 
-    LOG(INFO) << __func__ << ": address=" << address;
+    LOG_INFO("%s", leAudioDevice->address_.ToString().c_str());
+
+    if (leAudioDevice->known_service_handles_ == false) {
+      LOG_DEBUG("Database already invalidated");
+      return;
+    }
+
     leAudioDevice->known_service_handles_ = false;
     leAudioDevice->csis_member_ = false;
     BtaGattQueue::Clean(leAudioDevice->conn_id_);
     DeregisterNotifications(leAudioDevice);
+
+    if (leAudioDevice->GetConnectionState() == DeviceConnectState::CONNECTED) {
+      leAudioDevice->SetConnectionState(
+          DeviceConnectState::CONNECTED_BY_USER_GETTING_READY);
+    }
+
+    btif_storage_remove_leaudio(leAudioDevice->address_);
+
+    BTA_GATTC_ServiceSearchRequest(
+        leAudioDevice->conn_id_,
+        &le_audio::uuid::kPublishedAudioCapabilityServiceUuid);
+  }
+
+  void OnServiceChangeEvent(const RawAddress& address) {
+    LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
+    if (!leAudioDevice) {
+      LOG_WARN("Skipping unknown leAudioDevice %s", address.ToString().c_str());
+      return;
+    }
+    ClearDeviceInformationAndStartSearch(leAudioDevice);
   }
 
   void OnMtuChanged(uint16_t conn_id, uint16_t mtu) {
@@ -2323,6 +2354,13 @@ class LeAudioClientImpl : public LeAudioClient {
 
     if (!leAudioDevice) {
       LOG(ERROR) << __func__ << ", unknown conn_id=" << loghex(conn_id);
+      return;
+    }
+
+    if (status == GATT_DATABASE_OUT_OF_SYNC) {
+      LOG_INFO("Database out of sync for %s, conn_id: 0x%04x",
+               leAudioDevice->address_.ToString().c_str(), conn_id);
+      ClearDeviceInformationAndStartSearch(leAudioDevice);
       return;
     }
 
@@ -3920,14 +3958,18 @@ class LeAudioClientImpl : public LeAudioClient {
                                   void* data) {
     if (!instance) return;
 
+    LeAudioDevice* leAudioDevice =
+        instance->leAudioDevices_.FindByConnId(conn_id);
+
     if (status == GATT_SUCCESS) {
       instance->LeAudioCharValueHandle(conn_id, hdl, len, value);
+    } else if (status == GATT_DATABASE_OUT_OF_SYNC) {
+      instance->ClearDeviceInformationAndStartSearch(leAudioDevice);
+      return;
     }
 
     /* We use data to keep notify connected flag. */
     if (data && !!PTR_TO_INT(data)) {
-      LeAudioDevice* leAudioDevice =
-          instance->leAudioDevices_.FindByConnId(conn_id);
       leAudioDevice->notify_connected_after_read_ = false;
 
       /* Update PACs and ASEs when all is read.*/
@@ -4414,7 +4456,7 @@ class LeAudioClientImpl : public LeAudioClient {
 void le_audio_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
   if (!p_data || !instance) return;
 
-  DLOG(INFO) << __func__ << " event = " << +event;
+  LOG_DEBUG("event = %d", static_cast<int>(event));
 
   switch (event) {
     case BTA_GATTC_DEREG_EVT:
