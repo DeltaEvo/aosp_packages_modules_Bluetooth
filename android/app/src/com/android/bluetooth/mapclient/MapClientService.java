@@ -64,7 +64,8 @@ public class MapClientService extends ProfileService {
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
     private static MapClientService sMapClientService;
-    private MapBroadcastReceiver mMapReceiver;
+    @VisibleForTesting
+    MapBroadcastReceiver mMapReceiver;
 
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileMapClientEnabled().orElse(false);
@@ -82,7 +83,8 @@ public class MapClientService extends ProfileService {
         return sMapClientService;
     }
 
-    private static synchronized void setMapClientService(MapClientService instance) {
+    @VisibleForTesting
+    static synchronized void setMapClientService(MapClientService instance) {
         if (DBG) {
             Log.d(TAG, "setMapClientService(): set to: " + instance);
         }
@@ -164,6 +166,9 @@ public class MapClientService extends ProfileService {
     }
 
     private synchronized void addDeviceToMapAndConnect(BluetoothDevice device) {
+        if (Utils.isInstrumentationTestMode()) {
+            Log.d(TAG, "addDeviceToMapAndConnect: device=" + device, new Exception());
+        }
         // When creating a new statemachine, its state is set to CONNECTING - which will trigger
         // connect.
         MceStateMachine mapStateMachine = new MceStateMachine(this, device);
@@ -362,6 +367,10 @@ public class MapClientService extends ProfileService {
             Log.d(TAG, "in Cleanup");
         }
         removeUncleanAccounts();
+        mMapInstanceMap.clear();
+        if (Utils.isInstrumentationTestMode()) {
+            Log.d(TAG, "cleanup() called.", new Exception());
+        }
         // TODO(b/72948646): should be moved to stop()
         setMapClientService(null);
     }
@@ -461,7 +470,8 @@ public class MapClientService extends ProfileService {
      * This class implements the IClient interface - or actually it validates the
      * preconditions for calling the actual functionality in the MapClientService, and calls it.
      */
-    private static class Binder extends IBluetoothMapClient.Stub implements IProfileServiceBinder {
+    @VisibleForTesting
+    static class Binder extends IBluetoothMapClient.Stub implements IProfileServiceBinder {
         private MapClientService mService;
 
         Binder(MapClientService service) {
@@ -473,6 +483,9 @@ public class MapClientService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private MapClientService getService(AttributionSource source) {
+            if (Utils.isInstrumentationTestMode()) {
+                return mService;
+            }
             if (!Utils.checkServiceAvailable(mService, TAG)
                     || !(MapUtils.isSystemUser()
                     || Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG))
@@ -715,7 +728,8 @@ public class MapClientService extends ProfileService {
         }
     }
 
-    private class MapBroadcastReceiver extends BroadcastReceiver {
+    @VisibleForTesting
+    class MapBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();

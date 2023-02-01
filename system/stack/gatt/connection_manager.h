@@ -37,6 +37,8 @@ namespace connection_manager {
 using tAPP_ID = uint8_t;
 
 /* for background connection */
+extern bool background_connect_targeted_announcement_add(
+    tAPP_ID app_id, const RawAddress& address);
 extern bool background_connect_add(tAPP_ID app_id, const RawAddress& address);
 extern bool background_connect_remove(tAPP_ID app_id,
                                       const RawAddress& address);
@@ -58,5 +60,7 @@ extern void dump(int fd);
  * timeout. It must be implemented by users of connection_manager */
 extern void on_connection_timed_out(uint8_t app_id, const RawAddress& address);
 extern void on_connection_timed_out_from_shim(const RawAddress& address);
+
+extern bool is_background_connection(const RawAddress& address);
 
 }  // namespace connection_manager
