@@ -42,6 +42,7 @@ import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceProfile;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceUse;
+import android.bluetooth.BluetoothAudioPolicy;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothFrameworkInitializer;
@@ -262,7 +263,8 @@ public class AdapterService extends Service {
     }
 
     private BluetoothAdapter mAdapter;
-    private AdapterProperties mAdapterProperties;
+    @VisibleForTesting
+    AdapterProperties mAdapterProperties;
     private AdapterState mAdapterStateMachine;
     private BondStateMachine mBondStateMachine;
     private JniCallbacks mJniCallbacks;
@@ -299,6 +301,7 @@ public class AdapterService extends Service {
     private ActiveDeviceManager mActiveDeviceManager;
     private DatabaseManager mDatabaseManager;
     private SilenceDeviceManager mSilenceDeviceManager;
+    private CompanionManager mBtCompanionManager;
     private AppOpsManager mAppOps;
 
     private BluetoothSocketManagerBinder mBluetoothSocketManagerBinder;
@@ -440,6 +443,7 @@ public class AdapterService extends Service {
                         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_LOCAL_IO_CAPS_BLE);
                         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_DYNAMIC_AUDIO_BUFFER);
                         mAdapterStateMachine.sendMessage(AdapterState.BREDR_STARTED);
+                        mBtCompanionManager.loadCompanionInfo();
                     }
                     break;
                 case BluetoothAdapter.STATE_OFF:
@@ -540,6 +544,8 @@ public class AdapterService extends Service {
         mSilenceDeviceManager = new SilenceDeviceManager(this, new ServiceFactory(),
                 Looper.getMainLooper());
         mSilenceDeviceManager.start();
+
+        mBtCompanionManager = new CompanionManager(this, new ServiceFactory());
 
         mBluetoothSocketManagerBinder = new BluetoothSocketManagerBinder(this);
 
@@ -711,7 +717,7 @@ public class AdapterService extends Service {
     void stopProfileServices() {
         // Make sure to stop classic background tasks now
         cancelDiscoveryNative();
-        mAdapterProperties.setScanMode(AbstractionLayer.BT_SCAN_MODE_NONE);
+        mAdapterProperties.setScanMode(BluetoothAdapter.SCAN_MODE_NONE);
 
         Class[] supportedProfileServices = Config.getSupportedProfiles();
         // TODO(b/228875190): GATT is assumed supported. If we support no profiles then just move on
@@ -1361,7 +1367,8 @@ public class AdapterService extends Service {
     }
 
     @BluetoothAdapter.RfcommListenerResult
-    private int stopRfcommListener(ParcelUuid uuid, AttributionSource attributionSource) {
+    @VisibleForTesting
+    int stopRfcommListener(ParcelUuid uuid, AttributionSource attributionSource) {
         RfcommListenerData listenerData = mBluetoothServerSockets.get(uuid.getUuid());
 
         if (listenerData == null) {
@@ -1380,7 +1387,8 @@ public class AdapterService extends Service {
         return listenerData.closeServerAndPendingSockets(mHandler);
     }
 
-    private IncomingRfcommSocketInfo retrievePendingSocketForServiceRecord(
+    @VisibleForTesting
+    IncomingRfcommSocketInfo retrievePendingSocketForServiceRecord(
             ParcelUuid uuid, AttributionSource attributionSource) {
         IncomingRfcommSocketInfo socketInfo = new IncomingRfcommSocketInfo();
 
@@ -1548,8 +1556,35 @@ public class AdapterService extends Service {
         }
     }
 
-    private boolean isAvailable() {
+    @VisibleForTesting
+    boolean isAvailable() {
         return !mCleaningUp;
+    }
+
+    /**
+     *  Get an metadata of given device and key
+     *
+     *  @param device Bluetooth device
+     *  @param key Metadata key
+     *  @param value Metadata value
+     *  @return if metadata is set successfully
+     */
+    public boolean setMetadata(BluetoothDevice device, int key, byte[] value) {
+        if (value == null || value.length > BluetoothDevice.METADATA_MAX_LENGTH) {
+            return false;
+        }
+        return mDatabaseManager.setCustomMeta(device, key, value);
+    }
+
+    /**
+     *  Get an metadata of given device and key
+     *
+     *  @param device Bluetooth device
+     *  @param key Metadata key
+     *  @return value of given device and key combination
+     */
+    public byte[] getMetadata(BluetoothDevice device, int key) {
+        return mDatabaseManager.getCustomMeta(device, key);
     }
 
     /**
@@ -1963,7 +1998,7 @@ public class AdapterService extends Service {
             }
             enforceBluetoothPrivilegedPermission(service);
 
-            return service.mAdapterProperties.setScanMode(convertScanModeToHal(mode))
+            return service.mAdapterProperties.setScanMode(mode)
                     ? BluetoothStatusCodes.SUCCESS : BluetoothStatusCodes.ERROR_UNKNOWN;
         }
 
@@ -3167,6 +3202,10 @@ public class AdapterService extends Service {
                 service.mBluetoothKeystoreService.factoryReset();
             }
 
+            if (service.mBtCompanionManager != null) {
+                service.mBtCompanionManager.factoryReset();
+            }
+
             return service.factoryResetNative();
         }
 
@@ -3632,6 +3671,73 @@ public class AdapterService extends Service {
         }
 
         @Override
+        public void getAudioPolicyRemoteSupported(BluetoothDevice device,
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                receiver.send(getAudioPolicyRemoteSupported(device, source));
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+        private int getAudioPolicyRemoteSupported(BluetoothDevice device,
+                AttributionSource source) {
+            AdapterService service = getService();
+            if (service == null
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG,
+                        "getAudioPolicyRemoteSupported")
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return BluetoothAudioPolicy.FEATURE_UNCONFIGURED_BY_REMOTE;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            return service.getAudioPolicyRemoteSupported(device);
+        }
+
+        @Override
+        public void setAudioPolicy(BluetoothDevice device, BluetoothAudioPolicy policies,
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                receiver.send(setAudioPolicy(device, policies, source));
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+        private int setAudioPolicy(BluetoothDevice device, BluetoothAudioPolicy policies,
+                AttributionSource source) {
+            AdapterService service = getService();
+            if (service == null) {
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            } else if (!callerIsSystemOrActiveOrManagedUser(service, TAG, "setAudioPolicy")) {
+                return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED;
+            } else if (!Utils.checkConnectPermissionForDataDelivery(
+                    service, source, TAG)) {
+                return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            return service.setAudioPolicy(device, policies);
+        }
+
+        @Override
+        public void getAudioPolicy(BluetoothDevice device,
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                receiver.send(getAudioPolicy(device, source));
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+        private BluetoothAudioPolicy getAudioPolicy(BluetoothDevice device,
+                AttributionSource source) {
+            AdapterService service = getService();
+            if (service == null
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "getAudioPolicy")
+                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
+                return null;
+            }
+            enforceBluetoothPrivilegedPermission(service);
+            return service.getAudioPolicy(device);
+        }
+
+        @Override
         public void requestActivityInfo(IBluetoothActivityEnergyInfoListener listener,
                     AttributionSource source) {
             BluetoothActivityEnergyInfo info = reportActivityInfo(source);
@@ -3864,7 +3970,8 @@ public class AdapterService extends Service {
         return mAdapterProperties.getName().length();
     }
 
-    private static boolean isValidIoCapability(int capability) {
+    @VisibleForTesting
+    static boolean isValidIoCapability(int capability) {
         if (capability < 0 || capability >= BluetoothAdapter.IO_CAPABILITY_MAX) {
             Log.e(TAG, "Invalid IO capability value - " + capability);
             return false;
@@ -4645,6 +4752,8 @@ public class AdapterService extends Service {
                 return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_BAD_PARAMETERS;
             case /*HCI_ERR_PEER_USER*/ 0x13:
                 return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE_REQUEST;
+            case /*HCI_ERR_REMOTE_POWER_OFF*/ 0x15:
+                return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE_REQUEST;
             case /*HCI_ERR_CONN_CAUSE_LOCAL_HOST*/ 0x16:
                 return BluetoothStatusCodes.ERROR_DISCONNECT_REASON_LOCAL_REQUEST;
             case /*HCI_ERR_UNSUPPORTED_REM_FEATURE*/ 0x1A:
@@ -4793,7 +4902,8 @@ public class AdapterService extends Service {
         return mAdapterProperties.isA2dpOffloadEnabled();
     }
 
-    private BluetoothActivityEnergyInfo reportActivityInfo() {
+    @VisibleForTesting
+    BluetoothActivityEnergyInfo reportActivityInfo() {
         if (mAdapterProperties.getState() != BluetoothAdapter.STATE_ON
                 || !mAdapterProperties.isActivityAndEnergyReportingSupported()) {
             return null;
@@ -4855,7 +4965,7 @@ public class AdapterService extends Service {
                 source.getUid(), source.getPackageName(), deviceAddress);
     }
 
-    private static int convertScanModeToHal(int mode) {
+    static int convertScanModeToHal(int mode) {
         switch (mode) {
             case BluetoothAdapter.SCAN_MODE_NONE:
                 return AbstractionLayer.BT_SCAN_MODE_NONE;
@@ -5448,6 +5558,84 @@ public class AdapterService extends Service {
             return 0;
         }
         return getMetricIdNative(Utils.getByteAddress(device));
+    }
+
+    public CompanionManager getCompanionManager() {
+        return mBtCompanionManager;
+    }
+
+    /**
+     *  Call for the AdapterService receives bond state change
+     *
+     *  @param device Bluetooth device
+     *  @param state bond state
+     */
+    public void onBondStateChanged(BluetoothDevice device, int state) {
+        if (mBtCompanionManager != null) {
+            mBtCompanionManager.onBondStateChanged(device, state);
+        }
+    }
+
+    /**
+     * Get audio policy feature support status
+     *
+     * @param device Bluetooth device to be checked for audio policy support
+     * @return int status of the remote support for audio policy feature
+     */
+    public int getAudioPolicyRemoteSupported(BluetoothDevice device) {
+        if (mHeadsetClientService != null) {
+            return mHeadsetClientService.getAudioPolicyRemoteSupported(device);
+        } else {
+            Log.e(TAG, "No audio transport connected");
+            return BluetoothAudioPolicy.FEATURE_UNCONFIGURED_BY_REMOTE;
+        }
+    }
+
+    /**
+     * Set audio policy for remote device
+     *
+     * @param device Bluetooth device to be set policy for
+     * @return int result status for setAudioPolicy API
+     */
+    public int setAudioPolicy(BluetoothDevice device, BluetoothAudioPolicy policies) {
+        DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
+        if (deviceProp == null) {
+            return BluetoothStatusCodes.ERROR_DEVICE_NOT_BONDED;
+        }
+
+        if (mHeadsetClientService != null) {
+            if (getAudioPolicyRemoteSupported(device)
+                    != BluetoothAudioPolicy.FEATURE_SUPPORTED_BY_REMOTE) {
+                Log.w(TAG, "Audio Policy feature not supported by AG");
+                return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
+            }
+            deviceProp.setHfAudioPolicyForRemoteAg(policies);
+            mHeadsetClientService.setAudioPolicy(device, policies);
+            return BluetoothStatusCodes.SUCCESS;
+        } else {
+            Log.e(TAG, "HeadsetClient not connected");
+            return BluetoothStatusCodes.ERROR_PROFILE_NOT_CONNECTED;
+        }
+    }
+
+    /**
+     * Get audio policy for remote device
+     *
+     * @param device Bluetooth device to be set policy for
+     * @return {@link BluetoothAudioPolicy} policy stored for the device
+     */
+    public BluetoothAudioPolicy getAudioPolicy(BluetoothDevice device) {
+        DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(device);
+        if (deviceProp == null) {
+            return null;
+        }
+
+        if (mHeadsetClientService != null) {
+            return deviceProp.getHfAudioPolicyForRemoteAg();
+        } else {
+            Log.e(TAG, "HeadsetClient not connected");
+            return null;
+        }
     }
 
     /**
