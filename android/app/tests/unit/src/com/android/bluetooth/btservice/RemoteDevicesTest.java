@@ -6,10 +6,13 @@ import static org.mockito.Mockito.*;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAssignedNumbers;
+import android.bluetooth.BluetoothAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothHeadsetClient;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.HandlerThread;
@@ -21,11 +24,13 @@ import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
 import com.android.bluetooth.hfp.HeadsetHalConstants;
 
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -46,17 +51,31 @@ public class RemoteDevicesTest {
     private HandlerThread mHandlerThread;
     private TestLooperManager mTestLooperManager;
 
+    private Context mTargetContext;
+    private BluetoothManager mBluetoothManager;
+
     @Mock private AdapterService mAdapterService;
 
     @Before
     public void setUp() {
+        mTargetContext = InstrumentationRegistry.getTargetContext();
+
         MockitoAnnotations.initMocks(this);
         mDevice1 = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(TEST_BT_ADDR_1);
         mHandlerThread = new HandlerThread("RemoteDevicesTestHandlerThread");
         mHandlerThread.start();
         mTestLooperManager = InstrumentationRegistry.getInstrumentation()
                 .acquireLooperManager(mHandlerThread.getLooper());
+
+        mBluetoothManager = mTargetContext.getSystemService(BluetoothManager.class);
+        when(mAdapterService.getSystemService(Context.BLUETOOTH_SERVICE))
+                .thenReturn(mBluetoothManager);
+        when(mAdapterService.getSystemServiceName(BluetoothManager.class))
+                .thenReturn(Context.BLUETOOTH_SERVICE);
+
         mRemoteDevices = new RemoteDevices(mAdapterService, mHandlerThread.getLooper());
+        verify(mAdapterService, times(1)).getSystemService(Context.BLUETOOTH_SERVICE);
+        verify(mAdapterService, times(1)).getSystemService(BluetoothManager.class);
     }
 
     @After
@@ -256,6 +275,7 @@ public class RemoteDevicesTest {
     }
 
     @Test
+    @Ignore("b/266128644")
     public void testResetBatteryLevel_testAclStateChangeCallback() {
         int batteryLevel = 10;
 
@@ -278,7 +298,8 @@ public class RemoteDevicesTest {
         // BluetoothDevice.BATTERY_LEVEL_UNKNOWN
         when(mAdapterService.getState()).thenReturn(BluetoothAdapter.STATE_ON);
         mRemoteDevices.aclStateChangeCallback(0, Utils.getByteAddress(mDevice1),
-                AbstractionLayer.BT_ACL_STATE_DISCONNECTED, 2, 19); // HCI code 19 remote terminated
+                AbstractionLayer.BT_ACL_STATE_DISCONNECTED, 2, 19,
+                BluetoothDevice.ERROR); // HCI code 19 remote terminated
         // Verify ACTION_ACL_DISCONNECTED and BATTERY_LEVEL_CHANGED intent are sent
         verify(mAdapterService, times(3)).sendBroadcast(mIntentArgument.capture(),
                 mStringArgument.capture(), any(Bundle.class));
@@ -515,6 +536,26 @@ public class RemoteDevicesTest {
         verify(mAdapterService, never()).sendBroadcast(any(), anyString());
         // Verify that device property is still null after invalid update
         Assert.assertNull(mRemoteDevices.getDeviceProperties(mDevice1));
+    }
+
+    @Test
+    public void testSetgetHfAudioPolicyForRemoteAg() {
+        // Verify that device property is null initially
+        Assert.assertNull(mRemoteDevices.getDeviceProperties(mDevice1));
+
+        mRemoteDevices.addDeviceProperties(Utils.getBytesFromAddress(TEST_BT_ADDR_1));
+
+        DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(mDevice1);
+        BluetoothAudioPolicy policies = new BluetoothAudioPolicy.Builder()
+                .setCallEstablishPolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
+                .setConnectingTimePolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
+                .setInBandRingtonePolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
+                .build();
+        deviceProp.setHfAudioPolicyForRemoteAg(policies);
+
+        // Verify that the audio policy properties are set and get propperly
+        Assert.assertEquals(policies, mRemoteDevices.getDeviceProperties(mDevice1)
+                .getHfAudioPolicyForRemoteAg());
     }
 
     private static void verifyBatteryLevelChangedIntent(BluetoothDevice device, int batteryLevel,

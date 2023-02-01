@@ -540,7 +540,8 @@ static jboolean connectNative(JNIEnv* env, jobject object, jbyteArray address) {
     return JNI_FALSE;
   }
 
-  bt_status_t status = sBluetoothHfpClientInterface->connect((RawAddress*)addr);
+  bt_status_t status =
+      sBluetoothHfpClientInterface->connect((const RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
     ALOGE("Failed AG connection, status: %d", status);
   }
@@ -879,6 +880,37 @@ static jboolean sendATCmdNative(JNIEnv* env, jobject object, jbyteArray address,
   return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
+static jboolean sendAndroidAtNative(JNIEnv* env, jobject object,
+                                    jbyteArray address, jstring arg_str) {
+  std::shared_lock<std::shared_mutex> lock(interface_mutex);
+  if (!sBluetoothHfpClientInterface) return JNI_FALSE;
+
+  jbyte* addr = env->GetByteArrayElements(address, NULL);
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  const char* arg = NULL;
+  if (arg_str != NULL) {
+    arg = env->GetStringUTFChars(arg_str, NULL);
+  }
+
+  bt_status_t status = sBluetoothHfpClientInterface->send_android_at(
+      (const RawAddress*)addr, arg);
+
+  if (status != BT_STATUS_SUCCESS) {
+    ALOGE("FAILED to control volume, status: %d", status);
+  }
+
+  if (arg != NULL) {
+    env->ReleaseStringUTFChars(arg_str, arg);
+  }
+
+  env->ReleaseByteArrayElements(address, addr, 0);
+  return (status == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initializeNative", "()V", (void*)initializeNative},
@@ -903,6 +935,8 @@ static JNINativeMethod sMethods[] = {
     {"requestLastVoiceTagNumberNative", "([B)Z",
      (void*)requestLastVoiceTagNumberNative},
     {"sendATCmdNative", "([BIIILjava/lang/String;)Z", (void*)sendATCmdNative},
+    {"sendAndroidAtNative", "([BLjava/lang/String;)Z",
+     (void*)sendAndroidAtNative},
 };
 
 int register_com_android_bluetooth_hfpclient(JNIEnv* env) {

@@ -21,6 +21,10 @@ cc_library_static {
         "src/hci_packet_parser.cc",
         "src/packet_fragmenter.cc",
     ],
+    generated_headers: [
+        "BluetoothGeneratedDumpsysDataSchema_h",
+        "BluetoothGeneratedPackets_h",
+    ],
     target: {
         android: {
             srcs: ["src/hci_layer_android.cc"],
@@ -88,28 +92,6 @@ cc_test {
         "libbluetooth-for-tests",
         "libbtcore",
         "libbt-hci",
-    ],
-}
-
-// HCI native unit tests for target
-cc_test {
-    name: "net_test_hci_native",
-    test_suites: ["device-tests"],
-    defaults: [
-        "fluoride_unit_test_defaults",
-        "mts_defaults",
-    ],
-    local_include_dirs: [
-        "include",
-    ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/stack/include",
-    ],
-    srcs: [
-        "test/hci_layer_test.cc",
-        "test/other_stack_stub.cc",
     ],
 }
 

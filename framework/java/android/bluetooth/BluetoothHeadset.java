@@ -62,7 +62,7 @@ import java.util.concurrent.TimeoutException;
  */
 public final class BluetoothHeadset implements BluetoothProfile {
     private static final String TAG = "BluetoothHeadset";
-    private static final boolean DBG = true;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
     private static final boolean VDBG = false;
 
     /**
@@ -360,13 +360,14 @@ public final class BluetoothHeadset implements BluetoothProfile {
     }
 
     /**
-     * Close the connection to the backing service.
-     * Other public functions of BluetoothHeadset will return default error
-     * results once close() has been called. Multiple invocations of close()
+     * Close the connection to the backing service. Other public functions of BluetoothHeadset will
+     * return default error results once close() has been called. Multiple invocations of close()
      * are ok.
+     *
+     * @hide
      */
     @UnsupportedAppUsage
-    /*package*/ void close() {
+    public void close() {
         mProfileConnector.disconnect();
     }
 
@@ -416,7 +417,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         } else if (isEnabled() && isValidDevice(device)) {
             try {
                 final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
-                service.connectWithAttribution(device, mAttributionSource, recv);
+                service.connect(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -461,7 +462,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         } else if (isEnabled() && isValidDevice(device)) {
             try {
                 final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
-                service.disconnectWithAttribution(device, mAttributionSource, recv);
+                service.disconnect(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -487,7 +488,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
             try {
                 final SynchronousResultReceiver<List<BluetoothDevice>> recv =
                         SynchronousResultReceiver.get();
-                service.getConnectedDevicesWithAttribution(mAttributionSource, recv);
+                service.getConnectedDevices(mAttributionSource, recv);
                 return Attributable.setAttributionSource(
                         recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue),
                         mAttributionSource);
@@ -542,7 +543,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         } else if (isEnabled() && isValidDevice(device)) {
             try {
                 final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
-                service.getConnectionStateWithAttribution(device, mAttributionSource, recv);
+                service.getConnectionState(device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));

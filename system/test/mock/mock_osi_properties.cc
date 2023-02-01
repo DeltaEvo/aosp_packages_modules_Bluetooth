@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_osi_properties.h"
 
@@ -60,6 +58,11 @@ bool osi_property_get_bool(const char* key, bool default_value) {
 int32_t osi_property_get_int32(const char* key, int32_t default_value) {
   mock_function_count_map[__func__]++;
   return test::mock::osi_properties::osi_property_get_int32(key, default_value);
+}
+std::vector<uint32_t> osi_property_get_uintlist(
+    const char* key, std::vector<uint32_t> default_value) {
+  mock_function_count_map[__func__]++;
+  return default_value;
 }
 int osi_property_set(const char* key, const char* value) {
   mock_function_count_map[__func__]++;

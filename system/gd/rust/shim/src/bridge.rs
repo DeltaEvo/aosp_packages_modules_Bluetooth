@@ -5,6 +5,7 @@ pub use crate::hci::*;
 pub use crate::stack::*;
 
 #[cxx::bridge(namespace = bluetooth::shim::rust)]
+#[allow(unused_must_use)]
 pub mod ffi {
     extern "Rust" {
         type Stack;
@@ -80,12 +81,17 @@ pub mod ffi {
         fn controller_supports_connected_iso_stream_peripheral(c: &Controller) -> bool;
         fn controller_supports_iso_broadcaster(c: &Controller) -> bool;
         fn controller_supports_synchronized_receiver(c: &Controller) -> bool;
+        fn controller_supports_ble_periodic_advertising_adi(c: &Controller) -> bool;
         fn controller_supports_configure_data_path(c: &Controller) -> bool;
+        fn controller_supports_set_min_encryption_key_size(c: &Controller) -> bool;
 
         fn controller_supports_reading_remote_extended_features(c: &Controller) -> bool;
         fn controller_supports_enhanced_setup_synchronous_connection(c: &Controller) -> bool;
         fn controller_supports_enhanced_accept_synchronous_connection(c: &Controller) -> bool;
         fn controller_supports_ble_set_privacy_mode(c: &Controller) -> bool;
+
+        fn controller_supports_ble_connection_subrating(c: &Controller) -> bool;
+        fn controller_supports_ble_connection_subrating_host(c: &Controller) -> bool;
 
         fn controller_get_acl_buffer_length(c: &Controller) -> u16;
         fn controller_get_le_buffer_length(c: &Controller) -> u16;

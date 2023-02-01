@@ -25,6 +25,8 @@
 #ifndef SDP_INT_H
 #define SDP_INT_H
 
+#include <base/strings/stringprintf.h>
+
 #include <cstdint>
 
 #include "bt_target.h"
@@ -162,7 +164,7 @@ struct tCONN_CB {
 #define SDP_DISC_WAIT_CANCEL 5
 
   uint8_t disc_state;
-  uint8_t is_attr_search;
+  bool is_attr_search;
 
   uint16_t cont_offset;     /* Continuation state data in the server response */
   tSDP_CONT_INFO cont_info; /* structure to hold continuation information for
@@ -172,6 +174,28 @@ struct tCONN_CB {
  private:
   tCONN_CB(const tCONN_CB&) = delete;
 };
+
+#ifndef CASE_RETURN_TEXT
+#define CASE_RETURN_TEXT(code) \
+  case code:                   \
+    return #code
+#endif
+
+using tSDP_DISC_WAIT = int;
+
+inline std::string discovery_state_text(const tSDP_DISC_WAIT& state) {
+  switch (state) {
+    CASE_RETURN_TEXT(SDP_DISC_WAIT_CONN);
+    CASE_RETURN_TEXT(SDP_DISC_WAIT_HANDLES);
+    CASE_RETURN_TEXT(SDP_DISC_WAIT_ATTR);
+    CASE_RETURN_TEXT(SDP_DISC_WAIT_SEARCH_ATTR);
+    CASE_RETURN_TEXT(SDP_DISC_WAIT_CANCEL);
+    default:
+      return base::StringPrintf("UNKNOWN[%d]", state);
+  }
+}
+
+#undef CASE_RETURN_TEXT
 
 /*  The main SDP control block */
 typedef struct {
@@ -240,6 +264,9 @@ extern bool sdpu_is_service_id_avrc_target(const tSDP_ATTRIBUTE* p_attr);
 extern bool spdu_is_avrcp_version_valid(const uint16_t version);
 extern void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
                                          const RawAddress* bdaddr);
+extern void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr,
+                                          const RawAddress* bdaddr,
+                                          uint16_t profile_version);
 extern uint16_t sdpu_get_active_ccb_cid(const RawAddress& remote_bd_addr);
 extern bool sdpu_process_pend_ccb_same_cid(tCONN_CB& ccb);
 extern bool sdpu_process_pend_ccb_new_cid(tCONN_CB& ccb);

@@ -23,12 +23,14 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
+#include "btif/include/stack_manager.h"
 #include "btif_bqr.h"
 #include "btif_common.h"
 #include "btm_api.h"
 #include "btm_ble_api.h"
 #include "common/leaky_bonded_queue.h"
 #include "common/time_util.h"
+#include "core_callbacks.h"
 #include "osi/include/properties.h"
 
 namespace bluetooth {
@@ -341,7 +343,8 @@ void ConfigureBqr(const BqrConfiguration& bqr_config) {
 
 void BqrVscCompleteCallback(tBTM_VSC_CMPL* p_vsc_cmpl_params) {
   if (p_vsc_cmpl_params->param_len < 1) {
-    LOG(ERROR) << __func__ << ": The length of returned parameters is less than 1";
+    LOG(ERROR) << __func__
+               << ": The length of returned parameters is less than 1";
     return;
   }
 
@@ -352,7 +355,8 @@ void BqrVscCompleteCallback(tBTM_VSC_CMPL* p_vsc_cmpl_params) {
   // Current_Quality_Event_Mask | 4 octets | Indicates current bit mask setting
   STREAM_TO_UINT8(status, p_event_param_buf);
   if (status != HCI_SUCCESS) {
-    LOG(ERROR) << __func__ << ": Fail to configure BQR. status: " << loghex(status);
+    LOG(ERROR) << __func__
+               << ": Fail to configure BQR. status: " << loghex(status);
     return;
   }
 
@@ -443,7 +447,7 @@ void AddLinkQualityEventToQueue(uint8_t length,
   p_bqr_event->ParseBqrLinkQualityEvt(length, p_link_quality_event);
 
   LOG(WARNING) << *p_bqr_event;
-  invoke_link_quality_report_cb(
+  GetInterfaceToProfiles()->events->invoke_link_quality_report_cb(
       bluetooth::common::time_get_os_boottime_ms(),
       p_bqr_event->bqr_link_quality_event_.quality_report_id,
       p_bqr_event->bqr_link_quality_event_.rssi,

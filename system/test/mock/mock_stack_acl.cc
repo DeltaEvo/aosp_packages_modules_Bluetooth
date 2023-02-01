@@ -68,6 +68,10 @@ struct acl_peer_supports_ble_connection_parameters_request
 struct acl_peer_supports_ble_packet_extension
     acl_peer_supports_ble_packet_extension;
 struct acl_peer_supports_sniff_subrating acl_peer_supports_sniff_subrating;
+struct acl_peer_supports_ble_connection_subrating
+    acl_peer_supports_ble_connection_subrating;
+struct acl_peer_supports_ble_connection_subrating_host
+    acl_peer_supports_ble_connection_subrating_host;
 struct acl_refresh_remote_address acl_refresh_remote_address;
 struct acl_set_peer_le_features_from_handle
     acl_set_peer_le_features_from_handle;
@@ -87,6 +91,7 @@ struct BTM_SetLinkSuperTout BTM_SetLinkSuperTout;
 struct BTM_SwitchRoleToCentral BTM_SwitchRoleToCentral;
 struct btm_remove_acl btm_remove_acl;
 struct btm_get_acl_disc_reason_code btm_get_acl_disc_reason_code;
+struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
 struct BTM_GetHCIConnHandle BTM_GetHCIConnHandle;
 struct BTM_GetMaxPacketSize BTM_GetMaxPacketSize;
 struct BTM_GetNumAclLinks BTM_GetNumAclLinks;
@@ -171,6 +176,8 @@ struct hci_btm_set_link_supervision_timeout
     hci_btm_set_link_supervision_timeout;
 struct on_acl_br_edr_connected on_acl_br_edr_connected;
 struct on_acl_br_edr_failed on_acl_br_edr_failed;
+struct BTM_unblock_role_switch_and_sniff_mode_for
+    BTM_unblock_role_switch_and_sniff_mode_for;
 
 }  // namespace stack_acl
 }  // namespace mock
@@ -266,6 +273,17 @@ bool acl_peer_supports_sniff_subrating(const RawAddress& remote_bda) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_acl::acl_peer_supports_sniff_subrating(remote_bda);
 }
+bool acl_peer_supports_ble_connection_subrating(const RawAddress& remote_bda) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_acl::acl_peer_supports_ble_connection_subrating(
+      remote_bda);
+}
+bool acl_peer_supports_ble_connection_subrating_host(
+    const RawAddress& remote_bda) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_acl::acl_peer_supports_ble_connection_subrating_host(
+      remote_bda);
+}
 bool acl_refresh_remote_address(const RawAddress& identity_address,
                                 tBLE_ADDR_TYPE identity_address_type,
                                 const RawAddress& bda,
@@ -357,6 +375,10 @@ tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
 tHCI_REASON btm_get_acl_disc_reason_code(void) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_acl::btm_get_acl_disc_reason_code();
+}
+bool btm_is_acl_locally_initiated(void) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_acl::btm_is_acl_locally_initiated();
 }
 uint16_t BTM_GetHCIConnHandle(const RawAddress& remote_bda,
                               tBT_TRANSPORT transport) {
@@ -695,13 +717,20 @@ void hci_btm_set_link_supervision_timeout(tACL_CONN& link, uint16_t timeout) {
   test::mock::stack_acl::hci_btm_set_link_supervision_timeout(link, timeout);
 }
 void on_acl_br_edr_connected(const RawAddress& bda, uint16_t handle,
-                             uint8_t enc_mode) {
+                             uint8_t enc_mode, bool locally_initiated) {
   mock_function_count_map[__func__]++;
-  test::mock::stack_acl::on_acl_br_edr_connected(bda, handle, enc_mode);
+  test::mock::stack_acl::on_acl_br_edr_connected(bda, handle, enc_mode,
+                                                 locally_initiated);
 }
-void on_acl_br_edr_failed(const RawAddress& bda, tHCI_STATUS status) {
+void on_acl_br_edr_failed(const RawAddress& bda, tHCI_STATUS status,
+                          bool locally_initiated) {
   mock_function_count_map[__func__]++;
-  test::mock::stack_acl::on_acl_br_edr_failed(bda, status);
+  test::mock::stack_acl::on_acl_br_edr_failed(bda, status, locally_initiated);
+}
+
+void BTM_unblock_role_switch_and_sniff_mode_for(const RawAddress& peer_addr) {
+  mock_function_count_map[__func__]++;
+  test::mock::stack_acl::BTM_unblock_role_switch_and_sniff_mode_for(peer_addr);
 }
 
 // END mockcify generation

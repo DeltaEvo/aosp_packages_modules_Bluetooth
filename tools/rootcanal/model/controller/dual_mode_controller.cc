@@ -20,7 +20,7 @@
 #include <memory>
 #include <random>
 
-#include "crypto_toolbox/crypto_toolbox.h"
+#include "crypto/crypto.h"
 #include "log.h"
 #include "packet/raw_builder.h"
 
@@ -42,8 +42,8 @@ std::string DualModeController::GetTypeString() const {
 }
 
 void DualModeController::IncomingPacket(
-    model::packets::LinkLayerPacketView incoming) {
-  link_layer_controller_.IncomingPacket(incoming);
+    model::packets::LinkLayerPacketView incoming, int8_t rssi) {
+  link_layer_controller_.IncomingPacket(incoming, rssi);
 }
 
 void DualModeController::TimerTick() { link_layer_controller_.TimerTick(); }
@@ -68,12 +68,12 @@ void DualModeController::SendCommandCompleteUnknownOpCodeEvent(
 
 #ifdef ROOTCANAL_LMP
 DualModeController::DualModeController(const std::string& properties_filename,
-                                       uint16_t)
-    : Device(), properties_(properties_filename) {
+                                       uint16_t /*num_keys*/)
+    : properties_(properties_filename) {
 #else
 DualModeController::DualModeController(const std::string& properties_filename,
                                        uint16_t num_keys)
-    : Device(), properties_(properties_filename), security_manager_(num_keys) {
+    : properties_(properties_filename), security_manager_(num_keys) {
 #endif
   loopback_mode_ = LoopbackMode::NO_LOOPBACK;
 
@@ -83,8 +83,8 @@ DualModeController::DualModeController(const std::string& properties_filename,
 
   link_layer_controller_.RegisterRemoteChannel(
       [this](std::shared_ptr<model::packets::LinkLayerPacketBuilder> packet,
-             Phy::Type phy_type) {
-        DualModeController::SendLinkLayerPacket(packet, phy_type);
+             Phy::Type phy_type, int8_t tx_power) {
+        this->SendLinkLayerPacket(packet, phy_type, tx_power);
       });
 
   std::array<uint8_t, 64> supported_commands{0};
@@ -331,16 +331,50 @@ void DualModeController::SniffSubrating(CommandView command) {
 }
 
 void DualModeController::RegisterTaskScheduler(
-    std::function<AsyncTaskId(std::chrono::milliseconds, const TaskCallback&)>
-        oneshot_scheduler) {
-  link_layer_controller_.RegisterTaskScheduler(oneshot_scheduler);
+    std::function<AsyncTaskId(std::chrono::milliseconds, TaskCallback)>
+        task_scheduler) {
+  link_layer_controller_.RegisterTaskScheduler(
+      [this, schedule = std::move(task_scheduler)](
+          std::chrono::milliseconds delay_ms, TaskCallback callback) {
+        // weak_from_this is valid only if [this] is already protected
+        // behind a shared_ptr; this is the case in TestModel.
+        return schedule(delay_ms, [lifetime = weak_from_this(),
+                                   callback = std::move(callback)] {
+          // Capture a weak_ptr of the DualModeController object to protect
+          // against the execution of callbacks capturing dead pointers.
+          // This can occur if the device is deleted with scheduled events.
+          if (lifetime.lock() != nullptr) {
+            callback();
+          }
+        });
+      });
 }
 
 void DualModeController::RegisterPeriodicTaskScheduler(
     std::function<AsyncTaskId(std::chrono::milliseconds,
-                              std::chrono::milliseconds, const TaskCallback&)>
-        periodic_scheduler) {
-  link_layer_controller_.RegisterPeriodicTaskScheduler(periodic_scheduler);
+                              std::chrono::milliseconds, TaskCallback)>
+        periodic_task_scheduler) {
+  link_layer_controller_.RegisterPeriodicTaskScheduler(
+      [this, schedule = std::move(periodic_task_scheduler)](
+          std::chrono::milliseconds delay_ms,
+          std::chrono::milliseconds interval_ms, TaskCallback callback) {
+        // weak_from_this is valid only if [this] is already protected
+        // behind a shared_ptr; this is the case in TestModel.
+        return schedule(
+            delay_ms, interval_ms,
+            [lifetime = weak_from_this(), callback = std::move(callback)] {
+              // Capture a weak_ptr of the DualModeController object to protect
+              // against the execution of callbacks capturing dead pointers.
+              // This can occur if the device is deleted with scheduled events.
+              //
+              // Note: the task handle cannot be cancelled from this context;
+              // we depend on the link layer to properly clean-up pending
+              // periodic tasks when deleted.
+              if (lifetime.lock() != nullptr) {
+                callback();
+              }
+            });
+      });
 }
 
 void DualModeController::RegisterTaskCancel(
@@ -355,6 +389,13 @@ void DualModeController::HandleAcl(
   ASSERT(acl_packet.IsValid());
   if (loopback_mode_ == LoopbackMode::ENABLE_LOCAL) {
     uint16_t handle = acl_packet.GetHandle();
+
+    std::vector<uint8_t> payload{acl_packet.GetPayload().begin(),
+                                 acl_packet.GetPayload().end()};
+    send_acl_(bluetooth::hci::AclBuilder::Create(
+        handle, acl_packet.GetPacketBoundaryFlag(),
+        acl_packet.GetBroadcastFlag(),
+        std::make_unique<bluetooth::packet::RawBuilder>(payload)));
 
     std::vector<bluetooth::hci::CompletedPackets> completed_packets;
     bluetooth::hci::CompletedPackets cp;
@@ -435,53 +476,53 @@ void DualModeController::HandleCommand(
 
 void DualModeController::RegisterEventChannel(
     const std::function<void(std::shared_ptr<std::vector<uint8_t>>)>&
-        callback) {
+        send_event) {
   send_event_ =
-      [callback](std::shared_ptr<bluetooth::hci::EventBuilder> event) {
+      [send_event](std::shared_ptr<bluetooth::hci::EventBuilder> event) {
         auto bytes = std::make_shared<std::vector<uint8_t>>();
         bluetooth::packet::BitInserter bit_inserter(*bytes);
         bytes->reserve(event->size());
         event->Serialize(bit_inserter);
-        callback(std::move(bytes));
+        send_event(std::move(bytes));
       };
   link_layer_controller_.RegisterEventChannel(send_event_);
 }
 
 void DualModeController::RegisterAclChannel(
     const std::function<void(std::shared_ptr<std::vector<uint8_t>>)>&
-        callback) {
-  send_acl_ = [callback](std::shared_ptr<bluetooth::hci::AclBuilder> acl_data) {
+        send_acl) {
+  send_acl_ = [send_acl](std::shared_ptr<bluetooth::hci::AclBuilder> acl_data) {
     auto bytes = std::make_shared<std::vector<uint8_t>>();
     bluetooth::packet::BitInserter bit_inserter(*bytes);
     bytes->reserve(acl_data->size());
     acl_data->Serialize(bit_inserter);
-    callback(std::move(bytes));
+    send_acl(std::move(bytes));
   };
   link_layer_controller_.RegisterAclChannel(send_acl_);
 }
 
 void DualModeController::RegisterScoChannel(
     const std::function<void(std::shared_ptr<std::vector<uint8_t>>)>&
-        callback) {
-  send_sco_ = [callback](std::shared_ptr<bluetooth::hci::ScoBuilder> sco_data) {
+        send_sco) {
+  send_sco_ = [send_sco](std::shared_ptr<bluetooth::hci::ScoBuilder> sco_data) {
     auto bytes = std::make_shared<std::vector<uint8_t>>();
     bluetooth::packet::BitInserter bit_inserter(*bytes);
     bytes->reserve(sco_data->size());
     sco_data->Serialize(bit_inserter);
-    callback(std::move(bytes));
+    send_sco(std::move(bytes));
   };
   link_layer_controller_.RegisterScoChannel(send_sco_);
 }
 
 void DualModeController::RegisterIsoChannel(
     const std::function<void(std::shared_ptr<std::vector<uint8_t>>)>&
-        callback) {
-  send_iso_ = [callback](std::shared_ptr<bluetooth::hci::IsoBuilder> iso_data) {
+        send_iso) {
+  send_iso_ = [send_iso](std::shared_ptr<bluetooth::hci::IsoBuilder> iso_data) {
     auto bytes = std::make_shared<std::vector<uint8_t>>();
     bluetooth::packet::BitInserter bit_inserter(*bytes);
     bytes->reserve(iso_data->size());
     iso_data->Serialize(bit_inserter);
-    callback(std::move(bytes));
+    send_iso(std::move(bytes));
   };
   link_layer_controller_.RegisterIsoChannel(send_iso_);
 }
@@ -2112,29 +2153,21 @@ void DualModeController::LeReadAdvertisingPhysicalChannelTxPower(
 }
 
 void DualModeController::LeSetAdvertisingData(CommandView command) {
-  auto command_view = gd_hci::LeSetAdvertisingDataView::Create(
+  auto command_view = gd_hci::LeSetAdvertisingDataRawView::Create(
       gd_hci::LeAdvertisingCommandView::Create(command));
-  auto payload = command.GetPayload();
-  auto data_size = *payload.begin();
-  auto first_data = payload.begin() + 1;
-  std::vector<uint8_t> advertising_data{first_data, first_data + data_size};
-  ASSERT_LOG(command_view.IsValid(), "%s command.size() = %zu",
-             gd_hci::OpCodeText(command.GetOpCode()).c_str(), command.size());
-  ASSERT(command_view.GetPayload().size() == 32);
-  ErrorCode status =
-      link_layer_controller_.LeSetAdvertisingData(advertising_data);
+  ASSERT(command_view.IsValid());
+  ErrorCode status = link_layer_controller_.LeSetAdvertisingData(
+      command_view.GetAdvertisingData());
   send_event_(bluetooth::hci::LeSetAdvertisingDataCompleteBuilder::Create(
       kNumCommandPackets, status));
 }
 
 void DualModeController::LeSetScanResponseData(CommandView command) {
-  auto command_view = gd_hci::LeSetScanResponseDataView::Create(
+  auto command_view = gd_hci::LeSetScanResponseDataRawView::Create(
       gd_hci::LeAdvertisingCommandView::Create(command));
   ASSERT(command_view.IsValid());
-  ASSERT(command_view.GetPayload().size() == 32);
   ErrorCode status = link_layer_controller_.LeSetScanResponseData(
-      std::vector<uint8_t>(command_view.GetPayload().begin() + 1,
-                           command_view.GetPayload().end()));
+      command_view.GetAdvertisingData());
   send_event_(bluetooth::hci::LeSetScanResponseDataCompleteBuilder::Create(
       kNumCommandPackets, status));
 }
@@ -2614,7 +2647,7 @@ void DualModeController::LeEncrypt(CommandView command) {
       gd_hci::LeSecurityCommandView::Create(command));
   ASSERT(command_view.IsValid());
 
-  auto encrypted_data = bluetooth::crypto_toolbox::aes_128(
+  auto encrypted_data = rootcanal::crypto::aes_128(
       command_view.GetKey(), command_view.GetPlaintextData());
 
   send_event_(bluetooth::hci::LeEncryptCompleteBuilder::Create(
@@ -2680,7 +2713,7 @@ void DualModeController::LeVendorCap(CommandView command) {
       gd_hci::VendorCommandView::Create(command));
   ASSERT(command_view.IsValid());
   vector<uint8_t> caps = properties_.le_vendor_capabilities;
-  if (caps.size() == 0) {
+  if (caps.empty()) {
     SendCommandCompleteUnknownOpCodeEvent(
         static_cast<uint16_t>(OpCode::LE_GET_VENDOR_CAPABILITIES));
     return;
@@ -2746,7 +2779,7 @@ void DualModeController::CsrVendorCommand(CommandView command) {
   uint16_t length = 0;
   uint16_t varid = 0;
 
-  if (parameters.size() == 0) {
+  if (parameters.empty()) {
     LOG_INFO("Empty CSR vendor command");
     goto complete;
   }
@@ -2823,6 +2856,7 @@ complete:
       std::make_unique<bluetooth::packet::RawBuilder>(std::move(parameters))));
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void DualModeController::CsrReadVarid(CsrVarid varid,
                                       std::vector<uint8_t>& value) {
   switch (varid) {
@@ -2839,21 +2873,23 @@ void DualModeController::CsrReadVarid(CsrVarid varid,
   }
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void DualModeController::CsrWriteVarid(CsrVarid varid,
                                        std::vector<uint8_t> const& value) {
   LOG_INFO("Unsupported write of CSR varid 0x%04x", varid);
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void DualModeController::CsrReadPskey(CsrPskey pskey,
                                       std::vector<uint8_t>& value) {
   switch (pskey) {
     case CsrPskey::CSR_PSKEY_ENC_KEY_LMIN:
-      ASSERT(value.size() >= 1);
+      ASSERT(!value.empty());
       value[0] = 7;
       break;
 
     case CsrPskey::CSR_PSKEY_ENC_KEY_LMAX:
-      ASSERT(value.size() >= 1);
+      ASSERT(!value.empty());
       value[0] = 16;
       break;
 

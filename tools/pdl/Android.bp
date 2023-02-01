@@ -1,4 +1,3 @@
-
 package {
     // See: http://go/android-license-faq
     // A large-scale-change added 'default_applicable_licenses' to import
@@ -10,26 +9,324 @@ package {
 
 rust_defaults {
     name: "pdl_defaults",
-    srcs: ["src/main.rs"],
+    // LINT.IfChange
     rustlibs: [
+        "libclap",
+        "libcodespan_reporting",
         "libpest",
+        "libproc_macro2",
+        "libquote",
         "libserde",
         "libserde_json",
-        "libstructopt",
-        "libcodespan_reporting",
+        "libsyn",
+        "libtempfile",
     ],
     proc_macros: [
         "libpest_derive",
     ],
+    // LINT.ThenChange(Cargo.toml)
 }
 
 rust_binary_host {
     name: "pdl",
     defaults: ["pdl_defaults"],
+    srcs: ["src/main.rs"],
 }
 
 rust_test_host {
-    name: "pdl_inline_tests",
+    name: "pdl_tests",
     defaults: ["pdl_defaults"],
+    srcs: ["src/main.rs"],
+    proc_macros: [
+        "libpaste",
+    ],
+    test_suites: ["general-tests"],
+    enabled: false, // rustfmt is only available on x86.
+    arch: {
+        x86_64: {
+            enabled: true,
+        },
+    },
+    data: [
+        ":rustfmt",
+        ":rustfmt.toml",
+        "tests/generated/packet_decl_8bit_enum_big_endian.rs",
+        "tests/generated/packet_decl_8bit_enum_little_endian.rs",
+        "tests/generated/packet_decl_8bit_scalar_big_endian.rs",
+        "tests/generated/packet_decl_8bit_scalar_little_endian.rs",
+        "tests/generated/packet_decl_24bit_enum_big_endian.rs",
+        "tests/generated/packet_decl_24bit_enum_little_endian.rs",
+        "tests/generated/packet_decl_24bit_scalar_big_endian.rs",
+        "tests/generated/packet_decl_24bit_scalar_little_endian.rs",
+        "tests/generated/packet_decl_64bit_enum_big_endian.rs",
+        "tests/generated/packet_decl_64bit_enum_little_endian.rs",
+        "tests/generated/packet_decl_64bit_scalar_big_endian.rs",
+        "tests/generated/packet_decl_64bit_scalar_little_endian.rs",
+        "tests/generated/packet_decl_complex_scalars_big_endian.rs",
+        "tests/generated/packet_decl_complex_scalars_little_endian.rs",
+        "tests/generated/packet_decl_empty_big_endian.rs",
+        "tests/generated/packet_decl_empty_little_endian.rs",
+        "tests/generated/packet_decl_mask_scalar_value_big_endian.rs",
+        "tests/generated/packet_decl_mask_scalar_value_little_endian.rs",
+        "tests/generated/packet_decl_mixed_scalars_enums_big_endian.rs",
+        "tests/generated/packet_decl_mixed_scalars_enums_little_endian.rs",
+        "tests/generated/packet_decl_reserved_field_big_endian.rs",
+        "tests/generated/packet_decl_reserved_field_little_endian.rs",
+        "tests/generated/packet_decl_simple_scalars_big_endian.rs",
+        "tests/generated/packet_decl_simple_scalars_little_endian.rs",
+        "tests/generated/preamble.rs",
+        "tests/generated/struct_decl_complex_scalars_big_endian.rs",
+        "tests/generated/struct_decl_complex_scalars_little_endian.rs",
+    ],
+}
+
+genrule_defaults {
+    name: "pdl_rust_generator_defaults",
+    cmd: "set -o pipefail;" +
+        " $(location :pdl) --output-format rust $(in) |" +
+        " $(location :rustfmt) > $(out)",
+    tools: [
+        ":pdl",
+        ":rustfmt",
+    ],
+}
+
+// Generate the Rust parser+serializer backends.
+genrule {
+    name: "pdl_le_backend",
+    defaults: ["pdl_rust_generator_defaults"],
+    srcs: ["tests/canonical/le_rust_test_file.pdl"],
+    out: ["le_backend.rs"],
+}
+
+genrule {
+    name: "pdl_be_backend",
+    defaults: ["pdl_rust_generator_defaults"],
+    srcs: ["tests/canonical/be_rust_test_file.pdl"],
+    out: ["be_backend.rs"],
+}
+
+rust_defaults {
+    name: "pdl_backend_defaults",
+    features: ["serde"],
+    rustlibs: [
+        "libbytes",
+        "libnum_traits",
+        "libserde",
+        "libtempfile",
+        "libthiserror",
+    ],
+    proc_macros: [
+        "libnum_derive",
+        "libserde_derive",
+    ],
+}
+
+rust_library_host {
+    name: "libpdl_le_backend",
+    crate_name: "pdl_le_backend",
+    srcs: [":pdl_le_backend"],
+    defaults: ["pdl_backend_defaults"],
+}
+
+rust_library_host {
+    name: "libpdl_be_backend",
+    crate_name: "pdl_be_backend",
+    srcs: [":pdl_be_backend"],
+    defaults: ["pdl_backend_defaults"],
+}
+
+rust_binary_host {
+    name: "pdl_generate_tests",
+    srcs: ["src/bin/generate-canonical-tests.rs"],
+    rustlibs: [
+        "libproc_macro2",
+        "libquote",
+        "libserde",
+        "libserde_json",
+        "libsyn",
+        "libtempfile",
+    ],
+}
+
+genrule_defaults {
+    name: "pdl_rust_generator_src_defaults",
+    tools: [
+        ":pdl_generate_tests",
+        ":rustfmt",
+    ],
+}
+
+genrule {
+    name: "pdl_rust_generator_tests_le_src",
+    cmd: "set -o pipefail;" +
+        " $(location :pdl_generate_tests) $(in) pdl_le_backend |" +
+        " $(location :rustfmt) > $(out)",
+    srcs: ["tests/canonical/le_test_vectors.json"],
+    out: ["le_canonical.rs"],
+    defaults: ["pdl_rust_generator_src_defaults"],
+}
+
+genrule {
+    name: "pdl_rust_generator_tests_be_src",
+    cmd: "set -o pipefail;" +
+        " $(location :pdl_generate_tests) $(in) pdl_be_backend |" +
+        " $(location :rustfmt) > $(out)",
+    srcs: ["tests/canonical/be_test_vectors.json"],
+    out: ["be_canonical.rs"],
+    defaults: ["pdl_rust_generator_src_defaults"],
+}
+
+rust_test_host {
+    name: "pdl_rust_generator_tests_le",
+    srcs: [":pdl_rust_generator_tests_le_src"],
+    test_suites: ["general-tests"],
+    rustlibs: [
+        "libnum_traits",
+        "libpdl_le_backend",
+        "libserde_json",
+    ],
+}
+
+rust_test_host {
+    name: "pdl_rust_generator_tests_be",
+    srcs: [":pdl_rust_generator_tests_be_src"],
+    test_suites: ["general-tests"],
+    rustlibs: [
+        "libnum_traits",
+        "libpdl_be_backend",
+        "libserde_json",
+    ],
+}
+
+// Defaults for PDL python backend generation.
+genrule_defaults {
+    name: "pdl_python_generator_defaults",
+    tools: [
+        ":pdl",
+        ":pdl_python_generator",
+    ],
+}
+
+// Generate the python parser+serializer backend for the
+// little endian test file located at tests/canonical/le_test_file.pdl.
+genrule {
+    name: "pdl_python_generator_le_test_gen",
+    defaults: ["pdl_python_generator_defaults"],
+    cmd: "set -o pipefail;" +
+        " $(location :pdl) $(in) |" +
+        " $(location :pdl_python_generator)" +
+        " --output $(out) --custom-type-location tests.custom_types",
+    tool_files: [
+        "tests/custom_types.py",
+    ],
+    srcs: [
+        "tests/canonical/le_test_file.pdl",
+    ],
+    out: [
+        "le_pdl_test.py",
+    ],
+}
+
+// Generate the python parser+serializer backend for the
+// big endian test file located at tests/canonical/be_test_file.pdl.
+genrule {
+    name: "pdl_python_generator_be_test_gen",
+    defaults: ["pdl_python_generator_defaults"],
+    cmd: "set -o pipefail;" +
+        " $(location :pdl) $(in) |" +
+        " $(location :pdl_python_generator)" +
+        " --output $(out) --custom-type-location tests.custom_types",
+    tool_files: [
+        "tests/custom_types.py",
+    ],
+    srcs: [
+        "tests/canonical/be_test_file.pdl",
+    ],
+    out: [
+        "be_pdl_test.py",
+    ],
+}
+
+// Test the generated python parser+serializer against
+// pre-generated binary inputs.
+python_test_host {
+    name: "pdl_python_generator_test",
+    main: "tests/python_generator_test.py",
+    srcs: [
+        ":pdl_python_generator_be_test_gen",
+        ":pdl_python_generator_le_test_gen",
+        "tests/custom_types.py",
+        "tests/python_generator_test.py",
+    ],
+    data: [
+        "tests/canonical/be_test_vectors.json",
+        "tests/canonical/le_test_vectors.json",
+    ],
+    libs: [
+        "typing_extensions",
+    ],
+    test_options: {
+        unit_test: true,
+    },
+    version: {
+        py3: {
+            embedded_launcher: true,
+        },
+    },
+}
+
+// Test the python parser against the rust parser
+// on selected PDL source files.
+python_test_host {
+    name: "pdl_python_parser_test",
+    main: "tests/python_parser_test.py",
+    srcs: ["tests/python_parser_test.py"],
+    data: [
+        ":BluetoothHciPackets",
+        ":RootCanalLinkLayerPackets",
+        ":pdl",
+        ":pypdl",
+    ],
+}
+
+// Defaults for the rust_noalloc backend
+genrule_defaults {
+    name: "pdl_rust_noalloc_generator_defaults",
+    cmd: "set -o pipefail;" +
+        " $(location :pdl) --output-format rust_no_alloc $(in) |" +
+        " $(location :rustfmt) > $(out)",
+    tools: [
+        ":pdl",
+        ":rustfmt",
+    ],
+}
+
+// Generate the rust_noalloc backend srcs against the little-endian test vectors
+genrule {
+    name: "pdl_rust_noalloc_le_test_backend_srcs",
+    defaults: ["pdl_rust_noalloc_generator_defaults"],
+    srcs: ["tests/canonical/le_rust_noalloc_test_file.pdl"],
+    out: ["_packets.rs"],
+}
+
+// Generate the rust_noalloc test harness srcs for the supplied test vectors
+genrule {
+    name: "pdl_rust_noalloc_le_test_gen_harness",
+    cmd: "set -o pipefail;" +
+        " $(location :pdl) $(in) --output-format rust_no_alloc_test" +
+        " > $(out)",
+    srcs: ["tests/canonical/le_rust_noalloc_test_file.pdl"],
+    out: ["test_rust_noalloc_parser.rs"],
+    tools: [":pdl"],
+}
+
+// The test target for rust_noalloc
+rust_test_host {
+    name: "pdl_rust_noalloc_le_test",
+    srcs: [
+        ":pdl_rust_noalloc_le_test_gen_harness",
+        ":pdl_rust_noalloc_le_test_backend_srcs",
+    ],
     test_suites: ["general-tests"],
 }

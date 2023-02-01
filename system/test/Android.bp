@@ -294,6 +294,8 @@ filegroup {
   name: "TestMockBtif",
   srcs: [
       ":TestCommonJniThread",
+      ":TestCommonCoreInterface",
+      ":TestMockBluetoothInterface",
       "mock/mock_btif*.cc",
   ],
 }
@@ -358,6 +360,13 @@ filegroup {
   name: "TestMockStackGap",
   srcs: [
       "mock/mock_stack_gap*.cc",
+  ],
+}
+
+filegroup {
+  name: "TestMockStackEatt",
+  srcs: [
+      "mock/mock_stack_eatt*.cc",
   ],
 }
 
@@ -435,6 +444,20 @@ filegroup {
   name: "TestCommonStackConfig",
   srcs: [
       "common/stack_config.cc",
+  ],
+}
+
+filegroup {
+  name: "TestCommonCoreInterface",
+  srcs: [
+      "common/core_interface.cc",
+  ],
+}
+
+filegroup {
+  name: "TestCommonLogMsg",
+  srcs: [
+      "common/log_msg.cc",
   ],
 }
 

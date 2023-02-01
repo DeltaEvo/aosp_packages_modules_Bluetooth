@@ -33,7 +33,10 @@
 #include "bta/gatt/bta_gattc_int.h"
 #include "bta/hh/bta_hh_int.h"
 #include "btif/include/btif_debug_conn.h"
+#include "btif/include/core_callbacks.h"
+#include "btif/include/stack_manager.h"
 #include "device/include/controller.h"
+#include "device/include/interop.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
@@ -72,6 +75,10 @@ static void bta_gattc_phy_update_cback(tGATT_IF gatt_if, uint16_t conn_id,
 static void bta_gattc_conn_update_cback(tGATT_IF gatt_if, uint16_t conn_id,
                                         uint16_t interval, uint16_t latency,
                                         uint16_t timeout, tGATT_STATUS status);
+static void bta_gattc_subrate_chg_cback(tGATT_IF gatt_if, uint16_t conn_id,
+                                        uint16_t subrate_factor,
+                                        uint16_t latency, uint16_t cont_num,
+                                        uint16_t timeout, tGATT_STATUS status);
 static void bta_gattc_init_bk_conn(const tBTA_GATTC_API_OPEN* p_data,
                                    tBTA_GATTC_RCB* p_clreg);
 
@@ -84,7 +91,9 @@ static tGATT_CBACK bta_gattc_cl_cback = {
     .p_enc_cmpl_cb = bta_gattc_enc_cmpl_cback,
     .p_congestion_cb = bta_gattc_cong_cback,
     .p_phy_update_cb = bta_gattc_phy_update_cback,
-    .p_conn_update_cb = bta_gattc_conn_update_cback};
+    .p_conn_update_cb = bta_gattc_conn_update_cback,
+    .p_subrate_chg_cb = bta_gattc_subrate_chg_cback,
+};
 
 /* opcode(tGATTC_OPTYPE) order has to be comply with internal event order */
 static uint16_t bta_gattc_opcode_to_int_evt[] = {
@@ -144,7 +153,9 @@ void bta_gattc_disable() {
     bta_gattc_cb.state = BTA_GATTC_STATE_DISABLING;
 /* don't deregister HH GATT IF */
 /* HH GATT IF will be deregistered by bta_hh_le_deregister when disable HH */
-    if (!bta_hh_le_is_hh_gatt_if(bta_gattc_cb.cl_rcb[i].client_if)) {
+    if (!GetInterfaceToProfiles()
+             ->profileSpecific_HACK->bta_hh_le_is_hh_gatt_if(
+                 bta_gattc_cb.cl_rcb[i].client_if)) {
       bta_gattc_deregister(&bta_gattc_cb.cl_rcb[i]);
     }
   }
@@ -224,7 +235,8 @@ void bta_gattc_register(const Uuid& app_uuid, tBTA_GATTC_CBACK* p_cback,
 void bta_gattc_deregister(tBTA_GATTC_RCB* p_clreg) {
   if (!p_clreg) {
     LOG(ERROR) << __func__ << ": Deregister Failed unknown client cif";
-    bta_hh_cleanup_disable(BTA_HH_OK);
+    GetInterfaceToProfiles()->profileSpecific_HACK->bta_hh_cleanup_disable(
+        BTA_HH_OK);
     return;
   }
 
@@ -421,7 +433,7 @@ static void bta_gattc_init_bk_conn(const tBTA_GATTC_API_OPEN* p_data,
   if (!GATT_Connect(p_data->client_if, p_data->remote_bda,
                     p_data->connection_type, p_data->transport, false)) {
     LOG_ERROR("Unable to connect to remote bd_addr=%s",
-              p_data->remote_bda.ToString().c_str());
+              ADDRESS_TO_LOGGABLE_CSTR(p_data->remote_bda));
     bta_gattc_send_open_cback(p_clreg, GATT_ERROR, p_data->remote_bda,
                               GATT_INVALID_CONN_ID, BT_TRANSPORT_LE, 0);
     return;
@@ -438,7 +450,7 @@ static void bta_gattc_init_bk_conn(const tBTA_GATTC_API_OPEN* p_data,
       p_data->client_if, p_data->remote_bda, BT_TRANSPORT_LE);
   if (!p_clcb) {
     LOG_WARN("Unable to find connection link for device:%s",
-             PRIVATE_ADDRESS(p_data->remote_bda));
+             ADDRESS_TO_LOGGABLE_CSTR(p_data->remote_bda));
     return;
   }
 
@@ -468,7 +480,7 @@ void bta_gattc_cancel_bk_conn(const tBTA_GATTC_API_CANCEL_OPEN* p_data) {
     } else {
       LOG_ERROR("failed for client_if=%d, remote_bda=%s, is_direct=false",
                 static_cast<int>(p_data->client_if),
-                p_data->remote_bda.ToString().c_str());
+                ADDRESS_TO_LOGGABLE_CSTR(p_data->remote_bda));
     }
   }
   p_clreg = bta_gattc_cl_get_regcb(p_data->client_if);
@@ -537,9 +549,12 @@ void bta_gattc_conn(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
       p_clcb->p_srcb->state != BTA_GATTC_SERV_IDLE) {
     if (p_clcb->p_srcb->state == BTA_GATTC_SERV_IDLE) {
       p_clcb->p_srcb->state = BTA_GATTC_SERV_LOAD;
-      // For bonded devices, read cache directly, and back to connected state.
+      // Consider the case that if GATT Server is changed, but no service
+      // changed indication is received, the database might be out of date. So
+      // if robust caching is enabled, any time when connection is established,
+      // always check the db hash first, not just load the stored database.
       gatt::Database db = bta_gattc_cache_load(p_clcb->p_srcb->server_bda);
-      if (!db.IsEmpty() && btm_sec_is_a_bonded_dev(p_clcb->p_srcb->server_bda)) {
+      if (!bta_gattc_is_robust_caching_enabled() && !db.IsEmpty()) {
         p_clcb->p_srcb->gatt_database = db;
         p_clcb->p_srcb->state = BTA_GATTC_SERV_IDLE;
         bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_SUCCESS);
@@ -791,13 +806,25 @@ void bta_gattc_start_discover(tBTA_GATTC_CLCB* p_clcb,
       uint8_t lmp_version = 0;
       if (!BTM_ReadRemoteVersion(p_clcb->bda, &lmp_version, nullptr, nullptr)) {
         LOG_WARN("Could not read remote version for %s",
-                 p_clcb->bda.ToString().c_str());
+                 ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda));
       }
 
       if (lmp_version < 0x0a) {
         LOG_WARN(
             " Device LMP version 0x%02x < Bluetooth 5.1. Ignore database cache "
             "read.",
+            lmp_version);
+        p_clcb->p_srcb->srvc_hdl_db_hash = false;
+      }
+
+      // Some LMP 5.2 devices also don't support robust caching. This workaround
+      // conditionally disables the feature based on a combination of LMP
+      // version and OUI prefix.
+      if (lmp_version < 0x0c &&
+          interop_match_addr(INTEROP_DISABLE_ROBUST_CACHING, &p_clcb->bda)) {
+        LOG_WARN(
+            "Device LMP version 0x%02x <= Bluetooth 5.2 and MAC addr on "
+            "interop list, skipping robust caching",
             lmp_version);
         p_clcb->p_srcb->srvc_hdl_db_hash = false;
       }
@@ -1238,13 +1265,13 @@ static void bta_gattc_conn_cback(tGATT_IF gattc_if, const RawAddress& bdaddr,
                                  tBT_TRANSPORT transport) {
   if (connected) {
     LOG_INFO("Connected client_if:%hhu addr:%s, transport:%s reason:%s",
-             gattc_if, PRIVATE_ADDRESS(bdaddr),
+             gattc_if, ADDRESS_TO_LOGGABLE_CSTR(bdaddr),
              bt_transport_text(transport).c_str(),
              gatt_disconnection_reason_text(reason).c_str());
     btif_debug_conn_state(bdaddr, BTIF_DEBUG_CONNECTED, GATT_CONN_OK);
   } else {
     LOG_INFO("Disconnected att_id:%hhu addr:%s, transport:%s reason:%s",
-             gattc_if, PRIVATE_ADDRESS(bdaddr),
+             gattc_if, ADDRESS_TO_LOGGABLE_CSTR(bdaddr),
              bt_transport_text(transport).c_str(),
              gatt_disconnection_reason_text(reason).c_str());
     btif_debug_conn_state(bdaddr, BTIF_DEBUG_DISCONNECTED, GATT_CONN_OK);
@@ -1576,4 +1603,25 @@ static void bta_gattc_conn_update_cback(tGATT_IF gatt_if, uint16_t conn_id,
   cb_data.conn_update.timeout = timeout;
   cb_data.conn_update.status = status;
   (*p_clreg->p_cback)(BTA_GATTC_CONN_UPDATE_EVT, &cb_data);
+}
+
+static void bta_gattc_subrate_chg_cback(tGATT_IF gatt_if, uint16_t conn_id,
+                                        uint16_t subrate_factor,
+                                        uint16_t latency, uint16_t cont_num,
+                                        uint16_t timeout, tGATT_STATUS status) {
+  tBTA_GATTC_RCB* p_clreg = bta_gattc_cl_get_regcb(gatt_if);
+
+  if (!p_clreg || !p_clreg->p_cback) {
+    LOG(ERROR) << __func__ << ": client_if=" << gatt_if << " not found";
+    return;
+  }
+
+  tBTA_GATTC cb_data;
+  cb_data.subrate_chg.conn_id = conn_id;
+  cb_data.subrate_chg.subrate_factor = subrate_factor;
+  cb_data.subrate_chg.latency = latency;
+  cb_data.subrate_chg.cont_num = cont_num;
+  cb_data.subrate_chg.timeout = timeout;
+  cb_data.subrate_chg.status = status;
+  (*p_clreg->p_cback)(BTA_GATTC_SUBRATE_CHG_EVT, &cb_data);
 }

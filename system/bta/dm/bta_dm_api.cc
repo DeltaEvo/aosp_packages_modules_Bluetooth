@@ -678,6 +678,94 @@ void BTA_DmClearEventFilter(void) {
 
 /*******************************************************************************
  *
+ * Function         BTA_DmClearEventMask
+ *
+ * Description      This function clears the event mask
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmClearEventMask(void) {
+  APPL_TRACE_API("BTA_DmClearEventMask");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_clear_event_mask));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmClearEventMask
+ *
+ * Description      This function clears the filter accept list
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmClearFilterAcceptList(void) {
+  APPL_TRACE_API("BTA_DmClearFilterAcceptList");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_clear_filter_accept_list));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmLeRand
+ *
+ * Description      This function clears the event filter
+ *
+ * Returns          cb: callback to receive the resulting random number
+ *
+ ******************************************************************************/
+void BTA_DmLeRand(LeRandCallback cb) {
+  APPL_TRACE_API("BTA_DmLeRand");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_le_rand, cb));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmDisconnectAllAcls
+ *
+ * Description      This function will disconnect all LE and Classic ACLs.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmDisconnectAllAcls() {
+  APPL_TRACE_API("BTA_DmLeRand");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_disconnect_all_acls));
+}
+
+void BTA_DmSetEventFilterConnectionSetupAllDevices() {
+  APPL_TRACE_API("BTA_DmSetEventFilterConnectionSetupAllDevices");
+  do_in_main_thread(
+      FROM_HERE,
+      base::Bind(bta_dm_set_event_filter_connection_setup_all_devices));
+}
+
+void BTA_DmAllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
+  APPL_TRACE_API("BTA_DmAllowWakeByHid");
+  do_in_main_thread(FROM_HERE,
+                    base::Bind(bta_dm_allow_wake_by_hid, le_hid_devices));
+}
+
+void BTA_DmRestoreFilterAcceptList() {
+  APPL_TRACE_API("BTA_DmRestoreFilterAcceptList");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_restore_filter_accept_list));
+}
+
+void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask) {
+  APPL_TRACE_API("BTA_DmSetDefaultEventMaskExcept");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_set_default_event_mask_except,
+                                          mask, le_mask));
+}
+
+void BTA_DmSetEventFilterInquiryResultAllDevices() {
+  APPL_TRACE_API("BTA_DmSetEventFilterInquiryResultAllDevices");
+  do_in_main_thread(
+      FROM_HERE,
+      base::Bind(bta_dm_set_event_filter_inquiry_result_all_devices));
+}
+
+/*******************************************************************************
+ *
  * Function         BTA_DmBleResetId
  *
  * Description      This function resets the ble keys such as IRK
@@ -688,6 +776,31 @@ void BTA_DmClearEventFilter(void) {
 void BTA_DmBleResetId(void) {
   APPL_TRACE_API("BTA_DmBleResetId");
   do_in_main_thread(FROM_HERE, base::Bind(bta_dm_ble_reset_id));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmBleSubrateRequest
+ *
+ * Description      subrate request, can only be used when connection is up.
+ *
+ * Parameters:      bd_addr       - BD address of the peer
+ *                  subrate_min   - subrate factor minimum, [0x0001 - 0x01F4]
+ *                  subrate_max   - subrate factor maximum, [0x0001 - 0x01F4]
+ *                  max_latency   - max peripheral latency [0x0000 - 01F3]
+ *                  cont_num      - continuation number [0x0000 - 01F3]
+ *                  timeout       - supervision timeout [0x000a - 0xc80]
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmBleSubrateRequest(const RawAddress& bd_addr, uint16_t subrate_min,
+                             uint16_t subrate_max, uint16_t max_latency,
+                             uint16_t cont_num, uint16_t timeout) {
+  APPL_TRACE_API("%s", __func__);
+  do_in_main_thread(FROM_HERE,
+                    base::Bind(bta_dm_ble_subrate_request, bd_addr, subrate_min,
+                               subrate_max, max_latency, cont_num, timeout));
 }
 
 bool BTA_DmCheckLeAudioCapable(const RawAddress& address) {

@@ -24,13 +24,12 @@
 #include "bta_dm_api_mock.h"
 #include "bta_gatt_api_mock.h"
 #include "bta_gatt_queue_mock.h"
-#include "btif_storage.h"
+#include "btif_profile_storage.h"
 #include "btm_api_mock.h"
 #include "csis_types.h"
 #include "gatt/database_builder.h"
 #include "hardware/bt_gatt_types.h"
-
-std::map<std::string, int> mock_function_count_map;
+#include "test/common/mock_functions.h"
 
 namespace bluetooth {
 namespace csis {
@@ -327,7 +326,7 @@ class CsisClientTest : public ::testing::Test {
 
  protected:
   void SetUp(void) override {
-    mock_function_count_map.clear();
+    reset_mock_function_count_map();
     bluetooth::manager::SetMockBtmInterface(&btm_interface);
     dm::SetMockBtaDmInterface(&dm_interface);
     gatt::SetMockBtaGattInterface(&gatt_interface);
@@ -1034,23 +1033,21 @@ TEST_F(CsisMultiClientTest, test_discover_multiple_instances) {
 TEST_F(CsisClientTest, test_storage_calls) {
   SetSampleDatabaseCsis(1, 1);
 
-  ASSERT_EQ(0,
-            mock_function_count_map["btif_storage_load_bonded_csis_devices"]);
+  ASSERT_EQ(0, get_func_call_count("btif_storage_load_bonded_csis_devices"));
   TestAppRegister();
-  ASSERT_EQ(1,
-            mock_function_count_map["btif_storage_load_bonded_csis_devices"]);
+  ASSERT_EQ(1, get_func_call_count("btif_storage_load_bonded_csis_devices"));
 
-  ASSERT_EQ(0, mock_function_count_map["btif_storage_update_csis_info"]);
-  ASSERT_EQ(0, mock_function_count_map["btif_storage_set_csis_autoconnect"]);
+  ASSERT_EQ(0, get_func_call_count("btif_storage_update_csis_info"));
+  ASSERT_EQ(0, get_func_call_count("btif_storage_set_csis_autoconnect"));
   TestConnect(test_address);
   InjectConnectedEvent(test_address, 1);
   GetSearchCompleteEvent(1);
-  ASSERT_EQ(1, mock_function_count_map["btif_storage_set_csis_autoconnect"]);
-  ASSERT_EQ(1, mock_function_count_map["btif_storage_update_csis_info"]);
+  ASSERT_EQ(1, get_func_call_count("btif_storage_set_csis_autoconnect"));
+  ASSERT_EQ(1, get_func_call_count("btif_storage_update_csis_info"));
 
-  ASSERT_EQ(0, mock_function_count_map["btif_storage_remove_csis_device"]);
+  ASSERT_EQ(0, get_func_call_count("btif_storage_remove_csis_device"));
   CsisClient::Get()->RemoveDevice(test_address);
-  ASSERT_EQ(1, mock_function_count_map["btif_storage_remove_csis_device"]);
+  ASSERT_EQ(1, get_func_call_count("btif_storage_remove_csis_device"));
 
   TestAppUnregister();
 }

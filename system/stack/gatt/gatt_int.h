@@ -93,6 +93,10 @@ typedef struct {
   bool is_link_key_known;
   bool is_link_key_authed;
   bool is_encrypted;
+  // whether we connected to the peer, or if it
+  // connected to a discoverable advertisement (affects
+  // GAP permissions)
+  bool can_read_discoverable_characteristics;
 } tGATT_SEC_FLAG;
 
 /* Find Information Response Type
@@ -318,7 +322,7 @@ typedef struct {
 
   tGATT_CH_STATE ch_state;
 
-  std::unordered_set<uint8_t> app_hold_link;
+  std::unordered_set<tGATT_IF> app_hold_link;
 
   /* server needs */
   /* server response data */
@@ -577,6 +581,9 @@ extern uint32_t gatt_sr_enqueue_cmd(tGATT_TCB& tcb, uint16_t cid,
 extern bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda);
 extern void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
                                     uint8_t tx_phy, uint8_t rx_phy);
+extern void gatt_notify_subrate_change(uint16_t handle, uint16_t subrate_factor,
+                                       uint16_t latency, uint16_t cont_num,
+                                       uint16_t timeout, uint8_t status);
 /*   */
 
 extern bool gatt_tcb_is_cid_busy(tGATT_TCB& tcb, uint16_t cid);
@@ -594,7 +601,6 @@ extern uint16_t gatt_tcb_get_att_cid(tGATT_TCB& tcb, bool eatt_support);
 extern uint16_t gatt_tcb_get_payload_size_tx(tGATT_TCB& tcb, uint16_t cid);
 extern uint16_t gatt_tcb_get_payload_size_rx(tGATT_TCB& tcb, uint16_t cid);
 extern void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb);
-extern void gatt_clcb_dealloc(tGATT_CLCB* p_clcb);
 
 extern void gatt_sr_copy_prep_cnt_to_cback_cnt(tGATT_TCB& p_tcb);
 extern bool gatt_sr_is_cback_cnt_zero(tGATT_TCB& p_tcb);

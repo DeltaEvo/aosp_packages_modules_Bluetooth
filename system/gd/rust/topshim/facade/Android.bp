@@ -7,8 +7,8 @@ package {
     default_applicable_licenses: ["system_bt_license"],
 }
 
-rust_binary_host {
-    name: "bt_topshim_facade",
+rust_defaults {
+    name: "bt_topshim_facade.defaults",
     defaults: [
         "gd_rust_defaults",
         "libchrome_support_defaults"
@@ -19,17 +19,19 @@ rust_binary_host {
     rustlibs: [
         "libbluetooth_rs",
         "libbt_common",
-        "libtokio",
-        "libbt_packets",
-        "libfutures",
-        "libgrpcio",
-        "libnum_traits",
-        "libnix",
-        "liblog_rust",
         "libbt_facade_helpers",
+        "libbt_packets",
         "libbt_topshim",
         "libbt_topshim_facade_protobuf",
         "libbt_shim",
+        "libclap",
+        "libfutures",
+        "libgrpcio",
+        "liblazy_static",
+        "liblog_rust",
+        "libnix",
+        "libnum_traits",
+        "libtokio",
     ],
     static_libs: [
         "avrcp-target-service",
@@ -40,13 +42,17 @@ rust_binary_host {
         "libevent",
         "libbt_topshim_cxx",
         "libbt-bta",
+        "libbt-bta-core",
         "libbt-common",
         "libbtdevice",
         "libbtif",
+        "libbtif-core",
         "libbt-hci",
         "libbt-stack",
+        "libbt-stack-core",
         "libbt-utils",
         "libbtcore",
+        "libbthalutils",
         "libosi",
         "libbt-protos-lite",
         "libbte",
@@ -77,4 +83,15 @@ rust_binary_host {
     proc_macros: [
         "libpaste",
     ],
+}
+
+rust_binary_host {
+    name: "bt_topshim_facade",
+    defaults: ["bt_topshim_facade.defaults"],
+}
+
+rust_test_host {
+    name: "bt_topshim_facade.test",
+    defaults: ["bt_topshim_facade.defaults"],
+    test_suites: ["general-tests"],
 }

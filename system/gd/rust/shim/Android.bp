@@ -34,14 +34,15 @@ rust_defaults {
     rustlibs: [
         "libbluetooth_rs",
         "libbt_common",
-        "libcxx",
-        "libtokio",
-        "libbt_packets",
-        "libfutures",
-        "libnum_traits",
-        "libnix",
-        "liblog_rust",
         "libbt_facade_helpers",
+        "libbt_packets",
+        "libcxx",
+        "libfutures",
+        "liblazy_static",
+        "liblog_rust",
+        "libnix",
+        "libnum_traits",
+        "libtokio",
     ],
     proc_macros: [
         "libpaste",
@@ -60,7 +61,7 @@ rust_ffi_static {
     name: "libbt_shim_ffi",
     defaults: ["libbt_shim_defaults"],
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }
@@ -98,7 +99,7 @@ cc_library_static {
     ],
     host_supported: true,
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }
@@ -115,7 +116,7 @@ cc_library_static {
     ],
     host_supported: true,
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }
@@ -131,7 +132,7 @@ cc_library_static {
     generated_headers: ["libbt_shim_bridge_header", "cxx-bridge-header"],
     host_supported: true,
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }
@@ -141,7 +142,7 @@ cc_library_headers {
     local_include_dirs: ["callbacks"],
     host_supported: true,
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }

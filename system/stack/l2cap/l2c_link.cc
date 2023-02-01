@@ -27,7 +27,7 @@
 
 #include <cstdint>
 
-#include "device/include/controller.h"
+#include "device/include/device_iot_config.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
@@ -280,7 +280,7 @@ void l2c_link_sec_comp2(const RawAddress& p_bda,
   tL2C_CCB* p_next_ccb;
 
   LOG_DEBUG("btm_status=%s, BD_ADDR=%s, transport=%s",
-            btm_status_text(status).c_str(), PRIVATE_ADDRESS(p_bda),
+            btm_status_text(status).c_str(), ADDRESS_TO_LOGGABLE_CSTR(p_bda),
             bt_transport_text(transport).c_str());
 
   if (status == BTM_SUCCESS_NO_SECURITY) {
@@ -327,6 +327,36 @@ void l2c_link_sec_comp2(const RawAddress& p_bda,
 }
 
 /*******************************************************************************
+**
+** Function         l2c_link_iot_store_disc_reason
+**
+** Description      iot store disconnection reason to local conf file
+**
+** Returns          void
+**
+*******************************************************************************/
+static void l2c_link_iot_store_disc_reason(RawAddress& bda, uint8_t reason) {
+  const char* disc_keys[] = {
+      IOT_CONF_KEY_GAP_DISC_CONNTIMEOUT_COUNT,
+  };
+  const uint8_t disc_reasons[] = {
+      HCI_ERR_CONNECTION_TOUT,
+  };
+  int i = 0;
+  int num = sizeof(disc_keys) / sizeof(disc_keys[0]);
+
+  if (reason == (uint8_t)-1) return;
+
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(bda, IOT_CONF_KEY_GAP_DISC_COUNT);
+  for (i = 0; i < num; i++) {
+    if (disc_reasons[i] == reason) {
+      DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(bda, disc_keys[i]);
+      break;
+    }
+  }
+}
+
+/*******************************************************************************
  *
  * Function         l2c_link_hci_disc_comp
  *
@@ -350,6 +380,8 @@ bool l2c_link_hci_disc_comp(uint16_t handle, tHCI_REASON reason) {
   if (!p_lcb) {
     status = false;
   } else {
+    l2c_link_iot_store_disc_reason(p_lcb->remote_bd_addr, reason);
+
     p_lcb->SetDisconnectReason(reason);
 
     /* Just in case app decides to try again in the callback context */
@@ -414,7 +446,7 @@ bool l2c_link_hci_disc_comp(uint16_t handle, tHCI_REASON reason) {
                   "p_lcb = %p in_use = %d link_state = %d handle = %d "
                   "link_role = %d is_bonding = %d disc_reason = %d transport = "
                   "%d",
-                  xx, p_lcb->remote_bd_addr.ToString().c_str(), p_lcb,
+                  xx, ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr), p_lcb,
                   p_lcb->in_use, p_lcb->link_state, p_lcb->Handle(),
                   p_lcb->LinkRole(), p_lcb->IsBonding(),
                   p_lcb->DisconnectReason(), p_lcb->transport);
@@ -747,16 +779,14 @@ void l2c_link_adjust_chnl_allocation(void) {
   }
 }
 
-void l2c_link_init() {
+void l2c_link_init(const uint16_t acl_buffer_count_classic) {
   if (bluetooth::shim::is_gd_l2cap_enabled()) {
     // GD L2cap gets this info through GD ACL
     return;
   }
 
-  const controller_t* controller = controller_get_interface();
-
-  l2cb.num_lm_acl_bufs = controller->get_acl_buffer_count_classic();
-  l2cb.controller_xmit_window = controller->get_acl_buffer_count_classic();
+  l2cb.num_lm_acl_bufs = acl_buffer_count_classic;
+  l2cb.controller_xmit_window = acl_buffer_count_classic;
 }
 
 /*******************************************************************************
@@ -933,8 +963,7 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
         continue;
       }
 
-      if ((!p_lcb->in_use) || (p_lcb->partial_segment_being_sent) ||
-          (p_lcb->link_state != LST_CONNECTED) ||
+      if ((!p_lcb->in_use) || (p_lcb->link_state != LST_CONNECTED) ||
           (p_lcb->link_xmit_quota != 0) || (l2c_link_check_power_mode(p_lcb))) {
         LOG_DEBUG("Skipping lcb %d due to quota", xx);
         continue;
@@ -975,8 +1004,7 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
   } else /* if this is not round-robin service */
   {
     /* If a partial segment is being sent, can't send anything else */
-    if ((p_lcb->partial_segment_being_sent) ||
-        (p_lcb->link_state != LST_CONNECTED) ||
+    if ((p_lcb->link_state != LST_CONNECTED) ||
         (l2c_link_check_power_mode(p_lcb))) {
       LOG_INFO("A partial segment is being sent, cannot send anything else");
       return;
@@ -1176,8 +1204,6 @@ void l2c_link_segments_xmitted(BT_HDR* p_msg) {
   /* if we can transmit anything more.                             */
   list_prepend(p_lcb->link_xmit_data_q, p_msg);
 
-  p_lcb->partial_segment_being_sent = false;
-
   l2c_link_check_send_pkts(p_lcb, 0, NULL);
 }
 
@@ -1197,7 +1223,7 @@ tBTM_STATUS l2cu_ConnectAclForSecurity(const RawAddress& bd_addr) {
   /* Make sure an L2cap link control block is available */
   if (!p_lcb &&
       (p_lcb = l2cu_allocate_lcb(bd_addr, true, BT_TRANSPORT_BR_EDR)) == NULL) {
-    LOG_WARN("failed allocate LCB for %s", bd_addr.ToString().c_str());
+    LOG_WARN("failed allocate LCB for %s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     return BTM_NO_RESOURCES;
   }
 

@@ -163,7 +163,9 @@ void LeAddressAssociateCallback(RawAddress* main_bd_addr,
 
 void AclStateChangedCallback(bt_status_t status, RawAddress* remote_bd_addr,
                              bt_acl_state_t state, int transport_link_type,
-                             bt_hci_error_code_t hci_reason) {
+                             bt_hci_error_code_t hci_reason,
+                             bt_conn_direction_t direction,
+                             uint16_t acl_handle) {
   shared_lock<shared_mutex_impl> lock(g_instance_lock);
   VERIFY_INTERFACE_OR_RETURN();
   CHECK(remote_bd_addr);
@@ -173,7 +175,8 @@ void AclStateChangedCallback(bt_status_t status, RawAddress* remote_bd_addr,
           << ((state == BT_ACL_STATE_CONNECTED) ? "CONNECTED" : "DISCONNECTED")
           << " - HCI_REASON: " << std::to_string(hci_reason);
   FOR_EACH_BLUETOOTH_OBSERVER(AclStateChangedCallback(
-      status, *remote_bd_addr, state, transport_link_type, hci_reason));
+      status, *remote_bd_addr, state, transport_link_type, hci_reason,
+      direction, acl_handle));
 }
 
 void ThreadEventCallback(bt_cb_thread_evt evt) {
@@ -259,12 +262,12 @@ bt_callbacks_t bt_callbacks = {
     AclStateChangedCallback,
     ThreadEventCallback,
     nullptr, /* dut_mode_recv_cb */
-    nullptr, /* le_test_mode_cb */
     nullptr, /* energy_info_cb */
     LinkQualityReportCallback,
     nullptr /* generate_local_oob_data_cb */,
     SwitchBufferSizeCallback,
     SwitchCodecCallback,
+    nullptr /* le_rand_cb */,
 };
 
 bt_os_callouts_t bt_os_callouts = {sizeof(bt_os_callouts_t),
@@ -451,7 +454,8 @@ void BluetoothInterface::Observer::BondStateChangedCallback(
 void BluetoothInterface::Observer::AclStateChangedCallback(
     bt_status_t /* status */, const RawAddress& /* remote_bdaddr */,
     bt_acl_state_t /* state */, int /* transport_link_type */,
-    bt_hci_error_code_t /* hci_reason */) {
+    bt_hci_error_code_t /* hci_reason */, bt_conn_direction_t /* direction */,
+    uint16_t /* acl_handle*/) {
   // Do nothing.
 }
 

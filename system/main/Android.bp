@@ -104,7 +104,7 @@ cc_library {
         scs: true,
     },
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     host_supported: true,
     min_sdk_version: "30",
@@ -159,6 +159,7 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/stack/btm",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
@@ -183,7 +184,6 @@ cc_test {
         "shim/l2c_api.cc",
         "shim/le_advertising_manager.cc",
         "shim/le_scanning_manager.cc",
-        "shim/link_policy.cc",
         "shim/metric_id_api.cc",
         "shim/metrics_api.cc",
         "shim/shim.cc",

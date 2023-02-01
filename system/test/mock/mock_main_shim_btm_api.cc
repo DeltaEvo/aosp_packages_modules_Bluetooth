@@ -272,10 +272,6 @@ void bluetooth::shim::BTM_BleReadPhy(
     base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
   mock_function_count_map[__func__]++;
 }
-void bluetooth::shim::BTM_BleReceiverTest(uint8_t rx_freq,
-                                          tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  mock_function_count_map[__func__]++;
-}
 void bluetooth::shim::BTM_BleSecureConnectionOobDataReply(
     const RawAddress& bd_addr, uint8_t* p_c, uint8_t* p_r) {
   mock_function_count_map[__func__]++;
@@ -293,15 +289,6 @@ void bluetooth::shim::BTM_BleSetPrefConnParams(const RawAddress& bd_addr,
                                                uint16_t max_conn_int,
                                                uint16_t peripheral_latency,
                                                uint16_t supervision_tout) {
-  mock_function_count_map[__func__]++;
-}
-void bluetooth::shim::BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  mock_function_count_map[__func__]++;
-}
-void bluetooth::shim::BTM_BleTransmitterTest(uint8_t tx_freq,
-                                             uint8_t test_data_len,
-                                             uint8_t packet_payload,
-                                             tBTM_CMPL_CB* p_cmd_cmpl_cback) {
   mock_function_count_map[__func__]++;
 }
 void bluetooth::shim::BTM_BleUpdateAdvFilterPolicy(tBTM_BLE_AFP adv_policy) {
@@ -430,6 +417,53 @@ void btm_api_process_inquiry_result_with_rssi(RawAddress raw_address,
 }
 
 tBTM_STATUS bluetooth::shim::BTM_ClearEventFilter() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_ClearEventMask() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_ClearFilterAcceptList() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_DisconnectAllAcls() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_LeRand(LeRandCallback cb) {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetEventFilterConnectionSetupAllDevices() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList() {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetDefaultEventMaskExcept(uint64_t mask,
+                                                           uint64_t le_mask) {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+
+tBTM_STATUS bluetooth::shim::BTM_SetEventFilterInquiryResultAllDevices() {
   mock_function_count_map[__func__]++;
   return BTM_SUCCESS;
 }

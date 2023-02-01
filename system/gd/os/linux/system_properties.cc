@@ -25,7 +25,11 @@ namespace os {
 
 namespace {
 std::mutex properties_mutex;
-std::unordered_map<std::string, std::string> properties;
+
+// Properties set along with some default values for Floss.
+std::unordered_map<std::string, std::string> properties = {
+    {"bluetooth.profile.avrcp.target.enabled", "true"},
+};
 }  // namespace
 
 std::optional<std::string> GetSystemProperty(const std::string& property) {
@@ -35,6 +39,15 @@ std::optional<std::string> GetSystemProperty(const std::string& property) {
     return std::nullopt;
   }
   return iter->second;
+}
+
+uint32_t GetSystemPropertyUint32(const std::string& property, uint32_t default_value) {
+  std::optional<std::string> result = GetSystemProperty(property);
+  if (result) {
+    return static_cast<uint32_t>(std::stoul(*result));
+  } else {
+    return default_value;
+  }
 }
 
 bool SetSystemProperty(const std::string& property, const std::string& value) {

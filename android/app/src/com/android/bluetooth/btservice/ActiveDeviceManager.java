@@ -20,6 +20,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHapClient;
 import android.bluetooth.BluetoothHeadset;
@@ -633,7 +634,7 @@ class ActiveDeviceManager {
         filter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED);
         filter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothHapClient.ACTION_HAP_DEVICE_AVAILABLE);
-        mAdapterService.registerReceiver(mReceiver, filter);
+        mAdapterService.registerReceiver(mReceiver, filter, Context.RECEIVER_EXPORTED);
 
         mAudioManager.registerAudioDeviceCallback(mAudioManagerAudioDeviceCallback, mHandler);
     }
@@ -689,10 +690,14 @@ class ActiveDeviceManager {
         if (headsetService == null) {
             return;
         }
-        if (!headsetService.setActiveDevice(device)) {
-            return;
+        BluetoothAudioPolicy audioPolicy = headsetService.getHfpCallAudioPolicy(device);
+        if (audioPolicy == null || audioPolicy.getConnectingTimePolicy()
+                != BluetoothAudioPolicy.POLICY_NOT_ALLOWED) {
+            if (!headsetService.setActiveDevice(device)) {
+                return;
+            }
+            mHfpActiveDevice = device;
         }
-        mHfpActiveDevice = device;
     }
 
     private void setHearingAidActiveDevice(BluetoothDevice device) {

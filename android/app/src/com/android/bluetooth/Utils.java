@@ -22,6 +22,10 @@ import static android.Manifest.permission.BLUETOOTH_ADVERTISE;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 import static android.Manifest.permission.RENOUNCE_PERMISSIONS;
+import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_BALANCED;
+import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_CCC;
+import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_HIGH;
+import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER;
 import static android.bluetooth.BluetoothUtils.USER_HANDLE_NULL;
 import static android.content.pm.PackageManager.GET_PERMISSIONS;
 import static android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES;
@@ -34,7 +38,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
-import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -61,6 +64,8 @@ import android.provider.DeviceConfig;
 import android.provider.Telephony;
 import android.util.Log;
 
+import androidx.annotation.RequiresApi;
+
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 
@@ -77,6 +82,9 @@ import java.nio.charset.CharsetDecoder;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -242,7 +250,6 @@ public final class Utils {
     public static ParcelUuid[] byteArrayToUuid(byte[] val) {
         int numUuids = val.length / BD_UUID_LEN;
         ParcelUuid[] puuids = new ParcelUuid[numUuids];
-        UUID uuid;
         int offset = 0;
 
         ByteBuffer converter = ByteBuffer.wrap(val);
@@ -344,6 +351,7 @@ public final class Utils {
      * @throws SecurityException if the package name does not match the uid or the association
      *                           doesn't exist
      */
+    @RequiresPermission("android.permission.MANAGE_COMPANION_DEVICES")
     public static boolean enforceCdmAssociation(CompanionDeviceManager cdm, Context context,
             String callingPackage, int callingUid, BluetoothDevice device) {
         if (!isPackageNameAccurate(context, callingPackage, callingUid)) {
@@ -351,7 +359,7 @@ public final class Utils {
                     + " is inaccurate for calling uid " + callingUid);
         }
 
-        for (AssociationInfo association : cdm.getAllAssociations()) {
+        for (AssociationInfo association : getCdmAssociations(cdm)) {
             if (association.getPackageName().equals(callingPackage)
                     && !association.isSelfManaged() && device.getAddress() != null
                     && association.getDeviceMacAddress() != null
@@ -362,6 +370,22 @@ public final class Utils {
         }
         throw new SecurityException("The application with package name " + callingPackage
                 + " does not have a CDM association with the Bluetooth Device");
+    }
+
+    /**
+     * Obtains the complete list of registered CDM associations.
+     *
+     * @param cdm the CompanionDeviceManager object
+     * @return the list of AssociationInfo objects
+     */
+    @RequiresPermission("android.permission.MANAGE_COMPANION_DEVICES")
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    // TODO(b/193460475): Android Lint handles change from SystemApi to public incorrectly.
+    // CompanionDeviceManager#getAllAssociations() is public in U,
+    // but existed in T as an identical SystemApi.
+    @SuppressLint("NewApi")
+    public static List<AssociationInfo> getCdmAssociations(CompanionDeviceManager cdm) {
+        return cdm.getAllAssociations();
     }
 
     /**
@@ -621,6 +645,11 @@ public final class Utils {
         return false;
     }
 
+    private static boolean checkCallerIsSystem() {
+        int callingUid = Binder.getCallingUid();
+        return UserHandle.getAppId(Process.SYSTEM_UID) == UserHandle.getAppId(callingUid);
+    }
+
     private static boolean checkCallerIsSystemOrActiveUser() {
         int callingUid = Binder.getCallingUid();
         UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
@@ -640,6 +669,24 @@ public final class Utils {
 
     public static boolean callerIsSystemOrActiveUser(String tag, String method) {
         return checkCallerIsSystemOrActiveUser(tag + "." + method + "()");
+    }
+
+    /**
+     * Checks if the caller to the method is system server.
+     *
+     * @param tag the log tag to use in case the caller is not system server
+     * @param method the API method name
+     * @return {@code true} if the caller is system server, {@code false} otherwise
+     */
+    public static boolean callerIsSystem(String tag, String method) {
+        if (isInstrumentationTestMode()) {
+            return true;
+        }
+        final boolean res = checkCallerIsSystem();
+        if (!res) {
+            Log.w(TAG, tag + "." + method + "()" + " - Not allowed outside system server");
+        }
+        return res;
     }
 
     private static boolean checkCallerIsSystemOrActiveOrManagedUser(Context context) {
@@ -881,14 +928,8 @@ public final class Utils {
         return true;
     }
 
-    private static boolean isAppOppAllowed(AppOpsManager appOps, String op, String callingPackage,
-            @NonNull String callingFeatureId) {
-        return appOps.noteOp(op, Binder.getCallingUid(), callingPackage, callingFeatureId, null)
-                == AppOpsManager.MODE_ALLOWED;
-    }
-
     /**
-     * Converts {@code millisecond} to unit. Each unit is 0.625 millisecond.
+     * Converts {@code milliseconds} to unit. Each unit is 0.625 millisecond.
      */
     public static int millsToUnit(int milliseconds) {
         return (int) (TimeUnit.MILLISECONDS.toMicros(milliseconds) / MICROS_PER_UNIT);
@@ -1023,9 +1064,9 @@ public final class Utils {
      * Returns broadcast options.
      */
     public static @NonNull BroadcastOptions getTempBroadcastOptions() {
+        final BroadcastOptions bOptions = BroadcastOptions.makeBasic();
         // Use the Bluetooth process identity to pass permission check when reading DeviceConfig
         final long ident = Binder.clearCallingIdentity();
-        final BroadcastOptions bOptions = BroadcastOptions.makeBasic();
         try {
             final long durationMs = DeviceConfig.getLong(DeviceConfig.NAMESPACE_BLUETOOTH,
                     KEY_TEMP_ALLOW_LIST_DURATION_MS, DEFAULT_TEMP_ALLOW_LIST_DURATION_MS);
@@ -1049,5 +1090,142 @@ public final class Utils {
             if (Objects.equals(element, value)) return true;
         }
         return false;
+    }
+
+    /**
+     * Wrapper class for GATT connection interval and latency values.
+     *
+     * Prevents calling {@link Context#getResources()} each time a connection interval
+     * update is required.
+     * Raw values are in multiples of 1.25.
+     */
+    public static class GattPriority {
+        private static final String TAG = "GattPriority";
+        private int mMinInterval;
+        private int mMaxInterval;
+        private int mLatency;
+
+        private static final Map<Integer, GattPriority> sPriorities = new HashMap();
+
+        /**
+         * Constructs GattPriority with the config parameters.
+         */
+        private GattPriority(Context context, int priority) {
+            switch (priority) {
+                case CONNECTION_PRIORITY_HIGH:
+                    mMinInterval = context.getResources().getInteger(
+                            R.integer.gatt_high_priority_min_interval);
+                    mMaxInterval = context.getResources().getInteger(
+                            R.integer.gatt_high_priority_max_interval);
+                    mLatency = context.getResources().getInteger(
+                            R.integer.gatt_high_priority_latency);
+                    break;
+
+                case CONNECTION_PRIORITY_CCC:
+                    mMinInterval = context.getResources().getInteger(
+                            R.integer.gatt_ccc_priority_min_interval);
+                    mMaxInterval = context.getResources().getInteger(
+                            R.integer.gatt_ccc_priority_max_interval);
+                    mLatency = context.getResources().getInteger(
+                            R.integer.gatt_ccc_priority_latency);
+                    break;
+
+                case CONNECTION_PRIORITY_LOW_POWER:
+                    mMinInterval = context.getResources().getInteger(
+                            R.integer.gatt_low_power_min_interval);
+                    mMaxInterval = context.getResources().getInteger(
+                            R.integer.gatt_low_power_max_interval);
+                    mLatency = context.getResources().getInteger(
+                            R.integer.gatt_low_power_latency);
+                    break;
+
+                default:
+                    // Using the values for CONNECTION_PRIORITY_BALANCED.
+                    mMinInterval = context.getResources().getInteger(
+                            R.integer.gatt_balanced_priority_min_interval);
+                    mMaxInterval = context.getResources().getInteger(
+                            R.integer.gatt_balanced_priority_max_interval);
+                    mLatency = context.getResources().getInteger(
+                            R.integer.gatt_balanced_priority_latency);
+                    break;
+            }
+        }
+
+        /**
+         * Retrieves the GattPriority corresponding to the priority parameter.
+         */
+        public static GattPriority getStaticPriority(Context context, int priority) {
+            if (priority < CONNECTION_PRIORITY_BALANCED
+                    || priority > CONNECTION_PRIORITY_CCC) {
+                Log.e(TAG, "getStaticPriority: priority: " + priority + "does not exist");
+                return null;
+            }
+            if (sPriorities.get(priority) == null) {
+                sPriorities.put(priority, new GattPriority(context, priority));
+            }
+            return sPriorities.get(priority);
+        }
+
+        /**
+         * Retrieves the BluetoothGatt priority with raw values.
+         */
+        public static int toPriority(Context context, int interval,
+                int latency) {
+            return toPriority(context, interval, interval, latency);
+        }
+
+        /**
+         * Retrieves the BluetoothGatt priority with raw values.
+         */
+        public static int toPriority(Context context, int minInterval,
+                int maxInterval, int latency) {
+
+            GattPriority priorityCcc =
+                    getStaticPriority(context, CONNECTION_PRIORITY_CCC);
+            if (minInterval >= priorityCcc.getMinInterval()
+                    && maxInterval <= priorityCcc.getMaxInterval()) {
+                return CONNECTION_PRIORITY_CCC;
+            }
+
+            GattPriority priorityBalanced =
+                    getStaticPriority(context, CONNECTION_PRIORITY_BALANCED);
+            if (minInterval >= priorityBalanced.getMinInterval()
+                    && maxInterval <= priorityBalanced.getMaxInterval()) {
+                return CONNECTION_PRIORITY_BALANCED;
+            }
+
+            GattPriority priorityHigh =
+                    getStaticPriority(context, CONNECTION_PRIORITY_HIGH);
+            if (minInterval >= priorityHigh.getMinInterval()
+                    && maxInterval <= priorityHigh.getMaxInterval()) {
+                return CONNECTION_PRIORITY_HIGH;
+            }
+
+            GattPriority priorityLow =
+                    getStaticPriority(context, CONNECTION_PRIORITY_LOW_POWER);
+            if (minInterval >= priorityLow.getMinInterval()
+                    && maxInterval <= priorityLow.getMaxInterval()) {
+                return CONNECTION_PRIORITY_LOW_POWER;
+            }
+
+            Log.w(TAG, "toPriority: Did not find any matching priority");
+            return CONNECTION_PRIORITY_BALANCED;
+        }
+
+        public int getMinInterval() {
+            return mMinInterval;
+        }
+
+        public int getMaxInterval() {
+            return mMaxInterval;
+        }
+
+        public int getIntervalWindow() {
+            return mMaxInterval - mMinInterval;
+        }
+
+        public int getLatency() {
+            return mLatency;
+        }
     }
 }

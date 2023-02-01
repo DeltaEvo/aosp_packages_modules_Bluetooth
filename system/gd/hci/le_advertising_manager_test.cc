@@ -257,7 +257,7 @@ class LeAdvertisingAPITest : public LeAdvertisingManagerTest {
     LeAdvertisingManagerTest::SetUp();
 
     // start advertising set
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
     advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
     std::vector<GapData> gap_data{};
@@ -314,7 +314,7 @@ class LeAndroidHciAdvertisingAPITest : public LeAndroidHciAdvertisingManagerTest
   void SetUp() override {
     LeAndroidHciAdvertisingManagerTest::SetUp();
 
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
     advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
     std::vector<GapData> gap_data{};
@@ -359,7 +359,7 @@ class LeAndroidHciAdvertisingAPIPublicAddressTest : public LeAndroidHciAdvertisi
   void SetUp() override {
     LeAndroidHciAdvertisingManagerTest::SetUp();
 
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
     advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
     std::vector<GapData> gap_data{};
@@ -414,7 +414,7 @@ class LeExtendedAdvertisingAPITest : public LeExtendedAdvertisingManagerTest {
     LeExtendedAdvertisingManagerTest::SetUp();
 
     // start advertising set
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
     advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
     std::vector<GapData> gap_data{};
@@ -466,7 +466,7 @@ TEST_F(LeAndroidHciAdvertisingManagerTest, startup_teardown) {}
 TEST_F(LeExtendedAdvertisingManagerTest, startup_teardown) {}
 
 TEST_F(LeAdvertisingManagerTest, create_advertiser_test) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
   std::vector<GapData> gap_data{};
@@ -512,7 +512,7 @@ TEST_F(LeAdvertisingManagerTest, create_advertiser_test) {
 }
 
 TEST_F(LeAndroidHciAdvertisingManagerTest, create_advertiser_test) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
   std::vector<GapData> gap_data{};
@@ -554,7 +554,7 @@ TEST_F(LeAndroidHciAdvertisingManagerTest, create_advertiser_test) {
 }
 
 TEST_F(LeExtendedAdvertisingManagerTest, create_advertiser_test) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
   std::vector<GapData> gap_data{};
@@ -607,7 +607,7 @@ TEST_F(LeExtendedAdvertisingManagerTest, ignore_on_pause_on_resume_after_unregis
   test_le_address_manager->ignore_unregister_for_testing = true;
 
   // Register LeAddressManager vai ExtendedCreateAdvertiser
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
   std::vector<GapData> gap_data{};
@@ -673,7 +673,7 @@ TEST_F(LeAndroidHciAdvertisingAPIPublicAddressTest, startup_teardown) {}
 TEST_F(LeExtendedAdvertisingAPITest, startup_teardown) {}
 
 TEST_F(LeAdvertisingAPITest, set_parameter) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
   std::vector<GapData> gap_data{};
@@ -692,7 +692,7 @@ TEST_F(LeAdvertisingAPITest, set_parameter) {
 }
 
 TEST_F(LeAndroidHciAdvertisingAPITest, set_parameter) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
   std::vector<GapData> gap_data{};
@@ -714,7 +714,7 @@ TEST_F(LeAndroidHciAdvertisingAPITest, set_parameter) {
 }
 
 TEST_F(LeExtendedAdvertisingAPITest, set_parameter) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
   advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
   std::vector<GapData> gap_data{};
@@ -1147,7 +1147,7 @@ TEST_F(LeExtendedAdvertisingAPITest, set_perodic_data_with_invalid_length) {
 
 TEST_F(LeExtendedAdvertisingAPITest, disable_enable_periodic_advertiser_test) {
   // disable advertiser
-  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, false);
+  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, false, false);
   ASSERT_EQ(OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
   EXPECT_CALL(
       mock_advertising_callback_,
@@ -1156,7 +1156,7 @@ TEST_F(LeExtendedAdvertisingAPITest, disable_enable_periodic_advertiser_test) {
   sync_client_handler();
 
   // enable advertiser
-  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, true);
+  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, true, false);
   ASSERT_EQ(OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
   EXPECT_CALL(
       mock_advertising_callback_,

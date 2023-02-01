@@ -45,8 +45,6 @@ java_library {
     defaults: ["framework-bluetooth-defaults"],
     sdk_version: "module_current",
     libs: ["framework-annotations-lib"],
-    // java_api_finder must accompany `srcs` (`srcs` defined in `framework-bluetooth-defaults`)
-    plugins: ["java_api_finder"],
     installable: false,
 }
 
@@ -79,7 +77,7 @@ java_sdk_library {
     ],
 
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
 
     permitted_packages: [
@@ -111,4 +109,13 @@ java_defaults {
 filegroup {
     name: "bluetooth-jarjar-rules",
     srcs: ["jarjar-rules.txt"],
+}
+
+java_api_contribution {
+    name: "framework-bluetooth-public-stubs",
+    api_surface: "public",
+    api_file: "api/current.txt",
+    visibility: [
+        "//build/orchestrator/apis",
+    ],
 }

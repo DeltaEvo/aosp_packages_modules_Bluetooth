@@ -171,15 +171,27 @@ extern struct bta_hh_trace_dev_db bta_hh_trace_dev_db;
 // uint16_t version, uint8_t flag Return: void
 struct bta_hh_update_di_info {
   std::function<void(tBTA_HH_DEV_CB* p_cb, uint16_t vendor_id,
-                     uint16_t product_id, uint16_t version, uint8_t flag)>
+                     uint16_t product_id, uint16_t version, uint8_t flag,
+                     uint8_t ctry_code)>
       body{[](tBTA_HH_DEV_CB* p_cb, uint16_t vendor_id, uint16_t product_id,
-              uint16_t version, uint8_t flag) {}};
+              uint16_t version, uint8_t flag, uint8_t ctry_code) {}};
   void operator()(tBTA_HH_DEV_CB* p_cb, uint16_t vendor_id, uint16_t product_id,
-                  uint16_t version, uint8_t flag) {
-    body(p_cb, vendor_id, product_id, version, flag);
+                  uint16_t version, uint8_t flag, uint8_t ctry_code) {
+    body(p_cb, vendor_id, product_id, version, flag, ctry_code);
   };
 };
 extern struct bta_hh_update_di_info bta_hh_update_di_info;
+
+// Name: bta_hh_le_is_hh_gatt_if
+// Params: tGATT_IF client_if
+// Return: bool
+struct bta_hh_le_is_hh_gatt_if {
+  bool return_value{false};
+  std::function<bool(tGATT_IF client_if)> body{
+      [this](tGATT_IF client_if) { return return_value; }};
+  bool operator()(tGATT_IF client_if) { return body(client_if); };
+};
+extern struct bta_hh_le_is_hh_gatt_if bta_hh_le_is_hh_gatt_if;
 
 }  // namespace bta_hh_utils
 }  // namespace mock

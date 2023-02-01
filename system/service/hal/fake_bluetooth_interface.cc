@@ -58,6 +58,7 @@ bt_interface_t fake_bt_iface = {
     nullptr, /* start_discovery */
     nullptr, /* cancel_discovery */
     nullptr, /* create_bond */
+    nullptr, /* create_bond_le */
     nullptr, /* create_bond_out_of_band */
     nullptr, /* remove_bond */
     nullptr, /* cancel_bond */
@@ -67,7 +68,6 @@ bt_interface_t fake_bt_iface = {
     nullptr, /* get_profile_interface */
     nullptr, /* dut_mode_configure */
     nullptr, /* dut_more_send */
-    nullptr, /* le_test_mode */
     nullptr, /* set_os_callouts */
     nullptr, /* read_energy_info */
     nullptr, /* dump */
@@ -82,7 +82,22 @@ bt_interface_t fake_bt_iface = {
     nullptr, /* generate_local_oob_data */
     nullptr, /* allow_low_latency_audio */
     nullptr, /* clear_event_filter */
+    nullptr, /* clear_event_mask */
+    nullptr, /* clear_filter_accept_list */
+    nullptr, /* disconnect_all_acls */
+    nullptr, /* le_rand */
+    nullptr, /* set_event_filter_connection_setup_all_devices */
+    nullptr, /* allow_wake_by_hid */
+    nullptr, /* restore_filter_accept_list */
+    nullptr, /* set_default_event_mask_except */
+    nullptr, /* set_event_filter_inquiry_result_all_devices */
+    nullptr, /* get_wbs_supported */
     nullptr, /* metadata_changed */
+    nullptr, /* interop_match_addr */
+    nullptr, /* interop_match_name */
+    nullptr, /* interop_match_addr_or_name */
+    nullptr, /* interop_database_add_remove_addr */
+    nullptr, /* interop_database_add_remove_name */
 };
 
 }  // namespace
@@ -148,10 +163,12 @@ void FakeBluetoothInterface::NotifyAdapterLocalLeFeaturesPropertyChanged(
 
 void FakeBluetoothInterface::NotifyAclStateChangedCallback(
     bt_status_t status, const RawAddress& remote_bdaddr, bt_acl_state_t state,
-    int transport_link_type, bt_hci_error_code_t hci_reason) {
+    int transport_link_type, bt_hci_error_code_t hci_reason,
+    bt_conn_direction_t direction, uint16_t acl_handle) {
   for (auto& observer : observers_) {
     observer.AclStateChangedCallback(status, remote_bdaddr, state,
-                                     transport_link_type, hci_reason);
+                                     transport_link_type, hci_reason, direction,
+                                     acl_handle);
   }
 }
 

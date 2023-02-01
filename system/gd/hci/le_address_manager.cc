@@ -465,6 +465,10 @@ void LeAddressManager::AddDeviceToResolvingList(
     Address peer_identity_address,
     const std::array<uint8_t, 16>& peer_irk,
     const std::array<uint8_t, 16>& local_irk) {
+  if (!supports_ble_privacy_) {
+    return;
+  }
+
   // Disable Address resolution
   auto disable_builder = hci::LeSetAddressResolutionEnableBuilder::Create(hci::Enable::DISABLED);
   Command disable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, HCICommand{std::move(disable_builder)}};
@@ -503,6 +507,10 @@ void LeAddressManager::RemoveDeviceFromFilterAcceptList(
 
 void LeAddressManager::RemoveDeviceFromResolvingList(
     PeerAddressType peer_identity_address_type, Address peer_identity_address) {
+  if (!supports_ble_privacy_) {
+    return;
+  }
+
   // Disable Address resolution
   auto disable_builder = hci::LeSetAddressResolutionEnableBuilder::Create(hci::Enable::DISABLED);
   Command disable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, HCICommand{std::move(disable_builder)}};
@@ -532,6 +540,10 @@ void LeAddressManager::ClearFilterAcceptList() {
 }
 
 void LeAddressManager::ClearResolvingList() {
+  if (!supports_ble_privacy_) {
+    return;
+  }
+
   // Disable Address resolution
   auto disable_builder = hci::LeSetAddressResolutionEnableBuilder::Create(hci::Enable::DISABLED);
   Command disable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, HCICommand{std::move(disable_builder)}};
@@ -592,7 +604,8 @@ void LeAddressManager::OnCommandComplete(bluetooth::hci::CommandCompleteView vie
               "Received LE_SET_RANDOM_ADDRESS complete with status %s",
               ErrorCodeText(complete_view.GetStatus()).c_str());
         } else {
-          LOG_INFO("update random address : %s", cached_address_.GetAddress().ToString().c_str());
+          LOG_INFO("update random address : %s",
+                   ADDRESS_TO_LOGGABLE_CSTR(cached_address_.GetAddress()));
           le_address_ = cached_address_;
         }
       }

@@ -30,12 +30,12 @@
 #include "stack/include/smp_api.h"
 #include "stack/smp/p_256_ecc_pp.h"
 #include "stack/smp/smp_int.h"
+#include "test/common/mock_functions.h"
 #include "test/mock/mock_stack_acl.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
 tBTM_CB btm_cb;
-std::map<std::string, int> mock_function_count_map;
 
 const std::string kSmpOptions("mock smp options");
 const std::string kBroadcastAudioConfigOptions(
@@ -132,15 +132,6 @@ const stack_config_t* stack_config_get_interface(void) {
  * they are mostly reversed to be Little Endian which have LSB on the left and
  * MSB on the right.
  */
-
-// Require bte_logmsg.cc to run, here is just to fake it as we don't care about
-// trace in unit test
-void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) {
-  va_list args;
-  va_start(args, fmt_str);
-  vprintf(fmt_str, args);
-  va_end(args);
-}
 
 extern Octet16 smp_gen_p1_4_confirm(tSMP_CB* p_cb,
                                     tBLE_ADDR_TYPE remote_bd_addr_type);

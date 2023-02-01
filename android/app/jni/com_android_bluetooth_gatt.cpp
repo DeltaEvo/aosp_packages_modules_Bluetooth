@@ -26,6 +26,7 @@
 #include <shared_mutex>
 
 #include "com_android_bluetooth.h"
+#include "gd/common/init_flags.h"
 #include "hardware/bt_gatt.h"
 #include "utils/Log.h"
 #define info(fmt, ...) ALOGI("%s(L%d): " fmt, __func__, __LINE__, ##__VA_ARGS__)
@@ -142,6 +143,7 @@ static jmethodID method_onClientPhyUpdate;
 static jmethodID method_onClientPhyRead;
 static jmethodID method_onClientConnUpdate;
 static jmethodID method_onServiceChanged;
+static jmethodID method_onClientSubrateChange;
 
 /**
  * Server callback methods
@@ -163,6 +165,7 @@ static jmethodID method_onServerMtuChanged;
 static jmethodID method_onServerPhyUpdate;
 static jmethodID method_onServerPhyRead;
 static jmethodID method_onServerConnUpdate;
+static jmethodID method_onServerSubrateChange;
 
 /**
  * Advertiser callback methods
@@ -570,6 +573,18 @@ void btgattc_service_changed_cb(int conn_id) {
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServiceChanged, conn_id);
 }
 
+void btgattc_subrate_change_cb(int conn_id, uint16_t subrate_factor,
+                               uint16_t latency, uint16_t cont_num,
+                               uint16_t timeout, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
+
+  sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onClientSubrateChange,
+                               conn_id, subrate_factor, latency, cont_num,
+                               timeout, status);
+}
+
 static const btgatt_scanner_callbacks_t sGattScannerCallbacks = {
     btgattc_scan_result_cb,
     btgattc_batchscan_reports_cb,
@@ -598,6 +613,7 @@ static const btgatt_client_callbacks_t sGattClientCallbacks = {
     btgattc_phy_updated_cb,
     btgattc_conn_updated_cb,
     btgattc_service_changed_cb,
+    btgattc_subrate_change_cb,
 };
 
 /**
@@ -794,6 +810,18 @@ void btgatts_conn_updated_cb(int conn_id, uint16_t interval, uint16_t latency,
                                conn_id, interval, latency, timeout, status);
 }
 
+void btgatts_subrate_change_cb(int conn_id, uint16_t subrate_factor,
+                               uint16_t latency, uint16_t cont_num,
+                               uint16_t timeout, uint8_t status) {
+  std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid() || !mCallbacksObj) return;
+
+  sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onServerSubrateChange,
+                               conn_id, subrate_factor, latency, cont_num,
+                               timeout, status);
+}
+
 static const btgatt_server_callbacks_t sGattServerCallbacks = {
     btgatts_register_app_cb,
     btgatts_connection_cb,
@@ -810,7 +838,9 @@ static const btgatt_server_callbacks_t sGattServerCallbacks = {
     btgatts_congestion_cb,
     btgatts_mtu_changed_cb,
     btgatts_phy_updated_cb,
-    btgatts_conn_updated_cb};
+    btgatts_conn_updated_cb,
+    btgatts_subrate_change_cb,
+};
 
 /**
  * GATT callbacks
@@ -1173,6 +1203,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
       env->GetMethodID(clazz, "onClientConnUpdate", "(IIIII)V");
   method_onServiceChanged =
       env->GetMethodID(clazz, "onServiceChanged", "(I)V");
+  method_onClientSubrateChange =
+      env->GetMethodID(clazz, "onClientSubrateChange", "(IIIIII)V");
 
   // Server callbacks
 
@@ -1209,6 +1241,8 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
       env->GetMethodID(clazz, "onServerPhyUpdate", "(IIII)V");
   method_onServerConnUpdate =
       env->GetMethodID(clazz, "onServerConnUpdate", "(IIIII)V");
+  method_onServerSubrateChange =
+      env->GetMethodID(clazz, "onServerSubrateChange", "(IIIIII)V");
 
   info("classInitNative: Success!");
 }
@@ -1785,6 +1819,17 @@ static void gattConnectionParameterUpdateNative(JNIEnv* env, jobject object,
       (uint16_t)min_ce_len, (uint16_t)max_ce_len);
 }
 
+static void gattSubrateRequestNative(JNIEnv* env, jobject object,
+                                     jint client_if, jstring address,
+                                     jint subrate_min, jint subrate_max,
+                                     jint max_latency, jint cont_num,
+                                     jint sup_timeout) {
+  if (!sGattIf) return;
+  sGattIf->client->subrate_request(str2addr(env, address), subrate_min,
+                                   subrate_max, max_latency, cont_num,
+                                   sup_timeout);
+}
+
 void batchscan_cfg_storage_cb(uint8_t client_if, uint8_t status) {
   std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
@@ -2089,6 +2134,8 @@ static AdvertiseParameters parseParams(JNIEnv* env, jobject i) {
 
   methodId = env->GetMethodID(clazz, "isConnectable", "()Z");
   jboolean isConnectable = env->CallBooleanMethod(i, methodId);
+  methodId = env->GetMethodID(clazz, "isDiscoverable", "()Z");
+  jboolean isDiscoverable = env->CallBooleanMethod(i, methodId);
   methodId = env->GetMethodID(clazz, "isScannable", "()Z");
   jboolean isScannable = env->CallBooleanMethod(i, methodId);
   methodId = env->GetMethodID(clazz, "isLegacy", "()Z");
@@ -2111,6 +2158,7 @@ static AdvertiseParameters parseParams(JNIEnv* env, jobject i) {
   uint16_t props = 0;
   if (isConnectable) props |= 0x01;
   if (isScannable) props |= 0x02;
+  if (isDiscoverable) props |= 0x04;
   if (isLegacy) props |= 0x10;
   if (isAnonymous) props |= 0x20;
   if (includeTxPower) props |= 0x40;
@@ -2149,6 +2197,8 @@ static PeriodicAdvertisingParameters parsePeriodicParams(JNIEnv* env,
   uint16_t interval = env->CallIntMethod(i, methodId);
 
   p.enable = true;
+  p.include_adi =
+      bluetooth::common::init_flags::periodic_advertising_adi_is_enabled();
   p.min_interval = interval;
   p.max_interval = interval + 16; /* 20ms difference betwen min and max */
   uint16_t props = 0;
@@ -2346,8 +2396,10 @@ static void setPeriodicAdvertisingEnableNative(JNIEnv* env, jobject object,
                                                jboolean enable) {
   if (!sGattIf) return;
 
+  bool include_adi =
+      bluetooth::common::init_flags::periodic_advertising_adi_is_enabled();
   sGattIf->advertiser->SetPeriodicAdvertisingEnable(
-      advertiser_id, enable,
+      advertiser_id, enable, include_adi,
       base::Bind(&enablePeriodicSetCb, advertiser_id, enable));
 }
 
@@ -2479,7 +2531,7 @@ static JNINativeMethod sPeriodicScanMethods[] = {
      (void*)transferSetInfoNative},
 };
 
-// JNI functions defined in ScanManager class.
+// JNI functions defined in ScanNativeInterface class.
 static JNINativeMethod sScanMethods[] = {
     {"registerScannerNative", "(JJ)V", (void*)registerScannerNative},
     {"unregisterScannerNative", "(I)V", (void*)unregisterScannerNative},
@@ -2512,7 +2564,7 @@ static JNINativeMethod sScanMethods[] = {
      (void*)gattSetScanParametersNative},
 };
 
-// JNI functions defined in GattService class.
+// JNI functions defined in GattNativeInterface class.
 static JNINativeMethod sMethods[] = {
     {"classInitNative", "()V", (void*)classInitNative},
     {"initializeNative", "()V", (void*)initializeNative},
@@ -2582,13 +2634,15 @@ static JNINativeMethod sMethods[] = {
      (void*)gattServerSendNotificationNative},
     {"gattServerSendResponseNative", "(IIIIII[BI)V",
      (void*)gattServerSendResponseNative},
+    {"gattSubrateRequestNative", "(ILjava/lang/String;IIIII)V",
+     (void*)gattSubrateRequestNative},
 
     {"gattTestNative", "(IJJLjava/lang/String;IIIII)V", (void*)gattTestNative},
 };
 
 int register_com_android_bluetooth_gatt(JNIEnv* env) {
   int register_success = jniRegisterNativeMethods(
-      env, "com/android/bluetooth/gatt/ScanManager$ScanNative", sScanMethods,
+      env, "com/android/bluetooth/gatt/ScanNativeInterface", sScanMethods,
       NELEM(sScanMethods));
   register_success &= jniRegisterNativeMethods(
       env, "com/android/bluetooth/gatt/AdvertiseManager", sAdvertiseMethods,
@@ -2597,7 +2651,8 @@ int register_com_android_bluetooth_gatt(JNIEnv* env) {
       env, "com/android/bluetooth/gatt/PeriodicScanManager",
       sPeriodicScanMethods, NELEM(sPeriodicScanMethods));
   return register_success &
-         jniRegisterNativeMethods(env, "com/android/bluetooth/gatt/GattService",
-                                  sMethods, NELEM(sMethods));
+         jniRegisterNativeMethods(
+             env, "com/android/bluetooth/gatt/GattNativeInterface", sMethods,
+             NELEM(sMethods));
 }
 }  // namespace android

@@ -57,30 +57,6 @@ public class UtilTest {
     }
 
     @Test
-    public void toMetadata_withBundle() {
-        Bundle bundle = new Bundle();
-        bundle.putString(MediaMetadata.METADATA_KEY_MEDIA_ID, SONG_MEDIA_ID);
-        bundle.putString(MediaMetadata.METADATA_KEY_TITLE, SONG_TITLE);
-        bundle.putString(MediaMetadata.METADATA_KEY_ARTIST, SONG_ARTIST);
-        bundle.putString(MediaMetadata.METADATA_KEY_ALBUM, SONG_ALBUM);
-
-        Metadata metadata = Util.toMetadata(mContext, bundle);
-        assertThat(metadata.mediaId).isEqualTo(SONG_MEDIA_ID);
-        assertThat(metadata.title).isEqualTo(SONG_TITLE);
-        assertThat(metadata.artist).isEqualTo(SONG_ARTIST);
-        assertThat(metadata.album).isEqualTo(SONG_ALBUM);
-    }
-
-    @Test
-    public void toMetadata_withMediaDescription() {
-        Metadata metadata = Util.toMetadata(mContext, createDescription());
-        assertThat(metadata.mediaId).isEqualTo(SONG_MEDIA_ID);
-        assertThat(metadata.title).isEqualTo(SONG_TITLE);
-        assertThat(metadata.artist).isEqualTo(SONG_ARTIST);
-        assertThat(metadata.album).isEqualTo(SONG_ALBUM);
-    }
-
-    @Test
     public void toMetadata_withMediaItem() {
         Metadata metadata = Util.toMetadata(mContext,
                 new MediaBrowser.MediaItem(createDescription(), 0));

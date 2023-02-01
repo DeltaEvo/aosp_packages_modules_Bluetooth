@@ -18,15 +18,13 @@
  * Generated mock file from original source file
  */
 
+#include "osi/include/osi.h"
+
 #include <sys/socket.h>
 
 #include <list>
 #include <map>
 #include <string>
-
-extern std::map<std::string, int> mock_function_count_map;
-
-#include "osi/src/compat.cc"  // For strlcpy
 
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
@@ -38,14 +36,14 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "osi/include/hash_map_utils.h"
 #include "osi/include/list.h"
 #include "osi/include/log.h"
-#include "osi/include/osi.h"
 #include "osi/include/reactor.h"
 #include "osi/include/ringbuffer.h"
-#include "osi/include/semaphore.h"
 #include "osi/include/socket.h"
 #include "osi/include/thread.h"
 #include "osi/include/wakelock.h"
+#include "osi/src/compat.cc"  // For strlcpy
 #include "test/common/fake_osi.h"
+#include "test/common/mock_functions.h"
 
 #ifndef UNUSED_ATTR
 #define UNUSED_ATTR
@@ -628,28 +626,6 @@ int osi_property_set(const char* key, const char* value) {
 int32_t osi_property_get_int32(const char* key, int32_t default_value) {
   mock_function_count_map[__func__]++;
   return 0;
-}
-
-bool semaphore_try_wait(semaphore_t* semaphore) {
-  mock_function_count_map[__func__]++;
-  return false;
-}
-int semaphore_get_fd(const semaphore_t* semaphore) {
-  mock_function_count_map[__func__]++;
-  return 0;
-}
-semaphore_t* semaphore_new(unsigned int value) {
-  mock_function_count_map[__func__]++;
-  return nullptr;
-}
-void semaphore_free(semaphore_t* semaphore) {
-  mock_function_count_map[__func__]++;
-}
-void semaphore_post(semaphore_t* semaphore) {
-  mock_function_count_map[__func__]++;
-}
-void semaphore_wait(semaphore_t* semaphore) {
-  mock_function_count_map[__func__]++;
 }
 
 bool wakelock_acquire(void) {

@@ -45,12 +45,14 @@ cc_defaults {
         "android.hardware.bluetooth.audio@2.1",
         "android.system.suspend.control-V1-ndk",
         "android.system.suspend-V1-ndk",
+        "libPlatformProperties",
     ],
     static_libs: [
         "libbte",
         "liblog",
         "libosi",
         "libbtif",
+        "libbtif-core",
         "libbase",
         "libutils",
         "libevent",
@@ -58,6 +60,7 @@ cc_defaults {
         "libchrome",
         "libbtcore",
         "libbt-bta",
+        "libbt-bta-core",
         "libbt-hci",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
@@ -68,6 +71,7 @@ cc_defaults {
         "libflatbuffers-cpp",
         "libhidlbase",
         "libbt-stack",
+        "libbt-stack-core",
         "libg722codec",
         "libudrv-uipc",
         "libbt-common",
@@ -101,10 +105,8 @@ cc_defaults {
         "-DHAS_NO_BDROID_BUILDCFG",
     ],
     fuzz_config: {
-        cc: [
-            "android-media-fuzzing-reports@google.com",
-        ],
-        componentid: 155276,
+        cc: ["android-bluetooth-security@google.com"],
+        componentid: 27441,
     },
 }
 

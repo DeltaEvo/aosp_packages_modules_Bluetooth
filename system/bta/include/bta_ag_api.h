@@ -568,13 +568,14 @@ void BTA_AgClose(uint16_t handle);
  * Function         BTA_AgAudioOpen
  *
  * Description      Opens an audio connection to the currently connected
- *                  headset or hnadsfree
+ *                  headset or handsfree. Specifying force_cvsd to true to
+ *                  force the stack to use CVSD even if mSBC is supported.
  *
  *
  * Returns          void
  *
  ******************************************************************************/
-void BTA_AgAudioOpen(uint16_t handle);
+void BTA_AgAudioOpen(uint16_t handle, bool force_cvsd);
 
 /*******************************************************************************
  *
@@ -615,6 +616,8 @@ void BTA_AgResult(uint16_t handle, tBTA_AG_RES result,
  *
  ******************************************************************************/
 void BTA_AgSetCodec(uint16_t handle, tBTA_AG_PEER_CODEC codec);
+
+void BTA_AgSetScoOffloadEnabled(bool value);
 
 void BTA_AgSetScoAllowed(bool value);
 

@@ -885,4 +885,68 @@ extern void L2CA_AdjustConnectionIntervals(uint16_t* min_interval,
 extern bool L2CA_IsLinkEstablished(const RawAddress& bd_addr,
                                    tBT_TRANSPORT transport);
 
+/*******************************************************************************
+ *
+ *  Function        L2CA_SetDefaultSubrate
+ *
+ *  Description     BLE Set Default Subrate.
+ *
+ *  Parameters:     Subrate parameters
+ *
+ *  Return value:   void
+ *
+ ******************************************************************************/
+extern void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max,
+                                   uint16_t max_latency, uint16_t cont_num,
+                                   uint16_t timeout);
+
+/*******************************************************************************
+ *
+ *  Function        L2CA_SubrateRequest
+ *
+ *  Description     BLE Subrate request.
+ *
+ *  Parameters:     Subrate parameters
+ *
+ *  Return value:   true if update started
+ *
+ ******************************************************************************/
+extern bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min,
+                                uint16_t subrate_max, uint16_t max_latency,
+                                uint16_t cont_num, uint16_t timeout);
+
+/*******************************************************************************
+**
+** Function         L2CA_SetMediaStreamChannel
+**
+** Description      This function is called to set/reset the ccb of active media
+**                      streaming channel
+**
+**  Parameters:     local_media_cid: The local cid provided to A2DP to be used
+**                      for streaming
+**                  status: The status of media streaming on this channel
+**
+** Returns          void
+**
+*******************************************************************************/
+extern void L2CA_SetMediaStreamChannel(uint16_t local_media_cid, bool status);
+
+/*******************************************************************************
+**
+** Function         L2CA_isMediaChannel
+**
+** Description      This function returns if the channel id passed as parameter
+**                      is an A2DP streaming channel
+**
+**  Parameters:     handle: Connection handle with the remote device
+**                  channel_id: Channel ID
+**                  is_local_cid: Signifies if the channel id passed is local
+**                      cid or remote cid (true if local, remote otherwise)
+**
+** Returns          bool
+**
+*******************************************************************************/
+extern bool L2CA_isMediaChannel(uint16_t handle, uint16_t channel_id,
+                                bool is_local_cid);
+
 #endif /* L2C_API_H */

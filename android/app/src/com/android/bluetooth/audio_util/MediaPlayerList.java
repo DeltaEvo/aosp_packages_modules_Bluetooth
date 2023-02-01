@@ -31,6 +31,7 @@ import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -62,7 +63,7 @@ import java.util.regex.Pattern;
  */
 public class MediaPlayerList {
     private static final String TAG = "MediaPlayerList";
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     static boolean sTesting = false;
 
     private static final String PACKAGE_SCHEME = "package";
@@ -85,7 +86,6 @@ public class MediaPlayerList {
 
     private Context mContext;
     private Looper mLooper; // Thread all media player callbacks and timeouts happen on
-    private PackageManager mPackageManager;
     private MediaSessionManager mMediaSessionManager;
     private MediaData mCurrMediaData = null;
     private final AudioManager mAudioManager;
@@ -146,9 +146,44 @@ public class MediaPlayerList {
                 mContext.getMainExecutor(), mMediaKeyEventSessionChangedListener);
     }
 
+    private void constructCurrentPlayers() {
+        // Construct the list of current players
+        d("Initializing list of current media players");
+        List<android.media.session.MediaController> controllers =
+                mMediaSessionManager.getActiveSessions(null);
+
+        for (android.media.session.MediaController controller : controllers) {
+            addMediaPlayer(controller);
+        }
+
+        // If there were any active players and we don't already have one due to the Media
+        // Framework Callbacks then set the highest priority one to active
+        if (mActivePlayerId == 0 && mMediaPlayers.size() > 0) {
+            String packageName = mMediaSessionManager.getMediaKeyEventSessionPackageName();
+            if (!TextUtils.isEmpty(packageName) && haveMediaPlayer(packageName)) {
+                Log.i(TAG, "Set active player to MediaKeyEvent session = " + packageName);
+                setActivePlayer(mMediaPlayerIds.get(packageName));
+            } else {
+                Log.i(TAG, "Set active player to first default");
+                setActivePlayer(1);
+            }
+        }
+    }
+
     public void init(MediaUpdateCallback callback) {
         Log.v(TAG, "Initializing MediaPlayerList");
         mCallback = callback;
+
+        if (!SystemProperties.getBoolean("bluetooth.avrcp.browsable_media_player.enabled", true)) {
+            // Allow to disable BrowsablePlayerConnector with systemproperties.
+            // This is useful when for watches because:
+            //   1. It is not a regular use case
+            //   2. Registering to all players is a very loading task
+
+            Log.i(TAG, "init: without Browsable Player");
+            constructCurrentPlayers();
+            return;
+        }
 
         // Build the list of browsable players and afterwards, build the list of media players
         Intent intent = new Intent(android.service.media.MediaBrowserService.SERVICE_INTERFACE);
@@ -185,27 +220,7 @@ public class MediaPlayerList {
                             });
                 }
 
-                // Construct the list of current players
-                d("Initializing list of current media players");
-                List<android.media.session.MediaController> controllers =
-                        mMediaSessionManager.getActiveSessions(null);
-
-                for (android.media.session.MediaController controller : controllers) {
-                    addMediaPlayer(controller);
-                }
-
-                // If there were any active players and we don't already have one due to the Media
-                // Framework Callbacks then set the highest priority one to active
-                if (mActivePlayerId == 0 && mMediaPlayers.size() > 0) {
-                    String packageName = mMediaSessionManager.getMediaKeyEventSessionPackageName();
-                    if (!TextUtils.isEmpty(packageName) && haveMediaPlayer(packageName)) {
-                        Log.i(TAG, "Set active player to MediaKeyEvent session = " + packageName);
-                        setActivePlayer(mMediaPlayerIds.get(packageName));
-                    } else {
-                        Log.i(TAG, "Set active player to first default");
-                        setActivePlayer(1);
-                    }
-                }
+                constructCurrentPlayers();
             });
     }
 
@@ -731,7 +746,7 @@ public class MediaPlayerList {
         if (getActivePlayer() == null) {
             Log.d(TAG, "updateMediaForAudioPlayback: no active player");
             PlaybackState.Builder builder = new PlaybackState.Builder()
-                    .setState(PlaybackState.STATE_STOPPED, 0L, 0L);
+                    .setState(PlaybackState.STATE_STOPPED, 0L, 0f);
             List<Metadata> queue = new ArrayList<Metadata>();
             queue.add(Util.empty_data());
             currMediaData = new MediaData(
@@ -838,8 +853,7 @@ public class MediaPlayerList {
                         MediaSession.Token token) {
                     if (mMediaSessionManager == null) {
                         Log.w(TAG, "onMediaKeyEventSessionChanged(): Unexpected callback "
-                                + "from the MediaSessionManager, pkg" + packageName + ", token="
-                                + token);
+                                + "from the MediaSessionManager, pkg" + packageName);
                         return;
                     }
                     if (TextUtils.isEmpty(packageName)) {

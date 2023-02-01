@@ -48,7 +48,13 @@ void ACL_AddToAddressResolution(const tBLE_BD_ADDR& legacy_address_with_type,
 void ACL_RemoveFromAddressResolution(
     const tBLE_BD_ADDR& legacy_address_with_type);
 void ACL_ClearAddressResolution();
-void ACL_ClearAcceptList();
+void ACL_ClearFilterAcceptList();
+void ACL_LeSetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max,
+                             uint16_t max_latency, uint16_t cont_num,
+                             uint16_t sup_tout);
+void ACL_LeSubrateRequest(uint16_t hci_handle, uint16_t subrate_min,
+                          uint16_t subrate_max, uint16_t max_latency,
+                          uint16_t cont_num, uint16_t sup_tout);
 
 }  // namespace shim
 }  // namespace bluetooth

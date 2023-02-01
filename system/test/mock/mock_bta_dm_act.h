@@ -91,13 +91,31 @@ extern struct BTA_dm_acl_down BTA_dm_acl_down;
 // Params: const RawAddress bd_addr, tBT_TRANSPORT transport
 // Return: void
 struct BTA_dm_acl_up {
-  std::function<void(const RawAddress bd_addr, tBT_TRANSPORT transport)> body{
-      [](const RawAddress bd_addr, tBT_TRANSPORT transport) {}};
-  void operator()(const RawAddress bd_addr, tBT_TRANSPORT transport) {
-    body(bd_addr, transport);
+  std::function<void(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                     uint16_t acl_handle)>
+      body{[](const RawAddress bd_addr, tBT_TRANSPORT transport,
+              uint16_t acl_handle) {}};
+  void operator()(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                  uint16_t acl_handle) {
+    body(bd_addr, transport, acl_handle);
   };
 };
 extern struct BTA_dm_acl_up BTA_dm_acl_up;
+
+// Name: BTA_dm_acl_up_failed
+// Params: const RawAddress bd_addr, tBT_TRANSPORT transport, tHCI_STATUS
+// hci_status Return: void
+struct BTA_dm_acl_up_failed {
+  std::function<void(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                     tHCI_STATUS hci_status)>
+      body{[](const RawAddress bd_addr, tBT_TRANSPORT transport,
+              tHCI_STATUS hci_status) {}};
+  void operator()(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                  tHCI_STATUS hci_status) {
+    body(bd_addr, transport, hci_status);
+  };
+};
+extern struct BTA_dm_acl_up_failed BTA_dm_acl_up_failed;
 
 // Name: BTA_dm_notify_remote_features_complete
 // Params: const RawAddress bd_addr
@@ -147,10 +165,13 @@ extern struct BTA_dm_report_role_change BTA_dm_report_role_change;
 // Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
 // Return: void
 struct bta_dm_acl_up {
-  std::function<void(const RawAddress& bd_addr, tBT_TRANSPORT transport)> body{
-      [](const RawAddress& bd_addr, tBT_TRANSPORT transport) {}};
-  void operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
-    body(bd_addr, transport);
+  std::function<void(const RawAddress& bd_addr, tBT_TRANSPORT transport,
+                     uint16_t acl_handle)>
+      body{[](const RawAddress& bd_addr, tBT_TRANSPORT transport,
+              uint16_t acl_handle) {}};
+  void operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport,
+                  uint16_t acl_handle) {
+    body(bd_addr, transport, acl_handle);
   };
 };
 extern struct bta_dm_acl_up bta_dm_acl_up;

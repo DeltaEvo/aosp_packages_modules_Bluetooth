@@ -44,6 +44,7 @@ import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -245,7 +246,7 @@ public class MetadataTest {
         assertThat(metadata.numTracks).isEqualTo(numTracks);
         assertThat(metadata.genre).isEqualTo(genre);
         assertThat(metadata.duration).isEqualTo(duration);
-        assertThat(metadata.image).isEqualTo(image);
+        Assert.assertTrue(Image.sameAs(metadata.image, image));
     }
 
     /**
@@ -947,20 +948,6 @@ public class MetadataTest {
         Metadata metadata = new Metadata.Builder().fromMediaMetadata(m).build();
         Metadata metadata2 = metadata.clone();
         metadata2.numTracks = DEFAULT_NUM_TRACKS;
-        assertThat(metadata).isNotEqualTo(metadata2);
-    }
-
-    /**
-     * Make sure two Metadata objects are different if image doesn't match
-     */
-    @Test
-    public void testEqualsDifferentImage() {
-        MediaMetadata m =
-                getMediaMetadataWithBitmap(MediaMetadata.METADATA_KEY_ART, mTestBitmap);
-        MediaMetadata m2 =
-                getMediaMetadataWithBitmap(MediaMetadata.METADATA_KEY_ART, mTestBitmap2);
-        Metadata metadata = new Metadata.Builder().fromMediaMetadata(m).build();
-        Metadata metadata2 = new Metadata.Builder().fromMediaMetadata(m2).build();
         assertThat(metadata).isNotEqualTo(metadata2);
     }
 

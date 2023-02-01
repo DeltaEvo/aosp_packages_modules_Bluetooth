@@ -54,7 +54,6 @@ constexpr uint64_t kRandomNumber = 0x123456789abcdef0;
 uint16_t feature_spec_version = 55;
 constexpr char title[] = "hci_controller_test";
 
-
 PacketView<kLittleEndian> GetPacketView(std::unique_ptr<packet::BasePacketBuilder> packet) {
   auto bytes = std::make_shared<std::vector<uint8_t>>();
   BitInserter i(*bytes);
@@ -65,13 +64,15 @@ PacketView<kLittleEndian> GetPacketView(std::unique_ptr<packet::BasePacketBuilde
 
 }  // namespace
 
+namespace {
+
 class TestHciLayer : public HciLayer {
  public:
   void EnqueueCommand(
       std::unique_ptr<CommandBuilder> command,
       common::ContextualOnceCallback<void(CommandCompleteView)> on_complete) override {
-    GetHandler()->Post(common::BindOnce(&TestHciLayer::HandleCommand, common::Unretained(this), std::move(command),
-                                        std::move(on_complete)));
+    GetHandler()->Post(common::BindOnce(
+        &TestHciLayer::HandleCommand, common::Unretained(this), std::move(command), std::move(on_complete)));
   }
 
   void EnqueueCommand(
@@ -101,8 +102,8 @@ class TestHciLayer : public HciLayer {
         local_version_information.lmp_version_ = LmpVersion::V_4_2;
         local_version_information.manufacturer_name_ = 0xBAD;
         local_version_information.lmp_subversion_ = 0x5678;
-        event_builder = ReadLocalVersionInformationCompleteBuilder::Create(num_packets, ErrorCode::SUCCESS,
-                                                                           local_version_information);
+        event_builder = ReadLocalVersionInformationCompleteBuilder::Create(
+            num_packets, ErrorCode::SUCCESS, local_version_information);
       } break;
       case (OpCode::READ_LOCAL_SUPPORTED_COMMANDS): {
         std::array<uint8_t, 64> supported_commands;
@@ -121,13 +122,17 @@ class TestHciLayer : public HciLayer {
         uint8_t page_bumber = read_command.GetPageNumber();
         uint64_t lmp_features = 0x012345678abcdef;
         lmp_features += page_bumber;
-        event_builder = ReadLocalExtendedFeaturesCompleteBuilder::Create(num_packets, ErrorCode::SUCCESS, page_bumber,
-                                                                         0x02, lmp_features);
+        event_builder = ReadLocalExtendedFeaturesCompleteBuilder::Create(
+            num_packets, ErrorCode::SUCCESS, page_bumber, 0x02, lmp_features);
       } break;
       case (OpCode::READ_BUFFER_SIZE): {
         event_builder = ReadBufferSizeCompleteBuilder::Create(
-            num_packets, ErrorCode::SUCCESS, acl_data_packet_length, synchronous_data_packet_length,
-            total_num_acl_data_packets, total_num_synchronous_data_packets);
+            num_packets,
+            ErrorCode::SUCCESS,
+            acl_data_packet_length,
+            synchronous_data_packet_length,
+            total_num_acl_data_packets,
+            total_num_synchronous_data_packets);
       } break;
       case (OpCode::READ_BD_ADDR): {
         event_builder = ReadBdAddrCompleteBuilder::Create(num_packets, ErrorCode::SUCCESS, Address::kAny);
@@ -179,8 +184,8 @@ class TestHciLayer : public HciLayer {
           payload->AddOctets2(feature_spec_version);
           payload->AddOctets(payload_bytes);
         }
-        event_builder = LeGetVendorCapabilitiesCompleteBuilder::Create(num_packets, ErrorCode::SUCCESS,
-                                                                       base_vendor_capabilities, std::move(payload));
+        event_builder = LeGetVendorCapabilitiesCompleteBuilder::Create(
+            num_packets, ErrorCode::SUCCESS, base_vendor_capabilities, std::move(payload));
       } break;
       case (OpCode::SET_EVENT_MASK): {
         auto view = SetEventMaskView::Create(command);
@@ -284,6 +289,7 @@ class TestHciLayer : public HciLayer {
 class ControllerTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    feature_spec_version = feature_spec_version_;
     bluetooth::common::InitFlags::SetAllForTesting();
     test_hci_layer_ = new TestHciLayer;
     fake_registry_.InjectTestModule(&HciLayer::Factory, test_hci_layer_);
@@ -301,6 +307,32 @@ class ControllerTest : public ::testing::Test {
   os::Thread& thread_ = fake_registry_.GetTestThread();
   Controller* controller_ = nullptr;
   os::Handler* client_handler_ = nullptr;
+  uint16_t feature_spec_version_ = 98;
+};
+}  // namespace
+
+class Controller055Test : public ControllerTest {
+ protected:
+  void SetUp() override {
+    feature_spec_version_ = 55;
+    ControllerTest::SetUp();
+  }
+};
+
+class Controller095Test : public ControllerTest {
+ protected:
+  void SetUp() override {
+    feature_spec_version_ = 95;
+    ControllerTest::SetUp();
+  }
+};
+
+class Controller096Test : public ControllerTest {
+ protected:
+  void SetUp() override {
+    feature_spec_version_ = 96;
+    ControllerTest::SetUp();
+  }
 };
 
 TEST_F(ControllerTest, startup_teardown) {}
@@ -407,28 +439,25 @@ TEST_F(ControllerTest, is_supported_test) {
   ASSERT_FALSE(controller_->IsSupported(OpCode::LE_SET_PERIODIC_ADVERTISING_PARAM));
 }
 
-TEST_F(ControllerTest, feature_spec_version_055_test) {
+TEST_F(Controller055Test, feature_spec_version_055_test) {
   ASSERT_EQ(controller_->GetVendorCapabilities().version_supported_, 55);
   ASSERT_TRUE(controller_->IsSupported(OpCode::LE_MULTI_ADVT));
   ASSERT_FALSE(controller_->IsSupported(OpCode::CONTROLLER_DEBUG_INFO));
   ASSERT_FALSE(controller_->IsSupported(OpCode::CONTROLLER_A2DP_OPCODE));
-  feature_spec_version = 95;
 }
 
-TEST_F(ControllerTest, feature_spec_version_095_test) {
+TEST_F(Controller095Test, feature_spec_version_095_test) {
   ASSERT_EQ(controller_->GetVendorCapabilities().version_supported_, 95);
   ASSERT_TRUE(controller_->IsSupported(OpCode::LE_MULTI_ADVT));
   ASSERT_FALSE(controller_->IsSupported(OpCode::CONTROLLER_DEBUG_INFO));
   ASSERT_FALSE(controller_->IsSupported(OpCode::CONTROLLER_A2DP_OPCODE));
-  feature_spec_version = 96;
 }
 
-TEST_F(ControllerTest, feature_spec_version_096_test) {
+TEST_F(Controller096Test, feature_spec_version_096_test) {
   ASSERT_EQ(controller_->GetVendorCapabilities().version_supported_, 96);
   ASSERT_TRUE(controller_->IsSupported(OpCode::LE_MULTI_ADVT));
   ASSERT_FALSE(controller_->IsSupported(OpCode::CONTROLLER_DEBUG_INFO));
   ASSERT_FALSE(controller_->IsSupported(OpCode::CONTROLLER_A2DP_OPCODE));
-  feature_spec_version = 98;
 }
 
 TEST_F(ControllerTest, feature_spec_version_098_test) {
@@ -436,7 +465,6 @@ TEST_F(ControllerTest, feature_spec_version_098_test) {
   ASSERT_TRUE(controller_->IsSupported(OpCode::LE_MULTI_ADVT));
   ASSERT_FALSE(controller_->IsSupported(OpCode::CONTROLLER_DEBUG_INFO));
   ASSERT_TRUE(controller_->IsSupported(OpCode::CONTROLLER_A2DP_OPCODE));
-  feature_spec_version = 55;
 }
 
 std::promise<void> credits1_set;
@@ -488,6 +516,20 @@ std::promise<uint64_t> le_rand_set;
 
 void le_rand_callback(uint64_t random) {
   le_rand_set.set_value(random);
+}
+
+TEST_F(ControllerTest, leRandTest) {
+  le_rand_set = std::promise<uint64_t>();
+  auto le_rand_set_future = le_rand_set.get_future();
+
+  controller_->LeRand(common::Bind(le_rand_callback));
+
+  ASSERT_EQ(std::future_status::ready, le_rand_set_future.wait_for(2s));
+  ASSERT_EQ(kRandomNumber, le_rand_set_future.get());
+}
+
+TEST_F(ControllerTest, AllowWakeByHidTest) {
+  controller_->AllowWakeByHid();
 }
 
 TEST_F(ControllerTest, Dumpsys) {

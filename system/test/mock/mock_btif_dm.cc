@@ -66,14 +66,6 @@ void BTIF_dm_report_inquiry_status_change(uint8_t status) {
 void bte_dm_evt(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data) {
   mock_function_count_map[__func__]++;
 }
-void btif_ble_receiver_test(uint8_t rx_freq) {
-  mock_function_count_map[__func__]++;
-}
-void btif_ble_test_end() { mock_function_count_map[__func__]++; }
-void btif_ble_transmitter_test(uint8_t tx_freq, uint8_t test_data_len,
-                               uint8_t packet_payload) {
-  mock_function_count_map[__func__]++;
-}
 void btif_debug_bond_event_dump(int fd) { mock_function_count_map[__func__]++; }
 void btif_dm_ble_sec_req_evt(tBTA_DM_BLE_SEC_REQ* p_ble_req, bool is_consent) {
   mock_function_count_map[__func__]++;
@@ -84,6 +76,10 @@ void btif_dm_cancel_bond(const RawAddress bd_addr) {
 void btif_dm_cancel_discovery(void) { mock_function_count_map[__func__]++; }
 void btif_dm_cleanup(void) { mock_function_count_map[__func__]++; }
 void btif_dm_create_bond(const RawAddress bd_addr, int transport) {
+  mock_function_count_map[__func__]++;
+}
+void btif_dm_create_bond_le(const RawAddress bd_addr,
+                            tBLE_ADDR_TYPE addr_type) {
   mock_function_count_map[__func__]++;
 }
 void btif_dm_create_bond_out_of_band(const RawAddress bd_addr, int transport,

@@ -57,6 +57,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -870,22 +871,22 @@ public class BluetoothInCallService extends InCallService {
         BluetoothCall activeCall = mCallInfo.getActiveCall();
         BluetoothCall ringingCall = mCallInfo.getRingingOrSimulatedRingingCall();
         if (ringingCall == null) {
-            Log.i(TAG, "asdf ringingCall null");
+            Log.i(TAG, "ringingCall null at processChld");
         } else {
-            Log.i(TAG, "asdf ringingCall not null " + ringingCall.hashCode());
+            Log.i(TAG, "ringingCall hashcode: " + ringingCall.hashCode());
         }
 
         BluetoothCall heldCall = mCallInfo.getHeldCall();
 
         Log.i(TAG, "Active: " + activeCall
                 + " Ringing: " + ringingCall
-                + " Held: " + heldCall);
-        Log.i(TAG, "asdf chld " + chld);
+                + " Held: " + heldCall
+                + " chld: " + chld);
 
         if (chld == CHLD_TYPE_RELEASEHELD) {
-            Log.i(TAG, "asdf CHLD_TYPE_RELEASEHELD");
+            Log.i(TAG, "chld is CHLD_TYPE_RELEASEHELD");
             if (!mCallInfo.isNullCall(ringingCall)) {
-                Log.i(TAG, "asdf reject " + ringingCall.hashCode());
+                Log.i(TAG, "reject ringing call " + ringingCall.hashCode());
                 ringingCall.reject(false, null);
                 return true;
             } else if (!mCallInfo.isNullCall(heldCall)) {
@@ -1012,7 +1013,7 @@ public class BluetoothInCallService extends InCallService {
                 // Held BluetoothCall has changed due to it being combined into a CDMA conference.
                 // Keep track of this and ignore any future update since it doesn't really count
                 // as a BluetoothCall change.
-                if (mOldHeldCall != null && mOldHeldCall.getId() == id) {
+                if (mOldHeldCall != null && Objects.equals(mOldHeldCall.getId(), id)) {
                     ignoreHeldCallChange = true;
                     break;
                 }
@@ -1553,4 +1554,4 @@ public class BluetoothInCallService extends InCallService {
             mBluetoothLeCallControl.requestResult(requestId, BluetoothLeCallControl.RESULT_ERROR_APPLICATION);
         }
     };
-};
+}

@@ -29,6 +29,7 @@
 
 #include "bt_target.h"
 #include "btu.h"
+#include "device/include/device_iot_config.h"
 #include "device/include/esco_parameters.h"
 #include "hcidefs.h"
 #include "hcimsgs.h"
@@ -561,7 +562,13 @@ void btsnd_hcic_create_conn(const RawAddress& dest, uint16_t packet_types,
   UINT8_TO_STREAM(pp, page_scan_mode);
   UINT16_TO_STREAM(pp, clock_offset);
   UINT8_TO_STREAM(pp, allow_switch);
+
+  // If no role change is requested from the remote device, we want
+  // to classify the connection initiator as the central device.
+  acl_cache_role(dest, HCI_ROLE_CENTRAL, /*overwrite_cache=*/false);
+
   btm_acl_paging(p, dest);
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(dest, IOT_CONF_KEY_GAP_CONN_COUNT);
 }
 
 static void btsnd_hcic_disconnect(uint16_t handle, uint8_t reason) {

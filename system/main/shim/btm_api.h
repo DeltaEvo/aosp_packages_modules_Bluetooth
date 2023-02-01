@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "base/callback.h"
 #include "device/include/esco_parameters.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
@@ -549,46 +550,6 @@ void BTM_ReadDevInfo(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
  ******************************************************************************/
 bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
                                        tBT_TRANSPORT transport);
-
-/*******************************************************************************
- *
- * Function         BTM_BleReceiverTest
- *
- * Description      This function is called to start the LE Receiver test
- *
- * Parameter       rx_freq - Frequency Range
- *               p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback);
-
-/*******************************************************************************
- *
- * Function         BTM_BleTransmitterTest
- *
- * Description      This function is called to start the LE Transmitter test
- *
- * Parameter       tx_freq - Frequency Range
- *                       test_data_len - Length in bytes of payload data in each
- *                                       packet
- *                       packet_payload - Pattern to use in the payload
- *                       p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
-                            uint8_t packet_payload,
-                            tBTM_CMPL_CB* p_cmd_cmpl_cback);
-
-/*******************************************************************************
- *
- * Function         BTM_BleTestEnd
- *
- * Description     This function is called to stop the in-progress TX or RX test
- *
- * Parameter       p_cmd_cmpl_cback - Command complete callback
- *
- ******************************************************************************/
-void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback);
 
 /*******************************************************************************
  *
@@ -1837,6 +1798,112 @@ tBTM_STATUS BTM_BleGetEnergyInfo(tBTM_BLE_ENERGY_INFO_CBACK* p_ener_cback);
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ClearEventFilter(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_ClearEventMask
+ *
+ * Description      Clears the event mask in the controller
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_ClearEventMask(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_ClearFilterAcceptList
+ *
+ * Description      Clears the connect list in the controller
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_ClearFilterAcceptList(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_DisconnectAllAcls
+ *
+ * Description      Disconnects all of the ACL connections
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_DisconnectAllAcls(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_LeRand
+ *
+ * Description      Retrieves a random number from the controller
+ *
+ * Parameters       cb - The callback to receive the random number
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+using LeRandCallback = base::Callback<void(uint64_t)>;
+tBTM_STATUS BTM_LeRand(LeRandCallback);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetEventFilterConnectionSetupAllDevices
+ *
+ * Description    Tell the controller to allow all devices
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetEventFilterConnectionSetupAllDevices(void);
+
+/*******************************************************************************
+ *
+ * Function        BTM_AllowWakeByHid
+ *
+ * Description     Allow the device to be woken by HID devices
+ *
+ * Parameters      std::vector of RawAddress
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_AllowWakeByHid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
+
+/*******************************************************************************
+ *
+ * Function        BTM_RestoreFilterAcceptList
+ *
+ * Description    Floss: Restore the state of the for the filter accept list
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_RestoreFilterAcceptList(void);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetDefaultEventMaskExcept
+ *
+ * Description    Floss: Set the default event mask for Classic and LE except
+ *                the given values (they will be disabled in the final set
+ *                mask).
+ *
+ * Parameters     Bits set for event mask and le event mask that should be
+ *                disabled in the final value.
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetEventFilterInquiryResultAllDevices
+ *
+ * Description    Floss: Set the event filter to inquiry result device all
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetEventFilterInquiryResultAllDevices(void);
 
 /*******************************************************************************
  *

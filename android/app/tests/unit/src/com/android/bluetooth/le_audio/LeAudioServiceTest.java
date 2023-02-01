@@ -68,7 +68,6 @@ import com.android.bluetooth.vc.VolumeControlService;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -78,7 +77,6 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -141,25 +139,17 @@ public class LeAudioServiceTest {
                                 | BluetoothLeAudioCodecConfig.SAMPLE_RATE_16000)
                .build();
 
-    private static final List<BluetoothLeAudioCodecConfig> INPUT_CAPABILITIES_CONFIG =
-            new ArrayList() {{
-                    add(LC3_48KHZ_16KHZ_CONFIG);
-            }};
+    private static final List<BluetoothLeAudioCodecConfig> INPUT_CAPABILITIES_CONFIG = List.of(
+            LC3_48KHZ_16KHZ_CONFIG);
 
-    private static final List<BluetoothLeAudioCodecConfig> OUTPUT_CAPABILITIES_CONFIG =
-            new ArrayList() {{
-                    add(LC3_48KHZ_16KHZ_CONFIG);
-            }};
+    private static final List<BluetoothLeAudioCodecConfig> OUTPUT_CAPABILITIES_CONFIG = List.of(
+            LC3_48KHZ_16KHZ_CONFIG);
 
-    private static final List<BluetoothLeAudioCodecConfig> INPUT_SELECTABLE_CONFIG =
-            new ArrayList() {{
-                    add(LC3_16KHZ_CONFIG);
-             }};
+    private static final List<BluetoothLeAudioCodecConfig> INPUT_SELECTABLE_CONFIG = List.of(
+            LC3_16KHZ_CONFIG);
 
-    private static final List<BluetoothLeAudioCodecConfig> OUTPUT_SELECTABLE_CONFIG =
-            new ArrayList() {{
-                    add(LC3_48KHZ_16KHZ_CONFIG);
-            }};
+    private static final List<BluetoothLeAudioCodecConfig> OUTPUT_SELECTABLE_CONFIG = List.of(
+            LC3_48KHZ_16KHZ_CONFIG);
 
     @Before
     public void setUp() throws Exception {
@@ -643,6 +633,9 @@ public class LeAudioServiceTest {
         doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
         doReturn(true).when(mNativeInterface).disconnectLeAudio(any(BluetoothDevice.class));
 
+        // Create device descriptor with connect request
+        assertWithMessage("Connect failed").that(mService.connect(mLeftDevice)).isTrue();
+
         // Le Audio stack event: CONNECTION_STATE_CONNECTING - state machine should be created
         generateConnectionMessageFromNative(mLeftDevice, BluetoothProfile.STATE_CONNECTING,
                 BluetoothProfile.STATE_DISCONNECTED);
@@ -659,9 +652,15 @@ public class LeAudioServiceTest {
         mService.bondStateChanged(mLeftDevice, BluetoothDevice.BOND_NONE);
         assertThat(mService.getDevices().contains(mLeftDevice)).isFalse();
 
+        // Remove bond will remove also device descriptor. Device has to be connected again
+        assertWithMessage("Connect failed").that(mService.connect(mLeftDevice)).isTrue();
+        verifyConnectionStateIntent(LeAudioStateMachine.sConnectTimeoutMs * 2,
+                mLeftDevice, BluetoothProfile.STATE_CONNECTING,
+                BluetoothProfile.STATE_DISCONNECTED);
+
         // stack event: CONNECTION_STATE_CONNECTED - state machine should be created
         generateConnectionMessageFromNative(mLeftDevice, BluetoothProfile.STATE_CONNECTED,
-                BluetoothProfile.STATE_DISCONNECTED);
+                BluetoothProfile.STATE_CONNECTING);
         assertThat(BluetoothProfile.STATE_CONNECTED)
                 .isEqualTo(mService.getConnectionState(mLeftDevice));
         assertThat(mService.getDevices().contains(mLeftDevice)).isTrue();
@@ -709,6 +708,9 @@ public class LeAudioServiceTest {
                 .thenReturn(BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
         doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
         doReturn(true).when(mNativeInterface).disconnectLeAudio(any(BluetoothDevice.class));
+
+        // Create device descriptor with connect request
+        assertWithMessage("Connect failed").that(mService.connect(mLeftDevice)).isTrue();
 
         // LeAudio stack event: CONNECTION_STATE_CONNECTING - state machine should be created
         generateConnectionMessageFromNative(mLeftDevice, BluetoothProfile.STATE_CONNECTING,
@@ -776,6 +778,9 @@ public class LeAudioServiceTest {
                 .thenReturn(BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
         doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
         doReturn(true).when(mNativeInterface).disconnectLeAudio(any(BluetoothDevice.class));
+
+        // Create device descriptor with connect request
+        assertWithMessage("Connect failed").that(mService.connect(mLeftDevice)).isTrue();
 
         // LeAudio stack event: CONNECTION_STATE_CONNECTING - state machine should be created
         generateConnectionMessageFromNative(mLeftDevice, BluetoothProfile.STATE_CONNECTING,
@@ -1128,7 +1133,6 @@ public class LeAudioServiceTest {
      * Test native interface audio configuration changed message handling
      */
     @Test
-    @Ignore("b/258573934")
     public void testMessageFromNativeAudioConfChangedActiveGroup() {
         doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
         connectTestDevice(mSingleDevice, testGroupId);
@@ -1314,7 +1318,6 @@ public class LeAudioServiceTest {
      * Test native interface group status message handling
      */
     @Test
-    @Ignore("b/258573934")
     public void testLeadGroupDeviceDisconnects() {
         int groupId = 1;
         /* AUDIO_DIRECTION_OUTPUT_BIT = 0x01 */
@@ -1384,7 +1387,6 @@ public class LeAudioServiceTest {
      * Test native interface group status message handling
      */
     @Test
-    @Ignore("b/258573934")
     public void testLeadGroupDeviceReconnects() {
         int groupId = 1;
         /* AUDIO_DIRECTION_OUTPUT_BIT = 0x01 */
@@ -1514,6 +1516,9 @@ public class LeAudioServiceTest {
 
     @Test
     public void testGetAudioLocation() {
+        doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
+        connectTestDevice(mSingleDevice, testGroupId);
+
         assertThat(mService.getAudioLocation(null))
                 .isEqualTo(BluetoothLeAudio.AUDIO_LOCATION_INVALID);
 
@@ -1618,6 +1623,10 @@ public class LeAudioServiceTest {
     @Test
     public void testAuthorizeMcpServiceOnBluetoothEnableAndNodeRemoval() {
         int groupId = 1;
+
+        doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
+        connectTestDevice(mLeftDevice, groupId);
+        connectTestDevice(mRightDevice, groupId);
 
         generateGroupNodeAdded(mLeftDevice, groupId);
         generateGroupNodeAdded(mRightDevice, groupId);

@@ -268,6 +268,26 @@ struct acl_peer_supports_sniff_subrating {
 };
 extern struct acl_peer_supports_sniff_subrating
     acl_peer_supports_sniff_subrating;
+// Name: acl_peer_supports_ble_connection_subrating
+// Params: const RawAddress& remote_bda
+// Returns: bool
+struct acl_peer_supports_ble_connection_subrating {
+  std::function<bool(const RawAddress& remote_bda)> body{
+      [](const RawAddress& remote_bda) { return false; }};
+  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
+};
+extern struct acl_peer_supports_ble_connection_subrating
+    acl_peer_supports_ble_connection_subrating;
+// Name: acl_peer_supports_ble_connection_subrating_host
+// Params: const RawAddress& remote_bda
+// Returns: bool
+struct acl_peer_supports_ble_connection_subrating_host {
+  std::function<bool(const RawAddress& remote_bda)> body{
+      [](const RawAddress& remote_bda) { return false; }};
+  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
+};
+extern struct acl_peer_supports_ble_connection_subrating_host
+    acl_peer_supports_ble_connection_subrating_host;
 // Name: acl_refresh_remote_address
 // Params: const RawAddress& identity_address, tBLE_ADDR_TYPE
 // identity_address_type, const RawAddress& bda, tBLE_ADDR_TYPE rra_type,
@@ -483,6 +503,14 @@ struct btm_get_acl_disc_reason_code {
   tHCI_REASON operator()(void) { return body(); };
 };
 extern struct btm_get_acl_disc_reason_code btm_get_acl_disc_reason_code;
+// Name: btm_is_acl_locally_initiated
+// Params: void
+// Returns: bool
+struct btm_is_acl_locally_initiated {
+  std::function<bool(void)> body{[](void) { return true; }};
+  bool operator()(void) { return body(); };
+};
+extern struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
 // Name: BTM_GetHCIConnHandle
 // Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
 // Returns: uint16_t
@@ -1258,27 +1286,42 @@ struct hci_btm_set_link_supervision_timeout {
 extern struct hci_btm_set_link_supervision_timeout
     hci_btm_set_link_supervision_timeout;
 // Name: on_acl_br_edr_connected
-// Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode
-// Returns: void
+// Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode, bool
+// locally_initiated Returns: void
 struct on_acl_br_edr_connected {
-  std::function<void(const RawAddress& bda, uint16_t handle, uint8_t enc_mode)>
-      body{[](const RawAddress& bda, uint16_t handle, uint8_t enc_mode) { ; }};
-  void operator()(const RawAddress& bda, uint16_t handle, uint8_t enc_mode) {
-    body(bda, handle, enc_mode);
+  std::function<void(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
+                     bool locally_initiated)>
+      body{[](const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
+              bool locally_initiated) { ; }};
+  void operator()(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
+                  bool locally_initiated) {
+    body(bda, handle, enc_mode, locally_initiated);
   };
 };
 extern struct on_acl_br_edr_connected on_acl_br_edr_connected;
 // Name: on_acl_br_edr_failed
-// Params: const RawAddress& bda, tHCI_STATUS status
+// Params: const RawAddress& bda, tHCI_STATUS status, bool locally_initiated
 // Returns: void
 struct on_acl_br_edr_failed {
-  std::function<void(const RawAddress& bda, tHCI_STATUS status)> body{
-      [](const RawAddress& bda, tHCI_STATUS status) { ; }};
-  void operator()(const RawAddress& bda, tHCI_STATUS status) {
-    body(bda, status);
+  std::function<void(const RawAddress& bda, tHCI_STATUS status,
+                     bool locally_initiated)>
+      body{[](const RawAddress& bda, tHCI_STATUS status,
+              bool locally_initiated) { ; }};
+  void operator()(const RawAddress& bda, tHCI_STATUS status,
+                  bool locally_initiated) {
+    body(bda, status, locally_initiated);
   };
 };
 extern struct on_acl_br_edr_failed on_acl_br_edr_failed;
+
+// Manually added
+struct BTM_unblock_role_switch_and_sniff_mode_for {
+  std::function<void(const RawAddress& peer_addr)> body{
+      [](const RawAddress& peer_addr) {}};
+  void operator()(const RawAddress& peer_addr) { body(peer_addr); };
+};
+extern struct BTM_unblock_role_switch_and_sniff_mode_for
+    BTM_unblock_role_switch_and_sniff_mode_for;
 
 }  // namespace stack_acl
 }  // namespace mock

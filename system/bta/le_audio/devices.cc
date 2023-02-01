@@ -248,7 +248,7 @@ bool LeAudioDeviceGroup::Activate(LeAudioContextType context_type) {
 
     bool activated = leAudioDevice.lock()->ActivateConfiguredAses(context_type);
     LOG_INFO("Device %s is %s",
-             leAudioDevice.lock().get()->address_.ToString().c_str(),
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice.lock().get()->address_),
              activated ? "activated" : " not activated");
     if (activated) {
       if (!CigAssignCisIds(leAudioDevice.lock().get())) {
@@ -867,7 +867,8 @@ bool LeAudioDeviceGroup::IsInTransition(void) {
 }
 
 bool LeAudioDeviceGroup::IsReleasingOrIdle(void) {
-  return target_state_ == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
+  return (target_state_ == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) ||
+         (current_state_ == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
 }
 
 bool LeAudioDeviceGroup::IsGroupStreamReady(void) {
@@ -936,7 +937,7 @@ types::LeAudioConfigurationStrategy LeAudioDeviceGroup::GetGroupStrategy(void) {
   auto channel_cnt =
       device->GetLc3SupportedChannelCount(types::kLeAudioDirectionSink);
   LOG_INFO("Channel count for group %d is %d (device %s)", group_id_,
-           channel_cnt, device->address_.ToString().c_str());
+           channel_cnt, ADDRESS_TO_LOGGABLE_CSTR(device->address_));
   if (channel_cnt == 1) {
     return types::LeAudioConfigurationStrategy::STEREO_TWO_CISES_PER_DEVICE;
   }
@@ -1020,12 +1021,12 @@ void LeAudioDeviceGroup::CigGenerateCisIds(
 
 bool LeAudioDeviceGroup::CigAssignCisIds(LeAudioDevice* leAudioDevice) {
   ASSERT_LOG(leAudioDevice, "invalid device");
-  LOG_INFO("device: %s", leAudioDevice->address_.ToString().c_str());
+  LOG_INFO("device: %s", ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
 
   struct ase* ase = leAudioDevice->GetFirstActiveAse();
   if (!ase) {
     LOG_ERROR(" Device %s shouldn't be called without an active ASE",
-              leAudioDevice->address_.ToString().c_str());
+              ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     return false;
   }
 
@@ -1140,7 +1141,7 @@ void LeAudioDeviceGroup::CigAssignCisConnHandlesToAses(
     LeAudioDevice* leAudioDevice) {
   ASSERT_LOG(leAudioDevice, "Invalid device");
   LOG_INFO("group: %p, group_id: %d, device: %s", this, group_id_,
-           leAudioDevice->address_.ToString().c_str());
+           ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
 
   /* Assign all CIS connection handles to ases */
   struct le_audio::types::ase* ase =
@@ -1184,7 +1185,7 @@ void LeAudioDeviceGroup::CigUnassignCis(LeAudioDevice* leAudioDevice) {
   ASSERT_LOG(leAudioDevice, "Invalid device");
 
   LOG_INFO("Group %p, group_id %d, device: %s", this, group_id_,
-           leAudioDevice->address_.ToString().c_str());
+           ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
 
   for (struct le_audio::types::cis& cis_entry : cises_) {
     if (cis_entry.addr == leAudioDevice->address_) {
@@ -1575,7 +1576,7 @@ bool LeAudioDevice::ConfigureAses(
     LOG_DEBUG(
         "device=%s, activated ASE id=%d, direction=%s, max_sdu_size=%d, "
         "cis_id=%d, target_latency=%d",
-        address_.ToString().c_str(), ase->id,
+        ADDRESS_TO_LOGGABLE_CSTR(address_), ase->id,
         (ent.direction == 1 ? "snk" : "src"), ase->max_sdu_size, ase->cis_id,
         ent.target_latency);
 
@@ -1641,7 +1642,8 @@ bool LeAudioDeviceGroup::ConfigureAses(
        */
       if (device->GetConnectionState() != DeviceConnectState::CONNECTED) {
         LOG_WARN(
-            "Device %s, in the state %s", device->address_.ToString().c_str(),
+            "Device %s, in the state %s",
+            ADDRESS_TO_LOGGABLE_CSTR(device->address_),
             bluetooth::common::ToString(device->GetConnectionState()).c_str());
         continue;
       }
@@ -1898,13 +1900,13 @@ bool LeAudioDeviceGroup::IsConfigurationSupported(
                                                                 ent.codec);
     if (pac != nullptr) {
       LOG_INFO("Configuration is supported by device %s",
-               leAudioDevice->address_.ToString().c_str());
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
       return true;
     }
   }
 
   LOG_INFO("Configuration is NOT supported by device %s",
-           leAudioDevice->address_.ToString().c_str());
+           ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
   return false;
 }
 
@@ -2064,7 +2066,7 @@ void LeAudioDeviceGroup::Dump(int fd, int active_group_id) {
       stream << "\n\t cis id: " << static_cast<int>(cis.id)
              << ",\ttype: " << static_cast<int>(cis.type)
              << ",\tconn_handle: " << static_cast<int>(cis.conn_handle)
-             << ",\taddr: " << cis.addr;
+             << ",\taddr: " << ADDRESS_TO_LOGGABLE_STR(cis.addr);
     }
     stream << "\n\t ====";
   }
@@ -2384,7 +2386,7 @@ bool LeAudioDevice::IsReadyToSuspendStream(void) {
 
 bool LeAudioDevice::HaveAllActiveAsesCisEst(void) {
   if (ases_.empty()) {
-    LOG_WARN("No ases for device %s", address_.ToString().c_str());
+    LOG_WARN("No ases for device %s", ADDRESS_TO_LOGGABLE_CSTR(address_));
     return false;
   }
 
@@ -2567,7 +2569,8 @@ void LeAudioDevice::Dump(int fd) {
   }
 
   std::stringstream stream;
-  stream << "\n\taddress: " << address_ << ": " << connection_state_ << ": "
+  stream << "\n\taddress: " << ADDRESS_TO_LOGGABLE_STR(address_) << ": "
+         << connection_state_ << ": "
          << (conn_id_ == GATT_INVALID_CONN_ID ? "" : std::to_string(conn_id_))
          << ", acl_handle: " << std::to_string(acl_handle) << ", " << location
          << ",\t" << (encrypted_ ? "Encrypted" : "Unecrypted")
@@ -2642,13 +2645,14 @@ AudioContexts LeAudioDevice::SetAvailableContexts(AudioContexts snk_contexts,
 
 bool LeAudioDevice::ActivateConfiguredAses(LeAudioContextType context_type) {
   if (conn_id_ == GATT_INVALID_CONN_ID) {
-    LOG_WARN(" Device %s is not connected ", address_.ToString().c_str());
+    LOG_WARN(" Device %s is not connected ",
+             ADDRESS_TO_LOGGABLE_CSTR(address_));
     return false;
   }
 
   bool ret = false;
 
-  LOG_INFO(" Configuring device %s", address_.ToString().c_str());
+  LOG_INFO(" Configuring device %s", ADDRESS_TO_LOGGABLE_CSTR(address_));
   for (auto& ase : ases_) {
     if (ase.state == AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED &&
         ase.configured_for_context_type == context_type) {
@@ -2670,7 +2674,8 @@ void LeAudioDevice::DeactivateAllAses(void) {
       LOG_WARN(
           " %s, ase_id: %d, ase.cis_id: %d, cis_handle: 0x%02x, "
           "ase.data_path=%s",
-          address_.ToString().c_str(), ase.id, ase.cis_id, ase.cis_conn_hdl,
+          ADDRESS_TO_LOGGABLE_CSTR(address_), ase.id, ase.cis_id,
+          ase.cis_conn_hdl,
           bluetooth::common::ToString(ase.data_path_state).c_str());
     }
     ase.state = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
@@ -2777,7 +2782,7 @@ void LeAudioDevices::Add(const RawAddress& address, DeviceConnectState state,
                          int group_id) {
   auto device = FindByAddress(address);
   if (device != nullptr) {
-    LOG(ERROR) << __func__ << ", address: " << address
+    LOG(ERROR) << __func__ << ", address: " << ADDRESS_TO_LOGGABLE_STR(address)
                << " is already assigned to group: " << device->group_id_;
     return;
   }
@@ -2793,7 +2798,8 @@ void LeAudioDevices::Remove(const RawAddress& address) {
                            });
 
   if (iter == leAudioDevices_.end()) {
-    LOG(ERROR) << __func__ << ", no such address: " << address;
+    LOG(ERROR) << __func__ << ", no such address: "
+               << ADDRESS_TO_LOGGABLE_STR(address);
     return;
   }
 

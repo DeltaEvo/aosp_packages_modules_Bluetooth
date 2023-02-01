@@ -1335,7 +1335,7 @@ TEST_F(HasClientTest, test_reconnect_after_encryption_failed_from_storage) {
 
 TEST_F(HasClientTest, test_load_from_storage_and_connect) {
   const RawAddress test_address = GetTestAddress(1);
-  SetSampleDatabaseHasPresetsNtf(test_address, kFeatureBitDynamicPresets, {{}});
+  SetSampleDatabaseHasPresetsNtf(test_address, kFeatureBitDynamicPresets);
   SetEncryptionResult(test_address, true);
 
   std::set<HasPreset, HasPreset::ComparatorDesc> has_presets = {{
@@ -1405,7 +1405,7 @@ TEST_F(HasClientTest, test_load_from_storage_and_connect) {
 
 TEST_F(HasClientTest, test_load_from_storage) {
   const RawAddress test_address = GetTestAddress(1);
-  SetSampleDatabaseHasPresetsNtf(test_address, kFeatureBitDynamicPresets, {{}});
+  SetSampleDatabaseHasPresetsNtf(test_address, kFeatureBitDynamicPresets);
   SetEncryptionResult(test_address, true);
 
   std::set<HasPreset, HasPreset::ComparatorDesc> has_presets = {{
@@ -3176,19 +3176,23 @@ TEST_F(HasTypesTest, test_group_op_coordinator_completion) {
   wrapper.SetCompleted(address3);
   ASSERT_EQ(1u, wrapper.ref_cnt);
   ASSERT_FALSE(wrapper.IsFullyCompleted());
+  ASSERT_EQ(0, mock_function_count_map["alarm_free"]);
 
   /* Non existing address completion */
   wrapper.SetCompleted(address2);
+  ASSERT_EQ(0, mock_function_count_map["alarm_free"]);
   ASSERT_EQ(1u, wrapper.ref_cnt);
 
   /* Last device address completion */
   wrapper2.SetCompleted(address2);
   ASSERT_TRUE(wrapper.IsFullyCompleted());
   ASSERT_EQ(0u, wrapper.ref_cnt);
+  ASSERT_EQ(1, mock_function_count_map["alarm_free"]);
+  mock_function_count_map["alarm_free"] = 0;
 
   HasCtpGroupOpCoordinator::Cleanup();
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_free"]);
+  ASSERT_EQ(0, mock_function_count_map["alarm_free"]);
   ASSERT_EQ(1, mock_function_count_map["alarm_new"]);
 }
 

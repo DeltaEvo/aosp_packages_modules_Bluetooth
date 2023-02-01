@@ -47,6 +47,8 @@
 
 #define L2CAP_MIN_MTU 48 /* Minimum acceptable MTU is 48 bytes */
 
+#define MAX_ACTIVE_AVDT_CONN 2
+
 constexpr uint16_t L2CAP_CREDIT_BASED_MIN_MTU = 64;
 constexpr uint16_t L2CAP_CREDIT_BASED_MIN_MPS = 64;
 
@@ -482,8 +484,6 @@ typedef struct t_l2c_linkcb {
       sent_not_acked = 0;
   }
 
-  bool partial_segment_being_sent; /* Set true when a partial segment */
-                                   /* is being sent. */
   bool w4_info_rsp;                /* true when info request is active */
   uint32_t peer_ext_fea;           /* Peer's extended features mask */
   list_t* link_xmit_data_q;        /* Link transmit data buffer queue */
@@ -544,6 +544,19 @@ typedef struct t_l2c_linkcb {
   uint16_t timeout;
   uint16_t min_ce_len;
   uint16_t max_ce_len;
+
+#define L2C_BLE_SUBRATE_REQ_DISABLE 0x1  // disable subrate req
+#define L2C_BLE_NEW_SUBRATE_PARAM 0x2    // new subrate req parameter to be set
+#define L2C_BLE_SUBRATE_REQ_PENDING 0x4  // waiting for subrate to be completed
+
+  /* subrate req params */
+  uint16_t subrate_min;
+  uint16_t subrate_max;
+  uint16_t max_latency;
+  uint16_t cont_num;
+  uint16_t supervision_tout;
+
+  uint8_t subrate_req_mask;
 
   /* each priority group is limited burst transmission */
   /* round robin service for the same priority channels */
@@ -662,6 +675,12 @@ typedef struct {
   std::vector<uint16_t> lcids; /* Used when credit based is used*/
   uint16_t peer_mtu;     /* Peer MTU */
 } tL2C_CONN_INFO;
+
+typedef struct {
+  bool is_active;     /* is channel active */
+  uint16_t local_cid; /* Remote CID */
+  tL2C_CCB* p_ccb;    /* CCB */
+} tL2C_AVDT_CHANNEL_INFO;
 
 typedef void(tL2C_FCR_MGMT_EVT_HDLR)(uint8_t, tL2C_CCB*);
 
@@ -874,5 +893,11 @@ extern tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr,
 extern void l2cble_update_data_length(tL2C_LCB* p_lcb);
 
 extern void l2cu_process_fixed_disc_cback(tL2C_LCB* p_lcb);
+
+extern void l2cble_process_subrate_change_evt(uint16_t handle, uint8_t status,
+                                              uint16_t subrate_factor,
+                                              uint16_t peripheral_latency,
+                                              uint16_t cont_num,
+                                              uint16_t timeout);
 
 #endif

@@ -242,7 +242,8 @@ struct tBTA_DM_PEER_DEVICE {
   bool in_use;
 
  private:
-  friend void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport);
+  friend void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
+                            uint16_t acl_handle);
   friend void bta_dm_pm_btm_status(const RawAddress& bd_addr,
                                    tBTM_PM_STATUS status, uint16_t value,
                                    tHCI_STATUS hci_status);
@@ -282,7 +283,7 @@ typedef struct {
   std::string ToString() const {
     return base::StringPrintf(
         "peer:%s sys_name:%s app_id:%hhu state:%s new:request:%s",
-        PRIVATE_ADDRESS(peer_bdaddr), BtaIdSysText(id).c_str(), app_id,
+        ADDRESS_TO_LOGGABLE_CSTR(peer_bdaddr), BtaIdSysText(id).c_str(), app_id,
         bta_sys_conn_status_text(state).c_str(), logbool(new_request).c_str());
   }
 
@@ -576,6 +577,17 @@ extern tBTA_DM_PEER_DEVICE* bta_dm_find_peer_device(
     const RawAddress& peer_addr);
 
 extern void bta_dm_clear_event_filter(void);
+extern void bta_dm_clear_event_mask(void);
+extern void bta_dm_clear_filter_accept_list(void);
+extern void bta_dm_disconnect_all_acls(void);
+extern void bta_dm_le_rand(LeRandCallback cb);
+extern void bta_dm_set_event_filter_connection_setup_all_devices();
+extern void bta_dm_allow_wake_by_hid(
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
+extern void bta_dm_restore_filter_accept_list();
+extern void bta_dm_set_default_event_mask_except(uint64_t mask,
+                                                 uint64_t le_mask);
+extern void bta_dm_set_event_filter_inquiry_result_all_devices();
 
 extern void bta_dm_ble_reset_id(void);
 
@@ -584,6 +596,10 @@ void bta_dm_search_set_state(uint8_t state);
 
 void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding);
 void bta_dm_eir_update_cust_uuid(const tBTA_CUSTOM_UUID &curr, bool adding);
+
+void bta_dm_ble_subrate_request(const RawAddress& bd_addr, uint16_t subrate_min,
+                                uint16_t subrate_max, uint16_t max_latency,
+                                uint16_t cont_num, uint16_t timeout);
 
 #undef CASE_RETURN_TEXT
 #endif /* BTA_DM_INT_H */

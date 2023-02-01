@@ -20,16 +20,16 @@ rust_library_host_rlib {
         "libbluetooth_rs",
         "libbt_common",
         "libbt_facade_helpers",
-        "libclap",
+        "libbt_packets",
         "libcxx",
+        "libfutures",
         "libgrpcio",
+        "liblazy_static",
+        "liblog_rust",
+        "libnix",
+        "libnum_traits",
         "libtokio",
         "libtokio_stream",
-        "libbt_packets",
-        "libfutures",
-        "libnum_traits",
-        "libnix",
-        "liblog_rust",
     ],
     proc_macros: [
         "libnum_derive",
@@ -39,7 +39,6 @@ rust_library_host_rlib {
     lints: "none",
     clippy_lints: "none",
 }
-
 
 cc_library_static {
     name: "libbt_topshim_cxx",
@@ -57,7 +56,6 @@ cc_library_static {
         "gatt/gatt_ble_advertiser_shim.cc",
         "hfp/hfp_shim.cc",
         "controller/controller_shim.cc",
-        "common/utils.cc",
     ],
     generated_headers: [
         "libbt_init_flags_bridge_header",
@@ -126,6 +124,9 @@ rust_bindgen {
         "--allowlist-type=btgatt_.*",
         "--allowlist-type=bluetooth_sdp.*",
         "--allowlist-type=btsdp.*",
+        "--allowlist-type=btsock_.*",
+        "--allowlist-type=bthf_.*",
+        "--allowlist-type=sock_connect_signal_t",
         "--enable-cxx-namespaces",
         "--opaque-type=std::.*",
         "--with-derive-default",

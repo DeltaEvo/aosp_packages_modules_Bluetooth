@@ -15,11 +15,25 @@ package {
 
 cc_defaults {
     name: "rootcanal_defaults",
+    tidy: true,
+    tidy_checks: [
+        "-*",
+        "readability-*",
+	"-readability-function-size",
+        "-readability-identifier-length",
+        "-readability-implicit-bool-conversion",
+        "-readability-magic-numbers",
+        "-readability-use-anyofallof",
+    ],
+    tidy_checks_as_errors: [
+        "readability-*",
+    ],
+    tidy_flags: [
+        "--header-filter=^.*tools\\/rootcanal\\/(model|include|net|desktop)\\/(.(?!\\.pb\\.h))*$",
+    ],
     defaults: [
         "fluoride_common_options",
         "gd_defaults",
-        "gd_clang_tidy",
-        "gd_clang_tidy_ignore_android",
     ],
     cflags: [
         "-fvisibility=hidden",
@@ -28,9 +42,6 @@ cc_defaults {
     local_include_dirs: [
         "include",
     ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system/gd",
-    ],
     header_libs: [
         "libbase_headers",
     ],
@@ -38,6 +49,16 @@ cc_defaults {
         "RootCanalGeneratedPackets_h",
         "RootCanalBrEdrBBGeneratedPackets_h",
         "BluetoothGeneratedPackets_h",
+    ],
+}
+
+filegroup {
+    name: "lib_sources",
+    srcs: [
+        "lib/crypto/crypto.cc",
+        "lib/hci/address.cc",
+        "lib/hci/class_of_device.cc",
+        "lib/hci/pcap_filter.cc",
     ],
 }
 
@@ -82,9 +103,8 @@ cc_library_static {
         "net/posix/posix_async_socket.cc",
         "net/posix/posix_async_socket_connector.cc",
         "net/posix/posix_async_socket_server.cc",
+        ":lib_sources",
         ":BluetoothPacketSources",
-        ":BluetoothHciClassSources",
-        ":BluetoothCryptoToolboxSources",
     ],
     export_include_dirs: [
         "include",
@@ -98,10 +118,89 @@ cc_library_static {
     ],
     shared_libs: [
         "libbase",
+        "libcrypto",
     ],
     static_libs: [
         "libjsoncpp",
         "libscriptedbeaconpayload-protos-lite",
+    ],
+}
+
+// This library implements Python bindings to the DualModeController
+// class to enable scripted testing in Python.
+cc_library_host_shared {
+    name: "lib_rootcanal_python3",
+    defaults: [
+        "bluetooth_py3_native_extension_defaults",
+        "rootcanal_defaults",
+    ],
+    srcs: [
+        "model/controller/acl_connection.cc",
+        "model/controller/acl_connection_handler.cc",
+        "model/controller/controller_properties.cc",
+        "model/controller/dual_mode_controller.cc",
+        "model/controller/dual_mode_controller_python3.cc",
+        "model/controller/isochronous_connection_handler.cc",
+        "model/controller/le_advertiser.cc",
+        "model/controller/link_layer_controller.cc",
+        "model/controller/sco_connection.cc",
+        "model/controller/security_manager.cc",
+        "model/devices/device.cc",
+        "model/setup/async_manager.cc",
+        ":lib_sources",
+        ":BluetoothPacketSources",
+    ],
+    export_include_dirs: [
+        "include",
+        ".",
+    ],
+    stl: "libc++_static",
+    static_libs: [
+        "libcrypto",
+        "libjsoncpp",
+    ],
+    whole_static_libs: [
+        "libbase",
+        "liblmp",
+    ],
+    header_libs: [
+        "pybind11_headers",
+    ],
+    cflags: [
+        "-fexceptions",
+    ],
+    rtti: true,
+}
+
+// Generate the python parser+serializer backend for
+// packets/link_layer_packets.pdl.
+genrule {
+    name: "link_layer_packets_python3_gen",
+    defaults: [ "pdl_python_generator_defaults" ],
+    cmd: "$(location :pdl) $(in) |" +
+        " $(location :pdl_python_generator)" +
+        " --output $(out) --custom-type-location py.bluetooth",
+    srcs: [
+        "packets/link_layer_packets.pdl",
+    ],
+    out: [
+        "link_layer_packets.py",
+    ],
+}
+
+// Generate the python parser+serializer backend for
+// hci_packets.pdl.
+genrule {
+    name: "hci_packets_python3_gen",
+    defaults: [ "pdl_python_generator_defaults" ],
+    cmd: "$(location :pdl) $(in) |" +
+        " $(location :pdl_python_generator)" +
+        " --output $(out) --custom-type-location py.bluetooth",
+    srcs: [
+        ":BluetoothHciPackets",
+    ],
+    out: [
+        "hci_packets.py",
     ],
 }
 
@@ -124,6 +223,7 @@ cc_test_host {
         "rootcanal_defaults",
     ],
     srcs: [
+        "test/controller/le/rpa_generation_test.cc",
         "test/controller/le/le_set_random_address_test.cc",
         "test/controller/le/le_clear_filter_accept_list_test.cc",
         "test/controller/le/le_add_device_to_filter_accept_list_test.cc",
@@ -155,11 +255,41 @@ cc_test_host {
     ],
     shared_libs: [
         "libbase",
+        "libcrypto",
     ],
     static_libs: [
         "libbt-rootcanal",
         "libjsoncpp",
     ],
+}
+
+// Implement the Bluetooth official LL test suite for root-canal.
+python_test_host {
+    name: "rootcanal_ll_test",
+    main: "test/main.py",
+    srcs: [
+        "py/controller.py",
+        "py/bluetooth.py",
+        ":hci_packets_python3_gen",
+        ":link_layer_packets_python3_gen",
+        "test/main.py",
+        "test/LL/DDI/ADV/*.py",
+        "test/LL/DDI/SCN/*.py",
+    ],
+    data: [
+        ":lib_rootcanal_python3",
+    ],
+    libs: [
+        "typing_extensions",
+    ],
+    test_options: {
+        unit_test: true,
+    },
+    version: {
+        py3: {
+            embedded_launcher: true,
+        },
+    },
 }
 
 // test-vendor unit tests for host
@@ -183,9 +313,6 @@ cc_test_host {
     ],
     local_include_dirs: [
         "include",
-    ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system/gd",
     ],
     shared_libs: [
         "libbase",
@@ -224,6 +351,7 @@ cc_binary_host {
     ],
     static_libs: [
         "libc++fs",
+        "libcrypto",
         "libjsoncpp",
         "libprotobuf-cpp-lite",
         "libscriptedbeaconpayload-protos-lite",
@@ -260,6 +388,13 @@ genrule {
     ],
     out: [
         "packets/link_layer_packets.h",
+    ],
+}
+
+filegroup {
+    name: "RootCanalLinkLayerPackets",
+    srcs: [
+        "packets/link_layer_packets.pdl",
     ],
 }
 

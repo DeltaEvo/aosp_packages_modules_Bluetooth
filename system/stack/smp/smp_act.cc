@@ -23,6 +23,8 @@
 #include "btif/include/btif_api.h"
 #include "btif/include/btif_common.h"
 #include "btif/include/btif_storage.h"
+#include "btif/include/core_callbacks.h"
+#include "btif/include/stack_manager.h"
 #include "device/include/interop.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/shim.h"
@@ -525,7 +527,7 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(p_cb->pairing_bda);
 
   SMP_TRACE_DEBUG("%s: pairing_bda=%s", __func__,
-                  p_cb->pairing_bda.ToString().c_str());
+                  ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   /* erase all keys if it is peripheral proc pairing req */
   if (p_dev_rec && (p_cb->role == HCI_ROLE_PERIPHERAL))
@@ -571,7 +573,7 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       p_cb->local_i_key = p_cb->peer_i_key;
       p_cb->local_r_key = p_cb->peer_r_key;
 
-      p_cb->cb_evt = SMP_SEC_REQUEST_EVT;
+      p_cb->cb_evt =  SMP_IO_CAP_REQ_EVT;
     } else /* update local i/r key according to pairing request */
     {
       /* pairing started with this side (peripheral) sending Security Request */
@@ -1347,7 +1349,7 @@ void smp_decide_association_model(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
         smp_int_data.status = SMP_PAIR_AUTH_FAIL;
         int_evt = SMP_AUTH_CMPL_EVT;
       } else {
-        if (!is_atv_device() &&
+        if (!GetInterfaceToProfiles()->config->isAndroidTVDevice() &&
             (p_cb->local_io_capability == SMP_IO_CAP_IO ||
              p_cb->local_io_capability == SMP_IO_CAP_KBDISP)) {
           /* display consent dialog if this device has a display */
@@ -1738,7 +1740,7 @@ void smp_process_peer_nonce(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       }
 
       if (p_cb->selected_association_model == SMP_MODEL_SEC_CONN_JUSTWORKS) {
-        if (!is_atv_device() &&
+        if (!GetInterfaceToProfiles()->config->isAndroidTVDevice() &&
             (p_cb->local_io_capability == SMP_IO_CAP_IO ||
              p_cb->local_io_capability == SMP_IO_CAP_KBDISP)) {
           /* display consent dialog */
@@ -2012,7 +2014,7 @@ void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable) {
 
   if (smp_cb.pairing_bda == bda) {
     LOG_DEBUG("SMP encryption enable:%hhu device:%s", encr_enable,
-              PRIVATE_ADDRESS(bda));
+              ADDRESS_TO_LOGGABLE_CSTR(bda));
 
     /* encryption completed with STK, remember the key size now, could be
      * overwritten when key exchange happens                                 */
@@ -2030,7 +2032,7 @@ void smp_link_encrypted(const RawAddress& bda, uint8_t encr_enable) {
   } else {
     LOG_WARN(
         "SMP state machine busy so skipping encryption enable:%hhu device:%s",
-        encr_enable, PRIVATE_ADDRESS(bda));
+        encr_enable, ADDRESS_TO_LOGGABLE_CSTR(bda));
   }
 }
 

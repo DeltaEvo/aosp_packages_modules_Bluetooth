@@ -30,6 +30,7 @@
 #include "btif/include/btif_util.h"
 #include "include/hardware/bluetooth.h"
 #include "include/hardware/bt_av.h"
+#include "test/common/core_interface.h"
 #include "types/raw_address.h"
 
 void set_hal_cbacks(bt_callbacks_t* callbacks);
@@ -76,14 +77,15 @@ void le_address_associate_callback(RawAddress* main_bd_addr,
                                    RawAddress* secondary_bd_addr) {}
 void acl_state_changed_callback(bt_status_t status, RawAddress* remote_bd_addr,
                                 bt_acl_state_t state, int transport_link_type,
-                                bt_hci_error_code_t hci_reason) {}
+                                bt_hci_error_code_t hci_reason,
+                                bt_conn_direction_t direction,
+                                uint16_t acl_handle) {}
 void link_quality_report_callback(uint64_t timestamp, int report_id, int rssi,
                                   int snr, int retransmission_count,
                                   int packets_not_receive_count,
                                   int negative_acknowledgement_count) {}
 void callback_thread_event(bt_cb_thread_evt evt) { TESTCB; }
 void dut_mode_recv_callback(uint16_t opcode, uint8_t* buf, uint8_t len) {}
-void le_test_mode_callback(bt_status_t status, uint16_t num_packets) {}
 void energy_info_callback(bt_activity_energy_info* energy_info,
                           bt_uid_traffic_t* uid_data) {}
 void generate_local_oob_data_callback(tBT_TRANSPORT transport,
@@ -107,7 +109,6 @@ bt_callbacks_t callbacks = {
     .acl_state_changed_cb = acl_state_changed_callback,
     .thread_evt_cb = callback_thread_event,
     .dut_mode_recv_cb = dut_mode_recv_callback,
-    .le_test_mode_cb = le_test_mode_callback,
     .energy_info_cb = energy_info_callback,
     .link_quality_report_cb = link_quality_report_callback,
     .generate_local_oob_data_cb = generate_local_oob_data_callback,
@@ -122,13 +123,12 @@ class BtifCoreTest : public ::testing::Test {
   void SetUp() override {
     callback_map_.clear();
     set_hal_cbacks(&callbacks);
-
     auto promise = std::promise<void>();
     auto future = promise.get_future();
     callback_map_["callback_thread_event"] = [&promise]() {
       promise.set_value();
     };
-    btif_init_bluetooth();
+    InitializeCoreInterface();
     ASSERT_EQ(std::future_status::ready, future.wait_for(timeout_time));
     callback_map_.erase("callback_thread_event");
   }
@@ -139,7 +139,7 @@ class BtifCoreTest : public ::testing::Test {
     callback_map_["callback_thread_event"] = [&promise]() {
       promise.set_value();
     };
-    btif_cleanup_bluetooth();
+    CleanCoreInterface();
     ASSERT_EQ(std::future_status::ready, future.wait_for(timeout_time));
     callback_map_.erase("callback_thread_event");
   }

@@ -162,8 +162,6 @@ void bta_scan_results_cb_impl(RawAddress bd_addr, tBT_DEVICE_TYPE device_type,
 }
 
 void bta_scan_results_cb(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH* p_data) {
-  uint8_t len;
-
   if (event == BTA_DM_INQ_CMPL_EVT) {
     BTIF_TRACE_DEBUG("%s  BLE observe complete. Num Resp %d", __func__,
                      p_data->inq_cmpl.num_resps);
@@ -179,11 +177,6 @@ void bta_scan_results_cb(tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH* p_data) {
   if (p_data->inq_res.p_eir) {
     value.insert(value.begin(), p_data->inq_res.p_eir,
                  p_data->inq_res.p_eir + p_data->inq_res.eir_len);
-
-    if (AdvertiseDataParser::GetFieldByType(
-            value, HCI_EIR_COMPLETE_LOCAL_NAME_TYPE, &len)) {
-      p_data->inq_res.remt_name_not_required = true;
-    }
   }
 
   tBTA_DM_INQ_RES* r = &p_data->inq_res;
@@ -384,7 +377,7 @@ class BleScannerInterfaceImpl : public BleScannerInterface {
 
   void TransferSync(RawAddress address, uint16_t service_data,
                     uint16_t sync_handle, int pa_source) override {
-    LOG_DEBUG("address:%s", address.ToString().c_str());
+    LOG_DEBUG("address:%s", ADDRESS_TO_LOGGABLE_CSTR(address));
     const controller_t* controller = controller_get_interface();
     if (!controller->supports_ble_periodic_advertising_sync_transfer_sender()) {
       uint8_t status_no_resource = 2;
@@ -405,7 +398,7 @@ class BleScannerInterfaceImpl : public BleScannerInterface {
 
   void TransferSetInfo(RawAddress address, uint16_t service_data,
                        uint8_t adv_handle, int pa_source) override {
-    LOG_DEBUG("address: %s", address.ToString().c_str());
+    LOG_DEBUG("address: %s", ADDRESS_TO_LOGGABLE_CSTR(address));
     const controller_t* controller = controller_get_interface();
     if (!controller->supports_ble_periodic_advertising_sync_transfer_sender()) {
       uint8_t status_no_resource = 2;
@@ -426,7 +419,7 @@ class BleScannerInterfaceImpl : public BleScannerInterface {
 
   void SyncTxParameters(RawAddress addr, uint8_t mode, uint16_t skip,
                         uint16_t timeout, int reg_id) override {
-    LOG_DEBUG("address: %s", addr.ToString().c_str());
+    LOG_DEBUG("address: %s", ADDRESS_TO_LOGGABLE_CSTR(addr));
     const controller_t* controller = controller_get_interface();
     if (!controller->supports_ble_periodic_advertising_sync_transfer_sender()) {
       uint8_t status_no_resource = 2;

@@ -282,7 +282,6 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
     }
     batch_scan_config_.current_state = BatchScanState::DISABLED_STATE;
     batch_scan_config_.ref_value = kInvalidScannerId;
-    configure_scan();
   }
 
   void stop() {
@@ -549,6 +548,8 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
 
     if (le_address_manager_->GetAddressPolicy() != LeAddressManager::USE_PUBLIC_ADDRESS) {
       own_address_type_ = OwnAddressType::RANDOM_DEVICE_ADDRESS;
+    } else {
+      own_address_type_ = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
     }
 
     switch (api_type_) {

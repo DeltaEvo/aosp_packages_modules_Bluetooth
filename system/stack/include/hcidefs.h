@@ -613,6 +613,7 @@ constexpr uint8_t HCI_LE_STATES_INIT_CENTRAL_PERIPHERAL_BIT = 41;
 
 #define HCI_LE_PERIODIC_ADV_SYNC_TRANSFERE_RECEIVED_EVT 0x18
 #define HCI_LE_BIGINFO_ADVERTISING_REPORT_EVT 0x22
+#define HCI_LE_SUBRATE_CHANGE_EVT 0x23
 
 #define HCI_VENDOR_SPECIFIC_EVT 0xFF /* Vendor specific events */
 
@@ -734,6 +735,7 @@ typedef enum : uint16_t {
 #define HCI_EIR_OOB_SSP_HASH_C_TYPE 0x0E
 #define HCI_EIR_OOB_SSP_RAND_R_TYPE 0x0F
 #define HCI_EIR_RSI_TYPE 0x2E
+#define HCI_EIR_APPEARANCE_TYPE 0x19
 
 /* Definitions for Write Simple Pairing Mode */
 #define HCI_SP_MODE_ENABLED 0x01
@@ -828,6 +830,9 @@ typedef enum : uint8_t {
 
 /* Define an invalid value for a handle */
 #define HCI_INVALID_HANDLE 0xFFFF
+
+/* Define the max valid value for a connection handle */
+#define HCI_HANDLE_MAX 0xEFF
 
 /* Define the preamble length for all HCI Commands.
  * This is 2-bytes for opcode and 1 byte for length
@@ -1037,6 +1042,9 @@ typedef struct {
 #define HCI_LE_CIS_PERIPHERAL(x) ((x)[3] & 0x20)
 #define HCI_LE_ISO_BROADCASTER(x) ((x)[3] & 0x40)
 #define HCI_LE_SYNCHRONIZED_RECEIVER(x) ((x)[3] & 0x80)
+
+#define HCI_LE_CONN_SUBRATING_SUPPORT(x) ((x)[4] & 0x20)
+#define HCI_LE_CONN_SUBRATING_HOST_SUPPORT(x) ((x)[4] & 0x40)
 
 /* Supported Commands*/
 #define HCI_NUM_SUPP_COMMANDS_BYTES 64

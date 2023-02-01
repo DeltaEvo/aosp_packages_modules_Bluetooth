@@ -59,8 +59,8 @@ cc_defaults {
 cc_defaults {
     name: "gd_clang_file_coverage",
     target: {
-        host: {
-            clang_cflags: [
+        glibc: {
+            cflags: [
                 "-fprofile-instr-generate",
                 "-fcoverage-mapping",
             ],
@@ -77,7 +77,7 @@ cc_defaults {
 cc_defaults {
     name: "gd_clang_coverage_bin",
     target: {
-        host: {
+        glibc: {
             ldflags: [
                 "-fprofile-instr-generate",
                 "-fcoverage-mapping",
@@ -170,6 +170,9 @@ cc_defaults {
                 "libutils",
                 "libstatslog_bt",
             ],
+            whole_static_libs: [
+                "android.hardware.bluetooth-V1-ndk",
+            ],
         },
     },
     srcs: [
@@ -190,6 +193,8 @@ cc_defaults {
         ":BluetoothShimSources",
         ":BluetoothSecuritySources",
         ":BluetoothStorageSources",
+        ":BluetoothSyspropsSources",
+        ":BluetoothLogRedactionSources",
     ],
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
@@ -200,6 +205,9 @@ cc_defaults {
         "libcrypto",
         "libflatbuffers-cpp",
     ],
+    whole_static_libs: [
+        "libc++fs",
+    ],
     static_libs: [
         "libbluetooth-dumpsys",
         "libbluetooth-protos",
@@ -208,6 +216,10 @@ cc_defaults {
         "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
+    ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/types",
     ],
     export_static_lib_headers: [ "libbluetooth_rust_interop" ],
 }
@@ -218,7 +230,7 @@ cc_library {
         "libbluetooth_gd_defaults",
     ],
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "31",
 }
@@ -422,6 +434,7 @@ cc_test {
     sanitize: {
         address: true,
     },
+    min_sdk_version: "Tiramisu",
 }
 
 cc_test {
@@ -466,7 +479,7 @@ cc_test {
                 "libcutils",
             ],
         },
-        linux_glibc: {
+        host_linux: {
             shared_libs: [
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
@@ -476,6 +489,7 @@ cc_test {
             ],
         },
     },
+    min_sdk_version: "30",
 }
 
 cc_defaults {
@@ -536,7 +550,8 @@ cc_fuzz {
         ":BluetoothL2capFuzzTestSources",
     ],
     fuzz_config: {
-       cc: ["android-bluetooth@google.com"],
+       cc: ["android-bluetooth-security@google.com"],
+       componentid: 27441,
     },
 }
 
@@ -556,7 +571,8 @@ cc_fuzz {
         "hci/fuzz/acl_manager_fuzz_test.cc",
     ],
     fuzz_config: {
-       cc: ["zachoverflow@google.com"],
+       cc: ["android-bluetooth-security@google.com"],
+       componentid: 27441,
     },
 }
 
@@ -590,7 +606,7 @@ genrule {
     tools: [
         "bluetooth_packetgen",
     ],
-    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/system/gd --out=$(genDir) $(in)",
+    cmd: "$(location bluetooth_packetgen) --fuzzing --testing --include=packages/modules/Bluetooth/system/gd --out=$(genDir) $(in)",
     srcs: [
         "hci/hci_packets.pdl",
         "l2cap/l2cap_packets.pdl",
@@ -601,6 +617,7 @@ genrule {
         "l2cap/l2cap_packets.h",
         "security/smp_packets.h",
     ],
+    visibility: ["//visibility:public"],
 }
 
 genrule {
@@ -633,7 +650,7 @@ rust_library {
         "liblog_rust",
     ],
     apex_available: [
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     min_sdk_version: "30",
 }
@@ -771,22 +788,10 @@ genrule {
     ],
     cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/system/gd --out=$(genDir) --num_shards=10 $(in)",
     srcs: [
-        "hci/hci_packets.pdl",
         "l2cap/l2cap_packets.pdl",
         "security/smp_packets.pdl",
     ],
     out: [
-        "hci/hci_packets_python3.cc",
-        "hci/hci_packets_python3_shard_0.cc",
-        "hci/hci_packets_python3_shard_1.cc",
-        "hci/hci_packets_python3_shard_2.cc",
-        "hci/hci_packets_python3_shard_3.cc",
-        "hci/hci_packets_python3_shard_4.cc",
-        "hci/hci_packets_python3_shard_5.cc",
-        "hci/hci_packets_python3_shard_6.cc",
-        "hci/hci_packets_python3_shard_7.cc",
-        "hci/hci_packets_python3_shard_8.cc",
-        "hci/hci_packets_python3_shard_9.cc",
         "l2cap/l2cap_packets_python3.cc",
         "l2cap/l2cap_packets_python3_shard_0.cc",
         "l2cap/l2cap_packets_python3_shard_1.cc",
@@ -914,3 +919,20 @@ cc_library_host_shared {
     ],
     rtti: true,
 }
+
+// Generate the python parser+serializer backend for
+// hci_packets.pdl.
+genrule {
+    name: "gd_hci_packets_python3_gen",
+    defaults: [ "pdl_python_generator_defaults" ],
+    cmd: "$(location :pdl) $(in) |" +
+        " $(location :pdl_python_generator)" +
+        " --output $(out) --custom-type-location blueberry.utils.bluetooth",
+    srcs: [
+        ":BluetoothHciPackets",
+    ],
+    out:  [
+        "hci_packets.py",
+    ],
+}
+

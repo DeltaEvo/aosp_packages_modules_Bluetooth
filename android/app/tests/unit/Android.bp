@@ -6,7 +6,7 @@ java_defaults {
     name: "BluetoothInstrumentationTestsDefaults",
     defaults: ["framework-bluetooth-tests-defaults"],
 
-    min_sdk_version: "current",
+    min_sdk_version: "Tiramisu",
     target_sdk_version: "current",
     libs: [
         "javax.obex",
@@ -21,12 +21,12 @@ java_defaults {
         "androidx.media_media",
         "androidx.test.ext.truth",
         "androidx.test.rules",
-        "mockito-target",
         "androidx.test.espresso.intents",
-        "gson-prebuilt-jar",
         "androidx.room_room-migration",
         "androidx.room_room-runtime",
         "androidx.room_room-testing",
+        "gson",
+        "mockito-target",
         "truth-prebuilt",
         "PlatformProperties",
         "framework-bluetooth-pre-jarjar",

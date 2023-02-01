@@ -75,7 +75,6 @@ import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
-import android.telecom.Log;
 
 import androidx.test.filters.MediumTest;
 

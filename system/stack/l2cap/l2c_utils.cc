@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "device/include/controller.h"
+#include "gd/hal/snoop_logger.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
@@ -128,7 +129,7 @@ void l2cu_update_lcb_4_bonding(const RawAddress& p_bd_addr, bool is_bonding) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(p_bd_addr, BT_TRANSPORT_BR_EDR);
 
   if (p_lcb) {
-    VLOG(1) << __func__ << " BDA: " << p_bd_addr
+    VLOG(1) << __func__ << " BDA: " << ADDRESS_TO_LOGGABLE_STR(p_bd_addr)
             << " is_bonding: " << is_bonding;
     if (is_bonding) {
       p_lcb->SetBonding();
@@ -1556,6 +1557,16 @@ void l2cu_release_ccb(tL2C_CCB* p_ccb) {
   /* If already released, could be race condition */
   if (!p_ccb->in_use) return;
 
+  if (p_rcb && p_lcb && p_ccb->chnl_state >= CST_OPEN) {
+    bluetooth::shim::GetSnoopLogger()->SetL2capChannelClose(
+        p_ccb->p_lcb->Handle(), p_ccb->local_cid, p_ccb->remote_cid);
+  }
+
+  if (p_lcb) {
+    bluetooth::shim::GetSnoopLogger()->ClearL2capAcceptlist(
+        p_lcb->Handle(), p_ccb->local_cid, p_ccb->remote_cid);
+  }
+
   if (p_rcb && (p_rcb->psm != p_rcb->real_psm)) {
     BTM_SecClrServiceByPsm(p_rcb->psm);
   }
@@ -2630,16 +2641,9 @@ void l2cu_no_dynamic_ccbs(tL2C_LCB* p_lcb) {
   // be in use even without a GATT client. We only timeout if either a dynamic
   // channel or a GATT client was used, since then we expect the client to
   // manage the lifecycle of the connection.
-
-  // FOR T ONLY: We add the outer safety-check to only do this for LE/ATT, to
-  // minimize behavioral changes outside a dessert release. But for consistency
-  // this should happen throughout on U (i.e. for classic transport + other
-  // fixed channels too)
-  if (p_lcb->p_fixed_ccbs[L2CAP_ATT_CID - L2CAP_FIRST_FIXED_CHNL] != NULL) {
-    if (bluetooth::common::init_flags::finite_att_timeout_is_enabled() &&
-        !p_lcb->with_active_local_clients) {
-      return;
-    }
+  if (bluetooth::common::init_flags::finite_att_timeout_is_enabled() &&
+      !p_lcb->with_active_local_clients) {
+    return;
   }
 
   if (timeout_ms == 0) {

@@ -950,6 +950,34 @@ static BT_HDR* avrc_pass_msg(tAVRC_MSG_PASS* p_msg) {
 
 /******************************************************************************
  *
+ * Function         ARVC_GetControlProfileVersion
+ *
+ * Description      Get the AVRCP profile version
+ *
+ * Returns          The AVRCP control profile version
+ *
+ *****************************************************************************/
+uint16_t AVRC_GetControlProfileVersion() {
+  uint16_t profile_version = AVRC_REV_1_3;
+  char avrcp_version[PROPERTY_VALUE_MAX] = {0};
+  osi_property_get(AVRC_CONTROL_VERSION_PROPERTY, avrcp_version,
+                   AVRC_1_3_STRING);
+
+  if (!strncmp(AVRC_1_6_STRING, avrcp_version, sizeof(AVRC_1_6_STRING))) {
+    profile_version = AVRC_REV_1_6;
+  } else if (!strncmp(AVRC_1_5_STRING, avrcp_version,
+                      sizeof(AVRC_1_5_STRING))) {
+    profile_version = AVRC_REV_1_5;
+  } else if (!strncmp(AVRC_1_4_STRING, avrcp_version,
+                      sizeof(AVRC_1_4_STRING))) {
+    profile_version = AVRC_REV_1_4;
+  }
+
+  return profile_version;
+}
+
+/******************************************************************************
+ *
  * Function         ARVC_GetProfileVersion
  *
  * Description      Get the user assigned AVRCP profile version
@@ -1395,9 +1423,9 @@ void AVRC_SaveControllerVersion(const RawAddress& bdaddr,
                  (const uint8_t*)&new_version, sizeof(new_version))) {
     btif_config_save();
     LOG_INFO("store AVRC controller version %x for %s into config.",
-             new_version, bdaddr.ToString().c_str());
+             new_version, ADDRESS_TO_LOGGABLE_CSTR(bdaddr));
   } else {
     LOG_WARN("Failed to store AVRC controller version for %s",
-             bdaddr.ToString().c_str());
+             ADDRESS_TO_LOGGABLE_CSTR(bdaddr));
   }
 }

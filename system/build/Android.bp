@@ -31,7 +31,19 @@ cc_defaults {
         "-Werror",
         // there are too many unused parameters in all the code.
         "-Wno-unused-parameter",
+        // http://b/264549607
+        "-Wno-deprecated-builtins",
     ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system/gd",
+    ],
+    target: {
+        host: {
+            cflags: [
+                "-DOS_GENERIC",
+            ],
+        },
+    },
 }
 
 fluoride_defaults {
@@ -184,7 +196,7 @@ fluoride_defaults {
     defaults: ["fluoride_test_prod_shared_defaults", "libchrome_support_defaults"],
     apex_available: [
         "//apex_available:platform",
-        "com.android.bluetooth",
+        "com.android.btservices",
     ],
     shared_libs: [
         "libcrypto",
@@ -232,12 +244,13 @@ fluoride_defaults {
                 "libtinyxml2",
                 "libutils",
                 "libz",
+                "libPlatformProperties",
             ],
             static_libs: [
                 "android.system.suspend.control-V1-ndk",
             ],
         },
-        linux_glibc: {
+        host_linux: {
             shared_libs: [
                 "android.hardware.bluetooth.audio@2.0",
                 "android.hardware.bluetooth.audio@2.1",
@@ -262,11 +275,14 @@ fluoride_defaults {
     static_libs: [
         "libbte",
         "libbt-bta",
+        "libbt-bta-core",
         "libbt-common",
         "libbtdevice",
         "libbtif",
+        "libbtif-core",
         "libbt-hci",
         "libbt-stack",
+        "libbt-stack-core",
         "libbt-utils",
         "libbtcore",
         "libosi",
@@ -296,7 +312,7 @@ fluoride_defaults {
             // libstatslog_bt -> libbinder doesn't build on mac
             enabled: false,
         },
-        linux_glibc: {
+        host_linux: {
             shared_libs: [
                 "android.hardware.bluetooth@1.0",
                 "android.hardware.bluetooth@1.1",
@@ -331,8 +347,8 @@ fluoride_defaults {
 cc_defaults {
     name: "clang_file_coverage",
     target: {
-        host: {
-            clang_cflags: [
+        glibc: {
+            cflags: [
                 "-fprofile-instr-generate",
                 "-fcoverage-mapping",
             ],
@@ -349,7 +365,7 @@ cc_defaults {
 cc_defaults {
     name: "clang_coverage_bin",
     target: {
-        host: {
+        glibc: {
             ldflags: [
                 "-fprofile-instr-generate",
                 "-fcoverage-mapping",

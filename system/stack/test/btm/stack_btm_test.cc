@@ -43,7 +43,9 @@
 #include "stack/include/hcidefs.h"
 #include "stack/include/sec_hci_link_interface.h"
 #include "stack/l2cap/l2c_int.h"
+#include "test/common/mock_functions.h"
 #include "test/mock/mock_osi_list.h"
+#include "test/mock/mock_device_iot_config.h"
 #include "test/mock/mock_stack_hcic_hcicmds.h"
 #include "types/raw_address.h"
 
@@ -54,82 +56,16 @@ namespace mock = test::mock::stack_hcic_hcicmds;
 
 extern tBTM_CB btm_cb;
 
+uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
 uint8_t appl_trace_level = BT_TRACE_LEVEL_VERBOSE;
 btif_hh_cb_t btif_hh_cb;
 tL2C_CB l2cb;
 
 const hci_t* hci_layer_get_interface() { return nullptr; }
 
-void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) {}
-
 const std::string kSmpOptions("mock smp options");
 const std::string kBroadcastAudioConfigOptions(
     "mock broadcast audio config options");
-
-bool get_trace_config_enabled(void) { return false; }
-bool get_pts_avrcp_test(void) { return false; }
-bool get_pts_secure_only_mode(void) { return false; }
-bool get_pts_conn_updates_disabled(void) { return false; }
-bool get_pts_crosskey_sdp_disable(void) { return false; }
-const std::string* get_pts_smp_options(void) { return &kSmpOptions; }
-int get_pts_smp_failure_case(void) { return 123; }
-bool get_pts_force_eatt_for_notifications(void) { return false; }
-bool get_pts_connect_eatt_unconditionally(void) { return false; }
-bool get_pts_connect_eatt_before_encryption(void) { return false; }
-bool get_pts_unencrypt_broadcast(void) { return false; }
-bool get_pts_eatt_peripheral_collision_support(void) { return false; }
-bool get_pts_use_eatt_for_all_services(void) { return false; }
-bool get_pts_force_le_audio_multiple_contexts_metadata(void) { return false; }
-bool get_pts_l2cap_ecoc_upper_tester(void) { return false; }
-int get_pts_l2cap_ecoc_min_key_size(void) { return -1; }
-int get_pts_l2cap_ecoc_initial_chan_cnt(void) { return -1; }
-bool get_pts_l2cap_ecoc_connect_remaining(void) { return false; }
-int get_pts_l2cap_ecoc_send_num_of_sdu(void) { return -1; }
-bool get_pts_l2cap_ecoc_reconfigure(void) { return false; }
-const std::string* get_pts_broadcast_audio_config_options(void) {
-  return &kBroadcastAudioConfigOptions;
-}
-bool get_pts_le_audio_disable_ases_before_stopping(void) { return false; }
-config_t* get_all(void) { return nullptr; }
-const packet_fragmenter_t* packet_fragmenter_get_interface() { return nullptr; }
-
-stack_config_t mock_stack_config{
-    .get_trace_config_enabled = get_trace_config_enabled,
-    .get_pts_avrcp_test = get_pts_avrcp_test,
-    .get_pts_secure_only_mode = get_pts_secure_only_mode,
-    .get_pts_conn_updates_disabled = get_pts_conn_updates_disabled,
-    .get_pts_crosskey_sdp_disable = get_pts_crosskey_sdp_disable,
-    .get_pts_smp_options = get_pts_smp_options,
-    .get_pts_smp_failure_case = get_pts_smp_failure_case,
-    .get_pts_force_eatt_for_notifications =
-        get_pts_force_eatt_for_notifications,
-    .get_pts_connect_eatt_unconditionally =
-        get_pts_connect_eatt_unconditionally,
-    .get_pts_connect_eatt_before_encryption =
-        get_pts_connect_eatt_before_encryption,
-    .get_pts_unencrypt_broadcast = get_pts_unencrypt_broadcast,
-    .get_pts_eatt_peripheral_collision_support =
-        get_pts_eatt_peripheral_collision_support,
-    .get_pts_l2cap_ecoc_upper_tester = get_pts_l2cap_ecoc_upper_tester,
-    .get_pts_l2cap_ecoc_min_key_size = get_pts_l2cap_ecoc_min_key_size,
-    .get_pts_force_le_audio_multiple_contexts_metadata =
-        get_pts_force_le_audio_multiple_contexts_metadata,
-    .get_pts_l2cap_ecoc_initial_chan_cnt = get_pts_l2cap_ecoc_initial_chan_cnt,
-    .get_pts_l2cap_ecoc_connect_remaining =
-        get_pts_l2cap_ecoc_connect_remaining,
-    .get_pts_l2cap_ecoc_send_num_of_sdu = get_pts_l2cap_ecoc_send_num_of_sdu,
-    .get_pts_l2cap_ecoc_reconfigure = get_pts_l2cap_ecoc_reconfigure,
-    .get_pts_broadcast_audio_config_options =
-        get_pts_broadcast_audio_config_options,
-    .get_pts_le_audio_disable_ases_before_stopping =
-        get_pts_le_audio_disable_ases_before_stopping,
-    .get_all = get_all,
-};
-const stack_config_t* stack_config_get_interface(void) {
-  return &mock_stack_config;
-}
-
-std::map<std::string, int> mock_function_count_map;
 
 namespace {
 
@@ -144,6 +80,10 @@ using testing::StrEq;
 using testing::StrictMock;
 using testing::Test;
 
+// NOTE: The production code allows N+1 device records.
+constexpr size_t kBtmSecMaxDeviceRecords =
+    static_cast<size_t>(BTM_SEC_MAX_DEVICE_RECORDS + 1);
+
 std::string Hex16(int n) {
   std::ostringstream oss;
   oss << "0x" << std::hex << std::setw(4) << std::setfill('0') << n;
@@ -153,15 +93,21 @@ std::string Hex16(int n) {
 class StackBtmTest : public Test {
  public:
  protected:
-  void SetUp() override { mock_function_count_map.clear(); }
+  void SetUp() override { reset_mock_function_count_map(); }
   void TearDown() override {}
 };
 
 class StackBtmWithInitFreeTest : public StackBtmTest {
  public:
  protected:
-  void SetUp() override { btm_cb.Init(BTM_SEC_MODE_SC); }
-  void TearDown() override { btm_cb.Free(); }
+  void SetUp() override {
+    StackBtmTest::SetUp();
+    btm_cb.Init(BTM_SEC_MODE_SC);
+  }
+  void TearDown() override {
+    btm_cb.Free();
+    StackBtmTest::TearDown();
+  }
 };
 
 TEST_F(StackBtmTest, GlobalLifecycle) {
@@ -242,12 +188,12 @@ TEST_F(StackBtmTest, change_packet_type) {
     packet_types = p;
   };
   btm_set_packet_types_from_address(bda, 0x55aa);
-  ASSERT_EQ(++cnt, mock_function_count_map["btsnd_hcic_change_conn_type"]);
+  ASSERT_EQ(++cnt, get_func_call_count("btsnd_hcic_change_conn_type"));
   ASSERT_EQ(0x123, handle);
   ASSERT_EQ(Hex16(0x4400 | HCI_PKT_TYPES_MASK_DM1), Hex16(packet_types));
 
   btm_set_packet_types_from_address(bda, 0xffff);
-  ASSERT_EQ(++cnt, mock_function_count_map["btsnd_hcic_change_conn_type"]);
+  ASSERT_EQ(++cnt, get_func_call_count("btsnd_hcic_change_conn_type"));
   ASSERT_EQ(0x123, handle);
   ASSERT_EQ(Hex16(0xcc00 | HCI_PKT_TYPES_MASK_DM1 | HCI_PKT_TYPES_MASK_DH1),
             Hex16(packet_types));
@@ -431,4 +377,27 @@ TEST_F(StackBtmTest, btm_ble_sec_req_act_text) {
             btm_ble_sec_req_act_text(BTM_BLE_SEC_REQ_ACT_PAIR));
   ASSERT_EQ("BTM_BLE_SEC_REQ_ACT_DISCARD",
             btm_ble_sec_req_act_text(BTM_BLE_SEC_REQ_ACT_DISCARD));
+}
+
+TEST_F(StackBtmWithInitFreeTest, btm_sec_allocate_dev_rec__all) {
+  tBTM_SEC_DEV_REC* records[kBtmSecMaxDeviceRecords];
+
+  // Fill up the records
+  for (size_t i = 0; i < kBtmSecMaxDeviceRecords; i++) {
+    ASSERT_EQ(i, list_length(btm_cb.sec_dev_rec));
+    records[i] = btm_sec_allocate_dev_rec();
+    ASSERT_NE(nullptr, records[i]);
+  }
+
+  // Second pass up the records
+  for (size_t i = 0; i < kBtmSecMaxDeviceRecords; i++) {
+    ASSERT_EQ(kBtmSecMaxDeviceRecords, list_length(btm_cb.sec_dev_rec));
+    records[i] = btm_sec_allocate_dev_rec();
+    ASSERT_NE(nullptr, records[i]);
+  }
+
+  // NOTE: The memory allocated for each record is automatically
+  // allocated by the btm module and freed when the device record
+  // list is freed.
+  // Further, the memory for each record is reused when necessary.
 }

@@ -26,6 +26,7 @@ class IPCHandlerBinder : public IPCHandler {
  public:
   IPCHandlerBinder(bluetooth::Adapter* adapter, IPCManager::Delegate* delegate);
 
+  IPCHandlerBinder() = delete;
   IPCHandlerBinder(const IPCHandlerBinder&) = delete;
   IPCHandlerBinder& operator=(const IPCHandlerBinder&) = delete;
 
@@ -36,8 +37,6 @@ class IPCHandlerBinder : public IPCHandler {
   void Stop() override;
 
  private:
-  IPCHandlerBinder() = default;
-
   // Notify the delegate that IPC has started.
   void NotifyStarted();
 };

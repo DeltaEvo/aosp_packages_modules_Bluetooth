@@ -56,7 +56,7 @@ import java.util.stream.Stream;
  */
 public class MediaControlProfile implements MediaControlServiceCallbacks {
     private static final String TAG = "MediaControlProfile";
-    private static final boolean DBG = true;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
     private final Context mContext;
 
     // Media players data
@@ -677,7 +677,7 @@ public class MediaControlProfile implements MediaControlServiceCallbacks {
 
             // Instantiate a Service Instance and it's state machine
             int ccid = ContentControlIdKeeper.acquireCcid(BluetoothUuid.GENERIC_MEDIA_CONTROL,
-                    BluetoothLeAudio.CONTEXT_TYPE_MEDIA);
+                    BluetoothLeAudio.CONTEXT_TYPE_MEDIA | BluetoothLeAudio.CONTEXT_TYPE_LIVE);
             if (ccid == ContentControlIdKeeper.CCID_INVALID) {
                 Log.e(TAG, "Unable to acquire valid CCID!");
                 return;

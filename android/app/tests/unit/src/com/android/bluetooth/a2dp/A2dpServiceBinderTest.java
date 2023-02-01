@@ -67,99 +67,52 @@ public class A2dpServiceBinderTest {
     @Test
     public void connect() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
-
-        mBinder.connect(device, recv);
-        verify(mService).connect(device);
-    }
-
-    @Test
-    public void connectWithAttribution() {
-        BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
         final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.connectWithAttribution(device, source, recv);
+        mBinder.connect(device, source, recv);
         verify(mService).connect(device);
     }
 
     @Test
     public void disconnect() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
-        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
-
-        mBinder.disconnect(device, recv);
-        verify(mService).disconnect(device);
-    }
-
-    @Test
-    public void disconnectWithAttribution() {
-        BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
         final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
 
-        mBinder.disconnectWithAttribution(device, source, recv);
+        mBinder.disconnect(device, source, recv);
         verify(mService).disconnect(device);
     }
 
     @Test
     public void getConnectedDevices() {
-        final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                SynchronousResultReceiver.get();
-
-        mBinder.getConnectedDevices(recv);
-        verify(mService).getConnectedDevices();
-    }
-
-    @Test
-    public void getConnectedDevicesWithAttribution() {
         AttributionSource source = new AttributionSource.Builder(0).build();
         final SynchronousResultReceiver<List<BluetoothDevice>> recv =
                 SynchronousResultReceiver.get();
 
-        mBinder.getConnectedDevicesWithAttribution(source, recv);
+        mBinder.getConnectedDevices(source, recv);
         verify(mService).getConnectedDevices();
     }
 
     @Test
     public void getDevicesMatchingConnectionStates() {
         int[] states = new int[] {BluetoothProfile.STATE_CONNECTED };
-        final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                SynchronousResultReceiver.get();
-
-        mBinder.getDevicesMatchingConnectionStates(states, recv);
-        verify(mService).getDevicesMatchingConnectionStates(states);
-    }
-
-    @Test
-    public void getDevicesMatchingConnectionStatesWithAttribution() {
-        int[] states = new int[] {BluetoothProfile.STATE_CONNECTED };
         AttributionSource source = new AttributionSource.Builder(0).build();
         final SynchronousResultReceiver<List<BluetoothDevice>> recv =
                 SynchronousResultReceiver.get();
 
-        mBinder.getDevicesMatchingConnectionStatesWithAttribution(states, source, recv);
+        mBinder.getDevicesMatchingConnectionStates(states, source, recv);
         verify(mService).getDevicesMatchingConnectionStates(states);
     }
 
     @Test
     public void getConnectionState() {
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
-        final SynchronousResultReceiver<List<BluetoothDevice>> recv =
-                SynchronousResultReceiver.get();
-
-        mBinder.getConnectionState(device, recv);
-        verify(mService).getConnectionState(device);
-    }
-
-    @Test
-    public void getConnectionStateWithAttribution() {
-        BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         AttributionSource source = new AttributionSource.Builder(0).build();
         final SynchronousResultReceiver<List<BluetoothDevice>> recv =
                 SynchronousResultReceiver.get();
 
-        mBinder.getConnectionStateWithAttribution(device, source, recv);
+        mBinder.getConnectionState(device, source, recv);
         verify(mService).getConnectionState(device);
     }
 

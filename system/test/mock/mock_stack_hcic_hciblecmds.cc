@@ -46,10 +46,7 @@ struct btsnd_hci_ble_read_periodic_advertiser_list_size
 struct btsnd_hci_ble_remove_device_from_periodic_advertiser_list
     btsnd_hci_ble_remove_device_from_periodic_advertiser_list;
 struct btsnd_hcic_accept_cis_req btsnd_hcic_accept_cis_req;
-struct btsnd_hcic_big_create_sync btsnd_hcic_big_create_sync;
 struct btsnd_hcic_big_term_sync btsnd_hcic_big_term_sync;
-struct btsnd_hcic_ble_add_acceptlist btsnd_hcic_ble_add_acceptlist;
-struct btsnd_hcic_ble_clear_acceptlist btsnd_hcic_ble_clear_acceptlist;
 struct btsnd_hcic_ble_create_conn_cancel btsnd_hcic_ble_create_conn_cancel;
 struct btsnd_hcic_ble_create_ll_conn btsnd_hcic_ble_create_ll_conn;
 struct btsnd_hcic_ble_enh_rx_test btsnd_hcic_ble_enh_rx_test;
@@ -80,7 +77,6 @@ struct btsnd_hcic_ble_read_resolvable_addr_local
     btsnd_hcic_ble_read_resolvable_addr_local;
 struct btsnd_hcic_ble_read_resolvable_addr_peer
     btsnd_hcic_ble_read_resolvable_addr_peer;
-struct btsnd_hcic_ble_receiver_test btsnd_hcic_ble_receiver_test;
 struct btsnd_hcic_ble_remove_from_acceptlist
     btsnd_hcic_ble_remove_from_acceptlist;
 struct btsnd_hcic_ble_set_addr_resolution_enable
@@ -108,8 +104,6 @@ struct btsnd_hcic_ble_set_scan_enable btsnd_hcic_ble_set_scan_enable;
 struct btsnd_hcic_ble_set_scan_params btsnd_hcic_ble_set_scan_params;
 struct btsnd_hcic_ble_set_scan_rsp_data btsnd_hcic_ble_set_scan_rsp_data;
 struct btsnd_hcic_ble_start_enc btsnd_hcic_ble_start_enc;
-struct btsnd_hcic_ble_test_end btsnd_hcic_ble_test_end;
-struct btsnd_hcic_ble_transmitter_test btsnd_hcic_ble_transmitter_test;
 struct btsnd_hcic_ble_upd_ll_conn_params btsnd_hcic_ble_upd_ll_conn_params;
 struct btsnd_hcic_ble_write_adv_params btsnd_hcic_ble_write_adv_params;
 struct btsnd_hcic_create_big btsnd_hcic_create_big;
@@ -168,32 +162,11 @@ void btsnd_hcic_accept_cis_req(uint16_t conn_handle) {
   mock_function_count_map[__func__]++;
   test::mock::stack_hcic_hciblecmds::btsnd_hcic_accept_cis_req(conn_handle);
 }
-void btsnd_hcic_big_create_sync(uint8_t big_handle, uint16_t sync_handle,
-                                uint8_t enc, std::array<uint8_t, 16> bcst_code,
-                                uint8_t mse, uint16_t big_sync_timeout,
-                                std::vector<uint8_t> bis) {
-  mock_function_count_map[__func__]++;
-  test::mock::stack_hcic_hciblecmds::btsnd_hcic_big_create_sync(
-      big_handle, sync_handle, enc, bcst_code, mse, big_sync_timeout, bis);
-}
 void btsnd_hcic_big_term_sync(uint8_t big_handle,
                               base::OnceCallback<void(uint8_t*, uint16_t)> cb) {
   mock_function_count_map[__func__]++;
   test::mock::stack_hcic_hciblecmds::btsnd_hcic_big_term_sync(big_handle,
                                                               std::move(cb));
-}
-void btsnd_hcic_ble_add_acceptlist(
-    uint8_t addr_type, const RawAddress& bda,
-    base::OnceCallback<void(uint8_t*, uint16_t)> cb) {
-  mock_function_count_map[__func__]++;
-  test::mock::stack_hcic_hciblecmds::btsnd_hcic_ble_add_acceptlist(
-      addr_type, bda, std::move(cb));
-}
-void btsnd_hcic_ble_clear_acceptlist(
-    base::OnceCallback<void(uint8_t*, uint16_t)> cb) {
-  mock_function_count_map[__func__]++;
-  test::mock::stack_hcic_hciblecmds::btsnd_hcic_ble_clear_acceptlist(
-      std::move(cb));
 }
 void btsnd_hcic_ble_create_conn_cancel(void) {
   mock_function_count_map[__func__]++;
@@ -331,10 +304,6 @@ void btsnd_hcic_ble_read_resolvable_addr_peer(uint8_t addr_type_peer,
   test::mock::stack_hcic_hciblecmds::btsnd_hcic_ble_read_resolvable_addr_peer(
       addr_type_peer, bda_peer);
 }
-void btsnd_hcic_ble_receiver_test(uint8_t rx_freq) {
-  mock_function_count_map[__func__]++;
-  test::mock::stack_hcic_hciblecmds::btsnd_hcic_ble_receiver_test(rx_freq);
-}
 void btsnd_hcic_ble_remove_from_acceptlist(
     tBLE_ADDR_TYPE addr_type, const RawAddress& bda,
     base::OnceCallback<void(uint8_t*, uint16_t)> cb) {
@@ -452,16 +421,6 @@ void btsnd_hcic_ble_start_enc(uint16_t handle,
   mock_function_count_map[__func__]++;
   test::mock::stack_hcic_hciblecmds::btsnd_hcic_ble_start_enc(handle, rand,
                                                               ediv, ltk);
-}
-void btsnd_hcic_ble_test_end(void) {
-  mock_function_count_map[__func__]++;
-  test::mock::stack_hcic_hciblecmds::btsnd_hcic_ble_test_end();
-}
-void btsnd_hcic_ble_transmitter_test(uint8_t tx_freq, uint8_t test_data_len,
-                                     uint8_t payload) {
-  mock_function_count_map[__func__]++;
-  test::mock::stack_hcic_hciblecmds::btsnd_hcic_ble_transmitter_test(
-      tx_freq, test_data_len, payload);
 }
 void btsnd_hcic_ble_upd_ll_conn_params(uint16_t handle, uint16_t conn_int_min,
                                        uint16_t conn_int_max,

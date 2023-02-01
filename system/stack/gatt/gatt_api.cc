@@ -21,7 +21,7 @@
  *  this file contains GATT interface functions
  *
  ******************************************************************************/
-#include "gatt_api.h"
+#include "stack/include/gatt_api.h"
 
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
@@ -31,13 +31,13 @@
 
 #include "bt_target.h"
 #include "device/include/controller.h"
-#include "gatt_int.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "stack/gatt/connection_manager.h"
+#include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
@@ -486,7 +486,7 @@ tGATT_STATUS GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_handle,
 #if (GATT_UPPER_TESTER_MULT_VARIABLE_LENGTH_NOTIF == TRUE)
 static tGATT_STATUS GATTS_HandleMultileValueNotification(
     tGATT_TCB* p_tcb, std::vector<tGATT_VALUE> gatt_notif_vector) {
-  LOG(INFO) << __func__;
+  LOG_INFO("");
 
   uint16_t cid = gatt_tcb_get_att_cid(*p_tcb, true /* eatt support */);
   uint16_t payload_size = gatt_tcb_get_payload_size_tx(*p_tcb, cid);
@@ -501,8 +501,7 @@ static tGATT_STATUS GATTS_HandleMultileValueNotification(
   p_buf->offset = L2CAP_MIN_OFFSET;
   p_buf->len = 1;
   for (auto notif : gatt_notif_vector) {
-    LOG(INFO) << __func__ << "Adding handle: " << loghex(notif.handle)
-              << "val len: " << +notif.len;
+    LOG_INFO("Adding handle: 0x%04x, val len %d", notif.handle, notif.len);
     UINT16_TO_STREAM(p, notif.handle);
     p_buf->len += 2;
     UINT16_TO_STREAM(p, notif.len);
@@ -511,7 +510,7 @@ static tGATT_STATUS GATTS_HandleMultileValueNotification(
     p_buf->len += notif.len;
   }
 
-  LOG(INFO) << __func__ << "Total len: " << +p_buf->len;
+  LOG_INFO("Total len: %d", p_buf->len);
 
   return attp_send_sr_msg(*p_tcb, cid, p_buf);
 }
@@ -561,7 +560,7 @@ tGATT_STATUS GATTS_HandleValueNotification(uint16_t conn_id,
   if (stack_config_get_interface()->get_pts_force_eatt_for_notifications() &&
       gatt_sr_is_cl_multi_variable_len_notif_supported(*p_tcb)) {
     if (cached_tcb_idx == 0xFF) {
-      LOG(INFO) << __func__ << " Storing first notification";
+      LOG_INFO("Storing first notification");
       p_gatt_notif = &gatt_notif_vector[0];
 
       p_gatt_notif->handle = attr_handle;
@@ -575,7 +574,7 @@ tGATT_STATUS GATTS_HandleValueNotification(uint16_t conn_id,
     }
 
     if (cached_tcb_idx == tcb_idx) {
-      LOG(INFO) << __func__ << " Storing second notification";
+      LOG_INFO("Storing second notification");
       cached_tcb_idx = 0xFF;
       p_gatt_notif = &gatt_notif_vector[1];
 
@@ -588,8 +587,8 @@ tGATT_STATUS GATTS_HandleValueNotification(uint16_t conn_id,
       return GATTS_HandleMultileValueNotification(p_tcb, gatt_notif_vector);
     }
 
-    LOG(ERROR) << __func__ << "PTS Mode: Invalid tcb_idx: " << tcb_idx
-               << " cached_tcb_idx: " << cached_tcb_idx;
+    LOG_ERROR("PTS Mode: Invalid tcb_idx: %d, cached_tcb_idx: %d", tcb_idx,
+              cached_tcb_idx);
   }
 #endif
 
@@ -1228,7 +1227,7 @@ void GATT_StartIf(tGATT_IF gatt_if) {
         gatt_find_the_connected_bda(start_idx, bda, &found_idx, &transport)) {
       p_tcb = gatt_find_tcb_by_addr(bda, transport);
       LOG_INFO("GATT interface %d already has connected device %s", +gatt_if,
-               bda.ToString().c_str());
+               ADDRESS_TO_LOGGABLE_CSTR(bda));
       if (p_reg->app_cb.p_conn_cb && p_tcb) {
         conn_id = GATT_CREATE_CONN_ID(p_tcb->tcb_idx, gatt_if);
         LOG_INFO("Invoking callback with connection id %d", conn_id);
@@ -1292,21 +1291,21 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
   bool ret;
   if (is_direct) {
     LOG_DEBUG("Starting direct connect gatt_if=%u address=%s", gatt_if,
-              bd_addr.ToString().c_str());
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     ret = gatt_act_connect(p_reg, bd_addr, transport, initiating_phys);
   } else {
     LOG_DEBUG("Starting background connect gatt_if=%u address=%s", gatt_if,
-              bd_addr.ToString().c_str());
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     if (!BTM_BackgroundConnectAddressKnown(bd_addr)) {
       //  RPA can rotate, causing address to "expire" in the background
       //  connection list. RPA is allowed for direct connect, as such request
       //  times out after 30 seconds
       LOG_WARN("Unable to add RPA %s to background connection gatt_if=%d",
-               bd_addr.ToString().c_str(), +gatt_if);
+               ADDRESS_TO_LOGGABLE_CSTR(bd_addr), +gatt_if);
       ret = false;
     } else {
       LOG_DEBUG("Adding to background connect to device:%s",
-                PRIVATE_ADDRESS(bd_addr));
+                ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
       if (connection_type == BTM_BLE_BKG_CONNECT_ALLOW_LIST) {
         ret = connection_manager::background_connect_add(gatt_if, bd_addr);
       } else {
@@ -1349,7 +1348,8 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
  ******************************************************************************/
 bool GATT_CancelConnect(tGATT_IF gatt_if, const RawAddress& bd_addr,
                         bool is_direct) {
-  LOG(INFO) << __func__ << ": gatt_if:" << +gatt_if << ", address: " << bd_addr
+  LOG(INFO) << __func__ << ": gatt_if:" << +gatt_if
+            << ", address: " << ADDRESS_TO_LOGGABLE_CSTR(bd_addr)
             << ", direct:" << is_direct;
 
   tGATT_REG* p_reg;

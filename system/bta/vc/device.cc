@@ -46,7 +46,7 @@ void VolumeControlDevice::DeregisterNotifications(tGATT_IF gatt_if) {
 }
 
 void VolumeControlDevice::Disconnect(tGATT_IF gatt_if) {
-  LOG(INFO) << __func__ << ": " << this->ToString();
+  LOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(address);
 
   if (IsConnected()) {
     DeregisterNotifications(gatt_if);

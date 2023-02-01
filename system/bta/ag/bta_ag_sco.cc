@@ -24,20 +24,25 @@
 
 #include <base/bind.h>
 #include <base/logging.h>
+
 #include <cstdint>
 
 #include "bt_target.h"  // Must be first to define build configuration
 #include "bt_trace.h"   // Legacy trace logging
-
 #include "bta/ag/bta_ag_int.h"
 #include "device/include/controller.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
+#include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
+#include "stack/btm/btm_sco_hfp_hal.h"
+#include "stack/include/acl_api.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btu.h"  // do_in_main_thread
 #include "types/raw_address.h"
+
+extern tBTM_CB btm_cb;
 
 /* Codec negotiation timeout */
 #ifndef BTA_AG_CODEC_NEGOTIATION_TIMEOUT_MS
@@ -368,12 +373,14 @@ static void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
   /* Make sure this SCO handle is not already in use */
   if (p_scb->sco_idx != BTM_INVALID_SCO_INDEX) {
     APPL_TRACE_ERROR("%s: device %s, index 0x%04x already in use!", __func__,
-                     p_scb->peer_addr.ToString().c_str(), p_scb->sco_idx);
+                     ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr),
+                     p_scb->sco_idx);
     return;
   }
 
 #if (DISABLE_WBS == FALSE)
-  if ((p_scb->sco_codec == BTM_SCO_CODEC_MSBC) && !p_scb->codec_fallback)
+  if ((p_scb->sco_codec == BTM_SCO_CODEC_MSBC) && !p_scb->codec_fallback &&
+      hfp_hal_interface::get_wbs_supported())
     esco_codec = BTM_SCO_CODEC_MSBC;
 #endif
 
@@ -385,26 +392,31 @@ static void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
     p_scb->codec_msbc_settings = BTA_AG_SCO_MSBC_SETTINGS_T2;
   }
 
+  bool offload = hfp_hal_interface::get_offload_enabled();
   /* Initialize eSCO parameters */
   enh_esco_params_t params = {};
   /* If WBS included, use CVSD by default, index is 0 for CVSD by
    * initialization. If eSCO codec is mSBC, index is T2 or T1 */
   if (esco_codec == BTM_SCO_CODEC_MSBC) {
     if (p_scb->codec_msbc_settings == BTA_AG_SCO_MSBC_SETTINGS_T2) {
-      params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T2);
+      params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T2, offload);
     } else {
-      params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T1);
+      params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T1, offload);
     }
   } else {
     if (p_scb->features & BTA_AG_PEER_FEAT_ESCO_S4 &&
         (p_scb->peer_features & BTA_AG_PEER_FEAT_ESCO_S4)) {
       // HFP >=1.7 eSCO
-      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S4);
+      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S4, offload);
     } else {
       // HFP <=1.6 eSCO
-      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S3);
+      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S3, offload);
     }
   }
+
+  /* Configure input/output data path based on HAL settings. */
+  hfp_hal_interface::set_codec_datapath(esco_codec);
+  hfp_hal_interface::update_esco_parameters(&params);
 
   /* If initiating, setup parameters to start SCO/eSCO connection */
   if (is_orig) {
@@ -452,6 +464,7 @@ static void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
 static void bta_ag_create_pending_sco(tBTA_AG_SCB* p_scb, bool is_local) {
   tBTA_AG_PEER_CODEC esco_codec = p_scb->inuse_codec;
   enh_esco_params_t params = {};
+  bool offload = hfp_hal_interface::get_offload_enabled();
   bta_ag_cb.sco.p_curr_scb = p_scb;
   bta_ag_cb.sco.cur_idx = p_scb->sco_idx;
 
@@ -459,18 +472,18 @@ static void bta_ag_create_pending_sco(tBTA_AG_SCB* p_scb, bool is_local) {
   if (is_local) {
     if (esco_codec == BTM_SCO_CODEC_MSBC) {
       if (p_scb->codec_msbc_settings == BTA_AG_SCO_MSBC_SETTINGS_T2) {
-        params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T2);
+        params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T2, offload);
       } else {
-        params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T1);
+        params = esco_parameters_for_codec(ESCO_CODEC_MSBC_T1, offload);
       }
     } else {
       if (p_scb->features & BTA_AG_PEER_FEAT_ESCO_S4 &&
           (p_scb->peer_features & BTA_AG_PEER_FEAT_ESCO_S4)) {
         // HFP >=1.7 eSCO
-        params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S4);
+        params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S4, offload);
       } else {
         // HFP <=1.6 eSCO
-        params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S3);
+        params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S3, offload);
       }
     }
 
@@ -489,6 +502,8 @@ static void bta_ag_create_pending_sco(tBTA_AG_SCB* p_scb, bool is_local) {
                       bta_ag_sco_disc_cback) == BTM_CMD_STARTED) {
       /* Initiating the connection, set the current sco handle */
       bta_ag_cb.sco.cur_idx = p_scb->sco_idx;
+      /* Configure input/output data. */
+      hfp_hal_interface::set_codec_datapath(esco_codec);
     }
     APPL_TRACE_DEBUG("%s: initiated SCO connection", __func__);
   } else {
@@ -500,10 +515,19 @@ static void bta_ag_create_pending_sco(tBTA_AG_SCB* p_scb, bool is_local) {
     if (p_scb->features & BTA_AG_PEER_FEAT_ESCO_S4 &&
         (p_scb->peer_features & BTA_AG_PEER_FEAT_ESCO_S4)) {
       // HFP >=1.7 eSCO
-      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S4);
+      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S4, offload);
     } else {
       // HFP <=1.6 eSCO
-      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S3);
+      params = esco_parameters_for_codec(ESCO_CODEC_CVSD_S3, offload);
+    }
+
+    // HFP v1.8 5.7.3 CVSD coding
+    tSCO_CONN* p_sco = NULL;
+    if (p_scb->sco_idx < BTM_MAX_SCO_LINKS)
+      p_sco = &btm_cb.sco_cb.sco_db[p_scb->sco_idx];
+    if (p_sco && (p_sco->esco.data.link_type == BTM_LINK_TYPE_SCO ||
+                  !sco_peer_supports_esco_ev3(p_sco->esco.data.bd_addr))) {
+      params = esco_parameters_for_codec(SCO_CODEC_CVSD_D1, offload);
     }
 
     BTM_EScoConnRsp(p_scb->sco_idx, HCI_SUCCESS, &params);
@@ -592,7 +616,7 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
   tBTA_AG_SCO_CB* p_sco = &bta_ag_cb.sco;
   uint8_t previous_state = p_sco->state;
   LOG_INFO("device:%s index:0x%04x state:%s[%d] event:%s[%d]",
-           PRIVATE_ADDRESS(p_scb->peer_addr), p_scb->sco_idx,
+           ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr), p_scb->sco_idx,
            bta_ag_sco_state_str(p_sco->state), p_sco->state,
            bta_ag_sco_evt_str(event), event);
 
@@ -1155,6 +1179,12 @@ void bta_ag_sco_open(tBTA_AG_SCB* p_scb, UNUSED_ATTR const tBTA_AG_DATA& data) {
     LOG(INFO) << __func__ << ": not opening sco, by policy";
     return;
   }
+
+  if (data.api_audio_open.force_cvsd) {
+    LOG(INFO) << __func__ << ": set to use fallback codec";
+    p_scb->codec_fallback = true;
+  }
+
   /* if another scb using sco, this is a transfer */
   if (bta_ag_cb.sco.p_curr_scb && bta_ag_cb.sco.p_curr_scb != p_scb) {
     LOG(INFO) << __func__ << ": transfer "
@@ -1204,13 +1234,13 @@ void bta_ag_sco_codec_nego(tBTA_AG_SCB* p_scb, bool result) {
   if (result) {
     /* Subsequent SCO connection will skip codec negotiation */
     LOG_INFO("Succeeded for index 0x%04x, device %s", p_scb->sco_idx,
-             p_scb->peer_addr.ToString().c_str());
+             ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
     p_scb->codec_updated = false;
     bta_ag_sco_event(p_scb, BTA_AG_SCO_CN_DONE_E);
   } else {
     /* codec negotiation failed */
     LOG_INFO("Failed for index 0x%04x, device %s", p_scb->sco_idx,
-             p_scb->peer_addr.ToString().c_str());
+             ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
     bta_ag_sco_event(p_scb, BTA_AG_SCO_CLOSE_E);
   }
 }
@@ -1327,6 +1357,10 @@ void bta_ag_sco_conn_rsp(tBTA_AG_SCB* p_scb,
   p_scb->inuse_codec = BTM_SCO_CODEC_NONE;
   /* Send pending commands to create SCO connection to peer */
   bta_ag_create_pending_sco(p_scb, bta_ag_cb.sco.is_local);
+}
+
+void bta_ag_set_sco_offload_enabled(bool value) {
+  hfp_hal_interface::enable_offload(value);
 }
 
 void bta_ag_set_sco_allowed(bool value) {

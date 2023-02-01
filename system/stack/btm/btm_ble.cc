@@ -25,8 +25,11 @@
 
 #define LOG_TAG "bt_btm_ble"
 
+#include <base/logging.h>
+
 #include <cstdint>
 
+#include "btif/include/btif_storage.h"
 #include "device/include/controller.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/l2c_api.h"
@@ -47,8 +50,6 @@
 #include "stack/include/l2cdefs.h"
 #include "stack/include/smp_api.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 extern tBTM_CB btm_cb;
 
@@ -88,7 +89,7 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
     p_dev_rec->conn_params.peripheral_latency = BTM_BLE_CONN_PARAM_UNDEF;
 
     LOG_DEBUG("Device added, handle=0x%x, p_dev_rec=%p, bd_addr=%s",
-              p_dev_rec->ble_hci_handle, p_dev_rec, PRIVATE_ADDRESS(bd_addr));
+              p_dev_rec->ble_hci_handle, p_dev_rec, ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
   }
 
   memset(p_dev_rec->sec_bd_name, 0, sizeof(tBTM_BD_NAME));
@@ -109,6 +110,33 @@ void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
     LOG_DEBUG("InqDb device_type =0x%x  addr_type=0x%x",
               p_info->results.device_type, p_info->results.ble_addr_type);
   }
+}
+
+/*******************************************************************************
+ *
+ * Function         BTM_GetRemoteDeviceName
+ *
+ * Description      This function is called to get the dev name of remote device
+ *                  from NV
+ *
+ * Returns          TRUE if success; otherwise failed.
+ *
+ ******************************************************************************/
+bool BTM_GetRemoteDeviceName(const RawAddress& bd_addr, BD_NAME bd_name) {
+  BTM_TRACE_DEBUG("%s", __func__);
+  bool ret = FALSE;
+  bt_bdname_t bdname;
+  bt_property_t prop_name;
+  BTIF_STORAGE_FILL_PROPERTY(&prop_name, BT_PROPERTY_BDNAME,
+                             sizeof(bt_bdname_t), &bdname);
+
+  if (btif_storage_get_remote_device_property(&bd_addr, &prop_name) ==
+      BT_STATUS_SUCCESS) {
+    APPL_TRACE_DEBUG("%s, NV name = %s", __func__, bdname.name);
+    strncpy((char*)bd_name, (char*)bdname.name, BD_NAME_LEN + 1);
+    ret = TRUE;
+  }
+  return ret;
 }
 
 /*******************************************************************************
@@ -143,7 +171,7 @@ void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
     return;
   }
 
-  LOG_DEBUG("Adding BLE key device:%s key_type:%hhu", PRIVATE_ADDRESS(bd_addr),
+  LOG_DEBUG("Adding BLE key device:%s key_type:%hhu", ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
             key_type);
 
   btm_sec_save_le_key(bd_addr, key_type, p_le_key, false);
@@ -566,81 +594,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
   }
 
   return false;
-}
-
-/*******************************************************************************
- *
- * Function         BTM_BleReceiverTest
- *
- * Description      This function is called to start the LE Receiver test
- *
- * Parameter       rx_freq - Frequency Range
- *               p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleReceiverTest(rx_freq, p_cmd_cmpl_cback);
-  }
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
-
-  btsnd_hcic_ble_receiver_test(rx_freq);
-}
-
-/*******************************************************************************
- *
- * Function         BTM_BleTransmitterTest
- *
- * Description      This function is called to start the LE Transmitter test
- *
- * Parameter       tx_freq - Frequency Range
- *                       test_data_len - Length in bytes of payload data in each
- *                                       packet
- *                       packet_payload - Pattern to use in the payload
- *                       p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
-                            uint8_t packet_payload,
-                            tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTransmitterTest(
-        tx_freq, test_data_len, packet_payload, p_cmd_cmpl_cback);
-  }
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
-  btsnd_hcic_ble_transmitter_test(tx_freq, test_data_len, packet_payload);
-}
-
-/*******************************************************************************
- *
- * Function         BTM_BleTestEnd
- *
- * Description      This function is called to stop the in-progress TX or RX
- *                  test
- *
- * Parameter       p_cmd_cmpl_cback - Command complete callback
- *
- ******************************************************************************/
-void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTestEnd(p_cmd_cmpl_cback);
-  }
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
-
-  btsnd_hcic_ble_test_end();
-}
-
-/*******************************************************************************
- * Internal Functions
- ******************************************************************************/
-void btm_ble_test_command_complete(uint8_t* p) {
-  tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_le_test_cmd_cmpl_cb;
-
-  btm_cb.devcb.p_le_test_cmd_cmpl_cb = NULL;
-
-  if (p_cb) {
-    (*p_cb)(p);
-  }
 }
 
 /*******************************************************************************
@@ -1194,8 +1147,9 @@ void btm_sec_save_le_key(const RawAddress& bd_addr, tBTM_LE_KEY_TYPE key_type,
         BTM_TRACE_DEBUG(
             "%s: BTM_LE_KEY_PID key_type=0x%x save peer IRK, change bd_addr=%s "
             "to id_addr=%s id_addr_type=0x%x",
-            __func__, p_rec->ble.key_type, p_rec->bd_addr.ToString().c_str(),
-            p_keys->pid_key.identity_addr.ToString().c_str(),
+            __func__, p_rec->ble.key_type,
+            ADDRESS_TO_LOGGABLE_CSTR(p_rec->bd_addr),
+            ADDRESS_TO_LOGGABLE_CSTR(p_keys->pid_key.identity_addr),
             p_keys->pid_key.identity_addr_type);
         /* update device record address as identity address */
         p_rec->bd_addr = p_keys->pid_key.identity_addr;
@@ -1752,7 +1706,8 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
  ******************************************************************************/
 void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
                        uint8_t role, tBLE_ADDR_TYPE addr_type,
-                       bool addr_matched) {
+                       bool addr_matched,
+                       bool can_read_discoverable_characteristics) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
   if (!p_dev_rec) {
     LOG_INFO("Creating new device record for new ble connection");
@@ -1777,6 +1732,7 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
   p_dev_rec->ble_hci_handle = handle;
   p_dev_rec->device_type |= BT_DEVICE_TYPE_BLE;
   p_dev_rec->role_central = (role == HCI_ROLE_CENTRAL) ? true : false;
+  p_dev_rec->can_read_discoverable = can_read_discoverable_characteristics;
 
   if (!addr_matched) {
     p_dev_rec->ble.active_addr_type = tBTM_SEC_BLE::BTM_BLE_ADDR_PSEUDO;
@@ -1785,13 +1741,6 @@ void btm_ble_connected(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
     }
   }
   btm_cb.ble_ctr_cb.inq_var.directed_conn = BTM_BLE_ADV_IND_EVT;
-}
-
-void btm_ble_connected_from_address_with_type(
-    const tBLE_BD_ADDR& address_with_type, uint16_t handle, uint8_t enc_mode,
-    uint8_t role, bool addr_matched) {
-  btm_ble_connected(address_with_type.bda, handle, enc_mode, role,
-                    address_with_type.type, addr_matched);
 }
 
 /*****************************************************************************

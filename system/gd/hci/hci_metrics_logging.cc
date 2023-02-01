@@ -193,9 +193,9 @@ void log_link_layer_connection_command(std::unique_ptr<CommandView>& command_vie
       break;
     }
     case OpCode::LE_CLEAR_FILTER_ACCEPT_LIST: {
-      auto le_clear_connect_list_view = LeClearFilterAcceptListView::Create(
+      auto le_clear_filter_accept_list_view = LeClearFilterAcceptListView::Create(
           LeConnectionManagementCommandView::Create(std::move(connection_management_command_view)));
-      ASSERT(le_clear_connect_list_view.IsValid());
+      ASSERT(le_clear_filter_accept_list_view.IsValid());
       direction = android::bluetooth::DIRECTION_INCOMING;
       link_type = android::bluetooth::LINK_TYPE_ACL;
       break;
@@ -373,9 +373,9 @@ void log_link_layer_connection_command_status(std::unique_ptr<CommandView>& comm
       break;
     }
     case OpCode::LE_CLEAR_FILTER_ACCEPT_LIST: {
-      auto le_clear_connect_list_view = LeClearFilterAcceptListView::Create(
+      auto le_clear_filter_accept_list_view = LeClearFilterAcceptListView::Create(
           LeConnectionManagementCommandView::Create(std::move(connection_management_command_view)));
-      ASSERT(le_clear_connect_list_view.IsValid());
+      ASSERT(le_clear_filter_accept_list_view.IsValid());
       direction = android::bluetooth::DIRECTION_INCOMING;
       link_type = android::bluetooth::LINK_TYPE_ACL;
       break;
@@ -435,9 +435,9 @@ void log_link_layer_connection_command_complete(EventView event_view, std::uniqu
 
   switch (op_code) {
     case OpCode::LE_CLEAR_FILTER_ACCEPT_LIST: {
-      auto le_clear_connect_list_view = LeClearFilterAcceptListView::Create(
+      auto le_clear_filter_accept_list_view = LeClearFilterAcceptListView::Create(
           LeConnectionManagementCommandView::Create(std::move(connection_management_command_view)));
-      ASSERT(le_clear_connect_list_view.IsValid());
+      ASSERT(le_clear_filter_accept_list_view.IsValid());
       direction = android::bluetooth::DIRECTION_INCOMING;
       link_type = android::bluetooth::LINK_TYPE_ACL;
       break;
@@ -574,21 +574,35 @@ void log_link_layer_connection_other_hci_event(EventView packet, storage::Storag
 
 void log_link_layer_connection_event_le_meta(LeMetaEventView le_meta_event_view) {
   SubeventCode leEvt = le_meta_event_view.GetSubeventCode();
-  auto le_connection_complete_view = LeConnectionCompleteView::Create(std::move(le_meta_event_view));
-  if (!le_connection_complete_view.IsValid()) {
+  if (leEvt != SubeventCode::ENHANCED_CONNECTION_COMPLETE && leEvt != SubeventCode::CONNECTION_COMPLETE) {
     // function is called for all le meta events. Only need to process le connection complete.
     return;
   }
-  ASSERT(le_connection_complete_view.IsValid());
-  // init parameters to log
+
   EventCode event_code = EventCode::LE_META_EVENT;
-  Address address = le_connection_complete_view.GetPeerAddress();
-  uint32_t connection_handle = le_connection_complete_view.GetConnectionHandle();
+  Address address;
+  uint32_t connection_handle;
   android::bluetooth::DirectionEnum direction = android::bluetooth::DIRECTION_UNKNOWN;
   uint16_t link_type = android::bluetooth::LINK_TYPE_ACL;
-  ErrorCode status = le_connection_complete_view.GetStatus();
+  ErrorCode status;
   ErrorCode reason = ErrorCode::UNKNOWN_HCI_COMMAND;
   uint32_t cmd = android::bluetooth::hci::CMD_UNKNOWN;
+
+  if (leEvt == SubeventCode::CONNECTION_COMPLETE) {
+    auto le_connection_complete_view = LeConnectionCompleteView::Create(std::move(le_meta_event_view));
+    ASSERT(le_connection_complete_view.IsValid());
+    address = le_connection_complete_view.GetPeerAddress();
+    connection_handle = le_connection_complete_view.GetConnectionHandle();
+    status = le_connection_complete_view.GetStatus();
+  } else if (leEvt == SubeventCode::ENHANCED_CONNECTION_COMPLETE) {
+    auto le_enhanced_connection_complete_view = LeEnhancedConnectionCompleteView::Create(std::move(le_meta_event_view));
+    ASSERT(le_enhanced_connection_complete_view.IsValid());
+    address = le_enhanced_connection_complete_view.GetPeerAddress();
+    connection_handle = le_enhanced_connection_complete_view.GetConnectionHandle();
+    status = le_enhanced_connection_complete_view.GetStatus();
+  } else {
+    LOG_ALWAYS_FATAL("WTF");
+  }
 
   os::LogMetricLinkLayerConnectionEvent(
       &address,

@@ -18,6 +18,7 @@ package com.android.bluetooth.gatt;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.verify;
 
@@ -85,6 +86,7 @@ public class GattServiceTest {
     private static final String REMOTE_DEVICE_ADDRESS = "00:00:00:00:00:00";
 
     private static final int TIMES_UP_AND_DOWN = 3;
+    private static final int TIMEOUT_MS = 5_000;
     private Context mTargetContext;
     private GattService mService;
     @Mock private GattService.ClientMap mClientMap;
@@ -103,6 +105,9 @@ public class GattServiceTest {
 
     @Mock private Resources mResources;
     @Mock private AdapterService mAdapterService;
+    @Mock private GattObjectsFactory mFactory;
+    @Mock private GattNativeInterface mNativeInterface;
+    private BluetoothDevice mCurrentDevice;
     private CompanionManager mBtCompanionManager;
 
     @Before
@@ -112,6 +117,9 @@ public class GattServiceTest {
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(true).when(mAdapterService).isStartedProfile(anyString());
+
+        GattObjectsFactory.setInstanceForTesting(mFactory);
+        doReturn(mNativeInterface).when(mFactory).getNativeInterface();
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAttributionSource = mAdapter.getAttributionSource();
@@ -147,11 +155,13 @@ public class GattServiceTest {
         mService = GattService.getGattService();
         Assert.assertNull(mService);
         TestUtils.clearAdapterService(mAdapterService);
+        GattObjectsFactory.setInstanceForTesting(null);
     }
 
     @Test
     public void testInitialize() {
         Assert.assertEquals(mService, GattService.getGattService());
+        verify(mNativeInterface).init(eq(mService));
     }
 
     @Test
@@ -181,10 +191,12 @@ public class GattServiceTest {
         Assert.assertEquals(99700000000L, timestampNanos);
     }
 
+    @Test
     public void emptyClearServices() {
         int serverIf = 1;
 
         mService.clearServices(serverIf, mAttributionSource);
+        verify(mNativeInterface, times(0)).gattServerDeleteService(eq(serverIf), anyInt());
     }
 
     @Test
@@ -196,6 +208,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.clientReadPhy(clientIf, address, mAttributionSource);
+        verify(mNativeInterface).gattClientReadPhy(clientIf, address);
     }
 
     @Test
@@ -211,6 +224,8 @@ public class GattServiceTest {
 
         mService.clientSetPreferredPhy(clientIf, address, txPhy, rxPhy, phyOptions,
                 mAttributionSource);
+        verify(mNativeInterface).gattClientSetPreferredPhy(clientIf, address, txPhy, rxPhy,
+                phyOptions);
     }
 
     @Test
@@ -229,6 +244,9 @@ public class GattServiceTest {
         connectionPriority = BluetoothGatt.CONNECTION_PRIORITY_BALANCED;;
         mService.connectionParameterUpdate(clientIf, address, connectionPriority,
                 mAttributionSource);
+
+        verify(mNativeInterface, times(3)).gattConnectionParameterUpdate(eq(clientIf),
+                eq(address), anyInt(), anyInt(), anyInt(), anyInt(), eq(0), eq(0));
     }
 
     @Test
@@ -296,6 +314,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.disconnectAll(mAttributionSource);
+        verify(mNativeInterface).gattClientDisconnect(clientIf, address, connId);
     }
 
     @Test
@@ -399,6 +418,8 @@ public class GattServiceTest {
         boolean eattSupport = true;
 
         mService.registerClient(uuid, callback, eattSupport, mAttributionSource);
+        verify(mNativeInterface).gattClientRegisterApp(uuid.getLeastSignificantBits(),
+                uuid.getMostSignificantBits(), eattSupport);
     }
 
     @Test
@@ -407,6 +428,7 @@ public class GattServiceTest {
 
         mService.unregisterClient(clientIf, mAttributionSource);
         verify(mClientMap).remove(clientIf);
+        verify(mNativeInterface).gattClientUnregisterApp(clientIf);
     }
 
     @Test
@@ -441,6 +463,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.readCharacteristic(clientIf, address, handle, authReq, mAttributionSource);
+        verify(mNativeInterface).gattClientReadCharacteristic(connId, handle, authReq);
     }
 
     @Test
@@ -457,6 +480,9 @@ public class GattServiceTest {
 
         mService.readUsingCharacteristicUuid(clientIf, address, uuid, startHandle, endHandle,
                 authReq, mAttributionSource);
+        verify(mNativeInterface).gattClientReadUsingCharacteristicUuid(connId,
+                uuid.getLeastSignificantBits(), uuid.getMostSignificantBits(), startHandle,
+                endHandle, authReq);
     }
 
     @Test
@@ -488,6 +514,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.readDescriptor(clientIf, address, handle, authReq, mAttributionSource);
+        verify(mNativeInterface).gattClientReadDescriptor(connId, handle, authReq);
     }
 
     @Test
@@ -510,6 +537,7 @@ public class GattServiceTest {
 
         mService.endReliableWrite(clientIf, address, execute, mAttributionSource);
         verify(mReliableQueue).remove(address);
+        verify(mNativeInterface).gattClientExecuteWrite(connId, execute);
     }
 
     @Test
@@ -523,6 +551,9 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.registerForNotification(clientIf, address, handle, enable, mAttributionSource);
+
+        verify(mNativeInterface).gattClientRegisterForNotifications(clientIf, address, handle,
+                enable);
     }
 
     @Test
@@ -531,6 +562,7 @@ public class GattServiceTest {
         String address = REMOTE_DEVICE_ADDRESS;
 
         mService.readRemoteRssi(clientIf, address, mAttributionSource);
+        verify(mNativeInterface).gattClientReadRemoteRssi(clientIf, address);
     }
 
     @Test
@@ -543,6 +575,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.configureMTU(clientIf, address, mtu, mAttributionSource);
+        verify(mNativeInterface).gattClientConfigureMTU(connId, mtu);
     }
 
     @Test
@@ -559,6 +592,10 @@ public class GattServiceTest {
         mService.leConnectionUpdate(clientIf, address, minInterval, maxInterval,
                 peripheralLatency, supervisionTimeout, minConnectionEventLen,
                 maxConnectionEventLen, mAttributionSource);
+
+        verify(mNativeInterface).gattConnectionParameterUpdate(clientIf, address, minInterval,
+                maxInterval, peripheralLatency, supervisionTimeout, minConnectionEventLen,
+                maxConnectionEventLen);
     }
 
     @Test
@@ -569,6 +606,7 @@ public class GattServiceTest {
         int transport = 2;
 
         mService.serverConnect(serverIf, address, isDirect, transport, mAttributionSource);
+        verify(mNativeInterface).gattServerConnect(serverIf, address, isDirect, transport);
     }
 
     @Test
@@ -580,6 +618,7 @@ public class GattServiceTest {
         doReturn(connId).when(mServerMap).connIdByAddress(serverIf, address);
 
         mService.serverDisconnect(serverIf, address, mAttributionSource);
+        verify(mNativeInterface).gattServerDisconnect(serverIf, address, connId);
     }
 
     @Test
@@ -592,6 +631,8 @@ public class GattServiceTest {
 
         mService.serverSetPreferredPhy(serverIf, address, txPhy, rxPhy, phyOptions,
                 mAttributionSource);
+        verify(mNativeInterface).gattServerSetPreferredPhy(serverIf, address, txPhy, rxPhy,
+                phyOptions);
     }
 
     @Test
@@ -600,6 +641,7 @@ public class GattServiceTest {
         String address = REMOTE_DEVICE_ADDRESS;
 
         mService.serverReadPhy(serverIf, address, mAttributionSource);
+        verify(mNativeInterface).gattServerReadPhy(serverIf, address);
     }
 
     @Test
@@ -614,10 +656,12 @@ public class GattServiceTest {
         doReturn(connId).when(mServerMap).connIdByAddress(serverIf, address);
 
         mService.sendNotification(serverIf, address, handle, confirm, value, mAttributionSource);
+        verify(mNativeInterface).gattServerSendIndication(serverIf, handle, connId, value);
 
         confirm = false;
 
         mService.sendNotification(serverIf, address, handle, confirm, value, mAttributionSource);
+        verify(mNativeInterface).gattServerSendNotification(serverIf, handle, connId, value);
     }
 
     @Test
@@ -685,6 +729,7 @@ public class GattServiceTest {
 
         mService.unregAll(mAttributionSource);
         verify(mClientMap).remove(appId);
+        verify(mNativeInterface).gattClientUnregisterApp(appId);
     }
 
     @Test
@@ -698,4 +743,3 @@ public class GattServiceTest {
         mService.cleanup();
     }
 }
-

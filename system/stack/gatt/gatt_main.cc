@@ -268,7 +268,7 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
   tGATT_CH_STATE ch_state = gatt_get_ch_state(p_tcb);
   if (ch_state == GATT_CH_CLOSING) {
     LOG_DEBUG("Device already in closing state peer:%s",
-              PRIVATE_ADDRESS(p_tcb->peer_bda));
+              ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda));
     VLOG(1) << __func__ << " already in closing state";
     return true;
   }
@@ -286,7 +286,7 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
             "acceptlist "
             "gatt_if:%hhu peer:%s",
             static_cast<uint8_t>(CONN_MGR_ID_L2CAP),
-            PRIVATE_ADDRESS(p_tcb->peer_bda));
+            ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda));
       }
       gatt_cleanup_upon_disc(p_tcb->peer_bda, GATT_CONN_TERMINATE_LOCAL_HOST,
                              p_tcb->transport);
@@ -315,7 +315,7 @@ bool gatt_disconnect(tGATT_TCB* p_tcb) {
 bool gatt_update_app_hold_link_status(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
                                       bool is_add) {
   LOG_DEBUG("gatt_if=%d, is_add=%d, peer_bda=%s", +gatt_if, is_add,
-            p_tcb->peer_bda.ToString().c_str());
+            ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda));
   auto& holders = p_tcb->app_hold_link;
 
   if (is_add) {
@@ -378,7 +378,7 @@ void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
   if (is_add) {
     if (p_tcb->att_lcid == L2CAP_ATT_CID && is_valid_handle) {
       LOG_INFO("disable link idle timer for %s",
-               p_tcb->peer_bda.ToString().c_str());
+               ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda));
       /* acl link is connected disable the idle timeout */
       GATT_SetIdleTimeout(p_tcb->peer_bda, GATT_LINK_NO_IDLE_TIMEOUT,
                           p_tcb->transport, true /* is_active */);
@@ -471,7 +471,8 @@ static void gatt_le_connect_cback(uint16_t chan, const RawAddress& bd_addr,
     return;
   }
 
-  VLOG(1) << "GATT   ATT protocol channel with BDA: " << bd_addr << " is "
+  VLOG(1) << "GATT   ATT protocol channel with BDA: "
+          << ADDRESS_TO_LOGGABLE_STR(bd_addr) << " is "
           << ((connected) ? "connected" : "disconnected");
 
   p_srv_chg_clt = gatt_is_bda_in_the_srv_chg_clt_list(bd_addr);
@@ -583,6 +584,30 @@ void gatt_notify_conn_update(const RawAddress& remote, uint16_t interval,
       uint16_t conn_id = GATT_CREATE_CONN_ID(p_tcb->tcb_idx, p_reg->gatt_if);
       (*p_reg->app_cb.p_conn_update_cb)(p_reg->gatt_if, conn_id, interval,
                                         latency, timeout,
+                                        static_cast<tGATT_STATUS>(status));
+    }
+  }
+}
+
+void gatt_notify_subrate_change(uint16_t handle, uint16_t subrate_factor,
+                                uint16_t latency, uint16_t cont_num,
+                                uint16_t timeout, uint8_t status) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(handle);
+  if (!p_dev_rec) {
+    LOG_WARN("No Device Found!");
+    return;
+  }
+
+  tGATT_TCB* p_tcb =
+      gatt_find_tcb_by_addr(p_dev_rec->ble.pseudo_addr, BT_TRANSPORT_LE);
+  if (!p_tcb) return;
+
+  for (int i = 0; i < GATT_MAX_APPS; i++) {
+    tGATT_REG* p_reg = &gatt_cb.cl_rcb[i];
+    if (p_reg->in_use && p_reg->app_cb.p_subrate_chg_cb) {
+      uint16_t conn_id = GATT_CREATE_CONN_ID(p_tcb->tcb_idx, p_reg->gatt_if);
+      (*p_reg->app_cb.p_subrate_chg_cb)(p_reg->gatt_if, conn_id, subrate_factor,
+                                        latency, cont_num, timeout,
                                         static_cast<tGATT_STATUS>(status));
     }
   }
@@ -915,7 +940,8 @@ void gatt_send_srv_chg_ind(const RawAddress& peer_bda) {
 
   uint16_t conn_id = gatt_profile_find_conn_id_by_bd_addr(peer_bda);
   if (conn_id == GATT_INVALID_CONN_ID) {
-    LOG(ERROR) << "Unable to find conn_id for " << peer_bda;
+    LOG(ERROR) << "Unable to find conn_id for "
+               << ADDRESS_TO_LOGGABLE_STR(peer_bda);
     return;
   }
 

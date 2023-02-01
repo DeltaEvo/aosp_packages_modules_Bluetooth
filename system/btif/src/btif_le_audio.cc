@@ -23,7 +23,7 @@
 
 #include "bta_le_audio_api.h"
 #include "btif_common.h"
-#include "btif_storage.h"
+#include "btif_profile_storage.h"
 #include "stack/include/btu.h"
 
 using base::Bind;
@@ -136,7 +136,7 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void RemoveDevice(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << address;
+    DVLOG(2) << __func__ << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
     do_in_main_thread(FROM_HERE,
                       Bind(&LeAudioClient::RemoveDevice,
                            Unretained(LeAudioClient::Get()), address));
@@ -145,14 +145,14 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
   }
 
   void Connect(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << address;
+    DVLOG(2) << __func__ << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
     do_in_main_thread(FROM_HERE,
                       Bind(&LeAudioClient::Connect,
                            Unretained(LeAudioClient::Get()), address));
   }
 
   void Disconnect(const RawAddress& address) override {
-    DVLOG(2) << __func__ << " address: " << address;
+    DVLOG(2) << __func__ << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
     do_in_main_thread(FROM_HERE,
                       Bind(&LeAudioClient::Disconnect,
                            Unretained(LeAudioClient::Get()), address));
@@ -160,7 +160,7 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
 
   void GroupAddNode(const int group_id, const RawAddress& address) override {
     DVLOG(2) << __func__ << " group_id: " << group_id
-             << " address: " << address;
+             << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
     do_in_main_thread(
         FROM_HERE, Bind(&LeAudioClient::GroupAddNode,
                         Unretained(LeAudioClient::Get()), group_id, address));
@@ -168,7 +168,7 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
 
   void GroupRemoveNode(const int group_id, const RawAddress& address) override {
     DVLOG(2) << __func__ << " group_id: " << group_id
-             << " address: " << address;
+             << " address: " << ADDRESS_TO_LOGGABLE_STR(address);
     do_in_main_thread(
         FROM_HERE, Bind(&LeAudioClient::GroupRemoveNode,
                         Unretained(LeAudioClient::Get()), group_id, address));

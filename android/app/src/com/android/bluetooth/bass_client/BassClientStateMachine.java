@@ -150,7 +150,6 @@ public class BassClientStateMachine extends StateMachine {
     private final Map<Integer, Boolean> mPendingRemove = new HashMap();
     // Psync and PAST interfaces
     private PeriodicAdvertisingManager mPeriodicAdvManager;
-    private boolean mAutoAssist = false;
     @VisibleForTesting
     boolean mAutoTriggered = false;
     @VisibleForTesting
@@ -433,11 +432,11 @@ public class BassClientStateMachine extends StateMachine {
                 subGroup.addChannel(channel.build());
             }
             byte[] arrayCodecId = baseLevel2.codecId;
-            long codeId = (long) ((arrayCodecId[4] & 0xff) << 32
+            long codeId = ((long) (arrayCodecId[4] & 0xff)) << 32
                     | (arrayCodecId[3] & 0xff) << 24
                     | (arrayCodecId[2] & 0xff) << 16
                     | (arrayCodecId[1] & 0xff) << 8
-                    | (arrayCodecId[0] & 0xff));
+                    | (arrayCodecId[0] & 0xff);
             subGroup.setCodecId(codeId);
             subGroup.setCodecSpecificConfig(BluetoothLeAudioCodecConfigMetadata.
                     fromRawBytes(baseLevel2.codecConfigInfo));
@@ -584,10 +583,6 @@ public class BassClientStateMachine extends StateMachine {
                             mPeriodicAdvCallback);
                 } else {
                     Log.e(TAG, "There is no valid sync handle for this Source");
-                    if (mAutoAssist) {
-                        // Initiate Auto Assist procedure for this device
-                        mService.getBassUtils().triggerAutoAssist(recvState);
-                    }
                 }
             }
         } else if (state == BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_SYNCHRONIZED

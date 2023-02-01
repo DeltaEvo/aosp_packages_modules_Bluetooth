@@ -23,6 +23,8 @@ import android.media.browse.MediaBrowser.MediaItem;
 import android.media.session.MediaSession;
 import android.os.Bundle;
 
+import com.android.bluetooth.R;
+
 import java.util.Objects;
 
 public class Metadata implements Cloneable {
@@ -62,8 +64,13 @@ public class Metadata implements Cloneable {
         if (!Objects.equals(album, m.album)) return false;
         if (!Objects.equals(trackNum, m.trackNum)) return false;
         if (!Objects.equals(numTracks, m.numTracks)) return false;
-        if (!Objects.equals(image, m.image)) return false;
         return true;
+    }
+
+    @Override
+    public int hashCode() {
+        // Do not hash the Image as it does not implement hashCode
+        return Objects.hash(mediaId, title, artist, album, trackNum, numTracks, genre, duration);
     }
 
     @Override
@@ -227,8 +234,16 @@ public class Metadata implements Cloneable {
          * Elect to use default values in the Metadata in place of any missing values
          */
         public Builder useDefaults() {
-            if (mMetadata.mediaId == null) mMetadata.mediaId = "Not Provided";
-            if (mMetadata.title == null) mMetadata.title = "Not Provided";
+            if (mMetadata.mediaId == null) {
+                mMetadata.mediaId =
+                        mContext != null ? mContext.getString(R.string.not_provided)
+                                : "Not Provided";
+            }
+            if (mMetadata.title == null) {
+                mMetadata.title =
+                        mContext != null ? mContext.getString(R.string.not_provided)
+                                : "Not Provided";
+            }
             if (mMetadata.artist == null) mMetadata.artist = "";
             if (mMetadata.album == null) mMetadata.album = "";
             if (mMetadata.trackNum == null) mMetadata.trackNum = "1";

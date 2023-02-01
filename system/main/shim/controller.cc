@@ -19,7 +19,9 @@
 #include "main/shim/controller.h"
 
 #include "btcore/include/module.h"
+#include "gd/common/contextual_callback.h"
 #include "gd/common/init_flags.h"
+#include "gd/hci/controller.h"
 #include "hci/controller.h"
 #include "main/shim/entry.h"
 #include "main/shim/shim.h"
@@ -35,15 +37,6 @@ using ::bluetooth::shim::GetController;
 constexpr int kMaxSupportedCodecs = 8;  // MAX_LOCAL_SUPPORTED_CODECS_SIZE
 
 constexpr uint8_t kPhyLe1M = 0x01;
-
-/**
- * Interesting commands supported by controller
- */
-constexpr int kReadRemoteExtendedFeatures = 0x41c;
-constexpr int kEnhancedSetupSynchronousConnection = 0x428;
-constexpr int kEnhancedAcceptSynchronousConnection = 0x429;
-constexpr int kLeSetPrivacyMode = 0x204e;
-constexpr int kConfigureDataPath = 0x0c83;
 
 constexpr int kHciDataPreambleSize = 4;  // #define HCI_DATA_PREAMBLE_SIZE 4
 
@@ -85,7 +78,7 @@ static future_t* start_up(void) {
     data_.le_supported_states =
         bluetooth::shim::rust::controller_get_le_supported_states(**controller);
 
-    LOG_INFO("Mac address:%s", string_address.c_str());
+    LOG_INFO("Mac address:%s", ADDRESS_TO_LOGGABLE_CSTR(data_.raw_address));
   } else {
     std::string string_address = GetController()->GetMacAddress().ToString();
     RawAddress::FromString(string_address, data_.raw_address);
@@ -103,7 +96,7 @@ static future_t* start_up(void) {
     data_.bt_version.lmp_subversion = local_version_info.lmp_subversion_;
     data_.bt_version.manufacturer = local_version_info.manufacturer_name_;
 
-    LOG_INFO("Mac address:%s", string_address.c_str());
+    LOG_INFO("Mac address:%s", ADDRESS_TO_LOGGABLE_CSTR(data_.raw_address));
   }
 
   data_.phy = kPhyLe1M;
@@ -202,6 +195,9 @@ MAP_TO_GD(supports_connected_iso_stream_peripheral,
           SupportsBleConnectedIsochronousStreamPeripheral)
 MAP_TO_GD(supports_iso_broadcaster, SupportsBleIsochronousBroadcaster)
 MAP_TO_GD(supports_synchronized_receiver, SupportsBleSynchronizedReceiver)
+MAP_TO_GD(supports_ble_connection_subrating, SupportsBleConnectionSubrating)
+MAP_TO_GD(supports_ble_connection_subrating_host,
+          SupportsBleConnectionSubratingHost)
 
 #define FORWARD_IF_RUST(legacy, gd)                                      \
   static bool legacy(void) {                                             \
@@ -215,21 +211,29 @@ MAP_TO_GD(supports_synchronized_receiver, SupportsBleSynchronizedReceiver)
 
 FORWARD_IF_RUST(
     supports_configure_data_path,
-    GetController()->IsSupported((bluetooth::hci::OpCode)kConfigureDataPath))
+    GetController()->IsSupported(bluetooth::hci::OpCode::CONFIGURE_DATA_PATH))
+
+FORWARD_IF_RUST(supports_set_min_encryption_key_size,
+                GetController()->IsSupported(
+                    bluetooth::hci::OpCode::SET_MIN_ENCRYPTION_KEY_SIZE))
 
 FORWARD_IF_RUST(supports_reading_remote_extended_features,
-                GetController()->IsSupported((bluetooth::hci::OpCode)
-                                                 kReadRemoteExtendedFeatures))
-FORWARD_IF_RUST(supports_enhanced_setup_synchronous_connection,
-                GetController()->IsSupported((
-                    bluetooth::hci::OpCode)kEnhancedSetupSynchronousConnection))
+                GetController()->IsSupported(
+                    bluetooth::hci::OpCode::READ_REMOTE_EXTENDED_FEATURES))
+
+FORWARD_IF_RUST(
+    supports_enhanced_setup_synchronous_connection,
+    GetController()->IsSupported(
+        bluetooth::hci::OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION))
+
 FORWARD_IF_RUST(
     supports_enhanced_accept_synchronous_connection,
-    GetController()->IsSupported((bluetooth::hci::OpCode)
-                                     kEnhancedAcceptSynchronousConnection))
+    GetController()->IsSupported(
+        bluetooth::hci::OpCode::ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION))
+
 FORWARD_IF_RUST(
     supports_ble_set_privacy_mode,
-    GetController()->IsSupported((bluetooth::hci::OpCode)kLeSetPrivacyMode))
+    GetController()->IsSupported(bluetooth::hci::OpCode::LE_SET_PRIVACY_MODE))
 
 #define FORWARD_GETTER_IF_RUST(type, legacy, gd)                         \
   static type legacy(void) {                                             \
@@ -319,6 +323,47 @@ static uint8_t controller_clear_event_filter() {
   return BTM_SUCCESS;
 }
 
+static uint8_t controller_clear_event_mask() {
+  LOG_VERBOSE("Called!");
+  bluetooth::shim::GetController()->SetEventMask(0);
+  bluetooth::shim::GetController()->LeSetEventMask(0);
+  return BTM_SUCCESS;
+}
+
+static uint8_t controller_le_rand(LeRandCallback cb) {
+  LOG_VERBOSE("Called!");
+  bluetooth::shim::GetController()->LeRand(cb);
+  return BTM_SUCCESS;
+}
+
+static uint8_t controller_set_event_filter_connection_setup_all_devices() {
+  bluetooth::shim::GetController()->SetEventFilterConnectionSetupAllDevices(
+      bluetooth::hci::AutoAcceptFlag::AUTO_ACCEPT_ON_ROLE_SWITCH_ENABLED);
+  return BTM_SUCCESS;
+}
+
+static uint8_t controller_allow_wake_by_hid() {
+  bluetooth::shim::GetController()->AllowWakeByHid();
+  return BTM_SUCCESS;
+}
+
+static uint8_t controller_set_default_event_mask_except(uint64_t mask,
+                                                        uint64_t le_mask) {
+  uint64_t applied_mask =
+      bluetooth::hci::Controller::kDefaultEventMask & ~(mask);
+  uint64_t applied_le_mask =
+      bluetooth::hci::Controller::kDefaultLeEventMask & ~(le_mask);
+
+  bluetooth::shim::GetController()->SetEventMask(applied_mask);
+  bluetooth::shim::GetController()->LeSetEventMask(applied_le_mask);
+  return BTM_SUCCESS;
+}
+
+static uint8_t controller_set_event_filter_inquiry_result_all_devices() {
+  bluetooth::shim::GetController()->SetEventFilterInquiryResultAllDevices();
+  return BTM_SUCCESS;
+}
+
 static const controller_t interface = {
     .get_is_ready = get_is_ready,
 
@@ -363,6 +408,8 @@ static const controller_t interface = {
     .supports_sniff_subrating = supports_sniff_subrating,
     .supports_encryption_pause = supports_encryption_pause,
     .supports_configure_data_path = supports_configure_data_path,
+    .supports_set_min_encryption_key_size =
+        supports_set_min_encryption_key_size,
 
     .supports_ble = supports_ble,
     .supports_ble_packet_extension = supports_packet_extension,
@@ -388,6 +435,9 @@ static const controller_t interface = {
         supports_connected_iso_stream_peripheral,
     .supports_ble_isochronous_broadcaster = supports_iso_broadcaster,
     .supports_ble_synchronized_receiver = supports_synchronized_receiver,
+    .supports_ble_connection_subrating = supports_ble_connection_subrating,
+    .supports_ble_connection_subrating_host =
+        supports_ble_connection_subrating_host,
 
     .get_acl_data_size_classic = get_acl_buffer_length,
     .get_acl_data_size_ble = get_le_buffer_length,
@@ -417,7 +467,15 @@ static const controller_t interface = {
     .set_ble_resolving_list_max_size = set_ble_resolving_list_max_size,
     .get_local_supported_codecs = get_local_supported_codecs,
     .get_le_all_initiating_phys = get_le_all_initiating_phys,
-    .clear_event_filter = controller_clear_event_filter};
+    .clear_event_filter = controller_clear_event_filter,
+    .clear_event_mask = controller_clear_event_mask,
+    .le_rand = controller_le_rand,
+    .set_event_filter_connection_setup_all_devices =
+        controller_set_event_filter_connection_setup_all_devices,
+    .allow_wake_by_hid = controller_allow_wake_by_hid,
+    .set_default_event_mask_except = controller_set_default_event_mask_except,
+    .set_event_filter_inquiry_result_all_devices =
+        controller_set_event_filter_inquiry_result_all_devices};
 
 const controller_t* bluetooth::shim::controller_get_interface() {
   static bool loaded = false;
@@ -425,10 +483,6 @@ const controller_t* bluetooth::shim::controller_get_interface() {
     loaded = true;
   }
   return &interface;
-}
-
-void bluetooth::shim::controller_clear_event_mask() {
-  bluetooth::shim::GetController()->SetEventMask(0);
 }
 
 bool bluetooth::shim::controller_is_write_link_supervision_timeout_supported() {

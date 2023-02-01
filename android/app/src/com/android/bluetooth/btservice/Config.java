@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 
 public class Config {
     private static final String TAG = "AdapterServiceConfig";
@@ -61,12 +62,20 @@ public class Config {
     private static final String FEATURE_HEARING_AID = "settings_bluetooth_hearing_aid";
     private static final String FEATURE_BATTERY = "settings_bluetooth_battery";
 
+    private static final String FFLAG_OVERRIDE_PREFIX = "sys.fflag.override.";
+    private static final String PERSIST_PREFIX = "persist." + FFLAG_OVERRIDE_PREFIX;
+
     private static final String LE_AUDIO_DYNAMIC_SWITCH_PROPERTY =
             "ro.bluetooth.leaudio_switcher.supported";
     private static final String LE_AUDIO_BROADCAST_DYNAMIC_SWITCH_PROPERTY =
             "ro.bluetooth.leaudio_broadcast_switcher.supported";
     private static final String LE_AUDIO_DYNAMIC_ENABLED_PROPERTY =
             "persist.bluetooth.leaudio_switcher.enabled";
+
+    private static final Set<String> PERSISTENT_FLAGS = Set.of(
+            FEATURE_HEARING_AID,
+            FEATURE_BATTERY
+    );
 
     private static class ProfileConfig {
         Class mClass;
@@ -254,7 +263,7 @@ public class Config {
         }
     }
 
-    static HashSet<Class> geLeAudioUnicastProfiles() {
+    static HashSet<Class> getLeAudioUnicastProfiles() {
         return mLeAudioUnicastProfiles;
     }
 

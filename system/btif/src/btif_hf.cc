@@ -27,24 +27,28 @@
 
 #define LOG_TAG "bt_btif_hf"
 
+#include <base/logging.h>
+#include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
+
 #include <cstdint>
 #include <string>
 
 #include "bta/include/bta_ag_api.h"
 #include "bta/include/utl.h"
 #include "btif/include/btif_common.h"
+#include "btif/include/btif_metrics_logging.h"
 #include "btif/include/btif_profile_queue.h"
 #include "btif/include/btif_util.h"
 #include "common/metrics.h"
+#include "device/include/device_iot_config.h"
 #include "include/hardware/bluetooth_headset_callbacks.h"
 #include "include/hardware/bluetooth_headset_interface.h"
 #include "include/hardware/bt_hf.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/log.h"
+#include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/btm_api.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 namespace {
 constexpr char kBtmLogTag[] = "HFP";
@@ -271,7 +275,7 @@ static bool IsSlcConnected(RawAddress* bd_addr) {
   int idx = btif_hf_idx_by_bdaddr(bd_addr);
   if (idx < 0 || idx > BTA_AG_MAX_NUM_CLIENTS) {
     LOG(WARNING) << __func__ << ": invalid index " << idx << " for "
-                 << *bd_addr;
+                 << ADDRESS_TO_LOGGABLE_STR(*bd_addr);
     return false;
   }
   return btif_hf_cb[idx].state == BTHF_CONNECTION_STATE_SLC_CONNECTED;
@@ -317,17 +321,24 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
       break;
     // RFCOMM connected or failed to connect
     case BTA_AG_OPEN_EVT:
-      // Check if an outoging connection is pending
+      bt_hf_callbacks->ConnectionStateCallback(BTHF_CONNECTION_STATE_CONNECTING,
+                                               &(p_data->open.bd_addr));
+      // Check if an outgoing connection is pending
       if (btif_hf_cb[idx].is_initiator) {
+        // There is an outgoing connection.
+        // Check the incoming open event status and the outgoing connection
+        // state.
         if ((p_data->open.status != BTA_AG_SUCCESS) &&
             btif_hf_cb[idx].state != BTHF_CONNECTION_STATE_CONNECTING) {
+          // Check if the incoming open event and the outgoing connection are
+          // for the same device.
           if (p_data->open.bd_addr == btif_hf_cb[idx].connected_bda) {
             LOG(WARNING) << __func__ << ": btif_hf_cb state["
                          << p_data->open.status
                          << "] is not expected, possible connection collision, "
                             "ignoring AG open "
                             "failure event for the same device "
-                         << p_data->open.bd_addr;
+                         << ADDRESS_TO_LOGGABLE_STR(p_data->open.bd_addr);
           } else {
             LOG(WARNING) << __func__ << ": btif_hf_cb state["
                          << p_data->open.status
@@ -335,36 +346,59 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
                             "ignoring AG open failure "
                             "event for the different devices btif_hf_cb bda: "
                          << btif_hf_cb[idx].connected_bda
-                         << ", p_data bda: " << p_data->open.bd_addr
+                         << ", p_data bda: "
+                         << ADDRESS_TO_LOGGABLE_STR(p_data->open.bd_addr)
                          << ", report disconnect state for p_data bda.";
             bt_hf_callbacks->ConnectionStateCallback(
                 BTHF_CONNECTION_STATE_DISCONNECTED, &(p_data->open.bd_addr));
+            log_counter_metrics_btif(
+                android::bluetooth::CodePathCounterKeyEnum::
+                    HFP_COLLISON_AT_AG_OPEN,
+                1);
           }
           break;
         }
 
+        // There is an outgoing connection.
+        // Check the outgoing connection state and address.
         CHECK_EQ(btif_hf_cb[idx].state, BTHF_CONNECTION_STATE_CONNECTING)
             << "Control block must be in connecting state when initiating";
         CHECK(!btif_hf_cb[idx].connected_bda.IsEmpty())
             << "Remote device address must not be empty when initiating";
+        // Check if the incoming open event and the outgoing connection are
+        // for the same device.
         if (btif_hf_cb[idx].connected_bda != p_data->open.bd_addr) {
           LOG(WARNING) << __func__
                        << ": possible connection collision, ignore the "
                           "outgoing connection for the "
                           "different devices btif_hf_cb bda: "
-                       << btif_hf_cb[idx].connected_bda
-                       << ", p_data bda: " << p_data->open.bd_addr
+                       << ADDRESS_TO_LOGGABLE_STR(btif_hf_cb[idx].connected_bda)
+                       << ", p_data bda: "
+                       << ADDRESS_TO_LOGGABLE_STR(p_data->open.bd_addr)
                        << ", report disconnect state for btif_hf_cb bda.";
           bt_hf_callbacks->ConnectionStateCallback(
               BTHF_CONNECTION_STATE_DISCONNECTED,
               &(btif_hf_cb[idx].connected_bda));
+          log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
+                                       HFP_COLLISON_AT_CONNECTING,
+                                   1);
           reset_control_block(&btif_hf_cb[idx]);
           btif_queue_advance();
         }
       }
+
+      // There is no pending outgoing connection.
       if (p_data->open.status == BTA_AG_SUCCESS) {
         // In case this is an incoming connection
         btif_hf_cb[idx].connected_bda = p_data->open.bd_addr;
+        if (btif_hf_cb[idx].state != BTHF_CONNECTION_STATE_CONNECTING) {
+          DEVICE_IOT_CONFIG_ADDR_SET_INT(btif_hf_cb[idx].connected_bda,
+                                         IOT_CONF_KEY_HFP_ROLE,
+                                         IOT_CONF_VAL_HFP_ROLE_CLIENT);
+          DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(btif_hf_cb[idx].connected_bda,
+                                             IOT_CONF_KEY_HFP_SLC_CONN_COUNT);
+        }
+
         btif_hf_cb[idx].state = BTHF_CONNECTION_STATE_CONNECTED;
         btif_hf_cb[idx].peer_feat = 0;
         clear_phone_state_multihf(&btif_hf_cb[idx]);
@@ -377,17 +411,24 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
           // Ignore remote initiated open failures
           LOG(WARNING) << __func__ << ": Unexpected AG open failure "
                        << std::to_string(p_data->open.status) << " for "
-                       << p_data->open.bd_addr << " is ignored";
+                       << ADDRESS_TO_LOGGABLE_STR(p_data->open.bd_addr)
+                       << " is ignored";
           break;
         }
         LOG(ERROR) << __func__ << ": self initiated AG open failed for "
-                   << btif_hf_cb[idx].connected_bda << ", status "
+                   << ADDRESS_TO_LOGGABLE_STR(btif_hf_cb[idx].connected_bda)
+                   << ", status "
                    << std::to_string(p_data->open.status);
         RawAddress connected_bda = btif_hf_cb[idx].connected_bda;
         reset_control_block(&btif_hf_cb[idx]);
         bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
                                                  &connected_bda);
+        log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
+                                     HFP_SELF_INITIATED_AG_FAILED,
+                                 1);
         btif_queue_advance();
+        DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(
+            connected_bda, IOT_CONF_KEY_HFP_SLC_CONN_FAIL_COUNT);
       }
       break;
     case BTA_AG_CLOSE_EVT: {
@@ -395,22 +436,40 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
           "SLC and RFCOMM both disconnected event:%s idx:%d"
           " btif_hf_cb.handle:%d",
           dump_hf_event(event), idx, btif_hf_cb[idx].handle);
+      RawAddress connected_bda = btif_hf_cb[idx].connected_bda;
+      bt_hf_callbacks->ConnectionStateCallback(
+          BTHF_CONNECTION_STATE_DISCONNECTING, &connected_bda);
       // If AG_OPEN was received but SLC was not connected in time, then
       // AG_CLOSE may be received. We need to advance the queue here.
       bool failed_to_setup_slc =
           (btif_hf_cb[idx].state != BTHF_CONNECTION_STATE_SLC_CONNECTED) &&
           btif_hf_cb[idx].is_initiator;
-      RawAddress connected_bda = btif_hf_cb[idx].connected_bda;
+
       reset_control_block(&btif_hf_cb[idx]);
       bt_hf_callbacks->ConnectionStateCallback(btif_hf_cb[idx].state,
                                                &connected_bda);
       if (failed_to_setup_slc) {
         LOG(ERROR) << __func__ << ": failed to setup SLC for " << connected_bda;
+        log_counter_metrics_btif(
+            android::bluetooth::CodePathCounterKeyEnum::HFP_SLC_SETUP_FAILED,
+            1);
         btif_queue_advance();
+        DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(
+            btif_hf_cb[idx].connected_bda,
+            IOT_CONF_KEY_HFP_SLC_CONN_FAIL_COUNT);
       }
       break;
     }
     case BTA_AG_CONN_EVT:
+      DEVICE_IOT_CONFIG_ADDR_SET_HEX(
+          btif_hf_cb[idx].connected_bda, IOT_CONF_KEY_HFP_CODECTYPE,
+          p_data->conn.peer_codec == 0x03 ? IOT_CONF_VAL_HFP_CODECTYPE_CVSDMSBC
+                                          : IOT_CONF_VAL_HFP_CODECTYPE_CVSD,
+          IOT_CONF_BYTE_NUM_1);
+      DEVICE_IOT_CONFIG_ADDR_SET_HEX(
+          btif_hf_cb[idx].connected_bda, IOT_CONF_KEY_HFP_FEATURES,
+          p_data->conn.peer_feat, IOT_CONF_BYTE_NUM_2);
+
       LOG_DEBUG("SLC connected event:%s idx:%d", dump_hf_event(event), idx);
       btif_hf_cb[idx].peer_feat = p_data->conn.peer_feat;
       btif_hf_cb[idx].state = BTHF_CONNECTION_STATE_SLC_CONNECTED;
@@ -429,6 +488,10 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
 
     case BTA_AG_AUDIO_CLOSE_EVT:
       LOG_DEBUG("Audio close event:%s", dump_hf_event(event));
+
+      DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(btif_hf_cb[idx].connected_bda,
+                                         IOT_CONF_KEY_HFP_SCO_CONN_FAIL_COUNT);
+
       bt_hf_callbacks->AudioStateCallback(BTHF_AUDIO_STATE_DISCONNECTED,
                                           &btif_hf_cb[idx].connected_bda);
       break;
@@ -537,11 +600,10 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
     case BTA_AG_AT_BAC_EVT:
       BTIF_TRACE_DEBUG("AG Bitmap of peer-codecs %d", p_data->val.num);
       /* If the peer supports mSBC and the BTIF preferred codec is also mSBC,
-      then
-      we should set the BTA AG Codec to mSBC. This would trigger a +BCS to mSBC
-      at the time
-      of SCO connection establishment */
-      if (p_data->val.num & BTM_SCO_CODEC_MSBC) {
+       * then we should set the BTA AG Codec to mSBC. This would trigger a +BCS
+       * to mSBC at the time of SCO connection establishment */
+      if (hfp_hal_interface::get_wbs_supported() &&
+          (p_data->val.num & BTM_SCO_CODEC_MSBC)) {
         BTIF_TRACE_EVENT("%s: btif_hf override-Preferred Codec to MSBC",
                          __func__);
         BTA_AgSetCodec(btif_hf_cb[idx].handle, BTM_SCO_CODEC_MSBC);
@@ -642,8 +704,8 @@ static bt_status_t connect_int(RawAddress* bd_addr, uint16_t uuid) {
   CHECK_BTHF_INIT();
   if (is_connected(bd_addr)) {
     BTIF_TRACE_WARNING("%s: device %s is already connected", __func__,
-                       bd_addr->ToString().c_str());
-    return BT_STATUS_BUSY;
+                       ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
+    return BT_STATUS_DONE;
   }
   btif_hf_cb_t* hf_cb = nullptr;
   for (int i = 0; i < btif_max_hf_clients; i++) {
@@ -655,7 +717,8 @@ static bt_status_t connect_int(RawAddress* bd_addr, uint16_t uuid) {
     // control block should be in connecting state
     // Crash here to prevent future code changes from breaking this mechanism
     if (btif_hf_cb[i].state == BTHF_CONNECTION_STATE_CONNECTING) {
-      LOG(FATAL) << __func__ << ": " << btif_hf_cb[i].connected_bda
+      LOG(FATAL) << __func__ << ": "
+                 << ADDRESS_TO_LOGGABLE_STR(btif_hf_cb[i].connected_bda)
                  << ", handle " << btif_hf_cb[i].handle
                  << ", is still in connecting state " << btif_hf_cb[i].state;
     }
@@ -663,7 +726,7 @@ static bt_status_t connect_int(RawAddress* bd_addr, uint16_t uuid) {
   if (hf_cb == nullptr) {
     BTIF_TRACE_WARNING(
         "%s: Cannot connect %s: maximum %d clients already connected", __func__,
-        bd_addr->ToString().c_str(), btif_max_hf_clients);
+        ADDRESS_TO_LOGGABLE_CSTR(*bd_addr), btif_max_hf_clients);
     return BT_STATUS_BUSY;
   }
   hf_cb->state = BTHF_CONNECTION_STATE_CONNECTING;
@@ -671,6 +734,11 @@ static bt_status_t connect_int(RawAddress* bd_addr, uint16_t uuid) {
   hf_cb->is_initiator = true;
   hf_cb->peer_feat = 0;
   BTA_AgOpen(hf_cb->handle, hf_cb->connected_bda);
+
+  DEVICE_IOT_CONFIG_ADDR_SET_INT(hf_cb->connected_bda, IOT_CONF_KEY_HFP_ROLE,
+                                 IOT_CONF_VAL_HFP_ROLE_CLIENT);
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(hf_cb->connected_bda,
+                                     IOT_CONF_KEY_HFP_SLC_CONN_COUNT);
   return BT_STATUS_SUCCESS;
 }
 
@@ -712,7 +780,7 @@ class HeadsetInterface : Interface {
                    bool inband_ringing_enabled) override;
   bt_status_t Connect(RawAddress* bd_addr) override;
   bt_status_t Disconnect(RawAddress* bd_addr) override;
-  bt_status_t ConnectAudio(RawAddress* bd_addr) override;
+  bt_status_t ConnectAudio(RawAddress* bd_addr, bool force_cvsd) override;
   bt_status_t DisconnectAudio(RawAddress* bd_addr) override;
   bt_status_t isNoiseReductionSupported(RawAddress* bd_addr) override;
   bt_status_t isVoiceRecognitionSupported(RawAddress* bd_addr) override;
@@ -744,6 +812,7 @@ class HeadsetInterface : Interface {
                                const char* name, RawAddress* bd_addr) override;
 
   void Cleanup() override;
+  bt_status_t SetScoOffloadEnabled(bool value) override;
   bt_status_t SetScoAllowed(bool value) override;
   bt_status_t SendBsir(bool value, RawAddress* bd_addr) override;
   bt_status_t SetActiveDevice(RawAddress* active_device_addr) override;
@@ -796,14 +865,15 @@ bt_status_t HeadsetInterface::Disconnect(RawAddress* bd_addr) {
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   BTA_AgClose(btif_hf_cb[idx].handle);
   return BT_STATUS_SUCCESS;
 }
 
-bt_status_t HeadsetInterface::ConnectAudio(RawAddress* bd_addr) {
+bt_status_t HeadsetInterface::ConnectAudio(RawAddress* bd_addr,
+                                           bool force_cvsd) {
   CHECK_BTHF_INIT();
   int idx = btif_hf_idx_by_bdaddr(bd_addr);
   if ((idx < 0) || (idx >= BTA_AG_MAX_NUM_CLIENTS)) {
@@ -812,7 +882,8 @@ bt_status_t HeadsetInterface::ConnectAudio(RawAddress* bd_addr) {
   }
   /* Check if SLC is connected */
   if (!IsSlcConnected(bd_addr)) {
-    LOG(ERROR) << ": SLC not connected for " << *bd_addr;
+    LOG(ERROR) << ": SLC not connected for "
+    << ADDRESS_TO_LOGGABLE_STR(*bd_addr);
     return BT_STATUS_NOT_READY;
   }
   do_in_jni_thread(base::Bind(&Callbacks::AudioStateCallback,
@@ -820,7 +891,10 @@ bt_status_t HeadsetInterface::ConnectAudio(RawAddress* bd_addr) {
                               base::Unretained(bt_hf_callbacks),
                               BTHF_AUDIO_STATE_CONNECTING,
                               &btif_hf_cb[idx].connected_bda));
-  BTA_AgAudioOpen(btif_hf_cb[idx].handle);
+  BTA_AgAudioOpen(btif_hf_cb[idx].handle, force_cvsd);
+
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(*bd_addr, IOT_CONF_KEY_HFP_SCO_CONN_COUNT);
+
   return BT_STATUS_SUCCESS;
 }
 
@@ -833,7 +907,7 @@ bt_status_t HeadsetInterface::DisconnectAudio(RawAddress* bd_addr) {
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   BTA_AgAudioClose(btif_hf_cb[idx].handle);
@@ -875,7 +949,7 @@ bt_status_t HeadsetInterface::StartVoiceRecognition(RawAddress* bd_addr) {
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_NOT_READY;
   }
   if (!(btif_hf_cb[idx].peer_feat & BTA_AG_PEER_FEAT_VREC)) {
@@ -899,7 +973,7 @@ bt_status_t HeadsetInterface::StopVoiceRecognition(RawAddress* bd_addr) {
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_NOT_READY;
   }
   if (!(btif_hf_cb[idx].peer_feat & BTA_AG_PEER_FEAT_VREC)) {
@@ -923,7 +997,7 @@ bt_status_t HeadsetInterface::VolumeControl(bthf_volume_type_t type, int volume,
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   tBTA_AG_RES_DATA ag_res = {};
@@ -945,7 +1019,7 @@ bt_status_t HeadsetInterface::DeviceStatusNotification(
   int idx = btif_hf_idx_by_bdaddr(bd_addr);
   if (idx < 0 || idx > BTA_AG_MAX_NUM_CLIENTS) {
     BTIF_TRACE_WARNING("%s: invalid index %d for %s", __func__, idx,
-                       bd_addr->ToString().c_str());
+                       ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   const btif_hf_cb_t& control_block = btif_hf_cb[idx];
@@ -973,7 +1047,7 @@ bt_status_t HeadsetInterface::CopsResponse(const char* cops,
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   tBTA_AG_RES_DATA ag_res = {};
@@ -997,7 +1071,7 @@ bt_status_t HeadsetInterface::CindResponse(int svc, int num_active,
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   tBTA_AG_RES_DATA ag_res = {};
@@ -1027,7 +1101,7 @@ bt_status_t HeadsetInterface::FormattedAtResponse(const char* rsp,
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   /* Format the response and send */
@@ -1046,7 +1120,7 @@ bt_status_t HeadsetInterface::AtResponse(bthf_at_response_t response_code,
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   send_at_result(
@@ -1067,7 +1141,7 @@ bt_status_t HeadsetInterface::ClccResponse(
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s is not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   tBTA_AG_RES_DATA ag_res = {};
@@ -1120,13 +1194,15 @@ bt_status_t HeadsetInterface::PhoneStateChange(
 
   const RawAddress raw_address(*bd_addr);
   int idx = btif_hf_idx_by_bdaddr(bd_addr);
-  if (idx < 0 || idx > BTA_AG_MAX_NUM_CLIENTS) {
-    LOG_WARN("Invalid index %d for %s", idx, PRIVATE_ADDRESS(raw_address));
+  if (idx < 0 || idx >= BTA_AG_MAX_NUM_CLIENTS) {
+    LOG_WARN("Invalid index %d for %s", idx, ADDRESS_TO_LOGGABLE_CSTR(raw_address));
     return BT_STATUS_FAIL;
   }
+
   const btif_hf_cb_t& control_block = btif_hf_cb[idx];
   if (!IsSlcConnected(bd_addr)) {
-    LOG(WARNING) << ": SLC not connected for " << *bd_addr;
+    LOG(WARNING) << ": SLC not connected for "
+                 << ADDRESS_TO_LOGGABLE_STR(*bd_addr);
     return BT_STATUS_NOT_READY;
   }
   if (call_setup_state == BTHF_CALL_STATE_DISCONNECTED) {
@@ -1134,14 +1210,16 @@ bt_status_t HeadsetInterface::PhoneStateChange(
     // Since DISCONNECTED state must lead to IDLE state, ignoring it here.s
     LOG(INFO) << __func__
               << ": Ignore call state change to DISCONNECTED, idx=" << idx
-              << ", addr=" << *bd_addr << ", num_active=" << num_active
+              << ", addr="
+              << ADDRESS_TO_LOGGABLE_STR(*bd_addr)
+              << ", num_active=" << num_active
               << ", num_held=" << num_held;
     return BT_STATUS_SUCCESS;
   }
   LOG_DEBUG(
       "bd_addr:%s active_bda:%s num_active:%u prev_num_active:%u num_held:%u "
       "prev_num_held:%u call_state:%s prev_call_state:%s",
-      PRIVATE_ADDRESS((*bd_addr)), PRIVATE_ADDRESS(active_bda), num_active,
+      ADDRESS_TO_LOGGABLE_CSTR((*bd_addr)), ADDRESS_TO_LOGGABLE_CSTR(active_bda), num_active,
       control_block.num_active, num_held, control_block.num_held,
       dump_hf_call_state(call_setup_state),
       dump_hf_call_state(control_block.call_setup_state));
@@ -1392,6 +1470,10 @@ bt_status_t HeadsetInterface::PhoneStateChange(
   }
 
   UpdateCallStates(&btif_hf_cb[idx], num_active, num_held, call_setup_state);
+
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(btif_hf_cb[idx].connected_bda,
+                                     IOT_CONF_KEY_HFP_SCO_CONN_COUNT);
+
   return status;
 }
 
@@ -1410,7 +1492,14 @@ void HeadsetInterface::Cleanup() {
     btif_disable_service(BTA_HSP_SERVICE_ID);
   }
 #endif
-  do_in_jni_thread(FROM_HERE, base::Bind([]() { bt_hf_callbacks = nullptr; }));
+
+  bt_hf_callbacks = nullptr;
+}
+
+bt_status_t HeadsetInterface::SetScoOffloadEnabled(bool value) {
+  CHECK_BTHF_INIT();
+  BTA_AgSetScoOffloadEnabled(value);
+  return BT_STATUS_SUCCESS;
 }
 
 bt_status_t HeadsetInterface::SetScoAllowed(bool value) {
@@ -1424,12 +1513,12 @@ bt_status_t HeadsetInterface::SendBsir(bool value, RawAddress* bd_addr) {
   int idx = btif_hf_idx_by_bdaddr(bd_addr);
   if ((idx < 0) || (idx >= BTA_AG_MAX_NUM_CLIENTS)) {
     BTIF_TRACE_ERROR("%s: Invalid index %d for %s", __func__, idx,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   if (!is_connected(bd_addr)) {
     BTIF_TRACE_ERROR("%s: %s not connected", __func__,
-                     bd_addr->ToString().c_str());
+                     ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_FAIL;
   }
   tBTA_AG_RES_DATA ag_result = {};

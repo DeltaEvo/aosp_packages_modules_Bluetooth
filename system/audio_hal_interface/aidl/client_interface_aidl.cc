@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "BTAudioClientIf"
+#define LOG_TAG "BTAudioClientAIDL"
 
 #include "client_interface_aidl.h"
 
@@ -136,7 +136,7 @@ void BluetoothAudioClientInterface::FetchAudioProvider() {
   CHECK(provider_ != nullptr);
 
   binder_status_t binder_status = AIBinder_linkToDeath(
-      provider_factory->asBinder().get(), death_recipient_.get(), this);
+     provider_factory->asBinder().get(), death_recipient_.get(), this);
   if (binder_status != STATUS_OK) {
     LOG(ERROR) << "Failed to linkToDeath " << static_cast<int>(binder_status);
   }
