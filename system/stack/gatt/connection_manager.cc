@@ -29,6 +29,7 @@
 
 #include "bind_helpers.h"
 #include "internal_include/bt_trace.h"
+#include "main/shim/dumpsys.h"
 #include "main/shim/le_scanning_manager.h"
 #include "main/shim/shim.h"
 #include "osi/include/alarm.h"
@@ -41,6 +42,8 @@
 #include "types/raw_address.h"
 
 #define DIRECT_CONNECT_TIMEOUT (30 * 1000) /* 30 seconds */
+
+constexpr char kBtmLogTag[] = "TA";
 
 struct closure_data {
   base::OnceClosure user_task;
@@ -119,12 +122,11 @@ std::set<tAPP_ID> get_apps_connecting_to(const RawAddress& address) {
 
 bool IsTargetedAnnouncement(const uint8_t* p_eir, uint16_t eir_len) {
   const uint8_t* p_service_data = p_eir;
-  uint16_t remaining_data_len = eir_len;
   uint8_t service_data_len = 0;
 
   while ((p_service_data = AdvertiseDataParser::GetFieldByType(
               p_service_data + service_data_len,
-              (remaining_data_len -= service_data_len),
+              eir_len - (p_service_data - p_eir) - service_data_len,
               BTM_BLE_AD_TYPE_SERVICE_DATA_TYPE, &service_data_len))) {
     uint16_t uuid;
     uint8_t announcement_type;
@@ -182,6 +184,8 @@ static void target_announcement_observe_results_cb(tBTM_INQ_RESULTS* p_inq,
     return;
   }
 
+  BTM_LogHistory(kBtmLogTag, addr, "Found TA from");
+
   /* Take fist app_id and use it for direct_connect */
   auto app_id = *(it->second.doing_targeted_announcements_conn.begin());
 
@@ -192,6 +196,9 @@ static void target_announcement_observe_results_cb(tBTM_INQ_RESULTS* p_inq,
 
 void target_announcements_filtering_set(bool enable) {
   LOG_DEBUG("enable %d", enable);
+  BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty,
+                 (enable ? "Start filtering" : "Stop filtering"));
+
   /* Safe to call as if there is no support for filtering, this call will be
    * ignored. */
   bluetooth::shim::set_target_announcements_filter(enable);
@@ -247,6 +254,10 @@ bool background_connect_targeted_announcement_add(tAPP_ID app_id,
   }
 
   bgconn_dev[address].doing_targeted_announcements_conn.insert(app_id);
+  if (bgconn_dev[address].doing_targeted_announcements_conn.size() == 1) {
+    BTM_LogHistory(kBtmLogTag, address, "Allow connection from");
+  }
+
   if (num_of_targeted_announcements_users() == 1) {
     target_announcements_filtering_set(true);
   }
@@ -336,11 +347,18 @@ bool background_connect_remove(uint8_t app_id, const RawAddress& address) {
   auto num_of_targeted_announcements_before_remove =
       it->second.doing_targeted_announcements_conn.size();
 
-  if (!it->second.doing_bg_conn.erase(app_id) &&
-      !it->second.doing_targeted_announcements_conn.erase(app_id)) {
+  bool removed_from_bg_conn = (it->second.doing_bg_conn.erase(app_id) > 0);
+  bool removed_from_ta =
+      (it->second.doing_targeted_announcements_conn.erase(app_id) > 0);
+  if (!removed_from_bg_conn && !removed_from_ta) {
     LOG_WARN("Failed to remove background connection app %d for address %s",
              static_cast<int>(app_id), address.ToString().c_str());
     return false;
+  }
+
+  if (removed_from_ta &&
+      it->second.doing_targeted_announcements_conn.size() == 0) {
+    BTM_LogHistory(kBtmLogTag, address, "Ignore connection from");
   }
 
   if (is_anyone_connecting(it)) {
@@ -377,6 +395,10 @@ bool background_connect_remove(uint8_t app_id, const RawAddress& address) {
   }
 
   return true;
+}
+
+bool is_background_connection(const RawAddress& address) {
+  return bgconn_dev.find(address) != bgconn_dev.end();
 }
 
 /** deregister all related background connetion device. */
@@ -509,13 +531,15 @@ bool direct_connect_remove(uint8_t app_id, const RawAddress& address) {
             address.ToString().c_str());
   auto it = bgconn_dev.find(address);
   if (it == bgconn_dev.end()) {
-    LOG_WARN("Unable to find background connection to remove");
+    LOG_WARN("Unable to find background connection to remove peer:%s",
+             PRIVATE_ADDRESS(address));
     return false;
   }
 
   auto app_it = it->second.doing_direct_conn.find(app_id);
   if (app_it == it->second.doing_direct_conn.end()) {
-    LOG_WARN("Unable to find direct connection to remove");
+    LOG_WARN("Unable to find direct connection to remove peer:%s",
+             PRIVATE_ADDRESS(address));
     return false;
   }
 

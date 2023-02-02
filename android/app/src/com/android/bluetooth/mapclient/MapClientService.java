@@ -355,6 +355,7 @@ public class MapClientService extends ProfileService {
             }
             stateMachine.doQuit();
         }
+        mMapInstanceMap.clear();
         return true;
     }
 
@@ -364,7 +365,6 @@ public class MapClientService extends ProfileService {
             Log.d(TAG, "in Cleanup");
         }
         removeUncleanAccounts();
-        mMapInstanceMap.clear();
         // TODO(b/72948646): should be moved to stop()
         setMapClientService(null);
     }
