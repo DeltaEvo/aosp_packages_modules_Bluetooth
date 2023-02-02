@@ -30,6 +30,8 @@ import android.os.RemoteException;
 import android.util.Log;
 
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.gatt.GattService.AdvertiserMap;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,12 +42,14 @@ import java.util.Map;
  *
  * @hide
  */
-class AdvertiseManager {
+@VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+public class AdvertiseManager {
     private static final boolean DBG = GattServiceConfig.DBG;
     private static final String TAG = GattServiceConfig.TAG_PREFIX + "AdvertiseManager";
 
     private final GattService mService;
     private final AdapterService mAdapterService;
+    private final AdvertiserMap mAdvertiserMap;
     private Handler mHandler;
     Map<IBinder, AdvertiserInfo> mAdvertisers = Collections.synchronizedMap(new HashMap<>());
     static int sTempRegistrationId = -1;
@@ -53,12 +57,14 @@ class AdvertiseManager {
     /**
      * Constructor of {@link AdvertiseManager}.
      */
-    AdvertiseManager(GattService service, AdapterService adapterService) {
+    AdvertiseManager(GattService service, AdapterService adapterService,
+            AdvertiserMap advertiserMap) {
         if (DBG) {
             Log.d(TAG, "advertise manager created");
         }
         mService = service;
         mAdapterService = adapterService;
+        mAdvertiserMap = advertiserMap;
     }
 
     /**
@@ -157,10 +163,18 @@ class AdvertiseManager {
         if (status == 0) {
             entry.setValue(
                     new AdvertiserInfo(advertiserId, entry.getValue().deathRecipient, callback));
+
+            mAdvertiserMap.setAdvertiserIdByRegId(regId, advertiserId);
         } else {
             IBinder binder = entry.getKey();
             binder.unlinkToDeath(entry.getValue().deathRecipient, 0);
             mAdvertisers.remove(binder);
+
+            AppAdvertiseStats stats = mAdvertiserMap.getAppAdvertiseStatsById(regId);
+            if (stats != null) {
+                stats.recordAdvertiseStop();
+            }
+            mAdvertiserMap.removeAppAdvertiseStats(regId);
         }
 
         callback.onAdvertisingSetStarted(advertiserId, txPower, status);
@@ -181,6 +195,13 @@ class AdvertiseManager {
 
         IAdvertisingSetCallback callback = entry.getValue().callback;
         callback.onAdvertisingEnabled(advertiserId, enable, status);
+
+        if (!enable && status != 0) {
+            AppAdvertiseStats stats = mAdvertiserMap.getAppAdvertiseStatsById(advertiserId);
+            if (stats != null) {
+                stats.recordAdvertiseStop();
+            }
+        }
     }
 
     void startAdvertisingSet(AdvertisingSetParameters parameters, AdvertiseData advertiseData,
@@ -203,14 +224,19 @@ class AdvertiseManager {
             byte[] periodicDataBytes =
                     AdvertiseHelper.advertiseDataToBytes(periodicData, deviceName);
 
-        int cbId = --sTempRegistrationId;
-        mAdvertisers.put(binder, new AdvertiserInfo(cbId, deathRecipient, callback));
+            int cbId = --sTempRegistrationId;
+            mAdvertisers.put(binder, new AdvertiserInfo(cbId, deathRecipient, callback));
 
-        if (DBG) {
-            Log.d(TAG, "startAdvertisingSet() - reg_id=" + cbId + ", callback: " + binder);
-        }
-        startAdvertisingSetNative(parameters, advDataBytes, scanResponseBytes, periodicParameters,
-                periodicDataBytes, duration, maxExtAdvEvents, cbId);
+            if (DBG) {
+                Log.d(TAG, "startAdvertisingSet() - reg_id=" + cbId + ", callback: " + binder);
+            }
+
+            mAdvertiserMap.add(cbId, callback, mService);
+            mAdvertiserMap.recordAdvertiseStart(cbId, parameters, advertiseData,
+                    scanResponse, periodicParameters, periodicData, duration, maxExtAdvEvents);
+
+            startAdvertisingSetNative(parameters, advDataBytes, scanResponseBytes,
+                    periodicParameters, periodicDataBytes, duration, maxExtAdvEvents, cbId);
 
         } catch (IllegalArgumentException e) {
             try {
@@ -276,6 +302,8 @@ class AdvertiseManager {
         } catch (RemoteException e) {
             Log.i(TAG, "error sending onAdvertisingSetStopped callback", e);
         }
+
+        mAdvertiserMap.recordAdvertiseStop(advertiserId);
     }
 
     void enableAdvertisingSet(int advertiserId, boolean enable, int duration, int maxExtAdvEvents) {
@@ -285,6 +313,9 @@ class AdvertiseManager {
             return;
         }
         enableAdvertisingSetNative(advertiserId, enable, duration, maxExtAdvEvents);
+
+        mAdvertiserMap.enableAdvertisingSet(advertiserId,
+                enable, duration, maxExtAdvEvents);
     }
 
     void setAdvertisingData(int advertiserId, AdvertiseData data) {
@@ -297,6 +328,8 @@ class AdvertiseManager {
         try {
             setAdvertisingDataNative(advertiserId,
                     AdvertiseHelper.advertiseDataToBytes(data, deviceName));
+
+            mAdvertiserMap.setAdvertisingData(advertiserId, data);
         } catch (IllegalArgumentException e) {
             try {
                 onAdvertisingDataSet(advertiserId,
@@ -317,6 +350,8 @@ class AdvertiseManager {
         try {
             setScanResponseDataNative(advertiserId,
                     AdvertiseHelper.advertiseDataToBytes(data, deviceName));
+
+            mAdvertiserMap.setScanResponseData(advertiserId, data);
         } catch (IllegalArgumentException e) {
             try {
                 onScanResponseDataSet(advertiserId,
@@ -334,6 +369,8 @@ class AdvertiseManager {
             return;
         }
         setAdvertisingParametersNative(advertiserId, parameters);
+
+        mAdvertiserMap.setAdvertisingParameters(advertiserId, parameters);
     }
 
     void setPeriodicAdvertisingParameters(int advertiserId,
@@ -344,6 +381,8 @@ class AdvertiseManager {
             return;
         }
         setPeriodicAdvertisingParametersNative(advertiserId, parameters);
+
+        mAdvertiserMap.setPeriodicAdvertisingParameters(advertiserId, parameters);
     }
 
     void setPeriodicAdvertisingData(int advertiserId, AdvertiseData data) {
@@ -356,6 +395,8 @@ class AdvertiseManager {
         try {
             setPeriodicAdvertisingDataNative(advertiserId,
                     AdvertiseHelper.advertiseDataToBytes(data, deviceName));
+
+            mAdvertiserMap.setPeriodicAdvertisingData(advertiserId, data);
         } catch (IllegalArgumentException e) {
             try {
                 onPeriodicAdvertisingDataSet(advertiserId,
@@ -473,6 +514,11 @@ class AdvertiseManager {
 
         IAdvertisingSetCallback callback = entry.getValue().callback;
         callback.onPeriodicAdvertisingEnabled(advertiserId, enable, status);
+
+        AppAdvertiseStats stats = mAdvertiserMap.getAppAdvertiseStatsById(advertiserId);
+        if (stats != null) {
+            stats.onPeriodicAdvertiseEnabled(enable);
+        }
     }
 
     static {

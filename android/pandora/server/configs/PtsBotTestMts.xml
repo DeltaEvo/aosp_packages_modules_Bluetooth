@@ -1,5 +1,5 @@
 <configuration description="Runs PTS-bot tests in MTS">
-    <target_preparer class="com.android.tradefed.targetprep.TestAppInstallSetup">
+    <target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller">
         <option name="test-file-name" value="PandoraServer.apk" />
         <option name="install-arg" value="-r" />
         <option name="install-arg" value="-g" />
@@ -23,8 +23,8 @@
         <!-- Creates a randomized temp dir for pts-bot binaries and avoid
              conflicts when running multiple pts-bot on the same machine -->
         <option name="create-bin-temp-dir" value="true"/>
-        <!-- mmi2grpc is contained inside testcases folder -->
-        <option name="mmi2grpc" value="testcases" />
+        <!-- mmi2grpc is contained inside pts-bot-mts folder -->
+        <option name="mmi2grpc" value="pts-bot-mts" />
         <option name="tests-config-file" value="pts_bot_tests_config.json" />
         <option name="max-flaky-tests" value="3" />
         <option name="max-retries-per-test" value="3" />
@@ -38,9 +38,16 @@
         <option name="profile" value="GAP" />
         <option name="profile" value="GATT" />
         <option name="profile" value="HFP/AG" />
+        <option name="profile" value="HFP/HF" />
         <option name="profile" value="HID/HOS" />
         <option name="profile" value="HOGP" />
+        <option name="profile" value="L2CAP/COS" />
+        <option name="profile" value="L2CAP/EXF" />
         <option name="profile" value="L2CAP/LE" />
+        <option name="profile" value="MAP" />
+        <option name="profile" value="OPP" />
+        <option name="profile" value="PBAP/PSE" />
+        <option name="profile" value="RFCOMM" />
         <option name="profile" value="SDP" />
         <option name="profile" value="SM" />
     </test>

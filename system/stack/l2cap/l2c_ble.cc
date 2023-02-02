@@ -459,7 +459,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
   p_pkt_end = p + pkt_len;
 
   if (p + 4 > p_pkt_end) {
-    android_errorWriteLog(0x534e4554, "80261585");
     LOG(ERROR) << "invalid read";
     return;
   }
@@ -497,7 +496,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_BLE_UPDATE_REQ:
       if (p + 8 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -556,7 +554,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       /* Check how many channels remote side wants. */
       num_of_channels = (p_pkt_end - p) / sizeof(uint16_t);
       if (num_of_channels > L2CAP_CREDIT_BASED_MAX_CIDS) {
-        android_errorWriteLog(0x534e4554, "232256974");
         LOG_WARN("L2CAP - invalid number of channels requested: %d",
                  num_of_channels);
         l2cu_reject_credit_based_conn_req(p_lcb, id,
@@ -705,7 +702,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
        * all the channels has been rejected
        */
       if (con_info.l2cap_result == L2CAP_LE_RESULT_NO_PSM ||
-          con_info.l2cap_result == L2CAP_LE_RESULT_NO_RESOURCES ||
           con_info.l2cap_result ==
               L2CAP_LE_RESULT_INSUFFICIENT_AUTHENTICATION ||
           con_info.l2cap_result == L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP ||
@@ -896,7 +892,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
     case L2CAP_CMD_CREDIT_BASED_RECONFIG_RES: {
       uint16_t result;
       if (p + sizeof(uint16_t) > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "212694559");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -930,7 +925,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_BLE_CREDIT_BASED_CONN_REQ:
       if (p + 10 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -1026,7 +1020,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       if (p_ccb) {
         L2CAP_TRACE_DEBUG("I remember the connection req");
         if (p + 10 > p_pkt_end) {
-          android_errorWriteLog(0x534e4554, "80261585");
           LOG(ERROR) << "invalid read";
           return;
         }
@@ -1077,7 +1070,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_BLE_FLOW_CTRL_CREDIT:
       if (p + 4 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }
@@ -1097,7 +1089,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_DISC_REQ:
       if (p + 4 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "74121659");
         return;
       }
       STREAM_TO_UINT16(lcid, p);
@@ -1116,7 +1107,6 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
 
     case L2CAP_CMD_DISC_RSP:
       if (p + 4 > p_pkt_end) {
-        android_errorWriteLog(0x534e4554, "80261585");
         LOG(ERROR) << "invalid read";
         return;
       }

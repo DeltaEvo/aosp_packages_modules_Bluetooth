@@ -6,7 +6,8 @@ from mmi2grpc._helpers import match_description
 from mmi2grpc._proxy import ProfileProxy
 
 from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import Connection, ConnectabilityMode, AddressType
+from pandora_experimental.host_pb2 import Connection, OwnAddressType
+from pandora_experimental.security_grpc import Security
 from pandora_experimental.l2cap_grpc import L2CAP
 
 from typing import Optional
@@ -15,12 +16,17 @@ from typing import Optional
 class L2CAPProxy(ProfileProxy):
     test_status_map = {}  # record test status and pass them between MMI
     LE_DATA_PACKET_LARGE = "data: LE_DATA_PACKET_LARGE"
+    LE_DATA_PACKET1 = "data: LE_PACKET1"
     connection: Optional[Connection] = None
 
     def __init__(self, channel):
         super().__init__(channel)
         self.l2cap = L2CAP(channel)
         self.host = Host(channel)
+        self.security = Security(channel)
+
+        self.connection = None
+        self.pairing_events = None
 
     @assert_description
     def MMI_IUT_SEND_LE_CREDIT_BASED_CONNECTION_REQUEST(self, test: str, pts_addr: bytes, **kwargs):
@@ -60,7 +66,7 @@ class L2CAPProxy(ProfileProxy):
         assert self.connection is None, f"the connection should be None for the first call"
 
         time.sleep(2)  # avoid timing issue
-        self.connection = self.host.GetLEConnection(address=pts_addr).connection
+        self.connection = self.host.GetLEConnection(public=pts_addr).connection
 
         psm = 0x25  # default TSPX_spsm value
         if test == 'L2CAP/LE/CFC/BV-04-C':
@@ -91,11 +97,15 @@ class L2CAPProxy(ProfileProxy):
         Place the IUT into LE connectable mode.
         """
         self.host.StartAdvertising(
-            connectability_mode=ConnectabilityMode.CONNECTABILITY_CONNECTABLE,
-            own_address_type=AddressType.PUBLIC,
+            connectable=True,
+            own_address_type=OwnAddressType.PUBLIC,
         )
         # not strictly necessary, but can save time on waiting connection
         tests_to_open_bluetooth_server_socket = [
+            "L2CAP/COS/CFC/BV-01-C",
+            "L2CAP/COS/CFC/BV-02-C",
+            "L2CAP/COS/CFC/BV-03-C",
+            "L2CAP/COS/CFC/BV-04-C",
             "L2CAP/LE/CFC/BV-03-C",
             "L2CAP/LE/CFC/BV-05-C",
             "L2CAP/LE/CFC/BV-06-C",
@@ -133,7 +143,7 @@ class L2CAPProxy(ProfileProxy):
         return "OK"
 
     @match_description
-    def MMI_UPPER_TESTER_CONFIRM_LE_DATA(self, sent_data: str, **kwargs):
+    def MMI_UPPER_TESTER_CONFIRM_LE_DATA(self, sent_data: str, test: str, **kwargs):
         """
         Did the Upper Tester send the data (?P<sent_data>[0-9A-F]*) to to the
         PTS\? Click Yes if it matched, otherwise click No.
@@ -141,10 +151,13 @@ class L2CAPProxy(ProfileProxy):
         Description: The Implementation Under Test
         \(IUT\) send data is receive correctly in the PTS.
         """
-        hex_LE_DATA_PACKET_LARGE = self.LE_DATA_PACKET_LARGE.encode("utf-8").hex().upper()
-        if sent_data != hex_LE_DATA_PACKET_LARGE:
-            print(f"data not match, sent_data:{sent_data} and {hex_LE_DATA_PACKET_LARGE}", file=sys.stderr)
-            raise Exception(f"data not match, sent_data:{sent_data} and {hex_LE_DATA_PACKET_LARGE}")
+        if test == 'L2CAP/COS/CFC/BV-02-C':
+            hex_LE_DATA_PACKET = self.LE_DATA_PACKET1.encode("utf-8").hex().upper()
+        else:
+            hex_LE_DATA_PACKET = self.LE_DATA_PACKET_LARGE.encode("utf-8").hex().upper()
+        if sent_data != hex_LE_DATA_PACKET:
+            print(f"data not match, sent_data:{sent_data} and {hex_LE_DATA_PACKET}", file=sys.stderr)
+            raise Exception(f"data not match, sent_data:{sent_data} and {hex_LE_DATA_PACKET}")
         return "OK"
 
     @assert_description
@@ -346,16 +359,96 @@ class L2CAPProxy(ProfileProxy):
         """
         Initiate or create LE ACL connection to the PTS.
         """
-        self.connection = self.host.ConnectLE(address=pts_addr).connection
+        self.connection = self.host.ConnectLE(public=pts_addr).connection
         return "OK"
 
     @assert_description
-    def MMI_IUT_SEND_ACL_DISCONNECTION(self, **kwargs):
+    def MMI_IUT_SEND_ACL_DISCONNECTION(self, test: str, **kwargs):
         """
         Initiate an ACL disconnection from the IUT to the PTS.
         Description :
         The Implementation Under Test(IUT) should disconnect ACL channel by
         sending a disconnect request to PTS.
         """
-        self.host.DisconnectLE(connection=self.connection)
+        self.host.Disconnect(connection=self.connection)
+        return "OK"
+
+    def MMI_TESTER_ENABLE_CONNECTION(self, **kwargs):
+        """
+        Action: Place the IUT in connectable mode.
+
+        Description: PTS requires that the IUT be in connectable mode.
+        The PTS will attempt to establish an ACL connection.
+        """
+
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_INITIATE_ACL_CONNECTION(self, pts_addr: bytes, **kwargs):
+        """
+        Using the Implementation Under Test(IUT), initiate ACL Create Connection
+        Request to the PTS.
+
+        Description : The Implementation Under Test(IUT)
+        should create ACL connection request to PTS.
+        """
+        self.pairing_events = self.security.OnPairing()
+        self.connection = self.host.Connect(address=pts_addr, manually_confirm=True).connection
+        return "OK"
+
+    @assert_description
+    def _mmi_2001(self, **kwargs):
+        """
+        Please verify the passKey is correct: 000000
+        """
+        passkey = "000000"
+        for event in self.pairing_events:
+            if event.numeric_comparison == int(passkey):
+                self.pairing_events.send(event=event, confirm=True)
+                return "OK"
+            assert False, "The passkey does not match"
+        assert False, "Unexpected pairing event"
+
+    @assert_description
+    def MMI_IUT_SEND_CONFIG_REQ(self, **kwargs):
+        """
+        Please send Configure Request.
+        """
+
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_SEND_CONFIG_RSP(self, **kwargs):
+        """
+        Please send Configure Response.
+        """
+
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_SEND_DISCONNECT_RSP(self, **kwargs):
+        """
+        Please send L2CAP Disconnection Response to PTS.
+        """
+
+        return "OK"
+
+    @assert_description
+    def MMI_UPPER_TESTER_SEND_LE_DATA_PACKET1(self, **kwargs):
+        """
+        Upper Tester command IUT to send a non-segmented LE data packet to the
+        PTS with any values.
+         Description : The Implementation Under Test(IUT)
+        should send none segmantation LE frame of LE data to the PTS.
+        """
+        self.l2cap.SendData(connection=self.connection, data=bytes(self.LE_DATA_PACKET1, "utf-8"))
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_SEND_L2CAP_DATA(self, **kwargs):
+        """
+        Using the Implementation Under Test(IUT), send L2CAP_Data over the
+        assigned channel with correct DCID to the PTS.
+        """
+
         return "OK"
