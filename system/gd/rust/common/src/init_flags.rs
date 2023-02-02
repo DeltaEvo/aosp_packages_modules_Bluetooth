@@ -74,6 +74,7 @@ macro_rules! init_flags {
 
 init_flags!(
     flags: {
+        bta_dm_clear_conn_id_on_client_close,
         gd_core,
         gd_security,
         gd_l2cap,
