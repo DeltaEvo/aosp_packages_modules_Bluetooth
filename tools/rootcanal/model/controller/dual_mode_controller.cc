@@ -41,12 +41,13 @@ std::string DualModeController::GetTypeString() const {
   return "Simulated Bluetooth Controller";
 }
 
-void DualModeController::IncomingPacket(
-    model::packets::LinkLayerPacketView incoming, int8_t rssi) {
+void DualModeController::ReceiveLinkLayerPacket(
+    model::packets::LinkLayerPacketView incoming, Phy::Type /*type*/,
+    int8_t rssi) {
   link_layer_controller_.IncomingPacket(incoming, rssi);
 }
 
-void DualModeController::TimerTick() { link_layer_controller_.TimerTick(); }
+void DualModeController::Tick() { link_layer_controller_.Tick(); }
 
 void DualModeController::Close() {
   link_layer_controller_.Close();
@@ -456,7 +457,7 @@ void DualModeController::HandleCommand(
       op != OpCode::RESET &&
       op != OpCode::SET_CONTROLLER_TO_HOST_FLOW_CONTROL &&
       op != OpCode::HOST_BUFFER_SIZE &&
-      op != OpCode::HOST_NUM_COMPLETED_PACKETS &&
+      op != OpCode::HOST_NUMBER_OF_COMPLETED_PACKETS &&
       op != OpCode::READ_BUFFER_SIZE && op != OpCode::READ_LOOPBACK_MODE &&
       op != OpCode::WRITE_LOOPBACK_MODE) {
     std::unique_ptr<bluetooth::packet::RawBuilder> raw_builder_ptr =

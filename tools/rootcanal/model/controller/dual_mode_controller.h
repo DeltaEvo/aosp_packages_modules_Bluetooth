@@ -28,7 +28,7 @@
 #include "hci/address.h"
 #include "hci/hci_packets.h"
 #include "link_layer_controller.h"
-#include "model/controller/vendor/csr.h"
+#include "model/controller/vendor_commands/csr.h"
 #include "model/devices/device.h"
 #include "model/setup/async_manager.h"
 #ifndef ROOTCANAL_LMP
@@ -66,10 +66,11 @@ class DualModeController
   // Device methods.
   virtual std::string GetTypeString() const override;
 
-  virtual void IncomingPacket(model::packets::LinkLayerPacketView incoming,
-                              int8_t rssi) override;
+  virtual void ReceiveLinkLayerPacket(
+      model::packets::LinkLayerPacketView incoming, Phy::Type type,
+      int8_t rssi) override;
 
-  virtual void TimerTick() override;
+  virtual void Tick() override;
   virtual void Close() override;
 
   // Route commands and data from the stack.
