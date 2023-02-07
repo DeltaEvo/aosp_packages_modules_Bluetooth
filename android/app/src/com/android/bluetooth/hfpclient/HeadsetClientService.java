@@ -17,6 +17,7 @@
 package com.android.bluetooth.hfpclient;
 
 import android.annotation.RequiresPermission;
+import android.bluetooth.BluetoothAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadsetClient;
 import android.bluetooth.BluetoothHeadsetClientCall;
@@ -32,6 +33,7 @@ import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
@@ -59,7 +61,7 @@ import java.util.UUID;
  * @hide
  */
 public class HeadsetClientService extends ProfileService {
-    private static final boolean DBG = false;
+    private static final boolean DBG = true;
     private static final String TAG = "HeadsetClientService";
 
     // This is also used as a lock for shared data in {@link HeadsetClientService}
@@ -612,8 +614,10 @@ public class HeadsetClientService extends ProfileService {
                 List<BluetoothHeadsetClientCall> defaultValue = new ArrayList<>();
                 if (service != null) {
                     List<HfpClientCall> calls = service.getCurrentCalls(device);
-                    for (HfpClientCall call : calls) {
-                        defaultValue.add(toLegacyCall(call));
+                    if (calls != null) {
+                        for (HfpClientCall call : calls) {
+                            defaultValue.add(toLegacyCall(call));
+                        }
                     }
                 }
                 receiver.send(defaultValue);
@@ -923,6 +927,53 @@ public class HeadsetClientService extends ProfileService {
         return false;
     }
 
+    /**
+     * sends the {@link BluetoothAudioPolicy} object to the state machine of the corresponding
+     * device to store and send to the remote device using Android specific AT commands.
+     *
+     * @param device for whom the policies to be set
+     * @param policies to be set policies
+     */
+    public void setAudioPolicy(BluetoothDevice device, BluetoothAudioPolicy policies) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        Log.i(TAG, "setAudioPolicy: device=" + device + ", " + policies.toString() + ", "
+                + Utils.getUidPidString());
+        HeadsetClientStateMachine sm = getStateMachine(device);
+        if (sm != null) {
+            sm.setAudioPolicy(policies);
+        }
+    }
+
+    /**
+     * sets the audio policy feature support status for the corresponding device.
+     *
+     * @param device for whom the policies to be set
+     * @param supported support status
+     */
+    public void setAudioPolicyRemoteSupported(BluetoothDevice device, boolean supported) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        Log.i(TAG, "setAudioPolicyRemoteSupported: " + supported);
+        HeadsetClientStateMachine sm = getStateMachine(device);
+        if (sm != null) {
+            sm.setAudioPolicyRemoteSupported(supported);
+        }
+    }
+
+    /**
+     * gets the audio policy feature support status for the corresponding device.
+     *
+     * @param device for whom the policies to be set
+     * @return int support status
+     */
+    public int getAudioPolicyRemoteSupported(BluetoothDevice device) {
+        enforceCallingOrSelfPermission(BLUETOOTH_PERM, "Need BLUETOOTH permission");
+        HeadsetClientStateMachine sm = getStateMachine(device);
+        if (sm != null) {
+            return sm.getAudioPolicyRemoteSupported();
+        }
+        return BluetoothAudioPolicy.FEATURE_UNCONFIGURED_BY_REMOTE;
+    }
+
     public boolean connectAudio(BluetoothDevice device) {
         Log.i(TAG, "connectAudio: device=" + device + ", " + Utils.getUidPidString());
         HeadsetClientStateMachine sm = getStateMachine(device);
@@ -1075,6 +1126,14 @@ public class HeadsetClientService extends ProfileService {
         int connectionState = sm.getConnectionState(device);
         if (connectionState != BluetoothProfile.STATE_CONNECTED
                 && connectionState != BluetoothProfile.STATE_CONNECTING) {
+            return null;
+        }
+
+        // Some platform does not support three way calling (ex: watch)
+        final boolean support_three_way_calling = SystemProperties
+                .getBoolean("bluetooth.headset_client.three_way_calling.enabled", true);
+        if (!support_three_way_calling && !getCurrentCalls(device).isEmpty()) {
+            Log.e(TAG, String.format("dial(%s): Line is busy, reject dialing", device));
             return null;
         }
 

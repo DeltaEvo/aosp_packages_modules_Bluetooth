@@ -353,8 +353,10 @@ void BTA_dm_on_hw_on() {
    * graceful shutdown.
    */
   bta_dm_search_cb.search_timer = alarm_new("bta_dm_search.search_timer");
+  bool delay_close_gatt =
+      osi_property_get_bool("bluetooth.gatt.delay_close.enabled", true);
   bta_dm_search_cb.gatt_close_timer =
-      alarm_new("bta_dm_search.gatt_close_timer");
+      delay_close_gatt ? alarm_new("bta_dm_search.gatt_close_timer") : nullptr;
   bta_dm_search_cb.pending_discovery_queue = fixed_queue_new(SIZE_MAX);
 
   memset(&bta_dm_conn_srvcs, 0, sizeof(bta_dm_conn_srvcs));
@@ -1860,6 +1862,8 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
   /* application will parse EIR to find out remote device name */
   result.inq_res.p_eir = const_cast<uint8_t*>(p_eir);
   result.inq_res.eir_len = eir_len;
+
+  result.inq_res.ble_evt_type = p_inq->ble_evt_type;
 
   p_inq_info = BTM_InqDbRead(p_inq->remote_bd_addr);
   if (p_inq_info != NULL) {
@@ -3999,11 +4003,25 @@ static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status) {
   bta_sys_sendmsg(p_msg);
 
   if (conn_id != GATT_INVALID_CONN_ID) {
-    /* start a GATT channel close delay timer */
-    bta_sys_start_timer(bta_dm_search_cb.gatt_close_timer,
-                        BTA_DM_GATT_CLOSE_DELAY_TOUT,
-                        BTA_DM_DISC_CLOSE_TOUT_EVT, 0);
     bta_dm_search_cb.pending_close_bda = bta_dm_search_cb.peer_bdaddr;
+    // Gatt will be close immediately if bluetooth.gatt.delay_close.enabled is
+    // set to false. If property is true / unset there will be a delay
+    if (bta_dm_search_cb.gatt_close_timer != nullptr) {
+      /* start a GATT channel close delay timer */
+      bta_sys_start_timer(bta_dm_search_cb.gatt_close_timer,
+                          BTA_DM_GATT_CLOSE_DELAY_TOUT,
+                          BTA_DM_DISC_CLOSE_TOUT_EVT, 0);
+    } else {
+      p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+      p_msg->hdr.event = BTA_DM_DISC_CLOSE_TOUT_EVT;
+      p_msg->hdr.layer_specific = 0;
+      bta_sys_sendmsg(p_msg);
+    }
+  } else {
+    if (bluetooth::common::init_flags::
+            bta_dm_clear_conn_id_on_client_close_is_enabled()) {
+      bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
+    }
   }
   bta_dm_search_cb.gatt_disc_active = false;
 }
@@ -4136,7 +4154,8 @@ static void bta_dm_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       break;
 
     case BTA_GATTC_CLOSE_EVT:
-      LOG_DEBUG("BTA_GATTC_CLOSE_EVT reason = %d", p_data->close.reason);
+      LOG_INFO("BTA_GATTC_CLOSE_EVT reason = %d", p_data->close.reason);
+
       /* in case of disconnect before search is completed */
       if ((bta_dm_search_cb.state != BTA_DM_SEARCH_IDLE) &&
           (bta_dm_search_cb.state != BTA_DM_SEARCH_ACTIVE) &&
