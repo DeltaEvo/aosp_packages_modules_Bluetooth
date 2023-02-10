@@ -1,3 +1,4 @@
+use crate::command_handler::SocketSchedule;
 use crate::dbus_iface::{
     export_admin_policy_callback_dbus_intf, export_advertising_set_callback_dbus_intf,
     export_bluetooth_callback_dbus_intf, export_bluetooth_connection_callback_dbus_intf,
@@ -29,7 +30,11 @@ use dbus::nonblock::SyncConnection;
 use dbus_crossroads::Crossroads;
 use dbus_projection::DisconnectWatcher;
 use manager_service::iface_bluetooth_manager::IBluetoothManagerCallback;
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+const SOCKET_TEST_WRITE: &[u8] = b"01234567890123456789";
 
 /// Callback context for manager interface callbacks.
 pub(crate) struct BtManagerCallback {
@@ -763,12 +768,181 @@ impl IBluetoothGattServerCallback for BtGattServerCallback {
         print_info!("GATT Server registered status = {}, server_id = {}", status, server_id);
     }
 
-    fn on_server_connection_state(&self, _server_id: i32, _connected: bool, _addr: String) {
+    fn on_server_connection_state(&self, server_id: i32, connected: bool, addr: String) {
         print_info!(
             "GATT server connection with server_id = {}, connected = {}, addr = {}",
-            _server_id,
-            _connected,
-            _addr
+            server_id,
+            connected,
+            addr
+        );
+    }
+
+    fn on_service_added(&self, status: GattStatus, service: BluetoothGattService) {
+        print_info!("GATT service added with status = {}, service = {:?}", status, service)
+    }
+
+    fn on_characteristic_read_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        is_long: bool,
+        handle: i32,
+    ) {
+        print_info!(
+            "GATT characteristic read request for addr = {}, trans_id = {}, offset = {}, is_long = {}, handle = {}",
+            addr,
+            trans_id,
+            offset,
+            is_long,
+            handle
+        );
+    }
+
+    fn on_descriptor_read_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        is_long: bool,
+        handle: i32,
+    ) {
+        print_info!(
+            "GATT descriptor read request for addr = {}, trans_id = {}, offset = {}, is_long = {}, handle = {}",
+            addr,
+            trans_id,
+            offset,
+            is_long,
+            handle
+        );
+    }
+
+    fn on_characteristic_write_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        len: i32,
+        is_prep: bool,
+        need_rsp: bool,
+        handle: i32,
+        value: Vec<u8>,
+    ) {
+        print_info!(
+            "GATT characteristic write request for \
+                addr = {}, trans_id = {}, offset = {}, len = {}, is_prep = {}, need_rsp = {}, handle = {}, value = {:?}",
+            addr,
+            trans_id,
+            offset,
+            len,
+            is_prep,
+            need_rsp,
+            handle,
+            value
+        );
+    }
+
+    fn on_descriptor_write_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        len: i32,
+        is_prep: bool,
+        need_rsp: bool,
+        handle: i32,
+        value: Vec<u8>,
+    ) {
+        print_info!(
+            "GATT descriptor write request for \
+                addr = {}, trans_id = {}, offset = {}, len = {}, is_prep = {}, need_rsp = {}, handle = {}, value = {:?}",
+            addr,
+            trans_id,
+            offset,
+            len,
+            is_prep,
+            need_rsp,
+            handle,
+            value
+        );
+    }
+
+    fn on_execute_write(&self, addr: String, trans_id: i32, exec_write: bool) {
+        print_info!(
+            "GATT executed write for addr = {}, trans_id = {}, exec_write = {}",
+            addr,
+            trans_id,
+            exec_write
+        );
+    }
+
+    fn on_notification_sent(&self, addr: String, status: GattStatus) {
+        print_info!(
+            "GATT notification/indication sent for addr = {} with status = {}",
+            addr,
+            status
+        );
+    }
+
+    fn on_mtu_changed(&self, addr: String, mtu: i32) {
+        print_info!("GATT server MTU changed for addr = {}, mtu = {}", addr, mtu);
+    }
+
+    fn on_phy_update(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus) {
+        print_info!(
+            "GATT server phy updated for addr = {}: tx_phy = {:?}, rx_phy = {:?}, status = {}",
+            addr,
+            tx_phy,
+            rx_phy,
+            status
+        );
+    }
+
+    fn on_phy_read(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus) {
+        print_info!(
+            "GATT server phy read for addr = {}: tx_phy = {:?}, rx_phy = {:?}, status = {}",
+            addr,
+            tx_phy,
+            rx_phy,
+            status
+        );
+    }
+
+    fn on_connection_updated(
+        &self,
+        addr: String,
+        interval: i32,
+        latency: i32,
+        timeout: i32,
+        status: GattStatus,
+    ) {
+        print_info!(
+            "GATT server connection updated for addr = {}, interval = {}, latency = {}, timeout = {}, status = {}",
+            addr,
+            interval,
+            latency,
+            timeout,
+            status
+        );
+    }
+
+    fn on_subrate_change(
+        &self,
+        addr: String,
+        subrate_factor: i32,
+        latency: i32,
+        cont_num: i32,
+        timeout: i32,
+        status: GattStatus,
+    ) {
+        print_info!(
+            "GATT server subrate changed for addr = {}, subrate_factor = {}, latency = {}, cont_num = {}, timeout = {}, status = {}",
+            addr,
+            subrate_factor,
+            latency,
+            cont_num,
+            timeout,
+            status
         );
     }
 }
@@ -793,7 +967,6 @@ impl RPCProxy for BtGattServerCallback {
 pub(crate) struct BtSocketManagerCallback {
     objpath: String,
     context: Arc<Mutex<ClientContext>>,
-
     dbus_connection: Arc<SyncConnection>,
     dbus_crossroads: Arc<Mutex<Crossroads>>,
 }
@@ -806,6 +979,44 @@ impl BtSocketManagerCallback {
         dbus_crossroads: Arc<Mutex<Crossroads>>,
     ) -> Self {
         Self { objpath, context, dbus_connection, dbus_crossroads }
+    }
+
+    fn start_socket_schedule(&mut self, socket: BluetoothSocket) {
+        let SocketSchedule { num_frame, send_interval, disconnect_delay } =
+            match self.context.lock().unwrap().socket_test_schedule {
+                Some(s) => s,
+                None => return,
+            };
+
+        let mut fd = match socket.fd {
+            Some(fd) => fd,
+            None => {
+                print_error!("incoming connection fd is None. Unable to send data");
+                return;
+            }
+        };
+
+        tokio::spawn(async move {
+            for i in 0..num_frame {
+                fd.write_all(SOCKET_TEST_WRITE);
+                print_info!("data sent: {}", i + 1);
+                tokio::time::sleep(send_interval).await;
+            }
+
+            // dump any incoming data
+            let interval = 100;
+            for _d in (0..=disconnect_delay.as_millis()).step_by(interval) {
+                let mut buf = [0; 128];
+                let sz = fd.read(&mut buf).unwrap();
+                let data = buf[..sz].to_vec();
+                if sz > 0 {
+                    print_info!("received {} bytes: {:?}", sz, data);
+                }
+                tokio::time::sleep(Duration::from_millis(interval as u64)).await;
+            }
+
+            //|fd| is dropped automatically when the scope ends.
+        });
     }
 }
 
@@ -836,18 +1047,16 @@ impl IBluetoothSocketManagerCallbacks for BtSocketManagerCallback {
         let callback_id = self.context.lock().unwrap().socket_manager_callback_id.clone().unwrap();
 
         self.context.lock().unwrap().run_callback(Box::new(move |context| {
-            let status = context
-                .lock()
-                .unwrap()
-                .socket_manager_dbus
-                .as_mut()
-                .unwrap()
-                .close(callback_id, socket.id);
+            let status = context.lock().unwrap().socket_manager_dbus.as_mut().unwrap().accept(
+                callback_id,
+                socket.id,
+                None,
+            );
             if status != BtStatus::Success {
-                print_error!("Failed to close socket {}, status = {:?}", socket.id, status);
+                print_error!("Failed to accept socket {}, status = {:?}", socket.id, status);
                 return;
             }
-            print_info!("Requested for closing socket {}", socket.id);
+            print_info!("Requested for accepting socket {}", socket.id);
         }));
     }
 
@@ -857,10 +1066,11 @@ impl IBluetoothSocketManagerCallbacks for BtSocketManagerCallback {
 
     fn on_handle_incoming_connection(
         &mut self,
-        _listener_id: SocketId,
-        _connection: BluetoothSocket,
+        listener_id: SocketId,
+        connection: BluetoothSocket,
     ) {
-        todo!();
+        print_info!("Socket {} connected", listener_id);
+        self.start_socket_schedule(connection);
     }
 
     fn on_outgoing_connection_result(
@@ -871,6 +1081,7 @@ impl IBluetoothSocketManagerCallbacks for BtSocketManagerCallback {
     ) {
         if let Some(s) = socket {
             print_info!("Connection success on {}: {:?} for {}", connecting_id, result, s);
+            self.start_socket_schedule(s);
         } else {
             print_info!("Connection failed on {}: {:?}", connecting_id, result);
         }

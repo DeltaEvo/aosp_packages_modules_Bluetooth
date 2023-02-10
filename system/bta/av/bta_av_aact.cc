@@ -1244,6 +1244,11 @@ void bta_av_str_opened(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
         .edr = 0,
         .sep = AVDT_TSEP_INVALID,
     };
+
+    if (p_scb) {
+      L2CA_SetMediaStreamChannel(p_scb->l2c_cid, true);
+    }
+
     p = BTM_ReadRemoteFeatures(p_scb->PeerAddress());
     if (p != NULL) {
       if (HCI_EDR_ACL_2MPS_SUPPORTED(p)) open.edr |= BTA_AV_EDR_2MBPS;
@@ -2474,6 +2479,10 @@ void bta_av_str_closed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
     BTM_default_unblock_role_switch();
   }
 
+  if (p_scb) {
+    L2CA_SetMediaStreamChannel(p_scb->l2c_cid, false);
+  }
+
   if (p_scb->open_status != BTA_AV_SUCCESS) {
     /* must be failure when opening the stream */
     data.open.bd_addr = p_scb->PeerAddress();
@@ -2667,12 +2676,14 @@ void bta_av_rcfg_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
   if (p_scb->num_recfg > BTA_AV_RECONFIG_RETRY) {
     bta_av_cco_close(p_scb, p_data);
     /* report failure */
-    tBTA_AV_RECONFIG reconfig;
-    reconfig.status = BTA_AV_FAIL_STREAM;
-    reconfig.chnl = p_scb->chnl;
-    reconfig.hndl = p_scb->hndl;
-    tBTA_AV bta_av_data;
-    bta_av_data.reconfig = reconfig;
+    tBTA_AV bta_av_data = {
+        .reconfig =
+            {
+                .chnl = p_scb->chnl,
+                .hndl = p_scb->hndl,
+                .status = BTA_AV_FAIL_STREAM,
+            },
+    };
     (*bta_av_cb.p_cback)(BTA_AV_RECONFIG_EVT, &bta_av_data);
     /* go to closing state */
     bta_av_ssm_execute(p_scb, BTA_AV_API_CLOSE_EVT, NULL);
@@ -2731,12 +2742,14 @@ void bta_av_rcfg_discntd(tBTA_AV_SCB* p_scb, UNUSED_ATTR tBTA_AV_DATA* p_data) {
   p_scb->num_recfg++;
   if (p_scb->num_recfg > BTA_AV_RECONFIG_RETRY) {
     /* report failure */
-    tBTA_AV_RECONFIG reconfig;
-    reconfig.status = BTA_AV_FAIL_STREAM;
-    reconfig.chnl = p_scb->chnl;
-    reconfig.hndl = p_scb->hndl;
-    tBTA_AV bta_av_data;
-    bta_av_data.reconfig = reconfig;
+    tBTA_AV bta_av_data = {
+        .reconfig =
+            {
+                .chnl = p_scb->chnl,
+                .hndl = p_scb->hndl,
+                .status = BTA_AV_FAIL_STREAM,
+            },
+    };
     (*bta_av_cb.p_cback)(BTA_AV_RECONFIG_EVT, &bta_av_data);
     /* report close event & go to init state */
     bta_av_ssm_execute(p_scb, BTA_AV_STR_DISC_FAIL_EVT, NULL);

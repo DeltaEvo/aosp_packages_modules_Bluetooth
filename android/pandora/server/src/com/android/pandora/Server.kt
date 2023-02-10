@@ -39,6 +39,7 @@ class Server(context: Context) {
   private var hid: Hid
   private var l2cap: L2cap
   private var mediaplayer: MediaPlayer
+  private var pan: Pan
   private var pbap: Pbap
   private var rfcomm: Rfcomm
   private var security: Security
@@ -54,6 +55,7 @@ class Server(context: Context) {
     hid = Hid(context)
     l2cap = L2cap(context)
     mediaplayer = MediaPlayer(context)
+    pan = Pan(context)
     pbap = Pbap(context)
     rfcomm = Rfcomm(context)
     securityStorage = SecurityStorage(context)
@@ -67,6 +69,7 @@ class Server(context: Context) {
         .addService(hid)
         .addService(l2cap)
         .addService(mediaplayer)
+        .addService(pan)
         .addService(pbap)
         .addService(rfcomm)
         .addService(security)
@@ -114,6 +117,7 @@ class Server(context: Context) {
     hid.deinit()
     l2cap.deinit()
     mediaplayer.deinit()
+    pan.deinit()
     pbap.deinit()
     rfcomm.deinit()
     security.deinit()

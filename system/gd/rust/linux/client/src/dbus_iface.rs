@@ -1327,6 +1327,63 @@ impl IBluetoothGatt for BluetoothGattDBus {
     fn server_disconnect(&self, server_id: i32, addr: String) -> bool {
         dbus_generated!()
     }
+
+    #[dbus_method("AddService")]
+    fn add_service(&self, server_id: i32, service: BluetoothGattService) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("RemoveService")]
+    fn remove_service(&self, server_id: i32, handle: i32) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("ClearServices")]
+    fn clear_services(&self, server_id: i32) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SendResponse")]
+    fn send_response(
+        &self,
+        server_id: i32,
+        addr: String,
+        request_id: i32,
+        status: GattStatus,
+        offset: i32,
+        value: Vec<u8>,
+    ) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("SendNotification")]
+    fn send_notification(
+        &self,
+        server_id: i32,
+        addr: String,
+        handle: i32,
+        confirm: bool,
+        value: Vec<u8>,
+    ) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("ServerSetPreferredPhy")]
+    fn server_set_preferred_phy(
+        &self,
+        server_id: i32,
+        addr: String,
+        tx_phy: LePhy,
+        rx_phy: LePhy,
+        phy_options: i32,
+    ) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("ServerReadPhy")]
+    fn server_read_phy(&self, server_id: i32, addr: String) {
+        dbus_generated!()
+    }
 }
 
 struct IBluetoothGattCallbackDBus {}
@@ -1422,6 +1479,97 @@ impl IBluetoothGattServerCallback for IBluetoothGattCallbackDBus {
 
     #[dbus_method("OnServerConnectionState")]
     fn on_server_connection_state(&self, server_id: i32, connected: bool, addr: String) {}
+
+    #[dbus_method("OnServiceAdded")]
+    fn on_service_added(&self, status: GattStatus, service: BluetoothGattService) {}
+
+    #[dbus_method("OnCharacteristicReadRequest")]
+    fn on_characteristic_read_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        is_long: bool,
+        handle: i32,
+    ) {
+    }
+
+    #[dbus_method("OnDescriptorReadRequest")]
+    fn on_descriptor_read_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        is_long: bool,
+        handle: i32,
+    ) {
+    }
+
+    #[dbus_method("OnCharacteristicWriteRequest")]
+    fn on_characteristic_write_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        len: i32,
+        is_prep: bool,
+        need_rsp: bool,
+        handle: i32,
+        value: Vec<u8>,
+    ) {
+    }
+
+    #[dbus_method("OnDescriptorWriteRequest")]
+    fn on_descriptor_write_request(
+        &self,
+        addr: String,
+        trans_id: i32,
+        offset: i32,
+        len: i32,
+        is_prep: bool,
+        need_rsp: bool,
+        handle: i32,
+        value: Vec<u8>,
+    ) {
+    }
+
+    #[dbus_method("OnExecuteWrite")]
+    fn on_execute_write(&self, addr: String, trans_id: i32, exec_write: bool) {}
+
+    #[dbus_method("OnNotificationSent")]
+    fn on_notification_sent(&self, addr: String, status: GattStatus) {}
+
+    #[dbus_method("OnMtuChanged")]
+    fn on_mtu_changed(&self, addr: String, mtu: i32) {}
+
+    #[dbus_method("OnPhyUpdate")]
+    fn on_phy_update(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus) {}
+
+    #[dbus_method("OnPhyRead")]
+    fn on_phy_read(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus) {}
+
+    #[dbus_method("OnConnectionUpdated")]
+    fn on_connection_updated(
+        &self,
+        addr: String,
+        interval: i32,
+        latency: i32,
+        timeout: i32,
+        status: GattStatus,
+    ) {
+    }
+
+    #[dbus_method("OnSubrateChange")]
+    fn on_subrate_change(
+        &self,
+        addr: String,
+        subrate_factor: i32,
+        latency: i32,
+        cont_num: i32,
+        timeout: i32,
+        status: GattStatus,
+    ) {
+    }
 }
 
 #[dbus_propmap(BluetoothServerSocket)]

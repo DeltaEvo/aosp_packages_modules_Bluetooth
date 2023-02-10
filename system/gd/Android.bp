@@ -433,7 +433,7 @@ cc_test {
     sanitize: {
         address: true,
     },
-    min_sdk_version: "30",
+    min_sdk_version: "Tiramisu",
 }
 
 cc_test {
@@ -616,6 +616,7 @@ genrule {
         "l2cap/l2cap_packets.h",
         "security/smp_packets.h",
     ],
+    visibility: ["//visibility:public"],
 }
 
 genrule {

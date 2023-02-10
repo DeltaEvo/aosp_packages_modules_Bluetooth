@@ -21,6 +21,7 @@
 #include <hardware/bluetooth.h>
 #include <stdbool.h>
 
+#include "include/hardware/bluetooth.h"
 #include "osi/include/list.h"
 #include "raw_address.h"
 
@@ -320,6 +321,12 @@ typedef enum {
   // during connection.
   INTEROP_DISABLE_ROLE_SWITCH_DURING_CONNECTION,
 
+  // Some remote devices have LMP version in[5.0, 5.2] but do not support robust
+  // caching or correctly response with an error. We disable the database hash
+  // lookup for such devices.
+  INTEROP_DISABLE_ROBUST_CACHING,
+
+  INTEROP_HFP_1_7_ALLOWLIST,
   END_OF_INTEROP_LIST
 } interop_feature_t;
 
@@ -385,7 +392,7 @@ bool interop_match_addr_get_max_lat(const interop_feature_t feature,
 // This API is used for name based lookups for allowlisted media players.
 // If allowlisted media players list found it will assign the media players list
 // pointer to the argument passed and  return true else return false.
-bool interop_get_allowlisted_media_players_list(list_t** p_bl_devices);
+bool interop_get_allowlisted_media_players_list(list_t* p_bl_devices);
 
 // Return feature's enum value according to feature'name.
 int interop_feature_name_to_feature_id(const char* feature_name);

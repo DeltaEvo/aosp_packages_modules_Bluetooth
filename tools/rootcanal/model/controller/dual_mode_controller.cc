@@ -41,12 +41,13 @@ std::string DualModeController::GetTypeString() const {
   return "Simulated Bluetooth Controller";
 }
 
-void DualModeController::IncomingPacket(
-    model::packets::LinkLayerPacketView incoming, int8_t rssi) {
+void DualModeController::ReceiveLinkLayerPacket(
+    model::packets::LinkLayerPacketView incoming, Phy::Type /*type*/,
+    int8_t rssi) {
   link_layer_controller_.IncomingPacket(incoming, rssi);
 }
 
-void DualModeController::TimerTick() { link_layer_controller_.TimerTick(); }
+void DualModeController::Tick() { link_layer_controller_.Tick(); }
 
 void DualModeController::Close() {
   link_layer_controller_.Close();
@@ -54,16 +55,11 @@ void DualModeController::Close() {
 }
 
 void DualModeController::SendCommandCompleteUnknownOpCodeEvent(
-    uint16_t op_code) const {
-  std::unique_ptr<bluetooth::packet::RawBuilder> raw_builder_ptr =
-      std::make_unique<bluetooth::packet::RawBuilder>();
-  raw_builder_ptr->AddOctets1(kNumCommandPackets);
-  raw_builder_ptr->AddOctets2(op_code);
-  raw_builder_ptr->AddOctets1(
-      static_cast<uint8_t>(ErrorCode::UNKNOWN_HCI_COMMAND));
-
-  send_event_(gd_hci::EventBuilder::Create(gd_hci::EventCode::COMMAND_COMPLETE,
-                                           std::move(raw_builder_ptr)));
+    bluetooth::hci::OpCode op_code) const {
+  send_event_(gd_hci::CommandCompleteBuilder::Create(
+      kNumCommandPackets, op_code,
+      std::make_unique<bluetooth::packet::RawBuilder>(std::vector<uint8_t>{
+          static_cast<uint8_t>(ErrorCode::UNKNOWN_HCI_COMMAND)})));
 }
 
 #ifdef ROOTCANAL_LMP
@@ -86,237 +82,6 @@ DualModeController::DualModeController(const std::string& properties_filename,
              Phy::Type phy_type, int8_t tx_power) {
         this->SendLinkLayerPacket(packet, phy_type, tx_power);
       });
-
-  std::array<uint8_t, 64> supported_commands{0};
-
-#define SET_HANDLER(name, method)                                  \
-  active_hci_commands_[OpCode::name] = [this](CommandView param) { \
-    method(std::move(param));                                      \
-  };
-
-#define SET_VENDOR_HANDLER(op_code, method)                            \
-  active_hci_commands_[static_cast<bluetooth::hci::OpCode>(op_code)] = \
-      [this](CommandView param) { method(std::move(param)); };
-
-#define SET_SUPPORTED(name, method)                                        \
-  SET_HANDLER(name, method);                                               \
-  {                                                                        \
-    uint16_t index = (uint16_t)bluetooth::hci::OpCodeIndex::name;          \
-    uint16_t byte_index = index / 10;                                      \
-    uint8_t bit = 1 << (index % 10);                                       \
-    supported_commands[byte_index] = supported_commands[byte_index] | bit; \
-  }
-
-  SET_SUPPORTED(RESET, Reset);
-  SET_SUPPORTED(READ_BUFFER_SIZE, ReadBufferSize);
-  SET_SUPPORTED(HOST_BUFFER_SIZE, HostBufferSize);
-  SET_SUPPORTED(SNIFF_SUBRATING, SniffSubrating);
-  SET_SUPPORTED(READ_ENCRYPTION_KEY_SIZE, ReadEncryptionKeySize);
-  SET_SUPPORTED(READ_LOCAL_VERSION_INFORMATION, ReadLocalVersionInformation);
-  SET_SUPPORTED(READ_BD_ADDR, ReadBdAddr);
-  SET_HANDLER(READ_LOCAL_SUPPORTED_COMMANDS, ReadLocalSupportedCommands);
-  SET_SUPPORTED(READ_LOCAL_SUPPORTED_FEATURES, ReadLocalSupportedFeatures);
-  SET_SUPPORTED(READ_LOCAL_SUPPORTED_CODECS_V1, ReadLocalSupportedCodecs);
-  SET_SUPPORTED(READ_LOCAL_EXTENDED_FEATURES, ReadLocalExtendedFeatures);
-  SET_SUPPORTED(READ_REMOTE_EXTENDED_FEATURES, ReadRemoteExtendedFeatures);
-  SET_SUPPORTED(SWITCH_ROLE, SwitchRole);
-  SET_SUPPORTED(READ_REMOTE_SUPPORTED_FEATURES, ReadRemoteSupportedFeatures);
-  SET_SUPPORTED(READ_CLOCK_OFFSET, ReadClockOffset);
-  SET_HANDLER(ADD_SCO_CONNECTION, AddScoConnection);
-  SET_SUPPORTED(SETUP_SYNCHRONOUS_CONNECTION, SetupSynchronousConnection);
-  SET_SUPPORTED(ACCEPT_SYNCHRONOUS_CONNECTION, AcceptSynchronousConnection);
-  SET_SUPPORTED(REJECT_SYNCHRONOUS_CONNECTION, RejectSynchronousConnection);
-  SET_SUPPORTED(ENHANCED_SETUP_SYNCHRONOUS_CONNECTION,
-                EnhancedSetupSynchronousConnection);
-  SET_SUPPORTED(ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION,
-                EnhancedAcceptSynchronousConnection);
-  SET_SUPPORTED(IO_CAPABILITY_REQUEST_REPLY, IoCapabilityRequestReply);
-  SET_SUPPORTED(USER_CONFIRMATION_REQUEST_REPLY, UserConfirmationRequestReply);
-  SET_SUPPORTED(USER_CONFIRMATION_REQUEST_NEGATIVE_REPLY,
-                UserConfirmationRequestNegativeReply);
-  SET_SUPPORTED(USER_PASSKEY_REQUEST_REPLY, UserPasskeyRequestReply);
-  SET_SUPPORTED(USER_PASSKEY_REQUEST_NEGATIVE_REPLY,
-                UserPasskeyRequestNegativeReply);
-  SET_SUPPORTED(PIN_CODE_REQUEST_REPLY, PinCodeRequestReply);
-  SET_SUPPORTED(PIN_CODE_REQUEST_NEGATIVE_REPLY, PinCodeRequestNegativeReply);
-  SET_SUPPORTED(REMOTE_OOB_DATA_REQUEST_REPLY, RemoteOobDataRequestReply);
-  SET_SUPPORTED(REMOTE_OOB_DATA_REQUEST_NEGATIVE_REPLY,
-                RemoteOobDataRequestNegativeReply);
-  SET_SUPPORTED(IO_CAPABILITY_REQUEST_NEGATIVE_REPLY,
-                IoCapabilityRequestNegativeReply);
-  SET_SUPPORTED(REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY,
-                RemoteOobExtendedDataRequestReply);
-  SET_SUPPORTED(READ_INQUIRY_RESPONSE_TRANSMIT_POWER_LEVEL,
-                ReadInquiryResponseTransmitPowerLevel);
-  SET_SUPPORTED(SEND_KEYPRESS_NOTIFICATION, SendKeypressNotification);
-  SET_SUPPORTED(ENHANCED_FLUSH, EnhancedFlush);
-  SET_HANDLER(SET_EVENT_MASK_PAGE_2, SetEventMaskPage2);
-  SET_SUPPORTED(READ_LOCAL_OOB_DATA, ReadLocalOobData);
-  SET_SUPPORTED(READ_LOCAL_OOB_EXTENDED_DATA, ReadLocalOobExtendedData);
-  SET_SUPPORTED(WRITE_SIMPLE_PAIRING_MODE, WriteSimplePairingMode);
-  SET_SUPPORTED(WRITE_LE_HOST_SUPPORT, WriteLeHostSupport);
-  SET_SUPPORTED(WRITE_SECURE_CONNECTIONS_HOST_SUPPORT,
-                WriteSecureConnectionsHostSupport);
-  SET_SUPPORTED(SET_EVENT_MASK, SetEventMask);
-  SET_SUPPORTED(READ_INQUIRY_MODE, ReadInquiryMode);
-  SET_SUPPORTED(WRITE_INQUIRY_MODE, WriteInquiryMode);
-  SET_SUPPORTED(READ_PAGE_SCAN_TYPE, ReadPageScanType);
-  SET_SUPPORTED(WRITE_PAGE_SCAN_TYPE, WritePageScanType);
-  SET_SUPPORTED(WRITE_INQUIRY_SCAN_TYPE, WriteInquiryScanType);
-  SET_SUPPORTED(READ_INQUIRY_SCAN_TYPE, ReadInquiryScanType);
-  SET_SUPPORTED(AUTHENTICATION_REQUESTED, AuthenticationRequested);
-  SET_SUPPORTED(SET_CONNECTION_ENCRYPTION, SetConnectionEncryption);
-  SET_SUPPORTED(CHANGE_CONNECTION_LINK_KEY, ChangeConnectionLinkKey);
-  SET_SUPPORTED(CENTRAL_LINK_KEY, CentralLinkKey);
-  SET_SUPPORTED(WRITE_AUTHENTICATION_ENABLE, WriteAuthenticationEnable);
-  SET_SUPPORTED(READ_AUTHENTICATION_ENABLE, ReadAuthenticationEnable);
-  SET_SUPPORTED(WRITE_CLASS_OF_DEVICE, WriteClassOfDevice);
-  SET_SUPPORTED(READ_PAGE_TIMEOUT, ReadPageTimeout);
-  SET_SUPPORTED(WRITE_PAGE_TIMEOUT, WritePageTimeout);
-  SET_SUPPORTED(WRITE_LINK_SUPERVISION_TIMEOUT, WriteLinkSupervisionTimeout);
-  SET_SUPPORTED(HOLD_MODE, HoldMode);
-  SET_SUPPORTED(SNIFF_MODE, SniffMode);
-  SET_SUPPORTED(EXIT_SNIFF_MODE, ExitSniffMode);
-  SET_SUPPORTED(QOS_SETUP, QosSetup);
-  SET_SUPPORTED(ROLE_DISCOVERY, RoleDiscovery);
-  SET_SUPPORTED(READ_DEFAULT_LINK_POLICY_SETTINGS,
-                ReadDefaultLinkPolicySettings);
-  SET_SUPPORTED(WRITE_DEFAULT_LINK_POLICY_SETTINGS,
-                WriteDefaultLinkPolicySettings);
-  SET_SUPPORTED(FLOW_SPECIFICATION, FlowSpecification);
-  SET_SUPPORTED(READ_LINK_POLICY_SETTINGS, ReadLinkPolicySettings);
-  SET_SUPPORTED(WRITE_LINK_POLICY_SETTINGS, WriteLinkPolicySettings);
-  SET_SUPPORTED(CHANGE_CONNECTION_PACKET_TYPE, ChangeConnectionPacketType);
-  SET_SUPPORTED(WRITE_LOCAL_NAME, WriteLocalName);
-  SET_SUPPORTED(READ_LOCAL_NAME, ReadLocalName);
-  SET_SUPPORTED(WRITE_EXTENDED_INQUIRY_RESPONSE, WriteExtendedInquiryResponse);
-  SET_SUPPORTED(REFRESH_ENCRYPTION_KEY, RefreshEncryptionKey);
-  SET_SUPPORTED(WRITE_VOICE_SETTING, WriteVoiceSetting);
-  SET_SUPPORTED(READ_NUMBER_OF_SUPPORTED_IAC, ReadNumberOfSupportedIac);
-  SET_SUPPORTED(READ_CURRENT_IAC_LAP, ReadCurrentIacLap);
-  SET_SUPPORTED(WRITE_CURRENT_IAC_LAP, WriteCurrentIacLap);
-  SET_SUPPORTED(READ_PAGE_SCAN_ACTIVITY, ReadPageScanActivity);
-  SET_SUPPORTED(WRITE_PAGE_SCAN_ACTIVITY, WritePageScanActivity);
-  SET_SUPPORTED(READ_INQUIRY_SCAN_ACTIVITY, ReadInquiryScanActivity);
-  SET_SUPPORTED(WRITE_INQUIRY_SCAN_ACTIVITY, WriteInquiryScanActivity);
-  SET_SUPPORTED(READ_SCAN_ENABLE, ReadScanEnable);
-  SET_SUPPORTED(WRITE_SCAN_ENABLE, WriteScanEnable);
-  SET_SUPPORTED(SET_EVENT_FILTER, SetEventFilter);
-  SET_SUPPORTED(INQUIRY, Inquiry);
-  SET_SUPPORTED(INQUIRY_CANCEL, InquiryCancel);
-  SET_SUPPORTED(ACCEPT_CONNECTION_REQUEST, AcceptConnectionRequest);
-  SET_SUPPORTED(REJECT_CONNECTION_REQUEST, RejectConnectionRequest);
-  SET_SUPPORTED(LINK_KEY_REQUEST_REPLY, LinkKeyRequestReply);
-  SET_SUPPORTED(LINK_KEY_REQUEST_NEGATIVE_REPLY, LinkKeyRequestNegativeReply);
-  SET_SUPPORTED(DELETE_STORED_LINK_KEY, DeleteStoredLinkKey);
-  SET_SUPPORTED(REMOTE_NAME_REQUEST, RemoteNameRequest);
-  SET_SUPPORTED(LE_SET_EVENT_MASK, LeSetEventMask);
-  SET_SUPPORTED(LE_SET_HOST_FEATURE, LeSetHostFeature);
-  SET_SUPPORTED(LE_READ_BUFFER_SIZE_V1, LeReadBufferSize);
-  SET_SUPPORTED(LE_READ_BUFFER_SIZE_V2, LeReadBufferSizeV2);
-  SET_SUPPORTED(LE_READ_LOCAL_SUPPORTED_FEATURES, LeReadLocalSupportedFeatures);
-  SET_SUPPORTED(LE_SET_RANDOM_ADDRESS, LeSetRandomAddress);
-  SET_SUPPORTED(LE_SET_ADVERTISING_PARAMETERS, LeSetAdvertisingParameters);
-  SET_SUPPORTED(LE_READ_ADVERTISING_PHYSICAL_CHANNEL_TX_POWER,
-                LeReadAdvertisingPhysicalChannelTxPower);
-  SET_SUPPORTED(LE_SET_ADVERTISING_DATA, LeSetAdvertisingData);
-  SET_SUPPORTED(LE_SET_SCAN_RESPONSE_DATA, LeSetScanResponseData);
-  SET_SUPPORTED(LE_SET_ADVERTISING_ENABLE, LeSetAdvertisingEnable);
-  SET_SUPPORTED(LE_SET_SCAN_PARAMETERS, LeSetScanParameters);
-  SET_SUPPORTED(LE_SET_SCAN_ENABLE, LeSetScanEnable);
-  SET_SUPPORTED(LE_CREATE_CONNECTION, LeCreateConnection);
-  SET_SUPPORTED(CREATE_CONNECTION, CreateConnection);
-  SET_SUPPORTED(CREATE_CONNECTION_CANCEL, CreateConnectionCancel);
-  SET_SUPPORTED(DISCONNECT, Disconnect);
-  SET_SUPPORTED(LE_CREATE_CONNECTION_CANCEL, LeCreateConnectionCancel);
-  SET_SUPPORTED(LE_READ_FILTER_ACCEPT_LIST_SIZE, LeReadFilterAcceptListSize);
-  SET_SUPPORTED(LE_CLEAR_FILTER_ACCEPT_LIST, LeClearFilterAcceptList);
-  SET_SUPPORTED(LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST,
-                LeAddDeviceToFilterAcceptList);
-  SET_SUPPORTED(LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST,
-                LeRemoveDeviceFromFilterAcceptList);
-  SET_SUPPORTED(LE_ENCRYPT, LeEncrypt);
-  SET_SUPPORTED(LE_RAND, LeRand);
-  SET_SUPPORTED(LE_READ_SUPPORTED_STATES, LeReadSupportedStates);
-  SET_HANDLER(LE_GET_VENDOR_CAPABILITIES, LeVendorCap);
-  SET_VENDOR_HANDLER(CSR_VENDOR, CsrVendorCommand);
-  SET_HANDLER(LE_REMOTE_CONNECTION_PARAMETER_REQUEST_REPLY,
-              LeRemoteConnectionParameterRequestReply);
-  SET_HANDLER(LE_REMOTE_CONNECTION_PARAMETER_REQUEST_NEGATIVE_REPLY,
-              LeRemoteConnectionParameterRequestNegativeReply);
-  SET_HANDLER(LE_MULTI_ADVT, LeVendorMultiAdv);
-  SET_HANDLER(LE_ADV_FILTER, LeAdvertisingFilter);
-  SET_HANDLER(LE_ENERGY_INFO, LeEnergyInfo);
-  SET_SUPPORTED(LE_SET_ADVERTISING_SET_RANDOM_ADDRESS,
-                LeSetAdvertisingSetRandomAddress);
-  SET_SUPPORTED(LE_SET_EXTENDED_ADVERTISING_PARAMETERS,
-                LeSetExtendedAdvertisingParameters);
-  SET_SUPPORTED(LE_SET_EXTENDED_ADVERTISING_DATA, LeSetExtendedAdvertisingData);
-  SET_SUPPORTED(LE_SET_EXTENDED_SCAN_RESPONSE_DATA,
-                LeSetExtendedScanResponseData);
-  SET_SUPPORTED(LE_SET_EXTENDED_ADVERTISING_ENABLE,
-                LeSetExtendedAdvertisingEnable);
-  SET_SUPPORTED(LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH,
-                LeReadMaximumAdvertisingDataLength);
-  SET_SUPPORTED(LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS,
-                LeReadNumberOfSupportedAdvertisingSets);
-  SET_SUPPORTED(LE_REMOVE_ADVERTISING_SET, LeRemoveAdvertisingSet);
-  SET_SUPPORTED(LE_CLEAR_ADVERTISING_SETS, LeClearAdvertisingSets);
-  SET_SUPPORTED(LE_READ_REMOTE_FEATURES, LeReadRemoteFeatures);
-  SET_SUPPORTED(READ_REMOTE_VERSION_INFORMATION, ReadRemoteVersionInformation);
-  SET_SUPPORTED(LE_CONNECTION_UPDATE, LeConnectionUpdate);
-  SET_SUPPORTED(LE_START_ENCRYPTION, LeStartEncryption);
-  SET_SUPPORTED(LE_LONG_TERM_KEY_REQUEST_REPLY, LeLongTermKeyRequestReply);
-  SET_SUPPORTED(LE_LONG_TERM_KEY_REQUEST_NEGATIVE_REPLY,
-                LeLongTermKeyRequestNegativeReply);
-  SET_SUPPORTED(LE_ADD_DEVICE_TO_RESOLVING_LIST, LeAddDeviceToResolvingList);
-  SET_SUPPORTED(LE_REMOVE_DEVICE_FROM_RESOLVING_LIST,
-                LeRemoveDeviceFromResolvingList);
-  SET_SUPPORTED(LE_CLEAR_RESOLVING_LIST, LeClearResolvingList);
-  SET_SUPPORTED(LE_READ_RESOLVING_LIST_SIZE, LeReadResolvingListSize);
-  SET_SUPPORTED(LE_READ_MAXIMUM_DATA_LENGTH, LeReadMaximumDataLength);
-
-  SET_SUPPORTED(LE_SET_EXTENDED_SCAN_PARAMETERS, LeSetExtendedScanParameters);
-  SET_SUPPORTED(LE_SET_EXTENDED_SCAN_ENABLE, LeSetExtendedScanEnable);
-  SET_SUPPORTED(LE_EXTENDED_CREATE_CONNECTION, LeExtendedCreateConnection);
-  SET_SUPPORTED(LE_SET_PRIVACY_MODE, LeSetPrivacyMode);
-  SET_SUPPORTED(LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH,
-                LeReadSuggestedDefaultDataLength);
-  SET_SUPPORTED(LE_WRITE_SUGGESTED_DEFAULT_DATA_LENGTH,
-                LeWriteSuggestedDefaultDataLength);
-  // ISO Commands
-  SET_SUPPORTED(LE_READ_ISO_TX_SYNC, LeReadIsoTxSync);
-  SET_SUPPORTED(LE_SET_CIG_PARAMETERS, LeSetCigParameters);
-  SET_SUPPORTED(LE_CREATE_CIS, LeCreateCis);
-  SET_SUPPORTED(LE_REMOVE_CIG, LeRemoveCig);
-  SET_SUPPORTED(LE_ACCEPT_CIS_REQUEST, LeAcceptCisRequest);
-  SET_SUPPORTED(LE_REJECT_CIS_REQUEST, LeRejectCisRequest);
-  SET_SUPPORTED(LE_CREATE_BIG, LeCreateBig);
-  SET_SUPPORTED(LE_TERMINATE_BIG, LeTerminateBig);
-  SET_SUPPORTED(LE_BIG_CREATE_SYNC, LeBigCreateSync);
-  SET_SUPPORTED(LE_BIG_TERMINATE_SYNC, LeBigTerminateSync);
-  SET_SUPPORTED(LE_REQUEST_PEER_SCA, LeRequestPeerSca);
-  SET_SUPPORTED(LE_SETUP_ISO_DATA_PATH, LeSetupIsoDataPath);
-  SET_SUPPORTED(LE_REMOVE_ISO_DATA_PATH, LeRemoveIsoDataPath);
-  // Testing Commands
-  SET_SUPPORTED(READ_LOOPBACK_MODE, ReadLoopbackMode);
-  SET_SUPPORTED(WRITE_LOOPBACK_MODE, WriteLoopbackMode);
-
-  SET_SUPPORTED(READ_CLASS_OF_DEVICE, ReadClassOfDevice);
-  SET_SUPPORTED(READ_VOICE_SETTING, ReadVoiceSetting);
-  SET_SUPPORTED(READ_CONNECTION_ACCEPT_TIMEOUT, ReadConnectionAcceptTimeout);
-  SET_SUPPORTED(WRITE_CONNECTION_ACCEPT_TIMEOUT, WriteConnectionAcceptTimeout);
-  SET_SUPPORTED(LE_SET_ADDRESS_RESOLUTION_ENABLE, LeSetAddressResolutionEnable);
-  SET_SUPPORTED(LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT,
-                LeSetResolvablePrivateAddressTimeout);
-  SET_SUPPORTED(READ_SYNCHRONOUS_FLOW_CONTROL_ENABLE,
-                ReadSynchronousFlowControlEnable);
-  SET_SUPPORTED(WRITE_SYNCHRONOUS_FLOW_CONTROL_ENABLE,
-                WriteSynchronousFlowControlEnable);
-
-#undef SET_HANDLER
-#undef SET_SUPPORTED
-  properties_.SetSupportedCommands(supported_commands);
 }
 
 void DualModeController::SniffSubrating(CommandView command) {
@@ -446,31 +211,68 @@ void DualModeController::HandleIso(
 
 void DualModeController::HandleCommand(
     std::shared_ptr<std::vector<uint8_t>> packet) {
-  bluetooth::hci::PacketView<bluetooth::hci::kLittleEndian> raw_packet(packet);
-  auto command_packet = bluetooth::hci::CommandView::Create(raw_packet);
+  auto command_packet = bluetooth::hci::CommandView::Create(
+      bluetooth::hci::PacketView<bluetooth::hci::kLittleEndian>(packet));
   ASSERT(command_packet.IsValid());
-  auto op = command_packet.GetOpCode();
 
+  OpCode op_code = command_packet.GetOpCode();
+  const bool is_vendor_command = (static_cast<uint16_t>(op_code) >> 10) == 0x3f;
+  const bool is_known_command =
+      hci_command_op_code_to_index_.count(op_code) > 0;
+  const bool is_implemented_command = hci_command_handlers_.count(op_code) > 0;
+
+  // HCI Read Local Supported Commands is supported by default.
+  // Vendor commands are supported when implemented.
+  bool is_supported_command =
+      (op_code == OpCode::READ_LOCAL_SUPPORTED_COMMANDS) ||
+      (is_vendor_command && is_implemented_command);
+
+  // For other commands, query the Support Commands bit mask in
+  // the controller properties.
+  if (!is_supported_command && is_known_command) {
+    int index = static_cast<int>(hci_command_op_code_to_index_.at(op_code));
+    is_supported_command = (properties_.supported_commands[index / 10] &
+                            (1U << (index % 10))) != 0;
+  }
+
+  // Loopback mode, the commands are sent back to the host.
   if (loopback_mode_ == LoopbackMode::ENABLE_LOCAL &&
-      // Loopback exceptions.
-      op != OpCode::RESET &&
-      op != OpCode::SET_CONTROLLER_TO_HOST_FLOW_CONTROL &&
-      op != OpCode::HOST_BUFFER_SIZE &&
-      op != OpCode::HOST_NUM_COMPLETED_PACKETS &&
-      op != OpCode::READ_BUFFER_SIZE && op != OpCode::READ_LOOPBACK_MODE &&
-      op != OpCode::WRITE_LOOPBACK_MODE) {
+      op_code != OpCode::RESET &&
+      op_code != OpCode::SET_CONTROLLER_TO_HOST_FLOW_CONTROL &&
+      op_code != OpCode::HOST_BUFFER_SIZE &&
+      op_code != OpCode::HOST_NUMBER_OF_COMPLETED_PACKETS &&
+      op_code != OpCode::READ_BUFFER_SIZE &&
+      op_code != OpCode::READ_LOOPBACK_MODE &&
+      op_code != OpCode::WRITE_LOOPBACK_MODE) {
     std::unique_ptr<bluetooth::packet::RawBuilder> raw_builder_ptr =
         std::make_unique<bluetooth::packet::RawBuilder>(255);
     raw_builder_ptr->AddOctets(*packet);
     send_event_(bluetooth::hci::LoopbackCommandBuilder::Create(
         std::move(raw_builder_ptr)));
-  } else if (active_hci_commands_.count(op) > 0) {
-    active_hci_commands_[op](command_packet);
-  } else {
-    uint16_t opcode = static_cast<uint16_t>(op);
-    SendCommandCompleteUnknownOpCodeEvent(opcode);
+  }
+  // Command is both supported and implemented.
+  // Invoke the registered handler.
+  else if (is_supported_command && is_implemented_command) {
+    hci_command_handlers_.at(op_code)(this, command_packet);
+  }
+  // Command is supported but not implemented:
+  // the command needs to be implemented to fix this.
+  else if (is_supported_command) {
+    LOG_ALWAYS_FATAL(
+        "Unimplemented command %s;\n"
+        "This message will be displayed if the command is set as supported\n"
+        "in the command mask but no implementation was provided.\n"
+        "This warning will be fixed by implementing the command in "
+        "DualModeController",
+        OpCodeText(op_code).c_str());
+  }
+  // The command is not supported.
+  // Respond with the status code Unknown Command.
+  else {
+    SendCommandCompleteUnknownOpCodeEvent(op_code);
+    uint16_t raw_op_code = static_cast<uint16_t>(op_code);
     LOG_INFO("Unknown command, opcode: 0x%04X, OGF: 0x%04X, OCF: 0x%04X",
-             opcode, (opcode & 0xFC00) >> 10, opcode & 0x03FF);
+             raw_op_code, (raw_op_code & 0xFC00) >> 10, raw_op_code & 0x03FF);
   }
 }
 
@@ -621,7 +423,7 @@ void DualModeController::ReadLocalSupportedFeatures(CommandView command) {
       link_layer_controller_.GetLmpFeatures()));
 }
 
-void DualModeController::ReadLocalSupportedCodecs(CommandView command) {
+void DualModeController::ReadLocalSupportedCodecsV1(CommandView command) {
   auto command_view = gd_hci::ReadLocalSupportedCodecsV1View::Create(command);
   ASSERT(command_view.IsValid());
   send_event_(bluetooth::hci::ReadLocalSupportedCodecsV1CompleteBuilder::Create(
@@ -2046,7 +1848,7 @@ void DualModeController::LeSetHostFeature(CommandView command) {
       kNumCommandPackets, status));
 }
 
-void DualModeController::LeReadBufferSize(CommandView command) {
+void DualModeController::LeReadBufferSizeV1(CommandView command) {
   auto command_view = gd_hci::LeReadBufferSizeV1View::Create(command);
   ASSERT(command_view.IsValid());
 
@@ -2708,14 +2510,13 @@ void DualModeController::LeRemoteConnectionParameterRequestNegativeReply(
                  command_view.GetConnectionHandle()));
 }
 
-void DualModeController::LeVendorCap(CommandView command) {
+void DualModeController::LeGetVendorCapabilities(CommandView command) {
   auto command_view = gd_hci::LeGetVendorCapabilitiesView::Create(
       gd_hci::VendorCommandView::Create(command));
   ASSERT(command_view.IsValid());
   vector<uint8_t> caps = properties_.le_vendor_capabilities;
   if (caps.empty()) {
-    SendCommandCompleteUnknownOpCodeEvent(
-        static_cast<uint16_t>(OpCode::LE_GET_VENDOR_CAPABILITIES));
+    SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_GET_VENDOR_CAPABILITIES);
     return;
   }
 
@@ -2729,28 +2530,25 @@ void DualModeController::LeVendorCap(CommandView command) {
       std::move(raw_builder_ptr)));
 }
 
-void DualModeController::LeVendorMultiAdv(CommandView command) {
+void DualModeController::LeMultiAdv(CommandView command) {
   auto command_view = gd_hci::LeMultiAdvtView::Create(
       gd_hci::LeAdvertisingCommandView::Create(command));
   ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(
-      static_cast<uint16_t>(OpCode::LE_MULTI_ADVT));
+  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_MULTI_ADVT);
 }
 
 void DualModeController::LeAdvertisingFilter(CommandView command) {
   auto command_view = gd_hci::LeAdvFilterView::Create(
       gd_hci::LeScanningCommandView::Create(command));
   ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(
-      static_cast<uint16_t>(OpCode::LE_ADV_FILTER));
+  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_ADV_FILTER);
 }
 
 void DualModeController::LeEnergyInfo(CommandView command) {
   auto command_view = gd_hci::LeEnergyInfoView::Create(
       gd_hci::VendorCommandView::Create(command));
   ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(
-      static_cast<uint16_t>(OpCode::LE_ENERGY_INFO));
+  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_ENERGY_INFO);
 }
 
 // CSR vendor command.
@@ -3052,8 +2850,7 @@ void DualModeController::LeExtendedScanParams(CommandView command) {
   auto command_view = gd_hci::LeExtendedScanParamsView::Create(
       gd_hci::LeScanningCommandView::Create(command));
   ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(
-      static_cast<uint16_t>(OpCode::LE_EXTENDED_SCAN_PARAMS));
+  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_EXTENDED_SCAN_PARAMS);
 }
 
 void DualModeController::LeStartEncryption(CommandView command) {
@@ -3166,5 +2963,1058 @@ void DualModeController::WriteLoopbackMode(CommandView command) {
   send_event_(bluetooth::hci::WriteLoopbackModeCompleteBuilder::Create(
       kNumCommandPackets, ErrorCode::SUCCESS));
 }
+
+// Note: the list does not contain all defined opcodes.
+// Notable exceptions:
+// - Vendor commands
+// - Read Local Supported Commands command
+const std::unordered_map<OpCode, OpCodeIndex>
+    DualModeController::hci_command_op_code_to_index_{
+        // LINK_CONTROL
+        {OpCode::INQUIRY, OpCodeIndex::INQUIRY},
+        {OpCode::INQUIRY_CANCEL, OpCodeIndex::INQUIRY_CANCEL},
+        {OpCode::PERIODIC_INQUIRY_MODE, OpCodeIndex::PERIODIC_INQUIRY_MODE},
+        {OpCode::EXIT_PERIODIC_INQUIRY_MODE,
+         OpCodeIndex::EXIT_PERIODIC_INQUIRY_MODE},
+        {OpCode::CREATE_CONNECTION, OpCodeIndex::CREATE_CONNECTION},
+        {OpCode::DISCONNECT, OpCodeIndex::DISCONNECT},
+        {OpCode::ADD_SCO_CONNECTION, OpCodeIndex::ADD_SCO_CONNECTION},
+        {OpCode::CREATE_CONNECTION_CANCEL,
+         OpCodeIndex::CREATE_CONNECTION_CANCEL},
+        {OpCode::ACCEPT_CONNECTION_REQUEST,
+         OpCodeIndex::ACCEPT_CONNECTION_REQUEST},
+        {OpCode::REJECT_CONNECTION_REQUEST,
+         OpCodeIndex::REJECT_CONNECTION_REQUEST},
+        {OpCode::LINK_KEY_REQUEST_REPLY, OpCodeIndex::LINK_KEY_REQUEST_REPLY},
+        {OpCode::LINK_KEY_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::LINK_KEY_REQUEST_NEGATIVE_REPLY},
+        {OpCode::PIN_CODE_REQUEST_REPLY, OpCodeIndex::PIN_CODE_REQUEST_REPLY},
+        {OpCode::PIN_CODE_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::PIN_CODE_REQUEST_NEGATIVE_REPLY},
+        {OpCode::CHANGE_CONNECTION_PACKET_TYPE,
+         OpCodeIndex::CHANGE_CONNECTION_PACKET_TYPE},
+        {OpCode::AUTHENTICATION_REQUESTED,
+         OpCodeIndex::AUTHENTICATION_REQUESTED},
+        {OpCode::SET_CONNECTION_ENCRYPTION,
+         OpCodeIndex::SET_CONNECTION_ENCRYPTION},
+        {OpCode::CHANGE_CONNECTION_LINK_KEY,
+         OpCodeIndex::CHANGE_CONNECTION_LINK_KEY},
+        {OpCode::CENTRAL_LINK_KEY, OpCodeIndex::CENTRAL_LINK_KEY},
+        {OpCode::REMOTE_NAME_REQUEST, OpCodeIndex::REMOTE_NAME_REQUEST},
+        {OpCode::REMOTE_NAME_REQUEST_CANCEL,
+         OpCodeIndex::REMOTE_NAME_REQUEST_CANCEL},
+        {OpCode::READ_REMOTE_SUPPORTED_FEATURES,
+         OpCodeIndex::READ_REMOTE_SUPPORTED_FEATURES},
+        {OpCode::READ_REMOTE_EXTENDED_FEATURES,
+         OpCodeIndex::READ_REMOTE_EXTENDED_FEATURES},
+        {OpCode::READ_REMOTE_VERSION_INFORMATION,
+         OpCodeIndex::READ_REMOTE_VERSION_INFORMATION},
+        {OpCode::READ_CLOCK_OFFSET, OpCodeIndex::READ_CLOCK_OFFSET},
+        {OpCode::READ_LMP_HANDLE, OpCodeIndex::READ_LMP_HANDLE},
+        {OpCode::SETUP_SYNCHRONOUS_CONNECTION,
+         OpCodeIndex::SETUP_SYNCHRONOUS_CONNECTION},
+        {OpCode::ACCEPT_SYNCHRONOUS_CONNECTION,
+         OpCodeIndex::ACCEPT_SYNCHRONOUS_CONNECTION},
+        {OpCode::REJECT_SYNCHRONOUS_CONNECTION,
+         OpCodeIndex::REJECT_SYNCHRONOUS_CONNECTION},
+        {OpCode::IO_CAPABILITY_REQUEST_REPLY,
+         OpCodeIndex::IO_CAPABILITY_REQUEST_REPLY},
+        {OpCode::USER_CONFIRMATION_REQUEST_REPLY,
+         OpCodeIndex::USER_CONFIRMATION_REQUEST_REPLY},
+        {OpCode::USER_CONFIRMATION_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::USER_CONFIRMATION_REQUEST_NEGATIVE_REPLY},
+        {OpCode::USER_PASSKEY_REQUEST_REPLY,
+         OpCodeIndex::USER_PASSKEY_REQUEST_REPLY},
+        {OpCode::USER_PASSKEY_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::USER_PASSKEY_REQUEST_NEGATIVE_REPLY},
+        {OpCode::REMOTE_OOB_DATA_REQUEST_REPLY,
+         OpCodeIndex::REMOTE_OOB_DATA_REQUEST_REPLY},
+        {OpCode::REMOTE_OOB_DATA_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::REMOTE_OOB_DATA_REQUEST_NEGATIVE_REPLY},
+        {OpCode::IO_CAPABILITY_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::IO_CAPABILITY_REQUEST_NEGATIVE_REPLY},
+        {OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION,
+         OpCodeIndex::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION},
+        {OpCode::ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION,
+         OpCodeIndex::ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION},
+        {OpCode::TRUNCATED_PAGE, OpCodeIndex::TRUNCATED_PAGE},
+        {OpCode::TRUNCATED_PAGE_CANCEL, OpCodeIndex::TRUNCATED_PAGE_CANCEL},
+        {OpCode::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST,
+         OpCodeIndex::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST},
+        {OpCode::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_RECEIVE,
+         OpCodeIndex::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_RECEIVE},
+        {OpCode::START_SYNCHRONIZATION_TRAIN,
+         OpCodeIndex::START_SYNCHRONIZATION_TRAIN},
+        {OpCode::RECEIVE_SYNCHRONIZATION_TRAIN,
+         OpCodeIndex::RECEIVE_SYNCHRONIZATION_TRAIN},
+        {OpCode::REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY,
+         OpCodeIndex::REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY},
+
+        // LINK_POLICY
+        {OpCode::HOLD_MODE, OpCodeIndex::HOLD_MODE},
+        {OpCode::SNIFF_MODE, OpCodeIndex::SNIFF_MODE},
+        {OpCode::EXIT_SNIFF_MODE, OpCodeIndex::EXIT_SNIFF_MODE},
+        {OpCode::QOS_SETUP, OpCodeIndex::QOS_SETUP},
+        {OpCode::ROLE_DISCOVERY, OpCodeIndex::ROLE_DISCOVERY},
+        {OpCode::SWITCH_ROLE, OpCodeIndex::SWITCH_ROLE},
+        {OpCode::READ_LINK_POLICY_SETTINGS,
+         OpCodeIndex::READ_LINK_POLICY_SETTINGS},
+        {OpCode::WRITE_LINK_POLICY_SETTINGS,
+         OpCodeIndex::WRITE_LINK_POLICY_SETTINGS},
+        {OpCode::READ_DEFAULT_LINK_POLICY_SETTINGS,
+         OpCodeIndex::READ_DEFAULT_LINK_POLICY_SETTINGS},
+        {OpCode::WRITE_DEFAULT_LINK_POLICY_SETTINGS,
+         OpCodeIndex::WRITE_DEFAULT_LINK_POLICY_SETTINGS},
+        {OpCode::FLOW_SPECIFICATION, OpCodeIndex::FLOW_SPECIFICATION},
+        {OpCode::SNIFF_SUBRATING, OpCodeIndex::SNIFF_SUBRATING},
+
+        // CONTROLLER_AND_BASEBAND
+        {OpCode::SET_EVENT_MASK, OpCodeIndex::SET_EVENT_MASK},
+        {OpCode::RESET, OpCodeIndex::RESET},
+        {OpCode::SET_EVENT_FILTER, OpCodeIndex::SET_EVENT_FILTER},
+        {OpCode::FLUSH, OpCodeIndex::FLUSH},
+        {OpCode::READ_PIN_TYPE, OpCodeIndex::READ_PIN_TYPE},
+        {OpCode::WRITE_PIN_TYPE, OpCodeIndex::WRITE_PIN_TYPE},
+        {OpCode::READ_STORED_LINK_KEY, OpCodeIndex::READ_STORED_LINK_KEY},
+        {OpCode::WRITE_STORED_LINK_KEY, OpCodeIndex::WRITE_STORED_LINK_KEY},
+        {OpCode::DELETE_STORED_LINK_KEY, OpCodeIndex::DELETE_STORED_LINK_KEY},
+        {OpCode::WRITE_LOCAL_NAME, OpCodeIndex::WRITE_LOCAL_NAME},
+        {OpCode::READ_LOCAL_NAME, OpCodeIndex::READ_LOCAL_NAME},
+        {OpCode::READ_CONNECTION_ACCEPT_TIMEOUT,
+         OpCodeIndex::READ_CONNECTION_ACCEPT_TIMEOUT},
+        {OpCode::WRITE_CONNECTION_ACCEPT_TIMEOUT,
+         OpCodeIndex::WRITE_CONNECTION_ACCEPT_TIMEOUT},
+        {OpCode::READ_PAGE_TIMEOUT, OpCodeIndex::READ_PAGE_TIMEOUT},
+        {OpCode::WRITE_PAGE_TIMEOUT, OpCodeIndex::WRITE_PAGE_TIMEOUT},
+        {OpCode::READ_SCAN_ENABLE, OpCodeIndex::READ_SCAN_ENABLE},
+        {OpCode::WRITE_SCAN_ENABLE, OpCodeIndex::WRITE_SCAN_ENABLE},
+        {OpCode::READ_PAGE_SCAN_ACTIVITY, OpCodeIndex::READ_PAGE_SCAN_ACTIVITY},
+        {OpCode::WRITE_PAGE_SCAN_ACTIVITY,
+         OpCodeIndex::WRITE_PAGE_SCAN_ACTIVITY},
+        {OpCode::READ_INQUIRY_SCAN_ACTIVITY,
+         OpCodeIndex::READ_INQUIRY_SCAN_ACTIVITY},
+        {OpCode::WRITE_INQUIRY_SCAN_ACTIVITY,
+         OpCodeIndex::WRITE_INQUIRY_SCAN_ACTIVITY},
+        {OpCode::READ_AUTHENTICATION_ENABLE,
+         OpCodeIndex::READ_AUTHENTICATION_ENABLE},
+        {OpCode::WRITE_AUTHENTICATION_ENABLE,
+         OpCodeIndex::WRITE_AUTHENTICATION_ENABLE},
+        {OpCode::READ_CLASS_OF_DEVICE, OpCodeIndex::READ_CLASS_OF_DEVICE},
+        {OpCode::WRITE_CLASS_OF_DEVICE, OpCodeIndex::WRITE_CLASS_OF_DEVICE},
+        {OpCode::READ_VOICE_SETTING, OpCodeIndex::READ_VOICE_SETTING},
+        {OpCode::WRITE_VOICE_SETTING, OpCodeIndex::WRITE_VOICE_SETTING},
+        {OpCode::READ_AUTOMATIC_FLUSH_TIMEOUT,
+         OpCodeIndex::READ_AUTOMATIC_FLUSH_TIMEOUT},
+        {OpCode::WRITE_AUTOMATIC_FLUSH_TIMEOUT,
+         OpCodeIndex::WRITE_AUTOMATIC_FLUSH_TIMEOUT},
+        {OpCode::READ_NUM_BROADCAST_RETRANSMITS,
+         OpCodeIndex::READ_NUM_BROADCAST_RETRANSMITS},
+        {OpCode::WRITE_NUM_BROADCAST_RETRANSMITS,
+         OpCodeIndex::WRITE_NUM_BROADCAST_RETRANSMITS},
+        {OpCode::READ_HOLD_MODE_ACTIVITY, OpCodeIndex::READ_HOLD_MODE_ACTIVITY},
+        {OpCode::WRITE_HOLD_MODE_ACTIVITY,
+         OpCodeIndex::WRITE_HOLD_MODE_ACTIVITY},
+        {OpCode::READ_TRANSMIT_POWER_LEVEL,
+         OpCodeIndex::READ_TRANSMIT_POWER_LEVEL},
+        {OpCode::READ_SYNCHRONOUS_FLOW_CONTROL_ENABLE,
+         OpCodeIndex::READ_SYNCHRONOUS_FLOW_CONTROL_ENABLE},
+        {OpCode::WRITE_SYNCHRONOUS_FLOW_CONTROL_ENABLE,
+         OpCodeIndex::WRITE_SYNCHRONOUS_FLOW_CONTROL_ENABLE},
+        {OpCode::SET_CONTROLLER_TO_HOST_FLOW_CONTROL,
+         OpCodeIndex::SET_CONTROLLER_TO_HOST_FLOW_CONTROL},
+        {OpCode::HOST_BUFFER_SIZE, OpCodeIndex::HOST_BUFFER_SIZE},
+        {OpCode::HOST_NUMBER_OF_COMPLETED_PACKETS,
+         OpCodeIndex::HOST_NUMBER_OF_COMPLETED_PACKETS},
+        {OpCode::READ_LINK_SUPERVISION_TIMEOUT,
+         OpCodeIndex::READ_LINK_SUPERVISION_TIMEOUT},
+        {OpCode::WRITE_LINK_SUPERVISION_TIMEOUT,
+         OpCodeIndex::WRITE_LINK_SUPERVISION_TIMEOUT},
+        {OpCode::READ_NUMBER_OF_SUPPORTED_IAC,
+         OpCodeIndex::READ_NUMBER_OF_SUPPORTED_IAC},
+        {OpCode::READ_CURRENT_IAC_LAP, OpCodeIndex::READ_CURRENT_IAC_LAP},
+        {OpCode::WRITE_CURRENT_IAC_LAP, OpCodeIndex::WRITE_CURRENT_IAC_LAP},
+        {OpCode::SET_AFH_HOST_CHANNEL_CLASSIFICATION,
+         OpCodeIndex::SET_AFH_HOST_CHANNEL_CLASSIFICATION},
+        {OpCode::READ_INQUIRY_SCAN_TYPE, OpCodeIndex::READ_INQUIRY_SCAN_TYPE},
+        {OpCode::WRITE_INQUIRY_SCAN_TYPE, OpCodeIndex::WRITE_INQUIRY_SCAN_TYPE},
+        {OpCode::READ_INQUIRY_MODE, OpCodeIndex::READ_INQUIRY_MODE},
+        {OpCode::WRITE_INQUIRY_MODE, OpCodeIndex::WRITE_INQUIRY_MODE},
+        {OpCode::READ_PAGE_SCAN_TYPE, OpCodeIndex::READ_PAGE_SCAN_TYPE},
+        {OpCode::WRITE_PAGE_SCAN_TYPE, OpCodeIndex::WRITE_PAGE_SCAN_TYPE},
+        {OpCode::READ_AFH_CHANNEL_ASSESSMENT_MODE,
+         OpCodeIndex::READ_AFH_CHANNEL_ASSESSMENT_MODE},
+        {OpCode::WRITE_AFH_CHANNEL_ASSESSMENT_MODE,
+         OpCodeIndex::WRITE_AFH_CHANNEL_ASSESSMENT_MODE},
+        {OpCode::READ_EXTENDED_INQUIRY_RESPONSE,
+         OpCodeIndex::READ_EXTENDED_INQUIRY_RESPONSE},
+        {OpCode::WRITE_EXTENDED_INQUIRY_RESPONSE,
+         OpCodeIndex::WRITE_EXTENDED_INQUIRY_RESPONSE},
+        {OpCode::REFRESH_ENCRYPTION_KEY, OpCodeIndex::REFRESH_ENCRYPTION_KEY},
+        {OpCode::READ_SIMPLE_PAIRING_MODE,
+         OpCodeIndex::READ_SIMPLE_PAIRING_MODE},
+        {OpCode::WRITE_SIMPLE_PAIRING_MODE,
+         OpCodeIndex::WRITE_SIMPLE_PAIRING_MODE},
+        {OpCode::READ_LOCAL_OOB_DATA, OpCodeIndex::READ_LOCAL_OOB_DATA},
+        {OpCode::READ_INQUIRY_RESPONSE_TRANSMIT_POWER_LEVEL,
+         OpCodeIndex::READ_INQUIRY_RESPONSE_TRANSMIT_POWER_LEVEL},
+        {OpCode::WRITE_INQUIRY_TRANSMIT_POWER_LEVEL,
+         OpCodeIndex::WRITE_INQUIRY_TRANSMIT_POWER_LEVEL},
+        {OpCode::READ_DEFAULT_ERRONEOUS_DATA_REPORTING,
+         OpCodeIndex::READ_DEFAULT_ERRONEOUS_DATA_REPORTING},
+        {OpCode::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING,
+         OpCodeIndex::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING},
+        {OpCode::ENHANCED_FLUSH, OpCodeIndex::ENHANCED_FLUSH},
+        {OpCode::SEND_KEYPRESS_NOTIFICATION,
+         OpCodeIndex::SEND_KEYPRESS_NOTIFICATION},
+        {OpCode::SET_EVENT_MASK_PAGE_2, OpCodeIndex::SET_EVENT_MASK_PAGE_2},
+        {OpCode::READ_FLOW_CONTROL_MODE, OpCodeIndex::READ_FLOW_CONTROL_MODE},
+        {OpCode::WRITE_FLOW_CONTROL_MODE, OpCodeIndex::WRITE_FLOW_CONTROL_MODE},
+        {OpCode::READ_ENHANCED_TRANSMIT_POWER_LEVEL,
+         OpCodeIndex::READ_ENHANCED_TRANSMIT_POWER_LEVEL},
+        {OpCode::READ_LE_HOST_SUPPORT, OpCodeIndex::READ_LE_HOST_SUPPORT},
+        {OpCode::WRITE_LE_HOST_SUPPORT, OpCodeIndex::WRITE_LE_HOST_SUPPORT},
+        {OpCode::SET_MWS_CHANNEL_PARAMETERS,
+         OpCodeIndex::SET_MWS_CHANNEL_PARAMETERS},
+        {OpCode::SET_EXTERNAL_FRAME_CONFIGURATION,
+         OpCodeIndex::SET_EXTERNAL_FRAME_CONFIGURATION},
+        {OpCode::SET_MWS_SIGNALING, OpCodeIndex::SET_MWS_SIGNALING},
+        {OpCode::SET_MWS_TRANSPORT_LAYER, OpCodeIndex::SET_MWS_TRANSPORT_LAYER},
+        {OpCode::SET_MWS_SCAN_FREQUENCY_TABLE,
+         OpCodeIndex::SET_MWS_SCAN_FREQUENCY_TABLE},
+        {OpCode::SET_MWS_PATTERN_CONFIGURATION,
+         OpCodeIndex::SET_MWS_PATTERN_CONFIGURATION},
+        {OpCode::SET_RESERVED_LT_ADDR, OpCodeIndex::SET_RESERVED_LT_ADDR},
+        {OpCode::DELETE_RESERVED_LT_ADDR, OpCodeIndex::DELETE_RESERVED_LT_ADDR},
+        {OpCode::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_DATA,
+         OpCodeIndex::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_DATA},
+        {OpCode::READ_SYNCHRONIZATION_TRAIN_PARAMETERS,
+         OpCodeIndex::READ_SYNCHRONIZATION_TRAIN_PARAMETERS},
+        {OpCode::WRITE_SYNCHRONIZATION_TRAIN_PARAMETERS,
+         OpCodeIndex::WRITE_SYNCHRONIZATION_TRAIN_PARAMETERS},
+        {OpCode::READ_SECURE_CONNECTIONS_HOST_SUPPORT,
+         OpCodeIndex::READ_SECURE_CONNECTIONS_HOST_SUPPORT},
+        {OpCode::WRITE_SECURE_CONNECTIONS_HOST_SUPPORT,
+         OpCodeIndex::WRITE_SECURE_CONNECTIONS_HOST_SUPPORT},
+        {OpCode::READ_AUTHENTICATED_PAYLOAD_TIMEOUT,
+         OpCodeIndex::READ_AUTHENTICATED_PAYLOAD_TIMEOUT},
+        {OpCode::WRITE_AUTHENTICATED_PAYLOAD_TIMEOUT,
+         OpCodeIndex::WRITE_AUTHENTICATED_PAYLOAD_TIMEOUT},
+        {OpCode::READ_LOCAL_OOB_EXTENDED_DATA,
+         OpCodeIndex::READ_LOCAL_OOB_EXTENDED_DATA},
+        {OpCode::READ_EXTENDED_PAGE_TIMEOUT,
+         OpCodeIndex::READ_EXTENDED_PAGE_TIMEOUT},
+        {OpCode::WRITE_EXTENDED_PAGE_TIMEOUT,
+         OpCodeIndex::WRITE_EXTENDED_PAGE_TIMEOUT},
+        {OpCode::READ_EXTENDED_INQUIRY_LENGTH,
+         OpCodeIndex::READ_EXTENDED_INQUIRY_LENGTH},
+        {OpCode::WRITE_EXTENDED_INQUIRY_LENGTH,
+         OpCodeIndex::WRITE_EXTENDED_INQUIRY_LENGTH},
+        {OpCode::SET_ECOSYSTEM_BASE_INTERVAL,
+         OpCodeIndex::SET_ECOSYSTEM_BASE_INTERVAL},
+        {OpCode::CONFIGURE_DATA_PATH, OpCodeIndex::CONFIGURE_DATA_PATH},
+        {OpCode::SET_MIN_ENCRYPTION_KEY_SIZE,
+         OpCodeIndex::SET_MIN_ENCRYPTION_KEY_SIZE},
+
+        // INFORMATIONAL_PARAMETERS
+        {OpCode::READ_LOCAL_VERSION_INFORMATION,
+         OpCodeIndex::READ_LOCAL_VERSION_INFORMATION},
+        {OpCode::READ_LOCAL_SUPPORTED_FEATURES,
+         OpCodeIndex::READ_LOCAL_SUPPORTED_FEATURES},
+        {OpCode::READ_LOCAL_EXTENDED_FEATURES,
+         OpCodeIndex::READ_LOCAL_EXTENDED_FEATURES},
+        {OpCode::READ_BUFFER_SIZE, OpCodeIndex::READ_BUFFER_SIZE},
+        {OpCode::READ_BD_ADDR, OpCodeIndex::READ_BD_ADDR},
+        {OpCode::READ_DATA_BLOCK_SIZE, OpCodeIndex::READ_DATA_BLOCK_SIZE},
+        {OpCode::READ_LOCAL_SUPPORTED_CODECS_V1,
+         OpCodeIndex::READ_LOCAL_SUPPORTED_CODECS_V1},
+        {OpCode::READ_LOCAL_SIMPLE_PAIRING_OPTIONS,
+         OpCodeIndex::READ_LOCAL_SIMPLE_PAIRING_OPTIONS},
+        {OpCode::READ_LOCAL_SUPPORTED_CODECS_V2,
+         OpCodeIndex::READ_LOCAL_SUPPORTED_CODECS_V2},
+        {OpCode::READ_LOCAL_SUPPORTED_CODEC_CAPABILITIES,
+         OpCodeIndex::READ_LOCAL_SUPPORTED_CODEC_CAPABILITIES},
+        {OpCode::READ_LOCAL_SUPPORTED_CONTROLLER_DELAY,
+         OpCodeIndex::READ_LOCAL_SUPPORTED_CONTROLLER_DELAY},
+
+        // STATUS_PARAMETERS
+        {OpCode::READ_FAILED_CONTACT_COUNTER,
+         OpCodeIndex::READ_FAILED_CONTACT_COUNTER},
+        {OpCode::RESET_FAILED_CONTACT_COUNTER,
+         OpCodeIndex::RESET_FAILED_CONTACT_COUNTER},
+        {OpCode::READ_LINK_QUALITY, OpCodeIndex::READ_LINK_QUALITY},
+        {OpCode::READ_RSSI, OpCodeIndex::READ_RSSI},
+        {OpCode::READ_AFH_CHANNEL_MAP, OpCodeIndex::READ_AFH_CHANNEL_MAP},
+        {OpCode::READ_CLOCK, OpCodeIndex::READ_CLOCK},
+        {OpCode::READ_ENCRYPTION_KEY_SIZE,
+         OpCodeIndex::READ_ENCRYPTION_KEY_SIZE},
+        {OpCode::GET_MWS_TRANSPORT_LAYER_CONFIGURATION,
+         OpCodeIndex::GET_MWS_TRANSPORT_LAYER_CONFIGURATION},
+        {OpCode::SET_TRIGGERED_CLOCK_CAPTURE,
+         OpCodeIndex::SET_TRIGGERED_CLOCK_CAPTURE},
+
+        // TESTING
+        {OpCode::READ_LOOPBACK_MODE, OpCodeIndex::READ_LOOPBACK_MODE},
+        {OpCode::WRITE_LOOPBACK_MODE, OpCodeIndex::WRITE_LOOPBACK_MODE},
+        {OpCode::ENABLE_DEVICE_UNDER_TEST_MODE,
+         OpCodeIndex::ENABLE_DEVICE_UNDER_TEST_MODE},
+        {OpCode::WRITE_SIMPLE_PAIRING_DEBUG_MODE,
+         OpCodeIndex::WRITE_SIMPLE_PAIRING_DEBUG_MODE},
+        {OpCode::WRITE_SECURE_CONNECTIONS_TEST_MODE,
+         OpCodeIndex::WRITE_SECURE_CONNECTIONS_TEST_MODE},
+
+        // LE_CONTROLLER
+        {OpCode::LE_SET_EVENT_MASK, OpCodeIndex::LE_SET_EVENT_MASK},
+        {OpCode::LE_READ_BUFFER_SIZE_V1, OpCodeIndex::LE_READ_BUFFER_SIZE_V1},
+        {OpCode::LE_READ_LOCAL_SUPPORTED_FEATURES,
+         OpCodeIndex::LE_READ_LOCAL_SUPPORTED_FEATURES},
+        {OpCode::LE_SET_RANDOM_ADDRESS, OpCodeIndex::LE_SET_RANDOM_ADDRESS},
+        {OpCode::LE_SET_ADVERTISING_PARAMETERS,
+         OpCodeIndex::LE_SET_ADVERTISING_PARAMETERS},
+        {OpCode::LE_READ_ADVERTISING_PHYSICAL_CHANNEL_TX_POWER,
+         OpCodeIndex::LE_READ_ADVERTISING_PHYSICAL_CHANNEL_TX_POWER},
+        {OpCode::LE_SET_ADVERTISING_DATA, OpCodeIndex::LE_SET_ADVERTISING_DATA},
+        {OpCode::LE_SET_SCAN_RESPONSE_DATA,
+         OpCodeIndex::LE_SET_SCAN_RESPONSE_DATA},
+        {OpCode::LE_SET_ADVERTISING_ENABLE,
+         OpCodeIndex::LE_SET_ADVERTISING_ENABLE},
+        {OpCode::LE_SET_SCAN_PARAMETERS, OpCodeIndex::LE_SET_SCAN_PARAMETERS},
+        {OpCode::LE_SET_SCAN_ENABLE, OpCodeIndex::LE_SET_SCAN_ENABLE},
+        {OpCode::LE_CREATE_CONNECTION, OpCodeIndex::LE_CREATE_CONNECTION},
+        {OpCode::LE_CREATE_CONNECTION_CANCEL,
+         OpCodeIndex::LE_CREATE_CONNECTION_CANCEL},
+        {OpCode::LE_READ_FILTER_ACCEPT_LIST_SIZE,
+         OpCodeIndex::LE_READ_FILTER_ACCEPT_LIST_SIZE},
+        {OpCode::LE_CLEAR_FILTER_ACCEPT_LIST,
+         OpCodeIndex::LE_CLEAR_FILTER_ACCEPT_LIST},
+        {OpCode::LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST,
+         OpCodeIndex::LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST},
+        {OpCode::LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST,
+         OpCodeIndex::LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST},
+        {OpCode::LE_CONNECTION_UPDATE, OpCodeIndex::LE_CONNECTION_UPDATE},
+        {OpCode::LE_SET_HOST_CHANNEL_CLASSIFICATION,
+         OpCodeIndex::LE_SET_HOST_CHANNEL_CLASSIFICATION},
+        {OpCode::LE_READ_CHANNEL_MAP, OpCodeIndex::LE_READ_CHANNEL_MAP},
+        {OpCode::LE_READ_REMOTE_FEATURES, OpCodeIndex::LE_READ_REMOTE_FEATURES},
+        {OpCode::LE_ENCRYPT, OpCodeIndex::LE_ENCRYPT},
+        {OpCode::LE_RAND, OpCodeIndex::LE_RAND},
+        {OpCode::LE_START_ENCRYPTION, OpCodeIndex::LE_START_ENCRYPTION},
+        {OpCode::LE_LONG_TERM_KEY_REQUEST_REPLY,
+         OpCodeIndex::LE_LONG_TERM_KEY_REQUEST_REPLY},
+        {OpCode::LE_LONG_TERM_KEY_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::LE_LONG_TERM_KEY_REQUEST_NEGATIVE_REPLY},
+        {OpCode::LE_READ_SUPPORTED_STATES,
+         OpCodeIndex::LE_READ_SUPPORTED_STATES},
+        {OpCode::LE_RECEIVER_TEST_V1, OpCodeIndex::LE_RECEIVER_TEST_V1},
+        {OpCode::LE_TRANSMITTER_TEST_V1, OpCodeIndex::LE_TRANSMITTER_TEST_V1},
+        {OpCode::LE_TEST_END, OpCodeIndex::LE_TEST_END},
+        {OpCode::LE_REMOTE_CONNECTION_PARAMETER_REQUEST_REPLY,
+         OpCodeIndex::LE_REMOTE_CONNECTION_PARAMETER_REQUEST_REPLY},
+        {OpCode::LE_REMOTE_CONNECTION_PARAMETER_REQUEST_NEGATIVE_REPLY,
+         OpCodeIndex::LE_REMOTE_CONNECTION_PARAMETER_REQUEST_NEGATIVE_REPLY},
+        {OpCode::LE_SET_DATA_LENGTH, OpCodeIndex::LE_SET_DATA_LENGTH},
+        {OpCode::LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH,
+         OpCodeIndex::LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH},
+        {OpCode::LE_WRITE_SUGGESTED_DEFAULT_DATA_LENGTH,
+         OpCodeIndex::LE_WRITE_SUGGESTED_DEFAULT_DATA_LENGTH},
+        {OpCode::LE_READ_LOCAL_P_256_PUBLIC_KEY,
+         OpCodeIndex::LE_READ_LOCAL_P_256_PUBLIC_KEY},
+        {OpCode::LE_GENERATE_DHKEY_V1, OpCodeIndex::LE_GENERATE_DHKEY_V1},
+        {OpCode::LE_ADD_DEVICE_TO_RESOLVING_LIST,
+         OpCodeIndex::LE_ADD_DEVICE_TO_RESOLVING_LIST},
+        {OpCode::LE_REMOVE_DEVICE_FROM_RESOLVING_LIST,
+         OpCodeIndex::LE_REMOVE_DEVICE_FROM_RESOLVING_LIST},
+        {OpCode::LE_CLEAR_RESOLVING_LIST, OpCodeIndex::LE_CLEAR_RESOLVING_LIST},
+        {OpCode::LE_READ_RESOLVING_LIST_SIZE,
+         OpCodeIndex::LE_READ_RESOLVING_LIST_SIZE},
+        {OpCode::LE_READ_PEER_RESOLVABLE_ADDRESS,
+         OpCodeIndex::LE_READ_PEER_RESOLVABLE_ADDRESS},
+        {OpCode::LE_READ_LOCAL_RESOLVABLE_ADDRESS,
+         OpCodeIndex::LE_READ_LOCAL_RESOLVABLE_ADDRESS},
+        {OpCode::LE_SET_ADDRESS_RESOLUTION_ENABLE,
+         OpCodeIndex::LE_SET_ADDRESS_RESOLUTION_ENABLE},
+        {OpCode::LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT,
+         OpCodeIndex::LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT},
+        {OpCode::LE_READ_MAXIMUM_DATA_LENGTH,
+         OpCodeIndex::LE_READ_MAXIMUM_DATA_LENGTH},
+        {OpCode::LE_READ_PHY, OpCodeIndex::LE_READ_PHY},
+        {OpCode::LE_SET_DEFAULT_PHY, OpCodeIndex::LE_SET_DEFAULT_PHY},
+        {OpCode::LE_SET_PHY, OpCodeIndex::LE_SET_PHY},
+        {OpCode::LE_RECEIVER_TEST_V2, OpCodeIndex::LE_RECEIVER_TEST_V2},
+        {OpCode::LE_TRANSMITTER_TEST_V2, OpCodeIndex::LE_TRANSMITTER_TEST_V2},
+        {OpCode::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS,
+         OpCodeIndex::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS},
+        {OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS,
+         OpCodeIndex::LE_SET_EXTENDED_ADVERTISING_PARAMETERS},
+        {OpCode::LE_SET_EXTENDED_ADVERTISING_DATA,
+         OpCodeIndex::LE_SET_EXTENDED_ADVERTISING_DATA},
+        {OpCode::LE_SET_EXTENDED_SCAN_RESPONSE_DATA,
+         OpCodeIndex::LE_SET_EXTENDED_SCAN_RESPONSE_DATA},
+        {OpCode::LE_SET_EXTENDED_ADVERTISING_ENABLE,
+         OpCodeIndex::LE_SET_EXTENDED_ADVERTISING_ENABLE},
+        {OpCode::LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH,
+         OpCodeIndex::LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH},
+        {OpCode::LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS,
+         OpCodeIndex::LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS},
+        {OpCode::LE_REMOVE_ADVERTISING_SET,
+         OpCodeIndex::LE_REMOVE_ADVERTISING_SET},
+        {OpCode::LE_CLEAR_ADVERTISING_SETS,
+         OpCodeIndex::LE_CLEAR_ADVERTISING_SETS},
+        {OpCode::LE_SET_PERIODIC_ADVERTISING_PARAM,
+         OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_PARAM},
+        {OpCode::LE_SET_PERIODIC_ADVERTISING_DATA,
+         OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_DATA},
+        {OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE,
+         OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_ENABLE},
+        {OpCode::LE_SET_EXTENDED_SCAN_PARAMETERS,
+         OpCodeIndex::LE_SET_EXTENDED_SCAN_PARAMETERS},
+        {OpCode::LE_SET_EXTENDED_SCAN_ENABLE,
+         OpCodeIndex::LE_SET_EXTENDED_SCAN_ENABLE},
+        {OpCode::LE_EXTENDED_CREATE_CONNECTION,
+         OpCodeIndex::LE_EXTENDED_CREATE_CONNECTION},
+        {OpCode::LE_PERIODIC_ADVERTISING_CREATE_SYNC,
+         OpCodeIndex::LE_PERIODIC_ADVERTISING_CREATE_SYNC},
+        {OpCode::LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL,
+         OpCodeIndex::LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL},
+        {OpCode::LE_PERIODIC_ADVERTISING_TERMINATE_SYNC,
+         OpCodeIndex::LE_PERIODIC_ADVERTISING_TERMINATE_SYNC},
+        {OpCode::LE_ADD_DEVICE_TO_PERIODIC_ADVERTISING_LIST,
+         OpCodeIndex::LE_ADD_DEVICE_TO_PERIODIC_ADVERTISING_LIST},
+        {OpCode::LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISING_LIST,
+         OpCodeIndex::LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISING_LIST},
+        {OpCode::LE_CLEAR_PERIODIC_ADVERTISING_LIST,
+         OpCodeIndex::LE_CLEAR_PERIODIC_ADVERTISING_LIST},
+        {OpCode::LE_READ_PERIODIC_ADVERTISING_LIST_SIZE,
+         OpCodeIndex::LE_READ_PERIODIC_ADVERTISING_LIST_SIZE},
+        {OpCode::LE_READ_TRANSMIT_POWER, OpCodeIndex::LE_READ_TRANSMIT_POWER},
+        {OpCode::LE_READ_RF_PATH_COMPENSATION_POWER,
+         OpCodeIndex::LE_READ_RF_PATH_COMPENSATION_POWER},
+        {OpCode::LE_WRITE_RF_PATH_COMPENSATION_POWER,
+         OpCodeIndex::LE_WRITE_RF_PATH_COMPENSATION_POWER},
+        {OpCode::LE_SET_PRIVACY_MODE, OpCodeIndex::LE_SET_PRIVACY_MODE},
+        {OpCode::LE_RECEIVER_TEST_V3, OpCodeIndex::LE_RECEIVER_TEST_V3},
+        {OpCode::LE_TRANSMITTER_TEST_V3, OpCodeIndex::LE_TRANSMITTER_TEST_V3},
+        {OpCode::LE_SET_CONNECTIONLESS_CTE_TRANSMIT_PARAMETERS,
+         OpCodeIndex::LE_SET_CONNECTIONLESS_CTE_TRANSMIT_PARAMETERS},
+        {OpCode::LE_SET_CONNECTIONLESS_CTE_TRANSMIT_ENABLE,
+         OpCodeIndex::LE_SET_CONNECTIONLESS_CTE_TRANSMIT_ENABLE},
+        {OpCode::LE_SET_CONNECTIONLESS_IQ_SAMPLING_ENABLE,
+         OpCodeIndex::LE_SET_CONNECTIONLESS_IQ_SAMPLING_ENABLE},
+        {OpCode::LE_SET_CONNECTION_CTE_RECEIVE_PARAMETERS,
+         OpCodeIndex::LE_SET_CONNECTION_CTE_RECEIVE_PARAMETERS},
+        {OpCode::LE_SET_CONNECTION_CTE_TRANSMIT_PARAMETERS,
+         OpCodeIndex::LE_SET_CONNECTION_CTE_TRANSMIT_PARAMETERS},
+        {OpCode::LE_CONNECTION_CTE_REQUEST_ENABLE,
+         OpCodeIndex::LE_CONNECTION_CTE_REQUEST_ENABLE},
+        {OpCode::LE_CONNECTION_CTE_RESPONSE_ENABLE,
+         OpCodeIndex::LE_CONNECTION_CTE_RESPONSE_ENABLE},
+        {OpCode::LE_READ_ANTENNA_INFORMATION,
+         OpCodeIndex::LE_READ_ANTENNA_INFORMATION},
+        {OpCode::LE_SET_PERIODIC_ADVERTISING_RECEIVE_ENABLE,
+         OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_RECEIVE_ENABLE},
+        {OpCode::LE_PERIODIC_ADVERTISING_SYNC_TRANSFER,
+         OpCodeIndex::LE_PERIODIC_ADVERTISING_SYNC_TRANSFER},
+        {OpCode::LE_PERIODIC_ADVERTISING_SET_INFO_TRANSFER,
+         OpCodeIndex::LE_PERIODIC_ADVERTISING_SET_INFO_TRANSFER},
+        {OpCode::LE_SET_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS,
+         OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS},
+        {OpCode::LE_SET_DEFAULT_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS,
+         OpCodeIndex::
+             LE_SET_DEFAULT_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS},
+        {OpCode::LE_GENERATE_DHKEY_V2, OpCodeIndex::LE_GENERATE_DHKEY_V2},
+        {OpCode::LE_MODIFY_SLEEP_CLOCK_ACCURACY,
+         OpCodeIndex::LE_MODIFY_SLEEP_CLOCK_ACCURACY},
+        {OpCode::LE_READ_BUFFER_SIZE_V2, OpCodeIndex::LE_READ_BUFFER_SIZE_V2},
+        {OpCode::LE_READ_ISO_TX_SYNC, OpCodeIndex::LE_READ_ISO_TX_SYNC},
+        {OpCode::LE_SET_CIG_PARAMETERS, OpCodeIndex::LE_SET_CIG_PARAMETERS},
+        {OpCode::LE_SET_CIG_PARAMETERS_TEST,
+         OpCodeIndex::LE_SET_CIG_PARAMETERS_TEST},
+        {OpCode::LE_CREATE_CIS, OpCodeIndex::LE_CREATE_CIS},
+        {OpCode::LE_REMOVE_CIG, OpCodeIndex::LE_REMOVE_CIG},
+        {OpCode::LE_ACCEPT_CIS_REQUEST, OpCodeIndex::LE_ACCEPT_CIS_REQUEST},
+        {OpCode::LE_REJECT_CIS_REQUEST, OpCodeIndex::LE_REJECT_CIS_REQUEST},
+        {OpCode::LE_CREATE_BIG, OpCodeIndex::LE_CREATE_BIG},
+        {OpCode::LE_CREATE_BIG_TEST, OpCodeIndex::LE_CREATE_BIG_TEST},
+        {OpCode::LE_TERMINATE_BIG, OpCodeIndex::LE_TERMINATE_BIG},
+        {OpCode::LE_BIG_CREATE_SYNC, OpCodeIndex::LE_BIG_CREATE_SYNC},
+        {OpCode::LE_BIG_TERMINATE_SYNC, OpCodeIndex::LE_BIG_TERMINATE_SYNC},
+        {OpCode::LE_REQUEST_PEER_SCA, OpCodeIndex::LE_REQUEST_PEER_SCA},
+        {OpCode::LE_SETUP_ISO_DATA_PATH, OpCodeIndex::LE_SETUP_ISO_DATA_PATH},
+        {OpCode::LE_REMOVE_ISO_DATA_PATH, OpCodeIndex::LE_REMOVE_ISO_DATA_PATH},
+        {OpCode::LE_ISO_TRANSMIT_TEST, OpCodeIndex::LE_ISO_TRANSMIT_TEST},
+        {OpCode::LE_ISO_RECEIVE_TEST, OpCodeIndex::LE_ISO_RECEIVE_TEST},
+        {OpCode::LE_ISO_READ_TEST_COUNTERS,
+         OpCodeIndex::LE_ISO_READ_TEST_COUNTERS},
+        {OpCode::LE_ISO_TEST_END, OpCodeIndex::LE_ISO_TEST_END},
+        {OpCode::LE_SET_HOST_FEATURE, OpCodeIndex::LE_SET_HOST_FEATURE},
+        {OpCode::LE_READ_ISO_LINK_QUALITY,
+         OpCodeIndex::LE_READ_ISO_LINK_QUALITY},
+        {OpCode::LE_ENHANCED_READ_TRANSMIT_POWER_LEVEL,
+         OpCodeIndex::LE_ENHANCED_READ_TRANSMIT_POWER_LEVEL},
+        {OpCode::LE_READ_REMOTE_TRANSMIT_POWER_LEVEL,
+         OpCodeIndex::LE_READ_REMOTE_TRANSMIT_POWER_LEVEL},
+        {OpCode::LE_SET_PATH_LOSS_REPORTING_PARAMETERS,
+         OpCodeIndex::LE_SET_PATH_LOSS_REPORTING_PARAMETERS},
+        {OpCode::LE_SET_PATH_LOSS_REPORTING_ENABLE,
+         OpCodeIndex::LE_SET_PATH_LOSS_REPORTING_ENABLE},
+        {OpCode::LE_SET_TRANSMIT_POWER_REPORTING_ENABLE,
+         OpCodeIndex::LE_SET_TRANSMIT_POWER_REPORTING_ENABLE},
+        {OpCode::LE_TRANSMITTER_TEST_V4, OpCodeIndex::LE_TRANSMITTER_TEST_V4},
+        {OpCode::LE_SET_DATA_RELATED_ADDRESS_CHANGES,
+         OpCodeIndex::LE_SET_DATA_RELATED_ADDRESS_CHANGES},
+        {OpCode::LE_SET_DEFAULT_SUBRATE, OpCodeIndex::LE_SET_DEFAULT_SUBRATE},
+        {OpCode::LE_SUBRATE_REQUEST, OpCodeIndex::LE_SUBRATE_REQUEST},
+    };
+
+const std::unordered_map<OpCode, DualModeController::CommandHandler>
+    DualModeController::hci_command_handlers_{
+        // LINK_CONTROL
+        {OpCode::INQUIRY, &DualModeController::Inquiry},
+        {OpCode::INQUIRY_CANCEL, &DualModeController::InquiryCancel},
+        //{OpCode::PERIODIC_INQUIRY_MODE,
+        //&DualModeController::PeriodicInquiryMode},
+        //{OpCode::EXIT_PERIODIC_INQUIRY_MODE,
+        //&DualModeController::ExitPeriodicInquiryMode},
+        {OpCode::CREATE_CONNECTION, &DualModeController::CreateConnection},
+        {OpCode::DISCONNECT, &DualModeController::Disconnect},
+        {OpCode::ADD_SCO_CONNECTION, &DualModeController::AddScoConnection},
+        {OpCode::CREATE_CONNECTION_CANCEL,
+         &DualModeController::CreateConnectionCancel},
+        {OpCode::ACCEPT_CONNECTION_REQUEST,
+         &DualModeController::AcceptConnectionRequest},
+        {OpCode::REJECT_CONNECTION_REQUEST,
+         &DualModeController::RejectConnectionRequest},
+        {OpCode::LINK_KEY_REQUEST_REPLY,
+         &DualModeController::LinkKeyRequestReply},
+        {OpCode::LINK_KEY_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::LinkKeyRequestNegativeReply},
+        {OpCode::PIN_CODE_REQUEST_REPLY,
+         &DualModeController::PinCodeRequestReply},
+        {OpCode::PIN_CODE_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::PinCodeRequestNegativeReply},
+        {OpCode::CHANGE_CONNECTION_PACKET_TYPE,
+         &DualModeController::ChangeConnectionPacketType},
+        {OpCode::AUTHENTICATION_REQUESTED,
+         &DualModeController::AuthenticationRequested},
+        {OpCode::SET_CONNECTION_ENCRYPTION,
+         &DualModeController::SetConnectionEncryption},
+        {OpCode::CHANGE_CONNECTION_LINK_KEY,
+         &DualModeController::ChangeConnectionLinkKey},
+        {OpCode::CENTRAL_LINK_KEY, &DualModeController::CentralLinkKey},
+        {OpCode::REMOTE_NAME_REQUEST, &DualModeController::RemoteNameRequest},
+        //{OpCode::REMOTE_NAME_REQUEST_CANCEL,
+        //&DualModeController::RemoteNameRequestCancel},
+        {OpCode::READ_REMOTE_SUPPORTED_FEATURES,
+         &DualModeController::ReadRemoteSupportedFeatures},
+        {OpCode::READ_REMOTE_EXTENDED_FEATURES,
+         &DualModeController::ReadRemoteExtendedFeatures},
+        {OpCode::READ_REMOTE_VERSION_INFORMATION,
+         &DualModeController::ReadRemoteVersionInformation},
+        {OpCode::READ_CLOCK_OFFSET, &DualModeController::ReadClockOffset},
+        //{OpCode::READ_LMP_HANDLE, &DualModeController::ReadLmpHandle},
+        {OpCode::SETUP_SYNCHRONOUS_CONNECTION,
+         &DualModeController::SetupSynchronousConnection},
+        {OpCode::ACCEPT_SYNCHRONOUS_CONNECTION,
+         &DualModeController::AcceptSynchronousConnection},
+        {OpCode::REJECT_SYNCHRONOUS_CONNECTION,
+         &DualModeController::RejectSynchronousConnection},
+        {OpCode::IO_CAPABILITY_REQUEST_REPLY,
+         &DualModeController::IoCapabilityRequestReply},
+        {OpCode::USER_CONFIRMATION_REQUEST_REPLY,
+         &DualModeController::UserConfirmationRequestReply},
+        {OpCode::USER_CONFIRMATION_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::UserConfirmationRequestNegativeReply},
+        {OpCode::USER_PASSKEY_REQUEST_REPLY,
+         &DualModeController::UserPasskeyRequestReply},
+        {OpCode::USER_PASSKEY_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::UserPasskeyRequestNegativeReply},
+        {OpCode::REMOTE_OOB_DATA_REQUEST_REPLY,
+         &DualModeController::RemoteOobDataRequestReply},
+        {OpCode::REMOTE_OOB_DATA_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::RemoteOobDataRequestNegativeReply},
+        {OpCode::IO_CAPABILITY_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::IoCapabilityRequestNegativeReply},
+        {OpCode::ENHANCED_SETUP_SYNCHRONOUS_CONNECTION,
+         &DualModeController::EnhancedSetupSynchronousConnection},
+        {OpCode::ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION,
+         &DualModeController::EnhancedAcceptSynchronousConnection},
+        //{OpCode::TRUNCATED_PAGE, &DualModeController::TruncatedPage},
+        //{OpCode::TRUNCATED_PAGE_CANCEL,
+        //&DualModeController::TruncatedPageCancel},
+        //{OpCode::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST,
+        //&DualModeController::SetConnectionlessPeripheralBroadcast},
+        //{OpCode::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_RECEIVE,
+        //&DualModeController::SetConnectionlessPeripheralBroadcastReceive},
+        //{OpCode::START_SYNCHRONIZATION_TRAIN,
+        //&DualModeController::StartSynchronizationTrain},
+        //{OpCode::RECEIVE_SYNCHRONIZATION_TRAIN,
+        //&DualModeController::ReceiveSynchronizationTrain},
+        {OpCode::REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY,
+         &DualModeController::RemoteOobExtendedDataRequestReply},
+
+        // LINK_POLICY
+        {OpCode::HOLD_MODE, &DualModeController::HoldMode},
+        {OpCode::SNIFF_MODE, &DualModeController::SniffMode},
+        {OpCode::EXIT_SNIFF_MODE, &DualModeController::ExitSniffMode},
+        {OpCode::QOS_SETUP, &DualModeController::QosSetup},
+        {OpCode::ROLE_DISCOVERY, &DualModeController::RoleDiscovery},
+        {OpCode::SWITCH_ROLE, &DualModeController::SwitchRole},
+        {OpCode::READ_LINK_POLICY_SETTINGS,
+         &DualModeController::ReadLinkPolicySettings},
+        {OpCode::WRITE_LINK_POLICY_SETTINGS,
+         &DualModeController::WriteLinkPolicySettings},
+        {OpCode::READ_DEFAULT_LINK_POLICY_SETTINGS,
+         &DualModeController::ReadDefaultLinkPolicySettings},
+        {OpCode::WRITE_DEFAULT_LINK_POLICY_SETTINGS,
+         &DualModeController::WriteDefaultLinkPolicySettings},
+        {OpCode::FLOW_SPECIFICATION, &DualModeController::FlowSpecification},
+        {OpCode::SNIFF_SUBRATING, &DualModeController::SniffSubrating},
+
+        // CONTROLLER_AND_BASEBAND
+        {OpCode::SET_EVENT_MASK, &DualModeController::SetEventMask},
+        {OpCode::RESET, &DualModeController::Reset},
+        {OpCode::SET_EVENT_FILTER, &DualModeController::SetEventFilter},
+        //{OpCode::FLUSH, &DualModeController::Flush},
+        //{OpCode::READ_PIN_TYPE, &DualModeController::ReadPinType},
+        //{OpCode::WRITE_PIN_TYPE, &DualModeController::WritePinType},
+        //{OpCode::READ_STORED_LINK_KEY,
+        //&DualModeController::ReadStoredLinkKey},
+        //{OpCode::WRITE_STORED_LINK_KEY,
+        //&DualModeController::WriteStoredLinkKey},
+        {OpCode::DELETE_STORED_LINK_KEY,
+         &DualModeController::DeleteStoredLinkKey},
+        {OpCode::WRITE_LOCAL_NAME, &DualModeController::WriteLocalName},
+        {OpCode::READ_LOCAL_NAME, &DualModeController::ReadLocalName},
+        {OpCode::READ_CONNECTION_ACCEPT_TIMEOUT,
+         &DualModeController::ReadConnectionAcceptTimeout},
+        {OpCode::WRITE_CONNECTION_ACCEPT_TIMEOUT,
+         &DualModeController::WriteConnectionAcceptTimeout},
+        {OpCode::READ_PAGE_TIMEOUT, &DualModeController::ReadPageTimeout},
+        {OpCode::WRITE_PAGE_TIMEOUT, &DualModeController::WritePageTimeout},
+        {OpCode::READ_SCAN_ENABLE, &DualModeController::ReadScanEnable},
+        {OpCode::WRITE_SCAN_ENABLE, &DualModeController::WriteScanEnable},
+        {OpCode::READ_PAGE_SCAN_ACTIVITY,
+         &DualModeController::ReadPageScanActivity},
+        {OpCode::WRITE_PAGE_SCAN_ACTIVITY,
+         &DualModeController::WritePageScanActivity},
+        {OpCode::READ_INQUIRY_SCAN_ACTIVITY,
+         &DualModeController::ReadInquiryScanActivity},
+        {OpCode::WRITE_INQUIRY_SCAN_ACTIVITY,
+         &DualModeController::WriteInquiryScanActivity},
+        {OpCode::READ_AUTHENTICATION_ENABLE,
+         &DualModeController::ReadAuthenticationEnable},
+        {OpCode::WRITE_AUTHENTICATION_ENABLE,
+         &DualModeController::WriteAuthenticationEnable},
+        {OpCode::READ_CLASS_OF_DEVICE, &DualModeController::ReadClassOfDevice},
+        {OpCode::WRITE_CLASS_OF_DEVICE,
+         &DualModeController::WriteClassOfDevice},
+        {OpCode::READ_VOICE_SETTING, &DualModeController::ReadVoiceSetting},
+        {OpCode::WRITE_VOICE_SETTING, &DualModeController::WriteVoiceSetting},
+        //{OpCode::READ_AUTOMATIC_FLUSH_TIMEOUT,
+        //&DualModeController::ReadAutomaticFlushTimeout},
+        //{OpCode::WRITE_AUTOMATIC_FLUSH_TIMEOUT,
+        //&DualModeController::WriteAutomaticFlushTimeout},
+        //{OpCode::READ_NUM_BROADCAST_RETRANSMITS,
+        //&DualModeController::ReadNumBroadcastRetransmits},
+        //{OpCode::WRITE_NUM_BROADCAST_RETRANSMITS,
+        //&DualModeController::WriteNumBroadcastRetransmits},
+        //{OpCode::READ_HOLD_MODE_ACTIVITY,
+        //&DualModeController::ReadHoldModeActivity},
+        //{OpCode::WRITE_HOLD_MODE_ACTIVITY,
+        //&DualModeController::WriteHoldModeActivity},
+        //{OpCode::READ_TRANSMIT_POWER_LEVEL,
+        //&DualModeController::ReadTransmitPowerLevel},
+        {OpCode::READ_SYNCHRONOUS_FLOW_CONTROL_ENABLE,
+         &DualModeController::ReadSynchronousFlowControlEnable},
+        {OpCode::WRITE_SYNCHRONOUS_FLOW_CONTROL_ENABLE,
+         &DualModeController::WriteSynchronousFlowControlEnable},
+        //{OpCode::SET_CONTROLLER_TO_HOST_FLOW_CONTROL,
+        //&DualModeController::SetControllerToHostFlowControl},
+        {OpCode::HOST_BUFFER_SIZE, &DualModeController::HostBufferSize},
+        //{OpCode::HOST_NUMBER_OF_COMPLETED_PACKETS,
+        //&DualModeController::HostNumberOfCompletedPackets},
+        //{OpCode::READ_LINK_SUPERVISION_TIMEOUT,
+        //&DualModeController::ReadLinkSupervisionTimeout},
+        {OpCode::WRITE_LINK_SUPERVISION_TIMEOUT,
+         &DualModeController::WriteLinkSupervisionTimeout},
+        {OpCode::READ_NUMBER_OF_SUPPORTED_IAC,
+         &DualModeController::ReadNumberOfSupportedIac},
+        {OpCode::READ_CURRENT_IAC_LAP, &DualModeController::ReadCurrentIacLap},
+        {OpCode::WRITE_CURRENT_IAC_LAP,
+         &DualModeController::WriteCurrentIacLap},
+        //{OpCode::SET_AFH_HOST_CHANNEL_CLASSIFICATION,
+        //&DualModeController::SetAfhHostChannelClassification},
+        {OpCode::READ_INQUIRY_SCAN_TYPE,
+         &DualModeController::ReadInquiryScanType},
+        {OpCode::WRITE_INQUIRY_SCAN_TYPE,
+         &DualModeController::WriteInquiryScanType},
+        {OpCode::READ_INQUIRY_MODE, &DualModeController::ReadInquiryMode},
+        {OpCode::WRITE_INQUIRY_MODE, &DualModeController::WriteInquiryMode},
+        {OpCode::READ_PAGE_SCAN_TYPE, &DualModeController::ReadPageScanType},
+        {OpCode::WRITE_PAGE_SCAN_TYPE, &DualModeController::WritePageScanType},
+        //{OpCode::READ_AFH_CHANNEL_ASSESSMENT_MODE,
+        //&DualModeController::ReadAfhChannelAssessmentMode},
+        //{OpCode::WRITE_AFH_CHANNEL_ASSESSMENT_MODE,
+        //&DualModeController::WriteAfhChannelAssessmentMode},
+        //{OpCode::READ_EXTENDED_INQUIRY_RESPONSE,
+        //&DualModeController::ReadExtendedInquiryResponse},
+        {OpCode::WRITE_EXTENDED_INQUIRY_RESPONSE,
+         &DualModeController::WriteExtendedInquiryResponse},
+        {OpCode::REFRESH_ENCRYPTION_KEY,
+         &DualModeController::RefreshEncryptionKey},
+        //{OpCode::READ_SIMPLE_PAIRING_MODE,
+        //&DualModeController::ReadSimplePairingMode},
+        {OpCode::WRITE_SIMPLE_PAIRING_MODE,
+         &DualModeController::WriteSimplePairingMode},
+        {OpCode::READ_LOCAL_OOB_DATA, &DualModeController::ReadLocalOobData},
+        {OpCode::READ_INQUIRY_RESPONSE_TRANSMIT_POWER_LEVEL,
+         &DualModeController::ReadInquiryResponseTransmitPowerLevel},
+        //{OpCode::WRITE_INQUIRY_TRANSMIT_POWER_LEVEL,
+        //&DualModeController::WriteInquiryTransmitPowerLevel},
+        //{OpCode::READ_DEFAULT_ERRONEOUS_DATA_REPORTING,
+        //&DualModeController::ReadDefaultErroneousDataReporting},
+        //{OpCode::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING,
+        //&DualModeController::WriteDefaultErroneousDataReporting},
+        {OpCode::ENHANCED_FLUSH, &DualModeController::EnhancedFlush},
+        {OpCode::SEND_KEYPRESS_NOTIFICATION,
+         &DualModeController::SendKeypressNotification},
+        {OpCode::SET_EVENT_MASK_PAGE_2, &DualModeController::SetEventMaskPage2},
+        //{OpCode::READ_FLOW_CONTROL_MODE,
+        //&DualModeController::ReadFlowControlMode},
+        //{OpCode::WRITE_FLOW_CONTROL_MODE,
+        //&DualModeController::WriteFlowControlMode},
+        //{OpCode::READ_ENHANCED_TRANSMIT_POWER_LEVEL,
+        //&DualModeController::ReadEnhancedTransmitPowerLevel},
+        //{OpCode::READ_LE_HOST_SUPPORT,
+        //&DualModeController::ReadLeHostSupport},
+        {OpCode::WRITE_LE_HOST_SUPPORT,
+         &DualModeController::WriteLeHostSupport},
+        //{OpCode::SET_MWS_CHANNEL_PARAMETERS,
+        //&DualModeController::SetMwsChannelParameters},
+        //{OpCode::SET_EXTERNAL_FRAME_CONFIGURATION,
+        //&DualModeController::SetExternalFrameConfiguration},
+        //{OpCode::SET_MWS_SIGNALING, &DualModeController::SetMwsSignaling},
+        //{OpCode::SET_MWS_TRANSPORT_LAYER,
+        //&DualModeController::SetMwsTransportLayer},
+        //{OpCode::SET_MWS_SCAN_FREQUENCY_TABLE,
+        //&DualModeController::SetMwsScanFrequencyTable},
+        //{OpCode::SET_MWS_PATTERN_CONFIGURATION,
+        //&DualModeController::SetMwsPatternConfiguration},
+        //{OpCode::SET_RESERVED_LT_ADDR,
+        //&DualModeController::SetReservedLtAddr},
+        //{OpCode::DELETE_RESERVED_LT_ADDR,
+        //&DualModeController::DeleteReservedLtAddr},
+        //{OpCode::SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_DATA,
+        //&DualModeController::SetConnectionlessPeripheralBroadcastData},
+        //{OpCode::READ_SYNCHRONIZATION_TRAIN_PARAMETERS,
+        //&DualModeController::ReadSynchronizationTrainParameters},
+        //{OpCode::WRITE_SYNCHRONIZATION_TRAIN_PARAMETERS,
+        //&DualModeController::WriteSynchronizationTrainParameters},
+        //{OpCode::READ_SECURE_CONNECTIONS_HOST_SUPPORT,
+        //&DualModeController::ReadSecureConnectionsHostSupport},
+        {OpCode::WRITE_SECURE_CONNECTIONS_HOST_SUPPORT,
+         &DualModeController::WriteSecureConnectionsHostSupport},
+        //{OpCode::READ_AUTHENTICATED_PAYLOAD_TIMEOUT,
+        //&DualModeController::ReadAuthenticatedPayloadTimeout},
+        //{OpCode::WRITE_AUTHENTICATED_PAYLOAD_TIMEOUT,
+        //&DualModeController::WriteAuthenticatedPayloadTimeout},
+        {OpCode::READ_LOCAL_OOB_EXTENDED_DATA,
+         &DualModeController::ReadLocalOobExtendedData},
+        //{OpCode::READ_EXTENDED_PAGE_TIMEOUT,
+        //&DualModeController::ReadExtendedPageTimeout},
+        //{OpCode::WRITE_EXTENDED_PAGE_TIMEOUT,
+        //&DualModeController::WriteExtendedPageTimeout},
+        //{OpCode::READ_EXTENDED_INQUIRY_LENGTH,
+        //&DualModeController::ReadExtendedInquiryLength},
+        //{OpCode::WRITE_EXTENDED_INQUIRY_LENGTH,
+        //&DualModeController::WriteExtendedInquiryLength},
+        //{OpCode::SET_ECOSYSTEM_BASE_INTERVAL,
+        //&DualModeController::SetEcosystemBaseInterval},
+        //{OpCode::CONFIGURE_DATA_PATH, &DualModeController::ConfigureDataPath},
+        //{OpCode::SET_MIN_ENCRYPTION_KEY_SIZE,
+        //&DualModeController::SetMinEncryptionKeySize},
+
+        // INFORMATIONAL_PARAMETERS
+        {OpCode::READ_LOCAL_VERSION_INFORMATION,
+         &DualModeController::ReadLocalVersionInformation},
+        {OpCode::READ_LOCAL_SUPPORTED_COMMANDS,
+         &DualModeController::ReadLocalSupportedCommands},
+        {OpCode::READ_LOCAL_SUPPORTED_FEATURES,
+         &DualModeController::ReadLocalSupportedFeatures},
+        {OpCode::READ_LOCAL_EXTENDED_FEATURES,
+         &DualModeController::ReadLocalExtendedFeatures},
+        {OpCode::READ_BUFFER_SIZE, &DualModeController::ReadBufferSize},
+        {OpCode::READ_BD_ADDR, &DualModeController::ReadBdAddr},
+        //{OpCode::READ_DATA_BLOCK_SIZE,
+        //&DualModeController::ReadDataBlockSize},
+        {OpCode::READ_LOCAL_SUPPORTED_CODECS_V1,
+         &DualModeController::ReadLocalSupportedCodecsV1},
+        //{OpCode::READ_LOCAL_SIMPLE_PAIRING_OPTIONS,
+        //&DualModeController::ReadLocalSimplePairingOptions},
+        //{OpCode::READ_LOCAL_SUPPORTED_CODECS_V2,
+        //&DualModeController::ReadLocalSupportedCodecsV2},
+        //{OpCode::READ_LOCAL_SUPPORTED_CODEC_CAPABILITIES,
+        //&DualModeController::ReadLocalSupportedCodecCapabilities},
+        //{OpCode::READ_LOCAL_SUPPORTED_CONTROLLER_DELAY,
+        //&DualModeController::ReadLocalSupportedControllerDelay},
+
+        // STATUS_PARAMETERS
+        //{OpCode::READ_FAILED_CONTACT_COUNTER,
+        //&DualModeController::ReadFailedContactCounter},
+        //{OpCode::RESET_FAILED_CONTACT_COUNTER,
+        //&DualModeController::ResetFailedContactCounter},
+        //{OpCode::READ_LINK_QUALITY, &DualModeController::ReadLinkQuality},
+        //{OpCode::READ_RSSI, &DualModeController::ReadRssi},
+        //{OpCode::READ_AFH_CHANNEL_MAP,
+        //&DualModeController::ReadAfhChannelMap},
+        //{OpCode::READ_CLOCK, &DualModeController::ReadClock},
+        {OpCode::READ_ENCRYPTION_KEY_SIZE,
+         &DualModeController::ReadEncryptionKeySize},
+        //{OpCode::GET_MWS_TRANSPORT_LAYER_CONFIGURATION,
+        //&DualModeController::GetMwsTransportLayerConfiguration},
+        //{OpCode::SET_TRIGGERED_CLOCK_CAPTURE,
+        //&DualModeController::SetTriggeredClockCapture},
+
+        // TESTING
+        {OpCode::READ_LOOPBACK_MODE, &DualModeController::ReadLoopbackMode},
+        {OpCode::WRITE_LOOPBACK_MODE, &DualModeController::WriteLoopbackMode},
+        //{OpCode::ENABLE_DEVICE_UNDER_TEST_MODE,
+        //&DualModeController::EnableDeviceUnderTestMode},
+        //{OpCode::WRITE_SIMPLE_PAIRING_DEBUG_MODE,
+        //&DualModeController::WriteSimplePairingDebugMode},
+        //{OpCode::WRITE_SECURE_CONNECTIONS_TEST_MODE,
+        //&DualModeController::WriteSecureConnectionsTestMode},
+
+        // LE_CONTROLLER
+        {OpCode::LE_SET_EVENT_MASK, &DualModeController::LeSetEventMask},
+        {OpCode::LE_READ_BUFFER_SIZE_V1,
+         &DualModeController::LeReadBufferSizeV1},
+        {OpCode::LE_READ_LOCAL_SUPPORTED_FEATURES,
+         &DualModeController::LeReadLocalSupportedFeatures},
+        {OpCode::LE_SET_RANDOM_ADDRESS,
+         &DualModeController::LeSetRandomAddress},
+        {OpCode::LE_SET_ADVERTISING_PARAMETERS,
+         &DualModeController::LeSetAdvertisingParameters},
+        {OpCode::LE_READ_ADVERTISING_PHYSICAL_CHANNEL_TX_POWER,
+         &DualModeController::LeReadAdvertisingPhysicalChannelTxPower},
+        {OpCode::LE_SET_ADVERTISING_DATA,
+         &DualModeController::LeSetAdvertisingData},
+        {OpCode::LE_SET_SCAN_RESPONSE_DATA,
+         &DualModeController::LeSetScanResponseData},
+        {OpCode::LE_SET_ADVERTISING_ENABLE,
+         &DualModeController::LeSetAdvertisingEnable},
+        {OpCode::LE_SET_SCAN_PARAMETERS,
+         &DualModeController::LeSetScanParameters},
+        {OpCode::LE_SET_SCAN_ENABLE, &DualModeController::LeSetScanEnable},
+        {OpCode::LE_CREATE_CONNECTION, &DualModeController::LeCreateConnection},
+        {OpCode::LE_CREATE_CONNECTION_CANCEL,
+         &DualModeController::LeCreateConnectionCancel},
+        {OpCode::LE_READ_FILTER_ACCEPT_LIST_SIZE,
+         &DualModeController::LeReadFilterAcceptListSize},
+        {OpCode::LE_CLEAR_FILTER_ACCEPT_LIST,
+         &DualModeController::LeClearFilterAcceptList},
+        {OpCode::LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST,
+         &DualModeController::LeAddDeviceToFilterAcceptList},
+        {OpCode::LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST,
+         &DualModeController::LeRemoveDeviceFromFilterAcceptList},
+        {OpCode::LE_CONNECTION_UPDATE, &DualModeController::LeConnectionUpdate},
+        //{OpCode::LE_SET_HOST_CHANNEL_CLASSIFICATION,
+        //&DualModeController::LeSetHostChannelClassification},
+        //{OpCode::LE_READ_CHANNEL_MAP, &DualModeController::LeReadChannelMap},
+        {OpCode::LE_READ_REMOTE_FEATURES,
+         &DualModeController::LeReadRemoteFeatures},
+        {OpCode::LE_ENCRYPT, &DualModeController::LeEncrypt},
+        {OpCode::LE_RAND, &DualModeController::LeRand},
+        {OpCode::LE_START_ENCRYPTION, &DualModeController::LeStartEncryption},
+        {OpCode::LE_LONG_TERM_KEY_REQUEST_REPLY,
+         &DualModeController::LeLongTermKeyRequestReply},
+        {OpCode::LE_LONG_TERM_KEY_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::LeLongTermKeyRequestNegativeReply},
+        {OpCode::LE_READ_SUPPORTED_STATES,
+         &DualModeController::LeReadSupportedStates},
+        //{OpCode::LE_RECEIVER_TEST_V1, &DualModeController::LeReceiverTestV1},
+        //{OpCode::LE_TRANSMITTER_TEST_V1,
+        //&DualModeController::LeTransmitterTestV1},
+        //{OpCode::LE_TEST_END, &DualModeController::LeTestEnd},
+        {OpCode::LE_REMOTE_CONNECTION_PARAMETER_REQUEST_REPLY,
+         &DualModeController::LeRemoteConnectionParameterRequestReply},
+        {OpCode::LE_REMOTE_CONNECTION_PARAMETER_REQUEST_NEGATIVE_REPLY,
+         &DualModeController::LeRemoteConnectionParameterRequestNegativeReply},
+        //{OpCode::LE_SET_DATA_LENGTH, &DualModeController::LeSetDataLength},
+        {OpCode::LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH,
+         &DualModeController::LeReadSuggestedDefaultDataLength},
+        {OpCode::LE_WRITE_SUGGESTED_DEFAULT_DATA_LENGTH,
+         &DualModeController::LeWriteSuggestedDefaultDataLength},
+        //{OpCode::LE_READ_LOCAL_P_256_PUBLIC_KEY,
+        //&DualModeController::LeReadLocalP256PublicKey},
+        //{OpCode::LE_GENERATE_DHKEY_V1,
+        //&DualModeController::LeGenerateDhkeyV1},
+        {OpCode::LE_ADD_DEVICE_TO_RESOLVING_LIST,
+         &DualModeController::LeAddDeviceToResolvingList},
+        {OpCode::LE_REMOVE_DEVICE_FROM_RESOLVING_LIST,
+         &DualModeController::LeRemoveDeviceFromResolvingList},
+        {OpCode::LE_CLEAR_RESOLVING_LIST,
+         &DualModeController::LeClearResolvingList},
+        {OpCode::LE_READ_RESOLVING_LIST_SIZE,
+         &DualModeController::LeReadResolvingListSize},
+        //{OpCode::LE_READ_PEER_RESOLVABLE_ADDRESS,
+        //&DualModeController::LeReadPeerResolvableAddress},
+        //{OpCode::LE_READ_LOCAL_RESOLVABLE_ADDRESS,
+        //&DualModeController::LeReadLocalResolvableAddress},
+        {OpCode::LE_SET_ADDRESS_RESOLUTION_ENABLE,
+         &DualModeController::LeSetAddressResolutionEnable},
+        {OpCode::LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT,
+         &DualModeController::LeSetResolvablePrivateAddressTimeout},
+        {OpCode::LE_READ_MAXIMUM_DATA_LENGTH,
+         &DualModeController::LeReadMaximumDataLength},
+        //{OpCode::LE_READ_PHY, &DualModeController::LeReadPhy},
+        //{OpCode::LE_SET_DEFAULT_PHY, &DualModeController::LeSetDefaultPhy},
+        //{OpCode::LE_SET_PHY, &DualModeController::LeSetPhy},
+        //{OpCode::LE_RECEIVER_TEST_V2, &DualModeController::LeReceiverTestV2},
+        //{OpCode::LE_TRANSMITTER_TEST_V2,
+        //&DualModeController::LeTransmitterTestV2},
+        {OpCode::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS,
+         &DualModeController::LeSetAdvertisingSetRandomAddress},
+        {OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS,
+         &DualModeController::LeSetExtendedAdvertisingParameters},
+        {OpCode::LE_SET_EXTENDED_ADVERTISING_DATA,
+         &DualModeController::LeSetExtendedAdvertisingData},
+        {OpCode::LE_SET_EXTENDED_SCAN_RESPONSE_DATA,
+         &DualModeController::LeSetExtendedScanResponseData},
+        {OpCode::LE_SET_EXTENDED_ADVERTISING_ENABLE,
+         &DualModeController::LeSetExtendedAdvertisingEnable},
+        {OpCode::LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH,
+         &DualModeController::LeReadMaximumAdvertisingDataLength},
+        {OpCode::LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS,
+         &DualModeController::LeReadNumberOfSupportedAdvertisingSets},
+        {OpCode::LE_REMOVE_ADVERTISING_SET,
+         &DualModeController::LeRemoveAdvertisingSet},
+        {OpCode::LE_CLEAR_ADVERTISING_SETS,
+         &DualModeController::LeClearAdvertisingSets},
+        //{OpCode::LE_SET_PERIODIC_ADVERTISING_PARAM,
+        //&DualModeController::LeSetPeriodicAdvertisingParam},
+        //{OpCode::LE_SET_PERIODIC_ADVERTISING_DATA,
+        //&DualModeController::LeSetPeriodicAdvertisingData},
+        //{OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE,
+        //&DualModeController::LeSetPeriodicAdvertisingEnable},
+        {OpCode::LE_SET_EXTENDED_SCAN_PARAMETERS,
+         &DualModeController::LeSetExtendedScanParameters},
+        {OpCode::LE_SET_EXTENDED_SCAN_ENABLE,
+         &DualModeController::LeSetExtendedScanEnable},
+        {OpCode::LE_EXTENDED_CREATE_CONNECTION,
+         &DualModeController::LeExtendedCreateConnection},
+        //{OpCode::LE_PERIODIC_ADVERTISING_CREATE_SYNC,
+        //&DualModeController::LePeriodicAdvertisingCreateSync},
+        //{OpCode::LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL,
+        //&DualModeController::LePeriodicAdvertisingCreateSyncCancel},
+        //{OpCode::LE_PERIODIC_ADVERTISING_TERMINATE_SYNC,
+        //&DualModeController::LePeriodicAdvertisingTerminateSync},
+        //{OpCode::LE_ADD_DEVICE_TO_PERIODIC_ADVERTISING_LIST,
+        //&DualModeController::LeAddDeviceToPeriodicAdvertisingList},
+        //{OpCode::LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISING_LIST,
+        //&DualModeController::LeRemoveDeviceFromPeriodicAdvertisingList},
+        //{OpCode::LE_CLEAR_PERIODIC_ADVERTISING_LIST,
+        //&DualModeController::LeClearPeriodicAdvertisingList},
+        //{OpCode::LE_READ_PERIODIC_ADVERTISING_LIST_SIZE,
+        //&DualModeController::LeReadPeriodicAdvertisingListSize},
+        //{OpCode::LE_READ_TRANSMIT_POWER,
+        //&DualModeController::LeReadTransmitPower},
+        //{OpCode::LE_READ_RF_PATH_COMPENSATION_POWER,
+        //&DualModeController::LeReadRfPathCompensationPower},
+        //{OpCode::LE_WRITE_RF_PATH_COMPENSATION_POWER,
+        //&DualModeController::LeWriteRfPathCompensationPower},
+        {OpCode::LE_SET_PRIVACY_MODE, &DualModeController::LeSetPrivacyMode},
+        //{OpCode::LE_RECEIVER_TEST_V3, &DualModeController::LeReceiverTestV3},
+        //{OpCode::LE_TRANSMITTER_TEST_V3,
+        //&DualModeController::LeTransmitterTestV3},
+        //{OpCode::LE_SET_CONNECTIONLESS_CTE_TRANSMIT_PARAMETERS,
+        //&DualModeController::LeSetConnectionlessCteTransmitParameters},
+        //{OpCode::LE_SET_CONNECTIONLESS_CTE_TRANSMIT_ENABLE,
+        //&DualModeController::LeSetConnectionlessCteTransmitEnable},
+        //{OpCode::LE_SET_CONNECTIONLESS_IQ_SAMPLING_ENABLE,
+        //&DualModeController::LeSetConnectionlessIqSamplingEnable},
+        //{OpCode::LE_SET_CONNECTION_CTE_RECEIVE_PARAMETERS,
+        //&DualModeController::LeSetConnectionCteReceiveParameters},
+        //{OpCode::LE_SET_CONNECTION_CTE_TRANSMIT_PARAMETERS,
+        //&DualModeController::LeSetConnectionCteTransmitParameters},
+        //{OpCode::LE_CONNECTION_CTE_REQUEST_ENABLE,
+        //&DualModeController::LeConnectionCteRequestEnable},
+        //{OpCode::LE_CONNECTION_CTE_RESPONSE_ENABLE,
+        //&DualModeController::LeConnectionCteResponseEnable},
+        //{OpCode::LE_READ_ANTENNA_INFORMATION,
+        //&DualModeController::LeReadAntennaInformation},
+        //{OpCode::LE_SET_PERIODIC_ADVERTISING_RECEIVE_ENABLE,
+        //&DualModeController::LeSetPeriodicAdvertisingReceiveEnable},
+        //{OpCode::LE_PERIODIC_ADVERTISING_SYNC_TRANSFER,
+        //&DualModeController::LePeriodicAdvertisingSyncTransfer},
+        //{OpCode::LE_PERIODIC_ADVERTISING_SET_INFO_TRANSFER,
+        //&DualModeController::LePeriodicAdvertisingSetInfoTransfer},
+        //{OpCode::LE_SET_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS,
+        //&DualModeController::LeSetPeriodicAdvertisingSyncTransferParameters},
+        //{OpCode::LE_SET_DEFAULT_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS,
+        //&DualModeController::LeSetDefaultPeriodicAdvertisingSyncTransferParameters},
+        //{OpCode::LE_GENERATE_DHKEY_V2,
+        //&DualModeController::LeGenerateDhkeyV2},
+        //{OpCode::LE_MODIFY_SLEEP_CLOCK_ACCURACY,
+        //&DualModeController::LeModifySleepClockAccuracy},
+        {OpCode::LE_READ_BUFFER_SIZE_V2,
+         &DualModeController::LeReadBufferSizeV2},
+        {OpCode::LE_READ_ISO_TX_SYNC, &DualModeController::LeReadIsoTxSync},
+        {OpCode::LE_SET_CIG_PARAMETERS,
+         &DualModeController::LeSetCigParameters},
+        //{OpCode::LE_SET_CIG_PARAMETERS_TEST,
+        //&DualModeController::LeSetCigParametersTest},
+        {OpCode::LE_CREATE_CIS, &DualModeController::LeCreateCis},
+        {OpCode::LE_REMOVE_CIG, &DualModeController::LeRemoveCig},
+        {OpCode::LE_ACCEPT_CIS_REQUEST,
+         &DualModeController::LeAcceptCisRequest},
+        {OpCode::LE_REJECT_CIS_REQUEST,
+         &DualModeController::LeRejectCisRequest},
+        {OpCode::LE_CREATE_BIG, &DualModeController::LeCreateBig},
+        //{OpCode::LE_CREATE_BIG_TEST, &DualModeController::LeCreateBigTest},
+        {OpCode::LE_TERMINATE_BIG, &DualModeController::LeTerminateBig},
+        {OpCode::LE_BIG_CREATE_SYNC, &DualModeController::LeBigCreateSync},
+        {OpCode::LE_BIG_TERMINATE_SYNC,
+         &DualModeController::LeBigTerminateSync},
+        {OpCode::LE_REQUEST_PEER_SCA, &DualModeController::LeRequestPeerSca},
+        {OpCode::LE_SETUP_ISO_DATA_PATH,
+         &DualModeController::LeSetupIsoDataPath},
+        {OpCode::LE_REMOVE_ISO_DATA_PATH,
+         &DualModeController::LeRemoveIsoDataPath},
+        //{OpCode::LE_ISO_TRANSMIT_TEST,
+        //&DualModeController::LeIsoTransmitTest},
+        //{OpCode::LE_ISO_RECEIVE_TEST, &DualModeController::LeIsoReceiveTest},
+        //{OpCode::LE_ISO_READ_TEST_COUNTERS,
+        //&DualModeController::LeIsoReadTestCounters},
+        //{OpCode::LE_ISO_TEST_END, &DualModeController::LeIsoTestEnd},
+        {OpCode::LE_SET_HOST_FEATURE, &DualModeController::LeSetHostFeature},
+        //{OpCode::LE_READ_ISO_LINK_QUALITY,
+        //&DualModeController::LeReadIsoLinkQuality},
+        //{OpCode::LE_ENHANCED_READ_TRANSMIT_POWER_LEVEL,
+        //&DualModeController::LeEnhancedReadTransmitPowerLevel},
+        //{OpCode::LE_READ_REMOTE_TRANSMIT_POWER_LEVEL,
+        //&DualModeController::LeReadRemoteTransmitPowerLevel},
+        //{OpCode::LE_SET_PATH_LOSS_REPORTING_PARAMETERS,
+        //&DualModeController::LeSetPathLossReportingParameters},
+        //{OpCode::LE_SET_PATH_LOSS_REPORTING_ENABLE,
+        //&DualModeController::LeSetPathLossReportingEnable},
+        //{OpCode::LE_SET_TRANSMIT_POWER_REPORTING_ENABLE,
+        //&DualModeController::LeSetTransmitPowerReportingEnable},
+        //{OpCode::LE_TRANSMITTER_TEST_V4,
+        //&DualModeController::LeTransmitterTestV4},
+        //{OpCode::LE_SET_DATA_RELATED_ADDRESS_CHANGES,
+        //&DualModeController::LeSetDataRelatedAddressChanges},
+        //{OpCode::LE_SET_DEFAULT_SUBRATE,
+        //&DualModeController::LeSetDefaultSubrate},
+        //{OpCode::LE_SUBRATE_REQUEST, &DualModeController::LeSubrateRequest},
+
+        // VENDOR
+        {OpCode(CSR_VENDOR), &DualModeController::CsrVendorCommand},
+        {OpCode::LE_MULTI_ADVT, &DualModeController::LeMultiAdv},
+        {OpCode::LE_ADV_FILTER, &DualModeController::LeAdvertisingFilter},
+        {OpCode::LE_EXTENDED_SCAN_PARAMS,
+         &DualModeController::LeExtendedScanParams},
+        {OpCode::LE_ENERGY_INFO, &DualModeController::LeEnergyInfo},
+        {OpCode::LE_GET_VENDOR_CAPABILITIES,
+         &DualModeController::LeGetVendorCapabilities}};
 
 }  // namespace rootcanal

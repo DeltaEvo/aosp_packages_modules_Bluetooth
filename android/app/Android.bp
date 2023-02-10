@@ -70,6 +70,7 @@ cc_library_shared {
         "libbluetooth-types",
         "libbluetooth",
         "libc++fs",
+        "libbluetooth_core_rs_bridge",
     ],
     sanitize: {
         scs: true,
@@ -90,7 +91,7 @@ cc_library {
     include_dirs: [
         "packages/modules/Bluetooth/system/types",
     ],
-    whole_static_libs: [
+    static_libs: [
         "libbte",
         "libbt-bta-core",
         "libbt-common",

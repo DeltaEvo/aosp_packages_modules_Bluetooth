@@ -19,7 +19,7 @@
 #ifndef HCIMSGS_H
 #define HCIMSGS_H
 
-#include <base/callback_forward.h>
+#include <base/functional/callback_forward.h>
 
 #include <cstdint>
 
@@ -403,13 +403,6 @@ extern void btsnd_hcic_ble_create_ll_conn(
 extern void btsnd_hcic_ble_create_conn_cancel(void);
 
 extern void btsnd_hcic_ble_read_acceptlist_size(void);
-
-extern void btsnd_hcic_ble_clear_acceptlist(
-    base::OnceCallback<void(uint8_t*, uint16_t)> cb);
-
-extern void btsnd_hcic_ble_add_acceptlist(
-    tBLE_ADDR_TYPE addr_type, const RawAddress& bda,
-    base::OnceCallback<void(uint8_t*, uint16_t)> cb);
 
 extern void btsnd_hcic_ble_remove_from_acceptlist(
     tBLE_ADDR_TYPE addr_type, const RawAddress& bda,

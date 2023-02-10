@@ -872,6 +872,7 @@ jobject prepareBluetoothLeBroadcastMetadataObject(
       (jint)broadcast_metadata.adv_sid, (jint)broadcast_metadata.broadcast_id,
       (jint)broadcast_metadata.pa_interval,
       broadcast_metadata.broadcast_code ? true : false,
+      false, nullptr,
       broadcast_metadata.broadcast_code ? code.get() : nullptr,
       (jint)broadcast_metadata.basic_audio_announcement.presentation_delay,
       subgroup_list_obj.get());
@@ -990,9 +991,10 @@ static void BroadcasterClassInitNative(JNIEnv* env, jclass clazz) {
 
   jclass jniBluetoothLeBroadcastMetadataClass =
       env->FindClass("android/bluetooth/BluetoothLeBroadcastMetadata");
-  android_bluetooth_BluetoothLeBroadcastMetadata.constructor = env->GetMethodID(
-      jniBluetoothLeBroadcastMetadataClass, "<init>",
-      "(ILandroid/bluetooth/BluetoothDevice;IIIZ[BILjava/util/List;)V");
+  android_bluetooth_BluetoothLeBroadcastMetadata.constructor =
+      env->GetMethodID(jniBluetoothLeBroadcastMetadataClass, "<init>",
+                       "(ILandroid/bluetooth/BluetoothDevice;IIIZZLjava/lang/"
+                       "String;[BILjava/util/List;)V");
 }
 
 static void BroadcasterInitNative(JNIEnv* env, jobject object) {
@@ -1163,10 +1165,8 @@ static void CreateBroadcastNative(JNIEnv* env, jobject object,
       return;
     }
 
-    // Padding with zeros on LSB positions if code is shorter than 16 octets
-    env->GetByteArrayRegion(
-        broadcast_code, 0, size,
-        (jbyte*)code_array.data() + code_array.size() - size);
+    // Padding with zeros on MSB positions if code is shorter than 16 octets
+    env->GetByteArrayRegion(broadcast_code, 0, size, (jbyte*)code_array.data());
   }
 
   jbyte* meta = env->GetByteArrayElements(metadata, nullptr);

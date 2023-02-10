@@ -50,15 +50,7 @@ tGATT_STATUS gatt_get_link_encrypt_status(tGATT_TCB& tcb) {
   mock_function_count_map[__func__]++;
   return GATT_SUCCESS;
 }
-void gatt_enc_cmpl_cback(const RawAddress* bd_addr, tBT_TRANSPORT transport,
-                         UNUSED_ATTR void* p_ref_data, tBTM_STATUS result) {
-  mock_function_count_map[__func__]++;
-}
 void gatt_notify_enc_cmpl(const RawAddress& bd_addr) {
-  mock_function_count_map[__func__]++;
-}
-void gatt_sec_check_complete(bool sec_check_ok, tGATT_CLCB* p_clcb,
-                             uint8_t sec_act) {
   mock_function_count_map[__func__]++;
 }
 void gatt_set_sec_act(tGATT_TCB* p_tcb, tGATT_SEC_ACTION sec_act) {

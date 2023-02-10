@@ -68,6 +68,11 @@ cc_library_static {
         "packages/modules/Bluetooth/system/device/include",
         "packages/modules/Bluetooth/system/utils/include",
         "packages/modules/Bluetooth/system/gd/rust/shim",
+        "packages/modules/Bluetooth/system/gd/hal",
+    ],
+    generated_headers: [
+        "BluetoothGeneratedDumpsysDataSchema_h",
+        "BluetoothGeneratedPackets_h",
     ],
     srcs: crypto_toolbox_srcs + [
         "a2dp/a2dp_aac.cc",
@@ -178,6 +183,7 @@ cc_library_static {
         "packages/modules/Bluetooth/system/gd/rust/shim",
     ],
     srcs: crypto_toolbox_srcs + [
+        "arbiter/acl_arbiter.cc",
         "btm/ble_advertiser_hci_interface.cc",
         "acl/acl.cc",
         "acl/btm_acl.cc",
@@ -309,7 +315,6 @@ cc_test {
         "libhidlbase",
         "liblog",
         "libprocessgroup",
-        "libprotobuf-cpp-lite",
         "libutils",
         "libtinyxml2",
         "libz",
@@ -338,6 +343,7 @@ cc_test {
         "liblc3",
         "libopus",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libudrv-uipc",
         "libbt-protos-lite",
     ],
@@ -365,6 +371,7 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/gd/hal",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/utils/include",
     ],
@@ -372,6 +379,7 @@ cc_test {
         ":TestCommonMockFunctions",
         ":TestCommonLogMsg",
         ":TestMockHci",
+        ":TestMockMainShim",
         ":TestMockStackMetrics",
         "rfcomm/port_api.cc",
         "rfcomm/port_rfc.cc",
@@ -391,15 +399,20 @@ cc_test {
         "test/rfcomm/stack_rfcomm_test_utils.cc",
         "test/rfcomm/stack_rfcomm_test_utils_test.cc",
     ],
+    generated_headers: [
+        "BluetoothGeneratedDumpsysDataSchema_h",
+        "BluetoothGeneratedPackets_h",
+    ],
     shared_libs: [
         "libcutils",
-        "libprotobuf-cpp-lite",
         "libcrypto",
     ],
     static_libs: [
+        "libflatbuffers-cpp",
         "liblog",
         "libgmock",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libbt-common",
         "libbt-protos-lite",
     ],
@@ -615,7 +628,6 @@ cc_test {
     ],
     shared_libs: [
         "libcutils",
-        "libprotobuf-cpp-lite",
         "libcrypto",
     ],
     static_libs: [
@@ -673,13 +685,13 @@ cc_test {
     shared_libs: [
         "libcrypto",
         "libcutils",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
         "libbt-protos-lite",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libosi-AllocationTestHarness",
     ],
     sanitize: {
@@ -714,7 +726,6 @@ cc_test {
     shared_libs: [
         "libcrypto",
         "libcutils",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
@@ -763,7 +774,6 @@ cc_test {
     shared_libs: [
         "libcutils",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
@@ -862,7 +872,6 @@ cc_test {
     shared_libs: [
         "libcutils",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
@@ -870,6 +879,7 @@ cc_test {
         "liblog",
         "libgmock",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         cfi: false,
@@ -971,16 +981,21 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libudrv-uipc",
     ],
     shared_libs: [
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
-      hwaddress: true,
-      integer_overflow: true,
-      scs: true,
+        address: true,
+        all_undefined: true,
+        cfi: true,
+        integer_overflow: true,
+        scs: true,
+        diag: {
+            undefined : true
+        },
     },
 }
 
@@ -1016,7 +1031,6 @@ cc_test {
         "libbtdevice",
     ],
     shared_libs: [
-        "libprotobuf-cpp-lite",
         "libcrypto",
     ],
     sanitize: {
@@ -1069,10 +1083,10 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     shared_libs: [
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1137,7 +1151,6 @@ cc_test {
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1189,6 +1202,7 @@ cc_test {
         ":TestMockStackL2cap",
         ":TestMockStackSdp",
         ":TestMockStackSmp",
+        "arbiter/acl_arbiter.cc",
         "eatt/eatt.cc",
         "gatt/att_protocol.cc",
         "gatt/connection_manager.cc",
@@ -1211,11 +1225,11 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1285,11 +1299,11 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1363,7 +1377,6 @@ cc_test {
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,

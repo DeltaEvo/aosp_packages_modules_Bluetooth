@@ -19,17 +19,15 @@
  *   Functions generated:5
  */
 
-#include <map>
-#include <string>
-
-extern std::map<std::string, int> mock_function_count_map;
-
 #include <cstddef>
 #include <cstdint>
+#include <map>
+#include <string>
 
 #include "main/shim/acl_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
+#include "test/common/mock_functions.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -72,7 +70,11 @@ void bluetooth::shim::ACL_ReadConnectionAddress(const RawAddress& pseudo_addr,
                                                 tBLE_ADDR_TYPE* p_addr_type) {
   mock_function_count_map[__func__]++;
 }
-
+std::optional<uint8_t> bluetooth::shim::ACL_GetAdvertisingSetConnectedTo(
+    const RawAddress& addr) {
+  mock_function_count_map[__func__]++;
+  return std::nullopt;
+}
 void bluetooth::shim::ACL_AddToAddressResolution(
     const tBLE_BD_ADDR& legacy_address_with_type, const Octet16& peer_irk,
     const Octet16& local_irk) {
