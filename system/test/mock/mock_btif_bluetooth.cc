@@ -26,6 +26,8 @@
 #include <map>
 #include <string>
 
+extern std::map<std::string, int> mock_function_count_map;
+
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_btif_bluetooth.h"
 #include "types/raw_address.h"
@@ -45,6 +47,8 @@ namespace btif_bluetooth {
 struct is_atv_device is_atv_device;
 struct is_common_criteria_mode is_common_criteria_mode;
 struct is_restricted_mode is_restricted_mode;
+struct dut_mode_configure dut_mode_configure;
+struct dut_mode_send dut_mode_send;
 struct get_common_criteria_config_compare_result
     get_common_criteria_config_compare_result;
 struct get_remote_device_properties get_remote_device_properties;
@@ -69,6 +73,14 @@ bool is_common_criteria_mode() {
 bool is_restricted_mode() {
   mock_function_count_map[__func__]++;
   return test::mock::btif_bluetooth::is_restricted_mode();
+}
+int dut_mode_configure(uint8_t enable) {
+  mock_function_count_map[__func__]++;
+  return test::mock::btif_bluetooth::dut_mode_configure(enable);
+}
+int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
+  mock_function_count_map[__func__]++;
+  return test::mock::btif_bluetooth::dut_mode_send(opcode, buf, len);
 }
 int get_common_criteria_config_compare_result() {
   mock_function_count_map[__func__]++;

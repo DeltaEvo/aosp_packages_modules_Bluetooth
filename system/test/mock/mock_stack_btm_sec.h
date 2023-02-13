@@ -17,11 +17,7 @@
 #include <map>
 #include <string>
 
-#include "stack/include/btm_api_types.h"
-#include "stack/include/btm_status.h"
-#include "test/common/mock_functions.h"
-#include "types/bt_transport.h"
-#include "types/raw_address.h"
+extern std::map<std::string, int> mock_function_count_map;
 
 namespace test {
 namespace mock {

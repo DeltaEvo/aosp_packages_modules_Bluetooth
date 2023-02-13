@@ -26,6 +26,8 @@
 #include <map>
 #include <string>
 
+extern std::map<std::string, int> mock_function_count_map;
+
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -34,12 +36,9 @@
 //       may need attention to prune the inclusion set.
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
-
 #include <algorithm>
-
 #include "stack/crypto_toolbox/aes.h"
 #include "stack/crypto_toolbox/crypto_toolbox.h"
-#include "test/common/mock_functions.h"
 
 // Mocked compile conditionals, if any
 #ifndef UNUSED_ATTR

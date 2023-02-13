@@ -19,10 +19,12 @@
  *   Functions generated:9
  */
 
-#include <string.h>
-
 #include <map>
 #include <string>
+
+extern std::map<std::string, int> mock_function_count_map;
+
+#include <string.h>
 
 #include "a2dp_api.h"
 #include "avdt_api.h"
@@ -30,7 +32,6 @@
 #include "osi/include/log.h"
 #include "sdpdefs.h"
 #include "stack/a2dp/a2dp_int.h"
-#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -55,7 +56,7 @@ uint16_t A2DP_GetAvdtpVersion() {
 }
 uint8_t A2DP_BitsSet(uint64_t num) {
   mock_function_count_map[__func__]++;
-  return 1;
+  return 0;
 }
 uint8_t A2DP_SetTraceLevel(uint8_t new_level) {
   mock_function_count_map[__func__]++;

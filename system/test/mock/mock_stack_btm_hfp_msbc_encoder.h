@@ -27,6 +27,8 @@
 #include <map>
 #include <string>
 
+extern std::map<std::string, int> mock_function_count_map;
+
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -38,7 +40,6 @@
 #include "embdrv/sbc/encoder/include/sbc_encoder.h"
 #include "hfp_msbc_encoder.h"
 #include "osi/include/log.h"
-#include "test/common/mock_functions.h"
 
 // Original usings
 

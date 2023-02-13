@@ -19,6 +19,11 @@
  *   Functions generated:27
  */
 
+#include <map>
+#include <string>
+
+extern std::map<std::string, int> mock_function_count_map;
+
 #include <base/at_exit.h>
 #include <base/functional/bind.h>
 #include <base/threading/platform_thread.h>
@@ -26,8 +31,6 @@
 #include <sys/types.h>
 
 #include <cstdint>
-#include <map>
-#include <string>
 
 #include "bt_target.h"
 #include "btif/include/btif_av.h"
@@ -47,7 +50,6 @@
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_api.h"
 #include "test/common/jni_thread.h"
-#include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -55,6 +57,10 @@
 #define UNUSED_ATTR
 #endif
 
+bool btif_is_dut_mode() {
+  mock_function_count_map[__func__]++;
+  return false;
+}
 bool is_on_jni_thread() {
   mock_function_count_map[__func__]++;
   return false;
@@ -112,6 +118,12 @@ void btif_adapter_properties_evt(bt_status_t status, uint32_t num_props,
   mock_function_count_map[__func__]++;
 }
 void btif_disable_service(tBTA_SERVICE_ID service_id) {
+  mock_function_count_map[__func__]++;
+}
+void btif_dut_mode_configure(uint8_t enable) {
+  mock_function_count_map[__func__]++;
+}
+void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
   mock_function_count_map[__func__]++;
 }
 void btif_enable_bluetooth_evt() { mock_function_count_map[__func__]++; }

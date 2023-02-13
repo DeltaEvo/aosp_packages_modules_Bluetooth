@@ -19,12 +19,12 @@
  *   Functions generated:11
  */
 
-#include <fmq/EventFlag.h>
-
 #include <map>
 #include <string>
 
-#include "test/common/mock_functions.h"
+extern std::map<std::string, int> mock_function_count_map;
+
+#include <fmq/EventFlag.h>
 
 using namespace android;
 using namespace android::hardware;

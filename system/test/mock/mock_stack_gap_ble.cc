@@ -23,8 +23,9 @@
 #include <map>
 #include <string>
 
+extern std::map<std::string, int> mock_function_count_map;
+
 #include "stack/include/gap_api.h"
-#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR

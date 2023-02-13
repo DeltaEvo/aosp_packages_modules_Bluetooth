@@ -19,11 +19,14 @@
  *   Functions generated:17
  */
 
+#include <map>
+#include <string>
+
+extern std::map<std::string, int> mock_function_count_map;
+
 #include <base/strings/stringprintf.h>
 
 #include <cstdint>
-#include <map>
-#include <string>
 #include <unordered_map>
 
 #include "bt_target.h"
@@ -35,7 +38,6 @@
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_status.h"
-#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR

@@ -37,19 +37,16 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
     private final boolean mIsPublicBroadcast;
     private final String mBroadcastName;
     private final byte[] mBroadcastCode;
-    private final BluetoothLeAudioContentMetadata mPublicBroadcastMetadata;
     private final List<BluetoothLeBroadcastSubgroupSettings> mSubgroupSettings;
 
     private BluetoothLeBroadcastSettings(
             boolean isPublicBroadcast,
             String broadcastName,
             byte[] broadcastCode,
-            BluetoothLeAudioContentMetadata publicBroadcastMetadata,
             List<BluetoothLeBroadcastSubgroupSettings> subgroupSettings) {
         mIsPublicBroadcast = isPublicBroadcast;
         mBroadcastName = broadcastName;
         mBroadcastCode = broadcastCode;
-        mPublicBroadcastMetadata = publicBroadcastMetadata;
         mSubgroupSettings = subgroupSettings;
     }
 
@@ -62,7 +59,6 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
         return mIsPublicBroadcast == other.isPublicBroadcast()
                 && Objects.equals(mBroadcastName, other.getBroadcastName())
                 && Arrays.equals(mBroadcastCode, other.getBroadcastCode())
-                && Objects.equals(mPublicBroadcastMetadata, other.getPublicBroadcastMetadata())
                 && mSubgroupSettings.equals(other.getSubgroupSettings());
     }
 
@@ -72,7 +68,6 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
                 mIsPublicBroadcast,
                 mBroadcastName,
                 Arrays.hashCode(mBroadcastCode),
-                mPublicBroadcastMetadata,
                 mSubgroupSettings);
     }
 
@@ -94,8 +89,7 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
      * @hide
      */
     @SystemApi
-    @Nullable
-    public String getBroadcastName() {
+    public @Nullable String getBroadcastName() {
         return mBroadcastName;
     }
 
@@ -114,22 +108,8 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
      * @hide
      */
     @SystemApi
-    @Nullable
-    public byte[] getBroadcastCode() {
+    public @Nullable byte[] getBroadcastCode() {
         return mBroadcastCode;
-    }
-
-    /**
-     * Get public broadcast metadata for this Broadcast Group.
-     *
-     * @return public broadcast metadata for this Broadcast Group,
-     * null if no public metadata exists
-     * @hide
-     */
-    @SystemApi
-    @Nullable
-    public BluetoothLeAudioContentMetadata getPublicBroadcastMetadata() {
-        return mPublicBroadcastMetadata;
     }
 
     /**
@@ -170,7 +150,6 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
             // -1 indicates missing broadcast code
             out.writeInt(-1);
         }
-        out.writeTypedObject(mPublicBroadcastMetadata, 0);
         out.writeTypedList(mSubgroupSettings);
     }
 
@@ -196,8 +175,6 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
                         }
                     }
                     builder.setBroadcastCode(broadcastCode);
-                    builder.setPublicBroadcastMetadata(
-                            in.readTypedObject(BluetoothLeAudioContentMetadata.CREATOR));
                     final List<BluetoothLeBroadcastSubgroupSettings> subgroupSettings =
                             new ArrayList<>();
                     in.readTypedList(
@@ -223,7 +200,6 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
         private boolean mIsPublicBroadcast = false;
         private String mBroadcastName = null;
         private byte[] mBroadcastCode = null;
-        private BluetoothLeAudioContentMetadata mPublicBroadcastMetadata = null;
         private List<BluetoothLeBroadcastSubgroupSettings> mSubgroupSettings = new ArrayList<>();
         /**
          * Create an empty builder.
@@ -244,7 +220,6 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
             mIsPublicBroadcast = original.isPublicBroadcast();
             mBroadcastName = original.getBroadcastName();
             mBroadcastCode = original.getBroadcastCode();
-            mPublicBroadcastMetadata = original.getPublicBroadcastMetadata();
             mSubgroupSettings = original.getSubgroupSettings();
         }
 
@@ -299,23 +274,6 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
         }
 
         /**
-         * Set public broadcast metadata for this Broadcast Group.
-         * PBS should include the Program_Info length-type-value (LTV) structure metadata
-         *
-         * @param  publicBroadcastMetadata public broadcast metadata for this Broadcast Group,
-                                           null if no public meta data provided
-         * @return this builder
-         * @hide
-         */
-        @SystemApi
-        @NonNull
-        public Builder setPublicBroadcastMetadata(
-                @Nullable BluetoothLeAudioContentMetadata publicBroadcastMetadata) {
-            mPublicBroadcastMetadata = publicBroadcastMetadata;
-            return this;
-        }
-
-        /**
          * Add a subgroup settings to the broadcast group.
          *
          * @param subgroupSettings contains subgroup's setting data
@@ -358,8 +316,7 @@ public final class BluetoothLeBroadcastSettings implements Parcelable {
                 throw new IllegalArgumentException("Must contain at least one subgroup");
             }
             return new BluetoothLeBroadcastSettings(
-                    mIsPublicBroadcast, mBroadcastName, mBroadcastCode,
-                    mPublicBroadcastMetadata, mSubgroupSettings);
+                    mIsPublicBroadcast, mBroadcastName, mBroadcastCode, mSubgroupSettings);
         }
     }
 }

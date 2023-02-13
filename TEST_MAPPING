@@ -58,9 +58,6 @@
       "name": "net_test_stack"
     },
     {
-      "name": "net_test_stack_a2dp_codecs_native"
-    },
-    {
       "name": "net_test_stack_ad_parser"
     },
     {

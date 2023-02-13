@@ -19,10 +19,12 @@
  *   Functions generated:9
  */
 
-#include <string.h>
-
 #include <map>
 #include <string>
+
+extern std::map<std::string, int> mock_function_count_map;
+
+#include <string.h>
 
 #include "a2dp_api.h"
 #include "a2dp_int.h"
@@ -30,7 +32,6 @@
 #include "bt_target.h"
 #include "osi/include/log.h"
 #include "sdpdefs.h"
-#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR

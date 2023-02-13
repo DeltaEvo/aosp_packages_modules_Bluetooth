@@ -461,17 +461,13 @@ public class LeAudioBroadcastServiceTest {
     private BluetoothLeBroadcastSettings buildBroadcastSettingsFromMetadata(
             BluetoothLeAudioContentMetadata contentMetadata,
             @Nullable byte[] broadcastCode) {
-        BluetoothLeAudioContentMetadata publicBroadcastMetadata =
-                new BluetoothLeAudioContentMetadata.Builder().build();
-
         BluetoothLeBroadcastSubgroupSettings.Builder subgroupBuilder =
                 new BluetoothLeBroadcastSubgroupSettings.Builder()
                 .setContentMetadata(contentMetadata);
 
         BluetoothLeBroadcastSettings.Builder builder = new BluetoothLeBroadcastSettings.Builder()
                         .setPublicBroadcast(false)
-                        .setBroadcastCode(broadcastCode)
-                        .setPublicBroadcastMetadata(publicBroadcastMetadata);
+                        .setBroadcastCode(broadcastCode);
         // builder expect at least one subgroup setting
         builder.addSubgroupSettings(subgroupBuilder.build());
         return builder.build();

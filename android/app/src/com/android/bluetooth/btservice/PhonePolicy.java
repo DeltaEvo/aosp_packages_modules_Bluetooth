@@ -358,14 +358,11 @@ class PhonePolicy {
         boolean isLeAudioProfileAllowed = false;
         if ((leAudioService != null) && Utils.arrayContains(uuids,
                 BluetoothUuid.LE_AUDIO) && (leAudioService.getConnectionPolicy(device)
-                != BluetoothProfile.CONNECTION_POLICY_FORBIDDEN)) {
+                == BluetoothProfile.CONNECTION_POLICY_UNKNOWN)) {
             debugLog("setting le audio profile priority for device " + device);
             isLeAudioProfileAllowed = true;
-            if (leAudioService.getConnectionPolicy(device)
-                    == BluetoothProfile.CONNECTION_POLICY_UNKNOWN) {
-                mAdapterService.getDatabase().setProfileConnectionPolicy(device,
-                        BluetoothProfile.LE_AUDIO, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
-            }
+            mAdapterService.getDatabase().setProfileConnectionPolicy(device,
+                    BluetoothProfile.LE_AUDIO, BluetoothProfile.CONNECTION_POLICY_ALLOWED);
             if (mPreferLeAudioOnlyMode) {
                 if (mAdapterService.getDatabase()
                         .getProfileConnectionPolicy(device, BluetoothProfile.A2DP)

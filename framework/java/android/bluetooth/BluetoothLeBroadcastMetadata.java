@@ -16,7 +16,6 @@
 
 package android.bluetooth;
 
-import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -24,8 +23,6 @@ import android.annotation.SystemApi;
 import android.os.Parcel;
 import android.os.Parcelable;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -56,56 +53,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
     private final boolean mIsPublicBroadcast;
     private final String mBroadcastName;
     private final byte[] mBroadcastCode;
-    private final BluetoothLeAudioContentMetadata mPublicBroadcastMetadata;
-    private final @AudioConfigQuality int mAudioConfigQuality;
-
-    /**
-     * Audio configuration quality for this Broadcast Group.
-     * This quality bitmap is used for presenting the audio stream quality for this BIG,
-     * either public broadcast or non-public broadcast
-     * Bit0 indicates at least one broadcast Audio Stream configuration is standard quality
-     * Bit1 indicates at least one broadcast Audio Stream configuration is high quality
-     *
-     * @hide
-     */
-    @IntDef(flag = true, prefix = "AUDIO_CONFIG_QUALITY_",
-            value = {
-            AUDIO_CONFIG_QUALITY_NONE,
-            AUDIO_CONFIG_QUALITY_STANDARD,
-            AUDIO_CONFIG_QUALITY_HIGH,
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface AudioConfigQuality {}
-
-    /**
-     * Audio config quality is none, default value used for audio config quality.
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final int AUDIO_CONFIG_QUALITY_NONE = 0;
-
-    /**
-     * Audio config quality is standard.
-     * This indicates the BIG shall include at least one broadcast Audio Stream
-     * configuration defined as Mandatory for a Broadcast Sink in
-     * Basic Audio Profile, Version 1 or later, table 6.4
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final int AUDIO_CONFIG_QUALITY_STANDARD = 0x1 << 0;
-
-    /**
-     * Audio config quality is standard.
-     * This indicates the BIG shall include at least one broadcast Audio Stream
-     * configuration setting listed in
-     * Public Broadcast Profile, Version 1 or later, table 4.2
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final int AUDIO_CONFIG_QUALITY_HIGH = 0x1 << 1;
 
     // BASE structure
 
@@ -121,8 +68,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
             BluetoothDevice sourceDevice, int sourceAdvertisingSid, int broadcastId,
             int paSyncInterval, boolean isEncrypted, boolean isPublicBroadcast,
             String broadcastName, byte[] broadcastCode, int presentationDelay,
-            @AudioConfigQuality int audioConfigQuality,
-            BluetoothLeAudioContentMetadata publicBroadcastMetadata,
             List<BluetoothLeBroadcastSubgroup> subgroups) {
         mSourceAddressType = sourceAddressType;
         mSourceDevice = sourceDevice;
@@ -134,8 +79,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
         mBroadcastName = broadcastName;
         mBroadcastCode = broadcastCode;
         mPresentationDelayMicros = presentationDelay;
-        mAudioConfigQuality = audioConfigQuality;
-        mPublicBroadcastMetadata = publicBroadcastMetadata;
         mSubgroups = subgroups;
     }
 
@@ -155,8 +98,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
                 && Objects.equals(mBroadcastName, other.getBroadcastName())
                 && Arrays.equals(mBroadcastCode, other.getBroadcastCode())
                 && mPresentationDelayMicros == other.getPresentationDelayMicros()
-                && mAudioConfigQuality == other.getAudioConfigQuality()
-                && Objects.equals(mPublicBroadcastMetadata, other.getPublicBroadcastMetadata())
                 && mSubgroups.equals(other.getSubgroups());
     }
 
@@ -165,8 +106,7 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
         return Objects.hash(mSourceAddressType, mSourceDevice, mSourceAdvertisingSid,
                 mBroadcastId, mPaSyncInterval, mIsEncrypted, mIsPublicBroadcast,
                 mBroadcastName, Arrays.hashCode(mBroadcastCode),
-                mPresentationDelayMicros, mAudioConfigQuality, mPublicBroadcastMetadata,
-                mSubgroups);
+                mPresentationDelayMicros, mSubgroups);
     }
 
     /**
@@ -280,8 +220,7 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
      * 5.3, Broadcast Code is used to encrypt a broadcast audio stream.
      * <p>It must be a UTF-8 string that has at least 4 octets and should not exceed 16 octets.
      *
-     * @return Broadcast Code currently set for this Broadcast Source,
-     * {@code null} if code is not required
+     * @return Broadcast Code currently set for this Broadcast Source, null if code is not required
      *         or code is currently unknown
      * @hide
      */
@@ -301,29 +240,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
     @SystemApi
     public @IntRange(from = 0, to = 0xFFFFFF) int getPresentationDelayMicros() {
         return mPresentationDelayMicros;
-    }
-
-    /**
-     * Get broadcast audio config quality for this Broadcast Group.
-     *
-     * @return Broadcast audio config quality for this Broadcast Group
-     * @hide
-     */
-    @SystemApi
-    public @AudioConfigQuality int getAudioConfigQuality() {
-        return mAudioConfigQuality;
-    }
-
-    /**
-     * Get public broadcast metadata for this Broadcast Group.
-     *
-     * @return public broadcast metadata for this Broadcast Group,
-     * {@code null} if no public metadata exists
-     * @hide
-     */
-    @SystemApi
-    public @Nullable BluetoothLeAudioContentMetadata getPublicBroadcastMetadata() {
-        return mPublicBroadcastMetadata;
     }
 
     /**
@@ -376,8 +292,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
         out.writeTypedList(mSubgroups);
         out.writeBoolean(mIsPublicBroadcast);
         out.writeString(mBroadcastName);
-        out.writeInt(mAudioConfigQuality);
-        out.writeTypedObject(mPublicBroadcastMetadata, 0);
     }
 
     /**
@@ -418,9 +332,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
             }
             builder.setPublicBroadcast(in.readBoolean());
             builder.setBroadcastName(in.readString());
-            builder.setAudioConfigQuality(in.readInt());
-            builder.setPublicBroadcastMetadata(
-                    in.readTypedObject(BluetoothLeAudioContentMetadata.CREATOR));
             return builder.build();
         }
 
@@ -448,8 +359,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
         private String mBroadcastName = null;
         private byte[] mBroadcastCode = null;
         private int mPresentationDelayMicros = UNKNOWN_VALUE_PLACEHOLDER;
-        private @AudioConfigQuality int mAudioConfigQuality = AUDIO_CONFIG_QUALITY_NONE;
-        private BluetoothLeAudioContentMetadata mPublicBroadcastMetadata = null;
         private List<BluetoothLeBroadcastSubgroup> mSubgroups = new ArrayList<>();
 
         /**
@@ -478,8 +387,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
             mBroadcastName = original.getBroadcastName();
             mBroadcastCode = original.getBroadcastCode();
             mPresentationDelayMicros = original.getPresentationDelayMicros();
-            mAudioConfigQuality = original.getAudioConfigQuality();
-            mPublicBroadcastMetadata = original.getPublicBroadcastMetadata();
             mSubgroups = original.getSubgroups();
         }
 
@@ -595,8 +502,7 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
         /**
          * Set broadcast name for this Broadcast Group.
          *
-         * @param broadcastName Broadcast name for this Broadcast Group,
-         * {@code null} if no name provided
+         * @param broadcastName Broadcast name for this Broadcast Group, null if no name provided
          * @return this builder
          * @hide
          */
@@ -615,8 +521,8 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
          * 5.3, Broadcast Code is used to encrypt a broadcast audio stream.
          * <p>It must be a UTF-8 string that has at least 4 octets and should not exceed 16 octets.
          *
-         * @param broadcastCode Broadcast Code for this Broadcast Source,
-         * {@code null} if code is not required
+         * @param broadcastCode Broadcast Code for this Broadcast Source, null if code is not
+         *                      required
          * @return this builder
          * @hide
          */
@@ -647,37 +553,6 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
                         + presentationDelayMicros + " does not fall in [0, 0xFFFFFF]");
             }
             mPresentationDelayMicros = presentationDelayMicros;
-            return this;
-        }
-
-        /**
-         * Set broadcast audio config quality for this Broadcast Group.
-         *
-         * @param  audioConfigQuality broadcast audio config quality for this Broadcast Group
-         * @return this builder
-         * @hide
-         */
-        @SystemApi
-        @NonNull
-        public Builder setAudioConfigQuality(@AudioConfigQuality int audioConfigQuality) {
-            mAudioConfigQuality = audioConfigQuality;
-            return this;
-        }
-
-        /**
-         * Set public broadcast metadata for this Broadcast Group.
-         * PBS should include the Program_Info length-type-value (LTV) structure metadata
-         *
-         * @param  publicBroadcastMetadata public broadcast metadata for this Broadcast Group,
-                                           {@code null} if no public meta data provided
-         * @return this builder
-         * @hide
-         */
-        @SystemApi
-        @NonNull
-        public Builder setPublicBroadcastMetadata(
-                @Nullable BluetoothLeAudioContentMetadata publicBroadcastMetadata) {
-            mPublicBroadcastMetadata = publicBroadcastMetadata;
             return this;
         }
 
@@ -734,8 +609,7 @@ public final class BluetoothLeBroadcastMetadata implements Parcelable {
             return new BluetoothLeBroadcastMetadata(mSourceAddressType, mSourceDevice,
                     mSourceAdvertisingSid, mBroadcastId, mPaSyncInterval, mIsEncrypted,
                     mIsPublicBroadcast, mBroadcastName, mBroadcastCode,
-                    mPresentationDelayMicros, mAudioConfigQuality,
-                    mPublicBroadcastMetadata, mSubgroups);
+                    mPresentationDelayMicros, mSubgroups);
         }
     }
 }

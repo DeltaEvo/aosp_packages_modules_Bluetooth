@@ -23,7 +23,8 @@
 #include <map>
 #include <string>
 
-#include "test/common/mock_functions.h"
+extern std::map<std::string, int> mock_function_count_map;
+
 #include "udrv/include/uipc.h"
 
 #ifndef UNUSED_ATTR

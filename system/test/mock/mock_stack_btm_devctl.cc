@@ -19,13 +19,15 @@
  *   Functions generated:21
  */
 
+#include <map>
+#include <string>
+
+extern std::map<std::string, int> mock_function_count_map;
+
 #include <base/logging.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <map>
-#include <string>
 
 #include "bta/dm/bta_dm_int.h"
 #include "bta/sys/bta_sys.h"
@@ -42,7 +44,6 @@
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/l2cap_controller_interface.h"
-#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -60,6 +61,10 @@ tBTM_STATUS BTM_BT_Quality_Report_VSE_Register(
 }
 tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
                                     tBTM_CMPL_CB* p_cb) {
+  mock_function_count_map[__func__]++;
+  return BTM_SUCCESS;
+}
+tBTM_STATUS BTM_EnableTestMode(void) {
   mock_function_count_map[__func__]++;
   return BTM_SUCCESS;
 }

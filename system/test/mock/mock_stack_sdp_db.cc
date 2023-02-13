@@ -19,16 +19,17 @@
  *   Functions generated:14
  */
 
-#include <stdio.h>
-#include <string.h>
-
 #include <map>
 #include <string>
+
+extern std::map<std::string, int> mock_function_count_map;
+
+#include <stdio.h>
+#include <string.h>
 
 #include "bt_target.h"
 #include "stack/include/sdp_api.h"
 #include "stack/sdp/sdpint.h"
-#include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 
 #ifndef UNUSED_ATTR

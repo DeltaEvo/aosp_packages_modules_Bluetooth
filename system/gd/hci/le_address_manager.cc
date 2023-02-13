@@ -152,10 +152,7 @@ void LeAddressManager::SetPrivacyPolicyForInitiatorAddressForTest(
 LeAddressManager::AddressPolicy LeAddressManager::GetAddressPolicy() {
   return address_policy_;
 }
-bool LeAddressManager::RotatingAddress() {
-  return address_policy_ == AddressPolicy::USE_RESOLVABLE_ADDRESS ||
-         address_policy_ == AddressPolicy::USE_NON_RESOLVABLE_ADDRESS;
-}
+
 LeAddressManager::AddressPolicy LeAddressManager::Register(LeAddressManagerCallback* callback) {
   handler_->BindOnceOn(this, &LeAddressManager::register_client, callback).Invoke();
   return address_policy_;
@@ -214,21 +211,16 @@ void LeAddressManager::AckResume(LeAddressManagerCallback* callback) {
   handler_->BindOnceOn(this, &LeAddressManager::ack_resume, callback).Invoke();
 }
 
-AddressWithType LeAddressManager::GetInitiatorAddress() {
+AddressWithType LeAddressManager::GetCurrentAddress() {
   ASSERT(address_policy_ != AddressPolicy::POLICY_NOT_SET);
   return le_address_;
 }
 
-AddressWithType LeAddressManager::NewResolvableAddress() {
-  ASSERT(RotatingAddress());
+AddressWithType LeAddressManager::GetAnotherAddress() {
+  ASSERT(
+      address_policy_ == AddressPolicy::USE_NON_RESOLVABLE_ADDRESS ||
+      address_policy_ == AddressPolicy::USE_RESOLVABLE_ADDRESS);
   hci::Address address = generate_rpa();
-  auto random_address = AddressWithType(address, AddressType::RANDOM_DEVICE_ADDRESS);
-  return random_address;
-}
-
-AddressWithType LeAddressManager::NewNonResolvableAddress() {
-  ASSERT(RotatingAddress());
-  hci::Address address = generate_nrpa();
   auto random_address = AddressWithType(address, AddressType::RANDOM_DEVICE_ADDRESS);
   return random_address;
 }

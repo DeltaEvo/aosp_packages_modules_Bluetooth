@@ -19,13 +19,15 @@
  *   Functions generated:44
  */
 
+#include <map>
+#include <string>
+
+extern std::map<std::string, int> mock_function_count_map;
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <map>
-#include <string>
 
 #include "advertise_data_parser.h"
 #include "btm_api.h"
@@ -41,7 +43,6 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/inq_hci_link_interface.h"
-#include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 

@@ -51,9 +51,6 @@ std::string RawAddress::ToStringForLogging() const {
 }
 
 std::string RawAddress::ToRedactedStringForLogging() const {
-  if (*this == RawAddress::kAny || *this == RawAddress::kEmpty) {
-    return ToStringForLogging();
-  }
   return base::StringPrintf("xx:xx:xx:xx:%02x:%02x", address[4], address[5]);
 }
 
