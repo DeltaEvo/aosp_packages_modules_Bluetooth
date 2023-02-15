@@ -17,8 +17,8 @@
 
 #include "state_machine.h"
 
-#include <base/bind.h>
-#include <base/callback.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 
 #include <map>
 
@@ -837,6 +837,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         }
 
         LOG_INFO("Lost all members from the group %d", group->group_id_);
+        group->cises_.clear();
         RemoveCigForGroup(group);
 
         group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);

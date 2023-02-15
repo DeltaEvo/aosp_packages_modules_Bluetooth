@@ -156,6 +156,14 @@ static void NotifyBondingChange(tBTM_SEC_DEV_REC& p_dev_rec,
   }
 }
 
+static bool concurrentPeerAuthIsEnabled() {
+  // Was previously named BTM_DISABLE_CONCURRENT_PEER_AUTH.
+  // Renamed to ENABLED for homogeneity with system properties
+  static const bool sCONCURRENT_PEER_AUTH_IS_ENABLED = osi_property_get_bool(
+      "bluetooth.btm.sec.concurrent_peer_auth.enabled", true);
+  return sCONCURRENT_PEER_AUTH_IS_ENABLED;
+}
+
 void NotifyBondingCanceled(tBTM_STATUS btm_status) {
   if (btm_cb.api.p_bond_cancel_cmpl_callback) {
     btm_cb.api.p_bond_cancel_cmpl_callback(BTM_SUCCESS);
@@ -2255,6 +2263,9 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
   int i;
   uint8_t old_sec_state;
 
+  LOG_INFO("btm_sec_rmt_name_request_complete for %s",
+           p_bd_addr ? ADDRESS_TO_LOGGABLE_CSTR(*p_bd_addr) : "null");
+
   if ((!p_bd_addr &&
        !BTM_IsAclConnectionUp(btm_cb.connecting_bda, BT_TRANSPORT_BR_EDR)) ||
       (p_bd_addr && !BTM_IsAclConnectionUp(*p_bd_addr, BT_TRANSPORT_BR_EDR))) {
@@ -2488,6 +2499,9 @@ void btm_sec_rmt_host_support_feat_evt(const uint8_t* p) {
 
   STREAM_TO_BDADDR(bd_addr, p);
   p_dev_rec = btm_find_or_alloc_dev(bd_addr);
+
+  LOG_INFO("Got btm_sec_rmt_host_support_feat_evt from %s",
+           ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
   BTM_TRACE_EVENT("btm_sec_rmt_host_support_feat_evt  sm4: 0x%x  p[0]: 0x%x",
                   p_dev_rec->sm4, p[0]);
@@ -3436,11 +3450,9 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
                       __func__, p_dev_rec, p_dev_rec->p_callback);
       p_dev_rec->p_callback = NULL;
       l2cu_resubmit_pending_sec_req(&p_dev_rec->bd_addr);
-#ifdef BTM_DISABLE_CONCURRENT_PEER_AUTH
-    } else if (BTM_DISABLE_CONCURRENT_PEER_AUTH &&
+    } else if (!concurrentPeerAuthIsEnabled() &&
                p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
       p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
-#endif
     }
     return;
   }
@@ -4069,10 +4081,9 @@ void btm_sec_link_key_request(const uint8_t* p_event) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_or_alloc_dev(bda);
 
   VLOG(2) << __func__ << " bda: " << bda;
-#if (defined(BTM_DISABLE_CONCURRENT_PEER_AUTH) && \
-     (BTM_DISABLE_CONCURRENT_PEER_AUTH == TRUE))
-  p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
-#endif
+  if (!concurrentPeerAuthIsEnabled()) {
+    p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
+  }
 
   if ((btm_cb.pairing_state == BTM_PAIR_STATE_WAIT_PIN_REQ) &&
       (btm_cb.collision_start_time != 0) &&

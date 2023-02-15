@@ -21,8 +21,8 @@
 #include <memory>
 #include <set>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "bind_helpers.h"
 #include "btm_dev.h"
@@ -367,6 +367,10 @@ struct iso_impl {
     uint8_t status;
     uint16_t conn_handle;
 
+    if (len < 3) {
+      LOG(WARNING) << __func__ << "Malformatted packet received";
+      return;
+    }
     STREAM_TO_UINT8(status, stream);
     STREAM_TO_UINT16(conn_handle, stream);
 

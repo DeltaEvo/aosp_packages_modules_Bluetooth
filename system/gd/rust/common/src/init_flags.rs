@@ -251,6 +251,7 @@ fn parse_hci_adapter(flags: &mut InitFlags, values: Vec<&str>) {
 init_flags!(
     // LINT.IfChange
     flags: {
+        always_use_private_gatt_for_debugging,
         asynchronously_start_l2cap_coc = true,
         btaa_hci = true,
         bta_dm_clear_conn_id_on_client_close = true,
@@ -261,8 +262,8 @@ init_flags!(
         gatt_robust_caching_client = true,
         gatt_robust_caching_server,
         gd_core,
-        gd_hal_snoop_logger_socket,
-        gd_hal_snoop_logger_filtering,
+        gd_hal_snoop_logger_socket = true,
+        gd_hal_snoop_logger_filtering = true,
         gd_l2cap,
         gd_link_policy,
         gd_remote_name_request,
@@ -271,11 +272,13 @@ init_flags!(
         hci_adapter: i32,
         hfp_dynamic_version = true,
         irk_rotation,
-        leaudio_targeted_announcement_reconnection_mode,
+        leaudio_targeted_announcement_reconnection_mode = true,
         pass_phy_update_callback = true,
         periodic_advertising_adi = true,
+        private_gatt,
         queue_l2cap_coc_while_encrypting = true,
         redact_log = true,
+        rust_event_loop,
         sdp_serialization = true,
         sdp_skip_rnr_if_known = true,
         set_min_encryption = true,

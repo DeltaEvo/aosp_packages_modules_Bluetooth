@@ -26,11 +26,11 @@
 #define BTA_API_H
 
 #include <base/strings/stringprintf.h>
+#include <base/functional/callback.h>
 
 #include <cstdint>
 #include <vector>
 
-#include "base/callback.h"
 #include "bt_target.h"  // Must be first to define build configuration
 #include "osi/include/log.h"
 #include "stack/include/bt_octets.h"
@@ -716,18 +716,6 @@ enum {
  ****************************************************************************/
 
 void BTA_dm_init();
-
-/*******************************************************************************
- *
- * Function         BTA_EnableTestMode
- *
- * Description      Enables bluetooth device under test mode
- *
- *
- * Returns          tBTA_STATUS
- *
- ******************************************************************************/
-extern void BTA_EnableTestMode(void);
 
 /*******************************************************************************
  *

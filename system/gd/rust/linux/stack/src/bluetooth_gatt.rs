@@ -761,7 +761,7 @@ impl BluetoothGattService {
                 GattDbElementType::PrimaryService | GattDbElementType::SecondaryService => {
                     db_out.push(BluetoothGattService::new(
                         elem.uuid.uu,
-                        elem.id as i32,
+                        elem.attribute_handle as i32,
                         elem.type_ as i32,
                     ));
                     // TODO(b/200065274): Mark restricted services.
@@ -771,7 +771,7 @@ impl BluetoothGattService {
                     match db_out.last_mut() {
                         Some(s) => s.characteristics.push(BluetoothGattCharacteristic::new(
                             elem.uuid.uu,
-                            elem.id as i32,
+                            elem.attribute_handle as i32,
                             elem.properties as i32,
                             0,
                         )),
@@ -787,7 +787,7 @@ impl BluetoothGattService {
                         Some(s) => match s.characteristics.last_mut() {
                             Some(c) => c.descriptors.push(BluetoothGattDescriptor::new(
                                 elem.uuid.uu,
-                                elem.id as i32,
+                                elem.attribute_handle as i32,
                                 0,
                             )),
                             None => {
@@ -806,7 +806,7 @@ impl BluetoothGattService {
                         Some(s) => {
                             s.included_services.push(BluetoothGattService::new(
                                 elem.uuid.uu,
-                                elem.id as i32,
+                                elem.attribute_handle as i32,
                                 elem.type_ as i32,
                             ));
                         }
@@ -2484,7 +2484,15 @@ impl IBluetoothGatt for BluetoothGatt {
             let conn_id = self.server_context_map.get_conn_id_from_address(server_id, &addr)?;
             let handle = self.server_context_map.get_request_handle_from_id(request_id)?;
             let len = value.len() as u16;
-            let data: [u8; 600] = value.try_into().ok()?;
+
+            let data: [u8; 600] = value
+                .iter()
+                .chain(std::iter::repeat(&0))
+                .take(600)
+                .cloned()
+                .collect::<Vec<u8>>()
+                .try_into()
+                .ok()?;
 
             self.gatt.as_ref().unwrap().lock().unwrap().server.send_response(
                 conn_id,
@@ -3409,6 +3417,8 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         addr: RawAddress,
         exec_write: i32,
     ) {
+        self.server_context_map.add_request(trans_id, 0);
+
         if let Some(cbid) =
             self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
         {

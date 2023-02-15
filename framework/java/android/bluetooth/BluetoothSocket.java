@@ -285,7 +285,7 @@ public final class BluetoothSocket implements Closeable {
         BluetoothSocket as = new BluetoothSocket(this);
         as.mSocketState = SocketState.CONNECTED;
         FileDescriptor[] fds = mSocket.getAncillaryFileDescriptors();
-        if (DBG) Log.d(TAG, "socket fd passed by stack fds: " + Arrays.toString(fds));
+        if (DBG) Log.d(TAG, "acceptSocket: socket fd passed by stack fds:" + Arrays.toString(fds));
         if (fds == null || fds.length != 1) {
             Log.e(TAG, "socket fd passed from stack failed, fds: " + Arrays.toString(fds));
             as.close();
@@ -440,7 +440,40 @@ public final class BluetoothSocket implements Closeable {
                 mSocketOS = mSocket.getOutputStream();
             }
             int channel = readInt(mSocketIS);
-            if (channel <= 0) {
+            if (channel == 0) {
+                int errCode = (int) mSocketIS.read();
+                switch(errCode) {
+                    case /*BTA_JV_L2CAP_REASON_ACL_FAILURE*/ 2:
+                        throw new IOException("ACL connection failed");
+                    case /*BTA_JV_L2CAP_REASON_CL_SEC_FAILURE*/ 3:
+                        throw new IOException("Client security clearance failed");
+                    case /*BTA_JV_L2CAP_REASON_INSUFFICIENT_AUTHENTICATION*/ 4:
+                        throw new IOException("Insufficient authentication");
+                    case /*BTA_JV_L2CAP_REASON_INSUFFICIENT_AUTHORIZATION*/ 5:
+                        throw new IOException("Insufficient authorization");
+                    case /*BTA_JV_L2CAP_REASON_INSUFFICIENT_ENCRYP_KEY_SIZE*/ 6:
+                        throw new IOException("Insufficient encryption key size");
+                    case /*BTA_JV_L2CAP_REASON_INSUFFICIENT_ENCRYP*/ 7:
+                        throw new IOException("Insufficient encryption");
+                    case /*BTA_JV_L2CAP_REASON_INVALID_SOURCE_CID*/ 8:
+                        throw new IOException("Invalid source CID");
+                    case /*BTA_JV_L2CAP_REASON_SOURCE_CID_ALREADY_ALLOCATED*/ 9:
+                        throw new IOException("Source CID already allocated");
+                    case /*BTA_JV_L2CAP_REASON_UNACCEPTABLE_PARAMETERS*/ 10:
+                        throw new IOException("Unacceptable Parameters");
+                    case /*BTA_JV_L2CAP_REASON_INVALID_PARAMETERS*/ 11:
+                        throw new IOException("Invalid Parameters");
+                    case /*BTA_JV_L2CAP_REASON_NO_RESOURCES*/ 12:
+                        throw new IOException("No resources Available");
+                    case /*BTA_JV_L2CAP_REASON_NO_PSM*/ 13:
+                        throw new IOException("No PSM available");
+                    case /*BTA_JV_L2CAP_REASON_TIMEOUT*/ 14:
+                        throw new IOException("Connection Timeout");
+                    default:
+                        throw new IOException("bt socket connect failed for unknown reason");
+                }
+            }
+            if (channel < 0) {
                 throw new IOException("bt socket connect failed");
             }
             mPort = channel;
@@ -450,6 +483,7 @@ public final class BluetoothSocket implements Closeable {
                     throw new IOException("bt socket closed");
                 }
                 mSocketState = SocketState.CONNECTED;
+                if (DBG) Log.d(TAG, "connect(), socket connected");
             }
         } catch (RemoteException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -536,8 +570,8 @@ public final class BluetoothSocket implements Closeable {
         if (mSocketState != SocketState.LISTENING) {
             throw new IOException("bt socket is not in listen state");
         }
+        Log.d(TAG, "accept(), timeout (ms):" + timeout);
         if (timeout > 0) {
-            Log.d(TAG, "accept() set timeout (ms):" + timeout);
             mSocket.setSoTimeout(timeout);
         }
         String RemoteAddr = waitSocketSignal(mSocketIS);

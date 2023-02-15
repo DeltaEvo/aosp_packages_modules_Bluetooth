@@ -23,7 +23,6 @@ import static org.mockito.Mockito.when;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothGattCallback;
@@ -200,11 +199,10 @@ public class GattServiceBinderTest {
         int phy = 3;
 
         mBinder.clientConnect(clientIf, address, isDirect, transport, opportunistic, phy,
-                BluetoothGatt.CONNECTION_PRIORITY_DEFAULT, mAttributionSource,
-                SynchronousResultReceiver.get());
+                mAttributionSource, SynchronousResultReceiver.get());
 
         verify(mService).clientConnect(clientIf, address, isDirect, transport, opportunistic, phy,
-                BluetoothGatt.CONNECTION_PRIORITY_DEFAULT, mAttributionSource);
+                mAttributionSource);
     }
 
     @Test
@@ -589,15 +587,16 @@ public class GattServiceBinderTest {
         AdvertiseData periodicData = new AdvertiseData.Builder().build();
         int duration = 1;
         int maxExtAdvEvents = 2;
+        int serverIf = 3;
         IAdvertisingSetCallback callback = mock(IAdvertisingSetCallback.class);
 
         mBinder.startAdvertisingSet(parameters, advertiseData, scanResponse, periodicParameters,
-                periodicData, duration, maxExtAdvEvents, callback,
+                periodicData, duration, maxExtAdvEvents, serverIf, callback,
                 mAttributionSource, SynchronousResultReceiver.get());
 
         verify(mService).startAdvertisingSet(parameters, advertiseData, scanResponse,
-                periodicParameters, periodicData, duration, maxExtAdvEvents, callback,
-                mAttributionSource);
+                periodicParameters, periodicData, duration, maxExtAdvEvents,
+                serverIf, callback, mAttributionSource);
     }
 
     @Test

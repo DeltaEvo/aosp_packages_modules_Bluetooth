@@ -24,9 +24,8 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 #include "device/include/interop.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -79,7 +78,7 @@ bool interop_match_addr_get_max_lat(const interop_feature_t feature,
   return false;
 }
 
-bool interop_get_allowlisted_media_players_list(list_t** p_bl_devices) {
+bool interop_get_allowlisted_media_players_list(list_t* p_bl_devices) {
   mock_function_count_map[__func__]++;
   return false;
 }

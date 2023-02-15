@@ -16,7 +16,10 @@
     <target_preparer class="com.android.tradefed.targetprep.PythonVirtualenvPreparer">
         <option name="dep-module" value="grpcio" />
         <option name="dep-module" value="protobuf==3.20.1" />
-        <option name="dep-module" value="scipy" />
+
+        <!-- Re-enable when A2DP audio streaming tests are active, disabling to speed up atest runtime
+        (installation takes roughly 30s each time, never cached) -->
+        <!-- <option name="dep-module" value="scipy" /> -->
     </target_preparer>
 
     <test class="com.android.tradefed.testtype.pandora.PtsBotTest" >
@@ -35,6 +38,7 @@
         <option name="profile" value="AVDTP/SNK" />
         <option name="profile" value="AVDTP/SRC" />
         <option name="profile" value="AVRCP" />
+        <option name="profile" value="BNEP" />
         <option name="profile" value="GAP" />
         <option name="profile" value="GATT" />
         <option name="profile" value="HFP/AG" />
@@ -47,11 +51,10 @@
         <option name="profile" value="L2CAP/LE" />
         <option name="profile" value="MAP" />
         <option name="profile" value="OPP" />
+        <option name="profile" value="PAN" />
         <option name="profile" value="PBAP/PSE" />
         <option name="profile" value="RFCOMM" />
         <option name="profile" value="SDP" />
         <option name="profile" value="SM" />
-        <option name="profile" value="PAN" />
-        <option name="profile" value="BNEP" />
     </test>
 </configuration>

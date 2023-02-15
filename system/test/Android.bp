@@ -206,6 +206,13 @@ filegroup {
 }
 
 filegroup {
+    name: "TestMockStackRfcomm",
+    srcs: [
+      "mock/mock_stack_rfcomm*.cc",
+    ],
+}
+
+filegroup {
     name: "TestMockStack",
     srcs: [
       "mock/mock_stack_*.cc",
@@ -498,5 +505,39 @@ cc_defaults {
         lib64: {
             suffix: "64",
         },
+    },
+}
+
+cc_test {
+    name: "net_test_common",
+    host_supported: true,
+    local_include_dirs: [
+        "common",
+    ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/gd",
+    ],
+    srcs: [
+        "common/log_msg_test.cc",
+        "common/log_msg.cc",
+    ],
+    shared_libs: [
+        "libchrome",
+    ],
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        // there are too many unused parameters in all the code.
+        "-Wno-unused-parameter",
+        // http://b/264549607
+        "-Wno-deprecated-builtins",
+    ],
+    sanitize: {
+        address: true,
+        cfi: true,
+        misc_undefined: ["bounds"],
     },
 }

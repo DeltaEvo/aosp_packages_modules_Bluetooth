@@ -55,10 +55,10 @@
       "name": "net_test_hci"
     },
     {
-      "name": "net_test_hf_client_add_record"
+      "name": "net_test_stack"
     },
     {
-      "name": "net_test_stack"
+      "name": "net_test_stack_a2dp_codecs_native"
     },
     {
       "name": "net_test_stack_ad_parser"
@@ -111,9 +111,6 @@
     },
     {
       "name": "bluetooth_vc_test"
-    },
-    {
-      "name": "bluetoothtbd_test"
     },
     {
       "name": "bt_host_test_bta"

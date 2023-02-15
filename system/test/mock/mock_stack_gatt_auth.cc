@@ -19,15 +19,13 @@
  *   Functions generated:10
  */
 
+#include <cstdint>
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
-#include <cstdint>
-
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -49,10 +47,6 @@ tGATT_SEC_ACTION gatt_get_sec_act(tGATT_TCB* p_tcb) {
 tGATT_STATUS gatt_get_link_encrypt_status(tGATT_TCB& tcb) {
   mock_function_count_map[__func__]++;
   return GATT_SUCCESS;
-}
-void gatt_enc_cmpl_cback(const RawAddress* bd_addr, tBT_TRANSPORT transport,
-                         UNUSED_ATTR void* p_ref_data, tBTM_STATUS result) {
-  mock_function_count_map[__func__]++;
 }
 void gatt_notify_enc_cmpl(const RawAddress& bd_addr) {
   mock_function_count_map[__func__]++;

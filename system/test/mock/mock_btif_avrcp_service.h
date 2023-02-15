@@ -27,7 +27,7 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
+#include "test/common/mock_functions.h"
 
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
@@ -35,7 +35,7 @@ extern std::map<std::string, int> mock_function_count_map;
 //       still applies, but crafting proper inclusion is out of scope
 //       for this effort.  This compilation unit may compile as-is, or
 //       may need attention to prune from (or add to ) the inclusion set.
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/task/cancelable_task_tracker.h>
 #include <base/threading/thread.h>
