@@ -34,7 +34,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAssignedNumbers;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadsetClient;
-import android.bluetooth.BluetoothAudioPolicy;
+import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
@@ -112,8 +112,6 @@ public class HeadsetClientStateMachineTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when HeadsetClientService is not enabled",
-                HeadsetClientService.isEnabled());
         // Setup mocks and test assets
         MockitoAnnotations.initMocks(this);
         // Set a valid volume
@@ -148,9 +146,6 @@ public class HeadsetClientStateMachineTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!HeadsetClientService.isEnabled()) {
-            return;
-        }
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
         mHeadsetClientStateMachine.allowConnect = null;
         mHeadsetClientStateMachine.doQuit();
@@ -1085,7 +1080,7 @@ public class HeadsetClientStateMachineTest {
         expectedBroadcastIndex = setUpHfpClientConnection(expectedBroadcastIndex);
         expectedBroadcastIndex = setUpServiceLevelConnection(expectedBroadcastIndex);
 
-        BluetoothAudioPolicy dummyAudioPolicy = new BluetoothAudioPolicy.Builder().build();
+        BluetoothSinkAudioPolicy dummyAudioPolicy = new BluetoothSinkAudioPolicy.Builder().build();
         mHeadsetClientStateMachine.setAudioPolicy(dummyAudioPolicy);
         verify(mNativeInterface, never()).sendAndroidAt(mTestDevice, "+ANDROID:1,0,0,0");
     }
@@ -1102,10 +1097,10 @@ public class HeadsetClientStateMachineTest {
         expectedBroadcastIndex = setUpHfpClientConnection(expectedBroadcastIndex);
         expectedBroadcastIndex = setUpServiceLevelConnection(expectedBroadcastIndex, true);
 
-        BluetoothAudioPolicy dummyAudioPolicy = new BluetoothAudioPolicy.Builder()
-                .setCallEstablishPolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
-                .setConnectingTimePolicy(BluetoothAudioPolicy.POLICY_NOT_ALLOWED)
-                .setInBandRingtonePolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
+        BluetoothSinkAudioPolicy dummyAudioPolicy = new BluetoothSinkAudioPolicy.Builder()
+                .setCallEstablishPolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                .setActiveDevicePolicyAfterConnection(BluetoothSinkAudioPolicy.POLICY_NOT_ALLOWED)
+                .setInBandRingtonePolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
                 .build();
 
         mHeadsetClientStateMachine.setAudioPolicy(dummyAudioPolicy);

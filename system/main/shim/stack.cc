@@ -33,6 +33,7 @@
 #include "gd/hci/acl_manager.h"
 #include "gd/hci/acl_manager/acl_scheduler.h"
 #include "gd/hci/controller.h"
+#include "gd/hci/distance_measurement_manager.h"
 #include "gd/hci/hci_layer.h"
 #include "gd/hci/le_advertising_manager.h"
 #include "gd/hci/le_scanning_manager.h"
@@ -55,6 +56,7 @@
 #include "gd/sysprops/sysprops_module.h"
 #include "main/shim/acl_legacy_interface.h"
 #include "main/shim/activity_attribution.h"
+#include "main/shim/distance_measurement_manager.h"
 #include "main/shim/hci_layer.h"
 #include "main/shim/helpers.h"
 #include "main/shim/l2c_api.h"
@@ -67,31 +69,6 @@ namespace shim {
 
 using ::bluetooth::common::InitFlags;
 using ::bluetooth::common::StringFormat;
-
-namespace {
-// PID file format
-constexpr char pid_file_format[] = "/var/run/bluetooth/bluetooth%d.pid";
-
-void CreatePidFile() {
-  std::string pid_file =
-      StringFormat(pid_file_format, InitFlags::GetAdapterIndex());
-  int pid_fd_ = open(pid_file.c_str(), O_WRONLY | O_CREAT, 0644);
-  if (!pid_fd_) return;
-
-  pid_t my_pid = getpid();
-  dprintf(pid_fd_, "%d\n", my_pid);
-  close(pid_fd_);
-
-  LOG_INFO("%s - Created pid file %s", __func__, pid_file.c_str());
-}
-
-void RemovePidFile() {
-  std::string pid_file =
-      StringFormat(pid_file_format, InitFlags::GetAdapterIndex());
-  unlink(pid_file.c_str());
-  LOG_INFO("%s - Deleted pid file %s", __func__, pid_file.c_str());
-}
-}  // namespace
 
 Stack* Stack::GetInstance() {
   static Stack instance;
@@ -122,9 +99,6 @@ void Stack::StartEverything() {
     rust_controller_ =
         new ::rust::Box<rust::Controller>(rust::get_controller(**rust_stack_));
     bluetooth::shim::hci_on_reset_complete();
-
-    // Create pid since we're up and running
-    CreatePidFile();
 
     // Create the acl shim layer
     acl_ = new legacy::Acl(
@@ -164,6 +138,7 @@ void Stack::StartEverything() {
   modules.add<hci::LeAdvertisingManager>();
   modules.add<hci::MsftExtensionManager>();
   modules.add<hci::LeScanningManager>();
+  modules.add<hci::DistanceMeasurementManager>();
   if (common::init_flags::btaa_hci_is_enabled()) {
     modules.add<activity_attribution::ActivityAttribution>();
   }
@@ -204,6 +179,7 @@ void Stack::StartEverything() {
 
   bluetooth::shim::init_advertising_manager();
   bluetooth::shim::init_scanning_manager();
+  bluetooth::shim::init_distance_measurement_manager();
 
   if (common::init_flags::gd_l2cap_is_enabled() &&
       !common::init_flags::gd_core_is_enabled()) {
@@ -212,9 +188,6 @@ void Stack::StartEverything() {
   if (common::init_flags::btaa_hci_is_enabled()) {
     bluetooth::shim::init_activity_attribution();
   }
-
-  // Create pid since we're up and running
-  CreatePidFile();
 }
 
 void Stack::Start(ModuleList* modules) {
@@ -231,9 +204,6 @@ void Stack::Start(ModuleList* modules) {
 }
 
 void Stack::Stop() {
-  // First remove pid file so clients no stack is going down
-  RemovePidFile();
-
   if (common::init_flags::gd_rust_is_enabled()) {
     if (rust_stack_ != nullptr) {
       rust::stack_stop(**rust_stack_);

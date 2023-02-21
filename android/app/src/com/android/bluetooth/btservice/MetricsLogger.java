@@ -24,6 +24,8 @@ import com.android.bluetooth.BluetoothMetricsProto.BluetoothLog;
 import com.android.bluetooth.BluetoothMetricsProto.ProfileConnectionStats;
 import com.android.bluetooth.BluetoothMetricsProto.ProfileId;
 import com.android.bluetooth.BluetoothStatsLog;
+import com.android.bluetooth.Utils;
+import com.android.internal.annotations.VisibleForTesting;
 
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
@@ -54,7 +56,7 @@ public class MetricsLogger {
     private static final HashMap<ProfileId, Integer> sProfileConnectionCounts = new HashMap<>();
 
     HashMap<Integer, Long> mCounters = new HashMap<>();
-    private static MetricsLogger sInstance = null;
+    private static volatile MetricsLogger sInstance = null;
     private Context mContext = null;
     private AlarmManager mAlarmManager = null;
     private boolean mInitialized = false;
@@ -79,6 +81,20 @@ public class MetricsLogger {
             }
         }
         return sInstance;
+    }
+
+    /**
+     * Allow unit tests to substitute MetricsLogger with a test instance
+     *
+     * @param instance a test instance of the MetricsLogger
+     */
+    @VisibleForTesting
+    public static void setInstanceForTesting(MetricsLogger instance) {
+        Utils.enforceInstrumentationTestMode();
+        synchronized (mLock) {
+            Log.d(TAG, "setInstanceForTesting(), set to " + instance);
+            sInstance = instance;
+        }
     }
 
     public boolean isInitialized() {
@@ -236,7 +252,7 @@ public class MetricsLogger {
         mAlarmManager.cancel(mOnAlarmListener);
     }
 
-    protected boolean logSanitizedBluetoothDeviceName(String deviceName) {
+    protected boolean logSanitizedBluetoothDeviceName(int metricId, String deviceName) {
         if (!mBloomFilterInitialized) {
             return false;
         }
@@ -276,13 +292,16 @@ public class MetricsLogger {
         if (matchedSha256 == null) {
             return false;
         }
-        statslogBluetoothDeviceNames(matchedString, matchedSha256);
+        statslogBluetoothDeviceNames(metricId, matchedString, matchedSha256);
         return true;
     }
 
-    protected void statslogBluetoothDeviceNames(String matchedString, byte[] sha256) {
-        Log.w(TAG, "Uploading sha256 hash of matched bluetooth device name: "
-                + (new String(sha256, StandardCharsets.UTF_8)));
+    protected void statslogBluetoothDeviceNames(int metricId, String matchedString, byte[] sha256) {
+        String sha256String = new String(sha256);
+        Log.d(TAG,
+                "Uploading sha256 hash of matched bluetooth device name: " + sha256String);
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.BLUETOOTH_HASHED_DEVICE_NAME_REPORTED, metricId, sha256String);
     }
 
     protected static byte[] getSha256(String name) {

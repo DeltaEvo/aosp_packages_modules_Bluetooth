@@ -14,6 +14,7 @@ use bt_topshim::profiles::gatt::{
 };
 use bt_topshim::topstack;
 use bt_utils::adv_parser;
+use bt_utils::array_utils;
 
 use crate::async_helper::{AsyncHelper, CallbackSender};
 use crate::bluetooth::{Bluetooth, IBluetooth};
@@ -343,10 +344,10 @@ impl ServerContextMap {
     }
 
     fn add_request(&mut self, request_id: i32, handle: i32) {
-        self.requests.push(Request { id: request_id, handle: handle });
+        self.requests.push(Request { id: request_id, handle });
     }
 
-    fn delete_request(&mut self, request_id: i32) {
+    fn _delete_request(&mut self, request_id: i32) {
         self.requests.retain(|request| request.id != request_id);
     }
 
@@ -2485,14 +2486,7 @@ impl IBluetoothGatt for BluetoothGatt {
             let handle = self.server_context_map.get_request_handle_from_id(request_id)?;
             let len = value.len() as u16;
 
-            let data: [u8; 600] = value
-                .iter()
-                .chain(std::iter::repeat(&0))
-                .take(600)
-                .cloned()
-                .collect::<Vec<u8>>()
-                .try_into()
-                .ok()?;
+            let data: [u8; 600] = array_utils::to_sized_array(&value);
 
             self.gatt.as_ref().unwrap().lock().unwrap().server.send_response(
                 conn_id,
@@ -2503,7 +2497,7 @@ impl IBluetoothGatt for BluetoothGatt {
                         value: data,
                         handle: handle as u16,
                         offset: offset as u16,
-                        len: len,
+                        len,
                         auth_req: 0 as u8,
                     },
                 },
@@ -2540,7 +2534,7 @@ impl IBluetoothGatt for BluetoothGatt {
 
     fn server_set_preferred_phy(
         &self,
-        server_id: i32,
+        _server_id: i32,
         addr: String,
         tx_phy: LePhy,
         rx_phy: LePhy,
