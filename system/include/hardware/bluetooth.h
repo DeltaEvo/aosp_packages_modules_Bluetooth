@@ -59,6 +59,7 @@
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_PROFILE_LE_AUDIO_BROADCASTER_ID "le_audio_broadcaster"
+#define BT_BQR_ID "bqr"
 
 /** Bluetooth Device Name */
 typedef struct { uint8_t name[249]; } __attribute__((packed)) bt_bdname_t;
@@ -222,6 +223,7 @@ typedef struct {
   bool le_connected_isochronous_stream_central_supported;
   bool le_isochronous_broadcast_supported;
   bool le_periodic_advertising_sync_transfer_recipient_supported;
+  uint16_t adv_filter_extended_features_mask;
 } bt_local_le_features_t;
 
 /** Bluetooth Vendor and Product ID info */
