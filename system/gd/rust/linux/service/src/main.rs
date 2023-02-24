@@ -1,19 +1,18 @@
-extern crate clap;
-#[macro_use]
-extern crate lazy_static;
-
 use clap::{App, AppSettings, Arg};
 use dbus::{channel::MatchingReceiver, message::MatchRule};
 use dbus_crossroads::Crossroads;
 use dbus_tokio::connection;
 use futures::future;
-use log::LevelFilter;
+use lazy_static::lazy_static;
 use nix::sys::signal;
 use std::error::Error;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
-use syslog::{BasicLogger, Facility, Formatter3164};
 use tokio::time;
+
+// Necessary to link right entries.
+#[allow(unused_imports)]
+use bt_shim;
 
 use bt_topshim::{btif::get_btinterface, topstack};
 use btstack::{
@@ -23,6 +22,7 @@ use btstack::{
     bluetooth::{get_bt_dispatcher, Bluetooth, IBluetooth},
     bluetooth_admin::BluetoothAdmin,
     bluetooth_gatt::BluetoothGatt,
+    bluetooth_logging::BluetoothLogging,
     bluetooth_media::BluetoothMedia,
     socket_manager::BluetoothSocketManager,
     suspend::Suspend,
@@ -38,9 +38,14 @@ mod iface_bluetooth;
 mod iface_bluetooth_admin;
 mod iface_bluetooth_gatt;
 mod iface_bluetooth_media;
+mod iface_bluetooth_telephony;
+mod iface_logging;
 
 const DBUS_SERVICE_NAME: &str = "org.chromium.bluetooth";
 const ADMIN_SETTINGS_FILE_PATH: &str = "/var/lib/bluetooth/admin_policy.json";
+// The maximum ACL disconnect timeout is 3.5s defined by BTA_DM_DISABLE_TIMER_MS
+// and BTA_DM_DISABLE_TIMER_RETRIAL_MS
+const STACK_TURN_OFF_TIMEOUT_MS: Duration = Duration::from_millis(4000);
 
 fn make_object_name(idx: i32, name: &str) -> String {
     String::from(format!("/org/chromium/bluetooth/hci{}/{}", idx, name))
@@ -97,31 +102,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Forward --hci to Fluoride.
     init_flags.push(format!("--hci={}", hci_index));
 
-    let level_filter = if is_debug { LevelFilter::Debug } else { LevelFilter::Info };
-
-    if log_output == "stderr" {
-        env_logger::Builder::new().filter(None, level_filter).init();
-    } else {
-        let formatter = Formatter3164 {
-            facility: Facility::LOG_USER,
-            hostname: None,
-            process: "btadapterd".into(),
-            pid: 0,
-        };
-
-        let logger = syslog::unix(formatter).expect("could not connect to syslog");
-        let _ = log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
-            .map(|()| log::set_max_level(level_filter));
-    }
-
     let (tx, rx) = Stack::create_channel();
     let sig_notifier = Arc::new((Mutex::new(false), Condvar::new()));
 
     let intf = Arc::new(Mutex::new(get_btinterface().unwrap()));
     let bluetooth_gatt =
         Arc::new(Mutex::new(Box::new(BluetoothGatt::new(intf.clone(), tx.clone()))));
-    let bluetooth_media =
-        Arc::new(Mutex::new(Box::new(BluetoothMedia::new(tx.clone(), intf.clone()))));
     let battery_provider_manager =
         Arc::new(Mutex::new(Box::new(BatteryProviderManager::new(tx.clone()))));
     let battery_service = Arc::new(Mutex::new(Box::new(BatteryService::new(
@@ -133,11 +119,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         battery_provider_manager.clone(),
         tx.clone(),
     ))));
+    let bluetooth_media = Arc::new(Mutex::new(Box::new(BluetoothMedia::new(
+        tx.clone(),
+        intf.clone(),
+        battery_provider_manager.clone(),
+    ))));
     let bluetooth_admin = Arc::new(Mutex::new(Box::new(BluetoothAdmin::new(
         String::from(ADMIN_SETTINGS_FILE_PATH),
         tx.clone(),
     ))));
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
+        adapter_index,
         tx.clone(),
         intf.clone(),
         bluetooth_media.clone(),
@@ -148,9 +140,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         bluetooth.clone(),
         intf.clone(),
         bluetooth_gatt.clone(),
+        bluetooth_media.clone(),
         tx.clone(),
     ))));
-
+    let logging = Arc::new(Mutex::new(Box::new(BluetoothLogging::new(is_debug, log_output))));
     let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(tx.clone()))));
 
     topstack::get_runtime().block_on(async {
@@ -233,6 +226,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
         );
+        let logging_iface = iface_logging::export_bluetooth_logging_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
 
         // Register D-Bus method handlers of IBluetoothGatt.
         let gatt_iface = iface_bluetooth_gatt::export_bluetooth_gatt_dbus_intf(
@@ -242,6 +240,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let media_iface = iface_bluetooth_media::export_bluetooth_media_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
+        let telephony_iface = iface_bluetooth_telephony::export_bluetooth_telephony_dbus_intf(
             conn.clone(),
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
@@ -291,11 +295,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             &[media_iface],
             bluetooth_media.clone(),
         );
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "telephony"),
+            &[telephony_iface],
+            bluetooth_media.clone(),
+        );
+
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "battery_provider_manager"),
             &[battery_provider_manager_iface],
             battery_provider_manager.clone(),
         );
+
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "battery_manager"),
             &[battery_manager_iface],
@@ -306,6 +318,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             make_object_name(adapter_index, "admin"),
             &[admin_iface],
             bluetooth_admin.clone(),
+        );
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "logging"),
+            &[logging_iface],
+            logging.clone(),
         );
 
         // Hold locks and initialize all interfaces. This must be done AFTER DBus is
@@ -369,8 +387,8 @@ extern "C" fn handle_sigterm(_signum: i32) {
 
         let guard = notifier.0.lock().unwrap();
         if *guard {
-            log::debug!("Waiting for stack to turn off for 2s");
-            let _ = notifier.1.wait_timeout(guard, std::time::Duration::from_millis(2000));
+            log::debug!("Waiting for stack to turn off for {:?}", STACK_TURN_OFF_TIMEOUT_MS);
+            let _ = notifier.1.wait_timeout(guard, STACK_TURN_OFF_TIMEOUT_MS);
         }
     }
 

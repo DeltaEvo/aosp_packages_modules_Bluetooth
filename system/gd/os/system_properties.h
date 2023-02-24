@@ -32,6 +32,12 @@ std::optional<std::string> GetSystemProperty(const std::string& property);
 // does not exist or if the platform does not support system property
 uint32_t GetSystemPropertyUint32(const std::string& property, uint32_t default_value);
 
+// Get |property| keyed system property as uint32_t from supported platform, return |default_value|
+// if the property does not exist or if the platform does not support system property if property is
+// found it will call stoul with |base|
+uint32_t GetSystemPropertyUint32Base(
+    const std::string& property, uint32_t default_value, int base = 0);
+
 // Get |property| keyed property as bool from supported platform, return
 // |default_value| if the property does not exist or if the platform
 // does not support system property
@@ -41,8 +47,8 @@ bool GetSystemPropertyBool(const std::string& property, bool default_value);
 // Replace existing value if property already exists
 bool SetSystemProperty(const std::string& property, const std::string& value);
 
-// Clear system properties for host only
-void ClearSystemPropertiesForHost();
+// Clear system properties for host only return true on success
+bool ClearSystemPropertiesForHost();
 
 // Check if the vendor image is using root canal simulated Bluetooth stack
 bool IsRootCanalEnabled();

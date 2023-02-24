@@ -25,13 +25,29 @@
 struct tBTM_ESCO_DATA;
 void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
                              uint8_t tx_phy, uint8_t rx_phy);
+void gatt_notify_subrate_change(uint16_t handle, uint16_t subrate_factor,
+                                uint16_t latency, uint16_t cont_num,
+                                uint16_t timeout, uint8_t status);
+void l2cble_process_subrate_change_evt(uint16_t handle, uint8_t status,
+                                       uint16_t subrate_factor,
+                                       uint16_t peripheral_latency,
+                                       uint16_t cont_num, uint16_t timeout);
+
+static void on_le_subrate_change(uint16_t handle, uint16_t subrate_factor,
+                                 uint16_t latency, uint16_t cont_num,
+                                 uint16_t timeout, uint8_t status) {
+  l2cble_process_subrate_change_evt(handle, status, subrate_factor, latency,
+                                    cont_num, timeout);
+  gatt_notify_subrate_change(handle & 0x0FFF, subrate_factor, latency, cont_num,
+                             timeout, status);
+}
 
 namespace bluetooth {
 namespace shim {
 namespace legacy {
 
-const acl_interface_t GetAclInterface() {
-  acl_interface_t acl_interface{
+const acl_interface_t& GetAclInterface() {
+  static acl_interface_t acl_interface{
       .on_send_data_upwards = acl_rcv_acl_data,
       .on_packets_completed = acl_packets_completed,
 
@@ -83,6 +99,7 @@ const acl_interface_t GetAclInterface() {
       .link.le.on_read_remote_version_information_complete =
           btm_read_remote_version_complete,
       .link.le.on_phy_update = gatt_notify_phy_updated,
+      .link.le.on_le_subrate_change = on_le_subrate_change,
   };
   return acl_interface;
 }

@@ -54,8 +54,8 @@ pub enum BatteryServiceActions {
     OnCharacteristicRead(String, GattStatus, i32, Vec<u8>),
     /// Params: addr, handle, value
     OnNotify(String, i32, Vec<u8>),
-    /// Params: remote_device
-    Connect(BluetoothDevice),
+    /// Params: remote_device, transport
+    Connect(BluetoothDevice, BtTransport),
     /// Params: remote_device
     Disconnect(BluetoothDevice),
 }
@@ -227,8 +227,11 @@ impl BatteryService {
                 });
             }
 
-            BatteryServiceActions::Connect(device) => {
-                self.init_device(device.address);
+            BatteryServiceActions::Connect(device, transport) => {
+                if transport != BtTransport::Le {
+                    return;
+                }
+                self.init_device(device.address, transport);
             }
 
             BatteryServiceActions::Disconnect(device) => {
@@ -242,9 +245,13 @@ impl BatteryService {
         let level = u32::from_le_bytes(level.try_into().unwrap());
         debug!("Received battery level for {}: {}", remote_address.clone(), level);
         let battery_set = self.battery_sets.entry(remote_address.clone()).or_insert_with(|| {
-            BatterySet::new(remote_address.clone(), uuid::BAS.to_string(), "BAS".to_string())
+            BatterySet::new(
+                remote_address.clone(),
+                uuid::BAS.to_string(),
+                "BAS".to_string(),
+                vec![Battery { percentage: level, variant: "".to_string() }],
+            )
         });
-        battery_set.add_or_update_battery(Battery { percentage: level, variant: "".to_string() });
         self.battery_provider_manager
             .lock()
             .unwrap()
@@ -252,7 +259,7 @@ impl BatteryService {
         battery_set.clone()
     }
 
-    fn init_device(&self, remote_address: String) {
+    fn init_device(&self, remote_address: String, transport: BtTransport) {
         let client_id = match self.client_id {
             Some(id) => id,
             None => return,
@@ -262,7 +269,7 @@ impl BatteryService {
             client_id,
             remote_address,
             false,
-            BtTransport::Le,
+            transport,
             false,
             LePhy::Phy1m,
         );
@@ -279,7 +286,12 @@ impl BatteryService {
         // Let BatteryProviderManager know that BAS no longer has a battery for this device.
         self.battery_provider_manager.lock().unwrap().set_battery_info(
             self.battery_provider_id,
-            BatterySet::new(remote_address.clone(), uuid::BAS.to_string(), "BAS".to_string()),
+            BatterySet::new(
+                remote_address.clone(),
+                uuid::BAS.to_string(),
+                "BAS".to_string(),
+                vec![],
+            ),
         );
         self.battery_sets.remove(&remote_address);
     }
@@ -298,10 +310,7 @@ impl BatteryService {
         };
         let handle = match self.handles.get(&remote_address) {
             Some(id) => *id,
-            None => {
-                self.init_device(remote_address);
-                return true;
-            }
+            None => return false,
         };
         self.gatt.lock().unwrap().read_characteristic(client_id, remote_address.clone(), handle, 0);
         true

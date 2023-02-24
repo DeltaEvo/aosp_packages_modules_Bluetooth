@@ -29,7 +29,7 @@
 #define LOG_TAG "bt_btif_core"
 
 #include <base/at_exit.h>
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/threading/platform_thread.h>
 #include <signal.h>
@@ -50,6 +50,7 @@
 #include "btif/include/stack_manager.h"
 #include "common/message_loop_thread.h"
 #include "device/include/controller.h"
+#include "device/include/device_iot_config.h"
 #include "osi/include/allocator.h"
 #include "osi/include/future.h"
 #include "osi/include/log.h"
@@ -92,14 +93,6 @@ static void bt_jni_msg_ready(void* context);
  ******************************************************************************/
 
 static tBTA_SERVICE_MASK btif_enabled_services = 0;
-
-/*
- * This variable should be set to 1, if the Bluedroid+BTIF libraries are to
- * function in DUT mode.
- *
- * To set this, the btif_init_bluetooth needs to be called with argument as 1
- */
-static uint8_t btif_dut_mode = 0;
 
 static MessageLoopThread jni_thread("bt_jni_thread");
 static base::AtExitManager* exit_manager;
@@ -191,18 +184,6 @@ void post_on_bt_jni(BtJniClosure closure) {
 
 /*******************************************************************************
  *
- * Function         btif_is_dut_mode
- *
- * Description      checks if BTIF is currently in DUT mode
- *
- * Returns          true if test mode, otherwise false
- *
- ******************************************************************************/
-
-bool btif_is_dut_mode() { return btif_dut_mode == 1; }
-
-/*******************************************************************************
- *
  * Function         btif_is_enabled
  *
  * Description      checks if main adapter is fully enabled
@@ -212,8 +193,7 @@ bool btif_is_dut_mode() { return btif_dut_mode == 1; }
  ******************************************************************************/
 
 int btif_is_enabled(void) {
-  return ((!btif_is_dut_mode()) &&
-          (stack_manager_get_interface()->get_stack_is_running()));
+  return (stack_manager_get_interface()->get_stack_is_running());
 }
 
 void btif_init_ok() {
@@ -271,13 +251,18 @@ void btif_enable_bluetooth_evt() {
 
   std::string bdstr = local_bd_addr.ToString();
 
+  // save bd addr to iot conf file
+  device_iot_config_set_str(IOT_CONF_KEY_SECTION_ADAPTER, IOT_CONF_KEY_ADDRESS,
+                            bdstr);
+
   char val[PROPERTY_VALUE_MAX] = "";
   int val_size = PROPERTY_VALUE_MAX;
   if (!btif_config_get_str("Adapter", "Address", val, &val_size) ||
       strcmp(bdstr.c_str(), val) != 0) {
     // We failed to get an address or the one in the config file does not match
     // the address given by the controller interface. Update the config cache
-    LOG_INFO("%s: Storing '%s' into the config file", __func__, bdstr.c_str());
+    LOG_INFO("%s: Storing '%s' into the config file", __func__,
+            ADDRESS_TO_LOGGABLE_CSTR(local_bd_addr));
     btif_config_set_str("Adapter", "Address", bdstr.c_str());
     btif_config_save();
 
@@ -329,55 +314,8 @@ bt_status_t btif_cleanup_bluetooth() {
   jni_thread.ShutDown();
   delete exit_manager;
   exit_manager = nullptr;
-  btif_dut_mode = 0;
   LOG_INFO("%s finished", __func__);
   return BT_STATUS_SUCCESS;
-}
-
-/*******************************************************************************
- *
- * Function         btif_dut_mode_cback
- *
- * Description     Callback invoked on completion of vendor specific test mode
- *                 command
- *
- * Returns          None
- *
- ******************************************************************************/
-static void btif_dut_mode_cback(UNUSED_ATTR tBTM_VSC_CMPL* p) {
-  /* For now nothing to be done. */
-}
-
-/*******************************************************************************
- *
- * Function         btif_dut_mode_configure
- *
- * Description      Configure Test Mode - 'enable' to 1 puts the device in test
- *                       mode and 0 exits test mode
- *
- ******************************************************************************/
-void btif_dut_mode_configure(uint8_t enable) {
-  BTIF_TRACE_DEBUG("%s", __func__);
-
-  btif_dut_mode = enable;
-  if (enable == 1) {
-    BTA_EnableTestMode();
-  } else {
-    // Can't do in process reset anyways - just quit
-    kill(getpid(), SIGKILL);
-  }
-}
-
-/*******************************************************************************
- *
- * Function         btif_dut_mode_send
- *
- * Description     Sends a HCI Vendor specific command to the controller
- *
- ******************************************************************************/
-void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
-  BTIF_TRACE_DEBUG("%s", __func__);
-  BTM_VendorSpecificCommand(opcode, len, buf, btif_dut_mode_cback);
 }
 
 /*****************************************************************************
@@ -619,6 +557,9 @@ void btif_get_adapter_property(bt_property_type_t type) {
     local_le_features
         .le_periodic_advertising_sync_transfer_recipient_supported =
         controller->supports_ble_periodic_advertising_sync_transfer_recipient();
+    local_le_features.adv_filter_extended_features_mask =
+        cmn_vsc_cb.adv_filter_extended_features_mask;
+
     memcpy(prop.val, &local_le_features, prop.len);
   } else if (prop.type == BT_PROPERTY_DYNAMIC_AUDIO_BUFFER) {
     tBTM_BLE_VSC_CB cmn_vsc_cb;

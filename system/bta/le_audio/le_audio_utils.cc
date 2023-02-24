@@ -61,6 +61,8 @@ LeAudioContextType AudioContentToLeAudioContext(
       return LeAudioContextType::EMERGENCYALARM;
     case AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE:
       return LeAudioContextType::INSTRUCTIONAL;
+    case AUDIO_USAGE_ASSISTANCE_SONIFICATION:
+      return LeAudioContextType::SOUNDEFFECTS;
     default:
       break;
   }
@@ -222,22 +224,6 @@ AudioContexts GetAllowedAudioContextsFromSinkMetadata(
             bluetooth::common::ToString(all_track_contexts).c_str(),
             all_track_contexts.value());
   return all_track_contexts;
-}
-
-std::vector<uint8_t> GetAllCcids(const AudioContexts& contexts) {
-  auto ccid_keeper = ContentControlIdKeeper::GetInstance();
-  std::vector<uint8_t> ccid_vec;
-
-  for (LeAudioContextType context : types::kLeAudioContextAllTypesArray) {
-    if (!contexts.test(context)) continue;
-    using T = std::underlying_type<LeAudioContextType>::type;
-    auto ccid = ccid_keeper->GetCcid(static_cast<T>(context));
-    if (ccid != -1) {
-      ccid_vec.push_back(static_cast<uint8_t>(ccid));
-    }
-  }
-
-  return ccid_vec;
 }
 
 }  // namespace utils

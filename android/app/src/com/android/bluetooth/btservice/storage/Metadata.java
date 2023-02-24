@@ -51,6 +51,25 @@ class Metadata {
     public long last_active_time;
     public boolean is_active_a2dp_device;
 
+    @Embedded
+    public AudioPolicyEntity audioPolicyMetadata;
+
+    /**
+     * The preferred profile to be used for {@link BluetoothDevice#AUDIO_MODE_OUTPUT_ONLY}. This can
+     * be either {@link BluetoothProfile#A2DP} or {@link BluetoothProfile#LE_AUDIO}. This value is
+     * only used if the remote device supports both A2DP and LE Audio and both transports are
+     * connected and active.
+     */
+    public int preferred_output_only_profile;
+
+    /**
+     * The preferred profile to be used for {@link BluetoothDevice#AUDIO_MODE_DUPLEX}. This can
+     * be either {@link BluetoothProfile#HEADSET} or {@link BluetoothProfile#LE_AUDIO}. This value
+     * is only used if the remote device supports both HFP and LE Audio and both transports are
+     * connected and active.
+     */
+    public int preferred_duplex_profile;
+
     Metadata(String address) {
         this.address = address;
         migrated = false;
@@ -60,6 +79,9 @@ class Metadata {
         a2dpOptionalCodecsEnabled = BluetoothA2dp.OPTIONAL_CODECS_PREF_UNKNOWN;
         last_active_time = MetadataDatabase.sCurrentConnectionNumber++;
         is_active_a2dp_device = true;
+        audioPolicyMetadata = new AudioPolicyEntity();
+        preferred_output_only_profile = 0;
+        preferred_duplex_profile = 0;
     }
 
     String getAddress() {
@@ -275,6 +297,12 @@ class Metadata {
             case BluetoothDevice.METADATA_LE_AUDIO:
                 publicMetadata.le_audio = value;
                 break;
+            case BluetoothDevice.METADATA_GMCS_CCCD:
+                publicMetadata.gmcs_cccd = value;
+                break;
+            case BluetoothDevice.METADATA_GTBS_CCCD:
+                publicMetadata.gtbs_cccd = value;
+                break;
         }
     }
 
@@ -362,6 +390,12 @@ class Metadata {
             case BluetoothDevice.METADATA_LE_AUDIO:
                 value = publicMetadata.le_audio;
                 break;
+            case BluetoothDevice.METADATA_GMCS_CCCD:
+                value = publicMetadata.gmcs_cccd;
+                break;
+            case BluetoothDevice.METADATA_GTBS_CCCD:
+                value = publicMetadata.gtbs_cccd;
+                break;
         }
         return value;
     }
@@ -387,6 +421,8 @@ class Metadata {
             .append(a2dpOptionalCodecsEnabled)
             .append("), custom metadata(")
             .append(publicMetadata)
+            .append("), hfp client audio policy(")
+            .append(audioPolicyMetadata)
             .append(")}");
 
         return builder.toString();

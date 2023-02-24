@@ -43,6 +43,7 @@ COMMON_MK_USES = [
     'asan',
     'coverage',
     'cros_host',
+    'cros_debug',
     'fuzzer',
     'fuzzer',
     'msan',
@@ -51,6 +52,9 @@ COMMON_MK_USES = [
     'test',
     'ubsan',
 ]
+
+# Use a specific commit version for common-mk to avoid build surprises.
+COMMON_MK_COMMIT = "136c3e114b65f2c6c5f026376c2e75c73c2478a3"
 
 # Default use flags.
 USE_DEFAULTS = {
@@ -63,12 +67,13 @@ VALID_TARGETS = [
     'all',  # All targets except test and clean
     'clean',  # Clean up output directory
     'docs',  # Build Rust docs
+    'hosttools',  # Build the host tools (i.e. packetgen)
     'main',  # Build the main C++ codebase
     'prepare',  # Prepare the output directory (gn gen + rust setup)
     'rootcanal',  # Build Rust targets for RootCanal
     'rust',  # Build only the rust components + copy artifacts to output dir
     'test',  # Run the unit tests
-    'tools',  # Build the host tools (i.e. packetgen)
+    'utils',  # Build Floss utils
 ]
 
 # TODO(b/190750167) - Host tests are disabled until we are full bazel build
@@ -82,10 +87,12 @@ HOST_TESTS = [
     # 'net_test_btpackets',
 ]
 
+# Map of git repos to bootstrap and what commit to check them out at. None
+# values will just checkout to HEAD.
 BOOTSTRAP_GIT_REPOS = {
-    'platform2': 'https://chromium.googlesource.com/chromiumos/platform2',
-    'rust_crates': 'https://chromium.googlesource.com/chromiumos/third_party/rust_crates',
-    'proto_logging': 'https://android.googlesource.com/platform/frameworks/proto_logging'
+    'platform2': ('https://chromium.googlesource.com/chromiumos/platform2', COMMON_MK_COMMIT),
+    'rust_crates': ('https://chromium.googlesource.com/chromiumos/third_party/rust_crates', None),
+    'proto_logging': ('https://android.googlesource.com/platform/frameworks/proto_logging', None),
 }
 
 # List of packages required for linux build
@@ -434,14 +441,14 @@ class HostBuild():
         self._gn_configure()
         self._rust_configure()
 
-    def _target_tools(self):
+    def _target_hosttools(self):
         """ Build the tools target in an already prepared environment.
         """
         self._gn_build('tools')
 
         # Also copy bluetooth_packetgen to CARGO_HOME so it's available
-        shutil.copy(
-            os.path.join(self._gn_default_output(), 'bluetooth_packetgen'), os.path.join(self.env['CARGO_HOME'], 'bin'))
+        shutil.copy(os.path.join(self._gn_default_output(), 'bluetooth_packetgen'),
+                    os.path.join(self.env['CARGO_HOME'], 'bin'))
 
     def _target_docs(self):
         """Build the Rust docs."""
@@ -482,10 +489,20 @@ class HostBuild():
 
         # Host tests second based on host test list
         for t in HOST_TESTS:
-            self.run_command(
-                'test', [os.path.join(self.output_dir, 'out/Default', t)],
-                cwd=os.path.join(self.output_dir),
-                env=self.env)
+            self.run_command('test', [os.path.join(self.output_dir, 'out/Default', t)],
+                             cwd=os.path.join(self.output_dir),
+                             env=self.env)
+
+    def _target_utils(self):
+        """ Builds the utility applications.
+        """
+        rust_targets = ['hcidoc']
+
+        # Build targets
+        for target in rust_targets:
+            self.run_command('utils', ['cargo', 'build', '-p', target],
+                             cwd=os.path.join(self.platform_dir, 'bt'),
+                             env=self.env)
 
     def _target_install(self):
         """ Installs files required to run Floss to install directory.
@@ -562,7 +579,7 @@ class HostBuild():
         """ Build all common targets (skipping doc, test, and clean).
         """
         self._target_prepare()
-        self._target_tools()
+        self._target_hosttools()
         self._target_main()
         self._target_rust()
 
@@ -578,8 +595,8 @@ class HostBuild():
 
         if self.target == 'prepare':
             self._target_prepare()
-        elif self.target == 'tools':
-            self._target_tools()
+        elif self.target == 'hosttools':
+            self._target_hosttools()
         elif self.target == 'rootcanal':
             self._target_rootcanal()
         elif self.target == 'rust':
@@ -594,21 +611,25 @@ class HostBuild():
             self._target_clean()
         elif self.target == 'install':
             self._target_install()
+        elif self.target == 'utils':
+            self._target_utils()
         elif self.target == 'all':
             self._target_all()
 
 
 class Bootstrap():
 
-    def __init__(self, base_dir, bt_dir):
+    def __init__(self, base_dir, bt_dir, partial_staging):
         """ Construct bootstrapper.
 
         Args:
             base_dir: Where to stage everything.
             bt_dir: Where bluetooth source is kept (will be symlinked)
+            partial_staging: Whether to do a partial clone for staging.
         """
         self.base_dir = os.path.abspath(base_dir)
         self.bt_dir = os.path.abspath(bt_dir)
+        self.partial_staging = partial_staging
 
         # Create base directory if it doesn't already exist
         os.makedirs(self.base_dir, exist_ok=True)
@@ -625,9 +646,18 @@ class Bootstrap():
 
     def _update_platform2(self):
         """Updates repositories used for build."""
-        for repo in BOOTSTRAP_GIT_REPOS.keys():
-            cwd = os.path.join(self.git_dir, repo)
-            subprocess.check_call(['git', 'pull'], cwd=cwd)
+        for project in BOOTSTRAP_GIT_REPOS.keys():
+            cwd = os.path.join(self.git_dir, project)
+            (repo, commit) = BOOTSTRAP_GIT_REPOS[project]
+
+            # Update to required commit when necessary or pull the latest code.
+            if commit:
+                head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd).strip()
+                if head != commit:
+                    subprocess.check_call(['git', 'fetch'], cwd=cwd)
+                    subprocess.check_call(['git', 'checkout', commit], cwd=cwd)
+            else:
+                subprocess.check_call(['git', 'pull'], cwd=cwd)
 
     def _setup_platform2(self):
         """ Set up platform2.
@@ -644,9 +674,20 @@ class Bootstrap():
             print('{} already set-up. Updating instead.'.format(self.base_dir))
             self._update_platform2()
         else:
+            clone_options = []
+            # When doing a partial staging, we use a treeless clone which allows
+            # us to access all commits but downloads things on demand. This
+            # helps speed up the initial git clone during builds but isn't good
+            # for long-term development.
+            if self.partial_staging:
+                clone_options = ['--filter=tree:0']
             # Check out all repos in git directory
-            for repo in BOOTSTRAP_GIT_REPOS.values():
-                subprocess.check_call(['git', 'clone', repo], cwd=self.git_dir)
+            for project in BOOTSTRAP_GIT_REPOS.keys():
+                (repo, commit) = BOOTSTRAP_GIT_REPOS[project]
+                subprocess.check_call(['git', 'clone', repo, project] + clone_options, cwd=self.git_dir)
+                # Pin to commit.
+                if commit:
+                    subprocess.check_call(['git', 'checkout', commit], cwd=os.path.join(self.git_dir, project))
 
         # Symlink things
         symlinks = [
@@ -818,18 +859,22 @@ class Bootstrap():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Simple build for host.')
-    parser.add_argument(
-        '--bootstrap-dir', help='Directory to run bootstrap on (or was previously run on).', default="~/.floss")
-    parser.add_argument(
-        '--run-bootstrap',
-        help='Run bootstrap code to verify build env is ok to build.',
-        default=False,
-        action='store_true')
-    parser.add_argument(
-        '--print-env', help='Print environment variables used for build.', default=False, action='store_true')
+    parser.add_argument('--bootstrap-dir',
+                        help='Directory to run bootstrap on (or was previously run on).',
+                        default="~/.floss")
+    parser.add_argument('--run-bootstrap',
+                        help='Run bootstrap code to verify build env is ok to build.',
+                        default=False,
+                        action='store_true')
+    parser.add_argument('--print-env',
+                        help='Print environment variables used for build.',
+                        default=False,
+                        action='store_true')
     parser.add_argument('--no-clang', help='Don\'t use clang compiler.', default=False, action='store_true')
-    parser.add_argument(
-        '--no-strip', help='Skip stripping binaries during install.', default=False, action='store_true')
+    parser.add_argument('--no-strip',
+                        help='Skip stripping binaries during install.',
+                        default=False,
+                        action='store_true')
     parser.add_argument('--use', help='Set a specific use flag.')
     parser.add_argument('--notest', help='Don\'t compile test code.', default=False, action='store_true')
     parser.add_argument('--test-name', help='Run test with this string in the name.', default=None)
@@ -837,10 +882,17 @@ if __name__ == '__main__':
     parser.add_argument('--sysroot', help='Set a specific sysroot path', default='/')
     parser.add_argument('--libdir', help='Libdir - default = usr/lib', default='usr/lib')
     parser.add_argument('--jobs', help='Number of jobs to run', default=0, type=int)
-    parser.add_argument(
-        '--no-vendored-rust', help='Do not use vendored rust crates', default=False, action='store_true')
+    parser.add_argument('--no-vendored-rust',
+                        help='Do not use vendored rust crates',
+                        default=False,
+                        action='store_true')
     parser.add_argument('--verbose', help='Verbose logs for build.')
     parser.add_argument('--rust-debug', help='Build Rust code as debug.', default=False, action='store_true')
+    parser.add_argument(
+        '--partial-staging',
+        help='Bootstrap git repositories with partial clones. Use to speed up initial git clone for automated builds.',
+        default=False,
+        action='store_true')
     args = parser.parse_args()
 
     # Make sure we get absolute path + expanded path for bootstrap directory
@@ -852,7 +904,7 @@ if __name__ == '__main__':
         raise Exception("Only x86_64 machines are currently supported by this build script.")
 
     if args.run_bootstrap:
-        bootstrap = Bootstrap(args.bootstrap_dir, os.path.dirname(__file__))
+        bootstrap = Bootstrap(args.bootstrap_dir, os.path.dirname(__file__), args.partial_staging)
         bootstrap.bootstrap()
     elif args.print_env:
         build = HostBuild(args)

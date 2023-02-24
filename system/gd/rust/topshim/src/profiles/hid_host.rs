@@ -5,6 +5,7 @@ use crate::profiles::hid_host::bindings::bthh_interface_t;
 use crate::topstack::get_dispatchers;
 use crate::utils::LTCheckedPtrMut;
 
+use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 use std::sync::{Arc, Mutex};
 use topshim_macros::{cb_variant, profile_enabled_or};
@@ -333,6 +334,18 @@ impl HidHost {
             addr_ptr.into(),
             bindings::bthh_report_type_t::from(report_type),
             report_ptr.cast_into::<std::os::raw::c_char>()
+        ))
+    }
+
+    #[profile_enabled_or(BtStatus::NotReady)]
+    pub fn send_data(&mut self, addr: &mut RawAddress, data: &mut [u8]) -> BtStatus {
+        let addr_ptr = LTCheckedPtrMut::from_ref(addr);
+        let data_ptr = LTCheckedPtrMut::from(data);
+        BtStatus::from(ccall!(
+            self,
+            send_data,
+            addr_ptr.into(),
+            data_ptr.cast_into::<std::os::raw::c_char>()
         ))
     }
 

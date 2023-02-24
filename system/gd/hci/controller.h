@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "common/init_flags.h"
 #include "hci/address.h"
 #include "hci/hci_packets.h"
 #include "hci/le_rand_callback.h"
@@ -36,6 +37,9 @@
 #define COD_AV_HEADPHONES 0x0418
 #define COD_AV_PORTABLE_AUDIO 0x041C
 #define COD_AV_HIFI_AUDIO 0x0428
+
+// TODO Remove this once all QTI specific hacks are removed.
+#define LMP_COMPID_QTI 0x001D
 
 namespace bluetooth {
 namespace hci {
@@ -127,6 +131,9 @@ class Controller : public Module {
   virtual bool SupportsBlePowerControlRequest() const;
   virtual bool SupportsBlePowerChangeIndication() const;
   virtual bool SupportsBlePathLossMonitoring() const;
+  virtual bool SupportsBlePeriodicAdvertisingAdi() const;
+  virtual bool SupportsBleConnectionSubrating() const;
+  virtual bool SupportsBleConnectionSubratingHost() const;
 
   virtual uint16_t GetAclPacketLength() const;
 
@@ -194,6 +201,24 @@ class Controller : public Module {
 
   virtual uint8_t GetLePeriodicAdvertiserListSize() const;
 
+  struct VendorCapabilities {
+    uint8_t is_supported_;
+    uint8_t max_advt_instances_;
+    uint8_t offloaded_resolution_of_private_address_;
+    uint16_t total_scan_results_storage_;
+    uint8_t max_irk_list_sz_;
+    uint8_t filtering_support_;
+    uint8_t max_filter_;
+    uint8_t activity_energy_info_support_;
+    uint16_t version_supported_;
+    uint16_t total_num_of_advt_tracked_;
+    uint8_t extended_scan_support_;
+    uint8_t debug_logging_supported_;
+    uint8_t le_address_generation_offloading_support_;
+    uint32_t a2dp_source_offload_capability_mask_;
+    uint8_t bluetooth_quality_report_support_;
+  };
+
   virtual VendorCapabilities GetVendorCapabilities() const;
 
   virtual bool IsSupported(OpCode op_code) const;
@@ -201,7 +226,7 @@ class Controller : public Module {
   static const ModuleFactory Factory;
 
   static constexpr uint64_t kDefaultEventMask = 0x3dbfffffffffffff;
-  static constexpr uint64_t kDefaultLeEventMask = 0x000000004d02fe7f;
+  static constexpr uint64_t kDefaultLeEventMask = 0x000000074d02fe7f;
 
   static constexpr uint64_t kLeEventMask53 = 0x00000007ffffffff;
   static constexpr uint64_t kLeEventMask52 = 0x00000003ffffffff;
@@ -210,6 +235,9 @@ class Controller : public Module {
   static constexpr uint64_t kLeEventMask41 = 0x000000000000003f;
 
   static uint64_t MaskLeEventMask(HciVersion version, uint64_t mask) {
+    if (!common::init_flags::subrating_is_enabled()) {
+      mask = mask & ~(static_cast<uint64_t>(LLFeaturesBits::CONNECTION_SUBRATING_HOST_SUPPORT));
+    }
     if (version >= HciVersion::V_5_3) {
       return mask;
     } else if (version >= HciVersion::V_5_2) {

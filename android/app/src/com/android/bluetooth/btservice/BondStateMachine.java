@@ -344,13 +344,24 @@ final class BondStateMachine extends StateMachine {
         if (dev.getBondState() == BluetoothDevice.BOND_NONE) {
             infoLog("Bond address is:" + dev);
             byte[] addr = Utils.getBytesFromAddress(dev.getAddress());
+            int addrType = dev.getAddressType();
             boolean result;
             // If we have some data
             if (remoteP192Data != null || remoteP256Data != null) {
+                BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_BOND_STATE_CHANGED,
+                      mAdapterService.obfuscateAddress(dev), transport, dev.getType(),
+                      BluetoothDevice.BOND_BONDING,
+                      BluetoothProtoEnums.BOND_SUB_STATE_LOCAL_START_PAIRING_OOB,
+                      BluetoothProtoEnums.UNBOND_REASON_UNKNOWN, mAdapterService.getMetricId(dev));
                 result = mAdapterService.createBondOutOfBandNative(addr, transport,
                     remoteP192Data, remoteP256Data);
             } else {
-                result = mAdapterService.createBondNative(addr, transport);
+                BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_BOND_STATE_CHANGED,
+                      mAdapterService.obfuscateAddress(dev), transport, dev.getType(),
+                      BluetoothDevice.BOND_BONDING,
+                      BluetoothProtoEnums.BOND_SUB_STATE_LOCAL_START_PAIRING,
+                      BluetoothProtoEnums.UNBOND_REASON_UNKNOWN, mAdapterService.getMetricId(dev));
+                result = mAdapterService.createBondNative(addr, addrType, transport);
             }
             BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
                     mAdapterService.getMetricId(dev), dev.getName());
@@ -387,7 +398,7 @@ final class BondStateMachine extends StateMachine {
         intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         // Workaround for Android Auto until pre-accepting pairing requests is added.
         intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        mAdapterService.sendOrderedBroadcast(intent, BLUETOOTH_CONNECT,
+        Utils.sendOrderedBroadcast(mAdapterService, intent, BLUETOOTH_CONNECT,
                 Utils.getTempAllowlistBroadcastOptions(), null/* resultReceiver */,
                 null/* scheduler */, Activity.RESULT_OK/* initialCode */, null/* initialData */,
                 null/* initialExtras */);
@@ -469,6 +480,7 @@ final class BondStateMachine extends StateMachine {
         if (newState == BluetoothDevice.BOND_NONE) {
             intent.putExtra(BluetoothDevice.EXTRA_UNBOND_REASON, reason);
         }
+        mAdapterService.onBondStateChanged(device, newState);
         mAdapterService.sendBroadcastAsUser(intent, UserHandle.ALL, BLUETOOTH_CONNECT,
                 Utils.getTempAllowlistBroadcastOptions());
         infoLog("Bond State Change Intent:" + device + " " + state2str(oldState) + " => "

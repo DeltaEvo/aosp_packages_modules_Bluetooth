@@ -21,6 +21,7 @@ import android.content.Intent
 import android.media.*
 import com.google.protobuf.Empty
 import io.grpc.stub.StreamObserver
+import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -28,7 +29,7 @@ import pandora.MediaPlayerGrpc.MediaPlayerImplBase
 import pandora.MediaPlayerProto.*
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-class MediaPlayer(val context: Context) : MediaPlayerImplBase() {
+class MediaPlayer(val context: Context) : MediaPlayerImplBase(), Closeable {
   private val TAG = "PandoraMediaPlayer"
 
   private val scope: CoroutineScope
@@ -36,7 +37,9 @@ class MediaPlayer(val context: Context) : MediaPlayerImplBase() {
   init {
     // Init the CoroutineScope
     scope = CoroutineScope(Dispatchers.Default)
-    context.startService(Intent(context, MediaPlayerBrowserService::class.java))
+    if (!MediaPlayerBrowserService.isInitialized()) {
+      context.startService(Intent(context, MediaPlayerBrowserService::class.java))
+    }
   }
 
   override fun play(request: Empty, responseObserver: StreamObserver<Empty>) {
@@ -95,10 +98,15 @@ class MediaPlayer(val context: Context) : MediaPlayerImplBase() {
     }
   }
 
-  fun deinit() {
+  override fun updateQueue(request: Empty, responseObserver: StreamObserver<Empty>) {
+    grpcUnary<Empty>(scope, responseObserver) {
+      MediaPlayerBrowserService.instance.updateQueue()
+      Empty.getDefaultInstance()
+    }
+  }
+
+  override fun close() {
     // Deinit the CoroutineScope
     scope.cancel()
-    // Stop service
-    context.stopService(Intent(context, MediaPlayerBrowserService::class.java))
   }
 }

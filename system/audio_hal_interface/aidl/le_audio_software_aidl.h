@@ -26,6 +26,7 @@ namespace audio {
 namespace aidl {
 namespace le_audio {
 
+using ::aidl::android::hardware::bluetooth::audio::BroadcastCapability;
 using ::aidl::android::hardware::bluetooth::audio::
     LeAudioBroadcastConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::LeAudioConfiguration;
@@ -76,6 +77,8 @@ class LeAudioTransport {
   BluetoothAudioCtrlAck SuspendRequest();
 
   void StopRequest();
+
+  void SetLowLatency(bool is_low_latency);
 
   bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
                                uint64_t* total_bytes_processed,
@@ -131,6 +134,8 @@ class LeAudioSinkTransport
 
   void StopRequest() override;
 
+  void SetLowLatency(bool is_low_latency) override;
+
   bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
                                uint64_t* total_bytes_read,
                                timespec* data_position) override;
@@ -183,6 +188,8 @@ class LeAudioSourceTransport
   BluetoothAudioCtrlAck SuspendRequest() override;
 
   void StopRequest() override;
+
+  void SetLowLatency(bool is_low_latency) override;
 
   bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
                                uint64_t* total_bytes_written,

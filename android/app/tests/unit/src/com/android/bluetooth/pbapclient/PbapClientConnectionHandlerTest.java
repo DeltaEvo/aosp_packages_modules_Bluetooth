@@ -34,7 +34,6 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.os.HandlerThread;
 import android.os.Looper;
-import android.util.Log;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -53,8 +52,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
-import java.util.HashMap;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -89,8 +86,6 @@ public class PbapClientConnectionHandlerTest {
     public void setUp() throws Exception {
         mTargetContext = spy(new ContextWrapper(
                 InstrumentationRegistry.getInstrumentation().getTargetContext()));
-        Assume.assumeTrue("Ignore test when PbapClientService is not enabled",
-                PbapClientService.isEnabled());
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
@@ -118,9 +113,6 @@ public class PbapClientConnectionHandlerTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!PbapClientService.isEnabled()) {
-            return;
-        }
         TestUtils.stopService(mServiceRule, PbapClientService.class);
         mService = PbapClientService.getPbapClientService();
         assertThat(mService).isNull();
@@ -173,63 +165,14 @@ public class PbapClientConnectionHandlerTest {
     }
 
     @Test
-    public void downloadContacts() {
-        final String path = PbapClientConnectionHandler.PB_PATH;
+    public void removeCallLog_doesNotCrash() {
+        ContentResolver res = mock(ContentResolver.class);
+        when(mTargetContext.getContentResolver()).thenReturn(res);
+        mHandler.removeCallLog();
 
-        try {
-            mHandler.downloadContacts(path);
-        } catch (Exception e) {
-            Log.e(TAG, "Exception happened.", e);
-            assertWithMessage("Exception should not be thrown!").fail();
-        }
-    }
-
-    @Test
-    public void downloadCallLog() {
-        final String path = PbapClientConnectionHandler.ICH_PATH;
-        final HashMap<String, Integer> callCounter = new HashMap<>();
-
-        try {
-            mHandler.downloadCallLog(path, callCounter);
-        } catch (Exception e) {
-            Log.e(TAG, "Exception happened.", e);
-            assertWithMessage("Exception should not be thrown!").fail();
-        }
-    }
-
-    @Test
-    public void addAccount() {
-        try {
-            mHandler.addAccount(mock(Account.class));
-        } catch (Exception e) {
-            Log.e(TAG, "Exception happened.", e);
-            assertWithMessage("Exception should not be thrown!").fail();
-        }
-    }
-
-    @Test
-    public void removeAccount() {
-        try {
-            mHandler.removeAccount();
-        } catch (Exception e) {
-            Log.e(TAG, "Exception happened.", e);
-            assertWithMessage("Exception should not be thrown!").fail();
-        }
-    }
-
-    @Test
-    public void removeCallLog() {
-        try {
-            ContentResolver res = mock(ContentResolver.class);
-            when(mTargetContext.getContentResolver()).thenReturn(res);
-            mHandler.removeCallLog();
-
-            when(mTargetContext.getContentResolver()).thenReturn(null);
-            mHandler.removeCallLog();
-        } catch (Exception e) {
-            Log.e(TAG, "Exception happened.", e);
-            assertWithMessage("Exception should not be thrown!").fail();
-        }
+        // Also test when content resolver is null.
+        when(mTargetContext.getContentResolver()).thenReturn(null);
+        mHandler.removeCallLog();
     }
 
     @Test

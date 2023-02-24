@@ -19,7 +19,7 @@
 #ifndef BTM_BLE_API_TYPES_H
 #define BTM_BLE_API_TYPES_H
 
-#include <base/callback_forward.h>
+#include <base/functional/callback_forward.h>
 #include <hardware/bt_common_types.h>
 
 #include <cstdint>
@@ -333,6 +333,7 @@ typedef struct {
   uint32_t a2dp_source_offload_capability_mask;
   uint8_t quality_report_support;
   uint32_t dynamic_audio_buffer_support;
+  uint16_t adv_filter_extended_features_mask;
 } tBTM_BLE_VSC_CB;
 
 /* Stored the default/maximum/minimum buffer time for dynamic audio buffer.
@@ -353,6 +354,12 @@ typedef void(tBTM_BLE_ADV_DATA_CMPL_CBACK)(tBTM_STATUS status);
 #endif
 
 typedef uint8_t tGATT_IF;
+
+typedef enum : uint8_t {
+  BTM_BLE_DIRECT_CONNECTION = 0x00,
+  BTM_BLE_BKG_CONNECT_ALLOW_LIST = 0x01,
+  BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS = 0x02,
+} tBTM_BLE_CONN_TYPE;
 
 typedef void(tBTM_BLE_SCAN_THRESHOLD_CBACK)(tBTM_BLE_REF_VALUE ref_value);
 using tBTM_BLE_SCAN_REP_CBACK =

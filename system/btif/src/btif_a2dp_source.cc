@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <future>
 
 #include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "audio_hal_interface/a2dp_encoding.h"
@@ -242,7 +243,7 @@ static void btif_a2dp_source_start_session_delayed(
     const RawAddress& peer_address, std::promise<void> start_session_promise);
 static void btif_a2dp_source_end_session_delayed(
     const RawAddress& peer_address);
-static void btif_a2dp_source_shutdown_delayed(void);
+static void btif_a2dp_source_shutdown_delayed(std::promise<void>);
 static void btif_a2dp_source_cleanup_delayed(void);
 static void btif_a2dp_source_audio_tx_start_event(void);
 static void btif_a2dp_source_audio_tx_stop_event(void);
@@ -381,7 +382,8 @@ static void btif_a2dp_source_startup_delayed() {
 
 bool btif_a2dp_source_start_session(const RawAddress& peer_address,
                                     std::promise<void> peer_ready_promise) {
-  LOG(INFO) << __func__ << ": peer_address=" << peer_address
+  LOG(INFO) << __func__ << ": peer_address="
+            << ADDRESS_TO_LOGGABLE_STR(peer_address)
             << " state=" << btif_a2dp_source_cb.StateStr();
   btif_a2dp_source_setup_codec(peer_address);
   if (btif_a2dp_source_thread.DoInThread(
@@ -391,7 +393,8 @@ bool btif_a2dp_source_start_session(const RawAddress& peer_address,
     return true;
   } else {
     // cannot set promise but triggers crash
-    LOG(FATAL) << __func__ << ": peer_address=" << peer_address
+    LOG(FATAL) << __func__ << ": peer_address="
+               << ADDRESS_TO_LOGGABLE_STR(peer_address)
                << " state=" << btif_a2dp_source_cb.StateStr()
                << " fails to context switch";
     return false;
@@ -400,7 +403,8 @@ bool btif_a2dp_source_start_session(const RawAddress& peer_address,
 
 static void btif_a2dp_source_start_session_delayed(
     const RawAddress& peer_address, std::promise<void> peer_ready_promise) {
-  LOG(INFO) << __func__ << ": peer_address=" << peer_address
+  LOG(INFO) << __func__ << ": peer_address="
+            << ADDRESS_TO_LOGGABLE_STR(peer_address)
             << " state=" << btif_a2dp_source_cb.StateStr();
   if (btif_a2dp_source_cb.State() != BtifA2dpSource::kStateRunning) {
     LOG(ERROR) << __func__ << ": A2DP Source media task is not running";
@@ -422,8 +426,9 @@ static void btif_a2dp_source_start_session_delayed(
 bool btif_a2dp_source_restart_session(const RawAddress& old_peer_address,
                                       const RawAddress& new_peer_address,
                                       std::promise<void> peer_ready_promise) {
-  LOG(INFO) << __func__ << ": old_peer_address=" << old_peer_address
-            << " new_peer_address=" << new_peer_address
+  LOG(INFO) << __func__ << ": old_peer_address="
+            << ADDRESS_TO_LOGGABLE_STR(old_peer_address)
+            << " new_peer_address=" << ADDRESS_TO_LOGGABLE_STR(new_peer_address)
             << " state=" << btif_a2dp_source_cb.StateStr();
 
   CHECK(!new_peer_address.IsEmpty());
@@ -479,7 +484,7 @@ static void btif_a2dp_source_end_session_delayed(
   }
 }
 
-void btif_a2dp_source_shutdown(void) {
+void btif_a2dp_source_shutdown(std::promise<void> shutdown_complete_promise) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
 
   if ((btif_a2dp_source_cb.State() == BtifA2dpSource::kStateOff) ||
@@ -491,10 +496,12 @@ void btif_a2dp_source_shutdown(void) {
   btif_a2dp_source_cb.SetState(BtifA2dpSource::kStateShuttingDown);
 
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_shutdown_delayed));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_shutdown_delayed,
+                                std::move(shutdown_complete_promise)));
 }
 
-static void btif_a2dp_source_shutdown_delayed(void) {
+static void btif_a2dp_source_shutdown_delayed(
+    std::promise<void> shutdown_complete_promise) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
 
   // Stop the timer
@@ -510,13 +517,16 @@ static void btif_a2dp_source_shutdown_delayed(void) {
   btif_a2dp_source_cb.tx_audio_queue = nullptr;
 
   btif_a2dp_source_cb.SetState(BtifA2dpSource::kStateOff);
+
+  shutdown_complete_promise.set_value();
 }
 
 void btif_a2dp_source_cleanup(void) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
 
   // Make sure the source is shutdown
-  btif_a2dp_source_shutdown();
+  std::promise<void> shutdown_complete_promise;
+  btif_a2dp_source_shutdown(std::move(shutdown_complete_promise));
 
   btif_a2dp_source_thread.DoInThread(
       FROM_HERE, base::Bind(&btif_a2dp_source_cleanup_delayed));
@@ -631,7 +641,8 @@ void btif_a2dp_source_encoder_user_config_update_req(
     const RawAddress& peer_address,
     const std::vector<btav_a2dp_codec_config_t>& codec_user_preferences,
     std::promise<void> peer_ready_promise) {
-  LOG(INFO) << __func__ << ": peer_address=" << peer_address
+  LOG(INFO) << __func__ << ": peer_address="
+            << ADDRESS_TO_LOGGABLE_STR(peer_address)
             << " state=" << btif_a2dp_source_cb.StateStr() << " "
             << codec_user_preferences.size() << " codec_preference(s)";
   if (!btif_a2dp_source_thread.DoInThread(
@@ -640,7 +651,8 @@ void btif_a2dp_source_encoder_user_config_update_req(
                          peer_address, codec_user_preferences,
                          std::move(peer_ready_promise)))) {
     // cannot set promise but triggers crash
-    LOG(FATAL) << __func__ << ": peer_address=" << peer_address
+    LOG(FATAL) << __func__ << ": peer_address="
+               << ADDRESS_TO_LOGGABLE_STR(peer_address)
                << " state=" << btif_a2dp_source_cb.StateStr()
                << " fails to context switch";
   }
@@ -656,7 +668,8 @@ static void btif_a2dp_source_encoder_user_config_update_event(
     success = bta_av_co_set_codec_user_config(peer_address, codec_user_config,
                                               &restart_output);
     if (success) {
-      LOG(INFO) << __func__ << ": peer_address=" << peer_address
+      LOG(INFO) << __func__ << ": peer_address="
+                << ADDRESS_TO_LOGGABLE_STR(peer_address)
                 << " state=" << btif_a2dp_source_cb.StateStr()
                 << " codec_preference={" << codec_user_config.ToString()
                 << "} restart_output=" << (restart_output ? "true" : "false");
@@ -710,8 +723,6 @@ void btif_a2dp_source_on_idle(void) {
 void btif_a2dp_source_on_stopped(tBTA_AV_SUSPEND* p_av_suspend) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
 
-  if (btif_a2dp_source_cb.State() == BtifA2dpSource::kStateOff) return;
-
   // allow using this API for other (acknowledgement and stopping media task)
   // than suspend
   if (p_av_suspend != nullptr && p_av_suspend->status != BTA_AV_SUCCESS) {
@@ -725,10 +736,12 @@ void btif_a2dp_source_on_stopped(tBTA_AV_SUSPEND* p_av_suspend) {
         btif_a2dp_command_ack(A2DP_CTRL_ACK_FAILURE);
       }
     }
-  } else if (btif_av_is_a2dp_offload_running()) {
+  } else {
     bluetooth::audio::a2dp::ack_stream_suspended(A2DP_CTRL_ACK_SUCCESS);
     return;
   }
+
+  if (btif_a2dp_source_cb.State() == BtifA2dpSource::kStateOff) return;
 
   // ensure tx frames are immediately suspended
   btif_a2dp_source_cb.tx_flush = true;
@@ -996,10 +1009,9 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
         osi_free(p_data);
       }
     }
-    log_a2dp_audio_overrun_event(btif_av_source_active_peer(), drop_n,
-                                 btif_a2dp_source_cb.encoder_interval_ms,
-                                 num_dropped_encoded_frames,
-                                 num_dropped_encoded_bytes);
+    log_a2dp_audio_overrun_event(
+        btif_av_source_active_peer(), btif_a2dp_source_cb.encoder_interval_ms,
+        drop_n, num_dropped_encoded_frames, num_dropped_encoded_bytes);
 
     // Intel controllers don't handle ReadRSSI, ReadFailedContactCounter, and
     // ReadTxPower very well, it sends back Hardware Error event which will

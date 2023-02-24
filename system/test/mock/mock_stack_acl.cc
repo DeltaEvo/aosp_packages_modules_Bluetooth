@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Mock include file to share data between tests and mock
 #include "stack/include/bt_hdr.h"
 #include "test/mock/mock_stack_acl.h"
@@ -68,6 +66,10 @@ struct acl_peer_supports_ble_connection_parameters_request
 struct acl_peer_supports_ble_packet_extension
     acl_peer_supports_ble_packet_extension;
 struct acl_peer_supports_sniff_subrating acl_peer_supports_sniff_subrating;
+struct acl_peer_supports_ble_connection_subrating
+    acl_peer_supports_ble_connection_subrating;
+struct acl_peer_supports_ble_connection_subrating_host
+    acl_peer_supports_ble_connection_subrating_host;
 struct acl_refresh_remote_address acl_refresh_remote_address;
 struct acl_set_peer_le_features_from_handle
     acl_set_peer_le_features_from_handle;
@@ -268,6 +270,17 @@ bool acl_peer_supports_ble_packet_extension(uint16_t hci_handle) {
 bool acl_peer_supports_sniff_subrating(const RawAddress& remote_bda) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_acl::acl_peer_supports_sniff_subrating(remote_bda);
+}
+bool acl_peer_supports_ble_connection_subrating(const RawAddress& remote_bda) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_acl::acl_peer_supports_ble_connection_subrating(
+      remote_bda);
+}
+bool acl_peer_supports_ble_connection_subrating_host(
+    const RawAddress& remote_bda) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_acl::acl_peer_supports_ble_connection_subrating_host(
+      remote_bda);
 }
 bool acl_refresh_remote_address(const RawAddress& identity_address,
                                 tBLE_ADDR_TYPE identity_address_type,

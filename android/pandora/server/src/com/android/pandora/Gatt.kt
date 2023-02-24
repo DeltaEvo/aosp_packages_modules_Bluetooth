@@ -28,6 +28,7 @@ import android.content.IntentFilter
 import android.util.Log
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
+import java.io.Closeable
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,11 +41,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.take
 import pandora.GATTGrpc.GATTImplBase
 import pandora.GattProto.*
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-class Gatt(private val context: Context) : GATTImplBase() {
+class Gatt(private val context: Context) : GATTImplBase(), Closeable {
   private val TAG = "PandoraGatt"
 
   private val mScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
@@ -62,7 +64,7 @@ class Gatt(private val context: Context) : GATTImplBase() {
     flow = intentFlow(context, intentFilter).shareIn(mScope, SharingStarted.Eagerly)
   }
 
-  fun deinit() {
+  override fun close() {
     serverManager.server.close()
     mScope.cancel()
   }
@@ -150,9 +152,12 @@ class Gatt(private val context: Context) : GATTImplBase() {
       Log.i(TAG, "discoverServicesSdp")
       val bluetoothDevice = request.address.toBluetoothDevice(mBluetoothAdapter)
       check(bluetoothDevice.fetchUuidsWithSdp())
+      // Several ACTION_UUID could be sent and some of them are empty (null)
       flow
         .filter { it.getAction() == BluetoothDevice.ACTION_UUID }
         .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
+        .take(2)
+        .filter { bluetoothDevice.getUuids() != null }
         .first()
       val uuidsList = arrayListOf<String>()
       for (parcelUuid in bluetoothDevice.getUuids()) {

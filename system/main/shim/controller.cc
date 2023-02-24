@@ -195,6 +195,9 @@ MAP_TO_GD(supports_connected_iso_stream_peripheral,
           SupportsBleConnectedIsochronousStreamPeripheral)
 MAP_TO_GD(supports_iso_broadcaster, SupportsBleIsochronousBroadcaster)
 MAP_TO_GD(supports_synchronized_receiver, SupportsBleSynchronizedReceiver)
+MAP_TO_GD(supports_ble_connection_subrating, SupportsBleConnectionSubrating)
+MAP_TO_GD(supports_ble_connection_subrating_host,
+          SupportsBleConnectionSubratingHost)
 
 #define FORWARD_IF_RUST(legacy, gd)                                      \
   static bool legacy(void) {                                             \
@@ -209,6 +212,10 @@ MAP_TO_GD(supports_synchronized_receiver, SupportsBleSynchronizedReceiver)
 FORWARD_IF_RUST(
     supports_configure_data_path,
     GetController()->IsSupported(bluetooth::hci::OpCode::CONFIGURE_DATA_PATH))
+
+FORWARD_IF_RUST(supports_set_min_encryption_key_size,
+                GetController()->IsSupported(
+                    bluetooth::hci::OpCode::SET_MIN_ENCRYPTION_KEY_SIZE))
 
 FORWARD_IF_RUST(supports_reading_remote_extended_features,
                 GetController()->IsSupported(
@@ -401,6 +408,8 @@ static const controller_t interface = {
     .supports_sniff_subrating = supports_sniff_subrating,
     .supports_encryption_pause = supports_encryption_pause,
     .supports_configure_data_path = supports_configure_data_path,
+    .supports_set_min_encryption_key_size =
+        supports_set_min_encryption_key_size,
 
     .supports_ble = supports_ble,
     .supports_ble_packet_extension = supports_packet_extension,
@@ -426,6 +435,9 @@ static const controller_t interface = {
         supports_connected_iso_stream_peripheral,
     .supports_ble_isochronous_broadcaster = supports_iso_broadcaster,
     .supports_ble_synchronized_receiver = supports_synchronized_receiver,
+    .supports_ble_connection_subrating = supports_ble_connection_subrating,
+    .supports_ble_connection_subrating_host =
+        supports_ble_connection_subrating_host,
 
     .get_acl_data_size_classic = get_acl_buffer_length,
     .get_acl_data_size_ble = get_le_buffer_length,

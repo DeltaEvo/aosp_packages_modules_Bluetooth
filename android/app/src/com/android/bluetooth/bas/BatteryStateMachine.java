@@ -18,7 +18,7 @@ package com.android.bluetooth.bas;
 
 import static android.bluetooth.BluetoothDevice.PHY_LE_1M_MASK;
 import static android.bluetooth.BluetoothDevice.PHY_LE_2M_MASK;
-import static android.bluetooth.BluetoothDevice.TRANSPORT_AUTO;
+import static android.bluetooth.BluetoothDevice.TRANSPORT_LE;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -233,7 +233,7 @@ public class BatteryStateMachine extends StateMachine {
             mBluetoothGatt.close();
         }
         mBluetoothGatt = mDevice.connectGatt(service, /*autoConnect=*/false,
-                mGattCallback, TRANSPORT_AUTO, /*opportunistic=*/true,
+                mGattCallback, TRANSPORT_LE, /*opportunistic=*/true,
                 PHY_LE_1M_MASK | PHY_LE_2M_MASK, getHandler());
         return mBluetoothGatt != null;
     }
@@ -361,10 +361,9 @@ public class BatteryStateMachine extends StateMachine {
                     log(TAG, "Connection canceled to " + mDevice);
                     if (mBluetoothGatt != null) {
                         mBluetoothGatt.disconnect();
-                        transitionTo(mDisconnecting);
-                    } else {
-                        transitionTo(mDisconnected);
                     }
+                    // As we're not yet connected we don't need to wait for callbacks.
+                    transitionTo(mDisconnected);
                     break;
                 case CONNECTION_STATE_CHANGED:
                     processConnectionEvent(message.arg1);

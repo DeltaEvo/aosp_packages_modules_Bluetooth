@@ -16,7 +16,7 @@
 
 #include "avrcp_service.h"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/task/cancelable_task_tracker.h>
 #include <base/threading/thread.h>
@@ -55,6 +55,8 @@ class A2dpInterfaceImpl : public A2dpInterface {
 
 class AvrcpInterfaceImpl : public AvrcpInterface {
  public:
+  uint16_t GetAvrcpControlVersion() { return AVRC_GetControlProfileVersion(); }
+
   uint16_t GetAvrcpVersion() {
     return AVRC_GetProfileVersion();
   }
@@ -312,7 +314,8 @@ void AvrcpService::Init(MediaInterface* media_interface,
 
   avrcp_interface_.AddRecord(UUID_SERVCLASS_AV_REMOTE_CONTROL,
                              "AV Remote Control", NULL, AVRCP_SUPF_TG_CT,
-                             ct_sdp_record_handle, false, AVRC_REV_1_3, 0);
+                             ct_sdp_record_handle, false,
+                             avrcp_interface_.GetAvrcpControlVersion(), 0);
   bta_sys_add_uuid(UUID_SERVCLASS_AV_REMOTE_CONTROL);
 
   media_interface_ = new MediaInterfaceWrapper(media_interface);

@@ -1,5 +1,9 @@
 //! Utility functions for dealing with Rust integer types.
 
+use crate::ast;
+use crate::parser::ast as parser_ast;
+use quote::{format_ident, quote};
+
 /// A Rust integer type such as `u8`.
 #[derive(Copy, Clone)]
 pub struct Integer {
@@ -27,6 +31,111 @@ impl quote::ToTokens for Integer {
         let t: syn::Type = syn::parse_str(&format!("u{}", self.width))
             .expect("Could not parse integer, unsupported width?");
         t.to_tokens(tokens);
+    }
+}
+
+pub fn rust_type(field: &parser_ast::Field) -> proc_macro2::TokenStream {
+    match &field.desc {
+        ast::FieldDesc::Scalar { width, .. } => {
+            let field_type = Integer::new(*width);
+            quote!(#field_type)
+        }
+        ast::FieldDesc::Typedef { type_id, .. } => {
+            let field_type = format_ident!("{type_id}");
+            quote!(#field_type)
+        }
+        ast::FieldDesc::Array { width: Some(width), size: Some(size), .. } => {
+            let field_type = Integer::new(*width);
+            let size = proc_macro2::Literal::usize_unsuffixed(*size);
+            quote!([#field_type; #size])
+        }
+        ast::FieldDesc::Array { width: Some(width), size: None, .. } => {
+            let field_type = Integer::new(*width);
+            quote!(Vec<#field_type>)
+        }
+        ast::FieldDesc::Array { type_id: Some(type_id), size: Some(size), .. } => {
+            let field_type = format_ident!("{type_id}");
+            let size = proc_macro2::Literal::usize_unsuffixed(*size);
+            quote!([#field_type; #size])
+        }
+        ast::FieldDesc::Array { type_id: Some(type_id), size: None, .. } => {
+            let field_type = format_ident!("{type_id}");
+            quote!(Vec<#field_type>)
+        }
+        //ast::Field::Size { .. } | ast::Field::Count { .. } => quote!(),
+        _ => todo!("{field:?}"),
+    }
+}
+
+pub fn rust_borrow(field: &parser_ast::Field) -> proc_macro2::TokenStream {
+    match &field.desc {
+        // TODO: not all typedef fields are copy-types.
+        ast::FieldDesc::Scalar { .. } | ast::FieldDesc::Typedef { .. } => quote!(),
+        ast::FieldDesc::Array { .. } => quote!(&),
+        _ => todo!(),
+    }
+}
+
+/// Suffix for `Buf::get_*` and `BufMut::put_*` methods when reading a
+/// value with the given `width`.
+fn endianness_suffix(endianness: ast::EndiannessValue, width: usize) -> &'static str {
+    if width > 8 && endianness == ast::EndiannessValue::LittleEndian {
+        "_le"
+    } else {
+        ""
+    }
+}
+
+/// Parse an unsigned integer with the given `width`.
+///
+/// The generated code requires that `span` is a mutable `bytes::Buf`
+/// value.
+pub fn get_uint(
+    endianness: ast::EndiannessValue,
+    width: usize,
+    span: &proc_macro2::Ident,
+) -> proc_macro2::TokenStream {
+    let suffix = endianness_suffix(endianness, width);
+    let value_type = Integer::new(width);
+    if value_type.width == width {
+        let get_u = format_ident!("get_u{}{}", value_type.width, suffix);
+        quote! {
+            #span.get_mut().#get_u()
+        }
+    } else {
+        let get_uint = format_ident!("get_uint{}", suffix);
+        let value_nbytes = proc_macro2::Literal::usize_unsuffixed(width / 8);
+        let cast = (value_type.width < 64).then(|| quote!(as #value_type));
+        quote! {
+            #span.get_mut().#get_uint(#value_nbytes) #cast
+        }
+    }
+}
+
+/// Write an unsigned integer `value` to `span`.
+///
+/// The generated code requires that `span` is a mutable
+/// `bytes::BufMut` value.
+pub fn put_uint(
+    endianness: ast::EndiannessValue,
+    value: &proc_macro2::TokenStream,
+    width: usize,
+    span: &proc_macro2::Ident,
+) -> proc_macro2::TokenStream {
+    let suffix = endianness_suffix(endianness, width);
+    let value_type = Integer::new(width);
+    if value_type.width == width {
+        let put_u = format_ident!("put_u{}{}", width, suffix);
+        quote! {
+            #span.#put_u(#value)
+        }
+    } else {
+        let put_uint = format_ident!("put_uint{}", suffix);
+        let value_nbytes = proc_macro2::Literal::usize_unsuffixed(width / 8);
+        let cast = (value_type.width < 64).then(|| quote!(as u64));
+        quote! {
+            #span.#put_uint(#value #cast, #value_nbytes)
+        }
     }
 }
 

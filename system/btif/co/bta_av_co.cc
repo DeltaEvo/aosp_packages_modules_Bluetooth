@@ -23,6 +23,8 @@
  *
  ******************************************************************************/
 
+#include <base/logging.h>
+
 #include <mutex>
 #include <vector>
 
@@ -31,6 +33,7 @@
 #include "bta/include/bta_av_ci.h"
 #include "btif/include/btif_a2dp_source.h"
 #include "btif/include/btif_av.h"
+#include "device/include/device_iot_config.h"
 #include "include/hardware/bt_av.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/a2dp_codec_api.h"
@@ -39,8 +42,6 @@
 #include "stack/include/bt_hdr.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 // Macro to retrieve the number of elements in a statically allocated array
 #define BTA_AV_CO_NUM_ELEMENTS(__a) (sizeof(__a) / sizeof((__a)[0]))
@@ -910,6 +911,8 @@ void BtaAvCo::ProcessDiscoveryResult(tBTA_AV_HNDL bta_av_handle,
   }
 }
 
+static void bta_av_co_store_peer_codectype(const BtaAvCoPeer* p_peer);
+
 tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
     tBTA_AV_HNDL bta_av_handle, const RawAddress& peer_address,
     uint8_t* p_codec_info, uint8_t* p_sep_info_idx, uint8_t seid,
@@ -967,6 +970,8 @@ tA2DP_STATUS BtaAvCo::ProcessSourceGetConfig(
   APPL_TRACE_DEBUG("%s: last Sink codec reached for peer %s (local %s)",
                    __func__, ADDRESS_TO_LOGGABLE_CSTR(p_peer->addr),
                    p_peer->acceptor ? "acceptor" : "initiator");
+
+  bta_av_co_store_peer_codectype(p_peer);
 
   // Select the Source codec
   const BtaAvCoSep* p_sink = nullptr;
@@ -1417,21 +1422,23 @@ void BtaAvCo::ProcessAudioDelay(tBTA_AV_HNDL bta_av_handle,
 
 void BtaAvCo::UpdateMtu(tBTA_AV_HNDL bta_av_handle,
                         const RawAddress& peer_address, uint16_t mtu) {
-  LOG(INFO) << __func__ << ": peer " << peer_address
+  LOG(INFO) << __func__ << ": peer " << ADDRESS_TO_LOGGABLE_STR(peer_address)
             << " bta_av_handle: " << loghex(bta_av_handle) << " mtu: " << mtu;
 
   // Find the peer
   BtaAvCoPeer* p_peer = FindPeerAndUpdate(bta_av_handle, peer_address);
   if (p_peer == nullptr) {
     LOG(ERROR) << __func__ << ": could not find peer entry for bta_av_handle "
-               << loghex(bta_av_handle) << " peer " << peer_address;
+               << loghex(bta_av_handle) << " peer "
+               << ADDRESS_TO_LOGGABLE_STR(peer_address);
     return;
   }
   p_peer->mtu = mtu;
 }
 
 bool BtaAvCo::SetActivePeer(const RawAddress& peer_address) {
-  VLOG(1) << __func__ << ": peer_address=" << peer_address;
+  VLOG(1) << __func__ << ": peer_address="
+          << ADDRESS_TO_LOGGABLE_STR(peer_address);
 
   std::lock_guard<std::recursive_mutex> lock(codec_lock_);
 
@@ -1460,7 +1467,8 @@ void BtaAvCo::GetPeerEncoderParameters(
     const RawAddress& peer_address,
     tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {
   uint16_t min_mtu = 0xFFFF;
-  CHECK(p_peer_params != nullptr) << "Peer address " << peer_address;
+  CHECK(p_peer_params != nullptr) << "Peer address "
+                                  << ADDRESS_TO_LOGGABLE_STR(peer_address);
 
   std::lock_guard<std::recursive_mutex> lock(codec_lock_);
 
@@ -1504,14 +1512,16 @@ bool BtaAvCo::SetCodecUserConfig(
   bool config_updated = false;
   bool success = true;
 
-  VLOG(1) << __func__ << ": peer_address=" << peer_address
+  VLOG(1) << __func__ << ": peer_address="
+          << ADDRESS_TO_LOGGABLE_STR(peer_address)
           << " codec_user_config={" << codec_user_config.ToString() << "}";
 
   *p_restart_output = false;
 
   BtaAvCoPeer* p_peer = FindPeer(peer_address);
   if (p_peer == nullptr) {
-    LOG(ERROR) << __func__ << ": cannot find peer " << peer_address
+    LOG(ERROR) << __func__ << ": cannot find peer "
+               << ADDRESS_TO_LOGGABLE_STR(peer_address)
                << " to configure";
     success = false;
     goto done;
@@ -1520,7 +1530,8 @@ bool BtaAvCo::SetCodecUserConfig(
   // Don't call BTA_AvReconfig() prior to retrieving all peer's capabilities
   if ((p_peer->num_rx_sinks != p_peer->num_sinks) &&
       (p_peer->num_sup_sinks != BTA_AV_CO_NUM_ELEMENTS(p_peer->sinks))) {
-    LOG(WARNING) << __func__ << ": peer " << p_peer->addr
+    LOG(WARNING) << __func__ << ": peer "
+                 << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                  << " : not all peer's capabilities have been retrieved";
     success = false;
     goto done;
@@ -1534,7 +1545,7 @@ bool BtaAvCo::SetCodecUserConfig(
     p_sink = p_peer->p_sink;
   }
   if (p_sink == nullptr) {
-    LOG(ERROR) << __func__ << ": peer " << p_peer->addr
+    LOG(ERROR) << __func__ << ": peer " << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                << " : cannot find peer SEP to configure for codec type "
                << codec_user_config.codec_type;
     success = false;
@@ -1559,7 +1570,8 @@ bool BtaAvCo::SetCodecUserConfig(
 
     p_sink = SelectSourceCodec(p_peer);
     if (p_sink == nullptr) {
-      LOG(ERROR) << __func__ << ": peer " << p_peer->addr
+      LOG(ERROR) << __func__ << ": peer "
+                 << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                  << " : cannot set up codec for the peer SINK";
       success = false;
       goto done;
@@ -1609,7 +1621,8 @@ bool BtaAvCo::SetCodecAudioConfig(
   // Don't call BTA_AvReconfig() prior to retrieving all peer's capabilities
   if ((p_peer->num_rx_sinks != p_peer->num_sinks) &&
       (p_peer->num_sup_sinks != BTA_AV_CO_NUM_ELEMENTS(p_peer->sinks))) {
-    LOG(WARNING) << __func__ << ": peer " << p_peer->addr
+    LOG(WARNING) << __func__ << ": peer "
+                 << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                  << " : not all peer's capabilities have been retrieved";
     return false;
   }
@@ -1617,7 +1630,8 @@ bool BtaAvCo::SetCodecAudioConfig(
   // Use the current sink codec
   const BtaAvCoSep* p_sink = p_peer->p_sink;
   if (p_sink == nullptr) {
-    LOG(ERROR) << __func__ << ": peer " << p_peer->addr
+    LOG(ERROR) << __func__ << ": peer "
+               << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                << " : cannot find peer SEP to configure";
     return false;
   }
@@ -1662,22 +1676,35 @@ int BtaAvCo::GetSourceEncoderEffectiveFrameSize() {
 }
 
 bool BtaAvCo::ReportSourceCodecState(BtaAvCoPeer* p_peer) {
-  btav_a2dp_codec_config_t codec_config;
+  btav_a2dp_codec_config_t codec_config = {
+    .codec_type = BTAV_A2DP_CODEC_INDEX_SINK_MAX,
+    .codec_priority = BTAV_A2DP_CODEC_PRIORITY_DISABLED,
+    .sample_rate =    BTAV_A2DP_CODEC_SAMPLE_RATE_NONE,
+    .bits_per_sample = BTAV_A2DP_CODEC_BITS_PER_SAMPLE_NONE,
+    .channel_mode = BTAV_A2DP_CODEC_CHANNEL_MODE_NONE,
+    .codec_specific_1 = 0,
+    .codec_specific_2 = 0,
+    .codec_specific_3 = 0,
+    .codec_specific_4 = 0,
+  };
   std::vector<btav_a2dp_codec_config_t> codecs_local_capabilities;
   std::vector<btav_a2dp_codec_config_t> codecs_selectable_capabilities;
 
-  VLOG(1) << __func__ << ": peer_address=" << p_peer->addr;
+  VLOG(1) << __func__ << ": peer_address="
+          << ADDRESS_TO_LOGGABLE_STR(p_peer->addr);
   A2dpCodecs* codecs = p_peer->GetCodecs();
   CHECK(codecs != nullptr);
   if (!codecs->getCodecConfigAndCapabilities(&codec_config,
                                              &codecs_local_capabilities,
                                              &codecs_selectable_capabilities)) {
-    LOG(WARNING) << __func__ << ": Peer " << p_peer->addr
+    LOG(WARNING) << __func__ << ": Peer "
+                 << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                  << " : error reporting audio source codec state: cannot get "
                     "codec config and capabilities";
     return false;
   }
-  LOG(INFO) << __func__ << ": peer " << p_peer->addr << " codec_config={"
+  LOG(INFO) << __func__ << ": peer "
+            << ADDRESS_TO_LOGGABLE_STR(p_peer->addr) << " codec_config={"
             << codec_config.ToString() << "}";
   btif_av_report_source_codec_state(p_peer->addr, codec_config,
                                     codecs_local_capabilities,
@@ -2038,7 +2065,8 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer,
   bool restart_output = false;
   bool config_updated = false;
 
-  LOG(INFO) << __func__ << ": peer_address=" << p_peer->addr
+  LOG(INFO) << __func__ << ": peer_address="
+            << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
             << ", codec: " << A2DP_CodecInfoString(p_ota_codec_config);
 
   *p_restart_output = false;
@@ -2050,7 +2078,8 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer,
     // There are no peer SEPs if we didn't do the discovery procedure yet.
     // We have all the information we need from the peer, so we can
     // proceed with the OTA codec configuration.
-    LOG(ERROR) << __func__ << ": peer " << p_peer->addr
+    LOG(ERROR) << __func__ << ": peer "
+               << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                << " : cannot find peer SEP to configure";
     return false;
   }
@@ -2060,7 +2089,8 @@ bool BtaAvCo::SetCodecOtaConfig(BtaAvCoPeer* p_peer,
   if (!p_peer->GetCodecs()->setCodecOtaConfig(
           p_ota_codec_config, &peer_params, result_codec_config, &restart_input,
           &restart_output, &config_updated)) {
-    LOG(ERROR) << __func__ << ": peer " << p_peer->addr
+    LOG(ERROR) << __func__ << ": peer "
+               << ADDRESS_TO_LOGGABLE_STR(p_peer->addr)
                << " : cannot set OTA config";
     return false;
   }
@@ -2113,6 +2143,19 @@ void bta_av_co_audio_disc_res(tBTA_AV_HNDL bta_av_handle,
                               uint16_t uuid_local) {
   bta_av_co_cb.ProcessDiscoveryResult(bta_av_handle, peer_address, num_seps,
                                       num_sinks, num_sources, uuid_local);
+}
+
+static void bta_av_co_store_peer_codectype(const BtaAvCoPeer* p_peer) {
+  int index, peer_codec_type = 0;
+  const BtaAvCoSep* p_sink;
+  APPL_TRACE_DEBUG("%s", __func__);
+  for (index = 0; index < p_peer->num_sup_sinks; index++) {
+    p_sink = &p_peer->sinks[index];
+    peer_codec_type |= A2DP_IotGetPeerSinkCodecType(p_sink->codec_caps);
+  }
+
+  DEVICE_IOT_CONFIG_ADDR_SET_HEX(p_peer->addr, IOT_CONF_KEY_A2DP_CODECTYPE,
+                                 peer_codec_type, IOT_CONF_BYTE_NUM_1);
 }
 
 tA2DP_STATUS bta_av_co_audio_getconfig(tBTA_AV_HNDL bta_av_handle,

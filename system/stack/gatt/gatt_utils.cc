@@ -772,6 +772,8 @@ void gatt_sr_get_sec_info(const RawAddress& rem_bda, tBT_TRANSPORT transport,
   flags.is_link_key_known = BTM_IsLinkKeyKnown(rem_bda, transport);
   flags.is_link_key_authed = BTM_IsLinkKeyAuthed(rem_bda, transport);
   flags.is_encrypted = BTM_IsEncrypted(rem_bda, transport);
+  flags.can_read_discoverable_characteristics =
+      BTM_CanReadDiscoverableCharacteristics(rem_bda);
 
   *p_key_size = btm_ble_read_sec_key_size(rem_bda);
   *p_sec_flag = flags;
@@ -1135,9 +1137,10 @@ uint16_t gatt_tcb_get_payload_size_rx(tGATT_TCB& tcb, uint16_t cid) {
  * Returns         None
  *
  ******************************************************************************/
-void gatt_clcb_dealloc(tGATT_CLCB* p_clcb) {
+static void gatt_clcb_dealloc(tGATT_CLCB* p_clcb) {
   if (p_clcb) {
     alarm_free(p_clcb->gatt_rsp_timer_ent);
+    gatt_clcb_invalidate(p_clcb->p_tcb, p_clcb);
     for (auto clcb_it = gatt_cb.clcb_queue.begin();
          clcb_it != gatt_cb.clcb_queue.end(); clcb_it++) {
       if (&(*clcb_it) == p_clcb) {
@@ -1160,6 +1163,17 @@ void gatt_clcb_dealloc(tGATT_CLCB* p_clcb) {
 void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb) {
   std::deque<tGATT_CMD_Q>* cl_cmd_q_p;
   uint16_t cid = p_clcb->cid;
+
+  if (!p_tcb->pending_enc_clcb.empty()) {
+    for (size_t i = 0; i < p_tcb->pending_enc_clcb.size(); i++) {
+      if (p_tcb->pending_enc_clcb.at(i) == p_clcb) {
+        LOG_WARN("Removing clcb (%p) for conn id=0x%04x from pending_enc_clcb",
+                 p_clcb, p_clcb->conn_id);
+        p_tcb->pending_enc_clcb.at(i) = NULL;
+        break;
+      }
+    }
+  }
 
   if (cid == p_tcb->att_lcid) {
     cl_cmd_q_p = &p_tcb->cl_cmd_q;
@@ -1186,10 +1200,15 @@ void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb) {
   if (iter->to_send) {
     /* If command was not send, just remove the entire element */
     cl_cmd_q_p->erase(iter);
+    LOG_WARN("Removing scheduled clcb (%p) for conn_id=0x%04x", p_clcb,
+             p_clcb->conn_id);
   } else {
     /* If command has been sent, just invalidate p_clcb pointer for proper
      * response handling */
     iter->p_clcb = NULL;
+    LOG_WARN(
+        "Invalidating clcb (%p) for already sent request on conn_id=0x%04x",
+        p_clcb, p_clcb->conn_id);
   }
 }
 /*******************************************************************************
@@ -1429,7 +1448,7 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   if (!p_tcb) {
     LOG_WARN(
         "Unable to cancel open for unknown connection gatt_if:%hhu peer:%s",
-        gatt_if, PRIVATE_ADDRESS(bda));
+        gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
     return true;
   }
 
@@ -1444,16 +1463,23 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
     LOG_DEBUG(
         "Client reference count is zero disconnecting device gatt_if:%hhu "
         "peer:%s",
-        gatt_if, PRIVATE_ADDRESS(bda));
+        gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
     gatt_disconnect(p_tcb);
   }
 
   if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
-    BTM_AcceptlistRemove(bda);
-    LOG_INFO(
-        "GATT connection manager has no record but removed filter acceptlist "
-        "gatt_if:%hhu peer:%s",
-        gatt_if, PRIVATE_ADDRESS(bda));
+    if (!connection_manager::is_background_connection(bda)) {
+      BTM_AcceptlistRemove(bda);
+      LOG_INFO(
+          "Gatt connection manager has no background record but "
+          " removed filter acceptlist gatt_if:%hhu peer:%s",
+          gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
+    } else {
+      LOG_INFO(
+          "Gatt connection manager maintains a background record"
+          " preserving filter acceptlist gatt_if:%hhu peer:%s",
+          gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
+    }
   }
   return true;
 }
@@ -1619,7 +1645,7 @@ void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
   if (!p_tcb) {
     LOG_ERROR(
         "Disconnect for unknown connection bd_addr:%s reason:%s transport:%s",
-        PRIVATE_ADDRESS(bda), gatt_disconnection_reason_text(reason).c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(bda), gatt_disconnection_reason_text(reason).c_str(),
         bt_transport_text(transport).c_str());
     return;
   }

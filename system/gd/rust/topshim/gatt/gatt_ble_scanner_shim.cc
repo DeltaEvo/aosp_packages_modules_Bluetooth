@@ -16,8 +16,8 @@
 
 #include "gd/rust/topshim/gatt/gatt_ble_scanner_shim.h"
 
-#include <base/bind.h>
-#include <base/callback.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 
 #include <algorithm>
 #include <iterator>
@@ -56,6 +56,9 @@ ApcfCommand ConvertApcfFromRust(const RustApcfCommand& command) {
       .name = name,
       .company = command.company,
       .company_mask = command.company_mask,
+      .org_id = command.org_id,
+      .tds_flags = command.tds_flags,
+      .tds_flags_mask = command.tds_flags_mask,
       .ad_type = command.ad_type,
       .data = data,
       .data_mask = data_mask,
@@ -245,6 +248,10 @@ void BleScannerIntf::ScanFilterEnable(bool enable) {
   scanner_intf_->ScanFilterEnable(enable, base::Bind(&BleScannerIntf::OnEnableCallback, base::Unretained(this)));
 }
 
+bool BleScannerIntf::IsMsftSupported() {
+  return scanner_intf_->IsMsftSupported();
+}
+
 void BleScannerIntf::MsftAdvMonitorAdd(uint32_t call_id, const RustMsftAdvMonitor& monitor) {
   scanner_intf_->MsftAdvMonitorAdd(
       internal::ConvertAdvMonitor(monitor),
@@ -382,6 +389,10 @@ void BleScannerIntf::OnPeriodicSyncLost(uint16_t sync_handle) {
 
 void BleScannerIntf::OnPeriodicSyncTransferred(int, uint8_t status, RawAddress addr) {
   rusty::gdscan_sync_transfer_callback(status, &addr);
+}
+
+void BleScannerIntf::OnBigInfoReport(uint16_t sync_handle, bool encrypted) {
+  rusty::gdscan_biginfo_report_callback(sync_handle, encrypted);
 }
 
 void BleScannerIntf::RegisterCallbacks() {

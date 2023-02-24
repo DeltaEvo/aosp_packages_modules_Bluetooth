@@ -25,9 +25,17 @@
 #include "hci/hci_layer.h"
 #include "hci_controller_generated.h"
 #include "os/metrics.h"
+#include "os/system_properties.h"
+#include "sysprops/sysprops_module.h"
 
 namespace bluetooth {
 namespace hci {
+
+constexpr uint8_t kMinEncryptionKeySize = 7;  // #define MIN_ENCRYPTION_KEY_SIZE 7
+
+constexpr bool kDefaultVendorCapabilitiesEnabled = true;
+static const std::string kPropertyVendorCapabilitiesEnabled =
+    "bluetooth.core.le.vendor_capabilities.enabled";
 
 using os::Handler;
 
@@ -70,6 +78,12 @@ struct Controller::impl {
 
     hci_->EnqueueCommand(ReadBufferSizeBuilder::Create(),
                          handler->BindOnceOn(this, &Controller::impl::read_buffer_size_complete_handler));
+
+    if (common::init_flags::set_min_encryption_is_enabled() && is_supported(OpCode::SET_MIN_ENCRYPTION_KEY_SIZE)) {
+      hci_->EnqueueCommand(
+          SetMinEncryptionKeySizeBuilder::Create(kMinEncryptionKeySize),
+          handler->BindOnceOn(this, &Controller::impl::set_min_encryption_key_size_handler));
+    }
 
     if (is_supported(OpCode::LE_READ_BUFFER_SIZE_V2)) {
       hci_->EnqueueCommand(
@@ -156,8 +170,23 @@ struct Controller::impl {
           handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
     }
 
-    hci_->EnqueueCommand(LeGetVendorCapabilitiesBuilder::Create(),
-                         handler->BindOnceOn(this, &Controller::impl::le_get_vendor_capabilities_handler));
+    if (common::init_flags::subrating_is_enabled() && is_supported(OpCode::LE_SET_HOST_FEATURE) &&
+        module_.SupportsBleConnectionSubrating()) {
+      hci_->EnqueueCommand(
+          LeSetHostFeatureBuilder::Create(
+              LeHostFeatureBits::CONNECTION_SUBRATING_HOST_SUPPORT, Enable::ENABLED),
+          handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
+    }
+
+    // Skip vendor capabilities check if configured.
+    if (os::GetSystemPropertyBool(
+            kPropertyVendorCapabilitiesEnabled, kDefaultVendorCapabilitiesEnabled)) {
+      hci_->EnqueueCommand(
+          LeGetVendorCapabilitiesBuilder::Create(),
+          handler->BindOnceOn(this, &Controller::impl::le_get_vendor_capabilities_handler));
+    } else {
+      vendor_capabilities_.is_supported_ = 0x00;
+    }
 
     // We only need to synchronize the last read. Make BD_ADDR to be the last one.
     std::promise<void> promise;
@@ -319,6 +348,13 @@ struct Controller::impl {
       acl_buffers_ -= le_buffer_size_.total_num_le_packets_;
       le_buffer_size_.le_data_packet_length_ = acl_buffer_length_;
     }
+  }
+
+  void set_min_encryption_key_size_handler(CommandCompleteView view) {
+    auto complete_view = SetMinEncryptionKeySizeCompleteView::Create(view);
+    ASSERT(complete_view.IsValid());
+    ErrorCode status = complete_view.GetStatus();
+    ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
   }
 
   void le_read_buffer_size_v2_handler(CommandCompleteView view) {
@@ -629,6 +665,26 @@ struct Controller::impl {
       OP_CODE_MAPPING(READ_REMOTE_VERSION_INFORMATION)
       OP_CODE_MAPPING(READ_CLOCK_OFFSET)
       OP_CODE_MAPPING(READ_LMP_HANDLE)
+      OP_CODE_MAPPING(SETUP_SYNCHRONOUS_CONNECTION)
+      OP_CODE_MAPPING(ACCEPT_SYNCHRONOUS_CONNECTION)
+      OP_CODE_MAPPING(REJECT_SYNCHRONOUS_CONNECTION)
+      OP_CODE_MAPPING(IO_CAPABILITY_REQUEST_REPLY)
+      OP_CODE_MAPPING(USER_CONFIRMATION_REQUEST_REPLY)
+      OP_CODE_MAPPING(USER_CONFIRMATION_REQUEST_NEGATIVE_REPLY)
+      OP_CODE_MAPPING(USER_PASSKEY_REQUEST_REPLY)
+      OP_CODE_MAPPING(USER_PASSKEY_REQUEST_NEGATIVE_REPLY)
+      OP_CODE_MAPPING(REMOTE_OOB_DATA_REQUEST_REPLY)
+      OP_CODE_MAPPING(REMOTE_OOB_DATA_REQUEST_NEGATIVE_REPLY)
+      OP_CODE_MAPPING(IO_CAPABILITY_REQUEST_NEGATIVE_REPLY)
+      OP_CODE_MAPPING(ENHANCED_SETUP_SYNCHRONOUS_CONNECTION)
+      OP_CODE_MAPPING(ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION)
+      OP_CODE_MAPPING(TRUNCATED_PAGE)
+      OP_CODE_MAPPING(TRUNCATED_PAGE_CANCEL)
+      OP_CODE_MAPPING(SET_CONNECTIONLESS_PERIPHERAL_BROADCAST)
+      OP_CODE_MAPPING(SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_RECEIVE)
+      OP_CODE_MAPPING(START_SYNCHRONIZATION_TRAIN)
+      OP_CODE_MAPPING(RECEIVE_SYNCHRONIZATION_TRAIN)
+      OP_CODE_MAPPING(REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY)
       OP_CODE_MAPPING(HOLD_MODE)
       OP_CODE_MAPPING(SNIFF_MODE)
       OP_CODE_MAPPING(EXIT_SNIFF_MODE)
@@ -640,6 +696,7 @@ struct Controller::impl {
       OP_CODE_MAPPING(READ_DEFAULT_LINK_POLICY_SETTINGS)
       OP_CODE_MAPPING(WRITE_DEFAULT_LINK_POLICY_SETTINGS)
       OP_CODE_MAPPING(FLOW_SPECIFICATION)
+      OP_CODE_MAPPING(SNIFF_SUBRATING)
       OP_CODE_MAPPING(SET_EVENT_MASK)
       OP_CODE_MAPPING(RESET)
       OP_CODE_MAPPING(SET_EVENT_FILTER)
@@ -678,7 +735,7 @@ struct Controller::impl {
       OP_CODE_MAPPING(WRITE_SYNCHRONOUS_FLOW_CONTROL_ENABLE)
       OP_CODE_MAPPING(SET_CONTROLLER_TO_HOST_FLOW_CONTROL)
       OP_CODE_MAPPING(HOST_BUFFER_SIZE)
-      OP_CODE_MAPPING(HOST_NUM_COMPLETED_PACKETS)
+      OP_CODE_MAPPING(HOST_NUMBER_OF_COMPLETED_PACKETS)
       OP_CODE_MAPPING(READ_LINK_SUPERVISION_TIMEOUT)
       OP_CODE_MAPPING(WRITE_LINK_SUPERVISION_TIMEOUT)
       OP_CODE_MAPPING(READ_NUMBER_OF_SUPPORTED_IAC)
@@ -693,48 +750,72 @@ struct Controller::impl {
       OP_CODE_MAPPING(WRITE_PAGE_SCAN_TYPE)
       OP_CODE_MAPPING(READ_AFH_CHANNEL_ASSESSMENT_MODE)
       OP_CODE_MAPPING(WRITE_AFH_CHANNEL_ASSESSMENT_MODE)
+      OP_CODE_MAPPING(READ_EXTENDED_INQUIRY_RESPONSE)
+      OP_CODE_MAPPING(WRITE_EXTENDED_INQUIRY_RESPONSE)
+      OP_CODE_MAPPING(REFRESH_ENCRYPTION_KEY)
+      OP_CODE_MAPPING(READ_SIMPLE_PAIRING_MODE)
+      OP_CODE_MAPPING(WRITE_SIMPLE_PAIRING_MODE)
+      OP_CODE_MAPPING(READ_LOCAL_OOB_DATA)
+      OP_CODE_MAPPING(READ_INQUIRY_RESPONSE_TRANSMIT_POWER_LEVEL)
+      OP_CODE_MAPPING(WRITE_INQUIRY_TRANSMIT_POWER_LEVEL)
+      OP_CODE_MAPPING(READ_DEFAULT_ERRONEOUS_DATA_REPORTING)
+      OP_CODE_MAPPING(WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING)
+      OP_CODE_MAPPING(ENHANCED_FLUSH)
+      OP_CODE_MAPPING(SEND_KEYPRESS_NOTIFICATION)
+      OP_CODE_MAPPING(SET_EVENT_MASK_PAGE_2)
+      OP_CODE_MAPPING(READ_FLOW_CONTROL_MODE)
+      OP_CODE_MAPPING(WRITE_FLOW_CONTROL_MODE)
+      OP_CODE_MAPPING(READ_ENHANCED_TRANSMIT_POWER_LEVEL)
+      OP_CODE_MAPPING(READ_LE_HOST_SUPPORT)
+      OP_CODE_MAPPING(WRITE_LE_HOST_SUPPORT)
+      OP_CODE_MAPPING(SET_MWS_CHANNEL_PARAMETERS)
+      OP_CODE_MAPPING(SET_EXTERNAL_FRAME_CONFIGURATION)
+      OP_CODE_MAPPING(SET_MWS_SIGNALING)
+      OP_CODE_MAPPING(SET_MWS_TRANSPORT_LAYER)
+      OP_CODE_MAPPING(SET_MWS_SCAN_FREQUENCY_TABLE)
+      OP_CODE_MAPPING(SET_MWS_PATTERN_CONFIGURATION)
+      OP_CODE_MAPPING(SET_RESERVED_LT_ADDR)
+      OP_CODE_MAPPING(DELETE_RESERVED_LT_ADDR)
+      OP_CODE_MAPPING(SET_CONNECTIONLESS_PERIPHERAL_BROADCAST_DATA)
+      OP_CODE_MAPPING(READ_SYNCHRONIZATION_TRAIN_PARAMETERS)
+      OP_CODE_MAPPING(WRITE_SYNCHRONIZATION_TRAIN_PARAMETERS)
+      OP_CODE_MAPPING(READ_SECURE_CONNECTIONS_HOST_SUPPORT)
+      OP_CODE_MAPPING(WRITE_SECURE_CONNECTIONS_HOST_SUPPORT)
+      OP_CODE_MAPPING(READ_AUTHENTICATED_PAYLOAD_TIMEOUT)
+      OP_CODE_MAPPING(WRITE_AUTHENTICATED_PAYLOAD_TIMEOUT)
+      OP_CODE_MAPPING(READ_LOCAL_OOB_EXTENDED_DATA)
+      OP_CODE_MAPPING(READ_EXTENDED_PAGE_TIMEOUT)
+      OP_CODE_MAPPING(WRITE_EXTENDED_PAGE_TIMEOUT)
+      OP_CODE_MAPPING(READ_EXTENDED_INQUIRY_LENGTH)
+      OP_CODE_MAPPING(WRITE_EXTENDED_INQUIRY_LENGTH)
+      OP_CODE_MAPPING(SET_ECOSYSTEM_BASE_INTERVAL)
+      OP_CODE_MAPPING(CONFIGURE_DATA_PATH)
+      OP_CODE_MAPPING(SET_MIN_ENCRYPTION_KEY_SIZE)
       OP_CODE_MAPPING(READ_LOCAL_VERSION_INFORMATION)
       OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_FEATURES)
       OP_CODE_MAPPING(READ_LOCAL_EXTENDED_FEATURES)
       OP_CODE_MAPPING(READ_BUFFER_SIZE)
       OP_CODE_MAPPING(READ_BD_ADDR)
+      OP_CODE_MAPPING(READ_DATA_BLOCK_SIZE)
+      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CODECS_V1)
+      OP_CODE_MAPPING(READ_LOCAL_SIMPLE_PAIRING_OPTIONS)
+      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CODECS_V2)
+      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CODEC_CAPABILITIES)
+      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CONTROLLER_DELAY)
       OP_CODE_MAPPING(READ_FAILED_CONTACT_COUNTER)
       OP_CODE_MAPPING(RESET_FAILED_CONTACT_COUNTER)
       OP_CODE_MAPPING(READ_LINK_QUALITY)
       OP_CODE_MAPPING(READ_RSSI)
       OP_CODE_MAPPING(READ_AFH_CHANNEL_MAP)
       OP_CODE_MAPPING(READ_CLOCK)
+      OP_CODE_MAPPING(READ_ENCRYPTION_KEY_SIZE)
+      OP_CODE_MAPPING(GET_MWS_TRANSPORT_LAYER_CONFIGURATION)
+      OP_CODE_MAPPING(SET_TRIGGERED_CLOCK_CAPTURE)
       OP_CODE_MAPPING(READ_LOOPBACK_MODE)
       OP_CODE_MAPPING(WRITE_LOOPBACK_MODE)
       OP_CODE_MAPPING(ENABLE_DEVICE_UNDER_TEST_MODE)
-      OP_CODE_MAPPING(SETUP_SYNCHRONOUS_CONNECTION)
-      OP_CODE_MAPPING(ACCEPT_SYNCHRONOUS_CONNECTION)
-      OP_CODE_MAPPING(REJECT_SYNCHRONOUS_CONNECTION)
-      OP_CODE_MAPPING(READ_EXTENDED_INQUIRY_RESPONSE)
-      OP_CODE_MAPPING(WRITE_EXTENDED_INQUIRY_RESPONSE)
-      OP_CODE_MAPPING(REFRESH_ENCRYPTION_KEY)
-      OP_CODE_MAPPING(SNIFF_SUBRATING)
-      OP_CODE_MAPPING(READ_SIMPLE_PAIRING_MODE)
-      OP_CODE_MAPPING(WRITE_SIMPLE_PAIRING_MODE)
-      OP_CODE_MAPPING(READ_LOCAL_OOB_DATA)
-      OP_CODE_MAPPING(READ_INQUIRY_RESPONSE_TRANSMIT_POWER_LEVEL)
-      OP_CODE_MAPPING(WRITE_INQUIRY_TRANSMIT_POWER_LEVEL)
-      OP_CODE_MAPPING(IO_CAPABILITY_REQUEST_REPLY)
-      OP_CODE_MAPPING(USER_CONFIRMATION_REQUEST_REPLY)
-      OP_CODE_MAPPING(USER_CONFIRMATION_REQUEST_NEGATIVE_REPLY)
-      OP_CODE_MAPPING(USER_PASSKEY_REQUEST_REPLY)
-      OP_CODE_MAPPING(USER_PASSKEY_REQUEST_NEGATIVE_REPLY)
-      OP_CODE_MAPPING(REMOTE_OOB_DATA_REQUEST_REPLY)
       OP_CODE_MAPPING(WRITE_SIMPLE_PAIRING_DEBUG_MODE)
-      OP_CODE_MAPPING(REMOTE_OOB_DATA_REQUEST_NEGATIVE_REPLY)
-      OP_CODE_MAPPING(SEND_KEYPRESS_NOTIFICATION)
-      OP_CODE_MAPPING(SET_EVENT_MASK_PAGE_2)
-      OP_CODE_MAPPING(IO_CAPABILITY_REQUEST_NEGATIVE_REPLY)
-      OP_CODE_MAPPING(REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY)
-      OP_CODE_MAPPING(READ_ENCRYPTION_KEY_SIZE)
-      OP_CODE_MAPPING(READ_DATA_BLOCK_SIZE)
-      OP_CODE_MAPPING(READ_LE_HOST_SUPPORT)
-      OP_CODE_MAPPING(WRITE_LE_HOST_SUPPORT)
+      OP_CODE_MAPPING(WRITE_SECURE_CONNECTIONS_TEST_MODE)
       OP_CODE_MAPPING(LE_SET_EVENT_MASK)
       OP_CODE_MAPPING(LE_READ_BUFFER_SIZE_V1)
       OP_CODE_MAPPING(LE_READ_LOCAL_SUPPORTED_FEATURES)
@@ -762,23 +843,16 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_LONG_TERM_KEY_REQUEST_REPLY)
       OP_CODE_MAPPING(LE_LONG_TERM_KEY_REQUEST_NEGATIVE_REPLY)
       OP_CODE_MAPPING(LE_READ_SUPPORTED_STATES)
-      OP_CODE_MAPPING(LE_RECEIVER_TEST)
-      OP_CODE_MAPPING(LE_TRANSMITTER_TEST)
+      OP_CODE_MAPPING(LE_RECEIVER_TEST_V1)
+      OP_CODE_MAPPING(LE_TRANSMITTER_TEST_V1)
       OP_CODE_MAPPING(LE_TEST_END)
-      OP_CODE_MAPPING(ENHANCED_SETUP_SYNCHRONOUS_CONNECTION)
-      OP_CODE_MAPPING(ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION)
-      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CODECS_V1)
-      OP_CODE_MAPPING(READ_SECURE_CONNECTIONS_HOST_SUPPORT)
-      OP_CODE_MAPPING(WRITE_SECURE_CONNECTIONS_HOST_SUPPORT)
-      OP_CODE_MAPPING(READ_LOCAL_OOB_EXTENDED_DATA)
-      OP_CODE_MAPPING(WRITE_SECURE_CONNECTIONS_TEST_MODE)
       OP_CODE_MAPPING(LE_REMOTE_CONNECTION_PARAMETER_REQUEST_REPLY)
       OP_CODE_MAPPING(LE_REMOTE_CONNECTION_PARAMETER_REQUEST_NEGATIVE_REPLY)
       OP_CODE_MAPPING(LE_SET_DATA_LENGTH)
       OP_CODE_MAPPING(LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH)
       OP_CODE_MAPPING(LE_WRITE_SUGGESTED_DEFAULT_DATA_LENGTH)
-      OP_CODE_MAPPING(LE_READ_LOCAL_P_256_PUBLIC_KEY_COMMAND)
-      OP_CODE_MAPPING(LE_GENERATE_DHKEY_COMMAND_V1)
+      OP_CODE_MAPPING(LE_READ_LOCAL_P_256_PUBLIC_KEY)
+      OP_CODE_MAPPING(LE_GENERATE_DHKEY_V1)
       OP_CODE_MAPPING(LE_ADD_DEVICE_TO_RESOLVING_LIST)
       OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_RESOLVING_LIST)
       OP_CODE_MAPPING(LE_CLEAR_RESOLVING_LIST)
@@ -791,8 +865,8 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_READ_PHY)
       OP_CODE_MAPPING(LE_SET_DEFAULT_PHY)
       OP_CODE_MAPPING(LE_SET_PHY)
-      OP_CODE_MAPPING(LE_ENHANCED_RECEIVER_TEST)
-      OP_CODE_MAPPING(LE_ENHANCED_TRANSMITTER_TEST)
+      OP_CODE_MAPPING(LE_RECEIVER_TEST_V2)
+      OP_CODE_MAPPING(LE_TRANSMITTER_TEST_V2)
       OP_CODE_MAPPING(LE_SET_ADVERTISING_SET_RANDOM_ADDRESS)
       OP_CODE_MAPPING(LE_SET_EXTENDED_ADVERTISING_PARAMETERS)
       OP_CODE_MAPPING(LE_SET_EXTENDED_ADVERTISING_DATA)
@@ -819,12 +893,22 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_READ_RF_PATH_COMPENSATION_POWER)
       OP_CODE_MAPPING(LE_WRITE_RF_PATH_COMPENSATION_POWER)
       OP_CODE_MAPPING(LE_SET_PRIVACY_MODE)
+      OP_CODE_MAPPING(LE_RECEIVER_TEST_V3)
+      OP_CODE_MAPPING(LE_TRANSMITTER_TEST_V3)
+      OP_CODE_MAPPING(LE_SET_CONNECTIONLESS_CTE_TRANSMIT_PARAMETERS)
+      OP_CODE_MAPPING(LE_SET_CONNECTIONLESS_CTE_TRANSMIT_ENABLE)
+      OP_CODE_MAPPING(LE_SET_CONNECTIONLESS_IQ_SAMPLING_ENABLE)
+      OP_CODE_MAPPING(LE_SET_CONNECTION_CTE_RECEIVE_PARAMETERS)
+      OP_CODE_MAPPING(LE_SET_CONNECTION_CTE_TRANSMIT_PARAMETERS)
+      OP_CODE_MAPPING(LE_CONNECTION_CTE_REQUEST_ENABLE)
+      OP_CODE_MAPPING(LE_CONNECTION_CTE_RESPONSE_ENABLE)
+      OP_CODE_MAPPING(LE_READ_ANTENNA_INFORMATION)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_RECEIVE_ENABLE)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_SYNC_TRANSFER)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_SET_INFO_TRANSFER)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS)
       OP_CODE_MAPPING(LE_SET_DEFAULT_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS)
-      OP_CODE_MAPPING(LE_GENERATE_DHKEY_COMMAND)
+      OP_CODE_MAPPING(LE_GENERATE_DHKEY_V2)
       OP_CODE_MAPPING(LE_MODIFY_SLEEP_CLOCK_ACCURACY)
       OP_CODE_MAPPING(LE_READ_BUFFER_SIZE_V2)
       OP_CODE_MAPPING(LE_READ_ISO_TX_SYNC)
@@ -835,12 +919,17 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_ACCEPT_CIS_REQUEST)
       OP_CODE_MAPPING(LE_REJECT_CIS_REQUEST)
       OP_CODE_MAPPING(LE_CREATE_BIG)
+      OP_CODE_MAPPING(LE_CREATE_BIG_TEST)
       OP_CODE_MAPPING(LE_TERMINATE_BIG)
       OP_CODE_MAPPING(LE_BIG_CREATE_SYNC)
       OP_CODE_MAPPING(LE_BIG_TERMINATE_SYNC)
       OP_CODE_MAPPING(LE_REQUEST_PEER_SCA)
       OP_CODE_MAPPING(LE_SETUP_ISO_DATA_PATH)
       OP_CODE_MAPPING(LE_REMOVE_ISO_DATA_PATH)
+      OP_CODE_MAPPING(LE_ISO_TRANSMIT_TEST)
+      OP_CODE_MAPPING(LE_ISO_RECEIVE_TEST)
+      OP_CODE_MAPPING(LE_ISO_READ_TEST_COUNTERS)
+      OP_CODE_MAPPING(LE_ISO_TEST_END)
       OP_CODE_MAPPING(LE_SET_HOST_FEATURE)
       OP_CODE_MAPPING(LE_READ_ISO_LINK_QUALITY)
       OP_CODE_MAPPING(LE_ENHANCED_READ_TRANSMIT_POWER_LEVEL)
@@ -848,16 +937,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_SET_PATH_LOSS_REPORTING_PARAMETERS)
       OP_CODE_MAPPING(LE_SET_PATH_LOSS_REPORTING_ENABLE)
       OP_CODE_MAPPING(LE_SET_TRANSMIT_POWER_REPORTING_ENABLE)
-      OP_CODE_MAPPING(SET_ECOSYSTEM_BASE_INTERVAL)
-      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CODECS_V2)
-      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CODEC_CAPABILITIES)
-      OP_CODE_MAPPING(READ_LOCAL_SUPPORTED_CONTROLLER_DELAY)
-      OP_CODE_MAPPING(CONFIGURE_DATA_PATH)
-      OP_CODE_MAPPING(ENHANCED_FLUSH)
+      OP_CODE_MAPPING(LE_TRANSMITTER_TEST_V4)
       OP_CODE_MAPPING(LE_SET_DATA_RELATED_ADDRESS_CHANGES)
       OP_CODE_MAPPING(LE_SET_DEFAULT_SUBRATE)
       OP_CODE_MAPPING(LE_SUBRATE_REQUEST)
-      OP_CODE_MAPPING(SET_MIN_ENCRYPTION_KEY_SIZE)
 
       // deprecated
       case OpCode::ADD_SCO_CONNECTION:
@@ -905,27 +988,27 @@ struct Controller::impl {
 
   CompletedAclPacketsCallback acl_credits_callback_{};
   CompletedAclPacketsCallback acl_monitor_credits_callback_{};
-  LocalVersionInformation local_version_information_;
-  std::array<uint8_t, 64> local_supported_commands_;
-  std::vector<uint64_t> extended_lmp_features_array_;
-  uint16_t acl_buffer_length_ = 0;
-  uint16_t acl_buffers_ = 0;
-  uint8_t sco_buffer_length_ = 0;
-  uint16_t sco_buffers_ = 0;
-  Address mac_address_;
-  std::string local_name_;
-  LeBufferSize le_buffer_size_;
-  LeBufferSize iso_buffer_size_;
-  uint64_t le_local_supported_features_;
-  uint64_t le_supported_states_;
-  uint8_t le_connect_list_size_;
-  uint8_t le_resolving_list_size_;
-  LeMaximumDataLength le_maximum_data_length_;
-  uint16_t le_maximum_advertising_data_length_;
-  uint16_t le_suggested_default_data_length_;
-  uint8_t le_number_supported_advertising_sets_;
-  uint8_t le_periodic_advertiser_list_size_;
-  VendorCapabilities vendor_capabilities_;
+  LocalVersionInformation local_version_information_{};
+  std::array<uint8_t, 64> local_supported_commands_{};
+  std::vector<uint64_t> extended_lmp_features_array_{};
+  uint16_t acl_buffer_length_{};
+  uint16_t acl_buffers_{};
+  uint8_t sco_buffer_length_{};
+  uint16_t sco_buffers_{};
+  Address mac_address_{};
+  std::string local_name_{};
+  LeBufferSize le_buffer_size_{};
+  LeBufferSize iso_buffer_size_{};
+  uint64_t le_local_supported_features_{};
+  uint64_t le_supported_states_{};
+  uint8_t le_connect_list_size_{};
+  uint8_t le_resolving_list_size_{};
+  LeMaximumDataLength le_maximum_data_length_{};
+  uint16_t le_maximum_advertising_data_length_{};
+  uint16_t le_suggested_default_data_length_{};
+  uint8_t le_number_supported_advertising_sets_{};
+  uint8_t le_periodic_advertiser_list_size_{};
+  VendorCapabilities vendor_capabilities_{};
 };  // namespace hci
 
 Controller::Controller() : impl_(std::make_unique<impl>(*this)) {}
@@ -1035,6 +1118,9 @@ LOCAL_LE_FEATURE_ACCESSOR(SupportsBleIsochronousChannelsHostSupport, 32)
 LOCAL_LE_FEATURE_ACCESSOR(SupportsBlePowerControlRequest, 33)
 LOCAL_LE_FEATURE_ACCESSOR(SupportsBlePowerChangeIndication, 34)
 LOCAL_LE_FEATURE_ACCESSOR(SupportsBlePathLossMonitoring, 35)
+LOCAL_LE_FEATURE_ACCESSOR(SupportsBlePeriodicAdvertisingAdi, 36)
+LOCAL_LE_FEATURE_ACCESSOR(SupportsBleConnectionSubrating, 37)
+LOCAL_LE_FEATURE_ACCESSOR(SupportsBleConnectionSubratingHost, 38)
 
 uint64_t Controller::GetLocalFeatures(uint8_t page_number) const {
   if (page_number < impl_->extended_lmp_features_array_.size()) {
@@ -1196,7 +1282,7 @@ uint8_t Controller::GetLeNumberOfSupportedAdverisingSets() const {
   return impl_->le_number_supported_advertising_sets_;
 }
 
-VendorCapabilities Controller::GetVendorCapabilities() const {
+Controller::VendorCapabilities Controller::GetVendorCapabilities() const {
   return impl_->vendor_capabilities_;
 }
 
@@ -1212,6 +1298,7 @@ const ModuleFactory Controller::Factory = ModuleFactory([]() { return new Contro
 
 void Controller::ListDependencies(ModuleList* list) const {
   list->add<hci::HciLayer>();
+  list->add<sysprops::SyspropsModule>();
 }
 
 void Controller::Start() {

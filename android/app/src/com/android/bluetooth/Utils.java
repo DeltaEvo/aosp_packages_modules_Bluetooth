@@ -40,8 +40,10 @@ import android.bluetooth.BluetoothDevice;
 import android.companion.AssociationInfo;
 import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
@@ -49,6 +51,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.ParcelUuid;
 import android.os.PowerExemptionManager;
 import android.os.Process;
@@ -59,6 +62,8 @@ import android.permission.PermissionManager;
 import android.provider.DeviceConfig;
 import android.provider.Telephony;
 import android.util.Log;
+
+import androidx.annotation.RequiresApi;
 
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
@@ -76,6 +81,7 @@ import java.nio.charset.CharsetDecoder;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -350,7 +356,7 @@ public final class Utils {
                     + " is inaccurate for calling uid " + callingUid);
         }
 
-        for (AssociationInfo association : cdm.getAllAssociations()) {
+        for (AssociationInfo association : getCdmAssociations(cdm)) {
             if (association.getPackageName().equals(callingPackage)
                     && !association.isSelfManaged() && device.getAddress() != null
                     && association.getDeviceMacAddress() != null
@@ -361,6 +367,22 @@ public final class Utils {
         }
         throw new SecurityException("The application with package name " + callingPackage
                 + " does not have a CDM association with the Bluetooth Device");
+    }
+
+    /**
+     * Obtains the complete list of registered CDM associations.
+     *
+     * @param cdm the CompanionDeviceManager object
+     * @return the list of AssociationInfo objects
+     */
+    @RequiresPermission("android.permission.MANAGE_COMPANION_DEVICES")
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    // TODO(b/193460475): Android Lint handles change from SystemApi to public incorrectly.
+    // CompanionDeviceManager#getAllAssociations() is public in U,
+    // but existed in T as an identical SystemApi.
+    @SuppressLint("NewApi")
+    public static List<AssociationInfo> getCdmAssociations(CompanionDeviceManager cdm) {
+        return cdm.getAllAssociations();
     }
 
     /**
@@ -426,8 +448,6 @@ public final class Utils {
                 "Need DUMP permission");
     }
 
-    /**
-     */
     public static AttributionSource getCallingAttributionSource(Context context) {
         int callingUid = Binder.getCallingUid();
         if (callingUid == android.os.Process.ROOT_UID) {
@@ -462,6 +482,9 @@ public final class Utils {
     @SuppressLint("AndroidFrameworkRequiresPermission")
     private static boolean checkPermissionForDataDelivery(Context context, String permission,
             AttributionSource attributionSource, String message) {
+        if (isInstrumentationTestMode()) {
+            return true;
+        }
         // STOPSHIP(b/188391719): enable this security enforcement
         // attributionSource.enforceCallingUid();
         AttributionSource currentAttribution = new AttributionSource
@@ -619,6 +642,11 @@ public final class Utils {
         return false;
     }
 
+    private static boolean checkCallerIsSystem() {
+        int callingUid = Binder.getCallingUid();
+        return UserHandle.getAppId(Process.SYSTEM_UID) == UserHandle.getAppId(callingUid);
+    }
+
     private static boolean checkCallerIsSystemOrActiveUser() {
         int callingUid = Binder.getCallingUid();
         UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
@@ -638,6 +666,24 @@ public final class Utils {
 
     public static boolean callerIsSystemOrActiveUser(String tag, String method) {
         return checkCallerIsSystemOrActiveUser(tag + "." + method + "()");
+    }
+
+    /**
+     * Checks if the caller to the method is system server.
+     *
+     * @param tag the log tag to use in case the caller is not system server
+     * @param method the API method name
+     * @return {@code true} if the caller is system server, {@code false} otherwise
+     */
+    public static boolean callerIsSystem(String tag, String method) {
+        if (isInstrumentationTestMode()) {
+            return true;
+        }
+        final boolean res = checkCallerIsSystem();
+        if (!res) {
+            Log.w(TAG, tag + "." + method + "()" + " - Not allowed outside system server");
+        }
+        return res;
     }
 
     private static boolean checkCallerIsSystemOrActiveOrManagedUser(Context context) {
@@ -668,6 +714,9 @@ public final class Utils {
     }
 
     public static boolean checkCallerIsSystemOrActiveOrManagedUser(Context context, String tag) {
+        if (isInstrumentationTestMode()) {
+            return true;
+        }
         final boolean res = checkCallerIsSystemOrActiveOrManagedUser(context);
         if (!res) {
             Log.w(TAG, tag + " - Not allowed for"
@@ -997,12 +1046,15 @@ public final class Utils {
         }
         values.put(Telephony.Sms.ERROR_CODE, 0);
 
-        return 1 == context.getContentResolver().update(uri, values, null, null);
+        return 1 == BluetoothMethodProxy.getInstance().contentResolverUpdate(
+                context.getContentResolver(), uri, values, null, null);
     }
 
     /**
      * Returns bundled broadcast options.
      */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
     public static @NonNull Bundle getTempAllowlistBroadcastOptions() {
         return getTempBroadcastOptions().toBundle();
     }
@@ -1010,6 +1062,8 @@ public final class Utils {
     /**
      * Returns broadcast options.
      */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
     public static @NonNull BroadcastOptions getTempBroadcastOptions() {
         final BroadcastOptions bOptions = BroadcastOptions.makeBasic();
         // Use the Bluetooth process identity to pass permission check when reading DeviceConfig
@@ -1025,6 +1079,35 @@ public final class Utils {
         }
         return bOptions;
     }
+
+    /**
+     * Sends the {@code intent} as a broadcast in the provided {@code context} to receivers that
+     * have been granted the specified {@code receiverPermission} with the {@link BroadcastOptions}
+     * {@code options}.
+     *
+     * @see Context#sendBroadcast(Intent, String, Bundle)
+     */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
+    public static void sendBroadcast(@NonNull Context context, @NonNull Intent intent,
+            @Nullable String receiverPermission, @Nullable Bundle options) {
+        context.sendBroadcast(intent, receiverPermission, options);
+    }
+
+    /**
+     * @see Context#sendOrderedBroadcast(Intent, String, Bundle, BroadcastReceiver, Handler,
+     *          int, String, Bundle)
+     */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
+    public static void sendOrderedBroadcast(@NonNull Context context, @NonNull Intent intent,
+            @Nullable String receiverPermission, @Nullable Bundle options,
+            @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
+            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras) {
+        context.sendOrderedBroadcast(intent, receiverPermission, options, resultReceiver, scheduler,
+                initialCode, initialData, initialExtras);
+    }
+
     /**
      * Checks that value is present as at least one of the elements of the array.
      * @param array the array to check in

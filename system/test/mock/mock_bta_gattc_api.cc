@@ -19,22 +19,19 @@
  *   Functions generated:30
  */
 
-#include <base/callback.h>
-
-#include <map>
-#include <string>
-
-extern std::map<std::string, int> mock_function_count_map;
-
-#include <base/bind.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 
 #include <ios>
 #include <list>
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "bt_target.h"
 #include "bta/gatt/bta_gattc_int.h"
+#include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
@@ -112,12 +109,12 @@ void BTA_GATTC_GetGattDb(uint16_t conn_id, uint16_t start_handle,
   mock_function_count_map[__func__]++;
 }
 void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
-                    bool is_direct, bool opportunistic) {
+                    tBTM_BLE_CONN_TYPE connection_type, bool opportunistic) {
   mock_function_count_map[__func__]++;
 }
 void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
-                    bool is_direct, tBT_TRANSPORT transport, bool opportunistic,
-                    uint8_t initiating_phys) {
+                    tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                    bool opportunistic, uint8_t initiating_phys) {
   mock_function_count_map[__func__]++;
 }
 void BTA_GATTC_PrepareWrite(uint16_t conn_id, uint16_t handle, uint16_t offset,

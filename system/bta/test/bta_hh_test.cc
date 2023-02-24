@@ -26,7 +26,6 @@
 #include "test/mock/mock_osi_allocator.h"
 
 uint8_t appl_trace_level = 0;
-void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) {}
 uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
 
 namespace {
@@ -106,5 +105,5 @@ TEST_F(BtaHhTest, bta_hh_ctrl_dat_act__BTA_HH_GET_RPT_EVT) {
 
   bta_hh_ctrl_dat_act(&cb, &data);
 
-  ASSERT_EQ(mock_function_count_map["bta_hh_co_get_rpt_rsp"], 1);
+  ASSERT_EQ(get_func_call_count("bta_hh_co_get_rpt_rsp"), 1);
 }

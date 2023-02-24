@@ -20,7 +20,7 @@ class Test(ControllerTest):
 
         controller = self.controller
         peer_irk = bytes([1] * 16)
-        peer_identity_address = Address.from_str('aa:bb:cc:dd:ee:ff')
+        peer_identity_address = Address('aa:bb:cc:dd:ee:ff')
         peer_identity_address_type = hci.PeerAddressType.PUBLIC_DEVICE_OR_IDENTITY_ADDRESS
         peer_resolvable_address = Address(rootcanal.generate_rpa(peer_irk))
 
@@ -69,7 +69,7 @@ class Test(ControllerTest):
                                                      advertising_address_type=ll.AddressType.RANDOM,
                                                      advertising_type=ll.LegacyAdvertisingType.ADV_NONCONN_IND,
                                                      advertising_data=[1, 2, 3]),
-                           rssi=0xf0)
+                           rssi=-16)
 
         # 5. The Upper Tester receives at least one HCI_LE_Advertising_Report
         # reporting the advertising packets sent by the Lower Tester. The address in
@@ -108,7 +108,7 @@ class Test(ControllerTest):
                                                      advertising_address_type=ll.AddressType.RANDOM,
                                                      advertising_type=ll.LegacyAdvertisingType.ADV_NONCONN_IND,
                                                      advertising_data=[1, 2, 3]),
-                           rssi=0xf0)
+                           rssi=-16)
 
         # 10. The IUT does not resolve the Lower Tester’s address and reports it
         # unresolved (as received in the advertising PDU) in the advertising report

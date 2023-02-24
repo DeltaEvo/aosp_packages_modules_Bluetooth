@@ -27,10 +27,14 @@ using ::bluetooth::hci::Address;
 using ::bluetooth::hci::AddressType;
 using ::bluetooth::hci::AddressWithType;
 
-void AclConnectionHandler::RegisterTaskScheduler(
-    std::function<AsyncTaskId(std::chrono::milliseconds, const TaskCallback&)>
-        event_scheduler) {
-  schedule_task_ = event_scheduler;
+void AclConnectionHandler::Reset(std::function<void(AsyncTaskId)> stopStream) {
+  // Leave no dangling periodic task.
+  for (auto& [_, sco_connection] : sco_connections_) {
+    sco_connection.StopStream(stopStream);
+  }
+
+  sco_connections_.clear();
+  acl_connections_.clear();
 }
 
 bool AclConnectionHandler::HasHandle(uint16_t handle) const {
@@ -255,9 +259,9 @@ std::unique_ptr<bluetooth::hci::LeSetCigParametersCompleteBuilder>
 AclConnectionHandler::SetCigParameters(
     uint8_t id, uint32_t sdu_interval_m_to_s, uint32_t sdu_interval_s_to_m,
     bluetooth::hci::ClockAccuracy /* accuracy */,
-    bluetooth::hci::Packing packing, bluetooth::hci::Enable framed,
-    uint16_t max_transport_latency_m_to_s_,
-    uint16_t max_transport_latency_s_to_m_,
+    bluetooth::hci::Packing packing, bluetooth::hci::Enable framing,
+    uint16_t max_transport_latency_m_to_s,
+    uint16_t max_transport_latency_s_to_m,
     std::vector<bluetooth::hci::CisParametersConfig>& streams) {
   std::vector<uint16_t> handles;
   GroupParameters group_parameters{
@@ -265,9 +269,9 @@ AclConnectionHandler::SetCigParameters(
       .sdu_interval_m_to_s = sdu_interval_m_to_s,
       .sdu_interval_s_to_m = sdu_interval_s_to_m,
       .interleaved = packing == bluetooth::hci::Packing::INTERLEAVED,
-      .framed = framed == bluetooth::hci::Enable::ENABLED,
-      .max_transport_latency_m_to_s = max_transport_latency_m_to_s_,
-      .max_transport_latency_s_to_m = max_transport_latency_s_to_m_};
+      .framed = framing == bluetooth::hci::Enable::ENABLED,
+      .max_transport_latency_m_to_s = max_transport_latency_m_to_s,
+      .max_transport_latency_s_to_m = max_transport_latency_s_to_m};
   std::vector<StreamParameters> stream_parameters;
   for (size_t i = 0; i < streams.size(); i++) {
     auto handle = GetUnusedHandle();

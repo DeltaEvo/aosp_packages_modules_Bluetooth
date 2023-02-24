@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_btif_bluetooth.h"
 #include "types/raw_address.h"
@@ -47,14 +45,11 @@ namespace btif_bluetooth {
 struct is_atv_device is_atv_device;
 struct is_common_criteria_mode is_common_criteria_mode;
 struct is_restricted_mode is_restricted_mode;
-struct dut_mode_configure dut_mode_configure;
-struct dut_mode_send dut_mode_send;
 struct get_common_criteria_config_compare_result
     get_common_criteria_config_compare_result;
 struct get_remote_device_properties get_remote_device_properties;
 struct get_remote_device_property get_remote_device_property;
 struct get_remote_services get_remote_services;
-struct le_test_mode le_test_mode;
 struct set_remote_device_property set_remote_device_property;
 struct set_hal_cbacks set_hal_cbacks;
 
@@ -75,14 +70,6 @@ bool is_restricted_mode() {
   mock_function_count_map[__func__]++;
   return test::mock::btif_bluetooth::is_restricted_mode();
 }
-int dut_mode_configure(uint8_t enable) {
-  mock_function_count_map[__func__]++;
-  return test::mock::btif_bluetooth::dut_mode_configure(enable);
-}
-int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
-  mock_function_count_map[__func__]++;
-  return test::mock::btif_bluetooth::dut_mode_send(opcode, buf, len);
-}
 int get_common_criteria_config_compare_result() {
   mock_function_count_map[__func__]++;
   return test::mock::btif_bluetooth::
@@ -101,10 +88,6 @@ int get_remote_device_property(RawAddress* remote_addr,
 int get_remote_services(RawAddress* remote_addr) {
   mock_function_count_map[__func__]++;
   return test::mock::btif_bluetooth::get_remote_services(remote_addr);
-}
-int le_test_mode(uint16_t opcode, uint8_t* buf, uint8_t len) {
-  mock_function_count_map[__func__]++;
-  return test::mock::btif_bluetooth::le_test_mode(opcode, buf, len);
 }
 int set_remote_device_property(RawAddress* remote_addr,
                                const bt_property_t* property) {

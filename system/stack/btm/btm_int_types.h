@@ -41,13 +41,15 @@
 constexpr size_t kMaxLogSize = 255;
 constexpr size_t kBtmLogHistoryBufferSize = 100;
 
+extern bluetooth::common::TimestamperInMilliseconds timestamper_in_milliseconds;
+
 class TimestampedStringCircularBuffer
     : public bluetooth::common::TimestampedCircularBuffer<std::string> {
  public:
   explicit TimestampedStringCircularBuffer(size_t size)
       : bluetooth::common::TimestampedCircularBuffer<std::string>(size) {}
 
-  void Push(std::string s) {
+  void Push(const std::string& s) {
     bluetooth::common::TimestampedCircularBuffer<std::string>::Push(
         s.substr(0, kMaxLogSize));
   }
@@ -161,10 +163,6 @@ typedef struct tBTM_DEVCB {
   tBTM_CMPL_CB* p_tx_power_cmpl_cb; /* Callback function to be called       */
 
   DEV_CLASS dev_class; /* Local device class                   */
-
-  tBTM_CMPL_CB*
-      p_le_test_cmd_cmpl_cb; /* Callback function to be called when
-                             LE test mode command has been sent successfully */
 
   RawAddress read_tx_pwr_addr; /* read TX power target address     */
 
@@ -310,6 +308,13 @@ typedef struct tBTM_CB {
 
   std::shared_ptr<TimestampedStringCircularBuffer> history_{nullptr};
 
+  struct {
+    struct {
+      long long start_time_ms;
+      unsigned long results;
+    } classic_inquiry, le_scan, le_inquiry, le_observe, le_legacy_scan;
+  } neighbor;
+
   void Init(uint8_t initial_security_mode) {
     memset(&cfg, 0, sizeof(cfg));
     memset(&devcb, 0, sizeof(devcb));
@@ -327,6 +332,7 @@ typedef struct tBTM_CB {
     memset(&connecting_dc, 0, sizeof(connecting_dc));
 
     acl_cb_ = {};
+    neighbor = {};
 
     page_queue = fixed_queue_new(SIZE_MAX);
     sec_pending_q = fixed_queue_new(SIZE_MAX);
@@ -341,11 +347,15 @@ typedef struct tBTM_CB {
 #endif
     security_mode = initial_security_mode;
     pairing_bda = RawAddress::kAny;
-    sec_dev_rec = list_new(osi_free);
+    sec_dev_rec = list_new([](void* ptr) {
+      // Invoke destructor for all record objects and reset to default
+      // initialized value so memory may be properly freed
+      *((tBTM_SEC_DEV_REC*)ptr) = {};
+      osi_free(ptr);
+    });
 
     /* Initialize BTM component structures */
     btm_inq_vars.Init(); /* Inquiry Database and Structures */
-    acl_cb_ = {};
     sco_cb.Init();       /* SCO Database and Structures (If included) */
     devcb.Init();
 

@@ -413,7 +413,8 @@ public class BluetoothOppLauncherActivity extends Activity {
         return text;
     }
 
-    private void sendFileInfo(String mimeType, String uriString, boolean isHandover,
+    @VisibleForTesting
+    void sendFileInfo(String mimeType, String uriString, boolean isHandover,
             boolean fromExternal) {
         BluetoothOppManager manager = BluetoothOppManager.getInstance(getApplicationContext());
         try {
@@ -421,7 +422,8 @@ public class BluetoothOppLauncherActivity extends Activity {
             launchDevicePicker();
             finish();
         } catch (IllegalArgumentException exception) {
-            showToast(exception.getMessage());
+            String message = exception.getMessage();
+            showToast(message != null ? message : "IllegalArgumentException");
             finish();
         }
     }

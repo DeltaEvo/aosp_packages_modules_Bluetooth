@@ -18,7 +18,6 @@ package com.android.pandora
 
 import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
@@ -28,6 +27,7 @@ import android.media.*
 import android.util.Log
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
+import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -42,7 +42,7 @@ import pandora.A2DPGrpc.A2DPImplBase
 import pandora.A2dpProto.*
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-class A2dp(val context: Context) : A2DPImplBase() {
+class A2dp(val context: Context) : A2DPImplBase(), Closeable {
   private val TAG = "PandoraA2dp"
 
   private val scope: CoroutineScope
@@ -65,7 +65,7 @@ class A2dp(val context: Context) : A2DPImplBase() {
     flow = intentFlow(context, intentFilter).shareIn(scope, SharingStarted.Eagerly)
   }
 
-  fun deinit() {
+  override fun close() {
     bluetoothAdapter.closeProfileProxy(BluetoothProfile.A2DP, bluetoothA2dp)
     scope.cancel()
   }
@@ -77,11 +77,6 @@ class A2dp(val context: Context) : A2DPImplBase() {
     grpcUnary<OpenSourceResponse>(scope, responseObserver) {
       val device = request.connection.toBluetoothDevice(bluetoothAdapter)
       Log.i(TAG, "openSource: device=$device")
-
-      if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
-        Log.e(TAG, "Device is not bonded, cannot openSource")
-        throw Status.UNKNOWN.asException()
-      }
 
       if (bluetoothA2dp.getConnectionState(device) != BluetoothA2dp.STATE_CONNECTED) {
         bluetoothA2dp.connect(device)
@@ -116,11 +111,6 @@ class A2dp(val context: Context) : A2DPImplBase() {
     grpcUnary<WaitSourceResponse>(scope, responseObserver) {
       val device = request.connection.toBluetoothDevice(bluetoothAdapter)
       Log.i(TAG, "waitSource: device=$device")
-
-      if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
-        Log.e(TAG, "Device is not bonded, cannot openSource")
-        throw Status.UNKNOWN.asException()
-      }
 
       if (bluetoothA2dp.getConnectionState(device) != BluetoothA2dp.STATE_CONNECTED) {
         val state =

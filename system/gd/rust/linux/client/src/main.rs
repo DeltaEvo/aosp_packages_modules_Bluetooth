@@ -1,6 +1,4 @@
-#[macro_use]
-extern crate clap;
-use clap::{App, Arg};
+use clap::{value_t, App, Arg};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -17,10 +15,10 @@ use crate::callbacks::{
     AdminCallback, AdvertisingSetCallback, BtCallback, BtConnectionCallback, BtManagerCallback,
     BtSocketManagerCallback, ScannerCallback, SuspendCallback,
 };
-use crate::command_handler::CommandHandler;
+use crate::command_handler::{CommandHandler, SocketSchedule};
 use crate::dbus_iface::{
     BluetoothAdminDBus, BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, BluetoothQADBus,
-    BluetoothSocketManagerDBus, SuspendDBus,
+    BluetoothSocketManagerDBus, BluetoothTelephonyDBus, SuspendDBus,
 };
 use crate::editor::AsyncEditor;
 use bt_topshim::topstack;
@@ -91,6 +89,9 @@ pub(crate) struct ClientContext {
     /// Proxy for socket manager interface.
     pub(crate) socket_manager_dbus: Option<BluetoothSocketManagerDBus>,
 
+    /// Proxy for Telephony interface.
+    pub(crate) telephony_dbus: Option<BluetoothTelephonyDBus>,
+
     /// Channel to send actions to take in the foreground
     fg: mpsc::Sender<ForegroundActions>,
 
@@ -123,6 +124,9 @@ pub(crate) struct ClientContext {
 
     /// Data of GATT client preference.
     gatt_client_context: GattClientContext,
+
+    /// The schedule when a socket is connected.
+    socket_test_schedule: Option<SocketSchedule>,
 }
 
 impl ClientContext {
@@ -153,6 +157,7 @@ impl ClientContext {
             admin_dbus: None,
             suspend_dbus: None,
             socket_manager_dbus: None,
+            telephony_dbus: None,
             fg: tx,
             dbus_connection,
             dbus_crossroads,
@@ -164,6 +169,7 @@ impl ClientContext {
             socket_manager_callback_id: None,
             is_restricted,
             gatt_client_context: GattClientContext::new(),
+            socket_test_schedule: None,
         }
     }
 
@@ -206,6 +212,8 @@ impl ClientContext {
         self.socket_manager_dbus = Some(socket_manager_dbus);
 
         self.suspend_dbus = Some(SuspendDBus::new(conn.clone(), idx));
+
+        self.telephony_dbus = Some(BluetoothTelephonyDBus::new(conn.clone(), idx));
 
         // Trigger callback registration in the foreground
         let fg = self.fg.clone();
@@ -369,7 +377,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             _ => {
-                start_interactive_shell(handler, tx, rx, context).await;
+                start_interactive_shell(handler, tx, rx, context).await?;
             }
         };
         return Result::Ok(());
@@ -381,7 +389,7 @@ async fn start_interactive_shell(
     tx: mpsc::Sender<ForegroundActions>,
     mut rx: mpsc::Receiver<ForegroundActions>,
     context: Arc<Mutex<ClientContext>>,
-) {
+) -> Result<(), Box<dyn std::error::Error>> {
     let command_rule_list = handler.get_command_rule_list().clone();
     let context_for_closure = context.clone();
 
@@ -389,9 +397,9 @@ async fn start_interactive_shell(
 
     // Async task to keep reading new lines from user
     let semaphore = semaphore_fg.clone();
+    let editor = AsyncEditor::new(command_rule_list, context_for_closure)
+        .map_err(|x| format!("creating async editor failed: {x}"))?;
     tokio::spawn(async move {
-        let editor = AsyncEditor::new(command_rule_list, context_for_closure);
-
         loop {
             // Wait until ForegroundAction::Readline finishes its task.
             let permit = semaphore.acquire().await;
@@ -407,7 +415,7 @@ async fn start_interactive_shell(
         }
     });
 
-    loop {
+    'readline: loop {
         let m = rx.recv().await;
 
         if m.is_none() {
@@ -568,20 +576,42 @@ async fn start_interactive_shell(
                 print_info!("Adapter {} is ready", adapter_address);
             }
             ForegroundActions::Readline(result) => match result {
+                Err(rustyline::error::ReadlineError::Interrupted) => {
+                    // Ctrl-C cancels the currently typed line, do nothing and ready to do next
+                    // readline again.
+                    semaphore_fg.add_permits(1);
+                }
                 Err(_err) => {
                     break;
                 }
                 Ok(line) => {
-                    let command_vec =
-                        line.split(" ").map(|s| String::from(s)).collect::<Vec<String>>();
-                    let cmd = &command_vec[0];
-                    if cmd.eq("quit") {
+                    // Currently Chrome OS uses Rust 1.60 so use the 1-time loop block to
+                    // workaround this.
+                    // With Rust 1.65 onwards we can convert this loop hack into a named block:
+                    // https://blog.rust-lang.org/2022/11/03/Rust-1.65.0.html#break-from-labeled-blocks
+                    // TODO: Use named block when Android and Chrome OS Rust upgrade Rust to 1.65.
+                    loop {
+                        let args = match shell_words::split(line.as_str()) {
+                            Ok(words) => words,
+                            Err(e) => {
+                                print_error!("Error parsing arguments: {}", e);
+                                break;
+                            }
+                        };
+
+                        let (cmd, rest) = match args.split_first() {
+                            Some(pair) => pair,
+                            None => break,
+                        };
+
+                        if cmd == "quit" {
+                            break 'readline;
+                        }
+
+                        handler.process_cmd_line(cmd, &rest.to_vec());
                         break;
                     }
-                    handler.process_cmd_line(
-                        &String::from(cmd),
-                        &command_vec[1..command_vec.len()].to_vec(),
-                    );
+
                     // Ready to do readline again.
                     semaphore_fg.add_permits(1);
                 }
@@ -592,4 +622,5 @@ async fn start_interactive_shell(
     semaphore_fg.close();
 
     print_info!("Client exiting");
+    Ok(())
 }

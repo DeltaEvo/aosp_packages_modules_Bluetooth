@@ -55,7 +55,20 @@
 
 namespace {
 constexpr char kBtmLogTag[] = "SCAN";
+
+void btm_log_history_scan_mode(uint8_t scan_mode) {
+  static uint8_t scan_mode_cached_ = 0xff;
+  if (scan_mode_cached_ == scan_mode) return;
+
+  BTM_LogHistory(
+      kBtmLogTag, RawAddress::kEmpty, "Classic updated",
+      base::StringPrintf("inquiry_scan_enable:%c page_scan_enable:%c",
+                         (scan_mode & HCI_INQUIRY_SCAN_ENABLED) ? 'T' : 'F',
+                         (scan_mode & HCI_PAGE_SCAN_ENABLED) ? 'T' : 'F'));
+  scan_mode_cached_ = scan_mode;
 }
+
+}  // namespace
 
 extern tBTM_CB btm_cb;
 
@@ -269,6 +282,7 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
   if (btm_cb.btm_inq_vars.connectable_mode & BTM_CONNECTABLE_MASK)
     scan_mode |= HCI_PAGE_SCAN_ENABLED;
 
+  btm_log_history_scan_mode(scan_mode);
   btsnd_hcic_write_scan_enable(scan_mode);
   btm_cb.btm_inq_vars.discoverable_mode &= (~BTM_DISCOVERABLE_MASK);
   btm_cb.btm_inq_vars.discoverable_mode |= inq_mode;
@@ -440,6 +454,7 @@ tBTM_STATUS BTM_SetConnectability(uint16_t page_mode) {
   if (p_inq->discoverable_mode & BTM_DISCOVERABLE_MASK)
     scan_mode |= HCI_INQUIRY_SCAN_ENABLED;
 
+  btm_log_history_scan_mode(scan_mode);
   btsnd_hcic_write_scan_enable(scan_mode);
   p_inq->connectable_mode &= (~BTM_CONNECTABLE_MASK);
   p_inq->connectable_mode |= page_mode;
@@ -480,12 +495,19 @@ void BTM_CancelInquiry(void) {
     return;
   }
 
-  BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Classic inquiry stopped");
-
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
   BTM_TRACE_API("BTM_CancelInquiry called");
 
   CHECK(BTM_IsDeviceUp());
+
+  BTM_LogHistory(
+      kBtmLogTag, RawAddress::kEmpty, "Classic inquiry canceled",
+      base::StringPrintf("duration_s:%6.3f results:%lu",
+                         (timestamper_in_milliseconds.GetTimestamp() -
+                          btm_cb.neighbor.classic_inquiry.start_time_ms) /
+                             1000.0,
+                         btm_cb.neighbor.classic_inquiry.results));
+  btm_cb.neighbor.classic_inquiry = {};
 
   /* Only cancel if not in periodic mode, otherwise the caller should call
    * BTM_CancelPeriodicMode */
@@ -562,7 +584,11 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
     return BTM_WRONG_MODE;
   }
 
-  BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Classic inquiry started");
+  BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Classic inquiry started",
+                 base::StringPrintf(
+                     "%s", (btm_cb.neighbor.classic_inquiry.start_time_ms == 0)
+                               ? ""
+                               : "ERROR Already in progress"));
 
   /* Save the inquiry parameters to be used upon the completion of
    * setting/clearing the inquiry filter */
@@ -576,6 +602,10 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
   p_inq->p_inq_results_cb = p_results_cb;
   p_inq->inq_cmpl_info.num_resp = 0; /* Clear the results counter */
   p_inq->inq_active = p_inq->inqparms.mode;
+  btm_cb.neighbor.classic_inquiry = {
+      .start_time_ms = timestamper_in_milliseconds.GetTimestamp(),
+      .results = 0,
+  };
 
   BTM_TRACE_DEBUG("BTM_StartInquiry: p_inq->inq_active = 0x%02x",
                   p_inq->inq_active);
@@ -805,10 +835,12 @@ tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda) {
  *
  ******************************************************************************/
 void btm_inq_db_reset(void) {
-  tBTM_REMOTE_DEV_NAME rem_name;
+  tBTM_REMOTE_DEV_NAME rem_name = {};
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
   uint8_t num_responses;
   uint8_t temp_inq_active;
+
+  LOG_DEBUG("Resetting inquiry database");
 
   /* If an inquiry or periodic inquiry is active, reset the mode to inactive */
   if (p_inq->inq_active != BTM_INQUIRY_INACTIVE) {
@@ -835,6 +867,7 @@ void btm_inq_db_reset(void) {
 
     if (p_inq->p_remname_cmpl_cb) {
       rem_name.status = BTM_DEV_RESET;
+      rem_name.hci_status = HCI_SUCCESS;
 
       (*p_inq->p_remname_cmpl_cb)(&rem_name);
       p_inq->p_remname_cmpl_cb = NULL;
@@ -1106,12 +1139,14 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
   uint16_t clock_offset;
   const uint8_t* p_eir_data = NULL;
 
-#if (BTM_INQ_DEBUG == TRUE)
-  BTM_TRACE_DEBUG("btm_process_inq_results inq_active:0x%x state:%d",
-                  btm_cb.btm_inq_vars.inq_active, btm_cb.btm_inq_vars.state);
-#endif
+  LOG_DEBUG("Received inquiry result inq_active:0x%x state:%d",
+            btm_cb.btm_inq_vars.inq_active, btm_cb.btm_inq_vars.state);
+
   /* Only process the results if the BR inquiry is still active */
-  if (!(p_inq->inq_active & BTM_BR_INQ_ACTIVE_MASK)) return;
+  if (!(p_inq->inq_active & BTM_BR_INQ_ACTIVE_MASK)) {
+    LOG_INFO("Inquiry is inactive so dropping inquiry result");
+    return;
+  }
 
   STREAM_TO_UINT8(num_resp, p);
 
@@ -1124,7 +1159,6 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
 
     constexpr uint16_t extended_inquiry_result_size = 254;
     if (hci_evt_len - 1 != extended_inquiry_result_size) {
-      android_errorWriteLog(0x534e4554, "141620271");
       BTM_TRACE_ERROR("%s: can't fit %d results in %d bytes", __func__,
                       num_resp, hci_evt_len);
       return;
@@ -1133,13 +1167,13 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
              inq_res_mode == BTM_INQ_RESULT_WITH_RSSI) {
     constexpr uint16_t inquiry_result_size = 14;
     if (hci_evt_len < num_resp * inquiry_result_size) {
-      android_errorWriteLog(0x534e4554, "141620271");
       BTM_TRACE_ERROR("%s: can't fit %d results in %d bytes", __func__,
                       num_resp, hci_evt_len);
       return;
     }
   }
 
+  btm_cb.neighbor.classic_inquiry.results += num_resp;
   for (xx = 0; xx < num_resp; xx++) {
     update = false;
     /* Extract inquiry results */
@@ -1257,7 +1291,7 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
         (p_inq_results_cb)((tBTM_INQ_RESULTS*)p_cur, p_eir_data,
                            HCI_EXT_INQ_RESPONSE_LEN);
       } else {
-        BTM_TRACE_DEBUG("No callback is registered");
+        LOG_WARN("No callback is registered for inquiry result");
       }
     }
   }
@@ -1318,6 +1352,7 @@ void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode) {
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
 
   p_inq->inqparms.mode &= ~(mode);
+  const auto inq_active = p_inq->inq_active;
 
 #if (BTM_INQ_DEBUG == TRUE)
   BTM_TRACE_DEBUG("btm_process_inq_complete inq_active:0x%x state:%d",
@@ -1326,8 +1361,9 @@ void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode) {
   btm_acl_update_inquiry_status(BTM_INQUIRY_COMPLETE);
   /* Ignore any stray or late complete messages if the inquiry is not active */
   if (p_inq->inq_active) {
-    p_inq->inq_cmpl_info.status = (tBTM_STATUS)(
-        (status == HCI_SUCCESS) ? BTM_SUCCESS : BTM_ERR_PROCESSING);
+    p_inq->inq_cmpl_info.status =
+        (tBTM_STATUS)((status == HCI_SUCCESS) ? BTM_SUCCESS
+                                              : BTM_ERR_PROCESSING);
 
     /* Notify caller that the inquiry has completed; (periodic inquiries do not
      * send completion events */
@@ -1356,12 +1392,20 @@ void btm_process_inq_complete(tHCI_STATUS status, uint8_t mode) {
                       p_inq->inq_cmpl_info.num_resp);
 
       if (p_inq_cb) (p_inq_cb)((tBTM_INQUIRY_CMPL*)&p_inq->inq_cmpl_info);
+      BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Classic inquiry complete",
+                     base::StringPrintf(
+                         "duration_s:%6.3f results:%lu inq_active:0x%02x",
+                         (timestamper_in_milliseconds.GetTimestamp() -
+                          btm_cb.neighbor.classic_inquiry.start_time_ms) /
+                             1000.0,
+                         btm_cb.neighbor.classic_inquiry.results, inq_active));
+      btm_cb.neighbor.classic_inquiry.start_time_ms = 0;
     }
+  } else {
+    LOG_ERROR("Received inquiry complete when no inquiry was active");
   }
-#if (BTM_INQ_DEBUG == TRUE)
   BTM_TRACE_DEBUG("inq_active:0x%x state:%d", btm_cb.btm_inq_vars.inq_active,
                   btm_cb.btm_inq_vars.state);
-#endif
 }
 
 /*******************************************************************************
@@ -1463,10 +1507,12 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
 
   if (bda) {
     rem_name.bd_addr = *bda;
-    VLOG(2) << "BDA " << *bda;
   } else {
     rem_name.bd_addr = RawAddress::kEmpty;
   }
+
+  LOG_INFO("btm_process_remote_name for %s",
+           ADDRESS_TO_LOGGABLE_CSTR(rem_name.bd_addr));
 
   VLOG(2) << "Inquire BDA " << p_inq->remname_bda;
 
@@ -1491,6 +1537,7 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
       rem_name.length = (evt_len < BD_NAME_LEN) ? evt_len : BD_NAME_LEN;
       rem_name.remote_bd_name[rem_name.length] = 0;
       rem_name.status = BTM_SUCCESS;
+      rem_name.hci_status = hci_status;
       temp_evt_len = rem_name.length;
 
       while (temp_evt_len > 0) {
@@ -1498,12 +1545,11 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
         temp_evt_len--;
       }
       rem_name.remote_bd_name[rem_name.length] = 0;
-    }
-
-    /* If processing a stand alone remote name then report the error in the
-       callback */
-    else {
+    } else {
+      /* If processing a stand alone remote name then report the error in the
+         callback */
       rem_name.status = BTM_BAD_VALUE_RET;
+      rem_name.hci_status = hci_status;
       rem_name.length = 0;
       rem_name.remote_bd_name[0] = 0;
     }

@@ -69,27 +69,30 @@ cc_defaults {
         "libaudio-a2dp-hw-utils",
         "libbluetooth-dumpsys",
         "libbluetooth-types",
-        "libbluetoothtbd_hal",
         "libbt-audio-hal-interface",
         "libbt-bta",
+        "libbt-bta-core",
         "libbt-common",
         "libbtcore",
         "libbtdevice",
         "libbte",
         "libbt-hci",
         "libbtif",
+        "libbtif-core",
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
+        "libbt-stack-core",
         "libbt-utils",
         "libflatbuffers-cpp",
         "libFraunhoferAAC",
         "libg722codec",
         "libgmock",
         "liblc3",
+        "libopus",
         "libosi",
         "libstatslog_bt",
         "libc++fs",
@@ -101,7 +104,7 @@ cc_defaults {
     target: {
         android: {
             shared_libs: [
-                "android.hardware.bluetooth.audio-V2-ndk",
+                "android.hardware.bluetooth.audio-V3-ndk",
             ],
         },
     },
@@ -118,15 +121,5 @@ cc_test {
         "adapter/adapter_unittest.cc",
         "gatt/gatt_test.cc",
         "gatt/gatt_unittest.cc",
-    ],
-}
-
-// Bluetooth test suite for target
-cc_test {
-    name: "net_test_rfcomm_suite",
-    defaults: ["net_test_defaults"],
-    srcs: [
-        "rfcomm/rfcomm_test.cc",
-        "rfcomm/rfcomm_unittest.cc",
     ],
 }

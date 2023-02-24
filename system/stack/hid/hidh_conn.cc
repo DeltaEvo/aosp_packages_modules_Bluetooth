@@ -22,6 +22,7 @@
  *
  ******************************************************************************/
 
+#include <base/functional/callback.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
@@ -667,7 +668,6 @@ static void hidh_l2cif_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
     HIDH_TRACE_WARNING("Rcvd L2CAP data, invalid length %d, should be >= 1",
                        p_msg->len);
     osi_free(p_msg);
-    android_errorWriteLog(0x534e4554, "80493272");
     return;
   }
 

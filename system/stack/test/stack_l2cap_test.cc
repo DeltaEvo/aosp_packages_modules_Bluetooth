@@ -33,8 +33,6 @@ void l2c_link_send_to_lower_ble(tL2C_LCB* p_lcb, BT_HDR* p_buf);
 // Global trace level referred in the code under test
 uint8_t appl_trace_level = BT_TRACE_LEVEL_VERBOSE;
 
-extern "C" void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) {}
-
 namespace {
 constexpr uint16_t kAclBufferCountClassic = 123;
 constexpr uint8_t kAclBufferCountBle = 45;
@@ -96,7 +94,7 @@ class StackL2capChannelTest : public StackL2capTest {
               .result = 0,
               .mtu = 100,
               .mps = 100,
-              .credits = L2CAP_LE_CREDIT_DEFAULT,
+              .credits = L2CA_LeCreditDefault(),
               .number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS,
           },
       .peer_conn_cfg =
@@ -105,7 +103,7 @@ class StackL2capChannelTest : public StackL2capTest {
               .result = 0,
               .mtu = 100,
               .mps = 100,
-              .credits = L2CAP_LE_CREDIT_DEFAULT,
+              .credits = L2CA_LeCreditDefault(),
               .number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS,
           },
       .is_first_seg = false,

@@ -22,14 +22,13 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 #include "bt_target.h"
 #include "bta/av/bta_av_int.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
 #include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -93,7 +92,9 @@ void BTA_AvRemoteVendorUniqueCmd(uint8_t rc_handle, uint8_t label,
                                  uint8_t buf_len) {
   mock_function_count_map[__func__]++;
 }
-void BTA_AvStart(tBTA_AV_HNDL handle) { mock_function_count_map[__func__]++; }
+void BTA_AvStart(tBTA_AV_HNDL handle, bool use_latency_mode) {
+  mock_function_count_map[__func__]++;
+}
 void BTA_AvStop(tBTA_AV_HNDL handle, bool suspend) {
   mock_function_count_map[__func__]++;
 }
@@ -103,5 +104,8 @@ void BTA_AvVendorCmd(uint8_t rc_handle, uint8_t label, tBTA_AV_CODE cmd_code,
 }
 void BTA_AvVendorRsp(uint8_t rc_handle, uint8_t label, tBTA_AV_CODE rsp_code,
                      uint8_t* p_data, uint16_t len, uint32_t company_id) {
+  mock_function_count_map[__func__]++;
+}
+void BTA_AvSetLatency(tBTA_AV_HNDL handle, bool is_low_latency) {
   mock_function_count_map[__func__]++;
 }

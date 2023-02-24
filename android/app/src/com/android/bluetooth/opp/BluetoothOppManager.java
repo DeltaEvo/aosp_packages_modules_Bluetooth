@@ -106,7 +106,8 @@ public class BluetoothOppManager {
 
     private static final String ARRAYLIST_ITEM_SEPERATOR = ";";
 
-    private static final int ALLOWED_INSERT_SHARE_THREAD_NUMBER = 3;
+    @VisibleForTesting
+    static final int ALLOWED_INSERT_SHARE_THREAD_NUMBER = 3;
 
     // used to judge if need continue sending process after received a
     // ENABLED_ACTION
@@ -137,6 +138,14 @@ public class BluetoothOppManager {
 
             return sInstance;
         }
+    }
+
+    /**
+     * Set Singleton instance. Intended for testing purpose
+     */
+    @VisibleForTesting
+    static void setInstance(BluetoothOppManager instance) {
+        sInstance = instance;
     }
 
     /**
@@ -485,9 +494,7 @@ public class BluetoothOppManager {
                             BluetoothShare.USER_CONFIRMATION_HANDOVER_CONFIRMED);
                 }
                 final Uri contentUri = BluetoothMethodProxy.getInstance().contentResolverInsert(
-                        mContext.getContentResolver(), BluetoothShare.CONTENT_URI, values
-                );
-
+                        mContext.getContentResolver(), BluetoothShare.CONTENT_URI, values);
                 if (V) {
                     Log.v(TAG, "Insert contentUri: " + contentUri + "  to device: " + getDeviceName(
                             mRemoteDevice));
@@ -508,8 +515,7 @@ public class BluetoothOppManager {
                         BluetoothShare.USER_CONFIRMATION_HANDOVER_CONFIRMED);
             }
             final Uri contentUri = BluetoothMethodProxy.getInstance().contentResolverInsert(
-                    mContext.getContentResolver(), BluetoothShare.CONTENT_URI, values
-            );
+                    mContext.getContentResolver(), BluetoothShare.CONTENT_URI, values);
             if (V) {
                 Log.v(TAG, "Insert contentUri: " + contentUri + "  to device: " + getDeviceName(
                         mRemoteDevice));

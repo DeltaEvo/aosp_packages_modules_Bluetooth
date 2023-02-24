@@ -71,6 +71,8 @@ class Acl : public hci::acl_manager::ConnectionCallbacks,
   void OnLeLinkDisconnected(uint16_t handle, hci::ErrorCode reason);
   bluetooth::hci::AddressWithType GetConnectionLocalAddress(
       const RawAddress& remote_bda);
+  std::optional<uint8_t> GetAdvertisingSetConnectedTo(
+      const RawAddress& remote_bda);
 
   // LinkConnectionInterface
   void CreateClassicConnection(const hci::Address& address) override;
@@ -103,6 +105,12 @@ class Acl : public hci::acl_manager::ConnectionCallbacks,
   bool SniffSubrating(uint16_t hci_handle, uint16_t maximum_latency,
                       uint16_t minimum_remote_timeout,
                       uint16_t minimum_local_timeout) override;
+  void LeSetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max,
+                           uint16_t max_latency, uint16_t cont_num,
+                           uint16_t sup_tout);
+  void LeSubrateRequest(uint16_t hci_handle, uint16_t subrate_min,
+                        uint16_t subrate_max, uint16_t max_latency,
+                        uint16_t cont_num, uint16_t sup_tout);
 
   void WriteData(uint16_t hci_handle,
                  std::unique_ptr<packet::RawBuilder> packet);

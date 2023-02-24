@@ -18,7 +18,7 @@
 
 #include "main/shim/btm_api.h"
 
-#include <base/callback.h>
+#include <base/functional/callback.h>
 #include <base/logging.h>
 
 #include <mutex>
@@ -26,7 +26,6 @@
 #include "common/metric_id_allocator.h"
 #include "common/time_util.h"
 #include "gd/common/callback.h"
-#include "gd/neighbor/name.h"
 #include "gd/os/log.h"
 #include "gd/security/security_module.h"
 #include "gd/security/ui.h"
@@ -728,6 +727,15 @@ void bluetooth::shim::BTM_BleOpportunisticObserve(
   }
 }
 
+void bluetooth::shim::BTM_BleTargetAnnouncementObserve(
+    bool enable, tBTM_INQ_RESULTS_CB* p_results_cb) {
+  if (enable) {
+    btm_cb.ble_ctr_cb.p_target_announcement_obs_results_cb = p_results_cb;
+  } else {
+    btm_cb.ble_ctr_cb.p_target_announcement_obs_results_cb = nullptr;
+  }
+}
+
 void bluetooth::shim::BTM_EnableInterlacedPageScan() {
   Stack::GetInstance()->GetBtm()->SetInterlacedPageScan();
 }
@@ -1000,25 +1008,6 @@ bool bluetooth::shim::BTM_ReadConnectedTransportAddress(
   LOG_INFO("UNIMPLEMENTED %s", __func__);
   CHECK(remote_bda != nullptr);
   return false;
-}
-
-void bluetooth::shim::BTM_BleReceiverTest(uint8_t rx_freq,
-                                          tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_cmd_cmpl_cback != nullptr);
-}
-
-void bluetooth::shim::BTM_BleTransmitterTest(uint8_t tx_freq,
-                                             uint8_t test_data_len,
-                                             uint8_t packet_payload,
-                                             tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_cmd_cmpl_cback != nullptr);
-}
-
-void bluetooth::shim::BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_cmd_cmpl_cback != nullptr);
 }
 
 bool bluetooth::shim::BTM_UseLeLink(const RawAddress& raw_address) {

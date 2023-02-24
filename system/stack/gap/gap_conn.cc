@@ -207,7 +207,7 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
 
   /* Configure L2CAP COC, if transport is LE */
   if (transport == BT_TRANSPORT_LE) {
-    p_ccb->local_coc_cfg.credits = L2CAP_LE_CREDIT_DEFAULT;
+    p_ccb->local_coc_cfg.credits = L2CA_LeCreditDefault();
     p_ccb->local_coc_cfg.mtu = p_cfg->mtu;
 
     uint16_t max_mps = controller_get_interface()->get_acl_data_size_ble();
@@ -519,7 +519,8 @@ const RawAddress* GAP_ConnGetRemoteAddr(uint16_t gap_handle) {
   DVLOG(1) << __func__ << " gap_handle = " << gap_handle;
 
   if ((p_ccb) && (p_ccb->con_state > GAP_CCB_STATE_LISTENING)) {
-    DVLOG(1) << __func__ << " BDA: " << p_ccb->rem_dev_address;
+    DVLOG(1) << __func__ << " BDA: "
+             << ADDRESS_TO_LOGGABLE_STR(p_ccb->rem_dev_address);
     return &p_ccb->rem_dev_address;
   } else {
     DVLOG(1) << __func__ << " return Error ";
@@ -690,9 +691,13 @@ static void gap_on_l2cap_error(uint16_t l2cap_cid, uint16_t result) {
   tGAP_CCB* p_ccb = gap_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == nullptr) return;
 
+  /* Propagate the l2cap result upward */
+  tGAP_CB_DATA cb_data;
+  cb_data.l2cap_result = result;
+
   /* Tell the user if there is a callback */
   if (p_ccb->p_callback)
-    (*p_ccb->p_callback)(p_ccb->gap_handle, GAP_EVT_CONN_CLOSED, nullptr);
+    (*p_ccb->p_callback)(p_ccb->gap_handle, GAP_EVT_CONN_CLOSED, &cb_data);
 
   gap_release_ccb(p_ccb);
 }

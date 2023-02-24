@@ -107,6 +107,7 @@ class ScanningCallbacks {
   virtual void OnPeriodicSyncLost(uint16_t sync_handle) = 0;
   virtual void OnPeriodicSyncTransferred(int pa_source, uint8_t status,
                                          RawAddress address) = 0;
+  virtual void OnBigInfoReport(uint16_t sync_handle, bool encrypted) = 0;
 };
 
 class BleScannerInterface {
@@ -163,6 +164,9 @@ class BleScannerInterface {
 
   /** Enable / disable scan filter feature*/
   virtual void ScanFilterEnable(bool enable, EnableCallback cb) = 0;
+
+  /** Is MSFT Extension supported? */
+  virtual bool IsMsftSupported() = 0;
 
   /** Configures MSFT scan filter (advertisement monitor) */
   virtual void MsftAdvMonitorAdd(MsftAdvMonitor monitor,

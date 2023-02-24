@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -44,6 +42,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "osi/include/osi.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/btm_client_interface.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -181,6 +180,17 @@ struct bta_hh_update_di_info {
   };
 };
 extern struct bta_hh_update_di_info bta_hh_update_di_info;
+
+// Name: bta_hh_le_is_hh_gatt_if
+// Params: tGATT_IF client_if
+// Return: bool
+struct bta_hh_le_is_hh_gatt_if {
+  bool return_value{false};
+  std::function<bool(tGATT_IF client_if)> body{
+      [this](tGATT_IF client_if) { return return_value; }};
+  bool operator()(tGATT_IF client_if) { return body(client_if); };
+};
+extern struct bta_hh_le_is_hh_gatt_if bta_hh_le_is_hh_gatt_if;
 
 }  // namespace bta_hh_utils
 }  // namespace mock

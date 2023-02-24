@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 
 #include <vector>
 
@@ -52,12 +52,6 @@ void BTA_dm_init() {
   /* if UUID list is not provided as static data */
   bta_sys_eir_register(bta_dm_eir_update_uuid);
   bta_sys_cust_eir_register(bta_dm_eir_update_cust_uuid);
-}
-
-/** Enables bluetooth device under test mode */
-void BTA_EnableTestMode(void) {
-  do_in_main_thread(FROM_HERE,
-                    base::Bind(base::IgnoreResult(BTM_EnableTestMode)));
 }
 
 /** This function sets the Bluetooth name of local device */
@@ -776,4 +770,40 @@ void BTA_DmSetEventFilterInquiryResultAllDevices() {
 void BTA_DmBleResetId(void) {
   APPL_TRACE_API("BTA_DmBleResetId");
   do_in_main_thread(FROM_HERE, base::Bind(bta_dm_ble_reset_id));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmBleSubrateRequest
+ *
+ * Description      subrate request, can only be used when connection is up.
+ *
+ * Parameters:      bd_addr       - BD address of the peer
+ *                  subrate_min   - subrate factor minimum, [0x0001 - 0x01F4]
+ *                  subrate_max   - subrate factor maximum, [0x0001 - 0x01F4]
+ *                  max_latency   - max peripheral latency [0x0000 - 01F3]
+ *                  cont_num      - continuation number [0x0000 - 01F3]
+ *                  timeout       - supervision timeout [0x000a - 0xc80]
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmBleSubrateRequest(const RawAddress& bd_addr, uint16_t subrate_min,
+                             uint16_t subrate_max, uint16_t max_latency,
+                             uint16_t cont_num, uint16_t timeout) {
+  APPL_TRACE_API("%s", __func__);
+  do_in_main_thread(FROM_HERE,
+                    base::Bind(bta_dm_ble_subrate_request, bd_addr, subrate_min,
+                               subrate_max, max_latency, cont_num, timeout));
+}
+
+bool BTA_DmCheckLeAudioCapable(const RawAddress& address) {
+  for (tBTM_INQ_INFO* inq_ent = BTM_InqDbFirst(); inq_ent != nullptr;
+       inq_ent = BTM_InqDbNext(inq_ent)) {
+    if (inq_ent->results.remote_bd_addr != address) continue;
+
+    LOG_INFO("Device is LE Audio capable based on AD content");
+    return inq_ent->results.ble_ad_is_le_audio_capable;
+  }
+  return false;
 }

@@ -63,6 +63,12 @@ typedef enum : uint8_t {
   L2CAP_PRIORITY_HIGH = 1,
 } tL2CAP_PRIORITY;
 
+/* Values for priority parameter to L2CA_SetAclLatency */
+typedef enum : uint8_t {
+  L2CAP_LATENCY_NORMAL = 0,
+  L2CAP_LATENCY_LOW = 1,
+} tL2CAP_LATENCY;
+
 /* Values for priority parameter to L2CA_SetTxPriority */
 #define L2CAP_CHNL_PRIORITY_HIGH 0
 #define L2CAP_CHNL_PRIORITY_LOW 2
@@ -174,14 +180,11 @@ constexpr uint16_t L2CAP_LE_CREDIT_MAX = 65535;
 
 // This is initial amout of credits we send, and amount to which we increase
 // credits once they fall below threshold
-constexpr uint16_t L2CAP_LE_CREDIT_DEFAULT = 0xffff;
+uint16_t L2CA_LeCreditDefault();
 
 // If credit count on remote fall below this value, we send back credits to
 // reach default value.
-constexpr uint16_t L2CAP_LE_CREDIT_THRESHOLD = 0x0040;
-
-static_assert(L2CAP_LE_CREDIT_THRESHOLD < L2CAP_LE_CREDIT_DEFAULT,
-              "Threshold must be smaller than default credits");
+uint16_t L2CA_LeCreditThreshold();
 
 // Max number of CIDs in the L2CAP CREDIT BASED CONNECTION REQUEST
 constexpr uint16_t L2CAP_CREDIT_BASED_MAX_CIDS = 5;
@@ -193,7 +196,7 @@ struct tL2CAP_LE_CFG_INFO {
   uint16_t result; /* Only used in confirm messages */
   uint16_t mtu = 100;
   uint16_t mps = 100;
-  uint16_t credits = L2CAP_LE_CREDIT_DEFAULT;
+  uint16_t credits = L2CA_LeCreditDefault();
   uint8_t number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS;
 };
 
@@ -638,6 +641,18 @@ extern uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush);
 
 /*******************************************************************************
  *
+ * Function         L2CA_UseLatencyMode
+ *
+ * Description      Sets use latency mode for an ACL channel.
+ *
+ * Returns          true if a valid channel, else false
+ *
+ ******************************************************************************/
+extern bool L2CA_UseLatencyMode(const RawAddress& bd_addr,
+                                bool use_latency_mode);
+
+/*******************************************************************************
+ *
  * Function         L2CA_SetAclPriority
  *
  * Description      Sets the transmission priority for an ACL channel.
@@ -649,6 +664,18 @@ extern uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush);
  ******************************************************************************/
 extern bool L2CA_SetAclPriority(const RawAddress& bd_addr,
                                 tL2CAP_PRIORITY priority);
+
+/*******************************************************************************
+ *
+ * Function         L2CA_SetAclLatency
+ *
+ * Description      Sets the transmission latency for a channel.
+ *
+ * Returns          true if a valid channel, else false
+ *
+ ******************************************************************************/
+extern bool L2CA_SetAclLatency(const RawAddress& bd_addr,
+                               tL2CAP_LATENCY latency);
 
 /*******************************************************************************
  *
@@ -812,6 +839,8 @@ extern bool L2CA_RemoveFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda);
 extern bool L2CA_SetLeGattTimeout(const RawAddress& rem_bda,
                                   uint16_t idle_tout);
 
+extern bool L2CA_MarkLeLinkAsActive(const RawAddress& rem_bda);
+
 extern bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda,
                                      uint16_t min_int, uint16_t max_int,
                                      uint16_t latency, uint16_t timeout,
@@ -852,5 +881,69 @@ extern void L2CA_AdjustConnectionIntervals(uint16_t* min_interval,
  */
 extern bool L2CA_IsLinkEstablished(const RawAddress& bd_addr,
                                    tBT_TRANSPORT transport);
+
+/*******************************************************************************
+ *
+ *  Function        L2CA_SetDefaultSubrate
+ *
+ *  Description     BLE Set Default Subrate.
+ *
+ *  Parameters:     Subrate parameters
+ *
+ *  Return value:   void
+ *
+ ******************************************************************************/
+extern void L2CA_SetDefaultSubrate(uint16_t subrate_min, uint16_t subrate_max,
+                                   uint16_t max_latency, uint16_t cont_num,
+                                   uint16_t timeout);
+
+/*******************************************************************************
+ *
+ *  Function        L2CA_SubrateRequest
+ *
+ *  Description     BLE Subrate request.
+ *
+ *  Parameters:     Subrate parameters
+ *
+ *  Return value:   true if update started
+ *
+ ******************************************************************************/
+extern bool L2CA_SubrateRequest(const RawAddress& rem_bda, uint16_t subrate_min,
+                                uint16_t subrate_max, uint16_t max_latency,
+                                uint16_t cont_num, uint16_t timeout);
+
+/*******************************************************************************
+**
+** Function         L2CA_SetMediaStreamChannel
+**
+** Description      This function is called to set/reset the ccb of active media
+**                      streaming channel
+**
+**  Parameters:     local_media_cid: The local cid provided to A2DP to be used
+**                      for streaming
+**                  status: The status of media streaming on this channel
+**
+** Returns          void
+**
+*******************************************************************************/
+extern void L2CA_SetMediaStreamChannel(uint16_t local_media_cid, bool status);
+
+/*******************************************************************************
+**
+** Function         L2CA_isMediaChannel
+**
+** Description      This function returns if the channel id passed as parameter
+**                      is an A2DP streaming channel
+**
+**  Parameters:     handle: Connection handle with the remote device
+**                  channel_id: Channel ID
+**                  is_local_cid: Signifies if the channel id passed is local
+**                      cid or remote cid (true if local, remote otherwise)
+**
+** Returns          bool
+**
+*******************************************************************************/
+extern bool L2CA_isMediaChannel(uint16_t handle, uint16_t channel_id,
+                                bool is_local_cid);
 
 #endif /* L2C_API_H */

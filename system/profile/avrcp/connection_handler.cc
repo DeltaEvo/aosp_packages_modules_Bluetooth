@@ -16,7 +16,7 @@
 
 #include "connection_handler.h"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 
 #include <map>
@@ -110,11 +110,13 @@ void ConnectionHandler::InitForTesting(ConnectionHandler* handler) {
 }
 
 bool ConnectionHandler::ConnectDevice(const RawAddress& bdaddr) {
-  LOG(INFO) << "Attempting to connect to device " << bdaddr;
+  LOG(INFO) << "Attempting to connect to device "
+            << ADDRESS_TO_LOGGABLE_STR(bdaddr);
 
   for (const auto& pair : device_map_) {
     if (bdaddr == pair.second->GetAddress()) {
-      LOG(WARNING) << "Already connected to device with address " << bdaddr;
+      LOG(WARNING) << "Already connected to device with address "
+                   << ADDRESS_TO_LOGGABLE_STR(bdaddr);
       return false;
     }
   }
@@ -131,7 +133,7 @@ bool ConnectionHandler::ConnectDevice(const RawAddress& bdaddr) {
       instance_->connection_cb_.Run(std::shared_ptr<Device>());
     }
 
-    instance_->feature_map_.emplace(bdaddr, features);
+    instance_->feature_map_[bdaddr] = features;
     instance_->AvrcpConnect(true, bdaddr);
     return;
   };
@@ -347,7 +349,7 @@ void ConnectionHandler::AcceptorControlCb(uint8_t handle, uint8_t event,
         }
 
         auto device = instance_->device_map_[handle];
-        instance_->feature_map_.emplace(device->GetAddress(), features);
+        instance_->feature_map_[device->GetAddress()] = features;
 
         // TODO (apanicke): Report to the VolumeInterface that a new Device is
         // connected that doesn't support absolute volume.
@@ -492,7 +494,7 @@ void ConnectionHandler::SdpCb(RawAddress bdaddr, SdpCallback cb,
         }
       }
 
-      if (osi_property_get_bool(AVRC_DYNAMIC_AVRCP_ENABLE_PROPERTY, false)) {
+      if (osi_property_get_bool(AVRC_DYNAMIC_AVRCP_ENABLE_PROPERTY, true)) {
         avrc_->SaveControllerVersion(bdaddr, peer_avrcp_version);
       }
     }

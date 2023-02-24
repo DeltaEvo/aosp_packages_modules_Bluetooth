@@ -70,6 +70,9 @@ class VendorCommandResponseProcessor {
         SUPPORTED_VENDOR_EVENTS.put(
                 "+XAPL=",
                 BluetoothAssignedNumbers.APPLE);
+        SUPPORTED_VENDOR_EVENTS.put(
+                "+ANDROID:",
+                BluetoothAssignedNumbers.GOOGLE);
     }
 
     VendorCommandResponseProcessor(HeadsetClientService context, NativeInterface nativeInterface) {
@@ -149,10 +152,14 @@ class VendorCommandResponseProcessor {
         if (vendorId == null) {
             Log.e(TAG, "Invalid response: " + atString + ". " + eventCode);
             return false;
+        } else if (vendorId == BluetoothAssignedNumbers.GOOGLE) {
+            Log.i(TAG, "received +ANDROID event. Setting Audio policy to true");
+            mService.setAudioPolicyRemoteSupported(device, true);
+        } else {
+            broadcastVendorSpecificEventIntent(vendorId, eventCode, atString, device);
+            logD("process vendor event " + vendorId + ", " + eventCode + ", "
+                    + atString + " for device" + device);
         }
-        broadcastVendorSpecificEventIntent(vendorId, eventCode, atString, device);
-        logD("process vendor event " + vendorId + ", " + eventCode + ", "
-                + atString + " for device" + device);
         return true;
     }
 
@@ -165,7 +172,8 @@ class VendorCommandResponseProcessor {
         intent.putExtra(BluetoothHeadsetClient.EXTRA_VENDOR_EVENT_CODE, vendorEventCode);
         intent.putExtra(BluetoothHeadsetClient.EXTRA_VENDOR_EVENT_FULL_ARGS, vendorResponse);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
-        mService.sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+        Utils.sendBroadcast(mService, intent, BLUETOOTH_CONNECT,
+                Utils.getTempAllowlistBroadcastOptions());
     }
 
     private void logD(String msg) {

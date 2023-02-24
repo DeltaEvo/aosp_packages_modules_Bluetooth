@@ -21,7 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "btcore/include/version.h"
 #include "types/raw_address.h"
 
@@ -68,6 +68,7 @@ typedef struct controller_t {
   bool (*supports_sniff_subrating)(void);
   bool (*supports_encryption_pause)(void);
   bool (*supports_configure_data_path)(void);
+  bool (*supports_set_min_encryption_key_size)(void);
 
   bool (*supports_ble)(void);
   bool (*supports_ble_packet_extension)(void);
@@ -86,6 +87,9 @@ typedef struct controller_t {
   bool (*supports_ble_connected_isochronous_stream_peripheral)(void);
   bool (*supports_ble_isochronous_broadcaster)(void);
   bool (*supports_ble_synchronized_receiver)(void);
+
+  bool (*supports_ble_connection_subrating)(void);
+  bool (*supports_ble_connection_subrating_host)(void);
 
   // Get the cached acl data sizes for the controller.
   uint16_t (*get_acl_data_size_classic)(void);

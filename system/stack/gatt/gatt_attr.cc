@@ -25,7 +25,7 @@
 
 #include <map>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "bt_target.h"
 #include "bt_utils.h"
 #include "btif/include/btif_storage.h"
@@ -103,6 +103,7 @@ static tGATT_CBACK gatt_profile_cback = {
     .p_congestion_cb = nullptr,
     .p_phy_update_cb = nullptr,
     .p_conn_update_cb = nullptr,
+    .p_subrate_chg_cb = nullptr,
 };
 
 /*******************************************************************************
@@ -729,7 +730,8 @@ void GATT_ConfigServiceChangeCCC(const RawAddress& remote_bda, bool enable,
     p_clcb->connected = true;
   }
   /* hold the link here */
-  GATT_Connect(gatt_cb.gatt_if, remote_bda, true, transport, true);
+  GATT_Connect(gatt_cb.gatt_if, remote_bda, BTM_BLE_DIRECT_CONNECTION,
+               transport, true);
   p_clcb->ccc_stage = GATT_SVC_CHANGED_CONNECTING;
 
   if (!p_clcb->connected) {
@@ -1037,7 +1039,7 @@ static tGATT_STATUS gatt_sr_write_cl_supp_feat(uint16_t conn_id,
   // If input length is zero, return value_not_allowed
   if (tmp.empty()) {
     LOG(INFO) << __func__ << ": zero length, conn_id=" << loghex(conn_id)
-              << ", bda=" << tcb.peer_bda;
+              << ", bda=" << ADDRESS_TO_LOGGABLE_STR(tcb.peer_bda);
     return GATT_VALUE_NOT_ALLOWED;
   }
   // if original length is longer than new one, it must be the bit reset case.

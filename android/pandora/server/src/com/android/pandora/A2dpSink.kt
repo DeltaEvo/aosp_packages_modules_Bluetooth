@@ -18,7 +18,6 @@ package com.android.pandora
 
 import android.bluetooth.BluetoothA2dpSink
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
@@ -28,6 +27,7 @@ import android.media.*
 import android.util.Log
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
+import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -41,7 +41,7 @@ import pandora.A2DPGrpc.A2DPImplBase
 import pandora.A2dpProto.*
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-class A2dpSink(val context: Context) : A2DPImplBase() {
+class A2dpSink(val context: Context) : A2DPImplBase(), Closeable {
   private val TAG = "PandoraA2dpSink"
 
   private val scope: CoroutineScope
@@ -60,7 +60,7 @@ class A2dpSink(val context: Context) : A2DPImplBase() {
     flow = intentFlow(context, intentFilter).shareIn(scope, SharingStarted.Eagerly)
   }
 
-  fun deinit() {
+  override fun close() {
     bluetoothAdapter.closeProfileProxy(BluetoothProfile.A2DP_SINK, bluetoothA2dpSink)
     scope.cancel()
   }
@@ -72,11 +72,6 @@ class A2dpSink(val context: Context) : A2DPImplBase() {
     grpcUnary<WaitSinkResponse>(scope, responseObserver) {
       val device = request.connection.toBluetoothDevice(bluetoothAdapter)
       Log.i(TAG, "waitSink: device=$device")
-
-      if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
-        Log.e(TAG, "Device is not bonded, cannot wait for stream")
-        throw Status.UNKNOWN.asException()
-      }
 
       if (bluetoothA2dpSink.getConnectionState(device) != BluetoothProfile.STATE_CONNECTED) {
         val state =
@@ -102,13 +97,7 @@ class A2dpSink(val context: Context) : A2DPImplBase() {
 
   override fun close(request: CloseRequest, responseObserver: StreamObserver<CloseResponse>) {
     grpcUnary<CloseResponse>(scope, responseObserver) {
-      val device =
-        if (request.hasSink()) {
-          request.sink.connection.toBluetoothDevice(bluetoothAdapter)
-        } else {
-          Log.e(TAG, "Sink device required")
-          throw Status.UNKNOWN.asException()
-        }
+      val device = request.sink.connection.toBluetoothDevice(bluetoothAdapter)
       Log.i(TAG, "close: device=$device")
       if (bluetoothA2dpSink.getConnectionState(device) != BluetoothProfile.STATE_CONNECTED) {
         Log.e(TAG, "Device is not connected, cannot close")
@@ -120,8 +109,10 @@ class A2dpSink(val context: Context) : A2DPImplBase() {
           .filter { it.getAction() == BluetoothA2dpSink.ACTION_CONNECTION_STATE_CHANGED }
           .filter { it.getBluetoothDeviceExtra() == device }
           .map { it.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothAdapter.ERROR) }
+
       bluetoothA2dpSink.setConnectionPolicy(device, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN)
       a2dpConnectionStateChangedFlow.filter { it == BluetoothProfile.STATE_DISCONNECTED }.first()
+
       CloseResponse.getDefaultInstance()
     }
   }

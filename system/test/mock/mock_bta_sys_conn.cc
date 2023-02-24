@@ -19,12 +19,10 @@
  *   Functions generated:19
  */
 
+#include <cstdint>
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
-#include <cstdint>
 #include "bt_target.h"
 #include "bta/sys/bta_sys.h"
 #include "bta/sys/bta_sys_int.h"
@@ -32,6 +30,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/btm_api.h"
+#include "test/common/mock_functions.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
@@ -107,6 +106,7 @@ void bta_sys_ssr_cfg_register(tBTA_SYS_SSR_CFG_CBACK* p_cback) {
 void bta_sys_eir_register(tBTA_SYS_EIR_CBACK* p_cback) {
   mock_function_count_map[__func__]++;
 }
+void bta_sys_eir_unregister() { mock_function_count_map[__func__]++; }
 void bta_sys_cust_eir_register(tBTA_SYS_CUST_EIR_CBACK* p_cback) {
   mock_function_count_map[__func__]++;
 }

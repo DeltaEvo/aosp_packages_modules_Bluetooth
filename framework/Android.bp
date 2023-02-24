@@ -4,7 +4,7 @@ package {
 
 java_defaults {
     name: "bluetooth-module-sdk-version-defaults",
-    min_sdk_version: "current",
+    min_sdk_version: "Tiramisu",
 }
 
 filegroup {
@@ -30,6 +30,7 @@ java_defaults {
     libs: [
         "framework-tethering.stubs.module_lib",
         "unsupportedappusage", // for android.compat.annotation.UnsupportedAppUsage
+        "app-compat-annotations",
     ],
     stub_only_libs: ["framework-tethering.stubs.module_lib"],
     srcs: [
@@ -71,6 +72,8 @@ java_sdk_library {
         "//packages/modules/Bluetooth/service",
         "//packages/modules/Connectivity/nearby/tests/multidevices/clients/test_support/fastpair_provider",
         "//packages/services/Car/car-builtin-lib",
+        // TODO(240720385)
+        "//packages/services/Car/tests/carservice_unit_test",
         ":__subpackages__",
     ],
 
@@ -100,6 +103,7 @@ java_defaults {
 
         // if sdk_version="" this gets automatically included, but here we need to add manually.
         "framework-res",
+        "app-compat-annotations",
     ],
     defaults_visibility: ["//visibility:public"],
 }
@@ -107,4 +111,19 @@ java_defaults {
 filegroup {
     name: "bluetooth-jarjar-rules",
     srcs: ["jarjar-rules.txt"],
+}
+
+java_api_contribution {
+    name: "framework-bluetooth-public-stubs",
+    api_surface: "public",
+    api_file: "api/current.txt",
+    visibility: [
+        "//build/orchestrator/apis",
+    ],
+}
+
+platform_compat_config
+{
+    name: "framework-bluetooth-compat-config",
+    src: ":framework-bluetooth",
 }

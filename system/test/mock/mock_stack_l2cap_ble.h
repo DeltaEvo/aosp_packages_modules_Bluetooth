@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -36,6 +34,7 @@ extern std::map<std::string, int> mock_function_count_map;
 //       may need attention to prune the inclusion set.
 #include "stack/include/l2c_api.h"
 #include "stack/l2cap/l2c_int.h"
+#include "test/common/mock_functions.h"
 #include "types/ble_address_with_type.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
@@ -313,6 +312,42 @@ struct l2cble_use_preferred_conn_params {
   void operator()(const RawAddress& bda) { body(bda); };
 };
 extern struct l2cble_use_preferred_conn_params l2cble_use_preferred_conn_params;
+// Name: L2CA_SubrateRequest
+// Params:
+// Returns: bool
+struct L2CA_SubrateRequest {
+  std::function<bool(const RawAddress& rem_bda, uint16_t subrate_min,
+                     uint16_t subrate_max, uint16_t max_latency,
+                     uint16_t cont_num, uint16_t timeout)>
+      body{[](const RawAddress& rem_bda, uint16_t subrate_min,
+              uint16_t subrate_max, uint16_t max_latency, uint16_t cont_num,
+              uint16_t timeout) { return false; }};
+  bool operator()(const RawAddress& rem_bda, uint16_t subrate_min,
+                  uint16_t subrate_max, uint16_t max_latency, uint16_t cont_num,
+                  uint16_t timeout) {
+    return body(rem_bda, subrate_min, subrate_max, max_latency, cont_num,
+                timeout);
+  };
+};
+extern struct L2CA_SubrateRequest L2CA_SubrateRequest;
+// Name: l2cble_process_subrate_change_evt
+// Params: const RawAddress& bda
+// Returns: void
+struct l2cble_process_subrate_change_evt {
+  std::function<void(uint16_t handle, uint8_t status, uint16_t subrate_factor,
+                     uint16_t peripheral_latency, uint16_t cont_num,
+                     uint16_t timeout)>
+      body{[](uint16_t handle, uint8_t status, uint16_t subrate_factor,
+              uint16_t peripheral_latency, uint16_t cont_num,
+              uint16_t timeout) {}};
+  void operator()(uint16_t handle, uint8_t status, uint16_t subrate_factor,
+                  uint16_t peripheral_latency, uint16_t cont_num,
+                  uint16_t timeout) {
+    body(handle, status, subrate_factor, peripheral_latency, cont_num, timeout);
+  };
+};
+extern struct l2cble_process_subrate_change_evt
+    l2cble_process_subrate_change_evt;
 
 }  // namespace stack_l2cap_ble
 }  // namespace mock

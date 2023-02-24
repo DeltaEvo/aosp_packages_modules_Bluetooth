@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -41,6 +39,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_client_interface.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -268,6 +267,26 @@ struct acl_peer_supports_sniff_subrating {
 };
 extern struct acl_peer_supports_sniff_subrating
     acl_peer_supports_sniff_subrating;
+// Name: acl_peer_supports_ble_connection_subrating
+// Params: const RawAddress& remote_bda
+// Returns: bool
+struct acl_peer_supports_ble_connection_subrating {
+  std::function<bool(const RawAddress& remote_bda)> body{
+      [](const RawAddress& remote_bda) { return false; }};
+  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
+};
+extern struct acl_peer_supports_ble_connection_subrating
+    acl_peer_supports_ble_connection_subrating;
+// Name: acl_peer_supports_ble_connection_subrating_host
+// Params: const RawAddress& remote_bda
+// Returns: bool
+struct acl_peer_supports_ble_connection_subrating_host {
+  std::function<bool(const RawAddress& remote_bda)> body{
+      [](const RawAddress& remote_bda) { return false; }};
+  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
+};
+extern struct acl_peer_supports_ble_connection_subrating_host
+    acl_peer_supports_ble_connection_subrating_host;
 // Name: acl_refresh_remote_address
 // Params: const RawAddress& identity_address, tBLE_ADDR_TYPE
 // identity_address_type, const RawAddress& bda, tBLE_ADDR_TYPE rra_type,

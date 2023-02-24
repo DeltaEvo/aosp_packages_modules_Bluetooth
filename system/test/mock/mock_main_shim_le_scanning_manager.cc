@@ -22,10 +22,9 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 #include "include/hardware/ble_scanner.h"
 #include "main/shim/le_scanning_manager.h"
+#include "test/common/mock_functions.h"
 
 #ifndef UNUSED_ATTR
 #define UNUSED_ATTR
@@ -49,5 +48,9 @@ void bluetooth::shim::set_ad_type_rsi_filter(bool enable) {
 }
 
 void bluetooth::shim::set_empty_filter(bool enable) {
+  mock_function_count_map[__func__]++;
+}
+
+void bluetooth::shim::set_target_announcements_filter(bool enable) {
   mock_function_count_map[__func__]++;
 }

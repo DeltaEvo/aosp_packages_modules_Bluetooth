@@ -19,22 +19,20 @@
  *   Functions generated:13
  */
 
-#include <map>
-#include <string>
-
-extern std::map<std::string, int> mock_function_count_map;
-
-#include <base/bind.h>
-#include <base/callback.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 #include <base/location.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "bt_target.h"
 #include "bta/gatt/bta_gatts_int.h"
 #include "osi/include/allocator.h"
+#include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
@@ -85,3 +83,4 @@ void bta_gatts_add_service_impl(tGATT_IF server_if,
                                 BTA_GATTS_AddServiceCb cb) {
   mock_function_count_map[__func__]++;
 }
+void BTA_GATTS_InitBonded(void) { mock_function_count_map[__func__]++; }

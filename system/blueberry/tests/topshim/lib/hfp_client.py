@@ -13,7 +13,6 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-
 import asyncio
 import grpc
 
@@ -33,10 +32,12 @@ class HfpClient(AsyncClosable):
     __task_list = []
     __channel = None
     __hfp_stub = None
+    __hfp_event_stream = None
 
     def __init__(self, port=8999):
         self.__channel = grpc.aio.insecure_channel("localhost:%d" % port)
         self.__hfp_stub = facade_pb2_grpc.HfpServiceStub(self.__channel)
+        self.__hfp_event_stream = self.__hfp_stub.FetchEvents(facade_pb2.FetchEventsRequest())
 
     async def close(self):
         """
@@ -53,21 +54,22 @@ class HfpClient(AsyncClosable):
         """
         await self.__hfp_stub.StartSlc(
             facade_pb2.StartSlcRequest(connection=facade_pb2.Connection(cookie=address.encode())))
+        return await self._listen_for_event(facade_pb2.EventType.HFP_CONNECTION_STATE)
 
     async def stop_slc(self, address):
         """
         """
         await self.__hfp_stub.StopSlc(
             facade_pb2.StopSlcRequest(connection=facade_pb2.Connection(cookie=address.encode())))
+        return await self._listen_for_event(facade_pb2.EventType.HFP_CONNECTION_STATE)
 
     async def connect_audio(self, address, is_sco_offload_enabled=False, force_cvsd=False):
         """
         """
         await self.__hfp_stub.ConnectAudio(
-            facade_pb2.ConnectAudioRequest(
-                connection=facade_pb2.Connection(cookie=address.encode()),
-                is_sco_offload_enabled=is_sco_offload_enabled,
-                force_cvsd=force_cvsd))
+            facade_pb2.ConnectAudioRequest(connection=facade_pb2.Connection(cookie=address.encode()),
+                                           is_sco_offload_enabled=is_sco_offload_enabled,
+                                           force_cvsd=force_cvsd))
 
     async def disconnect_audio(self, address):
         """
@@ -80,3 +82,29 @@ class HfpClient(AsyncClosable):
         """
         await self.__hfp_stub.DisconnectAudio(
             facade_pb2.DisconnectAudioRequest(connection=facade_pb2.Connection(cookie=address.encode()), volume=volume))
+
+    async def wait_for_hfp_connection_state_change(self):
+        return await self._listen_for_event(facade_pb2.EventType.HFP_CONNECTION_STATE)
+
+    async def __get_next_event(self, event, future):
+        """Get the future of next event from the stream"""
+        while True:
+            e = await self.__hfp_event_stream.read()
+
+            # Match event by some condition.
+            if e.event_type == event:
+                future.set_result(e.data)
+                break
+            else:
+                print("Got '%s'; expecting '%s'" % (e.event_type, event))
+                print(e)
+
+    async def _listen_for_event(self, event):
+        """Start fetching events"""
+        future = asyncio.get_running_loop().create_future()
+        self.__task_list.append(asyncio.get_running_loop().create_task(self.__get_next_event(event, future)))
+        try:
+            await asyncio.wait_for(future, HfpClient.DEFAULT_TIMEOUT)
+        except:
+            print("Failed to get event", event)
+        return future

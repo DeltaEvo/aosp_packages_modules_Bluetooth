@@ -24,6 +24,7 @@ import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHidHost;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothHidHost;
 import android.content.AttributionSource;
 import android.content.Intent;
@@ -140,12 +141,15 @@ public class HidHostService extends ProfileService {
         setHidHostService(null);
     }
 
-    private BluetoothDevice getDevice(byte[] address) {
-        return mAdapterService.getDeviceFromByte(address);
-    }
-
     private byte[] getByteAddress(BluetoothDevice device) {
-        return mAdapterService.getByteIdentityAddress(device);
+        if (Utils.arrayContains(device.getUuids(), BluetoothUuid.HOGP)) {
+            // if HOGP is available, use the address on initial bonding
+            // (so if we bonded over LE, use the RPA)
+            return Utils.getByteAddress(device);
+        } else {
+            // if only classic HID is available, force usage of BREDR address
+            return mAdapterService.getByteIdentityAddress(device);
+        }
     }
 
     public static synchronized HidHostService getHidHostService() {
@@ -325,7 +329,8 @@ public class HidHostService extends ProfileService {
     /**
      * Handlers for incoming service calls
      */
-    private static class BluetoothHidHostBinder extends IBluetoothHidHost.Stub
+    @VisibleForTesting
+    static class BluetoothHidHostBinder extends IBluetoothHidHost.Stub
             implements IProfileServiceBinder {
         private HidHostService mService;
 
@@ -340,6 +345,9 @@ public class HidHostService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private HidHostService getService(AttributionSource source) {
+            if (Utils.isInstrumentationTestMode()) {
+                return mService;
+            }
             if (!Utils.checkServiceAvailable(mService, TAG)
                     || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
@@ -899,7 +907,8 @@ public class HidHostService extends ProfileService {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothHidHost.EXTRA_STATUS, status);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                Utils.getTempAllowlistBroadcastOptions());
     }
 
     private void broadcastProtocolMode(BluetoothDevice device, int protocolMode) {
@@ -907,7 +916,8 @@ public class HidHostService extends ProfileService {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothHidHost.EXTRA_PROTOCOL_MODE, protocolMode);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                Utils.getTempAllowlistBroadcastOptions());
         if (DBG) {
             Log.d(TAG, "Protocol Mode (" + device + "): " + protocolMode);
         }
@@ -919,7 +929,8 @@ public class HidHostService extends ProfileService {
         intent.putExtra(BluetoothHidHost.EXTRA_REPORT, report);
         intent.putExtra(BluetoothHidHost.EXTRA_REPORT_BUFFER_SIZE, rptSize);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                Utils.getTempAllowlistBroadcastOptions());
     }
 
     private void broadcastVirtualUnplugStatus(BluetoothDevice device, int status) {
@@ -927,7 +938,8 @@ public class HidHostService extends ProfileService {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothHidHost.EXTRA_VIRTUAL_UNPLUG_STATUS, status);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                Utils.getTempAllowlistBroadcastOptions());
     }
 
     private void broadcastIdleTime(BluetoothDevice device, int idleTime) {
@@ -935,7 +947,8 @@ public class HidHostService extends ProfileService {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothHidHost.EXTRA_IDLE_TIME, idleTime);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                Utils.getTempAllowlistBroadcastOptions());
         if (DBG) {
             Log.d(TAG, "Idle time (" + device + "): " + idleTime);
         }

@@ -26,11 +26,11 @@
 #define BTA_API_H
 
 #include <base/strings/stringprintf.h>
+#include <base/functional/callback.h>
 
 #include <cstdint>
 #include <vector>
 
-#include "base/callback.h"
 #include "bt_target.h"  // Must be first to define build configuration
 #include "osi/include/log.h"
 #include "stack/include/bt_octets.h"
@@ -57,6 +57,29 @@ typedef enum : uint8_t {
   BTA_NO_RESOURCES = 4,
   BTA_WRONG_MODE = 5,
 } tBTA_STATUS;
+
+#ifndef CASE_RETURN_TEXT
+#define CASE_RETURN_TEXT(code) \
+  case code:                   \
+    return #code
+#endif
+
+inline std::string bta_status_text(const tBTA_STATUS& status) {
+  switch (status) {
+    CASE_RETURN_TEXT(BTA_SUCCESS);
+    CASE_RETURN_TEXT(BTA_FAILURE);
+    CASE_RETURN_TEXT(BTA_PENDING);
+    CASE_RETURN_TEXT(BTA_BUSY);
+    CASE_RETURN_TEXT(BTA_NO_RESOURCES);
+    CASE_RETURN_TEXT(BTA_WRONG_MODE);
+    default:
+      return base::StringPrintf("UNKNOWN[%d]", status);
+  }
+}
+
+#undef CASE_RETURN_TEXT
+
+using tSDP_DISC_WAIT = int;
 
 /*
  * Service ID
@@ -313,6 +336,7 @@ typedef struct {
 typedef struct {
   RawAddress bd_addr; /* BD address peer device. */
   tBT_TRANSPORT transport_link_type;
+  uint16_t acl_handle;
 } tBTA_DM_LINK_UP;
 
 /* Structure associated with BTA_DM_LINK_UP_FAILED_EVT */
@@ -692,18 +716,6 @@ enum {
  ****************************************************************************/
 
 void BTA_dm_init();
-
-/*******************************************************************************
- *
- * Function         BTA_EnableTestMode
- *
- * Description      Enables bluetooth device under test mode
- *
- *
- * Returns          tBTA_STATUS
- *
- ******************************************************************************/
-extern void BTA_EnableTestMode(void);
 
 /*******************************************************************************
  *
@@ -1349,4 +1361,35 @@ extern void BTA_DmSetEventFilterInquiryResultAllDevices();
  ******************************************************************************/
 extern void BTA_DmBleResetId(void);
 
+/*******************************************************************************
+ *
+ * Function         BTA_DmBleSubrateRequest
+ *
+ * Description      subrate request, can only be used when connection is up.
+ *
+ * Parameters:      bd_addr       - BD address of the peer
+ *                  subrate_min   - subrate min
+ *                  subrate_max   - subrate max
+ *                  max_latency   - max latency
+ *                  cont_num      - continuation number
+ *                  timeout       - supervision timeout
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+extern void BTA_DmBleSubrateRequest(const RawAddress& bd_addr,
+                                    uint16_t subrate_min, uint16_t subrate_max,
+                                    uint16_t max_latency, uint16_t cont_num,
+                                    uint16_t timeout);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmCheckLeAudioCapable
+ *
+ * Description      Checks if device should be considered as LE Audio capable
+ *
+ * Returns          True if Le Audio capable device, false otherwise
+ *
+ ******************************************************************************/
+extern bool BTA_DmCheckLeAudioCapable(const RawAddress& address);
 #endif /* BTA_API_H */

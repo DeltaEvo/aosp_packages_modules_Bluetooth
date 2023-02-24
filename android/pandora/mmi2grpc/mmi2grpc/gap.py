@@ -5,9 +5,10 @@ from time import sleep
 
 from pandora_experimental.gatt_grpc import GATT
 from pandora_experimental.gatt_pb2 import GattServiceParams, GattCharacteristicParams
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import ConnectabilityMode, DataTypes, DiscoverabilityMode, OwnAddressType
-from pandora_experimental.security_grpc import Security
+from pandora.host_grpc import Host
+from pandora.host_pb2 import ConnectabilityMode, DataTypes, DiscoverabilityMode, OwnAddressType
+from pandora.security_grpc import Security, SecurityStorage, PairingEventAnswer
+from pandora.security_pb2 import LESecurityLevel
 
 
 class GAPProxy(ProfileProxy):
@@ -17,6 +18,7 @@ class GAPProxy(ProfileProxy):
         self.gatt = GATT(channel)
         self.host = Host(channel)
         self.security = Security(channel)
+        self.security_storage = SecurityStorage(channel)
 
         self.connection = None
         self.pairing_events = None
@@ -66,7 +68,7 @@ class GAPProxy(ProfileProxy):
 
         for event in self.pairing_events:
             assert event.numeric_comparison == int(passkey), (event, passkey)
-            self.pairing_events.send(event=event, confirm=True)
+            self.pairing_events.send(PairingEventAnswer(event=event, confirm=True))
             return "OK"
 
         assert False, "did not receive expected pairing event"
@@ -77,7 +79,7 @@ class GAPProxy(ProfileProxy):
         Please send a connectable undirected advertising report.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             connectable=True,
             own_address_type=OwnAddressType.PUBLIC,
         )
@@ -117,7 +119,7 @@ class GAPProxy(ProfileProxy):
 
         for event in self.pairing_events:
             if event.address == pts_addr and event.passkey_entry_request:
-                self.pairing_events.send(event=event, passkey=int(passkey))
+                self.pairing_events.send(PairingEventAnswer(event=event, passkey=int(passkey)))
                 return "OK"
 
         assert False
@@ -132,9 +134,9 @@ class GAPProxy(ProfileProxy):
             # we also begin pairing here if we are not already paired on LE
             if self.counter == 0:
                 self.counter += 1
-                self.security.DeletePairing(address=pts_addr)
-                self.connection = self.host.ConnectLE(public=pts_addr).connection
-                self.security.Pair(connection=self.host.GetLEConnection(address=pts_addr).connection)
+                self.security_storage.DeleteBond(public=pts_addr)
+                self.connection = self.host.ConnectLE(own_address_type=OwnAddressType.RANDOM, public=pts_addr).connection
+                self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
                 return "OK"
 
         if test == "GAP/SEC/AUT/BV-21-C" and self.connection is not None:
@@ -150,15 +152,15 @@ class GAPProxy(ProfileProxy):
             scans = self.host.Scan()
             for scan in scans:
                 adv_address = scan.public if scan.HasField("public") else scan.random
-                device_name = self.host.GetRemoteName(address=adv_address).name
+                device_name = scan.data.complete_local_name
                 if "pts" in device_name.lower():
                     address = adv_address
                     scans.cancel()
                     break
 
-        self.connection = self.host.ConnectLE(public=address).connection
+        self.connection = self.host.ConnectLE(own_address_type=OwnAddressType.RANDOM, public=address).connection
         if test in {"GAP/BOND/BON/BV-04-C"}:
-            self.security.Pair(connection=self.connection)
+            self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
 
         return "OK"
 
@@ -203,7 +205,7 @@ class GAPProxy(ProfileProxy):
         Please prepare IUT to send an advertising report with Service UUID.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             own_address_type=OwnAddressType.PUBLIC,
             data=DataTypes(complete_service_class_uuids128=["955798ce-3022-455c-b759-ee8edcd73d1a"],))
         return "OK"
@@ -214,7 +216,7 @@ class GAPProxy(ProfileProxy):
         Please prepare IUT to send an advertising report with Local Name.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             own_address_type=OwnAddressType.PUBLIC,
             data=DataTypes(include_complete_local_name=True, include_shortened_local_name=True,))
 
@@ -226,7 +228,7 @@ class GAPProxy(ProfileProxy):
         Please prepare IUT to send an advertising report with Flags.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             connectable=True,
             own_address_type=OwnAddressType.PUBLIC,
         )
@@ -242,7 +244,7 @@ class GAPProxy(ProfileProxy):
         Specific Data.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             own_address_type=OwnAddressType.PUBLIC,
             data=DataTypes(manufacturer_specific_data=b"d0n't b3 3v1l!",))
 
@@ -254,7 +256,7 @@ class GAPProxy(ProfileProxy):
         Please prepare IUT to send an advertising report with TX Power Level.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             own_address_type=OwnAddressType.PUBLIC,
             data=DataTypes(include_tx_power_level=True,))
 
@@ -266,7 +268,7 @@ class GAPProxy(ProfileProxy):
         Please send a connectable advertising report.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
         )
@@ -281,7 +283,7 @@ class GAPProxy(ProfileProxy):
         Please send connectable undirected advertising report.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
         )
@@ -332,8 +334,7 @@ class GAPProxy(ProfileProxy):
         Please confirm that IUT has discovered PTS and retrieved its name (?P<name>[a-zA-Z\-0-9]*)
         """
 
-        connection = self.host.GetConnection(address=pts_addr).connection
-        device = self.host.GetDevice(connection=connection)
+        device = self.host.GetDevice(connection=self.connection)
         assert name == device.name, (name, device.name)
 
         return "OK"
@@ -353,7 +354,7 @@ class GAPProxy(ProfileProxy):
         advertising report. Press OK to continue.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.DISCOVERABLE_GENERAL),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
@@ -371,7 +372,7 @@ class GAPProxy(ProfileProxy):
         discoverable undirected advertising.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.DISCOVERABLE_GENERAL),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
@@ -388,7 +389,7 @@ class GAPProxy(ProfileProxy):
         report using connectable undirected advertising.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.NOT_DISCOVERABLE),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
@@ -402,7 +403,7 @@ class GAPProxy(ProfileProxy):
         advertising report using connectable undirected advertising.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.DISCOVERABLE_GENERAL),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
@@ -521,7 +522,7 @@ class GAPProxy(ProfileProxy):
         send an advertising report.
         """
 
-        self.host.StartAdvertising(own_address_type=OwnAddressType.PUBLIC,)
+        self.advertise = self.host.Advertise(own_address_type=OwnAddressType.PUBLIC,)
 
         return "OK"
 
@@ -540,7 +541,7 @@ class GAPProxy(ProfileProxy):
         """
 
         try:
-            self.host.Disconnect(connection=self.host.GetLEConnection(address=pts_addr).connection)
+            self.host.Disconnect(connection=self.connection)
         except Exception:
             pass
 
@@ -559,9 +560,9 @@ class GAPProxy(ProfileProxy):
             return "OK"
 
         if test not in {"GAP/SEC/AUT/BV-21-C"}:
-            self.security.DeletePairing(address=pts_addr)
+            self.security_storage.DeleteBond(public=pts_addr)
 
-        self.security.Pair(connection=self.host.GetLEConnection(address=pts_addr).connection)
+        self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
 
         return "OK"
 
@@ -627,7 +628,7 @@ class GAPProxy(ProfileProxy):
         self.host.SetDiscoverabilityMode(
             mode=DiscoverabilityMode.DISCOVERABLE_GENERAL)
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.DISCOVERABLE_GENERAL),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
@@ -704,7 +705,7 @@ class GAPProxy(ProfileProxy):
         """
 
         # No idea how we can bond in non-bondable mode, but this passes the tests...
-        self.security.Pair(connection=self.host.GetLEConnection(address=pts_addr).connection,)
+        self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
 
         return "OK"
 
@@ -765,7 +766,7 @@ class GAPProxy(ProfileProxy):
         flags turned on.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.DISCOVERABLE_GENERAL),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=False,
@@ -780,7 +781,7 @@ class GAPProxy(ProfileProxy):
         an advertising report.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.NOT_DISCOVERABLE),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
@@ -795,7 +796,7 @@ class GAPProxy(ProfileProxy):
         advertising report using connectable undirected advertising.
         """
 
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             data=DataTypes(le_discoverability_mode=DiscoverabilityMode.DISCOVERABLE_GENERAL),
             own_address_type=OwnAddressType.PUBLIC,
             connectable=True,
@@ -887,14 +888,12 @@ class GAPProxy(ProfileProxy):
         if test != "GAP/SEC/SEM/BV-08-C":
             # we already started in the Connect MMI
             self.pairing_events = self.security.OnPairing()
-            self.security.Pair(connection=connection)
-
-        connection = self.host.GetConnection(address=pts_addr).connection
+            self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
 
         def after_that():
             self.host.WaitConnection()  # this really waits for bonding
             sleep(1)
-            self.host.Disconnect(connection=connection)
+            self.host.Disconnect(connection=self.connection)
 
         Thread(target=after_that).start()
 
@@ -909,7 +908,7 @@ class GAPProxy(ProfileProxy):
                 if event.WhichOneof('method') in {"just_works", "numeric_comparison"}:
                     if times is None or cnt < times:
                         cnt += 1
-                        pairing_events.send(event=event, confirm=True)
+                        pairing_events.send(PairingEventAnswer(event=event, confirm=True))
 
         Thread(target=task).start()
 

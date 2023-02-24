@@ -146,7 +146,7 @@ class TestHciLayer : public HciLayer {
   }
 
   void SetCommandFuture() {
-    ASSERT_TRUE(hci_command_promise_ == nullptr) << "Promises, Promises, ... Only one at a time.";
+    ASSERT_EQ(hci_command_promise_, nullptr) << "Promises, Promises, ... Only one at a time.";
     hci_command_promise_ = std::make_unique<std::promise<void>>();
     command_future_ = std::make_unique<std::future<void>>(hci_command_promise_->get_future());
   }
@@ -320,8 +320,9 @@ class TestHciLayer : public HciLayer {
  private:
   void Notify() {
     if (hci_command_promise_ != nullptr) {
-      hci_command_promise_->set_value();
-      hci_command_promise_.reset();
+      std::promise<void>* prom = hci_command_promise_.release();
+      prom->set_value();
+      delete prom;
     }
   }
 
@@ -372,8 +373,9 @@ class MockLeConnectionCallbacks : public LeConnectionCallbacks {
   void OnLeConnectSuccess(AddressWithType address_with_type, std::unique_ptr<LeAclConnection> connection) override {
     le_connections_.push_back(std::move(connection));
     if (le_connection_promise_ != nullptr) {
-      le_connection_promise_->set_value();
-      le_connection_promise_.reset();
+      std::promise<void>* prom = le_connection_promise_.release();
+      prom->set_value();
+      delete prom;
     }
   }
   MOCK_METHOD(void, OnLeConnectFail, (AddressWithType, ErrorCode reason, bool locally_initiated), (override));
@@ -641,11 +643,11 @@ class AclManagerWithLeConnectionTest : public AclManagerWithCallbacksTest {
 
     Address remote_public_address = Address::FromString(kRemotePublicDeviceStringA).value();
     remote_with_type_ = AddressWithType(remote_public_address, AddressType::PUBLIC_DEVICE_ADDRESS);
-    test_hci_layer_->SetCommandFuture();
+    ASSERT_NO_FATAL_FAILURE(test_hci_layer_->SetCommandFuture());
     acl_manager_->CreateLeConnection(remote_with_type_, true);
     test_hci_layer_->GetCommand(OpCode::LE_ADD_DEVICE_TO_FILTER_ACCEPT_LIST);
     test_hci_layer_->SendIncomingEvent(LeAddDeviceToFilterAcceptListCompleteBuilder::Create(0x01, ErrorCode::SUCCESS));
-    test_hci_layer_->SetCommandFuture();
+    ASSERT_NO_FATAL_FAILURE(test_hci_layer_->SetCommandFuture());
     auto packet = test_hci_layer_->GetCommand(OpCode::LE_CREATE_CONNECTION);
     auto le_connection_management_command_view =
         LeConnectionManagementCommandView::Create(AclCommandView::Create(packet));
@@ -674,7 +676,7 @@ class AclManagerWithLeConnectionTest : public AclManagerWithCallbacksTest {
         0x0C80,
         ClockAccuracy::PPM_30));
 
-    test_hci_layer_->SetCommandFuture();
+    ASSERT_NO_FATAL_FAILURE(test_hci_layer_->SetCommandFuture());
     test_hci_layer_->GetCommand(OpCode::LE_REMOVE_DEVICE_FROM_FILTER_ACCEPT_LIST);
     test_hci_layer_->SendIncomingEvent(
         LeRemoveDeviceFromFilterAcceptListCompleteBuilder::Create(0x01, ErrorCode::SUCCESS));
@@ -719,7 +721,14 @@ class AclManagerWithLeConnectionTest : public AclManagerWithCallbacksTest {
         void(hci::ErrorCode hci_status, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version));
     MOCK_METHOD2(OnLeReadRemoteFeaturesComplete, void(hci::ErrorCode hci_status, uint64_t features));
     MOCK_METHOD3(OnPhyUpdate, void(hci::ErrorCode hci_status, uint8_t tx_phy, uint8_t rx_phy));
-    MOCK_METHOD1(OnLocalAddressUpdate, void(AddressWithType address_with_type));
+    MOCK_METHOD5(
+        OnLeSubrateChange,
+        void(
+            hci::ErrorCode hci_status,
+            uint16_t subrate_factor,
+            uint16_t peripheral_latency,
+            uint16_t continuation_number,
+            uint16_t supervision_timeout));
   } mock_le_connection_management_callbacks_;
 };
 
@@ -732,7 +741,7 @@ class AclManagerWithResolvableAddressTest : public AclManagerWithCallbacksTest {
     fake_registry_.InjectTestModule(&Controller::Factory, test_controller_);
     client_handler_ = fake_registry_.GetTestModuleHandler(&HciLayer::Factory);
     ASSERT_NE(client_handler_, nullptr);
-    test_hci_layer_->SetCommandFuture();
+    ASSERT_NO_FATAL_FAILURE(test_hci_layer_->SetCommandFuture());
     fake_registry_.Start<AclManager>(&thread_);
     acl_manager_ = static_cast<AclManager*>(fake_registry_.GetModuleUnderTest(&AclManager::Factory));
     hci::Address address;

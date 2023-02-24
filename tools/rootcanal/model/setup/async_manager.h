@@ -98,7 +98,7 @@ class AsyncManager {
   // made from inside a CriticalCallback, since that would cause a lock to be
   // acquired twice with unpredictable results. It is strongly recommended to
   // have very simple CriticalCallbacks, preferably using lambda expressions.
-  void Synchronize(const CriticalCallback&);
+  void Synchronize(const CriticalCallback& critical_callback);
 
   AsyncManager();
   AsyncManager(const AsyncManager&) = delete;
@@ -119,8 +119,6 @@ class AsyncManager {
   // destroying the other one
   std::unique_ptr<AsyncFdWatcher> fdWatcher_p_;
   std::unique_ptr<AsyncTaskManager> taskManager_p_;
-
-  std::mutex synchronization_mutex_;
 };
 }  // namespace rootcanal
 #endif  // TEST_VENDOR_LIB_ASYNC_MANAGER_H_

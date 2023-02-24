@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "device/include/esco_parameters.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
@@ -123,6 +123,23 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
  ******************************************************************************/
 void BTM_BleOpportunisticObserve(bool enable,
                                  tBTM_INQ_RESULTS_CB* p_results_cb);
+
+/*******************************************************************************
+ *
+ * Function         BTM_BleTargetAnnouncementObserve
+ *
+ * Description      Register/Unregister client interested in the targeted
+ *                  announcements. Not that it is client responsible for parsing
+ *                  advertising data.
+ *
+ * Parameters       start: start or stop observe.
+ *                  p_results_cb: callback for results.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTM_BleTargetAnnouncementObserve(bool enable,
+                                      tBTM_INQ_RESULTS_CB* p_results_cb);
 
 void BTM_EnableInterlacedInquiryScan();
 
@@ -536,46 +553,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
 
 /*******************************************************************************
  *
- * Function         BTM_BleReceiverTest
- *
- * Description      This function is called to start the LE Receiver test
- *
- * Parameter       rx_freq - Frequency Range
- *               p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback);
-
-/*******************************************************************************
- *
- * Function         BTM_BleTransmitterTest
- *
- * Description      This function is called to start the LE Transmitter test
- *
- * Parameter       tx_freq - Frequency Range
- *                       test_data_len - Length in bytes of payload data in each
- *                                       packet
- *                       packet_payload - Pattern to use in the payload
- *                       p_cmd_cmpl_cback - Command Complete callback
- *
- ******************************************************************************/
-void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
-                            uint8_t packet_payload,
-                            tBTM_CMPL_CB* p_cmd_cmpl_cback);
-
-/*******************************************************************************
- *
- * Function         BTM_BleTestEnd
- *
- * Description     This function is called to stop the in-progress TX or RX test
- *
- * Parameter       p_cmd_cmpl_cback - Command complete callback
- *
- ******************************************************************************/
-void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback);
-
-/*******************************************************************************
- *
  * Function         BTM_UseLeLink
  *
  * Description      Select the underlying physical link to use.
@@ -943,23 +920,6 @@ void BTM_WritePageTimeout(uint16_t timeout);
  *
  ******************************************************************************/
 void BTM_WriteVoiceSettings(uint16_t settings);
-
-/*******************************************************************************
- *
- * Function         BTM_EnableTestMode
- *
- * Description      Send HCI the enable device under test command.
- *
- *                  Note: Controller can only be taken out of this mode by
- *                      resetting the controller.
- *
- * Returns
- *      BTM_SUCCESS         Command sent.
- *      BTM_NO_RESOURCES    If out of resources to send the command.
- *
- *
- ******************************************************************************/
-tBTM_STATUS BTM_EnableTestMode(void);
 
 /*******************************************************************************
  *

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_util.h>
@@ -95,40 +95,56 @@ class VolumeControlImpl : public VolumeControl {
   }
 
   void Connect(const RawAddress& address) override {
-    LOG(INFO) << __func__ << " " << address;
+    LOG(INFO) << __func__ << " " << ADDRESS_TO_LOGGABLE_STR(address);
 
     auto device = volume_control_devices_.FindByAddress(address);
     if (!device) {
       volume_control_devices_.Add(address, true);
     } else {
       device->connecting_actively = true;
+
+      if (device->IsConnected()) {
+        LOG(WARNING) << __func__ << ": address=" << address
+                     << ", connection_id=" << device->connection_id
+                     << " already connected.";
+
+        if (device->IsReady()) {
+          callbacks_->OnConnectionState(ConnectionState::CONNECTED,
+                                        device->address);
+        } else {
+          OnGattConnected(GATT_SUCCESS, device->connection_id, gatt_if_,
+                          device->address, BT_TRANSPORT_LE, GATT_MAX_MTU_SIZE);
+        }
+        return;
+      }
     }
 
-    BTA_GATTC_Open(gatt_if_, address, true, false);
+    BTA_GATTC_Open(gatt_if_, address, BTM_BLE_DIRECT_CONNECTION, false);
   }
 
   void AddFromStorage(const RawAddress& address, bool auto_connect) {
-    LOG(INFO) << __func__ << " " << address
+    LOG(INFO) << __func__ << " " << ADDRESS_TO_LOGGABLE_STR(address)
               << ", auto_connect=" << auto_connect;
 
     if (auto_connect) {
       volume_control_devices_.Add(address, false);
 
       /* Add device into BG connection to accept remote initiated connection */
-      BTA_GATTC_Open(gatt_if_, address, false, false);
+      BTA_GATTC_Open(gatt_if_, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
     }
   }
 
   void OnGattConnected(tGATT_STATUS status, uint16_t connection_id,
                        tGATT_IF /*client_if*/, RawAddress address,
                        tBT_TRANSPORT /*transport*/, uint16_t /*mtu*/) {
-    LOG(INFO) << __func__ << ": address=" << address
+    LOG(INFO) << __func__ << ": address=" << ADDRESS_TO_LOGGABLE_STR(address)
               << ", connection_id=" << connection_id;
 
     VolumeControlDevice* device =
         volume_control_devices_.FindByAddress(address);
     if (!device) {
-      LOG(ERROR) << __func__ << "Skipping unknown device, address=" << address;
+      LOG(ERROR) << __func__ << "Skipping unknown device, address="
+                 << ADDRESS_TO_LOGGABLE_STR(address);
       return;
     }
 
@@ -152,7 +168,8 @@ class VolumeControlImpl : public VolumeControl {
     VolumeControlDevice* device =
         volume_control_devices_.FindByAddress(address);
     if (!device) {
-      LOG(ERROR) << __func__ << "Skipping unknown device " << address;
+      LOG(ERROR) << __func__ << "Skipping unknown device "
+                 << ADDRESS_TO_LOGGABLE_STR(address);
       return;
     }
 
@@ -162,50 +179,69 @@ class VolumeControlImpl : public VolumeControl {
       // If the encryption failed, do not remove the device.
       // Disconnect only, since the Android will try to re-enable encryption
       // after disconnection
-      device->Disconnect(gatt_if_);
-      if (device->connecting_actively)
-        callbacks_->OnConnectionState(ConnectionState::DISCONNECTED,
-                                      device->address);
+      device_cleanup_helper(device, device->connecting_actively);
       return;
     }
 
-    LOG(INFO) << __func__ << " " << address << " status: " << +success;
+    LOG(INFO) << __func__ << " " << ADDRESS_TO_LOGGABLE_STR(address)
+              << " status: " << +success;
 
     if (device->HasHandles()) {
       device->EnqueueInitialRequests(gatt_if_, chrc_read_callback_static,
                                      OnGattWriteCccStatic);
 
     } else {
-      device->first_connection = true;
       BTA_GATTC_ServiceSearchRequest(device->connection_id,
                                      &kVolumeControlUuid);
     }
+  }
+
+  void ClearDeviceInformationAndStartSearch(VolumeControlDevice* device) {
+    if (!device) {
+      LOG_ERROR("Device is null");
+      return;
+    }
+
+    LOG_INFO(": address=%s", ADDRESS_TO_LOGGABLE_CSTR(device->address));
+    if (device->known_service_handles_ == false) {
+      LOG_INFO("Device already is waiting for new services");
+      return;
+    }
+
+    std::vector<RawAddress> devices = {device->address};
+    device->DeregisterNotifications(gatt_if_);
+
+    RemovePendingVolumeControlOperations(devices,
+                                         bluetooth::groups::kGroupUnknown);
+    device->ResetHandles();
+    BTA_GATTC_ServiceSearchRequest(device->connection_id, &kVolumeControlUuid);
   }
 
   void OnServiceChangeEvent(const RawAddress& address) {
     VolumeControlDevice* device =
         volume_control_devices_.FindByAddress(address);
     if (!device) {
-      LOG(ERROR) << __func__ << "Skipping unknown device " << address;
+      LOG(ERROR) << __func__ << "Skipping unknown device "
+                 << ADDRESS_TO_LOGGABLE_STR(address);
       return;
     }
-    LOG(INFO) << __func__ << ": address=" << address;
-    device->first_connection = true;
-    device->service_changed_rcvd = true;
-    BtaGattQueue::Clean(device->connection_id);
+
+    ClearDeviceInformationAndStartSearch(device);
   }
 
   void OnServiceDiscDoneEvent(const RawAddress& address) {
     VolumeControlDevice* device =
         volume_control_devices_.FindByAddress(address);
     if (!device) {
-      LOG(ERROR) << __func__ << "Skipping unknown device " << address;
+      LOG(ERROR) << __func__ << "Skipping unknown device "
+                 << ADDRESS_TO_LOGGABLE_STR(address);
       return;
     }
 
-    if (device->service_changed_rcvd)
+    if (device->known_service_handles_ == false) {
       BTA_GATTC_ServiceSearchRequest(device->connection_id,
                                      &kVolumeControlUuid);
+    }
   }
 
   void OnServiceSearchComplete(uint16_t connection_id, tGATT_STATUS status) {
@@ -218,19 +254,19 @@ class VolumeControlImpl : public VolumeControl {
     }
 
     /* Known device, nothing to do */
-    if (!device->first_connection) return;
+    if (device->IsReady()) return;
 
     if (status != GATT_SUCCESS) {
       /* close connection and report service discovery complete with error */
       LOG(ERROR) << "Service discovery failed";
-      device_cleanup_helper(device, device->first_connection);
+      device_cleanup_helper(device, device->connecting_actively);
       return;
     }
 
     bool success = device->UpdateHandles();
     if (!success) {
       LOG(ERROR) << "Incomplete service database";
-      device_cleanup_helper(device, true);
+      device_cleanup_helper(device, device->connecting_actively);
       return;
     }
 
@@ -249,7 +285,12 @@ class VolumeControlImpl : public VolumeControl {
     }
 
     if (status != GATT_SUCCESS) {
-      LOG(INFO) << __func__ << ": status=" << static_cast<int>(status);
+      LOG_INFO(": status=0x%02x", static_cast<int>(status));
+      if (status == GATT_DATABASE_OUT_OF_SYNC) {
+        LOG_INFO("Database out of sync for %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(device->address));
+        ClearDeviceInformationAndStartSearch(device);
+      }
       return;
     }
 
@@ -302,7 +343,7 @@ class VolumeControlImpl : public VolumeControl {
 
   void HandleAutonomusVolumeChange(VolumeControlDevice* device,
                                    bool is_volume_change, bool is_mute_change) {
-    DLOG(INFO) << __func__ << device->address
+    DLOG(INFO) << __func__ << ADDRESS_TO_LOGGABLE_STR(device->address)
                << " is volume change: " << is_volume_change
                << " is mute change: " << is_mute_change;
 
@@ -323,7 +364,8 @@ class VolumeControlImpl : public VolumeControl {
     auto group_id =
         csis_api->GetGroupId(device->address, le_audio::uuid::kCapServiceUuid);
     if (group_id == bluetooth::groups::kGroupUnknown) {
-      DLOG(INFO) << __func__ << " No group for device " << device->address;
+      DLOG(INFO) << __func__ << " No group for device "
+                 << ADDRESS_TO_LOGGABLE_STR(device->address);
       callbacks_->OnVolumeStateChanged(device->address, device->volume,
                                        device->mute, true);
       return;
@@ -409,7 +451,8 @@ class VolumeControlImpl : public VolumeControl {
                       });
     if (op == ongoing_operations_.end()) {
       DLOG(INFO) << __func__ << " Could not find operation id for device: "
-                 << device->address << ". Autonomus change";
+                 << ADDRESS_TO_LOGGABLE_STR(device->address)
+                 << ". Autonomus change";
       HandleAutonomusVolumeChange(device, is_volume_change, is_mute_change);
       return;
     }
@@ -547,10 +590,15 @@ class VolumeControlImpl : public VolumeControl {
     }
 
     if (status != GATT_SUCCESS) {
-      LOG(ERROR) << __func__
-                 << "Failed to register for notification: " << loghex(handle)
-                 << " status: " << status;
-      device_cleanup_helper(device, true);
+      if (status == GATT_DATABASE_OUT_OF_SYNC) {
+        LOG_INFO("Database out of sync for %s, conn_id: 0x%04x",
+                 ADDRESS_TO_LOGGABLE_CSTR(device->address), connection_id);
+        ClearDeviceInformationAndStartSearch(device);
+      } else {
+        LOG_ERROR("Failed to register for notification: 0x%04x, status 0x%02x",
+                  handle, status);
+        device_cleanup_helper(device, true);
+      }
       return;
     }
 
@@ -577,17 +625,20 @@ class VolumeControlImpl : public VolumeControl {
     VolumeControlDevice* device =
         volume_control_devices_.FindByAddress(address);
     if (!device) {
-      LOG(INFO) << "Device not connected to profile " << address;
+      LOG_WARN("Device not connected to profile %s",
+               ADDRESS_TO_LOGGABLE_CSTR(address));
+      callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
       return;
     }
 
-    LOG(INFO) << __func__ << " GAP_EVT_CONN_CLOSED: " << device->address;
+    LOG(INFO) << __func__ << " GAP_EVT_CONN_CLOSED: "
+              << ADDRESS_TO_LOGGABLE_STR(device->address);
+    device->connecting_actively = false;
     device_cleanup_helper(device, true);
   }
 
   void OnGattDisconnected(uint16_t connection_id, tGATT_IF /*client_if*/,
-                          RawAddress remote_bda,
-                          tGATT_DISCONN_REASON /*reason*/) {
+                          RawAddress remote_bda, tGATT_DISCONN_REASON reason) {
     VolumeControlDevice* device =
         volume_control_devices_.FindByConnId(connection_id);
     if (!device) {
@@ -597,16 +648,21 @@ class VolumeControlImpl : public VolumeControl {
       return;
     }
 
-    // If we get here, it means, device has not been exlicitly disconnected.
-    bool device_ready = device->IsReady();
+    if (!device->IsConnected()) {
+      LOG(ERROR) << __func__
+                 << " Skipping disconnect of the already disconnected device, "
+                    "connection_id="
+                 << loghex(connection_id);
+      return;
+    }
 
     device_cleanup_helper(device, device->connecting_actively);
 
-    if (device_ready) {
-      volume_control_devices_.Add(remote_bda, true);
-
+    if (reason != GATT_CONN_TERMINATE_LOCAL_HOST &&
+        device->connecting_actively) {
       /* Add device into BG connection to accept remote initiated connection */
-      BTA_GATTC_Open(gatt_if_, remote_bda, false, false);
+      BTA_GATTC_Open(gatt_if_, remote_bda, BTM_BLE_BKG_CONNECT_ALLOW_LIST,
+                     false);
     }
   }
 
@@ -682,6 +738,12 @@ class VolumeControlImpl : public VolumeControl {
 
     /* In case of error, remove device from the tracking operation list */
     RemoveDeviceFromOperationList(device->address, PTR_TO_INT(data));
+
+    if (status == GATT_DATABASE_OUT_OF_SYNC) {
+      LOG_INFO("Database out of sync for %s",
+               ADDRESS_TO_LOGGABLE_CSTR(device->address));
+      ClearDeviceInformationAndStartSearch(device);
+    }
   }
 
   static void operation_callback(void* data) {
@@ -1009,10 +1071,6 @@ class VolumeControlImpl : public VolumeControl {
       callbacks_->OnConnectionState(ConnectionState::CONNECTED,
                                     device->address);
 
-      device->connecting_actively = true;
-
-      device->first_connection = false;
-
       // once profile connected we can notify current states
       callbacks_->OnVolumeStateChanged(device->address, device->volume,
                                        device->mute, false);
@@ -1032,7 +1090,6 @@ class VolumeControlImpl : public VolumeControl {
     if (notify)
       callbacks_->OnConnectionState(ConnectionState::DISCONNECTED,
                                     device->address);
-    volume_control_devices_.Remove(device->address);
   }
 
   void devices_control_point_helper(std::vector<RawAddress>& devices,

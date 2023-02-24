@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.mapclient;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doThrow;
@@ -35,6 +37,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Telephony.Mms;
 import android.provider.Telephony.Sms;
+import android.telephony.SmsManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.test.mock.MockContentProvider;
@@ -53,6 +56,7 @@ import com.android.vcard.VCardProperty;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -105,6 +109,7 @@ public class MapClientContentTest {
     private FakeContentProvider mMockSmsContentProvider;
     private FakeContentProvider mMockMmsContentProvider;
     private FakeContentProvider mMockThreadContentProvider;
+    private SmsManager mSmsManager = SmsManager.getDefault();
 
     @Mock
     private SubscriptionManager mMockSubscriptionManager;
@@ -113,6 +118,8 @@ public class MapClientContentTest {
 
     @Before
     public void setUp() throws Exception {
+        // Do not run test if sms is not supported
+        Assume.assumeTrue(mSmsManager.isImsSmsSupported());
         MockitoAnnotations.initMocks(this);
         mTargetContext = InstrumentationRegistry.getTargetContext();
 
@@ -305,17 +312,24 @@ public class MapClientContentTest {
     }
 
     /**
-     * Test parse own phone number Attempt to parse your phone number from a received SMS message
-     * and fail Receive an MMS message and successfully parse your phone number
+     * Preconditions:
+     * - Create new {@link MapClientContent}, own phone number not initialized yet.
+     *
+     * Actions:
+     * - Invoke {@link MapClientContent#setRemoteDeviceOwnNumber} with a non-null number.
+     *
+     * Outcome:
+     * - {@link MapClientContent#mPhoneNumber} should now store the number.
      */
     @Test
-    public void testParseNumber() {
+    public void testSetRemoteDeviceOwnNumber() {
+        String testNumber = "5551212";
+
         mMapClientContent = new MapClientContent(mMockContext, mCallbacks, mTestDevice);
-        Assert.assertNull(mMapClientContent.mPhoneNumber);
-        mMapClientContent.storeMessage(mTestMessage1, mTestMessage1Handle, mTestMessage1Timestamp);
-        Assert.assertNull(mMapClientContent.mPhoneNumber);
-        mMapClientContent.storeMessage(mTestMessage2, mTestMessage1Handle, mTestMessage1Timestamp);
-        Assert.assertEquals("5551212", mMapClientContent.mPhoneNumber);
+        assertThat(mMapClientContent.mPhoneNumber).isNull();
+
+        mMapClientContent.setRemoteDeviceOwnNumber(testNumber);
+        assertThat(mMapClientContent.mPhoneNumber).isEqualTo(testNumber);
     }
 
     /**
@@ -362,6 +376,17 @@ public class MapClientContentTest {
         MapClientContent.clearAllContent(mMockContext);
         verify(mMockSubscriptionManager).removeSubscriptionInfoRecord(any(),
                 eq(SubscriptionManager.SUBSCRIPTION_TYPE_REMOTE_SIM));
+    }
+
+    /**
+     * Test to validate that cleaning content does not crash when no subscription are available.
+     */
+    @Test
+    public void testCleanUpWithNoSubscriptions() {
+        when(mMockSubscription.getSubscriptionType())
+                .thenReturn(null);
+
+        MapClientContent.clearAllContent(mMockContext);
     }
 
     void createTestMessages() {

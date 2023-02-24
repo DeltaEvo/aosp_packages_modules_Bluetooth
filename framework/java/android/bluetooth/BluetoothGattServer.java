@@ -389,6 +389,33 @@ public final class BluetoothGattServer implements BluetoothProfile {
                     }
                 }
 
+                /**
+                 * Callback invoked when the given connection's subrate parameters are changed
+                 * @hide
+                 */
+                @Override
+                public void onSubrateChange(String address, int subrateFactor, int latency,
+                        int contNum, int timeout, int status) {
+                    if (DBG) {
+                        Log.d(TAG,
+                                "onSubrateChange() - "
+                                        + "Device=" + BluetoothUtils.toAnonymizedAddress(address)
+                                        + ", subrateFactor=" + subrateFactor
+                                        + ", latency=" + latency + ", contNum=" + contNum
+                                        + ", timeout=" + timeout + ", status=" + status);
+                    }
+                    BluetoothDevice device = mAdapter.getRemoteDevice(address);
+                    if (device == null) {
+                        return;
+                    }
+
+                    try {
+                        mCallback.onSubrateChange(
+                                device, subrateFactor, latency, contNum, timeout, status);
+                    } catch (Exception ex) {
+                        Log.w(TAG, "Unhandled exception: " + ex);
+                    }
+                }
             };
 
     /**
@@ -403,6 +430,15 @@ public final class BluetoothGattServer implements BluetoothProfile {
         mServerIf = 0;
         mTransport = transport;
         mServices = new ArrayList<BluetoothGattService>();
+    }
+
+    /**
+     * Get the identifier of the BluetoothGattServer, or 0 if it is closed
+     *
+     * @hide
+     */
+    public int getServerIf() {
+        return mServerIf;
     }
 
     /**
@@ -442,11 +478,12 @@ public final class BluetoothGattServer implements BluetoothProfile {
     /**
      * Close this GATT server instance.
      *
-     * Application should call this method as early as possible after it is done with
-     * this GATT server.
+     * <p>Application should call this method as early as possible after it is done with this GATT
+     * server.
      */
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @Override
     public void close() {
         if (DBG) Log.d(TAG, "close()");
         unregisterCallback();

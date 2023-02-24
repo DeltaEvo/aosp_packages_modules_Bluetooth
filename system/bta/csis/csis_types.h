@@ -64,7 +64,7 @@ struct hdl_pair {
 
 /* CSIS Types */
 static constexpr uint8_t kDefaultScanDurationS = 5;
-static constexpr uint8_t kDefaultCsisSetSize = 2;
+static constexpr uint8_t kDefaultCsisSetSize = 1;
 static constexpr uint8_t kUnknownRank = 0xff;
 
 /* Enums */
@@ -249,7 +249,8 @@ class CsisDevice : public GattServiceDevice {
     }
 
     csis_instances_.insert({handle, csis_instance});
-    DLOG(INFO) << __func__ << " instance added: " << loghex(handle) << "device: " << addr;
+    DLOG(INFO) << __func__ << " instance added: " << loghex(handle)
+               << "device: " << ADDRESS_TO_LOGGABLE_STR(addr);
   }
 
   void RemoveCsisInstance(int group_id) {

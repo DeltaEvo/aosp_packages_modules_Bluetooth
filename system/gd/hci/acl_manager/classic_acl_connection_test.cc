@@ -124,8 +124,9 @@ class TestAclConnectionInterface : public hci::AclConnectionInterface {
     command_queue_.push(std::move(command));
     command_status_callbacks.push_back(std::move(on_status));
     if (command_promise_ != nullptr) {
-      command_promise_->set_value();
-      command_promise_.reset();
+      std::promise<void>* prom = command_promise_.release();
+      prom->set_value();
+      delete prom;
     }
   }
 
@@ -136,8 +137,9 @@ class TestAclConnectionInterface : public hci::AclConnectionInterface {
     command_queue_.push(std::move(command));
     command_complete_callbacks.push_back(std::move(on_complete));
     if (command_promise_ != nullptr) {
-      command_promise_->set_value();
-      command_promise_.reset();
+      std::promise<void>* prom = command_promise_.release();
+      prom->set_value();
+      delete prom;
     }
   }
 
@@ -251,13 +253,8 @@ class ClassicAclConnectionTest : public ::testing::Test {
   }
 
   void sync_handler() {
-    ASSERT(handler_ != nullptr);
-
-    auto promise = std::promise<void>();
-    auto future = promise.get_future();
-    handler_->BindOnceOn(&promise, &std::promise<void>::set_value).Invoke();
-    auto status = future.wait_for(2s);
-    ASSERT_EQ(status, std::future_status::ready);
+    ASSERT(thread_ != nullptr);
+    ASSERT(thread_->GetReactor()->WaitForIdle(2s));
   }
 
   Address address_;

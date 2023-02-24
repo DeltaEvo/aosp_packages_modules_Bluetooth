@@ -26,6 +26,7 @@
 #include "hci/acl_manager/le_connection_callbacks.h"
 #include "hci/address.h"
 #include "hci/address_with_type.h"
+#include "hci/distance_measurement_manager.h"
 #include "hci/hci_layer.h"
 #include "hci/hci_packets.h"
 #include "hci/le_address_manager.h"
@@ -56,6 +57,7 @@ class AclManager : public Module {
  friend void bluetooth::shim::L2CA_UseLegacySecurityModule();
  friend bool bluetooth::shim::L2CA_SetAclPriority(uint16_t, bool);
  friend class bluetooth::hci::LeScanningManager;
+ friend class bluetooth::hci::DistanceMeasurementManager;
 
 public:
  AclManager();
@@ -85,6 +87,9 @@ public:
 
  // Ask the controller for specific data parameters
  virtual void SetLeSuggestedDefaultDataParameters(uint16_t octets, uint16_t time);
+
+ virtual void LeSetDefaultSubrate(
+     uint16_t subrate_min, uint16_t subrate_max, uint16_t max_latency, uint16_t cont_num, uint16_t sup_tout);
 
  virtual void SetPrivacyPolicyForInitiatorAddress(
      LeAddressManager::AddressPolicy address_policy,
@@ -126,7 +131,12 @@ public:
  virtual void WriteDefaultLinkPolicySettings(uint16_t default_link_policy_settings);
 
  // Callback from Advertising Manager to notify the advitiser (local) address
- virtual void OnAdvertisingSetTerminated(ErrorCode status, uint16_t conn_handle, hci::AddressWithType adv_address);
+ virtual void OnAdvertisingSetTerminated(
+     ErrorCode status,
+     uint16_t conn_handle,
+     uint8_t adv_set_id,
+     hci::AddressWithType adv_address,
+     bool is_discoverable);
 
  // In order to avoid circular dependency use setter rather than module dependency.
  virtual void SetSecurityModule(security::SecurityModule* security_module);

@@ -30,6 +30,7 @@
 #include "hci/acl_manager/round_robin_scheduler.h"
 #include "hci/controller.h"
 #include "hci/hci_layer.h"
+#include "hci/remote_name_request.h"
 #include "hci_acl_manager_generated.h"
 #include "security/security_module.h"
 #include "storage/storage_module.h"
@@ -65,11 +66,21 @@ struct AclManager::impl {
     round_robin_scheduler_ = new RoundRobinScheduler(handler_, controller_, hci_layer_->GetAclQueueEnd());
     acl_scheduler_ = acl_manager_.GetDependency<AclScheduler>();
 
+    if (bluetooth::common::init_flags::gd_remote_name_request_is_enabled()) {
+      remote_name_request_module_ = acl_manager_.GetDependency<RemoteNameRequestModule>();
+    }
+
     bool crash_on_unknown_handle = false;
     {
       const std::lock_guard<std::mutex> lock(dumpsys_mutex_);
       classic_impl_ = new classic_impl(
-          hci_layer_, controller_, handler_, round_robin_scheduler_, crash_on_unknown_handle, acl_scheduler_);
+          hci_layer_,
+          controller_,
+          handler_,
+          round_robin_scheduler_,
+          crash_on_unknown_handle,
+          acl_scheduler_,
+          remote_name_request_module_);
       le_impl_ = new le_impl(hci_layer_, controller_, handler_, round_robin_scheduler_, crash_on_unknown_handle);
     }
 
@@ -92,6 +103,9 @@ struct AclManager::impl {
       classic_impl_ = nullptr;
     }
 
+    unknown_acl_alarm_.reset();
+    waiting_packets_.clear();
+
     delete round_robin_scheduler_;
     hci_queue_end_ = nullptr;
     handler_ = nullptr;
@@ -99,8 +113,44 @@ struct AclManager::impl {
     acl_scheduler_ = nullptr;
   }
 
+  void retry_unknown_acl(bool timed_out) {
+    std::vector<AclView> unsent_packets;
+    for (const auto& itr : waiting_packets_) {
+      auto handle = itr.GetHandle();
+      if (!classic_impl_->send_packet_upward(
+              handle,
+              [itr](struct acl_manager::assembler* assembler) {
+                assembler->on_incoming_packet(itr);
+              }) &&
+          !le_impl_->send_packet_upward(handle, [itr](struct acl_manager::assembler* assembler) {
+            assembler->on_incoming_packet(itr);
+          })) {
+        if (!timed_out) {
+          unsent_packets.push_back(itr);
+        } else {
+          LOG_ERROR(
+              "Dropping packet of size %zu to unknown connection 0x%0hx",
+              itr.size(),
+              itr.GetHandle());
+        }
+      }
+    }
+    waiting_packets_ = std::move(unsent_packets);
+  }
+
+  static void on_unknown_acl_timer(struct AclManager::impl* impl) {
+    LOG_INFO("Timer fired!");
+    impl->retry_unknown_acl(/* timed_out = */ true);
+    impl->unknown_acl_alarm_.reset();
+  }
+
   // Invoked from some external Queue Reactable context 2
   void dequeue_and_route_acl_packet_to_connection() {
+    // Retry any waiting packets first
+    if (!waiting_packets_.empty()) {
+      retry_unknown_acl(/* timed_out = */ false);
+    }
+
     auto packet = hci_queue_end_->TryDequeue();
     ASSERT(packet != nullptr);
     if (!packet->IsValid()) {
@@ -115,7 +165,16 @@ struct AclManager::impl {
     if (le_impl_->send_packet_upward(
             handle, [&packet](struct acl_manager::assembler* assembler) { assembler->on_incoming_packet(*packet); }))
       return;
-    LOG_INFO("Dropping packet of size %zu to unknown connection 0x%0hx", packet->size(), packet->GetHandle());
+    if (unknown_acl_alarm_ == nullptr) {
+      unknown_acl_alarm_.reset(new os::Alarm(handler_));
+    }
+    waiting_packets_.push_back(*packet);
+    LOG_INFO(
+        "Saving packet of size %zu to unknown connection 0x%0hx",
+        packet->size(),
+        packet->GetHandle());
+    unknown_acl_alarm_->Schedule(
+        BindOnce(&on_unknown_acl_timer, common::Unretained(this)), kWaitBeforeDroppingUnknownAcl);
   }
 
   void Dump(
@@ -126,6 +185,7 @@ struct AclManager::impl {
   classic_impl* classic_impl_ = nullptr;
   le_impl* le_impl_ = nullptr;
   AclScheduler* acl_scheduler_ = nullptr;
+  RemoteNameRequestModule* remote_name_request_module_ = nullptr;
   os::Handler* handler_ = nullptr;
   Controller* controller_ = nullptr;
   HciLayer* hci_layer_ = nullptr;
@@ -134,15 +194,20 @@ struct AclManager::impl {
   std::atomic_bool enqueue_registered_ = false;
   uint16_t default_link_policy_settings_ = 0xffff;
   mutable std::mutex dumpsys_mutex_;
+  std::unique_ptr<os::Alarm> unknown_acl_alarm_;
+  std::vector<AclView> waiting_packets_;
+  static constexpr std::chrono::seconds kWaitBeforeDroppingUnknownAcl{1};
 };
 
 AclManager::AclManager() : pimpl_(std::make_unique<impl>(*this)) {}
 
 void AclManager::RegisterCallbacks(ConnectionCallbacks* callbacks, os::Handler* handler) {
   ASSERT(callbacks != nullptr && handler != nullptr);
-  GetHandler()->Post(common::BindOnce(&classic_impl::handle_register_callbacks,
-                                      common::Unretained(pimpl_->classic_impl_), common::Unretained(callbacks),
-                                      common::Unretained(handler)));
+  GetHandler()->Post(common::BindOnce(
+      &classic_impl::handle_register_callbacks,
+      common::Unretained(pimpl_->classic_impl_),
+      common::Unretained(callbacks),
+      common::Unretained(handler)));
 }
 
 void AclManager::UnregisterCallbacks(ConnectionCallbacks* callbacks, std::promise<void> promise) {
@@ -185,6 +250,11 @@ void AclManager::IsOnBackgroundList(AddressWithType address_with_type, std::prom
 
 void AclManager::SetLeSuggestedDefaultDataParameters(uint16_t octets, uint16_t time) {
   CallOn(pimpl_->le_impl_, &le_impl::set_le_suggested_default_data_parameters, octets, time);
+}
+
+void AclManager::LeSetDefaultSubrate(
+    uint16_t subrate_min, uint16_t subrate_max, uint16_t max_latency, uint16_t cont_num, uint16_t sup_tout) {
+  CallOn(pimpl_->le_impl_, &le_impl::LeSetDefaultSubrate, subrate_min, subrate_max, max_latency, cont_num, sup_tout);
 }
 
 void AclManager::SetPrivacyPolicyForInitiatorAddress(
@@ -289,9 +359,20 @@ void AclManager::WriteDefaultLinkPolicySettings(uint16_t default_link_policy_set
   CallOn(pimpl_->classic_impl_, &classic_impl::write_default_link_policy_settings, default_link_policy_settings);
 }
 
-void AclManager::OnAdvertisingSetTerminated(ErrorCode status, uint16_t conn_handle, hci::AddressWithType adv_address) {
+void AclManager::OnAdvertisingSetTerminated(
+    ErrorCode status,
+    uint16_t conn_handle,
+    uint8_t adv_set_id,
+    hci::AddressWithType adv_address,
+    bool is_discoverable) {
   if (status == ErrorCode::SUCCESS) {
-    CallOn(pimpl_->le_impl_, &le_impl::UpdateLocalAddress, conn_handle, adv_address);
+    CallOn(
+        pimpl_->le_impl_,
+        &le_impl::OnAdvertisingSetTerminated,
+        conn_handle,
+        adv_set_id,
+        adv_address,
+        is_discoverable);
   }
 }
 
@@ -332,6 +413,9 @@ void AclManager::ListDependencies(ModuleList* list) const {
   list->add<Controller>();
   list->add<storage::StorageModule>();
   list->add<AclScheduler>();
+  if (bluetooth::common::init_flags::gd_remote_name_request_is_enabled()) {
+    list->add<RemoteNameRequestModule>();
+  }
 }
 
 void AclManager::Start() {

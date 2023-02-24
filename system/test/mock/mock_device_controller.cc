@@ -24,8 +24,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -237,6 +235,11 @@ bool supports_configure_data_path(void) {
   return HCI_CONFIGURE_DATA_PATH_SUPPORTED(supported_commands);
 }
 
+#define HCI_SET_MIN_ENCRYPTION_KEY_SIZE_SUPPORTED(x) ((x)[45] & 0x80)
+bool supports_set_min_encryption_key_size(void) {
+  return HCI_SET_MIN_ENCRYPTION_KEY_SIZE_SUPPORTED(supported_commands);
+}
+
 bool supports_ble(void) { return ble_supported; }
 
 bool supports_ble_privacy(void) {
@@ -304,6 +307,14 @@ bool supports_ble_isochronous_broadcaster(void) {
 
 bool supports_ble_synchronized_receiver(void) {
   return HCI_LE_SYNCHRONIZED_RECEIVER(features_ble.as_array);
+}
+
+bool supports_ble_connection_subrating(void) {
+  return HCI_LE_CONN_SUBRATING_SUPPORT(features_ble.as_array);
+}
+
+bool supports_ble_connection_subrating_host(void) {
+  return HCI_LE_CONN_SUBRATING_HOST_SUPPORT(features_ble.as_array);
 }
 
 uint16_t get_acl_data_size_classic(void) { return acl_data_size_classic; }
@@ -383,6 +394,7 @@ tBTM_STATUS set_event_filter_inquiry_result_all_devices() {
   return BTM_SUCCESS;
 }
 
+// clang-format off
 const controller_t interface = {
     get_is_ready,
 
@@ -424,6 +436,7 @@ const controller_t interface = {
     supports_sniff_subrating,
     supports_encryption_pause,
     supports_configure_data_path,
+    supports_set_min_encryption_key_size,
 
     supports_ble,
     supports_ble_packet_extension,
@@ -442,6 +455,8 @@ const controller_t interface = {
     supports_ble_connected_isochronous_stream_peripheral,
     supports_ble_isochronous_broadcaster,
     supports_ble_synchronized_receiver,
+    supports_ble_connection_subrating,
+    supports_ble_connection_subrating_host,
 
     get_acl_data_size_classic,
     get_acl_data_size_ble,
@@ -474,7 +489,9 @@ const controller_t interface = {
     set_event_filter_connection_setup_all_devices,
     allow_wake_by_hid,
     set_default_event_mask_except,
-    set_event_filter_inquiry_result_all_devices};
+    set_event_filter_inquiry_result_all_devices,
+};
+// clang-format on
 
 }  // namespace device_controller
 }  // namespace mock

@@ -12,10 +12,12 @@ mod test_utils;
 
 use crate::lint::Lintable;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum OutputFormat {
     JSON,
     Rust,
+    RustNoAlloc,
+    RustNoAllocTest,
 }
 
 impl std::str::FromStr for OutputFormat {
@@ -25,7 +27,9 @@ impl std::str::FromStr for OutputFormat {
         match input.to_lowercase().as_str() {
             "json" => Ok(Self::JSON),
             "rust" => Ok(Self::Rust),
-            _ => Err(format!("could not parse {:?}, valid option are 'json' and 'rust'.", input)),
+            "rust_no_alloc" => Ok(Self::RustNoAlloc),
+            "rust_no_alloc_test" => Ok(Self::RustNoAllocTest),
+            _ => Err(format!("could not parse {:?}, valid option are 'json', 'rust', 'rust_no_alloc', and 'rust_no_alloc_test'.", input)),
         }
     }
 }
@@ -34,12 +38,12 @@ impl std::str::FromStr for OutputFormat {
 #[clap(name = "pdl-parser", about = "Packet Description Language parser tool.")]
 struct Opt {
     /// Print tool version and exit.
-    #[clap(short, long = "--version")]
+    #[clap(short, long = "version")]
     version: bool,
 
-    /// Generate output in this format ("json" or "rust"). The output
+    /// Generate output in this format ("json", "rust", "rust_no_alloc", "rust_no_alloc_test"). The output
     /// will be printed on stdout in both cases.
-    #[clap(short, long = "--output-format", name = "FORMAT", default_value = "JSON")]
+    #[clap(short, long = "output-format", name = "FORMAT", default_value = "JSON")]
     output_format: OutputFormat,
 
     /// Input file.
@@ -48,7 +52,7 @@ struct Opt {
 }
 
 fn main() -> std::process::ExitCode {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     if opt.version {
         println!("Packet Description Language parser version 1.0");
@@ -72,6 +76,16 @@ fn main() -> std::process::ExitCode {
                 OutputFormat::Rust => {
                     println!("{}", backends::rust::generate(&sources, &file))
                 }
+                OutputFormat::RustNoAlloc => {
+                    let schema = backends::intermediate::generate(&file).unwrap();
+                    println!("{}", backends::rust_no_allocation::generate(&file, &schema).unwrap())
+                }
+                OutputFormat::RustNoAllocTest => {
+                    println!(
+                        "{}",
+                        backends::rust_no_allocation::test::generate_test_file().unwrap()
+                    )
+                }
             }
             std::process::ExitCode::SUCCESS
         }
@@ -81,5 +95,16 @@ fn main() -> std::process::ExitCode {
             term::emit(&mut writer.lock(), &config, &sources, &err).expect("Could not print error");
             std::process::ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_opt() {
+        Opt::command().debug_assert();
     }
 }

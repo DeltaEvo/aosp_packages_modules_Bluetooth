@@ -15,11 +15,25 @@ package {
 
 cc_defaults {
     name: "rootcanal_defaults",
+    tidy: true,
+    tidy_checks: [
+        "-*",
+        "readability-*",
+	"-readability-function-size",
+        "-readability-identifier-length",
+        "-readability-implicit-bool-conversion",
+        "-readability-magic-numbers",
+        "-readability-use-anyofallof",
+    ],
+    tidy_checks_as_errors: [
+        "readability-*",
+    ],
+    tidy_flags: [
+        "--header-filter=^.*tools\\/rootcanal\\/(model|include|net|desktop)\\/(.(?!\\.pb\\.h))*$",
+    ],
     defaults: [
         "fluoride_common_options",
         "gd_defaults",
-        "gd_clang_tidy",
-        "gd_clang_tidy_ignore_android",
     ],
     cflags: [
         "-fvisibility=hidden",
@@ -28,9 +42,6 @@ cc_defaults {
     local_include_dirs: [
         "include",
     ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system/gd",
-    ],
     header_libs: [
         "libbase_headers",
     ],
@@ -38,6 +49,16 @@ cc_defaults {
         "RootCanalGeneratedPackets_h",
         "RootCanalBrEdrBBGeneratedPackets_h",
         "BluetoothGeneratedPackets_h",
+    ],
+}
+
+filegroup {
+    name: "lib_sources",
+    srcs: [
+        "lib/crypto/crypto.cc",
+        "lib/hci/address.cc",
+        "lib/hci/class_of_device.cc",
+        "lib/hci/pcap_filter.cc",
     ],
 }
 
@@ -75,16 +96,16 @@ cc_library_static {
         "model/hci/hci_socket_transport.cc",
         "model/setup/async_manager.cc",
         "model/setup/device_boutique.cc",
-        "model/setup/phy_layer_factory.cc",
+        "model/setup/phy_layer.cc",
+        "model/setup/phy_device.cc",
         "model/setup/test_channel_transport.cc",
         "model/setup/test_command_handler.cc",
         "model/setup/test_model.cc",
         "net/posix/posix_async_socket.cc",
         "net/posix/posix_async_socket_connector.cc",
         "net/posix/posix_async_socket_server.cc",
+        ":lib_sources",
         ":BluetoothPacketSources",
-        ":BluetoothHciClassSources",
-        ":BluetoothCryptoToolboxSources",
     ],
     export_include_dirs: [
         "include",
@@ -98,6 +119,7 @@ cc_library_static {
     ],
     shared_libs: [
         "libbase",
+        "libcrypto",
     ],
     static_libs: [
         "libjsoncpp",
@@ -126,9 +148,8 @@ cc_library_host_shared {
         "model/controller/security_manager.cc",
         "model/devices/device.cc",
         "model/setup/async_manager.cc",
+        ":lib_sources",
         ":BluetoothPacketSources",
-        ":BluetoothHciClassSources",
-        ":BluetoothCryptoToolboxSources",
     ],
     export_include_dirs: [
         "include",
@@ -136,6 +157,7 @@ cc_library_host_shared {
     ],
     stl: "libc++_static",
     static_libs: [
+        "libcrypto",
         "libjsoncpp",
     ],
     whole_static_libs: [
@@ -202,6 +224,7 @@ cc_test_host {
         "rootcanal_defaults",
     ],
     srcs: [
+        "test/controller/le/rpa_generation_test.cc",
         "test/controller/le/le_set_random_address_test.cc",
         "test/controller/le/le_clear_filter_accept_list_test.cc",
         "test/controller/le/le_add_device_to_filter_accept_list_test.cc",
@@ -233,6 +256,7 @@ cc_test_host {
     ],
     shared_libs: [
         "libbase",
+        "libcrypto",
     ],
     static_libs: [
         "libbt-rootcanal",
@@ -250,8 +274,8 @@ python_test_host {
         ":hci_packets_python3_gen",
         ":link_layer_packets_python3_gen",
         "test/main.py",
-        "test/LL/DDI/SCN/BV_13_C.py",
-        "test/LL/DDI/SCN/BV_14_C.py",
+        "test/LL/DDI/ADV/*.py",
+        "test/LL/DDI/SCN/*.py",
     ],
     data: [
         ":lib_rootcanal_python3",
@@ -291,9 +315,6 @@ cc_test_host {
     local_include_dirs: [
         "include",
     ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system/gd",
-    ],
     shared_libs: [
         "libbase",
     ],
@@ -331,6 +352,7 @@ cc_binary_host {
     ],
     static_libs: [
         "libc++fs",
+        "libcrypto",
         "libjsoncpp",
         "libprotobuf-cpp-lite",
         "libscriptedbeaconpayload-protos-lite",

@@ -65,12 +65,6 @@ using bluetooth::groups::DeviceGroups;
  *  Constants & Macros
  ******************************************************************************/
 
-constexpr char kPrivateAddressPrefix[] = "xx:xx:xx:xx";
-#define PRIVATE_ADDRESS(addr)                                            \
-  (addr.ToString()                                                       \
-       .replace(0, strlen(kPrivateAddressPrefix), kPrivateAddressPrefix) \
-       .c_str())
-
 #define BTIF_STORAGE_CSIS_AUTOCONNECT "CsisAutoconnect"
 #define BTIF_STORAGE_CSIS_SET_INFO_BIN "CsisSetInfoBin"
 #define BTIF_STORAGE_LEAUDIO_AUTOCONNECT "LeAudioAutoconnect"
@@ -266,7 +260,7 @@ btif_storage_get_hid_device_addresses(void) {
     btif_get_address_type(bd_addr, &type);
 
     hid_addresses.push_back({bd_addr, type});
-    LOG_DEBUG("Remote device: %s", PRIVATE_ADDRESS(bd_addr));
+    LOG_DEBUG("Remote device: %s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
   }
   return hid_addresses;
 }
@@ -295,7 +289,7 @@ void btif_storage_add_hearing_aid(const HearingDevice& dev_info) {
           [](const HearingDevice& dev_info) {
             std::string bdstr = dev_info.address.ToString();
             VLOG(2) << "saving hearing aid device: "
-                    << ADDRESS_TO_LOGGABLE_CSTR(dev_info.address);
+                    << ADDRESS_TO_LOGGABLE_STR(dev_info.address);
             btif_config_set_int(bdstr, HEARING_AID_SERVICE_CHANGED_CCC_HANDLE,
                                 dev_info.service_changed_ccc_handle);
             btif_config_set_int(bdstr, HEARING_AID_READ_PSM_HANDLE,
@@ -1027,4 +1021,59 @@ bt_status_t btif_storage_remove_hidd(RawAddress* remote_bd_addr) {
   btif_config_save();
 
   return BT_STATUS_SUCCESS;
+}
+
+/*******************************************************************************
+ *
+ *Function : btif_storage_set_pce_profile_version
+ *
+ * Description :
+ *    This function store remote PCE profile version in config file
+ *
+ ******************************************************************************/
+void btif_storage_set_pce_profile_version(const RawAddress& remote_bd_addr,
+                                          uint16_t peer_pce_version) {
+  BTIF_TRACE_DEBUG("peer_pce_version : 0x%x", peer_pce_version);
+
+  if (btif_config_set_bin(
+          remote_bd_addr.ToString(), BT_CONFIG_KEY_PBAP_PCE_VERSION,
+          (const uint8_t*)&peer_pce_version, sizeof(peer_pce_version))) {
+    btif_config_save();
+  } else {
+    BTIF_TRACE_WARNING("Failed to store  peer_pce_version for %s",
+                       ADDRESS_TO_LOGGABLE_CSTR(remote_bd_addr));
+  }
+}
+
+/*******************************************************************************
+ *
+ * Function        btif_storage_is_pce_version_102
+ *
+ * Description     checks if remote supports PBAP 1.2
+ *
+ * Returns         true/false depending on remote PBAP version support found in
+ *file.
+ *
+ ******************************************************************************/
+bool btif_storage_is_pce_version_102(const RawAddress& remote_bd_addr) {
+  bool entry_found = false;
+  // Read and restore the PBAP PCE version from local storage
+  uint16_t pce_version = 0;
+  size_t version_value_size = sizeof(pce_version);
+  if (!btif_config_get_bin(remote_bd_addr.ToString(),
+                           BT_CONFIG_KEY_PBAP_PCE_VERSION,
+                           (uint8_t*)&pce_version, &version_value_size)) {
+    BTIF_TRACE_DEBUG("Failed to read cached peer PCE version for %s",
+                     ADDRESS_TO_LOGGABLE_CSTR(remote_bd_addr));
+    return entry_found;
+  }
+
+  if (pce_version == 0x0102) {
+    entry_found = true;
+  }
+
+  BTIF_TRACE_DEBUG("read cached peer PCE version 0x%04x for %s", pce_version,
+                   ADDRESS_TO_LOGGABLE_CSTR(remote_bd_addr));
+
+  return entry_found;
 }

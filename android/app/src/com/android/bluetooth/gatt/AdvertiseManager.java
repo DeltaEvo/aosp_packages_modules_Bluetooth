@@ -31,6 +31,7 @@ import android.util.Log;
 
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.gatt.GattService.AdvertiserMap;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,7 +42,8 @@ import java.util.Map;
  *
  * @hide
  */
-class AdvertiseManager {
+@VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+public class AdvertiseManager {
     private static final boolean DBG = GattServiceConfig.DBG;
     private static final String TAG = GattServiceConfig.TAG_PREFIX + "AdvertiseManager";
 
@@ -204,7 +206,7 @@ class AdvertiseManager {
 
     void startAdvertisingSet(AdvertisingSetParameters parameters, AdvertiseData advertiseData,
             AdvertiseData scanResponse, PeriodicAdvertisingParameters periodicParameters,
-            AdvertiseData periodicData, int duration, int maxExtAdvEvents,
+            AdvertiseData periodicData, int duration, int maxExtAdvEvents, int serverIf,
             IAdvertisingSetCallback callback) {
         AdvertisingSetDeathRecipient deathRecipient = new AdvertisingSetDeathRecipient(callback);
         IBinder binder = toBinder(callback);
@@ -234,7 +236,8 @@ class AdvertiseManager {
                     scanResponse, periodicParameters, periodicData, duration, maxExtAdvEvents);
 
             startAdvertisingSetNative(parameters, advDataBytes, scanResponseBytes,
-                    periodicParameters, periodicDataBytes, duration, maxExtAdvEvents, cbId);
+                    periodicParameters, periodicDataBytes, duration, maxExtAdvEvents, cbId,
+                    serverIf);
 
         } catch (IllegalArgumentException e) {
             try {
@@ -532,7 +535,7 @@ class AdvertiseManager {
     private native void startAdvertisingSetNative(AdvertisingSetParameters parameters,
             byte[] advertiseData, byte[] scanResponse,
             PeriodicAdvertisingParameters periodicParameters, byte[] periodicData, int duration,
-            int maxExtAdvEvents, int regId);
+            int maxExtAdvEvents, int regId, int serverIf);
 
     private native void getOwnAddressNative(int advertiserId);
 

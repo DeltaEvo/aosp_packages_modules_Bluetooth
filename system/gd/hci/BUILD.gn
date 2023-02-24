@@ -25,6 +25,7 @@ source_set("BluetoothHciSources") {
     "address.cc",
     "class_of_device.cc",
     "controller.cc",
+    "distance_measurement_manager.cc",
     "hci_layer.cc",
     "hci_metrics_logging.cc",
     "le_address_manager.cc",
@@ -32,6 +33,7 @@ source_set("BluetoothHciSources") {
     "le_scanning_manager.cc",
     "link_key.cc",
     "msft.cc",
+    "remote_name_request.cc",
     "uuid.cc",
     "vendor_specific_event_manager.cc",
   ]

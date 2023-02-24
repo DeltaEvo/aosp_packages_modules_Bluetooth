@@ -597,6 +597,7 @@ static uint8_t avrc_proc_far_msg(uint8_t handle, uint8_t label, uint8_t cr,
       return drop_code;
     }
     avrc_cmd.status = AVRC_STS_NO_ERROR;
+    avrc_cmd.opcode = AVRC_OP_INVALID;
     avrc_cmd.target_pdu = p_rcb->rasm_pdu;
 
     tAVRC_COMMAND avrc_command;
@@ -637,7 +638,6 @@ static void avrc_msg_cback(uint8_t handle, uint8_t label, uint8_t cr,
 
   if (cr == AVCT_CMD && (p_pkt->layer_specific & AVCT_DATA_CTRL &&
                          p_pkt->len > AVRC_PACKET_LEN)) {
-    android_errorWriteLog(0x534e4554, "177611958");
     AVRC_TRACE_WARNING("%s: Command length %d too long: must be at most %d",
                        __func__, p_pkt->len, AVRC_PACKET_LEN);
     osi_free(p_pkt);
@@ -667,7 +667,6 @@ static void avrc_msg_cback(uint8_t handle, uint8_t label, uint8_t cr,
     msg.browse.p_browse_pkt = p_pkt;
   } else {
     if (p_pkt->len < AVRC_AVC_HDR_SIZE) {
-      android_errorWriteLog(0x534e4554, "111803925");
       AVRC_TRACE_WARNING("%s: message length %d too short: must be at least %d",
                          __func__, p_pkt->len, AVRC_AVC_HDR_SIZE);
       osi_free(p_pkt);
@@ -710,7 +709,6 @@ static void avrc_msg_cback(uint8_t handle, uint8_t label, uint8_t cr,
             AVRC_TRACE_WARNING(
                 "%s: message length %d too short: must be at least %d",
                 __func__, p_pkt->len, AVRC_OP_UNIT_INFO_RSP_LEN);
-            android_errorWriteLog(0x534e4554, "79883824");
             drop = true;
             p_drop_msg = "UNIT_INFO_RSP too short";
             break;
@@ -748,7 +746,6 @@ static void avrc_msg_cback(uint8_t handle, uint8_t label, uint8_t cr,
             AVRC_TRACE_WARNING(
                 "%s: message length %d too short: must be at least %d",
                 __func__, p_pkt->len, AVRC_OP_SUB_UNIT_INFO_RSP_LEN);
-            android_errorWriteLog(0x534e4554, "79883824");
             drop = true;
             p_drop_msg = "SUB_UNIT_INFO_RSP too short";
             break;
@@ -950,6 +947,34 @@ static BT_HDR* avrc_pass_msg(tAVRC_MSG_PASS* p_msg) {
   p_cmd->len = (uint16_t)(p_data - (uint8_t*)(p_cmd + 1) - p_cmd->offset);
 
   return p_cmd;
+}
+
+/******************************************************************************
+ *
+ * Function         ARVC_GetControlProfileVersion
+ *
+ * Description      Get the AVRCP profile version
+ *
+ * Returns          The AVRCP control profile version
+ *
+ *****************************************************************************/
+uint16_t AVRC_GetControlProfileVersion() {
+  uint16_t profile_version = AVRC_REV_1_3;
+  char avrcp_version[PROPERTY_VALUE_MAX] = {0};
+  osi_property_get(AVRC_CONTROL_VERSION_PROPERTY, avrcp_version,
+                   AVRC_1_3_STRING);
+
+  if (!strncmp(AVRC_1_6_STRING, avrcp_version, sizeof(AVRC_1_6_STRING))) {
+    profile_version = AVRC_REV_1_6;
+  } else if (!strncmp(AVRC_1_5_STRING, avrcp_version,
+                      sizeof(AVRC_1_5_STRING))) {
+    profile_version = AVRC_REV_1_5;
+  } else if (!strncmp(AVRC_1_4_STRING, avrcp_version,
+                      sizeof(AVRC_1_4_STRING))) {
+    profile_version = AVRC_REV_1_4;
+  }
+
+  return profile_version;
 }
 
 /******************************************************************************

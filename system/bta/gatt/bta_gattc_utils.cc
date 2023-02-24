@@ -191,6 +191,26 @@ tBTA_GATTC_CLCB* bta_gattc_find_alloc_clcb(tGATT_IF client_if,
 
 /*******************************************************************************
  *
+ * Function         bta_gattc_server_disconnected
+ *
+ * Description      Set server cache disconnected
+ *
+ * Returns          pointer to the srcb
+ *
+ ******************************************************************************/
+void bta_gattc_server_disconnected(tBTA_GATTC_SERV* p_srcb) {
+  if (p_srcb && p_srcb->connected) {
+    p_srcb->connected = false;
+    p_srcb->state = BTA_GATTC_SERV_IDLE;
+    p_srcb->mtu = 0;
+
+    // clear reallocating
+    p_srcb->gatt_database.Clear();
+  }
+}
+
+/*******************************************************************************
+ *
  * Function         bta_gattc_clcb_dealloc
  *
  * Description      Deallocte a clcb
@@ -385,7 +405,7 @@ BtaEnqueuedResult_t bta_gattc_enqueue(tBTA_GATTC_CLCB* p_clcb,
   LOG_INFO(
       "Already has a pending command to executer. Queuing for later %s conn "
       "id=0x%04x",
-      p_clcb->bda.ToString().c_str(), p_clcb->bta_conn_id);
+      ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda), p_clcb->bta_conn_id);
   p_clcb->p_q_cmd_queue.push_back(p_data);
 
   return ENQUEUED_FOR_LATER;
@@ -499,7 +519,7 @@ bool bta_gattc_mark_bg_conn(tGATT_IF client_if,
   if (!add) {
     LOG(ERROR) << __func__
                << " unable to find the bg connection mask for bd_addr="
-               << remote_bda_ptr;
+               << ADDRESS_TO_LOGGABLE_STR(remote_bda_ptr);
     return false;
   } else /* adding a new device mask */
   {
@@ -511,7 +531,7 @@ bool bta_gattc_mark_bg_conn(tGATT_IF client_if,
 
         p_cif_mask = &p_bg_tck->cif_mask;
 
-        *p_cif_mask = (1 << (client_if - 1));
+        *p_cif_mask = ((tBTA_GATTC_CIF_MASK)1 << (client_if - 1));
         return true;
       }
     }
@@ -538,7 +558,7 @@ bool bta_gattc_check_bg_conn(tGATT_IF client_if, const RawAddress& remote_bda,
   for (i = 0; i < ble_acceptlist_size() && !is_bg_conn; i++, p_bg_tck++) {
     if (p_bg_tck->in_use && (p_bg_tck->remote_bda == remote_bda ||
                              p_bg_tck->remote_bda.IsEmpty())) {
-      if (((p_bg_tck->cif_mask & (1 << (client_if - 1))) != 0) &&
+      if (((p_bg_tck->cif_mask & ((tBTA_GATTC_CIF_MASK)1 << (client_if - 1))) != 0) &&
           role == HCI_ROLE_CENTRAL)
         is_bg_conn = true;
     }

@@ -242,7 +242,8 @@ struct tBTA_DM_PEER_DEVICE {
   bool in_use;
 
  private:
-  friend void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport);
+  friend void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
+                            uint16_t acl_handle);
   friend void bta_dm_pm_btm_status(const RawAddress& bd_addr,
                                    tBTM_PM_STATUS status, uint16_t value,
                                    tHCI_STATUS hci_status);
@@ -282,7 +283,7 @@ typedef struct {
   std::string ToString() const {
     return base::StringPrintf(
         "peer:%s sys_name:%s app_id:%hhu state:%s new:request:%s",
-        PRIVATE_ADDRESS(peer_bdaddr), BtaIdSysText(id).c_str(), app_id,
+        ADDRESS_TO_LOGGABLE_CSTR(peer_bdaddr), BtaIdSysText(id).c_str(), app_id,
         bta_sys_conn_status_text(state).c_str(), logbool(new_request).c_str());
   }
 
@@ -451,7 +452,7 @@ typedef struct {
 typedef struct {
   uint8_t allow_mask; /* mask of sniff/hold/park modes to allow */
   uint8_t ssr; /* set SSR on conn open/unpark */
-  tBTA_DM_PM_ACTN actn_tbl[BTA_DM_PM_NUM_EVTS][2];
+  tBTA_DM_PM_ACTN actn_tbl[BTA_DM_PM_NUM_EVTS];
 
 } tBTA_DM_PM_SPEC;
 
@@ -470,8 +471,16 @@ typedef struct {
 
 extern const uint16_t bta_service_id_to_uuid_lkup_tbl[];
 
+/* For Insight, PM cfg lookup tables are runtime configurable (to allow tweaking
+ * of params for power consumption measurements) */
+#ifndef BTE_SIM_APP
+#define tBTA_DM_PM_TYPE_QUALIFIER const
+#else
+#define tBTA_DM_PM_TYPE_QUALIFIER
+#endif
+
 extern const tBTA_DM_PM_CFG* p_bta_dm_pm_cfg;
-extern const tBTA_DM_PM_SPEC* p_bta_dm_pm_spec;
+tBTA_DM_PM_TYPE_QUALIFIER tBTA_DM_PM_SPEC* get_bta_dm_pm_spec();
 extern const tBTM_PM_PWR_MD* p_bta_dm_pm_md;
 extern tBTA_DM_SSR_SPEC* p_bta_dm_ssr_spec;
 
@@ -587,6 +596,10 @@ void bta_dm_search_set_state(uint8_t state);
 
 void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding);
 void bta_dm_eir_update_cust_uuid(const tBTA_CUSTOM_UUID &curr, bool adding);
+
+void bta_dm_ble_subrate_request(const RawAddress& bd_addr, uint16_t subrate_min,
+                                uint16_t subrate_max, uint16_t max_latency,
+                                uint16_t cont_num, uint16_t timeout);
 
 #undef CASE_RETURN_TEXT
 #endif /* BTA_DM_INT_H */

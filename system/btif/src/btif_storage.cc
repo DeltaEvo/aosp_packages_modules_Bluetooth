@@ -42,6 +42,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "btif/include/stack_manager.h"
 #include "btif_api.h"
 #include "btif_config.h"
 #include "btif_util.h"
@@ -55,7 +56,6 @@
 #include "osi/include/osi.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btu.h"
-#include "stack_manager.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -935,7 +935,6 @@ static void remove_devices_with_sample_ltk() {
   }
 
   for (RawAddress address : bad_ltk) {
-    android_errorWriteLog(0x534e4554, "128437297");
     LOG(ERROR) << __func__ << ": removing bond to device using test TLK: "
                << ADDRESS_TO_LOGGABLE_STR(address);
 

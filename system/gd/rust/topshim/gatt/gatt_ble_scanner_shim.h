@@ -73,6 +73,7 @@ class BleScannerIntf : public ScanningCallbacks {
       uint16_t sync_handle, int8_t tx_power, int8_t rssi, uint8_t status, std::vector<uint8_t> data) override;
   void OnPeriodicSyncLost(uint16_t sync_handle) override;
   void OnPeriodicSyncTransferred(int pa_source, uint8_t status, RawAddress address) override;
+  void OnBigInfoReport(uint16_t sync_handle, bool encrypted) override;
 
   // Implementations of BleScannerInterface. These don't inherit from
   // BleScannerInterface because the Rust FFI boundary requires some clever
@@ -101,6 +102,9 @@ class BleScannerIntf : public ScanningCallbacks {
 
   // Enable/disable scan filter. Gets responses via |OnEnableCallback|.
   void ScanFilterEnable(bool enable);
+
+  // Is MSFT Extension supported?
+  bool IsMsftSupported();
 
   // Adds an MSFT filter. Gets responses via |OnMsftAdvMonitorAddCallback|.
   void MsftAdvMonitorAdd(uint32_t call_id, const RustMsftAdvMonitor& monitor);

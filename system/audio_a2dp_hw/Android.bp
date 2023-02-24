@@ -48,6 +48,9 @@ cc_library_static {
         "src/audio_a2dp_hw_utils.cc",
     ],
     host_supported: true,
+    apex_available: [
+        "com.android.btservices",
+    ],
     min_sdk_version: "29",
 }
 
@@ -69,4 +72,5 @@ cc_test {
         "audio.a2dp.default",
         "libosi",
     ],
+    min_sdk_version: "29",
 }

@@ -58,6 +58,10 @@ import pandora.AndroidProto.InternalConnectionRef
 import pandora.HostProto.Connection
 
 private const val TAG = "PandoraUtils"
+private val alphanumeric = ('A'..'Z') + ('a'..'z') + ('0'..'9')
+
+val initiatedConnection = HashSet<BluetoothDevice>()
+val waitedAclConnection = HashSet<BluetoothDevice>()
 
 fun shell(cmd: String): String {
   val fd = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(cmd)
@@ -78,6 +82,10 @@ fun intentFlow(context: Context, intentFilter: IntentFilter) = callbackFlow {
   val broadcastReceiver: BroadcastReceiver =
     object : BroadcastReceiver() {
       override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
+          initiatedConnection.remove(intent.getBluetoothDeviceExtra())
+          waitedAclConnection.remove(intent.getBluetoothDeviceExtra())
+        }
         trySendBlocking(intent)
       }
     }
@@ -339,4 +347,14 @@ fun buildAudioTrack(): AudioTrack? {
     .setTransferMode(AudioTrack.MODE_STREAM)
     .setBufferSizeInBytes(44100 * 2 * 2)
     .build()
+}
+
+/**
+ * Generates Alpha-numeric string of given length.
+ *
+ * @param length required string size.
+ * @return a generated string
+ */
+fun generateAlphanumericString(length: Int): String {
+  return buildString { repeat(length) { append(alphanumeric.random()) } }
 }

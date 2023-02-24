@@ -5,9 +5,44 @@ use codespan_reporting::term::termcolor;
 use std::collections::HashMap;
 use std::ptr;
 
-use crate::ast::*;
+use crate::{ast::*, parser};
+
+pub mod ast {
+    use serde::Serialize;
+
+    // Field and declaration size information.
+    #[derive(Default, Debug)]
+    #[allow(unused)]
+    pub enum Size {
+        // Constant size in bits.
+        Static(usize),
+        // Size indicated at packet parsing by
+        // a size or count field.
+        Dynamic,
+        // The size cannot be determined statically or at runtime.
+        // The packet assumes the largest possible size.
+        #[default]
+        Unknown,
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct Annotation();
+
+    impl crate::ast::Annotation for Annotation {
+        type FieldAnnotation = Size;
+        type DeclAnnotation = Size;
+    }
+
+    #[allow(unused)]
+    pub type Field = crate::ast::Field<Annotation>;
+    #[allow(unused)]
+    pub type Decl = crate::ast::Decl<Annotation>;
+    #[allow(unused)]
+    pub type File = crate::ast::File<Annotation>;
+}
 
 /// Aggregate linter diagnostics.
+#[derive(Debug)]
 pub struct LintDiagnostics {
     pub diagnostics: Vec<Diagnostic<FileId>>,
 }
@@ -19,74 +54,64 @@ pub trait Lintable {
     fn lint(&self) -> LintDiagnostics;
 }
 
-/// Represents a chain of group expansion.
-/// Each field but the last in the chain is a typedef field of a group.
-/// The last field can also be a typedef field of a group if the chain is
-/// not fully expanded.
-#[derive(Clone)]
-struct FieldPath<'d>(Vec<&'d Field>);
-
 /// Gather information about the full AST.
-struct Scope<'d> {
+#[derive(Debug)]
+pub struct Scope<'d> {
     // Collection of Group, Packet, Enum, Struct, Checksum, and CustomField declarations.
-    typedef: HashMap<String, &'d Decl>,
+    pub typedef: HashMap<String, &'d parser::ast::Decl>,
 
     // Collection of Packet, Struct, and Group scope declarations.
-    scopes: HashMap<&'d Decl, PacketScope<'d>>,
+    pub scopes: HashMap<&'d parser::ast::Decl, PacketScope<'d>>,
+
+    // Children for the Decl with the given id.
+    pub children: HashMap<String, Vec<&'d parser::ast::Decl>>,
 }
 
 /// Gather information about a Packet, Struct, or Group declaration.
-struct PacketScope<'d> {
+#[derive(Debug)]
+pub struct PacketScope<'d> {
     // Checksum starts, indexed by the checksum field id.
-    checksums: HashMap<String, FieldPath<'d>>,
+    checksums: HashMap<String, &'d parser::ast::Field>,
 
     // Size or count fields, indexed by the field id.
-    sizes: HashMap<String, FieldPath<'d>>,
+    pub sizes: HashMap<String, &'d parser::ast::Field>,
 
     // Payload or body field.
-    payload: Option<FieldPath<'d>>,
+    pub payload: Option<&'d parser::ast::Field>,
 
     // Typedef, scalar, array fields.
-    named: HashMap<String, FieldPath<'d>>,
+    pub named: HashMap<String, &'d parser::ast::Field>,
 
     // Group fields.
-    groups: HashMap<String, &'d Field>,
+    groups: HashMap<String, &'d parser::ast::Field>,
 
     // Flattened field declarations.
     // Contains field declarations from the original Packet, Struct, or Group,
     // where Group fields have been substituted by their body.
-    // Constrained Scalar or Typedef Group fields are substitued by a Fixed
-    // field.
-    fields: Vec<FieldPath<'d>>,
+    pub fields: Vec<&'d parser::ast::Field>,
 
     // Constraint declarations gathered from Group inlining.
     constraints: HashMap<String, &'d Constraint>,
 
     // Local and inherited field declarations. Only named fields are preserved.
     // Saved here for reference for parent constraint resolving.
-    all_fields: HashMap<String, &'d Field>,
+    pub all_fields: HashMap<String, &'d parser::ast::Field>,
 
     // Local and inherited constraint declarations.
     // Saved here for constraint conflict checks.
-    all_constraints: HashMap<String, &'d Constraint>,
+    pub all_constraints: HashMap<String, &'d Constraint>,
 }
 
-impl std::cmp::Eq for &Decl {}
-impl<'d> std::cmp::PartialEq for &'d Decl {
+impl std::cmp::Eq for &parser::ast::Decl {}
+impl<'d> std::cmp::PartialEq for &'d parser::ast::Decl {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(*self, *other)
     }
 }
 
-impl<'d> std::hash::Hash for &'d Decl {
+impl<'d> std::hash::Hash for &'d parser::ast::Decl {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         std::ptr::hash(*self, state);
-    }
-}
-
-impl FieldPath<'_> {
-    fn loc(&self) -> &SourceRange {
-        self.0.last().unwrap().loc()
     }
 }
 
@@ -138,10 +163,10 @@ fn bit_width(val: usize) -> usize {
 
 impl<'d> PacketScope<'d> {
     /// Insert a field declaration into a packet scope.
-    fn insert(&mut self, field: &'d Field, result: &mut LintDiagnostics) {
-        match field {
-            Field::Checksum { loc, field_id, .. } => {
-                self.checksums.insert(field_id.clone(), FieldPath(vec![field])).map(|prev| {
+    fn insert(&mut self, field: &'d parser::ast::Field, result: &mut LintDiagnostics) {
+        match &field.desc {
+            FieldDesc::Checksum { field_id, .. } => {
+                self.checksums.insert(field_id.clone(), field).map(|prev| {
                     result.push(
                         Diagnostic::error()
                             .with_message(format!(
@@ -149,8 +174,8 @@ impl<'d> PacketScope<'d> {
                                 field_id
                             ))
                             .with_labels(vec![
-                                loc.primary(),
-                                prev.loc()
+                                field.loc.primary(),
+                                prev.loc
                                     .secondary()
                                     .with_message("checksum start is first declared here"),
                             ]),
@@ -158,10 +183,14 @@ impl<'d> PacketScope<'d> {
                 })
             }
 
-            Field::Padding { .. } | Field::Reserved { .. } | Field::Fixed { .. } => None,
+            FieldDesc::Padding { .. }
+            | FieldDesc::Reserved { .. }
+            | FieldDesc::FixedScalar { .. }
+            | FieldDesc::FixedEnum { .. }
+            | FieldDesc::ElementSize { .. } => None,
 
-            Field::Size { loc, field_id, .. } | Field::Count { loc, field_id, .. } => {
-                self.sizes.insert(field_id.clone(), FieldPath(vec![field])).map(|prev| {
+            FieldDesc::Size { field_id, .. } | FieldDesc::Count { field_id, .. } => {
+                self.sizes.insert(field_id.clone(), field).map(|prev| {
                     result.push(
                         Diagnostic::error()
                             .with_message(format!(
@@ -169,45 +198,43 @@ impl<'d> PacketScope<'d> {
                                 field_id
                             ))
                             .with_labels(vec![
-                                loc.primary(),
-                                prev.loc().secondary().with_message("size is first declared here"),
+                                field.loc.primary(),
+                                prev.loc.secondary().with_message("size is first declared here"),
                             ]),
                     )
                 })
             }
 
-            Field::Body { loc, .. } | Field::Payload { loc, .. } => {
+            FieldDesc::Body { .. } | FieldDesc::Payload { .. } => {
                 if let Some(prev) = self.payload.as_ref() {
                     result.push(
                         Diagnostic::error()
                             .with_message("redeclaration of payload or body field")
                             .with_labels(vec![
-                                loc.primary(),
-                                prev.loc()
-                                    .secondary()
-                                    .with_message("payload is first declared here"),
+                                field.loc.primary(),
+                                prev.loc.secondary().with_message("payload is first declared here"),
                             ]),
                     )
                 }
-                self.payload = Some(FieldPath(vec![field]));
+                self.payload = Some(field);
                 None
             }
 
-            Field::Array { loc, id, .. }
-            | Field::Scalar { loc, id, .. }
-            | Field::Typedef { loc, id, .. } => self
+            FieldDesc::Array { id, .. }
+            | FieldDesc::Scalar { id, .. }
+            | FieldDesc::Typedef { id, .. } => self
                 .named
-                .insert(id.clone(), FieldPath(vec![field]))
-                .map(|prev| result.err_redeclared(id, "field", loc, prev.loc())),
+                .insert(id.clone(), field)
+                .map(|prev| result.err_redeclared(id, "field", &field.loc, &prev.loc)),
 
-            Field::Group { loc, group_id, .. } => {
+            FieldDesc::Group { group_id, .. } => {
                 self.groups.insert(group_id.clone(), field).map(|prev| {
                     result.push(
                         Diagnostic::error()
                             .with_message(format!("duplicate group `{}` insertion", group_id))
                             .with_labels(vec![
-                                loc.primary(),
-                                prev.loc()
+                                field.loc.primary(),
+                                prev.loc
                                     .secondary()
                                     .with_message(format!("`{}` is first used here", group_id)),
                             ]),
@@ -260,7 +287,7 @@ impl<'d> PacketScope<'d> {
         &mut self,
         scope: &Scope,
         packet_scope: &PacketScope<'d>,
-        group: &'d Field,
+        group: &'d parser::ast::Field,
         constraints: impl Iterator<Item = &'d Constraint>,
         result: &mut LintDiagnostics,
     ) {
@@ -277,22 +304,22 @@ impl<'d> PacketScope<'d> {
         }
 
         for (id, field) in packet_scope.checksums.iter() {
-            if let Some(prev) = self.checksums.insert(id.clone(), field.clone()) {
+            if let Some(prev) = self.checksums.insert(id.clone(), field) {
                 err_redeclared_by_group(
                     result,
                     format!("inserted group redeclares checksum start for `{}`", id),
-                    group.loc(),
-                    prev.loc(),
+                    &group.loc,
+                    &prev.loc,
                 )
             }
         }
         for (id, field) in packet_scope.sizes.iter() {
-            if let Some(prev) = self.sizes.insert(id.clone(), field.clone()) {
+            if let Some(prev) = self.sizes.insert(id.clone(), field) {
                 err_redeclared_by_group(
                     result,
                     format!("inserted group redeclares size or count for `{}`", id),
-                    group.loc(),
-                    prev.loc(),
+                    &group.loc,
+                    &prev.loc,
                 )
             }
         }
@@ -300,30 +327,26 @@ impl<'d> PacketScope<'d> {
             (Some(prev), Some(next)) => err_redeclared_by_group(
                 result,
                 "inserted group redeclares payload or body field",
-                next.loc(),
-                prev.loc(),
+                &next.loc,
+                &prev.loc,
             ),
-            (None, Some(payload)) => self.payload = Some(payload.clone()),
+            (None, Some(payload)) => self.payload = Some(payload),
             _ => (),
         }
         for (id, field) in packet_scope.named.iter() {
-            let mut path = vec![group];
-            path.extend(field.0.clone());
-            if let Some(prev) = self.named.insert(id.clone(), FieldPath(path)) {
+            if let Some(prev) = self.named.insert(id.clone(), field) {
                 err_redeclared_by_group(
                     result,
                     format!("inserted group redeclares field `{}`", id),
-                    group.loc(),
-                    prev.loc(),
+                    &group.loc,
+                    &prev.loc,
                 )
             }
         }
 
         // Append group fields to the finalizeed fields.
         for field in packet_scope.fields.iter() {
-            let mut path = vec![group];
-            path.extend(field.0.clone());
-            self.fields.push(FieldPath(path));
+            self.fields.push(field);
         }
 
         // Append group constraints to the caller packet_scope.
@@ -350,10 +373,13 @@ impl<'d> PacketScope<'d> {
 
     /// Return the field immediately preceding the selected field, or None
     /// if no such field exists.
-    fn get_preceding_field(&self, searched_field: &FieldPath) -> Option<&FieldPath> {
-        let mut preceding_field: Option<&FieldPath> = None;
+    fn get_preceding_field(
+        &self,
+        searched_field: &parser::ast::Field,
+    ) -> Option<&parser::ast::Field> {
+        let mut preceding_field: Option<&parser::ast::Field> = None;
         for field in self.fields.iter() {
-            if ptr::eq(field, searched_field) {
+            if ptr::eq(*field, searched_field) {
                 break;
             }
             preceding_field = Some(field);
@@ -361,18 +387,33 @@ impl<'d> PacketScope<'d> {
         preceding_field
     }
 
+    /// Lookup a field by name. This will also find the special
+    /// `_payload_` and `_body_` fields.
+    pub fn get_packet_field(&self, id: &str) -> Option<&parser::ast::Field> {
+        self.named.get(id).copied().or(match id {
+            "_payload_" | "_body_" => self.payload,
+            _ => None,
+        })
+    }
+
+    /// Find the size field corresponding to the payload or body
+    /// field of this packet.
+    pub fn get_payload_size_field(&self) -> Option<&parser::ast::Field> {
+        self.sizes.get("_payload_").or_else(|| self.sizes.get("_body_")).copied()
+    }
+
     /// Cleanup scope after processing all fields.
     fn finalize(&mut self, result: &mut LintDiagnostics) {
         // Check field shadowing.
-        for f in self.fields.iter().map(|f| f.0.last().unwrap()) {
+        for f in self.fields.iter() {
             if let Some(id) = f.id() {
-                if let Some(prev) = self.all_fields.insert(id.clone(), f) {
+                if let Some(prev) = self.all_fields.insert(id.to_string(), f) {
                     result.push(
                         Diagnostic::warning()
                             .with_message(format!("declaration of `{}` shadows parent field", id))
                             .with_labels(vec![
-                                f.loc().primary(),
-                                prev.loc()
+                                f.loc.primary(),
+                                prev.loc
                                     .secondary()
                                     .with_message(format!("`{}` is first declared here", id)),
                             ]),
@@ -392,7 +433,11 @@ fn lint_constraint(
 ) {
     // Validate constraint value types.
     match (packet_scope.all_fields.get(&constraint.id), &constraint.value, &constraint.tag_id) {
-        (Some(Field::Scalar { loc: field_loc, width, .. }), Some(value), _) => {
+        (
+            Some(Field { loc: field_loc, desc: FieldDesc::Scalar { width, .. }, .. }),
+            Some(value),
+            _,
+        ) => {
             if bit_width(*value) > *width {
                 result.push(
                     Diagnostic::error().with_message("invalid integer literal").with_labels(vec![
@@ -406,16 +451,15 @@ fn lint_constraint(
             }
         }
 
-        (Some(Field::Scalar { loc: field_loc, .. }), None, _) => {
-            result.push(Diagnostic::error().with_message("invalid literal type").with_labels(vec![
+        (Some(Field { loc: field_loc, desc: FieldDesc::Scalar { .. }, .. }), None, _) => result
+            .push(Diagnostic::error().with_message("invalid literal type").with_labels(vec![
                 constraint.loc.primary().with_message("expected integer literal"),
                 field_loc.secondary().with_message("the value is used here"),
-            ]))
-        }
+            ])),
 
-        (Some(Field::Typedef { type_id, loc: field_loc, .. }), _, _) => {
+        (Some(Field { loc: field_loc, desc: FieldDesc::Typedef { type_id, .. }, .. }), _, _) => {
             match (scope.typedef.get(type_id), &constraint.tag_id) {
-                (Some(Decl::Enum { tags, .. }), Some(tag_id)) => {
+                (Some(Decl { desc: DeclDesc::Enum { tags, .. }, .. }), Some(tag_id)) => {
                     if !tags.iter().any(|t| &t.id == tag_id) {
                         result.push(
                             Diagnostic::error()
@@ -462,6 +506,23 @@ fn lint_constraint(
 }
 
 impl<'d> Scope<'d> {
+    pub fn new(file: &parser::ast::File) -> Result<Scope<'_>, LintDiagnostics> {
+        let mut lint_diagnostics = LintDiagnostics::new();
+        let scope = file.scope(&mut lint_diagnostics);
+
+        if !lint_diagnostics.diagnostics.is_empty() {
+            return Err(lint_diagnostics);
+        }
+        for decl in &file.declarations {
+            decl.lint(&scope, &mut lint_diagnostics)
+        }
+        if !lint_diagnostics.diagnostics.is_empty() {
+            return Err(lint_diagnostics);
+        }
+
+        Ok(scope)
+    }
+
     // Sort Packet, Struct, and Group declarations by reverse topological
     // orde, and inline Group fields.
     // Raises errors and warnings for:
@@ -470,20 +531,20 @@ impl<'d> Scope<'d> {
     //      - undeclared Packet or Struct parents,
     //      - recursive Group insertion,
     //      - recursive Packet or Struct inheritance.
-    fn finalize(&mut self, result: &mut LintDiagnostics) -> Vec<&'d Decl> {
+    fn finalize(&mut self, result: &mut LintDiagnostics) -> Vec<&'d parser::ast::Decl> {
         // Auxiliary function implementing BFS on Packet tree.
         enum Mark {
             Temporary,
             Permanent,
         }
         struct Context<'d> {
-            list: Vec<&'d Decl>,
-            visited: HashMap<&'d Decl, Mark>,
-            scopes: HashMap<&'d Decl, PacketScope<'d>>,
+            list: Vec<&'d parser::ast::Decl>,
+            visited: HashMap<&'d parser::ast::Decl, Mark>,
+            scopes: HashMap<&'d parser::ast::Decl, PacketScope<'d>>,
         }
 
         fn bfs<'s, 'd>(
-            decl: &'d Decl,
+            decl: &'d parser::ast::Decl,
             context: &'s mut Context<'d>,
             scope: &Scope<'d>,
             result: &mut LintDiagnostics,
@@ -498,18 +559,17 @@ impl<'d> Scope<'d> {
                                 decl.kind(),
                                 decl.id().unwrap()
                             ))
-                            .with_labels(vec![decl.loc().primary()]),
+                            .with_labels(vec![decl.loc.primary()]),
                     );
                     return None;
                 }
                 _ => (),
             }
 
-            let (parent_id, fields) = match decl {
-                Decl::Packet { parent_id, fields, .. } | Decl::Struct { parent_id, fields, .. } => {
-                    (parent_id.as_ref(), fields)
-                }
-                Decl::Group { fields, .. } => (None, fields),
+            let (parent_id, fields) = match &decl.desc {
+                DeclDesc::Packet { parent_id, fields, .. }
+                | DeclDesc::Struct { parent_id, fields, .. } => (parent_id.as_ref(), fields),
+                DeclDesc::Group { fields, .. } => (None, fields),
                 _ => return None,
             };
 
@@ -518,8 +578,8 @@ impl<'d> Scope<'d> {
 
             // Iterate over Struct and Group fields.
             for f in fields {
-                match f {
-                    Field::Group { group_id, constraints, .. } => {
+                match &f.desc {
+                    FieldDesc::Group { group_id, constraints, .. } => {
                         match scope.typedef.get(group_id) {
                             None => result.push(
                                 Diagnostic::error()
@@ -527,9 +587,9 @@ impl<'d> Scope<'d> {
                                         "undeclared group identifier `{}`",
                                         group_id
                                     ))
-                                    .with_labels(vec![f.loc().primary()]),
+                                    .with_labels(vec![f.loc.primary()]),
                             ),
-                            Some(group_decl @ Decl::Group { .. }) => {
+                            Some(group_decl @ Decl { desc: DeclDesc::Group { .. }, .. }) => {
                                 // Recurse to flatten the inserted group.
                                 if let Some(rscope) = bfs(group_decl, context, scope, result) {
                                     // Inline the group fields and constraints into
@@ -543,13 +603,13 @@ impl<'d> Scope<'d> {
                                         "invalid group field identifier `{}`",
                                         group_id
                                     ))
-                                    .with_labels(vec![f.loc().primary()])
+                                    .with_labels(vec![f.loc.primary()])
                                     .with_notes(vec!["hint: expected group identifier".to_owned()]),
                             ),
                         }
                     }
-                    Field::Typedef { type_id, .. } => {
-                        lscope.fields.push(FieldPath(vec![f]));
+                    FieldDesc::Typedef { type_id, .. } => {
+                        lscope.fields.push(f);
                         match scope.typedef.get(type_id) {
                             None => result.push(
                                 Diagnostic::error()
@@ -557,38 +617,43 @@ impl<'d> Scope<'d> {
                                         "undeclared typedef identifier `{}`",
                                         type_id
                                     ))
-                                    .with_labels(vec![f.loc().primary()]),
+                                    .with_labels(vec![f.loc.primary()]),
                             ),
-                            Some(struct_decl @ Decl::Struct { .. }) => {
+                            Some(struct_decl @ Decl { desc: DeclDesc::Struct { .. }, .. }) => {
                                 bfs(struct_decl, context, scope, result);
                             }
                             Some(_) => (),
                         }
                     }
-                    _ => lscope.fields.push(FieldPath(vec![f])),
+                    _ => lscope.fields.push(f),
                 }
             }
 
             // Iterate over parent declaration.
             let parent = parent_id.and_then(|id| scope.typedef.get(id));
-            match (decl, parent) {
-                (Decl::Packet { parent_id: Some(_), .. }, None)
-                | (Decl::Struct { parent_id: Some(_), .. }, None) => result.push(
+            match (&decl.desc, parent) {
+                (DeclDesc::Packet { parent_id: Some(_), .. }, None)
+                | (DeclDesc::Struct { parent_id: Some(_), .. }, None) => result.push(
                     Diagnostic::error()
                         .with_message(format!(
                             "undeclared parent identifier `{}`",
                             parent_id.unwrap()
                         ))
-                        .with_labels(vec![decl.loc().primary()])
+                        .with_labels(vec![decl.loc.primary()])
                         .with_notes(vec![format!("hint: expected {} parent", decl.kind())]),
                 ),
-                (Decl::Packet { .. }, Some(Decl::Struct { .. }))
-                | (Decl::Struct { .. }, Some(Decl::Packet { .. })) => result.push(
-                    Diagnostic::error()
-                        .with_message(format!("invalid parent identifier `{}`", parent_id.unwrap()))
-                        .with_labels(vec![decl.loc().primary()])
-                        .with_notes(vec![format!("hint: expected {} parent", decl.kind())]),
-                ),
+                (DeclDesc::Packet { .. }, Some(Decl { desc: DeclDesc::Struct { .. }, .. }))
+                | (DeclDesc::Struct { .. }, Some(Decl { desc: DeclDesc::Packet { .. }, .. })) => {
+                    result.push(
+                        Diagnostic::error()
+                            .with_message(format!(
+                                "invalid parent identifier `{}`",
+                                parent_id.unwrap()
+                            ))
+                            .with_labels(vec![decl.loc.primary()])
+                            .with_notes(vec![format!("hint: expected {} parent", decl.kind())]),
+                    )
+                }
                 (_, Some(parent_decl)) => {
                     if let Some(rscope) = bfs(parent_decl, context, scope, result) {
                         // Import the parent fields and constraints into the current scope.
@@ -617,21 +682,22 @@ impl<'d> Scope<'d> {
     }
 }
 
-impl Field {
+impl parser::ast::Field {
     fn kind(&self) -> &str {
-        match self {
-            Field::Checksum { .. } => "payload",
-            Field::Padding { .. } => "padding",
-            Field::Size { .. } => "size",
-            Field::Count { .. } => "count",
-            Field::Body { .. } => "body",
-            Field::Payload { .. } => "payload",
-            Field::Fixed { .. } => "fixed",
-            Field::Reserved { .. } => "reserved",
-            Field::Group { .. } => "group",
-            Field::Array { .. } => "array",
-            Field::Scalar { .. } => "scalar",
-            Field::Typedef { .. } => "typedef",
+        match &self.desc {
+            FieldDesc::Checksum { .. } => "payload",
+            FieldDesc::Padding { .. } => "padding",
+            FieldDesc::Size { .. } => "size",
+            FieldDesc::Count { .. } => "count",
+            FieldDesc::ElementSize { .. } => "elementsize",
+            FieldDesc::Body { .. } => "body",
+            FieldDesc::Payload { .. } => "payload",
+            FieldDesc::FixedScalar { .. } | FieldDesc::FixedEnum { .. } => "fixed",
+            FieldDesc::Reserved { .. } => "reserved",
+            FieldDesc::Group { .. } => "group",
+            FieldDesc::Array { .. } => "array",
+            FieldDesc::Scalar { .. } => "scalar",
+            FieldDesc::Typedef { .. } => "typedef",
         }
     }
 }
@@ -669,21 +735,20 @@ fn lint_enum(tags: &[Tag], width: usize, result: &mut LintDiagnostics) {
 fn lint_checksum(
     scope: &Scope,
     packet_scope: &PacketScope,
-    path: &FieldPath,
+    decl: &parser::ast::Field,
     field_id: &str,
     result: &mut LintDiagnostics,
 ) {
     // Checksum field must be declared before
     // the checksum start. The field must be a typedef with
     // a valid checksum type.
-    let checksum_loc = path.loc();
-    let field_decl = packet_scope.named.get(field_id);
+    let checksum_loc = &decl.loc;
 
-    match field_decl.and_then(|f| f.0.last()) {
-        Some(Field::Typedef { loc: field_loc, type_id, .. }) => {
+    match packet_scope.named.get(field_id) {
+        Some(Field { loc: field_loc, desc: FieldDesc::Typedef { type_id, .. }, .. }) => {
             // Check declaration type of checksum field.
             match scope.typedef.get(type_id) {
-                Some(Decl::Checksum { .. }) => (),
+                Some(Decl { desc: DeclDesc::Checksum { .. }, .. }) => (),
                 Some(decl) => result.push(
                     Diagnostic::error()
                         .with_message(format!("checksum start uses invalid field `{}`", field_id))
@@ -707,7 +772,7 @@ fn lint_checksum(
                 .with_message(format!("checksum start uses invalid field `{}`", field_id))
                 .with_labels(vec![
                     checksum_loc.primary(),
-                    field.loc().secondary().with_message(format!(
+                    field.loc.secondary().with_message(format!(
                         "`{}` is declared as {} field, expected typedef",
                         field_id,
                         field.kind()
@@ -722,7 +787,7 @@ fn lint_checksum(
 fn lint_size(
     _scope: &Scope,
     packet_scope: &PacketScope,
-    path: &FieldPath,
+    decl: &parser::ast::Field,
     field_id: &str,
     _width: usize,
     result: &mut LintDiagnostics,
@@ -732,28 +797,16 @@ fn lint_size(
     // The field must reference a valid body, payload or array
     // field.
 
-    let size_loc = path.loc();
+    let size_loc = &decl.loc;
 
     if field_id == "_payload_" {
-        return match packet_scope.payload.as_ref().and_then(|f| f.0.last()) {
-            Some(Field::Body { .. }) => result.push(
+        return match packet_scope.payload.as_ref() {
+            Some(Field { desc: FieldDesc::Body { .. }, .. }) => result.push(
                 Diagnostic::error()
                     .with_message("size field uses undeclared payload field, did you mean _body_ ?")
                     .with_labels(vec![size_loc.primary()]),
             ),
-            Some(Field::Payload { .. }) => {
-                match packet_scope.payload.as_ref().and_then(|f| f.0.first()) {
-                    Some(field) if field.loc().start < size_loc.start => result.push(
-                        Diagnostic::error().with_message("invalid size field").with_labels(vec![
-                            size_loc
-                                .primary()
-                                .with_message("size field is declared after payload field"),
-                            field.loc().secondary().with_message("payload field is declared here"),
-                        ]),
-                    ),
-                    _ => (),
-                }
-            }
+            Some(Field { desc: FieldDesc::Payload { .. }, .. }) => (),
             Some(_) => unreachable!(),
             None => result.push(
                 Diagnostic::error()
@@ -763,25 +816,13 @@ fn lint_size(
         };
     }
     if field_id == "_body_" {
-        return match packet_scope.payload.as_ref().and_then(|f| f.0.last()) {
-            Some(Field::Payload { .. }) => result.push(
+        return match packet_scope.payload.as_ref() {
+            Some(Field { desc: FieldDesc::Payload { .. }, .. }) => result.push(
                 Diagnostic::error()
                     .with_message("size field uses undeclared body field, did you mean _payload_ ?")
                     .with_labels(vec![size_loc.primary()]),
             ),
-            Some(Field::Body { .. }) => {
-                match packet_scope.payload.as_ref().and_then(|f| f.0.first()) {
-                    Some(field) if field.loc().start < size_loc.start => result.push(
-                        Diagnostic::error().with_message("invalid size field").with_labels(vec![
-                            size_loc
-                                .primary()
-                                .with_message("size field is declared after body field"),
-                            field.loc().secondary().with_message("body field is declared here"),
-                        ]),
-                    ),
-                    _ => (),
-                }
-            }
+            Some(Field { desc: FieldDesc::Body { .. }, .. }) => (),
             Some(_) => unreachable!(),
             None => result.push(
                 Diagnostic::error()
@@ -791,23 +832,24 @@ fn lint_size(
         };
     }
 
-    let field = packet_scope.named.get(field_id);
-
-    match field.and_then(|f| f.0.last()) {
-        Some(Field::Array { size: Some(_), loc: array_loc, .. }) => result.push(
-            Diagnostic::warning()
-                .with_message(format!("size field uses array `{}` with static size", field_id))
-                .with_labels(vec![
-                    size_loc.primary(),
-                    array_loc.secondary().with_message(format!("`{}` is declared here", field_id)),
-                ]),
-        ),
-        Some(Field::Array { .. }) => (),
+    match packet_scope.named.get(field_id) {
+        Some(Field { loc: array_loc, desc: FieldDesc::Array { size: Some(_), .. }, .. }) => result
+            .push(
+                Diagnostic::warning()
+                    .with_message(format!("size field uses array `{}` with static size", field_id))
+                    .with_labels(vec![
+                        size_loc.primary(),
+                        array_loc
+                            .secondary()
+                            .with_message(format!("`{}` is declared here", field_id)),
+                    ]),
+            ),
+        Some(Field { desc: FieldDesc::Array { .. }, .. }) => (),
         Some(field) => result.push(
             Diagnostic::error()
                 .with_message(format!("invalid `{}` field type", field_id))
                 .with_labels(vec![
-                    field.loc().primary().with_message(format!(
+                    field.loc.primary().with_message(format!(
                         "`{}` is declared as {}",
                         field_id,
                         field.kind()
@@ -819,20 +861,6 @@ fn lint_size(
         ),
 
         None => result.err_undeclared(field_id, size_loc),
-    };
-    match field.and_then(|f| f.0.first()) {
-        Some(field) if field.loc().start < size_loc.start => {
-            result.push(Diagnostic::error().with_message("invalid size field").with_labels(vec![
-                    size_loc
-                        .primary()
-                        .with_message(format!("size field is declared after field `{}`", field_id)),
-                    field
-                        .loc()
-                        .secondary()
-                        .with_message(format!("`{}` is declared here", field_id)),
-                ]))
-        }
-        _ => (),
     }
 }
 
@@ -840,7 +868,7 @@ fn lint_size(
 fn lint_count(
     _scope: &Scope,
     packet_scope: &PacketScope,
-    path: &FieldPath,
+    decl: &parser::ast::Field,
     field_id: &str,
     _width: usize,
     result: &mut LintDiagnostics,
@@ -849,25 +877,26 @@ fn lint_count(
     // The field must reference a valid array field.
     // Warning if the array already has a known size.
 
-    let count_loc = path.loc();
-    let field = packet_scope.named.get(field_id);
+    let count_loc = &decl.loc;
+    match packet_scope.named.get(field_id) {
+        Some(Field { loc: array_loc, desc: FieldDesc::Array { size: Some(_), .. }, .. }) => result
+            .push(
+                Diagnostic::warning()
+                    .with_message(format!("count field uses array `{}` with static size", field_id))
+                    .with_labels(vec![
+                        count_loc.primary(),
+                        array_loc
+                            .secondary()
+                            .with_message(format!("`{}` is declared here", field_id)),
+                    ]),
+            ),
 
-    match field.and_then(|f| f.0.last()) {
-        Some(Field::Array { size: Some(_), loc: array_loc, .. }) => result.push(
-            Diagnostic::warning()
-                .with_message(format!("count field uses array `{}` with static size", field_id))
-                .with_labels(vec![
-                    count_loc.primary(),
-                    array_loc.secondary().with_message(format!("`{}` is declared here", field_id)),
-                ]),
-        ),
-
-        Some(Field::Array { .. }) => (),
+        Some(Field { desc: FieldDesc::Array { .. }, .. }) => (),
         Some(field) => result.push(
             Diagnostic::error()
                 .with_message(format!("invalid `{}` field type", field_id))
                 .with_labels(vec![
-                    field.loc().primary().with_message(format!(
+                    field.loc.primary().with_message(format!(
                         "`{}` is declared as {}",
                         field_id,
                         field.kind()
@@ -879,86 +908,72 @@ fn lint_count(
         ),
 
         None => result.err_undeclared(field_id, count_loc),
-    };
-    match field.and_then(|f| f.0.first()) {
-        Some(field) if field.loc().start < count_loc.start => {
-            result.push(Diagnostic::error().with_message("invalid count field").with_labels(vec![
-                    count_loc.primary().with_message(format!(
-                        "count field is declared after field `{}`",
-                        field_id
-                    )),
-                    field
-                        .loc()
-                        .secondary()
-                        .with_message(format!("`{}` is declared here", field_id)),
-                ]))
-        }
-        _ => (),
     }
 }
 
 // Helper for linting fixed fields.
-#[allow(clippy::too_many_arguments)]
-fn lint_fixed(
-    scope: &Scope,
+fn lint_fixed_scalar(
+    _scope: &Scope,
     _packet_scope: &PacketScope,
-    path: &FieldPath,
-    width: &Option<usize>,
-    value: &Option<usize>,
-    enum_id: &Option<String>,
-    tag_id: &Option<String>,
+    decl: &parser::ast::Field,
+    width: usize,
+    value: usize,
     result: &mut LintDiagnostics,
 ) {
     // By parsing constraint, we already have that either
     // (width and value) or (enum_id and tag_id) are Some.
+    let fixed_loc = decl.loc;
 
-    let fixed_loc = path.loc();
+    // The value of a fixed field should have .
+    if bit_width(value) > width {
+        result.push(Diagnostic::error().with_message("invalid integer literal").with_labels(
+            vec![fixed_loc.primary().with_message(format!(
+                "expected maximum value of `{}`",
+                (1 << width) - 1
+            ))],
+        ))
+    }
+}
 
-    if width.is_some() {
-        // The value of a fixed field should have .
-        if bit_width(value.unwrap()) > width.unwrap() {
-            result.push(Diagnostic::error().with_message("invalid integer literal").with_labels(
-                vec![fixed_loc.primary().with_message(format!(
-                    "expected maximum value of `{}`",
-                    (1 << width.unwrap()) - 1
-                ))],
-            ))
-        }
-    } else {
-        // The fixed field should reference a valid enum id and tag id
-        // association.
-        match scope.typedef.get(enum_id.as_ref().unwrap()) {
-            Some(Decl::Enum { tags, .. }) => {
-                match tags.iter().find(|t| &t.id == tag_id.as_ref().unwrap()) {
-                    Some(_) => (),
-                    None => result.push(
-                        Diagnostic::error()
-                            .with_message(format!(
-                                "undeclared enum tag `{}`",
-                                tag_id.as_ref().unwrap()
-                            ))
-                            .with_labels(vec![fixed_loc.primary()]),
-                    ),
-                }
+fn lint_fixed_enum(
+    scope: &Scope,
+    _packet_scope: &PacketScope,
+    decl: &parser::ast::Field,
+    enum_id: &str,
+    tag_id: &str,
+    result: &mut LintDiagnostics,
+) {
+    // By parsing constraint, we already have that either
+    // (width and value) or (enum_id and tag_id) are Some.
+    let fixed_loc = decl.loc;
+
+    // The fixed field should reference a valid enum id and tag id
+    // association.
+    match scope.typedef.get(enum_id) {
+        Some(Decl { desc: DeclDesc::Enum { tags, .. }, .. }) => {
+            match tags.iter().find(|t| t.id == tag_id) {
+                Some(_) => (),
+                None => result.push(
+                    Diagnostic::error()
+                        .with_message(format!("undeclared enum tag `{}`", tag_id))
+                        .with_labels(vec![fixed_loc.primary()]),
+                ),
             }
-            Some(decl) => result.push(
-                Diagnostic::error()
-                    .with_message(format!(
-                        "fixed field uses invalid typedef `{}`",
-                        decl.id().unwrap()
-                    ))
-                    .with_labels(vec![fixed_loc.primary().with_message(format!(
-                        "{} has kind {}, expected enum",
-                        decl.id().unwrap(),
-                        decl.kind(),
-                    ))]),
-            ),
-            None => result.push(
-                Diagnostic::error()
-                    .with_message(format!("undeclared enum type `{}`", enum_id.as_ref().unwrap()))
-                    .with_labels(vec![fixed_loc.primary()]),
-            ),
         }
+        Some(decl) => result.push(
+            Diagnostic::error()
+                .with_message(format!("fixed field uses invalid typedef `{}`", decl.id().unwrap()))
+                .with_labels(vec![fixed_loc.primary().with_message(format!(
+                    "{} has kind {}, expected enum",
+                    decl.id().unwrap(),
+                    decl.kind(),
+                ))]),
+        ),
+        None => result.push(
+            Diagnostic::error()
+                .with_message(format!("undeclared enum type `{}`", enum_id))
+                .with_labels(vec![fixed_loc.primary()]),
+        ),
     }
 }
 
@@ -967,7 +982,7 @@ fn lint_fixed(
 fn lint_array(
     scope: &Scope,
     _packet_scope: &PacketScope,
-    path: &FieldPath,
+    decl: &parser::ast::Field,
     _width: &Option<usize>,
     type_id: &Option<String>,
     _size_modifier: &Option<String>,
@@ -979,14 +994,13 @@ fn lint_array(
     // type_id must reference a valid enum or packet type.
     // TODO(hchataing) unbounded arrays should have a matching size
     // or count field
-
-    let array_loc = path.loc();
+    let array_loc = decl.loc;
 
     if type_id.is_some() {
         match scope.typedef.get(type_id.as_ref().unwrap()) {
-            Some(Decl::Enum { .. })
-            | Some(Decl::Struct { .. })
-            | Some(Decl::CustomField { .. }) => (),
+            Some(Decl { desc: DeclDesc::Enum { .. }, .. })
+            | Some(Decl { desc: DeclDesc::Struct { .. }, .. })
+            | Some(Decl { desc: DeclDesc::CustomField { .. }, .. }) => (),
             Some(decl) => result.push(
                 Diagnostic::error()
                     .with_message(format!(
@@ -1014,15 +1028,14 @@ fn lint_array(
 fn lint_padding(
     _scope: &Scope,
     packet_scope: &PacketScope,
-    path: &FieldPath,
+    decl: &parser::ast::Field,
     _size: usize,
     result: &mut LintDiagnostics,
 ) {
     // The padding field must follow an array field.
+    let padding_loc = decl.loc;
 
-    let padding_loc = path.loc();
-
-    match packet_scope.get_preceding_field(path).map(|f| f.0.last().unwrap()) {
+    match packet_scope.get_preceding_field(decl) {
         None => result.push(
             Diagnostic::error()
                 .with_message("padding field cannot be the first field of a packet")
@@ -1031,14 +1044,14 @@ fn lint_padding(
                     "hint: padding fields must be placed after an array field".to_owned()
                 ]),
         ),
-        Some(Field::Array { .. }) => (),
+        Some(Field { desc: FieldDesc::Array { .. }, .. }) => (),
         Some(preceding_field) => result.push(
             Diagnostic::error()
                 .with_message(format!(
                     "padding field cannot be placed after {} field",
                     preceding_field.kind()
                 ))
-                .with_labels(vec![padding_loc.primary(), preceding_field.loc().secondary()])
+                .with_labels(vec![padding_loc.primary(), preceding_field.loc.secondary()])
                 .with_notes(vec![
                     "hint: padding fields must be placed after an array field".to_owned()
                 ]),
@@ -1050,21 +1063,20 @@ fn lint_padding(
 fn lint_typedef(
     scope: &Scope,
     _packet_scope: &PacketScope,
-    path: &FieldPath,
+    decl: &parser::ast::Field,
     type_id: &str,
     result: &mut LintDiagnostics,
 ) {
     // The typedef field must reference a valid struct, enum,
     // custom_field, or checksum type.
     // TODO(hchataing) checksum fields should have a matching checksum start
-
-    let typedef_loc = path.loc();
+    let typedef_loc = decl.loc;
 
     match scope.typedef.get(type_id) {
-        Some(Decl::Enum { .. })
-        | Some(Decl::Struct { .. })
-        | Some(Decl::CustomField { .. })
-        | Some(Decl::Checksum { .. }) => (),
+        Some(Decl { desc: DeclDesc::Enum { .. }, .. })
+        | Some(Decl { desc: DeclDesc::Struct { .. }, .. })
+        | Some(Decl { desc: DeclDesc::CustomField { .. }, .. })
+        | Some(Decl { desc: DeclDesc::Checksum { .. }, .. }) => (),
 
         Some(decl) => result.push(
             Diagnostic::error()
@@ -1089,41 +1101,46 @@ fn lint_typedef(
 fn lint_field(
     scope: &Scope,
     packet_scope: &PacketScope,
-    field: &FieldPath,
+    decl: &parser::ast::Field,
     result: &mut LintDiagnostics,
 ) {
-    match field.0.last().unwrap() {
-        Field::Checksum { field_id, .. } => {
-            lint_checksum(scope, packet_scope, field, field_id, result)
+    match &decl.desc {
+        FieldDesc::Checksum { field_id, .. } => {
+            lint_checksum(scope, packet_scope, decl, field_id, result)
         }
-        Field::Size { field_id, width, .. } => {
-            lint_size(scope, packet_scope, field, field_id, *width, result)
+        FieldDesc::Size { field_id, width, .. } => {
+            lint_size(scope, packet_scope, decl, field_id, *width, result)
         }
-        Field::Count { field_id, width, .. } => {
-            lint_count(scope, packet_scope, field, field_id, *width, result)
+        FieldDesc::Count { field_id, width, .. } => {
+            lint_count(scope, packet_scope, decl, field_id, *width, result)
         }
-        Field::Fixed { width, value, enum_id, tag_id, .. } => {
-            lint_fixed(scope, packet_scope, field, width, value, enum_id, tag_id, result)
+        FieldDesc::ElementSize { .. } => { /* TODO(aryarahul) */ }
+        FieldDesc::FixedScalar { width, value } => {
+            lint_fixed_scalar(scope, packet_scope, decl, *width, *value, result)
         }
-        Field::Array { width, type_id, size_modifier, size, .. } => {
-            lint_array(scope, packet_scope, field, width, type_id, size_modifier, size, result)
+        FieldDesc::FixedEnum { enum_id, tag_id } => {
+            lint_fixed_enum(scope, packet_scope, decl, enum_id, tag_id, result)
         }
-        Field::Typedef { type_id, .. } => lint_typedef(scope, packet_scope, field, type_id, result),
-        Field::Padding { size, .. } => lint_padding(scope, packet_scope, field, *size, result),
-        Field::Reserved { .. }
-        | Field::Scalar { .. }
-        | Field::Body { .. }
-        | Field::Payload { .. } => (),
-        Field::Group { .. } => unreachable!(),
+        FieldDesc::Array { width, type_id, size_modifier, size, .. } => {
+            lint_array(scope, packet_scope, decl, width, type_id, size_modifier, size, result)
+        }
+        FieldDesc::Typedef { type_id, .. } => {
+            lint_typedef(scope, packet_scope, decl, type_id, result)
+        }
+        FieldDesc::Padding { size, .. } => lint_padding(scope, packet_scope, decl, *size, result),
+        FieldDesc::Reserved { .. }
+        | FieldDesc::Scalar { .. }
+        | FieldDesc::Body { .. }
+        | FieldDesc::Payload { .. } => (),
+        FieldDesc::Group { .. } => unreachable!(),
     }
 }
 
 // Helper for linting a packet declaration.
 fn lint_packet(
     scope: &Scope,
-    decl: &Decl,
+    decl: &parser::ast::Decl,
     id: &str,
-    loc: &SourceRange,
     constraints: &[Constraint],
     parent_id: &Option<String>,
     result: &mut LintDiagnostics,
@@ -1142,7 +1159,7 @@ fn lint_packet(
                     "packet `{}` has field constraints, but no parent declaration",
                     id
                 ))
-                .with_labels(vec![loc.primary()])
+                .with_labels(vec![decl.loc.primary()])
                 .with_notes(vec!["hint: expected parent declaration".to_owned()]),
         )
     }
@@ -1159,9 +1176,8 @@ fn lint_packet(
 // Helper for linting a struct declaration.
 fn lint_struct(
     scope: &Scope,
-    decl: &Decl,
+    decl: &parser::ast::Decl,
     id: &str,
-    loc: &SourceRange,
     constraints: &[Constraint],
     parent_id: &Option<String>,
     result: &mut LintDiagnostics,
@@ -1180,7 +1196,7 @@ fn lint_struct(
                     "struct `{}` has field constraints, but no parent declaration",
                     id
                 ))
-                .with_labels(vec![loc.primary()])
+                .with_labels(vec![decl.loc.primary()])
                 .with_notes(vec!["hint: expected parent declaration".to_owned()]),
         )
     }
@@ -1194,10 +1210,10 @@ fn lint_struct(
     }
 }
 
-impl Decl {
+impl parser::ast::Decl {
     fn constraints(&self) -> impl Iterator<Item = &Constraint> {
-        match self {
-            Decl::Packet { constraints, .. } | Decl::Struct { constraints, .. } => {
+        match &self.desc {
+            DeclDesc::Packet { constraints, .. } | DeclDesc::Struct { constraints, .. } => {
                 Some(constraints.iter())
             }
             _ => None,
@@ -1207,10 +1223,10 @@ impl Decl {
     }
 
     fn scope<'d>(&'d self, result: &mut LintDiagnostics) -> Option<PacketScope<'d>> {
-        match self {
-            Decl::Packet { fields, .. }
-            | Decl::Struct { fields, .. }
-            | Decl::Group { fields, .. } => {
+        match &self.desc {
+            DeclDesc::Packet { fields, .. }
+            | DeclDesc::Struct { fields, .. }
+            | DeclDesc::Group { fields, .. } => {
                 let mut scope = PacketScope {
                     checksums: HashMap::new(),
                     sizes: HashMap::new(),
@@ -1233,38 +1249,39 @@ impl Decl {
     }
 
     fn lint<'d>(&'d self, scope: &Scope<'d>, result: &mut LintDiagnostics) {
-        match self {
-            Decl::Checksum { .. } | Decl::CustomField { .. } => (),
-            Decl::Enum { tags, width, .. } => lint_enum(tags, *width, result),
-            Decl::Packet { id, loc, constraints, parent_id, .. } => {
-                lint_packet(scope, self, id, loc, constraints, parent_id, result)
+        match &self.desc {
+            DeclDesc::Checksum { .. } | DeclDesc::CustomField { .. } => (),
+            DeclDesc::Enum { tags, width, .. } => lint_enum(tags, *width, result),
+            DeclDesc::Packet { id, constraints, parent_id, .. } => {
+                lint_packet(scope, self, id, constraints, parent_id, result)
             }
-            Decl::Struct { id, loc, constraints, parent_id, .. } => {
-                lint_struct(scope, self, id, loc, constraints, parent_id, result)
+            DeclDesc::Struct { id, constraints, parent_id, .. } => {
+                lint_struct(scope, self, id, constraints, parent_id, result)
             }
             // Groups are finalizeed before linting, to make sure
             // potential errors are raised only once.
-            Decl::Group { .. } => (),
-            Decl::Test { .. } => (),
+            DeclDesc::Group { .. } => (),
+            DeclDesc::Test { .. } => (),
         }
     }
 
     fn kind(&self) -> &str {
-        match self {
-            Decl::Checksum { .. } => "checksum",
-            Decl::CustomField { .. } => "custom field",
-            Decl::Enum { .. } => "enum",
-            Decl::Packet { .. } => "packet",
-            Decl::Struct { .. } => "struct",
-            Decl::Group { .. } => "group",
-            Decl::Test { .. } => "test",
+        match &self.desc {
+            DeclDesc::Checksum { .. } => "checksum",
+            DeclDesc::CustomField { .. } => "custom field",
+            DeclDesc::Enum { .. } => "enum",
+            DeclDesc::Packet { .. } => "packet",
+            DeclDesc::Struct { .. } => "struct",
+            DeclDesc::Group { .. } => "group",
+            DeclDesc::Test { .. } => "test",
         }
     }
 }
 
-impl File {
+impl parser::ast::File {
     fn scope<'d>(&'d self, result: &mut LintDiagnostics) -> Scope<'d> {
-        let mut scope = Scope { typedef: HashMap::new(), scopes: HashMap::new() };
+        let mut scope =
+            Scope { typedef: HashMap::new(), scopes: HashMap::new(), children: HashMap::new() };
 
         // Gather top-level declarations.
         // Validate the top-level scopes (Group, Packet, Typedef).
@@ -1272,12 +1289,18 @@ impl File {
         // TODO: switch to try_insert when stable
         for decl in &self.declarations {
             if let Some(id) = decl.id() {
-                if let Some(prev) = scope.typedef.insert(id.clone(), decl) {
-                    result.err_redeclared(id, decl.kind(), decl.loc(), prev.loc())
+                if let Some(prev) = scope.typedef.insert(id.to_string(), decl) {
+                    result.err_redeclared(id, decl.kind(), &decl.loc, &prev.loc)
                 }
             }
             if let Some(lscope) = decl.scope(result) {
                 scope.scopes.insert(decl, lscope);
+            }
+
+            if let DeclDesc::Packet { parent_id: Some(parent_id), .. }
+            | DeclDesc::Struct { parent_id: Some(parent_id), .. } = &decl.desc
+            {
+                scope.children.entry(parent_id.to_string()).or_default().push(decl);
             }
         }
 
@@ -1286,17 +1309,9 @@ impl File {
     }
 }
 
-impl Lintable for File {
+impl Lintable for parser::ast::File {
     fn lint(&self) -> LintDiagnostics {
-        let mut result = LintDiagnostics::new();
-        let scope = self.scope(&mut result);
-        if !result.diagnostics.is_empty() {
-            return result;
-        }
-        for decl in &self.declarations {
-            decl.lint(&scope, &mut result)
-        }
-        result
+        Scope::new(self).err().unwrap_or_else(LintDiagnostics::new)
     }
 }
 

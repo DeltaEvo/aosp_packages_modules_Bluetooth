@@ -20,7 +20,10 @@ apex {
     manifest: "apex_manifest.json",
     bootclasspath_fragments: ["com.android.btservices-bootclasspath-fragment"],
     systemserverclasspath_fragments: ["com.android.btservices-systemserverclasspath-fragment"],
-    compat_configs: ["bluetooth-compat-config"],
+    compat_configs: [
+        "bluetooth-compat-config",
+        "framework-bluetooth-compat-config",
+    ],
     apps: ["Bluetooth"],
 
     multilib: {
@@ -40,6 +43,7 @@ apex {
         "btservices-linker-config",
         "bt_did.conf",
         "bt_stack.conf",
+        "interop_database.conf",
         "privapp_allowlist_com.android.bluetooth.xml",
     ],
     key: "com.android.btservices.key",

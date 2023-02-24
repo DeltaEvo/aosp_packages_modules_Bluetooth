@@ -87,10 +87,13 @@ le_feature_getters! {
     connected_iso_stream_peripheral,
     iso_broadcaster,
     synchronized_receiver,
+    ble_periodic_advertising_adi,
+    ble_connection_subrating,
+    ble_connection_subrating_host,
 }
 
 macro_rules! opcode_getters {
-    ($($id:ident => $opcode:path),*) => {
+    ($($id:ident => $opcode:path,)*) => {
         paste! {
             $(
                 pub fn [<controller_supports_ $id>](c: &Controller) -> bool {
@@ -106,7 +109,8 @@ opcode_getters! {
     enhanced_setup_synchronous_connection => OpCode::EnhancedSetupSynchronousConnection,
     enhanced_accept_synchronous_connection => OpCode::EnhancedAcceptSynchronousConnection,
     ble_set_privacy_mode => OpCode::LeSetPrivacyMode,
-    configure_data_path => OpCode::ConfigureDataPath
+    configure_data_path => OpCode::ConfigureDataPath,
+    set_min_encryption_key_size => OpCode::SetMinEncryptionKeySize,
 }
 
 macro_rules! field_getters {

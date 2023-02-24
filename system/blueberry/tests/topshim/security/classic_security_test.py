@@ -15,19 +15,23 @@
 #   limitations under the License.
 
 from blueberry.tests.gd.cert.truth import assertThat
-from blueberry.tests.topshim.lib.topshim_base_test import TopshimBaseTest
 from blueberry.tests.topshim.lib.adapter_client import AdapterClient
+from blueberry.tests.topshim.lib.topshim_base_test import TopshimBaseTest
+from blueberry.tests.topshim.lib.topshim_device import TRANSPORT_CLASSIC
 
 from mobly import test_runner
 
 
 class ClassicSecurityTest(TopshimBaseTest):
 
-    DEFAULT_ADDRESS = "01:02:03:04:05:06"
-
-    def test_remove_bond_with_no_bonded_devices(self):
-        self.dut().remove_bonded_device(self.DEFAULT_ADDRESS)
-        self.dut().le_rand()
+    def test_create_classic_bond(self):
+        self.dut().enable_inquiry_scan()
+        self.cert().enable_inquiry_scan()
+        self.dut().toggle_discovery(True)
+        address = self.dut().find_device()
+        state, conn_addr = self.dut().create_bond(address=address, transport=TRANSPORT_CLASSIC)
+        assertThat(state).isEqualTo("Bonded")
+        assertThat(conn_addr).isEqualTo(address)
 
 
 if __name__ == "__main__":

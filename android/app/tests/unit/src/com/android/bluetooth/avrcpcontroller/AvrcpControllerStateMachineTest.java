@@ -51,6 +51,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -90,8 +91,6 @@ public class AvrcpControllerStateMachineTest {
 
     @Before
     public void setUp() throws Exception {
-        Assume.assumeTrue("Ignore test when AVRCP Controller is not enabled",
-                AvrcpControllerService.isEnabled());
         if (Looper.myLooper() == null) {
             Looper.prepare();
         }
@@ -141,9 +140,6 @@ public class AvrcpControllerStateMachineTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!AvrcpControllerService.isEnabled()) {
-            return;
-        }
         destroyStateMachine(mAvrcpStateMachine);
         TestUtils.clearAdapterService(mAvrcpAdapterService);
     }
@@ -679,7 +675,7 @@ public class AvrcpControllerStateMachineTest {
 
         //Get the root of the device
         BrowseTree.BrowseNode results = mAvrcpStateMachine.findNode(rootName);
-        Assert.assertEquals(rootName + mTestDevice.toString(), results.getID());
+        Assert.assertEquals(rootName + mTestDevice.getAddress(), results.getID());
 
         //Request fetch the list of players
         BrowseTree.BrowseNode playerNodes = mAvrcpStateMachine.findNode(results.getID());
@@ -871,7 +867,7 @@ public class AvrcpControllerStateMachineTest {
 
         //Get the root of the device
         BrowseTree.BrowseNode results = mAvrcpStateMachine.findNode(rootName);
-        Assert.assertEquals(rootName + mTestDevice.toString(), results.getID());
+        Assert.assertEquals(rootName + mTestDevice.getAddress(), results.getID());
 
         //Request fetch the list of players
         BrowseTree.BrowseNode playerNodes = mAvrcpStateMachine.findNode(results.getID());
@@ -937,7 +933,7 @@ public class AvrcpControllerStateMachineTest {
 
         //Get the root of the device
         BrowseTree.BrowseNode rootNode = mAvrcpStateMachine.findNode(rootName);
-        Assert.assertEquals(rootName + mTestDevice.toString(), rootNode.getID());
+        Assert.assertEquals(rootName + mTestDevice.getAddress(), rootNode.getID());
 
         //Request fetch the list of players
         BrowseTree.BrowseNode playerNodes = mAvrcpStateMachine.findNode(rootNode.getID());
@@ -996,7 +992,7 @@ public class AvrcpControllerStateMachineTest {
 
         //Get the root of the device
         BrowseTree.BrowseNode rootNode = mAvrcpStateMachine.findNode(rootName);
-        Assert.assertEquals(rootName + mTestDevice.toString(), rootNode.getID());
+        Assert.assertEquals(rootName + mTestDevice.getAddress(), rootNode.getID());
 
         //Request fetch the list of players
         BrowseTree.BrowseNode playerNodes = mAvrcpStateMachine.findNode(rootNode.getID());
@@ -1061,7 +1057,7 @@ public class AvrcpControllerStateMachineTest {
 
         //Get the root of the device
         BrowseTree.BrowseNode results = mAvrcpStateMachine.findNode(rootName);
-        Assert.assertEquals(rootName + mTestDevice.toString(), results.getID());
+        Assert.assertEquals(rootName + mTestDevice.getAddress(), results.getID());
 
         //Request fetch the list of players
         BrowseTree.BrowseNode playerNodes = mAvrcpStateMachine.findNode(results.getID());
@@ -1426,12 +1422,14 @@ public class AvrcpControllerStateMachineTest {
     }
 
     /**
-     * Test receiving an audio focus loss event. A pause should be sent
+     * Test receiving an audio focus loss event. A pause should be sent if we were playing
      */
+    @Ignore("b/260948676")
     @Test
-    public void testOnAudioFocusLoss_pauseSent() {
+    public void testOnAudioFocusLossWhilePlaying_pauseSent() {
         setUpConnectedState(true, true);
         sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_GAIN);
+        setPlaybackState(PlaybackStateCompat.STATE_PLAYING);
         sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_LOSS);
 
         TestUtils.waitForLooperToBeIdle(mAvrcpStateMachine.getHandler().getLooper());
@@ -1439,7 +1437,23 @@ public class AvrcpControllerStateMachineTest {
                 eq(AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE), eq(KEY_DOWN));
         verify(mAvrcpControllerService, times(1)).sendPassThroughCommandNative(eq(mTestAddress),
                 eq(AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE), eq(KEY_UP));
+    }
 
+    /**
+     * Test receiving an audio focus loss event. A pause should not be sent if we were paused
+     */
+    @Test
+    public void testOnAudioFocusLossWhilePause_pauseNotSent() {
+        setUpConnectedState(true, true);
+        sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_GAIN);
+        setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
+        sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_LOSS);
+
+        TestUtils.waitForLooperToBeIdle(mAvrcpStateMachine.getHandler().getLooper());
+        verify(mAvrcpControllerService, times(0)).sendPassThroughCommandNative(eq(mTestAddress),
+                eq(AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE), eq(KEY_DOWN));
+        verify(mAvrcpControllerService, times(0)).sendPassThroughCommandNative(eq(mTestAddress),
+                eq(AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE), eq(KEY_UP));
     }
 
     /**

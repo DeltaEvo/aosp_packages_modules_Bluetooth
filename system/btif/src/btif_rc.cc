@@ -439,7 +439,7 @@ void initialize_device(btif_rc_device_cb_t* p_dev) {
 
 static btif_rc_device_cb_t* get_connected_device(int index) {
   BTIF_TRACE_DEBUG("%s: index: %d", __func__, index);
-  if (index > BTIF_RC_NUM_CONN) {
+  if (index >= BTIF_RC_NUM_CONN) {
     BTIF_TRACE_ERROR("%s: can't support more than %d connections", __func__,
                      BTIF_RC_NUM_CONN);
     return NULL;
@@ -453,7 +453,7 @@ static btif_rc_device_cb_t* get_connected_device(int index) {
 }
 
 btif_rc_device_cb_t* btif_rc_get_device_by_bda(const RawAddress& bd_addr) {
-  VLOG(1) << __func__ << ": bd_addr: " << bd_addr;
+  VLOG(1) << __func__ << ": bd_addr: " << ADDRESS_TO_LOGGABLE_STR(bd_addr);
 
   for (int idx = 0; idx < BTIF_RC_NUM_CONN; idx++) {
     if ((btif_rc_cb.rc_multi_cb[idx].rc_state !=
@@ -3593,7 +3593,6 @@ static void handle_app_cur_val_response(tBTA_AV_META_MSG* pmeta_msg,
   app_settings.num_attr = p_rsp->num_val;
 
   if (app_settings.num_attr > BTRC_MAX_APP_SETTINGS) {
-    android_errorWriteLog(0x534e4554, "73824150");
     app_settings.num_attr = BTRC_MAX_APP_SETTINGS;
   }
 

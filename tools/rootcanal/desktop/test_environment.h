@@ -56,7 +56,9 @@ class TestEnvironment {
                   const std::string& controller_properties_file = "",
                   const std::string& default_commands_file = "",
                   bool enable_hci_sniffer = false,
-                  bool enable_baseband_sniffer = false)
+                  bool enable_baseband_sniffer = false,
+                  bool enable_pcap_filter = false,
+                  bool disable_address_reuse = false)
       : test_socket_server_(test_port),
         hci_socket_server_(hci_server_port),
         link_socket_server_(link_server_port),
@@ -66,8 +68,11 @@ class TestEnvironment {
         default_commands_file_(default_commands_file),
         enable_hci_sniffer_(enable_hci_sniffer),
         enable_baseband_sniffer_(enable_baseband_sniffer),
+        enable_pcap_filter_(enable_pcap_filter),
         controller_(std::make_shared<rootcanal::DualModeController>(
-            controller_properties_file)) {}
+            controller_properties_file)) {
+    test_model_.SetReuseDeviceIds(!disable_address_reuse);
+  }
 
   void initialize(std::promise<void> barrier);
 
@@ -84,6 +89,7 @@ class TestEnvironment {
   std::string default_commands_file_;
   bool enable_hci_sniffer_;
   bool enable_baseband_sniffer_;
+  bool enable_pcap_filter_;
   bool test_channel_open_{false};
   std::promise<void> barrier_;
 

@@ -24,6 +24,8 @@
 #include "le_audio_set_configuration_provider.h"
 #include "le_audio_types.h"
 #include "mock_controller.h"
+#include "mock_csis_client.h"
+#include "os/log.h"
 #include "stack/btm/btm_int_types.h"
 
 tACL_CONN* btm_bda_to_acl(const RawAddress& bda, tBT_TRANSPORT transport) {
@@ -41,7 +43,12 @@ using ::le_audio::LeAudioDeviceGroup;
 using ::le_audio::LeAudioDevices;
 using ::le_audio::types::AseState;
 using ::le_audio::types::AudioContexts;
+using ::le_audio::types::AudioLocations;
+using ::le_audio::types::BidirectionalPair;
 using ::le_audio::types::LeAudioContextType;
+using testing::_;
+using testing::Invoke;
+using testing::Return;
 using testing::Test;
 
 RawAddress GetTestAddress(int index) {
@@ -218,8 +225,9 @@ bool IsLc3SettingSupported(LeAudioContextType context_type, Lc3SettingId id) {
     case LeAudioContextType::EMERGENCYALARM:
     case LeAudioContextType::UNSPECIFIED:
       if (id == Lc3SettingId::LC3_16_1 || id == Lc3SettingId::LC3_16_2 ||
-          id == Lc3SettingId::LC3_48_4 || id == Lc3SettingId::LC3_48_2 ||
-          id == Lc3SettingId::LC3_VND_1 || id == Lc3SettingId::LC3_24_2)
+          id == Lc3SettingId::LC3_48_4 || id == Lc3SettingId::LC3_48_1 ||
+          id == Lc3SettingId::LC3_48_2 || id == Lc3SettingId::LC3_VND_1 ||
+          id == Lc3SettingId::LC3_24_2)
         return true;
 
       break;
@@ -399,12 +407,23 @@ class LeAudioAseConfigurationTest : public Test {
     bluetooth::manager::SetMockBtmInterface(&btm_interface_);
     controller::SetMockControllerInterface(&controller_interface_);
     ::le_audio::AudioSetConfigurationProvider::Initialize();
+    MockCsisClient::SetMockInstanceForTesting(&mock_csis_client_module_);
+    ON_CALL(mock_csis_client_module_, Get())
+        .WillByDefault(Return(&mock_csis_client_module_));
+    ON_CALL(mock_csis_client_module_, IsCsisClientRunning())
+        .WillByDefault(Return(true));
+    ON_CALL(mock_csis_client_module_, GetDeviceList(_))
+        .WillByDefault(Invoke([this](int group_id) { return addresses_; }));
+    ON_CALL(mock_csis_client_module_, GetDesiredSize(_))
+        .WillByDefault(
+            Invoke([this](int group_id) { return (int)(addresses_.size()); }));
   }
 
   void TearDown() override {
     controller::SetMockControllerInterface(nullptr);
     bluetooth::manager::SetMockBtmInterface(nullptr);
     devices_.clear();
+    addresses_.clear();
     delete group_;
     ::le_audio::AudioSetConfigurationProvider::Cleanup();
   }
@@ -416,6 +435,10 @@ class LeAudioAseConfigurationTest : public Test {
     auto device = (std::make_shared<LeAudioDevice>(
         GetTestAddress(index), DeviceConnectState::DISCONNECTED));
     devices_.push_back(device);
+    LOG_INFO(" addresses %d", (int)(addresses_.size()));
+    addresses_.push_back(device->address_);
+    LOG_INFO(" Addresses %d", (int)(addresses_.size()));
+
     group_->AddNode(device);
 
     int ase_id = 1;
@@ -533,10 +556,14 @@ class LeAudioAseConfigurationTest : public Test {
       data[i].device->src_pacs_ = src_pac_builder.Get();
     }
 
+    BidirectionalPair<AudioContexts> group_audio_locations = {
+        .sink = AudioContexts(context_type),
+        .source = AudioContexts(context_type)};
+
     /* Stimulate update of available context map */
     group_->UpdateAudioContextTypeAvailability(AudioContexts(context_type));
     ASSERT_EQ(success_expected,
-              group_->Configure(context_type, AudioContexts(context_type)));
+              group_->Configure(context_type, group_audio_locations));
 
     bool result = true;
     for (int i = 0; i < data_size; i++) {
@@ -619,10 +646,15 @@ class LeAudioAseConfigurationTest : public Test {
           interesting_configuration = false;
         }
       }
+
+      BidirectionalPair<AudioContexts> group_audio_locations = {
+          .sink = AudioContexts(context_type),
+          .source = AudioContexts(context_type)};
+
       /* Stimulate update of available context map */
       group_->UpdateAudioContextTypeAvailability(AudioContexts(context_type));
       auto configuration_result =
-          group_->Configure(context_type, AudioContexts(context_type));
+          group_->Configure(context_type, group_audio_locations);
 
       /* In case of configuration #ase is same as the one we expected to be
        * activated verify, ASEs are actually active */
@@ -742,9 +774,11 @@ class LeAudioAseConfigurationTest : public Test {
             /* Stimulate update of available context map */
             group_->UpdateAudioContextTypeAvailability(
                 AudioContexts(context_type));
-            ASSERT_EQ(
-                success_expected,
-                group_->Configure(context_type, AudioContexts(context_type)));
+            BidirectionalPair<AudioContexts> group_audio_locations = {
+                .sink = AudioContexts(context_type),
+                .source = AudioContexts(context_type)};
+            ASSERT_EQ(success_expected,
+                      group_->Configure(context_type, group_audio_locations));
             if (success_expected) {
               TestAsesActive(LeAudioCodecIdLc3, sampling_frequency,
                              frame_duration, octets_per_frame);
@@ -760,9 +794,11 @@ class LeAudioAseConfigurationTest : public Test {
 
   const int group_id_ = 6;
   std::vector<std::shared_ptr<LeAudioDevice>> devices_;
+  std::vector<RawAddress> addresses_;
   LeAudioDeviceGroup* group_ = nullptr;
   bluetooth::manager::MockBtmInterface btm_interface_;
   controller::MockControllerInterface controller_interface_;
+  MockCsisClient mock_csis_client_module_;
 };
 
 TEST_F(LeAudioAseConfigurationTest, test_mono_speaker_ringtone) {
@@ -1092,9 +1128,10 @@ TEST_F(LeAudioAseConfigurationTest, test_unsupported_codec) {
   device->snk_pacs_ = pac_builder.Get();
   device->src_pacs_ = pac_builder.Get();
 
-  ASSERT_FALSE(group_->Configure(
-      LeAudioContextType::RINGTONE,
-      AudioContexts(static_cast<uint16_t>(LeAudioContextType::RINGTONE))));
+  ASSERT_FALSE(
+      group_->Configure(LeAudioContextType::RINGTONE,
+                        {AudioContexts(LeAudioContextType::RINGTONE),
+                         AudioContexts(LeAudioContextType::RINGTONE)}));
   TestAsesInactive();
 }
 
@@ -1149,24 +1186,24 @@ TEST_F(LeAudioAseConfigurationTest, test_reconnection_media) {
   /* Prepare reconfiguration */
   uint8_t number_of_active_ases = 1;  // Right one
   auto* ase = right->GetFirstActiveAseByDirection(kLeAudioDirectionSink);
-  ::le_audio::types::AudioLocations group_snk_audio_location =
-      *ase->codec_config.audio_channel_allocation;
-  ::le_audio::types::AudioLocations group_src_audio_location =
-      *ase->codec_config.audio_channel_allocation;
+  BidirectionalPair<AudioLocations> group_audio_locations = {
+      .sink = *ase->codec_config.audio_channel_allocation,
+      .source = *ase->codec_config.audio_channel_allocation};
 
   /* Get entry for the sink direction and use it to set configuration */
-  std::vector<uint8_t> ccid_list;
+  BidirectionalPair<std::vector<uint8_t>> ccid_lists = {{}, {}};
+  BidirectionalPair<AudioContexts> audio_contexts = {AudioContexts(),
+                                                     AudioContexts()};
   for (auto& ent : configuration->confs) {
     if (ent.direction == ::le_audio::types::kLeAudioDirectionSink) {
       left->ConfigureAses(ent, group_->GetConfigurationContextType(),
-                          &number_of_active_ases, group_snk_audio_location,
-                          group_src_audio_location, false,
-                          ::le_audio::types::AudioContexts(), ccid_list);
+                          &number_of_active_ases, group_audio_locations,
+                          audio_contexts, ccid_lists, false);
     }
   }
 
   ASSERT_TRUE(number_of_active_ases == 2);
-  ASSERT_TRUE(group_snk_audio_location == kChannelAllocationStereo);
+  ASSERT_TRUE(group_audio_locations.sink == kChannelAllocationStereo);
 
   uint8_t directions_to_verify = ::le_audio::types::kLeAudioDirectionSink;
   for (int i = 0; i < 2; i++) {
