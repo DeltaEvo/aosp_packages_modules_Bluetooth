@@ -685,10 +685,6 @@ static void callback_thread_event(bt_cb_thread_evt event) {
   }
 }
 
-static void dut_mode_recv_callback(uint16_t opcode, uint8_t* buf, uint8_t len) {
-
-}
-
 static void energy_info_recv_callback(bt_activity_energy_info* p_energy_info,
                                       bt_uid_traffic_t* uid_data) {
   CallbackEnv sCallbackEnv(__func__);
@@ -732,7 +728,6 @@ static bt_callbacks_t sBluetoothCallbacks = {sizeof(sBluetoothCallbacks),
                                              le_address_associate_callback,
                                              acl_state_changed_callback,
                                              callback_thread_event,
-                                             dut_mode_recv_callback,
                                              energy_info_recv_callback,
                                              link_quality_report_callback,
                                              generate_local_oob_data_callback,
@@ -2035,6 +2030,42 @@ static void interopDatabaseAddRemoveNameNative(JNIEnv* env, jclass clazz,
   env->ReleaseStringUTFChars(name, name_str);
 }
 
+static int getRemotePbapPceVersionNative(JNIEnv* env, jobject obj,
+                                         jstring address) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) return JNI_FALSE;
+
+  const char* tmp_addr = env->GetStringUTFChars(address, NULL);
+  if (!tmp_addr) {
+    ALOGW("%s: address is null.", __func__);
+    return JNI_FALSE;
+  }
+
+  RawAddress bdaddr;
+  bool success = RawAddress::FromString(tmp_addr, bdaddr);
+
+  env->ReleaseStringUTFChars(address, tmp_addr);
+
+  if (!success) {
+    ALOGW("%s: address is invalid.", __func__);
+    return JNI_FALSE;
+  }
+
+  return sBluetoothInterface->get_remote_pbap_pce_version(&bdaddr);
+}
+
+static jboolean pbapPseDynamicVersionUpgradeIsEnabledNative(JNIEnv* env,
+                                                            jobject obj) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) return JNI_FALSE;
+
+  return sBluetoothInterface->pbap_pse_dynamic_version_upgrade_is_enabled()
+             ? JNI_TRUE
+             : JNI_FALSE;
+}
+
 static JNINativeMethod sMethods[] = {
     /* name, signature, funcPtr */
     {"classInitNative", "()V", (void*)classInitNative},
@@ -2091,6 +2122,10 @@ static JNINativeMethod sMethods[] = {
     {"interopDatabaseAddRemoveNameNative",
      "(ZLjava/lang/String;Ljava/lang/String;)V",
      (void*)interopDatabaseAddRemoveNameNative},
+    {"getRemotePbapPceVersionNative", "(Ljava/lang/String;)I",
+     (void*)getRemotePbapPceVersionNative},
+    {"pbapPseDynamicVersionUpgradeIsEnabledNative", "()Z",
+     (void*)pbapPseDynamicVersionUpgradeIsEnabledNative},
 };
 
 int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {
@@ -2229,6 +2264,14 @@ jint JNI_OnLoad(JavaVM* jvm, void* reserved) {
   status = android::register_com_android_bluetooth_csip_set_coordinator(e);
   if (status < 0) {
     ALOGE("jni csis client registration failure: %d", status);
+    return JNI_ERR;
+  }
+
+  status =
+      android::register_com_android_bluetooth_btservice_BluetoothQualityReport(
+          e);
+  if (status < 0) {
+    ALOGE("jni bluetooth quality report registration failure: %d", status);
     return JNI_ERR;
   }
 

@@ -69,7 +69,6 @@ cc_defaults {
         "libaudio-a2dp-hw-utils",
         "libbluetooth-dumpsys",
         "libbluetooth-types",
-        "libbluetoothtbd_hal",
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
@@ -105,7 +104,7 @@ cc_defaults {
     target: {
         android: {
             shared_libs: [
-                "android.hardware.bluetooth.audio-V2-ndk",
+                "android.hardware.bluetooth.audio-V3-ndk",
             ],
         },
     },

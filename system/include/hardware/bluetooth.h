@@ -59,6 +59,7 @@
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_PROFILE_LE_AUDIO_BROADCASTER_ID "le_audio_broadcaster"
+#define BT_BQR_ID "bqr"
 
 /** Bluetooth Device Name */
 typedef struct { uint8_t name[249]; } __attribute__((packed)) bt_bdname_t;
@@ -222,6 +223,7 @@ typedef struct {
   bool le_connected_isochronous_stream_central_supported;
   bool le_isochronous_broadcast_supported;
   bool le_periodic_advertising_sync_transfer_recipient_supported;
+  uint16_t adv_filter_extended_features_mask;
 } bt_local_le_features_t;
 
 /** Bluetooth Vendor and Product ID info */
@@ -372,6 +374,20 @@ typedef enum {
    */
   BT_PROPERTY_VENDOR_PRODUCT_INFO,
   BT_PROPERTY_WL_MEDIA_PLAYERS_LIST,
+
+  /**
+   * Description - ASHA capability.
+   * Access mode - GET.
+   * Data Type - int16_t.
+   */
+  BT_PROPERTY_REMOTE_ASHA_CAPABILITY,
+
+  /**
+   * Description - ASHA truncated HiSyncID.
+   * Access mode - GET.
+   * Data Type - uint32_t.
+   */
+  BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
 
   BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP = 0xFF,
 } bt_property_type_t;
@@ -525,12 +541,6 @@ typedef enum { ASSOCIATE_JVM, DISASSOCIATE_JVM } bt_cb_thread_evt;
  * attach/detach to/from the JVM */
 typedef void (*callback_thread_event)(bt_cb_thread_evt evt);
 
-/** Bluetooth Test Mode Callback */
-/* Receive any HCI event from controller. Must be in DUT Mode for this callback
- * to be received */
-typedef void (*dut_mode_recv_callback)(uint16_t opcode, uint8_t* buf,
-                                       uint8_t len);
-
 /** Callback invoked when energy details are obtained */
 /* Ctrl_state-Current controller state-Active-1,scan-2,or idle-3 state as
  * defined by HCI spec. If the ctrl_state value is 0, it means the API call
@@ -565,7 +575,6 @@ typedef struct {
   le_address_associate_callback le_address_associate_cb;
   acl_state_changed_callback acl_state_changed_cb;
   callback_thread_event thread_evt_cb;
-  dut_mode_recv_callback dut_mode_recv_cb;
   energy_info_callback energy_info_cb;
   link_quality_report_callback link_quality_report_cb;
   generate_local_oob_data_callback generate_local_oob_data_cb;
@@ -717,14 +726,6 @@ typedef struct {
 
   /** Get Bluetooth profile interface */
   const void* (*get_profile_interface)(const char* profile_id);
-
-  /** Bluetooth Test Mode APIs - Bluetooth must be enabled for these APIs */
-  /* Configure DUT Mode - Use this mode to enter/exit DUT mode */
-  int (*dut_mode_configure)(uint8_t enable);
-
-  /* Send any test HCI (vendor-specific) command to the controller. Must be in
-   * DUT Mode */
-  int (*dut_mode_send)(uint16_t opcode, uint8_t* buf, uint8_t len);
 
   /** Sets the OS call-out functions that bluedroid needs for alarms and wake
    * locks. This should be called immediately after a successful |init|.
@@ -909,6 +910,12 @@ typedef struct {
   void (*interop_database_add_remove_name)(bool do_add,
                                            const char* feature_name,
                                            const char* name);
+
+  /** get remote Pbap PCE  version*/
+  int (*get_remote_pbap_pce_version)(const RawAddress* bd_addr);
+
+  /** check if pbap pse dynamic version upgrade is enable */
+  bool (*pbap_pse_dynamic_version_upgrade_is_enabled)();
 
 } bt_interface_t;
 

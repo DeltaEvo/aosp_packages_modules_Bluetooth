@@ -27,8 +27,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -51,6 +49,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/gatt_api.h"
+#include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
@@ -349,11 +348,12 @@ extern struct GATT_GetConnectionInfor GATT_GetConnectionInfor;
 // bool eatt_support Return: tGATT_IF
 struct GATT_Register {
   static tGATT_IF return_value;
-  std::function<tGATT_IF(const Uuid& app_uuid128, std::string name,
+  std::function<tGATT_IF(const Uuid& app_uuid128, const std::string& name,
                          tGATT_CBACK* p_cb_info, bool eatt_support)>
-      body{[](const Uuid& app_uuid128, std::string name, tGATT_CBACK* p_cb_info,
+      body{[](const Uuid& app_uuid128, const std::string& name,
+              tGATT_CBACK* p_cb_info,
               bool eatt_support) { return return_value; }};
-  tGATT_IF operator()(const Uuid& app_uuid128, std::string name,
+  tGATT_IF operator()(const Uuid& app_uuid128, const std::string& name,
                       tGATT_CBACK* p_cb_info, bool eatt_support) {
     return body(app_uuid128, name, p_cb_info, eatt_support);
   };

@@ -190,7 +190,7 @@ static jmethodID method_onSyncLost;
 static jmethodID method_onSyncReport;
 static jmethodID method_onSyncStarted;
 static jmethodID method_onSyncTransferredCallback;
-
+static jmethodID method_onBigInfoReport;
 /**
  * Distance Measurement callback methods
  */
@@ -1157,6 +1157,19 @@ class JniScanningCallbacks : ScanningCallbacks {
                                  method_onSyncTransferredCallback, pa_source,
                                  status, addr.get());
   }
+
+  void OnBigInfoReport(uint16_t sync_handle, bool encrypted) {
+        std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    if (!mPeriodicScanCallbacksObj) {
+      ALOGE("mPeriodicScanCallbacksObj is NULL. Return.");
+      return;
+    }
+    sCallbackEnv->CallVoidMethod(mPeriodicScanCallbacksObj,
+                                 method_onBigInfoReport, sync_handle, encrypted);
+  }
 };
 
 class JniDistanceMeasurementCallbacks : DistanceMeasurementCallbacks {
@@ -1771,6 +1784,9 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
   jfieldID adTypeFid = env->GetFieldID(entryClazz, "ad_type", "I");
   jfieldID dataFid = env->GetFieldID(entryClazz, "data", "[B");
   jfieldID dataMaskFid = env->GetFieldID(entryClazz, "data_mask", "[B");
+  jfieldID orgFid = env->GetFieldID(entryClazz, "org_id", "I");
+  jfieldID TDSFlagsFid = env->GetFieldID(entryClazz, "tds_flags", "I");
+  jfieldID TDSFlagsMaskFid = env->GetFieldID(entryClazz, "tds_flags_mask", "I");
 
   for (int i = 0; i < numFilters; ++i) {
     ApcfCommand curr{};
@@ -1863,6 +1879,10 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
         env->ReleaseByteArrayElements(data_mask.get(), data_array, JNI_ABORT);
       }
     }
+    curr.org_id = env->GetIntField(current.get(), orgFid);
+    curr.tds_flags = env->GetIntField(current.get(), TDSFlagsFid);
+    curr.tds_flags_mask = env->GetIntField(current.get(), TDSFlagsMaskFid);
+
     native_filters.push_back(curr);
   }
 
@@ -2511,6 +2531,7 @@ static void periodicScanClassInitNative(JNIEnv* env, jclass clazz) {
   method_onSyncLost = env->GetMethodID(clazz, "onSyncLost", "(I)V");
   method_onSyncTransferredCallback = env->GetMethodID(
       clazz, "onSyncTransferredCallback", "(IILjava/lang/String;)V");
+  method_onBigInfoReport = env->GetMethodID(clazz, "onBigInfoReport", "(IZ)V");
 }
 
 static void periodicScanInitializeNative(JNIEnv* env, jobject object) {

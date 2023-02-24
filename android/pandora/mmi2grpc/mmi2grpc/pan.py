@@ -18,7 +18,7 @@ import sys
 from mmi2grpc._helpers import assert_description
 from mmi2grpc._proxy import ProfileProxy
 
-from pandora_experimental.host_grpc import Host
+from pandora.host_grpc import Host
 from pandora_experimental.pan_grpc import PAN
 
 
@@ -28,8 +28,6 @@ class PANProxy(ProfileProxy):
         super().__init__(channel)
         self.host = Host(channel)
         self.pan = PAN(channel)
-
-        self.connection = None
 
     def TSC_BNEP_mmi_iut_accept_transport(self, pts_addr: bytes, **kwargs):
         """

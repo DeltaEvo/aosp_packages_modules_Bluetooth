@@ -27,8 +27,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -48,6 +46,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -465,23 +464,6 @@ struct btsnd_hcic_ble_read_resolvable_addr_peer {
 };
 extern struct btsnd_hcic_ble_read_resolvable_addr_peer
     btsnd_hcic_ble_read_resolvable_addr_peer;
-
-// Name: btsnd_hcic_ble_remove_from_acceptlist
-// Params: tBLE_ADDR_TYPE addr_type, const RawAddress& bda,
-// base::OnceCallback<void(uint8_t*, uint16_t Return: void
-struct btsnd_hcic_ble_remove_from_acceptlist {
-  std::function<void(tBLE_ADDR_TYPE, const RawAddress&,
-                     base::OnceCallback<void(uint8_t*, uint16_t)>)>
-      body{[](tBLE_ADDR_TYPE addr_type, const RawAddress& bda,
-              base::OnceCallback<void(uint8_t*, uint16_t)> cb) {}};
-  void operator()(tBLE_ADDR_TYPE addr_type, const RawAddress& bda,
-                  base::OnceCallback<void(uint8_t*, uint16_t)> cb) {
-    body(addr_type, bda, std::move(cb));
-  };
-};
-extern struct btsnd_hcic_ble_remove_from_acceptlist
-    btsnd_hcic_ble_remove_from_acceptlist;
-
 // Name: btsnd_hcic_ble_rm_device_resolving_list
 // Params: uint8_t addr_type_peer, const RawAddress& bda_peer
 // Return: void

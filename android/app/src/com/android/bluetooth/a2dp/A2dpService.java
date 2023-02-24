@@ -18,12 +18,14 @@ package com.android.bluetooth.a2dp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
+import static com.android.bluetooth.ChangeIds.ENFORCE_CODEC_CONFIG_PRIVILEGED;
 import static com.android.bluetooth.Utils.checkCallerTargetSdk;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 import static com.android.bluetooth.Utils.enforceCdmAssociation;
 import static com.android.bluetooth.Utils.hasBluetoothPrivilegedPermission;
 
 import android.annotation.RequiresPermission;
+import android.app.compat.CompatChanges;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dp.OptionalCodecsPreferenceStatus;
 import android.bluetooth.BluetoothA2dp.OptionalCodecsSupportStatus;
@@ -1497,9 +1499,20 @@ public class A2dpService extends ProfileService {
             if (service == null) {
                 return;
             }
-            if (!hasBluetoothPrivilegedPermission(service)) {
+            boolean checkPrivilegedNeeded = false;
+            final int callingUid = Binder.getCallingUid();
+            final long token = Binder.clearCallingIdentity();
+            try {
+                checkPrivilegedNeeded =
+                        CompatChanges.isChangeEnabled(ENFORCE_CODEC_CONFIG_PRIVILEGED, callingUid);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+            if (checkPrivilegedNeeded) {
+                enforceBluetoothPrivilegedPermission(service);
+            } else if (!hasBluetoothPrivilegedPermission(service)) {
                 enforceCdmAssociation(service.mCompanionDeviceManager, service,
-                        source.getPackageName(), Binder.getCallingUid(), device);
+                            source.getPackageName(), Binder.getCallingUid(), device);
             }
             service.setCodecConfigPreference(device, codecConfig);
         }

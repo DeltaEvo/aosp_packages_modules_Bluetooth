@@ -43,6 +43,10 @@ flatbuffers::Offset<bluetooth::common::InitFlagsData> bluetooth::dumpsys::InitFl
       initFlags::btm_dm_flush_discovery_queue_on_search_cancel_is_enabled());
   builder.add_device_iot_config_logging_is_enabled(
       initFlags::device_iot_config_logging_is_enabled());
+  builder.add_clear_hidd_interrupt_cid_on_disconnect_is_enabled(
+      initFlags::clear_hidd_interrupt_cid_on_disconnect_is_enabled());
+  builder.add_delay_hidh_cleanup_until_hidh_ready_start_is_enabled(
+      initFlags::delay_hidh_cleanup_until_hidh_ready_start_is_enabled());
   builder.add_dynamic_avrcp_version_enhancement_is_enabled(
       initFlags::dynamic_avrcp_version_enhancement_is_enabled());
   builder.add_gd_hal_snoop_logger_filtering_is_enabled(
@@ -66,6 +70,8 @@ flatbuffers::Offset<bluetooth::common::InitFlagsData> bluetooth::dumpsys::InitFl
       initFlags::leaudio_targeted_announcement_reconnection_mode_is_enabled());
   builder.add_logging_debug_enabled_for_all_is_enabled(initFlags::logging_debug_enabled_for_all_is_enabled());
   builder.add_pass_phy_update_callback_is_enabled(initFlags::pass_phy_update_callback_is_enabled());
+  builder.add_pbap_pse_dynamic_version_upgrade_is_enabled(
+      initFlags::pbap_pse_dynamic_version_upgrade_is_enabled());
   builder.add_periodic_advertising_adi_is_enabled(bluetooth::common::init_flags::periodic_advertising_adi_is_enabled());
   builder.add_queue_l2cap_coc_while_encrypting_is_enabled(
       initFlags::queue_l2cap_coc_while_encrypting_is_enabled());
@@ -74,6 +80,8 @@ flatbuffers::Offset<bluetooth::common::InitFlagsData> bluetooth::dumpsys::InitFl
   builder.add_rust_event_loop_is_enabled(initFlags::rust_event_loop_is_enabled());
   builder.add_sdp_serialization_is_enabled(initFlags::sdp_serialization_is_enabled());
   builder.add_sdp_skip_rnr_if_known_is_enabled(initFlags::sdp_skip_rnr_if_known_is_enabled());
+  builder.add_bluetooth_quality_report_callback_is_enabled(
+      initFlags::bluetooth_quality_report_callback_is_enabled());
   builder.add_set_min_encryption_is_enabled(bluetooth::common::init_flags::set_min_encryption_is_enabled());
   builder.add_subrating_is_enabled(initFlags::subrating_is_enabled());
   builder.add_trigger_advertising_callbacks_on_first_resume_after_pause_is_enabled(

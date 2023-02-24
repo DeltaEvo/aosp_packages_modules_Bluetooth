@@ -188,6 +188,7 @@ cc_test {
     ],
     test_suites: ["device-tests"],
     srcs: [
+        ":TestMockBtif",
         ":TestMockStackBtm",
         ":TestCommonLogMsg",
         ":TestCommonMockFunctions",
@@ -245,6 +246,7 @@ cc_test {
         ":TestCommonLogMsg",
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
+        ":TestMockBtaSdp",
         ":TestMockBtif",
         ":TestMockDevice",
         ":TestMockMainShim",
@@ -288,6 +290,7 @@ cc_test {
         "test/bta_dm_test.cc",
         "test/bta_gatt_test.cc",
         "test/bta_pan_test.cc",
+        "test/bta_sdp_test.cc",
     ],
     shared_libs: [
         "libbase",
@@ -691,7 +694,7 @@ cc_test {
         android: {
             shared_libs: [
                 "libbinder_ndk",
-                "android.hardware.bluetooth.audio-V2-ndk",
+                "android.hardware.bluetooth.audio-V3-ndk",
             ],
         },
     },
@@ -813,7 +816,7 @@ cc_test {
         android: {
             shared_libs: [
                 "libbinder_ndk",
-                "android.hardware.bluetooth.audio-V2-ndk",
+                "android.hardware.bluetooth.audio-V3-ndk",
             ],
         },
     },
@@ -861,6 +864,7 @@ cc_test {
         "test/common/btm_api_mock.cc",
         "test/common/mock_controller.cc",
         "test/common/mock_csis_client.cc",
+        ":TestCommonMockFunctions",
         ":TestStubOsi",
     ],
     shared_libs: [
@@ -907,6 +911,7 @@ cc_test {
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
         ":TestMockBtaGatt",
+        ":TestMockBtaSdp",
         ":TestMockBtaSys",
         ":TestMockBtif",
         ":TestMockDevice",

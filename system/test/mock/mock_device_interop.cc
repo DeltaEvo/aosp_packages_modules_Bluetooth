@@ -24,9 +24,8 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 #include "device/include/interop.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -87,4 +86,9 @@ bool interop_get_allowlisted_media_players_list(list_t* p_bl_devices) {
 int interop_feature_name_to_feature_id(const char* feature_name) {
   mock_function_count_map[__func__]++;
   return false;
+}
+
+void interop_database_add_addr(const uint16_t feature, const RawAddress* addr,
+                               size_t length) {
+  mock_function_count_map[__func__]++;
 }
