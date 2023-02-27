@@ -38,6 +38,9 @@
 #define COD_AV_PORTABLE_AUDIO 0x041C
 #define COD_AV_HIFI_AUDIO 0x0428
 
+// TODO Remove this once all QTI specific hacks are removed.
+#define LMP_COMPID_QTI 0x001D
+
 namespace bluetooth {
 namespace hci {
 
@@ -223,7 +226,7 @@ class Controller : public Module {
   static const ModuleFactory Factory;
 
   static constexpr uint64_t kDefaultEventMask = 0x3dbfffffffffffff;
-  static constexpr uint64_t kDefaultLeEventMask = 0x000000054d02fe7f;
+  static constexpr uint64_t kDefaultLeEventMask = 0x000000074d02fe7f;
 
   static constexpr uint64_t kLeEventMask53 = 0x00000007ffffffff;
   static constexpr uint64_t kLeEventMask52 = 0x00000003ffffffff;

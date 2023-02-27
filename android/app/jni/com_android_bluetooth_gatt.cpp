@@ -29,6 +29,7 @@
 #include "gd/common/init_flags.h"
 #include "hardware/bt_gatt.h"
 #include "rust/cxx.h"
+#include "rust/src/gatt/ffi/gatt_shim.h"
 #include "src/core/ffi.rs.h"
 #include "src/gatt/ffi.rs.h"
 #include "utils/Log.h"
@@ -190,7 +191,7 @@ static jmethodID method_onSyncLost;
 static jmethodID method_onSyncReport;
 static jmethodID method_onSyncStarted;
 static jmethodID method_onSyncTransferredCallback;
-
+static jmethodID method_onBigInfoReport;
 /**
  * Distance Measurement callback methods
  */
@@ -1157,6 +1158,19 @@ class JniScanningCallbacks : ScanningCallbacks {
                                  method_onSyncTransferredCallback, pa_source,
                                  status, addr.get());
   }
+
+  void OnBigInfoReport(uint16_t sync_handle, bool encrypted) {
+        std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid()) return;
+
+    if (!mPeriodicScanCallbacksObj) {
+      ALOGE("mPeriodicScanCallbacksObj is NULL. Return.");
+      return;
+    }
+    sCallbackEnv->CallVoidMethod(mPeriodicScanCallbacksObj,
+                                 method_onBigInfoReport, sync_handle, encrypted);
+  }
 };
 
 class JniDistanceMeasurementCallbacks : DistanceMeasurementCallbacks {
@@ -1380,7 +1394,9 @@ static void initializeNative(JNIEnv* env, jobject object) {
 
   mCallbacksObj = env->NewGlobalRef(object);
 
-  bluetooth::rust_shim::init();
+  auto callbacks = std::make_unique<bluetooth::gatt::GattServerCallbacks>(
+      sGattServerCallbacks);
+  bluetooth::rust_shim::init(std::move(callbacks));
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
@@ -1771,6 +1787,9 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
   jfieldID adTypeFid = env->GetFieldID(entryClazz, "ad_type", "I");
   jfieldID dataFid = env->GetFieldID(entryClazz, "data", "[B");
   jfieldID dataMaskFid = env->GetFieldID(entryClazz, "data_mask", "[B");
+  jfieldID orgFid = env->GetFieldID(entryClazz, "org_id", "I");
+  jfieldID TDSFlagsFid = env->GetFieldID(entryClazz, "tds_flags", "I");
+  jfieldID TDSFlagsMaskFid = env->GetFieldID(entryClazz, "tds_flags_mask", "I");
 
   for (int i = 0; i < numFilters; ++i) {
     ApcfCommand curr{};
@@ -1863,6 +1882,10 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
         env->ReleaseByteArrayElements(data_mask.get(), data_array, JNI_ABORT);
       }
     }
+    curr.org_id = env->GetIntField(current.get(), orgFid);
+    curr.tds_flags = env->GetIntField(current.get(), TDSFlagsFid);
+    curr.tds_flags_mask = env->GetIntField(current.get(), TDSFlagsMaskFid);
+
     native_filters.push_back(curr);
   }
 
@@ -2172,7 +2195,9 @@ static void gattServerSendResponseNative(JNIEnv* env, jobject object,
   }
 
   if (bluetooth::gatt::is_connection_isolated(conn_id)) {
-    // no-op
+    auto data = ::rust::Slice<const uint8_t>(response.attr_value.value,
+                                             response.attr_value.len);
+    bluetooth::gatt::send_response(server_if, conn_id, trans_id, status, data);
   } else {
     sGattIf->server->send_response(conn_id, trans_id, status, response);
   }
@@ -2511,6 +2536,7 @@ static void periodicScanClassInitNative(JNIEnv* env, jclass clazz) {
   method_onSyncLost = env->GetMethodID(clazz, "onSyncLost", "(I)V");
   method_onSyncTransferredCallback = env->GetMethodID(
       clazz, "onSyncTransferredCallback", "(IILjava/lang/String;)V");
+  method_onBigInfoReport = env->GetMethodID(clazz, "onBigInfoReport", "(IZ)V");
 }
 
 static void periodicScanInitializeNative(JNIEnv* env, jobject object) {

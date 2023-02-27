@@ -56,6 +56,9 @@ ApcfCommand ConvertApcfFromRust(const RustApcfCommand& command) {
       .name = name,
       .company = command.company,
       .company_mask = command.company_mask,
+      .org_id = command.org_id,
+      .tds_flags = command.tds_flags,
+      .tds_flags_mask = command.tds_flags_mask,
       .ad_type = command.ad_type,
       .data = data,
       .data_mask = data_mask,
@@ -386,6 +389,10 @@ void BleScannerIntf::OnPeriodicSyncLost(uint16_t sync_handle) {
 
 void BleScannerIntf::OnPeriodicSyncTransferred(int, uint8_t status, RawAddress addr) {
   rusty::gdscan_sync_transfer_callback(status, &addr);
+}
+
+void BleScannerIntf::OnBigInfoReport(uint16_t sync_handle, bool encrypted) {
+  rusty::gdscan_biginfo_report_callback(sync_handle, encrypted);
 }
 
 void BleScannerIntf::RegisterCallbacks() {
