@@ -43,6 +43,7 @@ import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
 import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.DistanceMeasurementManager;
 import android.bluetooth.le.PeriodicAdvertisingManager;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
@@ -853,6 +854,7 @@ public final class BluetoothAdapter {
     private BluetoothLeScanner mBluetoothLeScanner;
     private BluetoothLeAdvertiser mBluetoothLeAdvertiser;
     private PeriodicAdvertisingManager mPeriodicAdvertisingManager;
+    private DistanceMeasurementManager mDistanceMeasurementManager;
 
     private final IBluetoothManager mManagerService;
     private final AttributionSource mAttributionSource;
@@ -880,6 +882,8 @@ public final class BluetoothAdapter {
             mBluetoothConnectionCallbackExecutorMap = new HashMap<>();
     private final Map<PreferredAudioProfilesChangedCallback, Executor>
             mAudioProfilesChangedCallbackExecutorMap = new HashMap<>();
+    private final Map<BluetoothQualityReportReadyCallback, Executor>
+            mBluetoothQualityReportReadyCallbackExecutorMap = new HashMap<>();
 
     /**
      * Bluetooth metadata listener. Overrides the default BluetoothMetadataListener
@@ -1195,6 +1199,40 @@ public final class BluetoothAdapter {
                 mBluetoothLeScanner = new BluetoothLeScanner(this);
             }
             return mBluetoothLeScanner;
+        }
+    }
+
+     /**
+     * Get a {@link DistanceMeasurementManager} object for distance measurement operations.
+     * <p>
+     * Use {@link #isDistanceMeasurementSupported()} to check whether distance
+     * measurement is supported on this device before calling this method.
+     *
+     * @return a new instance of {@link DistanceMeasurementManager}, or {@code null} if Bluetooth is
+     * turned off
+     * @throws UnsupportedOperationException if distance measurement is not supported on this device
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public @Nullable DistanceMeasurementManager getDistanceMeasurementManager() {
+        if (!getLeAccess()) {
+            return null;
+        }
+
+        if (isDistanceMeasurementSupported() != BluetoothStatusCodes.FEATURE_SUPPORTED) {
+            throw new UnsupportedOperationException("Distance measurement is unsupported");
+        }
+
+        synchronized (mLock) {
+            if (mDistanceMeasurementManager == null) {
+                mDistanceMeasurementManager = new DistanceMeasurementManager(this);
+            }
+            return mDistanceMeasurementManager;
         }
     }
 
@@ -2790,6 +2828,44 @@ public final class BluetoothAdapter {
     }
 
     /**
+     * Returns whether the distance measurement feature is supported.
+     *
+     * @return whether the Bluetooth distance measurement is supported
+     * @throws IllegalStateException if the bluetooth service is null
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    public @LeFeatureReturnValues int isDistanceMeasurementSupported() {
+        if (!getLeAccess()) {
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        }
+        mServiceLock.readLock().lock();
+        try {
+            if (mService != null) {
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                mService.isDistanceMeasurementSupported(mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout())
+                    .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            } else {
+                throw new IllegalStateException(
+                        "LE state is on, but there is no bluetooth service.");
+            }
+        } catch (TimeoutException e) {
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return BluetoothStatusCodes.ERROR_UNKNOWN;
+    }
+
+    /**
      * Return the maximum LE advertising data length in bytes,
      * if LE Extended Advertising feature is supported, 0 otherwise.
      *
@@ -3885,6 +3961,22 @@ public final class BluetoothAdapter {
                             } catch (RemoteException | TimeoutException e) {
                                 Log.e(TAG, "onBluetoothServiceUp: Failed to register bluetooth"
                                         + "connection callback", e);
+                            }
+                        }
+                    }
+                    synchronized (mBluetoothQualityReportReadyCallbackExecutorMap) {
+                        if (!mBluetoothQualityReportReadyCallbackExecutorMap.isEmpty()) {
+                            try {
+                                final SynchronousResultReceiver recv =
+                                        SynchronousResultReceiver.get();
+                                mService.registerBluetoothQualityReportReadyCallback(
+                                        mBluetoothQualityReportReadyCallback, mAttributionSource,
+                                        recv);
+                                recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(
+                                        BluetoothStatusCodes.ERROR_UNKNOWN);
+                            } catch (RemoteException | TimeoutException e) {
+                                Log.e(TAG, "onBluetoothServiceUp: Failed to register bluetooth"
+                                        + "quality report callback", e);
                             }
                         }
                     }
@@ -4984,6 +5076,7 @@ public final class BluetoothAdapter {
             BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
             BluetoothStatusCodes.ERROR_DEVICE_NOT_BONDED,
             BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
+            BluetoothStatusCodes.ERROR_NOT_DUAL_MODE_AUDIO_DEVICE,
             BluetoothStatusCodes.ERROR_UNKNOWN
     })
     public @interface SetPreferredAudioProfilesReturnValues {}
@@ -4996,7 +5089,9 @@ public final class BluetoothAdapter {
      * <p>
      * Note: apps that invoke profile-specific audio APIs are not subject to the preference noted
      * here. These preferences will also be ignored if the remote device is not simultaneously
-     * connected to a classic audio profile (A2DP and/or HFP) and LE Audio at the same time.
+     * connected to a classic audio profile (A2DP and/or HFP) and LE Audio at the same time. If the
+     * remote device does not support both BR/EDR audio and LE Audio, this API returns
+     * {@link BluetoothStatusCodes#ERROR_NOT_DUAL_MODE_AUDIO_DEVICE}.
      * <p>
      * The Bundle is expected to contain the following mappings:
      * 1. For key {@link #AUDIO_MODE_OUTPUT_ONLY}, it expects an integer value of either
@@ -5086,8 +5181,9 @@ public final class BluetoothAdapter {
      * <p>
      * An audio capable device must support at least one audio mode with a preferred audio profile.
      * If a device does not support an audio mode, the audio mode will be omitted from the keys of
-     * the Bundle. If the device is not recognized as an audio capable device (e.g. because it is
-     * not bonded or does not support any audio profiles), this API returns an empty Bundle.
+     * the Bundle. If the device is not recognized as a dual mode audio capable device (e.g. because
+     * it is not bonded, does not support any audio profiles, or does not support both BR/EDR audio
+     * and LE Audio), this API returns an empty Bundle.
      * <p>
      * The Bundle can contain the following mappings:
      * <ul>
@@ -5139,12 +5235,24 @@ public final class BluetoothAdapter {
         return defaultValue;
     }
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
+            BluetoothStatusCodes.ERROR_DEVICE_NOT_BONDED,
+            BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
+            BluetoothStatusCodes.ERROR_UNKNOWN
+    })
+    public @interface NotifyActiveDeviceChangeAppliedReturnValues {}
+
     /**
-     * Called by audio framework to inform the Bluetooth stack that a request from
-     * {@link #setPreferredAudioProfiles(BluetoothDevice, Bundle)} has taken effect in the audio
-     * framework. After this is called, the Bluetooth stack will invoke
+     * Called by audio framework to inform the Bluetooth stack that an active device change has
+     * taken effect. If this active device change is triggered by an app calling
+     * {@link #setPreferredAudioProfiles(BluetoothDevice, Bundle)}, the Bluetooth stack will invoke
      * {@link PreferredAudioProfilesChangedCallback#onPreferredAudioProfilesChanged(
-     * BluetoothDevice, Bundle, int)}.
+     * BluetoothDevice, Bundle, int)} if all requested changes for the device have been applied.
      * <p>
      * This method will return
      * {@link BluetoothStatusCodes#ERROR_BLUETOOTH_NOT_ALLOWED} if called outside system server.
@@ -5161,8 +5269,9 @@ public final class BluetoothAdapter {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    public int notifyPreferredAudioProfileChangeApplied(@NonNull BluetoothDevice device) {
-        if (DBG) Log.d(TAG, "notifyPreferredProfileChangeApplied(" + device + ")");
+    @NotifyActiveDeviceChangeAppliedReturnValues
+    public int notifyActiveDeviceChangeApplied(@NonNull BluetoothDevice device) {
+        if (DBG) Log.d(TAG, "notifyActiveDeviceChangeApplied(" + device + ")");
         Objects.requireNonNull(device, "device cannot be null");
         if (!BluetoothAdapter.checkBluetoothAddress(device.getAddress())) {
             throw new IllegalArgumentException("device cannot have an invalid address");
@@ -5173,7 +5282,7 @@ public final class BluetoothAdapter {
         try {
             if (mService != null) {
                 final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
-                mService.notifyPreferredAudioProfileChangeApplied(device,
+                mService.notifyActiveDeviceChangeApplied(device,
                         mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             }
@@ -5387,6 +5496,193 @@ public final class BluetoothAdapter {
                 Bundle preferredAudioProfiles, int status);
     }
 
+    @SuppressLint("AndroidFrameworkBluetoothPermission")
+    private final IBluetoothQualityReportReadyCallback mBluetoothQualityReportReadyCallback =
+            new IBluetoothQualityReportReadyCallback.Stub() {
+                @Override
+                public void onBluetoothQualityReportReady(BluetoothDevice device,
+                        BluetoothQualityReport bluetoothQualityReport, int status) {
+                    for (Map.Entry<BluetoothQualityReportReadyCallback, Executor>
+                            callbackExecutorEntry:
+                            mBluetoothQualityReportReadyCallbackExecutorMap.entrySet()) {
+                        BluetoothQualityReportReadyCallback callback =
+                                callbackExecutorEntry.getKey();
+                        Executor executor = callbackExecutorEntry.getValue();
+                        executor.execute(() -> callback.onBluetoothQualityReportReady(device,
+                                bluetoothQualityReport, status));
+                    }
+                }
+            };
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
+            BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
+            BluetoothStatusCodes.ERROR_UNKNOWN
+    })
+    public @interface RegisterBluetoothQualityReportReadyCallbackReturnValues {}
+
+    /**
+     * Registers a callback to be notified when Bluetooth Quality Report is ready. To unregister
+     * this callback, call
+     * {@link #unregisterBluetoothQualityReportReadyCallback(
+     * BluetoothQualityReportReadyCallback)}.
+     *
+     * @param executor an {@link Executor} to execute the callbacks
+     * @param callback user implementation of the {@link BluetoothQualityReportReadyCallback}
+     * @return whether the callback was registered successfully
+     * @throws NullPointerException if executor or callback is null
+     * @throws IllegalArgumentException if the callback is already registered
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    @RegisterBluetoothQualityReportReadyCallbackReturnValues
+    public int registerBluetoothQualityReportReadyCallback(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull BluetoothQualityReportReadyCallback callback) {
+        if (DBG) Log.d(TAG, "registerBluetoothQualityReportReadyCallback()");
+        Objects.requireNonNull(executor, "executor cannot be null");
+        Objects.requireNonNull(callback, "callback cannot be null");
+
+        final int defaultValue = BluetoothStatusCodes.ERROR_UNKNOWN;
+        int serviceCallStatus = defaultValue;
+        synchronized (mBluetoothQualityReportReadyCallbackExecutorMap) {
+            // If the callback map is empty, we register the service-to-app callback
+            if (mBluetoothQualityReportReadyCallbackExecutorMap.isEmpty()) {
+                mServiceLock.readLock().lock();
+                try {
+                    if (mService != null) {
+                        final SynchronousResultReceiver<Integer> recv =
+                                SynchronousResultReceiver.get();
+                        mService.registerBluetoothQualityReportReadyCallback(
+                                mBluetoothQualityReportReadyCallback, mAttributionSource, recv);
+                        serviceCallStatus = recv.awaitResultNoInterrupt(getSyncTimeout())
+                                .getValue(defaultValue);
+                    }
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                } catch (TimeoutException e) {
+                    Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                } finally {
+                    mServiceLock.readLock().unlock();
+                }
+                if (serviceCallStatus != BluetoothStatusCodes.SUCCESS) {
+                    return serviceCallStatus;
+                }
+            }
+
+            // Adds the passed in callback to our local mapping
+            if (mBluetoothQualityReportReadyCallbackExecutorMap.containsKey(callback)) {
+                throw new IllegalArgumentException("This callback has already been registered");
+            } else {
+                mBluetoothQualityReportReadyCallbackExecutorMap.put(callback, executor);
+            }
+        }
+
+        return BluetoothStatusCodes.SUCCESS;
+    }
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            BluetoothStatusCodes.SUCCESS,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
+            BluetoothStatusCodes.ERROR_CALLBACK_NOT_REGISTERED,
+            BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
+            BluetoothStatusCodes.ERROR_UNKNOWN
+    })
+    public @interface UnRegisterBluetoothQualityReportReadyCallbackReturnValues {}
+
+    /**
+     * Unregisters a callback that was previously registered with
+     * {@link #registerBluetoothQualityReportReadyCallback(Executor,
+     * BluetoothQualityReportReadyCallback)}.
+     *
+     * @param callback user implementation of the {@link BluetoothQualityReportReadyCallback}
+     * @return whether the callback was successfully unregistered
+     * @throws NullPointerException if the callback is null
+     * @throws IllegalArgumentException if the callback has not been registered
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    @UnRegisterBluetoothQualityReportReadyCallbackReturnValues
+    public int unregisterBluetoothQualityReportReadyCallback(
+            @NonNull BluetoothQualityReportReadyCallback callback) {
+        if (DBG) Log.d(TAG, "unregisterBluetoothQualityReportReadyCallback()");
+        Objects.requireNonNull(callback, "callback cannot be null");
+
+        synchronized (mBluetoothQualityReportReadyCallbackExecutorMap) {
+            if (mBluetoothQualityReportReadyCallbackExecutorMap.remove(callback) == null) {
+                throw new IllegalArgumentException("This callback has not been registered");
+            }
+        }
+
+        if (!mBluetoothConnectionCallbackExecutorMap.isEmpty()) {
+            return BluetoothStatusCodes.SUCCESS;
+        }
+
+        final int defaultValue = BluetoothStatusCodes.ERROR_UNKNOWN;
+        // If the callback map is empty, we unregister the service-to-app callback
+        mServiceLock.readLock().lock();
+        try {
+            if (mService != null) {
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                mService.unregisterBluetoothQualityReportReadyCallback(
+                        mBluetoothQualityReportReadyCallback, mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            }
+        } catch (TimeoutException e) {
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+
+        return defaultValue;
+    }
+
+    /**
+     * A callback for Bluetooth Quality Report that arise from the controller.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface BluetoothQualityReportReadyCallback {
+        /**
+         * Called when the Bluetooth Quality Report coming from the controller is ready. This
+         * callback includes a Parcel that contains information about Bluetooth Quality.
+         * Currently the report supports five event types: Quality monitor event,
+         * Approaching LSTO event, A2DP choppy event, SCO choppy event and Connect fail event.
+         * To know which kind of event is wrapped in this {@link BluetoothQualityReport} object,
+         * you need to call {@link #getQualityReportId}.
+         *
+         *
+         * @param device is the BluetoothDevice which connection quality is being reported
+         * @param bluetoothQualityReport a Parcel that contains info about Bluetooth Quality
+         * @param status whether the operation succeeded or timed out
+         *
+         * @hide
+         */
+        @SystemApi
+        void onBluetoothQualityReportReady(@NonNull BluetoothDevice device, @NonNull
+                BluetoothQualityReport bluetoothQualityReport, int status);
+    }
+
     /**
      * Converts old constant of priority to the new for connection policy
      *
@@ -5474,5 +5770,49 @@ public final class BluetoothAdapter {
             Log.e(TAG, "", e);
         }
         return BT_SNOOP_LOG_MODE_DISABLED;
+    }
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            BluetoothStatusCodes.FEATURE_SUPPORTED,
+            BluetoothStatusCodes.ERROR_UNKNOWN,
+            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
+            BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_SCAN_PERMISSION,
+            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED
+    })
+    public @interface IsOffloadedTransportDiscoveryDataScanSupportedReturnValues {}
+
+    /**
+     * Check if offloaded transport discovery data scan is supported or not.
+     *
+     * @return true if chipset supports on-chip tds filter scan
+     * @hide
+     */
+    @SystemApi
+    @RequiresBluetoothScanPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
+    @IsOffloadedTransportDiscoveryDataScanSupportedReturnValues
+    public int isOffloadedTransportDiscoveryDataScanSupported() {
+        if (!getLeAccess()) {
+            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+        }
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
+                mService.isOffloadedTransportDiscoveryDataScanSupported(mAttributionSource, recv);
+                return recv.awaitResultNoInterrupt(getSyncTimeout())
+                        .getValue(BluetoothStatusCodes.ERROR_UNKNOWN);
+            }
+        } catch (RemoteException | TimeoutException e) {
+            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return BluetoothStatusCodes.ERROR_UNKNOWN;
     }
 }

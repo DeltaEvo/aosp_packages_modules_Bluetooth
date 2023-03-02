@@ -27,7 +27,7 @@ import static org.mockito.Mockito.verify;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
-import android.bluetooth.BluetoothAudioPolicy;
+import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
@@ -73,8 +73,6 @@ public class HeadsetClientServiceTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when HeadsetClientService is not enabled",
-                HeadsetClientService.isEnabled());
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
@@ -90,9 +88,6 @@ public class HeadsetClientServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!HeadsetClientService.isEnabled()) {
-            return;
-        }
         TestUtils.stopService(mServiceRule, HeadsetClientService.class);
         mService = HeadsetClientService.getHeadsetClientService();
         Assert.assertNull(mService);
@@ -149,10 +144,10 @@ public class HeadsetClientServiceTest {
                 BluetoothAdapter.getDefaultAdapter().getRemoteDevice("00:01:02:03:04:05");
         mService.getStateMachineMap().put(device, mStateMachine);
 
-        mService.setAudioPolicy(device, new BluetoothAudioPolicy.Builder().build());
+        mService.setAudioPolicy(device, new BluetoothSinkAudioPolicy.Builder().build());
 
         verify(mStateMachine, timeout(STANDARD_WAIT_MILLIS).times(1))
-                .setAudioPolicy(any(BluetoothAudioPolicy.class));
+                .setAudioPolicy(any(BluetoothSinkAudioPolicy.class));
     }
 
     @Test

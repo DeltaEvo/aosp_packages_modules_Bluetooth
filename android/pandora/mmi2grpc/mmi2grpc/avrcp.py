@@ -24,8 +24,8 @@ from mmi2grpc._proxy import ProfileProxy
 from pandora_experimental.a2dp_grpc import A2DP
 from pandora_experimental.a2dp_pb2 import Sink, Source
 from pandora_experimental.avrcp_grpc import AVRCP
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import Connection
+from pandora.host_grpc import Host
+from pandora.host_pb2 import Connection
 from pandora_experimental.mediaplayer_grpc import MediaPlayer
 
 
@@ -61,8 +61,6 @@ class AVRCPProxy(ProfileProxy):
         the IUT connects to PTS to establish pairing.
 
         """
-        # Simulate CSR timeout: b/259102046
-        time.sleep(4)
         self.connection = self.host.WaitConnection(address=pts_addr).connection
         if ("TG" in test and "TG/VLH" not in test) or "CT/VLH" in test:
             try:
@@ -151,8 +149,7 @@ class AVRCPProxy(ProfileProxy):
         Take action to disconnect all A2DP and/or AVRCP connections.
 
         """
-        if self.connection is None:
-            self.connection = self.host.GetConnection(address=pts_addr).connection
+        assert self.connection is not None
         self.host.Disconnect(connection=self.connection)
 
         return "OK"
@@ -913,8 +910,6 @@ class AVRCPProxy(ProfileProxy):
         """
         # Currently disconnect is required in TG role
         if "TG" in test:
-            if self.connection is None:
-                self.connection = self.host.GetConnection(address=pts_addr).connection
             time.sleep(3)
             self.host.Disconnect(connection=self.connection)
             self.connection = None

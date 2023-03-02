@@ -24,7 +24,7 @@
 #ifndef AVRC_API_H
 #define AVRC_API_H
 
-#include <base/callback.h>
+#include <base/functional/callback.h>
 
 #include <cstdint>
 
@@ -253,6 +253,16 @@ typedef struct {
 /*****************************************************************************
  *  external function declarations
  ****************************************************************************/
+/******************************************************************************
+ *
+ * Function         avrcp_absolute_volume_is_enabled
+ *
+ * Description      Check if config support advance control (absolute volume)
+ *
+ * Returns          return true if absolute_volume is enabled
+ *
+ *****************************************************************************/
+bool avrcp_absolute_volume_is_enabled();
 
 /******************************************************************************
  *

@@ -20,8 +20,8 @@ from mmi2grpc._helpers import assert_description
 from mmi2grpc._proxy import ProfileProxy
 
 from pandora_experimental.gatt_grpc import GATT
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import ConnectabilityMode, OwnAddressType
+from pandora.host_grpc import Host
+from pandora.host_pb2 import ConnectabilityMode, OwnAddressType
 from pandora_experimental.gatt_pb2 import AttStatusCode, AttProperties, AttPermissions
 from pandora_experimental.gatt_pb2 import GattServiceParams
 from pandora_experimental.gatt_pb2 import GattCharacteristicParams
@@ -947,7 +947,7 @@ class GATTProxy(ProfileProxy):
         the Implementation Under Test (IUT) can accept GATT connect request from
         PTS.
         """
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             connectable=True,
             own_address_type=OwnAddressType.PUBLIC,
         )

@@ -819,8 +819,8 @@ impl RawAddress {
 }
 
 /// Address that is safe to display in logs.
-pub struct DisplayAddress(pub RawAddress);
-impl Display for DisplayAddress {
+pub struct DisplayAddress<'a>(pub &'a RawAddress);
+impl<'a> Display for DisplayAddress<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "xx:xx:xx:xx:{:2X}:{:2X}", &self.0.address[4], &self.0.address[5])
     }
@@ -850,7 +850,6 @@ pub enum BaseCallbacks {
     ),
     // Unimplemented so far:
     // thread_evt_cb
-    // dut_mode_recv_cb
     // energy_info_cb
     // link_quality_report_cb
     // switch_buffer_size_cb
@@ -1029,7 +1028,6 @@ impl BluetoothInterface {
             le_address_associate_cb: Some(le_address_associate_cb),
             acl_state_changed_cb: Some(acl_state_cb),
             thread_evt_cb: None,
-            dut_mode_recv_cb: None,
             energy_info_cb: None,
             link_quality_report_cb: None,
             generate_local_oob_data_cb: Some(generate_local_oob_data_cb),

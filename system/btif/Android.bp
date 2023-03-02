@@ -299,7 +299,7 @@ cc_test {
         android: {
             shared_libs: [
                 "libbinder_ndk",
-                "android.hardware.bluetooth.audio-V2-ndk",
+                "android.hardware.bluetooth.audio-V3-ndk",
             ],
         },
     },
@@ -544,6 +544,7 @@ cc_test {
           "lib-bt-packets",
           "lib-bt-packets-avrcp",
           "lib-bt-packets-base",
+          "libcom.android.sysprop.bluetooth",
           "libc++fs",
           "libflatbuffers-cpp",
           "libgmock",
@@ -553,7 +554,7 @@ cc_test {
           android: {
               shared_libs: [
                   "libbinder_ndk",
-                  "android.hardware.bluetooth.audio-V2-ndk",
+                  "android.hardware.bluetooth.audio-V3-ndk",
               ],
           },
       },
@@ -661,11 +662,11 @@ cc_test {
           "libbt-sbc-encoder",
           "libbtif",
           "libbtif-core",
-          "libbt-stack-core",
           "libbtdevice",
           "lib-bt-packets",
           "lib-bt-packets-avrcp",
           "lib-bt-packets-base",
+          "libcom.android.sysprop.bluetooth",
           "libc++fs",
           "libflatbuffers-cpp",
           "libgmock",
@@ -675,7 +676,7 @@ cc_test {
           android: {
               shared_libs: [
                   "libbinder_ndk",
-                  "android.hardware.bluetooth.audio-V2-ndk",
+                  "android.hardware.bluetooth.audio-V3-ndk",
               ],
           },
       },

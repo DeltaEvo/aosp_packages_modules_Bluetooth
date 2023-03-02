@@ -29,6 +29,7 @@ import com.google.protobuf.BoolValue
 import com.google.protobuf.Empty
 import io.grpc.Status
 import io.grpc.stub.StreamObserver
+import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -45,7 +46,7 @@ import pandora.SecurityStorageGrpc.SecurityStorageImplBase
 private const val TAG = "PandoraSecurityStorage"
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-class SecurityStorage(private val context: Context) : SecurityStorageImplBase() {
+class SecurityStorage(private val context: Context) : SecurityStorageImplBase(), Closeable {
 
   private val globalScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
   private val flow: Flow<Intent>
@@ -60,17 +61,25 @@ class SecurityStorage(private val context: Context) : SecurityStorageImplBase() 
     flow = intentFlow(context, intentFilter).shareIn(globalScope, SharingStarted.Eagerly)
   }
 
-  fun deinit() {
+  override fun close() {
     globalScope.cancel()
   }
 
   override fun isBonded(request: IsBondedRequest, responseObserver: StreamObserver<BoolValue>) {
     grpcUnary(globalScope, responseObserver) {
-      check(request.getAddressCase() == IsBondedRequest.AddressCase.PUBLIC)
-      val bluetoothDevice = request.public.toBluetoothDevice(bluetoothAdapter)
-      Log.i(TAG, "isBonded: $bluetoothDevice")
-      val isBonded = bluetoothDevice.getBondState() == BluetoothDevice.BOND_BONDED
-      BoolValue.newBuilder().setValue(isBonded).build()
+      val bondedDevices = bluetoothAdapter.getBondedDevices()
+      val bondedDevice =
+        when(request.getAddressCase()!!) {
+          IsBondedRequest.AddressCase.PUBLIC -> bondedDevices.firstOrNull {
+            it.toByteString() == request.public
+          }
+          IsBondedRequest.AddressCase.RANDOM ->  bondedDevices.firstOrNull {
+            it.toByteString() == request.random
+          }
+          IsBondedRequest.AddressCase.ADDRESS_NOT_SET -> throw Status.UNKNOWN.asException()
+        }
+      Log.i(TAG, "isBonded: device=$bondedDevice")
+      BoolValue.newBuilder().setValue(bondedDevice != null).build()
     }
   }
 

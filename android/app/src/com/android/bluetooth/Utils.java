@@ -22,10 +22,6 @@ import static android.Manifest.permission.BLUETOOTH_ADVERTISE;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 import static android.Manifest.permission.RENOUNCE_PERMISSIONS;
-import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_BALANCED;
-import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_CCC;
-import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_HIGH;
-import static android.bluetooth.BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER;
 import static android.bluetooth.BluetoothUtils.USER_HANDLE_NULL;
 import static android.content.pm.PackageManager.GET_PERMISSIONS;
 import static android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES;
@@ -44,8 +40,10 @@ import android.bluetooth.BluetoothDevice;
 import android.companion.AssociationInfo;
 import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
@@ -53,6 +51,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.ParcelUuid;
 import android.os.PowerExemptionManager;
 import android.os.Process;
@@ -82,9 +81,7 @@ import java.nio.charset.CharsetDecoder;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -1056,6 +1053,8 @@ public final class Utils {
     /**
      * Returns bundled broadcast options.
      */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
     public static @NonNull Bundle getTempAllowlistBroadcastOptions() {
         return getTempBroadcastOptions().toBundle();
     }
@@ -1063,6 +1062,8 @@ public final class Utils {
     /**
      * Returns broadcast options.
      */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
     public static @NonNull BroadcastOptions getTempBroadcastOptions() {
         final BroadcastOptions bOptions = BroadcastOptions.makeBasic();
         // Use the Bluetooth process identity to pass permission check when reading DeviceConfig
@@ -1078,6 +1079,35 @@ public final class Utils {
         }
         return bOptions;
     }
+
+    /**
+     * Sends the {@code intent} as a broadcast in the provided {@code context} to receivers that
+     * have been granted the specified {@code receiverPermission} with the {@link BroadcastOptions}
+     * {@code options}.
+     *
+     * @see Context#sendBroadcast(Intent, String, Bundle)
+     */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
+    public static void sendBroadcast(@NonNull Context context, @NonNull Intent intent,
+            @Nullable String receiverPermission, @Nullable Bundle options) {
+        context.sendBroadcast(intent, receiverPermission, options);
+    }
+
+    /**
+     * @see Context#sendOrderedBroadcast(Intent, String, Bundle, BroadcastReceiver, Handler,
+     *          int, String, Bundle)
+     */
+    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
+    @SuppressLint("NewApi")
+    public static void sendOrderedBroadcast(@NonNull Context context, @NonNull Intent intent,
+            @Nullable String receiverPermission, @Nullable Bundle options,
+            @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
+            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras) {
+        context.sendOrderedBroadcast(intent, receiverPermission, options, resultReceiver, scheduler,
+                initialCode, initialData, initialExtras);
+    }
+
     /**
      * Checks that value is present as at least one of the elements of the array.
      * @param array the array to check in
@@ -1090,142 +1120,5 @@ public final class Utils {
             if (Objects.equals(element, value)) return true;
         }
         return false;
-    }
-
-    /**
-     * Wrapper class for GATT connection interval and latency values.
-     *
-     * Prevents calling {@link Context#getResources()} each time a connection interval
-     * update is required.
-     * Raw values are in multiples of 1.25.
-     */
-    public static class GattPriority {
-        private static final String TAG = "GattPriority";
-        private int mMinInterval;
-        private int mMaxInterval;
-        private int mLatency;
-
-        private static final Map<Integer, GattPriority> sPriorities = new HashMap();
-
-        /**
-         * Constructs GattPriority with the config parameters.
-         */
-        private GattPriority(Context context, int priority) {
-            switch (priority) {
-                case CONNECTION_PRIORITY_HIGH:
-                    mMinInterval = context.getResources().getInteger(
-                            R.integer.gatt_high_priority_min_interval);
-                    mMaxInterval = context.getResources().getInteger(
-                            R.integer.gatt_high_priority_max_interval);
-                    mLatency = context.getResources().getInteger(
-                            R.integer.gatt_high_priority_latency);
-                    break;
-
-                case CONNECTION_PRIORITY_CCC:
-                    mMinInterval = context.getResources().getInteger(
-                            R.integer.gatt_ccc_priority_min_interval);
-                    mMaxInterval = context.getResources().getInteger(
-                            R.integer.gatt_ccc_priority_max_interval);
-                    mLatency = context.getResources().getInteger(
-                            R.integer.gatt_ccc_priority_latency);
-                    break;
-
-                case CONNECTION_PRIORITY_LOW_POWER:
-                    mMinInterval = context.getResources().getInteger(
-                            R.integer.gatt_low_power_min_interval);
-                    mMaxInterval = context.getResources().getInteger(
-                            R.integer.gatt_low_power_max_interval);
-                    mLatency = context.getResources().getInteger(
-                            R.integer.gatt_low_power_latency);
-                    break;
-
-                default:
-                    // Using the values for CONNECTION_PRIORITY_BALANCED.
-                    mMinInterval = context.getResources().getInteger(
-                            R.integer.gatt_balanced_priority_min_interval);
-                    mMaxInterval = context.getResources().getInteger(
-                            R.integer.gatt_balanced_priority_max_interval);
-                    mLatency = context.getResources().getInteger(
-                            R.integer.gatt_balanced_priority_latency);
-                    break;
-            }
-        }
-
-        /**
-         * Retrieves the GattPriority corresponding to the priority parameter.
-         */
-        public static GattPriority getStaticPriority(Context context, int priority) {
-            if (priority < CONNECTION_PRIORITY_BALANCED
-                    || priority > CONNECTION_PRIORITY_CCC) {
-                Log.e(TAG, "getStaticPriority: priority: " + priority + "does not exist");
-                return null;
-            }
-            if (sPriorities.get(priority) == null) {
-                sPriorities.put(priority, new GattPriority(context, priority));
-            }
-            return sPriorities.get(priority);
-        }
-
-        /**
-         * Retrieves the BluetoothGatt priority with raw values.
-         */
-        public static int toPriority(Context context, int interval,
-                int latency) {
-            return toPriority(context, interval, interval, latency);
-        }
-
-        /**
-         * Retrieves the BluetoothGatt priority with raw values.
-         */
-        public static int toPriority(Context context, int minInterval,
-                int maxInterval, int latency) {
-
-            GattPriority priorityCcc =
-                    getStaticPriority(context, CONNECTION_PRIORITY_CCC);
-            if (minInterval >= priorityCcc.getMinInterval()
-                    && maxInterval <= priorityCcc.getMaxInterval()) {
-                return CONNECTION_PRIORITY_CCC;
-            }
-
-            GattPriority priorityBalanced =
-                    getStaticPriority(context, CONNECTION_PRIORITY_BALANCED);
-            if (minInterval >= priorityBalanced.getMinInterval()
-                    && maxInterval <= priorityBalanced.getMaxInterval()) {
-                return CONNECTION_PRIORITY_BALANCED;
-            }
-
-            GattPriority priorityHigh =
-                    getStaticPriority(context, CONNECTION_PRIORITY_HIGH);
-            if (minInterval >= priorityHigh.getMinInterval()
-                    && maxInterval <= priorityHigh.getMaxInterval()) {
-                return CONNECTION_PRIORITY_HIGH;
-            }
-
-            GattPriority priorityLow =
-                    getStaticPriority(context, CONNECTION_PRIORITY_LOW_POWER);
-            if (minInterval >= priorityLow.getMinInterval()
-                    && maxInterval <= priorityLow.getMaxInterval()) {
-                return CONNECTION_PRIORITY_LOW_POWER;
-            }
-
-            Log.w(TAG, "toPriority: Did not find any matching priority");
-            return CONNECTION_PRIORITY_BALANCED;
-        }
-
-        public int getMinInterval() {
-            return mMinInterval;
-        }
-
-        public int getMaxInterval() {
-            return mMaxInterval;
-        }
-
-        public int getIntervalWindow() {
-            return mMaxInterval - mMinInterval;
-        }
-
-        public int getLatency() {
-            return mLatency;
-        }
     }
 }

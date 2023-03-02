@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -1047,7 +1047,8 @@ TEST_F(CsisClientTest, test_storage_calls) {
 
   ASSERT_EQ(0, get_func_call_count("btif_storage_remove_csis_device"));
   CsisClient::Get()->RemoveDevice(test_address);
-  ASSERT_EQ(1, get_func_call_count("btif_storage_remove_csis_device"));
+  /* It is 0 because btif_csis_client.cc calls that */
+  ASSERT_EQ(0, get_func_call_count("btif_storage_remove_csis_device"));
 
   TestAppUnregister();
 }

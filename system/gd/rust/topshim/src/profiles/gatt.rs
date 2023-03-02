@@ -38,6 +38,7 @@ pub mod ffi {
 
     #[derive(Debug, Clone)]
     pub struct RustAdvertisingTrackInfo {
+        monitor_handle: u8,
         scanner_id: u8,
         filter_index: u8,
         advertiser_state: u8,
@@ -80,6 +81,9 @@ pub mod ffi {
         company: u16,
         company_mask: u16,
         ad_type: u8,
+        org_id: u8,
+        tds_flags: u8,
+        tds_flags_mask: u8,
         data: Vec<u8>,
         data_mask: Vec<u8>,
         irk: [u8; 16],
@@ -321,6 +325,7 @@ pub mod ffi {
         );
         unsafe fn gdscan_sync_lost_callback(sync_handle: u16);
         unsafe fn gdscan_sync_transfer_callback(status: u8, address: *const RawAddress);
+        unsafe fn gdscan_biginfo_report_callback(sync_handle: u16, encrypted: bool);
     }
 
     unsafe extern "C++" {
@@ -988,6 +993,9 @@ pub enum GattScannerInbandCallbacks {
 
     /// Params: Status, Address
     SyncTransferCallback(u8, RawAddress),
+
+    /// Params: Sync Handle, Encrypted
+    BigInfoReportCallback(u16, bool),
 }
 
 pub struct GattScannerInbandCallbacksDispatcher {
@@ -1031,6 +1039,7 @@ cb_variant!(GDScannerInbandCb, gdscan_sync_transfer_callback -> GattScannerInban
 u8, *const RawAddress, {
     let _1 = unsafe { *_1 };
 });
+cb_variant!(GDScannerInbandCb, gdscan_biginfo_report_callback -> GattScannerInbandCallbacks::BigInfoReportCallback, u16, bool);
 
 /// Advertising callbacks used by the GD implementation of BleAdvertiserInterface.
 /// These callbacks should be registered using |RegisterCallbacks| on
@@ -1182,6 +1191,7 @@ impl GattClient {
         &self,
         client_if: i32,
         addr: &RawAddress,
+        addr_type: u8,
         is_direct: bool,
         transport: i32,
         opportunistic: bool,
@@ -1192,6 +1202,7 @@ impl GattClient {
             connect,
             client_if,
             addr,
+            addr_type,
             is_direct,
             transport,
             opportunistic,
