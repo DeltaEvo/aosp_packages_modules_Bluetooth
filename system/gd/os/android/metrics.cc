@@ -236,7 +236,7 @@ void LogMetricReadTxPowerLevelResult(
 }
 
 void LogMetricSmpPairingEvent(
-    const Address& address, uint8_t smp_cmd, android::bluetooth::DirectionEnum direction, uint8_t smp_fail_reason) {
+    const Address& address, uint16_t smp_cmd, android::bluetooth::DirectionEnum direction, uint16_t smp_fail_reason) {
   int metric_id = 0;
   if (!address.IsEmpty()) {
     metric_id = MetricIdManager::GetInstance().AllocateId(address);
@@ -443,7 +443,12 @@ void LogMetricBluetoothLocalVersions(
     uint8_t hci_version,
     uint32_t hci_revision) {
   int ret = stats_write(
-      BLUETOOTH_LOCAL_VERSIONS_REPORTED, lmp_manufacturer_name, lmp_version, lmp_subversion, hci_version, hci_revision);
+      BLUETOOTH_LOCAL_VERSIONS_REPORTED,
+      static_cast<int32_t>(lmp_manufacturer_name),
+      static_cast<int32_t>(lmp_version),
+      static_cast<int32_t>(lmp_subversion),
+      static_cast<int32_t>(hci_version),
+      static_cast<int32_t>(hci_revision));
   if (ret < 0) {
     LOG_WARN(
         "Failed for LogMetricBluetoothLocalVersions, "
