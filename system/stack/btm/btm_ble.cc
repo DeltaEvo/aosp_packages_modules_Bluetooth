@@ -991,10 +991,17 @@ tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
   }
 
   if (ble_sec_act == BTM_BLE_SEC_NONE) {
-    return result;
+    if (bluetooth::common::init_flags::queue_l2cap_coc_while_encrypting_is_enabled()) {
+      if (sec_act != BTM_SEC_ENC_PENDING) {
+        return result;
+      }
+    } else {
+      return result;
+    }
+  } else {
+    l2cble_update_sec_act(bd_addr, sec_act);
   }
 
-  l2cble_update_sec_act(bd_addr, sec_act);
   BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, p_callback, p_ref_data,
                     ble_sec_act);
 
@@ -1012,7 +1019,8 @@ tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-void btm_ble_rand_enc_complete(uint8_t* p, uint16_t op_code,
+void btm_ble_rand_enc_complete(uint8_t* p, uint16_t evt_len,
+                               uint16_t op_code,
                                tBTM_RAND_ENC_CB* p_enc_cplt_cback) {
   tBTM_RAND_ENC params;
   uint8_t* p_dest = params.param_buf;
@@ -1023,6 +1031,11 @@ void btm_ble_rand_enc_complete(uint8_t* p, uint16_t op_code,
 
   /* If there was a callback address for vcs complete, call it */
   if (p_enc_cplt_cback && p) {
+
+    if (evt_len < 1) {
+      goto err_out;
+    }
+
     /* Pass paramters to the callback function */
     STREAM_TO_UINT8(params.status, p); /* command status */
 
@@ -1034,12 +1047,21 @@ void btm_ble_rand_enc_complete(uint8_t* p, uint16_t op_code,
       else
         params.param_len = OCTET16_LEN;
 
+      if (evt_len < 1 + params.param_len) {
+        goto err_out;
+      }
+
       /* Fetch return info from HCI event message */
       memcpy(p_dest, p, params.param_len);
     }
     if (p_enc_cplt_cback) /* Call the Encryption complete callback function */
       (*p_enc_cplt_cback)(&params);
   }
+
+  return;
+
+err_out:
+  BTM_TRACE_ERROR("%s malformatted event packet, too short", __func__);
 }
 
 /*******************************************************************************
@@ -1585,13 +1607,30 @@ void btm_ble_ltk_request_reply(const RawAddress& bda, bool use_stk,
   BTM_TRACE_ERROR("key size = %d", p_rec->ble.keys.key_size);
   if (use_stk) {
     btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, stk);
-  } else /* calculate LTK using peer device  */
-  {
-    if (p_rec->ble.key_type & BTM_LE_KEY_LENC)
-      btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, p_rec->ble.keys.lltk);
-    else
-      btsnd_hcic_ble_ltk_req_neg_reply(btm_cb.enc_handle);
+    return;
   }
+  /* calculate LTK using peer device  */
+  if (p_rec->ble.key_type & BTM_LE_KEY_LENC) {
+    btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, p_rec->ble.keys.lltk);
+    return;
+  }
+
+  p_rec = btm_find_dev_with_lenc(bda);
+  if (!p_rec) {
+    btsnd_hcic_ble_ltk_req_neg_reply(btm_cb.enc_handle);
+    return;
+  }
+
+  LOG_INFO("Found second sec_dev_rec for device that have LTK");
+  /* This can happen when remote established LE connection using RPA to this
+   * device, but then pair with us using Classing transport while still keeping
+   * LE connection. If remote attempts to encrypt the LE connection, we might
+   * end up here. We will eventually consolidate both entries, this is to avoid
+   * race conditions. */
+
+  LOG_ASSERT(p_rec->ble.key_type & BTM_LE_KEY_LENC);
+  p_cb->key_size = p_rec->ble.keys.key_size;
+  btsnd_hcic_ble_ltk_req_reply(btm_cb.enc_handle, p_rec->ble.keys.lltk);
 }
 
 /*******************************************************************************
@@ -1820,7 +1859,6 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
           p_dev_rec = btm_find_dev(bd_addr);
           if (p_dev_rec == NULL) {
             BTM_TRACE_ERROR("%s: p_dev_rec is NULL", __func__);
-            android_errorWriteLog(0x534e4554, "120612744");
             return BTM_SUCCESS;
           }
           BTM_TRACE_DEBUG(
