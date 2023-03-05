@@ -156,6 +156,11 @@ impl IBluetoothGattServerCallback for BluetoothGattServerCallbackDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("OnServiceRemoved")]
+    fn on_service_removed(&self, status: GattStatus, handle: i32) {
+        dbus_generated!()
+    }
+
     #[dbus_method("OnCharacteristicReadRequest")]
     fn on_characteristic_read_request(
         &self,
@@ -294,8 +299,13 @@ impl IScannerCallback for ScannerCallbackDBus {
         dbus_generated!()
     }
 
-    #[dbus_method("OnScanResultLost")]
-    fn on_scan_result_lost(&self, scan_result: ScanResult) {
+    #[dbus_method("OnAdvertisementFound")]
+    fn on_advertisement_found(&self, scanner_id: u8, scan_result: ScanResult) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("OnAdvertisementLost")]
+    fn on_advertisement_lost(&self, scanner_id: u8, scan_result: ScanResult) {
         dbus_generated!()
     }
 

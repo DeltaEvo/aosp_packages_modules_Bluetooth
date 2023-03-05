@@ -25,7 +25,7 @@
 
 #define LOG_TAG "bt_bta_gattc"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 
@@ -249,7 +249,7 @@ void bta_gattc_deregister(tBTA_GATTC_RCB* p_clreg) {
   for (uint8_t i = 0; i < accept_list_size; i++) {
     if (!bta_gattc_cb.bg_track[i].in_use) continue;
 
-    if (bta_gattc_cb.bg_track[i].cif_mask & (1 << (p_clreg->client_if - 1))) {
+    if (bta_gattc_cb.bg_track[i].cif_mask & ((tBTA_GATTC_CIF_MASK)1 << (p_clreg->client_if - 1))) {
       bta_gattc_mark_bg_conn(p_clreg->client_if,
                              bta_gattc_cb.bg_track[i].remote_bda, false);
       GATT_CancelConnect(p_clreg->client_if,
@@ -390,6 +390,7 @@ void bta_gattc_open(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
   /* open/hold a connection */
   if (!GATT_Connect(p_clcb->p_rcb->client_if, p_data->api_conn.remote_bda,
+                    p_data->api_conn.remote_addr_type,
                     BTM_BLE_DIRECT_CONNECTION, p_data->api_conn.transport,
                     p_data->api_conn.opportunistic,
                     p_data->api_conn.initiating_phys)) {
@@ -610,6 +611,7 @@ void bta_gattc_close_fail(tBTA_GATTC_CLCB* p_clcb,
     cb_data.close.conn_id = p_data->hdr.layer_specific;
     cb_data.close.remote_bda = p_clcb->bda;
     cb_data.close.reason = BTA_GATT_CONN_NONE;
+    cb_data.close.status = GATT_ERROR;
 
     LOG(WARNING) << __func__ << ": conn_id=" << loghex(cb_data.close.conn_id)
                  << ". Returns GATT_ERROR(" << +GATT_ERROR << ").";
@@ -660,7 +662,7 @@ void bta_gattc_close(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
   bta_gattc_clcb_dealloc(p_clcb);
 
   if (p_data->hdr.event == BTA_GATTC_API_CLOSE_EVT) {
-    GATT_Disconnect(p_data->hdr.layer_specific);
+    cb_data.close.status = GATT_Disconnect(p_data->hdr.layer_specific);
     cb_data.close.reason = GATT_CONN_TERMINATE_LOCAL_HOST;
     LOG_DEBUG("Local close event client_if:%hu conn_id:%hu reason:%s",
               cb_data.close.client_if, cb_data.close.conn_id,
@@ -668,6 +670,7 @@ void bta_gattc_close(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
                   static_cast<tGATT_DISCONN_REASON>(cb_data.close.reason))
                   .c_str());
   } else if (p_data->hdr.event == BTA_GATTC_INT_DISCONN_EVT) {
+    cb_data.close.status = static_cast<tGATT_STATUS>(p_data->int_conn.reason);
     cb_data.close.reason = p_data->int_conn.reason;
     LOG_DEBUG("Peer close disconnect event client_if:%hu conn_id:%hu reason:%s",
               cb_data.close.client_if, cb_data.close.conn_id,

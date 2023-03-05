@@ -19,7 +19,7 @@
 #ifndef GATT_INT_H
 #define GATT_INT_H
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/strings/stringprintf.h>
 #include <string.h>
 
@@ -450,6 +450,7 @@ typedef struct {
   tGATT_APPL_INFO cb_info;
 
   tGATT_HDL_CFG hdl_cfg;
+  bool over_br_enabled;
 } tGATT_CB;
 
 #define GATT_SIZE_OF_SRV_CHG_HNDL_RANGE 4
@@ -466,9 +467,15 @@ extern void gatt_set_err_rsp(bool enable, uint8_t req_op_code,
 extern bool gatt_disconnect(tGATT_TCB* p_tcb);
 extern bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
                              tBT_TRANSPORT transport, int8_t initiating_phys);
+extern bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
+                             tBLE_ADDR_TYPE addr_type, tBT_TRANSPORT transport,
+                             int8_t initiating_phys);
 extern bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
                          tBT_TRANSPORT transport, uint8_t initiating_phys,
                          tGATT_IF gatt_if);
+extern bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
+                         tBLE_ADDR_TYPE addr_type, tBT_TRANSPORT transport,
+                         uint8_t initiating_phys, tGATT_IF gatt_if);
 extern void gatt_data_process(tGATT_TCB& p_tcb, uint16_t cid, BT_HDR* p_buf);
 extern void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
                                           bool is_add, bool check_acl_link);
@@ -494,7 +501,7 @@ extern bool gatt_sr_is_cl_multi_variable_len_notif_supported(tGATT_TCB& tcb);
 
 extern bool gatt_sr_is_cl_change_aware(tGATT_TCB& tcb);
 extern void gatt_sr_init_cl_status(tGATT_TCB& tcb);
-extern void gatt_sr_update_cl_status(tGATT_TCB& tcb, bool chg_unaware);
+extern void gatt_sr_update_cl_status(tGATT_TCB& tcb, bool chg_aware);
 
 /* Functions provided by att_protocol.cc */
 extern tGATT_STATUS attp_send_cl_confirmation_msg(tGATT_TCB& tcb, uint16_t cid);

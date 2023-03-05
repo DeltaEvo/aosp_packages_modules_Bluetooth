@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "device/include/esco_parameters.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
@@ -920,23 +920,6 @@ void BTM_WritePageTimeout(uint16_t timeout);
  *
  ******************************************************************************/
 void BTM_WriteVoiceSettings(uint16_t settings);
-
-/*******************************************************************************
- *
- * Function         BTM_EnableTestMode
- *
- * Description      Send HCI the enable device under test command.
- *
- *                  Note: Controller can only be taken out of this mode by
- *                      resetting the controller.
- *
- * Returns
- *      BTM_SUCCESS         Command sent.
- *      BTM_NO_RESOURCES    If out of resources to send the command.
- *
- *
- ******************************************************************************/
-tBTM_STATUS BTM_EnableTestMode(void);
 
 /*******************************************************************************
  *

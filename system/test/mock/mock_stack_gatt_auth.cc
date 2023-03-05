@@ -19,15 +19,13 @@
  *   Functions generated:10
  */
 
+#include <cstdint>
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
-#include <cstdint>
-
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 #ifndef UNUSED_ATTR
@@ -35,27 +33,27 @@ extern std::map<std::string, int> mock_function_count_map;
 #endif
 
 bool gatt_security_check_start(tGATT_CLCB* p_clcb) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return false;
 }
 tGATT_SEC_ACTION gatt_determine_sec_act(tGATT_CLCB* p_clcb) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return GATT_SEC_NONE;
 }
 tGATT_SEC_ACTION gatt_get_sec_act(tGATT_TCB* p_tcb) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return GATT_SEC_NONE;
 }
 tGATT_STATUS gatt_get_link_encrypt_status(tGATT_TCB& tcb) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return GATT_SUCCESS;
 }
 void gatt_notify_enc_cmpl(const RawAddress& bd_addr) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
 }
 void gatt_set_sec_act(tGATT_TCB* p_tcb, tGATT_SEC_ACTION sec_act) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
 }
 void gatt_verify_signature(tGATT_TCB& tcb, uint16_t cid, BT_HDR* p_buf) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
 }

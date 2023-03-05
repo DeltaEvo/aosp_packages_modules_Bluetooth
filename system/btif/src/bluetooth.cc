@@ -61,6 +61,7 @@
 #include "bta/include/bta_le_audio_broadcaster_api.h"
 #include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
+#include "btif/include/btif_sock.h"
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -772,6 +773,7 @@ static void dump(int fd, const char** arguments) {
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
   stack_debug_avdtp_api_dump(fd);
+  btif_sock_dump(fd);
   bluetooth::avrcp::AvrcpService::DebugDump(fd);
   btif_debug_config_dump(fd);
   device_debug_iot_config_dump(fd);
@@ -798,6 +800,27 @@ static void dump(int fd, const char** arguments) {
 
 static void dumpMetrics(std::string* output) {
   bluetooth::common::BluetoothMetricsLogger::GetInstance()->WriteString(output);
+}
+
+static int get_remote_pbap_pce_version(const RawAddress* bd_addr) {
+  // Read and restore the PCE version from local storage
+  uint16_t pce_version = 0;
+  size_t version_value_size = sizeof(pce_version);
+  if (!btif_config_get_bin(bd_addr->ToString(), BT_CONFIG_KEY_PBAP_PCE_VERSION,
+                           (uint8_t*)&pce_version, &version_value_size)) {
+    LOG_WARN("Failed to read cached peer PCE version for %s",
+             ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
+  }
+  return pce_version;
+}
+
+static bool pbap_pse_dynamic_version_upgrade_is_enabled() {
+  if (bluetooth::common::init_flags::
+          pbap_pse_dynamic_version_upgrade_is_enabled()) {
+    return true;
+  }
+  LOG_WARN("PBAP PSE dynamic version upgrade is not enabled");
+  return false;
 }
 
 static const void* get_profile_interface(const char* profile_id) {
@@ -872,33 +895,14 @@ static const void* get_profile_interface(const char* profile_id) {
   if (is_profile(profile_id, BT_PROFILE_CSIS_CLIENT_ID))
     return btif_csis_client_get_interface();
 
+  bool isBqrEnabled =
+      bluetooth::common::InitFlags::IsBluetoothQualityReportCallbackEnabled();
+  if (isBqrEnabled) {
+    if (is_profile(profile_id, BT_BQR_ID))
+      return bluetooth::bqr::getBluetoothQualityReportInterface();
+  }
+
   return NULL;
-}
-
-int dut_mode_configure(uint8_t enable) {
-  if (!interface_ready()) return BT_STATUS_NOT_READY;
-  if (!stack_manager_get_interface()->get_stack_is_running())
-    return BT_STATUS_NOT_READY;
-
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dut_mode_configure, enable));
-  return BT_STATUS_SUCCESS;
-}
-
-int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
-  if (!interface_ready()) return BT_STATUS_NOT_READY;
-  if (!btif_is_dut_mode()) return BT_STATUS_FAIL;
-
-  uint8_t* copy = (uint8_t*)osi_calloc(len);
-  memcpy(copy, buf, len);
-
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(
-                        [](uint16_t opcode, uint8_t* buf, uint8_t len) {
-                          btif_dut_mode_send(opcode, buf, len);
-                          osi_free(buf);
-                        },
-                        opcode, copy, len));
-  return BT_STATUS_SUCCESS;
 }
 
 static bt_os_callouts_t* wakelock_os_callouts_saved = nullptr;
@@ -1092,8 +1096,6 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .pin_reply = pin_reply,
     .ssp_reply = ssp_reply,
     .get_profile_interface = get_profile_interface,
-    .dut_mode_configure = dut_mode_configure,
-    .dut_mode_send = dut_mode_send,
     .set_os_callouts = set_os_callouts,
     .read_energy_info = read_energy_info,
     .dump = dump,
@@ -1126,6 +1128,9 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .interop_match_addr_or_name = interop_match_addr_or_name,
     .interop_database_add_remove_addr = interop_database_add_remove_addr,
     .interop_database_add_remove_name = interop_database_add_remove_name,
+    .get_remote_pbap_pce_version = get_remote_pbap_pce_version,
+    .pbap_pse_dynamic_version_upgrade_is_enabled =
+        pbap_pse_dynamic_version_upgrade_is_enabled,
 };
 
 // callback reporting helpers

@@ -16,34 +16,34 @@
 
 package com.android.pandora
 
-import android.util.Log
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.content.ComponentName
+import android.content.ContentUris
 import android.content.Context
-import com.google.protobuf.Empty
-import io.grpc.stub.StreamObserver
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Environment
+import android.provider.MediaStore.Images.Media
+import android.provider.MediaStore.MediaColumns
 import android.provider.Telephony.*
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
-import android.content.Intent
-import android.content.ComponentName
-import android.content.ContentUris
-import java.io.File
-import java.io.FileOutputStream
-import android.provider.MediaStore.Images.Media
-import android.provider.MediaStore.MediaColumns
-import android.net.Uri
-import kotlinx.coroutines.async
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
+import android.util.Log
 import androidx.test.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import com.google.protobuf.Empty
+import io.grpc.stub.StreamObserver
+import java.io.Closeable
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import pandora.AndroidGrpc.AndroidImplBase
 import pandora.AndroidProto.*
@@ -51,15 +51,13 @@ import pandora.AndroidProto.*
 private const val TAG = "PandoraAndroidInternal"
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-class AndroidInternal(val context: Context) : AndroidImplBase() {
+class AndroidInternal(val context: Context) : AndroidImplBase(), Closeable {
 
   private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
   private val INCOMING_FILE_ACCEPT_BTN = "ACCEPT"
   private val INCOMING_FILE_TITLE = "Incoming file"
   private val INCOMING_FILE_WAIT_TIMEOUT = 2000L
 
-  private val BT_PKG_NAME = "com.android.bluetooth"
-  private val BT_OPP_LAUNCHER_ACTIVITY = "com.android.bluetooth.opp.BluetoothOppLauncherActivity"
   private val BT_DEVICE_SELECT_WAIT_TIMEOUT = 3000L
   private val IMAGE_FILE_NAME = "OPP_TEST_IMAGE.bmp"
 
@@ -73,10 +71,14 @@ class AndroidInternal(val context: Context) : AndroidImplBase() {
     createImageFile()
   }
 
-  fun deinit() {
+  override fun close() {
     scope.cancel()
 
-    val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), IMAGE_FILE_NAME)
+    val file =
+      File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+        IMAGE_FILE_NAME
+      )
 
     if (file.exists()) {
       file.delete()
@@ -90,13 +92,19 @@ class AndroidInternal(val context: Context) : AndroidImplBase() {
     }
   }
 
-  override fun setAccessPermission(request: SetAccessPermissionRequest, responseObserver: StreamObserver<Empty>) {
+  override fun setAccessPermission(
+    request: SetAccessPermissionRequest,
+    responseObserver: StreamObserver<Empty>
+  ) {
     grpcUnary<Empty>(scope, responseObserver) {
       val bluetoothDevice = request.address.toBluetoothDevice(bluetoothAdapter)
       when (request.accessType!!) {
-        AccessType.ACCESS_MESSAGE -> bluetoothDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
-        AccessType.ACCESS_PHONEBOOK -> bluetoothDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
-        AccessType.ACCESS_SIM -> bluetoothDevice.setSimAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
+        AccessType.ACCESS_MESSAGE ->
+          bluetoothDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
+        AccessType.ACCESS_PHONEBOOK ->
+          bluetoothDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
+        AccessType.ACCESS_SIM ->
+          bluetoothDevice.setSimAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
         else -> {}
       }
       Empty.getDefaultInstance()
@@ -110,15 +118,25 @@ class AndroidInternal(val context: Context) : AndroidImplBase() {
       telephonyManager = telephonyManager.createForSubscriptionId(defaultSmsSub)
       val avdPhoneNumber = telephonyManager.getLine1Number()
 
-      smsManager.sendTextMessage(avdPhoneNumber, avdPhoneNumber, generateAlphanumericString(DEFAULT_MESSAGE_LEN), null, null)
+      smsManager.sendTextMessage(
+        avdPhoneNumber,
+        avdPhoneNumber,
+        generateAlphanumericString(DEFAULT_MESSAGE_LEN),
+        null,
+        null
+      )
       Empty.getDefaultInstance()
     }
   }
 
   override fun acceptIncomingFile(request: Empty, responseObserver: StreamObserver<Empty>) {
     grpcUnary<Empty>(scope, responseObserver) {
-      device.wait(Until.findObject(By.text(INCOMING_FILE_TITLE)), INCOMING_FILE_WAIT_TIMEOUT).click()
-      device.wait(Until.findObject(By.text(INCOMING_FILE_ACCEPT_BTN)), INCOMING_FILE_WAIT_TIMEOUT).click()
+      device
+        .wait(Until.findObject(By.text(INCOMING_FILE_TITLE)), INCOMING_FILE_WAIT_TIMEOUT)
+        .click()
+      device
+        .wait(Until.findObject(By.text(INCOMING_FILE_ACCEPT_BTN)), INCOMING_FILE_WAIT_TIMEOUT)
+        .click()
       Empty.getDefaultInstance()
     }
   }
@@ -132,9 +150,12 @@ class AndroidInternal(val context: Context) : AndroidImplBase() {
   }
 
   suspend private fun waitAndSelectBluetoothDevice() {
-    var selectJob = scope.async {
-      device.wait(Until.findObject(By.textContains("Cuttlefish")), BT_DEVICE_SELECT_WAIT_TIMEOUT).click()
-    }
+    var selectJob =
+      scope.async {
+        device
+          .wait(Until.findObject(By.textContains("Cuttlefish")), BT_DEVICE_SELECT_WAIT_TIMEOUT)
+          .click()
+      }
     selectJob.await()
   }
 
@@ -144,18 +165,31 @@ class AndroidInternal(val context: Context) : AndroidImplBase() {
     try {
       var sendingIntent = Intent(Intent.ACTION_SEND)
       sendingIntent.setType(type)
+      val activity =
+        context.packageManager!!
+          .queryIntentActivities(
+            sendingIntent,
+            PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+          )
+          .filter { it!!.loadLabel(context.packageManager) == "Bluetooth" }
+          .first()
+          .activityInfo
       sendingIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-      sendingIntent.setComponent(ComponentName(BT_PKG_NAME, BT_OPP_LAUNCHER_ACTIVITY))
+      sendingIntent.setComponent(ComponentName(activity.applicationInfo.packageName, activity.name))
       sendingIntent.putExtra(Intent.EXTRA_STREAM, contentUri)
       context.startActivity(sendingIntent)
-    } catch(e: Exception) {
+    } catch (e: Exception) {
+      e.printStackTrace()
     }
   }
 
   private fun getImageId(fileName: String): Long {
     val selection = MediaColumns.DISPLAY_NAME + "=?"
     val selectionArgs = arrayOf(fileName)
-    val cursor = context.getContentResolver().query(Media.EXTERNAL_CONTENT_URI, null, selection, selectionArgs, null)
+    val cursor =
+      context
+        .getContentResolver()
+        .query(Media.EXTERNAL_CONTENT_URI, null, selection, selectionArgs, null)
 
     cursor?.use {
       it.let {
@@ -168,7 +202,11 @@ class AndroidInternal(val context: Context) : AndroidImplBase() {
 
   private fun createImageFile() {
     val bitmapImage = Bitmap.createBitmap(30, 20, Bitmap.Config.ARGB_8888)
-    val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), IMAGE_FILE_NAME)
+    val file =
+      File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+        IMAGE_FILE_NAME
+      )
     var fileOutputStream: FileOutputStream? = null
 
     if (file.exists()) {
@@ -187,7 +225,7 @@ class AndroidInternal(val context: Context) : AndroidImplBase() {
           fileOutputStream.close()
         }
       } catch (e: Exception) {
-         e.printStackTrace()
+        e.printStackTrace()
       }
     }
   }

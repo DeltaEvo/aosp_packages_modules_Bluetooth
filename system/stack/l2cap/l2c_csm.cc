@@ -23,6 +23,7 @@
  ******************************************************************************/
 #define LOG_TAG "l2c_csm"
 
+#include <base/functional/callback.h>
 #include <base/logging.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 
@@ -126,9 +127,9 @@ void l2c_csm_execute(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
     return;
   }
 
-  LOG_DEBUG("Entry chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Entry chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 
   switch (p_ccb->chnl_state) {
     case CST_CLOSED:
@@ -226,7 +227,8 @@ static void l2c_csm_closed(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
         btm_acl_notif_conn_collision(p_ccb->p_lcb->remote_bd_addr);
       } else {
         l2cu_release_ccb(p_ccb);
-        (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid, L2CAP_CONN_OTHER_ERROR);
+        (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid,
+                                            L2CAP_CONN_ACL_CONNECTION_FAILED);
         bluetooth::shim::CountCounterMetrics(
             android::bluetooth::CodePathCounterKeyEnum::
                 L2CAP_CONNECT_CONFIRM_NEG,
@@ -280,7 +282,8 @@ static void l2c_csm_closed(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
 
     case L2CEVT_SEC_COMP_NEG: /* something is really bad with security */
       l2cu_release_ccb(p_ccb);
-      (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid, L2CAP_CONN_OTHER_ERROR);
+      (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(
+          local_cid, L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED);
       bluetooth::shim::CountCounterMetrics(
           android::bluetooth::CodePathCounterKeyEnum::
               L2CAP_SECURITY_NEG_AT_CSM_CLOSED,
@@ -336,7 +339,7 @@ static void l2c_csm_closed(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
 
     case L2CEVT_TIMEOUT:
       l2cu_release_ccb(p_ccb);
-      (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid, L2CAP_CONN_OTHER_ERROR);
+      (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid, L2CAP_CONN_TIMEOUT);
       bluetooth::shim::CountCounterMetrics(
           android::bluetooth::CodePathCounterKeyEnum::
               L2CAP_TIMEOUT_AT_CSM_CLOSED,
@@ -355,9 +358,9 @@ static void l2c_csm_closed(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -440,7 +443,8 @@ static void l2c_csm_orig_w4_sec_comp(tL2C_CCB* p_ccb, tL2CEVT event,
       }
 
       l2cu_release_ccb(p_ccb);
-      (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid, L2CAP_CONN_OTHER_ERROR);
+      (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(
+          local_cid, L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED);
       bluetooth::shim::CountCounterMetrics(
           android::bluetooth::CodePathCounterKeyEnum::
               L2CAP_SECURITY_NEG_AT_W4_SEC,
@@ -462,9 +466,9 @@ static void l2c_csm_orig_w4_sec_comp(tL2C_CCB* p_ccb, tL2CEVT event,
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -602,9 +606,9 @@ static void l2c_csm_term_w4_sec_comp(tL2C_CCB* p_ccb, tL2CEVT event,
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -706,7 +710,12 @@ static void l2c_csm_w4_l2cap_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
                    << loghex(p_ccb->local_cid)
                    << ", reason=" << loghex(p_ci->l2cap_result);
       l2cu_release_ccb(p_ccb);
-      (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid, L2CAP_CONN_OTHER_ERROR);
+      if (p_lcb->transport == BT_TRANSPORT_LE) {
+        (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(
+            local_cid, le_result_to_l2c_conn(p_ci->l2cap_result));
+      } else {
+        (*p_ccb->p_rcb->api.pL2CA_Error_Cb)(local_cid, p_ci->l2cap_result);
+      }
       bluetooth::shim::CountCounterMetrics(
           android::bluetooth::CodePathCounterKeyEnum::L2CAP_CONNECT_RSP_NEG, 1);
       break;
@@ -785,9 +794,9 @@ static void l2c_csm_w4_l2cap_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -948,9 +957,9 @@ static void l2c_csm_w4_l2ca_connect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -1248,9 +1257,9 @@ static void l2c_csm_config(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -1272,8 +1281,8 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
   uint16_t credit = 0;
   tL2CAP_LE_CFG_INFO* p_le_cfg = (tL2CAP_LE_CFG_INFO*)p_data;
 
-  LOG_DEBUG("LCID: 0x%04x  st: OPEN  evt: %s", p_ccb->local_cid,
-            l2c_csm_get_event_name(event));
+  LOG_VERBOSE("LCID: 0x%04x  st: OPEN  evt: %s", p_ccb->local_cid,
+              l2c_csm_get_event_name(event));
 
   switch (event) {
     case L2CEVT_LP_DISCONNECT_IND: /* Link was disconnected */
@@ -1438,9 +1447,9 @@ static void l2c_csm_open(tL2C_CCB* p_ccb, tL2CEVT event, void* p_data) {
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -1495,9 +1504,9 @@ static void l2c_csm_w4_l2cap_disconnect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************
@@ -1550,9 +1559,9 @@ static void l2c_csm_w4_l2ca_disconnect_rsp(tL2C_CCB* p_ccb, tL2CEVT event,
     default:
       LOG_ERROR("Handling unexpected event:%s", l2c_csm_get_event_name(event));
   }
-  LOG_DEBUG("Exit chnl_state=%s [%d], event=%s [%d]",
-            channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
-            l2c_csm_get_event_name(event), event);
+  LOG_VERBOSE("Exit chnl_state=%s [%d], event=%s [%d]",
+              channel_state_text(p_ccb->chnl_state).c_str(), p_ccb->chnl_state,
+              l2c_csm_get_event_name(event), event);
 }
 
 /*******************************************************************************

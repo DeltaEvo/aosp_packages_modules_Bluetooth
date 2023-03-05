@@ -1,6 +1,7 @@
 //! Utility functions for dealing with Rust integer types.
 
-use crate::ast;
+use crate::parser::ast as parser_ast;
+use crate::{ast, lint};
 use quote::{format_ident, quote};
 
 /// A Rust integer type such as `u8`.
@@ -33,16 +34,48 @@ impl quote::ToTokens for Integer {
     }
 }
 
-pub fn rust_type(field: &ast::Field) -> proc_macro2::TokenStream {
-    match field {
-        ast::Field::Scalar { width, .. } => {
+pub fn rust_type(field: &parser_ast::Field) -> proc_macro2::TokenStream {
+    match &field.desc {
+        ast::FieldDesc::Scalar { width, .. } => {
             let field_type = Integer::new(*width);
             quote!(#field_type)
         }
-        ast::Field::Typedef { type_id, .. } => {
+        ast::FieldDesc::Typedef { type_id, .. } => {
             let field_type = format_ident!("{type_id}");
             quote!(#field_type)
         }
+        ast::FieldDesc::Array { width: Some(width), size: Some(size), .. } => {
+            let field_type = Integer::new(*width);
+            let size = proc_macro2::Literal::usize_unsuffixed(*size);
+            quote!([#field_type; #size])
+        }
+        ast::FieldDesc::Array { width: Some(width), size: None, .. } => {
+            let field_type = Integer::new(*width);
+            quote!(Vec<#field_type>)
+        }
+        ast::FieldDesc::Array { type_id: Some(type_id), size: Some(size), .. } => {
+            let field_type = format_ident!("{type_id}");
+            let size = proc_macro2::Literal::usize_unsuffixed(*size);
+            quote!([#field_type; #size])
+        }
+        ast::FieldDesc::Array { type_id: Some(type_id), size: None, .. } => {
+            let field_type = format_ident!("{type_id}");
+            quote!(Vec<#field_type>)
+        }
+        //ast::Field::Size { .. } | ast::Field::Count { .. } => quote!(),
+        _ => todo!("{field:?}"),
+    }
+}
+
+pub fn rust_borrow(field: &parser_ast::Field, scope: &lint::Scope<'_>) -> proc_macro2::TokenStream {
+    match &field.desc {
+        ast::FieldDesc::Scalar { .. } => quote!(),
+        ast::FieldDesc::Typedef { type_id, .. } => match &scope.typedef[type_id].desc {
+            ast::DeclDesc::Enum { .. } => quote!(),
+            ast::DeclDesc::Struct { .. } => quote!(&),
+            desc => unreachable!("unexpected declaration: {desc:?}"),
+        },
+        ast::FieldDesc::Array { .. } => quote!(&),
         _ => todo!(),
     }
 }
@@ -71,14 +104,14 @@ pub fn get_uint(
     if value_type.width == width {
         let get_u = format_ident!("get_u{}{}", value_type.width, suffix);
         quote! {
-            #span.#get_u()
+            #span.get_mut().#get_u()
         }
     } else {
         let get_uint = format_ident!("get_uint{}", suffix);
         let value_nbytes = proc_macro2::Literal::usize_unsuffixed(width / 8);
         let cast = (value_type.width < 64).then(|| quote!(as #value_type));
         quote! {
-            #span.#get_uint(#value_nbytes) #cast
+            #span.get_mut().#get_uint(#value_nbytes) #cast
         }
     }
 }

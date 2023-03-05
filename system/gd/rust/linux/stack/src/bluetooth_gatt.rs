@@ -14,6 +14,7 @@ use bt_topshim::profiles::gatt::{
 };
 use bt_topshim::topstack;
 use bt_utils::adv_parser;
+use bt_utils::array_utils;
 
 use crate::async_helper::{AsyncHelper, CallbackSender};
 use crate::bluetooth::{Bluetooth, IBluetooth};
@@ -185,7 +186,7 @@ impl ContextMap {
         &mut self,
         callback_id: u32,
     ) -> Option<&mut GattClientCallback> {
-        self.callbacks.get_by_id(callback_id)
+        self.callbacks.get_by_id_mut(callback_id)
     }
 }
 
@@ -293,10 +294,7 @@ impl ServerContextMap {
         }
     }
 
-    fn get_callback_from_callback_id(
-        &mut self,
-        callback_id: u32,
-    ) -> Option<&mut GattServerCallback> {
+    fn get_callback_from_callback_id(&self, callback_id: u32) -> Option<&GattServerCallback> {
         self.callbacks.get_by_id(callback_id)
     }
 
@@ -343,10 +341,10 @@ impl ServerContextMap {
     }
 
     fn add_request(&mut self, request_id: i32, handle: i32) {
-        self.requests.push(Request { id: request_id, handle: handle });
+        self.requests.push(Request { id: request_id, handle });
     }
 
-    fn delete_request(&mut self, request_id: i32) {
+    fn _delete_request(&mut self, request_id: i32) {
         self.requests.retain(|request| request.id != request_id);
     }
 
@@ -761,7 +759,7 @@ impl BluetoothGattService {
                 GattDbElementType::PrimaryService | GattDbElementType::SecondaryService => {
                     db_out.push(BluetoothGattService::new(
                         elem.uuid.uu,
-                        elem.id as i32,
+                        elem.attribute_handle as i32,
                         elem.type_ as i32,
                     ));
                     // TODO(b/200065274): Mark restricted services.
@@ -771,7 +769,7 @@ impl BluetoothGattService {
                     match db_out.last_mut() {
                         Some(s) => s.characteristics.push(BluetoothGattCharacteristic::new(
                             elem.uuid.uu,
-                            elem.id as i32,
+                            elem.attribute_handle as i32,
                             elem.properties as i32,
                             0,
                         )),
@@ -787,7 +785,7 @@ impl BluetoothGattService {
                         Some(s) => match s.characteristics.last_mut() {
                             Some(c) => c.descriptors.push(BluetoothGattDescriptor::new(
                                 elem.uuid.uu,
-                                elem.id as i32,
+                                elem.attribute_handle as i32,
                                 0,
                             )),
                             None => {
@@ -806,7 +804,7 @@ impl BluetoothGattService {
                         Some(s) => {
                             s.included_services.push(BluetoothGattService::new(
                                 elem.uuid.uu,
-                                elem.id as i32,
+                                elem.attribute_handle as i32,
                                 elem.type_ as i32,
                             ));
                         }
@@ -969,6 +967,9 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
     /// When there is a service added to the GATT server.
     fn on_service_added(&self, _status: GattStatus, _service: BluetoothGattService);
 
+    /// When a service has been removed from the GATT server.
+    fn on_service_removed(&self, status: GattStatus, handle: i32);
+
     /// When a remote device has requested to read a characteristic.
     fn on_characteristic_read_request(
         &self,
@@ -1058,14 +1059,21 @@ pub trait IScannerCallback: RPCProxy {
     /// When the `register_scanner` request is done.
     fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus);
 
-    /// When an LE advertisement matching aggregate filters is detected. Since this callback is
-    /// shared among all scanner callbacks, clients may receive more advertisements than what is
-    /// requested to be filtered in.
+    /// When an LE advertisement matching aggregate filters is detected. This callback is shared
+    /// among all scanner callbacks and is triggered for *every* advertisement that the controller
+    /// receives. For listening to the beginning and end of a specific scanner's advertisements
+    /// detected while in RSSI range, use on_advertisement_found and on_advertisement_lost below.
     fn on_scan_result(&self, scan_result: ScanResult);
+
+    /// When an LE advertisement matching aggregate filters is found. The criteria of
+    /// how a device is considered found is specified by ScanFilter.
+    fn on_advertisement_found(&self, scanner_id: u8, scan_result: ScanResult);
 
     /// When an LE advertisement matching aggregate filters is no longer detected. The criteria of
     /// how a device is considered lost is specified by ScanFilter.
-    fn on_scan_result_lost(&self, scan_result: ScanResult);
+    // TODO(b/269343922): Rename this to on_advertisement_lost for symmetry with
+    // on_advertisement_found.
+    fn on_advertisement_lost(&self, scanner_id: u8, scan_result: ScanResult);
 
     /// When LE Scan module changes suspend mode due to system suspend/resume.
     fn on_suspend_mode_change(&self, suspend_mode: SuspendMode);
@@ -1695,35 +1703,38 @@ impl IBluetoothGatt for BluetoothGatt {
             let mut gatt_async = gatt_async.lock().await;
 
             // Add and enable the monitor filter only when the MSFT extension is supported.
-            if let (true, Some(filter)) = (is_msft_supported, filter) {
-                let monitor_handle = match gatt_async.msft_adv_monitor_add((&filter).into()).await {
-                    Ok((handle, 0)) => handle,
-                    _ => {
-                        log::error!("Error adding advertisement monitor");
-                        return;
-                    }
-                };
+            if is_msft_supported {
+                if let Some(filter) = filter {
+                    let monitor_handle =
+                        match gatt_async.msft_adv_monitor_add((&filter).into()).await {
+                            Ok((handle, 0)) => handle,
+                            _ => {
+                                log::error!("Error adding advertisement monitor");
+                                return;
+                            }
+                        };
 
-                if let Some(scanner) =
-                    Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
-                {
-                    // The monitor handle is needed in stop_scan().
-                    scanner.monitor_handle = Some(monitor_handle);
+                    if let Some(scanner) =
+                        Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
+                    {
+                        // The monitor handle is needed in stop_scan().
+                        scanner.monitor_handle = Some(monitor_handle);
+                    }
+
+                    log::debug!("Added adv monitor handle = {}", monitor_handle);
                 }
 
-                log::debug!("Added adv monitor handle = {}", monitor_handle);
-            }
-
-            if !gatt_async
-                .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
-                .await
-                .map_or(false, |status| status == 0)
-            {
-                // TODO(b/266752123):
-                // Intel controller throws "Command Disallowed" error if we tried to enable/disable
-                // filter but it's already at the same state. This is harmless but we can improve
-                // the state machine to avoid calling enable/disable if it's already at that state
-                log::error!("Error updating Advertisement Monitor enable");
+                if !gatt_async
+                    .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
+                    .await
+                    .map_or(false, |status| status == 0)
+                {
+                    // TODO(b/266752123):
+                    // Intel controller throws "Command Disallowed" error if we tried to enable/disable
+                    // filter but it's already at the same state. This is harmless but we can improve
+                    // the state machine to avoid calling enable/disable if it's already at that state
+                    log::error!("Error updating Advertisement Monitor enable");
+                }
             }
 
             gatt_async.update_scan().await;
@@ -1754,6 +1765,7 @@ impl IBluetoothGatt for BluetoothGatt {
             .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
 
         let gatt_async = self.gatt_async.clone();
+        let is_msft_supported = self.is_msft_supported();
         tokio::spawn(async move {
             // The two operations below (monitor remove, update scan) happen one after another, and
             // cannot be interleaved with other GATT async operations.
@@ -1761,16 +1773,19 @@ impl IBluetoothGatt for BluetoothGatt {
             // at the end of this block.
             let mut gatt_async = gatt_async.lock().await;
 
-            if let Some(handle) = monitor_handle {
-                let _res = gatt_async.msft_adv_monitor_remove(handle).await;
-            }
+            // Remove and disable the monitor only when the MSFT extension is supported.
+            if is_msft_supported {
+                if let Some(handle) = monitor_handle {
+                    let _res = gatt_async.msft_adv_monitor_remove(handle).await;
+                }
 
-            if !gatt_async
-                .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
-                .await
-                .map_or(false, |status| status == 0)
-            {
-                log::error!("Error updating Advertisement Monitor enable");
+                if !gatt_async
+                    .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
+                    .await
+                    .map_or(false, |status| status == 0)
+                {
+                    log::error!("Error updating Advertisement Monitor enable");
+                }
             }
 
             gatt_async.update_scan().await;
@@ -2091,6 +2106,8 @@ impl IBluetoothGatt for BluetoothGatt {
         self.gatt.as_ref().unwrap().lock().unwrap().client.connect(
             client_id,
             &address,
+            // Addr type is default PUBLIC.
+            0,
             is_direct,
             transport.into(),
             opportunistic,
@@ -2484,7 +2501,8 @@ impl IBluetoothGatt for BluetoothGatt {
             let conn_id = self.server_context_map.get_conn_id_from_address(server_id, &addr)?;
             let handle = self.server_context_map.get_request_handle_from_id(request_id)?;
             let len = value.len() as u16;
-            let data: [u8; 600] = value.try_into().ok()?;
+
+            let data: [u8; 600] = array_utils::to_sized_array(&value);
 
             self.gatt.as_ref().unwrap().lock().unwrap().server.send_response(
                 conn_id,
@@ -2495,7 +2513,7 @@ impl IBluetoothGatt for BluetoothGatt {
                         value: data,
                         handle: handle as u16,
                         offset: offset as u16,
-                        len: len,
+                        len,
                         auth_req: 0 as u8,
                     },
                 },
@@ -2532,7 +2550,7 @@ impl IBluetoothGatt for BluetoothGatt {
 
     fn server_set_preferred_phy(
         &self,
-        server_id: i32,
+        _server_id: i32,
         addr: String,
         tx_phy: LePhy,
         rx_phy: LePhy,
@@ -3290,6 +3308,14 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         if status == GattStatus::Success {
             self.server_context_map.delete_service(server_id, handle);
         }
+
+        if let Some(cb) = self
+            .server_context_map
+            .get_by_server_id(server_id)
+            .and_then(|server| self.server_context_map.get_callback_from_callback_id(server.cbid))
+        {
+            cb.on_service_removed(status, handle);
+        }
     }
 
     fn request_read_characteristic_cb(
@@ -3409,6 +3435,8 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         addr: RawAddress,
         exec_write: i32,
     ) {
+        self.server_context_map.add_request(trans_id, 0);
+
         if let Some(cbid) =
             self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
         {
@@ -3867,11 +3895,23 @@ impl BtifGattScannerCallbacks for BluetoothGatt {
     }
 
     fn on_track_adv_found_lost(&mut self, track_adv_info: RustAdvertisingTrackInfo) {
+        let scanner_id = match self.scanners.lock().unwrap().values().find_map(|scanner| {
+            scanner.monitor_handle.and_then(|handle| {
+                (handle == track_adv_info.monitor_handle).then(|| scanner.scanner_id).flatten()
+            })
+        }) {
+            Some(scanner_id) => scanner_id,
+            None => {
+                log::warn!("No scanner id having monitor handle {}", track_adv_info.monitor_handle);
+                return;
+            }
+        };
+
         self.scanner_callbacks.for_all_callbacks(|callback| {
             let adv_data =
                 [&track_adv_info.adv_packet[..], &track_adv_info.scan_response[..]].concat();
 
-            callback.on_scan_result_lost(ScanResult {
+            let scan_result = ScanResult {
                 name: adv_parser::extract_name(adv_data.as_slice()),
                 address: track_adv_info.advertiser_address.to_string(),
                 addr_type: track_adv_info.advertiser_address_type,
@@ -3889,7 +3929,13 @@ impl BtifGattScannerCallbacks for BluetoothGatt {
                 service_data: adv_parser::extract_service_data(adv_data.as_slice()),
                 manufacturer_data: adv_parser::extract_manufacturer_data(adv_data.as_slice()),
                 adv_data,
-            });
+            };
+
+            if track_adv_info.advertiser_state == 0x01 {
+                callback.on_advertisement_found(scanner_id, scan_result);
+            } else {
+                callback.on_advertisement_lost(scanner_id, scan_result);
+            }
         });
     }
 }

@@ -51,6 +51,8 @@ public class SdpManager {
     public static final byte PBAP_REPO_SIM = 0x01 << 1;
     public static final byte PBAP_REPO_SPEED_DAIL = 0x01 << 2;
     public static final byte PBAP_REPO_FAVORITES = 0x01 << 3;
+    public static final int PBAP_RFCOMM_CHANNEL = 19;
+    public static final int PBAP_L2CAP_PSM = 0x1025;
 
     /* Variables to keep track of ongoing and queued search requests.
      * mTrackerLock must be held, when using/changing sSdpSearchTracker
@@ -490,7 +492,7 @@ public class SdpManager {
          * Keep in mind that the MAP client needs to use this as well,
          * hence to make it call-backs, the MAP client profile needs to be
          * part of the Bluetooth APK. */
-        sAdapterService.sendBroadcast(intent, BLUETOOTH_CONNECT,
+        Utils.sendBroadcast(sAdapterService, intent, BLUETOOTH_CONNECT,
                 Utils.getTempAllowlistBroadcastOptions());
 
         if (!moreResults) {

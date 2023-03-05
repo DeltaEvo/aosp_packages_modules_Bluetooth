@@ -1,10 +1,9 @@
 // @generated rust packets from test
 
-#![allow(warnings, missing_docs)]
-
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::sync::Arc;
@@ -18,8 +17,12 @@ pub enum Error {
     InvalidPacketError,
     #[error("{field} was {value:x}, which is not known")]
     ConstraintOutOfBounds { field: String, value: u64 },
+    #[error("Got {actual:x}, expected {expected:x}")]
+    InvalidFixedValue { expected: u64, actual: u64 },
     #[error("when parsing {obj} needed length of {wanted} but got {got}")]
     InvalidLengthError { obj: String, wanted: usize, got: usize },
+    #[error("array size ({array} bytes) is not a multiple of the element size ({element} bytes)")]
+    InvalidArraySize { array: usize, element: usize },
     #[error("Due to size restrictions a struct could not be parsed.")]
     ImpossibleStructError,
     #[error("when parsing field {obj}.{field}, {value} is not a valid {type_} value")]
@@ -81,7 +84,7 @@ impl<'de> serde::Deserialize<'de> for Foo {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-struct BarData {
+pub struct BarData {
     x: Foo,
 }
 #[derive(Debug, Clone)]
@@ -99,15 +102,15 @@ impl BarData {
     fn conforms(bytes: &[u8]) -> bool {
         bytes.len() >= 1
     }
-    fn parse(mut bytes: &[u8]) -> Result<Self> {
-        if bytes.remaining() < 1 {
+    fn parse(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
+        if bytes.get().remaining() < 1 {
             return Err(Error::InvalidLengthError {
                 obj: "Bar".to_string(),
                 wanted: 1,
-                got: bytes.remaining(),
+                got: bytes.get().remaining(),
             });
         }
-        let x = Foo::from_u8(bytes.get_u8()).unwrap();
+        let x = Foo::from_u8(bytes.get_mut().get_u8()).unwrap();
         Ok(Self { x })
     }
     fn write_to(&self, buffer: &mut BytesMut) {
@@ -122,7 +125,7 @@ impl BarData {
 }
 impl Packet for Bar {
     fn to_bytes(self) -> Bytes {
-        let mut buffer = BytesMut::with_capacity(self.bar.get_total_size());
+        let mut buffer = BytesMut::with_capacity(self.bar.get_size());
         self.bar.write_to(&mut buffer);
         buffer.freeze()
     }
@@ -141,20 +144,39 @@ impl From<Bar> for Vec<u8> {
     }
 }
 impl Bar {
-    pub fn parse(mut bytes: &[u8]) -> Result<Self> {
-        Ok(Self::new(Arc::new(BarData::parse(bytes)?)).unwrap())
+    pub fn parse(bytes: &[u8]) -> Result<Self> {
+        let mut cell = Cell::new(bytes);
+        let packet = Self::parse_inner(&mut cell)?;
+        if !cell.get().is_empty() {
+            return Err(Error::InvalidPacketError);
+        }
+        Ok(packet)
     }
-    fn new(root: Arc<BarData>) -> std::result::Result<Self, &'static str> {
-        let bar = root;
+    fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
+        let data = BarData::parse(&mut bytes)?;
+        Ok(Self::new(Arc::new(data)).unwrap())
+    }
+    fn new(bar: Arc<BarData>) -> std::result::Result<Self, &'static str> {
         Ok(Self { bar })
     }
     pub fn get_x(&self) -> Foo {
         self.bar.as_ref().x
+    }
+    fn write_to(&self, buffer: &mut BytesMut) {
+        self.bar.write_to(buffer)
+    }
+    pub fn get_size(&self) -> usize {
+        self.bar.get_size()
     }
 }
 impl BarBuilder {
     pub fn build(self) -> Bar {
         let bar = Arc::new(BarData { x: self.x });
         Bar::new(bar).unwrap()
+    }
+}
+impl From<BarBuilder> for Bar {
+    fn from(builder: BarBuilder) -> Bar {
+        builder.build().into()
     }
 }
