@@ -974,10 +974,6 @@
  *
  *****************************************************************************/
 
-#ifndef AVRC_ADV_CTRL_INCLUDED
-#define AVRC_ADV_CTRL_INCLUDED TRUE
-#endif
-
 #ifndef DUMP_PCM_DATA
 #define DUMP_PCM_DATA FALSE
 #endif
@@ -1025,9 +1021,5 @@
 #endif
 
 #include "bt_trace.h"
-
-#ifndef BTM_DISABLE_CONCURRENT_PEER_AUTH
-#define BTM_DISABLE_CONCURRENT_PEER_AUTH FALSE
-#endif
 
 #endif /* BT_TARGET_H */
