@@ -157,7 +157,6 @@ static void smp_data_received(uint16_t channel, const RawAddress& bd_addr,
   uint8_t cmd;
 
   if (p_buf->len < 1) {
-    android_errorWriteLog(0x534e4554, "111215315");
     SMP_TRACE_WARNING("%s: smp packet length %d too short: must be at least 1",
                       __func__, p_buf->len);
     osi_free(p_buf);
@@ -196,7 +195,8 @@ static void smp_data_received(uint16_t channel, const RawAddress& bd_addr,
                        smp_rsp_timeout, NULL);
 
     smp_log_metrics(p_cb->pairing_bda, false /* incoming */,
-                    p_buf->data + p_buf->offset, p_buf->len);
+                    p_buf->data + p_buf->offset, p_buf->len,
+                    false /* is_over_br */);
 
     if (cmd == SMP_OPCODE_CONFIRM) {
       SMP_TRACE_DEBUG(
@@ -300,7 +300,6 @@ static void smp_br_data_received(uint16_t channel, const RawAddress& bd_addr,
   SMP_TRACE_EVENT("SMDBG l2c %s", __func__);
 
   if (p_buf->len < 1) {
-    android_errorWriteLog(0x534e4554, "111215315");
     SMP_TRACE_WARNING("%s: smp packet length %d too short: must be at least 1",
                       __func__, p_buf->len);
     osi_free(p_buf);
@@ -336,7 +335,8 @@ static void smp_br_data_received(uint16_t channel, const RawAddress& bd_addr,
                        smp_rsp_timeout, NULL);
 
     smp_log_metrics(p_cb->pairing_bda, false /* incoming */,
-                    p_buf->data + p_buf->offset, p_buf->len);
+                    p_buf->data + p_buf->offset, p_buf->len,
+                    true /* is_over_br */);
 
     p_cb->rcvd_cmd_code = cmd;
     p_cb->rcvd_cmd_len = (uint8_t)p_buf->len;

@@ -536,7 +536,6 @@ void gatt_process_error_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   VLOG(1) << __func__;
 
   if (len < 4) {
-    android_errorWriteLog(0x534e4554, "79591688");
     LOG(ERROR) << "Error response too short";
     // Specification does not clearly define what should happen if error
     // response is too short. General rule in BT Spec 5.0 Vol 3, Part F 3.4.1.1
@@ -596,7 +595,8 @@ void gatt_process_prep_write_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   VLOG(1) << StringPrintf("value resp op_code = %s len = %d",
                           gatt_dbg_op_name(op_code), len);
 
-  if (len < GATT_PREP_WRITE_RSP_MIN_LEN) {
+  if (len < GATT_PREP_WRITE_RSP_MIN_LEN ||
+      len > GATT_PREP_WRITE_RSP_MIN_LEN + sizeof(value.value)) {
     LOG(ERROR) << "illegal prepare write response length, discard";
     gatt_end_operation(p_clcb, GATT_INVALID_PDU, &value);
     return;
@@ -605,7 +605,7 @@ void gatt_process_prep_write_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   STREAM_TO_UINT16(value.handle, p);
   STREAM_TO_UINT16(value.offset, p);
 
-  value.len = len - 4;
+  value.len = len - GATT_PREP_WRITE_RSP_MIN_LEN;
 
   memcpy(value.value, p, value.len);
 
@@ -861,7 +861,6 @@ void gatt_process_read_by_type_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
     else if (p_clcb->operation == GATTC_OPTYPE_DISCOVERY &&
              p_clcb->op_subtype == GATT_DISC_INC_SRVC) {
       if (value_len < 4) {
-        android_errorWriteLog(0x534e4554, "158833854");
         LOG(ERROR) << __func__ << " Illegal Response length, must be at least 4.";
         gatt_end_operation(p_clcb, GATT_INVALID_PDU, NULL);
         return;
@@ -920,7 +919,6 @@ void gatt_process_read_by_type_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
     } else /* discover characterisitic */
     {
       if (value_len < 3) {
-        android_errorWriteLog(0x534e4554, "158778659");
         LOG(ERROR) << __func__ << " Illegal Response length, must be at least 3.";
         gatt_end_operation(p_clcb, GATT_INVALID_PDU, NULL);
         return;

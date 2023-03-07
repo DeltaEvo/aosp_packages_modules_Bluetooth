@@ -31,7 +31,6 @@ class MediaPlayerBrowserService : MediaBrowserService() {
 
   private lateinit var mediaSession: MediaSession
   private lateinit var playbackStateBuilder: PlaybackState.Builder
-  private val alphanumeric = ('A'..'Z') + ('a'..'z') + ('0'..'9')
   private val mediaIdToChildren = mutableMapOf<String, MutableList<MediaItem>>()
   private var metadataItems = mutableMapOf<String, MediaMetadata>()
   private var queue = mutableListOf<MediaSession.QueueItem>()
@@ -46,6 +45,7 @@ class MediaPlayerBrowserService : MediaBrowserService() {
 
   fun deinit() {
     // Releasing MediaSession instance
+    mediaSession.setActive(false)
     mediaSession.release()
   }
 
@@ -83,13 +83,13 @@ class MediaPlayerBrowserService : MediaBrowserService() {
   }
 
   fun play() {
-    setPlaybackState(PlaybackState.STATE_PLAYING)
     if (currentTrack == -1) {
-      currentTrack = 1
+      currentTrack = QUEUE_START_INDEX
       initQueue()
       mediaSession.setQueue(queue)
-      mediaSession.setMetadata(metadataItems.get("" + currentTrack))
     }
+    setPlaybackState(PlaybackState.STATE_PLAYING)
+    mediaSession.setMetadata(metadataItems.get("" + currentTrack))
   }
 
   fun stop() {
@@ -110,13 +110,13 @@ class MediaPlayerBrowserService : MediaBrowserService() {
   }
 
   fun forward() {
-    if (currentTrack == QUEUE_SIZE || currentTrack == -1) currentTrack = 1 else currentTrack += 1
+    if (currentTrack == QUEUE_SIZE) currentTrack = QUEUE_START_INDEX else currentTrack += 1
     setPlaybackState(PlaybackState.STATE_SKIPPING_TO_NEXT)
     mediaSession.setMetadata(metadataItems.get("" + currentTrack))
   }
 
   fun backward() {
-    if (currentTrack == 1 || currentTrack == -1) currentTrack = QUEUE_SIZE else currentTrack -= 1
+    if (currentTrack == QUEUE_START_INDEX) currentTrack = QUEUE_SIZE else currentTrack -= 1
     setPlaybackState(PlaybackState.STATE_SKIPPING_TO_PREVIOUS)
     mediaSession.setMetadata(metadataItems.get("" + currentTrack))
   }
@@ -129,10 +129,6 @@ class MediaPlayerBrowserService : MediaBrowserService() {
         .putString(MediaMetadata.METADATA_KEY_ARTIST, generateAlphanumericString(512))
         .build()
     )
-  }
-
-  private fun generateAlphanumericString(length: Int): String {
-    return buildString { repeat(length) { append(alphanumeric.random()) } }
   }
 
   private val mSessionCallback: MediaSession.Callback =
@@ -184,7 +180,7 @@ class MediaPlayerBrowserService : MediaBrowserService() {
 
   private fun initMediaItems() {
     var mediaItems = mutableListOf<MediaItem>()
-    for (item in 1..QUEUE_SIZE) {
+    for (item in QUEUE_START_INDEX..QUEUE_SIZE) {
       val metaData: MediaMetadata =
         MediaMetadata.Builder()
           .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, NOW_PLAYING_PREFIX + item)
@@ -246,6 +242,7 @@ class MediaPlayerBrowserService : MediaBrowserService() {
     const val ROOT = "__ROOT__"
     const val EMPTY_FOLDER = "@empty@"
     const val NOW_PLAYING_PREFIX = "NowPlayingId"
+    const val QUEUE_START_INDEX = 1
     const val QUEUE_SIZE = 6
   }
 }

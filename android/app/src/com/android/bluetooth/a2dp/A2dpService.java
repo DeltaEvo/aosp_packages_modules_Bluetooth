@@ -106,7 +106,6 @@ public class A2dpService extends ProfileService {
     boolean mA2dpOffloadEnabled = false;
 
     private BroadcastReceiver mBondStateChangedReceiver;
-    private BroadcastReceiver mConnectionStateChangedReceiver;
 
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileA2dpSourceEnabled().orElse(false);
@@ -169,10 +168,6 @@ public class A2dpService extends ProfileService {
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         mBondStateChangedReceiver = new BondStateChangedReceiver();
         registerReceiver(mBondStateChangedReceiver, filter);
-        filter = new IntentFilter();
-        filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
-        mConnectionStateChangedReceiver = new ConnectionStateChangedReceiver();
-        registerReceiver(mConnectionStateChangedReceiver, filter);
 
         // Step 8: Mark service as started
         setA2dpService(this);
@@ -208,8 +203,6 @@ public class A2dpService extends ProfileService {
         setA2dpService(null);
 
         // Step 7: Unregister broadcast receivers
-        unregisterReceiver(mConnectionStateChangedReceiver);
-        mConnectionStateChangedReceiver = null;
         unregisterReceiver(mBondStateChangedReceiver);
         mBondStateChangedReceiver = null;
 
@@ -494,13 +487,32 @@ public class A2dpService extends ProfileService {
                 previousActiveDevice = mActiveDevice;
             }
 
+            int prevActiveConnectionState = getConnectionState(previousActiveDevice);
+
+            // As per b/202602952, if we remove the active device due to a disconnection,
+            // we need to check if another device is connected and set it active instead.
+            // Calling this before any other active related calls has the same effect as
+            // a classic active device switch.
+            BluetoothDevice fallbackdevice = getFallbackDevice();
+            if (fallbackdevice != null && prevActiveConnectionState
+                    != BluetoothProfile.STATE_CONNECTED) {
+                setActiveDevice(fallbackdevice);
+                return;
+            }
+
             // This needs to happen before we inform the audio manager that the device
             // disconnected. Please see comment in updateAndBroadcastActiveDevice() for why.
             updateAndBroadcastActiveDevice(null);
 
-            // Make sure the Audio Manager knows the previous Active device is removed.
+            // Make sure the Audio Manager knows the previous Active device is disconnected.
+            // However, if A2DP is still connected and not forcing stop audio for that remote
+            // device, the user has explicitly switched the output to the local device and music
+            // should continue playing. Otherwise, the remote device has been indeed disconnected
+            // and audio should be suspended before switching the output to the local device.
+            boolean stopAudio = forceStopPlayingAudio || (prevActiveConnectionState
+                        != BluetoothProfile.STATE_CONNECTED);
             mAudioManager.handleBluetoothActiveDeviceChanged(null, previousActiveDevice,
-                    BluetoothProfileConnectionInfo.createA2dpInfo(!forceStopPlayingAudio, -1));
+                    BluetoothProfileConnectionInfo.createA2dpInfo(!stopAudio, -1));
 
             synchronized (mStateMachines) {
                 // Make sure the Active device in native layer is set to null and audio is off
@@ -544,22 +556,10 @@ public class A2dpService extends ProfileService {
      * @return true on success, otherwise false
      */
     public boolean setActiveDevice(BluetoothDevice device) {
-        return setActiveDevice(device, false);
-    }
-
-    /**
-     * Set the active device.
-     *
-     * @param device the active device
-     * @param hasFallbackDevice whether it has fallback device when the {@code device}
-     *                          is {@code null}.
-     * @return true on success, otherwise false
-     */
-    public boolean setActiveDevice(BluetoothDevice device, boolean hasFallbackDevice) {
         synchronized (mActiveSwitchingGuard) {
             if (device == null) {
                 // Remove active device and continue playing audio only if necessary.
-                removeActiveDevice(!hasFallbackDevice);
+                removeActiveDevice(false);
                 return true;
             }
 
@@ -1235,7 +1235,7 @@ public class A2dpService extends ProfileService {
         }
     }
 
-    private void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
+    void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
         if ((device == null) || (fromState == toState)) {
             return;
         }
@@ -1246,9 +1246,10 @@ public class A2dpService extends ProfileService {
         if (toState == BluetoothProfile.STATE_CONNECTED && (mMaxConnectedAudioDevices == 1)) {
             setActiveDevice(device);
         }
-
-        // When disconnected, ActiveDeviceManager will call setActiveDevice(null)
-
+        // Check if the active device is not connected anymore
+        if (isActiveDevice(device) && (fromState == BluetoothProfile.STATE_CONNECTED)) {
+            setActiveDevice(null);
+        }
         // Check if the device is disconnected - if unbond, remove the state machine
         if (toState == BluetoothProfile.STATE_DISCONNECTED) {
             if (mAdapterService.getBondState(device) == BluetoothDevice.BOND_NONE) {
@@ -1257,27 +1258,6 @@ public class A2dpService extends ProfileService {
                 }
                 removeStateMachine(device);
             }
-        }
-    }
-
-    /**
-     * Receiver for processing device connection state changes.
-     *
-     * <ul>
-     * <li> Update codec support per device when device is (re)connected
-     * <li> Delete the state machine instance if the device is disconnected and unbond
-     * </ul>
-     */
-    private class ConnectionStateChangedReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (!BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED.equals(intent.getAction())) {
-                return;
-            }
-            BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-            int toState = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
-            int fromState = intent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
-            connectionStateChanged(device, fromState, toState);
         }
     }
 
@@ -1301,6 +1281,9 @@ public class A2dpService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private A2dpService getService(AttributionSource source) {
+            if (Utils.isInstrumentationTestMode()) {
+                return mService;
+            }
             if (!Utils.checkServiceAvailable(mService, TAG)
                     || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
