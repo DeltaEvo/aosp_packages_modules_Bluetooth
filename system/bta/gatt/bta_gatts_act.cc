@@ -120,6 +120,8 @@ void bta_gatts_enable(tBTA_GATTS_CB* p_cb) {
 
     p_cb->enabled = true;
 
+    gatt_load_bonded();
+
     if (!GATTS_NVRegister(&bta_gatts_nv_cback)) {
       LOG(ERROR) << "BTA GATTS NV register failed.";
     }
@@ -420,7 +422,7 @@ void bta_gatts_open(UNUSED_ATTR tBTA_GATTS_CB* p_cb, tBTA_GATTS_DATA* p_msg) {
   if (p_rcb != NULL) {
     /* should always get the connection ID */
     if (GATT_Connect(p_rcb->gatt_if, p_msg->api_open.remote_bda,
-                     p_msg->api_open.is_direct, p_msg->api_open.transport,
+                     p_msg->api_open.connection_type, p_msg->api_open.transport,
                      false)) {
       status = GATT_SUCCESS;
 

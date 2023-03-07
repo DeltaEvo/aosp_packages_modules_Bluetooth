@@ -159,13 +159,12 @@ void bta_hh_api_disable(void) {
  ******************************************************************************/
 void bta_hh_disc_cmpl(void) {
   LOG_DEBUG("Disconnect complete");
-
-  HID_HostDeregister();
-  bta_hh_le_deregister();
   tBTA_HH_STATUS status = BTA_HH_OK;
 
   /* Deregister with lower layer */
   if (HID_HostDeregister() != HID_SUCCESS) status = BTA_HH_ERR;
+
+  bta_hh_le_deregister();
 
   bta_hh_cleanup_disable(status);
 }
@@ -710,7 +709,6 @@ void bta_hh_ctrl_dat_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   APPL_TRACE_DEBUG("Ctrl DATA received w4: event[%s]",
                    bta_hh_get_w4_event(p_cb->w4_evt));
   if (pdata->len == 0) {
-    android_errorWriteLog(0x534e4554, "116108738");
     p_cb->w4_evt = 0;
     osi_free_and_reset((void**)&pdata);
     return;

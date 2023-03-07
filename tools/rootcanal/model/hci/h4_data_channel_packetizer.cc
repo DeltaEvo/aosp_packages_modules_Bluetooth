@@ -26,10 +26,10 @@
 #include <utility>      // for move
 #include <vector>       // for vector
 
+#include "log.h"                     // for LOG_ERROR, LOG_ALWAYS_FATAL
 #include "model/hci/h4_parser.h"     // for H4Parser, ClientDisconnectCa...
 #include "model/hci/hci_protocol.h"  // for PacketReadCallback, AsyncDataChannel
 #include "net/async_data_channel.h"  // for AsyncDataChannel
-#include "os/log.h"                  // for LOG_ERROR, LOG_ALWAYS_FATAL
 
 namespace rootcanal {
 
@@ -39,7 +39,7 @@ H4DataChannelPacketizer::H4DataChannelPacketizer(
     PacketReadCallback sco_cb, PacketReadCallback iso_cb,
     ClientDisconnectCallback disconnect_cb)
     : uart_socket_(socket),
-      h4_parser_(command_cb, event_cb, acl_cb, sco_cb, iso_cb),
+      h4_parser_(command_cb, event_cb, acl_cb, sco_cb, iso_cb, true),
       disconnect_cb_(std::move(disconnect_cb)) {}
 
 size_t H4DataChannelPacketizer::Send(uint8_t type, const uint8_t* data,

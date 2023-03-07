@@ -111,6 +111,13 @@ struct eatt_impl {
   }
 
   void remove_channel_by_cid(eatt_device* eatt_dev, uint16_t lcid) {
+    auto channel = eatt_dev->eatt_channels[lcid];
+    if (!channel->cl_cmd_q_.empty()) {
+      LOG_WARN("Channel %c, for device %s is not empty on disconnection.", lcid,
+               channel->bda_.ToString().c_str());
+      channel->cl_cmd_q_.clear();
+    }
+
     eatt_dev->eatt_channels.erase(lcid);
 
     if (eatt_dev->eatt_channels.size() == 0) eatt_dev->eatt_tcb_ = NULL;
@@ -146,7 +153,8 @@ struct eatt_impl {
     tL2CAP_LE_CFG_INFO local_coc_cfg = {
         .mtu = eatt_dev->rx_mtu_,
         .mps = eatt_dev->rx_mps_ < max_mps ? eatt_dev->rx_mps_ : max_mps,
-        .credits = L2CAP_LE_CREDIT_DEFAULT};
+        .credits = L2CA_LeCreditDefault(),
+    };
 
     if (!L2CA_ConnectCreditBasedRsp(bda, identifier, lcids, L2CAP_CONN_OK,
                                     &local_coc_cfg))
@@ -577,7 +585,7 @@ struct eatt_impl {
     tL2CAP_LE_CFG_INFO local_coc_cfg = {
         .mtu = eatt_dev->rx_mtu_,
         .mps = eatt_dev->rx_mps_,
-        .credits = L2CAP_LE_CREDIT_DEFAULT,
+        .credits = L2CA_LeCreditDefault(),
         .number_of_channels = num_of_channels,
     };
 
@@ -867,7 +875,12 @@ struct eatt_impl {
               << " is_eatt_supported = " << int(is_eatt_supported);
     if (!is_eatt_supported) return;
 
-    eatt_device* eatt_dev = add_eatt_device(bd_addr);
+    eatt_device* eatt_dev = this->find_device_by_address(bd_addr);
+    if (!eatt_dev) {
+      LOG(INFO) << __func__ << " Adding device: " << bd_addr
+                << " on supported features callback.";
+      eatt_dev = add_eatt_device(bd_addr);
+    }
 
     if (role != HCI_ROLE_CENTRAL) {
       /* TODO For now do nothing, we could run a timer here and start EATT if

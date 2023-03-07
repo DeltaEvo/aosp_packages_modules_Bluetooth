@@ -99,7 +99,8 @@ cc_library_static {
         "le_audio/state_machine.cc",
         "le_audio/storage_helper.cc",
         "le_audio/client_parser.cc",
-        "le_audio/client_audio.cc",
+        "le_audio/audio_hal_client/audio_sink_hal_client.cc",
+        "le_audio/audio_hal_client/audio_source_hal_client.cc",
         "le_audio/le_audio_utils.cc",
         "le_audio/le_audio_set_configuration_provider.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
@@ -146,6 +147,7 @@ cc_library_static {
     static_libs: [
         "avrcp-target-service",
         "lib-bt-packets",
+        "libcom.android.sysprop.bluetooth",
     ],
     generated_headers: [
         "LeAudioSetConfigSchemas_h",
@@ -197,6 +199,39 @@ cc_test {
     ],
 }
 
+// bta unit tests for target
+cc_test {
+    name: "net_test_bta_security",
+    defaults: [
+        "fluoride_bta_defaults",
+        "mts_defaults"
+    ],
+    test_suites: ["device-tests"],
+    srcs: [
+        ":TestCommonMockFunctions",
+	":TestMockDevice",
+	":TestMockStack",
+	":TestMockBtif",
+        "test/bta_hf_client_security_test.cc",
+    ],
+    shared_libs: [
+        "android.hardware.bluetooth.audio@2.0",
+        "android.hardware.bluetooth.audio@2.1",
+        "libcrypto",
+        "liblog",
+        "libprotobuf-cpp-lite",
+    ],
+    static_libs: [
+        "crypto_toolbox_for_tests",
+        "libbtcore",
+        "libbt-bta",
+        "libbt-audio-hal-interface",
+        "libbluetooth-types",
+        "libbt-protos-lite",
+        "libosi",
+        "libbt-common",
+    ],
+}
 cc_test {
     name: "bt_host_test_bta",
     defaults: [
@@ -263,6 +298,7 @@ cc_test {
         "libbt-common",
         "libbt-protos-lite",
         "libbtcore",
+        "libcom.android.sysprop.bluetooth",
         "libflatbuffers-cpp",
         "libgmock",
     ],
@@ -558,8 +594,9 @@ cc_test {
         "test/common/bta_gatt_api_mock.cc",
         "test/common/bta_gatt_queue_mock.cc",
         "test/common/btm_api_mock.cc",
-        "le_audio/client_audio.cc",
-        "le_audio/client_audio_test.cc",
+        "le_audio/audio_hal_client/audio_sink_hal_client.cc",
+        "le_audio/audio_hal_client/audio_source_hal_client.cc",
+        "le_audio/audio_hal_client/audio_hal_client_test.cc",
         "le_audio/client_parser.cc",
         "le_audio/client_parser_test.cc",
         "le_audio/content_control_id_keeper.cc",
@@ -570,7 +607,9 @@ cc_test {
         "le_audio/le_audio_types_test.cc",
         "le_audio/metrics_collector_linux.cc",
         "le_audio/mock_iso_manager.cc",
+        "test/common/btif_storage_mock.cc",
         "test/common/mock_controller.cc",
+        "test/common/mock_csis_client.cc",
         "le_audio/state_machine.cc",
         "le_audio/state_machine_test.cc",
         "le_audio/storage_helper.cc",
@@ -629,7 +668,6 @@ cc_test {
         "gatt/database.cc",
         "gatt/database_builder.cc",
         "le_audio/client.cc",
-        "le_audio/client_audio.cc",
         "le_audio/client_parser.cc",
         "le_audio/content_control_id_keeper.cc",
         "le_audio/devices.cc",
@@ -777,7 +815,6 @@ cc_test {
         "le_audio/broadcaster/mock_ble_advertising_manager.cc",
         "le_audio/broadcaster/mock_state_machine.cc",
         "le_audio/content_control_id_keeper.cc",
-        "le_audio/client_audio.cc",
         "le_audio/le_audio_utils.cc",
         "le_audio/le_audio_types.cc",
         "le_audio/mock_iso_manager.cc",
@@ -854,6 +891,7 @@ cc_test {
         "test/common/btm_api_mock.cc",
         "test/common/mock_controller.cc",
         "test/common/mock_csis_client.cc",
+        ":TestStubOsi",
     ],
     shared_libs: [
         "libprotobuf-cpp-lite",

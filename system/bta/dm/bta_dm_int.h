@@ -61,7 +61,7 @@
 #define BTA_SERVICE_ID_TO_SERVICE_MASK(id) (1 << (id))
 
 /* DM search events */
-enum {
+typedef enum : uint16_t {
   /* DM search API events */
   BTA_DM_API_SEARCH_EVT = BTA_SYS_EVT_START(BTA_ID_DM_SEARCH),
   BTA_DM_API_DISCOVER_EVT,
@@ -71,7 +71,22 @@ enum {
   BTA_DM_SEARCH_CMPL_EVT,
   BTA_DM_DISCOVERY_RESULT_EVT,
   BTA_DM_DISC_CLOSE_TOUT_EVT,
-};
+} tBTA_DM_EVT;
+
+inline std::string bta_dm_event_text(const tBTA_DM_EVT& event) {
+  switch (event) {
+    CASE_RETURN_TEXT(BTA_DM_API_SEARCH_EVT);
+    CASE_RETURN_TEXT(BTA_DM_API_DISCOVER_EVT);
+    CASE_RETURN_TEXT(BTA_DM_INQUIRY_CMPL_EVT);
+    CASE_RETURN_TEXT(BTA_DM_REMT_NAME_EVT);
+    CASE_RETURN_TEXT(BTA_DM_SDP_RESULT_EVT);
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_CMPL_EVT);
+    CASE_RETURN_TEXT(BTA_DM_DISCOVERY_RESULT_EVT);
+    CASE_RETURN_TEXT(BTA_DM_DISC_CLOSE_TOUT_EVT);
+    default:
+      return base::StringPrintf("UNKNOWN[0x%04x]", event);
+  }
+}
 
 /* data type for BTA_DM_API_SEARCH_EVT */
 typedef struct {
@@ -381,14 +396,25 @@ typedef struct {
 } tBTA_DM_DI_CB;
 
 /* DM search state */
-enum {
+typedef enum {
 
   BTA_DM_SEARCH_IDLE,
   BTA_DM_SEARCH_ACTIVE,
   BTA_DM_SEARCH_CANCELLING,
   BTA_DM_DISCOVER_ACTIVE
 
-};
+} tBTA_DM_STATE;
+
+inline std::string bta_dm_state_text(const tBTA_DM_STATE& state) {
+  switch (state) {
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_IDLE);
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_ACTIVE);
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_CANCELLING);
+    CASE_RETURN_TEXT(BTA_DM_DISCOVER_ACTIVE);
+    default:
+      return base::StringPrintf("UNKNOWN[%d]", state);
+  }
+}
 
 typedef struct {
   uint16_t page_timeout; /* timeout for page in slots */
@@ -425,7 +451,7 @@ typedef struct {
 typedef struct {
   uint8_t allow_mask; /* mask of sniff/hold/park modes to allow */
   uint8_t ssr; /* set SSR on conn open/unpark */
-  tBTA_DM_PM_ACTN actn_tbl[BTA_DM_PM_NUM_EVTS][2];
+  tBTA_DM_PM_ACTN actn_tbl[BTA_DM_PM_NUM_EVTS];
 
 } tBTA_DM_PM_SPEC;
 
@@ -444,8 +470,16 @@ typedef struct {
 
 extern const uint16_t bta_service_id_to_uuid_lkup_tbl[];
 
+/* For Insight, PM cfg lookup tables are runtime configurable (to allow tweaking
+ * of params for power consumption measurements) */
+#ifndef BTE_SIM_APP
+#define tBTA_DM_PM_TYPE_QUALIFIER const
+#else
+#define tBTA_DM_PM_TYPE_QUALIFIER
+#endif
+
 extern const tBTA_DM_PM_CFG* p_bta_dm_pm_cfg;
-extern const tBTA_DM_PM_SPEC* p_bta_dm_pm_spec;
+tBTA_DM_PM_TYPE_QUALIFIER tBTA_DM_PM_SPEC* get_bta_dm_pm_spec();
 extern const tBTM_PM_PWR_MD* p_bta_dm_pm_md;
 extern tBTA_DM_SSR_SPEC* p_bta_dm_ssr_spec;
 
