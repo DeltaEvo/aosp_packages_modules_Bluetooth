@@ -75,10 +75,6 @@
 #define BTA_HH_ROLE BTA_CENTRAL_ROLE_PREF
 #endif
 
-#ifndef BTA_DISABLE_DELAY
-#define BTA_DISABLE_DELAY 200 /* in milliseconds */
-#endif
-
 #ifndef AVDT_VERSION
 #define AVDT_VERSION 0x0103
 #endif
@@ -973,10 +969,6 @@
  * AVRCP
  *
  *****************************************************************************/
-
-#ifndef AVRC_ADV_CTRL_INCLUDED
-#define AVRC_ADV_CTRL_INCLUDED TRUE
-#endif
 
 #ifndef DUMP_PCM_DATA
 #define DUMP_PCM_DATA FALSE
