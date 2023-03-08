@@ -24,15 +24,6 @@
 #define BUILDCFG
 #endif
 
-#if !defined(HAS_BDROID_BUILDCFG) && !defined(HAS_NO_BDROID_BUILDCFG)
-#error \
-    "An Android.mk file did not include bdroid_CFLAGS and possibly not bdroid_C_INCLUDES"
-#endif
-
-#ifdef HAS_BDROID_BUILDCFG
-#include "bdroid_buildcfg.h"
-#endif
-
 #include "bt_types.h" /* This must be defined AFTER buildcfg.h */
 
 #ifndef FALSE
@@ -73,10 +64,6 @@
 
 #ifndef BTA_HH_ROLE
 #define BTA_HH_ROLE BTA_CENTRAL_ROLE_PREF
-#endif
-
-#ifndef BTA_DISABLE_DELAY
-#define BTA_DISABLE_DELAY 200 /* in milliseconds */
 #endif
 
 #ifndef AVDT_VERSION
@@ -819,10 +806,6 @@
 #define PAN_INCLUDED TRUE
 #endif
 
-#ifndef PAN_NAP_DISABLED
-#define PAN_NAP_DISABLED FALSE
-#endif
-
 #ifndef PANU_DISABLED
 #define PANU_DISABLED FALSE
 #endif
@@ -974,10 +957,6 @@
  * AVRCP
  *
  *****************************************************************************/
-
-#ifndef AVRC_ADV_CTRL_INCLUDED
-#define AVRC_ADV_CTRL_INCLUDED TRUE
-#endif
 
 #ifndef DUMP_PCM_DATA
 #define DUMP_PCM_DATA FALSE

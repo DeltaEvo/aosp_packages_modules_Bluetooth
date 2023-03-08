@@ -347,6 +347,42 @@ bool LeAudioDeviceGroup::IsDeviceInTheGroup(LeAudioDevice* leAudioDevice) {
   return true;
 }
 
+bool LeAudioDeviceGroup::IsGroupReadyToCreateStream(void) {
+  auto iter =
+      std::find_if(leAudioDevices_.begin(), leAudioDevices_.end(), [](auto& d) {
+        if (d.expired())
+          return false;
+        else
+          return !(((d.lock()).get())->IsReadyToCreateStream());
+      });
+
+  return iter == leAudioDevices_.end();
+}
+
+bool LeAudioDeviceGroup::IsGroupReadyToSuspendStream(void) {
+  auto iter =
+      std::find_if(leAudioDevices_.begin(), leAudioDevices_.end(), [](auto& d) {
+        if (d.expired())
+          return false;
+        else
+          return !(((d.lock()).get())->IsReadyToSuspendStream());
+      });
+
+  return iter == leAudioDevices_.end();
+}
+
+bool LeAudioDeviceGroup::HaveAnyActiveDeviceInUnconfiguredState() {
+  auto iter =
+      std::find_if(leAudioDevices_.begin(), leAudioDevices_.end(), [](auto& d) {
+        if (d.expired())
+          return false;
+        else
+          return (((d.lock()).get())->HaveAnyUnconfiguredAses());
+      });
+
+  return iter != leAudioDevices_.end();
+}
+
 bool LeAudioDeviceGroup::HaveAllActiveDevicesAsesTheSameState(AseState state) {
   auto iter = std::find_if(
       leAudioDevices_.begin(), leAudioDevices_.end(), [&state](auto& d) {
@@ -1039,7 +1075,7 @@ bool LeAudioDeviceGroup::CigAssignCisIds(LeAudioDevice* leAudioDevice) {
       LOG_INFO("ASE ID: %d, is already assigned CIS ID: %d, type %d", ase->id,
                ase->cis_id, cises_[ase->cis_id].type);
       if (!cises_[ase->cis_id].addr.IsEmpty()) {
-        LOG_INFO("Bidirectional ASE already assigned");
+        LOG_INFO("Bi-Directional CIS already assigned");
         continue;
       }
       /* Reuse existing CIS ID if available*/
@@ -1049,6 +1085,18 @@ bool LeAudioDeviceGroup::CigAssignCisIds(LeAudioDevice* leAudioDevice) {
     /* First check if we have bidirectional ASEs. If so, assign same CIS ID.*/
     struct ase* matching_bidir_ase =
         leAudioDevice->GetNextActiveAseWithDifferentDirection(ase);
+
+    for (; matching_bidir_ase != nullptr;
+         matching_bidir_ase = leAudioDevice->GetNextActiveAseWithSameDirection(
+             matching_bidir_ase)) {
+      if ((matching_bidir_ase->cis_id != kInvalidCisId) &&
+          (matching_bidir_ase->cis_id != cis_id)) {
+        LOG_INFO("Bi-Directional CIS is already used. ASE Id: %d cis_id=%d",
+                 matching_bidir_ase->id, matching_bidir_ase->cis_id);
+        continue;
+      }
+      break;
+    }
 
     if (matching_bidir_ase) {
       if (cis_id == kInvalidCisId) {
@@ -1537,7 +1585,7 @@ bool LeAudioDevice::ConfigureAses(
       if (ase->state == AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED)
         ase->reconfigure = true;
 
-      ase->target_latency = ent.target_latency;
+      ase->target_latency = ent.qos.target_latency;
       ase->codec_id = ent.codec.id;
       /* TODO: find better way to not use LC3 explicitly */
       ase->codec_config = std::get<LeAudioLc3Config>(ent.codec.config);
@@ -1580,7 +1628,7 @@ bool LeAudioDevice::ConfigureAses(
         "cis_id=%d, target_latency=%d",
         ADDRESS_TO_LOGGABLE_CSTR(address_), ase->id,
         (ent.direction == 1 ? "snk" : "src"), ase->max_sdu_size, ase->cis_id,
-        ent.target_latency);
+        ent.qos.target_latency);
 
     /* Try to use the already active ASE */
     ase = GetNextActiveAseWithSameDirection(ase);
@@ -2049,9 +2097,10 @@ void LeAudioDeviceGroup::Dump(int fd, int active_group_id) {
          << "      state: " << GetState()
          << ",\ttarget state: " << GetTargetState()
          << ",\tcig state: " << cig_state_ << "\n"
-         << "      group available contexts: " << GetAvailableContexts()
+         << "      group available contexts: " << GetAvailableContexts() << "\n"
          << "      configuration context type: "
          << bluetooth::common::ToString(GetConfigurationContextType()).c_str()
+         << "\n"
          << "      active configuration name: "
          << (active_conf ? active_conf->name : " not set") << "\n"
          << "      stream configuration: "
@@ -2568,7 +2617,13 @@ void LeAudioDevice::Dump(int fd) {
   std::string location = "unknown location";
 
   if (snk_audio_locations_.to_ulong() &
-      codec_spec_conf::kLeAudioLocationAnyLeft) {
+          codec_spec_conf::kLeAudioLocationAnyLeft &&
+      snk_audio_locations_.to_ulong() &
+          codec_spec_conf::kLeAudioLocationAnyRight) {
+    std::string location_left_right = "left/right";
+    location.swap(location_left_right);
+  } else if (snk_audio_locations_.to_ulong() &
+             codec_spec_conf::kLeAudioLocationAnyLeft) {
     std::string location_left = "left";
     location.swap(location_left);
   } else if (snk_audio_locations_.to_ulong() &
@@ -2750,8 +2805,19 @@ void LeAudioDeviceGroups::Cleanup(void) {
 }
 
 void LeAudioDeviceGroups::Dump(int fd, int active_group_id) {
+  /* Dump first active group */
   for (auto& g : groups_) {
-    g->Dump(fd, active_group_id);
+    if (g->group_id_ == active_group_id) {
+      g->Dump(fd, active_group_id);
+      break;
+    }
+  }
+
+  /* Dump non active group */
+  for (auto& g : groups_) {
+    if (g->group_id_ != active_group_id) {
+      g->Dump(fd, active_group_id);
+    }
   }
 }
 
@@ -2884,13 +2950,16 @@ void LeAudioDevices::SetInitialGroupAutoconnectState(
     return;
   }
 
+  /* This function is called when bluetooth started, therefore here we will
+   * try direct connection, if that failes, we fallback to background connection
+   */
   for (auto dev : leAudioDevices_) {
     if ((dev->group_id_ == group_id) &&
         (dev->GetConnectionState() == DeviceConnectState::DISCONNECTED)) {
       dev->SetConnectionState(DeviceConnectState::CONNECTING_AUTOCONNECT);
       dev->autoconnect_flag_ = true;
       btif_storage_set_leaudio_autoconnect(dev->address_, true);
-      BTA_GATTC_Open(gatt_if, dev->address_, reconnection_mode, false);
+      BTA_GATTC_Open(gatt_if, dev->address_, BTM_BLE_DIRECT_CONNECTION, false);
     }
   }
 }

@@ -86,13 +86,13 @@ struct MsftExtensionManager::impl {
     ASSERT(view.IsValid());
 
     // The monitor state is 0x00 when the controller stops monitoring the device.
-    if (view.GetMonitorState() == 0x00) {
+    if (view.GetMonitorState() == 0x00 || view.GetMonitorState() == 0x01) {
       AdvertisingFilterOnFoundOnLostInfo on_found_on_lost_info;
       on_found_on_lost_info.advertiser_address_type = view.GetAddressType();
       on_found_on_lost_info.advertiser_address = view.GetBdAddr();
+      on_found_on_lost_info.advertiser_state = view.GetMonitorState();
+      on_found_on_lost_info.monitor_handle = view.GetMonitorHandle();
       scanning_callbacks_->OnTrackAdvFoundLost(on_found_on_lost_info);
-    } else if (view.GetMonitorState() == 0x01) {
-      // TODO: Bubble up this event via `OnScanResult`.
     } else {
       LOG_WARN("The Microsoft vendor event monitor state is invalid.");
       return;
@@ -138,6 +138,11 @@ struct MsftExtensionManager::impl {
   }
 
   void msft_adv_monitor_add(const MsftAdvMonitor& monitor, MsftAdvMonitorAddCallback cb) {
+    if (!supports_msft_extensions()) {
+      LOG_WARN("Disallowed as MSFT extension is not supported.");
+      return;
+    }
+
     std::vector<MsftLeMonitorAdvConditionPattern> patterns;
     MsftLeMonitorAdvConditionPattern pattern;
     // The Microsoft Extension specifies 1 octet for the number of patterns.
@@ -168,6 +173,11 @@ struct MsftExtensionManager::impl {
   }
 
   void msft_adv_monitor_remove(uint8_t monitor_handle, MsftAdvMonitorRemoveCallback cb) {
+    if (!supports_msft_extensions()) {
+      LOG_WARN("Disallowed as MSFT extension is not supported.");
+      return;
+    }
+
     msft_adv_monitor_remove_cb_ = cb;
     hci_layer_->EnqueueCommand(
         MsftLeCancelMonitorAdvBuilder::Create(
@@ -176,6 +186,11 @@ struct MsftExtensionManager::impl {
   }
 
   void msft_adv_monitor_enable(bool enable, MsftAdvMonitorEnableCallback cb) {
+    if (!supports_msft_extensions()) {
+      LOG_WARN("Disallowed as MSFT extension is not supported.");
+      return;
+    }
+
     msft_adv_monitor_enable_cb_ = cb;
     hci_layer_->EnqueueCommand(
         MsftLeSetAdvFilterEnableBuilder::Create(static_cast<OpCode>(msft_.opcode.value()), enable),

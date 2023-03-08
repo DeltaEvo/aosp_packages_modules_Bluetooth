@@ -36,6 +36,7 @@
 #include "main/shim/shim.h"
 #include "main/shim/stack.h"
 #include "osi/include/allocator.h"
+#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec.h"
@@ -839,7 +840,7 @@ void bluetooth::shim::BTM_CancelInquiry(void) {
 }
 
 tBTM_STATUS bluetooth::shim::BTM_ReadRemoteDeviceName(
-    const RawAddress& raw_address, tBTM_CMPL_CB* callback,
+    const RawAddress& raw_address, tBTM_NAME_CMPL_CB* callback,
     tBT_TRANSPORT transport) {
   CHECK(callback != nullptr);
   tBTM_STATUS status = BTM_NO_RESOURCES;
@@ -1244,7 +1245,8 @@ uint16_t bluetooth::shim::BTM_GetHCIConnHandle(const RawAddress& remote_bda,
   return Stack::GetInstance()->GetBtm()->GetAclHandle(remote_bda, transport);
 }
 
-static void remote_name_request_complete_noop(void* p_name){
+static void remote_name_request_complete_noop(
+    UNUSED_ATTR const tBTM_REMOTE_DEV_NAME* p_name){
     // Should notify BTM_Sec, but we should use GD SMP.
 };
 
@@ -1355,9 +1357,15 @@ tBTM_STATUS bluetooth::shim::BTM_SetEventFilterConnectionSetupAllDevices() {
 }
 
 tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
-  // Autoplumbed
-  controller_get_interface()->allow_wake_by_hid();
+  // First set ACL to suspended state.
+  Stack::GetInstance()->GetAcl()->SetSystemSuspendState(/*suspended=*/true);
+
+  // Allow classic HID wake.
+  controller_get_interface()->set_event_filter_allow_device_connection(
+      std::move(classic_hid_devices));
+
   // Allow BLE HID
   for (auto hid_address : le_hid_devices) {
     std::promise<bool> accept_promise;
@@ -1369,12 +1377,28 @@ tBTM_STATUS bluetooth::shim::BTM_AllowWakeByHid(
 
     accept_future.wait();
   }
+
   return BTM_SUCCESS;
 }
 
-tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList() {
-  LOG_ERROR("%s: TODO(230604670): Figure out what address for A2DP Connected Resume", __func__);
-  // TODO(230604670): Figure out what address for A2DP Connected Resume
+tBTM_STATUS bluetooth::shim::BTM_RestoreFilterAcceptList(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices) {
+  // First, mark ACL as no longer suspended.
+  Stack::GetInstance()->GetAcl()->SetSystemSuspendState(/*suspended=*/false);
+
+  // Next, Allow BLE connection from all devices that need to be restored.
+  // This will also re-arm the LE connection.
+  for (auto address_pair : le_devices) {
+    std::promise<bool> accept_promise;
+    auto accept_future = accept_promise.get_future();
+
+    Stack::GetInstance()->GetAcl()->AcceptLeConnectionFrom(
+        ToAddressWithType(address_pair.first, address_pair.second),
+        /*is_direct=*/false, std::move(accept_promise));
+
+    accept_future.wait();
+  }
+
   return BTM_SUCCESS;
 }
 
