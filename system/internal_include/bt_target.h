@@ -75,10 +75,6 @@
 #define BTA_HH_ROLE BTA_CENTRAL_ROLE_PREF
 #endif
 
-#ifndef BTA_DISABLE_DELAY
-#define BTA_DISABLE_DELAY 200 /* in milliseconds */
-#endif
-
 #ifndef AVDT_VERSION
 #define AVDT_VERSION 0x0103
 #endif
@@ -816,10 +812,6 @@
 
 #ifndef PAN_INCLUDED
 #define PAN_INCLUDED TRUE
-#endif
-
-#ifndef PAN_NAP_DISABLED
-#define PAN_NAP_DISABLED FALSE
 #endif
 
 #ifndef PANU_DISABLED
