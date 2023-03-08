@@ -29,6 +29,7 @@
 #include "gd/common/init_flags.h"
 #include "hardware/bt_gatt.h"
 #include "rust/cxx.h"
+#include "rust/src/gatt/ffi/gatt_shim.h"
 #include "src/core/ffi.rs.h"
 #include "src/gatt/ffi.rs.h"
 #include "utils/Log.h"
@@ -1393,7 +1394,9 @@ static void initializeNative(JNIEnv* env, jobject object) {
 
   mCallbacksObj = env->NewGlobalRef(object);
 
-  bluetooth::rust_shim::init();
+  auto callbacks = std::make_unique<bluetooth::gatt::GattServerCallbacks>(
+      sGattServerCallbacks);
+  bluetooth::rust_shim::init(std::move(callbacks));
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
@@ -1468,13 +1471,14 @@ static void gattClientScanNative(JNIEnv* env, jobject object, jboolean start) {
 }
 
 static void gattClientConnectNative(JNIEnv* env, jobject object, jint clientif,
-                                    jstring address, jboolean isDirect,
-                                    jint transport, jboolean opportunistic,
+                                    jstring address, jint addressType,
+                                    jboolean isDirect, jint transport,
+                                    jboolean opportunistic,
                                     jint initiating_phys) {
   if (!sGattIf) return;
 
-  sGattIf->client->connect(clientif, str2addr(env, address), isDirect,
-                           transport, opportunistic, initiating_phys);
+  sGattIf->client->connect(clientif, str2addr(env, address), addressType,
+                           isDirect, transport, opportunistic, initiating_phys);
 }
 
 static void gattClientDisconnectNative(JNIEnv* env, jobject object,
@@ -1855,7 +1859,7 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
 
     curr.company_mask = env->GetIntField(current.get(), companyMaskFid);
 
-    curr.ad_type = env->GetByteField(current.get(), adTypeFid);
+    curr.ad_type = env->GetIntField(current.get(), adTypeFid);
 
     ScopedLocalRef<jbyteArray> data(
         env, (jbyteArray)env->GetObjectField(current.get(), dataFid));
@@ -2192,7 +2196,9 @@ static void gattServerSendResponseNative(JNIEnv* env, jobject object,
   }
 
   if (bluetooth::gatt::is_connection_isolated(conn_id)) {
-    // no-op
+    auto data = ::rust::Slice<const uint8_t>(response.attr_value.value,
+                                             response.attr_value.len);
+    bluetooth::gatt::send_response(server_if, conn_id, trans_id, status, data);
   } else {
     sGattIf->server->send_response(conn_id, trans_id, status, response);
   }
@@ -2753,7 +2759,7 @@ static JNINativeMethod sMethods[] = {
      (void*)gattClientRegisterAppNative},
     {"gattClientUnregisterAppNative", "(I)V",
      (void*)gattClientUnregisterAppNative},
-    {"gattClientConnectNative", "(ILjava/lang/String;ZIZI)V",
+    {"gattClientConnectNative", "(ILjava/lang/String;IZIZI)V",
      (void*)gattClientConnectNative},
     {"gattClientDisconnectNative", "(ILjava/lang/String;I)V",
      (void*)gattClientDisconnectNative},

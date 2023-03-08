@@ -87,6 +87,7 @@
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btm_log_history.h"
 #include "stack/sdp/sdpint.h"
 #include "stack_config.h"
 #include "types/raw_address.h"
@@ -114,20 +115,6 @@ const Uuid UUID_BASS = Uuid::FromString("184F");
 const Uuid UUID_BATTERY = Uuid::FromString("180F");
 const Uuid UUID_A2DP_SINK = Uuid::FromString("110B");
 
-#define COD_UNCLASSIFIED ((0x1F) << 8)
-#define COD_HID_KEYBOARD 0x0540
-#define COD_HID_POINTING 0x0580
-#define COD_HID_COMBO 0x05C0
-#define COD_HID_MAJOR 0x0500
-#define COD_HID_MASK 0x0700
-#define COD_AV_HEADSETS 0x0404
-#define COD_AV_HANDSFREE 0x0408
-#define COD_AV_HEADPHONES 0x0418
-#define COD_AV_PORTABLE_AUDIO 0x041C
-#define COD_AV_HIFI_AUDIO 0x0428
-
-#define COD_CLASS_LE_AUDIO (1 << 14)
-
 #define BTIF_DM_MAX_SDP_ATTEMPTS_AFTER_PAIRING 2
 
 #ifndef PROPERTY_CLASS_OF_DEVICE
@@ -152,6 +139,12 @@ const Uuid UUID_A2DP_SINK = Uuid::FromString("110B");
 
 #define ENCRYPTED_BREDR 2
 #define ENCRYPTED_LE 4
+
+namespace {
+
+constexpr char kBtmLogTag[] = "API";
+
+}
 
 struct btif_dm_pairing_cb_t {
   bt_bond_state_t state;
@@ -503,7 +496,7 @@ static uint32_t get_cod(const RawAddress* remote_bdaddr) {
 }
 
 bool check_cod(const RawAddress* remote_bdaddr, uint32_t cod) {
-  return get_cod(remote_bdaddr) == cod;
+  return (get_cod(remote_bdaddr) & COD_DEVICE_MASK) == cod;
 }
 
 bool check_cod_hid(const RawAddress* remote_bdaddr) {
@@ -726,7 +719,7 @@ static void btif_update_remote_properties(const RawAddress& bdaddr,
 /* If device is LE Audio capable, we prefer LE connection first, this speeds
  * up LE profile connection, and limits all possible service discovery
  * ordering issues (first Classic, GATT over SDP, etc) */
-static bool is_device_le_audio_capable(const RawAddress bd_addr) {
+bool is_device_le_audio_capable(const RawAddress bd_addr) {
   if (!GetInterfaceToProfiles()
            ->profileSpecific_HACK->IsLeAudioClientRunning()) {
     /* If LE Audio profile is not enabled, do nothing. */
@@ -2346,6 +2339,11 @@ static void bta_energy_info_cb(tBTM_BLE_TX_TIME_MS tx_time,
 void btif_dm_start_discovery(void) {
   BTIF_TRACE_EVENT("%s", __func__);
 
+  BTM_LogHistory(
+      kBtmLogTag, RawAddress::kEmpty, "Device discovery",
+      base::StringPrintf("is_request_queued:%c",
+                         bta_dm_is_search_request_queued() ? 'T' : 'F'));
+
   /* no race here because we're guaranteed to be in the main thread */
   if (bta_dm_is_search_request_queued()) {
     LOG_INFO("%s skipping start discovery because a request is queued",
@@ -2368,6 +2366,8 @@ void btif_dm_start_discovery(void) {
  ******************************************************************************/
 void btif_dm_cancel_discovery(void) {
   LOG_INFO("Cancel search");
+  BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Cancel discovery");
+
   BTA_DmSearchCancel();
 }
 
@@ -2385,6 +2385,11 @@ bool btif_dm_pairing_is_busy() {
 void btif_dm_create_bond(const RawAddress bd_addr, int transport) {
   BTIF_TRACE_EVENT("%s: bd_addr=%s, transport=%d", __func__,
                    ADDRESS_TO_LOGGABLE_CSTR(bd_addr), transport);
+
+  BTM_LogHistory(
+      kBtmLogTag, bd_addr, "Create bond",
+      base::StringPrintf("transport:%s", bt_transport_text(transport).c_str()));
+
   btif_stats_add_bond_event(bd_addr, BTIF_DM_FUNC_CREATE_BOND,
                             pairing_cb.state);
 
@@ -2441,6 +2446,12 @@ void btif_dm_create_bond_out_of_band(const RawAddress bd_addr,
       oob_cb.data_present = (int)BTM_OOB_PRESENT_256;
     }
   }
+
+  BTM_LogHistory(
+      kBtmLogTag, bd_addr, "Create bond",
+      base::StringPrintf("transport:%s oob:%s",
+                         bt_transport_text(transport).c_str(),
+                         btm_oob_data_text(oob_cb.data_present).c_str()));
 
   uint8_t empty[] = {0, 0, 0, 0, 0, 0, 0};
   switch (transport) {
@@ -2524,6 +2535,8 @@ void btif_dm_cancel_bond(const RawAddress bd_addr) {
   BTIF_TRACE_EVENT("%s: bd_addr=%s", __func__,
                    ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
+  BTM_LogHistory(kBtmLogTag, bd_addr, "Cancel bond");
+
   btif_stats_add_bond_event(bd_addr, BTIF_DM_FUNC_CANCEL_BOND,
                             pairing_cb.state);
 
@@ -2581,6 +2594,8 @@ void btif_dm_hh_open_failed(RawAddress* bdaddr) {
 void btif_dm_remove_bond(const RawAddress bd_addr) {
   BTIF_TRACE_EVENT("%s: bd_addr=%s", __func__,
                    ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+
+  BTM_LogHistory(kBtmLogTag, bd_addr, "Remove bond");
 
   btif_stats_add_bond_event(bd_addr, BTIF_DM_FUNC_REMOVE_BOND,
                             pairing_cb.state);
@@ -2842,6 +2857,10 @@ void btif_dm_get_remote_services(RawAddress remote_addr, const int transport) {
   BTIF_TRACE_EVENT("%s: transport=%d, remote_addr=%s", __func__, transport,
                    ADDRESS_TO_LOGGABLE_CSTR(remote_addr));
 
+  BTM_LogHistory(
+      kBtmLogTag, remote_addr, "Service discovery",
+      base::StringPrintf("transport:%s", bt_transport_text(transport).c_str()));
+
   BTA_DmDiscover(remote_addr, btif_dm_search_services_evt, transport);
 }
 
@@ -3031,7 +3050,11 @@ void btif_dm_generate_local_oob_data(tBT_TRANSPORT transport) {
         stop_oob_advertiser();
       }
       waiting_on_oob_advertiser_start = true;
-      SMP_CrLocScOobData();
+      if (!SMP_CrLocScOobData()) {
+        waiting_on_oob_advertiser_start = false;
+        GetInterfaceToProfiles()->events->invoke_oob_data_request_cb(
+            transport, false, Octet16{}, Octet16{}, RawAddress{}, 0x00);
+      }
     } else {
       GetInterfaceToProfiles()->events->invoke_oob_data_request_cb(
           transport, false, Octet16{}, Octet16{}, RawAddress{}, 0x00);
@@ -3859,13 +3882,15 @@ void btif_dm_set_event_filter_connection_setup_all_devices() {
 }
 
 void btif_dm_allow_wake_by_hid(
-    std::vector<std::pair<RawAddress, uint8_t>> addrs) {
-  BTA_DmAllowWakeByHid(std::move(addrs));
+    std::vector<RawAddress> classic_addrs,
+    std::vector<std::pair<RawAddress, uint8_t>> le_addrs) {
+  BTA_DmAllowWakeByHid(std::move(classic_addrs), std::move(le_addrs));
 }
 
-void btif_dm_restore_filter_accept_list() {
+void btif_dm_restore_filter_accept_list(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices) {
   // Autoplumbed
-  BTA_DmRestoreFilterAcceptList();
+  BTA_DmRestoreFilterAcceptList(std::move(le_devices));
 }
 
 void btif_dm_set_default_event_mask_except(uint64_t mask, uint64_t le_mask) {

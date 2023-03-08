@@ -623,14 +623,26 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       return;
     }
 
-    /* If group is in Idle and not transitioning, just update the current group
+    /* If group is in Idle and not transitioning, update the current group
      * audio context availability which could change due to disconnected group
      * member.
      */
     if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) &&
         !group->IsInTransition()) {
-      LOG(INFO) << __func__ << " group: " << group->group_id_ << " is in IDLE";
+      LOG_INFO("group: %d is in IDLE", group->group_id_);
       group->UpdateAudioContextTypeAvailability();
+
+      /* When OnLeAudioDeviceSetStateTimeout happens, group will transition
+       * to IDLE, and after that an ACL disconnect will be triggered. We need
+       * to check if CIG is created and if it is, remove it so it can be created
+       * again after reconnect. Otherwise we will get Command Disallowed on CIG
+       * Create when starting stream.
+       */
+      if (group->GetCigState() == CigState::CREATED) {
+        LOG_INFO("CIG is in CREATED state so removing CIG for Group %d",
+                 group->group_id_);
+        RemoveCigForGroup(group);
+      }
       return;
     }
 
@@ -2007,6 +2019,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       confs.push_back(conf);
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
 
+    LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     le_audio::client_parser::ascs::PrepareAseCtpEnable(confs, value);
 
     BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
@@ -2026,6 +2040,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       ids.push_back(ase->id);
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
 
+    LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpDisable(ids, value);
 
@@ -2046,6 +2062,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       ids.push_back(ase->id);
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
 
+    LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpRelease(ids, value);
 
@@ -2116,6 +2134,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       return;
     }
 
+    LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpConfigQos(confs, value);
     BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
@@ -2171,6 +2191,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     if (confs.size() != 0) {
+      LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
       std::vector<uint8_t> value;
       le_audio::client_parser::ascs::PrepareAseCtpUpdateMetadata(confs, value);
 
@@ -2191,6 +2213,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
 
     if (ids.size() > 0) {
+      LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
       le_audio::client_parser::ascs::PrepareAseCtpAudioReceiverStartReady(
           ids, value);
 
@@ -2415,6 +2439,34 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
   }
 
+  void DisconnectCisIfNeeded(LeAudioDeviceGroup* group,
+                             LeAudioDevice* leAudioDevice, struct ase* ase) {
+    LOG_DEBUG(
+        "Group id: %d, %s, ase id: %d, cis_handle: 0x%04x, direction: %s, "
+        "data_path_state: %s",
+        group->group_id_, ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_),
+        ase->id, ase->cis_conn_hdl,
+        ase->direction == le_audio::types::kLeAudioDirectionSink ? "sink"
+                                                                 : "source",
+        bluetooth::common::ToString(ase->data_path_state).c_str());
+
+    auto bidirection_ase = leAudioDevice->GetAseToMatchBidirectionCis(ase);
+    if (bidirection_ase != nullptr &&
+        bidirection_ase->data_path_state ==
+            AudioStreamDataPathState::CIS_ESTABLISHED &&
+        (bidirection_ase->state == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING ||
+         bidirection_ase->state == AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING)) {
+      LOG_INFO("Still waiting for the bidirectional ase %d to be released (%s)",
+               bidirection_ase->id,
+               bluetooth::common::ToString(bidirection_ase->state).c_str());
+      return;
+    }
+
+    RemoveCisFromStreamConfiguration(group, leAudioDevice, ase->cis_conn_hdl);
+    IsoManager::GetInstance()->DisconnectCis(ase->cis_conn_hdl,
+                                             HCI_ERR_PEER_USER);
+  }
+
   void AseStateMachineProcessReleasing(
       struct le_audio::client_parser::ascs::ase_rsp_hdr& arh, struct ase* ase,
       LeAudioDeviceGroup* group, LeAudioDevice* leAudioDevice) {
@@ -2456,10 +2508,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                        AudioStreamDataPathState::CIS_ESTABLISHED ||
                    ase->data_path_state ==
                        AudioStreamDataPathState::CIS_PENDING) {
-          RemoveCisFromStreamConfiguration(group, leAudioDevice,
-                                           ase->cis_conn_hdl);
-          IsoManager::GetInstance()->DisconnectCis(ase->cis_conn_hdl,
-                                                   HCI_ERR_PEER_USER);
+          DisconnectCisIfNeeded(group, leAudioDevice, ase);
         } else {
           DLOG(INFO) << __func__ << ", Nothing to do ase data path state: "
                      << static_cast<int>(ase->data_path_state);

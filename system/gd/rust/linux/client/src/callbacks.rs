@@ -10,6 +10,7 @@ use crate::ClientContext;
 use crate::{console_red, console_yellow, print_error, print_info};
 use bt_topshim::btif::{BtBondState, BtPropertyType, BtSspVariant, BtStatus, Uuid128Bit};
 use bt_topshim::profiles::gatt::{AdvertisingStatus, GattStatus, LePhy};
+use bt_topshim::profiles::sdp::BtSdpRecord;
 use btstack::bluetooth::{
     BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
 };
@@ -231,6 +232,16 @@ impl IBluetoothCallback for BtCallback {
             self.context.lock().unwrap().bonded_devices.remove(&address);
         }
     }
+
+    fn on_sdp_search_complete(
+        &self,
+        _remote_device: BluetoothDevice,
+        _searched_uuid: Uuid128Bit,
+        _sdp_records: Vec<BtSdpRecord>,
+    ) {
+    }
+
+    fn on_sdp_record_created(&self, _record: BtSdpRecord, _handle: i32) {}
 }
 
 impl RPCProxy for BtCallback {
@@ -333,9 +344,15 @@ impl IScannerCallback for ScannerCallback {
         }
     }
 
-    fn on_scan_result_lost(&self, scan_result: ScanResult) {
+    fn on_advertisement_found(&self, scanner_id: u8, scan_result: ScanResult) {
         if self.context.lock().unwrap().active_scanner_ids.len() > 0 {
-            print_info!("Scan result lost: {:#?}", scan_result);
+            print_info!("Advertisement found for scanner_id {} : {:#?}", scanner_id, scan_result);
+        }
+    }
+
+    fn on_advertisement_lost(&self, scanner_id: u8, scan_result: ScanResult) {
+        if self.context.lock().unwrap().active_scanner_ids.len() > 0 {
+            print_info!("Advertisement lost for scanner_id {} : {:#?}", scanner_id, scan_result);
         }
     }
 
@@ -779,6 +796,10 @@ impl IBluetoothGattServerCallback for BtGattServerCallback {
 
     fn on_service_added(&self, status: GattStatus, service: BluetoothGattService) {
         print_info!("GATT service added with status = {}, service = {:?}", status, service)
+    }
+
+    fn on_service_removed(&self, status: GattStatus, handle: i32) {
+        print_info!("GATT service removed with status = {}, handle = {:?}", status, handle);
     }
 
     fn on_characteristic_read_request(

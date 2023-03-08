@@ -79,8 +79,6 @@ inline std::string bta_status_text(const tBTA_STATUS& status) {
 
 #undef CASE_RETURN_TEXT
 
-using tSDP_DISC_WAIT = int;
-
 /*
  * Service ID
  */
@@ -1312,6 +1310,7 @@ extern void BTA_DmSetEventFilterConnectionSetupAllDevices();
  *
  *******************************************************************************/
 extern void BTA_DmAllowWakeByHid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
 
 /*******************************************************************************
@@ -1323,7 +1322,8 @@ extern void BTA_DmAllowWakeByHid(
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmRestoreFilterAcceptList();
+extern void BTA_DmRestoreFilterAcceptList(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 
 /*******************************************************************************
  *
