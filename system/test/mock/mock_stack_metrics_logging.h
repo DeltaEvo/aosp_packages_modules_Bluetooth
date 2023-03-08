@@ -24,8 +24,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -39,6 +37,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
 #include "stack/include/stack_metrics_logging.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -195,6 +194,19 @@ struct log_counter_metrics {
   };
 };
 extern struct log_counter_metrics log_counter_metrics;
+
+// Name: log_hfp_audio_packet_loss_stats
+struct log_hfp_audio_packet_loss_stats {
+  std::function<void(const RawAddress& address, int num_decoded_frames,
+                     double packet_loss_ratio)>
+      body{[](const RawAddress& address, int num_decoded_frames,
+              double packet_loss_ratio) {}};
+  void operator()(const RawAddress& address, int num_decoded_frames,
+                  double packet_loss_ratio) {
+    body(address, num_decoded_frames, packet_loss_ratio);
+  };
+};
+extern struct log_hfp_audio_packet_loss_stats log_hfp_audio_packet_loss_stats;
 }  // namespace stack_metrics_logging
 }  // namespace mock
 }  // namespace test

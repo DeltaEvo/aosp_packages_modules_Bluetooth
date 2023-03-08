@@ -38,6 +38,7 @@ mod iface_bluetooth;
 mod iface_bluetooth_admin;
 mod iface_bluetooth_gatt;
 mod iface_bluetooth_media;
+mod iface_bluetooth_telephony;
 mod iface_logging;
 
 const DBUS_SERVICE_NAME: &str = "org.chromium.bluetooth";
@@ -128,6 +129,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         tx.clone(),
     ))));
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
+        adapter_index,
         tx.clone(),
         intf.clone(),
         bluetooth_media.clone(),
@@ -138,6 +140,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         bluetooth.clone(),
         intf.clone(),
         bluetooth_gatt.clone(),
+        bluetooth_media.clone(),
         tx.clone(),
     ))));
     let logging = Arc::new(Mutex::new(Box::new(BluetoothLogging::new(is_debug, log_output))));
@@ -242,6 +245,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             disconnect_watcher.clone(),
         );
 
+        let telephony_iface = iface_bluetooth_telephony::export_bluetooth_telephony_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
         let battery_provider_manager_iface =
             iface_battery_provider_manager::export_battery_provider_manager_dbus_intf(
                 conn.clone(),
@@ -286,11 +295,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             &[media_iface],
             bluetooth_media.clone(),
         );
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "telephony"),
+            &[telephony_iface],
+            bluetooth_media.clone(),
+        );
+
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "battery_provider_manager"),
             &[battery_provider_manager_iface],
             battery_provider_manager.clone(),
         );
+
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "battery_manager"),
             &[battery_manager_iface],

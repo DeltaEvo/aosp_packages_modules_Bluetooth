@@ -136,6 +136,7 @@ cc_library_static {
         "libbt-stack-core",
     ],
     whole_static_libs: [
+        "libcom.android.sysprop.bluetooth",
         "libldacBT_abr",
         "libldacBT_enc",
         "libaptx_enc",
@@ -143,6 +144,18 @@ cc_library_static {
     ],
     host_supported: true,
     min_sdk_version: "Tiramisu"
+}
+
+filegroup {
+  name: "LegacyStackSdp",
+  srcs: [
+        "sdp/sdp_api.cc",
+        "sdp/sdp_db.cc",
+        "sdp/sdp_discovery.cc",
+        "sdp/sdp_main.cc",
+        "sdp/sdp_server.cc",
+        "sdp/sdp_utils.cc",
+  ],
 }
 
 cc_library_static {
@@ -183,6 +196,8 @@ cc_library_static {
         "packages/modules/Bluetooth/system/gd/rust/shim",
     ],
     srcs: crypto_toolbox_srcs + [
+        ":LegacyStackSdp",
+        "arbiter/acl_arbiter.cc",
         "btm/ble_advertiser_hci_interface.cc",
         "acl/acl.cc",
         "acl/btm_acl.cc",
@@ -247,12 +262,6 @@ cc_library_static {
         "rfcomm/rfc_port_if.cc",
         "rfcomm/rfc_ts_frames.cc",
         "rfcomm/rfc_utils.cc",
-        "sdp/sdp_api.cc",
-        "sdp/sdp_db.cc",
-        "sdp/sdp_discovery.cc",
-        "sdp/sdp_main.cc",
-        "sdp/sdp_server.cc",
-        "sdp/sdp_utils.cc",
         "smp/p_256_curvepara.cc",
         "smp/p_256_ecc_pp.cc",
         "smp/p_256_multprecision.cc",
@@ -299,13 +308,14 @@ cc_test {
     srcs: [
         "test/stack_a2dp_test.cc",
         "test/stack_avrcp_test.cc",
+        "test/gatt/gatt_api_test.cc",
     ],
     shared_libs: [
         "android.hardware.bluetooth@1.0",
         "android.hardware.bluetooth@1.1",
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
-        "android.hardware.bluetooth.audio-V2-ndk",
+        "android.hardware.bluetooth.audio-V3-ndk",
         "libaaudio",
         "libbinder_ndk",
         "libcutils",
@@ -314,7 +324,6 @@ cc_test {
         "libhidlbase",
         "liblog",
         "libprocessgroup",
-        "libprotobuf-cpp-lite",
         "libutils",
         "libtinyxml2",
         "libz",
@@ -344,6 +353,7 @@ cc_test {
         "liblc3",
         "libopus",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libudrv-uipc",
         "libbt-protos-lite",
     ],
@@ -405,7 +415,6 @@ cc_test {
     ],
     shared_libs: [
         "libcutils",
-        "libprotobuf-cpp-lite",
         "libcrypto",
     ],
     static_libs: [
@@ -413,6 +422,7 @@ cc_test {
         "liblog",
         "libgmock",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libbt-common",
         "libbt-protos-lite",
     ],
@@ -628,7 +638,6 @@ cc_test {
     ],
     shared_libs: [
         "libcutils",
-        "libprotobuf-cpp-lite",
         "libcrypto",
     ],
     static_libs: [
@@ -686,13 +695,13 @@ cc_test {
     shared_libs: [
         "libcrypto",
         "libcutils",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
         "libbt-protos-lite",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libosi-AllocationTestHarness",
     ],
     sanitize: {
@@ -776,6 +785,7 @@ cc_test {
         "test/a2dp/test_util.cc",
         "test/a2dp/wav_reader.cc",
         "test/a2dp/wav_reader_unittest.cc",
+        ":TestCommonMockFunctions",
         ":TestMockBta",
         ":TestMockStackA2dpApi",
     ],
@@ -834,7 +844,6 @@ cc_test {
     shared_libs: [
         "libcrypto",
         "libcutils",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
@@ -883,7 +892,6 @@ cc_test {
     shared_libs: [
         "libcutils",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
@@ -982,7 +990,6 @@ cc_test {
     shared_libs: [
         "libcutils",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbt-common",
@@ -990,6 +997,7 @@ cc_test {
         "liblog",
         "libgmock",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         cfi: false,
@@ -1092,11 +1100,11 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libudrv-uipc",
     ],
     shared_libs: [
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1142,7 +1150,6 @@ cc_test {
         "libbtdevice",
     ],
     shared_libs: [
-        "libprotobuf-cpp-lite",
         "libcrypto",
     ],
     sanitize: {
@@ -1195,10 +1202,10 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     shared_libs: [
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1263,7 +1270,6 @@ cc_test {
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1315,6 +1321,8 @@ cc_test {
         ":TestMockStackL2cap",
         ":TestMockStackSdp",
         ":TestMockStackSmp",
+        ":TestMockSrvcDis",
+        "arbiter/acl_arbiter.cc",
         "eatt/eatt.cc",
         "gatt/att_protocol.cc",
         "gatt/connection_manager.cc",
@@ -1337,11 +1345,11 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1411,11 +1419,11 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
+        "libprotobuf-cpp-lite",
     ],
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     target: {
         android: {
@@ -1496,7 +1504,6 @@ cc_test {
     shared_libs: [
         "libbinder_ndk",
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -1537,12 +1544,7 @@ cc_test {
         ":TestMockOsi",
         ":TestMockStackL2cap",
         ":TestMockStackMetrics",
-        "sdp/sdp_api.cc",
-        "sdp/sdp_discovery.cc",
-        "sdp/sdp_server.cc",
-        "sdp/sdp_db.cc",
-        "sdp/sdp_main.cc",
-        "sdp/sdp_utils.cc",
+        ":LegacyStackSdp",
         "test/sdp/stack_sdp_test.cc",
         "test/sdp/stack_sdp_utils_test.cc",
     ],

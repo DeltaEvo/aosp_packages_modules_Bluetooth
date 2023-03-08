@@ -59,6 +59,8 @@ constexpr uint16_t kScanWindow2mFast = 0x0018;    /* 15 ms = 24 *0.625 */
 constexpr uint16_t kScanWindowCodedFast = 0x0018; /* 15 ms = 24 *0.625 */
 constexpr uint16_t kScanIntervalSlow = 0x0800;    /* 1.28 s = 2048 *0.625 */
 constexpr uint16_t kScanWindowSlow = 0x0030;      /* 30 ms = 48 *0.625 */
+constexpr uint16_t kScanIntervalSystemSuspend = 0x0400; /* 640 ms = 1024 * 0.625 */
+constexpr uint16_t kScanWindowSystemSuspend = 0x0012;   /* 11.25ms = 18 * 0.625 */
 constexpr uint32_t kCreateConnectionTimeoutMs = 30 * 1000;
 constexpr uint8_t PHY_LE_NO_PACKET = 0x00;
 constexpr uint8_t PHY_LE_1M = 0x01;
@@ -338,7 +340,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     auto peer_address_type = connection_complete.GetPeerAddressType();
     auto role = connection_complete.GetRole();
     AddressWithType remote_address(address, peer_address_type);
-    AddressWithType local_address = le_address_manager_->GetCurrentAddress();
+    AddressWithType local_address = le_address_manager_->GetInitiatorAddress();
     const bool in_filter_accept_list = is_device_in_connect_list(remote_address);
 
     if (role == hci::Role::CENTRAL) {
@@ -612,7 +614,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
 
   RoleSpecificData initialize_role_specific_data(Role role) {
     if (role == hci::Role::CENTRAL) {
-      return DataAsCentral{le_address_manager_->GetCurrentAddress()};
+      return DataAsCentral{le_address_manager_->GetInitiatorAddress()};
     } else if (
         controller_->SupportsBleExtendedAdvertising() ||
         controller_->IsSupported(hci::OpCode::LE_MULTI_ADVT)) {
@@ -624,7 +626,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       // the exception is if we only support legacy advertising - here, our current address is also
       // our advertised address
       return DataAsPeripheral{
-          le_address_manager_->GetCurrentAddress(),
+          le_address_manager_->GetInitiatorAddress(),
           {},
           true /* For now, ignore non-discoverable legacy advertising TODO(b/254314964) */};
     }
@@ -887,9 +889,16 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       le_scan_window_2m = os::GetSystemPropertyUint32(kPropertyConnScanWindow2mFast, kScanWindow2mFast);
       le_scan_window_coded = os::GetSystemPropertyUint32(kPropertyConnScanWindowCodedFast, kScanWindowCodedFast);
     }
+    // Use specific parameters when in system suspend.
+    if (system_suspend_) {
+      le_scan_interval = kScanIntervalSystemSuspend;
+      le_scan_window = kScanWindowSystemSuspend;
+      le_scan_window_2m = le_scan_window;
+      le_scan_window_coded = le_scan_window;
+    }
     InitiatorFilterPolicy initiator_filter_policy = InitiatorFilterPolicy::USE_FILTER_ACCEPT_LIST;
     OwnAddressType own_address_type =
-        static_cast<OwnAddressType>(le_address_manager_->GetCurrentAddress().GetAddressType());
+        static_cast<OwnAddressType>(le_address_manager_->GetInitiatorAddress().GetAddressType());
     uint16_t conn_interval_min = os::GetSystemPropertyUint32(kPropertyMinConnInterval, kConnIntervalMin);
     uint16_t conn_interval_max = os::GetSystemPropertyUint32(kPropertyMaxConnInterval, kConnIntervalMax);
     uint16_t conn_latency = os::GetSystemPropertyUint32(kPropertyConnLatency, kConnLatency);
@@ -1260,6 +1269,10 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     }
   }
 
+  void set_system_suspend_state(bool suspended) {
+    system_suspend_ = suspended;
+  }
+
   static constexpr uint16_t kMinimumCeLength = 0x0002;
   static constexpr uint16_t kMaximumCeLength = 0x0C00;
   HciLayer* hci_layer_ = nullptr;
@@ -1281,6 +1294,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
   bool ready_to_unregister = false;
   bool pause_connection = false;
   bool disarmed_while_arming_ = false;
+  bool system_suspend_ = false;
   ConnectabilityState connectability_state_{ConnectabilityState::DISARMED};
   std::map<AddressWithType, os::Alarm> create_connection_timeout_alarms_{};
 };

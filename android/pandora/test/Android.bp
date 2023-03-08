@@ -18,12 +18,15 @@ package {
 
 python_test_host {
     name: "avatar",
-    main: "example.py",
+    main: "main.py",
     srcs: [
+        "main.py",
+        "*_test.py",
         "example.py",
     ],
     libs: [
         "libavatar",
+        "bumble_services_experimental-python",
     ],
     required: ["PandoraServer"],
     test_suites: ["general-tests"],
@@ -31,15 +34,4 @@ python_test_host {
         unit_test: false,
     },
     data: ["config.yml"],
-}
-
-python_binary_host {
-    name: "avatar_runner",
-    main: "runner.py",
-    srcs: [
-        "runner.py",
-    ],
-    libs: [
-        "libavatar"
-    ],
 }

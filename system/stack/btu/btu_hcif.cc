@@ -27,7 +27,7 @@
 
 #define LOG_TAG "bt_btu_hcif"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/location.h>
 #include <base/logging.h>
 
@@ -72,7 +72,6 @@ void acl_disconnect_from_handle(uint16_t handle, tHCI_STATUS reason,
 /******************************************************************************/
 static void btu_hcif_inquiry_comp_evt(uint8_t* p);
 
-static void btu_hcif_disconnection_comp_evt(uint8_t* p);
 static void btu_hcif_authentication_comp_evt(uint8_t* p);
 static void btu_hcif_rmt_name_request_comp_evt(const uint8_t* p,
                                                uint16_t evt_len);
@@ -93,7 +92,7 @@ static void btu_hcif_esco_connection_chg_evt(uint8_t* p);
 static void btu_hcif_io_cap_request_evt(const uint8_t* p);
 
 static void btu_ble_ll_conn_param_upd_evt(uint8_t* p, uint16_t evt_len);
-static void btu_ble_proc_ltk_req(uint8_t* p);
+static void btu_ble_proc_ltk_req(uint8_t* p, uint16_t evt_len);
 static void btu_hcif_encryption_key_refresh_cmpl_evt(uint8_t* p);
 static void btu_ble_data_length_change_evt(uint8_t* p, uint16_t evt_len);
 static void btu_ble_rc_param_req_evt(uint8_t* p, uint8_t len);
@@ -148,17 +147,6 @@ void btu_hcif_log_event_metrics(uint8_t evt_code, const uint8_t* p_event) {
                                 encryption_enabled);
       break;
     }
-    case HCI_DISCONNECTION_COMP_EVT: {
-      STREAM_TO_UINT8(status, p_event);
-      STREAM_TO_UINT16(handle, p_event);
-      STREAM_TO_UINT8(reason, p_event);
-      handle = HCID_GET_HANDLE(handle);
-      log_link_layer_connection_event(
-          nullptr, handle, android::bluetooth::DIRECTION_UNKNOWN,
-          android::bluetooth::LINK_TYPE_UNKNOWN, cmd, evt_code,
-          android::bluetooth::hci::BLE_EVT_UNKNOWN, status, reason);
-      break;
-    }
     case HCI_ESCO_CONNECTION_COMP_EVT: {
       uint8_t link_type;
       STREAM_TO_UINT8(status, p_event);
@@ -186,6 +174,7 @@ void btu_hcif_log_event_metrics(uint8_t evt_code, const uint8_t* p_event) {
     }
     case HCI_CONNECTION_COMP_EVT:  // EventCode::CONNECTION_COMPLETE
     case HCI_CONNECTION_REQUEST_EVT:  // EventCode::CONNECTION_REQUEST
+    case HCI_DISCONNECTION_COMP_EVT:  // EventCode::DISCONNECTION_COMPLETE
     default:
       LOG_ERROR(
           "Unexpectedly received event_code:0x%02x that should not be "
@@ -234,9 +223,6 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
       break;
     case HCI_EXTENDED_INQUIRY_RESULT_EVT:
       btm_process_inq_results(p, hci_evt_len, BTM_INQ_RESULT_EXTENDED);
-      break;
-    case HCI_DISCONNECTION_COMP_EVT:
-      btu_hcif_disconnection_comp_evt(p);
       break;
     case HCI_AUTHENTICATION_COMP_EVT:
       btu_hcif_authentication_comp_evt(p);
@@ -332,7 +318,7 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
           btm_ble_read_remote_features_complete(p, ble_evt_len);
           break;
         case HCI_BLE_LTK_REQ_EVT: /* received only at peripheral device */
-          btu_ble_proc_ltk_req(p);
+          btu_ble_proc_ltk_req(p, ble_evt_len);
           break;
         case HCI_BLE_RC_PARAM_REQ_EVT:
           btu_ble_rc_param_req_evt(p, ble_evt_len);
@@ -413,6 +399,7 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id,
     case HCI_READ_RMT_FEATURES_COMP_EVT:  // EventCode::READ_REMOTE_SUPPORTED_FEATURES_COMPLETE
     case HCI_READ_RMT_VERSION_COMP_EVT:  // EventCode::READ_REMOTE_VERSION_INFORMATION_COMPLETE
     case HCI_ROLE_CHANGE_EVT:            // EventCode::ROLE_CHANGE
+    case HCI_DISCONNECTION_COMP_EVT:     // EventCode::DISCONNECTION_COMPLETE
     default:
       LOG_ERROR(
           "Unexpectedly received event_code:0x%02x that should not be "
@@ -855,30 +842,6 @@ static void btu_hcif_inquiry_comp_evt(uint8_t* p) {
 
   /* Tell inquiry processing that we are done */
   btm_process_inq_complete(to_hci_status_code(status), BTM_BR_INQUIRY_MASK);
-}
-
-/*******************************************************************************
- *
- * Function         btu_hcif_disconnection_comp_evt
- *
- * Description      Process event HCI_DISCONNECTION_COMP_EVT
- *
- * Returns          void
- *
- ******************************************************************************/
-static void btu_hcif_disconnection_comp_evt(uint8_t* p) {
-  uint8_t status;
-  uint16_t handle;
-  uint8_t reason;
-
-  STREAM_TO_UINT8(status, p);
-  STREAM_TO_UINT16(handle, p);
-  STREAM_TO_UINT8(reason, p);
-
-  handle = HCID_GET_HANDLE(handle);
-
-  btm_acl_disconnected(static_cast<tHCI_STATUS>(status), handle,
-                       static_cast<tHCI_STATUS>(reason));
 }
 
 /*******************************************************************************
@@ -1587,9 +1550,21 @@ static void btu_ble_ll_conn_param_upd_evt(uint8_t* p, uint16_t evt_len) {
                                 interval, latency, timeout);
 }
 
-static void btu_ble_proc_ltk_req(uint8_t* p) {
+static void btu_ble_proc_ltk_req(uint8_t* p, uint16_t evt_len) {
   uint16_t ediv, handle;
   uint8_t* pp;
+
+  // following the spec in Core_v5.3/Vol 4/Part E
+  // / 7.7.65.5 LE Long Term Key Request event
+  // A BLE Long Term Key Request event contains:
+  // - 1-byte subevent (already consumed in btu_hcif_process_event)
+  // - 2-byte connection handler
+  // - 8-byte random number
+  // - 2 byte Encrypted_Diversifier
+  if (evt_len < 2 + 8 + 2) {
+    LOG_ERROR("Event packet too short");
+    return;
+  }
 
   STREAM_TO_UINT16(handle, p);
   pp = p + 8;

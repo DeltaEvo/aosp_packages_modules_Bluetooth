@@ -19,7 +19,7 @@
 #ifndef BTM_BLE_API_TYPES_H
 #define BTM_BLE_API_TYPES_H
 
-#include <base/callback_forward.h>
+#include <base/functional/callback_forward.h>
 #include <hardware/bt_common_types.h>
 
 #include <cstdint>
@@ -333,6 +333,7 @@ typedef struct {
   uint32_t a2dp_source_offload_capability_mask;
   uint8_t quality_report_support;
   uint32_t dynamic_audio_buffer_support;
+  uint16_t adv_filter_extended_features_mask;
 } tBTM_BLE_VSC_CB;
 
 /* Stored the default/maximum/minimum buffer time for dynamic audio buffer.

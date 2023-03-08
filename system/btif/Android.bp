@@ -272,7 +272,6 @@ cc_test {
         "libcrypto",
         "libfmq",
         "libhidlbase",
-        "libprotobuf-cpp-lite",
         "libprocessgroup",
     ],
     static_libs: [
@@ -299,6 +298,7 @@ cc_test {
         "liblc3",
         "libopus",
         "libosi",
+        "libprotobuf-cpp-lite",
         "libudrv-uipc",
    ],
     whole_static_libs: [
@@ -309,7 +309,7 @@ cc_test {
         android: {
             shared_libs: [
                 "libbinder_ndk",
-                "android.hardware.bluetooth.audio-V2-ndk",
+                "android.hardware.bluetooth.audio-V3-ndk",
                 "libPlatformProperties",
             ],
         },
@@ -372,7 +372,6 @@ cc_test {
         "libcrypto",
         "libcutils",
         "liblog",
-        "libprotobuf-cpp-lite",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -556,6 +555,7 @@ cc_test {
           "lib-bt-packets",
           "lib-bt-packets-avrcp",
           "lib-bt-packets-base",
+          "libcom.android.sysprop.bluetooth",
           "libc++fs",
           "libflatbuffers-cpp",
           "libgmock",
@@ -565,7 +565,7 @@ cc_test {
           android: {
               shared_libs: [
                   "libbinder_ndk",
-                  "android.hardware.bluetooth.audio-V2-ndk",
+                  "android.hardware.bluetooth.audio-V3-ndk",
               ],
           },
       },
@@ -673,11 +673,11 @@ cc_test {
           "libbt-sbc-encoder",
           "libbtif",
           "libbtif-core",
-          "libbt-stack-core",
           "libbtdevice",
           "lib-bt-packets",
           "lib-bt-packets-avrcp",
           "lib-bt-packets-base",
+          "libcom.android.sysprop.bluetooth",
           "libc++fs",
           "libflatbuffers-cpp",
           "libgmock",
@@ -687,7 +687,7 @@ cc_test {
           android: {
               shared_libs: [
                   "libbinder_ndk",
-                  "android.hardware.bluetooth.audio-V2-ndk",
+                  "android.hardware.bluetooth.audio-V3-ndk",
               ],
           },
       },

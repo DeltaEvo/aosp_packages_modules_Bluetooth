@@ -20,7 +20,9 @@ package com.android.bluetooth.btservice;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
+import android.app.BroadcastOptions;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dpSink;
 import android.bluetooth.BluetoothAdapter;
@@ -45,6 +47,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Bundle;
 import android.os.ParcelUuid;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -56,6 +59,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
+import com.android.modules.utils.build.SdkLevel;
 
 import com.google.common.collect.EvictingQueue;
 
@@ -130,6 +134,7 @@ class AdapterProperties {
     private boolean mIsLeExtendedAdvertisingSupported;
     private boolean mIsLePeriodicAdvertisingSupported;
     private int mLeMaximumAdvertisingDataLength;
+    private boolean mIsOffloadedTransportDiscoveryDataScanSupported;
 
     private int mIsDynamicAudioBufferSizeSupported;
     private int mDynamicAudioBufferSizeSupportedCodecsGroup1;
@@ -579,6 +584,14 @@ class AdapterProperties {
         return mTotNumOfTrackableAdv;
     }
 
+
+    /**
+     * @return the isOffloadedTransportDiscoveryDataScanSupported
+     */
+    public boolean isOffloadedTransportDiscoveryDataScanSupported() {
+        return mIsOffloadedTransportDiscoveryDataScanSupported;
+    }
+
     /**
      * @return the maximum number of connected audio devices
      */
@@ -735,16 +748,18 @@ class AdapterProperties {
         BluetoothDevice device = connIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         int prevState = connIntent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
         int state = connIntent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
+        int metricId = mService.getMetricId(device);
         if (state == BluetoothProfile.STATE_CONNECTING) {
             BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
-                    mService.getMetricId(device), device.getName());
+                    metricId, device.getName());
+            MetricsLogger.getInstance().logSanitizedBluetoothDeviceName(metricId, device.getName());
         }
         Log.d(TAG,
                 "PROFILE_CONNECTION_STATE_CHANGE: profile=" + profile + ", device=" + device + ", "
                         + prevState + " -> " + state);
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_CONNECTION_STATE_CHANGED, state,
                 0 /* deprecated */, profile, mService.obfuscateAddress(device),
-                mService.getMetricId(device), 0, -1);
+                metricId, 0, -1);
 
         if (!isNormalStateTransition(prevState, state)) {
             Log.w(TAG,
@@ -989,7 +1004,7 @@ class AdapterProperties {
                         intent = new Intent(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
                         intent.putExtra(BluetoothAdapter.EXTRA_SCAN_MODE, mScanMode);
                         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-                        mService.sendBroadcast(intent, BLUETOOTH_SCAN,
+                        Utils.sendBroadcast(mService, intent, BLUETOOTH_SCAN,
                                 Utils.getTempAllowlistBroadcastOptions());
                         debugLog("Scan Mode:" + mScanMode);
                         break;
@@ -1079,6 +1094,7 @@ class AdapterProperties {
         mIsLeConnectedIsochronousStreamCentralSupported = ((0xFF & ((int) val[25])) != 0);
         mIsLeIsochronousBroadcasterSupported = ((0xFF & ((int) val[26])) != 0);
         mIsLePeriodicAdvertisingSyncTransferRecipientSupported = ((0xFF & ((int) val[27])) != 0);
+        mIsOffloadedTransportDiscoveryDataScanSupported = ((0x01 & ((int) val[28])) != 0);
 
         Log.d(TAG, "BT_PROPERTY_LOCAL_LE_FEATURES: update from BT controller"
                 + " mNumOfAdvertisementInstancesSupported = "
@@ -1106,7 +1122,9 @@ class AdapterProperties {
                 + " mIsLeIsochronousBroadcasterSupported = "
                 + mIsLeIsochronousBroadcasterSupported
                 + " mIsLePeriodicAdvertisingSyncTransferRecipientSupported = "
-                + mIsLePeriodicAdvertisingSyncTransferRecipientSupported);
+                + mIsLePeriodicAdvertisingSyncTransferRecipientSupported
+                + " mIsOffloadedTransportDiscoveryDataScanSupported = "
+                + mIsOffloadedTransportDiscoveryDataScanSupported);
         invalidateIsOffloadedFilteringSupportedCache();
     }
 
@@ -1167,16 +1185,28 @@ class AdapterProperties {
                 mService.clearDiscoveringPackages();
                 mDiscoveryEndMs = System.currentTimeMillis();
                 intent = new Intent(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
-                mService.sendBroadcast(intent, BLUETOOTH_SCAN,
-                        Utils.getTempAllowlistBroadcastOptions());
+                Utils.sendBroadcast(mService, intent, BLUETOOTH_SCAN,
+                        getBroadcastOptionsForDiscoveryFinished());
             } else if (state == AbstractionLayer.BT_DISCOVERY_STARTED) {
                 mDiscovering = true;
                 mDiscoveryEndMs = System.currentTimeMillis() + DEFAULT_DISCOVERY_TIMEOUT_MS;
                 intent = new Intent(BluetoothAdapter.ACTION_DISCOVERY_STARTED);
-                mService.sendBroadcast(intent, BLUETOOTH_SCAN,
+                Utils.sendBroadcast(mService, intent, BLUETOOTH_SCAN,
                         Utils.getTempAllowlistBroadcastOptions());
             }
         }
+    }
+
+    /**
+     * @return broadcast options for ACTION_DISCOVERY_FINISHED broadcast
+     */
+    private static @NonNull Bundle getBroadcastOptionsForDiscoveryFinished() {
+        final BroadcastOptions options = Utils.getTempBroadcastOptions();
+        if (SdkLevel.isAtLeastU()) {
+            options.setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT);
+            options.setDeferUntilActive(true);
+        }
+        return options.toBundle();
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)

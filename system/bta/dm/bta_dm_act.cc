@@ -26,12 +26,16 @@
 #define LOG_TAG "bt_bta_dm"
 
 #include <base/logging.h>
+#ifdef OS_ANDROID
+#include <bta.sysprop.h>
+#endif
 
 #include <cstdint>
 
 #include "bta/dm/bta_dm_int.h"
 #include "bta/gatt/bta_gattc_int.h"
 #include "bta/include/bta_dm_ci.h"
+#include "bta_sdp_api.h"
 #include "btif/include/btif_config.h"
 #include "btif/include/btif_dm.h"
 #include "btif/include/btif_storage.h"
@@ -49,6 +53,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
+#include "sdp_api.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
@@ -60,8 +65,10 @@
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/btm_log_history.h"
 #include "stack/include/btu.h"       // do_in_main_thread
 #include "stack/include/srvc_api.h"  // DIS_ReadDISInfo
+#include "stack/sdp/sdpint.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -70,6 +77,10 @@
 #endif
 
 using bluetooth::Uuid;
+
+namespace {
+constexpr char kBtmLogTag[] = "SDP";
+}
 
 void BTIF_dm_disable();
 void BTIF_dm_enable();
@@ -82,7 +93,7 @@ static void bta_dm_inq_cmpl_cb(void* p_result);
 static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
                                                 DEV_CLASS dc,
                                                 tBTM_BD_NAME bd_name);
-static void bta_dm_remname_cback(void* p);
+static void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p);
 static void bta_dm_find_services(const RawAddress& bd_addr);
 static void bta_dm_discover_next_device(void);
 static void bta_dm_sdp_callback(tSDP_STATUS sdp_status);
@@ -164,16 +175,18 @@ static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result);
 #define PROPERTY_PAGE_TIMEOUT "bluetooth.core.classic.page_timeout"
 #endif
 
-namespace {
-
 // Time to wait after receiving shutdown request to delay the actual shutdown
 // process. This time may be zero which invokes immediate shutdown.
-#ifndef BTA_DISABLE_DELAY
-constexpr uint64_t kDisableDelayTimerInMs = 0;
+static uint64_t get_DisableDelayTimerInMs() {
+#ifndef OS_ANDROID
+  return 200;
 #else
-constexpr uint64_t kDisableDelayTimerInMs =
-    static_cast<uint64_t>(BTA_DISABLE_DELAY);
+  static const uint64_t kDisableDelayTimerInMs =
+      android::sysprop::bluetooth::Bta::disable_delay().value_or(200);
+  return kDisableDelayTimerInMs;
 #endif
+}
+namespace {
 
 struct WaitForAllAclConnectionsToDrain {
   uint64_t time_to_wait_in_ms;
@@ -276,8 +289,10 @@ void bta_dm_enable(tBTA_DM_SEC_CBACK* p_sec_cback) {
   btm_local_io_caps = btif_storage_get_local_io_caps();
 }
 
-void bta_dm_search_set_state(uint8_t state) { bta_dm_search_cb.state = state; }
-uint8_t bta_dm_search_get_state() { return bta_dm_search_cb.state; }
+void bta_dm_search_set_state(tBTA_DM_STATE state) {
+  bta_dm_search_cb.state = state;
+}
+tBTA_DM_STATE bta_dm_search_get_state() { return bta_dm_search_cb.state; }
 
 /*******************************************************************************
  *
@@ -461,15 +476,15 @@ void bta_dm_disable() {
 
   if (BTM_GetNumAclLinks() == 0) {
     // We can shut down faster if there are no ACL links
-    switch (kDisableDelayTimerInMs) {
+    switch (get_DisableDelayTimerInMs()) {
       case 0:
         LOG_DEBUG("Immediately disabling device manager");
         bta_dm_disable_conn_down_timer_cback(nullptr);
         break;
       default:
         LOG_DEBUG("Set timer to delay disable initiation:%lu ms",
-                  static_cast<unsigned long>(kDisableDelayTimerInMs));
-        alarm_set_on_mloop(bta_dm_cb.disable_timer, kDisableDelayTimerInMs,
+                  static_cast<unsigned long>(get_DisableDelayTimerInMs()));
+        alarm_set_on_mloop(bta_dm_cb.disable_timer, get_DisableDelayTimerInMs(),
                            bta_dm_disable_conn_down_timer_cback, nullptr);
     }
   } else {
@@ -1078,11 +1093,22 @@ void bta_dm_rmt_name(tBTA_DM_MSG* p_data) {
  *
  ******************************************************************************/
 void bta_dm_disc_rmt_name(tBTA_DM_MSG* p_data) {
-  tBTM_INQ_INFO* p_btm_inq_info;
+  CHECK(p_data != nullptr);
 
   APPL_TRACE_DEBUG("bta_dm_disc_rmt_name");
 
-  p_btm_inq_info = BTM_InqDbRead(p_data->rem_name.result.disc_res.bd_addr);
+  const tBTA_DM_DISC_RES* disc_res = &p_data->rem_name.result.disc_res;
+
+  BTM_LogHistory(
+      kBtmLogTag, disc_res->bd_addr, "Remote name completed",
+      base::StringPrintf(
+          "status:%s name:\"%s\" service:0x%x device_type:%s num_uuids:%zu",
+          bta_status_text(disc_res->result).c_str(), disc_res->bd_name,
+          disc_res->services, DeviceTypeText(disc_res->device_type).c_str(),
+          disc_res->num_uuids));
+
+  tBTM_INQ_INFO* p_btm_inq_info =
+      BTM_InqDbRead(p_data->rem_name.result.disc_res.bd_addr);
   if (p_btm_inq_info) {
     if (p_data->rem_name.result.disc_res.bd_name[0]) {
       p_btm_inq_info->appl_knows_rem_name = true;
@@ -1177,6 +1203,8 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
   tSDP_PROTOCOL_ELEM pe;
 
   std::vector<Uuid> uuid_list;
+
+  const tSDP_RESULT sdp_result = p_data->sdp_event.sdp_result;
 
   if ((p_data->sdp_event.sdp_result == SDP_SUCCESS) ||
       (p_data->sdp_event.sdp_result == SDP_NO_RECS_MATCH) ||
@@ -1312,6 +1340,13 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
             &bta_dm_service_search_remname_cback);
       }
 
+      BTM_LogHistory(
+          kBtmLogTag, bta_dm_search_cb.peer_bdaddr, "Discovery completed",
+          base::StringPrintf("Result:%s services_found:0x%x service_index:0x%d",
+                             sdp_result_text(sdp_result).c_str(),
+                             bta_dm_search_cb.services_found,
+                             bta_dm_search_cb.service_index));
+
       p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
       p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
       p_msg->disc_result.result.disc_res.result = BTA_SUCCESS;
@@ -1362,7 +1397,10 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
       bta_sys_sendmsg(p_msg);
     }
   } else {
-    /* conn failed. No need for timer */
+    BTM_LogHistory(
+        kBtmLogTag, bta_dm_search_cb.peer_bdaddr, "Discovery failed",
+        base::StringPrintf("Result:%s", sdp_result_text(sdp_result).c_str()));
+    LOG_ERROR("SDP connection failed %s", sdp_status_text(sdp_result).c_str());
     if (p_data->sdp_event.sdp_result == SDP_CONN_FAILED)
       bta_dm_search_cb.wait_disc = false;
 
@@ -1579,10 +1617,14 @@ void bta_dm_free_sdp_db() {
  *
  ******************************************************************************/
 void bta_dm_queue_search(tBTA_DM_MSG* p_data) {
+  if (bta_dm_search_cb.p_pending_search) {
+    LOG_WARN("Overwrote previous device discovery inquiry scan request");
+  }
   osi_free_and_reset((void**)&bta_dm_search_cb.p_pending_search);
   bta_dm_search_cb.p_pending_search =
       (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_API_SEARCH));
   memcpy(bta_dm_search_cb.p_pending_search, p_data, sizeof(tBTA_DM_API_SEARCH));
+  LOG_INFO("Queued device discovery inquiry scan request");
 }
 
 /*******************************************************************************
@@ -1745,6 +1787,12 @@ static void bta_dm_find_services(const RawAddress& bd_addr) {
         bta_dm_search_cb.service_index = BTA_MAX_SERVICE_ID;
 
       } else {
+        if (uuid == Uuid::From16Bit(UUID_PROTOCOL_L2CAP)) {
+          if (!is_sdp_pbap_pce_disabled(bd_addr)) {
+            LOG_DEBUG("SDP search for PBAP Client ");
+            BTA_SdpSearch(bd_addr, Uuid::From16Bit(UUID_SERVCLASS_PBAP_PCE));
+          }
+        }
         bta_dm_search_cb.service_index++;
         return;
       }
@@ -1861,10 +1909,16 @@ static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
     if (bta_dm_read_remote_device_name(bta_dm_search_cb.peer_bdaddr,
                                        transport)) {
       if (bta_dm_search_cb.state != BTA_DM_DISCOVER_ACTIVE) {
-        /* Reset transport state for next discovery */
+        LOG_DEBUG("Reset transport state for next discovery");
         bta_dm_search_cb.transport = BT_TRANSPORT_AUTO;
       }
+      BTM_LogHistory(kBtmLogTag, bta_dm_search_cb.peer_bdaddr,
+                     "Read remote name",
+                     base::StringPrintf("Transport:%s",
+                                        bt_transport_text(transport).c_str()));
       return;
+    } else {
+      LOG_ERROR("Unable to start read remote device name");
     }
 
     /* starting name discovery failed */
@@ -1876,6 +1930,10 @@ static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
 
   /* if application wants to discover service */
   if (bta_dm_search_cb.services) {
+    BTM_LogHistory(kBtmLogTag, remote_bd_addr, "Discovery started ",
+                   base::StringPrintf("Transport:%s",
+                                      bt_transport_text(transport).c_str()));
+
     /* initialize variables */
     bta_dm_search_cb.service_index = 0;
     bta_dm_search_cb.services_found = 0;
@@ -2089,7 +2147,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_remname_cback(void* p) {
+static void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p) {
   tBTM_REMOTE_DEV_NAME* p_remote_name = (tBTM_REMOTE_DEV_NAME*)p;
   APPL_TRACE_DEBUG("bta_dm_remname_cback len = %d name=<%s>",
                    p_remote_name->length, p_remote_name->remote_bd_name);
@@ -2154,7 +2212,7 @@ static void bta_dm_remname_cback(void* p) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_dm_pinname_cback(void* p_data) {
+static void bta_dm_pinname_cback(const tBTM_REMOTE_DEV_NAME* p_data) {
   tBTM_REMOTE_DEV_NAME* p_result = (tBTM_REMOTE_DEV_NAME*)p_data;
   tBTA_DM_SEC sec_event;
   uint32_t bytes_to_copy;
@@ -4333,13 +4391,14 @@ void bta_dm_set_event_filter_connection_setup_all_devices() {
  *
  * Description     Allow the device to be woken by HID devices
  *
- * Parameters      std::vector of (Address, Address Type)
+ * Parameters      std::vector of Classic Address and LE (Address, Address Type)
  *
  *******************************************************************************/
 void bta_dm_allow_wake_by_hid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
-  // Autoplumbed
-  bluetooth::shim::BTM_AllowWakeByHid(le_hid_devices);
+  bluetooth::shim::BTM_AllowWakeByHid(std::move(classic_hid_devices),
+                                      std::move(le_hid_devices));
 }
 
 /*******************************************************************************
@@ -4351,9 +4410,10 @@ void bta_dm_allow_wake_by_hid(
  * Parameters
  *
  *******************************************************************************/
-void bta_dm_restore_filter_accept_list() {
+void bta_dm_restore_filter_accept_list(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices) {
   // Autoplumbed
-  bluetooth::shim::BTM_RestoreFilterAcceptList();
+  bluetooth::shim::BTM_RestoreFilterAcceptList(le_devices);
 }
 
 /*******************************************************************************
@@ -4430,6 +4490,13 @@ static void bta_dm_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
     case BTA_GATTC_CLOSE_EVT:
       LOG_INFO("BTA_GATTC_CLOSE_EVT reason = %d", p_data->close.reason);
 
+      if (p_data->close.remote_bda == bta_dm_search_cb.peer_bdaddr) {
+        if (bluetooth::common::init_flags::
+                bta_dm_clear_conn_id_on_client_close_is_enabled()) {
+          bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
+        }
+      }
+
       /* in case of disconnect before search is completed */
       if ((bta_dm_search_cb.state != BTA_DM_SEARCH_IDLE) &&
           (bta_dm_search_cb.state != BTA_DM_SEARCH_ACTIVE) &&
@@ -4502,7 +4569,9 @@ tBTA_DM_PEER_DEVICE* allocate_device_for(const RawAddress& bd_addr,
   return ::allocate_device_for(bd_addr, transport);
 }
 
-void bta_dm_remname_cback(void* p) { ::bta_dm_remname_cback(p); }
+void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p) {
+  ::bta_dm_remname_cback(p);
+}
 
 }  // namespace testing
 }  // namespace legacy

@@ -410,6 +410,9 @@ class AudioContexts {
   bool operator==(const AudioContexts& other) const {
     return value() == other.value();
   };
+  bool operator!=(const AudioContexts& other) const {
+    return value() != other.value();
+  };
   constexpr AudioContexts operator~() const { return AudioContexts(~value()); }
 };
 
@@ -450,13 +453,31 @@ template <typename T>
 struct BidirectionalPair {
   T sink;
   T source;
+
+  T get(uint8_t direction) const {
+    if (direction ==
+        (types::kLeAudioDirectionSink | types::kLeAudioDirectionSource)) {
+      return get_bidirectional(*this);
+    } else if (direction == types::kLeAudioDirectionSink) {
+      return sink;
+    }
+    return source;
+  }
+  T& get_ref(uint8_t direction) {
+    return (direction == types::kLeAudioDirectionSink) ? sink : source;
+  }
+
+  BidirectionalPair<T>& operator=(const BidirectionalPair<T>&) = default;
+  bool operator==(const BidirectionalPair<T>& other) const {
+    return (sink == other.sink) && (source == other.source);
+  };
+  bool operator!=(const BidirectionalPair<T>& other) const {
+    return (sink != other.sink) || (source != other.source);
+  };
 };
 
 template <typename T>
 T get_bidirectional(BidirectionalPair<T> p);
-
-template <>
-AudioContexts get_bidirectional(BidirectionalPair<AudioContexts> p);
 
 /* Configuration strategy */
 enum class LeAudioConfigurationStrategy : uint8_t {
@@ -686,6 +707,7 @@ using AudioLocations = std::bitset<32>;
 std::ostream& operator<<(std::ostream& os, const AseState& state);
 std::ostream& operator<<(std::ostream& os, const CigState& state);
 std::ostream& operator<<(std::ostream& os, const LeAudioLc3Config& config);
+std::string contextTypeToStr(const LeAudioContextType& context);
 std::ostream& operator<<(std::ostream& os, const LeAudioContextType& context);
 std::ostream& operator<<(std::ostream& os,
                          const AudioStreamDataPathState& state);
@@ -711,13 +733,14 @@ struct CodecCapabilitySetting {
 };
 
 struct QosConfigSetting {
+  uint8_t target_latency;
   uint8_t retransmission_number;
   uint16_t max_transport_latency;
 };
 
 struct SetConfiguration {
   SetConfiguration(uint8_t direction, uint8_t device_cnt, uint8_t ase_cnt,
-                   uint8_t target_latency, CodecCapabilitySetting codec,
+                   CodecCapabilitySetting codec,
                    QosConfigSetting qos = {.retransmission_number = 0,
                                            .max_transport_latency = 0},
                    le_audio::types::LeAudioConfigurationStrategy strategy =
@@ -726,7 +749,6 @@ struct SetConfiguration {
       : direction(direction),
         device_cnt(device_cnt),
         ase_cnt(ase_cnt),
-        target_latency(target_latency),
         codec(codec),
         qos(qos),
         strategy(strategy) {}
@@ -734,7 +756,6 @@ struct SetConfiguration {
   uint8_t direction;  /* Direction of set */
   uint8_t device_cnt; /* How many devices must be in set */
   uint8_t ase_cnt;    /* How many ASE we need in configuration */
-  uint8_t target_latency;
   CodecCapabilitySetting codec;
   QosConfigSetting qos;
   types::LeAudioConfigurationStrategy strategy;

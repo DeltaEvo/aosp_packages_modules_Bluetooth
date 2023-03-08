@@ -26,6 +26,7 @@
 #include <future>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_set>
 
@@ -129,6 +130,9 @@ struct hash<ConnectAddressWithType> {
 }  // namespace std
 
 namespace {
+
+constexpr uint32_t kRunicBjarkan = 0x0016D2;
+constexpr uint32_t kRunicHagall = 0x0016BC;
 
 using HciHandle = uint16_t;
 using PageNumber = uint8_t;
@@ -744,6 +748,19 @@ class LeShimAclConnection
     return connection_->GetLocalAddress();
   }
 
+  std::optional<uint8_t> GetAdvertisingSetConnectedTo() {
+    return std::visit(
+        [](auto&& data) {
+          using T = std::decay_t<decltype(data)>;
+          if constexpr (std::is_same_v<T, hci::acl_manager::DataAsPeripheral>) {
+            return data.advertising_set_id;
+          } else {
+            return std::optional<uint8_t>{};
+          }
+        },
+        connection_->GetRoleSpecificData());
+  }
+
   void OnConnectionUpdate(hci::ErrorCode hci_status,
                           uint16_t connection_interval,
                           uint16_t connection_latency,
@@ -1121,6 +1138,10 @@ struct shim::legacy::Acl::impl {
     GetAclManager()->AddDeviceToFilterAcceptList(address_with_type);
   }
 
+  void SetSystemSuspendState(bool suspended) {
+    GetAclManager()->SetSystemSuspendState(suspended);
+  }
+
   void DumpConnectionHistory() const {
     std::vector<std::string> history =
         connection_history_.ReadElementsAsString();
@@ -1302,8 +1323,33 @@ void DumpsysRecord(int fd) {
 }
 #undef DUMPSYS_TAG
 
+#define DUMPSYS_TAG "shim::legacy::stack"
+void DumpsysNeighbor(int fd) {
+  LOG_DUMPSYS(fd, "Stack information %lc%lc", kRunicBjarkan, kRunicHagall);
+  if (btm_cb.neighbor.classic_inquiry.start_time_ms == 0) {
+    LOG_DUMPSYS(fd, "Classic inquiry:disabled");
+  } else {
+    LOG_DUMPSYS(fd, "Classic inquiry:enabled duration_s:%.3f results:%lu",
+                (timestamper_in_milliseconds.GetTimestamp() -
+                 btm_cb.neighbor.classic_inquiry.start_time_ms) /
+                    1000.0,
+                btm_cb.neighbor.classic_inquiry.results);
+  }
+  if (btm_cb.neighbor.le_scan.start_time_ms == 0) {
+    LOG_DUMPSYS(fd, "Le scan:disabled");
+  } else {
+    LOG_DUMPSYS(fd, "Le scan:enabled duration_s:%.3f results:%lu",
+                (timestamper_in_milliseconds.GetTimestamp() -
+                 btm_cb.neighbor.le_scan.start_time_ms) /
+                    1000.0,
+                btm_cb.neighbor.le_scan.results);
+  }
+}
+#undef DUMPSYS_TAG
+
 void shim::legacy::Acl::Dump(int fd) const {
   DumpsysRecord(fd);
+  DumpsysNeighbor(fd);
   DumpsysAcl(fd);
   DumpsysL2cap(fd);
   DumpsysBtm(fd);
@@ -1473,6 +1519,18 @@ bluetooth::hci::AddressWithType shim::legacy::Acl::GetConnectionLocalAddress(
   }
   LOG_WARN("address not found!");
   return address_with_type;
+}
+
+std::optional<uint8_t> shim::legacy::Acl::GetAdvertisingSetConnectedTo(
+    const RawAddress& remote_bda) {
+  auto remote_address = ToGdAddress(remote_bda);
+  for (auto& [handle, connection] : pimpl_->handle_to_le_connection_map_) {
+    if (connection->GetRemoteAddressWithType().GetAddress() == remote_address) {
+      return connection->GetAdvertisingSetConnectedTo();
+    }
+  }
+  LOG_WARN("address not found!");
+  return {};
 }
 
 void shim::legacy::Acl::OnLeLinkDisconnected(HciHandle handle,
@@ -1838,4 +1896,8 @@ void shim::legacy::Acl::AddDeviceToFilterAcceptList(
     const hci::AddressWithType& address_with_type) {
   handler_->CallOn(pimpl_.get(), &Acl::impl::AddDeviceToFilterAcceptList,
                    address_with_type);
+}
+
+void shim::legacy::Acl::SetSystemSuspendState(bool suspended) {
+  handler_->CallOn(pimpl_.get(), &Acl::impl::SetSystemSuspendState, suspended);
 }

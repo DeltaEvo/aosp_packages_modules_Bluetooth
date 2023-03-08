@@ -26,8 +26,6 @@
 #include <string>
 #include <vector>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -48,6 +46,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "stack/include/bt_hdr.h"
 #include "stack/include/l2c_api.h"
 #include "stack/l2cap/l2c_int.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -509,6 +508,22 @@ struct L2CA_isMediaChannel {
   };
 };
 extern struct L2CA_isMediaChannel L2CA_isMediaChannel;
+// Name: L2CA_LeCreditDefault
+// Params:
+// Returns: uint16_t
+struct L2CA_LeCreditDefault {
+  std::function<uint16_t()> body{[]() { return 0; }};
+  uint16_t operator()() { return body(); };
+};
+extern struct L2CA_LeCreditDefault L2CA_LeCreditDefault;
+// Name: L2CA_LeCreditThreshold
+// Params:
+// Returns: uint16_t
+struct L2CA_LeCreditThreshold {
+  std::function<uint16_t()> body{[]() { return 0; }};
+  uint16_t operator()() { return body(); };
+};
+extern struct L2CA_LeCreditThreshold L2CA_LeCreditThreshold;
 
 }  // namespace stack_l2cap_api
 }  // namespace mock

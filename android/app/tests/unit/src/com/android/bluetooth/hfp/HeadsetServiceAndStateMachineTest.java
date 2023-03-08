@@ -26,7 +26,7 @@ import static org.mockito.Mockito.*;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothAudioPolicy;
+import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
@@ -60,6 +60,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -67,6 +68,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.InOrder;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -180,8 +182,8 @@ public class HeadsetServiceAndStateMachineTest {
                 .getRemoteUuids(any(BluetoothDevice.class));
         doAnswer(invocation -> mBondedDevices.toArray(new BluetoothDevice[]{})).when(
                 mAdapterService).getBondedDevices();
-        doReturn(new BluetoothAudioPolicy.Builder().build()).when(mAdapterService)
-                .getAudioPolicy(any(BluetoothDevice.class));
+        doReturn(new BluetoothSinkAudioPolicy.Builder().build()).when(mAdapterService)
+                .getRequestedAudioPolicyAsSink(any(BluetoothDevice.class));
         // Mock system interface
         doNothing().when(mSystemInterface).stop();
         doReturn(mPhoneState).when(mSystemInterface).getHeadsetPhoneState();
@@ -664,6 +666,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertTrue(mHeadsetService.setActiveDevice(device));
         verify(mNativeInterface).setActiveDevice(device);
         Assert.assertEquals(device, mHeadsetService.getActiveDevice());
+        verify(mNativeInterface).sendBsir(eq(device), eq(true));
         // Start voice recognition
         startVoiceRecognitionFromHf(device);
     }
@@ -687,6 +690,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertTrue(mHeadsetService.setActiveDevice(device));
         verify(mNativeInterface).setActiveDevice(device);
         Assert.assertEquals(device, mHeadsetService.getActiveDevice());
+        verify(mNativeInterface).sendBsir(eq(device), eq(true));
         // Start voice recognition
         startVoiceRecognitionFromHf(device);
         // Stop voice recognition
@@ -721,6 +725,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertTrue(mHeadsetService.setActiveDevice(device));
         verify(mNativeInterface).setActiveDevice(device);
         Assert.assertEquals(device, mHeadsetService.getActiveDevice());
+        verify(mNativeInterface).sendBsir(eq(device), eq(true));
         // Start voice recognition
         HeadsetStackEvent startVrEvent =
                 new HeadsetStackEvent(HeadsetStackEvent.EVENT_TYPE_VR_STATE_CHANGED,
@@ -753,6 +758,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertTrue(mHeadsetService.setActiveDevice(device));
         verify(mNativeInterface).setActiveDevice(device);
         Assert.assertEquals(device, mHeadsetService.getActiveDevice());
+        verify(mNativeInterface).sendBsir(eq(device), eq(true));
         // Start voice recognition
         HeadsetStackEvent startVrEvent =
                 new HeadsetStackEvent(HeadsetStackEvent.EVENT_TYPE_VR_STATE_CHANGED,
@@ -785,6 +791,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertTrue(mHeadsetService.setActiveDevice(device));
         verify(mNativeInterface).setActiveDevice(device);
         Assert.assertEquals(device, mHeadsetService.getActiveDevice());
+        verify(mNativeInterface).sendBsir(eq(device), eq(true));
         // Start voice recognition
         startVoiceRecognitionFromAg();
     }
@@ -858,6 +865,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertTrue(mHeadsetService.setActiveDevice(device));
         verify(mNativeInterface).setActiveDevice(device);
         Assert.assertEquals(device, mHeadsetService.getActiveDevice());
+        verify(mNativeInterface).sendBsir(eq(device), eq(true));
         // Start voice recognition
         startVoiceRecognitionFromAg();
         // Stop voice recognition
@@ -906,8 +914,10 @@ public class HeadsetServiceAndStateMachineTest {
         connectTestDevice(deviceA);
         BluetoothDevice deviceB = TestUtils.getTestDevice(mAdapter, 1);
         connectTestDevice(deviceB);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceA, false);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceB, false);
+        InOrder inOrder = inOrder(mNativeInterface);
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(true));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceB), eq(false));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(false));
         // Set active device to device B
         Assert.assertTrue(mHeadsetService.setActiveDevice(deviceB));
         verify(mNativeInterface).setActiveDevice(deviceB);
@@ -958,8 +968,10 @@ public class HeadsetServiceAndStateMachineTest {
         connectTestDevice(deviceA);
         BluetoothDevice deviceB = TestUtils.getTestDevice(mAdapter, 1);
         connectTestDevice(deviceB);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceA, false);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceB, false);
+        InOrder inOrder = inOrder(mNativeInterface);
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(true));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceB), eq(false));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(false));
         // Set active device to device B
         Assert.assertTrue(mHeadsetService.setActiveDevice(deviceB));
         verify(mNativeInterface).setActiveDevice(deviceB);
@@ -1004,14 +1016,17 @@ public class HeadsetServiceAndStateMachineTest {
      * Reference: Section 4.25, Page 64/144 of HFP 1.7.1 specification
      */
     @Test
+    @Ignore("b/271351629")
     public void testVoiceRecognition_MultiAgInitiatedSuccess() {
         // Connect two devices
         BluetoothDevice deviceA = TestUtils.getTestDevice(mAdapter, 0);
         connectTestDevice(deviceA);
         BluetoothDevice deviceB = TestUtils.getTestDevice(mAdapter, 1);
         connectTestDevice(deviceB);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceA, false);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceB, false);
+        InOrder inOrder = inOrder(mNativeInterface);
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(true));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceB), eq(false));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(false));
         // Set active device to device B
         Assert.assertTrue(mHeadsetService.setActiveDevice(deviceB));
         verify(mNativeInterface).setActiveDevice(deviceB);
@@ -1043,14 +1058,17 @@ public class HeadsetServiceAndStateMachineTest {
      * Reference: Section 4.25, Page 64/144 of HFP 1.7.1 specification
      */
     @Test
+    @Ignore("b/271351629")
     public void testVoiceRecognition_MultiAgInitiatedDeviceNotActive() {
         // Connect two devices
         BluetoothDevice deviceA = TestUtils.getTestDevice(mAdapter, 0);
         connectTestDevice(deviceA);
         BluetoothDevice deviceB = TestUtils.getTestDevice(mAdapter, 1);
         connectTestDevice(deviceB);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceA, false);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).sendBsir(deviceB, false);
+        InOrder inOrder = inOrder(mNativeInterface);
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(true));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceB), eq(false));
+        inOrder.verify(mNativeInterface).sendBsir(eq(deviceA), eq(false));
         // Set active device to device B
         Assert.assertTrue(mHeadsetService.setActiveDevice(deviceB));
         verify(mNativeInterface).setActiveDevice(deviceB);

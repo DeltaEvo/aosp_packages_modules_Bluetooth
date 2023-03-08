@@ -343,8 +343,8 @@ typedef struct t_l2c_ccb {
   uint16_t max_rx_mtu;
   uint8_t fcr_cfg_tries;          /* Max number of negotiation attempts */
   bool peer_cfg_already_rejected; /* If mode rejected once, set to true */
-  bool out_cfg_fcr_present; /* true if cfg response shoulkd include fcr options
-                               */
+  bool out_cfg_fcr_present; /* true if cfg response should include fcr options
+                             */
 
   bool is_flushable; /* true if channel is flushable */
 
@@ -620,9 +620,6 @@ typedef struct {
   uint16_t num_lm_acl_bufs; /* # of ACL buffers on controller */
   uint16_t idle_timeout;    /* Idle timeout */
 
-  list_t* rcv_pending_q;       /* Recv pending queue */
-  alarm_t* receive_hold_timer; /* Timer entry for rcv hold */
-
   tL2C_LCB* p_cur_hcit_lcb;  /* Current HCI Transport buffer */
   uint16_t num_used_lcbs;    /* Number of active link control blocks */
 
@@ -706,7 +703,6 @@ extern void l2c_ccb_timer_timeout(void* data);
 extern void l2c_lcb_timer_timeout(void* data);
 extern void l2c_fcrb_ack_timer_timeout(void* data);
 extern uint8_t l2c_data_write(uint16_t cid, BT_HDR* p_data, uint16_t flag);
-extern void l2c_process_held_packets(bool timed_out);
 
 extern tL2C_LCB* l2cu_allocate_lcb(const RawAddress& p_bd_addr, bool is_bonding,
                                    tBT_TRANSPORT transport);
@@ -788,6 +784,7 @@ extern bool l2cu_initialize_fixed_ccb(tL2C_LCB* p_lcb, uint16_t fixed_cid);
 extern void l2cu_no_dynamic_ccbs(tL2C_LCB* p_lcb);
 extern void l2cu_process_fixed_chnl_resp(tL2C_LCB* p_lcb);
 extern bool l2cu_is_ccb_active(tL2C_CCB* p_ccb);
+extern uint16_t le_result_to_l2c_conn(uint16_t result);
 
 /* Functions provided for Broadcom Aware
  ***************************************

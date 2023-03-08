@@ -153,11 +153,11 @@ class TestSnoopLoggerModule : public SnoopLogger {
     return snoop_logger_socket_thread_.get();
   }
 
-  uint32_t GetL2capHeaderSize() {
+  static uint32_t GetL2capHeaderSize() {
     return L2CAP_HEADER_SIZE;
   }
 
-  size_t GetMaxFilteredSize() {
+  static size_t GetMaxFilteredSize() {
     return MAX_HCI_ACL_LEN - PACKET_TYPE_LENGTH;
   }
 };
@@ -169,13 +169,21 @@ class SnoopLoggerModuleTest : public Test {
 
  protected:
   void SetUp() override {
-    temp_dir_ = std::filesystem::temp_directory_path();
-    temp_snoop_log_ = temp_dir_ / "btsnoop_hci.log";
-    temp_snoop_log_last_ = temp_dir_ / "btsnoop_hci.log.last";
-    temp_snooz_log_ = temp_dir_ / "btsnooz_hci.log";
-    temp_snooz_log_last_ = temp_dir_ / "btsnooz_hci.log.last";
-    temp_snoop_log_filtered = temp_dir_ / "btsnoop_hci.log.filtered";
-    temp_snoop_log_filtered_last = temp_dir_ / "btsnoop_hci.log.filtered.last";
+    const testing::TestInfo* const test_info =
+        testing::UnitTest::GetInstance()->current_test_info();
+
+    LOG_DEBUG(
+        "Setup for test %s in test suite %s.\n", test_info->name(), test_info->test_suite_name());
+    const std::filesystem::path temp_dir_ = std::filesystem::temp_directory_path();
+
+    temp_snoop_log_ = temp_dir_ / (std::string(test_info->name()) + "_btsnoop_hci.log");
+    temp_snoop_log_last_ = temp_dir_ / (std::string(test_info->name()) + "_btsnoop_hci.log.last");
+    temp_snooz_log_ = temp_dir_ / (std::string(test_info->name()) + "_btsnooz_hci.log");
+    temp_snooz_log_last_ = temp_dir_ / (std::string(test_info->name()) + "_btsnooz_hci.log.last");
+    temp_snoop_log_filtered =
+        temp_dir_ / (std::string(test_info->name()) + "_btsnoop_hci.log.filtered");
+    temp_snoop_log_filtered_last =
+        temp_dir_ / (std::string(test_info->name()) + "_btsnoop_hci.log.filtered.last");
     builder_ = new flatbuffers::FlatBufferBuilder();
 
     DeleteSnoopLogFiles();
@@ -197,8 +205,23 @@ class SnoopLoggerModuleTest : public Test {
     fake_timerfd_reset();
     test_registry->StopAll();
     delete test_registry;
+
+    const testing::TestInfo* const test_info =
+        testing::UnitTest::GetInstance()->current_test_info();
+    LOG_DEBUG(
+        "TearDown for test %s in test suite %s.\n",
+        test_info->name(),
+        test_info->test_suite_name());
   }
 
+  std::filesystem::path temp_snoop_log_;
+  std::filesystem::path temp_snoop_log_last_;
+  std::filesystem::path temp_snooz_log_;
+  std::filesystem::path temp_snooz_log_last_;
+  std::filesystem::path temp_snoop_log_filtered;
+  std::filesystem::path temp_snoop_log_filtered_last;
+
+ private:
   void DeleteSnoopLogFiles() {
     if (std::filesystem::exists(temp_snoop_log_)) {
       ASSERT_TRUE(std::filesystem::remove(temp_snoop_log_));
@@ -219,14 +242,6 @@ class SnoopLoggerModuleTest : public Test {
       ASSERT_TRUE(std::filesystem::remove(temp_snooz_log_last_));
     }
   }
-
-  std::filesystem::path temp_dir_;
-  std::filesystem::path temp_snoop_log_;
-  std::filesystem::path temp_snoop_log_last_;
-  std::filesystem::path temp_snooz_log_;
-  std::filesystem::path temp_snooz_log_last_;
-  std::filesystem::path temp_snoop_log_filtered;
-  std::filesystem::path temp_snoop_log_filtered_last;
 };
 
 TEST_F(SnoopLoggerModuleTest, empty_snoop_log_test) {
@@ -420,6 +435,15 @@ TEST_F(SnoopLoggerModuleTest, snoop_log_persists) {
   ASSERT_TRUE(std::filesystem::exists(temp_snooz_log_));
 }
 
+void sync_handler(bluetooth::os::Handler* handler) {
+  std::promise<void> promise;
+  auto future = promise.get_future();
+  handler->Post(bluetooth::common::BindOnce(
+      &std::promise<void>::set_value, bluetooth::common::Unretained(&promise)));
+  auto future_status = future.wait_for(std::chrono::seconds(1));
+  ASSERT_EQ(future_status, std::future_status::ready);
+}
+
 TEST_F(SnoopLoggerModuleTest, delete_old_snooz_log_files) {
   // Actual test
   auto* snoop_logger = new TestSnoopLoggerModule(
@@ -438,9 +462,13 @@ TEST_F(SnoopLoggerModuleTest, delete_old_snooz_log_files) {
   handler->Post(bluetooth::common::BindOnce(fake_timerfd_advance, 10));
   ASSERT_TRUE(std::filesystem::exists(temp_snooz_log_));
   handler->Post(bluetooth::common::BindOnce(fake_timerfd_advance, 15));
+  sync_handler(handler);
   handler->Post(bluetooth::common::BindOnce(
       [](std::filesystem::path path) { ASSERT_FALSE(std::filesystem::exists(path)); }, temp_snooz_log_));
+  sync_handler(handler);
+
   test_registry->StopAll();
+  ASSERT_FALSE(std::filesystem::exists(temp_snooz_log_));
 }
 
 TEST_F(SnoopLoggerModuleTest, rotate_file_at_new_session_test) {
@@ -638,15 +666,11 @@ TEST_F(SnoopLoggerModuleTest, a2dp_packets_filtered_test) {
   uint16_t local_cid = 0x0001;
   uint16_t remote_cid = 0xa040;
 
-  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeA2dpPktsFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
   ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeA2dpPktsFiltered) !=
-       std::string::npos));
+      bluetooth::os::SetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileA2dpProperty, "true"));
+  auto filter_a2dp_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileA2dpProperty);
+  ASSERT_TRUE(filter_a2dp_property && filter_a2dp_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -669,6 +693,9 @@ TEST_F(SnoopLoggerModuleTest, a2dp_packets_filtered_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(
+      bluetooth::os::SetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileA2dpProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
   // Should filter packet
@@ -684,13 +711,11 @@ TEST_F(SnoopLoggerModuleTest, a2dp_packets_filtered_negative_test) {
   uint16_t local_cid = 0x0001;
   uint16_t remote_cid = 0xa040;
 
-  ASSERT_TRUE(bluetooth::os::SetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty, " "));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
   ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeA2dpPktsFiltered) ==
-       std::string::npos));
+      bluetooth::os::SetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileA2dpProperty, "true"));
+  auto filter_a2dp_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileA2dpProperty);
+  ASSERT_TRUE(filter_a2dp_property && filter_a2dp_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -714,6 +739,9 @@ TEST_F(SnoopLoggerModuleTest, a2dp_packets_filtered_negative_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(
+      bluetooth::os::SetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileA2dpProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
   // Should not filter
@@ -725,15 +753,11 @@ TEST_F(SnoopLoggerModuleTest, a2dp_packets_filtered_negative_test) {
 }
 
 TEST_F(SnoopLoggerModuleTest, headers_filtered_test) {
-  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeHeadersFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
   ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeHeadersFiltered) !=
-       std::string::npos));
+      bluetooth::os::SetSystemProperty(SnoopLogger::kBtSnoopLogFilterHeadersProperty, "true"));
+  auto filter_headers_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterHeadersProperty);
+  ASSERT_TRUE(filter_headers_property && filter_headers_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -757,6 +781,9 @@ TEST_F(SnoopLoggerModuleTest, headers_filtered_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(
+      bluetooth::os::SetSystemProperty(SnoopLogger::kBtSnoopLogFilterHeadersProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
   LOG_INFO(
@@ -764,10 +791,11 @@ TEST_F(SnoopLoggerModuleTest, headers_filtered_test) {
       (int)(sizeof(SnoopLoggerCommon::FileHeaderType) + sizeof(SnoopLogger::PacketHeaderType)));
 
   // Packet should be filtered
-  ASSERT_EQ(
-      std::filesystem::file_size(temp_snoop_log_filtered),
-      sizeof(SnoopLoggerCommon::FileHeaderType) + sizeof(SnoopLogger::PacketHeaderType) +
-          snoop_logger->GetMaxFilteredSize());
+  const size_t file_size = (size_t)std::filesystem::file_size(temp_snoop_log_filtered);
+  const size_t expected_file_size = sizeof(SnoopLoggerCommon::FileHeaderType) +
+                                    sizeof(SnoopLogger::PacketHeaderType) +
+                                    TestSnoopLoggerModule::GetMaxFilteredSize();
+  ASSERT_EQ(file_size, expected_file_size);
   ASSERT_TRUE(std::filesystem::remove(temp_snoop_log_filtered));
 }
 
@@ -778,14 +806,11 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_sabme_ua_test) {
   uint16_t remote_cid = 0x3040;
 
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered) !=
-       std::string::npos));
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "true"));
+  auto filter_rfcomm_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty);
+  ASSERT_TRUE(filter_rfcomm_property);
+  ASSERT_TRUE(filter_rfcomm_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -817,6 +842,9 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_sabme_ua_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -837,14 +865,11 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_acceptlisted_dlci_test) {
   uint8_t dlci_byte = dlci << 2;
 
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered) !=
-       std::string::npos));
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "true"));
+  auto filter_rfcomm_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty);
+  ASSERT_TRUE(filter_rfcomm_property);
+  ASSERT_TRUE(filter_rfcomm_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -873,6 +898,9 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_acceptlisted_dlci_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -893,14 +921,11 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_not_acceptlisted_dlci_test
   uint8_t dlci_byte = dlci << 2;
 
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered) !=
-       std::string::npos));
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "true"));
+  auto filter_rfcomm_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty);
+  ASSERT_TRUE(filter_rfcomm_property);
+  ASSERT_TRUE(filter_rfcomm_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -929,6 +954,9 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_not_acceptlisted_dlci_test
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -936,7 +964,7 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_not_acceptlisted_dlci_test
   ASSERT_EQ(
       std::filesystem::file_size(temp_snoop_log_filtered),
       sizeof(SnoopLoggerCommon::FileHeaderType) + sizeof(SnoopLogger::PacketHeaderType) +
-          snoop_logger->GetL2capHeaderSize());
+          TestSnoopLoggerModule::GetL2capHeaderSize());
   ASSERT_TRUE(std::filesystem::remove(temp_snoop_log_filtered));
 }
 
@@ -947,14 +975,11 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_not_acceptlisted_l2cap_cha
   uint16_t remote_cid = 0x3040;
 
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered) !=
-       std::string::npos));
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "true"));
+  auto filter_rfcomm_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty);
+  ASSERT_TRUE(filter_rfcomm_property);
+  ASSERT_TRUE(filter_rfcomm_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -980,6 +1005,9 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_not_acceptlisted_l2cap_cha
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -987,7 +1015,7 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_not_acceptlisted_l2cap_cha
   ASSERT_EQ(
       std::filesystem::file_size(temp_snoop_log_filtered),
       sizeof(SnoopLoggerCommon::FileHeaderType) + sizeof(SnoopLogger::PacketHeaderType) +
-          snoop_logger->GetL2capHeaderSize());
+          TestSnoopLoggerModule::GetL2capHeaderSize());
   ASSERT_TRUE(std::filesystem::remove(temp_snoop_log_filtered));
 }
 
@@ -998,14 +1026,11 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_acceptlisted_l2cap_channel
   uint16_t remote_cid = 0x3040;
 
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeRfcommChannelFiltered) !=
-       std::string::npos));
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "true"));
+  auto filter_rfcomm_property =
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty);
+  ASSERT_TRUE(filter_rfcomm_property);
+  ASSERT_TRUE(filter_rfcomm_property.value() == "true");
 
   auto* snoop_logger = new TestSnoopLoggerModule(
       temp_snoop_log_.string(),
@@ -1033,6 +1058,9 @@ TEST_F(SnoopLoggerModuleTest, rfcomm_channel_filtered_acceptlisted_l2cap_channel
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileRfcommProperty, "false"));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -1057,31 +1085,21 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_hfp_hf_test) {
   const std::string clcc_pattern = "\x0d\x0a+CLCC:";
   const uint16_t HEADER_SIZE = 12;
 
-  // Set SnoopLogger filter type
-  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered) !=
-       std::string::npos));
   // Set pbap and map filtering modes
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeMagic));
   auto filterPbapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty);
   ASSERT_TRUE(
       filterPbapModeProperty &&
       (filterPbapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeMagic) !=
        std::string::npos));
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeMagic));
   auto filterMapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty);
   ASSERT_TRUE(
       filterMapModeProperty &&
       (filterMapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeMagic) !=
@@ -1117,6 +1135,13 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_hfp_hf_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -1142,31 +1167,21 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_pbap_magic_test) {
   const std::string magic_string = "PROHIBITED";
   const uint16_t HEADER_SIZE = 8;
 
-  // Set SnoopLogger filter type
-  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered) !=
-       std::string::npos));
   // Set pbap and map filtering modes
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeMagic));
   auto filterPbapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty);
   ASSERT_TRUE(
       filterPbapModeProperty &&
       (filterPbapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeMagic) !=
        std::string::npos));
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeMagic));
   auto filterMapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty);
   ASSERT_TRUE(
       filterMapModeProperty &&
       (filterMapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeMagic) !=
@@ -1198,6 +1213,13 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_pbap_magic_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -1224,31 +1246,21 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_pbap_header_test) {
   bool flow = true;
   const uint16_t HEADER_SIZE = 8;
 
-  // Set SnoopLogger filter type
-  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered) !=
-       std::string::npos));
   // Set pbap and map filtering modes
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeHeader));
   auto filterPbapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty);
   ASSERT_TRUE(
       filterPbapModeProperty &&
       (filterPbapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeHeader) !=
        std::string::npos));
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeHeader));
   auto filterMapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty);
   ASSERT_TRUE(
       filterMapModeProperty &&
       (filterMapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeHeader) !=
@@ -1280,6 +1292,13 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_pbap_header_test) {
 
   test_registry.StopAll();
 
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
+
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
@@ -1304,31 +1323,21 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_pbap_fullfilter_test) {
   uint16_t profile_uuid_pbap = PROFILE_UUID_PBAP;
   bool flow = true;
 
-  // Set SnoopLogger filter type
-  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterTypesProperty,
-      SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered));
-  auto filterTypesProperties =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterTypesProperty);
-  ASSERT_TRUE(
-      filterTypesProperties &&
-      (filterTypesProperties->find(SnoopLogger::kBtSnoopLogFilterTypeProfilesFiltered) !=
-       std::string::npos));
   // Set pbap and map filtering modes
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeFullfillter));
   auto filterPbapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesPbapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty);
   ASSERT_TRUE(
       filterPbapModeProperty &&
       (filterPbapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeFullfillter) !=
        std::string::npos));
   ASSERT_TRUE(bluetooth::os::SetSystemProperty(
-      SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
       SnoopLogger::kBtSnoopLogFilterProfileModeFullfillter));
   auto filterMapModeProperty =
-      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfilesMapModeProperty);
+      bluetooth::os::GetSystemProperty(SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty);
   ASSERT_TRUE(
       filterMapModeProperty &&
       (filterMapModeProperty->find(SnoopLogger::kBtSnoopLogFilterProfileModeFullfillter) !=
@@ -1359,6 +1368,13 @@ TEST_F(SnoopLoggerModuleTest, profiles_filtered_pbap_fullfilter_test) {
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
 
   test_registry.StopAll();
+
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfileMapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
+  ASSERT_TRUE(bluetooth::os::SetSystemProperty(
+      SnoopLogger::kBtSnoopLogFilterProfilePbapModeProperty,
+      SnoopLogger::kBtSnoopLogFilterProfileModeDisabled));
 
   // Verify states after test
   ASSERT_TRUE(std::filesystem::exists(temp_snoop_log_filtered));
@@ -1399,6 +1415,7 @@ TEST_F(SnoopLoggerModuleTest, socket_disabled_connect_fail_test) {
   ASSERT_TRUE(ret != 0);
 
   test_registry->StopAll();
+  close(socket_fd);
 }
 
 TEST_F(SnoopLoggerModuleTest, default_socket_enabled_capture_recv_test) {
@@ -1448,6 +1465,7 @@ TEST_F(SnoopLoggerModuleTest, default_socket_enabled_capture_recv_test) {
   ASSERT_TRUE(std::memcmp(recv_buf3, kHfpAtNrec0.data(), kHfpAtNrec0.size()) == 0);
 
   test_registry->StopAll();
+  close(socket_fd);
 }
 
 TEST_F(SnoopLoggerModuleTest, custom_socket_register_enabled_capture_recv_test) {
@@ -1507,6 +1525,7 @@ TEST_F(SnoopLoggerModuleTest, custom_socket_register_enabled_capture_recv_test) 
   ASSERT_TRUE(std::memcmp(recv_buf3, kHfpAtNrec0.data(), kHfpAtNrec0.size()) == 0);
 
   test_registry->StopAll();
+  close(socket_fd);
 }
 
 TEST_F(SnoopLoggerModuleTest, custom_socket_interface_register_logging_disabled_test) {

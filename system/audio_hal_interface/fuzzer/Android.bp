@@ -37,7 +37,7 @@ cc_defaults {
         "libstatslog",
         "libbinder_ndk",
         "libstatssocket",
-        "android.hardware.bluetooth.audio-V2-ndk",
+        "android.hardware.bluetooth.audio-V3-ndk",
         "android.hardware.bluetooth@1.0",
         "android.hardware.bluetooth@1.1",
         "android.hardware.bluetooth.a2dp@1.0",
@@ -102,7 +102,8 @@ cc_defaults {
         "packages/modules/Bluetooth/system/bta/include",
     ],
     cflags: [
-        "-DHAS_NO_BDROID_BUILDCFG",
+        // http://b/264549607
+        "-Wno-deprecated-builtins",
     ],
     fuzz_config: {
         cc: ["android-bluetooth-security@google.com"],

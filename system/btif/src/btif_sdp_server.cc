@@ -42,9 +42,9 @@
 #include "btif_sock_util.h"
 #include "btif_util.h"
 #include "osi/include/allocator.h"
+#include "stack/sdp/sdpint.h"
 #include "types/bluetooth/uuid.h"
 #include "utl.h"
-
 // Protects the sdp_slots array from concurrent access.
 static std::recursive_mutex sdp_lock;
 
@@ -287,6 +287,10 @@ bt_status_t create_sdp_record(bluetooth_sdp_record* record,
 bt_status_t remove_sdp_record(int record_id) {
   int handle;
 
+  if (record_id >= MAX_SDP_SLOTS) {
+    return BT_STATUS_PARM_INVALID;
+  }
+
   bluetooth_sdp_record* record;
   bluetooth_sdp_types sdp_type = SDP_TYPE_RAW;
   {
@@ -349,9 +353,9 @@ void on_create_record_event(int id) {
   BTIF_TRACE_DEBUG("Sdp Server %s", __func__);
   const sdp_slot_t* sdp_slot = start_create_sdp(id);
   tBTA_SERVICE_ID service_id = -1;
+  bluetooth_sdp_record* record;
   /* In the case we are shutting down, sdp_slot is NULL */
-  if (sdp_slot != NULL) {
-    bluetooth_sdp_record* record = sdp_slot->record_data;
+  if (sdp_slot != nullptr && (record = sdp_slot->record_data) != nullptr) {
     int handle = -1;
     switch (record->hdr.type) {
       case SDP_TYPE_MAP_MAS:
@@ -619,6 +623,12 @@ static int add_pbaps_sdp(const bluetooth_sdp_pse_record* rec) {
   uint8_t temp[4];
   uint8_t* p_temp = temp;
 
+  APPL_TRACE_DEBUG("%s(): scn 0x%02x, psm = 0x%04x\n  service name %s",
+                   __func__, rec->hdr.rfcomm_channel_number, rec->hdr.l2cap_psm,
+                   rec->hdr.service_name);
+
+  APPL_TRACE_DEBUG("  supported_repositories: 0x%08x, feature_bits: 0x%08x",
+                   rec->supported_repositories, rec->supported_features);
   sdp_handle = SDP_CreateRecord();
   if (sdp_handle == 0) {
     LOG_ERROR("Unable to register PBAP Server Service");
@@ -644,27 +654,47 @@ static int add_pbaps_sdp(const bluetooth_sdp_pse_record* rec) {
                              (uint8_t)TEXT_STR_DESC_TYPE,
                              (uint32_t)(rec->hdr.service_name_length + 1),
                              (uint8_t*)rec->hdr.service_name);
+  if (bluetooth::common::init_flags::
+          pbap_pse_dynamic_version_upgrade_is_enabled()) {
+    /*
+    PBAP 1.1.1  repositories bits
+    Bit 0 = Local Phonebook
+    Bit 1 = SIM card
+    Bit 2~7 reserved for future use */
+    uint8_t supported_repositories_1_1_mask = 0x03;
+    uint8_t supported_repositories_1_1 =
+        ((uint8_t)rec->supported_repositories) &
+        supported_repositories_1_1_mask;
+    status &= SDP_AddProfileDescriptorList(sdp_handle,
+                                           UUID_SERVCLASS_PHONE_ACCESS, 0x0101);
 
-  /* Add in the Bluetooth Profile Descriptor List */
-  status &= SDP_AddProfileDescriptorList(
-      sdp_handle, UUID_SERVCLASS_PHONE_ACCESS, rec->hdr.profile_version);
+    /* Add supported repositories 1 byte */
+    status &= SDP_AddAttribute(sdp_handle, ATTR_ID_SUPPORTED_REPOSITORIES,
+                               UINT_DESC_TYPE, (uint32_t)1,
+                               (uint8_t*)&supported_repositories_1_1);
+    APPL_TRACE_DEBUG(" supported_repositories_1_1: 0x%x",
+                     supported_repositories_1_1);
+  } else {
+    /* Add in the Bluetooth Profile Descriptor List */
+    status &= SDP_AddProfileDescriptorList(
+        sdp_handle, UUID_SERVCLASS_PHONE_ACCESS, rec->hdr.profile_version);
 
-  /* Add supported repositories 1 byte */
-  status &= SDP_AddAttribute(sdp_handle, ATTR_ID_SUPPORTED_REPOSITORIES,
-                             UINT_DESC_TYPE, (uint32_t)1,
-                             (uint8_t*)&rec->supported_repositories);
+    /* Add supported repositories 1 byte */
+    status &= SDP_AddAttribute(sdp_handle, ATTR_ID_SUPPORTED_REPOSITORIES,
+                               UINT_DESC_TYPE, (uint32_t)1,
+                               (uint8_t*)&rec->supported_repositories);
+    /* Add supported feature 4 bytes*/
+    UINT32_TO_BE_STREAM(p_temp, rec->supported_features);
+    status &= SDP_AddAttribute(sdp_handle, ATTR_ID_PBAP_SUPPORTED_FEATURES,
+                               UINT_DESC_TYPE, (uint32_t)4, temp);
 
-  /* Add supported feature 4 bytes*/
-  UINT32_TO_BE_STREAM(p_temp, rec->supported_features);
-  status &= SDP_AddAttribute(sdp_handle, ATTR_ID_PBAP_SUPPORTED_FEATURES,
-                             UINT_DESC_TYPE, (uint32_t)4, temp);
-
-  /* Add the L2CAP PSM if present */
-  if (rec->hdr.l2cap_psm != -1) {
-    p_temp = temp;  // The macro modifies p_temp, hence rewind.
-    UINT16_TO_BE_STREAM(p_temp, rec->hdr.l2cap_psm);
-    status &= SDP_AddAttribute(sdp_handle, ATTR_ID_GOEP_L2CAP_PSM,
-                               UINT_DESC_TYPE, (uint32_t)2, temp);
+    /* Add the L2CAP PSM if present */
+    if (rec->hdr.l2cap_psm != -1) {
+      p_temp = temp;  // The macro modifies p_temp, hence rewind.
+      UINT16_TO_BE_STREAM(p_temp, rec->hdr.l2cap_psm);
+      status &= SDP_AddAttribute(sdp_handle, ATTR_ID_GOEP_L2CAP_PSM,
+                                 UINT_DESC_TYPE, (uint32_t)2, temp);
+    }
   }
 
   /* Make the service browseable */

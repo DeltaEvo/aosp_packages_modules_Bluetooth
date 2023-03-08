@@ -1245,9 +1245,7 @@ void bta_av_str_opened(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
         .sep = AVDT_TSEP_INVALID,
     };
 
-    if (p_scb) {
-      L2CA_SetMediaStreamChannel(p_scb->l2c_cid, true);
-    }
+    L2CA_SetMediaStreamChannel(p_scb->l2c_cid, true);
 
     p = BTM_ReadRemoteFeatures(p_scb->PeerAddress());
     if (p != NULL) {
@@ -2479,9 +2477,7 @@ void bta_av_str_closed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
     BTM_default_unblock_role_switch();
   }
 
-  if (p_scb) {
-    L2CA_SetMediaStreamChannel(p_scb->l2c_cid, false);
-  }
+  L2CA_SetMediaStreamChannel(p_scb->l2c_cid, false);
 
   if (p_scb->open_status != BTA_AV_SUCCESS) {
     /* must be failure when opening the stream */
@@ -2742,12 +2738,14 @@ void bta_av_rcfg_discntd(tBTA_AV_SCB* p_scb, UNUSED_ATTR tBTA_AV_DATA* p_data) {
   p_scb->num_recfg++;
   if (p_scb->num_recfg > BTA_AV_RECONFIG_RETRY) {
     /* report failure */
-    tBTA_AV_RECONFIG reconfig;
-    reconfig.status = BTA_AV_FAIL_STREAM;
-    reconfig.chnl = p_scb->chnl;
-    reconfig.hndl = p_scb->hndl;
-    tBTA_AV bta_av_data;
-    bta_av_data.reconfig = reconfig;
+    tBTA_AV bta_av_data = {
+        .reconfig =
+            {
+                .chnl = p_scb->chnl,
+                .hndl = p_scb->hndl,
+                .status = BTA_AV_FAIL_STREAM,
+            },
+    };
     (*bta_av_cb.p_cback)(BTA_AV_RECONFIG_EVT, &bta_av_data);
     /* report close event & go to init state */
     bta_av_ssm_execute(p_scb, BTA_AV_STR_DISC_FAIL_EVT, NULL);

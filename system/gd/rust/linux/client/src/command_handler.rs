@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::slice::SliceIndex;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::bt_adv::AdvSet;
 use crate::bt_gatt::AuthReq;
@@ -13,6 +14,7 @@ use bt_topshim::profiles::hid_host::BthhReportType;
 use bt_topshim::profiles::{gatt::LePhy, ProfileConnectionState};
 use btstack::bluetooth::{BluetoothDevice, IBluetooth, IBluetoothQA};
 use btstack::bluetooth_gatt::{GattWriteType, IBluetoothGatt, ScanSettings, ScanType};
+use btstack::bluetooth_media::IBluetoothTelephony;
 use btstack::socket_manager::{IBluetoothSocketManager, SocketResult};
 use btstack::uuid::{Profile, UuidHelper, UuidWrapper};
 use manager_service::iface_bluetooth_manager::IBluetoothManager;
@@ -63,6 +65,21 @@ pub struct CommandOption {
 pub(crate) struct CommandHandler {
     context: Arc<Mutex<ClientContext>>,
     command_options: HashMap<String, CommandOption>,
+}
+
+/// Define what to do when a socket connects. Mainly for qualification purposes.
+/// Specifically, after a socket is connected/accepted, we will do
+/// (1) send a chunk of data every |send_interval| time until |num_frame| chunks has been sent.
+/// (2) wait another |disconnect_delay| time. any incoming data will be dumpted during this time.
+/// (3) disconnect the socket.
+#[derive(Copy, Clone)]
+pub struct SocketSchedule {
+    /// Number of times to send data
+    pub num_frame: u32,
+    /// Time interval between each sending
+    pub send_interval: Duration,
+    /// Extra time after the last sending. Any incoming data will be printed during this time.
+    pub disconnect_delay: Duration,
 }
 
 struct DisplayList<T>(Vec<T>);
@@ -171,6 +188,7 @@ fn build_commands() -> HashMap<String, CommandOption> {
                     "gatt write-characteristic <address> <handle> <NoRsp|Write|Prepare> <value>",
                 ),
                 String::from("gatt read-characteristic <address> <handle>"),
+                String::from("gatt register-notification <address> <handle> <enable|disable>"),
                 String::from("gatt register-server"),
             ],
             description: String::from("GATT tools"),
@@ -208,8 +226,10 @@ fn build_commands() -> HashMap<String, CommandOption> {
         String::from("socket"),
         CommandOption {
             rules: vec![
-                String::from("socket test"),
-                String::from("socket connect <addr> <l2cap|rfcomm> <psm|uuid>"),
+                String::from("socket listen <auth-required>"),
+                String::from("socket connect <address> <l2cap|rfcomm> <psm|uuid> <auth-required>"),
+                String::from("socket disconnect <socket_id>"),
+                String::from("socket set-on-connect-schedule <send|resend|dump>"),
             ],
             description: String::from("Socket manager utilities."),
             function_pointer: CommandHandler::cmd_socket,
@@ -251,6 +271,27 @@ fn build_commands() -> HashMap<String, CommandOption> {
                 "List bonded or found remote devices. Use: list <bonded|found>",
             ),
             function_pointer: CommandHandler::cmd_list_devices,
+        },
+    );
+    command_options.insert(
+        String::from("telephony"),
+        CommandOption {
+            rules: vec![
+                String::from("telephony set-network <on|off>"),
+                String::from("telephony set-roaming <on|off>"),
+                String::from("telephony set-signal <strength>"),
+                String::from("telephony set-battery <level>"),
+                String::from("telephony <enable|disable>"),
+                String::from("telephony <incoming-call|dialing-call> <number>"),
+                String::from("telephony <answer-call|hangup-call>"),
+                String::from("telephony <set-memory-call|set-last-call> [<number>]"),
+                String::from(
+                    "telephony <release-held|release-active-accept-held|hold-active-accept-held>",
+                ),
+                String::from("telephony <audio-connect|audio-disconnect> <address>"),
+            ],
+            description: String::from("Set device telephony status."),
+            function_pointer: CommandHandler::cmd_telephony,
         },
     );
     command_options.insert(
@@ -754,12 +795,10 @@ impl CommandHandler {
                     name: String::from(""),
                 };
                 let pin = get_arg(args, 2)?;
-                let (accept, pin) = match (&pin[..], String::from(pin).parse::<u32>()) {
-                    (_, Ok(p)) => (true, Vec::from(p.to_ne_bytes())),
+
+                let (accept, pin) = match (&pin[..], pin) {
                     ("reject", _) => (false, vec![]),
-                    _ => {
-                        return Err(format!("Failed to parse '{}'", pin).into());
-                    }
+                    (_, p) => (true, p.as_bytes().iter().cloned().collect::<Vec<u8>>()),
                 };
 
                 self.lock_context().adapter_dbus.as_mut().unwrap().set_pin(
@@ -1013,6 +1052,31 @@ impl CommandHandler {
                     .unwrap()
                     .read_characteristic(client_id, addr, handle, auth_req);
             }
+            "register-notification" => {
+                let addr = String::from(get_arg(args, 1)?);
+                let handle = String::from(get_arg(args, 2)?)
+                    .parse::<i32>()
+                    .or(Err("Failed to parse handle"))?;
+                let enable = match &get_arg(args, 3)?[..] {
+                    "enable" => true,
+                    "disable" => false,
+                    _ => {
+                        return Err("Failed to parse enable".into());
+                    }
+                };
+
+                let client_id = self
+                    .lock_context()
+                    .gatt_client_context
+                    .client_id
+                    .ok_or("GATT client is not yet registered.")?;
+
+                self.lock_context()
+                    .gatt_dbus
+                    .as_ref()
+                    .unwrap()
+                    .register_for_notification(client_id, addr, handle, enable);
+            }
             "register-server" => {
                 let dbus_connection = self.lock_context().dbus_connection.clone();
                 let dbus_crossroads = self.lock_context().dbus_crossroads.clone();
@@ -1252,13 +1316,44 @@ impl CommandHandler {
         let command = get_arg(args, 0)?;
 
         match &command[..] {
-            "test" => {
-                let SocketResult { status, id } = self
-                    .lock_context()
-                    .socket_manager_dbus
-                    .as_mut()
-                    .unwrap()
-                    .listen_using_l2cap_channel(callback_id);
+            "set-on-connect-schedule" => {
+                let schedule = match &get_arg(args, 1)?[..] {
+                    "send" => SocketSchedule {
+                        num_frame: 1,
+                        send_interval: Duration::from_millis(0),
+                        disconnect_delay: Duration::from_secs(30),
+                    },
+                    "resend" => SocketSchedule {
+                        num_frame: 3,
+                        send_interval: Duration::from_millis(100),
+                        disconnect_delay: Duration::from_secs(30),
+                    },
+                    "dump" => SocketSchedule {
+                        num_frame: 0,
+                        send_interval: Duration::from_millis(0),
+                        disconnect_delay: Duration::from_secs(30),
+                    },
+                    _ => {
+                        return Err("Failed to parse schedule".into());
+                    }
+                };
+
+                self.context.lock().unwrap().socket_test_schedule = Some(schedule);
+            }
+            "listen" => {
+                let auth_required = String::from(get_arg(args, 1)?)
+                    .parse::<bool>()
+                    .or(Err("Failed to parse auth-required"))?;
+
+                let SocketResult { status, id } = {
+                    let mut context_proxy = self.context.lock().unwrap();
+                    let proxy = context_proxy.socket_manager_dbus.as_mut().unwrap();
+                    if auth_required {
+                        proxy.listen_using_l2cap_channel(callback_id)
+                    } else {
+                        proxy.listen_using_insecure_l2cap_channel(callback_id)
+                    }
+                };
 
                 if status != BtStatus::Success {
                     return Err(format!(
@@ -1277,49 +1372,62 @@ impl CommandHandler {
                     name: String::from("Socket Connect Device"),
                 };
 
-                let SocketResult { status, id } = match &sock_type[0..] {
-                    "l2cap" => {
-                        let psm = match psm_or_uuid.clone().parse::<i32>() {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return Err(CommandError::Failed(format!(
-                                    "Bad PSM given. Error={}",
-                                    e
-                                )));
-                            }
-                        };
+                let auth_required = String::from(get_arg(args, 4)?)
+                    .parse::<bool>()
+                    .or(Err("Failed to parse auth-required"))?;
 
-                        self.lock_context()
-                            .socket_manager_dbus
-                            .as_mut()
-                            .unwrap()
-                            .create_insecure_l2cap_channel(callback_id, device, psm)
-                    }
-                    "rfcomm" => {
-                        let uuid = match UuidHelper::parse_string(psm_or_uuid.clone()) {
-                            Some(uu) => uu,
-                            None => {
-                                return Err(CommandError::Failed(format!(
-                                    "Could not parse given uuid."
-                                )));
-                            }
-                        };
+                let SocketResult { status, id } = {
+                    let mut context_proxy = self.context.lock().unwrap();
+                    let proxy = context_proxy.socket_manager_dbus.as_mut().unwrap();
 
-                        self.lock_context()
-                            .socket_manager_dbus
-                            .as_mut()
-                            .unwrap()
-                            .create_insecure_rfcomm_socket_to_service_record(
-                                callback_id,
-                                device,
-                                uuid,
-                            )
-                    }
-                    _ => {
-                        return Err(CommandError::Failed(format!(
-                            "Unknown socket type: {}",
-                            sock_type
-                        )));
+                    match &sock_type[0..] {
+                        "l2cap" => {
+                            let psm = match psm_or_uuid.clone().parse::<i32>() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    return Err(CommandError::Failed(format!(
+                                        "Bad PSM given. Error={}",
+                                        e
+                                    )));
+                                }
+                            };
+
+                            if auth_required {
+                                proxy.create_l2cap_channel(callback_id, device, psm)
+                            } else {
+                                proxy.create_insecure_l2cap_channel(callback_id, device, psm)
+                            }
+                        }
+                        "rfcomm" => {
+                            let uuid = match UuidHelper::parse_string(psm_or_uuid.clone()) {
+                                Some(uu) => uu,
+                                None => {
+                                    return Err(CommandError::Failed(format!(
+                                        "Could not parse given uuid."
+                                    )));
+                                }
+                            };
+
+                            if auth_required {
+                                proxy.create_rfcomm_socket_to_service_record(
+                                    callback_id,
+                                    device,
+                                    uuid,
+                                )
+                            } else {
+                                proxy.create_insecure_rfcomm_socket_to_service_record(
+                                    callback_id,
+                                    device,
+                                    uuid,
+                                )
+                            }
+                        }
+                        _ => {
+                            return Err(CommandError::Failed(format!(
+                                "Unknown socket type: {}",
+                                sock_type
+                            )));
+                        }
                     }
                 };
 
@@ -1436,6 +1544,207 @@ impl CommandHandler {
             }
         }
 
+        Ok(())
+    }
+
+    fn cmd_telephony(&mut self, args: &Vec<String>) -> CommandResult {
+        if !self.context.lock().unwrap().adapter_ready {
+            return Err(self.adapter_not_ready());
+        }
+
+        match &get_arg(args, 0)?[..] {
+            "set-network" => {
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_network_available(match &get_arg(args, 1)?[..] {
+                        "on" => true,
+                        "off" => false,
+                        other => {
+                            return Err(format!("Invalid argument '{}'", other).into());
+                        }
+                    });
+            }
+            "set-roaming" => {
+                self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().set_roaming(
+                    match &get_arg(args, 1)?[..] {
+                        "on" => true,
+                        "off" => false,
+                        other => {
+                            return Err(format!("Invalid argument '{}'", other).into());
+                        }
+                    },
+                );
+            }
+            "set-signal" => {
+                let strength = String::from(get_arg(args, 1)?)
+                    .parse::<i32>()
+                    .or(Err("Failed parsing signal strength"))?;
+                if strength < 0 || strength > 5 {
+                    return Err(
+                        format!("Invalid signal strength, got {}, want 0 to 5", strength).into()
+                    );
+                }
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_signal_strength(strength);
+            }
+            "set-battery" => {
+                let level = String::from(get_arg(args, 1)?)
+                    .parse::<i32>()
+                    .or(Err("Failed parsing battery level"))?;
+                if level < 0 || level > 5 {
+                    return Err(format!("Invalid battery level, got {}, want 0 to 5", level).into());
+                }
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_battery_level(level);
+            }
+            "enable" | "disable" => {
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_phone_ops_enabled(get_arg(args, 0)? == "enable");
+            }
+            "incoming-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .incoming_call(String::from(get_arg(args, 1)?));
+                if !success {
+                    return Err("IncomingCall failed".into());
+                }
+            }
+            "dialing-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .dialing_call(String::from(get_arg(args, 1)?));
+                if !success {
+                    return Err("DialingCall failed".into());
+                }
+            }
+            "answer-call" => {
+                let success =
+                    self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().answer_call();
+                if !success {
+                    return Err("AnswerCall failed".into());
+                }
+            }
+            "hangup-call" => {
+                let success =
+                    self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().hangup_call();
+                if !success {
+                    return Err("HangupCall failed".into());
+                }
+            }
+            "set-memory-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_memory_call(get_arg(args, 1).ok().map(String::from));
+                if !success {
+                    return Err("SetMemoryCall failed".into());
+                }
+            }
+            "set-last-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_last_call(get_arg(args, 1).ok().map(String::from));
+                if !success {
+                    return Err("SetLastCall failed".into());
+                }
+            }
+            "release-held" => {
+                let success =
+                    self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().release_held();
+                if !success {
+                    return Err("ReleaseHeld failed".into());
+                }
+            }
+            "release-active-accept-held" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .release_active_accept_held();
+                if !success {
+                    return Err("ReleaseActiveAcceptHeld failed".into());
+                }
+            }
+            "hold-active-accept-held" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .hold_active_accept_held();
+                if !success {
+                    return Err("HoldActiveAcceptHeld failed".into());
+                }
+            }
+            "audio-connect" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .audio_connect(String::from(get_arg(args, 1)?));
+                if !success {
+                    return Err("ConnectAudio failed".into());
+                }
+            }
+            "audio-disconnect" => {
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .audio_disconnect(String::from(get_arg(args, 1)?));
+            }
+            other => {
+                return Err(format!("Invalid argument '{}'", other).into());
+            }
+        }
         Ok(())
     }
 }

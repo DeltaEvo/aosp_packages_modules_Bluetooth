@@ -5,9 +5,10 @@ from mmi2grpc._helpers import assert_description
 from mmi2grpc._helpers import match_description
 from mmi2grpc._proxy import ProfileProxy
 
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import Connection, OwnAddressType
-from pandora_experimental.security_grpc import Security
+from pandora.host_grpc import Host
+from pandora.host_pb2 import PUBLIC, RANDOM, Connection
+from pandora.security_pb2 import PairingEventAnswer
+from pandora.security_grpc import Security
 from pandora_experimental.l2cap_grpc import L2CAP
 
 from typing import Optional
@@ -65,8 +66,7 @@ class L2CAPProxy(ProfileProxy):
 
         assert self.connection is None, f"the connection should be None for the first call"
 
-        time.sleep(2)  # avoid timing issue
-        self.connection = self.host.GetLEConnection(public=pts_addr).connection
+        self.connection = next(self.advertise).connection
 
         psm = 0x25  # default TSPX_spsm value
         if test == 'L2CAP/LE/CFC/BV-04-C':
@@ -96,9 +96,9 @@ class L2CAPProxy(ProfileProxy):
         """
         Place the IUT into LE connectable mode.
         """
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             connectable=True,
-            own_address_type=OwnAddressType.PUBLIC,
+            own_address_type=PUBLIC,
         )
         # not strictly necessary, but can save time on waiting connection
         tests_to_open_bluetooth_server_socket = [
@@ -359,7 +359,7 @@ class L2CAPProxy(ProfileProxy):
         """
         Initiate or create LE ACL connection to the PTS.
         """
-        self.connection = self.host.ConnectLE(own_address_type=OwnAddressType.RANDOM, public=pts_addr).connection
+        self.connection = self.host.ConnectLE(own_address_type=RANDOM, public=pts_addr).connection
         return "OK"
 
     @assert_description
@@ -415,7 +415,7 @@ class L2CAPProxy(ProfileProxy):
         passkey = "000000"
         for event in self.pairing_events:
             if event.numeric_comparison == int(passkey):
-                self.pairing_events.send(event=event, confirm=True)
+                self.pairing_events.send(PairingEventAnswer(event=event, confirm=True))
                 return "OK"
             assert False, "The passkey does not match"
         assert False, "Unexpected pairing event"

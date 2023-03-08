@@ -90,6 +90,9 @@ cc_library {
         "system/security/keystore/include",
         "hardware/interfaces/keymaster/4.0/support/include",
     ],
+    whole_static_libs: [
+        "libbluetooth_core_rs",
+    ],
     logtags: ["../../EventLogTags.logtags"],
     // Shared library link options.
     // References to global symbols and functions should bind to the library
@@ -179,6 +182,7 @@ cc_test {
         "shim/btm.cc",
         "shim/config.cc",
         "shim/controller.cc",
+        "shim/distance_measurement_manager.cc",
         "shim/dumpsys.cc",
         "shim/hci_layer.cc",
         "shim/l2c_api.cc",
@@ -204,7 +208,6 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,

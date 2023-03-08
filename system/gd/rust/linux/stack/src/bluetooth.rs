@@ -18,12 +18,16 @@ use bt_topshim::{
     topstack,
 };
 
+use bt_utils::array_utils;
 use btif_macros::{btif_callback, btif_callbacks_dispatcher};
 
 use log::{debug, warn};
 use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
+use std::fs::File;
 use std::hash::Hash;
+use std::io::Write;
+use std::process;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 use std::time::Instant;
@@ -49,6 +53,8 @@ const FOUND_DEVICE_FRESHNESS: Duration = Duration::from_secs(30);
 /// This is the value returned from Bluetooth Interface calls.
 // TODO(241930383): Add enum to topshim
 const BTM_SUCCESS: i32 = 0;
+
+const PID_DIR: &str = "/var/run/bluetooth";
 
 /// Defines the adapter API.
 pub trait IBluetooth {
@@ -185,6 +191,12 @@ pub trait IBluetooth {
 
     /// Triggers SDP and searches for a specific UUID on a remote device.
     fn sdp_search(&self, device: BluetoothDevice, uuid: Uuid128Bit) -> bool;
+
+    /// Creates a new SDP record.
+    fn create_sdp_record(&self, sdp_record: BtSdpRecord) -> bool;
+
+    /// Removes the SDP record associated with the provided handle.
+    fn remove_sdp_record(&self, handle: i32) -> bool;
 
     /// Connect all profiles supported by device and enabled on adapter.
     fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool;
@@ -365,6 +377,17 @@ pub trait IBluetoothCallback: RPCProxy {
 
     /// When a bonding attempt has completed.
     fn on_bond_state_changed(&self, status: u32, device_address: String, state: u32);
+
+    /// When an SDP search has completed.
+    fn on_sdp_search_complete(
+        &self,
+        remote_device: BluetoothDevice,
+        searched_uuid: Uuid128Bit,
+        sdp_records: Vec<BtSdpRecord>,
+    );
+
+    /// When an SDP record has been successfully created.
+    fn on_sdp_record_created(&self, record: BtSdpRecord, handle: i32);
 }
 
 /// An interface for other modules to track found remote devices.
@@ -395,6 +418,7 @@ pub trait IBluetoothConnectionCallback: RPCProxy {
 pub struct Bluetooth {
     intf: Arc<Mutex<BluetoothInterface>>,
 
+    adapter_index: i32,
     bonded_devices: HashMap<String, BluetoothDeviceContext>,
     bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
     bluetooth_admin: Arc<Mutex<Box<BluetoothAdmin>>>,
@@ -422,6 +446,7 @@ pub struct Bluetooth {
 impl Bluetooth {
     /// Constructs the IBluetooth implementation.
     pub fn new(
+        adapter_index: i32,
         tx: Sender<Message>,
         intf: Arc<Mutex<BluetoothInterface>>,
         bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
@@ -429,6 +454,7 @@ impl Bluetooth {
         bluetooth_admin: Arc<Mutex<Box<BluetoothAdmin>>>,
     ) -> Bluetooth {
         Bluetooth {
+            adapter_index,
             bonded_devices: HashMap::new(),
             callbacks: Callbacks::new(tx.clone(), Message::AdapterCallbackDisconnected),
             connection_callbacks: Callbacks::new(
@@ -585,6 +611,11 @@ impl Bluetooth {
         }
     }
 
+    fn get_remote_device_info_if_found(&self, remote_address: &str) -> Option<BluetoothDevice> {
+        self.get_remote_device_if_found(remote_address)
+            .map(|device_context| device_context.info.clone())
+    }
+
     fn get_remote_device_property(
         &self,
         device: &BluetoothDevice,
@@ -617,6 +648,23 @@ impl Bluetooth {
         remote_device.properties.insert(property_type, property.clone());
         self.intf.lock().unwrap().set_remote_device_property(addr, property);
         Ok(())
+    }
+
+    /// Returns all bonded and connected devices.
+    pub(crate) fn get_bonded_and_connected_devices(&mut self) -> Vec<BluetoothDevice> {
+        self.bonded_devices
+            .values()
+            .filter(|v| v.acl_state == BtAclState::Connected && v.bond_state == BtBondState::Bonded)
+            .map(|v| v.info.clone())
+            .collect()
+    }
+
+    /// Gets the bond state of a single device with its address.
+    pub fn get_bond_state_by_addr(&self, addr: &String) -> BtBondState {
+        match self.bonded_devices.get(addr) {
+            Some(device) => device.bond_state.clone(),
+            None => BtBondState::NotBonded,
+        }
     }
 
     /// Check whether found devices are still fresh. If they're outside the
@@ -718,6 +766,21 @@ impl Bluetooth {
                 self.connect_all_enabled_profiles(device);
             }
         }
+    }
+
+    /// Creates a file to notify btmanagerd the adapter is enabled.
+    fn create_pid_file(&self) -> std::io::Result<()> {
+        let file_name = format!("{}/bluetooth{}.pid", PID_DIR, self.adapter_index);
+        let mut f = File::create(&file_name)?;
+        f.write_all(process::id().to_string().as_bytes())?;
+        Ok(())
+    }
+
+    /// Removes the file to notify btmanagerd the adapter is disabled.
+    fn remove_pid_file(&self) -> std::io::Result<()> {
+        let file_name = format!("{}/bluetooth{}.pid", PID_DIR, self.adapter_index);
+        std::fs::remove_file(&file_name)?;
+        Ok(())
     }
 }
 
@@ -847,11 +910,19 @@ impl BtifBluetoothCallbacks for Bluetooth {
         }
 
         if self.state == BtState::On {
+            match self.create_pid_file() {
+                Err(err) => warn!("create_pid_file() error: {}", err),
+                _ => (),
+            }
             self.bluetooth_media.lock().unwrap().initialize();
         }
 
         if self.state == BtState::Off {
             self.properties.clear();
+            match self.remove_pid_file() {
+                Err(err) => warn!("remove_pid_file() error: {}", err),
+                _ => (),
+            }
 
             // Let the signal notifier know we are turned off.
             *self.sig_notifier.0.lock().unwrap() = false;
@@ -1099,9 +1170,6 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 d.update_properties(&properties);
                 d.seen();
 
-                // Services are resolved.
-                d.services_resolved = true;
-
                 Bluetooth::send_metrics_remote_device_info(d);
 
                 let info = d.info.clone();
@@ -1113,6 +1181,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
                         _ => None,
                     })
                     .map_or(false, |v| v);
+
+                // Services are resolved when uuids are fetched.
+                d.services_resolved = has_uuids;
 
                 if d.wait_to_connect && has_uuids {
                     d.wait_to_connect = false;
@@ -1144,7 +1215,7 @@ impl BtifBluetoothCallbacks for Bluetooth {
         link_type: BtTransport,
         hci_reason: BtHciErrorCode,
         conn_direction: BtConnectionDirection,
-        acl_handle: u16,
+        _acl_handle: u16,
     ) {
         if status != BtStatus::Success {
             warn!(
@@ -1533,10 +1604,7 @@ impl IBluetooth for Bluetooth {
     }
 
     fn get_bond_state(&self, device: BluetoothDevice) -> BtBondState {
-        match self.bonded_devices.get(&device.address) {
-            Some(device) => device.bond_state.clone(),
-            None => BtBondState::NotBonded,
-        }
+        self.get_bond_state_by_addr(&device.address)
     }
 
     fn set_pin(&self, device: BluetoothDevice, accept: bool, pin_code: Vec<u8>) -> bool {
@@ -1557,8 +1625,7 @@ impl IBluetooth for Bluetooth {
             return false;
         }
 
-        let mut btpin: BtPinCode = BtPinCode { pin: [0; 16] };
-        btpin.pin.copy_from_slice(pin_code.as_slice());
+        let mut btpin = BtPinCode { pin: array_utils::to_sized_array(&pin_code) };
 
         self.intf.lock().unwrap().pin_reply(
             &addr.unwrap(),
@@ -1790,6 +1857,24 @@ impl IBluetooth for Bluetooth {
         self.sdp.as_ref().unwrap().sdp_search(&mut addr.unwrap(), &uu) == BtStatus::Success
     }
 
+    fn create_sdp_record(&self, sdp_record: BtSdpRecord) -> bool {
+        let mut handle: i32 = -1;
+        let mut sdp_record = sdp_record;
+        match self.sdp.as_ref().unwrap().create_sdp_record(&mut sdp_record, &mut handle) {
+            BtStatus::Success => {
+                self.callbacks.for_all_callbacks(|callback| {
+                    callback.on_sdp_record_created(sdp_record.clone(), handle);
+                });
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn remove_sdp_record(&self, handle: i32) -> bool {
+        self.sdp.as_ref().unwrap().remove_sdp_record(handle) == BtStatus::Success
+    }
+
     fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool {
         // Profile init must be complete before this api is callable
         if !self.profiles_ready {
@@ -1817,6 +1902,7 @@ impl IBluetooth for Bluetooth {
 
         // Check all remote uuids to see if they match enabled profiles and connect them.
         let mut has_enabled_uuids = false;
+        let mut has_media_profile = false;
         let uuids = self.get_remote_uuids(device.clone());
         for uuid in uuids.iter() {
             match UuidHelper::is_known_profile(uuid) {
@@ -1842,10 +1928,10 @@ impl IBluetooth for Bluetooth {
                                 }
                             }
 
-                            Profile::A2dpSink
-                            | Profile::A2dpSource
-                            | Profile::Hfp
-                            | Profile::AvrcpController => {
+                            Profile::A2dpSink | Profile::A2dpSource | Profile::Hfp
+                                if !has_media_profile =>
+                            {
+                                has_media_profile = true;
                                 let txl = self.tx.clone();
                                 let address = device.address.clone();
                                 topstack::get_runtime().spawn(async move {
@@ -1893,7 +1979,7 @@ impl IBluetooth for Bluetooth {
         // If SDP isn't completed yet, we wait for it to complete and retry the connection again.
         // Otherwise, this connection request is done, no retry is required.
         if !has_enabled_uuids {
-            warn!("[{}] SDP hasn't completed for device, wait to connect.", DisplayAddress(addr));
+            warn!("[{}] SDP hasn't completed for device, wait to connect.", DisplayAddress(&addr));
             if let Some(d) = self.get_remote_device_if_found_mut(&device.address) {
                 if uuids.len() == 0 || !d.services_resolved {
                     d.wait_to_connect = true;
@@ -1924,6 +2010,7 @@ impl IBluetooth for Bluetooth {
         }
 
         let uuids = self.get_remote_uuids(device.clone());
+        let mut has_media_profile = false;
         for uuid in uuids.iter() {
             match UuidHelper::is_known_profile(uuid) {
                 Some(p) => {
@@ -1936,7 +2023,10 @@ impl IBluetooth for Bluetooth {
                             Profile::A2dpSink
                             | Profile::A2dpSource
                             | Profile::Hfp
-                            | Profile::AvrcpController => {
+                            | Profile::AvrcpController
+                                if !has_media_profile =>
+                            {
+                                has_media_profile = true;
                                 let txl = self.tx.clone();
                                 let address = device.address.clone();
                                 topstack::get_runtime().spawn(async move {
@@ -1982,8 +2072,19 @@ impl BtifSdpCallbacks for Bluetooth {
         address: RawAddress,
         uuid: Uuid,
         _count: i32,
-        _records: Vec<BtSdpRecord>,
+        records: Vec<BtSdpRecord>,
     ) {
+        let uuid = match UuidHelper::from_string(uuid.to_string()) {
+            Some(uu) => uu,
+            None => return,
+        };
+        let device_info = match self.get_remote_device_info_if_found(&address.to_string()) {
+            Some(info) => info,
+            None => BluetoothDevice::new(address.to_string(), "".to_string()),
+        };
+        self.callbacks.for_all_callbacks(|callback| {
+            callback.on_sdp_search_complete(device_info.clone(), uuid, records.clone());
+        });
         debug!(
             "Sdp search result found: Status({:?}) Address({:?}) Uuid({:?})",
             status, address, uuid
@@ -1992,7 +2093,7 @@ impl BtifSdpCallbacks for Bluetooth {
 }
 
 impl BtifHHCallbacks for Bluetooth {
-    fn connection_state(&mut self, address: RawAddress, state: BthhConnectionState) {
+    fn connection_state(&mut self, mut address: RawAddress, state: BthhConnectionState) {
         debug!("Hid host connection state updated: Address({:?}) State({:?})", address, state);
 
         // HID or HOG is not differentiated by the hid host when callback this function. Assume HOG
@@ -2017,6 +2118,14 @@ impl BtifHHCallbacks for Bluetooth {
             BtStatus::Success,
             state as u32,
         );
+
+        if BtBondState::Bonded != self.get_bond_state_by_addr(&address.to_string()) {
+            warn!(
+                "[{}]: Rejecting a unbonded device's attempt to connect to HID/HOG profiles",
+                DisplayAddress(&address)
+            );
+            self.hh.as_ref().unwrap().disconnect(&mut address);
+        }
     }
 
     fn hid_info(&mut self, address: RawAddress, info: BthhHidInfo) {

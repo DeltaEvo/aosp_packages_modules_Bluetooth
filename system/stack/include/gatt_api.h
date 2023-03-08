@@ -1040,7 +1040,7 @@ extern void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
  *
  ******************************************************************************/
 extern tGATT_IF GATT_Register(const bluetooth::Uuid& p_app_uuid128,
-                              const std::string name, tGATT_CBACK* p_cb_info,
+                              const std::string& name, tGATT_CBACK* p_cb_info,
                               bool eatt_support);
 
 /*******************************************************************************
@@ -1079,7 +1079,8 @@ extern void GATT_StartIf(tGATT_IF gatt_if);
  *                  GATT channel.
  *
  * Parameters       gatt_if: applicaiton interface
- *                  bd_addr: peer device address.
+ *                  bd_addr: peer device address
+ *                  addr_type: peer device address type
  *                  connection_type: connection type
  *                  transport : Physical transport for GATT connection
  *                              (BR/EDR or LE)
@@ -1094,6 +1095,11 @@ extern bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
                          tBTM_BLE_CONN_TYPE connection_type,
                          tBT_TRANSPORT transport, bool opportunistic);
 extern bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                         tBTM_BLE_CONN_TYPE connection_type,
+                         tBT_TRANSPORT transport, bool opportunistic,
+                         uint8_t initiating_phys);
+extern bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                         tBLE_ADDR_TYPE addr_type,
                          tBTM_BLE_CONN_TYPE connection_type,
                          tBT_TRANSPORT transport, bool opportunistic,
                          uint8_t initiating_phys);
@@ -1198,5 +1204,8 @@ extern void gatt_notify_enc_cmpl(const RawAddress& bd_addr);
 /** Reset bg device list. If called after controller reset, set |after_reset| to
  * true, as there is no need to wipe controller acceptlist in this case. */
 extern void gatt_reset_bgdev_list(bool after_reset);
+
+// Initialize GATTS list of bonded device service change updates.
+extern void gatt_load_bonded(void);
 
 #endif /* GATT_API_H */

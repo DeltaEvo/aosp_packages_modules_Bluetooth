@@ -175,6 +175,9 @@ void LogMetricA2dpPlaybackEvent(const Address& address, int playback_state, int 
   }
 }
 
+void LogMetricHfpPacketLossStats(
+    const Address& address, int num_decoded_frames, double packet_loss_ratio) {}
+
 void LogMetricReadRssiResult(const Address& address, uint16_t handle, uint32_t cmd_status, int8_t rssi) {
   int metric_id = 0;
   if (!address.IsEmpty()) {
@@ -443,7 +446,12 @@ void LogMetricBluetoothLocalVersions(
     uint8_t hci_version,
     uint32_t hci_revision) {
   int ret = stats_write(
-      BLUETOOTH_LOCAL_VERSIONS_REPORTED, lmp_manufacturer_name, lmp_version, lmp_subversion, hci_version, hci_revision);
+      BLUETOOTH_LOCAL_VERSIONS_REPORTED,
+      static_cast<int32_t>(lmp_manufacturer_name),
+      static_cast<int32_t>(lmp_version),
+      static_cast<int32_t>(lmp_subversion),
+      static_cast<int32_t>(hci_version),
+      static_cast<int32_t>(hci_revision));
   if (ret < 0) {
     LOG_WARN(
         "Failed for LogMetricBluetoothLocalVersions, "

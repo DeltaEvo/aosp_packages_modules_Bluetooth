@@ -51,6 +51,7 @@
 #include "main/shim/dumpsys.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
+#include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -347,6 +348,11 @@ void btm_acl_process_sca_cmpl_pkt(uint8_t len, uint8_t* data) {
   uint16_t handle;
   uint8_t sca;
   uint8_t status;
+
+  if (len < 4) {
+    LOG_WARN("Malformatted packet, not containing enough data");
+    return;
+  }
 
   STREAM_TO_UINT8(status, data);
 
@@ -648,6 +654,23 @@ void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
   if (p == nullptr) {
     LOG_WARN("Unable to find active acl");
     return;
+  }
+
+  /* Common Criteria mode only: if we are trying to drop encryption on an
+   * encrypted connection, drop the connection */
+  if (bluetooth::os::ParameterProvider::IsCommonCriteriaMode()) {
+    if (p->is_encrypted && !encr_enable) {
+      LOG(ERROR)
+          << __func__
+          << " attempting to decrypt encrypted connection, disconnecting. "
+             "handle: "
+          << loghex(handle);
+
+      acl_disconnect_from_handle(handle, HCI_ERR_HOST_REJECT_SECURITY,
+                                 "stack::btu::btu_hcif::read_drop_encryption "
+                                 "Connection Already Encrypted");
+      return;
+    }
   }
 
   p->is_encrypted = encr_enable;
@@ -2833,12 +2856,15 @@ void acl_write_automatic_flush_timeout(const RawAddress& bd_addr,
   btsnd_hcic_write_auto_flush_tout(p_acl->hci_handle, flush_timeout_in_ticks);
 }
 
-bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
+bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
+                                      tBLE_ADDR_TYPE addr_type) {
   tBLE_BD_ADDR address_with_type{
       .bda = bd_addr,
-      .type = BLE_ADDR_PUBLIC,
+      .type = addr_type,
   };
-  gatt_find_in_device_record(bd_addr, &address_with_type);
+  if (address_with_type.type == BLE_ADDR_PUBLIC) {
+    gatt_find_in_device_record(bd_addr, &address_with_type);
+  }
   LOG_DEBUG("Creating le direct connection to:%s",
             ADDRESS_TO_LOGGABLE_CSTR(address_with_type));
 
@@ -2850,9 +2876,13 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
     return false;
   }
 
-    bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
-                                                /* is_direct */ true);
-    return true;
+  bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
+                                              /* is_direct */ true);
+  return true;
+}
+
+bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
+  return acl_create_le_connection_with_id(id, bd_addr, BLE_ADDR_PUBLIC);
 }
 
 bool acl_create_le_connection(const RawAddress& bd_addr) {

@@ -367,28 +367,6 @@ public final class BluetoothGattServer implements BluetoothProfile {
                 }
 
                 /**
-                 * The connection priority has changed.
-                 * @hide
-                 */
-                @Override
-                public void onPriorityChanged(String address, int priority) {
-                    if (DBG) {
-                        Log.d(TAG,
-                                "onPriorityChanged() - " + "device=" + address
-                                        + ",interval=" + priority);
-                    }
-
-                    BluetoothDevice device = mAdapter.getRemoteDevice(address);
-                    if (device == null) return;
-
-                    try {
-                        mCallback.onPriorityChanged(device, priority);
-                    } catch (Exception ex) {
-                        Log.w(TAG, "Unhandled exception: " + ex);
-                    }
-                }
-
-                /**
                  * Callback invoked when the given connection is updated
                  * @hide
                  */
@@ -452,6 +430,15 @@ public final class BluetoothGattServer implements BluetoothProfile {
         mServerIf = 0;
         mTransport = transport;
         mServices = new ArrayList<BluetoothGattService>();
+    }
+
+    /**
+     * Get the identifier of the BluetoothGattServer, or 0 if it is closed
+     *
+     * @hide
+     */
+    public int getServerIf() {
+        return mServerIf;
     }
 
     /**
@@ -639,7 +626,7 @@ public final class BluetoothGattServer implements BluetoothProfile {
     public boolean connect(BluetoothDevice device, boolean autoConnect) {
         if (DBG) {
             Log.d(TAG,
-                    "connect() - device: " + device.getAddress() + ", auto: " + autoConnect);
+                    "connect() - device: " + device + ", auto: " + autoConnect);
         }
         if (mService == null || mServerIf == 0) return false;
 
@@ -667,7 +654,7 @@ public final class BluetoothGattServer implements BluetoothProfile {
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public void cancelConnection(BluetoothDevice device) {
-        if (DBG) Log.d(TAG, "cancelConnection() - device: " + device.getAddress());
+        if (DBG) Log.d(TAG, "cancelConnection() - device: " + device);
         if (mService == null || mServerIf == 0) return;
 
         try {
@@ -752,7 +739,7 @@ public final class BluetoothGattServer implements BluetoothProfile {
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean sendResponse(BluetoothDevice device, int requestId,
             int status, int offset, byte[] value) {
-        if (VDBG) Log.d(TAG, "sendResponse() - device: " + device.getAddress());
+        if (VDBG) Log.d(TAG, "sendResponse() - device: " + device);
         if (mService == null || mServerIf == 0) return false;
 
         try {
@@ -831,7 +818,7 @@ public final class BluetoothGattServer implements BluetoothProfile {
     public int notifyCharacteristicChanged(@NonNull BluetoothDevice device,
             @NonNull BluetoothGattCharacteristic characteristic, boolean confirm,
             @NonNull byte[] value) {
-        if (VDBG) Log.d(TAG, "notifyCharacteristicChanged() - device: " + device.getAddress());
+        if (VDBG) Log.d(TAG, "notifyCharacteristicChanged() - device: " + device);
         if (mService == null || mServerIf == 0) {
             return BluetoothStatusCodes.ERROR_PROFILE_SERVICE_NOT_BOUND;
         }

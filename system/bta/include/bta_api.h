@@ -26,11 +26,11 @@
 #define BTA_API_H
 
 #include <base/strings/stringprintf.h>
+#include <base/functional/callback.h>
 
 #include <cstdint>
 #include <vector>
 
-#include "base/callback.h"
 #include "bt_target.h"  // Must be first to define build configuration
 #include "osi/include/log.h"
 #include "stack/include/bt_octets.h"
@@ -78,8 +78,6 @@ inline std::string bta_status_text(const tBTA_STATUS& status) {
 }
 
 #undef CASE_RETURN_TEXT
-
-using tSDP_DISC_WAIT = int;
 
 /*
  * Service ID
@@ -719,18 +717,6 @@ void BTA_dm_init();
 
 /*******************************************************************************
  *
- * Function         BTA_EnableTestMode
- *
- * Description      Enables bluetooth device under test mode
- *
- *
- * Returns          tBTA_STATUS
- *
- ******************************************************************************/
-extern void BTA_EnableTestMode(void);
-
-/*******************************************************************************
- *
  * Function         BTA_DmSetDeviceName
  *
  * Description      This function sets the Bluetooth name of the local device.
@@ -1324,6 +1310,7 @@ extern void BTA_DmSetEventFilterConnectionSetupAllDevices();
  *
  *******************************************************************************/
 extern void BTA_DmAllowWakeByHid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
 
 /*******************************************************************************
@@ -1335,7 +1322,8 @@ extern void BTA_DmAllowWakeByHid(
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmRestoreFilterAcceptList();
+extern void BTA_DmRestoreFilterAcceptList(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 
 /*******************************************************************************
  *

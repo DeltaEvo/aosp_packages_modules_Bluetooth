@@ -508,7 +508,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-void btm_sec_rmt_host_support_feat_evt(uint8_t* p);
+void btm_sec_rmt_host_support_feat_evt(const uint8_t* p);
 
 /*******************************************************************************
  *
@@ -698,23 +698,6 @@ void btm_sec_pin_code_request(const uint8_t* p_event);
  *
  ******************************************************************************/
 void btm_sec_update_clock_offset(uint16_t handle, uint16_t clock_offset);
-
-/*******************************************************************************
- *
- * Function         btm_sec_execute_procedure
- *
- * Description      This function is called to start required security
- *                  procedure.  There is a case when multiplexing protocol
- *                  calls this function on the originating side, connection to
- *                  the peer will not be established.  This function in this
- *                  case performs only authorization.
- *
- * Returns          BTM_SUCCESS     - permission is granted
- *                  BTM_CMD_STARTED - in process
- *                  BTM_NO_RESOURCES  - permission declined
- *
- ******************************************************************************/
-tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec);
 
 /*******************************************************************************
  *

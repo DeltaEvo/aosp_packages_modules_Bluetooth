@@ -24,8 +24,8 @@ from mmi2grpc._proxy import ProfileProxy
 from pandora_experimental.a2dp_grpc import A2DP
 from pandora_experimental.a2dp_pb2 import Sink, Source
 from pandora_experimental.avrcp_grpc import AVRCP
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import Connection
+from pandora.host_grpc import Host
+from pandora.host_pb2 import Connection
 from pandora_experimental.mediaplayer_grpc import MediaPlayer
 
 
@@ -61,8 +61,6 @@ class AVRCPProxy(ProfileProxy):
         the IUT connects to PTS to establish pairing.
 
         """
-        # Simulate CSR timeout: b/259102046
-        time.sleep(4)
         self.connection = self.host.WaitConnection(address=pts_addr).connection
         if ("TG" in test and "TG/VLH" not in test) or "CT/VLH" in test:
             try:
@@ -151,8 +149,7 @@ class AVRCPProxy(ProfileProxy):
         Take action to disconnect all A2DP and/or AVRCP connections.
 
         """
-        if self.connection is None:
-            self.connection = self.host.GetConnection(address=pts_addr).connection
+        assert self.connection is not None
         self.host.Disconnect(connection=self.connection)
 
         return "OK"
@@ -673,6 +670,8 @@ class AVRCPProxy(ProfileProxy):
         the PTS.
         """
 
+        self.mediaplayer.Forward()
+
         return "OK"
 
     @assert_description
@@ -752,7 +751,35 @@ class AVRCPProxy(ProfileProxy):
         """
         Is the newly added media item listed below?
 
+        Media Element: Title1
+        Media
+        Element: Title2
+        Media Element: Title3
+        Media Element: Title4
+        Media
+        Element: Title5
+        Media Element: Title6
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_user_confirm_now_playing_list(self, **kwargs):
+        """
+        Do the following items match the current now playing list?
+
+        Media
+        Element: Title1
         Media Element: Title2
+        Media Element: Title3
+        Media
+        Element: Title4
+        Media Element: Title5
+        Media Element: Title6
+
+
+        Note: Some
+        now playing items may not be listed above.
         """
 
         return "OK"
@@ -790,6 +817,7 @@ class AVRCPProxy(ProfileProxy):
         Description: Verify that the Implementation Under Test (IUT) can update
         database by sending a valid Now Playing Changed Notification to the PTS.
         """
+        self.mediaplayer.UpdateQueue()
         self.mediaplayer.Play()
 
         return "OK"
@@ -882,8 +910,6 @@ class AVRCPProxy(ProfileProxy):
         """
         # Currently disconnect is required in TG role
         if "TG" in test:
-            if self.connection is None:
-                self.connection = self.host.GetConnection(address=pts_addr).connection
             time.sleep(3)
             self.host.Disconnect(connection=self.connection)
             self.connection = None
