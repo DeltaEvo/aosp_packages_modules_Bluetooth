@@ -82,7 +82,7 @@ impl<'de> serde::Deserialize<'de> for Enum16 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FooDataChild {
     Bar(Arc<BarData>),
@@ -100,7 +100,7 @@ impl FooDataChild {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FooChild {
     Bar(Bar),
@@ -108,14 +108,14 @@ pub enum FooChild {
     Payload(Bytes),
     None,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FooData {
     a: u8,
     b: Enum16,
     child: FooDataChild,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Foo {
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -248,6 +248,14 @@ impl Foo {
         let data = FooData::parse(&mut bytes)?;
         Ok(Self::new(Arc::new(data)).unwrap())
     }
+    pub fn specialize(&self) -> FooChild {
+        match &self.foo.child {
+            FooDataChild::Bar(_) => FooChild::Bar(Bar::new(self.foo.clone()).unwrap()),
+            FooDataChild::Baz(_) => FooChild::Baz(Baz::new(self.foo.clone()).unwrap()),
+            FooDataChild::Payload(payload) => FooChild::Payload(payload.clone()),
+            FooDataChild::None => FooChild::None,
+        }
+    }
     fn new(foo: Arc<FooData>) -> std::result::Result<Self, &'static str> {
         Ok(Self { foo })
     }
@@ -283,12 +291,12 @@ impl From<FooBuilder> for Foo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BarData {
     x: u8,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Bar {
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -412,12 +420,12 @@ impl From<BarBuilder> for Bar {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BazData {
     y: u16,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Baz {
     #[cfg_attr(feature = "serde", serde(flatten))]

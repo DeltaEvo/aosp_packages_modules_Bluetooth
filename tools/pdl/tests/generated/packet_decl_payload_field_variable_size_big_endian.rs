@@ -38,7 +38,7 @@ pub trait Packet {
     fn to_vec(self) -> Vec<u8>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FooDataChild {
     Payload(Bytes),
@@ -52,20 +52,20 @@ impl FooDataChild {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FooChild {
     Payload(Bytes),
     None,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FooData {
     a: u8,
     b: u16,
     child: FooDataChild,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Foo {
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -179,6 +179,12 @@ impl Foo {
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         let data = FooData::parse(&mut bytes)?;
         Ok(Self::new(Arc::new(data)).unwrap())
+    }
+    pub fn specialize(&self) -> FooChild {
+        match &self.foo.child {
+            FooDataChild::Payload(payload) => FooChild::Payload(payload.clone()),
+            FooDataChild::None => FooChild::None,
+        }
     }
     fn new(foo: Arc<FooData>) -> std::result::Result<Self, &'static str> {
         Ok(Self { foo })

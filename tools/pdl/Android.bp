@@ -32,6 +32,10 @@ rust_binary_host {
     name: "pdl",
     defaults: ["pdl_defaults"],
     srcs: ["src/main.rs"],
+    visibility: [
+        "//packages/modules/Bluetooth:__subpackages__",
+        "//external/uwb/src",
+    ],
 }
 
 rust_test_host {
@@ -93,6 +97,8 @@ rust_test_host {
         "tests/generated/packet_decl_fixed_enum_field_little_endian.rs",
         "tests/generated/packet_decl_fixed_scalar_field_big_endian.rs",
         "tests/generated/packet_decl_fixed_scalar_field_little_endian.rs",
+        "tests/generated/packet_decl_grand_children_big_endian.rs",
+        "tests/generated/packet_decl_grand_children_little_endian.rs",
         "tests/generated/packet_decl_mask_scalar_value_big_endian.rs",
         "tests/generated/packet_decl_mask_scalar_value_little_endian.rs",
         "tests/generated/packet_decl_mixed_scalars_enums_big_endian.rs",
@@ -121,6 +127,10 @@ genrule_defaults {
     tools: [
         ":pdl",
         ":rustfmt",
+    ],
+    defaults_visibility: [
+        "//packages/modules/Bluetooth:__subpackages__",
+        "//external/uwb/src",
     ],
 }
 

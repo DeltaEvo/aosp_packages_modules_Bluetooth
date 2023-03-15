@@ -33,6 +33,7 @@
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
+#include "stack/arbiter/acl_arbiter.h"
 #include "stack/eatt/eatt.h"
 #include "stack/include/bt_types.h"
 #include "types/bluetooth/uuid.h"
@@ -595,7 +596,8 @@ void gatt_process_prep_write_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   VLOG(1) << StringPrintf("value resp op_code = %s len = %d",
                           gatt_dbg_op_name(op_code), len);
 
-  if (len < GATT_PREP_WRITE_RSP_MIN_LEN) {
+  if (len < GATT_PREP_WRITE_RSP_MIN_LEN ||
+      len > GATT_PREP_WRITE_RSP_MIN_LEN + sizeof(value.value)) {
     LOG(ERROR) << "illegal prepare write response length, discard";
     gatt_end_operation(p_clcb, GATT_INVALID_PDU, &value);
     return;
@@ -604,7 +606,7 @@ void gatt_process_prep_write_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   STREAM_TO_UINT16(value.handle, p);
   STREAM_TO_UINT16(value.offset, p);
 
-  value.len = len - 4;
+  value.len = len - GATT_PREP_WRITE_RSP_MIN_LEN;
 
   memcpy(value.value, p, value.len);
 
@@ -1101,6 +1103,9 @@ void gatt_process_mtu_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb, uint16_t len,
     if (mtu < tcb.payload_size && mtu >= GATT_DEF_BLE_MTU_SIZE)
       tcb.payload_size = mtu;
   }
+
+  bluetooth::shim::arbiter::GetArbiter().OnIncomingMtuResp(tcb.tcb_idx,
+                                                           tcb.payload_size);
 
   BTM_SetBleDataLength(tcb.peer_bda, tcb.payload_size + L2CAP_PKT_OVERHEAD);
 

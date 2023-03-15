@@ -1,4 +1,6 @@
-use crate::backends::rust::{mask_bits, types};
+use crate::backends::rust::{
+    constraint_to_value, find_constrained_parent_fields, mask_bits, types,
+};
 use crate::parser::ast as parser_ast;
 use crate::{ast, lint};
 use heck::ToUpperCamelCase;
@@ -113,7 +115,7 @@ impl<'a> FieldParser<'a> {
             if !single_value && width < value_type.width {
                 // Mask value if we grabbed more than `width` and if
                 // `as #value_type` doesn't already do the masking.
-                let mask = mask_bits(width);
+                let mask = mask_bits(width, "u64");
                 v = quote! { (#v & #mask) };
             }
 
@@ -163,8 +165,18 @@ impl<'a> FieldParser<'a> {
                     }
                 }
                 ast::FieldDesc::Reserved { .. } => {
-                    // Nothing to do here.
-                    quote! {}
+                    if single_value {
+                        let span = self.span;
+                        let size = proc_macro2::Literal::usize_unsuffixed(size);
+                        quote! {
+                            #span.get_mut().advance(#size);
+                        }
+                    } else {
+                        //  Otherwise we don't need anything: we will
+                        //  have advanced past the reserved field when
+                        //  reading the chunk above.
+                        quote! {}
+                    }
                 }
                 ast::FieldDesc::Size { field_id, .. } => {
                     let id = size_field_ident(field_id);
@@ -571,26 +583,11 @@ impl<'a> FieldParser<'a> {
                 ast::DeclDesc::Packet { id, constraints, .. }
                 | ast::DeclDesc::Struct { id, constraints, .. } => {
                     for constraint in constraints.iter() {
-                        let value = match constraint {
-                            ast::Constraint { value: Some(value), .. } => {
-                                let value = proc_macro2::Literal::usize_unsuffixed(*value);
-                                quote!(#value)
-                            }
-                            ast::Constraint { id, tag_id: Some(tag_id), .. } => {
-                                // TODO: add `type_id` to `Constraint`.
-                                let type_id = match &packet_scope.named[id].desc {
-                                    ast::FieldDesc::Typedef { type_id, .. } => {
-                                        format_ident!("{type_id}")
-                                    }
-                                    _ => unreachable!("Invalid constraint: {constraint:?}"),
-                                };
-                                let tag_id = format_ident!("{}", tag_id.to_upper_camel_case());
-                                quote!(#type_id::#tag_id)
-                            }
-                            _ => unreachable!("Invalid constraint: {constraint:?}"),
-                        };
                         constrained_fields.insert(&constraint.id);
-                        constraint_values.insert((id.as_str(), &constraint.id), value);
+                        constraint_values.insert(
+                            (id.as_str(), &constraint.id),
+                            constraint_to_value(packet_scope, constraint),
+                        );
                     }
                 }
                 _ => unreachable!("Invalid child: {child:?}"),
@@ -609,12 +606,17 @@ impl<'a> FieldParser<'a> {
         });
         let constrained_field_idents =
             constrained_fields.iter().map(|field| format_ident!("{field}"));
+        let child_parse_args = children.iter().map(|child| {
+            let fields = find_constrained_parent_fields(self.scope, child.id().unwrap())
+                .map(|field| format_ident!("{}", field.id().unwrap()));
+            quote!(#(, #fields)*)
+        });
         let packet_data_child = format_ident!("{}DataChild", self.packet_name);
         self.code.push(quote! {
             let child = match (#(#constrained_field_idents),*) {
                 #(#match_values => {
                     let mut cell = Cell::new(payload);
-                    let child_data = #child_ids_data::parse(&mut cell)?;
+                    let child_data = #child_ids_data::parse(&mut cell #child_parse_args)?;
                     if !cell.get().is_empty() {
                         return Err(Error::InvalidPacketError);
                     }
