@@ -1,28 +1,18 @@
 //! Rust compiler backend.
 
-// The `format-push-string` lint was briefly enabled present in Rust
-// 1.62. It is now moved the disabled "restriction" category instead.
-// See https://github.com/rust-lang/rust-clippy/issues/9077 for the
-// problems with this lint.
-//
-// Remove this when we use Rust 1.63 or later.
-#![allow(clippy::format_push_string)]
-
 use crate::{ast, lint};
 use heck::ToUpperCamelCase;
 use quote::{format_ident, quote};
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use crate::parser::ast as parser_ast;
+use crate::analyzer::ast as analyzer_ast;
 
-mod declarations;
 mod parser;
 mod preamble;
 mod serializer;
 mod types;
 
-use declarations::FieldDeclarations;
 use parser::FieldParser;
 use serializer::FieldSerializer;
 
@@ -58,22 +48,31 @@ pub fn mask_bits(n: usize, suffix: &str) -> syn::LitInt {
 
 fn generate_packet_size_getter(
     scope: &lint::Scope<'_>,
-    fields: &[&parser_ast::Field],
+    fields: &[&analyzer_ast::Field],
+    is_packet: bool,
 ) -> (usize, proc_macro2::TokenStream) {
     let mut constant_width = 0;
     let mut dynamic_widths = Vec::new();
 
     for field in fields {
-        if let Some(width) = field.width(scope, false) {
+        if let Some(width) = scope.get_field_width(field, false) {
             constant_width += width;
             continue;
         }
 
-        let decl = field.declaration(scope);
+        let decl = scope.get_field_declaration(field);
         dynamic_widths.push(match &field.desc {
-            ast::FieldDesc::Payload { .. } | ast::FieldDesc::Body { .. } => quote! {
-                self.child.get_total_size()
-            },
+            ast::FieldDesc::Payload { .. } | ast::FieldDesc::Body { .. } => {
+                if is_packet {
+                    quote! {
+                        self.child.get_total_size()
+                    }
+                } else {
+                    quote! {
+                        self.payload.len()
+                    }
+                }
+            }
             ast::FieldDesc::Typedef { id, .. } => {
                 let id = format_ident!("{id}");
                 quote!(self.#id.get_size())
@@ -81,7 +80,7 @@ fn generate_packet_size_getter(
             ast::FieldDesc::Array { id, width, .. } => {
                 let id = format_ident!("{id}");
                 match &decl {
-                    Some(parser_ast::Decl {
+                    Some(analyzer_ast::Decl {
                         desc: ast::DeclDesc::Struct { .. } | ast::DeclDesc::CustomField { .. },
                         ..
                     }) => {
@@ -89,9 +88,10 @@ fn generate_packet_size_getter(
                             self.#id.iter().map(|elem| elem.get_size()).sum::<usize>()
                         }
                     }
-                    Some(parser_ast::Decl { desc: ast::DeclDesc::Enum { .. }, .. }) => {
-                        let width =
-                            syn::Index::from(decl.unwrap().width(scope, false).unwrap() / 8);
+                    Some(analyzer_ast::Decl { desc: ast::DeclDesc::Enum { .. }, .. }) => {
+                        let width = syn::Index::from(
+                            scope.get_decl_width(decl.unwrap(), false).unwrap() / 8,
+                        );
                         let mul_width = (width.index > 1).then(|| quote!(* #width));
                         quote! {
                             self.#id.len() #mul_width
@@ -126,7 +126,7 @@ fn generate_packet_size_getter(
     )
 }
 
-fn top_level_packet<'a>(scope: &lint::Scope<'a>, packet_name: &'a str) -> &'a parser_ast::Decl {
+fn top_level_packet<'a>(scope: &lint::Scope<'a>, packet_name: &'a str) -> &'a analyzer_ast::Decl {
     let mut decl = scope.typedef[packet_name];
     while let ast::DeclDesc::Packet { parent_id: Some(parent_id), .. }
     | ast::DeclDesc::Struct { parent_id: Some(parent_id), .. } = &decl.desc
@@ -136,18 +136,14 @@ fn top_level_packet<'a>(scope: &lint::Scope<'a>, packet_name: &'a str) -> &'a pa
     decl
 }
 
-fn get_packet_children<'a>(scope: &'a lint::Scope<'_>, id: &str) -> &'a [&'a parser_ast::Decl] {
-    scope.children.get(id).map(Vec::as_slice).unwrap_or_default()
-}
-
 /// Find all constrained fields in children of `id`.
 fn find_constrained_fields<'a>(
     scope: &'a lint::Scope<'a>,
     id: &'a str,
-) -> Vec<&'a parser_ast::Field> {
+) -> Vec<&'a analyzer_ast::Field> {
     let mut fields = Vec::new();
     let mut field_names = BTreeSet::new();
-    let mut children = Vec::from(get_packet_children(scope, id));
+    let mut children = scope.iter_children(id).collect::<Vec<_>>();
 
     while let Some(child) = children.pop() {
         if let ast::DeclDesc::Packet { id, constraints, .. }
@@ -159,7 +155,7 @@ fn find_constrained_fields<'a>(
                     fields.push(packet_scope.all_fields[&constraint.id]);
                 }
             }
-            children.extend(get_packet_children(scope, id));
+            children.extend(scope.iter_children(id).collect::<Vec<_>>());
         }
     }
 
@@ -174,7 +170,7 @@ fn find_constrained_fields<'a>(
 fn find_constrained_parent_fields<'a>(
     scope: &'a lint::Scope<'a>,
     id: &'a str,
-) -> impl Iterator<Item = &'a parser_ast::Field> {
+) -> impl Iterator<Item = &'a analyzer_ast::Field> {
     let packet_scope = &scope.scopes[&scope.typedef[id]];
     find_constrained_fields(scope, id).into_iter().filter(|field| {
         let id = field.id().unwrap();
@@ -191,33 +187,31 @@ fn generate_data_struct(
     endianness: ast::EndiannessValue,
     id: &str,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let packet_scope = &scope.scopes[&scope.typedef[id]];
-    let id_data = format_ident!("{id}Data");
-
-    let fields_with_ids =
-        packet_scope.fields.iter().filter(|f| f.id().is_some()).collect::<Vec<_>>();
-    let field_names =
-        fields_with_ids.iter().map(|f| format_ident!("{}", f.id().unwrap())).collect::<Vec<_>>();
+    let decl = scope.typedef[id];
+    let packet_scope = &scope.scopes[&decl];
+    let is_packet = matches!(&decl.desc, ast::DeclDesc::Packet { .. });
 
     let span = format_ident!("bytes");
     let serializer_span = format_ident!("buffer");
-    let mut field_declarations = FieldDeclarations::new(scope, id);
     let mut field_parser = FieldParser::new(scope, endianness, id, &span);
     let mut field_serializer = FieldSerializer::new(scope, endianness, id, &serializer_span);
     for field in &packet_scope.fields {
-        field_declarations.add(field);
         field_parser.add(field);
         field_serializer.add(field);
     }
-    field_declarations.done();
     field_parser.done();
 
-    let parse_fields = find_constrained_parent_fields(scope, id).collect::<Vec<_>>();
-    let parse_field_names =
-        parse_fields.iter().map(|f| format_ident!("{}", f.id().unwrap())).collect::<Vec<_>>();
-    let parse_field_types = parse_fields.iter().map(|f| types::rust_type(f));
+    let (parse_arg_names, parse_arg_types) = if is_packet {
+        let fields = find_constrained_parent_fields(scope, id).collect::<Vec<_>>();
+        let names = fields.iter().map(|f| format_ident!("{}", f.id().unwrap())).collect::<Vec<_>>();
+        let types = fields.iter().map(|f| types::rust_type(f)).collect::<Vec<_>>();
+        (names, types)
+    } else {
+        (Vec::new(), Vec::new()) // No extra arguments to parse in structs.
+    };
 
-    let (constant_width, packet_size) = generate_packet_size_getter(scope, &packet_scope.fields);
+    let (constant_width, packet_size) =
+        generate_packet_size_getter(scope, &packet_scope.fields, is_packet);
     let conforms = if constant_width == 0 {
         quote! { true }
     } else {
@@ -225,30 +219,56 @@ fn generate_data_struct(
         quote! { #span.len() >= #constant_width }
     };
 
-    let has_payload = packet_scope.payload.is_some();
-    let children = get_packet_children(scope, id);
-    let has_children_or_payload = !children.is_empty() || has_payload;
-    let child_field = has_children_or_payload.then(|| quote!(child));
+    let visibility = if is_packet { quote!() } else { quote!(pub) };
+    let has_payload = packet_scope.get_payload_field().is_some();
+    let has_children = scope.iter_children(id).next().is_some();
+
+    let struct_name = if is_packet { format_ident!("{id}Data") } else { format_ident!("{id}") };
+    let fields_with_ids =
+        packet_scope.fields.iter().filter(|f| f.id().is_some()).collect::<Vec<_>>();
+    let mut field_names =
+        fields_with_ids.iter().map(|f| format_ident!("{}", f.id().unwrap())).collect::<Vec<_>>();
+    let mut field_types = fields_with_ids.iter().map(|f| types::rust_type(f)).collect::<Vec<_>>();
+    if has_children || has_payload {
+        if is_packet {
+            field_names.push(format_ident!("child"));
+            let field_type = format_ident!("{id}DataChild");
+            field_types.push(quote!(#field_type));
+        } else {
+            field_names.push(format_ident!("payload"));
+            field_types.push(quote!(Vec<u8>));
+        }
+    }
 
     let data_struct_decl = quote! {
         #[derive(Debug, Clone, PartialEq, Eq)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-        pub struct #id_data {
-            #field_declarations
+        pub struct #struct_name {
+            #(#visibility #field_names: #field_types,)*
         }
     };
 
     let data_struct_impl = quote! {
-        impl #id_data {
+        impl #struct_name {
             fn conforms(#span: &[u8]) -> bool {
                 #conforms
             }
 
-            fn parse(mut #span: &mut Cell<&[u8]> #(, #parse_field_names: #parse_field_types)*) -> Result<Self> {
+            #visibility fn parse(
+                #span: &[u8] #(, #parse_arg_names: #parse_arg_types)*
+            ) -> Result<Self> {
+                let mut cell = Cell::new(#span);
+                let packet = Self::parse_inner(&mut cell #(, #parse_arg_names)*)?;
+                // TODO(mgeisler): communicate back to user if !cell.get().is_empty()?
+                Ok(packet)
+            }
+
+            fn parse_inner(
+                mut #span: &mut Cell<&[u8]> #(, #parse_arg_names: #parse_arg_types)*
+            ) -> Result<Self> {
                 #field_parser
                 Ok(Self {
                     #(#field_names,)*
-                    #child_field
                 })
             }
 
@@ -272,7 +292,7 @@ fn generate_data_struct(
 /// Find all parents from `id`.
 ///
 /// This includes the `Decl` for `id` itself.
-fn find_parents<'a>(scope: &lint::Scope<'a>, id: &str) -> Vec<&'a parser_ast::Decl> {
+fn find_parents<'a>(scope: &lint::Scope<'a>, id: &str) -> Vec<&'a analyzer_ast::Decl> {
     let mut decl = scope.typedef[id];
     let mut parents = vec![decl];
     while let ast::DeclDesc::Packet { parent_id: Some(parent_id), .. }
@@ -310,8 +330,7 @@ pub fn constraint_to_value(
     }
 }
 
-/// Generate code for `ast::Decl::Packet` and `ast::Decl::Struct`
-/// values.
+/// Generate code for a `ast::Decl::Packet`.
 fn generate_packet_decl(
     scope: &lint::Scope<'_>,
     endianness: ast::EndiannessValue,
@@ -400,7 +419,7 @@ fn generate_packet_decl(
             })
             .collect::<Vec<_>>();
 
-        if parent_packet_scope.payload.is_some() {
+        if parent_packet_scope.get_payload_field().is_some() {
             field.push(format_ident!("child"));
             if idx == 0 {
                 // Top-most parent, the child is simply created from
@@ -429,8 +448,8 @@ fn generate_packet_decl(
         }
     });
 
-    let children = get_packet_children(scope, id);
-    let has_payload = packet_scope.payload.is_some();
+    let children = scope.iter_children(id).collect::<Vec<_>>();
+    let has_payload = packet_scope.get_payload_field().is_some();
     let has_children_or_payload = !children.is_empty() || has_payload;
     let child =
         children.iter().map(|child| format_ident!("{}", child.id().unwrap())).collect::<Vec<_>>();
@@ -571,14 +590,12 @@ fn generate_packet_decl(
             pub fn parse(#span: &[u8]) -> Result<Self> {
                 let mut cell = Cell::new(#span);
                 let packet = Self::parse_inner(&mut cell)?;
-                if !cell.get().is_empty() {
-                    return Err(Error::InvalidPacketError);
-                }
+                // TODO(mgeisler): communicate back to user if !cell.get().is_empty()?
                 Ok(packet)
             }
 
             fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
-                let data = #top_level_data::parse(&mut bytes)?;
+                let data = #top_level_data::parse_inner(&mut bytes)?;
                 Ok(Self::new(Arc::new(data)).unwrap())
             }
 
@@ -624,6 +641,19 @@ fn generate_packet_decl(
                 }
             }
         )*
+    }
+}
+
+/// Generate code for a `ast::Decl::Struct`.
+fn generate_struct_decl(
+    scope: &lint::Scope<'_>,
+    endianness: ast::EndiannessValue,
+    id: &str,
+) -> proc_macro2::TokenStream {
+    let (struct_decl, struct_impl) = generate_data_struct(scope, endianness, id);
+    quote! {
+        #struct_decl
+        #struct_impl
     }
 }
 
@@ -690,12 +720,20 @@ fn generate_enum_decl(id: &str, tags: &[ast::Tag]) -> proc_macro2::TokenStream {
 
 fn generate_decl(
     scope: &lint::Scope<'_>,
-    file: &parser_ast::File,
-    decl: &parser_ast::Decl,
+    file: &analyzer_ast::File,
+    decl: &analyzer_ast::Decl,
 ) -> String {
     match &decl.desc {
-        ast::DeclDesc::Packet { id, .. } | ast::DeclDesc::Struct { id, .. } => {
+        ast::DeclDesc::Packet { id, .. } => {
             generate_packet_decl(scope, file.endianness.value, id).to_string()
+        }
+        ast::DeclDesc::Struct { id, parent_id: None, .. } => {
+            // TODO(mgeisler): handle structs with parents. We could
+            // generate code for them, but the code is not useful
+            // since it would require the caller to unpack everything
+            // manually. We either need to change the API, or
+            // implement the recursive (de)serialization.
+            generate_struct_decl(scope, file.endianness.value, id).to_string()
         }
         ast::DeclDesc::Enum { id, tags, .. } => generate_enum_decl(id, tags).to_string(),
         _ => todo!("unsupported Decl::{:?}", decl),
@@ -706,13 +744,13 @@ fn generate_decl(
 ///
 /// The code is not formatted, pipe it through `rustfmt` to get
 /// readable source code.
-pub fn generate(sources: &ast::SourceDatabase, file: &parser_ast::File) -> String {
+pub fn generate(sources: &ast::SourceDatabase, file: &analyzer_ast::File) -> String {
     let mut code = String::new();
 
     let source = sources.get(file.file).expect("could not read source");
     code.push_str(&preamble::generate(Path::new(source.name())));
 
-    let scope = lint::Scope::new(file).unwrap();
+    let scope = lint::Scope::new(file);
     for decl in &file.declarations {
         code.push_str(&generate_decl(&scope, file, decl));
         code.push_str("\n\n");
@@ -724,6 +762,7 @@ pub fn generate(sources: &ast::SourceDatabase, file: &parser_ast::File) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer;
     use crate::ast;
     use crate::parser::parse_inline;
     use crate::test_utils::{assert_snapshot_eq, rustfmt};
@@ -734,9 +773,11 @@ mod tests {
     /// # Panics
     ///
     /// Panics on parse errors.
-    pub fn parse_str(text: &str) -> parser_ast::File {
+    pub fn parse_str(text: &str) -> analyzer_ast::File {
         let mut db = ast::SourceDatabase::new();
-        parse_inline(&mut db, String::from("stdin"), String::from(text)).expect("parse error")
+        let file =
+            parse_inline(&mut db, String::from("stdin"), String::from(text)).expect("parse error");
+        analyzer::analyze(&file).expect("analyzer error")
     }
 
     #[track_caller]
@@ -755,19 +796,22 @@ mod tests {
                 a: 8,
                 b: 8,
                 c: 8,
+                _payload_,
               }
               packet Child: Parent(a = 10) {
                 x: 8,
+                _payload_,
               }
               packet GrandChild: Child(b = 20) {
                 y: 8,
+                _payload_,
               }
               packet GrandGrandChild: GrandChild(c = 30) {
                 z: 8,
               }
             ";
         let file = parse_str(code);
-        let scope = lint::Scope::new(&file).unwrap();
+        let scope = lint::Scope::new(&file);
         let find_fields =
             |id| find_constrained_parent_fields(&scope, id).map(|field| field.id().unwrap());
         assert_iter_eq(find_fields("Parent"), vec![]);
@@ -800,6 +844,7 @@ mod tests {
                     let code = format!("{endianness}_packets\n{}", $code);
                     let mut db = ast::SourceDatabase::new();
                     let file = parse_inline(&mut db, String::from("test"), code).unwrap();
+                    let file = analyzer::analyze(&file).unwrap();
                     let actual_code = generate(&db, &file);
                     assert_snapshot_eq(
                         &format!("tests/generated/{name}_{endianness}.rs"),
@@ -1096,4 +1141,63 @@ mod tests {
           }
         "
     );
+
+    // TODO(mgeisler): enable this test when we have an approach to
+    // struct fields with parents.
+    //
+    // test_pdl!(
+    //     struct_decl_child_structs,
+    //     "
+    //       enum Enum16 : 16 {
+    //         A = 1,
+    //         B = 2,
+    //       }
+    //
+    //       struct Foo {
+    //           a: 8,
+    //           b: Enum16,
+    //           _size_(_payload_): 8,
+    //           _payload_
+    //       }
+    //
+    //       struct Bar : Foo (a = 100) {
+    //           x: 8,
+    //       }
+    //
+    //       struct Baz : Foo (b = B) {
+    //           y: 16,
+    //       }
+    //     "
+    // );
+    //
+    // test_pdl!(
+    //     struct_decl_grand_children,
+    //     "
+    //       enum Enum16 : 16 {
+    //         A = 1,
+    //         B = 2,
+    //       }
+    //
+    //       struct Parent {
+    //           foo: Enum16,
+    //           bar: Enum16,
+    //           baz: Enum16,
+    //           _size_(_payload_): 8,
+    //           _payload_
+    //       }
+    //
+    //       struct Child : Parent (foo = A) {
+    //           quux: Enum16,
+    //           _payload_,
+    //       }
+    //
+    //       struct GrandChild : Child (bar = A, quux = A) {
+    //           _body_,
+    //       }
+    //
+    //       struct GrandGrandChild : GrandChild (baz = A) {
+    //           _body_,
+    //       }
+    //     "
+    // );
 }

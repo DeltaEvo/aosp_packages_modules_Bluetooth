@@ -481,7 +481,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     auto ase = leAudioDevice->GetFirstActiveAseByDataPathState(
         AudioStreamDataPathState::CIS_ESTABLISHED);
 
-    if (ase->cis_conn_hdl != conn_handle) {
+    if (!ase || ase->cis_conn_hdl != conn_handle) {
       LOG(ERROR) << __func__ << " Cannot find ase by handle " << +conn_handle;
       return;
     }
@@ -605,7 +605,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
   void ProcessHciNotifAclDisconnected(LeAudioDeviceGroup* group,
                                       LeAudioDevice* leAudioDevice) {
     FreeLinkQualityReports(leAudioDevice);
-    leAudioDevice->conn_id_ = GATT_INVALID_CONN_ID;
     /* mark ASEs as not used. */
     leAudioDevice->DeactivateAllAses();
 
@@ -760,6 +759,26 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       alarm_cancel(watchdog_);
       PrepareDataPath(group);
     }
+  }
+
+  static void WriteToControlPoint(LeAudioDevice* leAudioDevice,
+                                  std::vector<uint8_t> value) {
+    tGATT_WRITE_TYPE write_type = GATT_WRITE_NO_RSP;
+
+    if (value.size() > (leAudioDevice->mtu_ - 3)) {
+      LOG_WARN("%s, using long write procedure (%d > %d)",
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_),
+               static_cast<int>(value.size()), (leAudioDevice->mtu_ - 3));
+
+      /* Note, that this type is actually LONG WRITE.
+       * Meaning all the Prepare Writes plus Execute is handled in the stack
+       */
+      write_type = GATT_WRITE_PREPARE;
+    }
+
+    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
+                                      leAudioDevice->ctp_hdls_.val_hdl, value,
+                                      write_type, NULL, NULL);
   }
 
   static void RemoveDataPathByCisHandle(LeAudioDevice* leAudioDevice,
@@ -932,9 +951,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
       le_audio::client_parser::ascs::PrepareAseCtpAudioReceiverStopReady(ids,
                                                                          value);
-      BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                        leAudioDevice->ctp_hdls_.val_hdl, value,
-                                        GATT_WRITE_NO_RSP, NULL, NULL);
+      WriteToControlPoint(leAudioDevice, value);
     }
 
     /* Tear down CIS's data paths within the group */
@@ -1596,9 +1613,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpCodecConfig(confs, value);
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
   }
 
   void AseStateMachineProcessCodecConfigured(
@@ -2052,9 +2067,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
              ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     le_audio::client_parser::ascs::PrepareAseCtpEnable(confs, value);
 
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
   }
 
   GroupStreamStatus PrepareAndSendDisableToTheGroup(LeAudioDeviceGroup* group) {
@@ -2092,9 +2105,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpDisable(ids, value);
 
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
   }
 
   GroupStreamStatus PrepareAndSendReleaseToTheGroup(LeAudioDeviceGroup* group) {
@@ -2132,9 +2143,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpRelease(ids, value);
 
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
   }
 
   void PrepareAndSendConfigQos(LeAudioDeviceGroup* group,
@@ -2203,9 +2212,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
              ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpConfigQos(confs, value);
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
   }
 
   void PrepareAndSendUpdateMetadata(
@@ -2261,9 +2268,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       std::vector<uint8_t> value;
       le_audio::client_parser::ascs::PrepareAseCtpUpdateMetadata(confs, value);
 
-      BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                        leAudioDevice->ctp_hdls_.val_hdl, value,
-                                        GATT_WRITE_NO_RSP, NULL, NULL);
+      WriteToControlPoint(leAudioDevice, value);
     }
   }
 
@@ -2283,10 +2288,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       le_audio::client_parser::ascs::PrepareAseCtpAudioReceiverStartReady(
           ids, value);
 
-      BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                        leAudioDevice->ctp_hdls_.val_hdl, value,
-                                        GATT_WRITE_NO_RSP, NULL, NULL);
-
+      WriteToControlPoint(leAudioDevice, value);
       return;
     }
   }

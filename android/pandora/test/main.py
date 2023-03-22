@@ -6,24 +6,21 @@ import argparse
 import asha_test
 import example
 import gatt_test
-import grpc.aio
+import le_advertising_test
 import logging
 import os
 import sys
 
-from avatar import bumble_server
-from avatar.bumble_device import BumbleDevice
-from bumble_experimental.gatt import GATTService
 from collections import OrderedDict
 from mobly import base_test, config_parser, signals, suite_runner, test_runner
-from pandora_experimental.gatt_grpc_aio import add_GATTServicer_to_server
 from typing import Any, List, Optional, Type
 
-_TEST_CLASSES_LIST = [example.ExampleTest, asha_test.ASHATest, gatt_test.GattTest]
-
-
-def _bumble_servicer_hook(bumble: BumbleDevice, server: grpc.aio.Server) -> None:
-    add_GATTServicer_to_server(GATTService(bumble.device), server)
+_TEST_CLASSES_LIST = [
+    example.ExampleTest,
+    asha_test.ASHATest,
+    gatt_test.GattTest,
+    le_advertising_test.LeAdvertisingTest,
+]
 
 
 def _parse_cli_args(argv: List[str]) -> argparse.Namespace:
@@ -88,7 +85,9 @@ def run(test_classes: List[Any], argv: List[str]) -> None:
     ok = True
     try:
         # Load test config file.
-        test_configs: List[config_parser.TestRunConfig] = config_parser.load_test_config_file(args.config, args.test_bed)  # type: ignore
+        test_configs: List[config_parser.TestRunConfig] = config_parser.load_test_config_file(
+            args.config, args.test_bed
+        )  # type: ignore
 
         console_level = logging.DEBUG if args.verbose else logging.INFO
         for config in test_configs:
@@ -123,9 +122,6 @@ if __name__ == "__main__":
     # Default configuration file & `PandoraServer.apk`.
     root = str(os.path.dirname(__file__))
     default_argv = ['-c', os.path.join(root, 'config.yml')]
-
-    # Register experimental bumble servicers hook.
-    bumble_server.register_servicer_hook(_bumble_servicer_hook)
 
     # Run the test suite.
     run(_TEST_CLASSES_LIST, default_argv + argv)

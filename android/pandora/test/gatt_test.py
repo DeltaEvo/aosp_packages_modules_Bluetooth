@@ -13,16 +13,18 @@
 # limitations under the License.
 
 import asyncio
+import avatar
 import logging
 
-from avatar import BumbleDevice, PandoraDevice, PandoraDevices, asynchronous
+from avatar import BumblePandoraDevice, PandoraDevice, PandoraDevices, bumble_server
 from bumble.gatt import Characteristic, Service
 from bumble.smp import PairingConfig
-from mobly import base_test, test_runner
+from bumble_experimental.gatt import GATTService
+from mobly import base_test, signals, test_runner
 from pandora.host_pb2 import RANDOM, Connection, DataTypes
 from pandora.security_pb2 import LE_LEVEL3, PairingEventAnswer, SecureResponse
 from pandora_experimental.gatt_grpc import GATT
-from pandora_experimental.gatt_grpc_aio import GATT as AioGATT
+from pandora_experimental.gatt_grpc_aio import GATT as AioGATT, add_GATTServicer_to_server
 from pandora_experimental.gatt_pb2 import SUCCESS, ReadCharacteristicsFromUuidResponse
 from typing import Optional, Tuple
 
@@ -32,19 +34,22 @@ class GattTest(base_test.BaseTestClass):  # type: ignore[misc]
 
     # pandora devices.
     dut: PandoraDevice
-    ref: BumbleDevice
+    ref: PandoraDevice
 
     def setup_class(self) -> None:
+        # Register experimental bumble servicers hook.
+        bumble_server.register_servicer_hook(
+            lambda bumble, server: add_GATTServicer_to_server(GATTService(bumble.device), server)
+        )
+
         self.devices = PandoraDevices(self)
-        dut, ref = self.devices
-        assert isinstance(ref, BumbleDevice)
-        self.dut, self.ref = dut, ref
+        self.dut, self.ref, *_ = self.devices
 
     def teardown_class(self) -> None:
         if self.devices:
             self.devices.stop_all()
 
-    @asynchronous
+    @avatar.asynchronous
     async def setup_test(self) -> None:
         await asyncio.gather(self.dut.reset(), self.ref.reset())
 
@@ -78,8 +83,13 @@ class GattTest(base_test.BaseTestClass):  # type: ignore[misc]
         services = gatt.DiscoverServices(ref_dut)
         self.ref.log.info(f'REF services: {services}')
 
-    @asynchronous
+    @avatar.asynchronous
     async def test_read_characteristic_while_pairing(self) -> None:
+        if isinstance(self.dut, BumblePandoraDevice):
+            raise signals.TestSkip('TODO: b/273941061')
+        if not isinstance(self.ref, BumblePandoraDevice):
+            raise signals.TestSkip('Test require Bumble as reference device(s)')
+
         async def connect_dut_to_ref() -> Tuple[Connection, Connection]:
             ref_advertisement = self.ref.aio.host.Advertise(
                 legacy=True,
@@ -113,9 +123,9 @@ class GattTest(base_test.BaseTestClass):  # type: ignore[misc]
         )
         self.ref.device.add_service(service)  # type:ignore
         # disable MITM requirement on REF side (since it only does just works)
-        self.ref.device.pairing_config_factory = lambda _: PairingConfig(
+        self.ref.device.pairing_config_factory = lambda _: PairingConfig(  # type:ignore
             sc=True, mitm=False, bonding=True
-        )  # type: ignore
+        )
         # manually handle pairing on the DUT side
         dut_pairing_events = self.dut.aio.security.OnPairing()
         # set up connection
