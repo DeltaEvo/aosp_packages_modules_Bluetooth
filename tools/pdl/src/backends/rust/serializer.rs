@@ -1,5 +1,5 @@
+use crate::analyzer::ast as analyzer_ast;
 use crate::backends::rust::{mask_bits, types};
-use crate::parser::ast as parser_ast;
 use crate::{ast, lint};
 use heck::ToUpperCamelCase;
 use quote::{format_ident, quote};
@@ -39,11 +39,11 @@ impl<'a> FieldSerializer<'a> {
         }
     }
 
-    pub fn add(&mut self, field: &parser_ast::Field) {
+    pub fn add(&mut self, field: &analyzer_ast::Field) {
         match &field.desc {
-            _ if field.is_bitfield(self.scope) => self.add_bit_field(field),
+            _ if self.scope.is_bitfield(field) => self.add_bit_field(field),
             ast::FieldDesc::Array { id, width, .. } => {
-                self.add_array_field(id, *width, field.declaration(self.scope))
+                self.add_array_field(id, *width, self.scope.get_field_declaration(field))
             }
             ast::FieldDesc::Typedef { id, type_id } => {
                 self.add_typedef_field(id, type_id);
@@ -55,8 +55,8 @@ impl<'a> FieldSerializer<'a> {
         }
     }
 
-    fn add_bit_field(&mut self, field: &parser_ast::Field) {
-        let width = field.width(self.scope, false).unwrap();
+    fn add_bit_field(&mut self, field: &analyzer_ast::Field) {
+        let width = self.scope.get_field_width(field, false).unwrap();
         let shift = self.shift;
 
         match &field.desc {
@@ -65,7 +65,7 @@ impl<'a> FieldSerializer<'a> {
                 let field_type = types::Integer::new(*width);
                 if field_type.width > *width {
                     let packet_name = &self.packet_name;
-                    let max_value = mask_bits(*width);
+                    let max_value = mask_bits(*width, "u64");
                     self.code.push(quote! {
                         if self.#field_name > #max_value {
                             panic!(
@@ -105,7 +105,7 @@ impl<'a> FieldSerializer<'a> {
             }
             ast::FieldDesc::Size { field_id, width, .. } => {
                 let packet_name = &self.packet_name;
-                let max_value = mask_bits(*width);
+                let max_value = mask_bits(*width, "usize");
 
                 let decl = self.scope.typedef.get(self.packet_name).unwrap();
                 let scope = self.scope.scopes.get(decl).unwrap();
@@ -115,14 +115,17 @@ impl<'a> FieldSerializer<'a> {
                 let field_type = types::Integer::new(*width);
                 // TODO: size modifier
 
-                let value_field_decl = value_field.declaration(self.scope);
+                let value_field_decl = self.scope.get_field_declaration(value_field);
 
                 let field_size_name = format_ident!("{field_id}_size");
                 let array_size = match (&value_field.desc, value_field_decl.map(|decl| &decl.desc))
                 {
                     (ast::FieldDesc::Payload { .. } | ast::FieldDesc::Body { .. }, _) => {
-                        //let span = format_ident!("{}", self.span);
-                        quote! { self.child.get_total_size() }
+                        if let ast::DeclDesc::Packet { .. } = &decl.desc {
+                            quote! { self.child.get_total_size() }
+                        } else {
+                            quote! { self.payload.len() }
+                        }
                     }
                     (ast::FieldDesc::Array { width: Some(width), .. }, _)
                     | (ast::FieldDesc::Array { .. }, Some(ast::DeclDesc::Enum { width, .. })) => {
@@ -165,7 +168,7 @@ impl<'a> FieldSerializer<'a> {
                 let field_type = types::Integer::new(*width);
                 if field_type.width > *width {
                     let packet_name = &self.packet_name;
-                    let max_value = mask_bits(*width);
+                    let max_value = mask_bits(*width, "usize");
                     self.code.push(quote! {
                         if self.#field_name.len() > #max_value {
                             panic!(
@@ -237,7 +240,12 @@ impl<'a> FieldSerializer<'a> {
         self.shift = 0;
     }
 
-    fn add_array_field(&mut self, id: &str, width: Option<usize>, decl: Option<&parser_ast::Decl>) {
+    fn add_array_field(
+        &mut self,
+        id: &str,
+        width: Option<usize>,
+        decl: Option<&analyzer_ast::Decl>,
+    ) {
         // TODO: padding
 
         let serialize = match width {
@@ -291,23 +299,31 @@ impl<'a> FieldSerializer<'a> {
             panic!("Payload field does not start on an octet boundary");
         }
 
-        let children =
-            self.scope.children.get(self.packet_name).map(Vec::as_slice).unwrap_or_default();
-        let child_ids = children
-            .iter()
+        let decl = self.scope.typedef[self.packet_name];
+        let is_packet = matches!(&decl.desc, ast::DeclDesc::Packet { .. });
+
+        let child_ids = self
+            .scope
+            .iter_children(self.packet_name)
             .map(|child| format_ident!("{}", child.id().unwrap()))
             .collect::<Vec<_>>();
 
+        let span = format_ident!("{}", self.span);
         if self.shift == 0 {
-            let span = format_ident!("{}", self.span);
-            let packet_data_child = format_ident!("{}DataChild", self.packet_name);
-            self.code.push(quote! {
-                match &self.child {
-                    #(#packet_data_child::#child_ids(child) => child.write_to(#span),)*
-                    #packet_data_child::Payload(payload) => #span.put_slice(payload),
-                    #packet_data_child::None => {},
-                }
-            })
+            if is_packet {
+                let packet_data_child = format_ident!("{}DataChild", self.packet_name);
+                self.code.push(quote! {
+                    match &self.child {
+                        #(#packet_data_child::#child_ids(child) => child.write_to(#span),)*
+                        #packet_data_child::Payload(payload) => #span.put_slice(payload),
+                        #packet_data_child::None => {},
+                    }
+                })
+            } else {
+                self.code.push(quote! {
+                    #span.put_slice(&self.payload);
+                });
+            }
         } else {
             todo!("Shifted payloads");
         }

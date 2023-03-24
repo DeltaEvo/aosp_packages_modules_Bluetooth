@@ -40,6 +40,7 @@
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/crypto_toolbox/crypto_toolbox.h"
+#include "stack/eatt/eatt.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_types.h"
@@ -63,6 +64,22 @@ extern void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
 #ifndef PROPERTY_BLE_PRIVACY_ENABLED
 #define PROPERTY_BLE_PRIVACY_ENABLED "bluetooth.core.gap.le.privacy.enabled"
 #endif
+
+// Pairing parameters defined in Vol 3, Part H, Chapter 3.5.1 - 3.5.2
+// All present in the exact decimal values, not hex
+// Ex: bluetooth.core.smp.le.ctkd.initiator_key_distribution 15(0x0f)
+static const char kPropertyCtkdAuthRequest[] =
+    "bluetooth.core.smp.le.ctkd.auth_request";
+static const char kPropertyCtkdIoCapabilities[] =
+    "bluetooth.core.smp.le.ctkd.io_capabilities";
+// Vol 3, Part H, Chapter 3.6.1, Figure 3.11
+// |EncKey(1)|IdKey(1)|SignKey(1)|LinkKey(1)|Reserved(4)|
+static const char kPropertyCtkdInitiatorKeyDistribution[] =
+    "bluetooth.core.smp.le.ctkd.initiator_key_distribution";
+static const char kPropertyCtkdResponderKeyDistribution[] =
+    "bluetooth.core.smp.le.ctkd.responder_key_distribution";
+static const char kPropertyCtkdMaxKeySize[] =
+    "bluetooth.core.smp.le.ctkd.max_key_size";
 
 /******************************************************************************/
 /* External Function to be called by other modules                            */
@@ -631,10 +648,24 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
     return BTM_ILLEGAL_VALUE;
   }
 
+  LOG_INFO("%s, %d", ADDRESS_TO_LOGGABLE_CSTR(bd_addr), tx_pdu_length);
+
+  auto p_dev_rec = btm_find_dev(bd_addr);
+  if (p_dev_rec == NULL) {
+    LOG_ERROR("Device %s not found", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    return BTM_UNKNOWN_ADDR;
+  }
+
   if (tx_pdu_length > BTM_BLE_DATA_SIZE_MAX)
     tx_pdu_length = BTM_BLE_DATA_SIZE_MAX;
   else if (tx_pdu_length < BTM_BLE_DATA_SIZE_MIN)
     tx_pdu_length = BTM_BLE_DATA_SIZE_MIN;
+
+  if (p_dev_rec->get_suggested_tx_octets() >= tx_pdu_length) {
+    LOG_INFO(" Suggested TX octect already set to controller %d >= %d",
+             p_dev_rec->get_suggested_tx_octets(), tx_pdu_length);
+    return BTM_SUCCESS;
+  }
 
   uint16_t tx_time = BTM_BLE_DATA_TX_TIME_MAX_LEGACY;
 
@@ -651,6 +682,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
   if (bluetooth::shim::is_gd_l2cap_enabled()) {
     uint16_t handle = bluetooth::shim::L2CA_GetLeHandle(bd_addr);
     btsnd_hcic_ble_set_data_length(handle, tx_pdu_length, tx_time);
+    p_dev_rec->set_suggested_tx_octect(tx_pdu_length);
     return BTM_SUCCESS;
   }
 
@@ -668,6 +700,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
       tx_time, controller_get_interface()->get_ble_maximum_tx_time());
 
   btsnd_hcic_ble_set_data_length(hci_handle, tx_pdu_length, tx_time);
+  p_dev_rec->set_suggested_tx_octect(tx_pdu_length);
 
   return BTM_SUCCESS;
 }
@@ -1515,6 +1548,13 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
     else if (p_dev_rec->role_central)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
   }
+
+  if (encr_enable) {
+    /* Link is encrypted, start EATT */
+    bluetooth::eatt::EattExtension::GetInstance()->Connect(
+        p_dev_rec->ble.pseudo_addr);
+  }
+
   /* to notify GATT to send data if any request is pending */
   gatt_notify_enc_cmpl(p_dev_rec->ble.pseudo_addr);
 }
@@ -1671,11 +1711,18 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
                             tBTM_LE_IO_REQ* p_data) {
   uint8_t callback_rc = BTM_SUCCESS;
   BTM_TRACE_DEBUG("%s", __func__);
-  if (btm_cb.api.p_le_callback) {
-    /* the callback function implementation may change the IO capability... */
-    callback_rc = (*btm_cb.api.p_le_callback)(
-        BTM_LE_IO_REQ_EVT, p_dev_rec->bd_addr, (tBTM_LE_EVT_DATA*)p_data);
-  }
+  p_data->io_cap =
+      osi_property_get_int32(kPropertyCtkdIoCapabilities, BTM_IO_CAP_UNKNOWN);
+  p_data->auth_req = osi_property_get_int32(kPropertyCtkdAuthRequest,
+                                            BTM_LE_AUTH_REQ_SC_MITM_BOND);
+  p_data->init_keys = osi_property_get_int32(
+      kPropertyCtkdInitiatorKeyDistribution, SMP_BR_SEC_DEFAULT_KEY);
+  p_data->resp_keys = osi_property_get_int32(
+      kPropertyCtkdResponderKeyDistribution, SMP_BR_SEC_DEFAULT_KEY);
+  p_data->max_key_size =
+      osi_property_get_int32(kPropertyCtkdMaxKeySize, BTM_BLE_MAX_KEY_SIZE);
+  // No OOB data for BR/EDR
+  p_data->oob_data = false;
 
   return callback_rc;
 }
@@ -2037,7 +2084,7 @@ static void btm_ble_reset_id_impl(const Octet16& rand1, const Octet16& rand2) {
   /* proceed generate ER */
   btm_cb.devcb.ble_encryption_key_value = rand2;
   btm_notify_new_key(BTM_BLE_KEY_TYPE_ER);
-  
+
   /* if privacy is enabled, update the irk and RPA in the LE address manager */
   if (btm_cb.ble_ctr_cb.privacy_mode != BTM_PRIVACY_NONE) {
     BTM_BleConfigPrivacy(true);

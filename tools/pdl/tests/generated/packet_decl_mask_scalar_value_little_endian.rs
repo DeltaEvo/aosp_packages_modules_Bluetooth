@@ -38,14 +38,14 @@ pub trait Packet {
     fn to_vec(self) -> Vec<u8>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FooData {
     a: u8,
     b: u32,
     c: u8,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Foo {
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -62,7 +62,12 @@ impl FooData {
     fn conforms(bytes: &[u8]) -> bool {
         bytes.len() >= 4
     }
-    fn parse(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
+    fn parse(bytes: &[u8]) -> Result<Self> {
+        let mut cell = Cell::new(bytes);
+        let packet = Self::parse_inner(&mut cell)?;
+        Ok(packet)
+    }
+    fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         if bytes.get().remaining() < 4 {
             return Err(Error::InvalidLengthError {
                 obj: "Foo".to_string(),
@@ -72,7 +77,7 @@ impl FooData {
         }
         let chunk = bytes.get_mut().get_u32_le();
         let a = (chunk & 0x3) as u8;
-        let b = ((chunk >> 2) & 0xffffff);
+        let b = ((chunk >> 2) & 0xff_ffff);
         let c = ((chunk >> 26) & 0x3f) as u8;
         Ok(Self { a, b, c })
     }
@@ -80,8 +85,8 @@ impl FooData {
         if self.a > 0x3 {
             panic!("Invalid value for {}::{}: {} > {}", "Foo", "a", self.a, 0x3);
         }
-        if self.b > 0xffffff {
-            panic!("Invalid value for {}::{}: {} > {}", "Foo", "b", self.b, 0xffffff);
+        if self.b > 0xff_ffff {
+            panic!("Invalid value for {}::{}: {} > {}", "Foo", "b", self.b, 0xff_ffff);
         }
         if self.c > 0x3f {
             panic!("Invalid value for {}::{}: {} > {}", "Foo", "c", self.c, 0x3f);
@@ -120,13 +125,10 @@ impl Foo {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         let mut cell = Cell::new(bytes);
         let packet = Self::parse_inner(&mut cell)?;
-        if !cell.get().is_empty() {
-            return Err(Error::InvalidPacketError);
-        }
         Ok(packet)
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
-        let data = FooData::parse(&mut bytes)?;
+        let data = FooData::parse_inner(&mut bytes)?;
         Ok(Self::new(Arc::new(data)).unwrap())
     }
     fn new(foo: Arc<FooData>) -> std::result::Result<Self, &'static str> {

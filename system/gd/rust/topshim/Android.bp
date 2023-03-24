@@ -60,7 +60,7 @@ cc_library_static {
     generated_headers: [
         "libbt_init_flags_bridge_header",
         "libbt_topshim_bridge_header",
-        "cxx-bridge-header"
+        "cxx-bridge-header",
     ],
     generated_sources: ["libbt_topshim_bridge_code"],
     include_dirs: [
@@ -126,6 +126,7 @@ rust_bindgen {
         "--allowlist-type=btsdp.*",
         "--allowlist-type=btsock_.*",
         "--allowlist-type=bthf_.*",
+        "--allowlist-type=btrc_.*",
         "--allowlist-type=sock_connect_signal_t",
         "--enable-cxx-namespaces",
         "--opaque-type=std::.*",

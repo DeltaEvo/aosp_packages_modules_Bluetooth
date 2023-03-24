@@ -82,12 +82,12 @@ impl<'de> serde::Deserialize<'de> for Enum7 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FooData {
     b: u64,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Foo {
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -102,7 +102,12 @@ impl FooData {
     fn conforms(bytes: &[u8]) -> bool {
         bytes.len() >= 8
     }
-    fn parse(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
+    fn parse(bytes: &[u8]) -> Result<Self> {
+        let mut cell = Cell::new(bytes);
+        let packet = Self::parse_inner(&mut cell)?;
+        Ok(packet)
+    }
+    fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         if bytes.get().remaining() < 8 {
             return Err(Error::InvalidLengthError {
                 obj: "Foo".to_string(),
@@ -117,12 +122,15 @@ impl FooData {
                 actual: (chunk & 0x7f) as u8 as u64,
             });
         }
-        let b = ((chunk >> 7) & 0x1ffffffffffffffu64);
+        let b = ((chunk >> 7) & 0x1ff_ffff_ffff_ffff_u64);
         Ok(Self { b })
     }
     fn write_to(&self, buffer: &mut BytesMut) {
-        if self.b > 0x1ffffffffffffffu64 {
-            panic!("Invalid value for {}::{}: {} > {}", "Foo", "b", self.b, 0x1ffffffffffffffu64);
+        if self.b > 0x1ff_ffff_ffff_ffff_u64 {
+            panic!(
+                "Invalid value for {}::{}: {} > {}",
+                "Foo", "b", self.b, 0x1ff_ffff_ffff_ffff_u64
+            );
         }
         let value = (Enum7::A as u64) | (self.b << 7);
         buffer.put_u64_le(value);
@@ -158,13 +166,10 @@ impl Foo {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         let mut cell = Cell::new(bytes);
         let packet = Self::parse_inner(&mut cell)?;
-        if !cell.get().is_empty() {
-            return Err(Error::InvalidPacketError);
-        }
         Ok(packet)
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
-        let data = FooData::parse(&mut bytes)?;
+        let data = FooData::parse_inner(&mut bytes)?;
         Ok(Self::new(Arc::new(data)).unwrap())
     }
     fn new(foo: Arc<FooData>) -> std::result::Result<Self, &'static str> {

@@ -333,10 +333,6 @@ class Host(
         TRANSPORT_BREDR -> {
           Log.i(TAG, "disconnect BR_EDR")
           bluetoothDevice.disconnect()
-          flow
-            .filter { it.action == BluetoothDevice.ACTION_ACL_DISCONNECTED }
-            .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
-            .first()
         }
         TRANSPORT_LE -> {
           Log.i(TAG, "disconnect LE")
@@ -354,14 +350,18 @@ class Host(
             throw Status.UNKNOWN.asException()
           }
 
+          bluetoothDevice.disconnect()
           gattInstance.disconnectInstance()
-          gattInstance.waitForState(BluetoothProfile.STATE_DISCONNECTED)
         }
         else -> {
           Log.e(TAG, "Device type UNKNOWN")
           throw Status.UNKNOWN.asException()
         }
       }
+      flow
+        .filter { it.action == BluetoothDevice.ACTION_ACL_DISCONNECTED }
+        .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
+        .first()
 
       Empty.getDefaultInstance()
     }
@@ -462,16 +462,43 @@ class Host(
           throw Status.UNKNOWN.asException()
         }
 
-        for (service_uuid in dataTypesRequest.getCompleteServiceClassUuids16List()) {
-          val uuid16 = "0000${service_uuid}-0000-1000-8000-00805F9B34FB"
-          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(uuid16))
+        // Handle service uuids
+        for (uuid16 in dataTypesRequest.getCompleteServiceClassUuids16List()) {
+          val parcel_uuid16 = ParcelUuid.fromString("0000${uuid16}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceUuid(parcel_uuid16)
         }
-        for (service_uuid in dataTypesRequest.getCompleteServiceClassUuids32List()) {
-          val uuid32 = "${service_uuid}-0000-1000-8000-00805F9B34FB"
-          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(service_uuid))
+        for (uuid32 in dataTypesRequest.getCompleteServiceClassUuids32List()) {
+          val parcel_uuid32 = ParcelUuid.fromString("${uuid32}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceUuid(parcel_uuid32)
         }
-        for (service_uuid in dataTypesRequest.getCompleteServiceClassUuids128List()) {
-          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(service_uuid))
+        for (uuid128 in dataTypesRequest.getCompleteServiceClassUuids128List()) {
+          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(uuid128))
+        }
+
+        // Handle Service solicitation uuids
+        for (uuid16 in dataTypesRequest.getServiceSolicitationUuids16List()) {
+          val parcel_uuid16 = ParcelUuid.fromString("0000${uuid16}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceSolicitationUuid(parcel_uuid16)
+        }
+        for (uuid32 in dataTypesRequest.getServiceSolicitationUuids32List()) {
+          val parcel_uuid32 = ParcelUuid.fromString("${uuid32}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceSolicitationUuid(parcel_uuid32)
+        }
+        for (uuid128 in dataTypesRequest.getServiceSolicitationUuids128List()) {
+          advertisingDataBuilder.addServiceSolicitationUuid(ParcelUuid.fromString(uuid128))
+        }
+
+        // Handle service data uuids
+        for ((uuid16, data) in dataTypesRequest.getServiceDataUuid16()) {
+          val parcel_uuid16 = ParcelUuid.fromString("0000${uuid16}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceData(parcel_uuid16, data.toByteArray())
+        }
+        for ((uuid32, data) in dataTypesRequest.getServiceDataUuid32()) {
+          val parcel_uuid32 = ParcelUuid.fromString("${uuid32}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceData(parcel_uuid32, data.toByteArray())
+        }
+        for ((uuid128, data) in dataTypesRequest.getServiceDataUuid128()) {
+          advertisingDataBuilder.addServiceData(ParcelUuid.fromString(uuid128), data.toByteArray())
         }
 
         advertisingDataBuilder
@@ -582,17 +609,18 @@ class Host(
                   else -> DiscoverabilityMode.NOT_DISCOVERABLE
                 }
               dataTypesBuilder.setLeDiscoverabilityMode(mode)
-              var manufacturerData = ByteBuffer.allocate(32)
-              val manufacteurSpecificDatas = scanRecord.getManufacturerSpecificData()
-              for (i in 0..manufacteurSpecificDatas.size() - 1) {
-                val id = manufacteurSpecificDatas.keyAt(i)
+              var manufacturerData = ByteBuffer.allocate(512)
+              val manufacturerSpecificDatas = scanRecord.getManufacturerSpecificData()
+              for (i in 0..manufacturerSpecificDatas.size() - 1) {
+                val id = manufacturerSpecificDatas.keyAt(i)
                 manufacturerData
                   .put(id.toByte())
                   .put(id.shr(8).toByte())
-                  .put(manufacteurSpecificDatas.get(id))
+                  .put(manufacturerSpecificDatas.get(id))
               }
               dataTypesBuilder.setManufacturerSpecificData(
-                ByteString.copyFrom(manufacturerData.array())
+                ByteString.copyFrom(manufacturerData.array(), 0,
+                  manufacturerData.position())
               )
               val primaryPhy =
                 when (result.getPrimaryPhy()) {

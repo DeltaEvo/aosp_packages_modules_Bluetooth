@@ -48,7 +48,6 @@
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/security_device_record.h"
-#include "stack/eatt/eatt.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/btm_status.h"
@@ -3884,6 +3883,7 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason,
     p_dev_rec->sec_flags &= ~(BTM_SEC_LE_AUTHENTICATED | BTM_SEC_LE_ENCRYPTED |
                               BTM_SEC_ROLE_SWITCHED);
     p_dev_rec->enc_key_size = 0;
+    p_dev_rec->suggested_tx_octets = 0;
 
     if ((p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN) == 0) {
       p_dev_rec->sec_flags &=
@@ -4542,7 +4542,6 @@ static bool btm_sec_start_get_name(tBTM_SEC_DEV_REC* p_dev_rec) {
  *
  ******************************************************************************/
 static void btm_sec_wait_and_start_authentication(tBTM_SEC_DEV_REC* p_dev_rec) {
-  p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
   auto addr = new RawAddress(p_dev_rec->bd_addr);
 
   static const int32_t delay_auth =
@@ -4577,8 +4576,11 @@ static void btm_sec_auth_timer_timeout(void* data) {
     LOG_INFO("%s: invalid device or not found", __func__);
   } else if (btm_dev_authenticated(p_dev_rec)) {
     LOG_INFO("%s: device is already authenticated", __func__);
+  } else if (p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
+    LOG_INFO("%s: device is in the process of authenticating", __func__);
   } else {
     LOG_INFO("%s: starting authentication", __func__);
+    p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
     btsnd_hcic_auth_request(p_dev_rec->hci_handle);
   }
 }
@@ -4811,12 +4813,6 @@ void btm_sec_dev_rec_cback_event(tBTM_SEC_DEV_REC* p_dev_rec,
   }
 
   btm_sec_check_pending_reqs();
-
-  if (btm_status == BTM_SUCCESS && is_le_transport) {
-    /* Link is encrypted, start EATT */
-    bluetooth::eatt::EattExtension::GetInstance()->Connect(
-        p_dev_rec->ble.pseudo_addr);
-  }
 }
 
 void btm_sec_cr_loc_oob_data_cback_event(const RawAddress& address,

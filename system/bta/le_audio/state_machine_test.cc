@@ -78,6 +78,8 @@ constexpr LeAudioContextType kContextTypeConversational =
     static_cast<LeAudioContextType>(0x0002);
 constexpr LeAudioContextType kContextTypeMedia =
     static_cast<LeAudioContextType>(0x0004);
+constexpr LeAudioContextType kContextTypeLive =
+    static_cast<LeAudioContextType>(0x0040);
 constexpr LeAudioContextType kContextTypeSoundEffects =
     static_cast<LeAudioContextType>(0x0080);
 constexpr LeAudioContextType kContextTypeRingtone =
@@ -546,6 +548,15 @@ class StateMachineTest : public Test {
     return &(*group);
   }
 
+  void InjectAclDisconnected(LeAudioDeviceGroup* group,
+                             LeAudioDevice* leAudioDevice) {
+    // Do what the client.cc does when handling the disconnection event
+    leAudioDevice->conn_id_ = GATT_INVALID_CONN_ID;
+    leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
+    LeAudioGroupStateMachine::Get()->ProcessHciNotifAclDisconnected(
+        group, leAudioDevice);
+  }
+
   void InjectAseStateNotification(types::ase* ase, LeAudioDevice* device,
                                   LeAudioDeviceGroup* group, uint8_t new_state,
                                   void* new_state_params) {
@@ -734,6 +745,11 @@ class StateMachineTest : public Test {
         num_ase_src = 1 + additional_src_ases;
         break;
 
+      case kContextTypeLive:
+        num_ase_snk = 1 + additional_snk_ases;
+        num_ase_src = 1 + additional_src_ases;
+        break;
+
       default:
         ASSERT_TRUE(false);
     }
@@ -751,7 +767,7 @@ class StateMachineTest : public Test {
 
         // Prepare Sink Published Audio Capability records
         if ((kContextTypeRingtone | kContextTypeMedia |
-             kContextTypeConversational)
+             kContextTypeConversational | kContextTypeLive)
                 .test(context_type)) {
           // Set target ASE configurations
           std::vector<types::acs_ac_record> pac_recs;
@@ -769,14 +785,15 @@ class StateMachineTest : public Test {
           leAudioDevice->snk_pacs_.emplace_back(
               std::make_tuple(std::move(handle_pair), pac_recs));
 
-          snk_context_type.set(static_cast<LeAudioContextType>(context_type));
+          snk_context_type.set(context_type);
           leAudioDevice->snk_audio_locations_ =
               ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
               ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight;
         }
 
         // Prepare Source Published Audio Capability records
-        if (context_type == kContextTypeConversational) {
+        if ((context_type == kContextTypeConversational) ||
+            (context_type == kContextTypeLive)) {
           // Set target ASE configurations
           std::vector<types::acs_ac_record> pac_recs;
 
@@ -793,8 +810,7 @@ class StateMachineTest : public Test {
 
           leAudioDevice->src_pacs_.emplace_back(
               std::make_tuple(std::move(handle_pair), pac_recs));
-          src_context_type.set(
-              static_cast<LeAudioContextType>(kContextTypeConversational));
+          src_context_type.set(context_type);
 
           leAudioDevice->src_audio_locations_ =
               ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
@@ -1139,16 +1155,22 @@ class StateMachineTest : public Test {
   }
 
   void PrepareReleaseHandler(LeAudioDeviceGroup* group,
-                             int verify_ase_count = 0) {
+                             int verify_ase_count = 0,
+                             bool inject_disconnect_device = false) {
     ase_ctp_handlers[ascs::kAseCtpOpcodeRelease] =
-        [group, verify_ase_count, this](LeAudioDevice* device,
-                                        std::vector<uint8_t> value,
-                                        GATT_WRITE_OP_CB cb, void* cb_data) {
+        [group, verify_ase_count, inject_disconnect_device, this](
+            LeAudioDevice* device, std::vector<uint8_t> value,
+            GATT_WRITE_OP_CB cb, void* cb_data) {
           auto num_ase = value[1];
 
           // Verify ase count if needed
           if (verify_ase_count) ASSERT_EQ(verify_ase_count, num_ase);
           ASSERT_EQ(value.size(), 2ul + num_ase);
+
+          if (inject_disconnect_device) {
+            InjectAclDisconnected(group, device);
+            return;
+          }
 
           // Inject Releasing & Idle ASE state notification for each ASE
           auto* ase_p = &value[2];
@@ -1257,7 +1279,7 @@ TEST_F(StateMachineTest, testConfigureCodecSingle) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
 
   /* Cancel is called when group goes to streaming. */
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testConfigureCodecMulti) {
@@ -1303,7 +1325,7 @@ TEST_F(StateMachineTest, testConfigureCodecMulti) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
 
   /* Cancel is called when group goes to streaming. */
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testConfigureQosSingle) {
@@ -1349,7 +1371,7 @@ TEST_F(StateMachineTest, testConfigureQosSingle) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
 
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testConfigureQosSingleRecoverCig) {
@@ -1397,7 +1419,7 @@ TEST_F(StateMachineTest, testConfigureQosSingleRecoverCig) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testConfigureQosMultiple) {
@@ -1444,7 +1466,7 @@ TEST_F(StateMachineTest, testConfigureQosMultiple) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testStreamSingle) {
@@ -1496,7 +1518,7 @@ TEST_F(StateMachineTest, testStreamSingle) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testStreamSkipEnablingSink) {
@@ -1547,7 +1569,7 @@ TEST_F(StateMachineTest, testStreamSkipEnablingSink) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testStreamSkipEnablingSinkSource) {
@@ -1600,7 +1622,7 @@ TEST_F(StateMachineTest, testStreamSkipEnablingSinkSource) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testStreamMultipleConversational) {
@@ -1655,7 +1677,7 @@ TEST_F(StateMachineTest, testStreamMultipleConversational) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testFailedStreamMultipleConversational) {
@@ -1732,7 +1754,7 @@ TEST_F(StateMachineTest, testFailedStreamMultipleConversational) {
 
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(), types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testStreamMultiple) {
@@ -1786,7 +1808,7 @@ TEST_F(StateMachineTest, testStreamMultiple) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testUpdateMetadataMultiple) {
@@ -1843,8 +1865,8 @@ TEST_F(StateMachineTest, testUpdateMetadataMultiple) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Make sure all devices get the metadata update
   leAudioDevice = group->GetFirstDevice();
@@ -1867,7 +1889,7 @@ TEST_F(StateMachineTest, testUpdateMetadataMultiple) {
       {.sink = metadata_context_type, .source = metadata_context_type}));
 
   /* This is just update metadata - watchdog is not used */
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testDisableSingle) {
@@ -1924,8 +1946,8 @@ TEST_F(StateMachineTest, testDisableSingle) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Validate GroupStreamStatus
   EXPECT_CALL(
@@ -1945,7 +1967,7 @@ TEST_F(StateMachineTest, testDisableSingle) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testDisableMultiple) {
@@ -1998,8 +2020,8 @@ TEST_F(StateMachineTest, testDisableMultiple) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Validate GroupStreamStatus
   EXPECT_CALL(
@@ -2018,7 +2040,7 @@ TEST_F(StateMachineTest, testDisableMultiple) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testDisableBidirectional) {
@@ -2104,8 +2126,8 @@ TEST_F(StateMachineTest, testDisableBidirectional) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Validate GroupStreamStatus
   EXPECT_CALL(
@@ -2127,7 +2149,7 @@ TEST_F(StateMachineTest, testDisableBidirectional) {
   ASSERT_EQ(removed_unidirectional, true);
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testReleaseSingle) {
@@ -2175,8 +2197,8 @@ TEST_F(StateMachineTest, testReleaseSingle) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
   // Validate GroupStreamStatus
   EXPECT_CALL(
       mock_callbacks_,
@@ -2191,7 +2213,7 @@ TEST_F(StateMachineTest, testReleaseSingle) {
 
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(), types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testReleaseCachingSingle) {
@@ -2256,8 +2278,8 @@ TEST_F(StateMachineTest, testReleaseCachingSingle) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Stop the stream
   LeAudioGroupStateMachine::Get()->StopStream(group);
@@ -2266,7 +2288,7 @@ TEST_F(StateMachineTest, testReleaseCachingSingle) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest,
@@ -2339,8 +2361,8 @@ TEST_F(StateMachineTest,
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Stop the stream
   LeAudioGroupStateMachine::Get()->StopStream(group);
@@ -2349,8 +2371,8 @@ TEST_F(StateMachineTest,
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Start the configuration and stream Media content
   LeAudioGroupStateMachine::Get()->StartStream(
@@ -2362,8 +2384,8 @@ TEST_F(StateMachineTest,
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 }
 
 TEST_F(StateMachineTest,
@@ -2450,8 +2472,8 @@ TEST_F(StateMachineTest,
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Stop the stream
   LeAudioGroupStateMachine::Get()->StopStream(group);
@@ -2460,8 +2482,8 @@ TEST_F(StateMachineTest,
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Start the configuration and stream Media content
   context_type = kContextTypeMedia;
@@ -2473,7 +2495,7 @@ TEST_F(StateMachineTest,
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testReleaseMultiple) {
@@ -2514,6 +2536,11 @@ TEST_F(StateMachineTest, testReleaseMultiple) {
 
   InjectInitialIdleNotification(group);
 
+  EXPECT_CALL(mock_callbacks_,
+              StatusReportCb(leaudio_group_id,
+                             bluetooth::le_audio::GroupStreamStatus::STREAMING))
+      .Times(1);
+
   // Start the configuration and stream Media content
   LeAudioGroupStateMachine::Get()->StartStream(
       group, context_type,
@@ -2524,8 +2551,8 @@ TEST_F(StateMachineTest, testReleaseMultiple) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Validate GroupStreamStatus
   EXPECT_CALL(
@@ -2535,13 +2562,100 @@ TEST_F(StateMachineTest, testReleaseMultiple) {
   EXPECT_CALL(mock_callbacks_,
               StatusReportCb(leaudio_group_id,
                              bluetooth::le_audio::GroupStreamStatus::IDLE));
+  EXPECT_CALL(mock_callbacks_,
+              StatusReportCb(leaudio_group_id,
+                             bluetooth::le_audio::GroupStreamStatus::STREAMING))
+      .Times(0);
 
   // Stop the stream
   LeAudioGroupStateMachine::Get()->StopStream(group);
 
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(), types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+}
+
+TEST_F(StateMachineTest, testReleaseMultiple_DeviceDisconnectedDuringRelease) {
+  const auto context_type = kContextTypeMedia;
+  const auto leaudio_group_id = 6;
+  const auto num_devices = 2;
+
+  // Prepare multiple fake connected devices in a group
+  auto* group =
+      PrepareSingleTestDeviceGroup(leaudio_group_id, context_type, num_devices);
+  ASSERT_EQ(group->Size(), num_devices);
+
+  PrepareConfigureCodecHandler(group);
+  PrepareConfigureQosHandler(group);
+  PrepareEnableHandler(group);
+  PrepareDisableHandler(group);
+
+  /* Here we inject device disconnection during release */
+  PrepareReleaseHandler(group, 0, true);
+
+  auto* leAudioDevice = group->GetFirstDevice();
+  auto expected_devices_written = 0;
+  while (leAudioDevice) {
+    EXPECT_CALL(gatt_queue,
+                WriteCharacteristic(leAudioDevice->conn_id_,
+                                    leAudioDevice->ctp_hdls_.val_hdl, _,
+                                    GATT_WRITE_NO_RSP, _, _))
+        .Times(AtLeast(4));
+    expected_devices_written++;
+    leAudioDevice = group->GetNextDevice(leAudioDevice);
+  }
+  ASSERT_EQ(expected_devices_written, num_devices);
+
+  EXPECT_CALL(*mock_iso_manager_, CreateCig(_, _)).Times(1);
+  EXPECT_CALL(*mock_iso_manager_, EstablishCis(_)).Times(1);
+  EXPECT_CALL(*mock_iso_manager_, SetupIsoDataPath(_, _)).Times(2);
+  EXPECT_CALL(*mock_iso_manager_, RemoveIsoDataPath(_, _)).Times(0);
+  EXPECT_CALL(*mock_iso_manager_, DisconnectCis(_, _)).Times(0);
+  EXPECT_CALL(*mock_iso_manager_, RemoveCig(_, _)).Times(1);
+
+  InjectInitialIdleNotification(group);
+
+  EXPECT_CALL(mock_callbacks_,
+              StatusReportCb(leaudio_group_id,
+                             bluetooth::le_audio::GroupStreamStatus::STREAMING))
+      .Times(1);
+
+  // Start the configuration and stream Media content
+  LeAudioGroupStateMachine::Get()->StartStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)});
+
+  // Check if group has transitioned to a proper state
+  ASSERT_EQ(group->GetState(),
+            types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
+
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
+
+  testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
+
+  // Validate GroupStreamStatus
+  EXPECT_CALL(
+      mock_callbacks_,
+      StatusReportCb(leaudio_group_id,
+                     bluetooth::le_audio::GroupStreamStatus::RELEASING));
+  EXPECT_CALL(mock_callbacks_,
+              StatusReportCb(leaudio_group_id,
+                             bluetooth::le_audio::GroupStreamStatus::IDLE));
+  EXPECT_CALL(mock_callbacks_,
+              StatusReportCb(leaudio_group_id,
+                             bluetooth::le_audio::GroupStreamStatus::STREAMING))
+      .Times(0);
+
+  // Stop the stream
+  LeAudioGroupStateMachine::Get()->StopStream(group);
+
+  testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
+
+  // Check if group has transitioned to a proper state
+  ASSERT_EQ(group->GetState(), types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testReleaseBidirectional) {
@@ -2590,16 +2704,16 @@ TEST_F(StateMachineTest, testReleaseBidirectional) {
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Stop the stream
   LeAudioGroupStateMachine::Get()->StopStream(group);
 
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(), types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 }
 
 TEST_F(StateMachineTest, testDisableAndReleaseBidirectional) {
@@ -2762,8 +2876,8 @@ TEST_F(StateMachineTest, testAseAutonomousRelease) {
   /* Single disconnect as it is bidirectional Cis*/
   EXPECT_CALL(*mock_iso_manager_, DisconnectCis(_, _)).Times(2);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   for (auto* device = group->GetFirstDevice(); device != nullptr;
        device = group->GetNextDevice(device)) {
@@ -2789,7 +2903,7 @@ TEST_F(StateMachineTest, testAseAutonomousRelease) {
     }
   }
 
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, testAseAutonomousRelease2Devices) {
@@ -3026,12 +3140,6 @@ TEST_F(StateMachineTest, testConfigureDataPathForAdsp) {
        .source = types::AudioContexts(context_type)}));
 }
 
-static void InjectAclDisconnected(LeAudioDeviceGroup* group,
-                                  LeAudioDevice* leAudioDevice) {
-  LeAudioGroupStateMachine::Get()->ProcessHciNotifAclDisconnected(
-      group, leAudioDevice);
-}
-
 TEST_F(StateMachineTest, testStreamConfigurationAdspDownMix) {
   const auto context_type = kContextTypeConversational;
   const int leaudio_group_id = 4;
@@ -3204,6 +3312,8 @@ TEST_F(StateMachineTest, testAttachDeviceToTheStream) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
   lastDevice->conn_id_ = 3;
+  lastDevice->SetConnectionState(DeviceConnectState::CONNECTED);
+
   group->UpdateAudioContextTypeAvailability();
 
   // Make sure ASE with disconnected CIS are not left in STREAMING
@@ -3244,6 +3354,64 @@ TEST_F(StateMachineTest, testAttachDeviceToTheStream) {
   auto ase = fistDevice->GetFirstActiveAse();
   ASSERT_NE(ase->max_transport_latency, 0);
   ASSERT_NE(ase->retrans_nb, 0);
+}
+
+TEST_F(StateMachineTest, testStreamToGettingReadyDevice) {
+  const auto context_type = kContextTypeLive;
+  const auto leaudio_group_id = 666;
+  const auto num_devices = 2;
+
+  ContentControlIdKeeper::GetInstance()->SetCcid(call_context, call_ccid);
+
+  // Prepare multiple fake connected devices in a group
+  auto* group =
+      PrepareSingleTestDeviceGroup(leaudio_group_id, context_type, num_devices);
+
+  // Simulate the 2nd device still getting ready
+  auto* firstDevice = group->GetFirstDevice();
+  auto* secondDevice = group->GetNextDevice(firstDevice);
+  secondDevice->SetConnectionState(
+      DeviceConnectState::CONNECTED_BY_USER_GETTING_READY);
+  group->UpdateAudioContextTypeAvailability();
+
+  ASSERT_EQ(group->Size(), num_devices);
+  ASSERT_EQ(1, group->NumOfConnected());
+
+  PrepareConfigureCodecHandler(group);
+  PrepareConfigureQosHandler(group);
+  PrepareEnableHandler(group);
+  PrepareReceiverStartReady(group);
+  PrepareDisableHandler(group);
+  PrepareReleaseHandler(group);
+
+  /* Three Writes:
+   * 1: Codec Config
+   * 2: Codec QoS
+   * 3: Enabling
+   */
+  // Expect actions only on the already prepared device
+  EXPECT_CALL(gatt_queue, WriteCharacteristic(firstDevice->conn_id_,
+                                              firstDevice->ctp_hdls_.val_hdl, _,
+                                              GATT_WRITE_NO_RSP, _, _))
+      .Times(AtLeast(3));
+
+  EXPECT_CALL(*mock_iso_manager_, CreateCig(_, _)).Times(1);
+  EXPECT_CALL(*mock_iso_manager_, EstablishCis(_)).Times(1);
+  EXPECT_CALL(*mock_iso_manager_, SetupIsoDataPath(_, _)).Times(2);
+
+  InjectInitialIdleNotification(group);
+
+  // Start the configuration and the stream
+  LeAudioGroupStateMachine::Get()->StartStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)});
+
+  // Check if group has transitioned to a proper state with one device still
+  // being in the `CONNECTED_BY_USER_GETTING_READY` state
+  ASSERT_EQ(group->GetState(),
+            types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
+  testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
 }
 
 TEST_F(StateMachineTest, testAttachDeviceToTheConversationalStream) {
@@ -3313,6 +3481,8 @@ TEST_F(StateMachineTest, testAttachDeviceToTheConversationalStream) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
   lastDevice->conn_id_ = 3;
+  lastDevice->SetConnectionState(DeviceConnectState::CONNECTED);
+
   group->UpdateAudioContextTypeAvailability();
 
   // Make sure ASE with disconnected CIS are not left in STREAMING
@@ -3481,8 +3651,8 @@ TEST_F(StateMachineTest, StartStreamCachedConfig) {
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Validate GroupStreamStatus
   EXPECT_CALL(
@@ -3500,8 +3670,8 @@ TEST_F(StateMachineTest, StartStreamCachedConfig) {
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Restart stream
   EXPECT_CALL(
@@ -3516,7 +3686,7 @@ TEST_F(StateMachineTest, StartStreamCachedConfig) {
        .source = types::AudioContexts(context_type)});
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, BoundedHeadphonesConversationalToMediaChannelCount_2) {
@@ -3680,8 +3850,8 @@ TEST_F(StateMachineTest, BoundedHeadphonesConversationalToMediaChannelCount_1) {
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Validate GroupStreamStatus
   EXPECT_CALL(
@@ -3698,8 +3868,8 @@ TEST_F(StateMachineTest, BoundedHeadphonesConversationalToMediaChannelCount_1) {
   LeAudioGroupStateMachine::Get()->StopStream(group);
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   // Restart stream
   EXPECT_CALL(
@@ -3714,7 +3884,7 @@ TEST_F(StateMachineTest, BoundedHeadphonesConversationalToMediaChannelCount_1) {
        .source = types::AudioContexts(new_context_type)});
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, lateCisDisconnectedEvent_ConfiguredByUser) {
@@ -3768,8 +3938,8 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_ConfiguredByUser) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
   testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   /* Prepare DisconnectCis mock to not symulate CisDisconnection */
   ON_CALL(*mock_iso_manager_, DisconnectCis).WillByDefault(Return());
@@ -3792,7 +3962,7 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_ConfiguredByUser) {
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
 
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 
   EXPECT_CALL(mock_callbacks_,
               StatusReportCb(
@@ -3802,7 +3972,7 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_ConfiguredByUser) {
   // Inject CIS and ACL disconnection of first device
   InjectCisDisconnected(group, leAudioDevice, HCI_ERR_CONN_CAUSE_LOCAL_HOST);
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, lateCisDisconnectedEvent_AutonomousConfigured) {
@@ -3856,8 +4026,8 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_AutonomousConfigured) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
   testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
 
   /* Prepare DisconnectCis mock to not symulate CisDisconnection */
   ON_CALL(*mock_iso_manager_, DisconnectCis).WillByDefault(Return());
@@ -3884,7 +4054,7 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_AutonomousConfigured) {
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
 
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 
   EXPECT_CALL(
       mock_callbacks_,
@@ -3895,7 +4065,7 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_AutonomousConfigured) {
   // Inject CIS and ACL disconnection of first device
   InjectCisDisconnected(group, leAudioDevice, HCI_ERR_CONN_CAUSE_LOCAL_HOST);
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, lateCisDisconnectedEvent_Idle) {
@@ -3949,8 +4119,8 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_Idle) {
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
   testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
 
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
-  mock_function_count_map["alarm_cancel"] = 0;
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
+  reset_mock_function_count_map();
   /* Prepare DisconnectCis mock to not symulate CisDisconnection */
   ON_CALL(*mock_iso_manager_, DisconnectCis).WillByDefault(Return());
 
@@ -3970,7 +4140,7 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_Idle) {
 
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(), types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-  ASSERT_EQ(0, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(0, get_func_call_count("alarm_cancel"));
 
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
 
@@ -3981,7 +4151,7 @@ TEST_F(StateMachineTest, lateCisDisconnectedEvent_Idle) {
   // Inject CIS and ACL disconnection of first device
   InjectCisDisconnected(group, leAudioDevice, HCI_ERR_CONN_CAUSE_LOCAL_HOST);
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
 }
 
 TEST_F(StateMachineTest, StreamReconfigureAfterCisLostTwoDevices) {
@@ -4041,7 +4211,7 @@ TEST_F(StateMachineTest, StreamReconfigureAfterCisLostTwoDevices) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(1, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_cancel"));
   testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
   testing::Mock::VerifyAndClearExpectations(&gatt_queue);
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
@@ -4106,11 +4276,82 @@ TEST_F(StateMachineTest, StreamReconfigureAfterCisLostTwoDevices) {
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-  ASSERT_EQ(2, mock_function_count_map["alarm_cancel"]);
+  ASSERT_EQ(2, get_func_call_count("alarm_cancel"));
   testing::Mock::VerifyAndClearExpectations(&mock_iso_manager_);
   testing::Mock::VerifyAndClearExpectations(&gatt_queue);
   testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
 }
 
+TEST_F(StateMachineTest, StreamStartWithDifferentContextFromConfiguredState) {
+  auto context_type = kContextTypeConversational;
+  const auto leaudio_group_id = 6;
+  const auto num_devices = 2;
+
+  ContentControlIdKeeper::GetInstance()->SetCcid(media_context, media_ccid);
+
+  // Prepare multiple fake connected devices in a group
+  auto* group = PrepareSingleTestDeviceGroup(
+      leaudio_group_id, context_type, num_devices,
+      kContextTypeConversational | kContextTypeMedia);
+  ASSERT_EQ(group->Size(), num_devices);
+
+  PrepareConfigureCodecHandler(group, 0, true);
+  PrepareConfigureQosHandler(group);
+  PrepareEnableHandler(group);
+  PrepareDisableHandler(group);
+  PrepareReleaseHandler(group);
+  PrepareReceiverStartReady(group);
+
+  InjectInitialIdleNotification(group);
+
+  auto* leAudioDevice = group->GetFirstDevice();
+  auto expected_devices_written = 0;
+  while (leAudioDevice) {
+    /* Three Writes:
+     * 1. Codec configure
+     * 2: Codec QoS
+     * 3: Enabling
+     */
+    EXPECT_CALL(gatt_queue,
+                WriteCharacteristic(leAudioDevice->conn_id_,
+                                    leAudioDevice->ctp_hdls_.val_hdl, _,
+                                    GATT_WRITE_NO_RSP, _, _))
+        .Times(4);
+    expected_devices_written++;
+    leAudioDevice = group->GetNextDevice(leAudioDevice);
+  }
+  ASSERT_EQ(expected_devices_written, num_devices);
+
+  // Validate GroupStreamStatus
+  EXPECT_CALL(mock_callbacks_,
+              StatusReportCb(
+                  leaudio_group_id,
+                  bluetooth::le_audio::GroupStreamStatus::CONFIGURED_BY_USER));
+
+  // Start the configuration and stream Media content
+  group->SetPendingConfiguration();
+  LeAudioGroupStateMachine::Get()->ConfigureStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)});
+
+  testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
+
+  group->ClearPendingConfiguration();
+  // Validate GroupStreamStatus
+  EXPECT_CALL(
+      mock_callbacks_,
+      StatusReportCb(leaudio_group_id,
+                     bluetooth::le_audio::GroupStreamStatus::STREAMING));
+
+  context_type = kContextTypeMedia;
+  // Start the configuration and stream Media content
+  LeAudioGroupStateMachine::Get()->StartStream(
+      group, context_type,
+      {.sink = types::AudioContexts(context_type),
+       .source = types::AudioContexts(context_type)});
+
+  testing::Mock::VerifyAndClearExpectations(&mock_callbacks_);
+}
 }  // namespace internal
 }  // namespace le_audio

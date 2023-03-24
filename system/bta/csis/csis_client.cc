@@ -23,6 +23,7 @@
 #include <hardware/bt_gatt_types.h>
 
 #include <list>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,7 @@ using bluetooth::groups::DeviceGroupsCallbacks;
 namespace {
 class CsisClientImpl;
 CsisClientImpl* instance;
+std::mutex instance_mutex;
 DeviceGroupsCallbacks* device_group_callbacks;
 
 /**
@@ -1203,6 +1205,12 @@ class CsisClientImpl : public CsisClient {
       return;
     }
 
+    if (csis_group->GetDesiredSize() > 0 &&
+        (csis_group->GetDesiredSize() == csis_group->GetCurrentSize())) {
+      LOG_WARN("Group is already complete");
+      return;
+    }
+
     auto discovered_group_rsi = std::find_if(
         all_rsi.cbegin(), all_rsi.cend(), [&csis_group](const auto& rsi) {
           return csis_group->IsRsiMatching(rsi);
@@ -2035,6 +2043,7 @@ DeviceGroupsCallbacksImpl deviceGroupsCallbacksImpl;
 
 void CsisClient::Initialize(bluetooth::csis::CsisClientCallbacks* callbacks,
                             Closure initCb) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     LOG(ERROR) << __func__ << ": Already initialized!";
     return;
@@ -2073,6 +2082,7 @@ bool CsisClient::GetForStorage(const RawAddress& addr,
 }
 
 void CsisClient::CleanUp() {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   CsisClientImpl* ptr = instance;
   instance = nullptr;
 
@@ -2083,6 +2093,7 @@ void CsisClient::CleanUp() {
 }
 
 void CsisClient::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Coordinated Set Service Client:\n");
   if (instance) instance->Dump(fd);
   dprintf(fd, "\n");

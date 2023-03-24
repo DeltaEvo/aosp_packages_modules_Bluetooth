@@ -44,12 +44,14 @@
 #include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
 #include "device/include/interop.h"
+#include "gd/metrics/metrics_state.h"
 #include "include/l2cap_hci_link_interface.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/controller.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/l2c_api.h"
+#include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
@@ -73,6 +75,7 @@
 #include "stack/include/sco_hci_link_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
+#include "os/metrics.h"
 
 #ifndef PROPERTY_LINK_SUPERVISION_TIMEOUT
 #define PROPERTY_LINK_SUPERVISION_TIMEOUT \
@@ -107,6 +110,8 @@ struct StackAclBtmAcl {
   void set_default_packet_types_supported(uint16_t packet_types_supported) {
     btm_cb.acl_cb_.btm_acl_pkt_types_supported = packet_types_supported;
   }
+  void btm_acl_consolidate(const RawAddress& identity_addr,
+                           const RawAddress& rpa);
 };
 
 struct RoleChangeView {
@@ -308,6 +313,26 @@ tACL_CONN* StackAclBtmAcl::btm_bda_to_acl(const RawAddress& bda,
 tACL_CONN* acl_get_connection_from_address(const RawAddress& bd_addr,
                                            tBT_TRANSPORT transport) {
   return internal_.btm_bda_to_acl(bd_addr, transport);
+}
+
+void StackAclBtmAcl::btm_acl_consolidate(const RawAddress& identity_addr,
+                                         const RawAddress& rpa) {
+  tACL_CONN* p_acl = &btm_cb.acl_cb_.acl_db[0];
+  for (uint8_t index = 0; index < MAX_L2CAP_LINKS; index++, p_acl++) {
+    if (!p_acl->in_use) continue;
+
+    if (p_acl->remote_addr == rpa) {
+      LOG_INFO("consolidate %s -> %s", ADDRESS_TO_LOGGABLE_CSTR(rpa),
+               ADDRESS_TO_LOGGABLE_CSTR(identity_addr));
+      p_acl->remote_addr = identity_addr;
+      return;
+    }
+  }
+}
+
+void btm_acl_consolidate(const RawAddress& identity_addr,
+                         const RawAddress& rpa) {
+  return internal_.btm_acl_consolidate(identity_addr, rpa);
 }
 
 /*******************************************************************************
@@ -2808,6 +2833,15 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
         ADDRESS_TO_LOGGABLE_CSTR(address_with_type));
     return false;
   }
+
+  // argument list
+  auto argument_list = std::vector<std::pair<bluetooth::os::ArgumentType, int>>();
+
+  bluetooth::shim::LogMetricBluetoothLEConnectionMetricEvent(
+      bd_addr, android::bluetooth::le::LeConnectionOriginType::ORIGIN_NATIVE,
+      android::bluetooth::le::LeConnectionType::CONNECTION_TYPE_LE_ACL,
+      android::bluetooth::le::LeConnectionState::STATE_LE_ACL_START,
+      argument_list);
 
   bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
                                               /* is_direct */ true);

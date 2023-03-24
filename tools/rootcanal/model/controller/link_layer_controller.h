@@ -137,7 +137,14 @@ class LinkLayerController {
                              uint8_t page_scan_mode, uint16_t clock_offset,
                              uint8_t allow_role_switch);
   ErrorCode CreateConnectionCancel(const Address& addr);
-  ErrorCode Disconnect(uint16_t handle, ErrorCode reason);
+
+  // Disconnect a link.
+  // \p host_reason is taken from the Disconnect command, and sent over
+  // to the remote as disconnect error. \p controller_reason is the code
+  // used in the DisconnectionComplete event.
+  ErrorCode Disconnect(uint16_t handle, ErrorCode host_reason,
+                       ErrorCode controller_reason =
+                           ErrorCode::CONNECTION_TERMINATED_BY_LOCAL_HOST);
 
   // Internal task scheduler.
   // This scheduler is driven by the tick function only,
@@ -380,6 +387,11 @@ class LinkLayerController {
 
   void HandleIso(bluetooth::hci::IsoView iso);
 
+  // BR/EDR Commands
+
+  // HCI Read Rssi command (Vol 4, Part E § 7.5.4).
+  ErrorCode ReadRssi(uint16_t connection_handle, int8_t* rssi);
+
   // LE Commands
 
   // HCI LE Set Random Address command (Vol 4, Part E § 7.8.4).
@@ -553,7 +565,8 @@ class LinkLayerController {
       std::unique_ptr<model::packets::LinkLayerPacketBuilder> packet,
       int8_t tx_power = 0);
 
-  void IncomingAclPacket(model::packets::LinkLayerPacketView incoming);
+  void IncomingAclPacket(model::packets::LinkLayerPacketView incoming,
+                         int8_t rssi);
   void IncomingScoPacket(model::packets::LinkLayerPacketView incoming);
   void IncomingDisconnectPacket(model::packets::LinkLayerPacketView incoming);
   void IncomingEncryptConnection(model::packets::LinkLayerPacketView incoming);

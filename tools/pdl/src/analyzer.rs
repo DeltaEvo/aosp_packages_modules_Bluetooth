@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 use crate::parser::ast as parser_ast;
+use crate::utils;
 
 pub mod ast {
     use serde::Serialize;
@@ -25,7 +26,7 @@ pub mod ast {
         Unknown,
     }
 
-    #[derive(Debug, Serialize, Default)]
+    #[derive(Debug, Serialize, Default, Clone, PartialEq)]
     pub struct Annotation;
 
     #[derive(Default, Debug, Clone)]
@@ -130,6 +131,7 @@ pub enum ErrorCode {
     DuplicatePayloadField = 36,
     MissingPayloadField = 37,
     RedundantArraySize = 38,
+    InvalidPaddingField = 39,
 }
 
 impl From<ErrorCode> for String {
@@ -1037,6 +1039,43 @@ fn check_array_fields(file: &parser_ast::File) -> Result<(), Diagnostics> {
     diagnostics.err_or(())
 }
 
+/// Check padding fields.
+/// Raises error diagnostics for the following cases:
+///      - padding field not following an array field
+fn check_padding_fields(file: &parser_ast::File) -> Result<(), Diagnostics> {
+    let mut diagnostics: Diagnostics = Default::default();
+    for decl in &file.declarations {
+        let mut previous_is_array = false;
+        for field in decl.fields() {
+            match &field.desc {
+                FieldDesc::Padding { .. } if !previous_is_array => diagnostics.push(
+                    Diagnostic::error()
+                        .with_code(ErrorCode::InvalidPaddingField)
+                        .with_message("padding field does not follow an array field".to_owned())
+                        .with_labels(vec![field.loc.primary()]),
+                ),
+                FieldDesc::Array { .. } => previous_is_array = true,
+                _ => previous_is_array = false,
+            }
+        }
+    }
+
+    diagnostics.err_or(())
+}
+
+/// Check checksum fields.
+/// Raises error diagnostics for the following cases:
+///      - checksum field precedes checksum start
+///      - undeclared checksum field
+///      - invalid checksum field
+fn check_checksum_fields(
+    _file: &parser_ast::File,
+    _scope: &Scope<parser_ast::Annotation>,
+) -> Result<(), Diagnostics> {
+    // TODO
+    Ok(())
+}
+
 /// Check correct definition of packet sizes.
 /// Annotate fields and declarations with the size in bits.
 fn compute_field_sizes(file: &parser_ast::File) -> ast::File {
@@ -1167,8 +1206,67 @@ fn compute_field_sizes(file: &parser_ast::File) -> ast::File {
 }
 
 /// Inline group fields and remove group declarations.
-fn inline_groups(_file: &mut ast::File) -> Result<(), Diagnostics> {
-    // TODO
+fn inline_groups(file: &mut ast::File) -> Result<(), Diagnostics> {
+    fn inline_fields<'a>(
+        fields: impl Iterator<Item = &'a ast::Field>,
+        groups: &HashMap<String, ast::Decl>,
+        constraints: &HashMap<String, Constraint>,
+    ) -> Vec<ast::Field> {
+        fields
+            .flat_map(|field| match &field.desc {
+                FieldDesc::Group { group_id, constraints: group_constraints } => {
+                    let mut constraints = constraints.clone();
+                    constraints.extend(
+                        group_constraints
+                            .iter()
+                            .map(|constraint| (constraint.id.clone(), constraint.clone())),
+                    );
+                    inline_fields(groups.get(group_id).unwrap().fields(), groups, &constraints)
+                }
+                FieldDesc::Scalar { id, width } if constraints.contains_key(id) => {
+                    vec![ast::Field {
+                        desc: FieldDesc::FixedScalar {
+                            width: *width,
+                            value: constraints.get(id).unwrap().value.unwrap(),
+                        },
+                        loc: field.loc,
+                        annot: field.annot.clone(),
+                    }]
+                }
+                FieldDesc::Typedef { id, type_id, .. } if constraints.contains_key(id) => {
+                    vec![ast::Field {
+                        desc: FieldDesc::FixedEnum {
+                            enum_id: type_id.clone(),
+                            tag_id: constraints
+                                .get(id)
+                                .and_then(|constraint| constraint.tag_id.clone())
+                                .unwrap(),
+                        },
+                        loc: field.loc,
+                        annot: field.annot.clone(),
+                    }]
+                }
+                _ => vec![field.clone()],
+            })
+            .collect()
+    }
+
+    let groups = utils::drain_filter(&mut file.declarations, |decl| {
+        matches!(&decl.desc, DeclDesc::Group { .. })
+    })
+    .into_iter()
+    .map(|decl| (decl.id().unwrap().to_owned(), decl))
+    .collect::<HashMap<String, _>>();
+
+    for decl in file.declarations.iter_mut() {
+        match &mut decl.desc {
+            DeclDesc::Packet { fields, .. } | DeclDesc::Struct { fields, .. } => {
+                *fields = inline_fields(fields.iter(), &groups, &HashMap::new())
+            }
+            _ => (),
+        }
+    }
+
     Ok(())
 }
 
@@ -1184,8 +1282,8 @@ pub fn analyze(file: &parser_ast::File) -> Result<ast::File, Diagnostics> {
     check_fixed_fields(file, &scope)?;
     check_payload_fields(file)?;
     check_array_fields(file)?;
-    // TODO check_checksum_fields(file, &scope)?;
-    // TODO check_padding_fields(file, &scope)?;
+    check_padding_fields(file)?;
+    check_checksum_fields(file, &scope)?;
     let mut file = compute_field_sizes(file);
     inline_groups(&mut file)?;
     Ok(file)
@@ -1211,6 +1309,15 @@ mod test {
             println!("{}", std::str::from_utf8(buffer.as_slice()).unwrap());
             assert_eq!(diagnostics.diagnostics.len(), 1);
             assert_eq!(diagnostics.diagnostics[0].code, Some(analyzer::ErrorCode::$code.into()));
+        }};
+    }
+
+    macro_rules! valid {
+        ($text:literal) => {{
+            let mut db = SourceDatabase::new();
+            let file = parse_inline(&mut db, "stdin".to_owned(), $text.to_owned())
+                .expect("parsing failure");
+            assert!(analyzer::analyze(&file).is_ok());
         }};
     }
 
@@ -1967,6 +2074,133 @@ mod test {
             x : 8[8]
         }
         "#
+        );
+    }
+
+    #[test]
+    fn test_e39() {
+        raises!(
+            InvalidPaddingField,
+            r#"
+        little_endian_packets
+        packet A {
+            _padding_ [16],
+            x : 8[]
+        }
+        "#
+        );
+
+        raises!(
+            InvalidPaddingField,
+            r#"
+        little_endian_packets
+        enum A : 8 { X = 0 }
+        packet B {
+            x : A,
+            _padding_ [16]
+        }
+        "#
+        );
+
+        valid!(
+            r#"
+        little_endian_packets
+        packet A {
+            x : 8[],
+            _padding_ [16]
+        }
+        "#
+        );
+    }
+
+    fn desugar(text: &str) -> analyzer::ast::File {
+        let mut db = SourceDatabase::new();
+        let file =
+            parse_inline(&mut db, "stdin".to_owned(), text.to_owned()).expect("parsing failure");
+        analyzer::analyze(&file).expect("analyzer failure")
+    }
+
+    #[test]
+    fn test_inline_groups() {
+        assert_eq!(
+            desugar(
+                r#"
+        little_endian_packets
+        enum E : 8 { X=0, Y=1 }
+        group G {
+            a: 8,
+            b: E,
+        }
+        packet A {
+            G { }
+        }
+        "#
+            ),
+            desugar(
+                r#"
+        little_endian_packets
+        enum E : 8 { X=0, Y=1 }
+        packet A {
+            a: 8,
+            b: E,
+        }
+        "#
+            )
+        );
+
+        assert_eq!(
+            desugar(
+                r#"
+        little_endian_packets
+        enum E : 8 { X=0, Y=1 }
+        group G {
+            a: 8,
+            b: E,
+        }
+        packet A {
+            G { a=1, b=X }
+        }
+        "#
+            ),
+            desugar(
+                r#"
+        little_endian_packets
+        enum E : 8 { X=0, Y=1 }
+        packet A {
+            _fixed_ = 1: 8,
+            _fixed_ = X: E,
+        }
+        "#
+            )
+        );
+
+        assert_eq!(
+            desugar(
+                r#"
+        little_endian_packets
+        enum E : 8 { X=0, Y=1 }
+        group G1 {
+            a: 8,
+        }
+        group G2 {
+            G1 { a=1 },
+            b: E,
+        }
+        packet A {
+            G2 { b=X }
+        }
+        "#
+            ),
+            desugar(
+                r#"
+        little_endian_packets
+        enum E : 8 { X=0, Y=1 }
+        packet A {
+            _fixed_ = 1: 8,
+            _fixed_ = X: E,
+        }
+        "#
+            )
         );
     }
 }

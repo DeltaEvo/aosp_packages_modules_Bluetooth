@@ -225,6 +225,24 @@ LinkLayerController::GenerateResolvablePrivateAddress(AddressWithType address,
 }
 
 // =============================================================================
+//  BR/EDR Commands
+// =============================================================================
+
+// HCI Read Rssi command (Vol 4, Part E § 7.5.4).
+ErrorCode LinkLayerController::ReadRssi(uint16_t connection_handle,
+                                        int8_t* rssi) {
+  // Not documented: If the connection handle is not found, the Controller
+  // shall return the error code Unknown Connection Identifier (0x02).
+  if (!connections_.HasHandle(connection_handle)) {
+    LOG_INFO("unknown connection identifier");
+    return ErrorCode::UNKNOWN_CONNECTION;
+  }
+
+  *rssi = connections_.GetRssi(connection_handle);
+  return ErrorCode::SUCCESS;
+}
+
+// =============================================================================
 //  General LE Commands
 // =============================================================================
 
@@ -1365,8 +1383,10 @@ LinkLayerController::LinkLayerController(const Address& address,
           [](void* user, uint16_t handle, uint8_t(*result)[6]) {
             auto controller = static_cast<LinkLayerController*>(user);
 
-            auto address =
-                controller->connections_.GetAddress(handle).GetAddress();
+            auto address_opt = controller->connections_.GetAddressSafe(handle);
+            Address address = address_opt.has_value()
+                                  ? address_opt.value().GetAddress()
+                                  : Address::kEmpty;
             std::copy(address.data(), address.data() + 6,
                       reinterpret_cast<uint8_t*>(result));
           },
@@ -1635,7 +1655,7 @@ void LinkLayerController::IncomingPacket(
 
   switch (incoming.GetType()) {
     case model::packets::PacketType::ACL:
-      IncomingAclPacket(incoming);
+      IncomingAclPacket(incoming, rssi);
       break;
     case model::packets::PacketType::SCO:
       IncomingScoPacket(incoming);
@@ -1804,7 +1824,7 @@ void LinkLayerController::IncomingPacket(
 }
 
 void LinkLayerController::IncomingAclPacket(
-    model::packets::LinkLayerPacketView incoming) {
+    model::packets::LinkLayerPacketView incoming, int8_t rssi) {
   auto acl = model::packets::AclView::Create(incoming);
   ASSERT(acl.IsValid());
   auto payload = acl.GetPayload();
@@ -1827,6 +1847,9 @@ void LinkLayerController::IncomingAclPacket(
       LOG_INFO("Dropping packet since connection does not exist");
       return;
   }
+
+  // Update the RSSI for the local ACL connection.
+  connections_.SetRssi(local_handle, rssi);
 
   std::vector<uint8_t> payload_data(acl_view.GetPayload().begin(),
                                     acl_view.GetPayload().end());
@@ -2716,8 +2739,7 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
       // shall be ignored unless either:
       //  • the TargetA field is identical to the scanner's device address, or
       //  • the TargetA field is a resolvable private address, address
-      //  resolution is
-      //    enabled, and the address is resolved successfully
+      //  resolution is enabled, and the address is resolved successfully
       case bluetooth::hci::LeScanningFilterPolicy::ACCEPT_ALL:
       case bluetooth::hci::LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY:
         if (!IsLocalPublicOrRandomAddress(target_address) &&
@@ -2832,13 +2854,20 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
     response.address_ = resolved_advertising_address.GetAddress();
     response.primary_phy_ = bluetooth::hci::PrimaryPhyType::LE_1M;
     response.secondary_phy_ = bluetooth::hci::SecondaryPhyType::NO_PACKETS;
-    response.advertising_sid_ = 0xff;  // Not ADI field provided.
+    response.advertising_sid_ = 0xff;  // ADI not provided.
     response.tx_power_ = 0x7f;         // TX power information not available.
     response.rssi_ = rssi;
     response.periodic_advertising_interval_ = 0;  // No periodic advertising.
-    response.direct_address_type_ =
-        bluetooth::hci::DirectAdvertisingAddressType::NO_ADDRESS_PROVIDED;
-    response.direct_address_ = Address::kEmpty;
+    if (directed_advertising) {
+      response.direct_address_type_ =
+          bluetooth::hci::DirectAdvertisingAddressType(
+              target_address.GetAddressType());
+      response.direct_address_ = target_address.GetAddress();
+    } else {
+      response.direct_address_type_ =
+          bluetooth::hci::DirectAdvertisingAddressType::NO_ADDRESS_PROVIDED;
+      response.direct_address_ = Address::kEmpty;
+    }
     response.advertising_data_ = advertising_data;
 
     send_event_(bluetooth::hci::LeExtendedAdvertisingReportRawBuilder::Create(
@@ -3248,17 +3277,40 @@ void LinkLayerController::ScanIncomingLeExtendedAdvertisingPdu(
     response.address_ = resolved_advertising_address.GetAddress();
     response.primary_phy_ = bluetooth::hci::PrimaryPhyType::LE_1M;
     response.secondary_phy_ = bluetooth::hci::SecondaryPhyType::NO_PACKETS;
-    response.advertising_sid_ = 0xff;  // Not ADI field provided.
+    response.advertising_sid_ = pdu.GetSid();
     response.tx_power_ = 0x7f;         // TX power information not available.
     response.rssi_ = rssi;
     response.periodic_advertising_interval_ = 0;  // No periodic advertising.
-    response.direct_address_type_ =
-        bluetooth::hci::DirectAdvertisingAddressType::NO_ADDRESS_PROVIDED;
-    response.direct_address_ = Address::kEmpty;
+    if (directed_advertising) {
+      response.direct_address_type_ =
+          bluetooth::hci::DirectAdvertisingAddressType(
+              target_address.GetAddressType());
+      response.direct_address_ = target_address.GetAddress();
+    } else {
+      response.direct_address_type_ =
+          bluetooth::hci::DirectAdvertisingAddressType::NO_ADDRESS_PROVIDED;
+      response.direct_address_ = Address::kEmpty;
+    }
     response.advertising_data_ = advertising_data;
 
-    send_event_(bluetooth::hci::LeExtendedAdvertisingReportRawBuilder::Create(
-        {response}));
+    // Each extended advertising report can only pass 229 bytes of
+    // advertising data (255 - size of report fields).
+    // RootCanal must fragment the report as necessary.
+    const size_t max_fragment_size = 229;
+    size_t offset = 0;
+    do {
+      size_t remaining_size = advertising_data.size() - offset;
+      size_t fragment_size = std::min(max_fragment_size, remaining_size);
+      response.data_status_ = remaining_size <= max_fragment_size
+                                  ? bluetooth::hci::DataStatus::COMPLETE
+                                  : bluetooth::hci::DataStatus::CONTINUING;
+      response.advertising_data_ =
+          std::vector(advertising_data.begin() + offset,
+                      advertising_data.begin() + offset + fragment_size);
+      offset += fragment_size;
+      send_event_(bluetooth::hci::LeExtendedAdvertisingReportRawBuilder::Create(
+          {response}));
+    } while (offset < advertising_data.size());
   }
 
   // Did the user enable Active scanning ?
@@ -4755,7 +4807,8 @@ void LinkLayerController::Tick() {
 
 void LinkLayerController::Close() {
   for (auto handle : connections_.GetAclHandles()) {
-    Disconnect(handle, ErrorCode::CONNECTION_TIMEOUT);
+    Disconnect(handle, ErrorCode::CONNECTION_TIMEOUT,
+               ErrorCode::CONNECTION_TIMEOUT);
   }
 }
 
@@ -5409,18 +5462,20 @@ void LinkLayerController::SendDisconnectionCompleteEvent(uint16_t handle,
   }
 }
 
-ErrorCode LinkLayerController::Disconnect(uint16_t handle, ErrorCode reason) {
+ErrorCode LinkLayerController::Disconnect(uint16_t handle,
+                                          ErrorCode host_reason,
+                                          ErrorCode controller_reason) {
   if (connections_.HasScoHandle(handle)) {
     const Address remote = connections_.GetScoAddress(handle);
     LOG_INFO("Disconnecting eSCO connection with %s",
              remote.ToString().c_str());
 
     SendLinkLayerPacket(model::packets::ScoDisconnectBuilder::Create(
-        GetAddress(), remote, static_cast<uint8_t>(reason)));
+        GetAddress(), remote, static_cast<uint8_t>(host_reason)));
 
     connections_.Disconnect(
         handle, [this](TaskId task_id) { CancelScheduledTask(task_id); });
-    SendDisconnectionCompleteEvent(handle, reason);
+    SendDisconnectionCompleteEvent(handle, controller_reason);
     return ErrorCode::SUCCESS;
   }
 
@@ -5437,26 +5492,27 @@ ErrorCode LinkLayerController::Disconnect(uint16_t handle, ErrorCode reason) {
     uint16_t sco_handle = connections_.GetScoHandle(remote.GetAddress());
     if (sco_handle != kReservedHandle) {
       SendLinkLayerPacket(model::packets::ScoDisconnectBuilder::Create(
-          GetAddress(), remote.GetAddress(), static_cast<uint8_t>(reason)));
+          GetAddress(), remote.GetAddress(),
+          static_cast<uint8_t>(host_reason)));
 
       connections_.Disconnect(
           sco_handle, [this](TaskId task_id) { CancelScheduledTask(task_id); });
-      SendDisconnectionCompleteEvent(sco_handle, reason);
+      SendDisconnectionCompleteEvent(sco_handle, controller_reason);
     }
 
     SendLinkLayerPacket(model::packets::DisconnectBuilder::Create(
-        GetAddress(), remote.GetAddress(), static_cast<uint8_t>(reason)));
+        GetAddress(), remote.GetAddress(), static_cast<uint8_t>(host_reason)));
   } else {
     LOG_INFO("Disconnecting LE connection with %s", remote.ToString().c_str());
 
     SendLeLinkLayerPacket(model::packets::DisconnectBuilder::Create(
         connections_.GetOwnAddress(handle).GetAddress(), remote.GetAddress(),
-        static_cast<uint8_t>(reason)));
+        static_cast<uint8_t>(host_reason)));
   }
 
   connections_.Disconnect(
       handle, [this](TaskId task_id) { CancelScheduledTask(task_id); });
-  SendDisconnectionCompleteEvent(handle, ErrorCode(reason));
+  SendDisconnectionCompleteEvent(handle, controller_reason);
 #ifdef ROOTCANAL_LMP
   if (is_br_edr) {
     ASSERT(link_manager_remove_link(
@@ -6311,7 +6367,8 @@ void LinkLayerController::CheckExpiringConnection(uint16_t handle) {
   }
 
   if (connections_.HasLinkExpired(handle)) {
-    Disconnect(handle, ErrorCode::CONNECTION_TIMEOUT);
+    Disconnect(handle, ErrorCode::CONNECTION_TIMEOUT,
+               ErrorCode::CONNECTION_TIMEOUT);
     return;
   }
 

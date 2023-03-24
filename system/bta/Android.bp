@@ -28,7 +28,6 @@ cc_defaults {
         "packages/modules/Bluetooth/system/stack/btm",
         "packages/modules/Bluetooth/system/udrv/include",
         "packages/modules/Bluetooth/system/vnd/include",
-        "packages/modules/Bluetooth/system/utils/include",
         "packages/modules/Bluetooth/system/gd/rust/shim",
     ],
     header_libs: ["libbluetooth_headers"],
@@ -39,15 +38,15 @@ cc_defaults {
 }
 
 filegroup {
-  name: "BtaDmSources",
-  srcs: [
-    "dm/bta_dm_act.cc",
-    "dm/bta_dm_api.cc",
-    "dm/bta_dm_cfg.cc",
-    "dm/bta_dm_ci.cc",
-    "dm/bta_dm_main.cc",
-    "dm/bta_dm_pm.cc",
-  ],
+    name: "BtaDmSources",
+    srcs: [
+        "dm/bta_dm_act.cc",
+        "dm/bta_dm_api.cc",
+        "dm/bta_dm_cfg.cc",
+        "dm/bta_dm_ci.cc",
+        "dm/bta_dm_main.cc",
+        "dm/bta_dm_pm.cc",
+    ],
 }
 
 // BTA static library for target
@@ -114,6 +113,7 @@ cc_library_static {
         "hh/bta_hh_le.cc",
         "hh/bta_hh_main.cc",
         "hh/bta_hh_utils.cc",
+        "hfp/bta_hfp_api.cc",
         "hd/bta_hd_act.cc",
         "hd/bta_hd_api.cc",
         "hd/bta_hd_main.cc",
@@ -130,12 +130,13 @@ cc_library_static {
         "avrcp-target-service",
         "lib-bt-packets",
         "libbt-bta-core",
+        "libcom.android.sysprop.bluetooth",
     ],
     generated_headers: [
         "LeAudioSetConfigSchemas_h",
     ],
     host_supported: true,
-    min_sdk_version: "Tiramisu"
+    min_sdk_version: "Tiramisu",
 }
 
 cc_library_static {
@@ -177,7 +178,7 @@ cc_library_static {
         "libcom.android.sysprop.bluetooth",
     ],
     host_supported: true,
-    min_sdk_version: "Tiramisu"
+    min_sdk_version: "Tiramisu",
 }
 
 // bta unit tests for target
@@ -185,7 +186,7 @@ cc_test {
     name: "net_test_bta",
     defaults: [
         "fluoride_bta_defaults",
-        "mts_defaults"
+        "mts_defaults",
     ],
     test_suites: ["device-tests"],
     srcs: [
@@ -215,6 +216,7 @@ cc_test {
         "libbt-audio-hal-interface",
         "libbluetooth-types",
         "libbt-protos-lite",
+        "libcom.android.sysprop.bluetooth",
         "libosi",
         "libbt-common",
     ],
@@ -333,7 +335,7 @@ cc_test {
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/osi/include",
     ],
-    srcs : [
+    srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtif",
         ":TestMockMainShimLeScanning",
@@ -350,7 +352,7 @@ cc_test {
     shared_libs: [
         "libcrypto",
     ],
-    static_libs : [
+    static_libs: [
         "crypto_toolbox_for_tests",
         "libgmock",
         "libbt-common",
@@ -364,7 +366,7 @@ cc_test {
         all_undefined: true,
         integer_overflow: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
 }
@@ -383,7 +385,7 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
     ],
-    srcs : [
+    srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtif",
         "groups/groups_test.cc",
@@ -392,7 +394,7 @@ cc_test {
     shared_libs: [
         "libcrypto",
     ],
-    static_libs : [
+    static_libs: [
         "crypto_toolbox_for_tests",
         "libgmock",
         "libbt-common",
@@ -406,7 +408,7 @@ cc_test {
         all_undefined: true,
         integer_overflow: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
 }
@@ -428,7 +430,7 @@ cc_test {
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/include",
     ],
-    srcs : [
+    srcs: [
         ":TestCommonMockFunctions",
         ":TestMockOsi",
         "gatt/database.cc",
@@ -445,12 +447,12 @@ cc_test {
     shared_libs: [
         "libcrypto",
     ],
-    static_libs : [
+    static_libs: [
         "crypto_toolbox_for_tests",
         "libgmock",
         "libbt-common",
         "libbt-protos-lite",
-        "libosi"
+        "libosi",
     ],
     sanitize: {
         cfi: false,
@@ -561,7 +563,7 @@ cc_test {
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/include",
     ],
-    srcs : [
+    srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtaLeAudioHalVerifier",
         ":TestStubOsi",
@@ -595,19 +597,19 @@ cc_test {
         ":audio_set_scenarios_bfbs",
         ":audio_set_scenarios_json",
         ":audio_set_configurations_bfbs",
-        ":audio_set_configurations_json"
+        ":audio_set_configurations_json",
     ],
     generated_headers: [
         "LeAudioSetConfigSchemas_h",
     ],
     shared_libs: [
         "libcrypto",
-        "liblog",  // __android_log_print
+        "liblog", // __android_log_print
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
         "libhidlbase",
     ],
-    static_libs : [
+    static_libs: [
         "libgmock",
         "libbt-common",
         "libbt-protos-lite",
@@ -636,7 +638,7 @@ cc_test {
         "packages/modules/Bluetooth/system/bta/test/common",
         "packages/modules/Bluetooth/system/stack/include",
     ],
-    srcs : [
+    srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtaLeAudioHalVerifier",
         ":TestStubOsi",
@@ -673,7 +675,7 @@ cc_test {
         "libfmq",
         "libbinder_ndk",
     ],
-    static_libs : [
+    static_libs: [
         "libbt-audio-hal-interface",
         "crypto_toolbox_for_tests",
         "libgmock",
@@ -707,7 +709,7 @@ cc_test {
         all_undefined: true,
         integer_overflow: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
 }
@@ -731,7 +733,7 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/btm",
     ],
-    srcs : [
+    srcs: [
         "le_audio/broadcaster/broadcaster_types.cc",
         "le_audio/broadcaster/mock_ble_advertising_manager.cc",
         "le_audio/broadcaster/state_machine.cc",
@@ -745,7 +747,7 @@ cc_test {
     shared_libs: [
         "libcrypto",
     ],
-    static_libs : [
+    static_libs: [
         "libgmock",
         "libbt-common",
         "libbt-protos-lite",
@@ -758,7 +760,7 @@ cc_test {
         all_undefined: true,
         integer_overflow: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
 }
@@ -781,7 +783,7 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/btm",
     ],
-    srcs : [
+    srcs: [
         ":TestStubOsi",
         "le_audio/broadcaster/broadcaster.cc",
         "le_audio/broadcaster/broadcaster_test.cc",
@@ -806,7 +808,7 @@ cc_test {
         "android.hardware.bluetooth.audio@2.1",
         "libhidlbase",
     ],
-    static_libs : [
+    static_libs: [
         "libbt-audio-hal-interface",
         "libgmock",
         "libbt-common",
@@ -829,7 +831,7 @@ cc_test {
         all_undefined: true,
         integer_overflow: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
 }
@@ -851,7 +853,7 @@ cc_test {
         "packages/modules/Bluetooth/system/bta/test/common",
         "packages/modules/Bluetooth/system/stack/include",
     ],
-    srcs : [
+    srcs: [
         "gatt/database.cc",
         "gatt/database_builder.cc",
         "has/has_client.cc",
@@ -872,7 +874,7 @@ cc_test {
     shared_libs: [
         "libcrypto",
     ],
-    static_libs : [
+    static_libs: [
         "crypto_toolbox_for_tests",
         "libgmock",
         "libbt-common",
@@ -885,7 +887,7 @@ cc_test {
         all_undefined: true,
         integer_overflow: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
 }
@@ -907,7 +909,7 @@ cc_test {
         "packages/modules/Bluetooth/system/bta/test/common",
         "packages/modules/Bluetooth/system/stack/include",
     ],
-    srcs : [
+    srcs: [
         ":TestMockMainShim",
         ":TestCommonLogMsg",
         ":TestCommonMainHandler",
@@ -936,7 +938,7 @@ cc_test {
     shared_libs: [
         "libcrypto",
     ],
-    static_libs : [
+    static_libs: [
         "crypto_toolbox_for_tests",
         "libgmock",
         "libbt-common",
@@ -955,7 +957,12 @@ cc_test {
         all_undefined: true,
         integer_overflow: true,
         diag: {
-            undefined : true
+            undefined: true,
+        },
+    },
+    target: {
+        android: {
+            test_config_template: ":BluetoothGTestNotShardableConfigTemplate",
         },
     },
 }

@@ -99,7 +99,6 @@ cc_library {
         "libbtif-core",
         "libbt-hci",
         "libbt-stack-core",
-        "libbt-utils",
         "libbtcore",
         "libosi",
         "lib-bt-packets",
@@ -136,7 +135,10 @@ android_app {
         "src/**/*.java",
         ":statslog-bluetooth-java-gen",
     ],
-    aaptflags: [ "--custom-package", "com.android.bluetooth" ],
+    aaptflags: [
+        "--custom-package",
+        "com.android.bluetooth",
+    ],
     certificate: ":com.android.bluetooth.certificate",
 
     jarjar_rules: ":bluetooth-jarjar-rules",
@@ -217,7 +219,7 @@ android_app {
 java_library {
     name: "bluetooth.change-ids",
     srcs: [
-        "src/com/android/bluetooth/ChangeIds.java"
+        "src/com/android/bluetooth/ChangeIds.java",
     ],
     libs: [
         "app-compat-annotations",
@@ -261,5 +263,5 @@ genrule {
 
 android_app_certificate {
     name: "com.android.bluetooth.certificate",
-    certificate: "certs/com.android.bluetooth"
+    certificate: "certs/com.android.bluetooth",
 }

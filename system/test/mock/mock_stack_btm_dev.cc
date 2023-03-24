@@ -116,6 +116,10 @@ void BTM_SecDumpDev(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
 }
 std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return {};
+}
+
+void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* cb) {
+  inc_func_call_count(__func__);
 }

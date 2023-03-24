@@ -28,7 +28,6 @@ cc_fuzz {
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/encoder/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/decoder/include",
-        "packages/modules/Bluetooth/system/utils/include",
         "system/security/keystore/include",
         "hardware/interfaces/keymaster/4.0/support/include",
     ],
@@ -40,7 +39,7 @@ cc_fuzz {
         "libbte",
     ],
     fuzz_config: {
-       cc: ["android-bluetooth-security@google.com"],
-       componentid: 27441,
+        cc: ["android-bluetooth-security@google.com"],
+        componentid: 27441,
     },
 }

@@ -589,6 +589,13 @@ static void bond_state_changed(bt_status_t status, const RawAddress& bd_addr,
     dev_type = BT_DEVICE_TYPE_BREDR;
   }
 
+  if ((state == BT_BOND_STATE_NONE) && (pairing_cb.bd_addr != bd_addr)
+      && is_bonding_or_sdp()) {
+    LOG_WARN("Ignoring bond state changed for unexpected device: %s pairing: %s",
+        ADDRESS_TO_LOGGABLE_CSTR(bd_addr), ADDRESS_TO_LOGGABLE_CSTR(pairing_cb.bd_addr));
+    return;
+  }
+
   if (state == BT_BOND_STATE_BONDING ||
       (state == BT_BOND_STATE_BONDED &&
        (pairing_cb.sdp_attempts > 0 ||
@@ -662,7 +669,7 @@ static void btif_update_remote_properties(const RawAddress& bdaddr,
 
   /* class of device */
   cod = devclass2uint(dev_class);
-  if (cod == 0) {
+  if ((cod == 0) || (cod == COD_UNCLASSIFIED)) {
     /* Try to retrieve cod from storage */
     LOG_VERBOSE("class of device (cod) is unclassified, checking storage");
     BTIF_STORAGE_FILL_PROPERTY(&properties[num_properties],

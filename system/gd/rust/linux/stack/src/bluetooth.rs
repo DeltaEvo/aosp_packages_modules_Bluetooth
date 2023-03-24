@@ -40,8 +40,9 @@ use crate::bluetooth_admin::{BluetoothAdmin, IBluetoothAdmin};
 use crate::bluetooth_media::{BluetoothMedia, IBluetoothMedia, MediaActions};
 use crate::callbacks::Callbacks;
 use crate::uuid::{Profile, UuidHelper, HOGP};
-use crate::{Message, RPCProxy};
+use crate::{Message, RPCProxy, SuspendMode};
 
+const FLOSS_VER: u16 = 0x0001;
 const DEFAULT_DISCOVERY_TIMEOUT_MS: u64 = 12800;
 const MIN_ADV_INSTANCES_FOR_MULTI_ADV: u8 = 5;
 
@@ -218,6 +219,13 @@ pub trait IBluetoothQA {
 
     /// Sets connectability. Returns true on success, false otherwise.
     fn set_connectable(&mut self, mode: bool) -> bool;
+
+    /// Returns the adapter's Bluetooth friendly name.
+    fn get_alias(&self) -> String;
+
+    /// Returns the adapter's Device ID information in modalias format
+    /// used by the kernel and udev.
+    fn get_modalias(&self) -> String;
 
     /// Gets HID report on the peer.
     fn get_hid_report(
@@ -428,6 +436,8 @@ pub struct Bluetooth {
     hh: Option<HidHost>,
     is_connectable: bool,
     is_discovering: bool,
+    is_discovering_before_suspend: bool,
+    discovery_suspend_mode: SuspendMode,
     local_address: Option<RawAddress>,
     properties: HashMap<BtPropertyType, BluetoothProperty>,
     profiles_ready: bool,
@@ -468,6 +478,8 @@ impl Bluetooth {
             intf,
             is_connectable: false,
             is_discovering: false,
+            is_discovering_before_suspend: false,
+            discovery_suspend_mode: SuspendMode::Normal,
             local_address: None,
             properties: HashMap::new(),
             profiles_ready: false,
@@ -489,10 +501,14 @@ impl Bluetooth {
 
         match profile {
             Profile::Hid => {
-                self.hh.as_mut().unwrap().disable();
+                self.hh.as_mut().unwrap().activate_hidp(false);
             }
 
-            Profile::A2dpSource | Profile::Hfp => {
+            Profile::Hogp => {
+                self.hh.as_mut().unwrap().activate_hogp(false);
+            }
+
+            Profile::A2dpSource | Profile::Hfp | Profile::AvrcpTarget => {
                 self.bluetooth_media.lock().unwrap().disable_profile(profile);
             }
             // Ignore profiles that we don't connect.
@@ -507,10 +523,14 @@ impl Bluetooth {
 
         match profile {
             Profile::Hid => {
-                self.hh.as_mut().unwrap().enable();
+                self.hh.as_mut().unwrap().activate_hidp(true);
             }
 
-            Profile::A2dpSource | Profile::Hfp => {
+            Profile::Hogp => {
+                self.hh.as_mut().unwrap().activate_hogp(true);
+            }
+
+            Profile::A2dpSource | Profile::Hfp | Profile::AvrcpTarget => {
                 self.bluetooth_media.lock().unwrap().enable_profile(profile);
             }
             // Ignore profiles that we don't connect.
@@ -524,9 +544,11 @@ impl Bluetooth {
         }
 
         match profile {
-            Profile::Hid => Some(!self.hh.is_none() && self.hh.as_ref().unwrap().is_enabled()),
+            Profile::Hid => Some(self.hh.as_ref().unwrap().is_hidp_activated),
 
-            Profile::A2dpSource | Profile::Hfp => {
+            Profile::Hogp => Some(self.hh.as_ref().unwrap().is_hogp_activated),
+
+            Profile::A2dpSource | Profile::Hfp | Profile::AvrcpTarget => {
                 self.bluetooth_media.lock().unwrap().is_profile_enabled(profile)
             }
             // Ignore profiles that we don't connect.
@@ -550,6 +572,23 @@ impl Bluetooth {
                 }
             }
         }
+
+        if self.hh.as_mut().unwrap().configure_enabled_profiles() {
+            self.hh.as_mut().unwrap().disable();
+            let txl = self.tx.clone();
+
+            tokio::spawn(async move {
+                // Wait 100 milliseconds to prevent race condition caused by quick disable then
+                // enable.
+                // TODO: (b/272191117): don't enable until we're sure disable is done.
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                let _ = txl.send(Message::HidHostEnable).await;
+            });
+        }
+    }
+
+    pub fn enable_hidhost(&mut self) {
+        self.hh.as_mut().unwrap().enable();
     }
 
     pub fn init_profiles(&mut self) {
@@ -781,6 +820,50 @@ impl Bluetooth {
         let file_name = format!("{}/bluetooth{}.pid", PID_DIR, self.adapter_index);
         std::fs::remove_file(&file_name)?;
         Ok(())
+    }
+
+    /// Set the suspend mode.
+    pub fn set_discovery_suspend_mode(&mut self, suspend_mode: SuspendMode) {
+        if suspend_mode != self.discovery_suspend_mode {
+            self.discovery_suspend_mode = suspend_mode;
+        }
+    }
+
+    /// Gets current suspend mode.
+    pub fn get_discovery_suspend_mode(&self) -> SuspendMode {
+        self.discovery_suspend_mode.clone()
+    }
+
+    /// Enters the suspend mode for discovery.
+    pub fn discovery_enter_suspend(&mut self) -> BtStatus {
+        if self.get_discovery_suspend_mode() != SuspendMode::Normal {
+            return BtStatus::Busy;
+        }
+        self.set_discovery_suspend_mode(SuspendMode::Suspending);
+
+        if self.is_discovering {
+            self.is_discovering_before_suspend = true;
+            self.cancel_discovery();
+        }
+        self.set_discovery_suspend_mode(SuspendMode::Suspended);
+
+        return BtStatus::Success;
+    }
+
+    /// Exits the suspend mode for discovery.
+    pub fn discovery_exit_suspend(&mut self) -> BtStatus {
+        if self.get_discovery_suspend_mode() != SuspendMode::Suspended {
+            return BtStatus::Busy;
+        }
+        self.set_discovery_suspend_mode(SuspendMode::Resuming);
+
+        if self.is_discovering_before_suspend {
+            self.is_discovering_before_suspend = false;
+            self.start_discovery();
+        }
+        self.set_discovery_suspend_mode(SuspendMode::Normal);
+
+        return BtStatus::Success;
     }
 }
 
@@ -1039,6 +1122,16 @@ impl BtifBluetoothCallbacks for Bluetooth {
         self.is_discovering = &state == &BtDiscoveryState::Started;
         if self.is_discovering {
             self.discovering_started = Instant::now();
+        }
+
+        // Prevent sending out discovering changes or freshness checks when
+        // suspending. Clients don't need to be notified of discovery pausing
+        // during suspend. They will probably try to restore it and fail.
+        let discovery_suspend_mode = self.get_discovery_suspend_mode();
+        if discovery_suspend_mode != SuspendMode::Normal
+            && discovery_suspend_mode != SuspendMode::Resuming
+        {
+            return;
         }
 
         self.callbacks.for_all_callbacks(|callback| {
@@ -1465,6 +1558,14 @@ impl IBluetooth for Bluetooth {
             return true;
         }
 
+        let discovery_suspend_mode = self.get_discovery_suspend_mode();
+        if discovery_suspend_mode != SuspendMode::Normal
+            && discovery_suspend_mode != SuspendMode::Resuming
+        {
+            log::warn!("start_discovery is not allowed when suspending or suspended.");
+            return false;
+        }
+
         self.intf.lock().unwrap().start_discovery() == 0
     }
 
@@ -1473,6 +1574,14 @@ impl IBluetooth for Bluetooth {
         // state. For example, previous start discovery was enqueued for ongoing discovery.
         if !self.is_discovering {
             debug!("Reject cancel_discovery as it's not in discovering state.");
+            return false;
+        }
+
+        let discovery_suspend_mode = self.get_discovery_suspend_mode();
+        if discovery_suspend_mode != SuspendMode::Normal
+            && discovery_suspend_mode != SuspendMode::Suspending
+        {
+            log::warn!("cancel_discovery is not allowed when resuming or suspended.");
             return false;
         }
 
@@ -2187,6 +2296,24 @@ impl IBluetoothQA for Bluetooth {
         self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::AdapterScanMode(
             if mode { BtScanMode::Connectable } else { BtScanMode::None_ },
         )) == 0
+    }
+
+    fn get_alias(&self) -> String {
+        let name = self.get_name();
+        if !name.is_empty() {
+            return name;
+        }
+
+        // If the adapter name is empty, generate one based on local BDADDR
+        // so that test programs can have a friendly name for the adapter.
+        match self.local_address {
+            None => "floss_0000".to_string(),
+            Some(addr) => format!("floss_{:02X}{:02X}", addr.address[4], addr.address[5]),
+        }
+    }
+
+    fn get_modalias(&self) -> String {
+        format!("bluetooth:v00E0pC405d{:04x}", FLOSS_VER)
     }
 
     fn get_hid_report(

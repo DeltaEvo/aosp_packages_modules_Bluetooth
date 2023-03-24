@@ -16,7 +16,7 @@ filegroup {
         "bte_logmsg.cc",
         "bte_main.cc",
         "stack_config.cc",
-    ]
+    ],
 }
 
 cc_library_static {
@@ -45,7 +45,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/encoder/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/decoder/include",
-        "packages/modules/Bluetooth/system/utils/include",
         "system/security/keystore/include",
         "hardware/interfaces/keymaster/4.0/support/include",
     ],
@@ -56,7 +55,7 @@ cc_library_static {
     ],
     header_libs: ["libbt_callbacks_cxx_headers"],
     host_supported: true,
-    min_sdk_version: "Tiramisu"
+    min_sdk_version: "Tiramisu",
 }
 
 cc_library {
@@ -86,7 +85,6 @@ cc_library {
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/encoder/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/decoder/include",
-        "packages/modules/Bluetooth/system/utils/include",
         "system/security/keystore/include",
         "hardware/interfaces/keymaster/4.0/support/include",
     ],
@@ -130,7 +128,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
-        "packages/modules/Bluetooth/system/utils/include",
     ],
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
@@ -216,7 +213,7 @@ cc_test {
         integer_overflow: true,
         scs: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
     generated_headers: [
@@ -224,5 +221,5 @@ cc_test {
         "BluetoothGeneratedDumpsysDataSchema_h",
         "BluetoothGeneratedPackets_h",
     ],
-    min_sdk_version: "Tiramisu"
+    min_sdk_version: "Tiramisu",
 }

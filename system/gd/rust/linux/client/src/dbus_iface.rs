@@ -7,9 +7,8 @@ use bt_topshim::btif::{
 use bt_topshim::profiles::gatt::{AdvertisingStatus, GattStatus, LePhy};
 use bt_topshim::profiles::hid_host::BthhReportType;
 use bt_topshim::profiles::sdp::{
-    BtSdpDipRecord, BtSdpHeader, BtSdpHeaderOverlay, BtSdpMasRecord, BtSdpMnsRecord,
-    BtSdpOpsRecord, BtSdpPceRecord, BtSdpPseRecord, BtSdpRecord, BtSdpSapRecord, BtSdpType,
-    SupportedFormatsList,
+    BtSdpDipRecord, BtSdpHeaderOverlay, BtSdpMasRecord, BtSdpMnsRecord, BtSdpOpsRecord,
+    BtSdpPceRecord, BtSdpPseRecord, BtSdpRecord, BtSdpSapRecord, BtSdpType, SupportedFormatsList,
 };
 use bt_topshim::profiles::socket::SocketType;
 use bt_topshim::profiles::ProfileConnectionState;
@@ -115,8 +114,8 @@ impl DBusArg for Uuid128Bit {
 
 impl_dbus_arg_enum!(BtSdpType);
 
-#[dbus_propmap(BtSdpHeader)]
-pub struct BtSdpHeaderDBus {
+#[dbus_propmap(BtSdpHeaderOverlay)]
+struct BtSdpHeaderOverlayDBus {
     sdp_type: BtSdpType,
     uuid: Uuid,
     service_name_length: u32,
@@ -124,11 +123,7 @@ pub struct BtSdpHeaderDBus {
     rfcomm_channel_number: i32,
     l2cap_psm: i32,
     profile_version: i32,
-}
 
-#[dbus_propmap(BtSdpHeaderOverlay)]
-struct BtSdpHeaderOverlayDBus {
-    hdr: BtSdpHeader,
     user1_len: i32,
     user1_data: Vec<u8>,
     user2_len: i32,
@@ -882,6 +877,16 @@ impl IBluetoothQA for BluetoothQADBus {
         dbus_generated!()
     }
 
+    #[dbus_method("GetAlias")]
+    fn get_alias(&self) -> String {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetModalias")]
+    fn get_modalias(&self) -> String {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetHIDReport")]
     fn get_hid_report(
         &mut self,
@@ -1448,6 +1453,11 @@ impl IBluetoothGatt for BluetoothGattDBus {
 
     #[dbus_method("DiscoverServiceByUuid")]
     fn discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("BtifGattcDiscoverServiceByUuid")]
+    fn btif_gattc_discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String) {
         dbus_generated!()
     }
 

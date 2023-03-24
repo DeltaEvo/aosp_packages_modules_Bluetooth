@@ -13,9 +13,12 @@ rust_defaults {
     dylib: {
         enabled: false,
     },
-    srcs: ["src/lib.rs", ":bluetooth_core_rust_packets"],
+    srcs: [
+        "src/lib.rs",
+        ":bluetooth_core_rust_packets",
+    ],
     shared_libs: [
-      "libbase",
+        "libbase",
     ],
     static_libs: [
         "libbluetooth-core",
@@ -34,8 +37,8 @@ rust_defaults {
         "liblog_rust",
         "libanyhow",
         "libcxx",
-        "libtokio",
         "libbt_common",
+        "libbitflags",
 
         // needed to work around duplicate symbols
         // caused by bug in Soong
@@ -71,6 +74,9 @@ rust_ffi_static {
     name: "libbluetooth_core_rs",
     crate_name: "bluetooth_core",
     defaults: ["libbluetooth_core_rs_defaults"],
+    rustlibs: [
+        "libtokio",
+    ],
     target: {
         android: {
             rustlibs: [
@@ -85,6 +91,7 @@ rust_test_host {
     name: "libbluetooth_core_rs_test",
     defaults: ["libbluetooth_core_rs_defaults"],
     rustlibs: [
+        "libtokio_for_test",
         "libtokio_test",
     ],
 }
