@@ -54,6 +54,7 @@ import android.bluetooth.SdpMasRecord;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.provider.Telephony;
 import android.telecom.PhoneAccount;
 import android.telephony.SmsManager;
@@ -72,6 +73,7 @@ import com.android.vcard.VCardConstants;
 import com.android.vcard.VCardEntry;
 import com.android.vcard.VCardProperty;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -152,7 +154,8 @@ class MceStateMachine extends StateMachine {
      * Note: In the future it may be best to use the entries from the MessageListing in full instead
      * of this small subset.
      */
-    private class MessageMetadata {
+    @VisibleForTesting
+    static class MessageMetadata {
         private final String mHandle;
         private final Long mTimestamp;
         private boolean mRead;
@@ -181,7 +184,8 @@ class MceStateMachine extends StateMachine {
     }
 
     // Map each message to its metadata via the handle
-    private ConcurrentHashMap<String, MessageMetadata> mMessages =
+    @VisibleForTesting
+    ConcurrentHashMap<String, MessageMetadata> mMessages =
             new ConcurrentHashMap<String, MessageMetadata>();
 
     MceStateMachine(MapClientService service, BluetoothDevice device) {
@@ -689,12 +693,15 @@ class MceStateMachine extends StateMachine {
                     }
                     switch (ev.getType()) {
                         case NEW_MESSAGE:
-                            // Infer the timestamp for this message as 'now' and read status false
-                            // instead of getting the message listing data for it
-                            if (!mMessages.contains(ev.getHandle())) {
-                                Calendar calendar = Calendar.getInstance();
+                            if (!mMessages.containsKey(ev.getHandle())) {
+                                Long timestamp = ev.getTimestamp();
+                                if (timestamp == null) {
+                                    // Infer the timestamp for this message as 'now' and read status
+                                    // false instead of getting the message listing data for it
+                                    timestamp = new Long(Instant.now().toEpochMilli());
+                                }
                                 MessageMetadata metadata = new MessageMetadata(ev.getHandle(),
-                                        calendar.getTime().getTime(), false);
+                                        timestamp, false);
                                 mMessages.put(ev.getHandle(), metadata);
                             }
                             mMasClient.makeRequest(new RequestGetMessage(ev.getHandle(),
@@ -885,12 +892,27 @@ class MceStateMachine extends StateMachine {
                                     getRecipientsUri(recipients));
                         }
                     }
-                    // Only send to the current default SMS app if one exists
                     String defaultMessagingPackage = Telephony.Sms.getDefaultSmsPackage(mService);
-                    if (defaultMessagingPackage != null) {
+                    if (defaultMessagingPackage == null) {
+                        // Broadcast to all RECEIVE_SMS recipients, including the SMS receiver
+                        // package defined in system properties if one exists
+                        mService.sendBroadcast(intent, RECEIVE_SMS);
+                    } else {
+                        String smsReceiverPackageName =
+                                SystemProperties.get(
+                                        "bluetooth.profile.map_client.sms_receiver_package",
+                                        null
+                                );
+                        if (smsReceiverPackageName != null && !smsReceiverPackageName.isEmpty()) {
+                            // Clone intent and broadcast to SMS receiver package if one exists
+                            Intent messageNotificationIntent = (Intent) intent.clone();
+                            messageNotificationIntent.setPackage(smsReceiverPackageName);
+                            mService.sendBroadcast(messageNotificationIntent, RECEIVE_SMS);
+                        }
+                        // Broadcast to default messaging package
                         intent.setPackage(defaultMessagingPackage);
+                        mService.sendBroadcast(intent, RECEIVE_SMS);
                     }
-                    mService.sendBroadcast(intent, RECEIVE_SMS);
                     break;
                 case EMAIL:
                 default:
