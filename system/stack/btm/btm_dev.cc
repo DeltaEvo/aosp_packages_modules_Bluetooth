@@ -375,7 +375,7 @@ tBTM_SEC_DEV_REC* btm_find_dev(const RawAddress& bd_addr) {
 
 static bool has_lenc_and_address_is_equal(void* data, void* context) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
-  if (!(p_dev_rec->ble.key_type & BTM_LE_KEY_LENC)) return false;
+  if (!(p_dev_rec->ble.key_type & BTM_LE_KEY_LENC)) return true;
 
   return is_address_equal(data, context);
 }
@@ -649,4 +649,26 @@ bool btm_set_bond_type_dev(const RawAddress& bd_addr,
 
   p_dev_rec->bond_type = bond_type;
   return true;
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_get_sec_dev_rec
+ *
+ * Description      Get security device records satisfying given filter
+ *
+ * Returns          A vector containing pointers of security device records
+ *
+ ******************************************************************************/
+std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
+  std::vector<tBTM_SEC_DEV_REC*> result{};
+
+  list_node_t* end = list_end(btm_cb.sec_dev_rec);
+  for (list_node_t* node = list_begin(btm_cb.sec_dev_rec); node != end;
+       node = list_next(node)) {
+    tBTM_SEC_DEV_REC* p_dev_rec =
+        static_cast<tBTM_SEC_DEV_REC*>(list_node(node));
+    result.push_back(p_dev_rec);
+  }
+  return result;
 }

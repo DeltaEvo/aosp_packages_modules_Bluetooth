@@ -68,13 +68,6 @@
 #define BTIF_HF_CLIENT_SERVICE_NAME ("Handsfree")
 #endif
 
-#ifndef BTIF_HF_CLIENT_FEATURES
-#define BTIF_HF_CLIENT_FEATURES                                                \
-  (BTA_HF_CLIENT_FEAT_ECNR | BTA_HF_CLIENT_FEAT_3WAY |                         \
-   BTA_HF_CLIENT_FEAT_CLI | BTA_HF_CLIENT_FEAT_VREC | BTA_HF_CLIENT_FEAT_VOL | \
-   BTA_HF_CLIENT_FEAT_ECS | BTA_HF_CLIENT_FEAT_ECC | BTA_HF_CLIENT_FEAT_CODEC)
-#endif
-
 /*******************************************************************************
  *  Local type definitions
  ******************************************************************************/
@@ -358,7 +351,7 @@ static bt_status_t connect_audio(const RawAddress* bd_addr) {
 
   CHECK_BTHF_CLIENT_SLC_CONNECTED(cb);
 
-  if ((BTIF_HF_CLIENT_FEATURES & BTA_HF_CLIENT_FEAT_CODEC) &&
+  if ((get_default_hf_client_features() & BTA_HF_CLIENT_FEAT_CODEC) &&
       (cb->peer_feat & BTA_HF_CLIENT_PEER_CODEC)) {
     BTA_HfClientSendAT(cb->handle, BTA_HF_CLIENT_AT_CMD_BCC, 0, 0, NULL);
   } else {
@@ -872,6 +865,7 @@ static void btif_hf_client_upstreams_evt(uint16_t event, char* p_param) {
         cb->state = BTHF_CLIENT_CONNECTION_STATE_CONNECTED;
         cb->peer_feat = 0;
         cb->chld_feat = 0;
+        cb->handle = p_data->open.handle;
       } else if (cb->state == BTHF_CLIENT_CONNECTION_STATE_CONNECTING) {
         cb->state = BTHF_CLIENT_CONNECTION_STATE_DISCONNECTED;
       } else {
@@ -917,6 +911,22 @@ static void btif_hf_client_upstreams_evt(uint16_t event, char* p_param) {
       cb->peer_bda = RawAddress::kAny;
       cb->peer_feat = 0;
       cb->chld_feat = 0;
+      cb->handle = 0;
+
+      /* Clean up any btif_hf_client_cb for the same disconnected bd_addr.
+       * when there is an Incoming hf_client connection is in progress and
+       * at the same time, outgoing hf_client connection is initiated then
+       * due to race condition two btif_hf_client_cb is created. This creates
+       * problem for successive connections
+       */
+      while ((cb = btif_hf_client_get_cb_by_bda(p_data->bd_addr)) != NULL) {
+        cb->state = BTHF_CLIENT_CONNECTION_STATE_DISCONNECTED;
+        cb->peer_bda = RawAddress::kAny;
+        cb->peer_feat = 0;
+        cb->chld_feat = 0;
+        cb->handle = 0;
+      }
+
       btif_queue_advance();
       break;
 
@@ -1068,8 +1078,8 @@ static void bta_hf_client_evt(tBTA_HF_CLIENT_EVT event,
 bt_status_t btif_hf_client_execute_service(bool b_enable) {
   BTIF_TRACE_EVENT("%s: enable: %d", __func__, b_enable);
 
-  tBTA_HF_CLIENT_FEAT features = BTIF_HF_CLIENT_FEATURES;
-  uint16_t hfp_version = BTA_HFP_VERSION;
+  tBTA_HF_CLIENT_FEAT features = get_default_hf_client_features();
+  uint16_t hfp_version = get_default_hfp_version();
   if (hfp_version >= HFP_VERSION_1_7) {
     features |= BTA_HF_CLIENT_FEAT_ESCO_S4;
   }
