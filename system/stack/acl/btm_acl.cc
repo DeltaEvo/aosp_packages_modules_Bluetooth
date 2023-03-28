@@ -43,12 +43,14 @@
 #include "common/metrics.h"
 #include "device/include/controller.h"
 #include "device/include/interop.h"
+#include "gd/metrics/metrics_state.h"
 #include "include/l2cap_hci_link_interface.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/controller.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/l2c_api.h"
+#include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
 #include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
@@ -72,6 +74,7 @@
 #include "stack/include/sco_hci_link_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
+#include "os/metrics.h"
 
 void BTM_update_version_info(const RawAddress& bd_addr,
                              const remote_version_info& remote_version_info);
@@ -407,14 +410,14 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
   p_acl->transport = transport;
   p_acl->switch_role_failed_attempts = 0;
   p_acl->reset_switch_role();
-  BTM_PM_OnConnected(hci_handle, bda);
 
   LOG_DEBUG(
       "Created new ACL connection peer:%s role:%s handle:0x%04x transport:%s",
       PRIVATE_ADDRESS(bda), RoleText(p_acl->link_role).c_str(), hci_handle,
       bt_transport_text(transport).c_str());
 
-  if (transport == BT_TRANSPORT_BR_EDR) {
+  if (p_acl->is_transport_br_edr()) {
+    BTM_PM_OnConnected(hci_handle, bda);
     btm_set_link_policy(p_acl, btm_cb.acl_cb_.DefaultLinkPolicy());
   }
 
@@ -480,8 +483,10 @@ void btm_acl_removed(uint16_t handle) {
   }
   p_acl->in_use = false;
   NotifyAclLinkDown(*p_acl);
+  if (p_acl->is_transport_br_edr()) {
+    BTM_PM_OnDisconnected(handle);
+  }
   p_acl->Reset();
-  BTM_PM_OnDisconnected(handle);
 }
 
 /*******************************************************************************
@@ -2764,9 +2769,18 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
     return false;
   }
 
-    bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
-                                                /* is_direct */ true);
-    return true;
+  // argument list
+  auto argument_list = std::vector<std::pair<bluetooth::os::ArgumentType, int>>();
+
+  bluetooth::shim::LogMetricBluetoothLEConnectionMetricEvent(
+      bd_addr, android::bluetooth::le::LeConnectionOriginType::ORIGIN_NATIVE,
+      android::bluetooth::le::LeConnectionType::CONNECTION_TYPE_LE_ACL,
+      android::bluetooth::le::LeConnectionState::STATE_LE_ACL_START,
+      argument_list);
+
+  bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
+                                              /* is_direct */ true);
+  return true;
 }
 
 bool acl_create_le_connection(const RawAddress& bd_addr) {
