@@ -54,6 +54,7 @@ class Acl : public hci::acl_manager::ConnectionCallbacks,
   // hci::acl_manager::ConnectionCallbacks
   void OnConnectSuccess(
       std::unique_ptr<hci::acl_manager::ClassicAclConnection>) override;
+  void OnConnectRequest(hci::Address, hci::ClassOfDevice) override;
   void OnConnectFail(hci::Address, hci::ErrorCode reason,
                      bool locally_initiated) override;
 
@@ -121,8 +122,6 @@ class Acl : public hci::acl_manager::ConnectionCallbacks,
   void Shutdown();
   void FinalShutdown();
 
-  void AddDeviceToFilterAcceptList(
-      const hci::AddressWithType& address_with_type);
   void ClearFilterAcceptList();
   void DisconnectAllForSuspend();
   void LeRand(LeRandCallback cb);
