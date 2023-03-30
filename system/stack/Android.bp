@@ -207,6 +207,7 @@ cc_library_static {
         "libbt-hci",
     ],
     whole_static_libs: [
+        "libcom.android.sysprop.bluetooth",
         "libldacBT_abr",
         "libldacBT_enc",
         "libaptx_enc",
@@ -235,6 +236,7 @@ cc_test {
     srcs: [
         "test/stack_a2dp_test.cc",
         "test/stack_avrcp_test.cc",
+        "test/gatt/gatt_api_test.cc",
     ],
     shared_libs: [
         "android.hardware.bluetooth@1.0",
@@ -1002,9 +1004,14 @@ cc_test {
         "libprotobuf-cpp-lite",
     ],
     sanitize: {
-      hwaddress: true,
-      integer_overflow: true,
-      scs: true,
+        address: true,
+        all_undefined: true,
+        cfi: true,
+        integer_overflow: true,
+        scs: true,
+        diag: {
+            undefined : true
+        },
     },
 }
 

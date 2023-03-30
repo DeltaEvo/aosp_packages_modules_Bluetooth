@@ -5,7 +5,6 @@
 // rest of the `pdl` crate. To make this work, avoid `use crate::`
 // statements below.
 
-use quote::quote;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -103,21 +102,6 @@ pub fn assert_eq_with_diff(left_label: &str, left: &str, right_label: &str, righ
     );
 }
 
-// Assert that an expression equals the given expression.
-//
-// Both expressions are wrapped in a `main` function (so we can format
-// it with `rustfmt`) and a diff is be shown if they differ.
-#[track_caller]
-pub fn assert_expr_eq(left: proc_macro2::TokenStream, right: proc_macro2::TokenStream) {
-    let left = quote! {
-        fn main() { #left }
-    };
-    let right = quote! {
-        fn main() { #right }
-    };
-    assert_eq_with_diff("left", &rustfmt(&left.to_string()), "right", &rustfmt(&right.to_string()));
-}
-
 /// Check that `haystack` contains `needle`.
 ///
 /// Panic with a nice message if not.
@@ -146,14 +130,17 @@ pub fn assert_contains(haystack: &str, needle: &str) {
 /// a panic is triggered if they differ.
 #[track_caller]
 pub fn assert_snapshot_eq<P: AsRef<Path>>(snapshot_path: P, actual_content: &str) {
+    let update_snapshots = std::env::var("UPDATE_SNAPSHOTS").is_ok();
     let snapshot = snapshot_path.as_ref();
-    let snapshot_content = fs::read(snapshot).unwrap_or_else(|err| {
-        panic!("Could not read snapshot from {}: {}", snapshot.display(), err)
-    });
+    let snapshot_content = match fs::read(snapshot) {
+        Ok(content) => content,
+        Err(_) if update_snapshots => Vec::new(),
+        Err(err) => panic!("Could not read snapshot from {}: {}", snapshot.display(), err),
+    };
     let snapshot_content = String::from_utf8(snapshot_content).expect("Snapshot was not UTF-8");
 
     // Normal comparison if UPDATE_SNAPSHOTS is unset.
-    if std::env::var("UPDATE_SNAPSHOTS").is_err() {
+    if !update_snapshots {
         return assert_eq_with_diff(
             snapshot.to_str().unwrap(),
             &snapshot_content,
