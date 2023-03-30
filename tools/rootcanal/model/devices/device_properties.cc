@@ -74,6 +74,8 @@ DeviceProperties::DeviceProperties(const std::string& file_name)
   // Use SetSupportedComands() to change what's supported.
   for (int i = 35; i < 64; i++) supported_commands_[i] = 0x00;
 
+  supported_commands_[18] &= ~(1 << 2);
+
   le_supported_states_ = 0x3ffffffffff;
   le_vendor_cap_ = {};
 
