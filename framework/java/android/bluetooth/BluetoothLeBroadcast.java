@@ -170,43 +170,36 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
         }
     };
 
-    private final class BluetoothLeBroadcastServiceListener extends ForwardingServiceListener {
-        BluetoothLeBroadcastServiceListener(ServiceListener listener) {
-            super(listener);
-        }
-
-        @Override
-        public void onServiceConnected(int profile, BluetoothProfile proxy) {
-            try {
-                if (profile == LE_AUDIO_BROADCAST) {
-                    // re-register the service-to-app callback
-                    synchronized (mCallbackExecutorMap) {
-                        if (mCallbackExecutorMap.isEmpty()) {
-                            return;
-                        }
-                        try {
-                            final IBluetoothLeAudio service = getService();
-                            if (service != null) {
-                                final SynchronousResultReceiver<Integer> recv =
-                                        SynchronousResultReceiver.get();
-                                service.registerLeBroadcastCallback(mCallback,
-                                        mAttributionSource, recv);
-                                recv.awaitResultNoInterrupt(getSyncTimeout())
-                                        .getValue(null);
+    @SuppressLint("AndroidFrameworkBluetoothPermission")
+    private final IBluetoothStateChangeCallback mBluetoothStateChangeCallback =
+            new IBluetoothStateChangeCallback.Stub() {
+                public void onBluetoothStateChange(boolean up) {
+                    if (DBG) Log.d(TAG, "onBluetoothStateChange: up=" + up);
+                    if (up) {
+                        // re-register the service-to-app callback
+                        synchronized (mCallbackExecutorMap) {
+                            if (!mCallbackExecutorMap.isEmpty()) {
+                                try {
+                                    final IBluetoothLeAudio service = getService();
+                                    if (service != null) {
+                                        final SynchronousResultReceiver<Integer> recv =
+                                                SynchronousResultReceiver.get();
+                                        service.registerLeBroadcastCallback(mCallback,
+                                                mAttributionSource, recv);
+                                        recv.awaitResultNoInterrupt(getSyncTimeout())
+                                                .getValue(null);
+                                    }
+                                } catch (TimeoutException e) {
+                                    Log.e(TAG, "onBluetoothServiceUp: Failed to register "
+                                            + "Le Broadcaster callback", e);
+                                } catch (RemoteException e) {
+                                    throw e.rethrowFromSystemServer();
+                                }
                             }
-                        } catch (TimeoutException e) {
-                            Log.e(TAG, "onBluetoothServiceUp: Failed to register "
-                                    + "Le Broadcaster callback", e);
-                        } catch (RemoteException e) {
-                            throw e.rethrowFromSystemServer();
                         }
                     }
                 }
-            } finally {
-                super.onServiceConnected(profile, proxy);
-            }
-        }
-    }
+            };
 
     /**
      * Interface for receiving events related to Broadcast Source
@@ -336,7 +329,16 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
     /*package*/ BluetoothLeBroadcast(Context context, BluetoothProfile.ServiceListener listener) {
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAttributionSource = mAdapter.getAttributionSource();
-        mProfileConnector.connect(context, new BluetoothLeBroadcastServiceListener(listener));
+        mProfileConnector.connect(context, listener);
+
+        IBluetoothManager mgr = mAdapter.getBluetoothManager();
+        if (mgr != null) {
+            try {
+                mgr.registerStateChangeCallback(mBluetoothStateChangeCallback);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
 
         mCloseGuard = new CloseGuard();
         mCloseGuard.open("close");
@@ -875,6 +877,15 @@ public final class BluetoothLeBroadcast implements AutoCloseable, BluetoothProfi
     @Override
     public void close() {
         if (VDBG) log("close()");
+
+        IBluetoothManager mgr = mAdapter.getBluetoothManager();
+        if (mgr != null) {
+            try {
+                mgr.unregisterStateChangeCallback(mBluetoothStateChangeCallback);
+            } catch (RemoteException e) {
+                Log.e(TAG, "", e);
+            }
+        }
 
         mProfileConnector.disconnect();
     }

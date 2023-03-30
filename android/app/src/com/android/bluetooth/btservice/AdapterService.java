@@ -690,9 +690,7 @@ public class AdapterService extends Service {
             int port,
             boolean isSecured,
             int result,
-            long socketCreationTimeMillis,
-            long socketCreationLatencyMillis,
-            long socketConnectionTimeMillis,
+            long connectionLatencyMillis,
             long timeoutMillis,
             int appUid) {
 
@@ -700,19 +698,13 @@ public class AdapterService extends Service {
         if (device != null) {
             metricId = getMetricId(device);
         }
-        long currentTime = System.currentTimeMillis();
-        long endToEndLatencyMillis = currentTime - socketCreationTimeMillis;
-        long socketAcceptanceLatencyMillis = currentTime - socketConnectionTimeMillis;
         Log.i(TAG, "Statslog L2capcoc server connection. metricId "
                 + metricId + " port " + port + " isSecured " + isSecured
-                + " result " + result + " endToEndLatencyMillis " + endToEndLatencyMillis
-                + " socketCreationLatencyMillis " + socketCreationLatencyMillis
-                + " socketAcceptanceLatencyMillis " + socketAcceptanceLatencyMillis
+                + " result " + result + " connectionLatencyMillis " + connectionLatencyMillis
                 + " timeout set by app " + timeoutMillis + " appUid " + appUid);
         BluetoothStatsLog.write(
                 BluetoothStatsLog.BLUETOOTH_L2CAP_COC_SERVER_CONNECTION,
-                metricId, port, isSecured, result, endToEndLatencyMillis, timeoutMillis, appUid,
-                socketCreationLatencyMillis, socketAcceptanceLatencyMillis);
+                metricId, port, isSecured, result, connectionLatencyMillis, timeoutMillis, appUid);
     }
 
     public void setMetricsLogger(MetricsLogger metricsLogger) {
@@ -734,25 +726,17 @@ public class AdapterService extends Service {
             int port,
             boolean isSecured,
             int result,
-            long socketCreationTimeMillis,
-            long socketCreationLatencyMillis,
-            long socketConnectionTimeMillis,
+            long connectionLatencyMillis,
             int appUid) {
 
         int metricId = getMetricId(device);
-        long currentTime = System.currentTimeMillis();
-        long endToEndLatencyMillis = currentTime - socketCreationTimeMillis;
-        long socketConnectionLatencyMillis = currentTime - socketConnectionTimeMillis;
         Log.i(TAG, "Statslog L2capcoc client connection. metricId "
                 + metricId + " port " + port + " isSecured " + isSecured
-                + " result " + result + " endToEndLatencyMillis " + endToEndLatencyMillis
-                + " socketCreationLatencyMillis " + socketCreationLatencyMillis
-                + " socketConnectionLatencyMillis " + socketConnectionLatencyMillis
+                + " result " + result + " connectionLatencyMillis " + connectionLatencyMillis
                 + " appUid " + appUid);
         BluetoothStatsLog.write(
                 BluetoothStatsLog.BLUETOOTH_L2CAP_COC_CLIENT_CONNECTION,
-                metricId, port, isSecured, result, endToEndLatencyMillis,
-                appUid, socketCreationLatencyMillis, socketConnectionLatencyMillis);
+                metricId, port, isSecured, result, connectionLatencyMillis, appUid);
     }
 
     @RequiresPermission(allOf = {
@@ -1432,6 +1416,10 @@ public class AdapterService extends Service {
         }
         if (mBassClientService != null && mBassClientService.getConnectionPolicy(device)
                  > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            return true;
+        }
+        if (mBatteryService != null && mBatteryService.getConnectionPolicy(device)
+                > BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
             return true;
         }
         return false;
@@ -3503,9 +3491,7 @@ public class AdapterService extends Service {
                 int port,
                 boolean isSecured,
                 int result,
-                long socketCreationTimeMillis,
-                long socketCreationLatencyMillis,
-                long socketConnectionTimeMillis,
+                long connectionLatencyMillis,
                 long timeoutMillis,
                 SynchronousResultReceiver receiver) {
             AdapterService service = getService();
@@ -3518,9 +3504,7 @@ public class AdapterService extends Service {
                         port,
                         isSecured,
                         result,
-                        socketCreationTimeMillis,
-                        socketCreationLatencyMillis,
-                        socketConnectionTimeMillis,
+                        connectionLatencyMillis,
                         timeoutMillis,
                         Binder.getCallingUid());
                 receiver.send(null);
@@ -3545,9 +3529,7 @@ public class AdapterService extends Service {
                 int port,
                 boolean isSecured,
                 int result,
-                long socketCreationTimeMillis,
-                long socketCreationLatencyMillis,
-                long socketConnectionTimeMillis,
+                long connectionLatencyMillis,
                 SynchronousResultReceiver receiver) {
             AdapterService service = getService();
             if (service == null) {
@@ -3559,9 +3541,7 @@ public class AdapterService extends Service {
                         port,
                         isSecured,
                         result,
-                        socketCreationTimeMillis,
-                        socketCreationLatencyMillis,
-                        socketConnectionTimeMillis,
+                        connectionLatencyMillis,
                         Binder.getCallingUid());
                 receiver.send(null);
             } catch (RuntimeException e) {

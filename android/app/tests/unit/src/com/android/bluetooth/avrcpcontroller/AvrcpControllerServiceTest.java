@@ -28,7 +28,6 @@ import static org.mockito.Mockito.when;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
-import android.media.AudioManager;
 import android.support.v4.media.session.PlaybackStateCompat;
 
 import androidx.test.filters.MediumTest;
@@ -39,6 +38,7 @@ import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
 
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -79,7 +79,6 @@ public class AvrcpControllerServiceTest {
         assertThat(mAdapter).isNotNull();
         mRemoteDevice = mAdapter.getRemoteDevice(REMOTE_DEVICE_ADDRESS);
         mService.mDeviceStateMap.put(mRemoteDevice, mStateMachine);
-        BluetoothMediaBrowserService.setActive(false);
     }
 
     @After
@@ -299,7 +298,6 @@ public class AvrcpControllerServiceTest {
         assertThat(event.mType).isEqualTo(StackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED);
         assertThat(event.mRemoteControlConnected).isEqualTo(remoteControlConnected);
         assertThat(event.mBrowsingConnected).isEqualTo(browsingConnected);
-        assertThat(BluetoothMediaBrowserService.isActive()).isFalse();
     }
 
     @Test
@@ -309,7 +307,7 @@ public class AvrcpControllerServiceTest {
 
         mService.onConnectionStateChanged(
                 remoteControlConnected, browsingConnected, REMOTE_DEVICE_ADDRESS_AS_ARRAY);
-        assertThat(BluetoothMediaBrowserService.isActive()).isFalse();
+
         verify(mStateMachine).disconnect();
     }
 
@@ -430,17 +428,5 @@ public class AvrcpControllerServiceTest {
     public void dump_doesNotCrash() {
         mService.getRcPsm(REMOTE_DEVICE_ADDRESS_AS_ARRAY, 1);
         mService.dump(new StringBuilder());
-    }
-
-    @Test
-    public void testOnFocusChange_audioGainDeviceActive_sessionActivated() {
-        mService.onAudioFocusStateChanged(AudioManager.AUDIOFOCUS_GAIN);
-        assertThat(BluetoothMediaBrowserService.isActive()).isTrue();
-    }
-
-    @Test
-    public void testOnFocusChange_audioLoss_sessionDeactivated() {
-        mService.onAudioFocusStateChanged(AudioManager.AUDIOFOCUS_LOSS);
-        assertThat(BluetoothMediaBrowserService.isActive()).isFalse();
     }
 }

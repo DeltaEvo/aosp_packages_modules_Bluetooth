@@ -511,13 +511,11 @@ public class BluetoothProxy {
 
         adapterIntentFilter = new IntentFilter();
         adapterIntentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        application.registerReceiver(adapterIntentReceiver, adapterIntentFilter,
-                Context.RECEIVER_EXPORTED);
+        application.registerReceiver(adapterIntentReceiver, adapterIntentFilter);
 
         bassIntentFilter = new IntentFilter();
         bassIntentFilter.addAction(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(bassIntentReceiver, bassIntentFilter,
-                Context.RECEIVER_EXPORTED);
+        application.registerReceiver(bassIntentReceiver, bassIntentFilter);
     }
 
     // Lazy constructing Singleton acquire method
@@ -744,8 +742,7 @@ public class BluetoothProxy {
 
         intentFilter = new IntentFilter();
         intentFilter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(leAudioIntentReceiver, intentFilter,
-                Context.RECEIVER_EXPORTED);
+        application.registerReceiver(leAudioIntentReceiver, intentFilter);
     }
 
     private void cleanupLeAudioProxy() {
@@ -763,8 +760,7 @@ public class BluetoothProxy {
 
         intentFilter = new IntentFilter();
         intentFilter.addAction(BluetoothVolumeControl.ACTION_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(volumeControlIntentReceiver, intentFilter,
-                Context.RECEIVER_EXPORTED);
+        application.registerReceiver(volumeControlIntentReceiver, intentFilter);
     }
 
     private void cleanupVolumeControlProxy() {
@@ -784,8 +780,7 @@ public class BluetoothProxy {
         intentFilter = new IntentFilter();
         intentFilter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         intentFilter.addAction("android.bluetooth.action.HAP_DEVICE_AVAILABLE");
-        application.registerReceiver(hapClientIntentReceiver, intentFilter,
-                Context.RECEIVER_EXPORTED);
+        application.registerReceiver(hapClientIntentReceiver, intentFilter);
     }
 
     private void cleanupHapProxy() {

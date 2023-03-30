@@ -24,7 +24,6 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.Resources.NotFoundException;
 import android.media.AudioManager;
-import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.bluetooth.R;
@@ -187,9 +186,7 @@ class A2dpCodecConfig {
 
         int value;
         try {
-            value = SystemProperties.getInt(
-                "bluetooth.a2dp.source.sbc_priority.config",
-                resources.getInteger(R.integer.a2dp_source_codec_priority_sbc));
+            value = resources.getInteger(R.integer.a2dp_source_codec_priority_sbc);
         } catch (NotFoundException e) {
             value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
         }
@@ -199,9 +196,7 @@ class A2dpCodecConfig {
         }
 
         try {
-            value = SystemProperties.getInt(
-                "bluetooth.a2dp.source.aac_priority.config",
-                resources.getInteger(R.integer.a2dp_source_codec_priority_aac));
+            value = resources.getInteger(R.integer.a2dp_source_codec_priority_aac);
         } catch (NotFoundException e) {
             value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
         }
@@ -211,9 +206,7 @@ class A2dpCodecConfig {
         }
 
         try {
-            value = SystemProperties.getInt(
-                "bluetooth.a2dp.source.aptx_priority.config",
-                resources.getInteger(R.integer.a2dp_source_codec_priority_aptx));
+            value = resources.getInteger(R.integer.a2dp_source_codec_priority_aptx);
         } catch (NotFoundException e) {
             value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
         }
@@ -223,9 +216,7 @@ class A2dpCodecConfig {
         }
 
         try {
-            value = SystemProperties.getInt(
-                "bluetooth.a2dp.source.aptx_hd_priority.config",
-                resources.getInteger(R.integer.a2dp_source_codec_priority_aptx_hd));
+            value = resources.getInteger(R.integer.a2dp_source_codec_priority_aptx_hd);
         } catch (NotFoundException e) {
             value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
         }
@@ -235,9 +226,7 @@ class A2dpCodecConfig {
         }
 
         try {
-            value = SystemProperties.getInt(
-                "bluetooth.a2dp.source.ldac_priority.config",
-                resources.getInteger(R.integer.a2dp_source_codec_priority_ldac));
+            value = resources.getInteger(R.integer.a2dp_source_codec_priority_ldac);
         } catch (NotFoundException e) {
             value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
         }
@@ -247,9 +236,7 @@ class A2dpCodecConfig {
         }
 
         try {
-            value = SystemProperties.getInt(
-                "bluetooth.a2dp.source.lc3_priority.config",
-                resources.getInteger(R.integer.a2dp_source_codec_priority_lc3));
+            value = resources.getInteger(R.integer.a2dp_source_codec_priority_lc3);
         } catch (NotFoundException e) {
             value = BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT;
         }

@@ -78,9 +78,6 @@ pub trait IBluetoothMedia {
     // Set the device as the active A2DP device
     fn set_active_device(&mut self, address: String);
 
-    // Reset the active A2DP device
-    fn reset_active_device(&mut self);
-
     // Set the device as the active HFP device
     fn set_hfp_active_device(&mut self, address: String);
 
@@ -1785,26 +1782,11 @@ impl IBluetoothMedia for BluetoothMedia {
             Some(addr) => addr,
         };
 
-        match self.a2dp_states.get(&addr) {
-            Some(BtavConnectionState::Connected) => {
-                if let Some(a2dp) = self.a2dp.as_mut() {
-                    a2dp.set_active_device(addr);
-                    self.uinput.set_active_device(addr.to_string());
-                } else {
-                    warn!("Uninitialized A2DP to set active device");
-                }
-            }
-            _ => warn!("[{}] Not connected or disconnected A2DP address", address),
-        };
-    }
-
-    fn reset_active_device(&mut self) {
-        if let Some(a2dp) = self.a2dp.as_mut() {
-            a2dp.set_active_device(RawAddress::empty());
-        } else {
-            warn!("Uninitialized A2DP to set active device");
+        match self.a2dp.as_mut() {
+            Some(a2dp) => a2dp.set_active_device(addr),
+            None => warn!("Uninitialized A2DP to set active device"),
         }
-        self.uinput.set_active_device(RawAddress::empty().to_string());
+        self.uinput.set_active_device(addr.to_string());
     }
 
     fn set_hfp_active_device(&mut self, address: String) {
@@ -1816,15 +1798,11 @@ impl IBluetoothMedia for BluetoothMedia {
             Some(addr) => addr,
         };
 
-        match self.hfp_states.get(&addr) {
-            Some(BthfConnectionState::SlcConnected) => {
-                if let Some(hfp) = self.hfp.as_mut() {
-                    hfp.set_active_device(addr);
-                } else {
-                    warn!("Uninitialized HFP to set active device");
-                }
+        match self.hfp.as_mut() {
+            Some(hfp) => {
+                hfp.set_active_device(addr);
             }
-            _ => warn!("[{}] Not connected or disconnected HFP address", address),
+            None => warn!("Uninitialized HFP to set active device"),
         }
     }
 

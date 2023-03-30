@@ -135,7 +135,7 @@ public class A2dpSinkStreamHandler extends Handler {
     public void handleMessage(Message message) {
         if (DBG) {
             Log.d(TAG, " process message: " + message.what);
-            Log.d(TAG, " current audioFocus state =  " + mAudioFocus);
+            Log.d(TAG, " audioFocus =  " + mAudioFocus);
         }
         switch (message.what) {
             case SRC_STR_START:
@@ -183,12 +183,7 @@ public class A2dpSinkStreamHandler extends Handler {
                 break;
 
             case AUDIO_FOCUS_CHANGE:
-                final int focusChangeCode = (int) message.obj;
-                if (DBG) {
-                    Log.d(TAG, "New audioFocus =  " + focusChangeCode
-                            + " Previous audio focus = " + mAudioFocus);
-                }
-                mAudioFocus = focusChangeCode;
+                mAudioFocus = (int) message.obj;
                 // message.obj is the newly granted audio focus.
                 switch (mAudioFocus) {
                     case AudioManager.AUDIOFOCUS_GAIN:
@@ -226,7 +221,7 @@ public class A2dpSinkStreamHandler extends Handler {
                 AvrcpControllerService avrcpControllerService =
                         AvrcpControllerService.getAvrcpControllerService();
                 if (avrcpControllerService != null) {
-                    avrcpControllerService.onAudioFocusStateChanged(focusChangeCode);
+                    avrcpControllerService.onAudioFocusStateChanged(mAudioFocus);
                 } else {
                     Log.w(TAG, "AVRCP Controller Service not available to send focus events to.");
                 }
@@ -264,12 +259,8 @@ public class A2dpSinkStreamHandler extends Handler {
         int focusRequestStatus = mAudioManager.requestAudioFocus(focusRequest);
         // If the request is granted begin streaming immediately and schedule an upgrade.
         if (focusRequestStatus == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            startFluorideStreaming();
             mAudioFocus = AudioManager.AUDIOFOCUS_GAIN;
-            final Message a2dpSinkStreamHandlerMessage = A2dpSinkStreamHandler.this
-                    .obtainMessage(AUDIO_FOCUS_CHANGE, mAudioFocus);
-            A2dpSinkStreamHandler.this.sendMessageAtFrontOfQueue(a2dpSinkStreamHandlerMessage);
-        } else {
-            Log.e(TAG, "Audio focus was not granted:" + focusRequestStatus);
         }
         return focusRequestStatus;
     }
