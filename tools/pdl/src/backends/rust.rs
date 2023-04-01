@@ -5,7 +5,7 @@ use quote::{format_ident, quote};
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use crate::parser::ast as parser_ast;
+use crate::analyzer::ast as analyzer_ast;
 
 mod parser;
 mod preamble;
@@ -68,21 +68,21 @@ pub fn mask_bits(n: usize, suffix: &str) -> syn::LitInt {
     syn::parse_str::<syn::LitInt>(&format!("0x{hex_digits}{suffix}")).unwrap()
 }
 
-fn generate_packet_size_getter(
-    scope: &lint::Scope<'_>,
-    fields: &[&parser_ast::Field],
+fn generate_packet_size_getter<'a>(
+    scope: &lint::Scope<'a>,
+    fields: impl Iterator<Item = &'a analyzer_ast::Field>,
     is_packet: bool,
 ) -> (usize, proc_macro2::TokenStream) {
     let mut constant_width = 0;
     let mut dynamic_widths = Vec::new();
 
     for field in fields {
-        if let Some(width) = field.width(scope, false) {
+        if let Some(width) = scope.get_field_width(field, false) {
             constant_width += width;
             continue;
         }
 
-        let decl = field.declaration(scope);
+        let decl = scope.get_field_declaration(field);
         dynamic_widths.push(match &field.desc {
             ast::FieldDesc::Payload { .. } | ast::FieldDesc::Body { .. } => {
                 if is_packet {
@@ -102,7 +102,7 @@ fn generate_packet_size_getter(
             ast::FieldDesc::Array { id, width, .. } => {
                 let id = format_ident!("{id}");
                 match &decl {
-                    Some(parser_ast::Decl {
+                    Some(analyzer_ast::Decl {
                         desc: ast::DeclDesc::Struct { .. } | ast::DeclDesc::CustomField { .. },
                         ..
                     }) => {
@@ -110,9 +110,10 @@ fn generate_packet_size_getter(
                             self.#id.iter().map(|elem| elem.get_size()).sum::<usize>()
                         }
                     }
-                    Some(parser_ast::Decl { desc: ast::DeclDesc::Enum { .. }, .. }) => {
-                        let width =
-                            syn::Index::from(decl.unwrap().width(scope, false).unwrap() / 8);
+                    Some(analyzer_ast::Decl { desc: ast::DeclDesc::Enum { .. }, .. }) => {
+                        let width = syn::Index::from(
+                            scope.get_decl_width(decl.unwrap(), false).unwrap() / 8,
+                        );
                         let mul_width = (width.index > 1).then(|| quote!(* #width));
                         quote! {
                             self.#id.len() #mul_width
@@ -147,7 +148,7 @@ fn generate_packet_size_getter(
     )
 }
 
-fn top_level_packet<'a>(scope: &lint::Scope<'a>, packet_name: &'a str) -> &'a parser_ast::Decl {
+fn top_level_packet<'a>(scope: &lint::Scope<'a>, packet_name: &'a str) -> &'a analyzer_ast::Decl {
     let mut decl = scope.typedef[packet_name];
     while let ast::DeclDesc::Packet { parent_id: Some(parent_id), .. }
     | ast::DeclDesc::Struct { parent_id: Some(parent_id), .. } = &decl.desc
@@ -157,18 +158,14 @@ fn top_level_packet<'a>(scope: &lint::Scope<'a>, packet_name: &'a str) -> &'a pa
     decl
 }
 
-fn get_packet_children<'a>(scope: &'a lint::Scope<'_>, id: &str) -> &'a [&'a parser_ast::Decl] {
-    scope.children.get(id).map(Vec::as_slice).unwrap_or_default()
-}
-
 /// Find all constrained fields in children of `id`.
 fn find_constrained_fields<'a>(
     scope: &'a lint::Scope<'a>,
     id: &'a str,
-) -> Vec<&'a parser_ast::Field> {
+) -> Vec<&'a analyzer_ast::Field> {
     let mut fields = Vec::new();
     let mut field_names = BTreeSet::new();
-    let mut children = Vec::from(get_packet_children(scope, id));
+    let mut children = scope.iter_children(id).collect::<Vec<_>>();
 
     while let Some(child) = children.pop() {
         if let ast::DeclDesc::Packet { id, constraints, .. }
@@ -180,7 +177,7 @@ fn find_constrained_fields<'a>(
                     fields.push(packet_scope.all_fields[&constraint.id]);
                 }
             }
-            children.extend(get_packet_children(scope, id));
+            children.extend(scope.iter_children(id).collect::<Vec<_>>());
         }
     }
 
@@ -195,11 +192,11 @@ fn find_constrained_fields<'a>(
 fn find_constrained_parent_fields<'a>(
     scope: &'a lint::Scope<'a>,
     id: &'a str,
-) -> impl Iterator<Item = &'a parser_ast::Field> {
+) -> impl Iterator<Item = &'a analyzer_ast::Field> {
     let packet_scope = &scope.scopes[&scope.typedef[id]];
     find_constrained_fields(scope, id).into_iter().filter(|field| {
         let id = field.id().unwrap();
-        packet_scope.all_fields.contains_key(id) && !packet_scope.named.contains_key(id)
+        packet_scope.all_fields.contains_key(id) && packet_scope.get_packet_field(id).is_none()
     })
 }
 
@@ -220,7 +217,7 @@ fn generate_data_struct(
     let serializer_span = format_ident!("buffer");
     let mut field_parser = FieldParser::new(scope, endianness, id, &span);
     let mut field_serializer = FieldSerializer::new(scope, endianness, id, &serializer_span);
-    for field in &packet_scope.fields {
+    for field in packet_scope.iter_fields() {
         field_parser.add(field);
         field_serializer.add(field);
     }
@@ -236,7 +233,7 @@ fn generate_data_struct(
     };
 
     let (constant_width, packet_size) =
-        generate_packet_size_getter(scope, &packet_scope.fields, is_packet);
+        generate_packet_size_getter(scope, packet_scope.iter_fields(), is_packet);
     let conforms = if constant_width == 0 {
         quote! { true }
     } else {
@@ -245,16 +242,16 @@ fn generate_data_struct(
     };
 
     let visibility = if is_packet { quote!() } else { quote!(pub) };
-    let has_payload = packet_scope.payload.is_some();
-    let children = get_packet_children(scope, id);
-    let has_children_or_payload = !children.is_empty() || has_payload;
+    let has_payload = packet_scope.get_payload_field().is_some();
+    let has_children = scope.iter_children(id).next().is_some();
+
     let struct_name = if is_packet { format_ident!("{id}Data") } else { format_ident!("{id}") };
     let fields_with_ids =
-        packet_scope.fields.iter().filter(|f| f.id().is_some()).collect::<Vec<_>>();
+        packet_scope.iter_fields().filter(|f| f.id().is_some()).collect::<Vec<_>>();
     let mut field_names =
         fields_with_ids.iter().map(|f| format_ident!("{}", f.id().unwrap())).collect::<Vec<_>>();
     let mut field_types = fields_with_ids.iter().map(|f| types::rust_type(f)).collect::<Vec<_>>();
-    if has_children_or_payload {
+    if has_children || has_payload {
         if is_packet {
             field_names.push(format_ident!("child"));
             let field_type = format_ident!("{id}DataChild");
@@ -317,7 +314,7 @@ fn generate_data_struct(
 /// Find all parents from `id`.
 ///
 /// This includes the `Decl` for `id` itself.
-fn find_parents<'a>(scope: &lint::Scope<'a>, id: &str) -> Vec<&'a parser_ast::Decl> {
+fn find_parents<'a>(scope: &lint::Scope<'a>, id: &str) -> Vec<&'a analyzer_ast::Decl> {
     let mut decl = scope.typedef[id];
     let mut parents = vec![decl];
     while let ast::DeclDesc::Packet { parent_id: Some(parent_id), .. }
@@ -401,7 +398,7 @@ fn generate_packet_decl(
     let all_field_getter_names = all_field_names.iter().map(|id| format_ident!("get_{id}"));
     let all_field_self_field = all_fields.iter().map(|f| {
         for (parent, parent_id) in parents.iter().zip(parent_lower_ids.iter()) {
-            if scope.scopes[parent].fields.contains(f) {
+            if scope.scopes[parent].iter_fields().any(|ff| ff.id() == f.id()) {
                 return quote!(self.#parent_id);
             }
         }
@@ -427,8 +424,9 @@ fn generate_packet_decl(
         let parent_packet_scope = &scope.scopes[&scope.typedef[parent_id]];
 
         let named_fields = {
-            let mut names = parent_packet_scope.named.keys().collect::<Vec<_>>();
-            names.sort();
+            let mut names =
+                parent_packet_scope.iter_fields().filter_map(ast::Field::id).collect::<Vec<_>>();
+            names.sort_unstable();
             names
         };
 
@@ -444,7 +442,7 @@ fn generate_packet_decl(
             })
             .collect::<Vec<_>>();
 
-        if parent_packet_scope.payload.is_some() {
+        if parent_packet_scope.get_payload_field().is_some() {
             field.push(format_ident!("child"));
             if idx == 0 {
                 // Top-most parent, the child is simply created from
@@ -473,8 +471,8 @@ fn generate_packet_decl(
         }
     });
 
-    let children = get_packet_children(scope, id);
-    let has_payload = packet_scope.payload.is_some();
+    let children = scope.iter_children(id).collect::<Vec<_>>();
+    let has_payload = packet_scope.get_payload_field().is_some();
     let has_children_or_payload = !children.is_empty() || has_payload;
     let child =
         children.iter().map(|child| format_ident!("{}", child.id().unwrap())).collect::<Vec<_>>();
@@ -745,8 +743,8 @@ fn generate_enum_decl(id: &str, tags: &[ast::Tag]) -> proc_macro2::TokenStream {
 
 fn generate_decl(
     scope: &lint::Scope<'_>,
-    file: &parser_ast::File,
-    decl: &parser_ast::Decl,
+    file: &analyzer_ast::File,
+    decl: &analyzer_ast::Decl,
 ) -> String {
     match &decl.desc {
         ast::DeclDesc::Packet { id, .. } => {
@@ -769,13 +767,13 @@ fn generate_decl(
 ///
 /// The code is not formatted, pipe it through `rustfmt` to get
 /// readable source code.
-pub fn generate(sources: &ast::SourceDatabase, file: &parser_ast::File) -> String {
+pub fn generate(sources: &ast::SourceDatabase, file: &analyzer_ast::File) -> String {
     let mut code = String::new();
 
     let source = sources.get(file.file).expect("could not read source");
     code.push_str(&preamble::generate(Path::new(source.name())));
 
-    let scope = lint::Scope::new(file).unwrap();
+    let scope = lint::Scope::new(file);
     for decl in &file.declarations {
         code.push_str(&generate_decl(&scope, file, decl));
         code.push_str("\n\n");
@@ -787,6 +785,7 @@ pub fn generate(sources: &ast::SourceDatabase, file: &parser_ast::File) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer;
     use crate::ast;
     use crate::parser::parse_inline;
     use crate::test_utils::{assert_snapshot_eq, rustfmt};
@@ -797,9 +796,11 @@ mod tests {
     /// # Panics
     ///
     /// Panics on parse errors.
-    pub fn parse_str(text: &str) -> parser_ast::File {
+    pub fn parse_str(text: &str) -> analyzer_ast::File {
         let mut db = ast::SourceDatabase::new();
-        parse_inline(&mut db, String::from("stdin"), String::from(text)).expect("parse error")
+        let file =
+            parse_inline(&mut db, String::from("stdin"), String::from(text)).expect("parse error");
+        analyzer::analyze(&file).expect("analyzer error")
     }
 
     #[track_caller]
@@ -818,19 +819,22 @@ mod tests {
                 a: 8,
                 b: 8,
                 c: 8,
+                _payload_,
               }
               packet Child: Parent(a = 10) {
                 x: 8,
+                _payload_,
               }
               packet GrandChild: Child(b = 20) {
                 y: 8,
+                _payload_,
               }
               packet GrandGrandChild: GrandChild(c = 30) {
                 z: 8,
               }
             ";
         let file = parse_str(code);
-        let scope = lint::Scope::new(&file).unwrap();
+        let scope = lint::Scope::new(&file);
         let find_fields =
             |id| find_constrained_parent_fields(&scope, id).map(|field| field.id().unwrap());
         assert_iter_eq(find_fields("Parent"), vec![]);
@@ -863,6 +867,7 @@ mod tests {
                     let code = format!("{endianness}_packets\n{}", $code);
                     let mut db = ast::SourceDatabase::new();
                     let file = parse_inline(&mut db, String::from("test"), code).unwrap();
+                    let file = analyzer::analyze(&file).unwrap();
                     let actual_code = generate(&db, &file);
                     assert_snapshot_eq(
                         &format!("tests/generated/{name}_{endianness}.rs"),
