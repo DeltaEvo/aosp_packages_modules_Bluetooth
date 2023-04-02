@@ -1,7 +1,6 @@
 //! PDL parser and analyzer.
 
 use codespan_reporting::term::{self, termcolor};
-use structopt::StructOpt;
 
 mod analyzer;
 mod ast;
@@ -10,8 +9,9 @@ mod lint;
 mod parser;
 #[cfg(test)]
 mod test_utils;
+mod utils;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum OutputFormat {
     JSON,
     Rust,
@@ -33,25 +33,50 @@ impl std::str::FromStr for OutputFormat {
     }
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "pdl-parser", about = "Packet Description Language parser tool.")]
+#[derive(Debug)]
 struct Opt {
     /// Print tool version and exit.
-    #[structopt(short, long = "--version")]
     version: bool,
 
     /// Generate output in this format ("json", "rust", "rust_no_alloc", "rust_no_alloc_test"). The output
     /// will be printed on stdout in both cases.
-    #[structopt(short, long = "--output-format", name = "FORMAT", default_value = "JSON")]
     output_format: OutputFormat,
 
     /// Input file.
-    #[structopt(name = "FILE")]
     input_file: String,
 }
 
+impl Opt {
+    fn parse() -> Opt {
+        let app = clap::App::new("Packet Description Language parser")
+            .version("1.0")
+            .arg(
+                clap::Arg::with_name("input-file")
+                    .value_name("FILE")
+                    .help("Input PDL file")
+                    .required(true),
+            )
+            .arg(
+                clap::Arg::with_name("output-format")
+                    .value_name("FORMAT")
+                    .long("output-format")
+                    .help("Output file format")
+                    .takes_value(true)
+                    .default_value("json")
+                    .possible_values(&["json", "rust", "rust_no_alloc", "rust_no_alloc_test"]),
+            );
+        let matches = app.get_matches();
+
+        Opt {
+            version: matches.is_present("version"),
+            input_file: matches.value_of("input-file").unwrap().into(),
+            output_format: matches.value_of("output-format").unwrap().parse().unwrap(),
+        }
+    }
+}
+
 fn main() -> Result<(), String> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     if opt.version {
         println!("Packet Description Language parser version 1.0");
@@ -61,7 +86,7 @@ fn main() -> Result<(), String> {
     let mut sources = ast::SourceDatabase::new();
     match parser::parse_file(&mut sources, opt.input_file) {
         Ok(file) => {
-            let _analyzed_file = match analyzer::analyze(&file) {
+            let analyzed_file = match analyzer::analyze(&file) {
                 Ok(file) => file,
                 Err(diagnostics) => {
                     diagnostics
@@ -80,7 +105,7 @@ fn main() -> Result<(), String> {
                     println!("{}", backends::json::generate(&file).unwrap())
                 }
                 OutputFormat::Rust => {
-                    println!("{}", backends::rust::generate(&sources, &file))
+                    println!("{}", backends::rust::generate(&sources, &analyzed_file))
                 }
                 OutputFormat::RustNoAlloc => {
                     let schema = backends::intermediate::generate(&file).unwrap();
