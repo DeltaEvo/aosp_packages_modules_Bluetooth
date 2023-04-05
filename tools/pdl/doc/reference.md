@@ -54,6 +54,65 @@ packet Brew {
 }
 ```
 
+The endianess affects how fields of fractional byte sizes (hence named
+bit-fields) are parsed or serialized. Such fields are grouped together to the
+next byte boundary, least significant bit first, and then byte-swapped to the
+required endianess before being written to memory, or after being read from
+memory.
+
+```
+packet Coffee {
+  a: 1,
+  b: 15,
+  c: 3,
+  d: 5,
+}
+
+// The first two field are laid out as a single
+// integer of 16-bits
+//     MSB                                   LSB
+//     16                  8                 0
+//     +---------------------------------------+
+//     | b14 ..                        .. b0 |a|
+//     +---------------------------------------+
+//
+// The file endianness is applied to this integer
+// to obtain the byte layout of the packet fields.
+//
+// Little endian layout
+//     MSB                                   LSB
+//     7    6    5    4    3    2    1    0
+//     +---------------------------------------+
+//  0  |            b[6:0]                | a  |
+//     +---------------------------------------+
+//  1  |               b[14:7]                 |
+//     +---------------------------------------+
+//  2  |          d             |       c      |
+//     +---------------------------------------+
+//
+// Big endian layout
+//     MSB                                   LSB
+//     7    6    5    4    3    2    1    0
+//     +---------------------------------------+
+//  0  |               b[14:7]                 |
+//     +---------------------------------------+
+//  1  |            b[6:0]                | a  |
+//     +---------------------------------------+
+//  2  |          d             |       c      |
+//     +---------------------------------------+
+```
+
+Fields which qualify as bit-fields are:
+- [Scalar](#fields-scalar) fields
+- [Size](#fields-size) fields
+- [Count](#fields-count) fields
+- [Fixed](#fields-fixed) fields
+- [Reserved](#fields-reserved) fields
+- [Typedef](#fields-typedef) fields, when the field type is an
+  [Enum](#enum)
+
+Fields that do not qualify as bit-fields _must_ start and end on a byte boundary.
+
 ## Identifiers
 
 - Identifiers can denote a field; an enumeration tag; or a declared type.
@@ -102,22 +161,44 @@ A declaration is either:
 > &nbsp;&nbsp; enum_tag (`,` enum_tag)* `,`?
 >
 > enum_tag:\
+> &nbsp;&nbsp; enum_range | enum_value
+>
+> enum_range:\
+> &nbsp;&nbsp; [IDENTIFIER](#identifier) `=` [INTEGER](#integer) `..` [INTEGER](#integer)) (`{`\
+> &nbsp;&nbsp;&nbsp;&nbsp; enum_value_list\
+> &nbsp;&nbsp; `}`)?
+>
+> enum_value_list:\
+> &nbsp;&nbsp; enum_value (`,` enum_value)* `,`?
+>
+> enum_value:\
 > &nbsp;&nbsp; [IDENTIFIER](#identifier) `=` [INTEGER](#integer)
 
-An *enumeration* or for short *enum*, is a declaration of a set of named [integer](#integer) constants.
+An *enumeration* or for short *enum*, is a declaration of a set of named [integer](#integer) constants
+or named [integer](#integer) ranges. [integer](#integer) ranges are inclusive in both ends.
+[integer](#integer) value within a range *must* be unique. [integer](#integer) ranges
+*must not* overlap.
 
 The [integer](#integer) following the name specifies the bit size of the values.
 
 ```
-enum CoffeeAddition: 3 {
+enum CoffeeAddition: 5 {
   Empty = 0,
-  Cream = 1,
-  Vanilla = 2,
-  Chocolate = 3,
-  Whisky = 4,
-  Rum = 5,
-  Kahlua = 6,
-  Aquavit = 7
+
+  NonAlcoholic = 1..9 {
+    Cream = 1,
+    Vanilla = 2,
+    Chocolate = 3,
+  },
+
+  Alcoholic = 10..19 {
+    Whisky = 10,
+    Rum = 11,
+    Kahlua = 12,
+    Aquavit = 13,
+  },
+
+  Custom = 20..29,
 }
 ```
 
@@ -132,7 +213,9 @@ enum CoffeeAddition: 3 {
 > &nbsp;&nbsp;&nbsp;&nbsp; [field_list](#fields)?\
 > &nbsp;&nbsp; `}`
 
-A *packet* is a declaration of a sequence of [fields](#fields).
+A *packet* is a declaration of a sequence of [fields](#fields). While packets
+can contain bit-fields, the size of the whole packet must be a multiple of 8
+bits.
 
 A *packet* can optionally inherit from another *packet* declaration. In this case the packet
 inherits the parent's fields and the child's fields replace the
@@ -375,6 +458,9 @@ An *array* field defines a sequence of `N` elements of type `T`.
 - An [identifier](#identifier) referencing an [enum](#enum), a [struct](#struct)
 or a [custom field](#custom-field) type.
 
+The size of `T` must always be a multiple of 8 bits, that is, the array elements
+must start at byte boundaries.
+
 ```
 packet Brew {
    pots: 8[2],
@@ -504,11 +590,13 @@ packet CRCedBrew {
 > padding_field:\
 > &nbsp;&nbsp; `_padding_` `[` [INTEGER](#integer) `]`
 
-A *\_padding\_* field adds a number of **octet** of padding.
+A *\_padding\_* field immediately following an array field pads the array field with `0`s to the
+specified number of **octets**.
 
 ```
-packet Padded {
-  _padding_[1] // 1 octet/8bit of padding
+packet PaddedCoffee {
+  additions: CoffeeAddition[],
+  _padding_[100]
 }
 ```
 
@@ -571,13 +659,11 @@ starting with a letter.
 ### Size Modifier
 
 > SIZE_MODIFIER:\
-> &nbsp;&nbsp; `+` | `-` | `*` | `/` DIGIT | `+` | `-` | `*` | `/`
+> &nbsp;&nbsp; `+` INTVALUE
 
-Part of a arithmetic expression where the missing part is a size
-
-For example:
-- `+ 2` defines that the size is 2 octet bigger than the real size
-- `* 8` defines that the size is 8 times bigger than the real size
+A size modifier alters the octet size of the field it is attached to.
+For example, `+ 2` defines that the size is 2 octet bigger than the
+actual field size.
 
 ### Comment
 
