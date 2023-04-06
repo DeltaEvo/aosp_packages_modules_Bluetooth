@@ -1,7 +1,7 @@
+use crate::analyzer::ast as analyzer_ast;
 use crate::backends::rust::{
     constraint_to_value, find_constrained_parent_fields, mask_bits, types, ToUpperCamelCase,
 };
-use crate::parser::ast as parser_ast;
 use crate::{ast, lint};
 use quote::{format_ident, quote};
 use std::collections::{BTreeSet, HashMap};
@@ -13,7 +13,7 @@ fn size_field_ident(id: &str) -> proc_macro2::Ident {
 /// A single bit-field.
 struct BitField<'a> {
     shift: usize, // The shift to apply to this field.
-    field: &'a parser_ast::Field,
+    field: &'a analyzer_ast::Field,
 }
 
 pub struct FieldParser<'a> {
@@ -46,16 +46,16 @@ impl<'a> FieldParser<'a> {
         }
     }
 
-    pub fn add(&mut self, field: &'a parser_ast::Field) {
+    pub fn add(&mut self, field: &'a analyzer_ast::Field) {
         match &field.desc {
-            _ if field.is_bitfield(self.scope) => self.add_bit_field(field),
+            _ if self.scope.is_bitfield(field) => self.add_bit_field(field),
             ast::FieldDesc::Padding { .. } => todo!("Padding fields are not supported"),
             ast::FieldDesc::Array { id, width, type_id, size, .. } => self.add_array_field(
                 id,
                 *width,
                 type_id.as_deref(),
                 *size,
-                field.declaration(self.scope),
+                self.scope.get_field_declaration(field),
             ),
             ast::FieldDesc::Typedef { id, type_id } => self.add_typedef_field(id, type_id),
             ast::FieldDesc::Payload { size_modifier, .. } => {
@@ -66,9 +66,9 @@ impl<'a> FieldParser<'a> {
         }
     }
 
-    fn add_bit_field(&mut self, field: &'a parser_ast::Field) {
+    fn add_bit_field(&mut self, field: &'a analyzer_ast::Field) {
         self.chunk.push(BitField { shift: self.shift, field });
-        self.shift += field.width(self.scope, false).unwrap();
+        self.shift += self.scope.get_field_width(field, false).unwrap();
         if self.shift % 8 != 0 {
             return;
         }
@@ -109,7 +109,7 @@ impl<'a> FieldParser<'a> {
                 v = quote! { (#v >> #shift) }
             }
 
-            let width = field.width(self.scope, false).unwrap();
+            let width = self.scope.get_field_width(field, false).unwrap();
             let value_type = types::Integer::new(width);
             if !single_value && width < value_type.width {
                 // Mask value if we grabbed more than `width` and if
@@ -133,9 +133,9 @@ impl<'a> FieldParser<'a> {
                     let enum_id = format_ident!("{enum_id}");
                     let tag_id = format_ident!("{}", tag_id.to_upper_camel_case());
                     quote! {
-                        if #v != #enum_id::#tag_id as #value_type {
+                        if #v != #enum_id::#tag_id.into()  {
                             return Err(Error::InvalidFixedValue {
-                                expected: #enum_id::#tag_id as u64,
+                                expected: #value_type::from(#enum_id::#tag_id) as u64,
                                 actual: #v as u64,
                             });
                         }
@@ -153,15 +153,12 @@ impl<'a> FieldParser<'a> {
                     }
                 }
                 ast::FieldDesc::Typedef { id, type_id } => {
-                    let id = format_ident!("{id}");
-                    let type_id = format_ident!("{type_id}");
-                    let from_u = format_ident!("from_u{}", value_type.width);
                     // TODO(mgeisler): Remove the `unwrap` from the
                     // generated code and return the error to the
                     // caller.
-                    quote! {
-                        let #id = #type_id::#from_u(#v).unwrap();
-                    }
+                    let id = format_ident!("{id}");
+                    let type_id = format_ident!("{type_id}");
+                    quote! { let #id = #type_id::try_from(#v).unwrap(); }
                 }
                 ast::FieldDesc::Reserved { .. } => {
                     if single_value {
@@ -202,14 +199,14 @@ impl<'a> FieldParser<'a> {
     }
 
     fn find_count_field(&self, id: &str) -> Option<proc_macro2::Ident> {
-        match self.packet_scope()?.sizes.get(id)?.desc {
+        match self.packet_scope()?.get_array_size_field(id)?.desc {
             ast::FieldDesc::Count { .. } => Some(format_ident!("{id}_count")),
             _ => None,
         }
     }
 
     fn find_size_field(&self, id: &str) -> Option<proc_macro2::Ident> {
-        match self.packet_scope()?.sizes.get(id)?.desc {
+        match self.packet_scope()?.get_array_size_field(id)?.desc {
             ast::FieldDesc::Size { .. } => Some(size_field_ident(id)),
             _ => None,
         }
@@ -217,14 +214,14 @@ impl<'a> FieldParser<'a> {
 
     fn payload_field_offset_from_end(&self) -> Option<usize> {
         let packet_scope = self.packet_scope().unwrap();
-        let mut fields = packet_scope.fields.iter();
+        let mut fields = packet_scope.iter_fields();
         fields.find(|f| {
             matches!(f.desc, ast::FieldDesc::Body { .. } | ast::FieldDesc::Payload { .. })
         })?;
 
         let mut offset = 0;
         for field in fields {
-            if let Some(width) = field.width(self.scope, false) {
+            if let Some(width) = self.scope.get_field_width(field, false) {
                 offset += width;
             } else {
                 return None;
@@ -259,13 +256,13 @@ impl<'a> FieldParser<'a> {
         // `size`: the size of the array in number of elements (if
         // known). If None, the array is a Vec with a dynamic size.
         size: Option<usize>,
-        decl: Option<&parser_ast::Decl>,
+        decl: Option<&analyzer_ast::Decl>,
     ) {
         enum ElementWidth {
             Static(usize), // Static size in bytes.
             Unknown,
         }
-        let element_width = match width.or_else(|| decl?.width(self.scope, false)) {
+        let element_width = match width.or_else(|| self.scope.get_decl_width(decl?, false)) {
             Some(w) => {
                 assert_eq!(w % 8, 0, "Array element size ({w}) is not a multiple of 8");
                 ElementWidth::Static(w / 8)
@@ -433,7 +430,7 @@ impl<'a> FieldParser<'a> {
         let id = format_ident!("{id}");
         let type_id = format_ident!("{type_id}");
 
-        match decl.width(self.scope, true) {
+        match self.scope.get_decl_width(decl, true) {
             None => self.code.push(quote! {
                 let #id = #type_id::parse_inner(&mut #span)?;
             }),
@@ -535,7 +532,7 @@ impl<'a> FieldParser<'a> {
         span: &proc_macro2::Ident,
         width: Option<usize>,
         type_id: Option<&str>,
-        decl: Option<&parser_ast::Decl>,
+        decl: Option<&analyzer_ast::Decl>,
     ) -> proc_macro2::TokenStream {
         if let Some(width) = width {
             let get_uint = types::get_uint(self.endianness, width, span);
@@ -545,13 +542,11 @@ impl<'a> FieldParser<'a> {
         }
 
         if let Some(ast::DeclDesc::Enum { id, width, .. }) = decl.map(|decl| &decl.desc) {
-            let element_type = types::Integer::new(*width);
             let get_uint = types::get_uint(self.endianness, *width, span);
             let type_id = format_ident!("{id}");
-            let from_u = format_ident!("from_u{}", element_type.width);
             let packet_name = &self.packet_name;
             return quote! {
-                #type_id::#from_u(#get_uint).ok_or_else(|| Error::InvalidEnumValueError {
+                #type_id::try_from(#get_uint).map_err(|_| Error::InvalidEnumValueError {
                     obj: #packet_name.to_string(),
                     field: String::new(), // TODO(mgeisler): fill out or remove
                     value: 0,
@@ -568,14 +563,13 @@ impl<'a> FieldParser<'a> {
 
     pub fn done(&mut self) {
         let decl = self.scope.typedef[self.packet_name];
-        if let parser_ast::DeclDesc::Struct { .. } = &decl.desc {
+        if let ast::DeclDesc::Struct { .. } = &decl.desc {
             return; // Structs don't parse the child structs recursively.
         }
 
         let packet_scope = &self.scope.scopes[&decl];
-        let children =
-            self.scope.children.get(self.packet_name).map(Vec::as_slice).unwrap_or_default();
-        if children.is_empty() && packet_scope.payload.is_none() {
+        let children = self.scope.iter_children(self.packet_name).collect::<Vec<_>>();
+        if children.is_empty() && packet_scope.get_payload_field().is_none() {
             return;
         }
 
@@ -626,7 +620,7 @@ impl<'a> FieldParser<'a> {
         let packet_data_child = format_ident!("{}DataChild", self.packet_name);
         self.code.push(quote! {
             let child = match (#(#constrained_field_idents),*) {
-                #(#match_values => {
+                #(#match_values if #child_ids_data::conforms(&payload) => {
                     let mut cell = Cell::new(payload);
                     let child_data = #child_ids_data::parse_inner(&mut cell #child_parse_args)?;
                     // TODO(mgeisler): communicate back to user if !cell.get().is_empty()?
@@ -653,6 +647,7 @@ impl quote::ToTokens for FieldParser<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer;
     use crate::ast;
     use crate::parser::parse_inline;
 
@@ -661,9 +656,11 @@ mod tests {
     /// # Panics
     ///
     /// Panics on parse errors.
-    pub fn parse_str(text: &str) -> parser_ast::File {
+    pub fn parse_str(text: &str) -> analyzer_ast::File {
         let mut db = ast::SourceDatabase::new();
-        parse_inline(&mut db, String::from("stdin"), String::from(text)).expect("parse error")
+        let file =
+            parse_inline(&mut db, String::from("stdin"), String::from(text)).expect("parse error");
+        analyzer::analyze(&file).expect("analyzer error")
     }
 
     #[test]
@@ -675,7 +672,7 @@ mod tests {
               }
             ";
         let file = parse_str(code);
-        let scope = lint::Scope::new(&file).unwrap();
+        let scope = lint::Scope::new(&file);
         let span = format_ident!("bytes");
         let parser = FieldParser::new(&scope, file.endianness.value, "P", &span);
         assert_eq!(parser.find_size_field("a"), None);
@@ -692,7 +689,7 @@ mod tests {
               }
             ";
         let file = parse_str(code);
-        let scope = lint::Scope::new(&file).unwrap();
+        let scope = lint::Scope::new(&file);
         let span = format_ident!("bytes");
         let parser = FieldParser::new(&scope, file.endianness.value, "P", &span);
         assert_eq!(parser.find_size_field("b"), None);
@@ -709,7 +706,7 @@ mod tests {
               }
             ";
         let file = parse_str(code);
-        let scope = lint::Scope::new(&file).unwrap();
+        let scope = lint::Scope::new(&file);
         let span = format_ident!("bytes");
         let parser = FieldParser::new(&scope, file.endianness.value, "P", &span);
         assert_eq!(parser.find_size_field("c"), Some(format_ident!("c_size")));
