@@ -1,5 +1,6 @@
 /******************************************************************************
  *
+ *  Copyright (C) 2016 The Linux Foundation
  *  Copyright 2009-2012 Broadcom Corporation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,7 +50,6 @@
 #include <unistd.h>
 
 #include "audio_hal_interface/a2dp_encoding.h"
-#include "bt_utils.h"
 #include "bta/hh/bta_hh_int.h"  // for HID HACK profile methods
 #include "bta/include/bta_ar_api.h"
 #include "bta/include/bta_csis_api.h"
@@ -60,6 +60,7 @@
 #include "bta/include/bta_le_audio_broadcaster_api.h"
 #include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
+#include "btif/include/btif_sock.h"
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
@@ -76,13 +77,16 @@
 #include "btif_keystore.h"
 #include "btif_metrics_logging.h"
 #include "btif_pan.h"
+#include "btif_profile_storage.h"
 #include "btif_sock.h"
 #include "btif_storage.h"
 #include "common/address_obfuscator.h"
 #include "common/metric_id_allocator.h"
 #include "common/metrics.h"
 #include "common/os_utils.h"
+#include "device/include/device_iot_config.h"
 #include "device/include/interop.h"
+#include "device/include/interop_config.h"
 #include "gd/common/init_flags.h"
 #include "gd/os/parameter_provider.h"
 #include "main/shim/dumpsys.h"
@@ -330,7 +334,6 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .btif_hh_virtual_unplug = btif_hh_virtual_unplug,
       .bta_hh_read_ssr_param = bta_hh_read_ssr_param,
       .bta_hh_le_is_hh_gatt_if = bta_hh_le_is_hh_gatt_if,
-      .bta_hh_cleanup_disable = bta_hh_cleanup_disable,
 
       // AVDTP
       .btif_av_set_dynamic_audio_buffer_size =
@@ -340,7 +343,10 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .GetHearingAidDeviceCount = HearingAid::GetDeviceCount,
 
       // LE Audio
-      .IsLeAudioClientRunning = LeAudioClient::IsLeAudioClientRunning};
+      .IsLeAudioClientRunning = LeAudioClient::IsLeAudioClientRunning,
+
+      // AVRCP
+      .AVRC_GetProfileVersion = AVRC_GetProfileVersion};
 
   static auto interfaceForCore =
       CoreInterfaceImpl(&eventCallbacks, &configInterface, &msbcCodecInterface,
@@ -574,6 +580,15 @@ static int create_bond(const RawAddress* bd_addr, int transport) {
   return BT_STATUS_SUCCESS;
 }
 
+static int create_bond_le(const RawAddress* bd_addr, uint8_t addr_type) {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  if (btif_dm_pairing_is_busy()) return BT_STATUS_BUSY;
+
+  do_in_main_thread(
+      FROM_HERE, base::BindOnce(btif_dm_create_bond_le, *bd_addr, addr_type));
+  return BT_STATUS_SUCCESS;
+}
+
 static int create_bond_out_of_band(const RawAddress* bd_addr, int transport,
                                    const bt_oob_data_t* p192_data,
                                    const bt_oob_data_t* p256_data) {
@@ -716,16 +731,25 @@ static int set_default_event_mask_except(uint64_t mask, uint64_t le_mask) {
 
 static int restore_filter_accept_list() {
   if (!interface_ready()) return BT_STATUS_NOT_READY;
+  // TODO(b/260922031) - When restoring the filter accept list after a system
+  // suspend, we need to re-arm the LE connections that had `is_direct=False`.
+  // This should be the list of bonded devices and potentially any GATT
+  // connections that have `is_direct=False`. Currently, we only restore LE hid
+  // devices.
+  auto le_hid_addrs = btif_storage_get_le_hid_devices();
   do_in_main_thread(FROM_HERE,
-                    base::BindOnce(btif_dm_restore_filter_accept_list));
+                    base::BindOnce(btif_dm_restore_filter_accept_list,
+                                   std::move(le_hid_addrs)));
   return BT_STATUS_SUCCESS;
 }
 
 static int allow_wake_by_hid() {
   if (!interface_ready()) return BT_STATUS_NOT_READY;
-  auto hid_addrs = btif_storage_get_hid_device_addresses();
+  auto le_hid_addrs = btif_storage_get_le_hid_devices();
+  auto classic_hid_addrs = btif_storage_get_wake_capable_classic_hid_devices();
   do_in_main_thread(FROM_HERE, base::BindOnce(btif_dm_allow_wake_by_hid,
-                                              std::move(hid_addrs)));
+                                              std::move(classic_hid_addrs),
+                                              std::move(le_hid_addrs)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -745,8 +769,10 @@ static void dump(int fd, const char** arguments) {
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
   stack_debug_avdtp_api_dump(fd);
+  btif_sock_dump(fd);
   bluetooth::avrcp::AvrcpService::DebugDump(fd);
   btif_debug_config_dump(fd);
+  device_debug_iot_config_dump(fd);
   BTA_HfClientDumpStatistics(fd);
   wakelock_debug_dump(fd);
   osi_allocator_debug_dump(fd);
@@ -770,6 +796,27 @@ static void dump(int fd, const char** arguments) {
 
 static void dumpMetrics(std::string* output) {
   bluetooth::common::BluetoothMetricsLogger::GetInstance()->WriteString(output);
+}
+
+static int get_remote_pbap_pce_version(const RawAddress* bd_addr) {
+  // Read and restore the PCE version from local storage
+  uint16_t pce_version = 0;
+  size_t version_value_size = sizeof(pce_version);
+  if (!btif_config_get_bin(bd_addr->ToString(), BT_CONFIG_KEY_PBAP_PCE_VERSION,
+                           (uint8_t*)&pce_version, &version_value_size)) {
+    LOG_WARN("Failed to read cached peer PCE version for %s",
+             ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
+  }
+  return pce_version;
+}
+
+static bool pbap_pse_dynamic_version_upgrade_is_enabled() {
+  if (bluetooth::common::init_flags::
+          pbap_pse_dynamic_version_upgrade_is_enabled()) {
+    return true;
+  }
+  LOG_WARN("PBAP PSE dynamic version upgrade is not enabled");
+  return false;
 }
 
 static const void* get_profile_interface(const char* profile_id) {
@@ -844,33 +891,14 @@ static const void* get_profile_interface(const char* profile_id) {
   if (is_profile(profile_id, BT_PROFILE_CSIS_CLIENT_ID))
     return btif_csis_client_get_interface();
 
+  bool isBqrEnabled =
+      bluetooth::common::InitFlags::IsBluetoothQualityReportCallbackEnabled();
+  if (isBqrEnabled) {
+    if (is_profile(profile_id, BT_BQR_ID))
+      return bluetooth::bqr::getBluetoothQualityReportInterface();
+  }
+
   return NULL;
-}
-
-int dut_mode_configure(uint8_t enable) {
-  if (!interface_ready()) return BT_STATUS_NOT_READY;
-  if (!stack_manager_get_interface()->get_stack_is_running())
-    return BT_STATUS_NOT_READY;
-
-  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dut_mode_configure, enable));
-  return BT_STATUS_SUCCESS;
-}
-
-int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
-  if (!interface_ready()) return BT_STATUS_NOT_READY;
-  if (!btif_is_dut_mode()) return BT_STATUS_FAIL;
-
-  uint8_t* copy = (uint8_t*)osi_calloc(len);
-  memcpy(copy, buf, len);
-
-  do_in_main_thread(FROM_HERE,
-                    base::BindOnce(
-                        [](uint16_t opcode, uint8_t* buf, uint8_t len) {
-                          btif_dut_mode_send(opcode, buf, len);
-                          osi_free(buf);
-                        },
-                        opcode, copy, len));
-  return BT_STATUS_SUCCESS;
 }
 
 static bt_os_callouts_t* wakelock_os_callouts_saved = nullptr;
@@ -904,7 +932,18 @@ static int set_os_callouts(bt_os_callouts_t* callouts) {
 
 static int config_clear(void) {
   LOG_INFO("%s", __func__);
-  return btif_config_clear() ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
+  int ret = BT_STATUS_SUCCESS;
+  if (!btif_config_clear()) {
+    LOG_ERROR("Failed to clear btif config");
+    ret = BT_STATUS_FAIL;
+  }
+
+  if (!device_iot_config_clear()) {
+    LOG_ERROR("Failed to clear device iot config");
+    ret = BT_STATUS_FAIL;
+  }
+
+  return ret;
 }
 
 static bluetooth::avrcp::ServiceInterface* get_avrcp_service(void) {
@@ -942,6 +981,92 @@ static void metadata_changed(const RawAddress& remote_bd_addr, int key,
                                 std::move(value)));
 }
 
+static bool interop_match_addr(const char* feature_name,
+                               const RawAddress* addr) {
+  if (feature_name == NULL || addr == NULL) {
+    return false;
+  }
+
+  int feature = interop_feature_name_to_feature_id(feature_name);
+  if (feature == -1) {
+    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    return false;
+  }
+
+  return interop_match_addr((interop_feature_t)feature, addr);
+}
+
+static bool interop_match_name(const char* feature_name, const char* name) {
+  if (feature_name == NULL || name == NULL) {
+    return false;
+  }
+
+  int feature = interop_feature_name_to_feature_id(feature_name);
+  if (feature == -1) {
+    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    return false;
+  }
+
+  return interop_match_name((interop_feature_t)feature, name);
+}
+
+static bool interop_match_addr_or_name(const char* feature_name,
+                                       const RawAddress* addr) {
+  if (feature_name == NULL || addr == NULL) {
+    return false;
+  }
+
+  int feature = interop_feature_name_to_feature_id(feature_name);
+  if (feature == -1) {
+    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    return false;
+  }
+
+  return interop_match_addr_or_name((interop_feature_t)feature, addr,
+                                    &btif_storage_get_remote_device_property);
+}
+
+static void interop_database_add_remove_addr(bool do_add,
+                                             const char* feature_name,
+                                             const RawAddress* addr,
+                                             int length) {
+  if (feature_name == NULL || addr == NULL) {
+    return;
+  }
+
+  int feature = interop_feature_name_to_feature_id(feature_name);
+  if (feature == -1) {
+    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    return;
+  }
+
+  if (do_add) {
+    interop_database_add_addr((interop_feature_t)feature, addr, (size_t)length);
+  } else {
+    interop_database_remove_addr((interop_feature_t)feature, addr);
+  }
+}
+
+static void interop_database_add_remove_name(bool do_add,
+                                             const char* feature_name,
+                                             const char* name) {
+  if (feature_name == NULL || name == NULL) {
+    return;
+  }
+
+  int feature = interop_feature_name_to_feature_id(feature_name);
+  if (feature == -1) {
+    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    return;
+  }
+
+  if (do_add) {
+    interop_database_add_name((interop_feature_t)feature, name);
+  } else {
+    interop_database_remove_name((interop_feature_t)feature, name);
+  }
+}
+
 EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     sizeof(bluetoothInterface),
     .init = init,
@@ -959,6 +1084,7 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .start_discovery = start_discovery,
     .cancel_discovery = cancel_discovery,
     .create_bond = create_bond,
+    .create_bond_le = create_bond_le,
     .create_bond_out_of_band = create_bond_out_of_band,
     .remove_bond = remove_bond,
     .cancel_bond = cancel_bond,
@@ -966,8 +1092,6 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .pin_reply = pin_reply,
     .ssp_reply = ssp_reply,
     .get_profile_interface = get_profile_interface,
-    .dut_mode_configure = dut_mode_configure,
-    .dut_mode_send = dut_mode_send,
     .set_os_callouts = set_os_callouts,
     .read_energy_info = read_energy_info,
     .dump = dump,
@@ -994,7 +1118,16 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .set_event_filter_connection_setup_all_devices =
         set_event_filter_connection_setup_all_devices,
     .get_wbs_supported = get_wbs_supported,
-    .metadata_changed = metadata_changed};
+    .metadata_changed = metadata_changed,
+    .interop_match_addr = interop_match_addr,
+    .interop_match_name = interop_match_name,
+    .interop_match_addr_or_name = interop_match_addr_or_name,
+    .interop_database_add_remove_addr = interop_database_add_remove_addr,
+    .interop_database_add_remove_name = interop_database_add_remove_name,
+    .get_remote_pbap_pce_version = get_remote_pbap_pce_version,
+    .pbap_pse_dynamic_version_upgrade_is_enabled =
+        pbap_pse_dynamic_version_upgrade_is_enabled,
+};
 
 // callback reporting helpers
 

@@ -165,6 +165,7 @@ void Btm::ScanningCallbacks::OnPeriodicSyncReport(uint16_t sync_handle,
 void Btm::ScanningCallbacks::OnPeriodicSyncLost(uint16_t sync_handle) {}
 void Btm::ScanningCallbacks::OnPeriodicSyncTransferred(
     int pa_source, uint8_t status, bluetooth::hci::Address address) {}
+void Btm::ScanningCallbacks::OnBigInfoReport(uint16_t sync_handle, bool encrypted) {}
 
 Btm::Btm(os::Handler* handler, neighbor::InquiryModule* inquiry)
     : scanning_timer_(handler), observing_timer_(handler) {
@@ -480,13 +481,13 @@ bool Btm::UseLeLink(const RawAddress& raw_address) const {
 }
 
 BtmStatus Btm::ReadClassicRemoteDeviceName(const RawAddress& raw_address,
-                                           tBTM_CMPL_CB* callback) {
+                                           tBTM_NAME_CMPL_CB* callback) {
   LOG_ALWAYS_FATAL("unreachable");
   return BTM_UNDEFINED;
 }
 
 BtmStatus Btm::ReadLeRemoteDeviceName(const RawAddress& raw_address,
-                                      tBTM_CMPL_CB* callback) {
+                                      tBTM_NAME_CMPL_CB* callback) {
   if (!CheckLeAclLink(raw_address)) {
     return BTM_UNKNOWN_ADDR;
   }

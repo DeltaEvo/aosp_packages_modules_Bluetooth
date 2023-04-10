@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
-#include <base/callback.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <hardware/bt_csis.h>
 #include <hardware/bt_gatt_types.h>
 
 #include <list>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,7 @@ using bluetooth::groups::DeviceGroupsCallbacks;
 namespace {
 class CsisClientImpl;
 CsisClientImpl* instance;
+std::mutex instance_mutex;
 DeviceGroupsCallbacks* device_group_callbacks;
 
 /**
@@ -250,8 +252,9 @@ class CsisClientImpl : public CsisClient {
 
     auto device = FindDeviceByAddress(addr);
     if (device == nullptr) {
-      LOG(WARNING) << "Device not connected to profile"
-                   << ADDRESS_TO_LOGGABLE_STR(addr);
+      LOG_WARN("Device not connected to profile %s",
+               ADDRESS_TO_LOGGABLE_CSTR(addr));
+      callbacks_->OnConnectionState(addr, ConnectionState::DISCONNECTED);
       return;
     }
 
@@ -261,6 +264,7 @@ class CsisClientImpl : public CsisClient {
     } else {
       BTA_GATTC_CancelOpen(gatt_if_, addr, false);
       DoDisconnectCleanUp(device);
+      callbacks_->OnConnectionState(addr, ConnectionState::DISCONNECTED);
     }
   }
 
@@ -273,7 +277,6 @@ class CsisClientImpl : public CsisClient {
     Disconnect(addr);
 
     dev_groups_->RemoveDevice(addr);
-    btif_storage_remove_csis_device(addr);
   }
 
   int GetGroupId(const RawAddress& addr, Uuid uuid) override {
@@ -1099,20 +1102,29 @@ class CsisClientImpl : public CsisClient {
   }
 
   void OnCsisObserveCompleted(void) {
-    if (discovering_group_ == -1) {
-      LOG(ERROR) << __func__ << " No ongoing CSIS discovery - disable scan";
+    LOG_INFO("Group_id: %d", discovering_group_);
+
+    if (discovering_group_ == bluetooth::groups::kGroupUnknown) {
+      LOG_ERROR("No ongoing CSIS discovery - disable scan");
       return;
     }
 
     auto csis_group = FindCsisGroup(discovering_group_);
-    discovering_group_ = -1;
-    if (csis_group->IsGroupComplete())
+    discovering_group_ = bluetooth::groups::kGroupUnknown;
+
+    if (!csis_group) {
+      LOG_WARN("Group_id %d is not existing", discovering_group_);
+      discovering_group_ = bluetooth::groups::kGroupUnknown;
+      return;
+    }
+
+    discovering_group_ = bluetooth::groups::kGroupUnknown;
+    if (csis_group->IsGroupComplete()) {
       csis_group->SetDiscoveryState(
           CsisDiscoveryState::CSIS_DISCOVERY_COMPLETED);
-    else
+    } else {
       csis_group->SetDiscoveryState(CsisDiscoveryState::CSIS_DISCOVERY_IDLE);
-
-    LOG(INFO) << __func__;
+    }
   }
 
   /*
@@ -1207,6 +1219,12 @@ class CsisClientImpl : public CsisClient {
       return;
     }
 
+    if (csis_group->GetDesiredSize() > 0 &&
+        (csis_group->GetDesiredSize() == csis_group->GetCurrentSize())) {
+      LOG_WARN("Group is already complete");
+      return;
+    }
+
     auto discovered_group_rsi = std::find_if(
         all_rsi.cbegin(), all_rsi.cend(), [&csis_group](const auto& rsi) {
           return csis_group->IsRsiMatching(rsi);
@@ -1228,8 +1246,8 @@ class CsisClientImpl : public CsisClient {
   void CsisActiveObserverSet(bool enable) {
     bool is_ad_type_filter_supported =
         bluetooth::shim::is_ad_type_filter_supported();
-    LOG_INFO("CSIS Discovery SET: %d, is_ad_type_filter_supported: %d", enable,
-             is_ad_type_filter_supported);
+    LOG_INFO("Group_id %d: enable: %d, is_ad_type_filter_supported: %d", enable,
+             discovering_group_, is_ad_type_filter_supported);
     if (is_ad_type_filter_supported) {
       bluetooth::shim::set_ad_type_rsi_filter(enable);
     } else {
@@ -1457,7 +1475,7 @@ class CsisClientImpl : public CsisClient {
         /* Here it means, we have new group. Let's us create it */
         group_id =
             dev_groups_->AddDevice(device->addr, csis_instance->GetUuid());
-        LOG_ASSERT(group_id != -1);
+        LOG_ASSERT(group_id != bluetooth::groups::kGroupUnknown);
       } else {
         dev_groups_->AddDevice(device->addr, csis_instance->GetUuid(),
                                group_id);
@@ -2003,7 +2021,7 @@ class CsisClientImpl : public CsisClient {
   std::list<std::shared_ptr<CsisDevice>> devices_;
   std::list<std::shared_ptr<CsisGroup>> csis_groups_;
   DeviceGroups* dev_groups_;
-  int discovering_group_ = -1;
+  int discovering_group_ = bluetooth::groups::kGroupUnknown;
 };
 
 class DeviceGroupsCallbacksImpl : public DeviceGroupsCallbacks {
@@ -2039,6 +2057,7 @@ DeviceGroupsCallbacksImpl deviceGroupsCallbacksImpl;
 
 void CsisClient::Initialize(bluetooth::csis::CsisClientCallbacks* callbacks,
                             Closure initCb) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     LOG(ERROR) << __func__ << ": Already initialized!";
     return;
@@ -2077,6 +2096,7 @@ bool CsisClient::GetForStorage(const RawAddress& addr,
 }
 
 void CsisClient::CleanUp() {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   CsisClientImpl* ptr = instance;
   instance = nullptr;
 
@@ -2087,6 +2107,7 @@ void CsisClient::CleanUp() {
 }
 
 void CsisClient::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Coordinated Set Service Client:\n");
   if (instance) instance->Dump(fd);
   dprintf(fd, "\n");

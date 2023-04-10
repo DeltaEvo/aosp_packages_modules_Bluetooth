@@ -19,7 +19,7 @@
 #ifndef GATT_INT_H
 #define GATT_INT_H
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/strings/stringprintf.h>
 #include <string.h>
 
@@ -263,20 +263,14 @@ inline std::string gatt_channel_state_text(const tGATT_CH_STATE& state) {
 }
 #undef CASE_RETURN_TEXT
 
+// If you change these values make sure to look at b/262219144 before.
+// Some platform rely on this to never changes
 #define GATT_GATT_START_HANDLE 1
 #define GATT_GAP_START_HANDLE 20
 #define GATT_GMCS_START_HANDLE 40
 #define GATT_GTBS_START_HANDLE 90
 #define GATT_TMAS_START_HANDLE 130
 #define GATT_APP_START_HANDLE 134
-
-#ifndef GATT_DEFAULT_START_HANDLE
-#define GATT_DEFAULT_START_HANDLE GATT_GATT_START_HANDLE
-#endif
-
-#ifndef GATT_LAST_HANDLE
-#define GATT_LAST_HANDLE 0xFFFF
-#endif
 
 typedef struct hdl_cfg {
   uint16_t gatt_start_hdl;
@@ -348,6 +342,13 @@ typedef struct {
 
   bool in_use;
   uint8_t tcb_idx;
+
+  /* ATT Exchange MTU data */
+  uint16_t pending_user_mtu_exchange_value;
+  std::list<uint16_t> conn_ids_waiting_for_mtu_exchange;
+  /* Used to set proper TX DATA LEN on the controller*/
+  uint16_t max_user_mtu;
+
 } tGATT_TCB;
 
 /* logic channel */
@@ -456,6 +457,7 @@ typedef struct {
   tGATT_APPL_INFO cb_info;
 
   tGATT_HDL_CFG hdl_cfg;
+  bool over_br_enabled;
 } tGATT_CB;
 
 #define GATT_SIZE_OF_SRV_CHG_HNDL_RANGE 4
@@ -472,9 +474,15 @@ extern void gatt_set_err_rsp(bool enable, uint8_t req_op_code,
 extern bool gatt_disconnect(tGATT_TCB* p_tcb);
 extern bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
                              tBT_TRANSPORT transport, int8_t initiating_phys);
+extern bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
+                             tBLE_ADDR_TYPE addr_type, tBT_TRANSPORT transport,
+                             int8_t initiating_phys);
 extern bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
                          tBT_TRANSPORT transport, uint8_t initiating_phys,
                          tGATT_IF gatt_if);
+extern bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
+                         tBLE_ADDR_TYPE addr_type, tBT_TRANSPORT transport,
+                         uint8_t initiating_phys, tGATT_IF gatt_if);
 extern void gatt_data_process(tGATT_TCB& p_tcb, uint16_t cid, BT_HDR* p_buf);
 extern void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
                                           bool is_add, bool check_acl_link);
@@ -500,7 +508,7 @@ extern bool gatt_sr_is_cl_multi_variable_len_notif_supported(tGATT_TCB& tcb);
 
 extern bool gatt_sr_is_cl_change_aware(tGATT_TCB& tcb);
 extern void gatt_sr_init_cl_status(tGATT_TCB& tcb);
-extern void gatt_sr_update_cl_status(tGATT_TCB& tcb, bool chg_unaware);
+extern void gatt_sr_update_cl_status(tGATT_TCB& tcb, bool chg_aware);
 
 /* Functions provided by att_protocol.cc */
 extern tGATT_STATUS attp_send_cl_confirmation_msg(tGATT_TCB& tcb, uint16_t cid);
@@ -601,7 +609,10 @@ extern uint16_t gatt_tcb_get_att_cid(tGATT_TCB& tcb, bool eatt_support);
 extern uint16_t gatt_tcb_get_payload_size_tx(tGATT_TCB& tcb, uint16_t cid);
 extern uint16_t gatt_tcb_get_payload_size_rx(tGATT_TCB& tcb, uint16_t cid);
 extern void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb);
-extern void gatt_clcb_dealloc(tGATT_CLCB* p_clcb);
+extern uint16_t gatt_get_mtu(const RawAddress& bda, tBT_TRANSPORT transport);
+extern bool gatt_is_pending_mtu_exchange(tGATT_TCB* p_tcb);
+extern void gatt_set_conn_id_waiting_for_mtu_exchange(tGATT_TCB* p_tcb,
+                                                      uint16_t conn_id);
 
 extern void gatt_sr_copy_prep_cnt_to_cback_cnt(tGATT_TCB& p_tcb);
 extern bool gatt_sr_is_cback_cnt_zero(tGATT_TCB& p_tcb);

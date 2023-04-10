@@ -6,14 +6,16 @@ use bt_topshim::bindings::root::bluetooth::Uuid;
 use bt_topshim::btif::{BluetoothInterface, BtStatus, BtTransport, RawAddress, Uuid128Bit};
 use bt_topshim::profiles::gatt::{
     ffi::RustAdvertisingTrackInfo, AdvertisingStatus, BtGattDbElement, BtGattNotifyParams,
-    BtGattReadParams, Gatt, GattAdvCallbacks, GattAdvCallbacksDispatcher,
-    GattAdvInbandCallbacksDispatcher, GattClientCallbacks, GattClientCallbacksDispatcher,
-    GattScannerCallbacks, GattScannerCallbacksDispatcher, GattScannerInbandCallbacks,
-    GattScannerInbandCallbacksDispatcher, GattServerCallbacks, GattServerCallbacksDispatcher,
-    GattStatus, LePhy, MsftAdvMonitor, MsftAdvMonitorPattern,
+    BtGattReadParams, BtGattResponse, BtGattValue, Gatt, GattAdvCallbacks,
+    GattAdvCallbacksDispatcher, GattAdvInbandCallbacksDispatcher, GattClientCallbacks,
+    GattClientCallbacksDispatcher, GattScannerCallbacks, GattScannerCallbacksDispatcher,
+    GattScannerInbandCallbacks, GattScannerInbandCallbacksDispatcher, GattServerCallbacks,
+    GattServerCallbacksDispatcher, GattStatus, LePhy, MsftAdvMonitor, MsftAdvMonitorPattern,
 };
+use bt_topshim::sysprop;
 use bt_topshim::topstack;
 use bt_utils::adv_parser;
+use bt_utils::array_utils;
 
 use crate::async_helper::{AsyncHelper, CallbackSender};
 use crate::bluetooth::{Bluetooth, IBluetooth};
@@ -185,7 +187,7 @@ impl ContextMap {
         &mut self,
         callback_id: u32,
     ) -> Option<&mut GattClientCallback> {
-        self.callbacks.get_by_id(callback_id)
+        self.callbacks.get_by_id_mut(callback_id)
     }
 }
 
@@ -193,6 +195,16 @@ struct Server {
     id: Option<i32>,
     cbid: u32,
     uuid: Uuid128Bit,
+    services: Vec<BluetoothGattService>,
+    is_congested: bool,
+
+    // Queued on_notification_sent callback.
+    congestion_queue: Vec<(String, GattStatus)>,
+}
+
+struct Request {
+    id: i32,
+    handle: i32,
 }
 
 struct ServerContextMap {
@@ -201,6 +213,7 @@ struct ServerContextMap {
     callbacks: Callbacks<dyn IBluetoothGattServerCallback + Send>,
     servers: Vec<Server>,
     connections: Vec<Connection>,
+    requests: Vec<Request>,
 }
 
 type GattServerCallback = Box<dyn IBluetoothGattServerCallback + Send>;
@@ -211,6 +224,7 @@ impl ServerContextMap {
             callbacks: Callbacks::new(tx, Message::GattServerCallbackDisconnected),
             servers: vec![],
             connections: vec![],
+            requests: vec![],
         }
     }
 
@@ -222,8 +236,26 @@ impl ServerContextMap {
         self.servers.iter().find(|server| server.id.map_or(false, |id| id == server_id))
     }
 
+    fn get_mut_by_server_id(&mut self, server_id: i32) -> Option<&mut Server> {
+        self.servers.iter_mut().find(|server| server.id.map_or(false, |id| id == server_id))
+    }
+
     fn get_by_callback_id(&self, callback_id: u32) -> Option<&Server> {
         self.servers.iter().find(|server| server.cbid == callback_id)
+    }
+
+    fn get_by_conn_id(&self, conn_id: i32) -> Option<&Server> {
+        self.connections
+            .iter()
+            .find(|conn| conn.conn_id == conn_id)
+            .and_then(|conn| self.get_by_server_id(conn.server_id))
+    }
+
+    fn get_mut_by_conn_id(&mut self, conn_id: i32) -> Option<&mut Server> {
+        self.connections
+            .iter()
+            .find_map(|conn| (conn.conn_id == conn_id).then(|| conn.server_id.clone()))
+            .and_then(move |server_id| self.get_mut_by_server_id(server_id))
     }
 
     fn add(&mut self, uuid: &Uuid128Bit, callback: GattServerCallback) {
@@ -233,7 +265,14 @@ impl ServerContextMap {
 
         let cbid = self.callbacks.add_callback(callback);
 
-        self.servers.push(Server { id: None, cbid, uuid: uuid.clone() });
+        self.servers.push(Server {
+            id: None,
+            cbid,
+            uuid: uuid.clone(),
+            services: vec![],
+            is_congested: false,
+            congestion_queue: vec![],
+        });
     }
 
     fn remove(&mut self, id: i32) {
@@ -256,10 +295,7 @@ impl ServerContextMap {
         }
     }
 
-    fn get_callback_from_callback_id(
-        &mut self,
-        callback_id: u32,
-    ) -> Option<&mut GattServerCallback> {
+    fn get_callback_from_callback_id(&self, callback_id: u32) -> Option<&GattServerCallback> {
         self.callbacks.get_by_id(callback_id)
     }
 
@@ -286,6 +322,35 @@ impl ServerContextMap {
             .iter()
             .find(|conn| conn.server_id == server_id && conn.address == *address)
             .map(|conn| conn.conn_id);
+    }
+
+    fn get_address_from_conn_id(&self, conn_id: i32) -> Option<String> {
+        self.connections
+            .iter()
+            .find_map(|conn| (conn.conn_id == conn_id).then(|| conn.address.clone()))
+    }
+
+    fn add_service(&mut self, server_id: i32, service: BluetoothGattService) {
+        if let Some(s) = self.get_mut_by_server_id(server_id) {
+            s.services.push(service)
+        }
+    }
+
+    fn delete_service(&mut self, server_id: i32, handle: i32) {
+        self.get_mut_by_server_id(server_id)
+            .map(|s: &mut Server| s.services.retain(|service| service.instance_id != handle));
+    }
+
+    fn add_request(&mut self, request_id: i32, handle: i32) {
+        self.requests.push(Request { id: request_id, handle });
+    }
+
+    fn _delete_request(&mut self, request_id: i32) {
+        self.requests.retain(|request| request.id != request_id);
+    }
+
+    fn get_request_handle_from_id(&self, request_id: i32) -> Option<i32> {
+        self.requests.iter().find_map(|request| (request.id == request_id).then(|| request.handle))
     }
 }
 
@@ -456,6 +521,9 @@ pub trait IBluetoothGatt {
     /// Enumerates all GATT services on a connected device.
     fn discover_services(&self, client_id: i32, addr: String);
 
+    /// Discovers all GATT services on a connected device. Only used by PTS.
+    fn btif_gattc_discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String);
+
     /// Search a GATT service on a connected device based on a UUID.
     fn discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String);
 
@@ -562,9 +630,52 @@ pub trait IBluetoothGatt {
 
     /// Disconnects the server GATT connection.
     fn server_disconnect(&self, server_id: i32, addr: String) -> bool;
+
+    /// Adds a service to the GATT server.
+    fn add_service(&self, server_id: i32, service: BluetoothGattService);
+
+    /// Removes a service from the GATT server.
+    fn remove_service(&self, server_id: i32, handle: i32);
+
+    /// Clears all services from the GATT server.
+    fn clear_services(&self, server_id: i32);
+
+    /// Sends a response to a read/write operation.
+    fn send_response(
+        &self,
+        server_id: i32,
+        addr: String,
+        request_id: i32,
+        status: GattStatus,
+        offset: i32,
+        value: Vec<u8>,
+    ) -> bool;
+
+    /// Sends a notification to a remote device.
+    fn send_notification(
+        &self,
+        server_id: i32,
+        addr: String,
+        handle: i32,
+        confirm: bool,
+        value: Vec<u8>,
+    ) -> bool;
+
+    /// Sets preferred PHY.
+    fn server_set_preferred_phy(
+        &self,
+        server_id: i32,
+        addr: String,
+        tx_phy: LePhy,
+        rx_phy: LePhy,
+        phy_options: i32,
+    );
+
+    /// Reads the PHY used by a peer.
+    fn server_read_phy(&self, server_id: i32, addr: String);
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 /// Represents a GATT Descriptor.
 pub struct BluetoothGattDescriptor {
     pub uuid: Uuid128Bit,
@@ -578,7 +689,7 @@ impl BluetoothGattDescriptor {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 /// Represents a GATT Characteristic.
 pub struct BluetoothGattCharacteristic {
     pub uuid: Uuid128Bit,
@@ -623,7 +734,7 @@ impl BluetoothGattCharacteristic {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 /// Represents a GATT Service.
 pub struct BluetoothGattService {
     pub uuid: Uuid128Bit,
@@ -642,6 +753,138 @@ impl BluetoothGattService {
             characteristics: vec![],
             included_services: vec![],
         }
+    }
+
+    fn from_db(elements: Vec<BtGattDbElement>) -> Vec<BluetoothGattService> {
+        let mut db_out: Vec<BluetoothGattService> = vec![];
+
+        for elem in elements {
+            match GattDbElementType::from_u32(elem.type_).unwrap() {
+                GattDbElementType::PrimaryService | GattDbElementType::SecondaryService => {
+                    db_out.push(BluetoothGattService::new(
+                        elem.uuid.uu,
+                        elem.attribute_handle as i32,
+                        elem.type_ as i32,
+                    ));
+                    // TODO(b/200065274): Mark restricted services.
+                }
+
+                GattDbElementType::Characteristic => {
+                    match db_out.last_mut() {
+                        Some(s) => s.characteristics.push(BluetoothGattCharacteristic::new(
+                            elem.uuid.uu,
+                            elem.attribute_handle as i32,
+                            elem.properties as i32,
+                            0,
+                        )),
+                        None => {
+                            // TODO(b/193685325): Log error.
+                        }
+                    }
+                    // TODO(b/200065274): Mark restricted characteristics.
+                }
+
+                GattDbElementType::Descriptor => {
+                    match db_out.last_mut() {
+                        Some(s) => match s.characteristics.last_mut() {
+                            Some(c) => c.descriptors.push(BluetoothGattDescriptor::new(
+                                elem.uuid.uu,
+                                elem.attribute_handle as i32,
+                                0,
+                            )),
+                            None => {
+                                // TODO(b/193685325): Log error.
+                            }
+                        },
+                        None => {
+                            // TODO(b/193685325): Log error.
+                        }
+                    }
+                    // TODO(b/200065274): Mark restricted descriptors.
+                }
+
+                GattDbElementType::IncludedService => {
+                    match db_out.last_mut() {
+                        Some(s) => {
+                            s.included_services.push(BluetoothGattService::new(
+                                elem.uuid.uu,
+                                elem.attribute_handle as i32,
+                                elem.type_ as i32,
+                            ));
+                        }
+                        None => {
+                            // TODO(b/193685325): Log error.
+                        }
+                    }
+                }
+            }
+        }
+
+        db_out
+    }
+
+    fn into_db(service: BluetoothGattService) -> Vec<BtGattDbElement> {
+        let mut db_out: Vec<BtGattDbElement> = vec![];
+        db_out.push(BtGattDbElement {
+            id: service.instance_id as u16,
+            uuid: Uuid::from(service.uuid),
+            type_: service.service_type as u32,
+            attribute_handle: service.instance_id as u16,
+            start_handle: service.instance_id as u16,
+            end_handle: 0,
+            properties: 0,
+            extended_properties: 0,
+            permissions: 0,
+        });
+
+        for char in service.characteristics {
+            db_out.push(BtGattDbElement {
+                id: char.instance_id as u16,
+                uuid: Uuid::from(char.uuid),
+                type_: GattDbElementType::Characteristic as u32,
+                attribute_handle: char.instance_id as u16,
+                start_handle: 0,
+                end_handle: 0,
+                properties: char.properties as u8,
+                extended_properties: 0,
+                permissions: char.permissions as u16,
+            });
+
+            for desc in char.descriptors {
+                db_out.push(BtGattDbElement {
+                    id: desc.instance_id as u16,
+                    uuid: Uuid::from(desc.uuid),
+                    type_: GattDbElementType::Descriptor as u32,
+                    attribute_handle: desc.instance_id as u16,
+                    start_handle: 0,
+                    end_handle: 0,
+                    properties: 0,
+                    extended_properties: 0,
+                    permissions: desc.permissions as u16,
+                });
+            }
+        }
+
+        for included_service in service.included_services {
+            db_out.push(BtGattDbElement {
+                id: included_service.instance_id as u16,
+                uuid: Uuid::from(included_service.uuid),
+                type_: included_service.service_type as u32,
+                attribute_handle: included_service.instance_id as u16,
+                start_handle: 0,
+                end_handle: 0,
+                properties: 0,
+                extended_properties: 0,
+                permissions: 0,
+            });
+        }
+
+        // Set end handle of primary/secondary attribute to last element's handle
+        if let Some(elem) = db_out.last() {
+            db_out[0].end_handle = elem.attribute_handle;
+        }
+
+        db_out
     }
 }
 
@@ -724,6 +967,94 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
 
     /// When there is a change in the state of a GATT server connection.
     fn on_server_connection_state(&self, _server_id: i32, _connected: bool, _addr: String);
+
+    /// When there is a service added to the GATT server.
+    fn on_service_added(&self, _status: GattStatus, _service: BluetoothGattService);
+
+    /// When a service has been removed from the GATT server.
+    fn on_service_removed(&self, status: GattStatus, handle: i32);
+
+    /// When a remote device has requested to read a characteristic.
+    fn on_characteristic_read_request(
+        &self,
+        _addr: String,
+        _trans_id: i32,
+        _offset: i32,
+        _is_long: bool,
+        _handle: i32,
+    );
+
+    /// When a remote device has requested to read a descriptor.
+    fn on_descriptor_read_request(
+        &self,
+        _addr: String,
+        _trans_id: i32,
+        _offset: i32,
+        _is_long: bool,
+        _handle: i32,
+    );
+
+    /// When a remote device has requested to write to a characteristic.
+    fn on_characteristic_write_request(
+        &self,
+        _addr: String,
+        _trans_id: i32,
+        _offset: i32,
+        _len: i32,
+        _is_prep: bool,
+        _need_rsp: bool,
+        _handle: i32,
+        _value: Vec<u8>,
+    );
+
+    /// When a remote device has requested to write to a descriptor.
+    fn on_descriptor_write_request(
+        &self,
+        _addr: String,
+        _trans_id: i32,
+        _offset: i32,
+        _len: i32,
+        _is_prep: bool,
+        _need_rsp: bool,
+        _handle: i32,
+        _value: Vec<u8>,
+    );
+
+    /// When a previously prepared write is to be executed.
+    fn on_execute_write(&self, _addr: String, _trans_id: i32, _exec_write: bool);
+
+    /// When a notification or indication has been sent to a remote device.
+    fn on_notification_sent(&self, _addr: String, _status: GattStatus);
+
+    /// When the MTU for a given connection changes
+    fn on_mtu_changed(&self, addr: String, mtu: i32);
+
+    /// When there is a change of PHY.
+    fn on_phy_update(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus);
+
+    /// The completion of IBluetoothGatt::server_read_phy.
+    fn on_phy_read(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus);
+
+    /// When the connection parameters for a given connection changes.
+    fn on_connection_updated(
+        &self,
+        addr: String,
+        interval: i32,
+        latency: i32,
+        timeout: i32,
+        status: GattStatus,
+    );
+
+    /// When the subrate change event for a given connection is received.
+    fn on_subrate_change(
+        &self,
+        addr: String,
+        subrate_factor: i32,
+        latency: i32,
+        cont_num: i32,
+        timeout: i32,
+        status: GattStatus,
+    );
 }
 
 /// Interface for scanner callbacks to clients, passed to
@@ -732,14 +1063,21 @@ pub trait IScannerCallback: RPCProxy {
     /// When the `register_scanner` request is done.
     fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus);
 
-    /// When an LE advertisement matching aggregate filters is detected. Since this callback is
-    /// shared among all scanner callbacks, clients may receive more advertisements than what is
-    /// requested to be filtered in.
+    /// When an LE advertisement matching aggregate filters is detected. This callback is shared
+    /// among all scanner callbacks and is triggered for *every* advertisement that the controller
+    /// receives. For listening to the beginning and end of a specific scanner's advertisements
+    /// detected while in RSSI range, use on_advertisement_found and on_advertisement_lost below.
     fn on_scan_result(&self, scan_result: ScanResult);
+
+    /// When an LE advertisement matching aggregate filters is found. The criteria of
+    /// how a device is considered found is specified by ScanFilter.
+    fn on_advertisement_found(&self, scanner_id: u8, scan_result: ScanResult);
 
     /// When an LE advertisement matching aggregate filters is no longer detected. The criteria of
     /// how a device is considered lost is specified by ScanFilter.
-    fn on_scan_result_lost(&self, scan_result: ScanResult);
+    // TODO(b/269343922): Rename this to on_advertisement_lost for symmetry with
+    // on_advertisement_found.
+    fn on_advertisement_lost(&self, scanner_id: u8, scan_result: ScanResult);
 
     /// When LE Scan module changes suspend mode due to system suspend/resume.
     fn on_suspend_mode_change(&self, suspend_mode: SuspendMode);
@@ -942,6 +1280,11 @@ impl GattAsyncIntf {
     /// May be converted into real async in the future if btif supports it.
     async fn update_scan(&mut self) {
         if self.scanners.lock().unwrap().values().find(|scanner| scanner.is_active).is_some() {
+            // Toggle the scan off and on so that we reset the scan parameters based on whether
+            // we have active scanners using hardware filtering.
+            // TODO(b/266752123): We can do more bookkeeping to optimize when we really need to
+            // toggle. Also improve toggling API into 1 operation that guarantees correct ordering.
+            self.gatt.as_ref().unwrap().lock().unwrap().scanner.stop_scan();
             self.gatt.as_ref().unwrap().lock().unwrap().scanner.start_scan();
         } else {
             self.gatt.as_ref().unwrap().lock().unwrap().scanner.stop_scan();
@@ -963,6 +1306,8 @@ pub struct BluetoothGatt {
     reliable_queue: HashSet<String>,
     scanner_callbacks: Callbacks<dyn IScannerCallback + Send>,
     scanners: Arc<Mutex<ScannersMap>>,
+    scan_suspend_mode: SuspendMode,
+    paused_scanner_ids: Vec<u8>,
     advertisers: Advertisers,
 
     adv_mon_add_cb_sender: CallbackSender<(u8, u8)>,
@@ -993,6 +1338,8 @@ impl BluetoothGatt {
             reliable_queue: HashSet::new(),
             scanner_callbacks: Callbacks::new(tx.clone(), Message::ScannerCallbackDisconnected),
             scanners: scanners.clone(),
+            scan_suspend_mode: SuspendMode::Normal,
+            paused_scanner_ids: Vec::new(),
             small_rng: SmallRng::from_entropy(),
             advertisers: Advertisers::new(tx.clone()),
             adv_mon_add_cb_sender: async_helper_msft_adv_monitor_add.get_callback_sender(),
@@ -1113,14 +1460,60 @@ impl BluetoothGatt {
         self.scanner_callbacks.remove_callback(callback_id)
     }
 
+    /// Set the suspend mode.
+    pub fn set_scan_suspend_mode(&mut self, suspend_mode: SuspendMode) {
+        if suspend_mode != self.scan_suspend_mode {
+            self.scan_suspend_mode = suspend_mode;
+
+            // Notify current suspend mode to all active callbacks.
+            self.scanner_callbacks.for_all_callbacks(|callback| {
+                callback.on_suspend_mode_change(self.scan_suspend_mode.clone());
+            });
+        }
+    }
+
     /// Enters suspend mode for LE Scan.
     ///
     /// This "pauses" all operations managed by this module to prepare for system suspend. A
     /// callback is triggered to let clients know that this module is in suspend mode and some
     /// subsequent API calls will be blocked in this mode.
-    pub fn scan_enter_suspend(&mut self) {
-        // TODO(b/224603540): Implement
-        log::error!("TODO - scan_enter_suspend");
+    pub fn scan_enter_suspend(&mut self) -> BtStatus {
+        if self.get_scan_suspend_mode() != SuspendMode::Normal {
+            return BtStatus::Busy;
+        }
+        self.set_scan_suspend_mode(SuspendMode::Suspending);
+
+        // Collect the scanners that will be paused so that they can be re-enabled at resume.
+        let paused_scanner_ids = self
+            .scanners
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(_uuid, scanner)| {
+                if let (true, Some(scanner_id)) = (scanner.is_active, scanner.scanner_id) {
+                    Some(scanner_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Note: We can't simply disable the LE scanning. When a filter is offloaded
+        // with the MSFT extension and it is monitoring a device, it sends a
+        // `Monitor Device Event` to indicate that monitoring is stopped and this
+        // can cause an early wake-up. Until we fix the disable + mask solution, we
+        // must remove all monitors before suspend and re-monitor them on resume.
+        for &scanner_id in &paused_scanner_ids {
+            self.stop_scan(scanner_id);
+            if let Some(scanner) =
+                Self::find_scanner_by_id(&mut self.scanners.lock().unwrap(), scanner_id)
+            {
+                scanner.is_suspended = true;
+            }
+        }
+        self.paused_scanner_ids = paused_scanner_ids;
+        self.set_scan_suspend_mode(SuspendMode::Suspended);
+        return BtStatus::Success;
     }
 
     /// Exits suspend mode for LE Scan.
@@ -1128,9 +1521,19 @@ impl BluetoothGatt {
     /// To be called after system resume/wake up. This "unpauses" the operations that were "paused"
     /// due to suspend. A callback is triggered to let clients when this module has exited suspend
     /// mode.
-    pub fn scan_exit_suspend(&mut self) {
-        // TODO(b/224603540): Implement
-        log::error!("TODO - scan_exit_suspend");
+    pub fn scan_exit_suspend(&mut self) -> BtStatus {
+        if self.get_scan_suspend_mode() != SuspendMode::Suspended {
+            return BtStatus::Busy;
+        }
+        self.set_scan_suspend_mode(SuspendMode::Resuming);
+
+        // The resume_scan() will add and reenable the monitors individually.
+        for scanner_id in self.paused_scanner_ids.drain(..).collect::<Vec<_>>() {
+            self.resume_scan(scanner_id);
+        }
+        self.set_scan_suspend_mode(SuspendMode::Normal);
+
+        return BtStatus::Success;
     }
 
     fn find_scanner_by_id<'a>(
@@ -1138,6 +1541,105 @@ impl BluetoothGatt {
         scanner_id: u8,
     ) -> Option<&'a mut ScannerInfo> {
         scanners.values_mut().find(|scanner| scanner.scanner_id == Some(scanner_id))
+    }
+
+    /// The resume_scan method is used to resume scanning after system suspension.
+    /// It assumes that scanner.filter has already had the filter data.
+    fn resume_scan(&mut self, scanner_id: u8) -> BtStatus {
+        let scan_suspend_mode = self.get_scan_suspend_mode();
+        if scan_suspend_mode != SuspendMode::Normal && scan_suspend_mode != SuspendMode::Resuming {
+            return BtStatus::Busy;
+        }
+
+        let filter = {
+            let mut scanners_lock = self.scanners.lock().unwrap();
+            if let Some(scanner) = Self::find_scanner_by_id(&mut scanners_lock, scanner_id) {
+                if scanner.is_suspended {
+                    scanner.is_suspended = false;
+                    scanner.is_active = true;
+                    // When a scanner resumes from a suspended state, the
+                    // scanner.filter has already had the filter data.
+                    scanner.filter.clone()
+                } else {
+                    log::warn!(
+                        "This Scanner {} is supposed to resume from suspended state",
+                        scanner_id
+                    );
+                    return BtStatus::Fail;
+                }
+            } else {
+                log::warn!("Scanner {} not found", scanner_id);
+                return BtStatus::Fail;
+            }
+        };
+
+        self.add_monitor_and_update_scan(scanner_id, filter)
+    }
+
+    fn add_monitor_and_update_scan(
+        &mut self,
+        scanner_id: u8,
+        filter: Option<ScanFilter>,
+    ) -> BtStatus {
+        let has_active_unfiltered_scanner = self
+            .scanners
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
+
+        let gatt_async = self.gatt_async.clone();
+        let scanners = self.scanners.clone();
+        let is_msft_supported = self.is_msft_supported();
+
+        tokio::spawn(async move {
+            // The three operations below (monitor add, monitor enable, update scan) happen one
+            // after another, and cannot be interleaved with other GATT async operations.
+            // So acquire the GATT async lock in the beginning of this block and will be released
+            // at the end of this block.
+            // TODO(b/217274432): Consider not using async model but instead add actions when
+            // handling callbacks.
+            let mut gatt_async = gatt_async.lock().await;
+
+            // Add and enable the monitor filter only when the MSFT extension is supported.
+            if is_msft_supported {
+                if let Some(filter) = filter {
+                    let monitor_handle =
+                        match gatt_async.msft_adv_monitor_add((&filter).into()).await {
+                            Ok((handle, 0)) => handle,
+                            _ => {
+                                log::error!("Error adding advertisement monitor");
+                                return;
+                            }
+                        };
+
+                    if let Some(scanner) =
+                        Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
+                    {
+                        // The monitor handle is needed in stop_scan().
+                        scanner.monitor_handle = Some(monitor_handle);
+                    }
+
+                    log::debug!("Added adv monitor handle = {}", monitor_handle);
+                }
+
+                if !gatt_async
+                    .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
+                    .await
+                    .map_or(false, |status| status == 0)
+                {
+                    // TODO(b/266752123):
+                    // Intel controller throws "Command Disallowed" error if we tried to enable/disable
+                    // filter but it's already at the same state. This is harmless but we can improve
+                    // the state machine to avoid calling enable/disable if it's already at that state
+                    log::error!("Error updating Advertisement Monitor enable");
+                }
+            }
+
+            gatt_async.update_scan().await;
+        });
+
+        BtStatus::Success
     }
 
     /// Remove an advertiser callback and unregisters all advertising sets associated with that callback.
@@ -1213,6 +1715,31 @@ impl BluetoothGatt {
 
         self.advertisers.set_suspend_mode(SuspendMode::Normal);
     }
+
+    /// Start an active scan on given scanner id. This will look up and assign
+    /// the correct ScanSettings for it as well.
+    pub(crate) fn start_active_scan(&mut self, scanner_id: u8) -> BtStatus {
+        let interval: u16 = sysprop::get_i32(sysprop::Property::LeInquiryScanInterval)
+            .try_into()
+            .expect("Bad value configured for LeInquiryScanInterval");
+        let window: u16 = sysprop::get_i32(sysprop::Property::LeInquiryScanWindow)
+            .try_into()
+            .expect("Bad value configured for LeInquiryScanWindow");
+
+        self.gatt
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .scanner
+            .set_scan_parameters(scanner_id, interval, window);
+
+        self.start_scan(scanner_id, ScanSettings::default(), /*filter=*/ None)
+    }
+
+    pub(crate) fn stop_active_scan(&mut self, scanner_id: u8) -> BtStatus {
+        self.stop_scan(scanner_id)
+    }
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -1239,11 +1766,20 @@ struct ScannerInfo {
     filter: Option<ScanFilter>,
     // Adv monitor handle, if exists.
     monitor_handle: Option<u8>,
+    // Used by start_scan() to determine if it is called because of system resuming.
+    is_suspended: bool,
 }
 
 impl ScannerInfo {
     fn new(callback_id: u32) -> Self {
-        Self { callback_id, scanner_id: None, is_active: false, filter: None, monitor_handle: None }
+        Self {
+            callback_id,
+            scanner_id: None,
+            is_active: false,
+            filter: None,
+            monitor_handle: None,
+            is_suspended: false,
+        }
     }
 }
 
@@ -1328,6 +1864,11 @@ impl IBluetoothGatt for BluetoothGatt {
         _settings: ScanSettings,
         filter: Option<ScanFilter>,
     ) -> BtStatus {
+        let scan_suspend_mode = self.get_scan_suspend_mode();
+        if scan_suspend_mode != SuspendMode::Normal && scan_suspend_mode != SuspendMode::Resuming {
+            return BtStatus::Busy;
+        }
+
         // Multiplexing scanners happens at this layer. The implementations of start_scan
         // and stop_scan maintains the state of all registered scanners and based on the states
         // update the scanning and/or filter states of libbluetooth.
@@ -1343,53 +1884,16 @@ impl IBluetoothGatt for BluetoothGatt {
             }
         }
 
-        let gatt_async = self.gatt_async.clone();
-        let scanners = self.scanners.clone();
-        let is_msft_supported = self.is_msft_supported();
-        tokio::spawn(async move {
-            // The three operations below (monitor add, monitor enable, update scan) happen one
-            // after another, and cannot be interleaved with other GATT async operations.
-            // So acquire the GATT async lock in the beginning of this block and will be released
-            // at the end of this block.
-            // TODO(b/217274432): Consider not using async model but instead add actions when
-            // handling callbacks.
-            let mut gatt_async = gatt_async.lock().await;
-
-            // Add and enable the monitor filter only when the MSFT extension is supported.
-            if let (true, Some(filter)) = (is_msft_supported, filter) {
-                let monitor_handle = match gatt_async.msft_adv_monitor_add((&filter).into()).await {
-                    Ok((handle, 0)) => handle,
-                    _ => {
-                        log::error!("Error adding advertisement monitor");
-                        return;
-                    }
-                };
-
-                if let Some(scanner) =
-                    Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
-                {
-                    // The monitor handle is needed in stop_scan().
-                    scanner.monitor_handle = Some(monitor_handle);
-                }
-
-                log::debug!("Added adv monitor handle = {}", monitor_handle);
-
-                if !gatt_async
-                    .msft_adv_monitor_enable(true)
-                    .await
-                    .map_or(false, |status| status == 0)
-                {
-                    log::error!("Error enabling Advertisement Monitor");
-                }
-            }
-
-            gatt_async.update_scan().await;
-        });
-
-        BtStatus::Success
+        return self.add_monitor_and_update_scan(scanner_id, filter);
     }
 
     fn stop_scan(&mut self, scanner_id: u8) -> BtStatus {
+        let scan_suspend_mode = self.get_scan_suspend_mode();
+        if scan_suspend_mode != SuspendMode::Normal && scan_suspend_mode != SuspendMode::Suspending
+        {
+            return BtStatus::Busy;
+        }
+
         let monitor_handle = {
             let mut scanners_lock = self.scanners.lock().unwrap();
 
@@ -1403,7 +1907,15 @@ impl IBluetoothGatt for BluetoothGatt {
             }
         };
 
+        let has_active_unfiltered_scanner = self
+            .scanners
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
+
         let gatt_async = self.gatt_async.clone();
+        let is_msft_supported = self.is_msft_supported();
         tokio::spawn(async move {
             // The two operations below (monitor remove, update scan) happen one after another, and
             // cannot be interleaved with other GATT async operations.
@@ -1411,8 +1923,19 @@ impl IBluetoothGatt for BluetoothGatt {
             // at the end of this block.
             let mut gatt_async = gatt_async.lock().await;
 
-            if let Some(handle) = monitor_handle {
-                let _res = gatt_async.msft_adv_monitor_remove(handle).await;
+            // Remove and disable the monitor only when the MSFT extension is supported.
+            if is_msft_supported {
+                if let Some(handle) = monitor_handle {
+                    let _res = gatt_async.msft_adv_monitor_remove(handle).await;
+                }
+
+                if !gatt_async
+                    .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
+                    .await
+                    .map_or(false, |status| status == 0)
+                {
+                    log::error!("Error updating Advertisement Monitor enable");
+                }
             }
 
             gatt_async.update_scan().await;
@@ -1422,8 +1945,7 @@ impl IBluetoothGatt for BluetoothGatt {
     }
 
     fn get_scan_suspend_mode(&self) -> SuspendMode {
-        // TODO(b/224603540): Implement.
-        return SuspendMode::Normal;
+        self.scan_suspend_mode.clone()
     }
 
     // Advertising
@@ -1733,6 +2255,8 @@ impl IBluetoothGatt for BluetoothGatt {
         self.gatt.as_ref().unwrap().lock().unwrap().client.connect(
             client_id,
             &address,
+            // Addr type is default PUBLIC.
+            0,
             is_direct,
             transport.into(),
             opportunistic,
@@ -1784,6 +2308,26 @@ impl IBluetoothGatt for BluetoothGatt {
         }
 
         self.gatt.as_ref().unwrap().lock().unwrap().client.search_service(conn_id.unwrap(), uuid);
+    }
+
+    fn btif_gattc_discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String) {
+        let conn_id = match self.context_map.get_conn_id_from_address(client_id, &addr) {
+            None => return,
+            Some(id) => id,
+        };
+
+        let uuid = match UuidHelper::parse_string(uuid) {
+            None => return,
+            Some(uuid) => uuid,
+        };
+
+        self.gatt
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .client
+            .btif_gattc_discover_service_by_uuid(conn_id, &uuid);
     }
 
     fn read_characteristic(&self, client_id: i32, addr: String, handle: i32, auth_req: i32) {
@@ -2083,6 +2627,122 @@ impl IBluetoothGatt for BluetoothGatt {
         self.gatt.as_ref().unwrap().lock().unwrap().server.disconnect(server_id, &address, conn_id);
 
         true
+    }
+
+    fn add_service(&self, server_id: i32, service: BluetoothGattService) {
+        self.gatt
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .server
+            .add_service(server_id, &BluetoothGattService::into_db(service));
+    }
+
+    fn remove_service(&self, server_id: i32, handle: i32) {
+        self.gatt.as_ref().unwrap().lock().unwrap().server.delete_service(server_id, handle);
+    }
+
+    fn clear_services(&self, server_id: i32) {
+        if let Some(s) = self.server_context_map.get_by_server_id(server_id) {
+            for service in &s.services {
+                self.gatt
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .server
+                    .delete_service(server_id, service.instance_id);
+            }
+        }
+    }
+
+    fn send_response(
+        &self,
+        server_id: i32,
+        addr: String,
+        request_id: i32,
+        status: GattStatus,
+        offset: i32,
+        value: Vec<u8>,
+    ) -> bool {
+        (|| {
+            let conn_id = self.server_context_map.get_conn_id_from_address(server_id, &addr)?;
+            let handle = self.server_context_map.get_request_handle_from_id(request_id)?;
+            let len = value.len() as u16;
+
+            let data: [u8; 600] = array_utils::to_sized_array(&value);
+
+            self.gatt.as_ref().unwrap().lock().unwrap().server.send_response(
+                conn_id,
+                request_id,
+                status as i32,
+                &BtGattResponse {
+                    attr_value: BtGattValue {
+                        value: data,
+                        handle: handle as u16,
+                        offset: offset as u16,
+                        len,
+                        auth_req: 0 as u8,
+                    },
+                },
+            );
+
+            Some(())
+        })()
+        .is_some()
+    }
+
+    fn send_notification(
+        &self,
+        server_id: i32,
+        addr: String,
+        handle: i32,
+        confirm: bool,
+        value: Vec<u8>,
+    ) -> bool {
+        let conn_id = match self.server_context_map.get_conn_id_from_address(server_id, &addr) {
+            None => return false,
+            Some(id) => id,
+        };
+
+        self.gatt.as_ref().unwrap().lock().unwrap().server.send_indication(
+            server_id,
+            handle,
+            conn_id,
+            confirm as i32,
+            value.as_ref(),
+        );
+
+        true
+    }
+
+    fn server_set_preferred_phy(
+        &self,
+        _server_id: i32,
+        addr: String,
+        tx_phy: LePhy,
+        rx_phy: LePhy,
+        phy_options: i32,
+    ) {
+        (|| {
+            let address = RawAddress::from_string(addr)?;
+
+            self.gatt.as_ref().unwrap().lock().unwrap().server.set_preferred_phy(
+                &address,
+                tx_phy.to_u8().unwrap_or_default(),
+                rx_phy.to_u8().unwrap_or_default(),
+                phy_options as u16,
+            );
+
+            Some(())
+        })();
+    }
+
+    fn server_read_phy(&self, server_id: i32, addr: String) {
+        if let Some(address) = RawAddress::from_string(addr.clone()) {
+            self.gatt.as_ref().unwrap().lock().unwrap().server.read_phy(server_id, &address);
+        }
     }
 }
 
@@ -2485,76 +3145,16 @@ impl BtifGattClientCallbacks for BluetoothGatt {
             return;
         }
 
-        let mut db_out: Vec<BluetoothGattService> = vec![];
-
-        for elem in elements {
-            match GattDbElementType::from_u32(elem.type_).unwrap() {
-                GattDbElementType::PrimaryService | GattDbElementType::SecondaryService => {
-                    db_out.push(BluetoothGattService::new(
-                        elem.uuid.uu,
-                        elem.id as i32,
-                        elem.type_ as i32,
-                    ));
-                    // TODO(b/200065274): Mark restricted services.
-                }
-
-                GattDbElementType::Characteristic => {
-                    match db_out.last_mut() {
-                        Some(s) => s.characteristics.push(BluetoothGattCharacteristic::new(
-                            elem.uuid.uu,
-                            elem.id as i32,
-                            elem.properties as i32,
-                            0,
-                        )),
-                        None => {
-                            // TODO(b/193685325): Log error.
-                        }
-                    }
-                    // TODO(b/200065274): Mark restricted characteristics.
-                }
-
-                GattDbElementType::Descriptor => {
-                    match db_out.last_mut() {
-                        Some(s) => match s.characteristics.last_mut() {
-                            Some(c) => c.descriptors.push(BluetoothGattDescriptor::new(
-                                elem.uuid.uu,
-                                elem.id as i32,
-                                0,
-                            )),
-                            None => {
-                                // TODO(b/193685325): Log error.
-                            }
-                        },
-                        None => {
-                            // TODO(b/193685325): Log error.
-                        }
-                    }
-                    // TODO(b/200065274): Mark restricted descriptors.
-                }
-
-                GattDbElementType::IncludedService => {
-                    match db_out.last_mut() {
-                        Some(s) => {
-                            s.included_services.push(BluetoothGattService::new(
-                                elem.uuid.uu,
-                                elem.id as i32,
-                                elem.type_ as i32,
-                            ));
-                        }
-                        None => {
-                            // TODO(b/193685325): Log error.
-                        }
-                    }
-                }
-            }
-        }
-
         match (client, address) {
             (Some(c), Some(addr)) => {
                 let cbid = c.cbid;
                 self.context_map.get_callback_from_callback_id(cbid).and_then(
                     |cb: &mut GattClientCallback| {
-                        cb.on_search_complete(addr.to_string(), db_out, GattStatus::Success);
+                        cb.on_search_complete(
+                            addr.to_string(),
+                            BluetoothGattService::from_db(elements),
+                            GattStatus::Success,
+                        );
                         Some(())
                     },
                 );
@@ -2692,6 +3292,120 @@ pub(crate) trait BtifGattServerCallbacks {
 
     #[btif_callback(Connection)]
     fn connection_cb(&mut self, conn_id: i32, server_id: i32, connected: i32, addr: RawAddress);
+
+    #[btif_callback(ServiceAdded)]
+    fn service_added_cb(
+        &mut self,
+        status: GattStatus,
+        server_id: i32,
+        elements: Vec<BtGattDbElement>,
+        _count: usize,
+    );
+
+    #[btif_callback(ServiceDeleted)]
+    fn service_deleted_cb(&mut self, status: GattStatus, server_id: i32, handle: i32);
+
+    #[btif_callback(RequestReadCharacteristic)]
+    fn request_read_characteristic_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        is_long: bool,
+    );
+
+    #[btif_callback(RequestReadDescriptor)]
+    fn request_read_descriptor_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        is_long: bool,
+    );
+
+    #[btif_callback(RequestWriteCharacteristic)]
+    fn request_write_characteristic_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        need_rsp: bool,
+        is_prep: bool,
+        data: Vec<u8>,
+        len: usize,
+    );
+
+    #[btif_callback(RequestWriteDescriptor)]
+    fn request_write_descriptor_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        need_rsp: bool,
+        is_prep: bool,
+        data: Vec<u8>,
+        len: usize,
+    );
+
+    #[btif_callback(RequestExecWrite)]
+    fn request_exec_write_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        exec_write: i32,
+    );
+
+    #[btif_callback(IndicationSent)]
+    fn indication_sent_cb(&mut self, conn_id: i32, status: GattStatus);
+
+    #[btif_callback(Congestion)]
+    fn congestion_cb(&mut self, conn_id: i32, congested: bool);
+
+    #[btif_callback(MtuChanged)]
+    fn mtu_changed_cb(&mut self, conn_id: i32, mtu: i32);
+
+    #[btif_callback(PhyUpdated)]
+    fn phy_updated_cb(&mut self, conn_id: i32, tx_phy: u8, rx_phy: u8, status: GattStatus);
+
+    #[btif_callback(ReadPhy)]
+    fn read_phy_cb(
+        &mut self,
+        server_id: i32,
+        addr: RawAddress,
+        tx_phy: u8,
+        rx_phy: u8,
+        status: GattStatus,
+    );
+
+    #[btif_callback(ConnUpdated)]
+    fn conn_updated_cb(
+        &mut self,
+        conn_id: i32,
+        interval: u16,
+        latency: u16,
+        timeout: u16,
+        status: GattStatus,
+    );
+
+    #[btif_callback(SubrateChanged)]
+    fn subrate_chg_cb(
+        &mut self,
+        conn_id: i32,
+        subrate_factor: u16,
+        latency: u16,
+        cont_num: u16,
+        timeout: u16,
+        status: GattStatus,
+    );
 }
 
 impl BtifGattServerCallbacks for BluetoothGatt {
@@ -2730,6 +3444,321 @@ impl BtifGattServerCallbacks for BluetoothGatt {
                 warn!("Warning: No callback found for server ID {}", server_id);
             }
         }
+    }
+
+    fn service_added_cb(
+        &mut self,
+        status: GattStatus,
+        server_id: i32,
+        elements: Vec<BtGattDbElement>,
+        _count: usize,
+    ) {
+        for service in BluetoothGattService::from_db(elements) {
+            if status == GattStatus::Success {
+                self.server_context_map.add_service(server_id, service.clone());
+            }
+
+            let cbid =
+                self.server_context_map.get_by_server_id(server_id).map(|server| server.cbid);
+            match cbid {
+                Some(cbid) => {
+                    if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                        cb.on_service_added(status, service);
+                    }
+                }
+                None => {
+                    warn!("Warning: No callback found for server ID {}", server_id);
+                }
+            }
+        }
+    }
+
+    fn service_deleted_cb(&mut self, status: GattStatus, server_id: i32, handle: i32) {
+        if status == GattStatus::Success {
+            self.server_context_map.delete_service(server_id, handle);
+        }
+
+        if let Some(cb) = self
+            .server_context_map
+            .get_by_server_id(server_id)
+            .and_then(|server| self.server_context_map.get_callback_from_callback_id(server.cbid))
+        {
+            cb.on_service_removed(status, handle);
+        }
+    }
+
+    fn request_read_characteristic_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        is_long: bool,
+    ) {
+        self.server_context_map.add_request(trans_id, handle);
+
+        if let Some(cbid) =
+            self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
+        {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                cb.on_characteristic_read_request(
+                    addr.to_string(),
+                    trans_id,
+                    offset,
+                    is_long,
+                    handle,
+                );
+            }
+        }
+    }
+
+    fn request_read_descriptor_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        is_long: bool,
+    ) {
+        self.server_context_map.add_request(trans_id, handle);
+
+        if let Some(cbid) =
+            self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
+        {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                cb.on_descriptor_read_request(addr.to_string(), trans_id, offset, is_long, handle);
+            }
+        }
+    }
+
+    fn request_write_characteristic_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        need_rsp: bool,
+        is_prep: bool,
+        data: Vec<u8>,
+        len: usize,
+    ) {
+        self.server_context_map.add_request(trans_id, handle);
+
+        if let Some(cbid) =
+            self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
+        {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                cb.on_characteristic_write_request(
+                    addr.to_string(),
+                    trans_id,
+                    offset,
+                    len as i32,
+                    is_prep,
+                    need_rsp,
+                    handle,
+                    data,
+                );
+            }
+        }
+    }
+
+    fn request_write_descriptor_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        handle: i32,
+        offset: i32,
+        need_rsp: bool,
+        is_prep: bool,
+        data: Vec<u8>,
+        len: usize,
+    ) {
+        self.server_context_map.add_request(trans_id, handle);
+
+        if let Some(cbid) =
+            self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
+        {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                cb.on_descriptor_write_request(
+                    addr.to_string(),
+                    trans_id,
+                    offset,
+                    len as i32,
+                    is_prep,
+                    need_rsp,
+                    handle,
+                    data,
+                );
+            }
+        }
+    }
+
+    fn request_exec_write_cb(
+        &mut self,
+        conn_id: i32,
+        trans_id: i32,
+        addr: RawAddress,
+        exec_write: i32,
+    ) {
+        self.server_context_map.add_request(trans_id, 0);
+
+        if let Some(cbid) =
+            self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
+        {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                cb.on_execute_write(addr.to_string(), trans_id, exec_write != 0);
+            }
+        }
+    }
+
+    fn indication_sent_cb(&mut self, conn_id: i32, mut status: GattStatus) {
+        (|| {
+            let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
+            let server = self.server_context_map.get_mut_by_conn_id(conn_id)?;
+
+            if server.is_congested {
+                if status == GattStatus::Congested {
+                    status = GattStatus::Success;
+                }
+
+                server.congestion_queue.push((address, status));
+                return None;
+            }
+
+            let cbid = server.cbid;
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                cb.on_notification_sent(address.to_string(), status);
+            }
+
+            Some(())
+        })();
+    }
+
+    fn congestion_cb(&mut self, conn_id: i32, congested: bool) {
+        if let Some(mut server) = self.server_context_map.get_mut_by_conn_id(conn_id) {
+            server.is_congested = congested;
+            if !server.is_congested {
+                let cbid = server.cbid;
+                let congestion_queue: Vec<_> = server.congestion_queue.drain(..).collect();
+
+                if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                    for callback in congestion_queue {
+                        cb.on_notification_sent(callback.0.clone(), callback.1);
+                    }
+                }
+            }
+        }
+    }
+
+    fn mtu_changed_cb(&mut self, conn_id: i32, mtu: i32) {
+        (|| {
+            let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
+            let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
+
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+                cb.on_mtu_changed(address, mtu);
+            }
+
+            Some(())
+        })();
+    }
+
+    fn phy_updated_cb(&mut self, conn_id: i32, tx_phy: u8, rx_phy: u8, status: GattStatus) {
+        (|| {
+            let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
+            let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
+
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+                cb.on_phy_update(
+                    address,
+                    LePhy::from_u8(tx_phy).unwrap_or_default(),
+                    LePhy::from_u8(rx_phy).unwrap_or_default(),
+                    status,
+                );
+            }
+
+            Some(())
+        })();
+    }
+
+    fn read_phy_cb(
+        &mut self,
+        server_id: i32,
+        addr: RawAddress,
+        tx_phy: u8,
+        rx_phy: u8,
+        status: GattStatus,
+    ) {
+        if let Some(cbid) =
+            self.server_context_map.get_by_server_id(server_id).map(|server| server.cbid)
+        {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                cb.on_phy_read(
+                    addr.to_string(),
+                    LePhy::from_u8(tx_phy).unwrap_or_default(),
+                    LePhy::from_u8(rx_phy).unwrap_or_default(),
+                    status,
+                );
+            }
+        }
+    }
+
+    fn conn_updated_cb(
+        &mut self,
+        conn_id: i32,
+        interval: u16,
+        latency: u16,
+        timeout: u16,
+        status: GattStatus,
+    ) {
+        (|| {
+            let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
+            let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
+
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+                cb.on_connection_updated(
+                    address,
+                    interval as i32,
+                    latency as i32,
+                    timeout as i32,
+                    status,
+                );
+            }
+
+            Some(())
+        })();
+    }
+
+    fn subrate_chg_cb(
+        &mut self,
+        conn_id: i32,
+        subrate_factor: u16,
+        latency: u16,
+        cont_num: u16,
+        timeout: u16,
+        status: GattStatus,
+    ) {
+        (|| {
+            let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
+            let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
+
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+                cb.on_subrate_change(
+                    address,
+                    subrate_factor as i32,
+                    latency as i32,
+                    cont_num as i32,
+                    timeout as i32,
+                    status,
+                );
+            }
+
+            Some(())
+        })();
     }
 }
 
@@ -3035,11 +4064,23 @@ impl BtifGattScannerCallbacks for BluetoothGatt {
     }
 
     fn on_track_adv_found_lost(&mut self, track_adv_info: RustAdvertisingTrackInfo) {
+        let scanner_id = match self.scanners.lock().unwrap().values().find_map(|scanner| {
+            scanner.monitor_handle.and_then(|handle| {
+                (handle == track_adv_info.monitor_handle).then(|| scanner.scanner_id).flatten()
+            })
+        }) {
+            Some(scanner_id) => scanner_id,
+            None => {
+                log::warn!("No scanner id having monitor handle {}", track_adv_info.monitor_handle);
+                return;
+            }
+        };
+
         self.scanner_callbacks.for_all_callbacks(|callback| {
             let adv_data =
                 [&track_adv_info.adv_packet[..], &track_adv_info.scan_response[..]].concat();
 
-            callback.on_scan_result_lost(ScanResult {
+            let scan_result = ScanResult {
                 name: adv_parser::extract_name(adv_data.as_slice()),
                 address: track_adv_info.advertiser_address.to_string(),
                 addr_type: track_adv_info.advertiser_address_type,
@@ -3057,7 +4098,13 @@ impl BtifGattScannerCallbacks for BluetoothGatt {
                 service_data: adv_parser::extract_service_data(adv_data.as_slice()),
                 manufacturer_data: adv_parser::extract_manufacturer_data(adv_data.as_slice()),
                 adv_data,
-            });
+            };
+
+            if track_adv_info.advertiser_state == 0x01 {
+                callback.on_advertisement_found(scanner_id, scan_result);
+            } else {
+                callback.on_advertisement_lost(scanner_id, scan_result);
+            }
         });
     }
 }

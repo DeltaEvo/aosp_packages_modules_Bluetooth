@@ -23,6 +23,8 @@ import android.media.browse.MediaBrowser.MediaItem;
 import android.media.session.MediaSession;
 import android.os.Bundle;
 
+import com.android.bluetooth.R;
+
 import java.util.Objects;
 
 public class Metadata implements Cloneable {
@@ -62,6 +64,14 @@ public class Metadata implements Cloneable {
         if (!Objects.equals(album, m.album)) return false;
         if (!Objects.equals(trackNum, m.trackNum)) return false;
         if (!Objects.equals(numTracks, m.numTracks)) return false;
+        if (!Objects.equals(genre, m.genre)) return false;
+        if (!Objects.equals(duration, m.duration)) return false;
+        // Actual image comparisons have shown to be very expensive. Since it's rare that
+        // an application changes the cover artwork between multiple images once it's not
+        // null anymore, we just look for changes between "something" and "nothing".
+        if ((image == null && m.image != null) || (image != null && m.image == null)) {
+            return false;
+        }
         return true;
     }
 
@@ -76,6 +86,45 @@ public class Metadata implements Cloneable {
         return "{ mediaId=\"" + mediaId + "\" title=\"" + title + "\" artist=\"" + artist
                 + "\" album=\"" + album + "\" duration=" + duration
                 + " trackPosition=" + trackNum + "/" + numTracks + " image=" + image + " }";
+    }
+
+    /**
+     * Replaces default values by {@code filledMetadata} non default values.
+     */
+    public void replaceDefaults(Metadata filledMetadata) {
+        if (filledMetadata == null) {
+            return;
+        }
+
+        Metadata empty = Util.empty_data();
+
+        if (empty.mediaId.equals(mediaId)) {
+            mediaId = filledMetadata.mediaId;
+        }
+        if (empty.title.equals(title)) {
+            title = filledMetadata.title;
+        }
+        if (empty.artist.equals(artist)) {
+            artist = filledMetadata.artist;
+        }
+        if (empty.album.equals(album)) {
+            album = filledMetadata.album;
+        }
+        if (empty.trackNum.equals(trackNum)) {
+            trackNum = filledMetadata.trackNum;
+        }
+        if (empty.numTracks.equals(numTracks)) {
+            numTracks = filledMetadata.numTracks;
+        }
+        if (empty.genre.equals(genre)) {
+            genre = filledMetadata.genre;
+        }
+        if (empty.duration.equals(duration)) {
+            duration = filledMetadata.duration;
+        }
+        if (image == null) {
+            image = filledMetadata.image;
+        }
     }
 
     /**
@@ -232,8 +281,16 @@ public class Metadata implements Cloneable {
          * Elect to use default values in the Metadata in place of any missing values
          */
         public Builder useDefaults() {
-            if (mMetadata.mediaId == null) mMetadata.mediaId = "Not Provided";
-            if (mMetadata.title == null) mMetadata.title = "Not Provided";
+            if (mMetadata.mediaId == null) {
+                mMetadata.mediaId =
+                        mContext != null ? mContext.getString(R.string.not_provided)
+                                : "Not Provided";
+            }
+            if (mMetadata.title == null) {
+                mMetadata.title =
+                        mContext != null ? mContext.getString(R.string.not_provided)
+                                : "Not Provided";
+            }
             if (mMetadata.artist == null) mMetadata.artist = "";
             if (mMetadata.album == null) mMetadata.album = "";
             if (mMetadata.trackNum == null) mMetadata.trackNum = "1";

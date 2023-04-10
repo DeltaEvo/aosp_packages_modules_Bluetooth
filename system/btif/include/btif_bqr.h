@@ -19,7 +19,9 @@
 
 #include "btm_api_types.h"
 #include "common/leaky_bonded_queue.h"
+#include "include/hardware/bt_bqr.h"
 #include "osi/include/osi.h"
+#include "raw_address.h"
 
 namespace bluetooth {
 namespace bqr {
@@ -67,9 +69,12 @@ namespace bqr {
 //     just can autonomously report debug logging information via the Controller
 //     Debug Info sub-event to the host.
 //
-//   [Vendor Specific Trace]
-//     Used for the controller vendor to define the vendor proprietary trace(s).
-//
+//   [Connect Fail]
+//     When the controller fails to create connection with remote side,
+//     and remote responds for at least one time, the controller shall report
+//     connection fail event to the host. However, if remote doesn't respond
+//     at all(most likely remote is powered off or out of range), controller
+//     will not report this event.
 
 // Bit masks for the selected quality event reporting.
 static constexpr uint32_t kQualityEventMaskAllOff = 0;
@@ -78,6 +83,9 @@ static constexpr uint32_t kQualityEventMaskApproachLsto = 0x1 << 1;
 static constexpr uint32_t kQualityEventMaskA2dpAudioChoppy = 0x1 << 2;
 static constexpr uint32_t kQualityEventMaskScoVoiceChoppy = 0x1 << 3;
 static constexpr uint32_t kQualityEventMaskRootInflammation = 0x1 << 4;
+static constexpr uint32_t kQualityEventMaskEnergyMonitoring = 0x1 << 5;
+static constexpr uint32_t kQualityEventMaskLeAudioChoppy = 0x1 << 6;
+static constexpr uint32_t kQualityEventMaskConnectFail = 0x1 << 7;
 static constexpr uint32_t kQualityEventMaskVendorSpecificQuality = 0x1 << 15;
 static constexpr uint32_t kQualityEventMaskLmpMessageTrace = 0x1 << 16;
 static constexpr uint32_t kQualityEventMaskBtSchedulingTrace = 0x1 << 17;
@@ -86,9 +94,11 @@ static constexpr uint32_t kQualityEventMaskVendorSpecificTrace = 0x1 << 31;
 static constexpr uint32_t kQualityEventMaskAll =
     kQualityEventMaskMonitorMode | kQualityEventMaskApproachLsto |
     kQualityEventMaskA2dpAudioChoppy | kQualityEventMaskScoVoiceChoppy |
-    kQualityEventMaskRootInflammation | kQualityEventMaskVendorSpecificQuality |
-    kQualityEventMaskLmpMessageTrace | kQualityEventMaskBtSchedulingTrace |
-    kQualityEventMaskControllerDbgInfo | kQualityEventMaskVendorSpecificTrace;
+    kQualityEventMaskRootInflammation | kQualityEventMaskEnergyMonitoring |
+    kQualityEventMaskLeAudioChoppy | kQualityEventMaskConnectFail |
+    kQualityEventMaskVendorSpecificQuality | kQualityEventMaskLmpMessageTrace |
+    kQualityEventMaskBtSchedulingTrace | kQualityEventMaskControllerDbgInfo |
+    kQualityEventMaskVendorSpecificTrace;
 // Define the minimum time interval (in ms) of quality event reporting for the
 // selected quality event(s). Controller Firmware should not report the next
 // event within the defined time interval.
@@ -98,7 +108,7 @@ static constexpr uint16_t kMinReportIntervalMaxMs = 0xFFFF;
 static constexpr uint16_t kLogDumpEventPerFile = 0x00FF;
 // Total length of all parameters of the link Quality related event except
 // Vendor Specific Parameters.
-static constexpr uint8_t kLinkQualityParamTotalLen = 48;
+static constexpr uint8_t kLinkQualityParamTotalLen = 55;
 // 7.8.116 LE Read ISO Link Quality command
 static constexpr uint8_t kISOLinkQualityParamTotalLen = 24;
 // Total length of all parameters of the ROOT_INFLAMMATION event except Vendor
@@ -116,6 +126,12 @@ static constexpr uint8_t kBqrEventQueueSize = 25;
 // The Property of BQR event mask configuration.
 static constexpr const char* kpPropertyEventMask =
     "persist.bluetooth.bqr.event_mask";
+// The Property of BQR Vendor Quality configuration.
+static constexpr const char* kpPropertyVndQualityMask =
+    "persist.bluetooth.bqr.vnd_quality_mask";
+// The Property of BQR Vendor Trace configuration.
+static constexpr const char* kpPropertyVndTraceMask =
+    "persist.bluetooth.bqr.vnd_trace_mask";
 // The Property of BQR minimum report interval configuration.
 static constexpr const char* kpPropertyMinReportIntervalMs =
     "persist.bluetooth.bqr.min_interval_ms";
@@ -131,6 +147,12 @@ static constexpr const char* kpBtSchedulingTraceLogPath =
 // Path of the last Bluetooth Multi-profile/Coex scheduling trace log file.
 static constexpr const char* kpBtSchedulingTraceLastLogPath =
     "/data/misc/bluetooth/logs/bt_scheduling_trace.log.last";
+// The Property of BQR a2dp choppy report and sco choppy report thresholds.
+// A2dp choppy will be reported only when a2dp choppy times is >=
+// a2dp_choppy_threshold. The default value in firmware side is 1. It is same
+// for sco choppy. Value format is a2dp_choppy_threshold,sco_choppy_threshold
+static constexpr const char* kpPropertyChoppyThreshold =
+    "persist.bluetooth.bqr.choppy_threshold";
 
 // File Descriptor of LMP/LL message trace log
 static int LmpLlMessageTraceLogFd = INVALID_FD;
@@ -141,7 +163,9 @@ static uint16_t LmpLlMessageTraceCounter = 0;
 // Counter of Bluetooth Multi-profile/Coex scheduling trace
 static uint16_t BtSchedulingTraceCounter = 0;
 // The version supports ISO packets start from v1.01(257)
-static constexpr uint16_t kBqrIsoVersion = 257;
+static constexpr uint16_t kBqrIsoVersion = 0x101;
+// The version supports vendor quality and trace log starting v1.02(258)
+static constexpr uint16_t kBqrVndLogVersion = 0x102;
 
 // Action definition
 //
@@ -162,6 +186,7 @@ enum BqrQualityReportId : uint8_t {
   QUALITY_REPORT_ID_SCO_VOICE_CHOPPY = 0x04,
   QUALITY_REPORT_ID_ROOT_INFLAMMATION = 0x05,
   QUALITY_REPORT_ID_LE_AUDIO_CHOPPY = 0x07,
+  QUALITY_REPORT_ID_CONNECT_FAIL = 0x08,
   QUALITY_REPORT_ID_VENDOR_SPECIFIC_QUALITY = 0x10,
   QUALITY_REPORT_ID_LMP_LL_MESSAGE_TRACE = 0x11,
   QUALITY_REPORT_ID_BT_SCHEDULING_TRACE = 0x12,
@@ -207,6 +232,8 @@ typedef struct {
   BqrReportAction report_action;
   uint32_t quality_event_mask;
   uint16_t minimum_report_interval_ms;
+  uint32_t vnd_quality_mask;
+  uint32_t vnd_trace_mask;
 } BqrConfiguration;
 
 // Link quality related BQR event
@@ -260,6 +287,10 @@ typedef struct {
   uint32_t buffer_overflow_bytes;
   // Buffer underflow count (in byte).
   uint32_t buffer_underflow_bytes;
+  // Remote device address
+  RawAddress bdaddr;
+  // The count of calibration failed items
+  uint8_t cal_failed_item_count;
   // The number of packets that are sent out.
   uint32_t tx_total_packets;
   // The number of packets that don't receive an acknowledgment.
@@ -327,6 +358,8 @@ class BqrVseSubEvt {
   // Local wall clock timestamp of receiving BQR VSE sub-event
   std::tm tm_timestamp_ = {};
 };
+
+BluetoothQualityReportInterface* getBluetoothQualityReportInterface();
 
 // Get a string representation of the Quality Report ID.
 //

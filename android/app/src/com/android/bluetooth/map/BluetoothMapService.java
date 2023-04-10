@@ -42,6 +42,7 @@ import android.os.Message;
 import android.os.ParcelUuid;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.sysprop.BluetoothProperties;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
@@ -384,11 +385,13 @@ public class BluetoothMapService extends ProfileService {
                 case USER_TIMEOUT:
                     if (mIsWaitingAuthorization) {
                         Intent intent = new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_CANCEL);
-                        intent.setPackage(getString(R.string.pairing_ui_package));
+                        intent.setPackage(SystemProperties.get(
+                                Utils.PAIRING_UI_PROPERTY,
+                                getString(R.string.pairing_ui_package)));
                         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
                         intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                 BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
-                        sendBroadcast(intent, BLUETOOTH_CONNECT,
+                        Utils.sendBroadcast(BluetoothMapService.this, intent, BLUETOOTH_CONNECT,
                                 Utils.getTempAllowlistBroadcastOptions());
                         cancelUserTimeoutAlarm();
                         mIsWaitingAuthorization = false;
@@ -529,7 +532,8 @@ public class BluetoothMapService extends ProfileService {
             intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
             intent.putExtra(BluetoothProfile.EXTRA_STATE, mState);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
-            sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+            Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                    Utils.getTempAllowlistBroadcastOptions());
         }
     }
 
@@ -950,11 +954,13 @@ public class BluetoothMapService extends ProfileService {
         if (sendIntent) {
             // This will trigger Settings app's dialog.
             Intent intent = new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_REQUEST);
-            intent.setPackage(getString(R.string.pairing_ui_package));
+            intent.setPackage(SystemProperties.get(
+                    Utils.PAIRING_UI_PROPERTY,
+                    getString(R.string.pairing_ui_package)));
             intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                     BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
-            sendOrderedBroadcast(intent, BLUETOOTH_CONNECT,
+            Utils.sendOrderedBroadcast(this, intent, BLUETOOTH_CONNECT,
                     Utils.getTempAllowlistBroadcastOptions(), null, null,
                     Activity.RESULT_OK, null, null);
 
@@ -1053,7 +1059,8 @@ public class BluetoothMapService extends ProfileService {
         // Pending messages are no longer valid. To speed up things, simply delete them.
         if (mRemoveTimeoutMsg) {
             Intent timeoutIntent = new Intent(USER_CONFIRM_TIMEOUT_ACTION);
-            sendBroadcast(timeoutIntent, null, Utils.getTempAllowlistBroadcastOptions());
+            Utils.sendBroadcast(this, timeoutIntent, null,
+                    Utils.getTempAllowlistBroadcastOptions());
             mIsWaitingAuthorization = false;
             cancelUserTimeoutAlarm();
         }

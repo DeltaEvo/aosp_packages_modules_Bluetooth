@@ -8,8 +8,18 @@ package {
 }
 
 filegroup {
+    name: "BluetoothHciPacketSources",
+    srcs: [
+        "address.cc",
+        "class_of_device.cc",
+    ],
+    visibility: ["//visibility:public"],
+}
+
+filegroup {
     name: "BluetoothHciSources",
     srcs: [
+        ":BluetoothHciPacketSources",
         "acl_manager/acl_connection.cc",
         "acl_manager/acl_scheduler.cc",
         "acl_manager/classic_acl_connection.cc",
@@ -17,14 +27,14 @@ filegroup {
         "acl_manager/round_robin_scheduler.cc",
         "acl_manager/acl_fragmenter.cc",
         "acl_manager.cc",
-        "address.cc",
-        "class_of_device.cc",
         "controller.cc",
+        "distance_measurement_manager.cc",
         "hci_layer.cc",
         "hci_metrics_logging.cc",
         "le_address_manager.cc",
         "le_advertising_manager.cc",
         "le_scanning_manager.cc",
+        "le_scanning_reassembler.cc",
         "link_key.cc",
         "msft.cc",
         "remote_name_request.cc",
@@ -36,6 +46,7 @@ filegroup {
 filegroup {
     name: "BluetoothHciUnitTestSources",
     srcs: [
+        ":BluetoothHalFake",
         "acl_builder_test.cc",
         "acl_manager_test.cc",
         "acl_manager_unittest.cc",
@@ -57,6 +68,7 @@ filegroup {
         "uuid_unittest.cc",
         "le_periodic_sync_manager_test.cc",
         "le_scanning_manager_test.cc",
+        "le_scanning_reassembler_test.cc",
         "le_advertising_manager_test.cc",
         "le_address_manager_test.cc",
     ],
@@ -95,5 +107,5 @@ filegroup {
     name: "BluetoothHciPackets",
     srcs: [
         "hci_packets.pdl",
-    ]
+    ],
 }

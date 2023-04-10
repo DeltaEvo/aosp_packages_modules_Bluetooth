@@ -11,6 +11,7 @@ pub mod bluetooth;
 pub mod bluetooth_admin;
 pub mod bluetooth_adv;
 pub mod bluetooth_gatt;
+pub mod bluetooth_logging;
 pub mod bluetooth_media;
 pub mod callbacks;
 pub mod socket_manager;
@@ -88,6 +89,7 @@ pub enum Message {
     SuspendCallbackDisconnected(u32),
     SuspendReady(i32),
     ResumeReady(i32),
+    AudioReconnectOnResumeComplete,
 
     // Scanner related
     ScannerCallbackDisconnected(u32),
@@ -111,6 +113,7 @@ pub enum Message {
 
     // Admin policy related
     AdminCallbackDisconnected(u32),
+    HidHostEnable,
 }
 
 /// Represents suspend mode of a module.
@@ -267,6 +270,10 @@ impl Stack {
                     suspend.lock().unwrap().resume_ready(suspend_id);
                 }
 
+                Message::AudioReconnectOnResumeComplete => {
+                    suspend.lock().unwrap().audio_reconnect_complete();
+                }
+
                 Message::ScannerCallbackDisconnected(id) => {
                     bluetooth_gatt.lock().unwrap().remove_scanner_callback(id);
                 }
@@ -310,6 +317,9 @@ impl Stack {
                 }
                 Message::AdminCallbackDisconnected(id) => {
                     bluetooth_admin.lock().unwrap().unregister_admin_policy_callback(id);
+                }
+                Message::HidHostEnable => {
+                    bluetooth.lock().unwrap().enable_hidhost();
                 }
             }
         }

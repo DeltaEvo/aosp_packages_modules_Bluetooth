@@ -21,6 +21,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
@@ -56,6 +57,7 @@ public class CompanionManager {
     private final int[] mGattConnHighDefault;
     private final int[] mGattConnBalanceDefault;
     private final int[] mGattConnLowDefault;
+    private final int[] mGattConnDckDefault;
 
     @VisibleForTesting static final int COMPANION_TYPE_NONE      = 0;
     @VisibleForTesting static final int COMPANION_TYPE_PRIMARY   = 1;
@@ -69,61 +71,100 @@ public class CompanionManager {
     @VisibleForTesting static final String COMPANION_DEVICE_KEY = "companion_device";
     @VisibleForTesting static final String COMPANION_TYPE_KEY = "companion_type";
 
+    static final String PROPERTY_HIGH_MIN_INTERVAL = "bluetooth.gatt.high_priority.min_interval";
+    static final String PROPERTY_HIGH_MAX_INTERVAL = "bluetooth.gatt.high_priority.max_interval";
+    static final String PROPERTY_HIGH_LATENCY = "bluetooth.gatt.high_priority.latency";
+    static final String PROPERTY_BALANCED_MIN_INTERVAL =
+            "bluetooth.gatt.balanced_priority.min_interval";
+    static final String PROPERTY_BALANCED_MAX_INTERVAL =
+            "bluetooth.gatt.balanced_priority.max_interval";
+    static final String PROPERTY_BALANCED_LATENCY = "bluetooth.gatt.balanced_priority.latency";
+    static final String PROPERTY_LOW_MIN_INTERVAL = "bluetooth.gatt.low_priority_min.interval";
+    static final String PROPERTY_LOW_MAX_INTERVAL = "bluetooth.gatt.low_priority_max.interval";
+    static final String PROPERTY_LOW_LATENCY = "bluetooth.gatt.low_priority.latency";
+    static final String PROPERTY_DCK_MIN_INTERVAL = "bluetooth.gatt.dck_priority_min.interval";
+    static final String PROPERTY_DCK_MAX_INTERVAL = "bluetooth.gatt.dck_priority_max.interval";
+    static final String PROPERTY_DCK_LATENCY = "bluetooth.gatt.dck_priority.latency";
+    static final String PROPERTY_SUFFIX_PRIMARY = ".primary";
+    static final String PROPERTY_SUFFIX_SECONDARY = ".secondary";
+
     private final AdapterService mAdapterService;
     private final BluetoothAdapter mAdapter = BluetoothAdapter.getDefaultAdapter();
     private final Set<BluetoothDevice> mMetadataListeningDevices = new HashSet<>();
 
     public CompanionManager(AdapterService service, ServiceFactory factory) {
         mAdapterService = service;
+
         mGattConnHighDefault = new int[] {
-                service.getResources().getInteger(R.integer.gatt_high_priority_min_interval),
-                service.getResources().getInteger(R.integer.gatt_high_priority_max_interval),
-                service.getResources().getInteger(R.integer.gatt_high_priority_latency)};
+                getGattConfig(PROPERTY_HIGH_MIN_INTERVAL,
+                        R.integer.gatt_high_priority_min_interval),
+                getGattConfig(PROPERTY_HIGH_MAX_INTERVAL,
+                        R.integer.gatt_high_priority_max_interval),
+                getGattConfig(PROPERTY_HIGH_LATENCY,
+                        R.integer.gatt_high_priority_latency)};
         mGattConnBalanceDefault = new int[] {
-                service.getResources().getInteger(R.integer.gatt_balanced_priority_min_interval),
-                service.getResources().getInteger(R.integer.gatt_balanced_priority_max_interval),
-                service.getResources().getInteger(R.integer.gatt_balanced_priority_latency)};
+                getGattConfig(PROPERTY_BALANCED_MIN_INTERVAL,
+                        R.integer.gatt_balanced_priority_min_interval),
+                getGattConfig(PROPERTY_BALANCED_MAX_INTERVAL,
+                        R.integer.gatt_balanced_priority_max_interval),
+                getGattConfig(PROPERTY_BALANCED_LATENCY,
+                        R.integer.gatt_balanced_priority_latency)};
         mGattConnLowDefault = new int[] {
-                service.getResources().getInteger(R.integer.gatt_low_power_min_interval),
-                service.getResources().getInteger(R.integer.gatt_low_power_max_interval),
-                service.getResources().getInteger(R.integer.gatt_low_power_latency)};
+                getGattConfig(PROPERTY_LOW_MIN_INTERVAL, R.integer.gatt_low_power_min_interval),
+                getGattConfig(PROPERTY_LOW_MAX_INTERVAL, R.integer.gatt_low_power_max_interval),
+                getGattConfig(PROPERTY_LOW_LATENCY, R.integer.gatt_low_power_latency)};
+        mGattConnDckDefault = new int[] {
+                getGattConfig(PROPERTY_DCK_MIN_INTERVAL, R.integer.gatt_dck_priority_min_interval),
+                getGattConfig(PROPERTY_DCK_MAX_INTERVAL, R.integer.gatt_dck_priority_max_interval),
+                getGattConfig(PROPERTY_DCK_LATENCY, R.integer.gatt_dck_priority_latency)};
 
         mGattConnHighPrimary = new int[] {
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_HIGH_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
                         R.integer.gatt_high_priority_min_interval_primary),
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_HIGH_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
                         R.integer.gatt_high_priority_max_interval_primary),
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_HIGH_LATENCY + PROPERTY_SUFFIX_PRIMARY,
                         R.integer.gatt_high_priority_latency_primary)};
         mGattConnBalancePrimary = new int[] {
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_BALANCED_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
                         R.integer.gatt_balanced_priority_min_interval_primary),
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_BALANCED_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
                         R.integer.gatt_balanced_priority_max_interval_primary),
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_BALANCED_LATENCY + PROPERTY_SUFFIX_PRIMARY,
                         R.integer.gatt_balanced_priority_latency_primary)};
         mGattConnLowPrimary = new int[] {
-                service.getResources().getInteger(R.integer.gatt_low_power_min_interval_primary),
-                service.getResources().getInteger(R.integer.gatt_low_power_max_interval_primary),
-                service.getResources().getInteger(R.integer.gatt_low_power_latency_primary)};
+                getGattConfig(PROPERTY_LOW_MIN_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                        R.integer.gatt_low_power_min_interval_primary),
+                getGattConfig(PROPERTY_LOW_MAX_INTERVAL + PROPERTY_SUFFIX_PRIMARY,
+                        R.integer.gatt_low_power_max_interval_primary),
+                getGattConfig(PROPERTY_LOW_LATENCY + PROPERTY_SUFFIX_PRIMARY,
+                        R.integer.gatt_low_power_latency_primary)};
 
         mGattConnHighSecondary = new int[] {
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_HIGH_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
                         R.integer.gatt_high_priority_min_interval_secondary),
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_HIGH_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
                         R.integer.gatt_high_priority_max_interval_secondary),
-                service.getResources().getInteger(R.integer.gatt_high_priority_latency_secondary)};
+                getGattConfig(PROPERTY_HIGH_LATENCY + PROPERTY_SUFFIX_SECONDARY,
+                        R.integer.gatt_high_priority_latency_secondary)};
         mGattConnBalanceSecondary = new int[] {
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_BALANCED_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
                         R.integer.gatt_balanced_priority_min_interval_secondary),
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_BALANCED_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
                         R.integer.gatt_balanced_priority_max_interval_secondary),
-                service.getResources().getInteger(
+                getGattConfig(PROPERTY_BALANCED_LATENCY + PROPERTY_SUFFIX_SECONDARY,
                         R.integer.gatt_balanced_priority_latency_secondary)};
         mGattConnLowSecondary = new int[] {
-                service.getResources().getInteger(R.integer.gatt_low_power_min_interval_secondary),
-                service.getResources().getInteger(R.integer.gatt_low_power_max_interval_secondary),
-                service.getResources().getInteger(R.integer.gatt_low_power_latency_secondary)};
+                getGattConfig(PROPERTY_LOW_MIN_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                        R.integer.gatt_low_power_min_interval_secondary),
+                getGattConfig(PROPERTY_LOW_MAX_INTERVAL + PROPERTY_SUFFIX_SECONDARY,
+                        R.integer.gatt_low_power_max_interval_secondary),
+                getGattConfig(PROPERTY_LOW_LATENCY + PROPERTY_SUFFIX_SECONDARY,
+                        R.integer.gatt_low_power_latency_secondary)};
+    }
+
+    private int getGattConfig(String property, int resId) {
+        return SystemProperties.getInt(property, mAdapterService.getResources().getInteger(resId));
     }
 
     void loadCompanionInfo() {
@@ -364,6 +405,8 @@ public class CompanionManager {
                 return mGattConnHighDefault[type];
             case BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER:
                 return mGattConnLowDefault[type];
+            case BluetoothGatt.CONNECTION_PRIORITY_DCK:
+                return mGattConnDckDefault[type];
         }
         return mGattConnBalanceDefault[type];
     }

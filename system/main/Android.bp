@@ -16,7 +16,7 @@ filegroup {
         "bte_logmsg.cc",
         "bte_main.cc",
         "stack_config.cc",
-    ]
+    ],
 }
 
 cc_library_static {
@@ -45,7 +45,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/encoder/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/decoder/include",
-        "packages/modules/Bluetooth/system/utils/include",
         "system/security/keystore/include",
         "hardware/interfaces/keymaster/4.0/support/include",
     ],
@@ -56,7 +55,7 @@ cc_library_static {
     ],
     header_libs: ["libbt_callbacks_cxx_headers"],
     host_supported: true,
-    min_sdk_version: "Tiramisu"
+    min_sdk_version: "Tiramisu",
 }
 
 cc_library {
@@ -86,11 +85,16 @@ cc_library {
         "packages/modules/Bluetooth/system/vnd/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/encoder/include",
         "packages/modules/Bluetooth/system/embdrv/sbc/decoder/include",
-        "packages/modules/Bluetooth/system/utils/include",
         "system/security/keystore/include",
         "hardware/interfaces/keymaster/4.0/support/include",
     ],
-    logtags: ["../../EventLogTags.logtags"],
+    whole_static_libs: [
+        "libbluetooth_core_rs",
+    ],
+    shared_libs: [
+        "android.hardware.bluetooth@1.0",
+        "android.hardware.bluetooth@1.1",
+    ],
     // Shared library link options.
     // References to global symbols and functions should bind to the library
     // itself. This is to avoid issues with some of the unit/system tests
@@ -127,7 +131,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
-        "packages/modules/Bluetooth/system/utils/include",
     ],
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
@@ -155,6 +158,7 @@ cc_test {
     defaults: [
         "fluoride_defaults",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
@@ -179,6 +183,7 @@ cc_test {
         "shim/btm.cc",
         "shim/config.cc",
         "shim/controller.cc",
+        "shim/distance_measurement_manager.cc",
         "shim/dumpsys.cc",
         "shim/hci_layer.cc",
         "shim/l2c_api.cc",
@@ -204,7 +209,6 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
-        "libprotobuf-cpp-lite",
     ],
     sanitize: {
         address: true,
@@ -213,7 +217,7 @@ cc_test {
         integer_overflow: true,
         scs: true,
         diag: {
-            undefined : true
+            undefined: true,
         },
     },
     generated_headers: [
@@ -221,5 +225,5 @@ cc_test {
         "BluetoothGeneratedDumpsysDataSchema_h",
         "BluetoothGeneratedPackets_h",
     ],
-    min_sdk_version: "Tiramisu"
+    min_sdk_version: "Tiramisu",
 }

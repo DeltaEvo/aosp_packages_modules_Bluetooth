@@ -66,8 +66,6 @@ public class MapClientServiceTest {
 
     @Before
     public void setUp() throws Exception {
-        Assume.assumeTrue("Ignore test when MapClientService is not enabled",
-                MapClientService.isEnabled());
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
@@ -83,9 +81,6 @@ public class MapClientServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!MapClientService.isEnabled()) {
-            return;
-        }
         TestUtils.stopService(mServiceRule, MapClientService.class);
         mService = MapClientService.getMapClientService();
         assertThat(mService).isNull();
@@ -301,7 +296,7 @@ public class MapClientServiceTest {
         MceStateMachine sm = mock(MceStateMachine.class);
         mService.getInstanceMap().put(mRemoteDevice, sm);
 
-        Intent intent = new Intent(BluetoothHeadsetClient.ACTION_CONNECTION_STATE_CHANGED);
+        Intent intent = new Intent(BluetoothDevice.ACTION_SDP_RECORD);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mRemoteDevice);
         intent.putExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED);
         intent.putExtra(BluetoothDevice.EXTRA_UUID, BluetoothUuid.MAS);

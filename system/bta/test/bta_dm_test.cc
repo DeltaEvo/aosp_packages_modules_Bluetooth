@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/location.h>
 #include <gtest/gtest.h>
 
@@ -71,7 +71,7 @@ struct alarm_t {
 class BtaDmTest : public testing::Test {
  protected:
   void SetUp() override {
-    mock_function_count_map.clear();
+    reset_mock_function_count_map();
     bluetooth::common::InitFlags::Load(test_flags);
     test::mock::osi_alarm::alarm_new.body = [](const char* name) -> alarm_t* {
       return new alarm_t(name);
@@ -137,14 +137,14 @@ TEST_F(BtaDmTest, disable_no_acl_links) {
       };
 
   bta_dm_disable();  // Waiting for all ACL connections to drain
-  ASSERT_EQ(0, mock_function_count_map["btm_remove_acl"]);
-  ASSERT_EQ(1, mock_function_count_map["alarm_set_on_mloop"]);
+  ASSERT_EQ(0, get_func_call_count("btm_remove_acl"));
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
 
   // Execute timer callback
   alarm_callback(alarm_data);
-  ASSERT_EQ(1, mock_function_count_map["alarm_set_on_mloop"]);
-  ASSERT_EQ(0, mock_function_count_map["BTIF_dm_disable"]);
-  ASSERT_EQ(1, mock_function_count_map["future_ready"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(0, get_func_call_count("BTIF_dm_disable"));
+  ASSERT_EQ(1, get_func_call_count("future_ready"));
   ASSERT_TRUE(!bta_dm_cb.disabling);
 
   test::mock::osi_alarm::alarm_set_on_mloop = {};
@@ -170,14 +170,14 @@ TEST_F(BtaDmTest, disable_first_pass_with_acl_links) {
       };
 
   bta_dm_disable();              // Waiting for all ACL connections to drain
-  ASSERT_EQ(1, mock_function_count_map["alarm_set_on_mloop"]);
-  ASSERT_EQ(0, mock_function_count_map["BTIF_dm_disable"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(0, get_func_call_count("BTIF_dm_disable"));
 
   links_up = 0;
   // First disable pass
   alarm_callback(alarm_data);
-  ASSERT_EQ(1, mock_function_count_map["alarm_set_on_mloop"]);
-  ASSERT_EQ(1, mock_function_count_map["BTIF_dm_disable"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(1, get_func_call_count("BTIF_dm_disable"));
   ASSERT_TRUE(!bta_dm_cb.disabling);
 
   test::mock::stack_acl::BTM_GetNumAclLinks = {};
@@ -204,18 +204,18 @@ TEST_F(BtaDmTest, disable_second_pass_with_acl_links) {
       };
 
   bta_dm_disable();  // Waiting for all ACL connections to drain
-  ASSERT_EQ(1, mock_function_count_map["alarm_set_on_mloop"]);
-  ASSERT_EQ(0, mock_function_count_map["BTIF_dm_disable"]);
+  ASSERT_EQ(1, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(0, get_func_call_count("BTIF_dm_disable"));
 
   // First disable pass
   alarm_callback(alarm_data);
-  ASSERT_EQ(2, mock_function_count_map["alarm_set_on_mloop"]);
-  ASSERT_EQ(0, mock_function_count_map["BTIF_dm_disable"]);
-  ASSERT_EQ(1, mock_function_count_map["btm_remove_acl"]);
+  ASSERT_EQ(2, get_func_call_count("alarm_set_on_mloop"));
+  ASSERT_EQ(0, get_func_call_count("BTIF_dm_disable"));
+  ASSERT_EQ(1, get_func_call_count("btm_remove_acl"));
 
   // Second disable pass
   alarm_callback(alarm_data);
-  ASSERT_EQ(1, mock_function_count_map["BTIF_dm_disable"]);
+  ASSERT_EQ(1, get_func_call_count("BTIF_dm_disable"));
   ASSERT_TRUE(!bta_dm_cb.disabling);
 
   test::mock::stack_acl::BTM_GetNumAclLinks = {};
@@ -245,7 +245,10 @@ namespace testing {
 tBTA_DM_PEER_DEVICE* allocate_device_for(const RawAddress& bd_addr,
                                          tBT_TRANSPORT transport);
 
-void bta_dm_remname_cback(void* p);
+void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p);
+
+tBT_TRANSPORT bta_dm_determine_discovery_transport(
+    const RawAddress& remote_bd_addr);
 
 }  // namespace testing
 }  // namespace legacy
@@ -273,7 +276,7 @@ TEST_F(BtaDmTest, bta_dm_set_encryption) {
   // Fake indication that the encryption is in progress with non-null callback
   device->p_encrypt_cback = BTA_DM_ENCRYPT_CBACK;
   bta_dm_set_encryption(bd_addr, transport, BTA_DM_ENCRYPT_CBACK, sec_act);
-  ASSERT_EQ(0, mock_function_count_map["BTM_SetEncryption"]);
+  ASSERT_EQ(0, get_func_call_count("BTM_SetEncryption"));
   ASSERT_EQ(1UL, BTA_DM_ENCRYPT_CBACK_queue.size());
   auto params = BTA_DM_ENCRYPT_CBACK_queue.front();
   BTA_DM_ENCRYPT_CBACK_queue.pop();
@@ -289,7 +292,7 @@ TEST_F(BtaDmTest, bta_dm_set_encryption) {
   };
 
   bta_dm_set_encryption(bd_addr, transport, BTA_DM_ENCRYPT_CBACK, sec_act);
-  ASSERT_EQ(1, mock_function_count_map["BTM_SetEncryption"]);
+  ASSERT_EQ(1, get_func_call_count("BTM_SetEncryption"));
   ASSERT_EQ(0UL, BTA_DM_ENCRYPT_CBACK_queue.size());
   device->p_encrypt_cback = nullptr;
 
@@ -300,7 +303,7 @@ TEST_F(BtaDmTest, bta_dm_set_encryption) {
          tBTM_BLE_SEC_ACT sec_act) -> tBTM_STATUS { return BTM_CMD_STARTED; };
 
   bta_dm_set_encryption(bd_addr, transport, BTA_DM_ENCRYPT_CBACK, sec_act);
-  ASSERT_EQ(2, mock_function_count_map["BTM_SetEncryption"]);
+  ASSERT_EQ(2, get_func_call_count("BTM_SetEncryption"));
   ASSERT_EQ(0UL, BTA_DM_ENCRYPT_CBACK_queue.size());
   ASSERT_NE(nullptr, device->p_encrypt_cback);
 
@@ -416,11 +419,11 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__typical) {
   strlcpy(reinterpret_cast<char*>(&name.remote_bd_name), kRemoteName,
           strlen(kRemoteName));
 
-  bluetooth::legacy::testing::bta_dm_remname_cback(static_cast<void*>(&name));
+  bluetooth::legacy::testing::bta_dm_remname_cback(&name);
 
   sync_main_handler();
 
-  ASSERT_EQ(1, mock_function_count_map["BTM_SecDeleteRmtNameNotifyCallback"]);
+  ASSERT_EQ(1, get_func_call_count("BTM_SecDeleteRmtNameNotifyCallback"));
   ASSERT_TRUE(bta_dm_search_cb.name_discover_done);
 }
 
@@ -440,11 +443,11 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__wrong_address) {
   strlcpy(reinterpret_cast<char*>(&name.remote_bd_name), kRemoteName,
           strlen(kRemoteName));
 
-  bluetooth::legacy::testing::bta_dm_remname_cback(static_cast<void*>(&name));
+  bluetooth::legacy::testing::bta_dm_remname_cback(&name);
 
   sync_main_handler();
 
-  ASSERT_EQ(0, mock_function_count_map["BTM_SecDeleteRmtNameNotifyCallback"]);
+  ASSERT_EQ(0, get_func_call_count("BTM_SecDeleteRmtNameNotifyCallback"));
   ASSERT_FALSE(bta_dm_search_cb.name_discover_done);
 }
 
@@ -464,10 +467,37 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__HCI_ERR_CONNECTION_EXISTS) {
   strlcpy(reinterpret_cast<char*>(&name.remote_bd_name), kRemoteName,
           strlen(kRemoteName));
 
-  bluetooth::legacy::testing::bta_dm_remname_cback(static_cast<void*>(&name));
+  bluetooth::legacy::testing::bta_dm_remname_cback(&name);
 
   sync_main_handler();
 
-  ASSERT_EQ(1, mock_function_count_map["BTM_SecDeleteRmtNameNotifyCallback"]);
+  ASSERT_EQ(1, get_func_call_count("BTM_SecDeleteRmtNameNotifyCallback"));
   ASSERT_TRUE(bta_dm_search_cb.name_discover_done);
+}
+
+TEST_F(BtaDmTest, bta_dm_determine_discovery_transport__BT_TRANSPORT_BR_EDR) {
+  const RawAddress bd_addr{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}};
+  bta_dm_search_cb.transport = BT_TRANSPORT_BR_EDR;
+
+  ASSERT_EQ(BT_TRANSPORT_BR_EDR,
+            bluetooth::legacy::testing::bta_dm_determine_discovery_transport(
+                bd_addr));
+}
+
+TEST_F(BtaDmTest, bta_dm_determine_discovery_transport__BT_TRANSPORT_LE) {
+  const RawAddress bd_addr{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}};
+  bta_dm_search_cb.transport = BT_TRANSPORT_LE;
+
+  ASSERT_EQ(BT_TRANSPORT_LE,
+            bluetooth::legacy::testing::bta_dm_determine_discovery_transport(
+                bd_addr));
+}
+
+TEST_F(BtaDmTest, bta_dm_determine_discovery_transport__BT_TRANSPORT_AUTO) {
+  const RawAddress bd_addr{{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}};
+  bta_dm_search_cb.transport = BT_TRANSPORT_AUTO;
+
+  ASSERT_EQ(BT_TRANSPORT_BR_EDR,
+            bluetooth::legacy::testing::bta_dm_determine_discovery_transport(
+                bd_addr));
 }

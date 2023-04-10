@@ -7,15 +7,18 @@ package {
     default_applicable_licenses: ["system_bt_license"],
 }
 
-rust_binary_host {
-    name: "bt_topshim_facade",
+rust_defaults {
+    name: "bt_topshim_facade.defaults",
     defaults: [
         "gd_rust_defaults",
-        "libchrome_support_defaults"
+        "libchrome_support_defaults",
     ],
     crate_name: "bt_topshim_facade",
     srcs: ["src/main.rs"],
-    ld_flags: ["-fsanitize=undefined", "-fsanitize-minimal-runtime"],
+    ld_flags: [
+        "-fsanitize=undefined",
+        "-fsanitize-minimal-runtime",
+    ],
     rustlibs: [
         "libbluetooth_rs",
         "libbt_common",
@@ -50,7 +53,6 @@ rust_binary_host {
         "libbt-hci",
         "libbt-stack",
         "libbt-stack-core",
-        "libbt-utils",
         "libbtcore",
         "libbthalutils",
         "libosi",
@@ -78,9 +80,20 @@ rust_binary_host {
         "liblog",
         "libcutils",
         "libgrpc++",
-        "libgrpc_wrap"
+        "libgrpc_wrap",
     ],
     proc_macros: [
         "libpaste",
     ],
+}
+
+rust_binary_host {
+    name: "bt_topshim_facade",
+    defaults: ["bt_topshim_facade.defaults"],
+}
+
+rust_test_host {
+    name: "bt_topshim_facade.test",
+    defaults: ["bt_topshim_facade.defaults"],
+    test_suites: ["general-tests"],
 }

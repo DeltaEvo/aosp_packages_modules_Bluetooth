@@ -344,6 +344,7 @@ final class BondStateMachine extends StateMachine {
         if (dev.getBondState() == BluetoothDevice.BOND_NONE) {
             infoLog("Bond address is:" + dev);
             byte[] addr = Utils.getBytesFromAddress(dev.getAddress());
+            int addrType = dev.getAddressType();
             boolean result;
             // If we have some data
             if (remoteP192Data != null || remoteP256Data != null) {
@@ -360,7 +361,7 @@ final class BondStateMachine extends StateMachine {
                       BluetoothDevice.BOND_BONDING,
                       BluetoothProtoEnums.BOND_SUB_STATE_LOCAL_START_PAIRING,
                       BluetoothProtoEnums.UNBOND_REASON_UNKNOWN, mAdapterService.getMetricId(dev));
-                result = mAdapterService.createBondNative(addr, transport);
+                result = mAdapterService.createBondNative(addr, addrType, transport);
             }
             BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
                     mAdapterService.getMetricId(dev), dev.getName());
@@ -397,7 +398,7 @@ final class BondStateMachine extends StateMachine {
         intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         // Workaround for Android Auto until pre-accepting pairing requests is added.
         intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        mAdapterService.sendOrderedBroadcast(intent, BLUETOOTH_CONNECT,
+        Utils.sendOrderedBroadcast(mAdapterService, intent, BLUETOOTH_CONNECT,
                 Utils.getTempAllowlistBroadcastOptions(), null/* resultReceiver */,
                 null/* scheduler */, Activity.RESULT_OK/* initialCode */, null/* initialData */,
                 null/* initialExtras */);
@@ -554,7 +555,7 @@ final class BondStateMachine extends StateMachine {
         }
         BluetoothDevice device = mRemoteDevices.getDevice(address);
         if (device == null) {
-            warnLog("Device is not known for:" + Utils.getAddressStringFromByte(address));
+            warnLog("Device is not known for:" + Utils.getRedactedAddressStringFromByte(address));
             mRemoteDevices.addDeviceProperties(address);
             device = Objects.requireNonNull(mRemoteDevices.getDevice(address));
         }
@@ -591,7 +592,7 @@ final class BondStateMachine extends StateMachine {
                 BluetoothDevice.BOND_BONDING,
                 BluetoothProtoEnums.BOND_SUB_STATE_LOCAL_PIN_REQUESTED, 0);
 
-        infoLog("pinRequestCallback: " + bdDevice.getAddress()
+        infoLog("pinRequestCallback: " + bdDevice
                 + " name:" + Utils.getName(bdDevice) + " cod:" + new BluetoothClass(cod));
 
         Message msg = obtainMessage(PIN_REQUEST);

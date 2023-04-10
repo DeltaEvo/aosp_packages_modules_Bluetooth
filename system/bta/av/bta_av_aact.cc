@@ -40,6 +40,7 @@
 #include "btif/include/btif_av_co.h"
 #include "btif/include/btif_config.h"
 #include "btif/include/btif_storage.h"
+#include "device/include/device_iot_config.h"
 #include "device/include/interop.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
@@ -533,6 +534,10 @@ static void bta_av_a2dp_sdp_cback(bool found, tA2DP_Service* p_service,
   }
   if (found && (p_service != NULL)) {
     p_scb->SetAvdtpVersion(p_service->avdt_version);
+    DEVICE_IOT_CONFIG_ADDR_SET_HEX_IF_GREATER(
+        p_scb->PeerAddress(), IOT_CONF_KEY_A2DP_VERSION,
+        p_service->avdt_version, IOT_CONF_BYTE_NUM_2);
+
     if (p_service->avdt_version != 0) {
       if (btif_config_set_bin(p_scb->PeerAddress().ToString(),
                               AVDTP_VERSION_CONFIG_KEY,
@@ -970,10 +975,17 @@ void bta_av_config_ind(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
     p_info->seid = p_data->str_msg.msg.config_ind.int_seid;
 
     /* Sep type of Peer will be oppsite role to our local sep */
-    if (local_sep == AVDT_TSEP_SRC)
+    if (local_sep == AVDT_TSEP_SRC) {
       p_info->tsep = AVDT_TSEP_SNK;
-    else if (local_sep == AVDT_TSEP_SNK)
+      DEVICE_IOT_CONFIG_ADDR_SET_INT(p_scb->PeerAddress(),
+                                     IOT_CONF_KEY_A2DP_ROLE,
+                                     IOT_CONF_VAL_A2DP_ROLE_SINK);
+    } else if (local_sep == AVDT_TSEP_SNK) {
       p_info->tsep = AVDT_TSEP_SRC;
+      DEVICE_IOT_CONFIG_ADDR_SET_INT(p_scb->PeerAddress(),
+                                     IOT_CONF_KEY_A2DP_ROLE,
+                                     IOT_CONF_VAL_A2DP_ROLE_SOURCE);
+    }
 
     p_scb->role |= BTA_AV_ROLE_AD_ACP;
     p_scb->cur_psc_mask = p_evt_cfg->psc_mask;
@@ -1232,6 +1244,9 @@ void bta_av_str_opened(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
         .edr = 0,
         .sep = AVDT_TSEP_INVALID,
     };
+
+    L2CA_SetMediaStreamChannel(p_scb->l2c_cid, true);
+
     p = BTM_ReadRemoteFeatures(p_scb->PeerAddress());
     if (p != NULL) {
       if (HCI_EDR_ACL_2MPS_SUPPORTED(p)) open.edr |= BTA_AV_EDR_2MBPS;
@@ -2385,26 +2400,30 @@ void bta_av_start_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
                      ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), suspend,
                      p_scb->role, initiator);
 
-    tBTA_AV_START start;
-    start.suspending = suspend;
-    start.initiator = initiator;
-    start.chnl = p_scb->chnl;
-    start.status = BTA_AV_SUCCESS;
-    start.hndl = p_scb->hndl;
-    tBTA_AV bta_av_data;
-    bta_av_data.start = start;
+    tBTA_AV bta_av_data = {
+        .start =
+            {
+                .chnl = p_scb->chnl,
+                .hndl = p_scb->hndl,
+                .status = BTA_AV_SUCCESS,
+                .initiator = initiator,
+                .suspending = suspend,
+            },
+    };
     (*bta_av_cb.p_cback)(BTA_AV_START_EVT, &bta_av_data);
 
     if (suspend) {
-      tBTA_AV_API_STOP stop;
       p_scb->role |= BTA_AV_ROLE_SUSPEND;
       p_scb->cong = true; /* do not allow the media data to go through */
       /* do not duplicate the media packets to this channel */
       p_scb->p_cos->stop(p_scb->hndl, p_scb->PeerAddress());
       p_scb->co_started = false;
-      stop.flush = false;
-      stop.suspend = true;
-      stop.reconfig_stop = false;
+      tBTA_AV_API_STOP stop = {
+          .hdr = {},
+          .suspend = true,
+          .flush = false,
+          .reconfig_stop = false,
+      };
       bta_av_ssm_execute(p_scb, BTA_AV_AP_STOP_EVT, (tBTA_AV_DATA*)&stop);
     }
   }
@@ -2445,8 +2464,8 @@ void bta_av_start_failed(tBTA_AV_SCB* p_scb, UNUSED_ATTR tBTA_AV_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_av_str_closed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
-  tBTA_AV data;
-  tBTA_AV_EVT event;
+  tBTA_AV data = {};
+  tBTA_AV_EVT event = {};
 
   APPL_TRACE_WARNING(
       "%s: peer %s bta_handle:0x%x open_status:%d chnl:%d co_started:%d",
@@ -2457,6 +2476,8 @@ void bta_av_str_closed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
   if (bta_av_cb.audio_open_cnt <= 1) {
     BTM_default_unblock_role_switch();
   }
+
+  L2CA_SetMediaStreamChannel(p_scb->l2c_cid, false);
 
   if (p_scb->open_status != BTA_AV_SUCCESS) {
     /* must be failure when opening the stream */
@@ -2521,7 +2542,7 @@ void bta_av_clr_cong(tBTA_AV_SCB* p_scb, UNUSED_ATTR tBTA_AV_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_av_suspend_cfm(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
-  tBTA_AV_SUSPEND suspend_rsp;
+  tBTA_AV_SUSPEND suspend_rsp = {};
   uint8_t err_code = p_data->str_msg.msg.hdr.err_code;
 
   APPL_TRACE_DEBUG("%s: peer %s bta_handle:0x%x audio_open_cnt:%d err_code:%d",
@@ -2622,12 +2643,14 @@ void bta_av_rcfg_str_ok(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
 
   {
     /* reconfigure success  */
-    tBTA_AV_RECONFIG reconfig;
-    reconfig.status = BTA_AV_SUCCESS;
-    reconfig.chnl = p_scb->chnl;
-    reconfig.hndl = p_scb->hndl;
-    tBTA_AV bta_av_data;
-    bta_av_data.reconfig = reconfig;
+    tBTA_AV bta_av_data = {
+        .reconfig =
+            {
+                .chnl = p_scb->chnl,
+                .hndl = p_scb->hndl,
+                .status = BTA_AV_SUCCESS,
+            },
+    };
     (*bta_av_cb.p_cback)(BTA_AV_RECONFIG_EVT, &bta_av_data);
   }
 }
@@ -2649,12 +2672,14 @@ void bta_av_rcfg_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
   if (p_scb->num_recfg > BTA_AV_RECONFIG_RETRY) {
     bta_av_cco_close(p_scb, p_data);
     /* report failure */
-    tBTA_AV_RECONFIG reconfig;
-    reconfig.status = BTA_AV_FAIL_STREAM;
-    reconfig.chnl = p_scb->chnl;
-    reconfig.hndl = p_scb->hndl;
-    tBTA_AV bta_av_data;
-    bta_av_data.reconfig = reconfig;
+    tBTA_AV bta_av_data = {
+        .reconfig =
+            {
+                .chnl = p_scb->chnl,
+                .hndl = p_scb->hndl,
+                .status = BTA_AV_FAIL_STREAM,
+            },
+    };
     (*bta_av_cb.p_cback)(BTA_AV_RECONFIG_EVT, &bta_av_data);
     /* go to closing state */
     bta_av_ssm_execute(p_scb, BTA_AV_API_CLOSE_EVT, NULL);
@@ -2713,12 +2738,14 @@ void bta_av_rcfg_discntd(tBTA_AV_SCB* p_scb, UNUSED_ATTR tBTA_AV_DATA* p_data) {
   p_scb->num_recfg++;
   if (p_scb->num_recfg > BTA_AV_RECONFIG_RETRY) {
     /* report failure */
-    tBTA_AV_RECONFIG reconfig;
-    reconfig.status = BTA_AV_FAIL_STREAM;
-    reconfig.chnl = p_scb->chnl;
-    reconfig.hndl = p_scb->hndl;
-    tBTA_AV bta_av_data;
-    bta_av_data.reconfig = reconfig;
+    tBTA_AV bta_av_data = {
+        .reconfig =
+            {
+                .chnl = p_scb->chnl,
+                .hndl = p_scb->hndl,
+                .status = BTA_AV_FAIL_STREAM,
+            },
+    };
     (*bta_av_cb.p_cback)(BTA_AV_RECONFIG_EVT, &bta_av_data);
     /* report close event & go to init state */
     bta_av_ssm_execute(p_scb, BTA_AV_STR_DISC_FAIL_EVT, NULL);

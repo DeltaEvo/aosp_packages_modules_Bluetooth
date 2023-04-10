@@ -58,6 +58,8 @@ typedef struct {
 
 class AdvertisingTrackInfo {
  public:
+  // For MSFT-based advertisement monitor.
+  uint8_t monitor_handle;
   uint8_t scanner_id;
   uint8_t filter_index;
   uint8_t advertiser_state;
@@ -107,6 +109,7 @@ class ScanningCallbacks {
   virtual void OnPeriodicSyncLost(uint16_t sync_handle) = 0;
   virtual void OnPeriodicSyncTransferred(int pa_source, uint8_t status,
                                          RawAddress address) = 0;
+  virtual void OnBigInfoReport(uint16_t sync_handle, bool encrypted) = 0;
 };
 
 class BleScannerInterface {

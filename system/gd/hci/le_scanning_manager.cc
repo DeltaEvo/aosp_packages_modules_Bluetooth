@@ -24,6 +24,7 @@
 #include "hci/hci_packets.h"
 #include "hci/le_periodic_sync_manager.h"
 #include "hci/le_scanning_interface.h"
+#include "hci/le_scanning_reassembler.h"
 #include "hci/vendor_specific_event_manager.h"
 #include "module.h"
 #include "os/handler.h"
@@ -59,80 +60,6 @@ enum class ScanApiType {
 struct Scanner {
   Uuid app_uuid;
   bool in_use;
-};
-
-class AdvertisingCache {
- public:
-  const std::vector<uint8_t>& Set(const AddressWithType& address_with_type, std::vector<uint8_t> data) {
-    auto it = Find(address_with_type);
-    if (it != items.end()) {
-      it->data = std::move(data);
-      return it->data;
-    }
-
-    if (items.size() > cache_max) {
-      items.pop_back();
-    }
-
-    items.emplace_front(address_with_type, std::move(data));
-    return items.front().data;
-  }
-
-  bool Exist(const AddressWithType& address_with_type) {
-    auto it = Find(address_with_type);
-    if (it == items.end()) {
-      return false;
-    }
-    return true;
-  }
-
-  const std::vector<uint8_t>& Append(const AddressWithType& address_with_type, std::vector<uint8_t> data) {
-    auto it = Find(address_with_type);
-    if (it != items.end()) {
-      it->data.insert(it->data.end(), data.begin(), data.end());
-      return it->data;
-    }
-
-    if (items.size() > cache_max) {
-      items.pop_back();
-    }
-
-    items.emplace_front(address_with_type, std::move(data));
-    return items.front().data;
-  }
-
-  /* Clear data for device |addr_type, addr| */
-  void Clear(AddressWithType address_with_type) {
-    auto it = Find(address_with_type);
-    if (it != items.end()) {
-      items.erase(it);
-    }
-  }
-
-  void ClearAll() {
-    items.clear();
-  }
-
-  struct Item {
-    AddressWithType address_with_type;
-    std::vector<uint8_t> data;
-
-    Item(const AddressWithType& address_with_type, std::vector<uint8_t> data)
-        : address_with_type(address_with_type), data(data) {}
-  };
-
-  std::list<Item>::iterator Find(const AddressWithType& address_with_type) {
-    for (auto it = items.begin(); it != items.end(); it++) {
-      if (it->address_with_type == address_with_type) {
-        return it;
-      }
-    }
-    return items.end();
-  }
-
-  /* we keep maximum 7 devices in the cache */
-  const size_t cache_max = 1000;
-  std::list<Item> items;
 };
 
 class NullScanningCallback : public ScanningCallback {
@@ -197,6 +124,9 @@ class NullScanningCallback : public ScanningCallback {
   };
   void OnPeriodicSyncTransferred(int pa_source, uint8_t status, Address address) override {
     LOG_INFO("OnPeriodicSyncTransferred in NullScanningCallback");
+  };
+  void OnBigInfoReport(uint16_t sync_handle, bool encrypted) {
+    LOG_INFO("OnBigInfoReport in NullScanningCallback");
   };
 };
 
@@ -302,13 +232,13 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
   void handle_scan_results(LeMetaEventView event) {
     switch (event.GetSubeventCode()) {
       case SubeventCode::ADVERTISING_REPORT:
-        handle_advertising_report(LeAdvertisingReportView::Create(event));
+        handle_advertising_report(LeAdvertisingReportRawView::Create(event));
         break;
       case SubeventCode::DIRECTED_ADVERTISING_REPORT:
         handle_directed_advertising_report(LeDirectedAdvertisingReportView::Create(event));
         break;
       case SubeventCode::EXTENDED_ADVERTISING_REPORT:
-        handle_extended_advertising_report(LeExtendedAdvertisingReportView::Create(event));
+        handle_extended_advertising_report(LeExtendedAdvertisingReportRawView::Create(event));
         break;
       case SubeventCode::PERIODIC_ADVERTISING_SYNC_ESTABLISHED:
         LePeriodicAdvertisingSyncEstablishedView::Create(event);
@@ -328,6 +258,10 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
       case SubeventCode::SCAN_TIMEOUT:
         scanning_callbacks_->OnTimeout();
         break;
+      case SubeventCode::BIG_INFO_ADVERTISING_REPORT:
+        periodic_sync_manager_.HandleLeBigInfoAdvertisingReport(
+            LeBigInfoAdvertisingReportView::Create(event));
+        break;
       default:
         LOG_ALWAYS_FATAL("Unknown advertising subevent %s", SubeventCodeText(event.GetSubeventCode()).c_str());
     }
@@ -343,45 +277,45 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
     bool truncated{false};
   };
 
-  void transform_to_extended_event_type(uint16_t* extended_event_type, ExtendedEventTypeOptions o) {
-    ASSERT(extended_event_type != nullptr);
-    *extended_event_type = (o.connectable ? 0x0001 << 0 : 0) | (o.scannable ? 0x0001 << 1 : 0) |
-                           (o.directed ? 0x0001 << 2 : 0) | (o.scan_response ? 0x0001 << 3 : 0) |
-                           (o.legacy ? 0x0001 << 4 : 0) | (o.continuing ? 0x0001 << 5 : 0) |
-                           (o.truncated ? 0x0001 << 6 : 0);
+  uint16_t transform_to_extended_event_type(ExtendedEventTypeOptions o) {
+    return (o.connectable ? 0x0001 << 0 : 0) | (o.scannable ? 0x0001 << 1 : 0) |
+           (o.directed ? 0x0001 << 2 : 0) | (o.scan_response ? 0x0001 << 3 : 0) |
+           (o.legacy ? 0x0001 << 4 : 0) | (o.continuing ? 0x0001 << 5 : 0) |
+           (o.truncated ? 0x0001 << 6 : 0);
   }
 
-  void handle_advertising_report(LeAdvertisingReportView event_view) {
+  void handle_advertising_report(LeAdvertisingReportRawView event_view) {
     if (!event_view.IsValid()) {
       LOG_INFO("Dropping invalid advertising event");
       return;
     }
-    std::vector<LeAdvertisingResponse> reports = event_view.GetResponses();
+    std::vector<LeAdvertisingResponseRaw> reports = event_view.GetResponses();
     if (reports.empty()) {
       LOG_INFO("Zero results in advertising event");
       return;
     }
 
-    for (LeAdvertisingResponse report : reports) {
+    for (LeAdvertisingResponseRaw report : reports) {
       uint16_t extended_event_type = 0;
       switch (report.event_type_) {
         case AdvertisingEventType::ADV_IND:
-          transform_to_extended_event_type(
-              &extended_event_type, {.connectable = true, .scannable = true, .legacy = true});
+          extended_event_type = transform_to_extended_event_type(
+              {.connectable = true, .scannable = true, .legacy = true});
           break;
         case AdvertisingEventType::ADV_DIRECT_IND:
-          transform_to_extended_event_type(
-              &extended_event_type, {.connectable = true, .directed = true, .legacy = true});
+          extended_event_type = transform_to_extended_event_type(
+              {.connectable = true, .directed = true, .legacy = true});
           break;
         case AdvertisingEventType::ADV_SCAN_IND:
-          transform_to_extended_event_type(&extended_event_type, {.scannable = true, .legacy = true});
+          extended_event_type =
+              transform_to_extended_event_type({.scannable = true, .legacy = true});
           break;
         case AdvertisingEventType::ADV_NONCONN_IND:
-          transform_to_extended_event_type(&extended_event_type, {.legacy = true});
+          extended_event_type = transform_to_extended_event_type({.legacy = true});
           break;
         case AdvertisingEventType::SCAN_RESPONSE:
-          transform_to_extended_event_type(
-              &extended_event_type, {.connectable = true, .scannable = true, .scan_response = true, .legacy = true});
+          extended_event_type = transform_to_extended_event_type(
+              {.connectable = true, .scannable = true, .scan_response = true, .legacy = true});
           break;
         default:
           LOG_WARN("Unsupported event type:%d", (uint16_t)report.event_type_);
@@ -402,33 +336,23 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
     }
   }
 
-  void handle_directed_advertising_report(LeDirectedAdvertisingReportView event_view) {
-    if (!event_view.IsValid()) {
-      LOG_INFO("Dropping invalid advertising event");
-      return;
-    }
-    std::vector<LeDirectedAdvertisingResponse> reports = event_view.GetResponses();
-    if (reports.empty()) {
-      LOG_INFO("Zero results in advertising event");
-      return;
-    }
-    uint16_t extended_event_type = 0;
-    transform_to_extended_event_type(&extended_event_type, {.connectable = true, .directed = true, .legacy = true});
-    // TODO: parse report
+  void handle_directed_advertising_report(LeDirectedAdvertisingReportView /*event_view*/) {
+    LOG_WARN("HCI Directed Advertising Report events are not supported");
   }
 
-  void handle_extended_advertising_report(LeExtendedAdvertisingReportView event_view) {
+  void handle_extended_advertising_report(LeExtendedAdvertisingReportRawView event_view) {
     if (!event_view.IsValid()) {
       LOG_INFO("Dropping invalid advertising event");
       return;
     }
-    std::vector<LeExtendedAdvertisingResponse> reports = event_view.GetResponses();
+
+    std::vector<LeExtendedAdvertisingResponseRaw> reports = event_view.GetResponses();
     if (reports.empty()) {
       LOG_INFO("Zero results in advertising event");
       return;
     }
 
-    for (LeExtendedAdvertisingResponse report : reports) {
+    for (LeExtendedAdvertisingResponseRaw& report : reports) {
       uint16_t event_type = report.connectable_ | (report.scannable_ << kScannableBit) |
                             (report.directed_ << kDirectedBit) | (report.scan_response_ << kScanResponseBit) |
                             (report.legacy_ << kLegacyBit) | ((uint16_t)report.data_status_ << kDataStatusBits);
@@ -456,20 +380,32 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
       int8_t tx_power,
       int8_t rssi,
       uint16_t periodic_advertising_interval,
-      std::vector<LengthAndData> advertising_data) {
-    bool is_scannable = event_type & (1 << kScannableBit);
-    bool is_scan_response = event_type & (1 << kScanResponseBit);
-    bool is_legacy = event_type & (1 << kLegacyBit);
+      const std::vector<uint8_t>& advertising_data) {
+    // When using the vendor command Le Set Extended Params to
+    // configure a filter accept list based e.g. on the service UUIDs
+    // found in the report, we ignore the scan responses as we cannot be
+    // certain that they will not be dropped by the filter.
+    // TODO(b/275754998): Improve the decision on what to do with scan responses: Only when used
+    // with hardware-filtering features should we ignore waiting for scan response, and make sure
+    // scan responses are still reported too.
+    scanning_reassembler_.SetIgnoreScanResponses(
+        filter_policy_ == LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY);
 
-    auto significant_data = std::vector<uint8_t>{};
-    for (const auto& datum : advertising_data) {
-      if (!datum.data_.empty()) {
-        significant_data.push_back(static_cast<uint8_t>(datum.data_.size()));
-        significant_data.insert(significant_data.end(), datum.data_.begin(), datum.data_.end());
+    auto complete_advertising_data = scanning_reassembler_.ProcessAdvertisingReport(
+        event_type, address_type, address, advertising_sid, advertising_data);
+
+    if (complete_advertising_data.has_value()) {
+      switch (address_type) {
+        case (uint8_t)AddressType::PUBLIC_DEVICE_ADDRESS:
+        case (uint8_t)AddressType::PUBLIC_IDENTITY_ADDRESS:
+          address_type = (uint8_t)AddressType::PUBLIC_DEVICE_ADDRESS;
+          break;
+        case (uint8_t)AddressType::RANDOM_DEVICE_ADDRESS:
+        case (uint8_t)AddressType::RANDOM_IDENTITY_ADDRESS:
+          address_type = (uint8_t)AddressType::RANDOM_DEVICE_ADDRESS;
+          break;
       }
-    }
 
-    if (address_type == (uint8_t)DirectAdvertisingAddressType::NO_ADDRESS_PROVIDED) {
       scanning_callbacks_->OnScanResult(
           event_type,
           address_type,
@@ -480,58 +416,8 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
           tx_power,
           rssi,
           periodic_advertising_interval,
-          significant_data);
-      return;
-    } else if (address == Address::kEmpty) {
-      LOG_WARN("Receive non-anonymous advertising report with empty address, skip!");
-      return;
+          complete_advertising_data.value());
     }
-
-    AddressWithType address_with_type(address, (AddressType)address_type);
-
-    if (is_legacy && is_scan_response && !advertising_cache_.Exist(address_with_type)) {
-      return;
-    }
-
-    bool is_start = is_legacy && is_scannable && !is_scan_response;
-
-    std::vector<uint8_t> const& adv_data = is_start ? advertising_cache_.Set(address_with_type, significant_data)
-                                                    : advertising_cache_.Append(address_with_type, significant_data);
-
-    uint8_t data_status = event_type >> kDataStatusBits;
-    if (data_status == (uint8_t)DataStatus::CONTINUING) {
-      // Waiting for whole data
-      return;
-    }
-
-    if (is_scannable && !is_scan_response) {
-      // Waiting for scan response
-      return;
-    }
-
-    switch (address_type) {
-      case (uint8_t)AddressType::PUBLIC_DEVICE_ADDRESS:
-      case (uint8_t)AddressType::PUBLIC_IDENTITY_ADDRESS:
-        address_type = (uint8_t)AddressType::PUBLIC_DEVICE_ADDRESS;
-        break;
-      case (uint8_t)AddressType::RANDOM_DEVICE_ADDRESS:
-      case (uint8_t)AddressType::RANDOM_IDENTITY_ADDRESS:
-        address_type = (uint8_t)AddressType::RANDOM_DEVICE_ADDRESS;
-        break;
-    }
-    scanning_callbacks_->OnScanResult(
-        event_type,
-        address_type,
-        address,
-        primary_phy,
-        secondary_phy,
-        advertising_sid,
-        tx_power,
-        rssi,
-        periodic_advertising_interval,
-        adv_data);
-
-    advertising_cache_.Clear(address_with_type);
   }
 
   void configure_scan() {
@@ -710,6 +596,10 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
     scanning_callbacks_->OnSetScannerParameterComplete(scanner_id, ScanningCallback::SUCCESS);
   }
 
+  void set_scan_filter_policy(LeScanningFilterPolicy filter_policy) {
+    filter_policy_ = filter_policy;
+  }
+
   void scan_filter_enable(bool enable) {
     if (!is_filter_supported_) {
       LOG_WARN("Advertising filter is not supported");
@@ -832,6 +722,17 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
         }
         case ApcfFilterType::SERVICE_DATA: {
           update_service_data_filter(apcf_action, filter_index, filter.data, filter.data_mask);
+          break;
+        }
+        case ApcfFilterType::TRANSPORT_DISCOVERY_DATA: {
+          update_transport_discovery_data_filter(
+              apcf_action,
+              filter_index,
+              filter.org_id,
+              filter.tds_flags,
+              filter.tds_flags_mask,
+              filter.data,
+              filter.data_mask);
           break;
         }
         case ApcfFilterType::AD_TYPE: {
@@ -1025,6 +926,60 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
 
     le_scanning_interface_->EnqueueCommand(
         LeAdvFilterServiceDataBuilder::Create(action, filter_index, combined_data),
+        module_handler_->BindOnceOn(this, &impl::on_advertising_filter_complete));
+  }
+
+  void update_transport_discovery_data_filter(
+      ApcfAction action,
+      uint8_t filter_index,
+      uint8_t org_id,
+      uint8_t tds_flags,
+      uint8_t tds_flags_mask,
+      std::vector<uint8_t> transport_data,
+      std::vector<uint8_t> transport_data_mask) {
+    std::vector<uint8_t> combined_data = {};
+
+    LocalVersionInformation local_version_information = controller_->GetLocalVersionInformation();
+
+    // QTI controller, transport discovery data  filter are supported by default. Check is added
+    // to keep backward compatibility.
+    if (!is_transport_discovery_data_filter_supported_ &&
+        !(local_version_information.manufacturer_name_ == LMP_COMPID_QTI)) {
+      LOG_WARN("transport discovery data filter isn't supported");
+      return;
+    }
+
+    if (action != ApcfAction::CLEAR) {
+      combined_data.push_back((uint8_t)org_id);
+      combined_data.push_back((uint8_t)tds_flags);
+      combined_data.push_back((uint8_t)tds_flags_mask);
+      if (transport_data.size() != 0) {
+        // 0x02 Wi�Fi Alliance Neighbor Awareness Networking
+        if (org_id == 0x02) {
+          // Transport data contains WIFI NAN hash, reverse it before sending controller.
+          std::reverse(transport_data.begin(), transport_data.end());
+        }
+        combined_data.insert(combined_data.end(), transport_data.begin(), transport_data.end());
+        // For future version , controller may also filter using transport data
+        // & transport data mask for non WIFI NAN id.
+        if (is_transport_discovery_data_filter_supported_ && org_id != 0x02) {
+          combined_data.insert(
+              combined_data.end(), transport_data_mask.begin(), transport_data_mask.end());
+        }
+      }
+    }
+
+    LOG_INFO(
+        "org id: %d, tds_flags: %d, tds_flags_mask = %d,"
+        "transport_data size: %zu, transport_data_mask size: %zu",
+        org_id,
+        tds_flags,
+        tds_flags_mask,
+        transport_data.size(),
+        transport_data_mask.size());
+
+    le_scanning_interface_->EnqueueCommand(
+        LeAdvFilterTransportDiscoveryDataBuilder::Create(action, filter_index, combined_data),
         module_handler_->BindOnceOn(this, &impl::on_advertising_filter_complete));
   }
 
@@ -1415,6 +1370,15 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
             complete_view.GetApcfAction(),
             (uint8_t)complete_view.GetStatus());
       } break;
+      case ApcfOpcode::TRANSPORT_DISCOVERY_DATA: {
+        auto complete_view = LeAdvFilterTransportDiscoveryDataCompleteView::Create(status_view);
+        ASSERT(complete_view.IsValid());
+        scanning_callbacks_->OnFilterConfigCallback(
+            ApcfFilterType::TRANSPORT_DISCOVERY_DATA,
+            complete_view.GetApcfAvailableSpaces(),
+            complete_view.GetApcfAction(),
+            (uint8_t)complete_view.GetStatus());
+      } break;
       case ApcfOpcode::AD_TYPE: {
         auto complete_view = LeAdvFilterADTypeCompleteView::Create(status_view);
         ASSERT(complete_view.IsValid());
@@ -1445,8 +1409,14 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
     }
     auto complete_view = LeAdvFilterReadExtendedFeaturesCompleteView::Create(status_view);
     ASSERT(complete_view.IsValid());
+    is_transport_discovery_data_filter_supported_ =
+        complete_view.GetTransportDiscoveryDataFilter() == 1;
     is_ad_type_filter_supported_ = complete_view.GetAdTypeFilter() == 1;
-    LOG_INFO("set is_ad_type_filter_supported_ to %d", is_ad_type_filter_supported_);
+    LOG_INFO(
+        "set is_ad_type_filter_supported_ to %d & "
+        "is_transport_discovery_data_filter_supported_ to %d",
+        is_ad_type_filter_supported_,
+        is_transport_discovery_data_filter_supported_);
   }
 
   void on_batch_scan_complete(CommandCompleteView view) {
@@ -1598,11 +1568,12 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
   bool is_scanning_ = false;
   bool scan_on_resume_ = false;
   bool paused_ = false;
-  AdvertisingCache advertising_cache_;
+  LeScanningReassembler scanning_reassembler_;
   bool is_filter_supported_ = false;
   bool is_ad_type_filter_supported_ = false;
   bool is_batch_scan_supported_ = false;
   bool is_periodic_advertising_sync_transfer_sender_supported_ = false;
+  bool is_transport_discovery_data_filter_supported_ = false;
 
   LeScanType le_scan_type_ = LeScanType::ACTIVE;
   uint32_t interval_ms_{1000};
@@ -1684,6 +1655,10 @@ void LeScanningManager::Scan(bool start) {
 void LeScanningManager::SetScanParameters(
     ScannerId scanner_id, LeScanType scan_type, uint16_t scan_interval, uint16_t scan_window) {
   CallOn(pimpl_.get(), &impl::set_scan_parameters, scanner_id, scan_type, scan_interval, scan_window);
+}
+
+void LeScanningManager::SetScanFilterPolicy(LeScanningFilterPolicy filter_policy) {
+  CallOn(pimpl_.get(), &impl::set_scan_filter_policy, filter_policy);
 }
 
 void LeScanningManager::ScanFilterEnable(bool enable) {

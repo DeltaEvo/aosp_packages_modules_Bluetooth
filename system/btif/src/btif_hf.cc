@@ -27,8 +27,12 @@
 
 #define LOG_TAG "bt_btif_hf"
 
+#include <base/functional/callback.h>
 #include <base/logging.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
+#ifdef OS_ANDROID
+#include <hfp.sysprop.h>
+#endif
 
 #include <cstdint>
 #include <string>
@@ -40,6 +44,7 @@
 #include "btif/include/btif_profile_queue.h"
 #include "btif/include/btif_util.h"
 #include "common/metrics.h"
+#include "device/include/device_iot_config.h"
 #include "include/hardware/bluetooth_headset_callbacks.h"
 #include "include/hardware/bluetooth_headset_interface.h"
 #include "include/hardware/bt_hf.h"
@@ -67,25 +72,14 @@ namespace headset {
 #define BTIF_HFAG_SERVICE_NAME ("Handsfree Gateway")
 #endif
 
-#ifndef BTIF_HF_SERVICES
-#define BTIF_HF_SERVICES (BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK)
-#endif
-
 #ifndef BTIF_HF_SERVICE_NAMES
 #define BTIF_HF_SERVICE_NAMES \
   { BTIF_HSAG_SERVICE_NAME, BTIF_HFAG_SERVICE_NAME }
 #endif
 
-#ifndef BTIF_HF_FEATURES
-#define BTIF_HF_FEATURES                                          \
-  (BTA_AG_FEAT_3WAY | BTA_AG_FEAT_ECNR | BTA_AG_FEAT_REJECT |     \
-   BTA_AG_FEAT_ECS | BTA_AG_FEAT_EXTERR | BTA_AG_FEAT_VREC |      \
-   BTA_AG_FEAT_CODEC | BTA_AG_FEAT_HF_IND | BTA_AG_FEAT_ESCO_S4 | \
-   BTA_AG_FEAT_UNAT)
-#endif
-
+static uint32_t get_hf_features();
 /* HF features supported at runtime */
-static uint32_t btif_hf_features = BTIF_HF_FEATURES;
+static uint32_t btif_hf_features = get_hf_features();
 
 #define BTIF_HF_INVALID_IDX (-1)
 
@@ -146,6 +140,36 @@ static const char* dump_hf_call_state(bthf_call_state_t call_state) {
  */
 static bool is_active_device(const RawAddress& bd_addr) {
   return !active_bda.IsEmpty() && active_bda == bd_addr;
+}
+
+static tBTA_SERVICE_MASK get_BTIF_HF_SERVICES() {
+#ifdef OS_ANDROID
+  static const tBTA_SERVICE_MASK hf_services =
+      android::sysprop::bluetooth::Hfp::hf_services().value_or(
+          BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK);
+  return hf_services;
+#else
+  return BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK;
+#endif
+}
+
+/* HF features supported at runtime */
+static uint32_t get_hf_features() {
+#define DEFAULT_BTIF_HF_FEATURES                                  \
+  (BTA_AG_FEAT_3WAY | BTA_AG_FEAT_ECNR | BTA_AG_FEAT_REJECT |     \
+   BTA_AG_FEAT_ECS | BTA_AG_FEAT_EXTERR | BTA_AG_FEAT_VREC |      \
+   BTA_AG_FEAT_CODEC | BTA_AG_FEAT_HF_IND | BTA_AG_FEAT_ESCO_S4 | \
+   BTA_AG_FEAT_UNAT)
+#ifdef OS_ANDROID
+  static const uint32_t hf_features =
+      android::sysprop::bluetooth::Hfp::hf_features().value_or(
+          DEFAULT_BTIF_HF_FEATURES);
+  return hf_features;
+#elif TARGET_FLOSS
+  return BTA_AG_FEAT_ECS | BTA_AG_FEAT_CODEC;
+#else
+  return DEFAULT_BTIF_HF_FEATURES;
+#endif
 }
 
 /*******************************************************************************
@@ -390,6 +414,14 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
       if (p_data->open.status == BTA_AG_SUCCESS) {
         // In case this is an incoming connection
         btif_hf_cb[idx].connected_bda = p_data->open.bd_addr;
+        if (btif_hf_cb[idx].state != BTHF_CONNECTION_STATE_CONNECTING) {
+          DEVICE_IOT_CONFIG_ADDR_SET_INT(btif_hf_cb[idx].connected_bda,
+                                         IOT_CONF_KEY_HFP_ROLE,
+                                         IOT_CONF_VAL_HFP_ROLE_CLIENT);
+          DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(btif_hf_cb[idx].connected_bda,
+                                             IOT_CONF_KEY_HFP_SLC_CONN_COUNT);
+        }
+
         btif_hf_cb[idx].state = BTHF_CONNECTION_STATE_CONNECTED;
         btif_hf_cb[idx].peer_feat = 0;
         clear_phone_state_multihf(&btif_hf_cb[idx]);
@@ -418,6 +450,8 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
                                      HFP_SELF_INITIATED_AG_FAILED,
                                  1);
         btif_queue_advance();
+        DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(
+            connected_bda, IOT_CONF_KEY_HFP_SLC_CONN_FAIL_COUNT);
       }
       break;
     case BTA_AG_CLOSE_EVT: {
@@ -443,10 +477,22 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
             android::bluetooth::CodePathCounterKeyEnum::HFP_SLC_SETUP_FAILED,
             1);
         btif_queue_advance();
+        DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(
+            btif_hf_cb[idx].connected_bda,
+            IOT_CONF_KEY_HFP_SLC_CONN_FAIL_COUNT);
       }
       break;
     }
     case BTA_AG_CONN_EVT:
+      DEVICE_IOT_CONFIG_ADDR_SET_HEX(
+          btif_hf_cb[idx].connected_bda, IOT_CONF_KEY_HFP_CODECTYPE,
+          p_data->conn.peer_codec == 0x03 ? IOT_CONF_VAL_HFP_CODECTYPE_CVSDMSBC
+                                          : IOT_CONF_VAL_HFP_CODECTYPE_CVSD,
+          IOT_CONF_BYTE_NUM_1);
+      DEVICE_IOT_CONFIG_ADDR_SET_HEX(
+          btif_hf_cb[idx].connected_bda, IOT_CONF_KEY_HFP_FEATURES,
+          p_data->conn.peer_feat, IOT_CONF_BYTE_NUM_2);
+
       LOG_DEBUG("SLC connected event:%s idx:%d", dump_hf_event(event), idx);
       btif_hf_cb[idx].peer_feat = p_data->conn.peer_feat;
       btif_hf_cb[idx].state = BTHF_CONNECTION_STATE_SLC_CONNECTED;
@@ -465,6 +511,10 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
 
     case BTA_AG_AUDIO_CLOSE_EVT:
       LOG_DEBUG("Audio close event:%s", dump_hf_event(event));
+
+      DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(btif_hf_cb[idx].connected_bda,
+                                         IOT_CONF_KEY_HFP_SCO_CONN_FAIL_COUNT);
+
       bt_hf_callbacks->AudioStateCallback(BTHF_AUDIO_STATE_DISCONNECTED,
                                           &btif_hf_cb[idx].connected_bda);
       break;
@@ -707,6 +757,11 @@ static bt_status_t connect_int(RawAddress* bd_addr, uint16_t uuid) {
   hf_cb->is_initiator = true;
   hf_cb->peer_feat = 0;
   BTA_AgOpen(hf_cb->handle, hf_cb->connected_bda);
+
+  DEVICE_IOT_CONFIG_ADDR_SET_INT(hf_cb->connected_bda, IOT_CONF_KEY_HFP_ROLE,
+                                 IOT_CONF_VAL_HFP_ROLE_CLIENT);
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(hf_cb->connected_bda,
+                                     IOT_CONF_KEY_HFP_SLC_CONN_COUNT);
   return BT_STATUS_SUCCESS;
 }
 
@@ -810,11 +865,11 @@ bt_status_t HeadsetInterface::Init(Callbacks* callbacks, int max_hf_clients,
 // Invoke the enable service API to the core to set the appropriate service_id
 // Internally, the HSP_SERVICE_ID shall also be enabled if HFP is enabled
 // (phone) otherwise only HSP is enabled (tablet)
-#if (defined(BTIF_HF_SERVICES) && (BTIF_HF_SERVICES & BTA_HFP_SERVICE_MASK))
-  btif_enable_service(BTA_HFP_SERVICE_ID);
-#else
-  btif_enable_service(BTA_HSP_SERVICE_ID);
-#endif
+  if (get_BTIF_HF_SERVICES() & BTA_HFP_SERVICE_MASK) {
+    btif_enable_service(BTA_HFP_SERVICE_ID);
+  } else {
+    btif_enable_service(BTA_HSP_SERVICE_ID);
+  }
 
   return BT_STATUS_SUCCESS;
 }
@@ -860,6 +915,9 @@ bt_status_t HeadsetInterface::ConnectAudio(RawAddress* bd_addr,
                               BTHF_AUDIO_STATE_CONNECTING,
                               &btif_hf_cb[idx].connected_bda));
   BTA_AgAudioOpen(btif_hf_cb[idx].handle, force_cvsd);
+
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(*bd_addr, IOT_CONF_KEY_HFP_SCO_CONN_COUNT);
+
   return BT_STATUS_SUCCESS;
 }
 
@@ -1163,6 +1221,7 @@ bt_status_t HeadsetInterface::PhoneStateChange(
     LOG_WARN("Invalid index %d for %s", idx, ADDRESS_TO_LOGGABLE_CSTR(raw_address));
     return BT_STATUS_FAIL;
   }
+
   const btif_hf_cb_t& control_block = btif_hf_cb[idx];
   if (!IsSlcConnected(bd_addr)) {
     LOG(WARNING) << ": SLC not connected for "
@@ -1434,6 +1493,10 @@ bt_status_t HeadsetInterface::PhoneStateChange(
   }
 
   UpdateCallStates(&btif_hf_cb[idx], num_active, num_held, call_setup_state);
+
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(btif_hf_cb[idx].connected_bda,
+                                     IOT_CONF_KEY_HFP_SCO_CONN_COUNT);
+
   return status;
 }
 
@@ -1443,15 +1506,15 @@ void HeadsetInterface::Cleanup() {
   btif_queue_cleanup(UUID_SERVCLASS_AG_HANDSFREE);
 
   tBTA_SERVICE_MASK mask = btif_get_enabled_services_mask();
-#if (defined(BTIF_HF_SERVICES) && (BTIF_HF_SERVICES & BTA_HFP_SERVICE_MASK))
-  if ((mask & (1 << BTA_HFP_SERVICE_ID)) != 0) {
-    btif_disable_service(BTA_HFP_SERVICE_ID);
+  if (get_BTIF_HF_SERVICES() & BTA_HFP_SERVICE_MASK) {
+    if ((mask & (1 << BTA_HFP_SERVICE_ID)) != 0) {
+      btif_disable_service(BTA_HFP_SERVICE_ID);
+    }
+  } else {
+    if ((mask & (1 << BTA_HSP_SERVICE_ID)) != 0) {
+      btif_disable_service(BTA_HSP_SERVICE_ID);
+    }
   }
-#else
-  if ((mask & (1 << BTA_HSP_SERVICE_ID)) != 0) {
-    btif_disable_service(BTA_HSP_SERVICE_ID);
-  }
-#endif
 
   bt_hf_callbacks = nullptr;
 }
@@ -1515,7 +1578,8 @@ bt_status_t ExecuteService(bool b_enable) {
     /* Enable and register with BTA-AG */
     BTA_AgEnable(bte_hf_evt);
     for (uint8_t app_id = 0; app_id < btif_max_hf_clients; app_id++) {
-      BTA_AgRegister(BTIF_HF_SERVICES, btif_hf_features, service_names, app_id);
+      BTA_AgRegister(get_BTIF_HF_SERVICES(), btif_hf_features, service_names,
+                     app_id);
     }
   } else {
     /* De-register AG */

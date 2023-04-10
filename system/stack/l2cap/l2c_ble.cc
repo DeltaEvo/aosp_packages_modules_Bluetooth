@@ -180,6 +180,18 @@ bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable) {
   return (true);
 }
 
+void L2CA_Consolidate(const RawAddress& identity_addr, const RawAddress& rpa) {
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rpa, BT_TRANSPORT_LE);
+  if (p_lcb == nullptr) {
+    return;
+  }
+
+  LOG_INFO("consolidating l2c_lcb record %s -> %s",
+           ADDRESS_TO_LOGGABLE_CSTR(rpa),
+           ADDRESS_TO_LOGGABLE_CSTR(identity_addr));
+  p_lcb->remote_bd_addr = identity_addr;
+}
+
 hci_role_t L2CA_GetBleConnRole(const RawAddress& bd_addr) {
   if (bluetooth::shim::is_gd_l2cap_enabled()) {
     return bluetooth::shim::L2CA_GetBleConnRole(bd_addr);
@@ -1020,7 +1032,8 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       p_ccb->local_conn_cfg.mtu = L2CAP_SDU_LENGTH_LE_MAX;
       p_ccb->local_conn_cfg.mps =
           controller_get_interface()->get_acl_data_size_ble();
-      p_ccb->local_conn_cfg.credits = L2CAP_LE_CREDIT_DEFAULT,
+      p_ccb->local_conn_cfg.credits = L2CA_LeCreditDefault();
+      p_ccb->remote_credit_count = L2CA_LeCreditDefault();
 
       p_ccb->peer_conn_cfg.mtu = mtu;
       p_ccb->peer_conn_cfg.mps = mps;

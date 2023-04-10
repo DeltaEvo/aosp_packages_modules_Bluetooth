@@ -28,9 +28,9 @@ import static org.mockito.Mockito.when;
 
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -388,6 +388,10 @@ public final class DatabaseManagerTest {
                 value, true);
         testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_LE_AUDIO,
                 value, true);
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_GMCS_CCCD,
+                value, true);
+        testSetGetCustomMetaCase(false, BluetoothDevice.METADATA_GTBS_CCCD,
+                value, true);
         testSetGetCustomMetaCase(false, badKey, value, false);
 
         // Device is in database
@@ -448,14 +452,18 @@ public final class DatabaseManagerTest {
                 value, true);
         testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_LE_AUDIO,
                 value, true);
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_GMCS_CCCD,
+                value, true);
+        testSetGetCustomMetaCase(true, BluetoothDevice.METADATA_GTBS_CCCD,
+                value, true);
     }
     @Test
     public void testSetGetAudioPolicyMetaData() {
         int badKey = 100;
-        BluetoothAudioPolicy value = new BluetoothAudioPolicy.Builder()
-                .setCallEstablishPolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
-                .setConnectingTimePolicy(BluetoothAudioPolicy.POLICY_NOT_ALLOWED)
-                .setInBandRingtonePolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
+        BluetoothSinkAudioPolicy value = new BluetoothSinkAudioPolicy.Builder()
+                .setCallEstablishPolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                .setActiveDevicePolicyAfterConnection(BluetoothSinkAudioPolicy.POLICY_NOT_ALLOWED)
+                .setInBandRingtonePolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
                 .build();
 
         // Device is not in database
@@ -1277,6 +1285,30 @@ public final class DatabaseManagerTest {
         }
     }
 
+    @Test
+    public void testDatabaseMigration_116_117() throws IOException {
+        // Create a database with version 116
+        SupportSQLiteDatabase db = testHelper.createDatabase(DB_NAME, 116);
+        // insert a device to the database
+        ContentValues device = new ContentValues();
+        device.put("address", TEST_BT_ADDR);
+        device.put("migrated", false);
+        assertThat(db.insert("metadata", SQLiteDatabase.CONFLICT_IGNORE, device),
+                CoreMatchers.not(-1));
+        // Migrate database from 116 to 117
+        db.close();
+        db = testHelper.runMigrationsAndValidate(DB_NAME, 117, true,
+                MetadataDatabase.MIGRATION_116_117);
+        Cursor cursor = db.query("SELECT * FROM metadata");
+        assertHasColumn(cursor, "gmcs_cccd", true);
+        assertHasColumn(cursor, "gtbs_cccd", true);
+        while (cursor.moveToNext()) {
+            // Check the new columns was added with default value
+            assertColumnBlobData(cursor, "gmcs_cccd", null);
+            assertColumnBlobData(cursor, "gtbs_cccd", null);
+        }
+    }
+
     /**
      * Helper function to check whether the database has the expected column
      */
@@ -1449,8 +1481,8 @@ public final class DatabaseManagerTest {
     }
 
     void testSetGetAudioPolicyMetadataCase(boolean stored,
-                BluetoothAudioPolicy policy, boolean expectedResult) {
-        BluetoothAudioPolicy testPolicy = new BluetoothAudioPolicy.Builder().build();
+                BluetoothSinkAudioPolicy policy, boolean expectedResult) {
+        BluetoothSinkAudioPolicy testPolicy = new BluetoothSinkAudioPolicy.Builder().build();
         if (stored) {
             Metadata data = new Metadata(TEST_BT_ADDR);
             mDatabaseManager.mMetadataCache.put(TEST_BT_ADDR, data);

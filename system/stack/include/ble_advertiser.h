@@ -19,7 +19,7 @@
 #ifndef BLE_ADVERTISER_H
 #define BLE_ADVERTISER_H
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/memory/weak_ptr.h>
 
 #include <cstdint>
@@ -40,7 +40,6 @@ using ParametersCb =
 void btm_ble_update_dmt_flag_bits(uint8_t* flag_value,
                                   const uint16_t connect_mode,
                                   const uint16_t disc_mode);
-void btm_acl_update_conn_addr(uint16_t conn_handle, const RawAddress& address);
 
 // methods we expose to c code:
 void btm_ble_multi_adv_cleanup(void);

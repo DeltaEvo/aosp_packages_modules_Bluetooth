@@ -43,7 +43,9 @@
 #include "stack/include/hcidefs.h"
 #include "stack/include/sec_hci_link_interface.h"
 #include "stack/l2cap/l2c_int.h"
+#include "test/common/mock_functions.h"
 #include "test/mock/mock_osi_list.h"
+#include "test/mock/mock_device_iot_config.h"
 #include "test/mock/mock_stack_hcic_hcicmds.h"
 #include "types/raw_address.h"
 
@@ -54,6 +56,7 @@ namespace mock = test::mock::stack_hcic_hcicmds;
 
 extern tBTM_CB btm_cb;
 
+uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
 uint8_t appl_trace_level = BT_TRACE_LEVEL_VERBOSE;
 btif_hh_cb_t btif_hh_cb;
 tL2C_CB l2cb;
@@ -77,6 +80,10 @@ using testing::StrEq;
 using testing::StrictMock;
 using testing::Test;
 
+// NOTE: The production code allows N+1 device records.
+constexpr size_t kBtmSecMaxDeviceRecords =
+    static_cast<size_t>(BTM_SEC_MAX_DEVICE_RECORDS + 1);
+
 std::string Hex16(int n) {
   std::ostringstream oss;
   oss << "0x" << std::hex << std::setw(4) << std::setfill('0') << n;
@@ -86,7 +93,7 @@ std::string Hex16(int n) {
 class StackBtmTest : public Test {
  public:
  protected:
-  void SetUp() override { mock_function_count_map.clear(); }
+  void SetUp() override { reset_mock_function_count_map(); }
   void TearDown() override {}
 };
 
@@ -131,8 +138,7 @@ TEST_F(StackBtmTest, InformClientOnConnectionSuccess) {
   RawAddress bda({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 
   btm_acl_connected(bda, 2, HCI_SUCCESS, false);
-  ASSERT_EQ(static_cast<size_t>(1),
-            mock_function_count_map.count("BTA_dm_acl_up"));
+  ASSERT_EQ(1, get_func_call_count("BTA_dm_acl_up"));
 
   get_btm_client_interface().lifecycle.btm_free();
 }
@@ -143,8 +149,7 @@ TEST_F(StackBtmTest, NoInformClientOnConnectionFail) {
   RawAddress bda({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 
   btm_acl_connected(bda, 2, HCI_ERR_NO_CONNECTION, false);
-  ASSERT_EQ(static_cast<size_t>(0),
-            mock_function_count_map.count("BTA_dm_acl_up"));
+  ASSERT_EQ(0, get_func_call_count("BTA_dm_acl_up"));
 
   get_btm_client_interface().lifecycle.btm_free();
 }
@@ -181,12 +186,12 @@ TEST_F(StackBtmTest, change_packet_type) {
     packet_types = p;
   };
   btm_set_packet_types_from_address(bda, 0x55aa);
-  ASSERT_EQ(++cnt, mock_function_count_map["btsnd_hcic_change_conn_type"]);
+  ASSERT_EQ(++cnt, get_func_call_count("btsnd_hcic_change_conn_type"));
   ASSERT_EQ(0x123, handle);
   ASSERT_EQ(Hex16(0x4400 | HCI_PKT_TYPES_MASK_DM1), Hex16(packet_types));
 
   btm_set_packet_types_from_address(bda, 0xffff);
-  ASSERT_EQ(++cnt, mock_function_count_map["btsnd_hcic_change_conn_type"]);
+  ASSERT_EQ(++cnt, get_func_call_count("btsnd_hcic_change_conn_type"));
   ASSERT_EQ(0x123, handle);
   ASSERT_EQ(Hex16(0xcc00 | HCI_PKT_TYPES_MASK_DM1 | HCI_PKT_TYPES_MASK_DH1),
             Hex16(packet_types));
@@ -370,4 +375,68 @@ TEST_F(StackBtmTest, btm_ble_sec_req_act_text) {
             btm_ble_sec_req_act_text(BTM_BLE_SEC_REQ_ACT_PAIR));
   ASSERT_EQ("BTM_BLE_SEC_REQ_ACT_DISCARD",
             btm_ble_sec_req_act_text(BTM_BLE_SEC_REQ_ACT_DISCARD));
+}
+
+TEST_F(StackBtmWithInitFreeTest, btm_sec_allocate_dev_rec__all) {
+  tBTM_SEC_DEV_REC* records[kBtmSecMaxDeviceRecords];
+
+  // Fill up the records
+  for (size_t i = 0; i < kBtmSecMaxDeviceRecords; i++) {
+    ASSERT_EQ(i, list_length(btm_cb.sec_dev_rec));
+    records[i] = btm_sec_allocate_dev_rec();
+    ASSERT_NE(nullptr, records[i]);
+  }
+
+  // Second pass up the records
+  for (size_t i = 0; i < kBtmSecMaxDeviceRecords; i++) {
+    ASSERT_EQ(kBtmSecMaxDeviceRecords, list_length(btm_cb.sec_dev_rec));
+    records[i] = btm_sec_allocate_dev_rec();
+    ASSERT_NE(nullptr, records[i]);
+  }
+
+  // NOTE: The memory allocated for each record is automatically
+  // allocated by the btm module and freed when the device record
+  // list is freed.
+  // Further, the memory for each record is reused when necessary.
+}
+
+TEST_F(StackBtmTest, btm_oob_data_text) {
+  std::vector<std::pair<tBTM_OOB_DATA, std::string>> datas = {
+      std::make_pair(BTM_OOB_NONE, "BTM_OOB_NONE"),
+      std::make_pair(BTM_OOB_PRESENT_192, "BTM_OOB_PRESENT_192"),
+      std::make_pair(BTM_OOB_PRESENT_256, "BTM_OOB_PRESENT_256"),
+      std::make_pair(BTM_OOB_PRESENT_192_AND_256,
+                     "BTM_OOB_PRESENT_192_AND_256"),
+      std::make_pair(BTM_OOB_UNKNOWN, "BTM_OOB_UNKNOWN"),
+  };
+  for (const auto& data : datas) {
+    ASSERT_STREQ(data.second.c_str(), btm_oob_data_text(data.first).c_str());
+  }
+  auto unknown = base::StringPrintf("UNKNOWN[%hhu]",
+                                    std::numeric_limits<std::uint8_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               btm_oob_data_text(static_cast<tBTM_OOB_DATA>(
+                                     std::numeric_limits<std::uint8_t>::max()))
+                   .c_str());
+}
+
+TEST_F(StackBtmTest, bond_type_text) {
+  std::vector<std::pair<tBTM_SEC_DEV_REC::tBTM_BOND_TYPE, std::string>> datas =
+      {
+          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN,
+                         "tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN"),
+          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT,
+                         "tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT"),
+          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY,
+                         "tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY"),
+      };
+  for (const auto& data : datas) {
+    ASSERT_STREQ(data.second.c_str(), bond_type_text(data.first).c_str());
+  }
+  auto unknown = base::StringPrintf("UNKNOWN[%hhu]",
+                                    std::numeric_limits<std::uint8_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               bond_type_text(static_cast<tBTM_SEC_DEV_REC::tBTM_BOND_TYPE>(
+                                  std::numeric_limits<std::uint8_t>::max()))
+                   .c_str());
 }

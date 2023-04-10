@@ -2,17 +2,20 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::slice::SliceIndex;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::bt_adv::AdvSet;
 use crate::bt_gatt::AuthReq;
 use crate::callbacks::{BtGattCallback, BtGattServerCallback};
 use crate::ClientContext;
 use crate::{console_red, console_yellow, print_error, print_info};
-use bt_topshim::btif::{BtConnectionState, BtStatus, BtTransport};
+use bt_topshim::btif::{BtConnectionState, BtDiscMode, BtStatus, BtTransport};
 use bt_topshim::profiles::hid_host::BthhReportType;
+use bt_topshim::profiles::sdp::{BtSdpMpsRecord, BtSdpRecord};
 use bt_topshim::profiles::{gatt::LePhy, ProfileConnectionState};
-use btstack::bluetooth::{BluetoothDevice, IBluetooth, IBluetoothQA};
+use btstack::bluetooth::{BluetoothDevice, IBluetooth, IBluetoothQALegacy};
 use btstack::bluetooth_gatt::{GattWriteType, IBluetoothGatt, ScanSettings, ScanType};
+use btstack::bluetooth_media::IBluetoothTelephony;
 use btstack::socket_manager::{IBluetoothSocketManager, SocketResult};
 use btstack::uuid::{Profile, UuidHelper, UuidWrapper};
 use manager_service::iface_bluetooth_manager::IBluetoothManager;
@@ -65,6 +68,21 @@ pub(crate) struct CommandHandler {
     command_options: HashMap<String, CommandOption>,
 }
 
+/// Define what to do when a socket connects. Mainly for qualification purposes.
+/// Specifically, after a socket is connected/accepted, we will do
+/// (1) send a chunk of data every |send_interval| time until |num_frame| chunks has been sent.
+/// (2) wait another |disconnect_delay| time. any incoming data will be dumpted during this time.
+/// (3) disconnect the socket.
+#[derive(Copy, Clone)]
+pub struct SocketSchedule {
+    /// Number of times to send data
+    pub num_frame: u32,
+    /// Time interval between each sending
+    pub send_interval: Duration,
+    /// Extra time after the last sending. Any incoming data will be printed during this time.
+    pub disconnect_delay: Duration,
+}
+
 struct DisplayList<T>(Vec<T>);
 
 impl<T: Display> Display for DisplayList<T> {
@@ -103,12 +121,17 @@ fn build_commands() -> HashMap<String, CommandOption> {
     command_options.insert(
         String::from("adapter"),
         CommandOption {
-            rules: vec![String::from(
-                "adapter <enable|disable|show|discoverable|connectable|set-name>",
-            )],
+            rules: vec![
+                String::from("adapter enable"),
+                String::from("adapter disable"),
+                String::from("adapter show"),
+                String::from("adapter discoverable <on|limited|off> <duration>"),
+                String::from("adapter connectable <on|off>"),
+                String::from("adapter set-name <name>"),
+            ],
             description: String::from(
                 "Enable/Disable/Show default bluetooth adapter. (e.g. adapter enable)\n
-                 Discoverable On/Off (e.g. adapter discoverable on)\n
+                 Discoverable On/Limited/Off (e.g. adapter discoverable on 60)\n
                  Connectable On/Off (e.g. adapter connectable on)",
             ),
             function_pointer: CommandHandler::cmd_adapter,
@@ -160,17 +183,22 @@ fn build_commands() -> HashMap<String, CommandOption> {
                 String::from("gatt client-connect <address>"),
                 String::from("gatt client-read-phy <address>"),
                 String::from("gatt client-discover-services <address>"),
+                String::from("gatt client-discover-service-by-uuid-pts <address> <uuid>"),
                 String::from("gatt client-disconnect <address>"),
                 String::from("gatt configure-mtu <address> <mtu>"),
                 String::from("gatt set-direct-connect <true|false>"),
                 String::from("gatt set-connect-transport <Bredr|LE|Auto>"),
                 String::from("gatt set-connect-opportunistic <true|false>"),
                 String::from("gatt set-connect-phy <Phy1m|Phy2m|PhyCoded>"),
-                String::from("gatt set-auth-req <MITM|SIGNED> <enable|disable>"),
+                String::from("gatt set-auth-req <NONE|EncNoMitm|EncMitm|SignedNoMitm|SignedMitm>"),
                 String::from(
                     "gatt write-characteristic <address> <handle> <NoRsp|Write|Prepare> <value>",
                 ),
                 String::from("gatt read-characteristic <address> <handle>"),
+                String::from(
+                    "gatt read-characteristic-by-uuid <address> <uuid> <start_handle> <end_handle>",
+                ),
+                String::from("gatt register-notification <address> <handle> <enable|disable>"),
                 String::from("gatt register-server"),
             ],
             description: String::from("GATT tools"),
@@ -198,6 +226,7 @@ fn build_commands() -> HashMap<String, CommandOption> {
                 String::from("advertise set-interval <ms>"),
                 String::from("advertise set-scan-rsp <enable|disable>"),
                 String::from("advertise set-raw-data <raw-adv-data> <adv-id>"),
+                String::from("advertise set-connectable <on|off> <adv-id>"),
             ],
             description: String::from("Advertising utilities."),
             function_pointer: CommandHandler::cmd_advertise,
@@ -207,8 +236,12 @@ fn build_commands() -> HashMap<String, CommandOption> {
         String::from("socket"),
         CommandOption {
             rules: vec![
-                String::from("socket test"),
-                String::from("socket connect <addr> <l2cap|rfcomm> <psm|uuid>"),
+                String::from("socket listen <auth-required> <Bredr|LE>"),
+                String::from(
+                    "socket connect <address> <l2cap|rfcomm> <psm|uuid> <auth-required> <Bredr|LE>",
+                ),
+                String::from("socket disconnect <socket_id>"),
+                String::from("socket set-on-connect-schedule <send|resend|dump>"),
             ],
             description: String::from("Socket manager utilities."),
             function_pointer: CommandHandler::cmd_socket,
@@ -253,6 +286,27 @@ fn build_commands() -> HashMap<String, CommandOption> {
         },
     );
     command_options.insert(
+        String::from("telephony"),
+        CommandOption {
+            rules: vec![
+                String::from("telephony set-network <on|off>"),
+                String::from("telephony set-roaming <on|off>"),
+                String::from("telephony set-signal <strength>"),
+                String::from("telephony set-battery <level>"),
+                String::from("telephony <enable|disable>"),
+                String::from("telephony <incoming-call|dialing-call> <number>"),
+                String::from("telephony <answer-call|hangup-call>"),
+                String::from("telephony <set-memory-call|set-last-call> [<number>]"),
+                String::from(
+                    "telephony <release-held|release-active-accept-held|hold-active-accept-held>",
+                ),
+                String::from("telephony <audio-connect|audio-disconnect> <address>"),
+            ],
+            description: String::from("Set device telephony status."),
+            function_pointer: CommandHandler::cmd_telephony,
+        },
+    );
+    command_options.insert(
         String::from("quit"),
         CommandOption {
             rules: vec![String::from("quit")],
@@ -285,9 +339,9 @@ impl CommandHandler {
     }
 
     /// Entry point for command and arguments
-    pub fn process_cmd_line(&mut self, command: &String, args: &Vec<String>) {
+    pub fn process_cmd_line(&mut self, command: &str, args: &Vec<String>) {
         // Ignore empty line
-        match &command[..] {
+        match command {
             "" => {}
             _ => match self.command_options.get(command) {
                 Some(cmd) => {
@@ -408,11 +462,13 @@ impl CommandHandler {
                 };
                 let context = self.lock_context();
                 let adapter_dbus = context.adapter_dbus.as_ref().unwrap();
-                let qa_dbus = context.qa_dbus.as_ref().unwrap();
+                let qa_legacy_dbus = context.qa_legacy_dbus.as_ref().unwrap();
                 let name = adapter_dbus.get_name();
                 let uuids = adapter_dbus.get_uuids();
                 let is_discoverable = adapter_dbus.get_discoverable();
-                let is_connectable = qa_dbus.get_connectable();
+                let is_connectable = qa_legacy_dbus.get_connectable();
+                let alias = qa_legacy_dbus.get_alias();
+                let modalias = qa_legacy_dbus.get_modalias();
                 let discoverable_timeout = adapter_dbus.get_discoverable_timeout();
                 let cod = adapter_dbus.get_bluetooth_class();
                 let multi_adv_supported = adapter_dbus.is_multi_advertisement_supported();
@@ -432,6 +488,8 @@ impl CommandHandler {
                     .collect();
                 print_info!("Address: {}", address);
                 print_info!("Name: {}", name);
+                print_info!("Alias: {}", alias);
+                print_info!("Modalias: {}", modalias);
                 print_info!("State: {}", if enabled { "enabled" } else { "disabled" });
                 print_info!("Discoverable: {}", is_discoverable);
                 print_info!("DiscoverableTimeout: {}s", discoverable_timeout);
@@ -453,14 +511,36 @@ impl CommandHandler {
             }
             "discoverable" => match &get_arg(args, 1)?[..] {
                 "on" => {
+                    let duration = String::from(get_arg(args, 2)?)
+                        .parse::<u32>()
+                        .or(Err("Failed parsing duration."))?;
+
                     let discoverable = self
                         .lock_context()
                         .adapter_dbus
                         .as_mut()
                         .unwrap()
-                        .set_discoverable(true, 60);
+                        .set_discoverable(BtDiscMode::GeneralDiscoverable, duration);
                     print_info!(
-                        "Set discoverable for 60s: {}",
+                        "Set discoverable for {} seconds: {}",
+                        duration,
+                        if discoverable { "succeeded" } else { "failed" }
+                    );
+                }
+                "limited" => {
+                    let duration = String::from(get_arg(args, 2)?)
+                        .parse::<u32>()
+                        .or(Err("Failed parsing duration."))?;
+
+                    let discoverable = self
+                        .lock_context()
+                        .adapter_dbus
+                        .as_mut()
+                        .unwrap()
+                        .set_discoverable(BtDiscMode::LimitedDiscoverable, duration);
+                    print_info!(
+                        "Set limited discoverable for {} seconds: {}",
+                        duration,
                         if discoverable { "succeeded" } else { "failed" }
                     );
                 }
@@ -470,7 +550,7 @@ impl CommandHandler {
                         .adapter_dbus
                         .as_mut()
                         .unwrap()
-                        .set_discoverable(false, 60);
+                        .set_discoverable(BtDiscMode::NonDiscoverable, 0 /*not used*/);
                     print_info!(
                         "Turn discoverable off: {}",
                         if discoverable { "succeeded" } else { "failed" }
@@ -480,11 +560,13 @@ impl CommandHandler {
             },
             "connectable" => match &get_arg(args, 1)?[..] {
                 "on" => {
-                    let ret = self.lock_context().qa_dbus.as_mut().unwrap().set_connectable(true);
+                    let ret =
+                        self.lock_context().qa_legacy_dbus.as_mut().unwrap().set_connectable(true);
                     print_info!("Set connectable on {}", if ret { "succeeded" } else { "failed" });
                 }
                 "off" => {
-                    let ret = self.lock_context().qa_dbus.as_mut().unwrap().set_connectable(false);
+                    let ret =
+                        self.lock_context().qa_legacy_dbus.as_mut().unwrap().set_connectable(false);
                     print_info!("Set connectable off {}", if ret { "succeeded" } else { "failed" });
                 }
                 other => println!("Invalid argument for adapter connectable '{}'", other),
@@ -753,12 +835,10 @@ impl CommandHandler {
                     name: String::from(""),
                 };
                 let pin = get_arg(args, 2)?;
-                let (accept, pin) = match (&pin[..], String::from(pin).parse::<u32>()) {
-                    (_, Ok(p)) => (true, Vec::from(p.to_ne_bytes())),
+
+                let (accept, pin) = match (&pin[..], pin) {
                     ("reject", _) => (false, vec![]),
-                    _ => {
-                        return Err(format!("Failed to parse '{}'", pin).into());
-                    }
+                    (_, p) => (true, p.as_bytes().iter().cloned().collect::<Vec<u8>>()),
                 };
 
                 self.lock_context().adapter_dbus.as_mut().unwrap().set_pin(
@@ -892,6 +972,20 @@ impl CommandHandler {
                 let addr = String::from(get_arg(args, 1)?);
                 self.lock_context().gatt_dbus.as_ref().unwrap().discover_services(client_id, addr);
             }
+            "client-discover-service-by-uuid-pts" => {
+                let client_id = self
+                    .lock_context()
+                    .gatt_client_context
+                    .client_id
+                    .ok_or("GATT client is not yet registered.")?;
+                let addr = String::from(get_arg(args, 1)?);
+                let uuid = String::from(get_arg(args, 2)?);
+                self.lock_context()
+                    .gatt_dbus
+                    .as_ref()
+                    .unwrap()
+                    .btif_gattc_discover_service_by_uuid(client_id, addr, uuid);
+            }
             "configure-mtu" => {
                 let client_id = self
                     .lock_context()
@@ -944,23 +1038,18 @@ impl CommandHandler {
             }
             "set-auth-req" => {
                 let flag = match &get_arg(args, 1)?[..] {
-                    "MITM" => AuthReq::MITM,
-                    "SIGNED" => AuthReq::SIGNED,
+                    "NONE" => AuthReq::NONE,
+                    "EncNoMitm" => AuthReq::EncNoMitm,
+                    "EncMitm" => AuthReq::EncMitm,
+                    "SignedNoMitm" => AuthReq::SignedNoMitm,
+                    "SignedMitm" => AuthReq::SignedMitm,
                     _ => {
                         return Err("Failed to parse auth-req".into());
                     }
                 };
 
-                let enable = match &get_arg(args, 2)?[..] {
-                    "enable" => true,
-                    "disable" => false,
-                    _ => {
-                        return Err("Failed to parse enable".into());
-                    }
-                };
-
-                self.lock_context().gatt_client_context.auth_req.set(flag, enable);
-                println!("AuthReq: {:?}", self.lock_context().gatt_client_context.auth_req);
+                self.lock_context().gatt_client_context.auth_req = flag;
+                println!("AuthReq: {:?}", self.lock_context().gatt_client_context.get_auth_req());
             }
             "write-characteristic" => {
                 let addr = String::from(get_arg(args, 1)?);
@@ -985,7 +1074,7 @@ impl CommandHandler {
                     .client_id
                     .ok_or("GATT client is not yet registered.")?;
 
-                let auth_req = self.lock_context().gatt_client_context.get_auth_req_bits();
+                let auth_req = self.lock_context().gatt_client_context.get_auth_req().into();
 
                 self.lock_context()
                     .gatt_dbus
@@ -1004,13 +1093,65 @@ impl CommandHandler {
                     .client_id
                     .ok_or("GATT client is not yet registered.")?;
 
-                let auth_req = self.lock_context().gatt_client_context.get_auth_req_bits();
+                let auth_req = self.lock_context().gatt_client_context.get_auth_req().into();
 
                 self.lock_context()
                     .gatt_dbus
                     .as_ref()
                     .unwrap()
                     .read_characteristic(client_id, addr, handle, auth_req);
+            }
+            "read-characteristic-by-uuid" => {
+                let addr = String::from(get_arg(args, 1)?);
+                let uuid = String::from(get_arg(args, 2)?);
+                let start_handle = String::from(get_arg(args, 3)?)
+                    .parse::<i32>()
+                    .or(Err("Failed to parse start handle"))?;
+                let end_handle = String::from(get_arg(args, 4)?)
+                    .parse::<i32>()
+                    .or(Err("Failed to parse end handle"))?;
+
+                let client_id = self
+                    .lock_context()
+                    .gatt_client_context
+                    .client_id
+                    .ok_or("GATT client is not yet registered.")?;
+
+                let auth_req = self.lock_context().gatt_client_context.get_auth_req().into();
+
+                self.lock_context().gatt_dbus.as_ref().unwrap().read_using_characteristic_uuid(
+                    client_id,
+                    addr,
+                    uuid,
+                    start_handle,
+                    end_handle,
+                    auth_req,
+                );
+            }
+            "register-notification" => {
+                let addr = String::from(get_arg(args, 1)?);
+                let handle = String::from(get_arg(args, 2)?)
+                    .parse::<i32>()
+                    .or(Err("Failed to parse handle"))?;
+                let enable = match &get_arg(args, 3)?[..] {
+                    "enable" => true,
+                    "disable" => false,
+                    _ => {
+                        return Err("Failed to parse enable".into());
+                    }
+                };
+
+                let client_id = self
+                    .lock_context()
+                    .gatt_client_context
+                    .client_id
+                    .ok_or("GATT client is not yet registered.")?;
+
+                self.lock_context()
+                    .gatt_dbus
+                    .as_ref()
+                    .unwrap()
+                    .register_for_notification(client_id, addr, handle, enable);
             }
             "register-server" => {
                 let dbus_connection = self.lock_context().dbus_connection.clone();
@@ -1151,6 +1292,40 @@ impl CommandHandler {
                     context.gatt_dbus.as_mut().unwrap().set_advertising_parameters(adv_id, params);
                 }
             }
+            "set-connectable" => {
+                let connectable = match &get_arg(args, 1)?[..] {
+                    "on" => true,
+                    "off" => false,
+                    _ => false,
+                };
+
+                let adv_id = String::from(get_arg(args, 2)?)
+                    .parse::<i32>()
+                    .or(Err("Failed parsing adv_id"))?;
+
+                let mut context = self.context.lock().unwrap();
+
+                let advs: Vec<(_, _)> = context
+                    .adv_sets
+                    .iter_mut()
+                    .filter_map(|(_, s)| {
+                        if !(s.adv_id.map_or(false, |id| id == adv_id)) {
+                            return None;
+                        }
+                        s.params.connectable = connectable;
+                        Some((s.params.clone(), s.data.clone()))
+                    })
+                    .collect();
+
+                for (params, data) in advs {
+                    print_info!("Setting advertising parameters for {}", adv_id);
+                    context.gatt_dbus.as_mut().unwrap().set_advertising_parameters(adv_id, params);
+
+                    // renew the flags
+                    print_info!("Setting advertising data for {}", adv_id);
+                    context.gatt_dbus.as_mut().unwrap().set_advertising_data(adv_id, data);
+                }
+            }
             "set-scan-rsp" => {
                 let enable = match &get_arg(args, 1)?[..] {
                     "enable" => true,
@@ -1217,13 +1392,59 @@ impl CommandHandler {
         let command = get_arg(args, 0)?;
 
         match &command[..] {
-            "test" => {
-                let SocketResult { status, id } = self
-                    .lock_context()
-                    .socket_manager_dbus
-                    .as_mut()
-                    .unwrap()
-                    .listen_using_l2cap_channel(callback_id);
+            "set-on-connect-schedule" => {
+                let schedule = match &get_arg(args, 1)?[..] {
+                    "send" => SocketSchedule {
+                        num_frame: 1,
+                        send_interval: Duration::from_millis(0),
+                        disconnect_delay: Duration::from_secs(30),
+                    },
+                    "resend" => SocketSchedule {
+                        num_frame: 3,
+                        send_interval: Duration::from_millis(100),
+                        disconnect_delay: Duration::from_secs(30),
+                    },
+                    "dump" => SocketSchedule {
+                        num_frame: 0,
+                        send_interval: Duration::from_millis(0),
+                        disconnect_delay: Duration::from_secs(30),
+                    },
+                    _ => {
+                        return Err("Failed to parse schedule".into());
+                    }
+                };
+
+                self.context.lock().unwrap().socket_test_schedule = Some(schedule);
+            }
+            "listen" => {
+                let auth_required = String::from(get_arg(args, 1)?)
+                    .parse::<bool>()
+                    .or(Err("Failed to parse auth-required"))?;
+                let is_le = match &get_arg(args, 2)?[..] {
+                    "LE" => true,
+                    "Bredr" => false,
+                    _ => {
+                        return Err("Failed to parse socket type".into());
+                    }
+                };
+
+                let SocketResult { status, id } = {
+                    let mut context_proxy = self.context.lock().unwrap();
+                    let proxy = context_proxy.socket_manager_dbus.as_mut().unwrap();
+                    if auth_required {
+                        if is_le {
+                            proxy.listen_using_l2cap_le_channel(callback_id)
+                        } else {
+                            proxy.listen_using_l2cap_channel(callback_id)
+                        }
+                    } else {
+                        if is_le {
+                            proxy.listen_using_insecure_l2cap_le_channel(callback_id)
+                        } else {
+                            proxy.listen_using_insecure_l2cap_channel(callback_id)
+                        }
+                    }
+                };
 
                 if status != BtStatus::Success {
                     return Err(format!(
@@ -1242,49 +1463,78 @@ impl CommandHandler {
                     name: String::from("Socket Connect Device"),
                 };
 
-                let SocketResult { status, id } = match &sock_type[0..] {
-                    "l2cap" => {
-                        let psm = match psm_or_uuid.clone().parse::<i32>() {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return Err(CommandError::Failed(format!(
-                                    "Bad PSM given. Error={}",
-                                    e
-                                )));
-                            }
-                        };
+                let auth_required = String::from(get_arg(args, 4)?)
+                    .parse::<bool>()
+                    .or(Err("Failed to parse auth-required"))?;
 
-                        self.lock_context()
-                            .socket_manager_dbus
-                            .as_mut()
-                            .unwrap()
-                            .create_insecure_l2cap_channel(callback_id, device, psm)
-                    }
-                    "rfcomm" => {
-                        let uuid = match UuidHelper::parse_string(psm_or_uuid.clone()) {
-                            Some(uu) => uu,
-                            None => {
-                                return Err(CommandError::Failed(format!(
-                                    "Could not parse given uuid."
-                                )));
-                            }
-                        };
-
-                        self.lock_context()
-                            .socket_manager_dbus
-                            .as_mut()
-                            .unwrap()
-                            .create_insecure_rfcomm_socket_to_service_record(
-                                callback_id,
-                                device,
-                                uuid,
-                            )
-                    }
+                let is_le = match &get_arg(args, 5)?[..] {
+                    "LE" => true,
+                    "Bredr" => false,
                     _ => {
-                        return Err(CommandError::Failed(format!(
-                            "Unknown socket type: {}",
-                            sock_type
-                        )));
+                        return Err("Failed to parse socket type".into());
+                    }
+                };
+
+                let SocketResult { status, id } = {
+                    let mut context_proxy = self.context.lock().unwrap();
+                    let proxy = context_proxy.socket_manager_dbus.as_mut().unwrap();
+
+                    match &sock_type[0..] {
+                        "l2cap" => {
+                            let psm = match psm_or_uuid.clone().parse::<i32>() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    return Err(CommandError::Failed(format!(
+                                        "Bad PSM given. Error={}",
+                                        e
+                                    )));
+                                }
+                            };
+
+                            if auth_required {
+                                if is_le {
+                                    proxy.create_l2cap_le_channel(callback_id, device, psm)
+                                } else {
+                                    proxy.create_l2cap_channel(callback_id, device, psm)
+                                }
+                            } else {
+                                if is_le {
+                                    proxy.create_insecure_l2cap_le_channel(callback_id, device, psm)
+                                } else {
+                                    proxy.create_insecure_l2cap_channel(callback_id, device, psm)
+                                }
+                            }
+                        }
+                        "rfcomm" => {
+                            let uuid = match UuidHelper::parse_string(psm_or_uuid.clone()) {
+                                Some(uu) => uu,
+                                None => {
+                                    return Err(CommandError::Failed(format!(
+                                        "Could not parse given uuid."
+                                    )));
+                                }
+                            };
+
+                            if auth_required {
+                                proxy.create_rfcomm_socket_to_service_record(
+                                    callback_id,
+                                    device,
+                                    uuid,
+                                )
+                            } else {
+                                proxy.create_insecure_rfcomm_socket_to_service_record(
+                                    callback_id,
+                                    device,
+                                    uuid,
+                                )
+                            }
+                        }
+                        _ => {
+                            return Err(CommandError::Failed(format!(
+                                "Unknown socket type: {}",
+                                sock_type
+                            )));
+                        }
                     }
                 };
 
@@ -1292,8 +1542,8 @@ impl CommandHandler {
                     return Err(CommandError::Failed(format!("Failed to create socket with status={:?} against {}, type {}, with psm/uuid {}",
                         status, addr, sock_type, psm_or_uuid)));
                 } else {
-                    return Err(CommandError::Failed(format!("Called create socket with result ({:?}, {}) against {}, type {}, with psm/uuid {}",
-                    status, id, addr, sock_type, psm_or_uuid)));
+                    print_info!("Called create socket with result ({:?}, {}) against {}, type {}, with psm/uuid {}",
+                    status, id, addr, sock_type, psm_or_uuid);
                 }
             }
 
@@ -1325,7 +1575,7 @@ impl CommandHandler {
                     .parse::<u8>()
                     .or(Err("Failed parsing report_id"))?;
 
-                self.context.lock().unwrap().qa_dbus.as_mut().unwrap().get_hid_report(
+                self.context.lock().unwrap().qa_legacy_dbus.as_mut().unwrap().get_hid_report(
                     addr,
                     report_type,
                     report_id,
@@ -1343,7 +1593,7 @@ impl CommandHandler {
                 };
                 let report_value = String::from(get_arg(args, 3)?);
 
-                self.context.lock().unwrap().qa_dbus.as_mut().unwrap().set_hid_report(
+                self.context.lock().unwrap().qa_legacy_dbus.as_mut().unwrap().set_hid_report(
                     addr,
                     report_type,
                     report_value,
@@ -1353,7 +1603,13 @@ impl CommandHandler {
                 let addr = String::from(get_arg(args, 1)?);
                 let data = String::from(get_arg(args, 2)?);
 
-                self.context.lock().unwrap().qa_dbus.as_mut().unwrap().send_hid_data(addr, data);
+                self.context
+                    .lock()
+                    .unwrap()
+                    .qa_legacy_dbus
+                    .as_mut()
+                    .unwrap()
+                    .send_hid_data(addr, data);
             }
             _ => return Err(CommandError::InvalidArgs),
         };
@@ -1401,6 +1657,222 @@ impl CommandHandler {
             }
         }
 
+        Ok(())
+    }
+
+    fn cmd_telephony(&mut self, args: &Vec<String>) -> CommandResult {
+        if !self.context.lock().unwrap().adapter_ready {
+            return Err(self.adapter_not_ready());
+        }
+
+        match &get_arg(args, 0)?[..] {
+            "set-network" => {
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_network_available(match &get_arg(args, 1)?[..] {
+                        "on" => true,
+                        "off" => false,
+                        other => {
+                            return Err(format!("Invalid argument '{}'", other).into());
+                        }
+                    });
+            }
+            "set-roaming" => {
+                self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().set_roaming(
+                    match &get_arg(args, 1)?[..] {
+                        "on" => true,
+                        "off" => false,
+                        other => {
+                            return Err(format!("Invalid argument '{}'", other).into());
+                        }
+                    },
+                );
+            }
+            "set-signal" => {
+                let strength = String::from(get_arg(args, 1)?)
+                    .parse::<i32>()
+                    .or(Err("Failed parsing signal strength"))?;
+                if strength < 0 || strength > 5 {
+                    return Err(
+                        format!("Invalid signal strength, got {}, want 0 to 5", strength).into()
+                    );
+                }
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_signal_strength(strength);
+            }
+            "set-battery" => {
+                let level = String::from(get_arg(args, 1)?)
+                    .parse::<i32>()
+                    .or(Err("Failed parsing battery level"))?;
+                if level < 0 || level > 5 {
+                    return Err(format!("Invalid battery level, got {}, want 0 to 5", level).into());
+                }
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_battery_level(level);
+            }
+            "enable" => {
+                let mut context = self.lock_context();
+                context.telephony_dbus.as_mut().unwrap().set_phone_ops_enabled(true);
+                if context.mps_sdp_handle.is_none() {
+                    let success = context
+                        .adapter_dbus
+                        .as_mut()
+                        .unwrap()
+                        .create_sdp_record(BtSdpRecord::Mps(BtSdpMpsRecord::default()));
+                    if !success {
+                        return Err(format!("Failed to create SDP record").into());
+                    }
+                }
+            }
+            "disable" => {
+                let mut context = self.lock_context();
+                context.telephony_dbus.as_mut().unwrap().set_phone_ops_enabled(false);
+                if let Some(handle) = context.mps_sdp_handle.take() {
+                    let success = context.adapter_dbus.as_mut().unwrap().remove_sdp_record(handle);
+                    if !success {
+                        return Err(format!("Failed to remove SDP record").into());
+                    }
+                }
+            }
+            "incoming-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .incoming_call(String::from(get_arg(args, 1)?));
+                if !success {
+                    return Err("IncomingCall failed".into());
+                }
+            }
+            "dialing-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .dialing_call(String::from(get_arg(args, 1)?));
+                if !success {
+                    return Err("DialingCall failed".into());
+                }
+            }
+            "answer-call" => {
+                let success =
+                    self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().answer_call();
+                if !success {
+                    return Err("AnswerCall failed".into());
+                }
+            }
+            "hangup-call" => {
+                let success =
+                    self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().hangup_call();
+                if !success {
+                    return Err("HangupCall failed".into());
+                }
+            }
+            "set-memory-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_memory_call(get_arg(args, 1).ok().map(String::from));
+                if !success {
+                    return Err("SetMemoryCall failed".into());
+                }
+            }
+            "set-last-call" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .set_last_call(get_arg(args, 1).ok().map(String::from));
+                if !success {
+                    return Err("SetLastCall failed".into());
+                }
+            }
+            "release-held" => {
+                let success =
+                    self.context.lock().unwrap().telephony_dbus.as_mut().unwrap().release_held();
+                if !success {
+                    return Err("ReleaseHeld failed".into());
+                }
+            }
+            "release-active-accept-held" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .release_active_accept_held();
+                if !success {
+                    return Err("ReleaseActiveAcceptHeld failed".into());
+                }
+            }
+            "hold-active-accept-held" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .hold_active_accept_held();
+                if !success {
+                    return Err("HoldActiveAcceptHeld failed".into());
+                }
+            }
+            "audio-connect" => {
+                let success = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .audio_connect(String::from(get_arg(args, 1)?));
+                if !success {
+                    return Err("ConnectAudio failed".into());
+                }
+            }
+            "audio-disconnect" => {
+                self.context
+                    .lock()
+                    .unwrap()
+                    .telephony_dbus
+                    .as_mut()
+                    .unwrap()
+                    .audio_disconnect(String::from(get_arg(args, 1)?));
+            }
+            other => {
+                return Err(format!("Invalid argument '{}'", other).into());
+            }
+        }
         Ok(())
     }
 }

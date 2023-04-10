@@ -80,6 +80,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @TargetApi(19)
 public class BluetoothMapContentObserver {
@@ -1469,7 +1470,7 @@ public class BluetoothMapContentObserver {
                                 long timestamp = c.getLong(c.getColumnIndex(Sms.DATE));
                                 String date = BluetoothMapUtils.getDateTimeString(timestamp);
                                 if (BluetoothMapUtils.isDateTimeOlderThanOneYear(timestamp)) {
-                                    // Skip sending new message events older than one year
+                                    // Skip sending message events older than one year
                                     listChanged = false;
                                     msgListSms.remove(id);
                                     continue;
@@ -1632,7 +1633,6 @@ public class BluetoothMapContentObserver {
 
                         if (msg == null) {
                             /* New message - only notify on retrieve conf */
-                            listChanged = true;
                             if (getMmsFolderName(type).equalsIgnoreCase(
                                     BluetoothMapContract.FOLDER_NAME_INBOX)
                                     && mtype != MESSAGE_TYPE_RETRIEVE_CONF) {
@@ -1644,11 +1644,13 @@ public class BluetoothMapContentObserver {
                             if (mTransmitEvents && // extract contact details only if needed
                                     mMapEventReportVersion
                                             != BluetoothMapUtils.MAP_EVENT_REPORT_V10) {
-                                long timestamp = c.getLong(c.getColumnIndex(Mms.DATE));
+                                // MMS date field is in seconds
+                                long timestamp =
+                                        TimeUnit.SECONDS.toMillis(
+                                            c.getLong(c.getColumnIndex(Mms.DATE)));
                                 String date = BluetoothMapUtils.getDateTimeString(timestamp);
                                 if (BluetoothMapUtils.isDateTimeOlderThanOneYear(timestamp)) {
                                     // Skip sending new message events older than one year
-                                    listChanged = false;
                                     msgListMms.remove(id);
                                     continue;
                                 }
@@ -1692,6 +1694,7 @@ public class BluetoothMapContentObserver {
                                 evt = new Event(EVENT_TYPE_NEW, id, getMmsFolderName(type), null,
                                         TYPE.MMS);
                             }
+                            listChanged = true;
 
                             sendEvent(evt);
                         } else {

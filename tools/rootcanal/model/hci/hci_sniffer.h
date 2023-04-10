@@ -28,8 +28,8 @@
 namespace rootcanal {
 
 enum class PacketDirection : uint8_t {
-  CONTROLLER_TO_HOST = 0,
-  HOST_TO_CONTROLLER = 1,
+  HOST_TO_CONTROLLER = 0,
+  CONTROLLER_TO_HOST = 1,
 };
 
 // A Hci Transport that logs all the in and out going
@@ -66,7 +66,7 @@ class HciSniffer : public HciTransport {
                          PacketCallback iso_callback,
                          CloseCallback close_callback) override;
 
-  void TimerTick() override;
+  void Tick() override;
 
   void Close() override;
 

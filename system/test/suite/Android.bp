@@ -32,7 +32,6 @@ cc_defaults {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/utils/include",
         "packages/modules/Bluetooth/system/vnd/include",
         "system/libfmq/include",
         "system/libhwbinder/include",
@@ -70,7 +69,6 @@ cc_defaults {
         "libaudio-a2dp-hw-utils",
         "libbluetooth-dumpsys",
         "libbluetooth-types",
-        "libbluetoothtbd_hal",
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
@@ -88,7 +86,7 @@ cc_defaults {
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-stack-core",
-        "libbt-utils",
+        "libcom.android.sysprop.bluetooth",
         "libflatbuffers-cpp",
         "libFraunhoferAAC",
         "libg722codec",
@@ -106,7 +104,7 @@ cc_defaults {
     target: {
         android: {
             shared_libs: [
-                "android.hardware.bluetooth.audio-V2-ndk",
+                "android.hardware.bluetooth.audio-V3-ndk",
             ],
         },
     },
@@ -118,10 +116,15 @@ cc_test {
     defaults: [
         "net_test_defaults",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     srcs: [
         "adapter/adapter_unittest.cc",
         "gatt/gatt_test.cc",
         "gatt/gatt_unittest.cc",
+    ],
+    static_libs: [
+        "android.hardware.bluetooth@1.0",
+        "android.hardware.bluetooth@1.1",
     ],
 }

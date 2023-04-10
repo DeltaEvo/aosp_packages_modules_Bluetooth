@@ -43,6 +43,14 @@
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;
+extern void gatt_consolidate(const RawAddress& identity_addr,
+                             const RawAddress& rpa);
+
+namespace {
+
+constexpr char kBtmLogTag[] = "BOND";
+
+}
 
 /*******************************************************************************
  *
@@ -166,11 +174,9 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
   if (p_dev_rec != NULL) {
     RawAddress bda = p_dev_rec->bd_addr;
 
-    if (p_dev_rec->ble.in_controller_list & BTM_ACCEPTLIST_BIT) {
-      LOG_INFO("Remove device %s from filter accept list before delete record",
-               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-      BTM_AcceptlistRemove(p_dev_rec->bd_addr);
-    }
+    LOG_INFO("Remove device %s from filter accept list before delete record",
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    BTM_AcceptlistRemove(p_dev_rec->bd_addr);
 
     /* Clear out any saved BLE keys */
     btm_sec_clear_ble_keys(p_dev_rec);
@@ -178,6 +184,11 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
     /* Tell controller to get rid of the link key, if it has one stored */
     BTM_DeleteStoredLinkKey(&bda, NULL);
     LOG_INFO("%s %s complete", __func__, ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    BTM_LogHistory(
+        kBtmLogTag, bd_addr, "Device removed",
+        base::StringPrintf("device_type:%s bond_type:%s",
+                           DeviceTypeText(p_dev_rec->device_type).c_str(),
+                           bond_type_text(p_dev_rec->bond_type).c_str()));
   } else {
     LOG_WARN("%s Unable to delete link key for unknown device %s", __func__,
              ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
@@ -375,7 +386,7 @@ tBTM_SEC_DEV_REC* btm_find_dev(const RawAddress& bd_addr) {
 
 static bool has_lenc_and_address_is_equal(void* data, void* context) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
-  if (!(p_dev_rec->ble.key_type & BTM_LE_KEY_LENC)) return false;
+  if (!(p_dev_rec->ble.key_type & BTM_LE_KEY_LENC)) return true;
 
   return is_address_equal(data, context);
 }
@@ -456,6 +467,12 @@ void btm_consolidate_dev(tBTM_SEC_DEV_REC* p_target_rec) {
   }
 }
 
+BTM_CONSOLIDATION_CB* btm_consolidate_cb = nullptr;
+
+void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* cb) {
+  btm_consolidate_cb = cb;
+}
+
 /* combine security records of established LE connections after Classic pairing
  * succeeded. */
 void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
@@ -502,11 +519,16 @@ void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
       /* remove the old LE record */
       wipe_secrets_and_remove(p_dev_rec);
 
+      btm_acl_consolidate(bd_addr, ble_conn_addr);
+      L2CA_Consolidate(bd_addr, ble_conn_addr);
+      gatt_consolidate(bd_addr, ble_conn_addr);
+      if (btm_consolidate_cb) btm_consolidate_cb(bd_addr, ble_conn_addr);
+
       /* To avoid race conditions between central/peripheral starting encryption
        * at same time, initiate it just from central. */
       if (L2CA_GetBleConnRole(ble_conn_addr) == HCI_ROLE_CENTRAL) {
         LOG_INFO("Will encrypt existing connection");
-        BTM_SetEncryption(ble_conn_addr, BT_TRANSPORT_LE, nullptr, nullptr,
+        BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, nullptr, nullptr,
                           BTM_BLE_SEC_ENCRYPT);
       }
     }
@@ -608,6 +630,7 @@ tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void) {
   p_dev_rec->bond_type = tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN;
   p_dev_rec->timestamp = btm_cb.dev_rec_count++;
   p_dev_rec->rmt_io_caps = BTM_IO_CAP_UNKNOWN;
+  p_dev_rec->suggested_tx_octets = 0;
 
   return p_dev_rec;
 }
@@ -649,4 +672,26 @@ bool btm_set_bond_type_dev(const RawAddress& bd_addr,
 
   p_dev_rec->bond_type = bond_type;
   return true;
+}
+
+/*******************************************************************************
+ *
+ * Function         btm_get_sec_dev_rec
+ *
+ * Description      Get security device records satisfying given filter
+ *
+ * Returns          A vector containing pointers of security device records
+ *
+ ******************************************************************************/
+std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
+  std::vector<tBTM_SEC_DEV_REC*> result{};
+
+  list_node_t* end = list_end(btm_cb.sec_dev_rec);
+  for (list_node_t* node = list_begin(btm_cb.sec_dev_rec); node != end;
+       node = list_next(node)) {
+    tBTM_SEC_DEV_REC* p_dev_rec =
+        static_cast<tBTM_SEC_DEV_REC*>(list_node(node));
+    result.push_back(p_dev_rec);
+  }
+  return result;
 }

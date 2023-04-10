@@ -217,6 +217,8 @@ void smp_send_app_cback(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
           break;
 
         // Expected, but nothing to do
+        case SMP_NC_REQ_EVT:
+        case SMP_SC_OOB_REQ_EVT:
         case SMP_SC_LOC_OOB_DATA_UP_EVT:
         case SMP_LE_ADDR_ASSOC_EVT:
           break;
@@ -573,7 +575,7 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       p_cb->local_i_key = p_cb->peer_i_key;
       p_cb->local_r_key = p_cb->peer_r_key;
 
-      p_cb->cb_evt = SMP_SEC_REQUEST_EVT;
+      p_cb->cb_evt =  SMP_IO_CAP_REQ_EVT;
     } else /* update local i/r key according to pairing request */
     {
       /* pairing started with this side (peripheral) sending Security Request */

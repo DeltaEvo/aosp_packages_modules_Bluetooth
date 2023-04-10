@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
-#include <base/callback.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <hardware/bt_gatt_types.h>
@@ -24,6 +24,7 @@
 
 #include <list>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -91,6 +92,7 @@ extern bool gatt_profile_get_eatt_support(const RawAddress& remote_bda);
 namespace {
 class HasClientImpl;
 HasClientImpl* instance;
+std::mutex instance_mutex;
 
 /**
  * -----------------------------------------------------------------------------
@@ -233,7 +235,10 @@ class HasClientImpl : public HasClient {
         callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, addr);
       } else {
         /* Removes active connection. */
-        if (is_connecting_actively) BTA_GATTC_CancelOpen(gatt_if_, addr, true);
+        if (is_connecting_actively) {
+          BTA_GATTC_CancelOpen(gatt_if_, addr, true);
+          callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, addr);
+        }
       }
 
       /* Removes all registrations for connection. */
@@ -2109,6 +2114,7 @@ alarm_callback_t HasCtpGroupOpCoordinator::cb = [](void*) {};
 
 void HasClient::Initialize(bluetooth::has::HasClientCallbacks* callbacks,
                            base::Closure initCb) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     LOG(ERROR) << "Already initialized!";
     return;
@@ -2137,6 +2143,7 @@ void HasClient::AddFromStorage(const RawAddress& addr, uint8_t features,
 };
 
 void HasClient::CleanUp() {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   HasClientImpl* ptr = instance;
   instance = nullptr;
 
@@ -2149,6 +2156,7 @@ void HasClient::CleanUp() {
 };
 
 void HasClient::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Hearing Access Service Client:\n");
   if (instance)
     instance->Dump(fd);

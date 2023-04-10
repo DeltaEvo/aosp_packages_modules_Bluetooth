@@ -27,8 +27,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -58,6 +56,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "stack/include/l2cap_security_interface.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/smp_api.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Original usings
@@ -296,6 +295,19 @@ struct BTM_SecAddBleDevice {
   };
 };
 extern struct BTM_SecAddBleDevice BTM_SecAddBleDevice;
+
+// Name: BTM_GetRemoteDeviceName
+// Params: const RawAddress& bd_addr, BD_NAME bd_name
+// Return: bool
+struct BTM_GetRemoteDeviceName {
+  static bool return_value;
+  std::function<bool(const RawAddress& bd_addr, BD_NAME bd_name)> body{
+      [](const RawAddress& bd_addr, BD_NAME bd_name) { return return_value; }};
+  bool operator()(const RawAddress& bd_addr, BD_NAME bd_name) {
+    return body(bd_addr, bd_name);
+  };
+};
+extern struct BTM_GetRemoteDeviceName BTM_GetRemoteDeviceName;
 
 // Name: BTM_SecAddBleKey
 // Params: const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,

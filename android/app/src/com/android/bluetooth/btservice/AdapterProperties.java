@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2016-2017 The Linux Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +20,9 @@ package com.android.bluetooth.btservice;
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.BLUETOOTH_SCAN;
 
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
+import android.app.BroadcastOptions;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dpSink;
 import android.bluetooth.BluetoothAdapter;
@@ -44,6 +47,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Bundle;
 import android.os.ParcelUuid;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -55,6 +59,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
+import com.android.modules.utils.build.SdkLevel;
 
 import com.google.common.collect.EvictingQueue;
 
@@ -96,6 +101,8 @@ class AdapterProperties {
 
     private static final int SCAN_MODE_CHANGES_MAX_SIZE = 10;
     private EvictingQueue<String> mScanModeChanges;
+    private CopyOnWriteArrayList<String> mAllowlistedPlayers =
+            new CopyOnWriteArrayList<String>();
 
     private int mProfilesConnecting, mProfilesConnected, mProfilesDisconnecting;
     private final HashMap<Integer, Pair<Integer, Integer>> mProfileConnectionState =
@@ -127,6 +134,7 @@ class AdapterProperties {
     private boolean mIsLeExtendedAdvertisingSupported;
     private boolean mIsLePeriodicAdvertisingSupported;
     private int mLeMaximumAdvertisingDataLength;
+    private boolean mIsOffloadedTransportDiscoveryDataScanSupported;
 
     private int mIsDynamicAudioBufferSizeSupported;
     private int mDynamicAudioBufferSizeSupportedCodecsGroup1;
@@ -263,6 +271,7 @@ class AdapterProperties {
         mBondedDevices.clear();
         mScanModeChanges.clear();
         invalidateBluetoothCaches();
+        mAllowlistedPlayers.clear();
     }
 
     private static void invalidateGetProfileConnectionStateCache() {
@@ -575,6 +584,14 @@ class AdapterProperties {
         return mTotNumOfTrackableAdv;
     }
 
+
+    /**
+     * @return the isOffloadedTransportDiscoveryDataScanSupported
+     */
+    public boolean isOffloadedTransportDiscoveryDataScanSupported() {
+        return mIsOffloadedTransportDiscoveryDataScanSupported;
+    }
+
     /**
      * @return the maximum number of connected audio devices
      */
@@ -700,6 +717,24 @@ class AdapterProperties {
         }
     }
 
+     /**
+     * @return the mAllowlistedPlayers
+     */
+    String[] getAllowlistedMediaPlayers() {
+        String[] AllowlistedPlayersList = new String[0];
+        try {
+            AllowlistedPlayersList = mAllowlistedPlayers.toArray(AllowlistedPlayersList);
+        } catch (ArrayStoreException ee) {
+            errorLog("Error retrieving Allowlisted Players array");
+        }
+        Log.d(TAG, "getAllowlistedMediaPlayers: numAllowlistedPlayers = "
+                                        + AllowlistedPlayersList.length);
+        for (int i = 0; i < AllowlistedPlayersList.length; i++) {
+            Log.d(TAG, "players :" + AllowlistedPlayersList[i]);
+        }
+        return AllowlistedPlayersList;
+    }
+
     long discoveryEndMillis() {
         return mDiscoveryEndMs;
     }
@@ -713,16 +748,18 @@ class AdapterProperties {
         BluetoothDevice device = connIntent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         int prevState = connIntent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
         int state = connIntent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
+        int metricId = mService.getMetricId(device);
         if (state == BluetoothProfile.STATE_CONNECTING) {
             BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_DEVICE_NAME_REPORTED,
-                    mService.getMetricId(device), device.getName());
+                    metricId, device.getName());
+            MetricsLogger.getInstance().logSanitizedBluetoothDeviceName(metricId, device.getName());
         }
         Log.d(TAG,
                 "PROFILE_CONNECTION_STATE_CHANGE: profile=" + profile + ", device=" + device + ", "
                         + prevState + " -> " + state);
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_CONNECTION_STATE_CHANGED, state,
                 0 /* deprecated */, profile, mService.obfuscateAddress(device),
-                mService.getMetricId(device), 0, -1);
+                metricId, 0, -1);
 
         if (!isNormalStateTransition(prevState, state)) {
             Log.w(TAG,
@@ -911,6 +948,15 @@ class AdapterProperties {
         }
     }
 
+    void updateAllowlistedMediaPlayers(String playername) {
+        Log.d(TAG, "updateAllowlistedMediaPlayers ");
+
+        if (!mAllowlistedPlayers.contains(playername)) {
+            Log.d(TAG, "Adding to Allowlisted Players list:" + playername);
+            mAllowlistedPlayers.add(playername);
+        }
+    }
+
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     void adapterPropertyChangedCallback(int[] types, byte[][] values) {
         Intent intent;
@@ -958,7 +1004,7 @@ class AdapterProperties {
                         intent = new Intent(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
                         intent.putExtra(BluetoothAdapter.EXTRA_SCAN_MODE, mScanMode);
                         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-                        mService.sendBroadcast(intent, BLUETOOTH_SCAN,
+                        Utils.sendBroadcast(mService, intent, BLUETOOTH_SCAN,
                                 Utils.getTempAllowlistBroadcastOptions());
                         debugLog("Scan Mode:" + mScanMode);
                         break;
@@ -999,6 +1045,23 @@ class AdapterProperties {
                         debugLog("mLocalIOCapabilityBLE set to " + mLocalIOCapabilityBLE);
                         break;
 
+                    case AbstractionLayer.BT_PROPERTY_WL_MEDIA_PLAYERS_LIST:
+                        int pos = 0;
+                        for (int j = 0; j < val.length; j++) {
+                            if (val[j] != 0) {
+                                continue;
+                            }
+                            int name_len = j - pos;
+
+                            byte[] buf = new byte[name_len];
+                            System.arraycopy(val, pos, buf, 0, name_len);
+                            String player_name = new String(buf, 0, name_len);
+                            Log.d(TAG, "player_name: "  +  player_name);
+                            updateAllowlistedMediaPlayers(player_name);
+                            pos += (name_len + 1);
+                        }
+                        break;
+
                     default:
                         errorLog("Property change not handled in Java land:" + type);
                 }
@@ -1031,6 +1094,7 @@ class AdapterProperties {
         mIsLeConnectedIsochronousStreamCentralSupported = ((0xFF & ((int) val[25])) != 0);
         mIsLeIsochronousBroadcasterSupported = ((0xFF & ((int) val[26])) != 0);
         mIsLePeriodicAdvertisingSyncTransferRecipientSupported = ((0xFF & ((int) val[27])) != 0);
+        mIsOffloadedTransportDiscoveryDataScanSupported = ((0x01 & ((int) val[28])) != 0);
 
         Log.d(TAG, "BT_PROPERTY_LOCAL_LE_FEATURES: update from BT controller"
                 + " mNumOfAdvertisementInstancesSupported = "
@@ -1058,7 +1122,9 @@ class AdapterProperties {
                 + " mIsLeIsochronousBroadcasterSupported = "
                 + mIsLeIsochronousBroadcasterSupported
                 + " mIsLePeriodicAdvertisingSyncTransferRecipientSupported = "
-                + mIsLePeriodicAdvertisingSyncTransferRecipientSupported);
+                + mIsLePeriodicAdvertisingSyncTransferRecipientSupported
+                + " mIsOffloadedTransportDiscoveryDataScanSupported = "
+                + mIsOffloadedTransportDiscoveryDataScanSupported);
         invalidateIsOffloadedFilteringSupportedCache();
     }
 
@@ -1119,16 +1185,28 @@ class AdapterProperties {
                 mService.clearDiscoveringPackages();
                 mDiscoveryEndMs = System.currentTimeMillis();
                 intent = new Intent(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
-                mService.sendBroadcast(intent, BLUETOOTH_SCAN,
-                        Utils.getTempAllowlistBroadcastOptions());
+                Utils.sendBroadcast(mService, intent, BLUETOOTH_SCAN,
+                        getBroadcastOptionsForDiscoveryFinished());
             } else if (state == AbstractionLayer.BT_DISCOVERY_STARTED) {
                 mDiscovering = true;
                 mDiscoveryEndMs = System.currentTimeMillis() + DEFAULT_DISCOVERY_TIMEOUT_MS;
                 intent = new Intent(BluetoothAdapter.ACTION_DISCOVERY_STARTED);
-                mService.sendBroadcast(intent, BLUETOOTH_SCAN,
+                Utils.sendBroadcast(mService, intent, BLUETOOTH_SCAN,
                         Utils.getTempAllowlistBroadcastOptions());
             }
         }
+    }
+
+    /**
+     * @return broadcast options for ACTION_DISCOVERY_FINISHED broadcast
+     */
+    private static @NonNull Bundle getBroadcastOptionsForDiscoveryFinished() {
+        final BroadcastOptions options = Utils.getTempBroadcastOptions();
+        if (SdkLevel.isAtLeastU()) {
+            options.setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT);
+            options.setDeferralPolicy(BroadcastOptions.DEFERRAL_POLICY_UNTIL_ACTIVE);
+        }
+        return options.toBundle();
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)

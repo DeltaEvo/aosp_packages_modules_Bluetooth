@@ -20,7 +20,7 @@
 
 #include "btif/include/btif_av.h"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/a2dp/enums.pb.h>
@@ -49,11 +49,13 @@
 #include "btif_metrics_logging.h"
 #include "common/metrics.h"
 #include "common/state_machine.h"
+#include "device/include/device_iot_config.h"
 #include "hardware/bt_av.h"
 #include "include/hardware/bt_rc.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
+#include "stack/include/avrc_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btu.h"  // do_in_main_thread
@@ -1516,6 +1518,18 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
       BTA_AvOpen(peer_.PeerAddress(), peer_.BtaHandle(), true,
                  peer_.LocalUuidServiceClass());
       peer_.StateMachine().TransitionTo(BtifAvStateMachine::kStateOpening);
+      if (event == BTIF_AV_CONNECT_REQ_EVT) {
+        DEVICE_IOT_CONFIG_ADDR_SET_INT(
+            peer_.PeerAddress(), IOT_CONF_KEY_A2DP_ROLE,
+            (peer_.LocalUuidServiceClass() == UUID_SERVCLASS_AUDIO_SOURCE)
+                ? IOT_CONF_VAL_A2DP_ROLE_SINK
+                : IOT_CONF_VAL_A2DP_ROLE_SOURCE);
+        DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(peer_.PeerAddress(),
+                                           IOT_CONF_KEY_A2DP_CONN_COUNT);
+      } else if (event == BTA_AV_PENDING_EVT) {
+        DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(peer_.PeerAddress(),
+                                           IOT_CONF_KEY_A2DP_CONN_COUNT);
+      }
     } break;
     case BTIF_AV_AVRCP_OPEN_EVT:
     case BTA_AV_RC_OPEN_EVT: {
@@ -1640,6 +1654,8 @@ bool BtifAvStateMachine::StateIdle::ProcessEvent(uint32_t event, void* p_data) {
                                      BTAV_CONNECTION_STATE_DISCONNECTED,
                                      bt_status_t::BT_STATUS_FAIL, status);
         peer_.StateMachine().TransitionTo(BtifAvStateMachine::kStateIdle);
+        DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(peer_.PeerAddress(),
+                                           IOT_CONF_KEY_A2DP_CONN_FAIL_COUNT);
       }
       btif_queue_advance();
     } break;
@@ -1785,6 +1801,8 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
           if (peer_handle != BTRC_HANDLE_NONE) {
             BTA_AvCloseRc(peer_handle);
           }
+          DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(peer_.PeerAddress(),
+                                             IOT_CONF_KEY_A2DP_CONN_FAIL_COUNT);
         }
         av_state = BtifAvStateMachine::kStateIdle;
         // Report the connection state to the application
@@ -1869,6 +1887,8 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
       peer_.StateMachine().TransitionTo(BtifAvStateMachine::kStateIdle);
       log_counter_metrics_btif(
           android::bluetooth::CodePathCounterKeyEnum::A2DP_CONNECTION_CLOSE, 1);
+      DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(peer_.PeerAddress(),
+                                         IOT_CONF_KEY_A2DP_CONN_FAIL_COUNT);
       if (peer_.SelfInitiatedConnection()) {
         btif_queue_advance();
       }
@@ -1880,6 +1900,8 @@ bool BtifAvStateMachine::StateOpening::ProcessEvent(uint32_t event,
                                    BTAV_CONNECTION_STATE_DISCONNECTED,
                                    bt_status_t::BT_STATUS_FAIL, BTA_AV_FAIL);
       peer_.StateMachine().TransitionTo(BtifAvStateMachine::kStateIdle);
+      DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(peer_.PeerAddress(),
+                                         IOT_CONF_KEY_A2DP_CONN_FAIL_COUNT);
       log_counter_metrics_btif(android::bluetooth::CodePathCounterKeyEnum::
                                    A2DP_CONNECTION_DISCONNECTED,
                                1);
@@ -3392,9 +3414,10 @@ bt_status_t btif_av_source_execute_service(bool enable) {
       features |= BTA_AV_FEAT_DELAY_RPT;
     }
 
-#if (AVRC_ADV_CTRL_INCLUDED == TRUE)
-    features |= BTA_AV_FEAT_RCCT | BTA_AV_FEAT_ADV_CTRL | BTA_AV_FEAT_BROWSE;
-#endif
+    if (avrcp_absolute_volume_is_enabled()) {
+      features |= BTA_AV_FEAT_RCCT | BTA_AV_FEAT_ADV_CTRL | BTA_AV_FEAT_BROWSE;
+    }
+
     BTA_AvEnable(features, bta_av_source_callback);
     btif_av_source.RegisterAllBtaHandles();
     return BT_STATUS_SUCCESS;

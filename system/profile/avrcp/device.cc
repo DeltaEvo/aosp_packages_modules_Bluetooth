@@ -680,6 +680,11 @@ void Device::MessageReceived(uint8_t label, std::shared_ptr<Packet> pkt) {
     case Opcode::SUBUNIT_INFO: {
     } break;
     case Opcode::PASS_THROUGH: {
+      /** Newavrcp not passthrough response pkt. @{ */
+      if (pkt->GetCType() == CType::ACCEPTED || pkt->GetCType() == CType::REJECTED
+          || pkt->GetCType() == CType::NOT_IMPLEMENTED)
+        break;
+      /** @} */
       auto pass_through_packet = Packet::Specialize<PassThroughPacket>(pkt);
 
       if (!pass_through_packet->IsValid()) {
@@ -1099,6 +1104,8 @@ void Device::GetItemAttributesVFSResponse(
                                                                browse_mtu_);
 
   ListItem item_requested;
+  item_requested.type = ListItem::SONG;
+
   for (const auto& temp : item_list) {
     if ((temp.type == ListItem::FOLDER && temp.folder.media_id == media_id) ||
         (temp.type == ListItem::SONG && temp.song.media_id == media_id)) {

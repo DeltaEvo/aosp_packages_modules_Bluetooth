@@ -26,6 +26,7 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemProperties;
 import android.provider.CallLog.Calls;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
 import android.provider.ContactsContract.PhoneLookup;
@@ -107,7 +108,9 @@ public class AtPhonebook {
 
     public AtPhonebook(Context context, HeadsetNativeInterface nativeInterface) {
         mContext = context;
-        mPairingPackage = context.getString(R.string.pairing_ui_package);
+        mPairingPackage = SystemProperties.get(
+            Utils.PAIRING_UI_PROPERTY,
+            context.getString(R.string.pairing_ui_package));
         mContentResolver = context.getContentResolver();
         mNativeInterface = nativeInterface;
         mPhonebooks.put("DC", new PhonebookResult());  // dialled calls
@@ -655,7 +658,7 @@ public class AtPhonebook {
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, remoteDevice);
             // Leave EXTRA_PACKAGE_NAME and EXTRA_CLASS_NAME field empty.
             // BluetoothHandsfree's broadcast receiver is anonymous, cannot be targeted.
-            mContext.sendOrderedBroadcast(intent, BLUETOOTH_CONNECT,
+            Utils.sendOrderedBroadcast(mContext, intent, BLUETOOTH_CONNECT,
                     Utils.getTempAllowlistBroadcastOptions(), null, null,
                     Activity.RESULT_OK, null, null);
         }

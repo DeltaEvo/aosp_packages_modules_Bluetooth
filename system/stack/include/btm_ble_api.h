@@ -25,7 +25,7 @@
 #ifndef BTM_BLE_API_H
 #define BTM_BLE_API_H
 
-#include <base/callback_forward.h>
+#include <base/functional/callback_forward.h>
 #include <hardware/bt_common_types.h>
 
 #include <cstdint>
@@ -462,6 +462,18 @@ extern void BTM_ReadDevInfo(const RawAddress& remote_bda,
 
 /*******************************************************************************
  *
+ * Function         BTM_GetRemoteDeviceName
+ *
+ * Description      This function is called to get the dev name of remote device
+ *                  from NV
+ *
+ * Returns          true if success; otherwise failed.
+ *
+ *******************************************************************************/
+extern bool BTM_GetRemoteDeviceName(const RawAddress& bda, BD_NAME bd_name);
+
+/*******************************************************************************
+ *
  * Function         BTM_ReadConnectedTransportAddress
  *
  * Description      This function is called to read the paired device/address
@@ -635,6 +647,7 @@ using SyncReportCb = base::Callback<void(
     uint16_t /*sync_handle*/, int8_t /*tx_power*/, int8_t /*rssi*/,
     uint8_t /*status*/, std::vector<uint8_t> /*data*/)>;
 using SyncLostCb = base::Callback<void(uint16_t /*sync_handle*/)>;
+using BigInfoReportCb = base::Callback<void(uint16_t /*sync_handle*/, bool /*encrypted*/)>;
 
 extern void btm_ble_periodic_adv_sync_established(
     uint8_t status, uint16_t sync_handle, uint8_t adv_sid, uint8_t address_type,
@@ -667,7 +680,7 @@ extern void btm_ble_periodic_adv_sync_tx_rcvd(uint8_t* param,
 extern void BTM_BleStartPeriodicSync(uint8_t adv_sid, RawAddress address,
                                      uint16_t skip, uint16_t timeout,
                                      StartSyncCb syncCb, SyncReportCb reportCb,
-                                     SyncLostCb lostCb);
+                                     SyncLostCb lostCb, BigInfoReportCb biginfo_reportCb);
 /*******************************************************************************
  *
  * Function         BTM_BleStopPeriodicSync

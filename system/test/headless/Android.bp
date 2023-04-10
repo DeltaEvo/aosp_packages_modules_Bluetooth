@@ -8,36 +8,36 @@ package {
 }
 
 sh_binary {
-  name: "headless_build_timestamp",
-  host_supported: true,
-  src: "tools/build_timestamp.sh",
+    name: "headless_build_timestamp",
+    host_supported: true,
+    src: "tools/build_timestamp.sh",
 }
 
 genrule {
-  name : "HeadlessBuildTimestamp",
-  tools: [
-    "headless_build_timestamp",
-  ],
-  cmd: "$(location headless_build_timestamp) > $(out)",
-  out: [
-    "build_timestamp.h"
-  ],
+    name: "HeadlessBuildTimestamp",
+    tools: [
+        "headless_build_timestamp",
+    ],
+    cmd: "$(location headless_build_timestamp) > $(out)",
+    out: [
+        "build_timestamp.h",
+    ],
 }
 
 filegroup {
     name: "TestHeadlessModules",
     srcs: [
-          "connect/connect.cc",
-          "discovery/discovery.cc",
-          "dumpsys/dumpsys.cc",
-          "nop/nop.cc",
-          "pairing/pairing.cc",
-          "read/name.cc",
-          "read/read.cc",
-          "scan/scan.cc",
-          "sdp/sdp.cc",
-          "sdp/sdp_db.cc",
-     ],
+        "connect/connect.cc",
+        "discovery/discovery.cc",
+        "dumpsys/dumpsys.cc",
+        "nop/nop.cc",
+        "pairing/pairing.cc",
+        "read/name.cc",
+        "read/read.cc",
+        "scan/scan.cc",
+        "sdp/sdp.cc",
+        "sdp/sdp_db.cc",
+    ],
 }
 
 cc_binary {
@@ -58,10 +58,12 @@ cc_binary {
         ":TestHeadlessModules",
         "bt_property.cc",
         "get_options.cc",
+        "handler.cc",
         "headless.cc",
         "log.cc",
         "main.cc",
         "messenger.cc",
+        "property.cc",
         "util.cc",
     ],
     include_dirs: [
@@ -100,7 +102,6 @@ cc_binary {
         "libbt_shim_ffi",
         "libbt-stack",
         "libbt-stack-core",
-        "libbt-utils",
         "libc++fs",
         "libflatbuffers-cpp",
         "libFraunhoferAAC",
@@ -117,24 +118,23 @@ cc_binary {
         "android.hardware.bluetooth@1.1",
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
-        "android.hardware.bluetooth.audio-V2-ndk",
+        "android.hardware.bluetooth.audio-V3-ndk",
         "android.system.suspend-V1-ndk",
         "libaaudio",
         "libbase",
         "libbinder_ndk",
         "libcrypto",
-        "libcutils",  // property_get_bool
+        "libcutils", // property_get_bool
         "libfmq",
         "libhidlbase",
         "libjsoncpp",
-        "liblog",  // __android_log_print
-        "libprocessgroup",
+        "liblog", // __android_log_print
         "libtinyxml2",
         "libutils",
         "libPlatformProperties",
     ],
     ldflags: ["-rdynamic"],
     sanitize: {
-      cfi: false,
+        cfi: false,
     },
 }

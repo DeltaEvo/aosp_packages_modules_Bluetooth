@@ -103,6 +103,8 @@ static tGAP_CCB* gap_allocate_ccb(void);
 static void gap_release_ccb(tGAP_CCB* p_ccb);
 static void gap_checks_con_flags(tGAP_CCB* p_ccb);
 
+extern bool BTM_UseLeLink(const RawAddress& bd_addr);
+
 /*******************************************************************************
  *
  * Function         gap_conn_init
@@ -207,7 +209,7 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
 
   /* Configure L2CAP COC, if transport is LE */
   if (transport == BT_TRANSPORT_LE) {
-    p_ccb->local_coc_cfg.credits = L2CAP_LE_CREDIT_DEFAULT;
+    p_ccb->local_coc_cfg.credits = L2CA_LeCreditDefault();
     p_ccb->local_coc_cfg.mtu = p_cfg->mtu;
 
     uint16_t max_mps = controller_get_interface()->get_acl_data_size_ble();
@@ -620,7 +622,7 @@ static void gap_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid,
     LOG(WARNING) << "*******";
 
     /* Disconnect because it is an unexpected connection */
-    if (p_ccb->transport == BT_TRANSPORT_LE) {
+    if (BTM_UseLeLink(bd_addr)) {
       L2CA_DisconnectLECocReq(l2cap_cid);
     } else {
       L2CA_DisconnectReq(l2cap_cid);
@@ -691,9 +693,13 @@ static void gap_on_l2cap_error(uint16_t l2cap_cid, uint16_t result) {
   tGAP_CCB* p_ccb = gap_find_ccb_by_cid(l2cap_cid);
   if (p_ccb == nullptr) return;
 
+  /* Propagate the l2cap result upward */
+  tGAP_CB_DATA cb_data;
+  cb_data.l2cap_result = result;
+
   /* Tell the user if there is a callback */
   if (p_ccb->p_callback)
-    (*p_ccb->p_callback)(p_ccb->gap_handle, GAP_EVT_CONN_CLOSED, nullptr);
+    (*p_ccb->p_callback)(p_ccb->gap_handle, GAP_EVT_CONN_CLOSED, &cb_data);
 
   gap_release_ccb(p_ccb);
 }

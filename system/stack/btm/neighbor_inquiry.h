@@ -185,12 +185,24 @@ typedef struct {
   uint8_t num_resp; /* Number of results from the current inquiry */
 } tBTM_INQUIRY_CMPL;
 
+/* Structure returned with remote name  request */
 typedef struct {
-  tBTM_CMPL_CB* p_remname_cmpl_cb;
+  tBTM_STATUS status;
+  RawAddress bd_addr;
+  uint16_t length;
+  BD_NAME remote_bd_name;
+  tHCI_STATUS hci_status;
+} tBTM_REMOTE_DEV_NAME;
+
+typedef void(tBTM_NAME_CMPL_CB)(const tBTM_REMOTE_DEV_NAME*);
+
+typedef struct {
+  tBTM_NAME_CMPL_CB* p_remname_cmpl_cb;
 
 #define BTM_EXT_RMT_NAME_TIMEOUT_MS (40 * 1000) /* 40 seconds */
 
   alarm_t* remote_name_timer;
+  alarm_t* classic_inquiry_timer;
 
   uint16_t discoverable_mode;
   uint16_t connectable_mode;
@@ -234,21 +246,17 @@ typedef struct {
 
   void Init() {
     alarm_free(remote_name_timer);
+    alarm_free(classic_inquiry_timer);
     remote_name_timer = alarm_new("btm_inq.remote_name_timer");
+    classic_inquiry_timer = alarm_new("btm_inq.classic_inquiry_timer");
     no_inc_ssp = BTM_NO_SSP_ON_INQUIRY;
   }
-  void Free() { alarm_free(remote_name_timer); }
+  void Free() {
+    alarm_free(remote_name_timer);
+    alarm_free(classic_inquiry_timer);
+  }
 
 } tBTM_INQUIRY_VAR_ST;
-
-/* Structure returned with remote name  request */
-typedef struct {
-  tBTM_STATUS status;
-  RawAddress bd_addr;
-  uint16_t length;
-  BD_NAME remote_bd_name;
-  tHCI_STATUS hci_status;
-} tBTM_REMOTE_DEV_NAME;
 
 typedef union /* contains the inquiry filter condition */
 {

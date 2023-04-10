@@ -4,12 +4,10 @@ use dbus_crossroads::Crossroads;
 use dbus_tokio::connection;
 use futures::future;
 use lazy_static::lazy_static;
-use log::LevelFilter;
 use nix::sys::signal;
 use std::error::Error;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
-use syslog::{BasicLogger, Facility, Formatter3164};
 use tokio::time;
 
 // Necessary to link right entries.
@@ -24,6 +22,7 @@ use btstack::{
     bluetooth::{get_bt_dispatcher, Bluetooth, IBluetooth},
     bluetooth_admin::BluetoothAdmin,
     bluetooth_gatt::BluetoothGatt,
+    bluetooth_logging::BluetoothLogging,
     bluetooth_media::BluetoothMedia,
     socket_manager::BluetoothSocketManager,
     suspend::Suspend,
@@ -39,12 +38,23 @@ mod iface_bluetooth;
 mod iface_bluetooth_admin;
 mod iface_bluetooth_gatt;
 mod iface_bluetooth_media;
+mod iface_bluetooth_telephony;
+mod iface_logging;
 
 const DBUS_SERVICE_NAME: &str = "org.chromium.bluetooth";
 const ADMIN_SETTINGS_FILE_PATH: &str = "/var/lib/bluetooth/admin_policy.json";
 // The maximum ACL disconnect timeout is 3.5s defined by BTA_DM_DISABLE_TIMER_MS
 // and BTA_DM_DISABLE_TIMER_RETRIAL_MS
 const STACK_TURN_OFF_TIMEOUT_MS: Duration = Duration::from_millis(4000);
+
+const VERBOSE_ONLY_LOG_TAGS: &[&str] = &[
+    "bt_bta_av", // AV apis
+    "btm_sco",   // SCO data path logs
+    "l2c_csm",   // L2CAP state machine
+    "l2c_link",  // L2CAP link layer logs
+    "sco_hci",   // SCO over HCI
+    "uipc",      // Userspace IPC implementation
+];
 
 fn make_object_name(idx: i32, name: &str) -> String {
     String::from(format!("/org/chromium/bluetooth/hci{}/{}", idx, name))
@@ -70,6 +80,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .help("The Virtual index"),
         )
         .arg(Arg::with_name("debug").long("debug").short("d").help("Enables debug level logs"))
+        .arg(
+            Arg::with_name("verbose-debug")
+                .long("verbose-debug")
+                .short("v")
+                .help("Enables VERBOSE and additional tags for debug logging. Use with --debug."),
+        )
         .arg(Arg::from_usage("[init-flags] 'Fluoride INIT_ flags'").multiple(true))
         .arg(
             Arg::with_name("log-output")
@@ -82,6 +98,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
 
     let is_debug = matches.is_present("debug");
+    let is_verbose_debug = matches.is_present("verbose-debug");
     let log_output = matches.value_of("log-output").unwrap_or("syslog");
 
     let adapter_index = matches.value_of("index").map_or(0, |idx| idx.parse::<i32>().unwrap_or(0));
@@ -95,28 +112,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Set GD debug flag if debug is enabled.
     if is_debug {
-        init_flags.push(String::from("INIT_logging_debug_enabled_for_all=true"));
+        // Limit tags if verbose debug logging isn't enabled.
+        if !is_verbose_debug {
+            init_flags.push(format!(
+                "INIT_logging_debug_disabled_for_tags={}",
+                VERBOSE_ONLY_LOG_TAGS.join(",")
+            ));
+            init_flags.push(String::from("INIT_default_log_level_str=LOG_DEBUG"));
+        } else {
+            init_flags.push(String::from("INIT_default_log_level_str=LOG_VERBOSE"));
+        }
     }
 
     // Forward --hci to Fluoride.
     init_flags.push(format!("--hci={}", hci_index));
 
-    let level_filter = if is_debug { LevelFilter::Debug } else { LevelFilter::Info };
-
-    if log_output == "stderr" {
-        env_logger::Builder::new().filter(None, level_filter).init();
-    } else {
-        let formatter = Formatter3164 {
-            facility: Facility::LOG_USER,
-            hostname: None,
-            process: "btadapterd".into(),
-            pid: 0,
-        };
-
-        let logger = syslog::unix(formatter).expect("could not connect to syslog");
-        let _ = log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
-            .map(|()| log::set_max_level(level_filter));
-    }
+    // Always treat discovery as classic only
+    init_flags.push(String::from("INIT_classic_discovery_only=true"));
 
     let (tx, rx) = Stack::create_channel();
     let sig_notifier = Arc::new((Mutex::new(false), Condvar::new()));
@@ -145,19 +157,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         tx.clone(),
     ))));
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
+        adapter_index,
         tx.clone(),
-        intf.clone(),
-        bluetooth_media.clone(),
         sig_notifier.clone(),
+        intf.clone(),
         bluetooth_admin.clone(),
+        bluetooth_gatt.clone(),
+        bluetooth_media.clone(),
     ))));
     let suspend = Arc::new(Mutex::new(Box::new(Suspend::new(
         bluetooth.clone(),
         intf.clone(),
         bluetooth_gatt.clone(),
+        bluetooth_media.clone(),
         tx.clone(),
     ))));
-
+    let logging = Arc::new(Mutex::new(Box::new(BluetoothLogging::new(is_debug, log_output))));
     let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(tx.clone()))));
 
     topstack::get_runtime().block_on(async {
@@ -225,7 +240,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
         );
-        let qa_iface = iface_bluetooth::export_bluetooth_qa_dbus_intf(
+        let qa_legacy_iface = iface_bluetooth::export_bluetooth_qa_legacy_dbus_intf(
             conn.clone(),
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
@@ -240,6 +255,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
         );
+        let logging_iface = iface_logging::export_bluetooth_logging_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
 
         // Register D-Bus method handlers of IBluetoothGatt.
         let gatt_iface = iface_bluetooth_gatt::export_bluetooth_gatt_dbus_intf(
@@ -249,6 +269,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let media_iface = iface_bluetooth_media::export_bluetooth_media_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+
+        let telephony_iface = iface_bluetooth_telephony::export_bluetooth_telephony_dbus_intf(
             conn.clone(),
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
@@ -283,7 +309,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "adapter"),
-            &[adapter_iface, qa_iface, socket_mgr_iface, suspend_iface],
+            &[adapter_iface, qa_legacy_iface, socket_mgr_iface, suspend_iface],
             mixin,
         );
 
@@ -298,11 +324,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             &[media_iface],
             bluetooth_media.clone(),
         );
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "telephony"),
+            &[telephony_iface],
+            bluetooth_media.clone(),
+        );
+
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "battery_provider_manager"),
             &[battery_provider_manager_iface],
             battery_provider_manager.clone(),
         );
+
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "battery_manager"),
             &[battery_manager_iface],
@@ -313,6 +347,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             make_object_name(adapter_index, "admin"),
             &[admin_iface],
             bluetooth_admin.clone(),
+        );
+
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "logging"),
+            &[logging_iface],
+            logging.clone(),
         );
 
         // Hold locks and initialize all interfaces. This must be done AFTER DBus is

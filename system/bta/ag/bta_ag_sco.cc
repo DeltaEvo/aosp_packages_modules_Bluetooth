@@ -22,7 +22,7 @@
  *
  ******************************************************************************/
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 
 #include <cstdint>
@@ -593,6 +593,7 @@ void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb) {
   }
 
   if ((p_scb->codec_updated || p_scb->codec_fallback) &&
+      (p_scb->features & BTA_AG_FEAT_CODEC) &&
       (p_scb->peer_features & BTA_AG_PEER_FEAT_CODEC)) {
     LOG_INFO("Starting codec negotiation");
     /* Change the power mode to Active until SCO open is completed. */
@@ -1018,6 +1019,7 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           p_sco->state = BTA_AG_SCO_SHUTTING_ST;
           break;
 
+        case BTA_AG_SCO_CN_DONE_E:
         case BTA_AG_SCO_CONN_CLOSE_E: {
           /* closed sco; place old sco in listen mode,
              take current sco out of listen, and

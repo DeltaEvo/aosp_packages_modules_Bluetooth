@@ -19,7 +19,6 @@
 #include "stack/include/bt_hdr.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-#include "utils/include/bt_utils.h"
 
 /** stack/gatt/connection_manager.cc */
 namespace connection_manager {
@@ -29,6 +28,7 @@ bool background_connect_remove(uint8_t app_id, const RawAddress& address) {
 bool direct_connect_remove(uint8_t app_id, const RawAddress& address) {
   return false;
 }
+bool is_background_connection(const RawAddress& address) { return false; }
 }  // namespace connection_manager
 
 /** stack/gatt/att_protocol.cc */

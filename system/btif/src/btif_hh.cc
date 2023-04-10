@@ -95,6 +95,8 @@ typedef struct hid_kb_list {
 btif_hh_cb_t btif_hh_cb;
 
 static bthh_callbacks_t* bt_hh_callbacks = NULL;
+static bthh_profile_enable_t bt_hh_enable_type = {.hidp_enabled = true,
+                                                  .hogp_enabled = true};
 
 /* List of HID keyboards for which the NUMLOCK state needs to be
  * turned ON by default. Add devices to this list to apply the
@@ -539,6 +541,15 @@ bt_status_t btif_hh_virtual_unplug(const RawAddress* bd_addr) {
         (btif_hh_cb.status == BTIF_HH_DEV_CONNECTING)) {
       btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_DISCONNECTED;
       btif_hh_cb.pending_conn_address = RawAddress::kEmpty;
+
+      /* need to notify up-layer device is disconnected to avoid
+       * state out of sync with up-layer */
+      do_in_jni_thread(base::Bind(
+            [](RawAddress bd_addrcb) {
+              HAL_CBACK(bt_hh_callbacks, connection_state_cb, &bd_addrcb,
+                        BTHH_CONN_STATE_DISCONNECTED);
+            },
+           *bd_addr));
     }
     return BT_STATUS_FAIL;
   }
@@ -695,7 +706,8 @@ void btif_hh_service_registration(bool enable) {
       btif_hd_service_registration();
     }
   } else if (enable) {
-    BTA_HhEnable(bte_hh_evt);
+    BTA_HhEnable(bte_hh_evt, bt_hh_enable_type.hidp_enabled,
+                 bt_hh_enable_type.hogp_enabled);
   } else {
     btif_hh_cb.service_dereg_active = TRUE;
     BTA_HhDisable();
@@ -763,6 +775,10 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
       break;
 
     case BTA_HH_DISABLE_EVT:
+      if (btif_hh_cb.status == BTIF_HH_DISABLING) {
+        bt_hh_callbacks = NULL;
+      }
+
       btif_hh_cb.status = BTIF_HH_DISABLED;
       if (btif_hh_cb.service_dereg_active) {
         BTIF_TRACE_DEBUG("BTA_HH_DISABLE_EVT: enabling HID Device service");
@@ -918,7 +934,7 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
         HAL_CBACK(bt_hh_callbacks, handshake_cb, (RawAddress*)&(p_dev->bd_addr),
                   (bthh_status_t)p_data->hs_data.status);
 
-#ifdef OS_ANDROID  // Host kernel does not support UHID_SET_REPORT
+#if ENABLE_UHID_SET_REPORT
         if (p_dev->le_hid && p_dev->set_rpt_id_queue) {
           /* There is no handshake response for HOGP. Conclude the
            * UHID_SET_REPORT procedure here. */
@@ -928,7 +944,7 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
             bta_hh_co_set_rpt_rsp(p_dev->dev_handle, p_data->dev_status.status);
           }
         }
-#endif
+#endif  // ENABLE_UHID_SET_REPORT
       }
       break;
 
@@ -1794,7 +1810,8 @@ static void cleanup(void) {
   BTIF_TRACE_EVENT("%s", __func__);
   btif_hh_device_t* p_dev;
   int i;
-  if (btif_hh_cb.status == BTIF_HH_DISABLED) {
+  if (btif_hh_cb.status == BTIF_HH_DISABLED ||
+      btif_hh_cb.status == BTIF_HH_DISABLING) {
     BTIF_TRACE_WARNING("%s: HH disabling or disabled already, status = %d",
                        __func__, btif_hh_cb.status);
     return;
@@ -1805,7 +1822,6 @@ static void cleanup(void) {
      */
     btif_hh_cb.service_dereg_active = FALSE;
     btif_disable_service(BTA_HID_SERVICE_ID);
-    bt_hh_callbacks = NULL;
   }
   for (i = 0; i < BTIF_HH_MAX_HID; i++) {
     p_dev = &btif_hh_cb.devices[i];
@@ -1819,6 +1835,21 @@ static void cleanup(void) {
       p_dev->hh_poll_thread_id = -1;
     }
   }
+}
+
+/*******************************************************************************
+ *
+ * Function         configure_enabled_profiles
+ *
+ * Description      Configure HIDP or HOGP enablement. Require to cleanup and
+ *re-init to take effect.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+static void configure_enabled_profiles(bool enable_hidp, bool enable_hogp) {
+  bt_hh_enable_type.hidp_enabled = enable_hidp;
+  bt_hh_enable_type.hogp_enabled = enable_hogp;
 }
 
 static const bthh_interface_t bthhInterface = {
@@ -1837,6 +1868,7 @@ static const bthh_interface_t bthhInterface = {
     set_report,
     send_data,
     cleanup,
+    configure_enabled_profiles,
 };
 
 /*******************************************************************************
@@ -1851,7 +1883,8 @@ static const bthh_interface_t bthhInterface = {
 bt_status_t btif_hh_execute_service(bool b_enable) {
   if (b_enable) {
     /* Enable and register with BTA-HH */
-    BTA_HhEnable(bte_hh_evt);
+    BTA_HhEnable(bte_hh_evt, bt_hh_enable_type.hidp_enabled,
+                 bt_hh_enable_type.hogp_enabled);
   } else {
     /* Disable HH */
     BTA_HhDisable();

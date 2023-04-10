@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "device/include/esco_parameters.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
@@ -226,7 +226,7 @@ void BTM_CancelInquiry(void);
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda,
-                                     tBTM_CMPL_CB* p_cb,
+                                     tBTM_NAME_CMPL_CB* p_cb,
                                      tBT_TRANSPORT transport);
 
 /*******************************************************************************
@@ -920,23 +920,6 @@ void BTM_WritePageTimeout(uint16_t timeout);
  *
  ******************************************************************************/
 void BTM_WriteVoiceSettings(uint16_t settings);
-
-/*******************************************************************************
- *
- * Function         BTM_EnableTestMode
- *
- * Description      Send HCI the enable device under test command.
- *
- *                  Note: Controller can only be taken out of this mode by
- *                      resetting the controller.
- *
- * Returns
- *      BTM_SUCCESS         Command sent.
- *      BTM_NO_RESOURCES    If out of resources to send the command.
- *
- *
- ******************************************************************************/
-tBTM_STATUS BTM_EnableTestMode(void);
 
 /*******************************************************************************
  *
@@ -1867,6 +1850,7 @@ tBTM_STATUS BTM_SetEventFilterConnectionSetupAllDevices(void);
  *
  *******************************************************************************/
 tBTM_STATUS BTM_AllowWakeByHid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
 
 /*******************************************************************************
@@ -1878,7 +1862,8 @@ tBTM_STATUS BTM_AllowWakeByHid(
  * Parameters
  *
  *******************************************************************************/
-tBTM_STATUS BTM_RestoreFilterAcceptList(void);
+tBTM_STATUS BTM_RestoreFilterAcceptList(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 
 /*******************************************************************************
  *

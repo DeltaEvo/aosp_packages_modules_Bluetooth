@@ -41,8 +41,10 @@
 #include <mutex>
 #include <set>
 
+// Define before including log.h
+#define LOG_TAG "uipc"
+
 #include "audio_a2dp_hw/include/audio_a2dp_hw.h"
-#include "bt_utils.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/socket_utils/sockets.h"
@@ -417,8 +419,6 @@ static void* uipc_read_task(void* arg) {
   int result;
 
   prctl(PR_SET_NAME, (unsigned long)"uipc-main", 0, 0, 0);
-
-  raise_priority_a2dp(TASK_UIPC_READ);
 
   while (uipc.running) {
     uipc.read_set = uipc.active_set;

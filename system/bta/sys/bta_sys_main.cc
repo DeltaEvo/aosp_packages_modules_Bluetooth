@@ -24,7 +24,7 @@
 
 #define LOG_TAG "bt_bta_sys_main"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 
 #include <cstring>
@@ -133,10 +133,7 @@ void bta_sys_register(uint8_t id, const tBTA_SYS_REG* p_reg) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_sys_deregister(uint8_t id) {
-  bta_sys_cb.is_reg[id] = false;
-  bta_sys_cb.reg[id] = nullptr;
-}
+void bta_sys_deregister(uint8_t id) { bta_sys_cb.is_reg[id] = false; }
 
 /*******************************************************************************
  *

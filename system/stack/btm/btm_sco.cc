@@ -30,7 +30,10 @@
 #include <cstring>
 #include <string>
 
+#define LOG_TAG "btm_sco"
+
 #include "device/include/controller.h"
+#include "device/include/device_iot_config.h"
 #include "embdrv/sbc/decoder/include/oi_codec_sbc.h"
 #include "embdrv/sbc/decoder/include/oi_status.h"
 #include "osi/include/allocator.h"
@@ -45,6 +48,7 @@
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/hci_error_code.h"
+#include "stack/include/stack_metrics_logging.h"
 #include "types/class_of_device.h"
 #include "types/raw_address.h"
 
@@ -250,7 +254,11 @@ void btm_route_sco_data(BT_HDR* p_msg) {
   const uint8_t* decoded = nullptr;
   size_t written = 0, rc = 0;
   if (active_sco->is_wbs()) {
-    rc = bluetooth::audio::sco::wbs::enqueue_packet(payload, data_len);
+    uint16_t status = HCID_GET_PKT_STATUS(handle_with_flags);
+
+    if (status > 0) LOG_DEBUG("Packet corrupted with status(0x%X)", status);
+    rc = bluetooth::audio::sco::wbs::enqueue_packet(payload, data_len,
+                                                    status > 0);
     if (rc != data_len) LOG_DEBUG("Failed to enqueue packet");
 
     while (rc) {
@@ -807,6 +815,8 @@ void btm_sco_conn_req(const RawAddress& bda, const DEV_CLASS& dev_class,
   tSCO_CONN* p = &p_sco->sco_db[0];
   tBTM_ESCO_CONN_REQ_EVT_DATA evt_data = {};
 
+  DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(bda, IOT_CONF_KEY_HFP_SCO_CONN_COUNT);
+
   for (uint16_t sco_index = 0; sco_index < BTM_MAX_SCO_LINKS;
        sco_index++, p++) {
     /*
@@ -987,8 +997,12 @@ void btm_sco_connection_failed(tHCI_STATUS hci_status, const RawAddress& bda,
         if (p->state == SCO_ST_CONNECTING) {
           p->state = SCO_ST_UNUSED;
           (*p->p_disc_cb)(xx);
-        } else
+        } else {
           p->state = SCO_ST_LISTENING;
+          if (bda != RawAddress::kEmpty)
+            DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(
+                bda, IOT_CONF_KEY_HFP_SCO_CONN_FAIL_COUNT);
+        }
         BTM_LogHistory(
             kBtmLogTag, bda, "Connection failed",
             base::StringPrintf(
@@ -1112,8 +1126,8 @@ void btm_sco_on_esco_connect_request(
 
 void btm_sco_on_sco_connect_request(
     const RawAddress& bda, const bluetooth::types::ClassOfDevice& cod) {
-  LOG_DEBUG("Remote SCO connect request remote:%s cod:%s", ADDRESS_TO_LOGGABLE_CSTR(bda),
-            cod.ToString().c_str());
+  LOG_DEBUG("Remote SCO connect request remote:%s cod:%s",
+            ADDRESS_TO_LOGGABLE_CSTR(bda), cod.ToString().c_str());
   btm_sco_conn_req(bda, cod.cod, BTM_LINK_TYPE_SCO);
 }
 
@@ -1156,6 +1170,16 @@ void btm_sco_on_disconnected(uint16_t hci_handle, tHCI_REASON reason) {
 
   if (p_sco->is_inband()) {
     if (p_sco->is_wbs()) {
+      int num_decoded_frames;
+      double packet_loss_ratio;
+      if (bluetooth::audio::sco::wbs::fill_plc_stats(&num_decoded_frames,
+                                                     &packet_loss_ratio)) {
+        log_hfp_audio_packet_loss_stats(bd_addr, num_decoded_frames,
+                                        packet_loss_ratio);
+      } else {
+        LOG_WARN("Failed to get the packet loss stats");
+      }
+
       bluetooth::audio::sco::wbs::cleanup();
     }
 

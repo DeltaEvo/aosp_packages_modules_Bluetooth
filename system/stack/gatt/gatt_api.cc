@@ -31,11 +31,15 @@
 
 #include "bt_target.h"
 #include "device/include/controller.h"
+#include "gd/os/system_properties.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
+#include "osi/include/list.h"
 #include "osi/include/log.h"
+#include "stack/arbiter/acl_arbiter.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
@@ -304,7 +308,7 @@ tGATT_STATUS GATTS_AddService(tGATT_IF gatt_if, btgatt_db_element_t* service,
   elem.type = list.asgn_range.is_primary ? GATT_UUID_PRI_SERVICE
                                          : GATT_UUID_SEC_SERVICE;
 
-  if (elem.type == GATT_UUID_PRI_SERVICE) {
+  if (elem.type == GATT_UUID_PRI_SERVICE && gatt_cb.over_br_enabled) {
     Uuid* p_uuid = gatts_get_service_uuid(elem.p_db);
     if (*p_uuid != Uuid::From16Bit(UUID_SERVCLASS_GMCS_SERVER) &&
         *p_uuid != Uuid::From16Bit(UUID_SERVCLASS_GTBS_SERVER)) {
@@ -709,13 +713,144 @@ tGATT_STATUS GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu) {
 
   /* For this request only ATT CID is valid */
   p_clcb->cid = L2CAP_ATT_CID;
-  p_clcb->p_tcb->payload_size = mtu;
   p_clcb->operation = GATTC_OPTYPE_CONFIG;
   tGATT_CL_MSG gatt_cl_msg;
-  gatt_cl_msg.mtu = mtu;
-  LOG_DEBUG("Configuring ATT mtu size conn_id:%hu mtu:%hu", conn_id, mtu);
 
-  return attp_send_cl_msg(*p_clcb->p_tcb, p_clcb, GATT_REQ_MTU, &gatt_cl_msg);
+  bluetooth::shim::arbiter::GetArbiter().OnOutgoingMtuReq(tcb_idx);
+
+  /* Since GATT MTU Exchange can be done only once, and it is impossible to
+   * predict what MTU will be requested by other applications, let's use
+   * max possible MTU in the request. */
+  gatt_cl_msg.mtu = GATT_MAX_MTU_SIZE;
+
+  LOG_INFO("Configuring ATT mtu size conn_id:%hu mtu:%hu user mtu %hu", conn_id,
+           gatt_cl_msg.mtu, mtu);
+
+  auto result =
+      attp_send_cl_msg(*p_clcb->p_tcb, p_clcb, GATT_REQ_MTU, &gatt_cl_msg);
+  if (result == GATT_SUCCESS) {
+    p_clcb->p_tcb->pending_user_mtu_exchange_value = mtu;
+  }
+  return result;
+}
+
+/******************************************************************************
+ *
+ * Function         GATTC_TryMtuRequest
+ *
+ * Description      This function shall be called before calling
+ *                  GATTC_ConfgureMTU in order to check if operation is
+ *                  available to do.
+ *
+ * Parameters        remote_bda : peer device address. (input)
+ *                   transport  : physical transport of the GATT connection
+ *                                 (BR/EDR or LE) (input)
+ *                   conn_id    : connection id  (input)
+ *                   current_mtu: current mtu on the link (output)
+ *
+ * Returns          tGATTC_TryMtuRequestResult:
+ *                  - MTU_EXCHANGE_NOT_DONE_YET: There was no MTU Exchange
+ *                      procedure on the link. User can call GATTC_ConfigureMTU
+ *                      now.
+ *                  - MTU_EXCHANGE_NOT_ALLOWED : Not allowed for BR/EDR or if
+ *                      link does not exist
+ *                  - MTU_EXCHANGE_ALREADY_DONE: MTU Exchange is done. MTU
+ *                      should be taken from current_mtu
+ *                  - MTU_EXCHANGE_IN_PROGRESS : Other use is doing MTU
+ *                      Exchange. Conn_id is stored for result.
+ *
+ ******************************************************************************/
+tGATTC_TryMtuRequestResult GATTC_TryMtuRequest(const RawAddress& remote_bda,
+                                               tBT_TRANSPORT transport,
+                                               uint16_t conn_id,
+                                               uint16_t* current_mtu) {
+  LOG_INFO("%s conn_id=0x%04x", remote_bda.ToString().c_str(), conn_id);
+  *current_mtu = GATT_DEF_BLE_MTU_SIZE;
+
+  if (transport == BT_TRANSPORT_BR_EDR) {
+    LOG_ERROR("Device %s connected over BR/EDR",
+              ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
+    return MTU_EXCHANGE_NOT_ALLOWED;
+  }
+
+  tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(remote_bda, transport);
+  if (!p_tcb) {
+    LOG_ERROR("Device %s is not connected ",
+              ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
+    return MTU_EXCHANGE_DEVICE_DISCONNECTED;
+  }
+
+  if (gatt_is_pending_mtu_exchange(p_tcb)) {
+    LOG_DEBUG("Continue MTU pending for other client.");
+    /* MTU Exchange is in progress, started by other GATT Client.
+     * Wait until it is completed.
+     */
+    gatt_set_conn_id_waiting_for_mtu_exchange(p_tcb, conn_id);
+    return MTU_EXCHANGE_IN_PROGRESS;
+  }
+
+  uint16_t mtu = gatt_get_mtu(remote_bda, transport);
+  if (mtu == GATT_DEF_BLE_MTU_SIZE || mtu == 0) {
+    LOG_DEBUG("MTU not yet updated for %s",
+              ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
+    return MTU_EXCHANGE_NOT_DONE_YET;
+  }
+
+  *current_mtu = mtu;
+  return MTU_EXCHANGE_ALREADY_DONE;
+}
+
+/*******************************************************************************
+ * Function         GATTC_UpdateUserAttMtuIfNeeded
+ *
+ * Description      This function to be called when user requested MTU after
+ *                  MTU Exchange has been already done. This will update data
+ *                  length in the controller.
+ *
+ * Parameters        remote_bda : peer device address. (input)
+ *                   transport  : physical transport of the GATT connection
+ *                                 (BR/EDR or LE) (input)
+ *                   user_mtu: user request mtu
+ *
+ ******************************************************************************/
+void GATTC_UpdateUserAttMtuIfNeeded(const RawAddress& remote_bda,
+                                    tBT_TRANSPORT transport,
+                                    uint16_t user_mtu) {
+  LOG_INFO("%s, mtu=%hu", ADDRESS_TO_LOGGABLE_CSTR(remote_bda), user_mtu);
+  tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(remote_bda, transport);
+  if (!p_tcb) {
+    LOG_WARN("Transport control block not found");
+    return;
+  }
+
+  LOG_INFO("%s, current mtu: %d, max_user_mtu:%d, user_mtu: %d",
+           ADDRESS_TO_LOGGABLE_CSTR(remote_bda), p_tcb->payload_size,
+           p_tcb->max_user_mtu, user_mtu);
+
+  if (p_tcb->payload_size < user_mtu) {
+    LOG_INFO("User requested more than what GATT can handle. Trim it.");
+    user_mtu = p_tcb->payload_size;
+  }
+
+  if (p_tcb->max_user_mtu >= user_mtu) {
+    return;
+  }
+
+  p_tcb->max_user_mtu = user_mtu;
+  BTM_SetBleDataLength(remote_bda, user_mtu);
+}
+
+std::list<uint16_t> GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
+    const RawAddress& remote_bda) {
+  std::list result = std::list<uint16_t>();
+
+  tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(remote_bda, BT_TRANSPORT_LE);
+  if (!p_tcb || p_tcb->conn_ids_waiting_for_mtu_exchange.empty()) {
+    return result;
+  }
+
+  result.swap(p_tcb->conn_ids_waiting_for_mtu_exchange);
+  return result;
 }
 
 /*******************************************************************************
@@ -1085,7 +1220,7 @@ void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
  *                  with GATT
  *
  ******************************************************************************/
-tGATT_IF GATT_Register(const Uuid& app_uuid128, std::string name,
+tGATT_IF GATT_Register(const Uuid& app_uuid128, const std::string& name,
                        tGATT_CBACK* p_cb_info, bool eatt_support) {
   tGATT_REG* p_reg;
   uint8_t i_gatt_if = 0;
@@ -1266,8 +1401,9 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
 }
 
 bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
-                  bool opportunistic, uint8_t initiating_phys) {
+                  tBLE_ADDR_TYPE addr_type, tBTM_BLE_CONN_TYPE connection_type,
+                  tBT_TRANSPORT transport, bool opportunistic,
+                  uint8_t initiating_phys) {
   /* Make sure app is registered */
   tGATT_REG* p_reg = gatt_get_regcb(gatt_if);
   if (!p_reg) {
@@ -1292,7 +1428,8 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
   if (is_direct) {
     LOG_DEBUG("Starting direct connect gatt_if=%u address=%s", gatt_if,
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-    ret = gatt_act_connect(p_reg, bd_addr, transport, initiating_phys);
+    ret =
+        gatt_act_connect(p_reg, bd_addr, addr_type, transport, initiating_phys);
   } else {
     LOG_DEBUG("Starting background connect gatt_if=%u address=%s", gatt_if,
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
@@ -1329,6 +1466,13 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
   }
 
   return ret;
+}
+
+bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                  bool opportunistic, uint8_t initiating_phys) {
+  return GATT_Connect(gatt_if, bd_addr, BLE_ADDR_PUBLIC, connection_type,
+                      transport, opportunistic, initiating_phys);
 }
 
 /*******************************************************************************
@@ -1478,4 +1622,49 @@ bool GATT_GetConnIdIfConnected(tGATT_IF gatt_if, const RawAddress& bd_addr,
 
   LOG_DEBUG("status=%d", status);
   return status;
+}
+
+static void gatt_bonded_check_add_address(const RawAddress& bda) {
+  if (!gatt_is_bda_in_the_srv_chg_clt_list(bda)) {
+    gatt_add_a_bonded_dev_for_srv_chg(bda);
+  }
+}
+
+std::optional<bool> OVERRIDE_GATT_LOAD_BONDED = std::nullopt;
+
+static bool gatt_load_bonded_is_enabled() {
+  static const bool sGATT_LOAD_BONDED = bluetooth::os::GetSystemPropertyBool(
+      "bluetooth.gatt.load_bonded.enabled", false);
+  if (OVERRIDE_GATT_LOAD_BONDED.has_value()) {
+    return OVERRIDE_GATT_LOAD_BONDED.value();
+  }
+  return sGATT_LOAD_BONDED;
+}
+
+/* Initialize GATTS list of bonded device service change updates.
+ *
+ * Addresses for bonded devices (publict for BR/EDR or pseudo for BLE) are added
+ * to GATTS service change control list so that updates are sent to bonded
+ * devices on next connect after any handles for GATTS services change due to
+ * services added/removed.
+ */
+void gatt_load_bonded(void) {
+  const bool load_bonded = gatt_load_bonded_is_enabled();
+  LOG_INFO("load bonded: %s", load_bonded ? "True" : "False");
+  if (!load_bonded) {
+    return;
+  }
+  for (tBTM_SEC_DEV_REC* p_dev_rec : btm_get_sec_dev_rec()) {
+    if (p_dev_rec->is_link_key_known()) {
+      LOG_VERBOSE("Add bonded BR/EDR transport %s",
+                  ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->bd_addr));
+      gatt_bonded_check_add_address(p_dev_rec->bd_addr);
+    }
+    if (p_dev_rec->is_le_link_key_known()) {
+      VLOG(1) << " add bonded BLE " << p_dev_rec->ble.pseudo_addr;
+      LOG_VERBOSE("Add bonded BLE %s",
+                  ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->ble.pseudo_addr));
+      gatt_bonded_check_add_address(p_dev_rec->ble.pseudo_addr);
+    }
+  }
 }

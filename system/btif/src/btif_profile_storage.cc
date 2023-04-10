@@ -64,6 +64,7 @@ using bluetooth::groups::DeviceGroups;
 /*******************************************************************************
  *  Constants & Macros
  ******************************************************************************/
+#define BTIF_STORAGE_PATH_REMOTE_DEVCLASS "DevClass"
 
 #define BTIF_STORAGE_CSIS_AUTOCONNECT "CsisAutoconnect"
 #define BTIF_STORAGE_CSIS_SET_INFO_BIN "CsisSetInfoBin"
@@ -235,33 +236,91 @@ bt_status_t btif_storage_remove_hid_info(const RawAddress& remote_bd_addr) {
   return BT_STATUS_SUCCESS;
 }
 
+// Check if a given profile is supported.
+static bool btif_device_supports_profile(const std::string& device,
+                                         const Uuid& profile) {
+  int size = STORAGE_UUID_STRING_SIZE * BT_MAX_NUM_UUIDS;
+  char uuid_str[size];
+  if (btif_config_get_str(device, BTIF_STORAGE_PATH_REMOTE_SERVICE, uuid_str,
+                          &size)) {
+    Uuid p_uuid[BT_MAX_NUM_UUIDS];
+    size_t num_uuids =
+        btif_split_uuids_string(uuid_str, p_uuid, BT_MAX_NUM_UUIDS);
+    for (size_t i = 0; i < num_uuids; i++) {
+      if (p_uuid[i] == profile) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+static bool btif_device_supports_hogp(const std::string& device) {
+  return btif_device_supports_profile(device,
+                                      Uuid::From16Bit(UUID_SERVCLASS_LE_HID));
+}
+
+static bool btif_device_supports_classic_hid(const std::string& device) {
+  return btif_device_supports_profile(
+      device, Uuid::From16Bit(UUID_SERVCLASS_HUMAN_INTERFACE));
+}
+
 /*******************************************************************************
  *
- * Function         btif_storage_get_hid_device_addresses
+ * Function         btif_storage_get_le_hid_devices
  *
- * Description      BTIF storage API - Finds all bonded HID devices
+ * Description      BTIF storage API - Finds all bonded LE HID devices
  *
- * Returns          std::vector of RawAddress
+ * Returns          std::vector of (RawAddress, AddressType)
  *
  ******************************************************************************/
 
 extern bool btif_get_address_type(const RawAddress& bda,
                                   tBLE_ADDR_TYPE* p_addr_type);
 
-std::vector<std::pair<RawAddress, uint8_t>>
-btif_storage_get_hid_device_addresses(void) {
+std::vector<std::pair<RawAddress, uint8_t>> btif_storage_get_le_hid_devices(
+    void) {
   std::vector<std::pair<RawAddress, uint8_t>> hid_addresses;
   for (const auto& bd_addr : btif_config_get_paired_devices()) {
     auto name = bd_addr.ToString();
-    int value;
-    if (!btif_config_get_int(name, "HidAttrMask", &value)) continue;
+    if (btif_device_supports_hogp(name)) {
+      tBLE_ADDR_TYPE type = BLE_ADDR_PUBLIC;
+      btif_get_address_type(bd_addr, &type);
 
-    tBLE_ADDR_TYPE type = BLE_ADDR_PUBLIC;
-    btif_get_address_type(bd_addr, &type);
-
-    hid_addresses.push_back({bd_addr, type});
-    LOG_DEBUG("Remote device: %s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+      hid_addresses.push_back({bd_addr, type});
+      LOG_DEBUG("Remote device: %s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    }
   }
+
+  return hid_addresses;
+}
+
+std::vector<RawAddress> btif_storage_get_wake_capable_classic_hid_devices(
+    void) {
+  std::vector<RawAddress> hid_addresses;
+  for (const auto& bd_addr : btif_config_get_paired_devices()) {
+    auto name = bd_addr.ToString();
+    if (btif_device_supports_classic_hid(name)) {
+      // Filter out devices that aren't keyboards or pointing devices.
+      // 0x500 = HID Major
+      // 0x080 = Pointing device
+      // 0x040 = Keyboard
+      constexpr int kHidMask = COD_HID_MAJOR;
+      constexpr int kKeyboardMouseMask = COD_HID_COMBO & ~COD_HID_MAJOR;
+      int cod_value;
+      if (!btif_config_get_int(name, BTIF_STORAGE_PATH_REMOTE_DEVCLASS,
+                               &cod_value) ||
+          (cod_value & kHidMask) != kHidMask ||
+          (cod_value & kKeyboardMouseMask) == 0) {
+        continue;
+      }
+
+      hid_addresses.push_back(bd_addr);
+      LOG_DEBUG("Remote device: %s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    }
+  }
+
   return hid_addresses;
 }
 
@@ -1021,4 +1080,59 @@ bt_status_t btif_storage_remove_hidd(RawAddress* remote_bd_addr) {
   btif_config_save();
 
   return BT_STATUS_SUCCESS;
+}
+
+/*******************************************************************************
+ *
+ *Function : btif_storage_set_pce_profile_version
+ *
+ * Description :
+ *    This function store remote PCE profile version in config file
+ *
+ ******************************************************************************/
+void btif_storage_set_pce_profile_version(const RawAddress& remote_bd_addr,
+                                          uint16_t peer_pce_version) {
+  BTIF_TRACE_DEBUG("peer_pce_version : 0x%x", peer_pce_version);
+
+  if (btif_config_set_bin(
+          remote_bd_addr.ToString(), BT_CONFIG_KEY_PBAP_PCE_VERSION,
+          (const uint8_t*)&peer_pce_version, sizeof(peer_pce_version))) {
+    btif_config_save();
+  } else {
+    BTIF_TRACE_WARNING("Failed to store  peer_pce_version for %s",
+                       ADDRESS_TO_LOGGABLE_CSTR(remote_bd_addr));
+  }
+}
+
+/*******************************************************************************
+ *
+ * Function        btif_storage_is_pce_version_102
+ *
+ * Description     checks if remote supports PBAP 1.2
+ *
+ * Returns         true/false depending on remote PBAP version support found in
+ *file.
+ *
+ ******************************************************************************/
+bool btif_storage_is_pce_version_102(const RawAddress& remote_bd_addr) {
+  bool entry_found = false;
+  // Read and restore the PBAP PCE version from local storage
+  uint16_t pce_version = 0;
+  size_t version_value_size = sizeof(pce_version);
+  if (!btif_config_get_bin(remote_bd_addr.ToString(),
+                           BT_CONFIG_KEY_PBAP_PCE_VERSION,
+                           (uint8_t*)&pce_version, &version_value_size)) {
+    BTIF_TRACE_DEBUG("Failed to read cached peer PCE version for %s",
+                     ADDRESS_TO_LOGGABLE_CSTR(remote_bd_addr));
+    return entry_found;
+  }
+
+  if (pce_version == 0x0102) {
+    entry_found = true;
+  }
+
+  BTIF_TRACE_DEBUG("read cached peer PCE version 0x%04x for %s", pce_version,
+                   ADDRESS_TO_LOGGABLE_CSTR(remote_bd_addr));
+
+  return entry_found;
 }

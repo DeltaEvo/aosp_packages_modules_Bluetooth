@@ -58,8 +58,7 @@ static bool acl_ble_common_connection(
   if (!l2cble_conn_comp(handle, role, address_with_type.bda,
                         address_with_type.type, conn_interval, conn_latency,
                         conn_timeout)) {
-    btm_sec_disconnect(handle, HCI_ERR_NO_CONNECTION,
-                       "stack::acl::ble_acl fail");
+    btm_sec_disconnect(handle, HCI_ERR_PEER_USER, "stack::acl::ble_acl fail");
     LOG_WARN("Unable to complete l2cap connection");
     return false;
   }
@@ -82,9 +81,6 @@ void acl_ble_enhanced_connection_complete(
     LOG_WARN("Unable to create enhanced ble acl connection");
     return;
   }
-
-  btm_ble_refresh_local_resolvable_private_addr(address_with_type.bda,
-                                                local_rpa);
 
   if (peer_addr_type & BLE_ADDR_TYPE_ID_BIT)
     btm_ble_refresh_peer_resolvable_private_addr(
@@ -128,15 +124,11 @@ void acl_ble_enhanced_connection_complete_from_shim(
 }
 
 void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
-                             uint16_t handle, bool enhanced, tHCI_STATUS status,
-                             bool locally_initiated) {
-  acl_set_locally_initiated(locally_initiated);
+                             uint16_t handle, bool enhanced,
+                             tHCI_STATUS status) {
+  acl_set_locally_initiated(
+      true);  // LE connection failures are always locally initiated
   btm_acl_create_failed(address_with_type.bda, BT_TRANSPORT_LE, status);
-
-  // Stop here if the connection is not locally initiated.
-  if (!locally_initiated) {
-    return;
-  }
 
   if (status != HCI_ERR_ADVERTISING_TIMEOUT) {
     btm_cb.ble_ctr_cb.set_connection_state_idle();

@@ -25,7 +25,7 @@
 
 #define LOG_TAG "bt_bta_gattc"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 
@@ -36,6 +36,7 @@
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager.h"
 #include "device/include/controller.h"
+#include "device/include/interop.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
@@ -61,10 +62,6 @@ static void bta_gattc_conn_cback(tGATT_IF gattc_if, const RawAddress& bda,
 static void bta_gattc_cmpl_cback(uint16_t conn_id, tGATTC_OPTYPE op,
                                  tGATT_STATUS status,
                                  tGATT_CL_COMPLETE* p_data);
-static void bta_gattc_cmpl_sendmsg(uint16_t conn_id, tGATTC_OPTYPE op,
-                                   tGATT_STATUS status,
-                                   tGATT_CL_COMPLETE* p_data);
-
 static void bta_gattc_deregister_cmpl(tBTA_GATTC_RCB* p_clreg);
 static void bta_gattc_enc_cmpl_cback(tGATT_IF gattc_if, const RawAddress& bda);
 static void bta_gattc_cong_cback(uint16_t conn_id, bool congested);
@@ -232,13 +229,6 @@ void bta_gattc_register(const Uuid& app_uuid, tBTA_GATTC_CBACK* p_cback,
 
 /** De-Register a GATT client application with BTA */
 void bta_gattc_deregister(tBTA_GATTC_RCB* p_clreg) {
-  if (!p_clreg) {
-    LOG(ERROR) << __func__ << ": Deregister Failed unknown client cif";
-    GetInterfaceToProfiles()->profileSpecific_HACK->bta_hh_cleanup_disable(
-        BTA_HH_OK);
-    return;
-  }
-
   uint8_t accept_list_size = 0;
   if (controller_get_interface()->supports_ble()) {
     accept_list_size = controller_get_interface()->get_ble_acceptlist_size();
@@ -248,7 +238,7 @@ void bta_gattc_deregister(tBTA_GATTC_RCB* p_clreg) {
   for (uint8_t i = 0; i < accept_list_size; i++) {
     if (!bta_gattc_cb.bg_track[i].in_use) continue;
 
-    if (bta_gattc_cb.bg_track[i].cif_mask & (1 << (p_clreg->client_if - 1))) {
+    if (bta_gattc_cb.bg_track[i].cif_mask & ((tBTA_GATTC_CIF_MASK)1 << (p_clreg->client_if - 1))) {
       bta_gattc_mark_bg_conn(p_clreg->client_if,
                              bta_gattc_cb.bg_track[i].remote_bda, false);
       GATT_CancelConnect(p_clreg->client_if,
@@ -389,6 +379,7 @@ void bta_gattc_open(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
   /* open/hold a connection */
   if (!GATT_Connect(p_clcb->p_rcb->client_if, p_data->api_conn.remote_bda,
+                    p_data->api_conn.remote_addr_type,
                     BTM_BLE_DIRECT_CONNECTION, p_data->api_conn.transport,
                     p_data->api_conn.opportunistic,
                     p_data->api_conn.initiating_phys)) {
@@ -550,14 +541,24 @@ void bta_gattc_conn(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
       p_clcb->p_srcb->state = BTA_GATTC_SERV_LOAD;
       // Consider the case that if GATT Server is changed, but no service
       // changed indication is received, the database might be out of date. So
-      // if robust caching is enabled, any time when connection is established,
-      // always check the db hash first, not just load the stored database.
-      gatt::Database db = bta_gattc_cache_load(p_clcb->p_srcb->server_bda);
-      if (!bta_gattc_is_robust_caching_enabled() && !db.IsEmpty()) {
-        p_clcb->p_srcb->gatt_database = db;
-        p_clcb->p_srcb->state = BTA_GATTC_SERV_IDLE;
-        bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_SUCCESS);
-      } else {
+      // if robust caching is known to be supported, always check the db hash
+      // first, before loading the stored database.
+
+      // Only load the database if we are bonded, since the device cache is
+      // meaningless otherwise (as we need to do rediscovery regardless)
+      gatt::Database db = btm_sec_is_a_bonded_dev(p_clcb->bda)
+                              ? bta_gattc_cache_load(p_clcb->p_srcb->server_bda)
+                              : gatt::Database();
+      auto robust_caching_support = GetRobustCachingSupport(p_clcb, db);
+      LOG_INFO("Connected to %s, robust caching support is %d",
+               p_clcb->bda.ToRedactedStringForLogging().c_str(),
+               robust_caching_support);
+      if (db.IsEmpty() ||
+          robust_caching_support == RobustCachingSupport::SUPPORTED) {
+        // If the peer device is expected to support robust caching, or if we
+        // don't know its services yet, then we should do discovery (which may
+        // short-circuit through a hash match, but might also do the full
+        // discovery).
         p_clcb->p_srcb->state = BTA_GATTC_SERV_DISC;
 
         /* set true to read database hash before service discovery */
@@ -567,6 +568,10 @@ void bta_gattc_conn(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
         /* cache load failure, start discovery */
         bta_gattc_start_discover(p_clcb, NULL);
+      } else {
+        p_clcb->p_srcb->gatt_database = db;
+        p_clcb->p_srcb->state = BTA_GATTC_SERV_IDLE;
+        bta_gattc_reset_discover_st(p_clcb->p_srcb, GATT_SUCCESS);
       }
     } else /* cache is building */
       p_clcb->state = BTA_GATTC_DISCOVER_ST;
@@ -609,6 +614,7 @@ void bta_gattc_close_fail(tBTA_GATTC_CLCB* p_clcb,
     cb_data.close.conn_id = p_data->hdr.layer_specific;
     cb_data.close.remote_bda = p_clcb->bda;
     cb_data.close.reason = BTA_GATT_CONN_NONE;
+    cb_data.close.status = GATT_ERROR;
 
     LOG(WARNING) << __func__ << ": conn_id=" << loghex(cb_data.close.conn_id)
                  << ". Returns GATT_ERROR(" << +GATT_ERROR << ").";
@@ -659,7 +665,7 @@ void bta_gattc_close(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
   bta_gattc_clcb_dealloc(p_clcb);
 
   if (p_data->hdr.event == BTA_GATTC_API_CLOSE_EVT) {
-    GATT_Disconnect(p_data->hdr.layer_specific);
+    cb_data.close.status = GATT_Disconnect(p_data->hdr.layer_specific);
     cb_data.close.reason = GATT_CONN_TERMINATE_LOCAL_HOST;
     LOG_DEBUG("Local close event client_if:%hu conn_id:%hu reason:%s",
               cb_data.close.client_if, cb_data.close.conn_id,
@@ -667,6 +673,7 @@ void bta_gattc_close(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
                   static_cast<tGATT_DISCONN_REASON>(cb_data.close.reason))
                   .c_str());
   } else if (p_data->hdr.event == BTA_GATTC_INT_DISCONN_EVT) {
+    cb_data.close.status = static_cast<tGATT_STATUS>(p_data->int_conn.reason);
     cb_data.close.reason = p_data->int_conn.reason;
     LOG_DEBUG("Peer close disconnect event client_if:%hu conn_id:%hu reason:%s",
               cb_data.close.client_if, cb_data.close.conn_id,
@@ -738,6 +745,42 @@ void bta_gattc_restart_discover(tBTA_GATTC_CLCB* p_clcb,
 
 /** Configure MTU size on the GATT connection */
 void bta_gattc_cfg_mtu(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
+  uint16_t current_mtu = 0;
+  auto result = GATTC_TryMtuRequest(p_clcb->bda, p_clcb->transport,
+                                    p_clcb->bta_conn_id, &current_mtu);
+  switch (result) {
+    case MTU_EXCHANGE_DEVICE_DISCONNECTED:
+      LOG_INFO("Device %s disconnected", ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda));
+      bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_CONFIG,
+                             GATT_NO_RESOURCES, NULL);
+      bta_gattc_continue(p_clcb);
+      return;
+    case MTU_EXCHANGE_NOT_ALLOWED:
+      LOG_INFO("Not allowed for BR/EDR devices %s",
+               ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda));
+      bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_CONFIG,
+                             GATT_ERR_UNLIKELY, NULL);
+      bta_gattc_continue(p_clcb);
+      return;
+    case MTU_EXCHANGE_ALREADY_DONE:
+      /* Check if MTU is not already set, if so, just report it back to the user
+       * and continue with other requests.
+       */
+      GATTC_UpdateUserAttMtuIfNeeded(p_clcb->bda, p_clcb->transport,
+                                     p_data->api_mtu.mtu);
+      bta_gattc_send_mtu_response(p_clcb, p_data, current_mtu);
+      return;
+    case MTU_EXCHANGE_IN_PROGRESS:
+      LOG_INFO("Enqueue MTU Request  - waiting for response on p_clcb %p",
+               p_clcb);
+      bta_gattc_enqueue(p_clcb, p_data);
+      return;
+
+    case MTU_EXCHANGE_NOT_DONE_YET:
+      /* OK to proceed */
+      break;
+  }
+
   if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
   tGATT_STATUS status =
@@ -796,23 +839,10 @@ void bta_gattc_start_discover(tBTA_GATTC_CLCB* p_clcb,
       p_clcb->p_srcb->update_count = 0;
       p_clcb->p_srcb->state = BTA_GATTC_SERV_DISC_ACT;
 
-      /* This is workaround for the embedded devices being already on the market
-       * and having a serious problem with handle Read By Type with
-       * GATT_UUID_DATABASE_HASH. With this workaround, Android will assume that
-       * embedded device having LMP version lower than 5.1 (0x0a), it does not
-       * support GATT Caching.
-       */
-      uint8_t lmp_version = 0;
-      if (!BTM_ReadRemoteVersion(p_clcb->bda, &lmp_version, nullptr, nullptr)) {
-        LOG_WARN("Could not read remote version for %s",
-                 ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda));
-      }
-
-      if (lmp_version < 0x0a) {
-        LOG_WARN(
-            " Device LMP version 0x%02x < Bluetooth 5.1. Ignore database cache "
-            "read.",
-            lmp_version);
+      if (GetRobustCachingSupport(p_clcb, p_clcb->p_srcb->gatt_database) ==
+          RobustCachingSupport::UNSUPPORTED) {
+        // Skip initial DB hash read if we have strong reason (due to interop,
+        // or a prior discovery) to believe that it is unsupported.
         p_clcb->p_srcb->srvc_hdl_db_hash = false;
       }
 
@@ -966,11 +996,16 @@ void bta_gattc_write(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
   attr.len = p_data->api_write.len;
   attr.auth_req = p_data->api_write.auth_req;
 
-  if (p_data->api_write.p_value)
-    memcpy(attr.value, p_data->api_write.p_value, p_data->api_write.len);
+  /* Before coping to the fixed array, make sure it fits. */
+  if (attr.len > GATT_MAX_ATTR_LEN) {
+    status = GATT_INVALID_ATTR_LEN;
+  } else {
+    if (p_data->api_write.p_value)
+      memcpy(attr.value, p_data->api_write.p_value, p_data->api_write.len);
 
-  status =
-      GATTC_Write(p_clcb->bta_conn_id, p_data->api_write.write_type, &attr);
+    status =
+        GATTC_Write(p_clcb->bta_conn_id, p_data->api_write.write_type, &attr);
+  }
 
   /* write fail */
   if (status != GATT_SUCCESS) {
@@ -1155,17 +1190,30 @@ void bta_gattc_op_cmpl(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
   }
 
   /* service handle change void the response, discard it */
-  if (op == GATTC_OPTYPE_READ)
+  if (op == GATTC_OPTYPE_READ) {
     bta_gattc_read_cmpl(p_clcb, &p_data->op_cmpl);
-
-  else if (op == GATTC_OPTYPE_WRITE)
+  } else if (op == GATTC_OPTYPE_WRITE) {
     bta_gattc_write_cmpl(p_clcb, &p_data->op_cmpl);
-
-  else if (op == GATTC_OPTYPE_EXE_WRITE)
+  } else if (op == GATTC_OPTYPE_EXE_WRITE) {
     bta_gattc_exec_cmpl(p_clcb, &p_data->op_cmpl);
-
-  else if (op == GATTC_OPTYPE_CONFIG)
+  } else if (op == GATTC_OPTYPE_CONFIG) {
     bta_gattc_cfg_mtu_cmpl(p_clcb, &p_data->op_cmpl);
+
+    /* If there are more clients waiting for the MTU results on the same device,
+     * lets trigger them now.
+     */
+
+    auto outstanding_conn_ids =
+        GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(p_clcb->bda);
+    for (auto conn_id : outstanding_conn_ids) {
+      tBTA_GATTC_CLCB* p_clcb = bta_gattc_find_clcb_by_conn_id(conn_id);
+      LOG_DEBUG("Continue MTU request clcb %p", p_clcb);
+      if (p_clcb) {
+        LOG_DEBUG("Continue MTU request for client conn_id=0x%04x", conn_id);
+        bta_gattc_continue(p_clcb);
+      }
+    }
+  }
 
   // If receive DATABASE_OUT_OF_SYNC error code, bta_gattc should start service
   // discovery immediately
@@ -1188,7 +1236,10 @@ void bta_gattc_op_cmpl(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
     }
 
     bta_gattc_sm_execute(p_clcb, BTA_GATTC_INT_DISCOVER_EVT, NULL);
+    return;
   }
+
+  bta_gattc_continue(p_clcb);
 }
 
 /** start a search in the local server cache */
@@ -1523,9 +1574,8 @@ static void bta_gattc_cmpl_cback(uint16_t conn_id, tGATTC_OPTYPE op,
 }
 
 /** client operation complete send message */
-static void bta_gattc_cmpl_sendmsg(uint16_t conn_id, tGATTC_OPTYPE op,
-                                   tGATT_STATUS status,
-                                   tGATT_CL_COMPLETE* p_data) {
+void bta_gattc_cmpl_sendmsg(uint16_t conn_id, tGATTC_OPTYPE op,
+                            tGATT_STATUS status, tGATT_CL_COMPLETE* p_data) {
   const size_t len = sizeof(tBTA_GATTC_OP_CMPL) + sizeof(tGATT_CL_COMPLETE);
   tBTA_GATTC_OP_CMPL* p_buf = (tBTA_GATTC_OP_CMPL*)osi_calloc(len);
 

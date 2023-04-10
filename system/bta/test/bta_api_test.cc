@@ -16,7 +16,7 @@
 
 #include "bta/include/bta_api.h"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/location.h>
 #include <gtest/gtest.h>
 
@@ -42,7 +42,7 @@ const char* test_flags[] = {
 class BtaApiTest : public testing::Test {
  protected:
   void SetUp() override {
-    mock_function_count_map.clear();
+    reset_mock_function_count_map();
     bluetooth::common::InitFlags::Load(test_flags);
   }
   void TearDown() override {}

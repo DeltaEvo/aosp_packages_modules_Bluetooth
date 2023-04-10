@@ -47,30 +47,30 @@ android_test_helper_app {
 
     test_suites: [
         "general-tests",
-        "device-tests",
-        "mts-bluetooth",
     ],
+    min_sdk_version: "Tiramisu",
 }
 
 android_test {
     name: "pts-bot",
-    required: ["PandoraServer"],
     test_config: "configs/PtsBotTest.xml",
     data: [
+        ":PandoraServer",
         "configs/pts_bot_tests_config.json",
-        ":mmi2grpc"
+        ":mmi2grpc",
     ],
     test_suites: ["device-tests"],
+    min_sdk_version: "Tiramisu",
 }
 
 android_test {
     name: "pts-bot-mts",
-    required: ["PandoraServer"],
     test_config: "configs/PtsBotTestMts.xml",
     data: [
+        ":PandoraServer",
         "configs/pts_bot_tests_config.json",
-        ":mmi2grpc"
+        ":mmi2grpc",
     ],
     test_suites: ["mts-bluetooth"],
-    min_sdk_version: "33",
+    min_sdk_version: "Tiramisu",
 }

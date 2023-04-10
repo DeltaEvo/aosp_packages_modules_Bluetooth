@@ -18,14 +18,20 @@ package {
 
 python_test_host {
     name: "avatar",
-    main: "example.py",
+    main: "main.py",
     srcs: [
+        "main.py",
+        "*_test.py",
         "example.py",
     ],
     libs: [
         "libavatar",
+        "bumble_services_experimental-python",
     ],
-    required: ["PandoraServer"],
+    required: [
+        "PandoraServer",
+        "aapt",
+    ],
     test_suites: ["general-tests"],
     test_options: {
         unit_test: false,
@@ -33,13 +39,14 @@ python_test_host {
     data: ["config.yml"],
 }
 
-python_binary_host {
-    name: "avatar_runner",
-    main: "runner.py",
-    srcs: [
-        "runner.py",
-    ],
-    libs: [
-        "libavatar"
+sh_binary_host {
+    name: "avatar.sh",
+    src: "avatar.sh",
+    required: [
+        "avatar",
+        "pandora-python-gen-src",
+        "pandora_experimental-python-gen-src",
+        "tradefed",
+        "tradefed-test-framework",
     ],
 }

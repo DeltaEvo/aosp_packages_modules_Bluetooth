@@ -20,10 +20,10 @@ import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dp.OptionalCodecsPreferenceStatus;
 import android.bluetooth.BluetoothA2dp.OptionalCodecsSupportStatus;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
+import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.bluetooth.BluetoothStatusCodes;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
@@ -250,7 +250,7 @@ public class DatabaseManager {
                 return true;
             }
             logManufacturerInfo(device, key, newValue);
-            logMetadataChange(address, "setCustomMeta key=" + key);
+            logMetadataChange(data, "setCustomMeta key=" + key);
             data.setCustomizedMeta(key, newValue);
 
             updateDatabase(data);
@@ -277,7 +277,7 @@ public class DatabaseManager {
             String address = device.getAddress();
 
             if (!mMetadataCache.containsKey(address)) {
-                Log.d(TAG, "getCustomMeta: device " + address + " is not in cache");
+                Log.d(TAG, "getCustomMeta: device " + device + " is not in cache");
                 return null;
             }
 
@@ -290,7 +290,8 @@ public class DatabaseManager {
      * Set audio policy metadata to database with requested key
      */
     @VisibleForTesting
-    public boolean setAudioPolicyMetadata(BluetoothDevice device, BluetoothAudioPolicy policies) {
+    public boolean setAudioPolicyMetadata(BluetoothDevice device,
+            BluetoothSinkAudioPolicy policies) {
         synchronized (mMetadataCache) {
             if (device == null) {
                 Log.e(TAG, "setAudioPolicyMetadata: device is null");
@@ -304,7 +305,7 @@ public class DatabaseManager {
             Metadata data = mMetadataCache.get(address);
             AudioPolicyEntity entity = data.audioPolicyMetadata;
             entity.callEstablishAudioPolicy = policies.getCallEstablishPolicy();
-            entity.connectingTimeAudioPolicy = policies.getConnectingTimePolicy();
+            entity.connectingTimeAudioPolicy = policies.getActiveDevicePolicyAfterConnection();
             entity.inBandRingtoneAudioPolicy = policies.getInBandRingtonePolicy();
 
             updateDatabase(data);
@@ -316,7 +317,7 @@ public class DatabaseManager {
      * Get audio policy metadata from database with requested key
      */
     @VisibleForTesting
-    public BluetoothAudioPolicy getAudioPolicyMetadata(BluetoothDevice device) {
+    public BluetoothSinkAudioPolicy getAudioPolicyMetadata(BluetoothDevice device) {
         synchronized (mMetadataCache) {
             if (device == null) {
                 Log.e(TAG, "getAudioPolicyMetadata: device is null");
@@ -326,14 +327,14 @@ public class DatabaseManager {
             String address = device.getAddress();
 
             if (!mMetadataCache.containsKey(address)) {
-                Log.d(TAG, "getAudioPolicyMetadata: device " + address + " is not in cache");
+                Log.d(TAG, "getAudioPolicyMetadata: device " + device + " is not in cache");
                 return null;
             }
 
             AudioPolicyEntity entity = mMetadataCache.get(address).audioPolicyMetadata;
-            return new BluetoothAudioPolicy.Builder()
+            return new BluetoothSinkAudioPolicy.Builder()
                     .setCallEstablishPolicy(entity.callEstablishAudioPolicy)
-                    .setConnectingTimePolicy(entity.connectingTimeAudioPolicy)
+                    .setActiveDevicePolicyAfterConnection(entity.connectingTimeAudioPolicy)
                     .setInBandRingtonePolicy(entity.inBandRingtoneAudioPolicy)
                     .build();
         }
@@ -388,8 +389,8 @@ public class DatabaseManager {
                 return true;
             }
             String profileStr = BluetoothProfile.getProfileName(profile);
-            logMetadataChange(address, profileStr + " connection policy changed: "
-                    + ": " + oldConnectionPolicy + " -> " + newConnectionPolicy);
+            logMetadataChange(data, profileStr + " connection policy changed: "
+                                    + oldConnectionPolicy + " -> " + newConnectionPolicy);
 
             data.setProfileConnectionPolicy(profile, newConnectionPolicy);
             updateDatabase(data);
@@ -474,8 +475,8 @@ public class DatabaseManager {
             if (oldValue == newValue) {
                 return;
             }
-            logMetadataChange(address, "Supports optional codec changed: "
-                    + oldValue + " -> " + newValue);
+            logMetadataChange(data, "Supports optional codec changed: "
+                                    + oldValue + " -> " + newValue);
 
             data.a2dpSupportsOptionalCodecs = newValue;
             updateDatabase(data);
@@ -503,7 +504,7 @@ public class DatabaseManager {
             String address = device.getAddress();
 
             if (!mMetadataCache.containsKey(address)) {
-                Log.d(TAG, "getA2dpOptionalCodec: device " + address + " is not in cache");
+                Log.d(TAG, "getA2dpOptionalCodec: device " + device + " is not in cache");
                 return BluetoothA2dp.OPTIONAL_CODECS_SUPPORT_UNKNOWN;
             }
 
@@ -545,8 +546,8 @@ public class DatabaseManager {
             if (oldValue == newValue) {
                 return;
             }
-            logMetadataChange(address, "Enable optional codec changed: "
-                    + oldValue + " -> " + newValue);
+            logMetadataChange(data, "Enable optional codec changed: "
+                                     + oldValue + " -> " + newValue);
 
             data.a2dpOptionalCodecsEnabled = newValue;
             updateDatabase(data);
@@ -574,7 +575,7 @@ public class DatabaseManager {
             String address = device.getAddress();
 
             if (!mMetadataCache.containsKey(address)) {
-                Log.d(TAG, "getA2dpOptionalCodecEnabled: device " + address + " is not in cache");
+                Log.d(TAG, "getA2dpOptionalCodecEnabled: device " + device + " is not in cache");
                 return BluetoothA2dp.OPTIONAL_CODECS_PREF_UNKNOWN;
             }
 
@@ -688,7 +689,7 @@ public class DatabaseManager {
                             .getRemoteDevice(metadata.getAddress()));
                 } catch (IllegalArgumentException ex) {
                     Log.d(TAG, "getBondedDevicesOrdered: Invalid address for "
-                            + "device " + metadata.getAddress());
+                               + "device " + metadata.getAnonymizedAddress());
                 }
             }
         }
@@ -742,7 +743,7 @@ public class DatabaseManager {
                                 metadata.getAddress());
                     } catch (IllegalArgumentException ex) {
                         Log.d(TAG, "getMostRecentlyConnectedA2dpDevice: Invalid address for "
-                                + "device " + metadata.getAddress());
+                                   + "device " + metadata.getAnonymizedAddress());
                     }
                 }
             }
@@ -938,7 +939,7 @@ public class DatabaseManager {
         data.is_active_a2dp_device = isActiveA2dpDevice;
         mMetadataCache.put(address, data);
         updateDatabase(data);
-        logMetadataChange(address, "Metadata created");
+        logMetadataChange(data, "Metadata created");
     }
 
     @VisibleForTesting
@@ -953,7 +954,8 @@ public class DatabaseManager {
                     for (int key : list) {
                         mAdapterService.metadataChanged(address, key, null);
                     }
-                    Log.i(TAG, "remove unpaired device from database " + address);
+                    Log.i(TAG, "remove unpaired device from database "
+                               + metadata.getAnonymizedAddress());
                     deleteDatabase(mMetadataCache.get(address));
                 }
             });
@@ -1194,7 +1196,7 @@ public class DatabaseManager {
             Log.e(TAG, "deleteDatabase: address is null");
             return;
         }
-        logMetadataChange(address, "Metadata deleted");
+        logMetadataChange(data, "Metadata deleted");
         Message message = mHandler.obtainMessage(MSG_DELETE_DATABASE);
         message.obj = data.getAddress();
         mHandler.sendMessage(message);
@@ -1236,10 +1238,11 @@ public class DatabaseManager {
                 Integer.parseInt(macAddress[2], 16));
     }
 
-    private void logMetadataChange(String address, String log) {
+    private void logMetadataChange(Metadata data, String log) {
         String time = Utils.getLocalTimeString();
         String uidPid = Utils.getUidPidString();
-        mMetadataChangedLog.add(time + " (" + uidPid + ") " + address + " " + log);
+        mMetadataChangedLog.add(time + " (" + uidPid + ") " + data.getAnonymizedAddress()
+                                + " " + log);
     }
 
     /**

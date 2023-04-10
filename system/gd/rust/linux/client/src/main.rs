@@ -15,10 +15,10 @@ use crate::callbacks::{
     AdminCallback, AdvertisingSetCallback, BtCallback, BtConnectionCallback, BtManagerCallback,
     BtSocketManagerCallback, ScannerCallback, SuspendCallback,
 };
-use crate::command_handler::CommandHandler;
+use crate::command_handler::{CommandHandler, SocketSchedule};
 use crate::dbus_iface::{
-    BluetoothAdminDBus, BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, BluetoothQADBus,
-    BluetoothSocketManagerDBus, SuspendDBus,
+    BluetoothAdminDBus, BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus,
+    BluetoothQALegacyDBus, BluetoothSocketManagerDBus, BluetoothTelephonyDBus, SuspendDBus,
 };
 use crate::editor::AsyncEditor;
 use bt_topshim::topstack;
@@ -74,8 +74,8 @@ pub(crate) struct ClientContext {
     /// Proxy for adapter interface. Only exists when the default adapter is enabled.
     pub(crate) adapter_dbus: Option<BluetoothDBus>,
 
-    /// Proxy for adapter QA interface. Only exists when the default adapter is enabled.
-    pub(crate) qa_dbus: Option<BluetoothQADBus>,
+    /// Proxy for adapter QA Legacy interface. Only exists when the default adapter is enabled.
+    pub(crate) qa_legacy_dbus: Option<BluetoothQALegacyDBus>,
 
     /// Proxy for GATT interface.
     pub(crate) gatt_dbus: Option<BluetoothGattDBus>,
@@ -88,6 +88,9 @@ pub(crate) struct ClientContext {
 
     /// Proxy for socket manager interface.
     pub(crate) socket_manager_dbus: Option<BluetoothSocketManagerDBus>,
+
+    /// Proxy for Telephony interface.
+    pub(crate) telephony_dbus: Option<BluetoothTelephonyDBus>,
 
     /// Channel to send actions to take in the foreground
     fg: mpsc::Sender<ForegroundActions>,
@@ -121,6 +124,12 @@ pub(crate) struct ClientContext {
 
     /// Data of GATT client preference.
     gatt_client_context: GattClientContext,
+
+    /// The schedule when a socket is connected.
+    socket_test_schedule: Option<SocketSchedule>,
+
+    /// The handle of the SDP record for MPS (Multi-Profile Specification).
+    mps_sdp_handle: Option<i32>,
 }
 
 impl ClientContext {
@@ -146,11 +155,12 @@ impl ClientContext {
             bonded_devices: HashMap::new(),
             manager_dbus,
             adapter_dbus: None,
-            qa_dbus: None,
+            qa_legacy_dbus: None,
             gatt_dbus: None,
             admin_dbus: None,
             suspend_dbus: None,
             socket_manager_dbus: None,
+            telephony_dbus: None,
             fg: tx,
             dbus_connection,
             dbus_crossroads,
@@ -162,6 +172,8 @@ impl ClientContext {
             socket_manager_callback_id: None,
             is_restricted,
             gatt_client_context: GattClientContext::new(),
+            socket_test_schedule: None,
+            mps_sdp_handle: None,
         }
     }
 
@@ -192,7 +204,7 @@ impl ClientContext {
 
         let dbus = BluetoothDBus::new(conn.clone(), idx);
         self.adapter_dbus = Some(dbus);
-        self.qa_dbus = Some(BluetoothQADBus::new(conn.clone(), idx));
+        self.qa_legacy_dbus = Some(BluetoothQALegacyDBus::new(conn.clone(), idx));
 
         let gatt_dbus = BluetoothGattDBus::new(conn.clone(), idx);
         self.gatt_dbus = Some(gatt_dbus);
@@ -204,6 +216,8 @@ impl ClientContext {
         self.socket_manager_dbus = Some(socket_manager_dbus);
 
         self.suspend_dbus = Some(SuspendDBus::new(conn.clone(), idx));
+
+        self.telephony_dbus = Some(BluetoothTelephonyDBus::new(conn.clone(), idx));
 
         // Trigger callback registration in the foreground
         let fg = self.fg.clone();
@@ -367,7 +381,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             _ => {
-                start_interactive_shell(handler, tx, rx, context).await;
+                start_interactive_shell(handler, tx, rx, context).await?;
             }
         };
         return Result::Ok(());
@@ -379,7 +393,7 @@ async fn start_interactive_shell(
     tx: mpsc::Sender<ForegroundActions>,
     mut rx: mpsc::Receiver<ForegroundActions>,
     context: Arc<Mutex<ClientContext>>,
-) {
+) -> Result<(), Box<dyn std::error::Error>> {
     let command_rule_list = handler.get_command_rule_list().clone();
     let context_for_closure = context.clone();
 
@@ -387,9 +401,9 @@ async fn start_interactive_shell(
 
     // Async task to keep reading new lines from user
     let semaphore = semaphore_fg.clone();
+    let editor = AsyncEditor::new(command_rule_list, context_for_closure)
+        .map_err(|x| format!("creating async editor failed: {x}"))?;
     tokio::spawn(async move {
-        let editor = AsyncEditor::new(command_rule_list, context_for_closure);
-
         loop {
             // Wait until ForegroundAction::Readline finishes its task.
             let permit = semaphore.acquire().await;
@@ -594,12 +608,11 @@ async fn start_interactive_shell(
                             None => break,
                         };
 
-                        if cmd.eq("quit") {
+                        if cmd == "quit" {
                             break 'readline;
                         }
 
-                        handler.process_cmd_line(&String::from(cmd), &rest.to_vec());
-
+                        handler.process_cmd_line(cmd, &rest.to_vec());
                         break;
                     }
 
@@ -613,4 +626,5 @@ async fn start_interactive_shell(
     semaphore_fg.close();
 
     print_info!("Client exiting");
+    Ok(())
 }

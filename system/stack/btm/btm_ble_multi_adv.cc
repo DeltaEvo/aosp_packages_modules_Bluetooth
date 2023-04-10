@@ -17,7 +17,7 @@
  *
  ******************************************************************************/
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/location.h>
 #include <base/logging.h>
 #include <base/memory/weak_ptr.h>
@@ -976,11 +976,6 @@ class BleAdvertisingManagerImpl
 
       p_inst->timeout_cb.Run(status);
       return;
-    }
-
-    if (BTM_BleLocalPrivacyEnabled() &&
-        advertising_handle <= BTM_BLE_MULTI_ADV_MAX) {
-      btm_acl_update_conn_addr(connection_handle, p_inst->own_address);
     }
 
     VLOG(1) << "reneabling advertising";

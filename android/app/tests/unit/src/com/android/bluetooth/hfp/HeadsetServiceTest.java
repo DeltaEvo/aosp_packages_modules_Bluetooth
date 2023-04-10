@@ -19,7 +19,7 @@ package com.android.bluetooth.hfp;
 import static org.mockito.Mockito.*;
 
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothAudioPolicy;
+import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
@@ -90,8 +90,6 @@ public class HeadsetServiceTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when HeadsetService is not enabled",
-                HeadsetService.isEnabled());
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         // We cannot mock HeadsetObjectsFactory.getInstance() with Mockito.
@@ -117,8 +115,8 @@ public class HeadsetServiceTest {
             Set<BluetoothDevice> keys = mStateMachines.keySet();
             return keys.toArray(new BluetoothDevice[keys.size()]);
         }).when(mAdapterService).getBondedDevices();
-        doReturn(new BluetoothAudioPolicy.Builder().build()).when(mAdapterService)
-                .getAudioPolicy(any(BluetoothDevice.class));
+        doReturn(new BluetoothSinkAudioPolicy.Builder().build()).when(mAdapterService)
+                .getRequestedAudioPolicyAsSink(any(BluetoothDevice.class));
         // Mock system interface
         doNothing().when(mSystemInterface).stop();
         when(mSystemInterface.getHeadsetPhoneState()).thenReturn(mPhoneState);
@@ -156,9 +154,6 @@ public class HeadsetServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!HeadsetService.isEnabled()) {
-            return;
-        }
         TestUtils.stopService(mServiceRule, HeadsetService.class);
         mHeadsetService = HeadsetService.getHeadsetService();
         Assert.assertNull(mHeadsetService);
@@ -724,6 +719,7 @@ public class HeadsetServiceTest {
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
         verify(mAudioManager, never()).setA2dpSuspended(true);
+        verify(mAudioManager, never()).setLeAudioSuspended(true);
         HeadsetTestUtils.verifyPhoneStateChangeSetters(mPhoneState, headsetCallState,
                 ASYNC_CALL_TIMEOUT_MILLIS);
     }
@@ -781,8 +777,9 @@ public class HeadsetServiceTest {
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
 
-        // Should not ask Audio HAL to suspend A2DP without active device
+        // Should not ask Audio HAL to suspend A2DP or LE Audio without active device
         verify(mAudioManager, never()).setA2dpSuspended(true);
+        verify(mAudioManager, never()).setLeAudioSuspended(true);
         // Make sure we notify device about this change
         verify(mStateMachines.get(mCurrentDevice)).sendMessage(
                 HeadsetStateMachine.CALL_STATE_CHANGED, headsetCallState);
@@ -799,8 +796,9 @@ public class HeadsetServiceTest {
                 headsetCallState.mType, headsetCallState.mName, false);
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
-        // Ask Audio HAL to suspend A2DP
+        // Ask Audio HAL to suspend A2DP and LE Audio
         verify(mAudioManager).setA2dpSuspended(true);
+        verify(mAudioManager).setLeAudioSuspended(true);
         // Make sure state is updated
         verify(mStateMachines.get(mCurrentDevice)).sendMessage(
                 HeadsetStateMachine.CALL_STATE_CHANGED, headsetCallState);
@@ -863,8 +861,9 @@ public class HeadsetServiceTest {
         mHeadsetService.phoneStateChanged(headsetCallState.mNumActive,
                 headsetCallState.mNumHeld, headsetCallState.mCallState, headsetCallState.mNumber,
                 headsetCallState.mType, headsetCallState.mName, false);
-        // Ask Audio HAL to suspend A2DP
+        // Ask Audio HAL to suspend A2DP and LE Audio
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setLeAudioSuspended(true);
         // Make sure we notify devices about this change
         for (BluetoothDevice device : connectedDevices) {
             verify(mStateMachines.get(device)).sendMessage(HeadsetStateMachine.CALL_STATE_CHANGED,
@@ -1066,19 +1065,21 @@ public class HeadsetServiceTest {
                 BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_CONNECTED);
 
         when(mStateMachines.get(mCurrentDevice).getHfpCallAudioPolicy()).thenReturn(
-                new BluetoothAudioPolicy.Builder()
-                        .setCallEstablishPolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
-                        .setConnectingTimePolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
-                        .setInBandRingtonePolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
+                new BluetoothSinkAudioPolicy.Builder()
+                        .setCallEstablishPolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                        .setActiveDevicePolicyAfterConnection(
+                                BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                        .setInBandRingtonePolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
                         .build()
         );
         Assert.assertEquals(true, mHeadsetService.isInbandRingingEnabled());
 
         when(mStateMachines.get(mCurrentDevice).getHfpCallAudioPolicy()).thenReturn(
-                new BluetoothAudioPolicy.Builder()
-                        .setCallEstablishPolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
-                        .setConnectingTimePolicy(BluetoothAudioPolicy.POLICY_ALLOWED)
-                        .setInBandRingtonePolicy(BluetoothAudioPolicy.POLICY_NOT_ALLOWED)
+                new BluetoothSinkAudioPolicy.Builder()
+                        .setCallEstablishPolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                        .setActiveDevicePolicyAfterConnection(
+                                BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                        .setInBandRingtonePolicy(BluetoothSinkAudioPolicy.POLICY_NOT_ALLOWED)
                         .build()
         );
         Assert.assertEquals(false, mHeadsetService.isInbandRingingEnabled());

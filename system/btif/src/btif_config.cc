@@ -55,7 +55,6 @@
 #include "raw_address.h"
 #include "stack/include/bt_octets.h"
 
-#define BT_CONFIG_SOURCE_TAG_NUM 1010001
 #define TEMPORARY_SECTION_CAPACITY 10000
 
 #define INFO_SECTION "Info"
@@ -112,7 +111,7 @@ static void read_or_set_metrics_salt() {
     metrics_salt.fill(0);
   }
   if (!AddressObfuscator::IsSaltValid(metrics_salt)) {
-    LOG(INFO) << __func__ << ": Metrics salt is not invalid, creating new one";
+    LOG(INFO) << __func__ << ": Metrics salt is invalid, creating new one";
     if (RAND_bytes(metrics_salt.data(), metrics_salt.size()) != 1) {
       LOG(FATAL) << __func__ << "Failed to generate salt for metrics";
     }

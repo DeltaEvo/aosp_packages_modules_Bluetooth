@@ -71,6 +71,7 @@ static_library("btif") {
     "src/btif_hf.cc",
     "src/btif_hf_client.cc",
     "src/btif_hh.cc",
+    "src/btif_iot_config.cc",
     "src/btif_keystore.cc",
     "src/btif_le_audio.cc",
     "src/btif_metrics_logging.cc",
@@ -113,7 +114,6 @@ static_library("btif") {
     "//bt/system/stack/include",
     "//bt/system/internal_include",
     "//bt/system/udrv/include",
-    "//bt/system/utils/include",
     "//bt/system/vnd/include",
     "//bt/system/profile/avrcp",
   ]

@@ -42,14 +42,18 @@
 #include "btif/include/btif_acl.h"
 #include "common/metrics.h"
 #include "device/include/controller.h"
+#include "device/include/device_iot_config.h"
 #include "device/include/interop.h"
+#include "gd/metrics/metrics_state.h"
 #include "include/l2cap_hci_link_interface.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/controller.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/l2c_api.h"
+#include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
+#include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -72,6 +76,7 @@
 #include "stack/include/sco_hci_link_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
+#include "os/metrics.h"
 
 #ifndef PROPERTY_LINK_SUPERVISION_TIMEOUT
 #define PROPERTY_LINK_SUPERVISION_TIMEOUT \
@@ -89,6 +94,8 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle,
 void BTM_db_reset(void);
 
 extern tBTM_CB btm_cb;
+extern void btm_iot_save_remote_properties(tACL_CONN* p_acl_cb);
+extern void btm_iot_save_remote_versions(tACL_CONN* p_acl_cb);
 
 struct StackAclBtmAcl {
   tACL_CONN* acl_allocate_connection();
@@ -104,6 +111,8 @@ struct StackAclBtmAcl {
   void set_default_packet_types_supported(uint16_t packet_types_supported) {
     btm_cb.acl_cb_.btm_acl_pkt_types_supported = packet_types_supported;
   }
+  void btm_acl_consolidate(const RawAddress& identity_addr,
+                           const RawAddress& rpa);
 };
 
 struct RoleChangeView {
@@ -307,6 +316,26 @@ tACL_CONN* acl_get_connection_from_address(const RawAddress& bd_addr,
   return internal_.btm_bda_to_acl(bd_addr, transport);
 }
 
+void StackAclBtmAcl::btm_acl_consolidate(const RawAddress& identity_addr,
+                                         const RawAddress& rpa) {
+  tACL_CONN* p_acl = &btm_cb.acl_cb_.acl_db[0];
+  for (uint8_t index = 0; index < MAX_L2CAP_LINKS; index++, p_acl++) {
+    if (!p_acl->in_use) continue;
+
+    if (p_acl->remote_addr == rpa) {
+      LOG_INFO("consolidate %s -> %s", ADDRESS_TO_LOGGABLE_CSTR(rpa),
+               ADDRESS_TO_LOGGABLE_CSTR(identity_addr));
+      p_acl->remote_addr = identity_addr;
+      return;
+    }
+  }
+}
+
+void btm_acl_consolidate(const RawAddress& identity_addr,
+                         const RawAddress& rpa) {
+  return internal_.btm_acl_consolidate(identity_addr, rpa);
+}
+
 /*******************************************************************************
  *
  * Function         btm_handle_to_acl_index
@@ -344,6 +373,11 @@ void btm_acl_process_sca_cmpl_pkt(uint8_t len, uint8_t* data) {
   uint16_t handle;
   uint8_t sca;
   uint8_t status;
+
+  if (len < 4) {
+    LOG_WARN("Malformatted packet, not containing enough data");
+    return;
+  }
 
   STREAM_TO_UINT8(status, data);
 
@@ -418,10 +452,9 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
     btm_set_link_policy(p_acl, btm_cb.acl_cb_.DefaultLinkPolicy());
   }
 
-  if (transport == BT_TRANSPORT_LE) {
-    btm_ble_refresh_local_resolvable_private_addr(
-        bda, btm_cb.ble_ctr_cb.addr_mgnt_cb.private_addr);
-  }
+  // save remote properties to iot conf file
+  btm_iot_save_remote_properties(p_acl);
+
   /* if BR/EDR do something more */
   if (transport == BT_TRANSPORT_BR_EDR) {
     btsnd_hcic_read_rmt_clk_offset(hci_handle);
@@ -444,15 +477,6 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
 void btm_acl_create_failed(const RawAddress& bda, tBT_TRANSPORT transport,
                            tHCI_STATUS hci_status) {
   BTA_dm_acl_up_failed(bda, transport, hci_status);
-}
-
-void btm_acl_update_conn_addr(uint16_t handle, const RawAddress& address) {
-  tACL_CONN* p_acl = internal_.acl_get_connection_from_handle(handle);
-  if (p_acl == nullptr) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-  p_acl->conn_addr = address;
 }
 
 void btm_configure_data_path(uint8_t direction, uint8_t path_id,
@@ -643,6 +667,23 @@ void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
     return;
   }
 
+  /* Common Criteria mode only: if we are trying to drop encryption on an
+   * encrypted connection, drop the connection */
+  if (bluetooth::os::ParameterProvider::IsCommonCriteriaMode()) {
+    if (p->is_encrypted && !encr_enable) {
+      LOG(ERROR)
+          << __func__
+          << " attempting to decrypt encrypted connection, disconnecting. "
+             "handle: "
+          << loghex(handle);
+
+      acl_disconnect_from_handle(handle, HCI_ERR_HOST_REJECT_SECURITY,
+                                 "stack::btu::btu_hcif::read_drop_encryption "
+                                 "Connection Already Encrypted");
+      return;
+    }
+  }
+
   p->is_encrypted = encr_enable;
 
   /* Process Role Switch if active */
@@ -819,6 +860,9 @@ static void maybe_chain_more_commands_after_read_remote_version_complete(
                 bt_transport_text(p_acl_cb->transport).c_str(),
                 ADDRESS_TO_LOGGABLE_CSTR(p_acl_cb->remote_addr));
   }
+
+  // save remote versions to iot conf file
+  btm_iot_save_remote_versions(p_acl_cb);
 }
 
 void btm_process_remote_version_complete(uint8_t status, uint16_t handle,
@@ -920,6 +964,13 @@ void btm_read_remote_features_complete(uint16_t handle, uint8_t* features) {
                   HCI_FEATURE_BYTES_PER_PAGE);
   p_acl_cb->peer_lmp_feature_valid[0] = true;
 
+  /* save remote supported features to iot conf file */
+  std::string key = IOT_CONF_KEY_RT_SUPP_FEATURES "_" + std::to_string(0);
+
+  DEVICE_IOT_CONFIG_ADDR_SET_BIN(p_acl_cb->remote_addr, key,
+                                 p_acl_cb->peer_lmp_feature_pages[0],
+                                 BD_FEATURES_LEN);
+
   if ((HCI_LMP_EXTENDED_SUPPORTED(p_acl_cb->peer_lmp_feature_pages[0])) &&
       (controller_get_interface()
            ->supports_reading_remote_extended_features())) {
@@ -994,6 +1045,13 @@ void btm_read_remote_ext_features_complete(uint16_t handle, uint8_t page_num,
   STREAM_TO_ARRAY(p_acl_cb->peer_lmp_feature_pages[page_num], features,
                   HCI_FEATURE_BYTES_PER_PAGE);
   p_acl_cb->peer_lmp_feature_valid[page_num] = true;
+
+  /* save remote extended features to iot conf file */
+  std::string key = IOT_CONF_KEY_RT_EXT_FEATURES "_" + std::to_string(page_num);
+
+  DEVICE_IOT_CONFIG_ADDR_SET_BIN(p_acl_cb->remote_addr, key,
+                                 p_acl_cb->peer_lmp_feature_pages[page_num],
+                                 BD_FEATURES_LEN);
 
   /* If there is the next remote features page and
    * we have space to keep this page data - read this page */
@@ -2435,35 +2493,6 @@ const RawAddress acl_address_from_handle(uint16_t handle) {
   return p_acl->remote_addr;
 }
 
-/*******************************************************************************
- *
- * Function         btm_ble_refresh_local_resolvable_private_addr
- *
- * Description      This function refresh the currently used resolvable private
- *                  address for the active link to the remote device
- *
- ******************************************************************************/
-void btm_ble_refresh_local_resolvable_private_addr(
-    const RawAddress& pseudo_addr, const RawAddress& local_rpa) {
-  tACL_CONN* p_acl = internal_.btm_bda_to_acl(pseudo_addr, BT_TRANSPORT_LE);
-  if (p_acl == nullptr) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-
-  if (btm_cb.ble_ctr_cb.privacy_mode == BTM_PRIVACY_NONE) {
-    p_acl->conn_addr_type = BLE_ADDR_PUBLIC;
-    p_acl->conn_addr = *controller_get_interface()->get_address();
-  } else {
-    p_acl->conn_addr_type = BLE_ADDR_RANDOM;
-    if (local_rpa.IsEmpty()) {
-      p_acl->conn_addr = btm_cb.ble_ctr_cb.addr_mgnt_cb.private_addr;
-    } else {
-      p_acl->conn_addr = local_rpa;
-    }
-  }
-}
-
 bool sco_peer_supports_esco_2m_phy(const RawAddress& remote_bda) {
   uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
   if (features == nullptr) {
@@ -2621,6 +2650,12 @@ bool acl_set_peer_le_features_from_handle(uint16_t hci_handle,
   STREAM_TO_ARRAY(p_acl->peer_le_features, p, BD_FEATURES_LEN);
   p_acl->peer_le_features_valid = true;
   LOG_DEBUG("Completed le feature read request");
+
+  /* save LE remote supported features to iot conf file */
+  std::string key = IOT_CONF_KEY_RT_SUPP_FEATURES "_" + std::to_string(0);
+
+  DEVICE_IOT_CONFIG_ADDR_SET_BIN(p_acl->remote_addr, key,
+                                 p_acl->peer_le_features, BD_FEATURES_LEN);
   return true;
 }
 
@@ -2721,6 +2756,15 @@ void acl_create_classic_connection(const RawAddress& bd_addr,
   return bluetooth::shim::ACL_CreateClassicConnection(bd_addr);
 }
 
+void btm_connection_request(const RawAddress& bda,
+                            const bluetooth::types::ClassOfDevice& cod) {
+  // Copy Cod information
+  DEV_CLASS dc;
+  dc[0] = cod.cod[2], dc[1] = cod.cod[1], dc[2] = cod.cod[0];
+
+  btm_sec_conn_req(bda, dc);
+}
+
 void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc) {
   btm_sec_conn_req(bda, dc);
   l2c_link_hci_conn_req(bda);
@@ -2803,12 +2847,15 @@ void acl_write_automatic_flush_timeout(const RawAddress& bd_addr,
   btsnd_hcic_write_auto_flush_tout(p_acl->hci_handle, flush_timeout_in_ticks);
 }
 
-bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
+bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
+                                      tBLE_ADDR_TYPE addr_type) {
   tBLE_BD_ADDR address_with_type{
       .bda = bd_addr,
-      .type = BLE_ADDR_PUBLIC,
+      .type = addr_type,
   };
-  gatt_find_in_device_record(bd_addr, &address_with_type);
+  if (address_with_type.type == BLE_ADDR_PUBLIC) {
+    gatt_find_in_device_record(bd_addr, &address_with_type);
+  }
   LOG_DEBUG("Creating le direct connection to:%s",
             ADDRESS_TO_LOGGABLE_CSTR(address_with_type));
 
@@ -2820,9 +2867,22 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
     return false;
   }
 
-    bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
-                                                /* is_direct */ true);
-    return true;
+  // argument list
+  auto argument_list = std::vector<std::pair<bluetooth::os::ArgumentType, int>>();
+
+  bluetooth::shim::LogMetricBluetoothLEConnectionMetricEvent(
+      bd_addr, android::bluetooth::le::LeConnectionOriginType::ORIGIN_NATIVE,
+      android::bluetooth::le::LeConnectionType::CONNECTION_TYPE_LE_ACL,
+      android::bluetooth::le::LeConnectionState::STATE_LE_ACL_START,
+      argument_list);
+
+  bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
+                                              /* is_direct */ true);
+  return true;
+}
+
+bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
+  return acl_create_le_connection_with_id(id, bd_addr, BLE_ADDR_PUBLIC);
 }
 
 bool acl_create_le_connection(const RawAddress& bd_addr) {

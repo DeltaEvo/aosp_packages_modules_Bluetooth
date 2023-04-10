@@ -26,7 +26,7 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
+#include "test/common/mock_functions.h"
 
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
@@ -34,7 +34,7 @@ extern std::map<std::string, int> mock_function_count_map;
 //       still applies, but crafting proper inclusion is out of scope
 //       for this effort.  This compilation unit may compile as-is, or
 //       may need attention to prune from (or add to ) the inclusion set.
-#include <base/bind.h>
+#include <base/functional/bind.h>
 
 #include <map>
 #include <string>
@@ -417,15 +417,6 @@ struct BTA_DmSetLocalDiRecord {
   };
 };
 extern struct BTA_DmSetLocalDiRecord BTA_DmSetLocalDiRecord;
-
-// Name: BTA_EnableTestMode
-// Params: void
-// Return: void
-struct BTA_EnableTestMode {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct BTA_EnableTestMode BTA_EnableTestMode;
 
 // Name: BTA_GetEirService
 // Params: uint8_t* p_eir, size_t eir_len, tBTA_SERVICE_MASK* p_services

@@ -18,7 +18,7 @@
 
 #include "le_scanning_manager.h"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/threading/thread.h>
 #include <hardware/bluetooth.h>
@@ -49,6 +49,8 @@
 
 using bluetooth::ToGdAddress;
 using bluetooth::ToRawAddress;
+
+extern tBTM_CB btm_cb;
 
 namespace {
 constexpr char kBtmLogTag[] = "SCAN";
@@ -102,6 +104,8 @@ class DefaultScanningCallback : public ::ScanningCallbacks {
     LogUnused();
   };
 
+  void OnBigInfoReport(uint16_t sync_handle, bool encrypted) override {LogUnused(); };
+
  private:
   static void LogUnused() {
     LOG_WARN("BLE Scanning callbacks have not been registered");
@@ -134,6 +138,10 @@ using bluetooth::shim::BleScannerInterfaceImpl;
 void BleScannerInterfaceImpl::Init() {
   LOG_INFO("init BleScannerInterfaceImpl");
   bluetooth::shim::GetScanning()->RegisterScanningCallback(this);
+
+  if (bluetooth::shim::GetMsftExtensionManager()) {
+    bluetooth::shim::GetMsftExtensionManager()->SetScanningCallback(this);
+  }
 }
 
 /** Registers a scanner with the stack */
@@ -154,14 +162,30 @@ void BleScannerInterfaceImpl::Unregister(int scanner_id) {
 void BleScannerInterfaceImpl::Scan(bool start) {
   LOG(INFO) << __func__ << " in shim layer " <<  ((start) ? "started" : "stopped");
   bluetooth::shim::GetScanning()->Scan(start);
-  BTM_LogHistory(
-      kBtmLogTag, RawAddress::kEmpty,
-      base::StringPrintf("Le scan %s", (start) ? "started" : "stopped"));
-  if (start) {
+  if (start && !btm_cb.ble_ctr_cb.is_ble_observe_active()) {
+    btm_cb.neighbor.le_scan = {
+        .start_time_ms = timestamper_in_milliseconds.GetTimestamp(),
+        .results = 0,
+    };
+    BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Le scan started");
     btm_cb.ble_ctr_cb.set_ble_observe_active();
-  } else {
+  } else if (!start && btm_cb.ble_ctr_cb.is_ble_observe_active()) {
+    // stopped
+    const unsigned long long duration_timestamp =
+        timestamper_in_milliseconds.GetTimestamp() -
+        btm_cb.neighbor.le_scan.start_time_ms;
+    BTM_LogHistory(kBtmLogTag, RawAddress::kEmpty, "Le scan stopped",
+                   base::StringPrintf("duration_s:%6.3f results:%-3lu",
+                                      (double)duration_timestamp / 1000.0,
+                                      btm_cb.neighbor.le_scan.results));
     btm_cb.ble_ctr_cb.reset_ble_observe();
+    btm_cb.neighbor.le_scan = {};
+  } else {
+    LOG_WARN("Invalid state: start:%d, current scan state: %d", start,
+             btm_cb.ble_ctr_cb.is_ble_observe_active());
+    return;
   }
+
   do_in_jni_thread(FROM_HERE,
                    base::Bind(&BleScannerInterfaceImpl::AddressCache::init,
                               base::Unretained(&address_cache_)));
@@ -279,7 +303,7 @@ void BleScannerInterfaceImpl::MsftAdvMonitorEnable(
   msft_callbacks_.Enable = cb;
   bluetooth::shim::GetMsftExtensionManager()->MsftAdvMonitorEnable(
       enable, base::Bind(&BleScannerInterfaceImpl::OnMsftAdvMonitorEnable,
-                         base::Unretained(this)));
+                         base::Unretained(this), enable));
 }
 
 /** Callback of adding MSFT filter */
@@ -298,8 +322,15 @@ void BleScannerInterfaceImpl::OnMsftAdvMonitorRemove(
 
 /** Callback of enabling / disabling MSFT scan filter */
 void BleScannerInterfaceImpl::OnMsftAdvMonitorEnable(
-    bluetooth::hci::ErrorCode status) {
+    bool enable, bluetooth::hci::ErrorCode status) {
   LOG_INFO("in shim layer");
+
+  if (status == bluetooth::hci::ErrorCode::SUCCESS) {
+    bluetooth::shim::GetScanning()->SetScanFilterPolicy(
+        enable ? bluetooth::hci::LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY
+               : bluetooth::hci::LeScanningFilterPolicy::ACCEPT_ALL);
+  }
+
   msft_callbacks_.Enable.Run((uint8_t)status);
 }
 
@@ -474,6 +505,7 @@ void BleScannerInterfaceImpl::OnScanResult(
   RawAddress raw_address = ToRawAddress(address);
   tBLE_ADDR_TYPE ble_addr_type = to_ble_addr_type(address_type);
 
+  btm_cb.neighbor.le_scan.results++;
   if (ble_addr_type != BLE_ADDR_ANONYMOUS) {
     btm_ble_process_adv_addr(raw_address, &ble_addr_type);
   }
@@ -481,8 +513,8 @@ void BleScannerInterfaceImpl::OnScanResult(
   do_in_jni_thread(
       FROM_HERE,
       base::BindOnce(&BleScannerInterfaceImpl::handle_remote_properties,
-                     base::Unretained(this), raw_address, ble_addr_type,
-                     advertising_data));
+                     base::Unretained(this), event_type, raw_address,
+                     ble_addr_type, advertising_data));
 
   do_in_jni_thread(
       FROM_HERE,
@@ -510,6 +542,7 @@ void BleScannerInterfaceImpl::OnTrackAdvFoundLost(
                              &on_found_on_lost_info.advertiser_address_type);
   }
 
+  track_info.monitor_handle = on_found_on_lost_info.monitor_handle;
   track_info.advertiser_address = raw_address;
   track_info.advertiser_address_type =
       on_found_on_lost_info.advertiser_address_type;
@@ -603,6 +636,12 @@ void BleScannerInterfaceImpl::OnPeriodicSyncTransferred(
                                   pa_source, status, ToRawAddress(address)));
 }
 
+void BleScannerInterfaceImpl::OnBigInfoReport(uint16_t sync_handle, bool encrypted) {
+  do_in_jni_thread(FROM_HERE,
+                   base::BindOnce(&ScanningCallbacks::OnBigInfoReport,
+                   base::Unretained(scanning_callbacks_), sync_handle, encrypted));
+}
+
 void BleScannerInterfaceImpl::OnTimeout() {}
 void BleScannerInterfaceImpl::OnFilterEnable(bluetooth::hci::Enable enable,
                                              uint8_t status) {}
@@ -674,6 +713,10 @@ bool BleScannerInterfaceImpl::parse_filter_command(
   advertising_packet_content_filter_command.company_mask =
       apcf_command.company_mask;
   advertising_packet_content_filter_command.ad_type = apcf_command.ad_type;
+  advertising_packet_content_filter_command.org_id = apcf_command.org_id;
+  advertising_packet_content_filter_command.tds_flags = apcf_command.tds_flags;
+  advertising_packet_content_filter_command.tds_flags_mask =
+      apcf_command.tds_flags_mask;
   advertising_packet_content_filter_command.data.assign(
       apcf_command.data.begin(), apcf_command.data.end());
   advertising_packet_content_filter_command.data_mask.assign(
@@ -683,7 +726,7 @@ bool BleScannerInterfaceImpl::parse_filter_command(
 }
 
 void BleScannerInterfaceImpl::handle_remote_properties(
-    RawAddress bd_addr, tBLE_ADDR_TYPE addr_type,
+    uint16_t event_type, RawAddress bd_addr, tBLE_ADDR_TYPE addr_type,
     std::vector<uint8_t> advertising_data) {
   if (!bluetooth::shim::is_gd_stack_started_up()) {
     LOG_WARN("Gd stack is stopped, return");
@@ -695,15 +738,33 @@ void BleScannerInterfaceImpl::handle_remote_properties(
     return;
   }
 
-  auto device_type = bluetooth::hci::DeviceType::LE;
   uint8_t flag_len;
   const uint8_t* p_flag = AdvertiseDataParser::GetFieldByType(
       advertising_data, BTM_BLE_AD_TYPE_FLAG, &flag_len);
-  if (p_flag != NULL && flag_len != 0) {
-    if ((BTM_BLE_BREDR_NOT_SPT & *p_flag) == 0) {
-      device_type = bluetooth::hci::DeviceType::DUAL;
-    }
+  bluetooth::hci::DeviceType device_type;
+  bool is_adv_connectable = event_type & (1 << BLE_EVT_CONNECTABLE_BIT);
+  // 1. If adv is connectable and flag data is not present, device type is
+  // DUAL mode.
+  if (is_adv_connectable && p_flag == nullptr) {
+    device_type = bluetooth::hci::DeviceType::DUAL;
   }
+  // 2. If adv is not connectable and flag data is not present, device type is
+  // UNKNOWN.
+  else if (!is_adv_connectable && p_flag == nullptr) {
+    device_type = bluetooth::hci::DeviceType::UNKNOWN;
+  }
+  // 3. If flag data is present, use `BR/EDR Not Supported` bit to find device
+  // type.
+  else {
+    device_type = (BTM_BLE_BREDR_NOT_SPT & *p_flag)
+                      ? bluetooth::hci::DeviceType::LE
+                      : bluetooth::hci::DeviceType::DUAL;
+  }
+  LOG_DEBUG(
+      "%s event_type: %d, is_adv_connectable: %d, flag data: %d, device_type: "
+      "%d",
+      __func__, event_type, is_adv_connectable, (p_flag ? *p_flag : 0),
+      device_type);
 
   uint8_t remote_name_len;
   const uint8_t* p_eir_remote_name = AdvertiseDataParser::GetFieldByType(
@@ -715,7 +776,7 @@ void BleScannerInterfaceImpl::handle_remote_properties(
   }
 
   // update device name
-  if ((addr_type != BLE_ADDR_RANDOM) || (p_eir_remote_name)) {
+  if (p_eir_remote_name) {
     if (!address_cache_.find(bd_addr)) {
       address_cache_.add(bd_addr);
 

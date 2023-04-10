@@ -18,8 +18,8 @@
 
 #include "connection_manager.h"
 
-#include <base/bind.h>
-#include <base/callback.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 #include <base/location.h>
 #include <base/logging.h>
 
@@ -397,6 +397,10 @@ bool background_connect_remove(uint8_t app_id, const RawAddress& address) {
   return true;
 }
 
+bool is_background_connection(const RawAddress& address) {
+  return bgconn_dev.find(address) != bgconn_dev.end();
+}
+
 /** deregister all related background connetion device. */
 void on_app_deregistered(uint8_t app_id) {
   LOG_DEBUG("app_id=%d", static_cast<int>(app_id));
@@ -460,7 +464,7 @@ void wl_direct_connect_timeout_cb(uint8_t app_id, const RawAddress& address) {
   direct_connect_remove(app_id, address);
 }
 
-/** Add a device to the direcgt connection list.  Returns true if device
+/** Add a device to the direct connection list. Returns true if device
  * added to the list, false otherwise */
 bool direct_connect_add(uint8_t app_id, const RawAddress& address) {
   LOG_DEBUG("app_id=%d, address=%s", static_cast<int>(app_id),
@@ -487,13 +491,10 @@ bool direct_connect_add(uint8_t app_id, const RawAddress& address) {
     }
   }
 
-  bool params_changed = BTM_SetLeConnectionModeToFast();
-
   if (!in_acceptlist) {
-    if (!BTM_AcceptlistAdd(address)) {
+    if (!BTM_AcceptlistAdd(address, true)) {
       // if we can't add to acceptlist, turn parameters back to slow.
       LOG_WARN("Unable to add le device to acceptlist");
-      if (params_changed) BTM_SetLeConnectionModeToSlow();
       return false;
     }
     bgconn_dev[address].is_in_accept_list = true;
@@ -516,25 +517,20 @@ static void schedule_direct_connect_add(uint8_t app_id,
   direct_connect_add(app_id, address);
 }
 
-static bool any_direct_connect_left() {
-  for (const auto& tmp : bgconn_dev) {
-    if (!tmp.second.doing_direct_conn.empty()) return true;
-  }
-  return false;
-}
-
 bool direct_connect_remove(uint8_t app_id, const RawAddress& address) {
   LOG_DEBUG("app_id=%d, address=%s", static_cast<int>(app_id),
             ADDRESS_TO_LOGGABLE_CSTR(address));
   auto it = bgconn_dev.find(address);
   if (it == bgconn_dev.end()) {
-    LOG_WARN("Unable to find background connection to remove");
+    LOG_WARN("Unable to find background connection to remove peer:%s",
+             ADDRESS_TO_LOGGABLE_CSTR(address));
     return false;
   }
 
   auto app_it = it->second.doing_direct_conn.find(app_id);
   if (app_it == it->second.doing_direct_conn.end()) {
-    LOG_WARN("Unable to find direct connection to remove");
+    LOG_WARN("Unable to find direct connection to remove peer:%s",
+             ADDRESS_TO_LOGGABLE_CSTR(address));
     return false;
   }
 
@@ -544,12 +540,6 @@ bool direct_connect_remove(uint8_t app_id, const RawAddress& address) {
 
   // this will free the alarm
   it->second.doing_direct_conn.erase(app_it);
-
-  // if we removed last direct connection, lower the scan parameters used for
-  // connecting
-  if (!any_direct_connect_left()) {
-    BTM_SetLeConnectionModeToSlow();
-  }
 
   if (is_anyone_interested_to_use_accept_list(it)) {
     return true;

@@ -23,6 +23,9 @@
  ******************************************************************************/
 #include "avrc_api.h"
 
+#ifdef OS_ANDROID
+#include <avrcp.sysprop.h>
+#endif
 #include <base/logging.h>
 #include <string.h>
 
@@ -74,6 +77,25 @@ static const uint8_t avrc_ctrl_event_map[] = {
 /* Flags definitions for AVRC_MsgReq */
 #define AVRC_MSG_MASK_IS_VENDOR_CMD 0x01
 #define AVRC_MSG_MASK_IS_CONTINUATION_RSP 0x02
+
+/******************************************************************************
+ *
+ * Function         avrcp_absolute_volume_is_enabled
+ *
+ * Description      Check if config support advance control (absolute volume)
+ *
+ * Returns          return true if absolute_volume is enabled
+ *
+ *****************************************************************************/
+bool avrcp_absolute_volume_is_enabled() {
+#ifdef OS_ANDROID
+  static const bool absolute_volume =
+      android::sysprop::bluetooth::Avrcp::absolute_volume().value_or(true);
+  return absolute_volume;
+#else
+  return true;
+#endif
+}
 
 /******************************************************************************
  *
@@ -597,6 +619,7 @@ static uint8_t avrc_proc_far_msg(uint8_t handle, uint8_t label, uint8_t cr,
       return drop_code;
     }
     avrc_cmd.status = AVRC_STS_NO_ERROR;
+    avrc_cmd.opcode = AVRC_OP_INVALID;
     avrc_cmd.target_pdu = p_rcb->rasm_pdu;
 
     tAVRC_COMMAND avrc_command;
