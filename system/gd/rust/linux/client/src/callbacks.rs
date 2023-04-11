@@ -35,7 +35,8 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-const SOCKET_TEST_WRITE: &[u8] = b"01234567890123456789";
+const SOCKET_TEST_WRITE: &[u8] =
+    b"01234567890123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /// Callback context for manager interface callbacks.
 pub(crate) struct BtManagerCallback {
@@ -199,6 +200,18 @@ impl IBluetoothCallback for BtCallback {
         }
     }
 
+    fn on_pin_request(&self, remote_device: BluetoothDevice, _cod: u32, min_16_digit: bool) {
+        print_info!(
+            "Device [{}: {}] would like to pair, enter pin code {}",
+            &remote_device.address,
+            &remote_device.name,
+            match min_16_digit {
+                true => "with at least 16 digits",
+                false => "",
+            }
+        );
+    }
+
     fn on_bond_state_changed(&self, status: u32, address: String, state: u32) {
         print_info!("Bonding state changed: [{}] state: {}, Status = {}", address, state, status);
 
@@ -241,7 +254,12 @@ impl IBluetoothCallback for BtCallback {
     ) {
     }
 
-    fn on_sdp_record_created(&self, _record: BtSdpRecord, _handle: i32) {}
+    fn on_sdp_record_created(&self, record: BtSdpRecord, handle: i32) {
+        print_info!("SDP record handle={} created", handle);
+        if let BtSdpRecord::Mps(_) = record {
+            self.context.lock().unwrap().mps_sdp_handle = Some(handle);
+        }
+    }
 }
 
 impl RPCProxy for BtCallback {

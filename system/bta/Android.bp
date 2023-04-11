@@ -88,6 +88,7 @@ cc_library_static {
         "le_audio/client_parser.cc",
         "le_audio/audio_hal_client/audio_sink_hal_client.cc",
         "le_audio/audio_hal_client/audio_source_hal_client.cc",
+        "le_audio/le_audio_log_history.cc",
         "le_audio/le_audio_utils.cc",
         "le_audio/le_audio_set_configuration_provider.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
@@ -187,6 +188,7 @@ cc_test {
     defaults: [
         "fluoride_bta_defaults",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     test_suites: ["device-tests"],
     srcs: [
@@ -268,6 +270,7 @@ cc_test {
     defaults: [
         "fluoride_bta_defaults",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     test_suites: ["device-tests"],
     host_supported: true,
@@ -360,6 +363,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     include_dirs: [
@@ -414,6 +418,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     include_dirs: [
@@ -456,6 +461,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     include_dirs: [
@@ -575,6 +581,7 @@ cc_test {
         "fluoride_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     target: {
@@ -614,6 +621,7 @@ cc_test {
         "le_audio/content_control_id_keeper_test.cc",
         "le_audio/devices.cc",
         "le_audio/devices_test.cc",
+        "le_audio/le_audio_log_history.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
         "le_audio/le_audio_types.cc",
         "le_audio/le_audio_types_test.cc",
@@ -663,6 +671,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
@@ -683,6 +692,7 @@ cc_test {
         "le_audio/client_parser.cc",
         "le_audio/content_control_id_keeper.cc",
         "le_audio/devices.cc",
+        "le_audio/le_audio_log_history.cc",
         "le_audio/le_audio_utils.cc",
         "le_audio/le_audio_client_test.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
@@ -756,6 +766,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
@@ -807,6 +818,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     include_dirs: [
@@ -878,6 +890,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
@@ -934,6 +947,7 @@ cc_test {
         "fluoride_bta_defaults",
         "clang_coverage_bin",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
@@ -993,11 +1007,6 @@ cc_test {
         integer_overflow: true,
         diag: {
             undefined: true,
-        },
-    },
-    target: {
-        android: {
-            test_config_template: ":BluetoothGTestNotShardableConfigTemplate",
         },
     },
 }

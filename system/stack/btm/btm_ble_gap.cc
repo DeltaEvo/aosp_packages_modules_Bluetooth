@@ -536,11 +536,16 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
       if (duration == 0) {
         if (alarm_is_scheduled(btm_cb.ble_ctr_cb.observer_timer)) {
           alarm_cancel(btm_cb.ble_ctr_cb.observer_timer);
-          return BTM_CMD_STARTED;
+        } else {
+          BTM_TRACE_ERROR("%s Scan with no duration started twice!", __func__);
+        }
+      } else {
+        if (alarm_is_scheduled(btm_cb.ble_ctr_cb.observer_timer)) {
+          BTM_TRACE_ERROR("%s Scan with duration started twice!", __func__);
         }
       }
-      BTM_TRACE_ERROR("%s Observe Already Active", __func__);
-      return status;
+      BTM_TRACE_WARNING("%s Observer was already active", __func__);
+      return BTM_CMD_STARTED;
     }
 
     btm_cb.ble_ctr_cb.p_obs_results_cb = p_results_cb;
@@ -1220,6 +1225,10 @@ void btm_ble_periodic_adv_sync_lost(uint16_t sync_handle) {
   LOG_DEBUG("[PSync]: sync_handle = %d", sync_handle);
 
   int index = btm_ble_get_psync_index_from_handle(sync_handle);
+  if (index == MAX_SYNC_TRANSACTION) {
+    LOG_ERROR("[PSync]: index not found for handle %u", sync_handle);
+    return;
+  }
   tBTM_BLE_PERIODIC_SYNC* ps = &btm_ble_pa_sync_cb.p_sync[index];
   ps->sync_lost_cb.Run(sync_handle);
 
@@ -3496,9 +3505,6 @@ void btm_ble_init(void) {
   p_cb->inq_var.discoverable_mode = BTM_BLE_NON_DISCOVERABLE;
   p_cb->inq_var.fast_adv_timer = alarm_new("btm_ble_inq.fast_adv_timer");
   p_cb->inq_var.inquiry_timer = alarm_new("btm_ble_inq.inquiry_timer");
-
-  /* for background connection, reset connection params to be undefined */
-  p_cb->scan_int = p_cb->scan_win = BTM_BLE_SCAN_PARAM_UNDEF;
 
   p_cb->inq_var.evt_type = BTM_BLE_NON_CONNECT_EVT;
 

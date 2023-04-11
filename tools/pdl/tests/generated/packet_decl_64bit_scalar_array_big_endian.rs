@@ -1,8 +1,6 @@
 // @generated rust packets from test
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{FromPrimitive, ToPrimitive};
 use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -10,6 +8,19 @@ use std::sync::Arc;
 use thiserror::Error;
 
 type Result<T> = std::result::Result<T, Error>;
+
+#[doc = r" Private prevents users from creating arbitrary scalar values"]
+#[doc = r" in situations where the value needs to be validated."]
+#[doc = r" Users can freely deref the value, but only the backend"]
+#[doc = r" may create it."]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Private<T>(T);
+impl<T> std::ops::Deref for Private<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -71,7 +82,7 @@ impl FooData {
                 got: bytes.get().remaining(),
             });
         }
-        let x = std::array::from_fn(|_| Ok::<_, Error>(bytes.get_mut().get_u64()).unwrap());
+        let x = [0; 7].map(|_| Ok::<_, Error>(bytes.get_mut().get_u64()).unwrap());
         Ok(Self { x })
     }
     fn write_to(&self, buffer: &mut BytesMut) {

@@ -28,6 +28,8 @@
 #include "bta_groups.h"
 #include "btm_iso_api_types.h"
 #include "gatt_api.h"
+#include "gd/common/strings.h"
+#include "le_audio_log_history.h"
 #include "le_audio_types.h"
 #include "osi/include/alarm.h"
 #include "osi/include/properties.h"
@@ -337,6 +339,8 @@ class LeAudioDeviceGroup {
   bool IsPendingConfiguration(void);
   void SetPendingConfiguration(void);
   void ClearPendingConfiguration(void);
+  void AddToAllowListNotConnectedGroupMembers(int gatt_if);
+  void RemoveFromAllowListNotConnectedGroupMembers(int gatt_if);
   bool IsConfigurationSupported(
       LeAudioDevice* leAudioDevice,
       const set_configurations::AudioSetConfiguration* audio_set_conf);
@@ -353,6 +357,10 @@ class LeAudioDeviceGroup {
   void SetState(types::AseState state) {
     LOG(INFO) << __func__ << " current state: " << current_state_
               << " new state: " << state;
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogStateMachineTag, group_id_, RawAddress::kEmpty, kLogStateChangedOp,
+        bluetooth::common::ToString(current_state_) + "->" +
+            bluetooth::common::ToString(state));
     current_state_ = state;
   }
 
@@ -360,6 +368,11 @@ class LeAudioDeviceGroup {
   void SetTargetState(types::AseState state) {
     LOG(INFO) << __func__ << " target state: " << target_state_
               << " new target state: " << state;
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogStateMachineTag, group_id_, RawAddress::kEmpty,
+        kLogTargetStateChangedOp,
+        bluetooth::common::ToString(target_state_) + "->" +
+            bluetooth::common::ToString(state));
     target_state_ = state;
   }
 

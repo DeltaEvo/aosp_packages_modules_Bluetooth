@@ -82,9 +82,6 @@ void acl_ble_enhanced_connection_complete(
     return;
   }
 
-  btm_ble_refresh_local_resolvable_private_addr(address_with_type.bda,
-                                                local_rpa);
-
   if (peer_addr_type & BLE_ADDR_TYPE_ID_BIT)
     btm_ble_refresh_peer_resolvable_private_addr(
         address_with_type.bda, peer_rpa, tBTM_SEC_BLE::BTM_BLE_ADDR_RRA);
@@ -127,15 +124,11 @@ void acl_ble_enhanced_connection_complete_from_shim(
 }
 
 void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
-                             uint16_t handle, bool enhanced, tHCI_STATUS status,
-                             bool locally_initiated) {
-  acl_set_locally_initiated(locally_initiated);
+                             uint16_t handle, bool enhanced,
+                             tHCI_STATUS status) {
+  acl_set_locally_initiated(
+      true);  // LE connection failures are always locally initiated
   btm_acl_create_failed(address_with_type.bda, BT_TRANSPORT_LE, status);
-
-  // Stop here if the connection is not locally initiated.
-  if (!locally_initiated) {
-    return;
-  }
 
   if (status != HCI_ERR_ADVERTISING_TIMEOUT) {
     btm_cb.ble_ctr_cb.set_connection_state_idle();
