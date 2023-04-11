@@ -95,7 +95,7 @@ public class BluetoothProxy {
         }
         @Override
         public void onGroupNodeAdded(BluetoothDevice device, int groupId) {
-            Log.d("LeCB:", device.getAddress() + " group added " + groupId);
+            Log.d("LeCB:", device + " group added " + groupId);
             if (device == null || groupId == BluetoothLeAudio.GROUP_ID_INVALID) {
                 Log.d("LeCB:", "invalid parameter");
                 return;
@@ -123,7 +123,7 @@ public class BluetoothProxy {
                 return;
             }
 
-            Log.d("LeCB:", device.getAddress() + " group added " + groupId);
+            Log.d("LeCB:", device + " group added " + groupId);
             if (device == null || groupId == BluetoothLeAudio.GROUP_ID_INVALID) {
                 Log.d("LeCB:", "invalid parameter");
                 return;
@@ -511,11 +511,13 @@ public class BluetoothProxy {
 
         adapterIntentFilter = new IntentFilter();
         adapterIntentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        application.registerReceiver(adapterIntentReceiver, adapterIntentFilter);
+        application.registerReceiver(adapterIntentReceiver, adapterIntentFilter,
+                Context.RECEIVER_EXPORTED);
 
         bassIntentFilter = new IntentFilter();
         bassIntentFilter.addAction(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(bassIntentReceiver, bassIntentFilter);
+        application.registerReceiver(bassIntentReceiver, bassIntentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     // Lazy constructing Singleton acquire method
@@ -742,7 +744,8 @@ public class BluetoothProxy {
 
         intentFilter = new IntentFilter();
         intentFilter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(leAudioIntentReceiver, intentFilter);
+        application.registerReceiver(leAudioIntentReceiver, intentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     private void cleanupLeAudioProxy() {
@@ -760,7 +763,8 @@ public class BluetoothProxy {
 
         intentFilter = new IntentFilter();
         intentFilter.addAction(BluetoothVolumeControl.ACTION_CONNECTION_STATE_CHANGED);
-        application.registerReceiver(volumeControlIntentReceiver, intentFilter);
+        application.registerReceiver(volumeControlIntentReceiver, intentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     private void cleanupVolumeControlProxy() {
@@ -780,7 +784,8 @@ public class BluetoothProxy {
         intentFilter = new IntentFilter();
         intentFilter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         intentFilter.addAction("android.bluetooth.action.HAP_DEVICE_AVAILABLE");
-        application.registerReceiver(hapClientIntentReceiver, intentFilter);
+        application.registerReceiver(hapClientIntentReceiver, intentFilter,
+                Context.RECEIVER_EXPORTED);
     }
 
     private void cleanupHapProxy() {
@@ -1356,10 +1361,10 @@ public class BluetoothProxy {
         return mBroadcastStatusMutableLive;
     }
 
-    public boolean startBroadcast(BluetoothLeAudioContentMetadata meta, byte[] code) {
+    public boolean startBroadcast(BluetoothLeBroadcastSettings settings) {
         if (mBluetoothLeBroadcast == null)
             return false;
-        mBluetoothLeBroadcast.startBroadcast(meta, code);
+        mBluetoothLeBroadcast.startBroadcast(settings);
         return true;
     }
 
@@ -1374,14 +1379,10 @@ public class BluetoothProxy {
         return mBluetoothLeBroadcast.getAllBroadcastMetadata();
     }
 
-    public boolean updateBroadcast(int broadcastId, String programInfo) {
+    public boolean updateBroadcast(int broadcastId, BluetoothLeBroadcastSettings settings) {
         if (mBluetoothLeBroadcast == null) return false;
 
-        BluetoothLeAudioContentMetadata.Builder contentBuilder =
-                new BluetoothLeAudioContentMetadata.Builder();
-        contentBuilder.setProgramInfo(programInfo);
-
-        mBluetoothLeBroadcast.updateBroadcast(broadcastId, contentBuilder.build());
+        mBluetoothLeBroadcast.updateBroadcast(broadcastId, settings);
         return true;
     }
 

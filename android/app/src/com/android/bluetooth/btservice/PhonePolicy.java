@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.btservice;
 
+import static com.android.bluetooth.Utils.isDualModeAudioEnabled;
+
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
@@ -96,8 +98,6 @@ class PhonePolicy {
     private static final int MESSAGE_PROFILE_ACTIVE_DEVICE_CHANGED = 5;
     private static final int MESSAGE_DEVICE_CONNECTED = 6;
 
-    @VisibleForTesting static final String PREFER_LE_AUDIO_ONLY_MODE =
-            "persist.bluetooth.prefer_le_audio_only_mode";
     @VisibleForTesting static final String AUTO_CONNECT_PROFILES_PROPERTY =
             "bluetooth.auto_connect_profiles.enabled";
 
@@ -111,8 +111,6 @@ class PhonePolicy {
     private final HashSet<BluetoothDevice> mHeadsetRetrySet = new HashSet<>();
     private final HashSet<BluetoothDevice> mA2dpRetrySet = new HashSet<>();
     private final HashSet<BluetoothDevice> mConnectOtherProfilesDeviceSet = new HashSet<>();
-
-    @VisibleForTesting boolean mPreferLeAudioOnlyMode;
     @VisibleForTesting boolean mAutoConnectProfilesSupported;
 
     // Broadcast receiver for all changes to states of various profiles
@@ -293,7 +291,6 @@ class PhonePolicy {
                 "DatabaseManager cannot be null when PhonePolicy starts");
         mFactory = factory;
         mHandler = new PhonePolicyHandler(service.getMainLooper());
-        mPreferLeAudioOnlyMode = SystemProperties.getBoolean(PREFER_LE_AUDIO_ONLY_MODE, true);
         mAutoConnectProfilesSupported = SystemProperties.getBoolean(
                 AUTO_CONNECT_PROFILES_PROPERTY, false);
     }
@@ -342,7 +339,7 @@ class PhonePolicy {
                 || Utils.arrayContains(uuids, BluetoothUuid.HFP)) && (
                 headsetService.getConnectionPolicy(device)
                         == BluetoothProfile.CONNECTION_POLICY_UNKNOWN))) {
-            if (mPreferLeAudioOnlyMode && isLeAudioProfileAllowed) {
+            if (!isDualModeAudioEnabled() && isLeAudioProfileAllowed) {
                 debugLog("clear hfp profile priority for the le audio dual mode device "
                         + device);
                 mAdapterService.getDatabase().setProfileConnectionPolicy(device,
@@ -362,7 +359,7 @@ class PhonePolicy {
                 || Utils.arrayContains(uuids, BluetoothUuid.ADV_AUDIO_DIST)) && (
                 a2dpService.getConnectionPolicy(device)
                         == BluetoothProfile.CONNECTION_POLICY_UNKNOWN)) {
-            if (mPreferLeAudioOnlyMode && isLeAudioProfileAllowed) {
+            if (!isDualModeAudioEnabled() && isLeAudioProfileAllowed) {
                 debugLog("clear a2dp profile priority for the le audio dual mode device "
                         + device);
                 mAdapterService.getDatabase().setProfileConnectionPolicy(device,
@@ -523,39 +520,44 @@ class PhonePolicy {
 
     /**
      * Updates the last connection date in the connection order database for the newly active device
-     * if connected to a2dp profile. If the device is LE audio dual mode device, and
-     * mPreferLeAudioOnlyMode be true, A2DP/HFP will be disconnected as LE audio become active one
-     * after pairing.
+     * if connected to the A2DP profile. If this is a dual mode audio device (supports classic and
+     * LE Audio), LE Audio is made active, and {@link Utils#isDualModeAudioEnabled()} is false,
+     * A2DP and HFP will be disconnected.
      *
      * @param device is the device we just made the active device
      */
     private void processActiveDeviceChanged(BluetoothDevice device, int profileId) {
         debugLog("processActiveDeviceChanged, device=" + device + ", profile=" + profileId
-                + " mPreferLeAudioOnlyMode: " + mPreferLeAudioOnlyMode);
+                + " isDualModeAudioEnabled=" + isDualModeAudioEnabled());
 
         if (device != null) {
             mDatabaseManager.setConnection(device, profileId == BluetoothProfile.A2DP);
 
-            if (!mPreferLeAudioOnlyMode) return;
+            if (isDualModeAudioEnabled()) return;
             if (profileId == BluetoothProfile.LE_AUDIO) {
-                HeadsetService hsService = mFactory.getHeadsetService();
-                if (hsService != null) {
-                    if ((hsService.getConnectionPolicy(device)
-                            != BluetoothProfile.CONNECTION_POLICY_ALLOWED)
-                            && (hsService.getConnectionState(device)
-                            == BluetoothProfile.STATE_CONNECTED)) {
-                        debugLog("Disconnect HFP for the LE audio dual mode device " + device);
-                        hsService.disconnect(device);
-                    }
-                }
                 A2dpService a2dpService = mFactory.getA2dpService();
-                if (a2dpService != null) {
-                    if ((a2dpService.getConnectionPolicy(device)
-                            != BluetoothProfile.CONNECTION_POLICY_ALLOWED)
-                            && (a2dpService.getConnectionState(device)
-                            == BluetoothProfile.STATE_CONNECTED)) {
-                        debugLog("Disconnect A2DP for the LE audio dual mode device " + device);
-                        a2dpService.disconnect(device);
+                HeadsetService hsService = mFactory.getHeadsetService();
+                LeAudioService leAudioService = mFactory.getLeAudioService();
+                if (leAudioService == null) {
+                    debugLog("processActiveDeviceChanged: LeAudioService is null");
+                    return;
+                }
+                List<BluetoothDevice> leAudioActiveGroupDevices =
+                        leAudioService.getGroupDevices(leAudioService.getGroupId(device));
+
+                // Disable classic audio profiles for all group devices as lead can change
+                for (BluetoothDevice activeGroupDevice: leAudioActiveGroupDevices) {
+                    if (hsService != null) {
+                        debugLog("Disable HFP for the LE audio dual mode group device "
+                                + activeGroupDevice);
+                        hsService.setConnectionPolicy(activeGroupDevice,
+                                BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
+                    }
+                    if (a2dpService != null) {
+                        debugLog("Disable A2DP for the LE audio dual mode group device "
+                                + activeGroupDevice);
+                        a2dpService.setConnectionPolicy(activeGroupDevice,
+                                BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
                     }
                 }
             }

@@ -3355,8 +3355,7 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
           p_dev_rec->sec_flags |= BTM_SEC_16_DIGIT_PIN_AUTHED;
         }
       } else if (p_dev_rec->ble_hci_handle == handle) {  // BLE
-        p_dev_rec->sec_flags |=
-            (BTM_SEC_LE_AUTHENTICATED | BTM_SEC_LE_ENCRYPTED);
+        p_dev_rec->sec_flags |= BTM_SEC_LE_ENCRYPTED;
       } else {
         LOG_ERROR(
             "Received encryption change for unknown device handle:0x%04x "
@@ -3402,8 +3401,8 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
         status == HCI_ERR_ENCRY_MODE_NOT_ACCEPTABLE) {
       p_dev_rec->sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
       p_dev_rec->ble.key_type = BTM_LE_KEY_NONE;
-      p_dev_rec->sec_status = status;
     }
+    p_dev_rec->sec_status = status;
     btm_ble_link_encrypted(p_dev_rec->ble.pseudo_addr, encr_enable);
     return;
   } else {

@@ -108,14 +108,19 @@ cc_defaults {
     ],
     tidy_flags: [
         "--header-filter=^.*packages/modules/Bluetooth/system/.*.h$",
+
         "--extra-arg-before=-Xclang",
         "--extra-arg-before=-analyzer-config",
+
         "--extra-arg-before=-Xclang",
         "--extra-arg-before=optin.cplusplus.UninitializedObject:Pedantic=true",
+
         "--extra-arg-before=-Xclang",
         "--extra-arg-before=-analyzer-config",
+
         "--extra-arg-before=-Xclang",
         "--extra-arg-before=optin.cplusplus.UninitializedObject:CheckPointeeInitialization=true",
+
     ],
 }
 
@@ -350,6 +355,7 @@ cc_test {
         "gd_clang_coverage_bin",
         "libchrome_support_defaults",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     host_supported: true,
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
@@ -426,7 +432,7 @@ cc_test {
         "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-        "libbt-platform-protos-lite"
+        "libbt-platform-protos-lite",
     ],
     shared_libs: [
         "libcrypto",
@@ -445,6 +451,7 @@ cc_test {
         "gd_clang_coverage_bin",
         "libchrome_support_defaults",
         "mts_defaults",
+        "bluetooth_gtest_x86_asan_workaround",
     ],
     include_dirs: ["packages/modules/Bluetooth/system/gd"],
     host_supported: true,
@@ -478,7 +485,6 @@ cc_test {
                 "libutils",
                 "libcutils",
             ],
-            test_config_template: ":BluetoothGTestNotShardableConfigTemplate",
         },
         host_linux: {
             shared_libs: [
@@ -641,6 +647,7 @@ rust_library {
     crate_name: "bt_packets",
     srcs: [
         "rust/packets/lib.rs",
+
         ":BluetoothGeneratedPackets_rust",
     ],
     edition: "2018",
@@ -665,6 +672,7 @@ rust_library {
     crate_name: "bt_packets",
     srcs: [
         "rust/packets/lib.rs",
+
         ":BluetoothGeneratedPackets_rust",
     ],
     edition: "2018",
@@ -688,6 +696,7 @@ rust_test_host {
     ],
     srcs: [
         "rust/packets/lib.rs",
+
         ":BluetoothGeneratedPackets_rust",
     ],
     test_suites: ["general-tests"],
@@ -724,6 +733,7 @@ rust_test_host {
     ],
     srcs: [
         "rust/packets/test_lib.rs",
+
         ":TestGeneratedPackets_rust",
     ],
     test_suites: ["general-tests"],

@@ -42,13 +42,13 @@ pub trait ISuspend {
 /// Suspend events.
 pub trait ISuspendCallback: RPCProxy {
     /// Triggered when a callback is registered and given an identifier `callback_id`.
-    fn on_callback_registered(&self, callback_id: u32);
+    fn on_callback_registered(&mut self, callback_id: u32);
 
     /// Triggered when the stack is ready for suspend and tell the observer the id of the suspend.
-    fn on_suspend_ready(&self, suspend_id: i32);
+    fn on_suspend_ready(&mut self, suspend_id: i32);
 
     /// Triggered when the stack has resumed the previous suspend.
-    fn on_resumed(&self, suspend_id: i32);
+    fn on_resumed(&mut self, suspend_id: i32);
 }
 
 /// Events that are disabled when we go into suspend. This prevents spurious wakes from
@@ -130,7 +130,7 @@ impl Suspend {
     }
 
     pub(crate) fn callback_registered(&mut self, id: u32) {
-        match self.callbacks.get_by_id(id) {
+        match self.callbacks.get_by_id_mut(id) {
             Some(callback) => callback.on_callback_registered(id),
             None => warn!("Suspend callback {} does not exist", id),
         }
@@ -140,13 +140,13 @@ impl Suspend {
         self.callbacks.remove_callback(id)
     }
 
-    pub(crate) fn suspend_ready(&self, suspend_id: i32) {
+    pub(crate) fn suspend_ready(&mut self, suspend_id: i32) {
         self.callbacks.for_all_callbacks(|callback| {
             callback.on_suspend_ready(suspend_id);
         });
     }
 
-    pub(crate) fn resume_ready(&self, suspend_id: i32) {
+    pub(crate) fn resume_ready(&mut self, suspend_id: i32) {
         self.callbacks.for_all_callbacks(|callback| {
             callback.on_resumed(suspend_id);
         });
@@ -185,6 +185,7 @@ impl ISuspend for Suspend {
         // Set suspend event mask
         self.intf.lock().unwrap().set_default_event_mask_except(MASKED_EVENTS_FOR_SUSPEND, 0u64);
 
+        self.bt.lock().unwrap().set_connectable_internal(false);
         self.intf.lock().unwrap().clear_event_filter();
         self.intf.lock().unwrap().clear_filter_accept_list();
 
@@ -247,6 +248,7 @@ impl ISuspend for Suspend {
         self.intf.lock().unwrap().clear_event_filter();
         self.intf.lock().unwrap().clear_filter_accept_list();
         self.intf.lock().unwrap().restore_filter_accept_list();
+        self.bt.lock().unwrap().set_connectable_internal(true);
 
         if !self.audio_reconnect_list.is_empty() {
             let reconnect_list = self.audio_reconnect_list.clone();

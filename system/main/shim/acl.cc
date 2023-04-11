@@ -1083,8 +1083,7 @@ struct shim::legacy::Acl::impl {
   void ignore_le_connection_from(
       const hci::AddressWithType& address_with_type) {
     shadow_acceptlist_.Remove(address_with_type);
-    GetAclManager()->CancelLeConnectAndRemoveFromBackgroundList(
-        address_with_type);
+    GetAclManager()->CancelLeConnect(address_with_type);
     LOG_DEBUG("Ignore Le connection from remote:%s",
               ADDRESS_TO_LOGGABLE_CSTR(address_with_type));
     BTM_LogHistory(kBtmLogTag, ToLegacyAddressWithType(address_with_type),
@@ -1131,11 +1130,6 @@ struct shim::legacy::Acl::impl {
     GetAclManager()->ClearResolvingList();
     // TODO This should really be cleared after successful clear status
     shadow_address_resolution_list_.Clear();
-  }
-
-  void AddDeviceToFilterAcceptList(
-      const hci::AddressWithType& address_with_type) {
-    GetAclManager()->AddDeviceToFilterAcceptList(address_with_type);
   }
 
   void SetSystemSuspendState(bool suspended) {
@@ -1273,9 +1267,6 @@ void DumpsysAcl(int fd) {
       LOG_DUMPSYS(fd, "    [le] active_remote_addr:%s[%s]",
                   ADDRESS_TO_LOGGABLE_CSTR(link.active_remote_addr),
                   AddressTypeText(link.active_remote_addr_type).c_str());
-      LOG_DUMPSYS(fd, "    [le] conn_addr:%s[%s]",
-                  ADDRESS_TO_LOGGABLE_CSTR(link.conn_addr),
-                  AddressTypeText(link.conn_addr_type).c_str());
     }
   }
 }
@@ -1591,6 +1582,20 @@ void shim::legacy::Acl::OnConnectSuccess(
                                      : "classic Remote initiated");
 }
 
+void shim::legacy::Acl::OnConnectRequest(hci::Address address,
+                                         hci::ClassOfDevice cod) {
+  const RawAddress bd_addr = ToRawAddress(address);
+
+  types::ClassOfDevice legacy_cod;
+  legacy_cod.FromOctets(cod.data());
+
+  TRY_POSTING_ON_MAIN(acl_interface_.connection.classic.on_connect_request,
+                      bd_addr, legacy_cod);
+  LOG_DEBUG("Received connect request remote:%s",
+            ADDRESS_TO_LOGGABLE_CSTR(address));
+  BTM_LogHistory(kBtmLogTag, ToRawAddress(address), "Connection request");
+}
+
 void shim::legacy::Acl::OnConnectFail(hci::Address address,
                                       hci::ErrorCode reason,
                                       bool locally_initiated) {
@@ -1719,8 +1724,7 @@ void shim::legacy::Acl::OnLeConnectSuccess(
 }
 
 void shim::legacy::Acl::OnLeConnectFail(hci::AddressWithType address_with_type,
-                                        hci::ErrorCode reason,
-                                        bool locally_initiated) {
+                                        hci::ErrorCode reason) {
   tBLE_BD_ADDR legacy_address_with_type =
       ToLegacyAddressWithType(address_with_type);
 
@@ -1729,11 +1733,7 @@ void shim::legacy::Acl::OnLeConnectFail(hci::AddressWithType address_with_type,
   tHCI_STATUS status = ToLegacyHciErrorCode(reason);
 
   TRY_POSTING_ON_MAIN(acl_interface_.connection.le.on_failed,
-                      legacy_address_with_type, handle, enhanced, status,
-                      locally_initiated);
-  if (!locally_initiated) {
-    return;
-  }
+                      legacy_address_with_type, handle, enhanced, status);
 
   pimpl_->shadow_acceptlist_.Remove(address_with_type);
   LOG_WARN("Connection failed le remote:%s",
@@ -1890,12 +1890,6 @@ void shim::legacy::Acl::RemoveFromAddressResolution(
 
 void shim::legacy::Acl::ClearAddressResolution() {
   handler_->CallOn(pimpl_.get(), &Acl::impl::ClearResolvingList);
-}
-
-void shim::legacy::Acl::AddDeviceToFilterAcceptList(
-    const hci::AddressWithType& address_with_type) {
-  handler_->CallOn(pimpl_.get(), &Acl::impl::AddDeviceToFilterAcceptList,
-                   address_with_type);
 }
 
 void shim::legacy::Acl::SetSystemSuspendState(bool suspended) {

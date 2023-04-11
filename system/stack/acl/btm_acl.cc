@@ -446,11 +446,6 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
     btm_set_link_policy(p_acl, btm_cb.acl_cb_.DefaultLinkPolicy());
   }
 
-  if (transport == BT_TRANSPORT_LE) {
-    btm_ble_refresh_local_resolvable_private_addr(
-        bda, btm_cb.ble_ctr_cb.addr_mgnt_cb.private_addr);
-  }
-
   // save remote properties to iot conf file
   btm_iot_save_remote_properties(p_acl);
 
@@ -476,15 +471,6 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
 void btm_acl_create_failed(const RawAddress& bda, tBT_TRANSPORT transport,
                            tHCI_STATUS hci_status) {
   BTA_dm_acl_up_failed(bda, transport, hci_status);
-}
-
-void btm_acl_update_conn_addr(uint16_t handle, const RawAddress& address) {
-  tACL_CONN* p_acl = internal_.acl_get_connection_from_handle(handle);
-  if (p_acl == nullptr) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-  p_acl->conn_addr = address;
 }
 
 void btm_configure_data_path(uint8_t direction, uint8_t path_id,
@@ -2440,35 +2426,6 @@ const RawAddress acl_address_from_handle(uint16_t handle) {
   return p_acl->remote_addr;
 }
 
-/*******************************************************************************
- *
- * Function         btm_ble_refresh_local_resolvable_private_addr
- *
- * Description      This function refresh the currently used resolvable private
- *                  address for the active link to the remote device
- *
- ******************************************************************************/
-void btm_ble_refresh_local_resolvable_private_addr(
-    const RawAddress& pseudo_addr, const RawAddress& local_rpa) {
-  tACL_CONN* p_acl = internal_.btm_bda_to_acl(pseudo_addr, BT_TRANSPORT_LE);
-  if (p_acl == nullptr) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-
-  if (btm_cb.ble_ctr_cb.privacy_mode == BTM_PRIVACY_NONE) {
-    p_acl->conn_addr_type = BLE_ADDR_PUBLIC;
-    p_acl->conn_addr = *controller_get_interface()->get_address();
-  } else {
-    p_acl->conn_addr_type = BLE_ADDR_RANDOM;
-    if (local_rpa.IsEmpty()) {
-      p_acl->conn_addr = btm_cb.ble_ctr_cb.addr_mgnt_cb.private_addr;
-    } else {
-      p_acl->conn_addr = local_rpa;
-    }
-  }
-}
-
 bool sco_peer_supports_esco_2m_phy(const RawAddress& remote_bda) {
   uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
   if (features == nullptr) {
@@ -2730,6 +2687,15 @@ void acl_create_classic_connection(const RawAddress& bd_addr,
                                    bool there_are_high_priority_channels,
                                    bool is_bonding) {
   return bluetooth::shim::ACL_CreateClassicConnection(bd_addr);
+}
+
+void btm_connection_request(const RawAddress& bda,
+                            const bluetooth::types::ClassOfDevice& cod) {
+  // Copy Cod information
+  DEV_CLASS dc;
+  dc[0] = cod.cod[2], dc[1] = cod.cod[1], dc[2] = cod.cod[0];
+
+  btm_sec_conn_req(bda, dc);
 }
 
 void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc) {

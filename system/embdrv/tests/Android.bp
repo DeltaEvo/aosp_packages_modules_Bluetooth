@@ -10,6 +10,7 @@ package {
 cc_test {
     name: "libaptx_enc_tests",
     defaults: [
+        "bluetooth_gtest_x86_asan_workaround",
         "mts_defaults",
     ],
     test_suites: ["device-tests"],
@@ -29,6 +30,7 @@ cc_test {
 cc_test {
     name: "libaptxhd_enc_tests",
     defaults: [
+        "bluetooth_gtest_x86_asan_workaround",
         "mts_defaults",
     ],
     test_suites: ["device-tests"],
