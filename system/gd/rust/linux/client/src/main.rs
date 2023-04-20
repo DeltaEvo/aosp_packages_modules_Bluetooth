@@ -18,7 +18,7 @@ use crate::callbacks::{
 use crate::command_handler::{CommandHandler, SocketSchedule};
 use crate::dbus_iface::{
     BluetoothAdminDBus, BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, BluetoothQADBus,
-    BluetoothSocketManagerDBus, BluetoothTelephonyDBus, SuspendDBus,
+    BluetoothQALegacyDBus, BluetoothSocketManagerDBus, BluetoothTelephonyDBus, SuspendDBus,
 };
 use crate::editor::AsyncEditor;
 use bt_topshim::topstack;
@@ -74,7 +74,10 @@ pub(crate) struct ClientContext {
     /// Proxy for adapter interface. Only exists when the default adapter is enabled.
     pub(crate) adapter_dbus: Option<BluetoothDBus>,
 
-    /// Proxy for adapter QA interface. Only exists when the default adapter is enabled.
+    /// Proxy for adapter QA Legacy interface. Only exists when the default adapter is enabled.
+    pub(crate) qa_legacy_dbus: Option<BluetoothQALegacyDBus>,
+
+    /// Proxy for adapter QA interface.
     pub(crate) qa_dbus: Option<BluetoothQADBus>,
 
     /// Proxy for GATT interface.
@@ -127,6 +130,9 @@ pub(crate) struct ClientContext {
 
     /// The schedule when a socket is connected.
     socket_test_schedule: Option<SocketSchedule>,
+
+    /// The handle of the SDP record for MPS (Multi-Profile Specification).
+    mps_sdp_handle: Option<i32>,
 }
 
 impl ClientContext {
@@ -152,6 +158,7 @@ impl ClientContext {
             bonded_devices: HashMap::new(),
             manager_dbus,
             adapter_dbus: None,
+            qa_legacy_dbus: None,
             qa_dbus: None,
             gatt_dbus: None,
             admin_dbus: None,
@@ -170,6 +177,7 @@ impl ClientContext {
             is_restricted,
             gatt_client_context: GattClientContext::new(),
             socket_test_schedule: None,
+            mps_sdp_handle: None,
         }
     }
 
@@ -200,6 +208,7 @@ impl ClientContext {
 
         let dbus = BluetoothDBus::new(conn.clone(), idx);
         self.adapter_dbus = Some(dbus);
+        self.qa_legacy_dbus = Some(BluetoothQALegacyDBus::new(conn.clone(), idx));
         self.qa_dbus = Some(BluetoothQADBus::new(conn.clone(), idx));
 
         let gatt_dbus = BluetoothGattDBus::new(conn.clone(), idx);

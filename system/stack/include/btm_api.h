@@ -363,7 +363,7 @@ void BTM_EnableInterlacedPageScan();
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda,
-                                     tBTM_CMPL_CB* p_cb,
+                                     tBTM_NAME_CMPL_CB* p_cb,
                                      tBT_TRANSPORT transport);
 
 /*******************************************************************************
@@ -941,5 +941,9 @@ extern tBTM_STATUS BTM_BT_Quality_Report_VSE_Register(
     bool is_register, tBTM_BT_QUALITY_REPORT_RECEIVER* p_bqr_report_receiver);
 
 uint8_t btm_ble_read_sec_key_size(const RawAddress& bd_addr);
+
+typedef void(BTM_CONSOLIDATION_CB)(const RawAddress& identity_addr,
+                                   const RawAddress& rpa);
+void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* cb);
 
 #endif /* BTM_API_H */

@@ -20,18 +20,35 @@ python_test_host {
     name: "avatar",
     main: "main.py",
     srcs: [
-        "main.py",
         "*_test.py",
         "example.py",
+        "main.py",
     ],
     libs: [
-        "libavatar",
         "bumble_services_experimental-python",
+        "libavatar",
     ],
-    required: ["PandoraServer"],
+    required: [
+        "aapt",
+    ],
     test_suites: ["general-tests"],
     test_options: {
         unit_test: false,
     },
-    data: ["config.yml"],
+    data: [
+        ":PandoraServer",
+        "config.yml",
+    ],
+}
+
+sh_binary_host {
+    name: "avatar.sh",
+    src: "avatar.sh",
+    required: [
+        "avatar",
+        "pandora-python-gen-src",
+        "pandora_experimental-python-gen-src",
+        "tradefed",
+        "tradefed-test-framework",
+    ],
 }

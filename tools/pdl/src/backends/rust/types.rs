@@ -1,6 +1,20 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //! Utility functions for dealing with Rust integer types.
 
-use crate::parser::ast as parser_ast;
+use crate::analyzer::ast as analyzer_ast;
 use crate::{ast, lint};
 use quote::{format_ident, quote};
 
@@ -34,7 +48,7 @@ impl quote::ToTokens for Integer {
     }
 }
 
-pub fn rust_type(field: &parser_ast::Field) -> proc_macro2::TokenStream {
+pub fn rust_type(field: &analyzer_ast::Field) -> proc_macro2::TokenStream {
     match &field.desc {
         ast::FieldDesc::Scalar { width, .. } => {
             let field_type = Integer::new(*width);
@@ -67,7 +81,10 @@ pub fn rust_type(field: &parser_ast::Field) -> proc_macro2::TokenStream {
     }
 }
 
-pub fn rust_borrow(field: &parser_ast::Field, scope: &lint::Scope<'_>) -> proc_macro2::TokenStream {
+pub fn rust_borrow(
+    field: &analyzer_ast::Field,
+    scope: &lint::Scope<'_>,
+) -> proc_macro2::TokenStream {
     match &field.desc {
         ast::FieldDesc::Scalar { .. } => quote!(),
         ast::FieldDesc::Typedef { type_id, .. } => match &scope.typedef[type_id].desc {

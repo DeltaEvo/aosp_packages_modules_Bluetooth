@@ -85,6 +85,30 @@ void LogMetricA2dpAudioOverrunEvent(
       .Record();
 }
 
+void LogMetricHfpPacketLossStats(
+    const Address& address, int num_decoded_frames, double packet_loss_ratio) {
+  std::string boot_id;
+  std::string addr_string;
+
+  if (!metrics::GetBootId(&boot_id)) return;
+
+  addr_string = address.ToString();
+
+  LOG_DEBUG(
+      "HfpPacketLoss: %s, %s, %d, %f",
+      boot_id.c_str(),
+      addr_string.c_str(),
+      num_decoded_frames,
+      packet_loss_ratio);
+
+  ::metrics::structured::events::bluetooth::BluetoothHfpPacketLoss()
+      .SetBootId(boot_id)
+      .SetDeviceId(addr_string)
+      .SetDecodedFrames(num_decoded_frames)
+      .SetPacketLossRatio(packet_loss_ratio)
+      .Record();
+}
+
 void LogMetricReadRssiResult(
     const Address& address, uint16_t handle, uint32_t cmd_status, int8_t rssi) {}
 
@@ -157,6 +181,13 @@ void LogMetricBluetoothRemoteSupportedFeatures(
     const Address& address, uint32_t page, uint64_t features, uint32_t connection_handle) {}
 
 void LogMetricBluetoothCodePathCounterMetrics(int32_t key, int64_t count) {}
+
+void LogMetricBluetoothLEConnectionMetricEvent(
+    const Address& raw_address,
+    android::bluetooth::le::LeConnectionOriginType origin_type,
+    android::bluetooth::le::LeConnectionType connection_type,
+    android::bluetooth::le::LeConnectionState transaction_state,
+    std::vector<std::pair<os::ArgumentType, int>>& argument_list) {}
 
 }  // namespace os
 }  // namespace bluetooth

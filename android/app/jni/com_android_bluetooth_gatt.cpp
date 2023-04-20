@@ -30,7 +30,6 @@
 #include "hardware/bt_gatt.h"
 #include "rust/cxx.h"
 #include "rust/src/gatt/ffi/gatt_shim.h"
-#include "src/core/ffi.rs.h"
 #include "src/gatt/ffi.rs.h"
 #include "utils/Log.h"
 #define info(fmt, ...) ALOGI("%s(L%d): " fmt, __func__, __LINE__, ##__VA_ARGS__)
@@ -1393,10 +1392,6 @@ static void initializeNative(JNIEnv* env, jobject object) {
       JniDistanceMeasurementCallbacks::GetInstance());
 
   mCallbacksObj = env->NewGlobalRef(object);
-
-  auto callbacks = std::make_unique<bluetooth::gatt::GattServerCallbacks>(
-      sGattServerCallbacks);
-  bluetooth::rust_shim::init(std::move(callbacks));
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
@@ -1859,7 +1854,7 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
 
     curr.company_mask = env->GetIntField(current.get(), companyMaskFid);
 
-    curr.ad_type = env->GetByteField(current.get(), adTypeFid);
+    curr.ad_type = env->GetIntField(current.get(), adTypeFid);
 
     ScopedLocalRef<jbyteArray> data(
         env, (jbyteArray)env->GetObjectField(current.get(), dataFid));
@@ -2147,8 +2142,13 @@ static void gattServerSendIndicationNative(JNIEnv* env, jobject object,
   jbyte* array = env->GetByteArrayElements(val, 0);
   int val_len = env->GetArrayLength(val);
 
-  sGattIf->server->send_indication(server_if, attr_handle, conn_id,
-                                   /*confirm*/ 1, (uint8_t*)array, val_len);
+  if (bluetooth::gatt::is_connection_isolated(conn_id)) {
+    auto data = ::rust::Slice<const uint8_t>((uint8_t*)array, val_len);
+    bluetooth::gatt::send_indication(server_if, attr_handle, conn_id, data);
+  } else {
+    sGattIf->server->send_indication(server_if, attr_handle, conn_id,
+                                     /*confirm*/ 1, (uint8_t*)array, val_len);
+  }
 
   env->ReleaseByteArrayElements(val, array, JNI_ABORT);
 }

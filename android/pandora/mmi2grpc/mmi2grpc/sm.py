@@ -20,10 +20,10 @@ import asyncio
 from mmi2grpc._helpers import assert_description, match_description
 from mmi2grpc._proxy import ProfileProxy
 
-from pandora.security_grpc import Security, PairingEventAnswer
-from pandora.security_pb2 import LESecurityLevel
+from pandora.security_grpc import Security
+from pandora.security_pb2 import LE_LEVEL3, PairingEventAnswer
 from pandora.host_grpc import Host
-from pandora.host_pb2 import ConnectabilityMode, OwnAddressType
+from pandora.host_pb2 import PUBLIC, RANDOM
 
 
 def debug(*args, **kwargs):
@@ -46,7 +46,7 @@ class SMProxy(ProfileProxy):
         """
         Initiate an connection from the IUT to the PTS.
         """
-        self.connection = self.host.ConnectLE(own_address_type=OwnAddressType.RANDOM, public=pts_addr).connection
+        self.connection = self.host.ConnectLE(own_address_type=RANDOM, public=pts_addr).connection
         return "OK"
 
     @assert_description
@@ -54,9 +54,11 @@ class SMProxy(ProfileProxy):
         """
         Please start pairing process.
         """
+
         def secure():
             if self.connection:
-                self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
+                self.security.Secure(connection=self.connection, le=LE_LEVEL3)
+
         Thread(target=secure).start()
         return "OK"
 
@@ -94,8 +96,9 @@ class SMProxy(ProfileProxy):
         """
         self.advertise = self.host.Advertise(
             connectable=True,
-            own_address_type=OwnAddressType.PUBLIC,
+            own_address_type=PUBLIC,
         )
+
         return "OK"
 
     @assert_description
@@ -163,6 +166,28 @@ class SMProxy(ProfileProxy):
         """
         Please verify the passKey is correct: 000000
         """
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_INITIATE_CONNECTION_BR_EDR_PAIRING(self, test: str, pts_addr: bytes, **kwargs):
+        """
+        Please initiate a connection over BR/EDR to the PTS, and initiate
+        pairing process.
+    
+        Description: Verify that the Implementation Under Test
+        (IUT) can initiate a connect request over BR/EDR to PTS, and initiate
+        pairing process.
+        """
+        self.connection = self.host.Connect(address=pts_addr).connection
+
+        return "OK"
+
+    @assert_description
+    def MMI_ASK_IUT_PERFORM_FEATURE_EXCHANGE_OVER_BR(self, **kwargs):
+        """
+        Please start pairing feature exchange over BR/EDR.
+        """
+
         return "OK"
 
     def _handle_pairing_requests(self):

@@ -402,6 +402,9 @@ class DualModeController : public Device {
   // Status Parameters Commands
   // Bluetooth Core Specification Version 4.2 Volume 2 Part E 7.5
 
+  // 7.5.4
+  void ReadRssi(CommandView command);
+
   // 7.5.7
   void ReadEncryptionKeySize(CommandView command);
 
@@ -505,17 +508,15 @@ class DualModeController : public Device {
   // 7.8.35
   void LeWriteSuggestedDefaultDataLength(CommandView command);
 
-  // 7.8.38
+  // 7.8.38 - 7.8.41
   void LeAddDeviceToResolvingList(CommandView command);
-
-  // 7.8.39
   void LeRemoveDeviceFromResolvingList(CommandView command);
-
-  // 7.8.40
   void LeClearResolvingList(CommandView command);
-
-  // 7.8.41
   void LeReadResolvingListSize(CommandView command);
+
+  // 7.8.42 - 7.8.43
+  void LeReadPeerResolvableAddress(CommandView command);
+  void LeReadLocalResolvableAddress(CommandView command);
 
   // 7.8.44
   void LeSetAddressResolutionEnable(CommandView command);
@@ -525,6 +526,10 @@ class DualModeController : public Device {
 
   // 7.8.46
   void LeReadMaximumDataLength(CommandView command);
+
+  void LeReadPhy(CommandView command);
+  void LeSetDefaultPhy(CommandView command);
+  void LeSetPhy(CommandView command);
 
   // 7.8.52
   void LeSetAdvertisingSetRandomAddress(CommandView command);
@@ -552,6 +557,22 @@ class DualModeController : public Device {
 
   // 7.8.60
   void LeClearAdvertisingSets(CommandView command);
+
+  // 7.8.61 - 7.8.63
+  void LeSetPeriodicAdvertisingParameters(CommandView command);
+  void LeSetPeriodicAdvertisingData(CommandView command);
+  void LeSetPeriodicAdvertisingEnable(CommandView command);
+
+  // 7.8.67 - 7.8.69
+  void LePeriodicAdvertisingCreateSync(CommandView command);
+  void LePeriodicAdvertisingCreateSyncCancel(CommandView command);
+  void LePeriodicAdvertisingTerminateSync(CommandView command);
+
+  // 7.8.70 - 7.8.73
+  void LeAddDeviceToPeriodicAdvertiserList(CommandView command);
+  void LeRemoveDeviceFromPeriodicAdvertiserList(CommandView command);
+  void LeClearPeriodicAdvertiserList(CommandView command);
+  void LeReadPeriodicAdvertiserListSize(CommandView command);
 
   // 7.8.64
   void LeSetExtendedScanParameters(CommandView command);

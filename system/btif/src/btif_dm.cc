@@ -115,20 +115,6 @@ const Uuid UUID_BASS = Uuid::FromString("184F");
 const Uuid UUID_BATTERY = Uuid::FromString("180F");
 const Uuid UUID_A2DP_SINK = Uuid::FromString("110B");
 
-#define COD_UNCLASSIFIED ((0x1F) << 8)
-#define COD_HID_KEYBOARD 0x0540
-#define COD_HID_POINTING 0x0580
-#define COD_HID_COMBO 0x05C0
-#define COD_HID_MAJOR 0x0500
-#define COD_HID_MASK 0x0700
-#define COD_AV_HEADSETS 0x0404
-#define COD_AV_HANDSFREE 0x0408
-#define COD_AV_HEADPHONES 0x0418
-#define COD_AV_PORTABLE_AUDIO 0x041C
-#define COD_AV_HIFI_AUDIO 0x0428
-
-#define COD_CLASS_LE_AUDIO (1 << 14)
-
 #define BTIF_DM_MAX_SDP_ATTEMPTS_AFTER_PAIRING 2
 
 #ifndef PROPERTY_CLASS_OF_DEVICE
@@ -510,7 +496,7 @@ static uint32_t get_cod(const RawAddress* remote_bdaddr) {
 }
 
 bool check_cod(const RawAddress* remote_bdaddr, uint32_t cod) {
-  return get_cod(remote_bdaddr) == cod;
+  return (get_cod(remote_bdaddr) & COD_DEVICE_MASK) == cod;
 }
 
 bool check_cod_hid(const RawAddress* remote_bdaddr) {
@@ -603,6 +589,13 @@ static void bond_state_changed(bt_status_t status, const RawAddress& bd_addr,
     dev_type = BT_DEVICE_TYPE_BREDR;
   }
 
+  if ((state == BT_BOND_STATE_NONE) && (pairing_cb.bd_addr != bd_addr)
+      && is_bonding_or_sdp()) {
+    LOG_WARN("Ignoring bond state changed for unexpected device: %s pairing: %s",
+        ADDRESS_TO_LOGGABLE_CSTR(bd_addr), ADDRESS_TO_LOGGABLE_CSTR(pairing_cb.bd_addr));
+    return;
+  }
+
   if (state == BT_BOND_STATE_BONDING ||
       (state == BT_BOND_STATE_BONDED &&
        (pairing_cb.sdp_attempts > 0 ||
@@ -676,7 +669,7 @@ static void btif_update_remote_properties(const RawAddress& bdaddr,
 
   /* class of device */
   cod = devclass2uint(dev_class);
-  if (cod == 0) {
+  if ((cod == 0) || (cod == COD_UNCLASSIFIED)) {
     /* Try to retrieve cod from storage */
     LOG_VERBOSE("class of device (cod) is unclassified, checking storage");
     BTIF_STORAGE_FILL_PROPERTY(&properties[num_properties],
@@ -733,7 +726,7 @@ static void btif_update_remote_properties(const RawAddress& bdaddr,
 /* If device is LE Audio capable, we prefer LE connection first, this speeds
  * up LE profile connection, and limits all possible service discovery
  * ordering issues (first Classic, GATT over SDP, etc) */
-static bool is_device_le_audio_capable(const RawAddress bd_addr) {
+bool is_device_le_audio_capable(const RawAddress bd_addr) {
   if (!GetInterfaceToProfiles()
            ->profileSpecific_HACK->IsLeAudioClientRunning()) {
     /* If LE Audio profile is not enabled, do nothing. */
@@ -1338,7 +1331,9 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
     case BTA_DM_DISC_RES_EVT: {
       /* Remote name update */
       if (strlen((const char*)p_search_data->disc_res.bd_name)) {
-        bt_property_t properties[1];
+        /** Fix inquiry time too long @{ */
+        bt_property_t properties[3];
+        /** @} */
         bt_status_t status;
 
         properties[0].type = BT_PROPERTY_BDNAME;
@@ -1352,6 +1347,24 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
                 "failed to save remote device property", status);
         GetInterfaceToProfiles()->events->invoke_remote_device_properties_cb(
             status, bdaddr, 1, properties);
+        /** Fix inquiry time too long @{ */
+        uint32_t cod = 0;
+        /* Check if we already have cod in our btif_storage cache */
+        BTIF_STORAGE_FILL_PROPERTY(&properties[2], BT_PROPERTY_CLASS_OF_DEVICE, sizeof(uint32_t), &cod);
+        if (btif_storage_get_remote_device_property(
+                        &bdaddr, &properties[2]) == BT_STATUS_SUCCESS) {
+          BTIF_TRACE_DEBUG("%s, BTA_DM_DISC_RES_EVT, cod in storage = 0x%08x", __func__, cod);
+        } else {
+          BTIF_TRACE_DEBUG("%s, BTA_DM_DISC_RES_EVT, no cod in storage", __func__);
+          cod = 0;
+        }
+        if (cod != 0) {
+          BTIF_STORAGE_FILL_PROPERTY(&properties[1], BT_PROPERTY_BDADDR, sizeof(bdaddr), &bdaddr);
+          BTIF_STORAGE_FILL_PROPERTY(&properties[2], BT_PROPERTY_CLASS_OF_DEVICE, sizeof(uint32_t), &cod);
+          BTIF_TRACE_DEBUG("%s: Now we have name and cod, report to JNI", __func__);
+          GetInterfaceToProfiles()->events->invoke_device_found_cb(3, properties);
+        }
+        /** @} */
       }
       /* TODO: Services? */
     } break;
@@ -1568,6 +1581,12 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
             BT_DISCOVERY_STOPPED);
       }
     } break;
+    case BTA_DM_GATT_OVER_LE_RES_EVT:
+    case BTA_DM_DID_RES_EVT:
+    case BTA_DM_GATT_OVER_SDP_RES_EVT:
+    default:
+      LOG_WARN("Unhandled event:%s", bta_dm_search_evt_text(event).c_str());
+      break;
   }
 }
 
@@ -2270,15 +2289,6 @@ static void btif_dm_upstreams_evt(uint16_t event, char* p_param) {
     case BTA_DM_LE_FEATURES_READ:
       btif_get_adapter_property(BT_PROPERTY_LOCAL_LE_FEATURES);
       break;
-    /* add case for HANDLE_KEY_MISSING */
-    case BTA_DM_REPORT_BONDING_EVT:
-      LOG_WARN("Received encryption failed: Report bonding firstly.");
-      bd_addr = p_data->delete_key_RC_to_unpair.bd_addr;
-      GetInterfaceToProfiles()->events->invoke_bond_state_changed_cb(
-          BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDING,
-          pairing_cb.fail_reason);
-      btif_dm_remove_bond(bd_addr);
-      break;
 
     case BTA_DM_LE_ADDR_ASSOC_EVT:
       GetInterfaceToProfiles()->events->invoke_le_address_associate_cb(
@@ -2843,11 +2853,6 @@ bt_status_t btif_dm_get_adapter_property(bt_property_t* prop) {
 
     case BT_PROPERTY_LOCAL_IO_CAPS: {
       *(bt_io_cap_t*)prop->val = (bt_io_cap_t)BTM_LOCAL_IO_CAPS;
-      prop->len = sizeof(bt_io_cap_t);
-    } break;
-
-    case BT_PROPERTY_LOCAL_IO_CAPS_BLE: {
-      *(bt_io_cap_t*)prop->val = (bt_io_cap_t)BTM_LOCAL_IO_CAPS_BLE;
       prop->len = sizeof(bt_io_cap_t);
     } break;
 
@@ -3896,13 +3901,15 @@ void btif_dm_set_event_filter_connection_setup_all_devices() {
 }
 
 void btif_dm_allow_wake_by_hid(
-    std::vector<std::pair<RawAddress, uint8_t>> addrs) {
-  BTA_DmAllowWakeByHid(std::move(addrs));
+    std::vector<RawAddress> classic_addrs,
+    std::vector<std::pair<RawAddress, uint8_t>> le_addrs) {
+  BTA_DmAllowWakeByHid(std::move(classic_addrs), std::move(le_addrs));
 }
 
-void btif_dm_restore_filter_accept_list() {
+void btif_dm_restore_filter_accept_list(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices) {
   // Autoplumbed
-  BTA_DmRestoreFilterAcceptList();
+  BTA_DmRestoreFilterAcceptList(std::move(le_devices));
 }
 
 void btif_dm_set_default_event_mask_except(uint64_t mask, uint64_t le_mask) {

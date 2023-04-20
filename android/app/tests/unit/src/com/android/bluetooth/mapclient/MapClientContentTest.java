@@ -31,13 +31,13 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothMapClient;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Telephony.Mms;
 import android.provider.Telephony.Sms;
-import android.telephony.SmsManager;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.test.mock.MockContentProvider;
@@ -111,7 +111,6 @@ public class MapClientContentTest {
     private FakeContentProvider mMockSmsContentProvider;
     private FakeContentProvider mMockMmsContentProvider;
     private FakeContentProvider mMockThreadContentProvider;
-    private SmsManager mSmsManager = SmsManager.getDefault();
 
     @Mock
     private SubscriptionManager mMockSubscriptionManager;
@@ -120,10 +119,12 @@ public class MapClientContentTest {
 
     @Before
     public void setUp() throws Exception {
-        // Do not run test if sms is not supported
-        Assume.assumeTrue(mSmsManager.isImsSmsSupported());
         MockitoAnnotations.initMocks(this);
         mTargetContext = InstrumentationRegistry.getTargetContext();
+
+        // Do not run test if there is no telephony feature (no support for sms)
+        PackageManager packageManager = mTargetContext.getPackageManager();
+        Assume.assumeTrue(packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY));
 
         mMockSmsContentProvider = Mockito.spy(new FakeContentProvider(mTargetContext));
 
@@ -147,7 +148,6 @@ public class MapClientContentTest {
         when(mMockSubscriptionManager.getActiveSubscriptionInfoList())
                 .thenReturn(Arrays.asList(mMockSubscription));
         createTestMessages();
-
     }
 
     @After

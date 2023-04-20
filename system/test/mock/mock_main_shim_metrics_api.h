@@ -39,6 +39,8 @@
 #include "main/shim/helpers.h"
 #include "main/shim/metrics_api.h"
 #include "types/raw_address.h"
+#include <frameworks/proto_logging/stats/enums/bluetooth/le/enums.pb.h>
+
 
 // Mocked compile conditionals, if any
 #ifndef UNUSED_ATTR
@@ -127,6 +129,20 @@ struct LogMetricA2dpPlaybackEvent {
   };
 };
 extern struct LogMetricA2dpPlaybackEvent LogMetricA2dpPlaybackEvent;
+// Name: LogMetricHfpPacketLossStats
+// Params: const RawAddress& raw_address, int num_decoded_frames, double
+// packet_loss_ratio Returns: void
+struct LogMetricHfpPacketLossStats {
+  std::function<void(const RawAddress& raw_address, int num_decoded_frames,
+                     double packet_loss_ratio)>
+      body{[](const RawAddress& raw_address, int num_decoded_frames,
+              double packet_loss_ratio) {}};
+  void operator()(const RawAddress& raw_address, int num_decoded_frames,
+                  double packet_loss_ratio) {
+    body(raw_address, num_decoded_frames, packet_loss_ratio);
+  };
+};
+extern struct LogMetricHfpPacketLossStats LogMetricHfpPacketLossStats;
 // Name: LogMetricReadRssiResult
 // Params: const RawAddress& raw_address, uint16_t handle, uint32_t cmd_status,
 // int8_t rssi Returns: void
@@ -282,6 +298,40 @@ struct LogMetricManufacturerInfo {
   };
 };
 extern struct LogMetricManufacturerInfo LogMetricManufacturerInfo;
+
+// Name: LogMetricBluetoothLEConnectionMetricEvent
+// Params:     const RawAddress& raw_address,
+//    android::bluetooth::le::LeConnectionOriginType origin_type,
+//    android::bluetooth::le::LeConnectionType connection_type,
+//    android::bluetooth::le::LeConnectionState transaction_state,
+//    std::vector<std::pair<bluetooth::metrics::ArgumentType, int>>
+//    argument_list
+struct LogMetricBluetoothLEConnectionMetricEvent {
+  std::function<void(
+      const RawAddress& raw_address,
+      android::bluetooth::le::LeConnectionOriginType origin_type,
+      android::bluetooth::le::LeConnectionType connection_type,
+      android::bluetooth::le::LeConnectionState transaction_state,
+      std::vector<std::pair<bluetooth::os::ArgumentType, int>>
+          argument_list)>
+      body{[](const RawAddress& raw_address,
+              android::bluetooth::le::LeConnectionOriginType origin_type,
+              android::bluetooth::le::LeConnectionType connection_type,
+              android::bluetooth::le::LeConnectionState
+                  transaction_state,
+              std::vector<std::pair<bluetooth::os::ArgumentType, int>>
+                  argument_list) {}};
+  void operator()(
+      const RawAddress& raw_address,
+      android::bluetooth::le::LeConnectionOriginType origin_type,
+      android::bluetooth::le::LeConnectionType connection_type,
+      android::bluetooth::le::LeConnectionState transaction_state,
+      std::vector<std::pair<bluetooth::os::ArgumentType, int>>
+          argument_list) {
+    body(raw_address, origin_type, connection_type, transaction_state,
+         argument_list);
+  };
+};
 
 }  // namespace main_shim_metrics_api
 }  // namespace mock

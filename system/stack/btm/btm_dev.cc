@@ -38,11 +38,14 @@
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
+#include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;
+extern void gatt_consolidate(const RawAddress& identity_addr,
+                             const RawAddress& rpa);
 
 namespace {
 
@@ -172,9 +175,14 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
   if (p_dev_rec != NULL) {
     RawAddress bda = p_dev_rec->bd_addr;
 
-    if (p_dev_rec->ble.in_controller_list & BTM_ACCEPTLIST_BIT) {
-      LOG_INFO("Remove device %s from filter accept list before delete record",
-               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    LOG_INFO("Remove device %s from filter accept list before delete record",
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    if (bluetooth::common::init_flags::
+            use_unified_connection_manager_is_enabled()) {
+      bluetooth::connection::GetConnectionManager()
+          .stop_all_connections_to_device(
+              bluetooth::connection::ResolveRawAddress(p_dev_rec->bd_addr));
+    } else {
       BTM_AcceptlistRemove(p_dev_rec->bd_addr);
     }
 
@@ -467,6 +475,12 @@ void btm_consolidate_dev(tBTM_SEC_DEV_REC* p_target_rec) {
   }
 }
 
+BTM_CONSOLIDATION_CB* btm_consolidate_cb = nullptr;
+
+void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* cb) {
+  btm_consolidate_cb = cb;
+}
+
 /* combine security records of established LE connections after Classic pairing
  * succeeded. */
 void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
@@ -513,11 +527,16 @@ void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
       /* remove the old LE record */
       wipe_secrets_and_remove(p_dev_rec);
 
+      btm_acl_consolidate(bd_addr, ble_conn_addr);
+      L2CA_Consolidate(bd_addr, ble_conn_addr);
+      gatt_consolidate(bd_addr, ble_conn_addr);
+      if (btm_consolidate_cb) btm_consolidate_cb(bd_addr, ble_conn_addr);
+
       /* To avoid race conditions between central/peripheral starting encryption
        * at same time, initiate it just from central. */
       if (L2CA_GetBleConnRole(ble_conn_addr) == HCI_ROLE_CENTRAL) {
         LOG_INFO("Will encrypt existing connection");
-        BTM_SetEncryption(ble_conn_addr, BT_TRANSPORT_LE, nullptr, nullptr,
+        BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, nullptr, nullptr,
                           BTM_BLE_SEC_ENCRYPT);
       }
     }
@@ -619,6 +638,7 @@ tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void) {
   p_dev_rec->bond_type = tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN;
   p_dev_rec->timestamp = btm_cb.dev_rec_count++;
   p_dev_rec->rmt_io_caps = BTM_IO_CAP_UNKNOWN;
+  p_dev_rec->suggested_tx_octets = 0;
 
   return p_dev_rec;
 }

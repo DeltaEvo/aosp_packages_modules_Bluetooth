@@ -68,7 +68,8 @@ typedef struct { uint8_t name[249]; } __attribute__((packed)) bt_bdname_t;
 typedef enum {
   BT_SCAN_MODE_NONE,
   BT_SCAN_MODE_CONNECTABLE,
-  BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE
+  BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE,
+  BT_SCAN_MODE_CONNECTABLE_LIMITED_DISCOVERABLE
 } bt_scan_mode_t;
 
 /** Bluetooth Adapter State */
@@ -344,12 +345,7 @@ typedef enum {
    */
   BT_PROPERTY_LOCAL_IO_CAPS,
 
-  /**
-   * Description - Local Input/Output Capabilities for BLE
-   * Access mode - GET and SET
-   * Data Type - bt_io_cap_t.
-   */
-  BT_PROPERTY_LOCAL_IO_CAPS_BLE,
+  BT_PROPERTY_RESERVED_0F,
 
   BT_PROPERTY_DYNAMIC_AUDIO_BUFFER,
 
@@ -388,6 +384,13 @@ typedef enum {
    * Data Type - uint32_t.
    */
   BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
+
+  /**
+   * Description - Model name read from Device Information Service(DIS).
+   * Access mode - GET and SET.
+   * Data Type - char array.
+   */
+  BT_PROPERTY_REMOTE_MODEL_NUM,
 
   BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP = 0xFF,
 } bt_property_type_t;

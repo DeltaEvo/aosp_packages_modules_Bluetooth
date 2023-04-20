@@ -21,6 +21,7 @@
 #include <base/strings/stringprintf.h>
 
 #include <cstdint>
+#include <list>
 #include <string>
 
 #include "bt_target.h"
@@ -86,6 +87,64 @@ typedef enum GattStatus : uint8_t {
   GATT_OUT_OF_RANGE = 0xFF,
 } tGATT_STATUS;
 
+#ifndef CASE_RETURN_TEXT
+#define CASE_RETURN_TEXT(code) \
+  case code:                   \
+    return #code
+#endif
+
+inline std::string gatt_status_text(const tGATT_STATUS& status) {
+  switch (status) {
+    CASE_RETURN_TEXT(GATT_SUCCESS);  // Also GATT_ENCRYPED_MITM
+    CASE_RETURN_TEXT(GATT_INVALID_HANDLE);
+    CASE_RETURN_TEXT(GATT_READ_NOT_PERMIT);
+    CASE_RETURN_TEXT(GATT_WRITE_NOT_PERMIT);
+    CASE_RETURN_TEXT(GATT_INVALID_PDU);
+    CASE_RETURN_TEXT(GATT_INSUF_AUTHENTICATION);
+    CASE_RETURN_TEXT(GATT_REQ_NOT_SUPPORTED);
+    CASE_RETURN_TEXT(GATT_INVALID_OFFSET);
+    CASE_RETURN_TEXT(GATT_INSUF_AUTHORIZATION);
+    CASE_RETURN_TEXT(GATT_PREPARE_Q_FULL);
+    CASE_RETURN_TEXT(GATT_NOT_FOUND);
+    CASE_RETURN_TEXT(GATT_NOT_LONG);
+    CASE_RETURN_TEXT(GATT_INSUF_KEY_SIZE);
+    CASE_RETURN_TEXT(GATT_INVALID_ATTR_LEN);
+    CASE_RETURN_TEXT(GATT_ERR_UNLIKELY);
+    CASE_RETURN_TEXT(GATT_INSUF_ENCRYPTION);
+    CASE_RETURN_TEXT(GATT_UNSUPPORT_GRP_TYPE);
+    CASE_RETURN_TEXT(GATT_INSUF_RESOURCE);
+    CASE_RETURN_TEXT(GATT_DATABASE_OUT_OF_SYNC);
+    CASE_RETURN_TEXT(GATT_VALUE_NOT_ALLOWED);
+    CASE_RETURN_TEXT(GATT_ILLEGAL_PARAMETER);
+    CASE_RETURN_TEXT(GATT_TOO_SHORT);
+    CASE_RETURN_TEXT(GATT_NO_RESOURCES);
+    CASE_RETURN_TEXT(GATT_INTERNAL_ERROR);
+    CASE_RETURN_TEXT(GATT_WRONG_STATE);
+    CASE_RETURN_TEXT(GATT_DB_FULL);
+    CASE_RETURN_TEXT(GATT_BUSY);
+    CASE_RETURN_TEXT(GATT_ERROR);
+    CASE_RETURN_TEXT(GATT_CMD_STARTED);
+    CASE_RETURN_TEXT(GATT_PENDING);
+    CASE_RETURN_TEXT(GATT_AUTH_FAIL);
+    CASE_RETURN_TEXT(GATT_MORE);
+    CASE_RETURN_TEXT(GATT_INVALID_CFG);
+    CASE_RETURN_TEXT(GATT_SERVICE_STARTED);
+    CASE_RETURN_TEXT(GATT_ENCRYPED_NO_MITM);
+    CASE_RETURN_TEXT(GATT_NOT_ENCRYPTED);
+    CASE_RETURN_TEXT(GATT_CONGESTED);
+    CASE_RETURN_TEXT(GATT_DUP_REG);
+    CASE_RETURN_TEXT(GATT_ALREADY_OPEN);
+    CASE_RETURN_TEXT(GATT_CANCEL);
+    CASE_RETURN_TEXT(GATT_CCC_CFG_ERR);
+    CASE_RETURN_TEXT(GATT_PRC_IN_PROGRESS);
+    CASE_RETURN_TEXT(GATT_OUT_OF_RANGE);
+    default:
+      return base::StringPrintf("UNKNOWN[%hhu]", status);
+  }
+}
+
+#undef CASE_RETURN_TEXT
+
 typedef enum : uint8_t {
   GATT_RSP_ERROR = 0x01,
   GATT_REQ_MTU = 0x02,
@@ -126,6 +185,14 @@ typedef enum : uint8_t {
   /* 0x1E = 30 + 1 = 31*/
   GATT_OP_CODE_MAX = (GATT_HANDLE_MULTI_VALUE_NOTIF + 1),
 } tGATT_OP_CODE;
+
+typedef enum : uint8_t {
+  MTU_EXCHANGE_DEVICE_DISCONNECTED = 0x00,
+  MTU_EXCHANGE_NOT_ALLOWED,
+  MTU_EXCHANGE_NOT_DONE_YET,
+  MTU_EXCHANGE_IN_PROGRESS,
+  MTU_EXCHANGE_ALREADY_DONE,
+} tGATTC_TryMtuRequestResult;
 
 inline std::string gatt_op_code_text(const tGATT_OP_CODE& op_code) {
   switch (op_code) {
@@ -914,6 +981,55 @@ extern tGATT_STATUS GATTS_SendRsp(uint16_t conn_id, uint32_t trans_id,
  ******************************************************************************/
 extern tGATT_STATUS GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu);
 
+/*******************************************************************************
+ * Function         GATTC_UpdateUserAttMtuIfNeeded
+ *
+ * Description      This function to be called when user requested MTU after
+ *                  MTU Exchange has been already done. This will update data
+ *                  length in the controller.
+ *
+ * Parameters        remote_bda : peer device address. (input)
+ *                   transport  : physical transport of the GATT connection
+ *                                 (BR/EDR or LE) (input)
+ *                   user_mtu: user request mtu
+ *
+ ******************************************************************************/
+extern void GATTC_UpdateUserAttMtuIfNeeded(const RawAddress& remote_bda,
+                                           tBT_TRANSPORT transport,
+                                           uint16_t user_mtu);
+
+/******************************************************************************
+ *
+ * Function         GATTC_TryMtuRequest
+ *
+ * Description      This function shall be called before calling
+ *                  GATTC_ConfgureMTU in order to check if operation is
+ *                  available to do.
+ *
+ * Parameters        remote_bda : peer device address. (input)
+ *                   transport  : physical transport of the GATT connection
+ *                                 (BR/EDR or LE) (input)
+ *                   conn_id    : connection id  (input)
+ *                   current_mtu: current mtu on the link (output)
+ *
+ * Returns          tGATTC_TryMtuRequestResult:
+ *                  - MTU_EXCHANGE_NOT_DONE_YET: There was no MTU Exchange
+ *                      procedure on the link. User can call GATTC_ConfigureMTU
+ *                      now.
+ *                  - MTU_EXCHANGE_NOT_ALLOWED : Not allowed for BR/EDR or if
+ *                      link does not exist
+ *                  - MTU_EXCHANGE_ALREADY_DONE: MTU Exchange is done. MTU
+ *                      should be taken from current_mtu
+ *                  - MTU_EXCHANGE_IN_PROGRESS : Other use is doing MTU
+ *                      Exchange. Conn_id is stored for result.
+ *
+ ******************************************************************************/
+extern tGATTC_TryMtuRequestResult GATTC_TryMtuRequest(
+    const RawAddress& remote_bda, tBT_TRANSPORT transport, uint16_t conn_id,
+    uint16_t* current_mtu);
+
+extern std::list<uint16_t> GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
+    const RawAddress& remote_bda);
 /*******************************************************************************
  *
  * Function         GATTC_Discover

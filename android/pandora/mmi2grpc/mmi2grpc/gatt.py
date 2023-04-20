@@ -14,15 +14,34 @@
 
 import re
 import sys
+import time
 from threading import Thread
 
-from mmi2grpc._helpers import assert_description
+from mmi2grpc._helpers import assert_description, match_description
 from mmi2grpc._proxy import ProfileProxy
 
 from pandora_experimental.gatt_grpc import GATT
 from pandora.host_grpc import Host
-from pandora.host_pb2 import ConnectabilityMode, OwnAddressType
-from pandora_experimental.gatt_pb2 import AttStatusCode, AttProperties, AttPermissions
+from pandora.host_pb2 import PUBLIC, RANDOM
+from pandora.security_grpc import SecurityStorage
+from pandora_experimental.gatt_pb2 import (
+    INVALID_HANDLE,
+    READ_NOT_PERMITTED,
+    UNKNOWN_ERROR,
+    INSUFFICIENT_AUTHENTICATION,
+    ATTRIBUTE_NOT_FOUND,
+    APPLICATION_ERROR,
+    INVALID_ATTRIBUTE_LENGTH,
+    WRITE_NOT_PERMITTED,
+    PERMISSION_NONE,
+    PROPERTY_READ,
+    PROPERTY_WRITE,
+    PERMISSION_READ,
+    PERMISSION_WRITE,
+    PERMISSION_READ_ENCRYPTED,
+    ENABLE_NOTIFICATION_VALUE,
+    ENABLE_INDICATION_VALUE,
+)
 from pandora_experimental.gatt_pb2 import GattServiceParams
 from pandora_experimental.gatt_pb2 import GattCharacteristicParams
 from pandora_experimental.gatt_pb2 import ReadCharacteristicResponse
@@ -52,12 +71,15 @@ class GATTProxy(ProfileProxy):
         super().__init__(channel)
         self.gatt = GATT(channel)
         self.host = Host(channel)
+        self.security_storage = SecurityStorage(channel)
         self.connection = None
         self.services = None
         self.characteristics = None
         self.descriptors = None
         self.read_response = None
         self.write_response = None
+        self.characteristic_notification_received = False
+        self.handles = []
         self.written_over_length = False
         self.last_added_service = None
 
@@ -71,7 +93,7 @@ class GATTProxy(ProfileProxy):
         PTS.
         """
 
-        self.connection = self.host.ConnectLE(own_address_type=OwnAddressType.RANDOM, public=pts_addr).connection
+        self.connection = self.host.ConnectLE(own_address_type=RANDOM, public=pts_addr).connection
         if test in NEEDS_CACHE_CLEARED:
             self.gatt.ClearCache(connection=self.connection)
         return "OK"
@@ -94,6 +116,8 @@ class GATTProxy(ProfileProxy):
         self.descriptors = None
         self.read_response = None
         self.write_response = None
+        self.characteristic_notification_received = False
+        self.handles = []
         self.written_over_length = False
         self.last_added_service = None
         return "OK"
@@ -441,10 +465,12 @@ class GATTProxy(ProfileProxy):
 
         assert self.connection is not None
         handle = stringHandleToInt(re.findall("'([a0-Z9]*)'O", description)[0])
+
         def read():
             nonlocal handle
             self.read_response = self.gatt.ReadCharacteristicFromHandle(\
                     connection=self.connection, handle=handle)
+
         worker = Thread(target=read)
         worker.start()
         worker.join(timeout=30)
@@ -474,10 +500,10 @@ class GATTProxy(ProfileProxy):
         """
 
         if type(self.read_response) is ReadCharacteristicResponse:
-            assert self.read_response.status == AttStatusCode.INVALID_HANDLE
+            assert self.read_response.status == INVALID_HANDLE
         elif type(self.read_response) is ReadCharacteristicsFromUuidResponse:
             assert self.read_response.characteristics_read is not None
-            assert AttStatusCode.INVALID_HANDLE in\
+            assert INVALID_HANDLE in\
                     list(map(lambda characteristic_read: characteristic_read.status,\
                             self.read_response.characteristics_read))
         return "Yes"
@@ -496,14 +522,14 @@ class GATTProxy(ProfileProxy):
         # Android read error doesn't return an error code so we have to also
         # compare to the generic error code here.
         if type(self.read_response) is ReadCharacteristicResponse:
-            assert self.read_response.status == AttStatusCode.READ_NOT_PERMITTED or\
-                    self.read_response.status == AttStatusCode.UNKNOWN_ERROR
+            assert self.read_response.status == READ_NOT_PERMITTED or\
+                   self.read_response.status == UNKNOWN_ERROR
         elif type(self.read_response) is ReadCharacteristicsFromUuidResponse:
             assert self.read_response.characteristics_read is not None
             status_list = list(map(lambda characteristic_read: characteristic_read.status,\
                     self.read_response.characteristics_read))
-            assert AttStatusCode.READ_NOT_PERMITTED in status_list or\
-                    AttStatusCode.UNKNOWN_ERROR in status_list
+            assert READ_NOT_PERMITTED in status_list or\
+                     UNKNOWN_ERROR in status_list
         return "Yes"
 
     @assert_description
@@ -518,10 +544,10 @@ class GATTProxy(ProfileProxy):
         """
 
         if type(self.read_response) is ReadCharacteristicResponse:
-            assert self.read_response.status == AttStatusCode.INSUFFICIENT_AUTHENTICATION
+            assert self.read_response.status == INSUFFICIENT_AUTHENTICATION
         elif type(self.read_response) is ReadCharacteristicsFromUuidResponse:
             assert self.read_response.characteristics_read is not None
-            assert AttStatusCode.INSUFFICIENT_AUTHENTICATION in\
+            assert INSUFFICIENT_AUTHENTICATION in\
                     list(map(lambda characteristic_read: characteristic_read.status,\
                             self.read_response.characteristics_read))
         return "Yes"
@@ -557,14 +583,14 @@ class GATTProxy(ProfileProxy):
         # Android read error doesn't return an error code so we have to also
         # compare to the generic error code here.
         if type(self.read_response) is ReadCharacteristicResponse:
-            assert self.read_response.status == AttStatusCode.ATTRIBUTE_NOT_FOUND or\
-                    self.read_response.status == AttStatusCode.UNKNOWN_ERROR
+            assert self.read_response.status == ATTRIBUTE_NOT_FOUND or\
+                    self.read_response.status == UNKNOWN_ERROR
         elif type(self.read_response) is ReadCharacteristicsFromUuidResponse:
             assert self.read_response.characteristics_read is not None
             status_list = list(map(lambda characteristic_read: characteristic_read.status,\
                     self.read_response.characteristics_read))
-            assert AttStatusCode.ATTRIBUTE_NOT_FOUND in status_list or\
-                    AttStatusCode.UNKNOWN_ERROR in status_list
+            assert ATTRIBUTE_NOT_FOUND in status_list or\
+                    UNKNOWN_ERROR in status_list
         return "Yes"
 
     def MMI_IUT_SEND_READ_GREATER_OFFSET(self, description: str, **kwargs):
@@ -609,10 +635,10 @@ class GATTProxy(ProfileProxy):
         """
 
         if type(self.read_response) is ReadCharacteristicResponse:
-            assert self.read_response.status == AttStatusCode.APPLICATION_ERROR
+            assert self.read_response.status == APPLICATION_ERROR
         elif type(self.read_response) is ReadCharacteristicsFromUuidResponse:
             assert self.read_response.characteristics_read is not None
-            assert AttStatusCode.APPLICATION_ERROR in\
+            assert APPLICATION_ERROR in\
                     list(map(lambda characteristic_read: characteristic_read.status,\
                             self.read_response.characteristics_read))
         return "Yes"
@@ -732,11 +758,13 @@ class GATTProxy(ProfileProxy):
         matches = re.findall("'([a0-Z9]*)'O with <= '([a0-Z9]*)'", description)
         handle = stringHandleToInt(matches[0][0])
         data = bytes([1]) * int(matches[0][1])
+
         def write():
             nonlocal handle
             nonlocal data
             self.write_response = self.gatt.WriteAttFromHandle(connection=self.connection,\
                 handle=handle, value=data)
+
         worker = Thread(target=write)
         worker.start()
         worker.join(timeout=30)
@@ -766,7 +794,7 @@ class GATTProxy(ProfileProxy):
         """
 
         assert self.write_response is not None
-        assert self.write_response.status == AttStatusCode.INVALID_HANDLE
+        assert self.write_response.status == INVALID_HANDLE
         return "Yes"
 
     @assert_description
@@ -781,7 +809,7 @@ class GATTProxy(ProfileProxy):
         """
 
         assert self.write_response is not None
-        assert self.write_response.status == AttStatusCode.WRITE_NOT_PERMITTED
+        assert self.write_response.status == WRITE_NOT_PERMITTED
         return "Yes"
 
     def MMI_IUT_SEND_PREPARE_WRITE(self, description: str, **kwargs):
@@ -812,7 +840,7 @@ class GATTProxy(ProfileProxy):
 
         assert self.connection is not None
         handle = stringHandleToInt(re.findall("'([a0-Z9]*)'O", description)[0])
-        data = bytes([4]) # Multiple Handle Value Notifications
+        data = bytes([4])  # Multiple Handle Value Notifications
         self.write_response = self.gatt.WriteAttFromHandle(connection=self.connection,\
                 handle=handle, value=data)
         return "OK"
@@ -870,7 +898,7 @@ class GATTProxy(ProfileProxy):
         assert self.write_response is not None
         # See MMI_IUT_SEND_PREPARE_WRITE_GREATER_OFFSET
         if self.written_over_length == True:
-            assert self.write_response.status == AttStatusCode.INVALID_ATTRIBUTE_LENGTH
+            assert self.write_response.status == INVALID_ATTRIBUTE_LENGTH
         return "OK"
 
     def MMI_IUT_SEND_WRITE_REQUEST_GREATER(self, description: str, **kwargs):
@@ -902,7 +930,7 @@ class GATTProxy(ProfileProxy):
         """
 
         assert self.write_response is not None
-        assert self.write_response.status == AttStatusCode.INVALID_ATTRIBUTE_LENGTH
+        assert self.write_response.status == INVALID_ATTRIBUTE_LENGTH
         return "OK"
 
     def MMI_IUT_SEND_PREPARE_WRITE_REQUEST_GREATER(self, description: str, **kwargs):
@@ -949,24 +977,24 @@ class GATTProxy(ProfileProxy):
         """
         self.advertise = self.host.Advertise(
             connectable=True,
-            own_address_type=OwnAddressType.PUBLIC,
+            own_address_type=PUBLIC,
         )
-        self.gatt.RegisterService(
-            service=GattServiceParams(
-                uuid=BASE_READ_WRITE_SERVICE_UUID,
-                characteristics=[
-                    GattCharacteristicParams(
-                        uuid=BASE_READ_CHARACTERISTIC_UUID,
-                        properties=AttProperties.PROPERTY_READ,
-                        permissions=AttPermissions.PERMISSION_READ,
-                    ),
-                    GattCharacteristicParams(
-                        uuid=BASE_WRITE_CHARACTERISTIC_UUID,
-                        properties=AttProperties.PROPERTY_WRITE,
-                        permissions=AttPermissions.PERMISSION_WRITE,
-                    ),
-                ],
-            ))
+        time.sleep(1)
+        self.gatt.RegisterService(service=GattServiceParams(
+            uuid=BASE_READ_WRITE_SERVICE_UUID,
+            characteristics=[
+                GattCharacteristicParams(
+                    uuid=BASE_READ_CHARACTERISTIC_UUID,
+                    properties=PROPERTY_READ,
+                    permissions=PERMISSION_READ,
+                ),
+                GattCharacteristicParams(
+                    uuid=BASE_WRITE_CHARACTERISTIC_UUID,
+                    properties=PROPERTY_WRITE,
+                    permissions=PERMISSION_WRITE,
+                ),
+            ],
+        ))
 
         return "OK"
 
@@ -1036,17 +1064,16 @@ class GATTProxy(ProfileProxy):
         that the Implementation Under Test (IUT) can respond Read Not Permitted.
         """
 
-        self.last_added_service = self.gatt.RegisterService(
-            service=GattServiceParams(
-                uuid=CUSTOM_SERVICE_UUID,
-                characteristics=[
-                    GattCharacteristicParams(
-                        uuid=CUSTOM_CHARACTERISTIC_UUID,
-                        properties=AttProperties.PROPERTY_READ,
-                        permissions=AttPermissions.PERMISSION_NONE,
-                    ),
-                ],
-            ))
+        self.last_added_service = self.gatt.RegisterService(service=GattServiceParams(
+            uuid=CUSTOM_SERVICE_UUID,
+            characteristics=[
+                GattCharacteristicParams(
+                    uuid=CUSTOM_CHARACTERISTIC_UUID,
+                    properties=PROPERTY_READ,
+                    permissions=PERMISSION_NONE,
+                ),
+            ],
+        ))
         return CUSTOM_CHARACTERISTIC_UUID[4:8].upper()
 
     def MMI_IUT_ENTER_HANDLE_READ_NOT_PERMITTED(self, **kwargs):
@@ -1080,17 +1107,16 @@ class GATTProxy(ProfileProxy):
         Authentication.
         """
 
-        self.last_added_service = self.gatt.RegisterService(
-            service=GattServiceParams(
-                uuid=CUSTOM_SERVICE_UUID,
-                characteristics=[
-                    GattCharacteristicParams(
-                        uuid=CUSTOM_CHARACTERISTIC_UUID,
-                        properties=AttProperties.PROPERTY_READ,
-                        permissions=AttPermissions.PERMISSION_READ_ENCRYPTED,
-                    ),
-                ],
-            ))
+        self.last_added_service = self.gatt.RegisterService(service=GattServiceParams(
+            uuid=CUSTOM_SERVICE_UUID,
+            characteristics=[
+                GattCharacteristicParams(
+                    uuid=CUSTOM_CHARACTERISTIC_UUID,
+                    properties=PROPERTY_READ,
+                    permissions=PERMISSION_READ_ENCRYPTED,
+                ),
+            ],
+        ))
         return CUSTOM_CHARACTERISTIC_UUID[4:8].upper()
 
     def MMI_IUT_ENTER_HANDLE_INSUFFICIENT_AUTHENTICATION(self, **kwargs):
@@ -1113,17 +1139,16 @@ class GATTProxy(ProfileProxy):
         Implementation Under Test (IUT) can issue a Read Not Permitted Response.
         """
 
-        self.last_added_service = self.gatt.RegisterService(
-            service=GattServiceParams(
-                uuid=CUSTOM_SERVICE_UUID,
-                characteristics=[
-                    GattCharacteristicParams(
-                        uuid=CUSTOM_CHARACTERISTIC_UUID,
-                        properties=AttProperties.PROPERTY_READ,
-                        permissions=AttPermissions.PERMISSION_NONE,
-                    ),
-                ],
-            ))
+        self.last_added_service = self.gatt.RegisterService(service=GattServiceParams(
+            uuid=CUSTOM_SERVICE_UUID,
+            characteristics=[
+                GattCharacteristicParams(
+                    uuid=CUSTOM_CHARACTERISTIC_UUID,
+                    properties=PROPERTY_READ,
+                    permissions=PERMISSION_NONE,
+                ),
+            ],
+        ))
         return "{:04x}".format(self.last_added_service.service.characteristics[0].handle)
 
     def MMI_IUT_CONFIRM_READ_MULTIPLE_HANDLE_VALUES(self, **kwargs):
@@ -1146,18 +1171,110 @@ class GATTProxy(ProfileProxy):
         Permitted.
         """
 
-        self.last_added_service = self.gatt.RegisterService(
-            service=GattServiceParams(
-                uuid=CUSTOM_SERVICE_UUID,
-                characteristics=[
-                    GattCharacteristicParams(
-                        uuid=CUSTOM_CHARACTERISTIC_UUID,
-                        properties=AttProperties.PROPERTY_WRITE,
-                        permissions=AttPermissions.PERMISSION_NONE,
-                    ),
-                ],
-            ))
+        self.last_added_service = self.gatt.RegisterService(service=GattServiceParams(
+            uuid=CUSTOM_SERVICE_UUID,
+            characteristics=[
+                GattCharacteristicParams(
+                    uuid=CUSTOM_CHARACTERISTIC_UUID,
+                    properties=PROPERTY_WRITE,
+                    permissions=PERMISSION_NONE,
+                ),
+            ],
+        ))
         return "{:04x}".format(self.last_added_service.service.characteristics[0].handle)
+
+    def MMI_IUT_SEND_INDICATION(self, description: str, **kwargs):
+        """
+        Please write to client characteristic configuration handle = 'XXXX'O to
+        enable indication to the PTS. Discover all characteristics if needed.
+        Description: Verify that the Implementation Under Test (IUT) can receive
+        indication sent from PTS.
+        """
+        assert self.connection is not None
+        handle = stringHandleToInt(re.findall("'([a0-Z9]*)'O", description)[0])
+        self.handles.append(handle)
+        self.gatt.SetCharacteristicNotificationFromHandle(connection=self.connection,\
+                handle=handle, enable_value=ENABLE_INDICATION_VALUE)
+
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_RECEIVE_INDICATION(self, **kwargs):
+        """
+        Please confirm IUT received indication from PTS. Click YES if received,
+        otherwise NO.
+
+        Description: Verify that the Implementation Under Test
+        (IUT) can receive indication send from PTS.
+        """
+        for handle in self.handles:
+            self.characteristic_notification_received = self.gatt.WaitCharacteristicNotification(
+                connection=self.connection, handle=handle).characteristic_notification_received
+            assert self.characteristic_notification_received
+
+        return "OK"
+
+    def MMI_IUT_SEND_NOTIFICATION(self, description: str, **kwargs):
+        """
+        Please write to client characteristic configuration handle = 'XXXX'O to
+        enable notification to the PTS. Discover all characteristics if needed.
+        Description: Verify that the Implementation Under Test (IUT) can receive
+        notification sent from PTS.
+        """
+        assert self.connection is not None
+        handle = stringHandleToInt(re.findall("'([a0-Z9]*)'O", description)[0])
+        self.handles.append(handle)
+        self.gatt.SetCharacteristicNotificationFromHandle(connection=self.connection,\
+                handle=handle, enable_value=ENABLE_NOTIFICATION_VALUE)
+
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_RECEIVE_NOTIFICATION(self, **kwargs):
+        """
+        Please confirm IUT received notification from PTS. Click YES if
+        received, otherwise NO.
+
+        Description: Verify that the Implementation
+        Under Test (IUT) can receive notification send from PTS.
+        """
+        for handle in self.handles:
+            self.characteristic_notification_received = self.gatt.WaitCharacteristicNotification(
+                connection=self.connection, handle=handle).characteristic_notification_received
+            assert self.characteristic_notification_received
+
+        return "OK"
+
+    @assert_description
+    def MMI_IUT_DELETE_SECUIRTY_KEY(self, pts_addr: bytes, **kwargs):
+        """
+        Please delete security key before connecting to PTS if IUT was bonded
+        previously.
+        """
+        self.security_storage.DeleteBond(public=pts_addr)
+
+        return "OK"
+
+    def MMI_IUT_WRITE_SUPPORT_FEATURE(self, description: str, **kwargs):
+        """
+        Please write to client support feature handle = 'XXXX'O to enable Robust
+        Caching. Discover all characteristics if needed.
+        """
+        assert self.connection is not None
+        handle = stringHandleToInt(re.findall("'([a0-Z9]*)'O", description)[0])
+        data = bytes([1])
+        self.write_response = self.gatt.WriteAttFromHandle(connection=self.connection,\
+                handle=handle, value=data)
+
+        return "OK"
+
+    @match_description
+    def _mmi_2004(self, passkey: str, **kwargs):
+        """
+        Please confirm that 6 digit number is matched with (?P<passkey>[0-9]+).
+        """
+
+        return "OK"
 
 
 common_uuid = "0000XXXX-0000-1000-8000-00805f9b34fb"

@@ -64,6 +64,7 @@
 typedef enum : uint16_t {
   /* DM search API events */
   BTA_DM_API_SEARCH_EVT = BTA_SYS_EVT_START(BTA_ID_DM_SEARCH),
+  BTA_DM_API_SEARCH_CANCEL_EVT,
   BTA_DM_API_DISCOVER_EVT,
   BTA_DM_INQUIRY_CMPL_EVT,
   BTA_DM_REMT_NAME_EVT,
@@ -76,6 +77,7 @@ typedef enum : uint16_t {
 inline std::string bta_dm_event_text(const tBTA_DM_EVT& event) {
   switch (event) {
     CASE_RETURN_TEXT(BTA_DM_API_SEARCH_EVT);
+    CASE_RETURN_TEXT(BTA_DM_API_SEARCH_CANCEL_EVT);
     CASE_RETURN_TEXT(BTA_DM_API_DISCOVER_EVT);
     CASE_RETURN_TEXT(BTA_DM_INQUIRY_CMPL_EVT);
     CASE_RETURN_TEXT(BTA_DM_REMT_NAME_EVT);
@@ -102,6 +104,10 @@ typedef struct {
   tBTA_DM_SEARCH_CBACK* p_cback;
   tBT_TRANSPORT transport;
 } tBTA_DM_API_DISCOVER;
+
+typedef struct {
+  BT_HDR_RIGID hdr;
+} tBTA_DM_API_DISCOVERY_CANCEL;
 
 typedef struct {
   RawAddress bd_addr;
@@ -357,6 +363,27 @@ typedef struct {
   alarm_t* switch_delay_timer;
 } tBTA_DM_CB;
 
+/* DM search state */
+typedef enum {
+
+  BTA_DM_SEARCH_IDLE,
+  BTA_DM_SEARCH_ACTIVE,
+  BTA_DM_SEARCH_CANCELLING,
+  BTA_DM_DISCOVER_ACTIVE
+
+} tBTA_DM_STATE;
+
+inline std::string bta_dm_state_text(const tBTA_DM_STATE& state) {
+  switch (state) {
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_IDLE);
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_ACTIVE);
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_CANCELLING);
+    CASE_RETURN_TEXT(BTA_DM_DISCOVER_ACTIVE);
+    default:
+      return base::StringPrintf("UNKNOWN[%d]", state);
+  }
+}
+
 /* DM search control block */
 typedef struct {
   tBTA_DM_SEARCH_CBACK* p_search_cback;
@@ -365,7 +392,7 @@ typedef struct {
   tBTA_SERVICE_MASK services_to_search;
   tBTA_SERVICE_MASK services_found;
   tSDP_DISCOVERY_DB* p_sdp_db;
-  uint16_t state;
+  tBTA_DM_STATE state;
   RawAddress peer_bdaddr;
   bool name_discover_done;
   BD_NAME peer_name;
@@ -395,27 +422,6 @@ typedef struct {
   uint32_t di_handle[BTA_DI_NUM_MAX]; /* local DI record handle, the first one
                                          is primary record */
 } tBTA_DM_DI_CB;
-
-/* DM search state */
-typedef enum {
-
-  BTA_DM_SEARCH_IDLE,
-  BTA_DM_SEARCH_ACTIVE,
-  BTA_DM_SEARCH_CANCELLING,
-  BTA_DM_DISCOVER_ACTIVE
-
-} tBTA_DM_STATE;
-
-inline std::string bta_dm_state_text(const tBTA_DM_STATE& state) {
-  switch (state) {
-    CASE_RETURN_TEXT(BTA_DM_SEARCH_IDLE);
-    CASE_RETURN_TEXT(BTA_DM_SEARCH_ACTIVE);
-    CASE_RETURN_TEXT(BTA_DM_SEARCH_CANCELLING);
-    CASE_RETURN_TEXT(BTA_DM_DISCOVER_ACTIVE);
-    default:
-      return base::StringPrintf("UNKNOWN[%d]", state);
-  }
-}
 
 typedef struct {
   uint16_t page_timeout; /* timeout for page in slots */
@@ -452,7 +458,7 @@ typedef struct {
 typedef struct {
   uint8_t allow_mask; /* mask of sniff/hold/park modes to allow */
   uint8_t ssr; /* set SSR on conn open/unpark */
-  tBTA_DM_PM_ACTN actn_tbl[BTA_DM_PM_NUM_EVTS];
+  tBTA_DM_PM_ACTN actn_tbl[BTA_DM_PM_NUM_EVTS][2];
 
 } tBTA_DM_PM_SPEC;
 
@@ -583,16 +589,18 @@ extern void bta_dm_disconnect_all_acls(void);
 extern void bta_dm_le_rand(LeRandCallback cb);
 extern void bta_dm_set_event_filter_connection_setup_all_devices();
 extern void bta_dm_allow_wake_by_hid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
-extern void bta_dm_restore_filter_accept_list();
+extern void bta_dm_restore_filter_accept_list(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 extern void bta_dm_set_default_event_mask_except(uint64_t mask,
                                                  uint64_t le_mask);
 extern void bta_dm_set_event_filter_inquiry_result_all_devices();
 
 extern void bta_dm_ble_reset_id(void);
 
-uint8_t bta_dm_search_get_state();
-void bta_dm_search_set_state(uint8_t state);
+tBTA_DM_STATE bta_dm_search_get_state();
+void bta_dm_search_set_state(tBTA_DM_STATE state);
 
 void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding);
 void bta_dm_eir_update_cust_uuid(const tBTA_CUSTOM_UUID &curr, bool adding);
@@ -600,6 +608,8 @@ void bta_dm_eir_update_cust_uuid(const tBTA_CUSTOM_UUID &curr, bool adding);
 void bta_dm_ble_subrate_request(const RawAddress& bd_addr, uint16_t subrate_min,
                                 uint16_t subrate_max, uint16_t max_latency,
                                 uint16_t cont_num, uint16_t timeout);
+extern void bta_dm_consolidate(const RawAddress& identity_addr,
+                               const RawAddress& rpa);
 
 #undef CASE_RETURN_TEXT
 #endif /* BTA_DM_INT_H */

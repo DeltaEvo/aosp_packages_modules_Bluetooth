@@ -53,8 +53,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MapClientService extends ProfileService {
     private static final String TAG = "MapClientService";
 
-    static final boolean DBG = false;
-    static final boolean VDBG = false;
+    static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    static final boolean VDBG = Log.isLoggable(TAG, Log.VERBOSE);
 
     static final int MAXIMUM_CONNECTED_DEVICES = 4;
 
@@ -339,9 +339,11 @@ public class MapClientService extends ProfileService {
             Log.d(TAG, "stop()");
         }
 
-        mAdapterService.notifyActivityAttributionInfo(
-                getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
+        if (mAdapterService != null) {
+            mAdapterService.notifyActivityAttributionInfo(
+                    getAttributionSource(),
+                    AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
+        }
         if (mMapReceiver != null) {
             unregisterReceiver(mMapReceiver);
             mMapReceiver = null;

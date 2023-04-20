@@ -69,7 +69,6 @@ extern bool btm_identity_addr_to_random_pseudo(RawAddress* bd_addr,
                                                bool refresh);
 extern void btm_ble_batchscan_init(void);
 extern void btm_ble_adv_filter_init(void);
-extern void btm_clear_all_pending_le_entry(void);
 extern const tBLE_BD_ADDR convert_to_address_with_type(
     const RawAddress& bd_addr, const tBTM_SEC_DEV_REC* p_dev_rec);
 
@@ -536,11 +535,16 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
       if (duration == 0) {
         if (alarm_is_scheduled(btm_cb.ble_ctr_cb.observer_timer)) {
           alarm_cancel(btm_cb.ble_ctr_cb.observer_timer);
-          return BTM_CMD_STARTED;
+        } else {
+          BTM_TRACE_ERROR("%s Scan with no duration started twice!", __func__);
+        }
+      } else {
+        if (alarm_is_scheduled(btm_cb.ble_ctr_cb.observer_timer)) {
+          BTM_TRACE_ERROR("%s Scan with duration started twice!", __func__);
         }
       }
-      BTM_TRACE_ERROR("%s Observe Already Active", __func__);
-      return status;
+      BTM_TRACE_WARNING("%s Observer was already active", __func__);
+      return BTM_CMD_STARTED;
     }
 
     btm_cb.ble_ctr_cb.p_obs_results_cb = p_results_cb;
@@ -2137,7 +2141,7 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda,
  *
  ******************************************************************************/
 tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda,
-                                     tBTM_CMPL_CB* p_cb) {
+                                     tBTM_NAME_CMPL_CB* p_cb) {
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
 
   if (!controller_get_interface()->supports_ble()) return BTM_ERR_PROCESSING;
@@ -2515,30 +2519,6 @@ void btm_ble_update_inq_result(tINQ_DB_ENT* p_i, uint8_t addr_type,
     }
   } else {
     LOG_VERBOSE("NOT_BR/EDR support bit set, treat device as LE only");
-  }
-}
-
-/*******************************************************************************
- *
- * Function         btm_clear_all_pending_le_entry
- *
- * Description      This function is called to clear all LE pending entry in
- *                  inquiry database.
- *
- * Returns          void
- *
- ******************************************************************************/
-void btm_clear_all_pending_le_entry(void) {
-  uint16_t xx;
-  tINQ_DB_ENT* p_ent = btm_cb.btm_inq_vars.inq_db;
-
-  for (xx = 0; xx < BTM_INQ_DB_SIZE; xx++, p_ent++) {
-    /* mark all pending LE entry as unused if an LE only device has scan
-     * response outstanding */
-    if ((p_ent->in_use) &&
-        (p_ent->inq_info.results.device_type == BT_DEVICE_TYPE_BLE) &&
-        !p_ent->scan_rsp)
-      p_ent->in_use = false;
   }
 }
 
@@ -3477,9 +3457,6 @@ void btm_ble_init(void) {
   p_cb->inq_var.discoverable_mode = BTM_BLE_NON_DISCOVERABLE;
   p_cb->inq_var.fast_adv_timer = alarm_new("btm_ble_inq.fast_adv_timer");
   p_cb->inq_var.inquiry_timer = alarm_new("btm_ble_inq.inquiry_timer");
-
-  /* for background connection, reset connection params to be undefined */
-  p_cb->scan_int = p_cb->scan_win = BTM_BLE_SCAN_PARAM_UNDEF;
 
   p_cb->inq_var.evt_type = BTM_BLE_NON_CONNECT_EVT;
 
