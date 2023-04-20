@@ -57,6 +57,8 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
+#include "rust/src/connection/ffi/connection_shim.h"
+#include "rust/src/core/ffi/types.h"
 #include "stack/acl/acl.h"
 #include "stack/acl/peer_packet_types.h"
 #include "stack/btm/btm_dev.h"
@@ -201,6 +203,19 @@ static void hci_btsnd_hcic_disconnect(tACL_CONN& p_acl, tHCI_STATUS reason,
            ADDRESS_TO_LOGGABLE_CSTR(p_acl.remote_addr),
            hci_error_code_text(reason).c_str(), comment.c_str());
   p_acl.disconnect_reason = reason;
+
+  if (bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    if (!p_acl.is_transport_br_edr()) {
+      // TODO(aryarahul): this should be moved into GATT, so when a client
+      // disconnects, it removes its request to autoConnect, even if the ACL
+      // link stays up due to the presence of other clients.
+      bluetooth::connection::GetConnectionManager()
+          .stop_all_connections_to_device(bluetooth::core::ToRustAddress(
+              tBLE_BD_ADDR{.bda = p_acl.active_remote_addr,
+                           .type = p_acl.active_remote_addr_type}));
+    }
+  }
 
   return bluetooth::shim::ACL_Disconnect(
       p_acl.hci_handle, p_acl.is_transport_br_edr(), reason, comment);
@@ -446,11 +461,6 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
     btm_set_link_policy(p_acl, btm_cb.acl_cb_.DefaultLinkPolicy());
   }
 
-  if (transport == BT_TRANSPORT_LE) {
-    btm_ble_refresh_local_resolvable_private_addr(
-        bda, btm_cb.ble_ctr_cb.addr_mgnt_cb.private_addr);
-  }
-
   // save remote properties to iot conf file
   btm_iot_save_remote_properties(p_acl);
 
@@ -476,15 +486,6 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
 void btm_acl_create_failed(const RawAddress& bda, tBT_TRANSPORT transport,
                            tHCI_STATUS hci_status) {
   BTA_dm_acl_up_failed(bda, transport, hci_status);
-}
-
-void btm_acl_update_conn_addr(uint16_t handle, const RawAddress& address) {
-  tACL_CONN* p_acl = internal_.acl_get_connection_from_handle(handle);
-  if (p_acl == nullptr) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-  p_acl->conn_addr = address;
 }
 
 void btm_configure_data_path(uint8_t direction, uint8_t path_id,
@@ -2440,35 +2441,6 @@ const RawAddress acl_address_from_handle(uint16_t handle) {
   return p_acl->remote_addr;
 }
 
-/*******************************************************************************
- *
- * Function         btm_ble_refresh_local_resolvable_private_addr
- *
- * Description      This function refresh the currently used resolvable private
- *                  address for the active link to the remote device
- *
- ******************************************************************************/
-void btm_ble_refresh_local_resolvable_private_addr(
-    const RawAddress& pseudo_addr, const RawAddress& local_rpa) {
-  tACL_CONN* p_acl = internal_.btm_bda_to_acl(pseudo_addr, BT_TRANSPORT_LE);
-  if (p_acl == nullptr) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-
-  if (btm_cb.ble_ctr_cb.privacy_mode == BTM_PRIVACY_NONE) {
-    p_acl->conn_addr_type = BLE_ADDR_PUBLIC;
-    p_acl->conn_addr = *controller_get_interface()->get_address();
-  } else {
-    p_acl->conn_addr_type = BLE_ADDR_RANDOM;
-    if (local_rpa.IsEmpty()) {
-      p_acl->conn_addr = btm_cb.ble_ctr_cb.addr_mgnt_cb.private_addr;
-    } else {
-      p_acl->conn_addr = local_rpa;
-    }
-  }
-}
-
 bool sco_peer_supports_esco_2m_phy(const RawAddress& remote_bda) {
   uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
   if (features == nullptr) {
@@ -2732,6 +2704,15 @@ void acl_create_classic_connection(const RawAddress& bd_addr,
   return bluetooth::shim::ACL_CreateClassicConnection(bd_addr);
 }
 
+void btm_connection_request(const RawAddress& bda,
+                            const bluetooth::types::ClassOfDevice& cod) {
+  // Copy Cod information
+  DEV_CLASS dc;
+  dc[0] = cod.cod[2], dc[1] = cod.cod[1], dc[2] = cod.cod[0];
+
+  btm_sec_conn_req(bda, dc);
+}
+
 void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc) {
   btm_sec_conn_req(bda, dc);
   l2c_link_hci_conn_req(bda);
@@ -2820,11 +2801,13 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
       .bda = bd_addr,
       .type = addr_type,
   };
-  if (address_with_type.type == BLE_ADDR_PUBLIC) {
-    gatt_find_in_device_record(bd_addr, &address_with_type);
-  }
-  LOG_DEBUG("Creating le direct connection to:%s",
-            ADDRESS_TO_LOGGABLE_CSTR(address_with_type));
+
+  gatt_find_in_device_record(bd_addr, &address_with_type);
+
+  LOG_DEBUG("Creating le direct connection to:%s type:%s (initial type: %s)",
+            ADDRESS_TO_LOGGABLE_CSTR(address_with_type),
+            AddressTypeText(address_with_type.type).c_str(),
+            AddressTypeText(addr_type).c_str());
 
   if (address_with_type.type == BLE_ADDR_ANONYMOUS) {
     LOG_WARN(
@@ -2843,8 +2826,14 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
       android::bluetooth::le::LeConnectionState::STATE_LE_ACL_START,
       argument_list);
 
-  bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
-                                              /* is_direct */ true);
+  if (bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    bluetooth::connection::GetConnectionManager().start_direct_connection(
+        id, bluetooth::core::ToRustAddress(address_with_type));
+  } else {
+    bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
+                                                /* is_direct */ true);
+  }
   return true;
 }
 

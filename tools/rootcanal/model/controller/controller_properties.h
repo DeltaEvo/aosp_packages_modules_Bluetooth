@@ -116,6 +116,9 @@ struct ControllerProperties {
   // at any time. This behaviour is not emulated here.
   uint8_t le_num_supported_advertising_sets{8};
 
+  // LE Periodic Advertiser List Size (Vol 4, Part E § 7.8.73).
+  uint8_t le_periodic_advertiser_list_size{8};
+
   // Vendor Information.
   // Provide parameters returned by vendor specific commands.
   std::vector<uint8_t> le_vendor_capabilities{};
@@ -136,6 +139,19 @@ struct ControllerProperties {
     int index = static_cast<int>(op_code);
     return (supported_commands[index / 10] & (UINT64_C(1) << (index % 10))) !=
            0;
+  }
+
+  /// Return a bit mask with all supported PHYs
+  /// (0b001 = LE_1M, 0b010 = LE_2M, 0b100 = LE_CODED).
+  uint8_t LeSupportedPhys() const {
+    uint8_t supported_phys = 0x1;  // LE_1M is always supported.
+    if (SupportsLLFeature(bluetooth::hci::LLFeaturesBits::LE_2M_PHY)) {
+      supported_phys |= 0x2;
+    }
+    if (SupportsLLFeature(bluetooth::hci::LLFeaturesBits::LE_CODED_PHY)) {
+      supported_phys |= 0x4;
+    }
+    return supported_phys;
   }
 };
 

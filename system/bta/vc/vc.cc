@@ -21,6 +21,7 @@
 #include <base/strings/string_util.h>
 #include <hardware/bt_vc.h>
 
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -48,6 +49,7 @@ using namespace bluetooth::vc::internal;
 namespace {
 class VolumeControlImpl;
 VolumeControlImpl* instance;
+std::mutex instance_mutex;
 
 /**
  * Overview:
@@ -861,7 +863,7 @@ class VolumeControlImpl : public VolumeControl {
         LOG_DEBUG("Address: %s: isReady: %s",
                   ADDRESS_TO_LOGGABLE_CSTR(dev->address),
                   dev->IsReady() ? "true" : "false");
-        if (dev->IsReady()) {
+        if (dev->IsReady() && (dev->mute != mute)) {
           std::vector<RawAddress> devices = {dev->address};
           PrepareVolumeControlOperation(
               devices, bluetooth::groups::kGroupUnknown, false, opcode, arg);
@@ -880,7 +882,7 @@ class VolumeControlImpl : public VolumeControl {
       auto devices = csis_api->GetDeviceList(group_id);
       for (auto it = devices.begin(); it != devices.end();) {
         auto dev = volume_control_devices_.FindByAddress(*it);
-        if (!dev || !dev->IsReady()) {
+        if (!dev || !dev->IsReady() || (dev->mute == mute)) {
           it = devices.erase(it);
         } else {
           it++;
@@ -946,7 +948,7 @@ class VolumeControlImpl : public VolumeControl {
       auto devices = csis_api->GetDeviceList(group_id);
       for (auto it = devices.begin(); it != devices.end();) {
         auto dev = volume_control_devices_.FindByAddress(*it);
-        if (!dev || !dev->IsReady()) {
+        if (!dev || !dev->IsReady() || (dev->volume == volume)) {
           it = devices.erase(it);
         } else {
           it++;
@@ -1200,6 +1202,7 @@ class VolumeControlImpl : public VolumeControl {
 
 void VolumeControl::Initialize(
     bluetooth::vc::VolumeControlCallbacks* callbacks) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     LOG(ERROR) << "Already initialized!";
     return;
@@ -1226,6 +1229,7 @@ void VolumeControl::AddFromStorage(const RawAddress& address,
 };
 
 void VolumeControl::CleanUp() {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (!instance) {
     LOG(ERROR) << "Not initialized!";
     return;
@@ -1240,6 +1244,7 @@ void VolumeControl::CleanUp() {
 };
 
 void VolumeControl::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Volume Control Manager:\n");
   if (instance) instance->Dump(fd);
   dprintf(fd, "\n");

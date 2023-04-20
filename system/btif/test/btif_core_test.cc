@@ -46,6 +46,7 @@ module_t gd_controller_module;
 module_t gd_idle_module;
 module_t gd_shim_module;
 module_t osi_module;
+module_t rust_module;
 
 namespace {
 
@@ -290,7 +291,6 @@ TEST_F(BtifCoreTest, dump_dm_event) {
       std::make_pair(BTA_DM_BLE_AUTH_CMPL_EVT, "BTA_DM_BLE_AUTH_CMPL_EVT"),
       std::make_pair(BTA_DM_DEV_UNPAIRED_EVT, "BTA_DM_DEV_UNPAIRED_EVT"),
       std::make_pair(BTA_DM_ENER_INFO_READ, "BTA_DM_ENER_INFO_READ"),
-      std::make_pair(BTA_DM_REPORT_BONDING_EVT, "BTA_DM_REPORT_BONDING_EVT"),
   };
   for (const auto& event : events) {
     ASSERT_STREQ(event.second.c_str(), dump_dm_event(event.first));

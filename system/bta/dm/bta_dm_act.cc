@@ -351,7 +351,7 @@ void BTA_dm_on_hw_off() {
   alarm_free(bta_dm_search_cb.gatt_close_timer);
   osi_free_and_reset((void**)&bta_dm_search_cb.p_pending_search);
   fixed_queue_free(bta_dm_search_cb.pending_discovery_queue, osi_free);
-  memset(&bta_dm_search_cb, 0, sizeof(bta_dm_search_cb));
+  bta_dm_search_cb = {};
 }
 
 void BTA_dm_on_hw_on() {
@@ -372,7 +372,7 @@ void BTA_dm_on_hw_on() {
   alarm_free(bta_dm_search_cb.gatt_close_timer);
   osi_free_and_reset((void**)&bta_dm_search_cb.p_pending_search);
   fixed_queue_free(bta_dm_search_cb.pending_discovery_queue, osi_free);
-  memset(&bta_dm_search_cb, 0, sizeof(bta_dm_search_cb));
+  bta_dm_search_cb = {};
   /*
    * TODO: Should alarm_free() the bta_dm_search_cb timers during
    * graceful shutdown.
@@ -580,6 +580,11 @@ bool BTA_DmSetVisibility(bt_scan_mode_t mode) {
 
     case BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE:
       disc_mode_param = BTA_DM_GENERAL_DISC;
+      conn_mode_param = BTA_DM_CONN;
+      break;
+
+    case BT_SCAN_MODE_CONNECTABLE_LIMITED_DISCOVERABLE:
+      disc_mode_param = BTA_DM_LIMITED_DISC;
       conn_mode_param = BTA_DM_CONN;
       break;
 
@@ -973,12 +978,23 @@ void bta_dm_discover(tBTA_DM_MSG* p_data) {
  * Description      Cancels an ongoing search or discovery for devices in case
  *                  of a Bluetooth disable
  *
- *
  * Returns          void
  *
  ******************************************************************************/
 static void bta_dm_disable_search_and_disc(void) {
-  if (bta_dm_search_cb.state != BTA_DM_SEARCH_IDLE) bta_dm_search_cancel();
+  switch (bta_dm_search_get_state()) {
+    case BTA_DM_SEARCH_IDLE:
+      break;
+    case BTA_DM_SEARCH_ACTIVE:
+    case BTA_DM_SEARCH_CANCELLING:
+    case BTA_DM_DISCOVER_ACTIVE:
+    default:
+      LOG_DEBUG(
+          "Search state machine is not idle so issuing search cancel current "
+          "state:%s",
+          bta_dm_state_text(bta_dm_search_get_state()).c_str());
+      bta_dm_search_cancel();
+  }
 }
 
 /*******************************************************************************
@@ -3761,8 +3777,6 @@ static void ble_io_req(const RawAddress& bd_addr, tBTM_IO_CAP* p_io_cap,
                        tBTM_OOB_DATA* p_oob_data, tBTM_LE_AUTH_REQ* p_auth_req,
                        uint8_t* p_max_key_size, tBTM_LE_KEY_TYPE* p_init_key,
                        tBTM_LE_KEY_TYPE* p_resp_key) {
-  bte_appl_cfg.ble_io_cap = btif_storage_get_local_io_caps_ble();
-
   /* Retrieve the properties from file system if possible */
   tBTE_APPL_CFG nv_config;
   if (btif_dm_get_smp_config(&nv_config)) bte_appl_cfg = nv_config;
@@ -4426,6 +4440,12 @@ void bta_dm_set_event_filter_connection_setup_all_devices() {
 void bta_dm_allow_wake_by_hid(
     std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
+  // If there are any entries in the classic hid list, we should also make
+  // the adapter connectable for classic.
+  if (classic_hid_devices.size() > 0) {
+    BTM_SetConnectability(BTA_DM_CONN);
+  }
+
   bluetooth::shim::BTM_AllowWakeByHid(std::move(classic_hid_devices),
                                       std::move(le_hid_devices));
 }
@@ -4561,17 +4581,6 @@ static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result) {
   }
 }
 #endif /* BLE_VND_INCLUDED */
-
-void bta_dm_process_delete_key_RC_to_unpair(const RawAddress& bd_addr)
-{
-    LOG_WARN("RC key missing");
-    tBTA_DM_SEC param = {
-        .delete_key_RC_to_unpair = {
-            .bd_addr = bd_addr,
-        },
-    };
-    bta_dm_cb.p_sec_cback(BTA_DM_REPORT_BONDING_EVT, &param);
-}
 
 /*******************************************************************************
  *

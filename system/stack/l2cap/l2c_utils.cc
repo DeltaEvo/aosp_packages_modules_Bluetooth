@@ -2274,28 +2274,75 @@ static void l2cu_set_acl_priority_latency_brcm(tL2C_LCB* p_lcb,
 
 /*******************************************************************************
  *
- * Function         l2cu_set_acl_priority_syna
+ * Function         l2cu_set_acl_priority_latency_syna
  *
- * Description      Sends a VSC to set the ACL priority on Synaptics chip.
+ * Description      Sends a VSC to set the ACL priority and recorded latency on
+ *                  Synaptics chip.
  *
  * Returns          void
  *
  ******************************************************************************/
 
-static void l2cu_set_acl_priority_syna(uint16_t handle,
-                                       tL2CAP_PRIORITY priority) {
-  uint8_t* pp;
-  uint8_t command[HCI_SYNA_ACL_PRIORITY_PARAM_SIZE];
+static void l2cu_set_acl_priority_latency_syna(tL2C_LCB* p_lcb,
+                                               tL2CAP_PRIORITY priority) {
   uint8_t vs_param;
+  if (priority == L2CAP_PRIORITY_HIGH) {
+    // priority to high, if using latency mode check preset latency
+    if (p_lcb->use_latency_mode &&
+        p_lcb->preset_acl_latency == L2CAP_LATENCY_LOW) {
+      LOG_INFO("Set ACL priority: High Priority and Low Latency Mode");
+      vs_param = HCI_SYNA_ACL_HIGH_PRIORITY_LOW_LATENCY;
+      p_lcb->set_latency(L2CAP_LATENCY_LOW);
+    } else {
+      LOG_INFO("Set ACL priority: High Priority Mode");
+      vs_param = HCI_SYNA_ACL_HIGH_PRIORITY;
+    }
+  } else {
+    // priority to normal
+    LOG_INFO("Set ACL priority: Normal Mode");
+    vs_param = HCI_SYNA_ACL_NORMAL_PRIORITY;
+    p_lcb->set_latency(L2CAP_LATENCY_NORMAL);
+  }
 
-  pp = command;
-  vs_param = (priority == L2CAP_PRIORITY_HIGH) ? HCI_SYNA_ACL_PRIORITY_HIGH
-                                               : HCI_SYNA_ACL_PRIORITY_LOW;
-  UINT16_TO_STREAM(pp, handle);
+  uint8_t command[HCI_SYNA_ACL_PRIORITY_PARAM_SIZE];
+  uint8_t* pp = command;
+  UINT16_TO_STREAM(pp, p_lcb->Handle());
   UINT8_TO_STREAM(pp, vs_param);
 
   BTM_VendorSpecificCommand(HCI_SYNA_SET_ACL_PRIORITY,
                             HCI_SYNA_ACL_PRIORITY_PARAM_SIZE, command, NULL);
+}
+
+/*******************************************************************************
+ *
+ * Function         l2cu_set_acl_priority_unisoc
+ *
+ * Description      Sends a VSC to set the ACL priority on Unisoc chip.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+
+static void l2cu_set_acl_priority_unisoc(tL2C_LCB* p_lcb,
+                                               tL2CAP_PRIORITY priority) {
+  uint8_t vs_param;
+  if (priority == L2CAP_PRIORITY_HIGH) {
+    // priority to high
+    LOG_INFO("Set ACL priority: High Priority Mode");
+    vs_param = HCI_UNISOC_ACL_HIGH_PRIORITY;
+  } else {
+    // priority to normal
+    LOG_INFO("Set ACL priority: Normal Mode");
+    vs_param = HCI_UNISOC_ACL_NORMAL_PRIORITY;
+  }
+
+  uint8_t command[HCI_UNISOC_ACL_PRIORITY_PARAM_SIZE];
+  uint8_t* pp = command;
+  UINT16_TO_STREAM(pp, p_lcb->Handle());
+  UINT8_TO_STREAM(pp, vs_param);
+
+  BTM_VendorSpecificCommand(HCI_UNISOC_SET_ACL_PRIORITY,
+                            HCI_UNISOC_ACL_PRIORITY_PARAM_SIZE, command, NULL);
 }
 
 /*******************************************************************************
@@ -2335,7 +2382,11 @@ bool l2cu_set_acl_priority(const RawAddress& bd_addr, tL2CAP_PRIORITY priority,
         break;
 
       case LMP_COMPID_SYNAPTICS:
-        l2cu_set_acl_priority_syna(p_lcb->Handle(), priority);
+        l2cu_set_acl_priority_latency_syna(p_lcb, priority);
+        break;
+
+      case LMP_COMPID_UNISOC:
+        l2cu_set_acl_priority_unisoc(p_lcb, priority);
         break;
 
       default:
@@ -2380,6 +2431,32 @@ static void l2cu_set_acl_latency_brcm(tL2C_LCB* p_lcb, tL2CAP_LATENCY latency) {
 
 /*******************************************************************************
  *
+ * Function         l2cu_set_acl_latency_syna
+ *
+ * Description      Sends a VSC to set the ACL latency on Synatics chip.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+
+static void l2cu_set_acl_latency_syna(tL2C_LCB* p_lcb, tL2CAP_LATENCY latency) {
+  LOG_INFO("Set ACL latency: %s",
+           latency == L2CAP_LATENCY_LOW ? "Low Latancy" : "Normal Latency");
+
+  uint8_t command[HCI_SYNA_ACL_PRIORITY_PARAM_SIZE];
+  uint8_t* pp = command;
+  uint8_t vs_param = latency == L2CAP_LATENCY_LOW
+                         ? HCI_SYNA_ACL_HIGH_PRIORITY_LOW_LATENCY
+                         : HCI_SYNA_ACL_HIGH_PRIORITY;
+  UINT16_TO_STREAM(pp, p_lcb->Handle());
+  UINT8_TO_STREAM(pp, vs_param);
+
+  BTM_VendorSpecificCommand(HCI_SYNA_SET_ACL_PRIORITY,
+                            HCI_SYNA_ACL_PRIORITY_PARAM_SIZE, command, NULL);
+}
+
+/*******************************************************************************
+ *
  * Function         l2cu_set_acl_latency
  *
  * Description      Sets the transmission latency for a channel.
@@ -2404,6 +2481,10 @@ bool l2cu_set_acl_latency(const RawAddress& bd_addr, tL2CAP_LATENCY latency) {
     switch (controller_get_interface()->get_bt_version()->manufacturer) {
       case LMP_COMPID_BROADCOM:
         l2cu_set_acl_latency_brcm(p_lcb, latency);
+        break;
+
+      case LMP_COMPID_SYNAPTICS:
+        l2cu_set_acl_latency_syna(p_lcb, latency);
         break;
 
       default:

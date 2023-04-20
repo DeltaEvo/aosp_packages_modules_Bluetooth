@@ -1,6 +1,6 @@
 use bt_topshim::btif::{
-    BtBondState, BtConnectionState, BtDeviceType, BtPropertyType, BtSspVariant, BtStatus,
-    BtTransport, Uuid, Uuid128Bit,
+    BtBondState, BtConnectionState, BtDeviceType, BtDiscMode, BtPropertyType, BtSspVariant,
+    BtStatus, BtTransport, Uuid, Uuid128Bit,
 };
 use bt_topshim::profiles::socket::SocketType;
 use bt_topshim::profiles::ProfileConnectionState;
@@ -8,13 +8,14 @@ use bt_topshim::profiles::ProfileConnectionState;
 use bt_topshim::profiles::hid_host::BthhReportType;
 
 use bt_topshim::profiles::sdp::{
-    BtSdpDipRecord, BtSdpHeaderOverlay, BtSdpMasRecord, BtSdpMnsRecord, BtSdpOpsRecord,
-    BtSdpPceRecord, BtSdpPseRecord, BtSdpRecord, BtSdpSapRecord, BtSdpType, SupportedFormatsList,
+    BtSdpDipRecord, BtSdpHeaderOverlay, BtSdpMasRecord, BtSdpMnsRecord, BtSdpMpsRecord,
+    BtSdpOpsRecord, BtSdpPceRecord, BtSdpPseRecord, BtSdpRecord, BtSdpSapRecord, BtSdpType,
+    SupportedDependencies, SupportedFormatsList, SupportedScenarios,
 };
 
 use btstack::bluetooth::{
     Bluetooth, BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
-    IBluetoothQA,
+    IBluetoothQALegacy,
 };
 use btstack::socket_manager::{
     BluetoothServerSocket, BluetoothSocket, BluetoothSocketManager, CallbackId,
@@ -75,36 +76,36 @@ struct BluetoothCallbackDBus {}
 #[dbus_proxy_obj(BluetoothCallback, "org.chromium.bluetooth.BluetoothCallback")]
 impl IBluetoothCallback for BluetoothCallbackDBus {
     #[dbus_method("OnAdapterPropertyChanged")]
-    fn on_adapter_property_changed(&self, prop: BtPropertyType) {
+    fn on_adapter_property_changed(&mut self, prop: BtPropertyType) {
         dbus_generated!()
     }
     #[dbus_method("OnAddressChanged")]
-    fn on_address_changed(&self, addr: String) {
+    fn on_address_changed(&mut self, addr: String) {
         dbus_generated!()
     }
     #[dbus_method("OnNameChanged")]
-    fn on_name_changed(&self, name: String) {
+    fn on_name_changed(&mut self, name: String) {
         dbus_generated!()
     }
     #[dbus_method("OnDiscoverableChanged")]
-    fn on_discoverable_changed(&self, discoverable: bool) {
+    fn on_discoverable_changed(&mut self, discoverable: bool) {
         dbus_generated!()
     }
     #[dbus_method("OnDeviceFound")]
-    fn on_device_found(&self, remote_device: BluetoothDevice) {
+    fn on_device_found(&mut self, remote_device: BluetoothDevice) {
         dbus_generated!()
     }
     #[dbus_method("OnDeviceCleared")]
-    fn on_device_cleared(&self, remote_device: BluetoothDevice) {
+    fn on_device_cleared(&mut self, remote_device: BluetoothDevice) {
         dbus_generated!()
     }
     #[dbus_method("OnDiscoveringChanged")]
-    fn on_discovering_changed(&self, discovering: bool) {
+    fn on_discovering_changed(&mut self, discovering: bool) {
         dbus_generated!()
     }
     #[dbus_method("OnSspRequest")]
     fn on_ssp_request(
-        &self,
+        &mut self,
         remote_device: BluetoothDevice,
         cod: u32,
         variant: BtSspVariant,
@@ -112,13 +113,17 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
     ) {
         dbus_generated!()
     }
+    #[dbus_method("OnPinRequest")]
+    fn on_pin_request(&mut self, remote_device: BluetoothDevice, cod: u32, min_16_digit: bool) {
+        dbus_generated!()
+    }
     #[dbus_method("OnBondStateChanged")]
-    fn on_bond_state_changed(&self, status: u32, address: String, state: u32) {
+    fn on_bond_state_changed(&mut self, status: u32, address: String, state: u32) {
         dbus_generated!()
     }
     #[dbus_method("OnSdpSearchComplete")]
     fn on_sdp_search_complete(
-        &self,
+        &mut self,
         remote_device: BluetoothDevice,
         searched_uuid: Uuid128Bit,
         sdp_records: Vec<BtSdpRecord>,
@@ -126,7 +131,7 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
         dbus_generated!()
     }
     #[dbus_method("OnSdpRecordCreated")]
-    fn on_sdp_record_created(&self, record: BtSdpRecord, handle: i32) {
+    fn on_sdp_record_created(&mut self, record: BtSdpRecord, handle: i32) {
         dbus_generated!()
     }
 }
@@ -145,12 +150,12 @@ struct BluetoothConnectionCallbackDBus {}
 #[dbus_proxy_obj(BluetoothConnectionCallback, "org.chromium.bluetooth.BluetoothConnectionCallback")]
 impl IBluetoothConnectionCallback for BluetoothConnectionCallbackDBus {
     #[dbus_method("OnDeviceConnected")]
-    fn on_device_connected(&self, remote_device: BluetoothDevice) {
+    fn on_device_connected(&mut self, remote_device: BluetoothDevice) {
         dbus_generated!()
     }
 
     #[dbus_method("OnDeviceDisconnected")]
-    fn on_device_disconnected(&self, remote_device: BluetoothDevice) {
+    fn on_device_disconnected(&mut self, remote_device: BluetoothDevice) {
         dbus_generated!()
     }
 }
@@ -222,6 +227,17 @@ struct BtSdpDipRecordDBus {
     product: u16,
     version: u16,
     primary_record: bool,
+}
+
+impl_dbus_arg_from_into!(SupportedScenarios, Vec<u8>);
+impl_dbus_arg_from_into!(SupportedDependencies, Vec<u8>);
+
+#[dbus_propmap(BtSdpMpsRecord)]
+pub struct BtSdpMpsRecordDBus {
+    hdr: BtSdpHeaderOverlay,
+    supported_scenarios_mpsd: SupportedScenarios,
+    supported_scenarios_mpmd: SupportedScenarios,
+    supported_dependencies: SupportedDependencies,
 }
 
 fn read_propmap_value<T: 'static + DirectDBus>(
@@ -321,6 +337,10 @@ impl DBusArg for BtSdpRecord {
                 let arg_0 = parse_propmap_value::<BtSdpDipRecord>(&data, "0")?;
                 BtSdpRecord::Dip(arg_0)
             }
+            BtSdpType::Mps => {
+                let arg_0 = parse_propmap_value::<BtSdpMpsRecord>(&data, "0")?;
+                BtSdpRecord::Mps(arg_0)
+            }
         };
         Ok(record)
     }
@@ -357,10 +377,15 @@ impl DBusArg for BtSdpRecord {
             BtSdpRecord::Dip(dip_record) => {
                 write_propmap_value::<BtSdpDipRecord>(&mut map, dip_record, &String::from("0"))?
             }
+            BtSdpRecord::Mps(mps_record) => {
+                write_propmap_value::<BtSdpMpsRecord>(&mut map, mps_record, &String::from("0"))?
+            }
         }
         Ok(map)
     }
 }
+
+impl_dbus_arg_enum!(BtDiscMode);
 
 #[allow(dead_code)]
 struct IBluetoothDBus {}
@@ -442,7 +467,7 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("SetDiscoverable")]
-    fn set_discoverable(&mut self, mode: bool, duration: u32) -> bool {
+    fn set_discoverable(&mut self, mode: BtDiscMode, duration: u32) -> bool {
         dbus_generated!()
     }
 
@@ -587,7 +612,7 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("CreateSdpRecord")]
-    fn create_sdp_record(&self, sdp_record: BtSdpRecord) -> bool {
+    fn create_sdp_record(&mut self, sdp_record: BtSdpRecord) -> bool {
         dbus_generated!()
     }
 
@@ -700,8 +725,18 @@ impl IBluetoothSocketManager for IBluetoothSocketManagerDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("ListenUsingInsecureL2capLeChannel")]
+    fn listen_using_insecure_l2cap_le_channel(&mut self, callback: CallbackId) -> SocketResult {
+        dbus_generated!()
+    }
+
     #[dbus_method("ListenUsingL2capChannel")]
     fn listen_using_l2cap_channel(&mut self, callback: CallbackId) -> SocketResult {
+        dbus_generated!()
+    }
+
+    #[dbus_method("ListenUsingL2capLeChannel")]
+    fn listen_using_l2cap_le_channel(&mut self, callback: CallbackId) -> SocketResult {
         dbus_generated!()
     }
 
@@ -711,6 +746,18 @@ impl IBluetoothSocketManager for IBluetoothSocketManagerDBus {
         callback: CallbackId,
         name: String,
         uuid: Uuid,
+    ) -> SocketResult {
+        dbus_generated!()
+    }
+
+    #[dbus_method("ListenUsingRfcomm")]
+    fn listen_using_rfcomm(
+        &mut self,
+        callback: CallbackId,
+        channel: Option<i32>,
+        application_uuid: Option<Uuid>,
+        name: Option<String>,
+        flags: Option<i32>,
     ) -> SocketResult {
         dbus_generated!()
     }
@@ -735,8 +782,28 @@ impl IBluetoothSocketManager for IBluetoothSocketManagerDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("CreateInsecureL2capLeChannel")]
+    fn create_insecure_l2cap_le_channel(
+        &mut self,
+        callback: CallbackId,
+        device: BluetoothDevice,
+        psm: i32,
+    ) -> SocketResult {
+        dbus_generated!()
+    }
+
     #[dbus_method("CreateL2capChannel")]
     fn create_l2cap_channel(
+        &mut self,
+        callback: CallbackId,
+        device: BluetoothDevice,
+        psm: i32,
+    ) -> SocketResult {
+        dbus_generated!()
+    }
+
+    #[dbus_method("CreateL2capLeChannel")]
+    fn create_l2cap_le_channel(
         &mut self,
         callback: CallbackId,
         device: BluetoothDevice,
@@ -815,15 +882,15 @@ struct SuspendCallbackDBus {}
 #[dbus_proxy_obj(SuspendCallback, "org.chromium.bluetooth.SuspendCallback")]
 impl ISuspendCallback for SuspendCallbackDBus {
     #[dbus_method("OnCallbackRegistered")]
-    fn on_callback_registered(&self, callback_id: u32) {
+    fn on_callback_registered(&mut self, callback_id: u32) {
         dbus_generated!()
     }
     #[dbus_method("OnSuspendReady")]
-    fn on_suspend_ready(&self, suspend_id: i32) {
+    fn on_suspend_ready(&mut self, suspend_id: i32) {
         dbus_generated!()
     }
     #[dbus_method("OnResumed")]
-    fn on_resumed(&self, suspend_id: i32) {
+    fn on_resumed(&mut self, suspend_id: i32) {
         dbus_generated!()
     }
 }
@@ -831,15 +898,15 @@ impl ISuspendCallback for SuspendCallbackDBus {
 impl_dbus_arg_enum!(BthhReportType);
 
 #[allow(dead_code)]
-struct IBluetoothQADBus {}
+struct IBluetoothQALegacyDBus {}
 
 #[generate_dbus_exporter(
-    export_bluetooth_qa_dbus_intf,
-    "org.chromium.bluetooth.BluetoothQA",
+    export_bluetooth_qa_legacy_dbus_intf,
+    "org.chromium.bluetooth.BluetoothQALegacy",
     BluetoothMixin,
     qa
 )]
-impl IBluetoothQA for IBluetoothQADBus {
+impl IBluetoothQALegacy for IBluetoothQALegacyDBus {
     #[dbus_method("GetConnectable")]
     fn get_connectable(&self) -> bool {
         dbus_generated!()

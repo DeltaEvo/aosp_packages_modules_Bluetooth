@@ -385,9 +385,11 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
     // configure a filter accept list based e.g. on the service UUIDs
     // found in the report, we ignore the scan responses as we cannot be
     // certain that they will not be dropped by the filter.
+    // TODO(b/275754998): Improve the decision on what to do with scan responses: Only when used
+    // with hardware-filtering features should we ignore waiting for scan response, and make sure
+    // scan responses are still reported too.
     scanning_reassembler_.SetIgnoreScanResponses(
-        filter_policy_ == LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY &&
-        api_type_ == ScanApiType::ANDROID_HCI);
+        filter_policy_ == LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY);
 
     auto complete_advertising_data = scanning_reassembler_.ProcessAdvertisingReport(
         event_type, address_type, address, advertising_sid, advertising_data);
@@ -1088,10 +1090,10 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
       LOG_WARN("Batch scan is not supported");
       return;
     }
-    AdvertisingAddressType own_address_type = AdvertisingAddressType::PUBLIC_ADDRESS;
+    PeerAddressType own_address_type = PeerAddressType::PUBLIC_DEVICE_OR_IDENTITY_ADDRESS;
     if (own_address_type_ == OwnAddressType::RANDOM_DEVICE_ADDRESS ||
         own_address_type_ == OwnAddressType::RESOLVABLE_OR_RANDOM_ADDRESS) {
-      own_address_type = AdvertisingAddressType::RANDOM_ADDRESS;
+      own_address_type = PeerAddressType::RANDOM_DEVICE_OR_IDENTITY_ADDRESS;
     }
     uint8_t truncated_mode_enabled = 0x00;
     uint8_t full_mode_enabled = 0x00;

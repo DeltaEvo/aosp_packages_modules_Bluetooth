@@ -26,7 +26,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.util.Log
-import io.grpc.Status
 import io.grpc.stub.StreamObserver
 import java.io.Closeable
 import java.util.UUID
@@ -77,8 +76,7 @@ class Gatt(private val context: Context) : GATTImplBase(), Closeable {
       val mtu = request.mtu
       Log.i(TAG, "exchangeMTU MTU=$mtu")
       if (!GattInstance.get(request.connection.address).mGatt.requestMtu(mtu)) {
-        Log.e(TAG, "Error on requesting MTU $mtu")
-        throw Status.UNKNOWN.asException()
+        throw RuntimeException("Error on requesting MTU $mtu")
       }
       ExchangeMTUResponse.newBuilder().build()
     }
@@ -273,6 +271,57 @@ class Gatt(private val context: Context) : GATTImplBase(), Closeable {
     }
   }
 
+  override fun setCharacteristicNotificationFromHandle(
+    request: SetCharacteristicNotificationFromHandleRequest,
+    responseObserver: StreamObserver<SetCharacteristicNotificationFromHandleResponse>
+  ) {
+    grpcUnary<SetCharacteristicNotificationFromHandleResponse>(mScope, responseObserver) {
+      Log.i(TAG, "SetCharcteristicNotificationFromHandle")
+      val gattInstance = GattInstance.get(request.connection.address)
+      val descriptor: BluetoothGattDescriptor? =
+        getDescriptorWithHandle(request.handle, gattInstance)
+      checkNotNull(descriptor) {
+        "Found no descriptor with handle ${request.handle}"
+      }
+      var characteristic = descriptor.getCharacteristic()
+      gattInstance.mGatt.setCharacteristicNotification(characteristic, true)
+      if (request.enableValue == EnableValue.ENABLE_INDICATION_VALUE){
+        val valueWrote =
+          gattInstance.writeDescriptorBlocking(descriptor, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
+        SetCharacteristicNotificationFromHandleResponse.newBuilder()
+          .setHandle(valueWrote.handle)
+          .setStatus(valueWrote.status)
+          .build()
+      } else {
+        val valueWrote =
+          gattInstance.writeDescriptorBlocking(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+        SetCharacteristicNotificationFromHandleResponse.newBuilder()
+          .setHandle(valueWrote.handle)
+          .setStatus(valueWrote.status)
+          .build()
+      }
+    }
+  }
+
+  override fun waitCharacteristicNotification(
+    request: WaitCharacteristicNotificationRequest,
+    responseObserver: StreamObserver<WaitCharacteristicNotificationResponse>
+  ) {
+    grpcUnary<WaitCharacteristicNotificationResponse>(mScope, responseObserver) {
+      val gattInstance = GattInstance.get(request.connection.address)
+      val descriptor: BluetoothGattDescriptor? =
+        getDescriptorWithHandle(request.handle, gattInstance)
+      checkNotNull(descriptor) {
+        "Found no descriptor with handle ${request.handle}"
+      }
+      var characteristic = descriptor.getCharacteristic()
+      val characteristicNotificationReceived = gattInstance.waitForOnCharacteristicChanged(characteristic)
+      WaitCharacteristicNotificationResponse.newBuilder()
+        .setCharacteristicNotificationReceived(characteristicNotificationReceived)
+        .build()
+    }
+  }
+
   /**
    * Discovers services, then returns characteristic with given handle. BluetoothGatt API is
    * package-private so we have to redefine it here.
@@ -383,8 +432,7 @@ class Gatt(private val context: Context) : GATTImplBase(), Closeable {
 
   private suspend fun tryDiscoverServices(gattInstance: GattInstance) {
     if (!gattInstance.servicesDiscovered() && !gattInstance.mGatt.discoverServices()) {
-      Log.e(TAG, "Error on discovering services for $gattInstance")
-      throw Status.UNKNOWN.asException()
+      throw RuntimeException("Error on discovering services for $gattInstance")
     } else {
       gattInstance.waitForDiscoveryEnd()
     }

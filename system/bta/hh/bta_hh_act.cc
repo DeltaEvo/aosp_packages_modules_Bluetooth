@@ -75,7 +75,7 @@ static const char* bta_hh_hid_event_name(uint16_t event);
  * Returns          void
  *
  ******************************************************************************/
-void bta_hh_api_enable(const tBTA_HH_DATA* p_data) {
+void bta_hh_api_enable(tBTA_HH_CBACK* p_cback, bool enable_hid, bool enable_hogp) {
   tBTA_HH_STATUS status = BTA_HH_OK;
   uint8_t xx;
 
@@ -85,7 +85,7 @@ void bta_hh_api_enable(const tBTA_HH_DATA* p_data) {
   memset(&bta_hh_cb, 0, sizeof(tBTA_HH_CB));
 
   /* store parameters */
-  bta_hh_cb.p_cback = p_data->api_enable.p_cback;
+  bta_hh_cb.p_cback = p_cback;
   /* initialize device CB */
   for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
     bta_hh_cb.kdev[xx].state = BTA_HH_IDLE_ST;
@@ -98,14 +98,14 @@ void bta_hh_api_enable(const tBTA_HH_DATA* p_data) {
     bta_hh_cb.cb_index[xx] = BTA_HH_IDX_INVALID;
   }
 
-  if (p_data->api_enable.enable_hid) {
+  if (enable_hid) {
     /* Register with L2CAP */
     if (HID_HostRegister(bta_hh_cback) != HID_SUCCESS) {
       status = BTA_HH_ERR;
     }
   }
 
-  if (status == BTA_HH_OK && p_data->api_enable.enable_hogp) {
+  if (status == BTA_HH_OK && enable_hogp) {
     bta_hh_le_enable();
   } else {
     /* signal BTA call back event */
@@ -171,9 +171,12 @@ void bta_hh_disc_cmpl(void) {
   /* Deregister with lower layer */
   if (HID_HostDeregister() != HID_SUCCESS) status = BTA_HH_ERR;
 
-  bta_hh_le_deregister();
-
-  bta_hh_cleanup_disable(status);
+  if (bta_hh_cb.gatt_if != BTA_GATTS_INVALID_IF) {
+    LOG_DEBUG("Deregister HOGP host before cleanup");
+    bta_hh_le_deregister();
+  } else {
+    bta_hh_cleanup_disable(status);
+  }
 }
 
 /*******************************************************************************
@@ -656,9 +659,6 @@ void bta_hh_handsk_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
       bta_hh.hs_data.status = bta_hh_get_trans_status(p_data->hid_cback.data);
       if (bta_hh.hs_data.status == BTA_HH_OK)
         bta_hh.hs_data.status = BTA_HH_HS_TRANS_NOT_SPT;
-      if (p_cb->w4_evt == BTA_HH_GET_RPT_EVT)
-        bta_hh_co_get_rpt_rsp(bta_hh.dev_status.handle, bta_hh.hs_data.status,
-                              NULL, 0);
       (*bta_hh_cb.p_cback)(p_cb->w4_evt, &bta_hh);
       p_cb->w4_evt = 0;
       break;
@@ -670,9 +670,6 @@ void bta_hh_handsk_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
       bta_hh.dev_status.handle = p_cb->hid_handle;
       bta_hh.dev_status.status =
           bta_hh_get_trans_status(p_data->hid_cback.data);
-      if (p_cb->w4_evt == BTA_HH_SET_RPT_EVT)
-        bta_hh_co_set_rpt_rsp(bta_hh.dev_status.handle,
-                              bta_hh.dev_status.status);
       (*bta_hh_cb.p_cback)(p_cb->w4_evt, &bta_hh);
       p_cb->w4_evt = 0;
       break;
@@ -729,8 +726,6 @@ void bta_hh_ctrl_dat_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
       break;
     case BTA_HH_GET_RPT_EVT:
       hs_data.rsp_data.p_rpt_data = pdata;
-      bta_hh_co_get_rpt_rsp(hs_data.handle, hs_data.status, pdata->data,
-                            pdata->len);
       break;
     case BTA_HH_GET_PROTO_EVT:
       /* match up BTE/BTA report/boot mode def*/

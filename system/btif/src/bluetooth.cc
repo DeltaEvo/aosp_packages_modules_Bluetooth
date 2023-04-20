@@ -333,8 +333,6 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .btif_hh_connect = btif_hh_connect,
       .btif_hh_virtual_unplug = btif_hh_virtual_unplug,
       .bta_hh_read_ssr_param = bta_hh_read_ssr_param,
-      .bta_hh_le_is_hh_gatt_if = bta_hh_le_is_hh_gatt_if,
-      .bta_hh_cleanup_disable = bta_hh_cleanup_disable,
 
       // AVDTP
       .btif_av_set_dynamic_audio_buffer_size =
@@ -516,7 +514,6 @@ static int set_adapter_property(const bt_property_t* property) {
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
     case BT_PROPERTY_CLASS_OF_DEVICE:
     case BT_PROPERTY_LOCAL_IO_CAPS:
-    case BT_PROPERTY_LOCAL_IO_CAPS_BLE:
       break;
     default:
       return BT_STATUS_FAIL;

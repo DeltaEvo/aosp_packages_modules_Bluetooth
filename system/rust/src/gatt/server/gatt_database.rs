@@ -6,7 +6,7 @@ use std::{cell::RefCell, collections::BTreeMap, ops::RangeInclusive, rc::Rc};
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use log::error;
+use log::{error, warn};
 
 use crate::{
     core::{
@@ -14,7 +14,7 @@ use crate::{
         uuid::Uuid,
     },
     gatt::{
-        callbacks::GattDatastore,
+        callbacks::{GattWriteRequestType, RawGattDatastore},
         ffi::AttributeBackingType,
         ids::{AttHandle, ConnectionId},
     },
@@ -99,8 +99,8 @@ struct GattDatabaseSchema {
 #[derive(Clone)]
 enum AttAttributeBackingValue {
     Static(AttAttributeDataChild),
-    DynamicCharacteristic(Rc<dyn GattDatastore>),
-    DynamicDescriptor(Rc<dyn GattDatastore>),
+    DynamicCharacteristic(Rc<dyn RawGattDatastore>),
+    DynamicDescriptor(Rc<dyn RawGattDatastore>),
 }
 
 #[derive(Clone)]
@@ -166,7 +166,7 @@ impl GattDatabase {
     pub fn add_service_with_handles(
         &self,
         service: GattServiceWithHandle,
-        datastore: Rc<dyn GattDatastore>,
+        datastore: Rc<dyn RawGattDatastore>,
     ) -> Result<()> {
         let mut attributes = BTreeMap::new();
         let mut attribute_cnt = 0;
@@ -211,8 +211,11 @@ impl GattDatabase {
                         properties: GattCharacteristicPropertiesBuilder {
                             broadcast: 0,
                             read: characteristic.permissions.readable().into(),
-                            write_without_response: 0,
-                            write: characteristic.permissions.writable().into(),
+                            write_without_response: characteristic
+                                .permissions
+                                .writable_without_response()
+                                .into(),
+                            write: characteristic.permissions.writable_with_response().into(),
                             notify: 0,
                             indicate: characteristic.permissions.indicate().into(),
                             authenticated_signed_writes: 0,
@@ -360,10 +363,24 @@ impl AttDatabase for AttDatabaseImpl {
         match value {
             AttAttributeBackingValue::Static(val) => return Ok(val),
             AttAttributeBackingValue::DynamicCharacteristic(datastore) => {
-                datastore.read(self.conn_id, handle, AttributeBackingType::Characteristic).await
+                datastore
+                    .read(
+                        self.conn_id,
+                        handle,
+                        /* offset */ 0,
+                        AttributeBackingType::Characteristic,
+                    )
+                    .await
             }
             AttAttributeBackingValue::DynamicDescriptor(datastore) => {
-                datastore.read(self.conn_id, handle, AttributeBackingType::Descriptor).await
+                datastore
+                    .read(
+                        self.conn_id,
+                        handle,
+                        /* offset */ 0,
+                        AttributeBackingType::Descriptor,
+                    )
+                    .await
             }
         }
     }
@@ -382,7 +399,7 @@ impl AttDatabase for AttDatabaseImpl {
             let Some(attr) = services.attributes.get(&handle) else {
                 return Err(AttErrorCode::INVALID_HANDLE);
             };
-            if !attr.attribute.permissions.writable() {
+            if !attr.attribute.permissions.writable_with_response() {
                 return Err(AttErrorCode::WRITE_NOT_PERMITTED);
             }
             Ok(attr.value.clone())
@@ -395,13 +412,72 @@ impl AttDatabase for AttDatabaseImpl {
             }
             AttAttributeBackingValue::DynamicCharacteristic(datastore) => {
                 datastore
-                    .write(self.conn_id, handle, AttributeBackingType::Characteristic, data)
+                    .write(
+                        self.conn_id,
+                        handle,
+                        AttributeBackingType::Characteristic,
+                        GattWriteRequestType::Request,
+                        data,
+                    )
                     .await
             }
             AttAttributeBackingValue::DynamicDescriptor(datastore) => {
-                datastore.write(self.conn_id, handle, AttributeBackingType::Descriptor, data).await
+                datastore
+                    .write(
+                        self.conn_id,
+                        handle,
+                        AttributeBackingType::Descriptor,
+                        GattWriteRequestType::Request,
+                        data,
+                    )
+                    .await
             }
         }
+    }
+
+    fn write_no_response_attribute(&self, handle: AttHandle, data: AttAttributeDataView<'_>) {
+        let value = self.gatt_db.with(|gatt_db| {
+            let Some(gatt_db) = gatt_db else {
+                // db must have been closed
+                return None;
+            };
+            let services = gatt_db.schema.borrow();
+            let Some(attr) = services.attributes.get(&handle) else {
+                warn!("cannot find handle {handle:?}");
+                return None;
+            };
+            if !attr.attribute.permissions.writable_without_response() {
+                warn!("trying to write without response to {handle:?}, which doesn't support it");
+                return None;
+            }
+            Some(attr.value.clone())
+        });
+
+        let Some(value) = value else {
+            return;
+        };
+
+        match value {
+            AttAttributeBackingValue::Static(val) => {
+                error!("A static attribute {val:?} is marked as writable - ignoring it and rejecting the write...");
+            }
+            AttAttributeBackingValue::DynamicCharacteristic(datastore) => {
+                datastore.write_no_response(
+                    self.conn_id,
+                    handle,
+                    AttributeBackingType::Characteristic,
+                    data,
+                );
+            }
+            AttAttributeBackingValue::DynamicDescriptor(datastore) => {
+                datastore.write_no_response(
+                    self.conn_id,
+                    handle,
+                    AttributeBackingType::Descriptor,
+                    data,
+                );
+            }
+        };
     }
 
     fn list_attributes(&self) -> Vec<AttAttribute> {
@@ -444,6 +520,7 @@ mod test {
         gatt::mocks::{
             mock_database_callbacks::{MockCallbackEvents, MockCallbacks},
             mock_datastore::{MockDatastore, MockDatastoreEvents},
+            mock_raw_datastore::{MockRawDatastore, MockRawDatastoreEvents},
         },
         packets::Packet,
         utils::{
@@ -605,7 +682,7 @@ mod test {
                         handle: CHARACTERISTIC_VALUE_HANDLE,
                         type_: CHARACTERISTIC_TYPE,
                         permissions: AttPermissions::READABLE
-                            | AttPermissions::WRITABLE
+                            | AttPermissions::WRITABLE_WITH_RESPONSE
                             | AttPermissions::INDICATE,
                         descriptors: vec![],
                     }],
@@ -635,7 +712,7 @@ mod test {
                 handle: CHARACTERISTIC_VALUE_HANDLE,
                 type_: CHARACTERISTIC_TYPE,
                 permissions: AttPermissions::READABLE
-                    | AttPermissions::WRITABLE
+                    | AttPermissions::WRITABLE_WITH_RESPONSE
                     | AttPermissions::INDICATE
             }
         );
@@ -648,6 +725,54 @@ mod test {
                         read: 1,
                         broadcast: 0,
                         write_without_response: 0,
+                        write: 1,
+                        notify: 0,
+                        indicate: 1,
+                        authenticated_signed_writes: 0,
+                        extended_properties: 0,
+                    },
+                    handle: CHARACTERISTIC_VALUE_HANDLE.into(),
+                    uuid: CHARACTERISTIC_TYPE.into()
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_all_characteristic_permissions() {
+        // arrange
+        let (gatt_datastore, _) = MockDatastore::new();
+        let gatt_db = SharedBox::new(GattDatabase::new());
+        let att_db = gatt_db.get_att_database(CONN_ID);
+
+        // act: add a characteristic with all permission bits set
+        gatt_db
+            .add_service_with_handles(
+                GattServiceWithHandle {
+                    handle: SERVICE_HANDLE,
+                    type_: SERVICE_TYPE,
+                    characteristics: vec![GattCharacteristicWithHandle {
+                        handle: CHARACTERISTIC_VALUE_HANDLE,
+                        type_: CHARACTERISTIC_TYPE,
+                        permissions: AttPermissions::all(),
+                        descriptors: vec![],
+                    }],
+                },
+                Rc::new(gatt_datastore),
+            )
+            .unwrap();
+
+        // assert: the characteristic declaration has all the bits we support set
+        let characteristic_decl =
+            tokio_test::block_on(att_db.read_attribute(CHARACTERISTIC_DECLARATION_HANDLE));
+        assert_eq!(
+            characteristic_decl,
+            Ok(AttAttributeDataChild::GattCharacteristicDeclarationValue(
+                GattCharacteristicDeclarationValueBuilder {
+                    properties: GattCharacteristicPropertiesBuilder {
+                        read: 1,
+                        broadcast: 0,
+                        write_without_response: 1,
                         write: 1,
                         notify: 0,
                         indicate: 1,
@@ -746,7 +871,7 @@ mod test {
                 characteristics: vec![GattCharacteristicWithHandle {
                     handle: SERVICE_HANDLE,
                     type_: CHARACTERISTIC_TYPE,
-                    permissions: AttPermissions::WRITABLE,
+                    permissions: AttPermissions::WRITABLE_WITH_RESPONSE,
                     descriptors: vec![],
                 }],
             },
@@ -798,7 +923,7 @@ mod test {
                     characteristics: vec![GattCharacteristicWithHandle {
                         handle: CHARACTERISTIC_VALUE_HANDLE,
                         type_: CHARACTERISTIC_TYPE,
-                        permissions: AttPermissions::WRITABLE,
+                        permissions: AttPermissions::WRITABLE_WITH_RESPONSE,
                         descriptors: vec![],
                     }],
                 },
@@ -852,7 +977,7 @@ mod test {
                     characteristics: vec![GattCharacteristicWithHandle {
                         handle: CHARACTERISTIC_VALUE_HANDLE,
                         type_: CHARACTERISTIC_TYPE,
-                        permissions: AttPermissions::WRITABLE,
+                        permissions: AttPermissions::WRITABLE_WITH_RESPONSE,
                         descriptors: vec![],
                     }],
                 },
@@ -977,7 +1102,7 @@ mod test {
                         descriptors: vec![GattDescriptorWithHandle {
                             handle: DESCRIPTOR_HANDLE,
                             type_: DESCRIPTOR_TYPE,
-                            permissions: AttPermissions::WRITABLE,
+                            permissions: AttPermissions::WRITABLE_WITH_RESPONSE,
                         }],
                     }],
                 },
@@ -1038,13 +1163,13 @@ mod test {
                                 GattDescriptorWithHandle {
                                     handle: AttHandle(7),
                                     type_: DESCRIPTOR_TYPE,
-                                    permissions: AttPermissions::WRITABLE,
+                                    permissions: AttPermissions::WRITABLE_WITH_RESPONSE,
                                 },
                                 GattDescriptorWithHandle {
                                     handle: AttHandle(8),
                                     type_: DESCRIPTOR_TYPE,
                                     permissions: AttPermissions::READABLE
-                                        | AttPermissions::WRITABLE,
+                                        | AttPermissions::WRITABLE_WITH_RESPONSE,
                                 },
                             ],
                         },
@@ -1073,8 +1198,11 @@ mod test {
         assert_eq!(attributes[7].handle, AttHandle(8));
         // assert: check the permissions of the descriptors are correct
         assert_eq!(attributes[3].permissions, AttPermissions::READABLE);
-        assert_eq!(attributes[6].permissions, AttPermissions::WRITABLE);
-        assert_eq!(attributes[7].permissions, AttPermissions::READABLE | AttPermissions::WRITABLE);
+        assert_eq!(attributes[6].permissions, AttPermissions::WRITABLE_WITH_RESPONSE);
+        assert_eq!(
+            attributes[7].permissions,
+            AttPermissions::READABLE | AttPermissions::WRITABLE_WITH_RESPONSE
+        );
     }
 
     #[test]
@@ -1352,5 +1480,75 @@ mod test {
         };
         assert_eq!(*range.start(), AttHandle(4));
         assert_eq!(*range.end(), AttHandle(4));
+    }
+
+    #[test]
+    fn test_write_no_response_single_characteristic() {
+        // arrange: create a database with a single characteristic
+        let (gatt_datastore, mut data_evts) = MockRawDatastore::new();
+        let gatt_db = SharedBox::new(GattDatabase::new());
+        gatt_db
+            .add_service_with_handles(
+                GattServiceWithHandle {
+                    handle: SERVICE_HANDLE,
+                    type_: SERVICE_TYPE,
+                    characteristics: vec![GattCharacteristicWithHandle {
+                        handle: CHARACTERISTIC_VALUE_HANDLE,
+                        type_: CHARACTERISTIC_TYPE,
+                        permissions: AttPermissions::WRITABLE_WITHOUT_RESPONSE,
+                        descriptors: vec![],
+                    }],
+                },
+                Rc::new(gatt_datastore),
+            )
+            .unwrap();
+        let att_db = gatt_db.get_att_database(CONN_ID);
+        let data =
+            build_view_or_crash(build_att_data(AttAttributeDataChild::RawData(Box::new([1, 2]))));
+
+        // act: write without response to the database
+        att_db.write_no_response_attribute(CHARACTERISTIC_VALUE_HANDLE, data.view());
+
+        // assert: we got a callback
+        let event = data_evts.blocking_recv().unwrap();
+        let MockRawDatastoreEvents::WriteNoResponse(CONN_ID, CHARACTERISTIC_VALUE_HANDLE, AttributeBackingType::Characteristic, recv_data) = event else {
+            unreachable!("{event:?}");
+        };
+        assert_eq!(
+            recv_data.view().get_raw_payload().collect::<Vec<_>>(),
+            data.view().get_raw_payload().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_unwriteable_without_response_characteristic() {
+        // arrange: db with a characteristic that is writable, but not writable-without-response
+        let (gatt_datastore, mut data_events) = MockRawDatastore::new();
+        let gatt_db = SharedBox::new(GattDatabase::new());
+        gatt_db
+            .add_service_with_handles(
+                GattServiceWithHandle {
+                    handle: SERVICE_HANDLE,
+                    type_: SERVICE_TYPE,
+                    characteristics: vec![GattCharacteristicWithHandle {
+                        handle: CHARACTERISTIC_VALUE_HANDLE,
+                        type_: CHARACTERISTIC_TYPE,
+                        permissions: AttPermissions::READABLE
+                            | AttPermissions::WRITABLE_WITH_RESPONSE,
+                        descriptors: vec![],
+                    }],
+                },
+                Rc::new(gatt_datastore),
+            )
+            .unwrap();
+        let att_db = gatt_db.get_att_database(CONN_ID);
+        let data =
+            build_view_or_crash(build_att_data(AttAttributeDataChild::RawData(Box::new([1, 2]))));
+
+        // act: try writing without response to this characteristic
+        att_db.write_no_response_attribute(CHARACTERISTIC_VALUE_HANDLE, data.view());
+
+        // assert: no callback was sent
+        assert_eq!(data_events.try_recv().unwrap_err(), TryRecvError::Empty);
     }
 }

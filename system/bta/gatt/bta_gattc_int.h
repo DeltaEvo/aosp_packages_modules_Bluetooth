@@ -445,6 +445,12 @@ extern BtaEnqueuedResult_t bta_gattc_enqueue(tBTA_GATTC_CLCB* p_clcb,
 extern bool bta_gattc_is_data_queued(tBTA_GATTC_CLCB* p_clcb,
                                      const tBTA_GATTC_DATA* p_data);
 extern void bta_gattc_continue(tBTA_GATTC_CLCB* p_clcb);
+extern void bta_gattc_send_mtu_response(tBTA_GATTC_CLCB* p_clcb,
+                                        const tBTA_GATTC_DATA* p_data,
+                                        uint16_t current_mtu);
+extern void bta_gattc_cmpl_sendmsg(uint16_t conn_id, tGATTC_OPTYPE op,
+                                   tGATT_STATUS status,
+                                   tGATT_CL_COMPLETE* p_data);
 
 extern bool bta_gattc_check_notif_registry(tBTA_GATTC_RCB* p_clreg,
                                            tBTA_GATTC_SERV* p_srcb,
@@ -490,6 +496,15 @@ extern void bta_gattc_get_gatt_db(uint16_t conn_id, uint16_t start_handle,
                                   uint16_t end_handle, btgatt_db_element_t** db,
                                   int* count);
 extern void bta_gattc_init_cache(tBTA_GATTC_SERV* p_srvc_cb);
+
+enum class RobustCachingSupport {
+  UNSUPPORTED,
+  SUPPORTED,
+  UNKNOWN,
+};
+RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
+                                             const gatt::Database& db);
+
 extern void bta_gattc_reset_discover_st(tBTA_GATTC_SERV* p_srcb,
                                         tGATT_STATUS status);
 

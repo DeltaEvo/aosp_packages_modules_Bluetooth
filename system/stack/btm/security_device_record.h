@@ -112,7 +112,6 @@ struct tBTM_SEC_BLE {
 
   tBLE_BD_ADDR identity_address_with_type;
 
-#define BTM_ACCEPTLIST_BIT 0x01
 #define BTM_RESOLVING_LIST_BIT 0x02
   uint8_t in_controller_list; /* in controller resolving list or not */
   uint8_t resolving_list_index;
@@ -231,7 +230,7 @@ struct tBTM_SEC_DEV_REC {
   RawAddress bd_addr;      /* BD_ADDR of the device              */
   DEV_CLASS dev_class;     /* DEV_CLASS of the device            */
   LinkKey link_key;        /* Device link key                    */
-  tHCI_STATUS sec_status;      /* status for pin_or_key_missing      */
+  tHCI_STATUS sec_status;  /* Status in encryption change event  */
 
  public:
   RawAddress RemoteAddress() const { return bd_addr; }

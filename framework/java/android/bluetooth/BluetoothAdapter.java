@@ -1936,72 +1936,6 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Returns the Input/Output capability of the device for BLE operations.
-     *
-     * @return Input/Output capability of the device. One of {@link #IO_CAPABILITY_OUT},
-     *         {@link #IO_CAPABILITY_IO}, {@link #IO_CAPABILITY_IN}, {@link #IO_CAPABILITY_NONE},
-     *         {@link #IO_CAPABILITY_KBDISP} or {@link #IO_CAPABILITY_UNKNOWN}.
-     *
-     * @hide
-     */
-    @RequiresLegacyBluetoothAdminPermission
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    @IoCapability
-    public int getLeIoCapability() {
-        if (getState() != STATE_ON) return BluetoothAdapter.IO_CAPABILITY_UNKNOWN;
-        mServiceLock.readLock().lock();
-        try {
-            if (mService != null) {
-                final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
-                mService.getLeIoCapability(mAttributionSource, recv);
-                return recv.awaitResultNoInterrupt(getSyncTimeout())
-                    .getValue(BluetoothAdapter.IO_CAPABILITY_UNKNOWN);
-            }
-        } catch (RemoteException | TimeoutException e) {
-            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-        } finally {
-            mServiceLock.readLock().unlock();
-        }
-        return BluetoothAdapter.IO_CAPABILITY_UNKNOWN;
-    }
-
-    /**
-     * Sets the Input/Output capability of the device for BLE operations.
-     *
-     * <p>Changing the Input/Output capability of a device only takes effect on restarting the
-     * Bluetooth stack. You would need to restart the stack using {@link BluetoothAdapter#disable()}
-     * and {@link BluetoothAdapter#enable()} to see the changes.
-     *
-     * @param capability Input/Output capability of the device. One of {@link #IO_CAPABILITY_OUT},
-     *                   {@link #IO_CAPABILITY_IO}, {@link #IO_CAPABILITY_IN},
-     *                   {@link #IO_CAPABILITY_NONE} or {@link #IO_CAPABILITY_KBDISP}.
-     *
-     * @hide
-     */
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(allOf = {
-            android.Manifest.permission.BLUETOOTH_CONNECT,
-            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-    })
-    public boolean setLeIoCapability(@IoCapability int capability) {
-        if (getState() != STATE_ON) return false;
-        mServiceLock.readLock().lock();
-        try {
-            if (mService != null) {
-                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
-                mService.setLeIoCapability(capability, mAttributionSource, recv);
-                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(false);
-            }
-        } catch (RemoteException | TimeoutException e) {
-            Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
-        } finally {
-            mServiceLock.readLock().unlock();
-        }
-        return false;
-    }
-
-    /**
      * Get the current Bluetooth scan mode of the local Bluetooth adapter.
      * <p>The Bluetooth scan mode determines if the local adapter is
      * connectable and/or discoverable from remote Bluetooth devices.
@@ -2375,7 +2309,9 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Sets device as the active devices for the profiles passed into the function
+     * Sets device as the active devices for the use cases passed into the function. Note that in
+     * order to make a device active for LE Audio, it must be the active device for audio and
+     * phone calls.
      *
      * @param device is the remote bluetooth device
      * @param profiles represents the purpose for which we are setting this as the active device.
@@ -3983,6 +3919,22 @@ public final class BluetoothAdapter {
                                 }
                             }
                         }
+                        synchronized (mBluetoothConnectionCallbackExecutorMap) {
+                            if (!mBluetoothConnectionCallbackExecutorMap.isEmpty()) {
+                                try {
+                                    final SynchronousResultReceiver recv =
+                                            SynchronousResultReceiver.get();
+                                    mService.registerBluetoothConnectionCallback(
+                                            mConnectionCallback,
+                                            mAttributionSource, recv);
+                                    recv.awaitResultNoInterrupt(getSyncTimeout())
+                                            .getValue(null);
+                                } catch (RemoteException | TimeoutException e) {
+                                    Log.e(TAG, "onBluetoothServiceUp: Failed to register "
+                                            + "bluetooth connection callback", e);
+                                }
+                            }
+                        }
                     } finally {
                         mServiceLock.readLock().unlock();
                     }
@@ -5096,7 +5048,8 @@ public final class BluetoothAdapter {
             BluetoothStatusCodes.ERROR_DEVICE_NOT_BONDED,
             BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
             BluetoothStatusCodes.ERROR_NOT_DUAL_MODE_AUDIO_DEVICE,
-            BluetoothStatusCodes.ERROR_UNKNOWN
+            BluetoothStatusCodes.ERROR_UNKNOWN,
+            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED,
     })
     public @interface SetPreferredAudioProfilesReturnValues {}
 
@@ -5110,7 +5063,9 @@ public final class BluetoothAdapter {
      * here. These preferences will also be ignored if the remote device is not simultaneously
      * connected to a classic audio profile (A2DP and/or HFP) and LE Audio at the same time. If the
      * remote device does not support both BR/EDR audio and LE Audio, this API returns
-     * {@link BluetoothStatusCodes#ERROR_NOT_DUAL_MODE_AUDIO_DEVICE}.
+     * {@link BluetoothStatusCodes#ERROR_NOT_DUAL_MODE_AUDIO_DEVICE}. If the system property
+     * persist.bluetooth.enable_dual_mode_audio is set to {@code false}, this API returns
+     * {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED}.
      * <p>
      * The Bundle is expected to contain the following mappings:
      * 1. For key {@link #AUDIO_MODE_OUTPUT_ONLY}, it expects an integer value of either
@@ -5202,7 +5157,9 @@ public final class BluetoothAdapter {
      * If a device does not support an audio mode, the audio mode will be omitted from the keys of
      * the Bundle. If the device is not recognized as a dual mode audio capable device (e.g. because
      * it is not bonded, does not support any audio profiles, or does not support both BR/EDR audio
-     * and LE Audio), this API returns an empty Bundle.
+     * and LE Audio), this API returns an empty Bundle. If the system property
+     * persist.bluetooth.enable_dual_mode_audio is set to {@code false}, this API returns an empty
+     * Bundle.
      * <p>
      * The Bundle can contain the following mappings:
      * <ul>
@@ -5342,7 +5299,8 @@ public final class BluetoothAdapter {
             BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
             BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
             BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
-            BluetoothStatusCodes.ERROR_UNKNOWN
+            BluetoothStatusCodes.ERROR_UNKNOWN,
+            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED
     })
     public @interface RegisterPreferredAudioProfilesCallbackReturnValues {}
 
@@ -5350,7 +5308,9 @@ public final class BluetoothAdapter {
      * Registers a callback to be notified when the preferred audio profile changes have taken
      * effect. To unregister this callback, call
      * {@link #unregisterPreferredAudioProfilesChangedCallback(
-     * PreferredAudioProfilesChangedCallback)}.
+     * PreferredAudioProfilesChangedCallback)}. If the system property
+     * persist.bluetooth.enable_dual_mode_audio is set to {@code false}, this API returns
+     * {@link BluetoothStatusCodes#FEATURE_NOT_SUPPORTED}.
      *
      * @param executor an {@link Executor} to execute the callbacks
      * @param callback user implementation of the {@link PreferredAudioProfilesChangedCallback}
@@ -5419,7 +5379,8 @@ public final class BluetoothAdapter {
             BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
             BluetoothStatusCodes.ERROR_CALLBACK_NOT_REGISTERED,
             BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
-            BluetoothStatusCodes.ERROR_UNKNOWN
+            BluetoothStatusCodes.ERROR_UNKNOWN,
+            BluetoothStatusCodes.FEATURE_NOT_SUPPORTED
     })
     public @interface UnRegisterPreferredAudioProfilesCallbackReturnValues {}
 
