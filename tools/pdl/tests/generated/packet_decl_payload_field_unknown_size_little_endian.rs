@@ -1,8 +1,6 @@
 // @generated rust packets from test
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{FromPrimitive, ToPrimitive};
 use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -10,6 +8,19 @@ use std::sync::Arc;
 use thiserror::Error;
 
 type Result<T> = std::result::Result<T, Error>;
+
+#[doc = r" Private prevents users from creating arbitrary scalar values"]
+#[doc = r" in situations where the value needs to be validated."]
+#[doc = r" Users can freely deref the value, but only the backend"]
+#[doc = r" may create it."]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Private<T>(T);
+impl<T> std::ops::Deref for Private<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -38,7 +49,7 @@ pub trait Packet {
     fn to_vec(self) -> Vec<u8>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FooDataChild {
     Payload(Bytes),
@@ -52,19 +63,19 @@ impl FooDataChild {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FooChild {
     Payload(Bytes),
     None,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FooData {
     a: u32,
     child: FooDataChild,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Foo {
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -80,7 +91,12 @@ impl FooData {
     fn conforms(bytes: &[u8]) -> bool {
         bytes.len() >= 3
     }
-    fn parse(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
+    fn parse(bytes: &[u8]) -> Result<Self> {
+        let mut cell = Cell::new(bytes);
+        let packet = Self::parse_inner(&mut cell)?;
+        Ok(packet)
+    }
+    fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         if bytes.get().remaining() < 3 {
             return Err(Error::InvalidLengthError {
                 obj: "Foo".to_string(),
@@ -98,8 +114,8 @@ impl FooData {
         Ok(Self { a, child })
     }
     fn write_to(&self, buffer: &mut BytesMut) {
-        if self.a > 0xffffff {
-            panic!("Invalid value for {}::{}: {} > {}", "Foo", "a", self.a, 0xffffff);
+        if self.a > 0xff_ffff {
+            panic!("Invalid value for {}::{}: {} > {}", "Foo", "a", self.a, 0xff_ffff);
         }
         buffer.put_uint_le(self.a as u64, 3);
         match &self.child {
@@ -138,14 +154,17 @@ impl Foo {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         let mut cell = Cell::new(bytes);
         let packet = Self::parse_inner(&mut cell)?;
-        if !cell.get().is_empty() {
-            return Err(Error::InvalidPacketError);
-        }
         Ok(packet)
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
-        let data = FooData::parse(&mut bytes)?;
+        let data = FooData::parse_inner(&mut bytes)?;
         Ok(Self::new(Arc::new(data)).unwrap())
+    }
+    pub fn specialize(&self) -> FooChild {
+        match &self.foo.child {
+            FooDataChild::Payload(payload) => FooChild::Payload(payload.clone()),
+            FooDataChild::None => FooChild::None,
+        }
     }
     fn new(foo: Arc<FooData>) -> std::result::Result<Self, &'static str> {
         Ok(Self { foo })

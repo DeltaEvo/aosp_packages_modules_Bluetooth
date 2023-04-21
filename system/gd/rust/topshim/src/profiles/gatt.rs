@@ -38,6 +38,7 @@ pub mod ffi {
 
     #[derive(Debug, Clone)]
     pub struct RustAdvertisingTrackInfo {
+        monitor_handle: u8,
         scanner_id: u8,
         filter_index: u8,
         advertiser_state: u8,
@@ -1190,6 +1191,7 @@ impl GattClient {
         &self,
         client_if: i32,
         addr: &RawAddress,
+        addr_type: u8,
         is_direct: bool,
         transport: i32,
         opportunistic: bool,
@@ -1200,6 +1202,7 @@ impl GattClient {
             connect,
             client_if,
             addr,
+            addr_type,
             is_direct,
             transport,
             opportunistic,

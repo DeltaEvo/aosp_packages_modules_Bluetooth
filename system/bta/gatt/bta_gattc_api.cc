@@ -92,7 +92,13 @@ void BTA_GATTC_AppRegister(tBTA_GATTC_CBACK* p_client_cb,
 }
 
 static void app_deregister_impl(tGATT_IF client_if) {
-  bta_gattc_deregister(bta_gattc_cl_get_regcb(client_if));
+  tBTA_GATTC_RCB* p_clreg = bta_gattc_cl_get_regcb(client_if);
+
+  if (p_clreg != nullptr) {
+    bta_gattc_deregister(p_clreg);
+  } else {
+    LOG_ERROR("Unknown GATT ID: %d, state: %d", client_if, bta_gattc_cb.state);
+  }
 }
 /*******************************************************************************
  *
@@ -135,6 +141,7 @@ void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
 }
 
 void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
+                    tBLE_ADDR_TYPE addr_type,
                     tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
                     bool opportunistic, uint8_t initiating_phys) {
   tBTA_GATTC_DATA data = {
@@ -145,6 +152,7 @@ void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
                       .event = BTA_GATTC_API_OPEN_EVT,
                   },
               .remote_bda = remote_bda,
+              .remote_addr_type = addr_type,
               .client_if = client_if,
               .connection_type = connection_type,
               .transport = transport,
@@ -154,6 +162,13 @@ void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
   };
 
   post_on_bt_main([data]() { bta_gattc_process_api_open(&data); });
+}
+
+void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
+                    tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                    bool opportunistic, uint8_t initiating_phys) {
+  BTA_GATTC_Open(client_if, remote_bda, BLE_ADDR_PUBLIC, connection_type,
+                 BT_TRANSPORT_LE, opportunistic, initiating_phys);
 }
 
 /*******************************************************************************

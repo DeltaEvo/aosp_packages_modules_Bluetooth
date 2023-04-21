@@ -27,18 +27,19 @@
 
 // Mock include file to share data between tests and mock
 #include "test/mock/mock_btif_avrcp_service.h"
+#include "types/raw_address.h"
 
 // Original usings
 
 // Mocked internal structures, if any
 
 bluetooth::avrcp::AvrcpService* bluetooth::avrcp::AvrcpService::Get() {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   return nullptr;
 }
 
 void bluetooth::avrcp::AvrcpService::ConnectDevice(RawAddress const&) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
 }
 
 namespace test {
@@ -61,7 +62,7 @@ namespace btif_avrcp_service {}  // namespace btif_avrcp_service
 
 // Mocked functions, if any
 void do_in_avrcp_jni(const base::Closure& task) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   test::mock::btif_avrcp_service::do_in_avrcp_jni(task);
 }
 // Mocked functions complete

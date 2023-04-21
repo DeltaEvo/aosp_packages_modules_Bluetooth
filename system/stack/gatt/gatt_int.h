@@ -342,6 +342,13 @@ typedef struct {
 
   bool in_use;
   uint8_t tcb_idx;
+
+  /* ATT Exchange MTU data */
+  uint16_t pending_user_mtu_exchange_value;
+  std::list<uint16_t> conn_ids_waiting_for_mtu_exchange;
+  /* Used to set proper TX DATA LEN on the controller*/
+  uint16_t max_user_mtu;
+
 } tGATT_TCB;
 
 /* logic channel */
@@ -467,9 +474,15 @@ extern void gatt_set_err_rsp(bool enable, uint8_t req_op_code,
 extern bool gatt_disconnect(tGATT_TCB* p_tcb);
 extern bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
                              tBT_TRANSPORT transport, int8_t initiating_phys);
+extern bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
+                             tBLE_ADDR_TYPE addr_type, tBT_TRANSPORT transport,
+                             int8_t initiating_phys);
 extern bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
                          tBT_TRANSPORT transport, uint8_t initiating_phys,
                          tGATT_IF gatt_if);
+extern bool gatt_connect(const RawAddress& rem_bda, tGATT_TCB* p_tcb,
+                         tBLE_ADDR_TYPE addr_type, tBT_TRANSPORT transport,
+                         uint8_t initiating_phys, tGATT_IF gatt_if);
 extern void gatt_data_process(tGATT_TCB& p_tcb, uint16_t cid, BT_HDR* p_buf);
 extern void gatt_update_app_use_link_flag(tGATT_IF gatt_if, tGATT_TCB* p_tcb,
                                           bool is_add, bool check_acl_link);
@@ -596,6 +609,10 @@ extern uint16_t gatt_tcb_get_att_cid(tGATT_TCB& tcb, bool eatt_support);
 extern uint16_t gatt_tcb_get_payload_size_tx(tGATT_TCB& tcb, uint16_t cid);
 extern uint16_t gatt_tcb_get_payload_size_rx(tGATT_TCB& tcb, uint16_t cid);
 extern void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb);
+extern uint16_t gatt_get_mtu(const RawAddress& bda, tBT_TRANSPORT transport);
+extern bool gatt_is_pending_mtu_exchange(tGATT_TCB* p_tcb);
+extern void gatt_set_conn_id_waiting_for_mtu_exchange(tGATT_TCB* p_tcb,
+                                                      uint16_t conn_id);
 
 extern void gatt_sr_copy_prep_cnt_to_cback_cnt(tGATT_TCB& p_tcb);
 extern bool gatt_sr_is_cback_cnt_zero(tGATT_TCB& p_tcb);

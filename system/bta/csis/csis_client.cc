@@ -23,6 +23,7 @@
 #include <hardware/bt_gatt_types.h>
 
 #include <list>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,7 @@ using bluetooth::groups::DeviceGroupsCallbacks;
 namespace {
 class CsisClientImpl;
 CsisClientImpl* instance;
+std::mutex instance_mutex;
 DeviceGroupsCallbacks* device_group_callbacks;
 
 /**
@@ -1100,20 +1102,29 @@ class CsisClientImpl : public CsisClient {
   }
 
   void OnCsisObserveCompleted(void) {
-    if (discovering_group_ == -1) {
-      LOG(ERROR) << __func__ << " No ongoing CSIS discovery - disable scan";
+    LOG_INFO("Group_id: %d", discovering_group_);
+
+    if (discovering_group_ == bluetooth::groups::kGroupUnknown) {
+      LOG_ERROR("No ongoing CSIS discovery - disable scan");
       return;
     }
 
     auto csis_group = FindCsisGroup(discovering_group_);
-    discovering_group_ = -1;
-    if (csis_group->IsGroupComplete())
+    discovering_group_ = bluetooth::groups::kGroupUnknown;
+
+    if (!csis_group) {
+      LOG_WARN("Group_id %d is not existing", discovering_group_);
+      discovering_group_ = bluetooth::groups::kGroupUnknown;
+      return;
+    }
+
+    discovering_group_ = bluetooth::groups::kGroupUnknown;
+    if (csis_group->IsGroupComplete()) {
       csis_group->SetDiscoveryState(
           CsisDiscoveryState::CSIS_DISCOVERY_COMPLETED);
-    else
+    } else {
       csis_group->SetDiscoveryState(CsisDiscoveryState::CSIS_DISCOVERY_IDLE);
-
-    LOG(INFO) << __func__;
+    }
   }
 
   /*
@@ -1208,6 +1219,12 @@ class CsisClientImpl : public CsisClient {
       return;
     }
 
+    if (csis_group->GetDesiredSize() > 0 &&
+        (csis_group->GetDesiredSize() == csis_group->GetCurrentSize())) {
+      LOG_WARN("Group is already complete");
+      return;
+    }
+
     auto discovered_group_rsi = std::find_if(
         all_rsi.cbegin(), all_rsi.cend(), [&csis_group](const auto& rsi) {
           return csis_group->IsRsiMatching(rsi);
@@ -1229,8 +1246,8 @@ class CsisClientImpl : public CsisClient {
   void CsisActiveObserverSet(bool enable) {
     bool is_ad_type_filter_supported =
         bluetooth::shim::is_ad_type_filter_supported();
-    LOG_INFO("CSIS Discovery SET: %d, is_ad_type_filter_supported: %d", enable,
-             is_ad_type_filter_supported);
+    LOG_INFO("Group_id %d: enable: %d, is_ad_type_filter_supported: %d", enable,
+             discovering_group_, is_ad_type_filter_supported);
     if (is_ad_type_filter_supported) {
       bluetooth::shim::set_ad_type_rsi_filter(enable);
     } else {
@@ -1458,7 +1475,7 @@ class CsisClientImpl : public CsisClient {
         /* Here it means, we have new group. Let's us create it */
         group_id =
             dev_groups_->AddDevice(device->addr, csis_instance->GetUuid());
-        LOG_ASSERT(group_id != -1);
+        LOG_ASSERT(group_id != bluetooth::groups::kGroupUnknown);
       } else {
         dev_groups_->AddDevice(device->addr, csis_instance->GetUuid(),
                                group_id);
@@ -1725,30 +1742,22 @@ class CsisClientImpl : public CsisClient {
     device->conn_id = evt.conn_id;
 
     /* Verify bond */
-    uint8_t sec_flag = 0;
-    BTM_GetSecurityFlagsByTransport(evt.remote_bda, &sec_flag, BT_TRANSPORT_LE);
-
-    /* If link has been encrypted look for the service or report */
-    if (sec_flag & BTM_SEC_FLAG_ENCRYPTED) {
-      if (device->is_gatt_service_valid) {
-        instance->OnEncrypted(device);
-      } else {
-        BTA_GATTC_ServiceSearchRequest(device->conn_id, &kCsisServiceUuid);
-      }
-
+    if (BTM_SecIsSecurityPending(device->addr)) {
+      /* if security collision happened, wait for encryption done
+       * (BTA_GATTC_ENC_CMPL_CB_EVT) */
       return;
     }
 
-    int result = BTM_SetEncryption(
-        evt.remote_bda, BT_TRANSPORT_LE,
-        [](const RawAddress* bd_addr, tBT_TRANSPORT transport, void* p_ref_data,
-           tBTM_STATUS status) {
-          if (instance) instance->OnLeEncryptionComplete(*bd_addr, status);
-        },
-        nullptr, BTM_BLE_SEC_ENCRYPT);
+    /* verify bond */
+    if (BTM_IsEncrypted(device->addr, BT_TRANSPORT_LE)) {
+      /* if link has been encrypted */
+      OnEncrypted(device);
+      return;
+    }
 
-    DLOG(INFO) << __func__
-               << " Encryption required. Request result: " << result;
+    int result = BTM_SetEncryption(device->addr, BT_TRANSPORT_LE, nullptr,
+                                   nullptr, BTM_BLE_SEC_ENCRYPT);
+    LOG_INFO("Encryption required. Request result: 0x%02x", result);
   }
 
   void OnGattDisconnected(const tBTA_GATTC_CLOSE& evt) {
@@ -1880,17 +1889,15 @@ class CsisClientImpl : public CsisClient {
   }
 
   void OnLeEncryptionComplete(const RawAddress& address, uint8_t status) {
-    DLOG(INFO) << __func__ << " " << ADDRESS_TO_LOGGABLE_STR(address);
+    LOG_INFO("%s", ADDRESS_TO_LOGGABLE_CSTR(address));
     auto device = FindDeviceByAddress(address);
     if (device == nullptr) {
-      LOG(WARNING) << "Skipping unknown device"
-                   << ADDRESS_TO_LOGGABLE_STR(address);
+      LOG_WARN("Skipping unknown device %s", ADDRESS_TO_LOGGABLE_CSTR(address));
       return;
     }
 
     if (status != BTM_SUCCESS) {
-      LOG(ERROR) << "encryption failed"
-                 << " status: " << status;
+      LOG_ERROR("encryption failed. status: 0x%02x", status);
 
       BTA_GATTC_Close(device->conn_id);
       return;
@@ -2004,7 +2011,7 @@ class CsisClientImpl : public CsisClient {
   std::list<std::shared_ptr<CsisDevice>> devices_;
   std::list<std::shared_ptr<CsisGroup>> csis_groups_;
   DeviceGroups* dev_groups_;
-  int discovering_group_ = -1;
+  int discovering_group_ = bluetooth::groups::kGroupUnknown;
 };
 
 class DeviceGroupsCallbacksImpl : public DeviceGroupsCallbacks {
@@ -2040,6 +2047,7 @@ DeviceGroupsCallbacksImpl deviceGroupsCallbacksImpl;
 
 void CsisClient::Initialize(bluetooth::csis::CsisClientCallbacks* callbacks,
                             Closure initCb) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     LOG(ERROR) << __func__ << ": Already initialized!";
     return;
@@ -2078,6 +2086,7 @@ bool CsisClient::GetForStorage(const RawAddress& addr,
 }
 
 void CsisClient::CleanUp() {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   CsisClientImpl* ptr = instance;
   instance = nullptr;
 
@@ -2088,6 +2097,7 @@ void CsisClient::CleanUp() {
 }
 
 void CsisClient::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Coordinated Set Service Client:\n");
   if (instance) instance->Dump(fd);
   dprintf(fd, "\n");

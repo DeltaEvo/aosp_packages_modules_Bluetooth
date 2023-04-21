@@ -242,9 +242,6 @@ bool BTM_IsBleConnection(uint16_t hci_handle);
 
 const RawAddress acl_address_from_handle(uint16_t hci_handle);
 
-void btm_ble_refresh_local_resolvable_private_addr(
-    const RawAddress& pseudo_addr, const RawAddress& local_rpa);
-
 void btm_cont_rswitch_from_handle(uint16_t hci_handle);
 
 uint8_t acl_link_role_from_handle(uint16_t handle);
@@ -264,8 +261,6 @@ tBTM_STATUS btm_read_power_mode_state(const RawAddress& remote_bda,
                                       tBTM_PM_STATE* pmState);
 
 void btm_acl_notif_conn_collision(const RawAddress& bda);
-
-void btm_acl_update_conn_addr(uint16_t conn_handle, const RawAddress& address);
 
 void btm_configure_data_path(uint8_t direction, uint8_t path_id,
                              std::vector<uint8_t> vendor_config);
@@ -328,3 +323,5 @@ void btm_acl_update_inquiry_status(uint8_t status);
 void ACL_RegisterClient(struct acl_client_callback_s* callbacks);
 void ACL_UnregisterClient(struct acl_client_callback_s* callbacks);
 bool ACL_SupportTransparentSynchronousData(const RawAddress& bd_addr);
+void btm_acl_consolidate(const RawAddress& identity_addr,
+                         const RawAddress& rpa);

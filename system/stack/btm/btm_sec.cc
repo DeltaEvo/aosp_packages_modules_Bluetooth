@@ -48,7 +48,6 @@
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/security_device_record.h"
-#include "stack/eatt/eatt.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/btm_status.h"
@@ -124,7 +123,7 @@ static bool btm_dev_encrypted(tBTM_SEC_DEV_REC* p_dev_rec);
 static uint16_t btm_sec_set_serv_level4_flags(uint16_t cur_security,
                                               bool is_originator);
 
-static bool btm_sec_queue_encrypt_request(const RawAddress& bd_addr,
+static void btm_sec_queue_encrypt_request(const RawAddress& bd_addr,
                                           tBT_TRANSPORT transport,
                                           tBTM_SEC_CALLBACK* p_callback,
                                           void* p_ref_data,
@@ -1044,10 +1043,9 @@ tBTM_LINK_KEY_TYPE BTM_SecGetDeviceLinkKeyType(const RawAddress& bd_addr) {
  *
  * Parameters:      bd_addr       - Address of the peer device
  *                  transport     - Link transport
- *                  p_callback    - Pointer to callback function called if
- *                                  this function returns PENDING after required
- *                                  procedures are completed.  Can be set to
- *                                  NULL if status is not desired.
+ *                  p_callback    - Pointer to callback function called after
+ *                                  required procedures are completed. Can be
+ *                                  set to NULL if status is not desired.
  *                  p_ref_data    - pointer to any data the caller wishes to
  *                                  receive in the callback function upon
  *                                  completion. can be set to NULL if not used.
@@ -1075,6 +1073,8 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
     return BTM_WRONG_MODE;
   }
 
+  auto owned_bd_addr = base::Owned(new RawAddress(bd_addr));
+
   switch (transport) {
     case BT_TRANSPORT_BR_EDR:
       if (p_dev_rec->hci_handle == HCI_INVALID_HANDLE) {
@@ -1082,8 +1082,11 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
             "Security Manager: BTM_SetEncryption not connected peer:%s "
             "transport:%s",
             ADDRESS_TO_LOGGABLE_CSTR(bd_addr), bt_transport_text(transport).c_str());
-        if (p_callback)
-          (*p_callback)(&bd_addr, transport, p_ref_data, BTM_WRONG_MODE);
+        if (p_callback) {
+          do_in_main_thread(FROM_HERE,
+                            base::Bind(p_callback, std::move(owned_bd_addr),
+                                       transport, p_ref_data, BTM_WRONG_MODE));
+        }
         return BTM_WRONG_MODE;
       }
       if (p_dev_rec->sec_flags & BTM_SEC_ENCRYPTED) {
@@ -1091,8 +1094,11 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
             "Security Manager: BTM_SetEncryption already encrypted peer:%s "
             "transport:%s",
             ADDRESS_TO_LOGGABLE_CSTR(bd_addr), bt_transport_text(transport).c_str());
-        if (*p_callback)
-          (*p_callback)(&bd_addr, transport, p_ref_data, BTM_SUCCESS);
+        if (p_callback) {
+          do_in_main_thread(FROM_HERE,
+                            base::Bind(p_callback, std::move(owned_bd_addr),
+                                       transport, p_ref_data, BTM_SUCCESS));
+        }
         return BTM_SUCCESS;
       }
       break;
@@ -1103,9 +1109,11 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
             "Security Manager: BTM_SetEncryption not connected peer:%s "
             "transport:%s",
             ADDRESS_TO_LOGGABLE_CSTR(bd_addr), bt_transport_text(transport).c_str());
-        if (p_callback)
-          (*p_callback)(&bd_addr, transport, p_ref_data, BTM_WRONG_MODE);
-
+        if (p_callback) {
+          do_in_main_thread(FROM_HERE,
+                            base::Bind(p_callback, std::move(owned_bd_addr),
+                                       transport, p_ref_data, BTM_WRONG_MODE));
+        }
         return BTM_WRONG_MODE;
       }
       if (p_dev_rec->sec_flags & BTM_SEC_LE_ENCRYPTED) {
@@ -1113,9 +1121,11 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
             "Security Manager: BTM_SetEncryption already encrypted peer:%s "
             "transport:%s",
             ADDRESS_TO_LOGGABLE_CSTR(bd_addr), bt_transport_text(transport).c_str());
-        if (*p_callback)
-          (*p_callback)(&bd_addr, transport, p_ref_data, BTM_SUCCESS);
-
+        if (p_callback) {
+          do_in_main_thread(FROM_HERE,
+                            base::Bind(p_callback, std::move(owned_bd_addr),
+                                       transport, p_ref_data, BTM_SUCCESS));
+        }
         return BTM_SUCCESS;
       }
       break;
@@ -1128,16 +1138,10 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
   /* enqueue security request if security is active */
   if (p_dev_rec->p_callback || (p_dev_rec->sec_state != BTM_SEC_STATE_IDLE)) {
     LOG_WARN("Security Manager: BTM_SetEncryption busy, enqueue request");
-    if (btm_sec_queue_encrypt_request(bd_addr, transport, p_callback,
-                                      p_ref_data, sec_act)) {
-      LOG_INFO("Queued start encryption");
-      return BTM_CMD_STARTED;
-    } else {
-      LOG_WARN("Unable to enqueue start encryption request");
-      if (p_callback)
-        (*p_callback)(&bd_addr, transport, p_ref_data, BTM_NO_RESOURCES);
-      return BTM_NO_RESOURCES;
-    }
+    btm_sec_queue_encrypt_request(bd_addr, transport, p_callback, p_ref_data,
+                                  sec_act);
+    LOG_INFO("Queued start encryption");
+    return BTM_CMD_STARTED;
   }
 
   p_dev_rec->p_callback = p_callback;
@@ -1186,7 +1190,9 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
                   ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
                   bt_transport_text(transport).c_str());
         p_dev_rec->p_callback = nullptr;
-        (*p_callback)(&bd_addr, transport, p_dev_rec->p_ref_data, rc);
+        do_in_main_thread(FROM_HERE,
+                          base::Bind(p_callback, std::move(owned_bd_addr),
+                                     transport, p_dev_rec->p_ref_data, rc));
       }
       break;
   }
@@ -2323,9 +2329,17 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
 
     /* Notify all clients waiting for name to be resolved */
     for (i = 0; i < BTM_SEC_MAX_RMT_NAME_CALLBACKS; i++) {
-      if (btm_cb.p_rmt_name_callback[i] && p_bd_addr)
-        (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, p_dev_rec->dev_class,
-                                         p_dev_rec->sec_bd_name);
+      if (btm_cb.p_rmt_name_callback[i]) {
+        if (p_bd_addr) {
+          (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, p_dev_rec->dev_class,
+                                           p_dev_rec->sec_bd_name);
+        } else {
+          // TODO Still need to send status back to get SDP state machine
+          // running
+          LOG_ERROR("Unable to issue callback with unknown address status:%s",
+                    hci_status_code_text(status).c_str());
+        }
+      }
     }
   } else {
     LOG_DEBUG(
@@ -2337,11 +2351,18 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     /* Notify all clients waiting for name to be resolved even if not found so
      * clients can continue */
     for (i = 0; i < BTM_SEC_MAX_RMT_NAME_CALLBACKS; i++) {
-      if (btm_cb.p_rmt_name_callback[i] && p_bd_addr)
-        (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, (uint8_t*)kDevClassEmpty,
-                                         (uint8_t*)kBtmBdNameEmpty);
+      if (btm_cb.p_rmt_name_callback[i]) {
+        if (p_bd_addr) {
+          (*btm_cb.p_rmt_name_callback[i])(*p_bd_addr, (uint8_t*)kDevClassEmpty,
+                                           (uint8_t*)kBtmBdNameEmpty);
+        } else {
+          // TODO Still need to send status back to get SDP state machine
+          // running
+          LOG_ERROR("Unable to issue callback with unknown address status:%s",
+                    hci_status_code_text(status).c_str());
+        }
+      }
     }
-
     return;
   }
 
@@ -3355,8 +3376,7 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
           p_dev_rec->sec_flags |= BTM_SEC_16_DIGIT_PIN_AUTHED;
         }
       } else if (p_dev_rec->ble_hci_handle == handle) {  // BLE
-        p_dev_rec->sec_flags |=
-            (BTM_SEC_LE_AUTHENTICATED | BTM_SEC_LE_ENCRYPTED);
+        p_dev_rec->sec_flags |= BTM_SEC_LE_ENCRYPTED;
       } else {
         LOG_ERROR(
             "Received encryption change for unknown device handle:0x%04x "
@@ -3402,8 +3422,8 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
         status == HCI_ERR_ENCRY_MODE_NOT_ACCEPTABLE) {
       p_dev_rec->sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
       p_dev_rec->ble.key_type = BTM_LE_KEY_NONE;
-      p_dev_rec->sec_status = status;
     }
+    p_dev_rec->sec_status = status;
     btm_ble_link_encrypted(p_dev_rec->ble.pseudo_addr, encr_enable);
     return;
   } else {
@@ -3883,6 +3903,7 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason,
     p_dev_rec->sec_flags &= ~(BTM_SEC_LE_AUTHENTICATED | BTM_SEC_LE_ENCRYPTED |
                               BTM_SEC_ROLE_SWITCHED);
     p_dev_rec->enc_key_size = 0;
+    p_dev_rec->suggested_tx_octets = 0;
 
     if ((p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN) == 0) {
       p_dev_rec->sec_flags &=
@@ -4541,7 +4562,6 @@ static bool btm_sec_start_get_name(tBTM_SEC_DEV_REC* p_dev_rec) {
  *
  ******************************************************************************/
 static void btm_sec_wait_and_start_authentication(tBTM_SEC_DEV_REC* p_dev_rec) {
-  p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
   auto addr = new RawAddress(p_dev_rec->bd_addr);
 
   static const int32_t delay_auth =
@@ -4576,8 +4596,11 @@ static void btm_sec_auth_timer_timeout(void* data) {
     LOG_INFO("%s: invalid device or not found", __func__);
   } else if (btm_dev_authenticated(p_dev_rec)) {
     LOG_INFO("%s: device is already authenticated", __func__);
+  } else if (p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
+    LOG_INFO("%s: device is in the process of authenticating", __func__);
   } else {
     LOG_INFO("%s: starting authentication", __func__);
+    p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
     btsnd_hcic_auth_request(p_dev_rec->hci_handle);
   }
 }
@@ -4810,12 +4833,6 @@ void btm_sec_dev_rec_cback_event(tBTM_SEC_DEV_REC* p_dev_rec,
   }
 
   btm_sec_check_pending_reqs();
-
-  if (btm_status == BTM_SUCCESS && is_le_transport) {
-    /* Link is encrypted, start EATT */
-    bluetooth::eatt::EattExtension::GetInstance()->Connect(
-        p_dev_rec->ble.pseudo_addr);
-  }
 }
 
 void btm_sec_cr_loc_oob_data_cback_event(const RawAddress& address,
@@ -4911,7 +4928,7 @@ static bool btm_sec_check_prefetch_pin(tBTM_SEC_DEV_REC* p_dev_rec) {
  *                  process pending.
  *
  ******************************************************************************/
-static bool btm_sec_queue_encrypt_request(const RawAddress& bd_addr,
+static void btm_sec_queue_encrypt_request(const RawAddress& bd_addr,
                                           tBT_TRANSPORT transport,
                                           tBTM_SEC_CALLBACK* p_callback,
                                           void* p_ref_data,
@@ -4926,8 +4943,6 @@ static bool btm_sec_queue_encrypt_request(const RawAddress& bd_addr,
   p_e->sec_act = sec_act;
   p_e->bd_addr = bd_addr;
   fixed_queue_enqueue(btm_cb.sec_pending_q, p_e);
-
-  return true;
 }
 
 /*******************************************************************************

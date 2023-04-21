@@ -39,6 +39,7 @@
 #include "bta_sdp_api.h"
 #include "bta_sys.h"
 #include "btif_common.h"
+#include "btif_sock_sdp.h"
 #include "btif_sock_util.h"
 #include "btif_util.h"
 #include "osi/include/allocator.h"
@@ -75,6 +76,7 @@ static int add_pbapc_sdp(const bluetooth_sdp_pce_record* rec);
 static int add_pbaps_sdp(const bluetooth_sdp_pse_record* rec);
 static int add_opps_sdp(const bluetooth_sdp_ops_record* rec);
 static int add_saps_sdp(const bluetooth_sdp_sap_record* rec);
+static int add_mps_sdp(const bluetooth_sdp_mps_record* rec);
 bt_status_t remove_sdp_record(int record_id);
 static int free_sdp_slot(int id);
 
@@ -380,6 +382,15 @@ void on_create_record_event(int id) {
         handle = add_pbapc_sdp(&record->pce);
         service_id = BTA_PCE_SERVICE_ID;
         break;
+      case SDP_TYPE_MPS:
+        handle = add_mps_sdp(&record->mps);
+        break;
+      case SDP_TYPE_RAW:
+        if (record->hdr.rfcomm_channel_number > 0) {
+          handle = add_rfc_sdp_rec(record->hdr.service_name, record->hdr.uuid,
+                                   record->hdr.rfcomm_channel_number);
+        }
+        break;
       default:
         BTIF_TRACE_DEBUG("Record type %d is not supported", record->hdr.type);
         break;
@@ -674,6 +685,10 @@ static int add_pbaps_sdp(const bluetooth_sdp_pse_record* rec) {
                                (uint8_t*)&supported_repositories_1_1);
     APPL_TRACE_DEBUG(" supported_repositories_1_1: 0x%x",
                      supported_repositories_1_1);
+    sdp_save_local_pse_record_attributes(
+        rec->hdr.rfcomm_channel_number, rec->hdr.l2cap_psm,
+        rec->hdr.profile_version, rec->supported_features,
+        rec->supported_repositories);
   } else {
     /* Add in the Bluetooth Profile Descriptor List */
     status &= SDP_AddProfileDescriptorList(
@@ -852,5 +867,54 @@ static int add_saps_sdp(const bluetooth_sdp_sap_record* rec) {
     APPL_TRACE_DEBUG("%s(): SDP Registered (handle 0x%08x)", __func__,
                      sdp_handle);
   }
+  return sdp_handle;
+}
+
+/* Create a Multi-Profile Specification SDP record based on information stored
+ * in a bluetooth_sdp_mps_record */
+static int add_mps_sdp(const bluetooth_sdp_mps_record* rec) {
+  uint16_t service = UUID_SERVCLASS_MPS_SC;
+  uint16_t browse = UUID_SERVCLASS_PUBLIC_BROWSE_GROUP;
+  bool status = true;
+  uint32_t sdp_handle = 0;
+
+  sdp_handle = SDP_CreateRecord();
+  if (sdp_handle == 0) {
+    LOG_ERROR("Unable to register MPS record");
+    return sdp_handle;
+  }
+
+  status &= SDP_AddServiceClassIdList(sdp_handle, 1, &service);
+
+  /* Add in the Bluetooth Profile Descriptor List */
+  status &= SDP_AddProfileDescriptorList(sdp_handle, UUID_SERVCLASS_MPS_PROFILE,
+                                         rec->hdr.profile_version);
+
+  /* Add supported scenarios MPSD */
+  status &= SDP_AddAttribute(sdp_handle, ATTR_ID_MPS_SUPPORTED_SCENARIOS_MPSD,
+                             UINT_DESC_TYPE, (uint32_t)8,
+                             (uint8_t*)&rec->supported_scenarios_mpsd);
+  /* Add supported scenarios MPMD */
+  status &= SDP_AddAttribute(sdp_handle, ATTR_ID_MPS_SUPPORTED_SCENARIOS_MPMD,
+                             UINT_DESC_TYPE, (uint32_t)8,
+                             (uint8_t*)&rec->supported_scenarios_mpmd);
+  /* Add supported dependencies */
+  status &= SDP_AddAttribute(sdp_handle, ATTR_ID_MPS_SUPPORTED_DEPENDENCIES,
+                             UINT_DESC_TYPE, (uint32_t)2,
+                             (uint8_t*)&rec->supported_dependencies);
+
+  /* Make the service browseable */
+  status &=
+      SDP_AddUuidSequence(sdp_handle, ATTR_ID_BROWSE_GROUP_LIST, 1, &browse);
+
+  if (!status) {
+    SDP_DeleteRecord(sdp_handle);
+    sdp_handle = 0;
+    APPL_TRACE_ERROR("%s() FAILED", __func__);
+    return sdp_handle;
+  }
+  bta_sys_add_uuid(service); /* UUID_SERVCLASS_MPS_SC */
+  APPL_TRACE_DEBUG("%s():  SDP Registered (handle 0x%08x)", __func__,
+                   sdp_handle);
   return sdp_handle;
 }

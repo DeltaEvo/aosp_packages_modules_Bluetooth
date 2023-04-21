@@ -33,12 +33,7 @@
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
 
-#include "common/metrics.h"
-#include "main/shim/metrics_api.h"
-#include "main/shim/shim.h"
-#include "stack/include/stack_metrics_logging.h"
 #include "test/common/mock_functions.h"
-#include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
 #ifndef UNUSED_ATTR
@@ -194,6 +189,19 @@ struct log_counter_metrics {
   };
 };
 extern struct log_counter_metrics log_counter_metrics;
+
+// Name: log_hfp_audio_packet_loss_stats
+struct log_hfp_audio_packet_loss_stats {
+  std::function<void(const RawAddress& address, int num_decoded_frames,
+                     double packet_loss_ratio)>
+      body{[](const RawAddress& address, int num_decoded_frames,
+              double packet_loss_ratio) {}};
+  void operator()(const RawAddress& address, int num_decoded_frames,
+                  double packet_loss_ratio) {
+    body(address, num_decoded_frames, packet_loss_ratio);
+  };
+};
+extern struct log_hfp_audio_packet_loss_stats log_hfp_audio_packet_loss_stats;
 }  // namespace stack_metrics_logging
 }  // namespace mock
 }  // namespace test

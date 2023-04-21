@@ -53,15 +53,10 @@ enum tBTA_HH_INT_EVT : uint16_t {
   BTA_HH_GATT_OPEN_EVT,
   BTA_HH_START_ENC_EVT,
   BTA_HH_ENC_CMPL_EVT,
-  BTA_HH_GATT_ENC_CMPL_EVT,
-
-  /* not handled by execute state machine */
-  BTA_HH_API_ENABLE_EVT,
-  BTA_HH_API_DISABLE_EVT,
-  BTA_HH_DISC_CMPL_EVT
+  BTA_HH_GATT_ENC_CMPL_EVT
 }; /* HID host internal events */
 
-#define BTA_HH_INVALID_EVT (BTA_HH_DISC_CMPL_EVT + 1)
+#define BTA_HH_INVALID_EVT (BTA_HH_GATT_ENC_CMPL_EVT + 1)
 
 /* state machine states */
 enum {
@@ -85,13 +80,6 @@ typedef struct {
   uint16_t data;
   BT_HDR* p_data;
 } tBTA_HH_CMD_DATA;
-
-/* data type for BTA_HH_API_ENABLE_EVT */
-typedef struct {
-  BT_HDR_RIGID hdr;
-  uint8_t service_name[BTA_SERVICE_NAME_LEN + 1];
-  tBTA_HH_CBACK* p_cback;
-} tBTA_HH_API_ENABLE;
 
 typedef struct {
   BT_HDR_RIGID hdr;
@@ -132,7 +120,6 @@ typedef struct {
 /* union of all event data types */
 typedef union {
   BT_HDR_RIGID hdr;
-  tBTA_HH_API_ENABLE api_enable;
   tBTA_HH_API_CONN api_conn;
   tBTA_HH_CMD_DATA api_sndcmd;
   tBTA_HH_CBACK_DATA hid_cback;
@@ -266,7 +253,7 @@ extern void bta_hh_close_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
 extern void bta_hh_data_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
 extern void bta_hh_ctrl_dat_act(tBTA_HH_DEV_CB* p_cb,
                                 const tBTA_HH_DATA* p_data);
-extern void bta_hh_start_sdp(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
+extern void bta_hh_connect(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
 extern void bta_hh_sdp_cmpl(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data);
 extern void bta_hh_write_dev_act(tBTA_HH_DEV_CB* p_cb,
                                  const tBTA_HH_DATA* p_data);
@@ -299,7 +286,7 @@ extern void bta_hh_cleanup_disable(tBTA_HH_STATUS status);
 extern uint8_t bta_hh_dev_handle_to_cb_idx(uint8_t dev_handle);
 
 /* action functions used outside state machine */
-extern void bta_hh_api_enable(const tBTA_HH_DATA* p_data);
+extern void bta_hh_api_enable(tBTA_HH_CBACK* p_cback, bool enable_hid, bool enable_hogp);
 extern void bta_hh_api_disable(void);
 extern void bta_hh_disc_cmpl(void);
 
@@ -309,7 +296,6 @@ extern tBTA_HH_STATUS bta_hh_read_ssr_param(const RawAddress& bd_addr,
 
 /* functions for LE HID */
 extern void bta_hh_le_enable(void);
-extern bool bta_hh_le_is_hh_gatt_if(tGATT_IF client_if);
 extern void bta_hh_le_deregister(void);
 extern void bta_hh_le_open_conn(tBTA_HH_DEV_CB* p_cb,
                                 const RawAddress& remote_bda);

@@ -74,7 +74,6 @@ target(lib_type, "bluetooth") {
     "//bt/system/brcm/include",
     "//bt/system/embdrv/sbc/encoder/include",
     "//bt/system/embdrv/sbc/decoder/include",
-    "//bt/system/utils/include",
     "//bt/system/test/suite",
   ]
 
@@ -91,9 +90,9 @@ target(lib_type, "bluetooth") {
     "//bt/system/main/shim:LibBluetoothShimSources",
     "//bt/system/osi",
     "//bt/system/packet",
+    "//bt/system/rust:core_rs",
     "//bt/system/stack",
     "//bt/system/udrv",
-    "//bt/system/utils",
   ]
 
   configs += [

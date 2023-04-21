@@ -17,6 +17,7 @@ enum PacketType : 8 {
     IO_CAPABILITY_NEGATIVE_RESPONSE = 0x0A,
     LE_LEGACY_ADVERTISING_PDU = 0x0B,
     LE_EXTENDED_ADVERTISING_PDU = 0x37,
+    LE_PERIODIC_ADVERTISING_PDU = 0x40,
     LE_CONNECT = 0x0C,
     LE_CONNECT_COMPLETE = 0x0D,
     LE_SCAN = 0x0E,
@@ -63,6 +64,8 @@ enum PacketType : 8 {
 
     PING_REQUEST = 0x35,
     PING_RESPONSE = 0x36,
+    ROLE_SWITCH_REQUEST = 0x38,
+    ROLE_SWITCH_RESPONSE = 0x39,
 }
 
 packet LinkLayerPacket {
@@ -73,7 +76,9 @@ packet LinkLayerPacket {
 }
 
 packet Acl : LinkLayerPacket (type = ACL) {
-  _payload_,
+  packet_boundary_flag : 8,
+  broadcast_flag : 8,
+  data: 8[],
 }
 
 packet Disconnect : LinkLayerPacket (type = DISCONNECT) {
@@ -182,11 +187,20 @@ packet LeExtendedAdvertisingPdu : LinkLayerPacket (type = LE_EXTENDED_ADVERTISIN
   connectable: 1,
   scannable: 1,
   directed: 1,
-  sid: 4,
-  _reserved_: 1,
+  _reserved_: 5,
+  sid: 8, // 0xff when not provided
   tx_power: 8,
   primary_phy: PrimaryPhyType,
   secondary_phy: SecondaryPhyType,
+  periodic_advertising_interval: 16,
+  advertising_data: 8[],
+}
+
+packet LePeriodicAdvertisingPdu : LinkLayerPacket (type = LE_PERIODIC_ADVERTISING_PDU) {
+  advertising_address_type: AddressType,
+  sid: 8, // 0xff when not provided
+  tx_power: 8,
+  advertising_interval: 16,
   advertising_data: 8[],
 }
 
@@ -454,4 +468,13 @@ packet PingRequest : LinkLayerPacket (type = PING_REQUEST) {
 }
 
 packet PingResponse : LinkLayerPacket (type = PING_RESPONSE) {
+}
+
+packet RoleSwitchRequest : LinkLayerPacket (type = ROLE_SWITCH_REQUEST) {
+  initiator_new_role: 8,
+}
+
+packet RoleSwitchResponse : LinkLayerPacket (type = ROLE_SWITCH_RESPONSE) {
+  status: 8,
+  initiator_new_role: 8,
 }

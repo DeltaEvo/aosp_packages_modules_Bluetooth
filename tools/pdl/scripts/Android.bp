@@ -7,12 +7,6 @@ package {
     default_applicable_licenses: ["system_bt_license"],
 }
 
-python_binary_host {
-    name: "pypdl",
-    main: "pdl/parser.py",
-    srcs: ["pdl/parser.py"],
-}
-
 // Python generator.
 python_binary_host {
     name: "pdl_python_generator",
@@ -21,5 +15,30 @@ python_binary_host {
         "generate_python_backend.py",
         "pdl/ast.py",
         "pdl/core.py",
+        "pdl/utils.py",
+    ],
+}
+
+// C++ generator.
+python_binary_host {
+    name: "pdl_cxx_generator",
+    main: "generate_cxx_backend.py",
+    srcs: [
+        "generate_cxx_backend.py",
+        "pdl/ast.py",
+        "pdl/core.py",
+        "pdl/utils.py",
+    ],
+}
+
+// C++ test generator.
+python_binary_host {
+    name: "pdl_cxx_unittest_generator",
+    main: "generate_cxx_backend_tests.py",
+    srcs: [
+        "generate_cxx_backend_tests.py",
+        "pdl/ast.py",
+        "pdl/core.py",
+        "pdl/utils.py",
     ],
 }

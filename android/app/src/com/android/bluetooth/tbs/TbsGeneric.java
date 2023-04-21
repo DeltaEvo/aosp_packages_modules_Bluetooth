@@ -192,9 +192,6 @@ public class TbsGeneric {
             mTbsGatt.clearSilentModeFlag();
         }
 
-        // Android supports inband ringtone
-        mTbsGatt.setInbandRingtoneFlag();
-
         mReceiver = new Receiver();
         mTbsGatt.getContext().registerReceiver(mReceiver,
                 new IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION));
@@ -217,6 +214,34 @@ public class TbsGeneric {
         }
 
         mIsInitialized = false;
+    }
+
+    /**
+     * Set inband ringtone for the device.
+     * When set, notification will be sent to given device.
+     *
+     * @param device    device for which inband ringtone has been set
+     */
+    public synchronized void setInbandRingtoneSupport(BluetoothDevice device) {
+        if (mTbsGatt == null) {
+            Log.w(TAG, "setInbandRingtoneSupport, mTbsGatt is null");
+            return;
+        }
+        mTbsGatt.setInbandRingtoneFlag(device);
+    }
+
+    /**
+     * Clear inband ringtone for the device.
+     * When set, notification will be sent to given device.
+     *
+     * @param device    device for which inband ringtone has been cleared
+     */
+    public synchronized void clearInbandRingtoneSupport(BluetoothDevice device) {
+        if (mTbsGatt == null) {
+            Log.w(TAG, "setInbandRingtoneSupport, mTbsGatt is null");
+            return;
+        }
+        mTbsGatt.clearInbandRingtoneFlag(device);
     }
 
     private synchronized boolean isSilentModeEnabled() {
@@ -752,6 +777,16 @@ public class TbsGeneric {
         }
 
         @Override
+        public boolean isInbandRingtoneEnabled(BluetoothDevice device) {
+            if (!isLeAudioServiceAvailable()) {
+                Log.i(TAG, "LeAudio service not available");
+                return false;
+            }
+            int groupId = mLeAudioService.getGroupId(device);
+            return mLeAudioService.isInbandRingtoneEnabled(groupId);
+        }
+
+        @Override
         public void onCallControlPointRequest(BluetoothDevice device, int opcode, byte[] args) {
             synchronized (TbsGeneric.this) {
                 if (DBG) {
@@ -1112,5 +1147,24 @@ public class TbsGeneric {
         }
 
         return false;
+    }
+
+    /**
+     * Dump status of TBS service along with related objects
+     *
+     * @param sb string builder object that TBS module will be appending
+     */
+    public void dump(StringBuilder sb) {
+        sb.append("\tRinger Mode: " + mStoredRingerMode);
+
+        sb.append("\n\tCurrent call list:");
+        for (TbsCall call : mCurrentCallsList.values()) {
+            sb.append("\n\t\tFriendly name: " + call.getSafeFriendlyName());
+            sb.append("\n\t\t\tState: " + TbsCall.stateToString(call.getState()));
+            sb.append("\n\t\t\tURI: " +  call.getSafeUri());
+            sb.append("\n\t\t\tFlags: " + TbsCall.flagsToString(call.getFlags()));
+        }
+
+        mTbsGatt.dump(sb);
     }
 }

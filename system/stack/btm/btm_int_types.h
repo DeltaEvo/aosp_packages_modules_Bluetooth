@@ -39,7 +39,7 @@
 #define BTM_MAX_SCN_ 31  // PORT_MAX_RFC_PORTS packages/modules/Bluetooth/system/stack/include/rfcdefs.h
 
 constexpr size_t kMaxLogSize = 255;
-constexpr size_t kBtmLogHistoryBufferSize = 100;
+constexpr size_t kBtmLogHistoryBufferSize = 200;
 
 extern bluetooth::common::TimestamperInMilliseconds timestamper_in_milliseconds;
 
@@ -363,6 +363,7 @@ typedef struct tBTM_CB {
         kBtmLogHistoryBufferSize);
     CHECK(history_ != nullptr);
     history_->Push(std::string("Initialized btm history"));
+    btm_available_index = 1;
   }
 
   void Free() {
@@ -396,6 +397,7 @@ typedef struct tBTM_CB {
   friend bool BTM_TryAllocateSCN(uint8_t scn);
   friend bool BTM_FreeSCN(uint8_t scn);
   uint8_t btm_scn[BTM_MAX_SCN_];
+  uint8_t btm_available_index;
 } tBTM_CB;
 
 /* security action for L2CAP COC channels */

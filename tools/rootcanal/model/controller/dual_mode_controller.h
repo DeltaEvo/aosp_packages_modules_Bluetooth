@@ -30,7 +30,6 @@
 #include "link_layer_controller.h"
 #include "model/controller/vendor_commands/csr.h"
 #include "model/devices/device.h"
-#include "model/setup/async_manager.h"
 #ifndef ROOTCANAL_LMP
 #include "security_manager.h"
 #endif /* !ROOTCANAL_LMP */
@@ -51,9 +50,7 @@ using ::bluetooth::hci::CommandView;
 // the controller's default constructor. Be sure to name your method after the
 // corresponding Bluetooth command in the Core Specification with the prefix
 // "Hci" to distinguish it as a controller command.
-class DualModeController
-    : public Device,
-      public std::enable_shared_from_this<DualModeController> {
+class DualModeController : public Device {
   static constexpr uint16_t kSecurityManagerNumKeys = 15;
 
  public:
@@ -78,18 +75,6 @@ class DualModeController
   void HandleCommand(std::shared_ptr<std::vector<uint8_t>> command_packet);
   void HandleSco(std::shared_ptr<std::vector<uint8_t>> sco_packet);
   void HandleIso(std::shared_ptr<std::vector<uint8_t>> iso_packet);
-
-  // Set the callbacks for scheduling tasks.
-  void RegisterTaskScheduler(
-      std::function<AsyncTaskId(std::chrono::milliseconds, TaskCallback)>
-          task_scheduler);
-
-  void RegisterPeriodicTaskScheduler(
-      std::function<AsyncTaskId(std::chrono::milliseconds,
-                                std::chrono::milliseconds, TaskCallback)>
-          periodic_task_scheduler);
-
-  void RegisterTaskCancel(std::function<void(AsyncTaskId)> cancel);
 
   // Set the callbacks for sending packets to the HCI.
   void RegisterEventChannel(
@@ -417,6 +402,9 @@ class DualModeController
   // Status Parameters Commands
   // Bluetooth Core Specification Version 4.2 Volume 2 Part E 7.5
 
+  // 7.5.4
+  void ReadRssi(CommandView command);
+
   // 7.5.7
   void ReadEncryptionKeySize(CommandView command);
 
@@ -520,17 +508,15 @@ class DualModeController
   // 7.8.35
   void LeWriteSuggestedDefaultDataLength(CommandView command);
 
-  // 7.8.38
+  // 7.8.38 - 7.8.41
   void LeAddDeviceToResolvingList(CommandView command);
-
-  // 7.8.39
   void LeRemoveDeviceFromResolvingList(CommandView command);
-
-  // 7.8.40
   void LeClearResolvingList(CommandView command);
-
-  // 7.8.41
   void LeReadResolvingListSize(CommandView command);
+
+  // 7.8.42 - 7.8.43
+  void LeReadPeerResolvableAddress(CommandView command);
+  void LeReadLocalResolvableAddress(CommandView command);
 
   // 7.8.44
   void LeSetAddressResolutionEnable(CommandView command);
@@ -540,6 +526,10 @@ class DualModeController
 
   // 7.8.46
   void LeReadMaximumDataLength(CommandView command);
+
+  void LeReadPhy(CommandView command);
+  void LeSetDefaultPhy(CommandView command);
+  void LeSetPhy(CommandView command);
 
   // 7.8.52
   void LeSetAdvertisingSetRandomAddress(CommandView command);
@@ -567,6 +557,22 @@ class DualModeController
 
   // 7.8.60
   void LeClearAdvertisingSets(CommandView command);
+
+  // 7.8.61 - 7.8.63
+  void LeSetPeriodicAdvertisingParameters(CommandView command);
+  void LeSetPeriodicAdvertisingData(CommandView command);
+  void LeSetPeriodicAdvertisingEnable(CommandView command);
+
+  // 7.8.67 - 7.8.69
+  void LePeriodicAdvertisingCreateSync(CommandView command);
+  void LePeriodicAdvertisingCreateSyncCancel(CommandView command);
+  void LePeriodicAdvertisingTerminateSync(CommandView command);
+
+  // 7.8.70 - 7.8.73
+  void LeAddDeviceToPeriodicAdvertiserList(CommandView command);
+  void LeRemoveDeviceFromPeriodicAdvertiserList(CommandView command);
+  void LeClearPeriodicAdvertiserList(CommandView command);
+  void LeReadPeriodicAdvertiserListSize(CommandView command);
 
   // 7.8.64
   void LeSetExtendedScanParameters(CommandView command);

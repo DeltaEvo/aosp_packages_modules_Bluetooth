@@ -74,6 +74,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
@@ -93,6 +94,12 @@ public final class Utils {
     private static final String TAG = "BluetoothUtils";
     private static final int MICROS_PER_UNIT = 625;
     private static final String PTS_TEST_MODE_PROPERTY = "persist.bluetooth.pts";
+
+    private static final String ENABLE_DUAL_MODE_AUDIO =
+            "persist.bluetooth.enable_dual_mode_audio";
+    private static boolean sDualModeEnabled =
+            SystemProperties.getBoolean(ENABLE_DUAL_MODE_AUDIO, false);
+
     private static final String KEY_TEMP_ALLOW_LIST_DURATION_MS = "temp_allow_list_duration_ms";
     private static final long DEFAULT_TEMP_ALLOW_LIST_DURATION_MS = 20_000;
 
@@ -109,6 +116,7 @@ public final class Utils {
      */
     public static final char PAUSE = ',';
     public static final char WAIT = ';';
+    public static final String PAIRING_UI_PROPERTY = "bluetooth.pairing_ui_package.name";
 
     private static boolean isPause(char c) {
         return c == 'p' || c == 'P';
@@ -116,6 +124,37 @@ public final class Utils {
 
     private static boolean isToneWait(char c) {
         return c == 'w' || c == 'W';
+    }
+
+    /**
+     * Check if dual mode audio is enabled. This is set via the system property
+     * persist.bluetooth.enable_dual_mode_audio.
+     * <p>
+     * When set to {@code false}, we will not connect A2DP and HFP on a dual mode (BR/EDR + BLE)
+     * device. We will only attempt to use BLE Audio in this scenario.
+     * <p>
+     * When set to {@code true}, we will connect all the supported audio profiles
+     * (A2DP, HFP, and LE Audio) at the same time. In this state, we will respect calls to
+     * profile-specific APIs (e.g. if a SCO API is invoked, we will route audio over HFP). If no
+     * profile-specific API is invoked to route audio (e.g. Telecom routed phone calls, media,
+     * game audio, etc.), then audio will be routed in accordance with the preferred audio profiles
+     * for the remote device. You can get the preferred audio profiles for a remote device by
+     * calling {@link BluetoothAdapter#getPreferredAudioProfiles(BluetoothDevice)}.
+     *
+     * @return true if dual mode audio is enabled, false otherwise
+     */
+    public static boolean isDualModeAudioEnabled() {
+        Log.i(TAG, "Dual mode enable state is: " + sDualModeEnabled);
+        return sDualModeEnabled;
+    }
+
+    /**
+     * Only exposed for testing, do not invoke this method outside of tests.
+     * @param enabled true if the dual mode state is enabled, false otherwise
+     */
+    public static void setDualModeAudioStateForTesting(boolean enabled) {
+        Log.i(TAG, "Updating dual mode audio state for testing to: " + enabled);
+        sDualModeEnabled = enabled;
     }
 
     public static @Nullable String getName(@Nullable BluetoothDevice device) {
@@ -142,6 +181,14 @@ public final class Utils {
 
         return String.format("%02X:%02X:%02X:%02X:%02X:%02X", address[0], address[1], address[2],
                 address[3], address[4], address[5]);
+    }
+
+    public static String getRedactedAddressStringFromByte(byte[] address) {
+        if (address == null || address.length != BD_ADDR_LEN) {
+            return null;
+        }
+
+        return String.format("XX:XX:XX:XX:%02X:%02X", address[4], address[5]);
     }
 
     public static byte[] getByteAddress(BluetoothDevice device) {
@@ -1120,5 +1167,27 @@ public final class Utils {
             if (Objects.equals(element, value)) return true;
         }
         return false;
+    }
+
+    /**
+     * CCC descriptor short integer value to string.
+     * @param cccValue the short value of CCC descriptor
+     * @return String value representing CCC state
+     */
+    public static String cccIntToStr(Short cccValue) {
+        String string = "";
+
+        if (cccValue == 0) {
+            return string += "NO SUBSCRIPTION";
+        }
+
+        if (BigInteger.valueOf(cccValue).testBit(0)) {
+            string += "NOTIFICATION";
+        }
+        if (BigInteger.valueOf(cccValue).testBit(1)) {
+            string += string.isEmpty() ? "INDICATION" : "|INDICATION";
+        }
+
+        return string;
     }
 }

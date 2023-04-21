@@ -95,6 +95,8 @@ typedef struct hid_kb_list {
 btif_hh_cb_t btif_hh_cb;
 
 static bthh_callbacks_t* bt_hh_callbacks = NULL;
+static bthh_profile_enable_t bt_hh_enable_type = {.hidp_enabled = true,
+                                                  .hogp_enabled = true};
 
 /* List of HID keyboards for which the NUMLOCK state needs to be
  * turned ON by default. Add devices to this list to apply the
@@ -704,7 +706,8 @@ void btif_hh_service_registration(bool enable) {
       btif_hd_service_registration();
     }
   } else if (enable) {
-    BTA_HhEnable(bte_hh_evt);
+    BTA_HhEnable(bte_hh_evt, bt_hh_enable_type.hidp_enabled,
+                 bt_hh_enable_type.hogp_enabled);
   } else {
     btif_hh_cb.service_dereg_active = TRUE;
     BTA_HhDisable();
@@ -772,6 +775,10 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
       break;
 
     case BTA_HH_DISABLE_EVT:
+      if (btif_hh_cb.status == BTIF_HH_DISABLING) {
+        bt_hh_callbacks = NULL;
+      }
+
       btif_hh_cb.status = BTIF_HH_DISABLED;
       if (btif_hh_cb.service_dereg_active) {
         BTIF_TRACE_DEBUG("BTA_HH_DISABLE_EVT: enabling HID Device service");
@@ -818,7 +825,6 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
           BTIF_TRACE_WARNING(
               "BTA_HH_OPEN_EVT: Error, failed to find the uhid driver...");
           p_dev->bd_addr = p_data->conn.bda;
-          p_dev->le_hid = p_data->conn.le_hid;
           // remove the connection  and then try again to reconnect from the
           // mouse side to recover
           btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_DISCONNECTED;
@@ -829,7 +835,6 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
               "... %d",
               p_data->conn.handle);
           p_dev->bd_addr = p_data->conn.bda;
-          p_dev->le_hid = p_data->conn.le_hid;
           btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_CONNECTED;
           // Send set_idle if the peer_device is a keyboard
           if (check_cod(&p_data->conn.bda, COD_HID_KEYBOARD) ||
@@ -892,22 +897,23 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
       break;
 
     case BTA_HH_GET_RPT_EVT: {
-      BT_HDR* hdr = p_data->hs_data.rsp_data.p_rpt_data;
-      uint8_t* data = NULL;
-      uint16_t len = 0;
-
       BTIF_TRACE_DEBUG("BTA_HH_GET_RPT_EVT: status = %d, handle = %d",
                        p_data->hs_data.status, p_data->hs_data.handle);
       p_dev = btif_hh_find_connected_dev_by_handle(p_data->hs_data.handle);
       if (p_dev) {
-        /* p_rpt_data is NULL in HANDSHAKE response case */
-        if (hdr) {
-          data = (uint8_t*)(hdr + 1) + hdr->offset;
-          len = hdr->len;
+        BT_HDR* hdr = p_data->hs_data.rsp_data.p_rpt_data;
+
+        if (hdr) { /* Get report response */
+          uint8_t* data = (uint8_t*)(hdr + 1) + hdr->offset;
+          uint16_t len = hdr->len;
           HAL_CBACK(bt_hh_callbacks, get_report_cb,
                     (RawAddress*)&(p_dev->bd_addr),
                     (bthh_status_t)p_data->hs_data.status, data, len);
-        } else {
+
+          bta_hh_co_get_rpt_rsp(p_dev->dev_handle,
+                                (tBTA_HH_STATUS)p_data->hs_data.status, data,
+                                len);
+        } else { /* Handshake */
           HAL_CBACK(bt_hh_callbacks, handshake_cb,
                     (RawAddress*)&(p_dev->bd_addr),
                     (bthh_status_t)p_data->hs_data.status);
@@ -927,17 +933,7 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
         HAL_CBACK(bt_hh_callbacks, handshake_cb, (RawAddress*)&(p_dev->bd_addr),
                   (bthh_status_t)p_data->hs_data.status);
 
-#if ENABLE_UHID_SET_REPORT
-        if (p_dev->le_hid && p_dev->set_rpt_id_queue) {
-          /* There is no handshake response for HOGP. Conclude the
-           * UHID_SET_REPORT procedure here. */
-          uint32_t* set_rpt_id =
-              (uint32_t*)fixed_queue_try_peek_first(p_dev->set_rpt_id_queue);
-          if (set_rpt_id) {
-            bta_hh_co_set_rpt_rsp(p_dev->dev_handle, p_data->dev_status.status);
-          }
-        }
-#endif  // ENABLE_UHID_SET_REPORT
+        bta_hh_co_set_rpt_rsp(p_dev->dev_handle, p_data->dev_status.status);
       }
       break;
 
@@ -1803,7 +1799,8 @@ static void cleanup(void) {
   BTIF_TRACE_EVENT("%s", __func__);
   btif_hh_device_t* p_dev;
   int i;
-  if (btif_hh_cb.status == BTIF_HH_DISABLED) {
+  if (btif_hh_cb.status == BTIF_HH_DISABLED ||
+      btif_hh_cb.status == BTIF_HH_DISABLING) {
     BTIF_TRACE_WARNING("%s: HH disabling or disabled already, status = %d",
                        __func__, btif_hh_cb.status);
     return;
@@ -1814,7 +1811,6 @@ static void cleanup(void) {
      */
     btif_hh_cb.service_dereg_active = FALSE;
     btif_disable_service(BTA_HID_SERVICE_ID);
-    bt_hh_callbacks = NULL;
   }
   for (i = 0; i < BTIF_HH_MAX_HID; i++) {
     p_dev = &btif_hh_cb.devices[i];
@@ -1828,6 +1824,21 @@ static void cleanup(void) {
       p_dev->hh_poll_thread_id = -1;
     }
   }
+}
+
+/*******************************************************************************
+ *
+ * Function         configure_enabled_profiles
+ *
+ * Description      Configure HIDP or HOGP enablement. Require to cleanup and
+ *re-init to take effect.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+static void configure_enabled_profiles(bool enable_hidp, bool enable_hogp) {
+  bt_hh_enable_type.hidp_enabled = enable_hidp;
+  bt_hh_enable_type.hogp_enabled = enable_hogp;
 }
 
 static const bthh_interface_t bthhInterface = {
@@ -1846,6 +1857,7 @@ static const bthh_interface_t bthhInterface = {
     set_report,
     send_data,
     cleanup,
+    configure_enabled_profiles,
 };
 
 /*******************************************************************************
@@ -1860,7 +1872,8 @@ static const bthh_interface_t bthhInterface = {
 bt_status_t btif_hh_execute_service(bool b_enable) {
   if (b_enable) {
     /* Enable and register with BTA-HH */
-    BTA_HhEnable(bte_hh_evt);
+    BTA_HhEnable(bte_hh_evt, bt_hh_enable_type.hidp_enabled,
+                 bt_hh_enable_type.hogp_enabled);
   } else {
     /* Disable HH */
     BTA_HhDisable();

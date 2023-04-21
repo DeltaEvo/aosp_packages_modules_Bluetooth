@@ -299,11 +299,33 @@ pub enum BtScanMode {
     None_,
     Connectable,
     ConnectableDiscoverable,
+    ConnectableLimitedDiscoverable,
 }
 
 impl From<bindings::bt_scan_mode_t> for BtScanMode {
     fn from(item: bindings::bt_scan_mode_t) -> Self {
         BtScanMode::from_u32(item).unwrap_or(BtScanMode::None_)
+    }
+}
+
+#[derive(Clone, Debug, FromPrimitive, ToPrimitive, PartialEq, PartialOrd)]
+#[repr(u32)]
+pub enum BtDiscMode {
+    // reference to system/stack/btm/neighbor_inquiry.h
+    NonDiscoverable = 0,
+    LimitedDiscoverable = 1,
+    GeneralDiscoverable = 2,
+}
+
+impl From<u32> for BtDiscMode {
+    fn from(num: u32) -> Self {
+        BtDiscMode::from_u32(num).unwrap_or(BtDiscMode::NonDiscoverable)
+    }
+}
+
+impl Into<u32> for BtDiscMode {
+    fn into(self) -> u32 {
+        self.to_u32().unwrap_or(0)
     }
 }
 
@@ -371,6 +393,12 @@ impl TryFrom<Vec<u8>> for Uuid {
 impl From<[u8; 16]> for Uuid {
     fn from(value: [u8; 16]) -> Self {
         Self { uu: value }
+    }
+}
+
+impl From<Uuid> for [u8; 16] {
+    fn from(uuid: Uuid) -> Self {
+        uuid.uu
     }
 }
 
@@ -705,6 +733,7 @@ pub enum SupportedProfiles {
     Sdp,
     Socket,
     HfClient,
+    AvrcpCtrl,
 }
 
 impl From<SupportedProfiles> for Vec<u8> {
@@ -717,6 +746,7 @@ impl From<SupportedProfiles> for Vec<u8> {
             SupportedProfiles::Sdp => "sdp",
             SupportedProfiles::Socket => "socket",
             SupportedProfiles::HfClient => "handsfree_client",
+            SupportedProfiles::AvrcpCtrl => "avrcp_ctrl",
         }
         .bytes()
         .chain("\0".bytes())
@@ -816,13 +846,17 @@ impl RawAddress {
     pub fn to_byte_arr(&self) -> [u8; 6] {
         self.address.clone()
     }
+
+    pub fn empty() -> RawAddress {
+        unsafe { bindings::RawAddress_kEmpty }
+    }
 }
 
 /// Address that is safe to display in logs.
 pub struct DisplayAddress<'a>(pub &'a RawAddress);
 impl<'a> Display for DisplayAddress<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "xx:xx:xx:xx:{:2X}:{:2X}", &self.0.address[4], &self.0.address[5])
+        write!(f, "xx:xx:xx:xx:{:02X}:{:02X}", &self.0.address[4], &self.0.address[5])
     }
 }
 
@@ -977,6 +1011,13 @@ macro_rules! mutcxxcall {
     };
 }
 
+#[no_mangle]
+extern "C" fn wake_lock_noop(_0: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int {
+    // The wakelock mechanism is not available on this platform,
+    // so just returning success to avoid error log.
+    0
+}
+
 /// Rust wrapper around `bt_interface_t`.
 pub struct BluetoothInterface {
     internal: RawInterfaceWrapper,
@@ -986,6 +1027,7 @@ pub struct BluetoothInterface {
 
     // Need to take ownership of callbacks so it doesn't get freed after init
     callbacks: Option<Box<bindings::bt_callbacks_t>>,
+    os_callouts: Option<Box<bindings::bt_os_callouts_t>>,
 }
 
 impl BluetoothInterface {
@@ -1015,7 +1057,7 @@ impl BluetoothInterface {
         // Fill up callbacks struct to pass to init function (will be copied so
         // no need to worry about ownership)
         let mut callbacks = Box::new(bindings::bt_callbacks_t {
-            size: 16 * 8,
+            size: std::mem::size_of::<bindings::bt_callbacks_t>(),
             adapter_state_changed_cb: Some(adapter_state_cb),
             adapter_properties_cb: Some(adapter_properties_cb),
             remote_device_properties_cb: Some(remote_device_properties_cb),
@@ -1055,6 +1097,21 @@ impl BluetoothInterface {
 
         self.is_init = init == 0;
         self.callbacks = Some(callbacks);
+
+        if self.is_init {
+            // Fill up OSI function table and register it with BTIF.
+            // TODO(b/271931441) - pass a NoOpOsCallouts structure from
+            // gd/rust/linux/stack.
+            let mut callouts = Box::new(bindings::bt_os_callouts_t {
+                size: std::mem::size_of::<bindings::bt_os_callouts_t>(),
+                set_wake_alarm: None, // Not used
+                acquire_wake_lock: Some(wake_lock_noop),
+                release_wake_lock: Some(wake_lock_noop),
+            });
+            let callouts_ptr = LTCheckedPtrMut::from(&mut callouts);
+            ccall!(self, set_os_callouts, callouts_ptr.into());
+            self.os_callouts = Some(callouts);
+        }
 
         return self.is_init;
     }
@@ -1194,6 +1251,10 @@ impl BluetoothInterface {
         ccall!(self, get_wbs_supported)
     }
 
+    pub fn get_swb_supported(&self) -> bool {
+        ccall!(self, get_swb_supported)
+    }
+
     pub fn le_rand(&self) -> i32 {
         ccall!(self, le_rand)
     }
@@ -1248,6 +1309,7 @@ pub fn get_btinterface() -> Option<BluetoothInterface> {
                 internal: RawInterfaceWrapper { raw: ifptr },
                 is_init: false,
                 callbacks: None,
+                os_callouts: None,
             });
         }
     }
@@ -1340,5 +1402,25 @@ mod tests {
                 _ => false,
             });
         }
+    }
+
+    #[test]
+    fn test_display_address() {
+        assert_eq!(
+            format!("{}", DisplayAddress(&RawAddress::from_string("00:00:00:00:00:00").unwrap())),
+            String::from("xx:xx:xx:xx:00:00")
+        );
+        assert_eq!(
+            format!("{}", DisplayAddress(&RawAddress::from_string("1a:2b:1a:2b:1a:2b").unwrap())),
+            String::from("xx:xx:xx:xx:1A:2B")
+        );
+        assert_eq!(
+            format!("{}", DisplayAddress(&RawAddress::from_string("3C:4D:3C:4D:3C:4D").unwrap())),
+            String::from("xx:xx:xx:xx:3C:4D")
+        );
+        assert_eq!(
+            format!("{}", DisplayAddress(&RawAddress::from_string("11:35:11:35:11:35").unwrap())),
+            String::from("xx:xx:xx:xx:11:35")
+        );
     }
 }

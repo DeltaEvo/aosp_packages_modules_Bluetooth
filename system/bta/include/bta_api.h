@@ -79,8 +79,6 @@ inline std::string bta_status_text(const tBTA_STATUS& status) {
 
 #undef CASE_RETURN_TEXT
 
-using tSDP_DISC_WAIT = int;
-
 /*
  * Service ID
  */
@@ -140,6 +138,8 @@ typedef uint16_t tBTA_SEC;
 #define BTA_DM_GENERAL_DISC                         \
   BTM_GENERAL_DISCOVERABLE /* General discoverable. \
                               */
+#define BTA_DM_LIMITED_DISC BTM_LIMITED_DISCOVERABLE
+
 typedef uint16_t
     tBTA_DM_DISC; /* this discoverability mode is a bit mask among BR mode and
                      LE mode */
@@ -451,17 +451,40 @@ typedef void(tBTA_DM_SEC_CBACK)(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data);
 #define BTA_DM_BLE_PF_FILT_LOGIC_OR 0
 
 /* Search callback events */
-#define BTA_DM_INQ_RES_EVT 0  /* Inquiry result for a peer device. */
-#define BTA_DM_INQ_CMPL_EVT 1 /* Inquiry complete. */
-#define BTA_DM_DISC_RES_EVT 2 /* Discovery result for a peer device. */
-#define BTA_DM_GATT_OVER_LE_RES_EVT \
-  3 /* GATT services over LE transport discovered */
-#define BTA_DM_DISC_CMPL_EVT 4          /* Discovery complete. */
-#define BTA_DM_SEARCH_CANCEL_CMPL_EVT 6 /* Search cancelled */
-#define BTA_DM_DID_RES_EVT 7            /* Vendor/Product ID search result */
-#define BTA_DM_GATT_OVER_SDP_RES_EVT 8  /* GATT services over SDP discovered */
+typedef enum : uint8_t {
+  BTA_DM_INQ_RES_EVT = 0,  /* Inquiry result for a peer device. */
+  BTA_DM_INQ_CMPL_EVT = 1, /* Inquiry complete. */
+  BTA_DM_DISC_RES_EVT = 2, /* Discovery result for a peer device. */
+  BTA_DM_GATT_OVER_LE_RES_EVT =
+      3,                    /* GATT services over LE transport discovered */
+  BTA_DM_DISC_CMPL_EVT = 4, /* Discovery complete. */
+  BTA_DM_SEARCH_CANCEL_CMPL_EVT = 5, /* Search cancelled */
+  BTA_DM_DID_RES_EVT = 6,            /* Vendor/Product ID search result */
+  BTA_DM_GATT_OVER_SDP_RES_EVT = 7,  /* GATT services over SDP discovered */
+} tBTA_DM_SEARCH_EVT;
 
-typedef uint8_t tBTA_DM_SEARCH_EVT;
+#ifndef CASE_RETURN_TEXT
+#define CASE_RETURN_TEXT(code) \
+  case code:                   \
+    return #code
+#endif
+
+inline std::string bta_dm_search_evt_text(const tBTA_DM_SEARCH_EVT& event) {
+  switch (event) {
+    CASE_RETURN_TEXT(BTA_DM_INQ_RES_EVT);
+    CASE_RETURN_TEXT(BTA_DM_INQ_CMPL_EVT);
+    CASE_RETURN_TEXT(BTA_DM_DISC_RES_EVT);
+    CASE_RETURN_TEXT(BTA_DM_GATT_OVER_LE_RES_EVT);
+    CASE_RETURN_TEXT(BTA_DM_DISC_CMPL_EVT);
+    CASE_RETURN_TEXT(BTA_DM_SEARCH_CANCEL_CMPL_EVT);
+    CASE_RETURN_TEXT(BTA_DM_DID_RES_EVT);
+    CASE_RETURN_TEXT(BTA_DM_GATT_OVER_SDP_RES_EVT);
+    default:
+      return base::StringPrintf("UNKNOWN[%hhu]", event);
+  }
+}
+
+#undef CASE_RETURN_TEXT
 
 /* Structure associated with BTA_DM_INQ_RES_EVT */
 typedef struct {
@@ -1312,6 +1335,7 @@ extern void BTA_DmSetEventFilterConnectionSetupAllDevices();
  *
  *******************************************************************************/
 extern void BTA_DmAllowWakeByHid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
 
 /*******************************************************************************
@@ -1323,7 +1347,8 @@ extern void BTA_DmAllowWakeByHid(
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmRestoreFilterAcceptList();
+extern void BTA_DmRestoreFilterAcceptList(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 
 /*******************************************************************************
  *

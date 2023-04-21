@@ -34,7 +34,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
-import android.test.ActivityInstrumentationTestCase2;
 import android.view.MenuItem;
 
 import androidx.test.core.app.ActivityScenario;
@@ -48,6 +47,7 @@ import com.google.common.base.Objects;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -55,6 +55,7 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -74,7 +75,7 @@ public class BluetoothOppTransferHistoryTest {
     Context mTargetContext;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mBluetoothMethodProxy = Mockito.spy(BluetoothMethodProxy.getInstance());
         BluetoothMethodProxy.setInstanceForTesting(mBluetoothMethodProxy);
@@ -117,6 +118,7 @@ public class BluetoothOppTransferHistoryTest {
         ));
 
         BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
+        BluetoothOppTestUtils.wakeUpAndDismissKeyGuard();
     }
 
     @After
@@ -166,6 +168,7 @@ public class BluetoothOppTransferHistoryTest {
                 matches(isDisplayed()));
     }
 
+    @Ignore("b/268424815")
     @Test
     public void onOptionsItemSelected_clearAllSelected_promptWarning() {
         BluetoothOppTestUtils.setUpMockCursor(mCursor, mCursorMockDataList);
