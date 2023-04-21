@@ -1113,17 +1113,12 @@ class StateMachineTest : public Test {
 
             // Once we did the 'ReceiverStartReady' the server goes to
             // Streaming, when in Source role
-            auto meta_len = *ase_p++;
-            auto num_handled_bytes = ase_p - value.data();
-            ase_p += num_handled_bytes;
-
             const auto& ase = &(*it);
-            client_parser::ascs::ase_transient_state_params enable_params = {
-                .metadata = std::vector<uint8_t>(
-                    value.begin() + num_handled_bytes,
-                    value.begin() + num_handled_bytes + meta_len)};
-            InjectAseStateNotification(
-                ase, device, group, ascs::kAseStateStreaming, &enable_params);
+            client_parser::ascs::ase_transient_state_params streaming_params = {
+                .metadata = ase->metadata};
+            InjectAseStateNotification(ase, device, group,
+                                       ascs::kAseStateStreaming,
+                                       &streaming_params);
           }
         };
   }
@@ -3194,15 +3189,6 @@ TEST_F(StateMachineTest, testStreamConfigurationAdspDownMix) {
           group->stream_conf.source_offloader_streams_target_allocation.size()),
       2);
 
-  ASSERT_EQ(
-      static_cast<int>(
-          group->stream_conf.sink_offloader_streams_current_allocation.size()),
-      2);
-  ASSERT_EQ(
-      static_cast<int>(group->stream_conf
-                           .source_offloader_streams_current_allocation.size()),
-      2);
-
   // Check if group has transitioned to a proper state
   ASSERT_EQ(group->GetState(),
             types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
@@ -3210,7 +3196,7 @@ TEST_F(StateMachineTest, testStreamConfigurationAdspDownMix) {
   uint32_t allocation = 0;
   for (const auto& s :
        group->stream_conf.sink_offloader_streams_target_allocation) {
-    allocation |= s.second;
+    allocation |= s.audio_channel_allocation;
     ASSERT_FALSE(allocation == 0);
   }
   ASSERT_TRUE(allocation == codec_spec_conf::kLeAudioLocationStereo);
@@ -3218,21 +3204,23 @@ TEST_F(StateMachineTest, testStreamConfigurationAdspDownMix) {
   allocation = 0;
   for (const auto& s :
        group->stream_conf.source_offloader_streams_target_allocation) {
-    allocation |= s.second;
+    allocation |= s.audio_channel_allocation;
     ASSERT_FALSE(allocation == 0);
   }
   ASSERT_TRUE(allocation == codec_spec_conf::kLeAudioLocationStereo);
 
   for (const auto& s :
-       group->stream_conf.sink_offloader_streams_current_allocation) {
-    ASSERT_TRUE((s.second == 0) ||
-                (s.second == codec_spec_conf::kLeAudioLocationStereo));
+       group->stream_conf.sink_offloader_streams_target_allocation) {
+    ASSERT_TRUE((s.audio_channel_allocation != 0) &&
+                (s.audio_channel_allocation !=
+                 codec_spec_conf::kLeAudioLocationStereo));
   }
 
   for (const auto& s :
-       group->stream_conf.source_offloader_streams_current_allocation) {
-    ASSERT_TRUE((s.second == 0) ||
-                (s.second == codec_spec_conf::kLeAudioLocationStereo));
+       group->stream_conf.source_offloader_streams_target_allocation) {
+    ASSERT_TRUE((s.audio_channel_allocation != 0) &&
+                (s.audio_channel_allocation !=
+                 codec_spec_conf::kLeAudioLocationStereo));
   }
 }
 

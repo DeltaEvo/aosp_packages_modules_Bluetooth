@@ -47,7 +47,6 @@ import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceProfile;
 import android.bluetooth.BluetoothAdapter.ActiveDeviceUse;
-import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothFrameworkInitializer;
 import android.bluetooth.BluetoothMap;
@@ -485,10 +484,8 @@ public class AdapterService extends Service {
                             && mRegisteredProfiles.size() == mRunningProfiles.size()) {
                         mAdapterProperties.onBluetoothReady();
                         updateUuids();
-                        setBluetoothClassFromConfig();
                         initProfileServices();
                         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_LOCAL_IO_CAPS);
-                        getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_LOCAL_IO_CAPS_BLE);
                         getAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_DYNAMIC_AUDIO_BUFFER);
                         mAdapterStateMachine.sendMessage(AdapterState.BREDR_STARTED);
                         mBtCompanionManager.loadCompanionInfo();
@@ -860,21 +857,6 @@ public class AdapterService extends Service {
         }
     }
 
-    /**
-     * Sets the Bluetooth CoD value of the local adapter if there exists a config value for it.
-     */
-    void setBluetoothClassFromConfig() {
-        int bluetoothClassConfig = retrieveBluetoothClassConfig();
-        if (bluetoothClassConfig != 0) {
-            mAdapterProperties.setBluetoothClass(new BluetoothClass(bluetoothClassConfig));
-        }
-    }
-
-    private int retrieveBluetoothClassConfig() {
-        return Settings.Global.getInt(
-                getContentResolver(), Settings.Global.BLUETOOTH_CLASS_OF_DEVICE, 0);
-    }
-
     void startProfileServices() {
         debugLog("startCoreServices()");
         Class[] supportedProfileServices = Config.getSupportedProfiles();
@@ -885,7 +867,6 @@ public class AdapterService extends Service {
                 .equals(supportedProfileServices[0].getSimpleName())) {
             mAdapterProperties.onBluetoothReady();
             updateUuids();
-            setBluetoothClassFromConfig();
             mAdapterStateMachine.sendMessage(AdapterState.BREDR_STARTED);
         } else {
             setAllProfileServiceStates(supportedProfileServices, BluetoothAdapter.STATE_ON);
@@ -2153,61 +2134,6 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public void getBluetoothClass(AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                receiver.send(getBluetoothClass(source));
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-        private BluetoothClass getBluetoothClass(AttributionSource attributionSource) {
-            AdapterService service = getService();
-            if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "getBluetoothClass")
-                    || !Utils.checkConnectPermissionForDataDelivery(
-                            service, attributionSource, "AdapterSource getBluetoothClass")) {
-                return null;
-            }
-
-            return service.mAdapterProperties.getBluetoothClass();
-        }
-
-        @Override
-        public void setBluetoothClass(BluetoothClass bluetoothClass, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                receiver.send(setBluetoothClass(bluetoothClass, source));
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-        @RequiresPermission(allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-        })
-        private boolean setBluetoothClass(BluetoothClass bluetoothClass, AttributionSource source) {
-            AdapterService service = getService();
-            if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "setBluetoothClass")
-                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
-                return false;
-            }
-
-            enforceBluetoothPrivilegedPermission(service);
-
-            if (!service.mAdapterProperties.setBluetoothClass(bluetoothClass)) {
-              return false;
-            }
-
-            return Settings.Global.putInt(
-                    service.getContentResolver(),
-                    Settings.Global.BLUETOOTH_CLASS_OF_DEVICE,
-                    bluetoothClass.getClassOfDevice());
-        }
-
-        @Override
         public void getIoCapability(AttributionSource source, SynchronousResultReceiver receiver) {
             try {
                 receiver.send(getIoCapability(source));
@@ -2256,58 +2182,6 @@ public class AdapterService extends Service {
             }
 
             return service.mAdapterProperties.setIoCapability(capability);
-        }
-
-        @Override
-        public void getLeIoCapability(AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                receiver.send(getLeIoCapability(source));
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-        private int getLeIoCapability(AttributionSource attributionSource) {
-            AdapterService service = getService();
-            if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "getLeIoCapability")
-                    || !Utils.checkConnectPermissionForDataDelivery(
-                            service, attributionSource, "AdapterService getLeIoCapability")) {
-                return BluetoothAdapter.IO_CAPABILITY_UNKNOWN;
-            }
-
-            return service.mAdapterProperties.getLeIoCapability();
-        }
-
-        @Override
-        public void setLeIoCapability(int capability, AttributionSource source,
-                SynchronousResultReceiver receiver) {
-            try {
-                receiver.send(setLeIoCapability(capability, source));
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-        @RequiresPermission(allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-        })
-        private boolean setLeIoCapability(int capability, AttributionSource source) {
-            AdapterService service = getService();
-            if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "setLeIoCapability")
-                    || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
-                return false;
-            }
-
-            enforceBluetoothPrivilegedPermission(service);
-
-            if (!isValidIoCapability(capability)) {
-              return false;
-            }
-
-            return service.mAdapterProperties.setLeIoCapability(capability);
         }
 
         @Override
@@ -4959,6 +4833,21 @@ public class AdapterService extends Service {
                 return dbResult;
             }
 
+            int outputOnlyPreference = strippedPreferences.getInt(
+                    BluetoothAdapter.AUDIO_MODE_OUTPUT_ONLY);
+            if (outputOnlyPreference == 0) {
+                outputOnlyPreference = previousPreferences.getInt(
+                        BluetoothAdapter.AUDIO_MODE_OUTPUT_ONLY);
+            }
+            int duplexPreference = strippedPreferences.getInt(BluetoothAdapter.AUDIO_MODE_DUPLEX);
+            if (duplexPreference == 0) {
+                duplexPreference = previousPreferences.getInt(BluetoothAdapter.AUDIO_MODE_DUPLEX);
+            }
+
+            mLeAudioService.sendAudioProfilePreferencesToNative(groupId,
+                    outputOnlyPreference == BluetoothProfile.LE_AUDIO,
+                    duplexPreference == BluetoothProfile.LE_AUDIO);
+
             /* Populates the HashMap to hold requests on the groupId. We will update
             numRequestsToAudioFramework after we make requests to the audio framework */
             PendingAudioProfilePreferenceRequest holdRequest =
@@ -5607,7 +5496,11 @@ public class AdapterService extends Service {
                 || mHearingAidService.getConnectionPolicy(device)
                 == BluetoothProfile.CONNECTION_POLICY_ALLOWED)) {
             Log.i(TAG, "setActiveDevice: Setting active Hearing Aid " + device);
-            mHearingAidService.setActiveDevice(device);
+            if (device == null) {
+                mHearingAidService.removeActiveDevice(false);
+            } else {
+                mHearingAidService.setActiveDevice(device);
+            }
         }
 
         if (setHeadset && hfpSupported) {

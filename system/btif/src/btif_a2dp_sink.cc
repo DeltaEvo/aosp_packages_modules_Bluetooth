@@ -682,8 +682,11 @@ uint8_t btif_a2dp_sink_enqueue_buf(BT_HDR* p_pkt) {
   fixed_queue_enqueue(btif_a2dp_sink_cb.rx_audio_queue, p_msg);
   if (fixed_queue_length(btif_a2dp_sink_cb.rx_audio_queue) ==
       MAX_A2DP_DELAYED_START_FRAME_COUNT) {
-    BTIF_TRACE_DEBUG("%s: Initiate decoding", __func__);
-    btif_a2dp_sink_audio_handle_start_decoding();
+    BTIF_TRACE_DEBUG("%s: Initiate decoding. Current focus state:%d", __func__,
+                     btif_a2dp_sink_cb.rx_focus_state);
+    if (btif_a2dp_sink_cb.rx_focus_state == BTIF_A2DP_SINK_FOCUS_GRANTED) {
+      btif_a2dp_sink_audio_handle_start_decoding();
+    }
   }
 
   return fixed_queue_length(btif_a2dp_sink_cb.rx_audio_queue);
@@ -735,7 +738,7 @@ static void btif_a2dp_sink_set_focus_state_event(
 }
 
 void btif_a2dp_sink_set_audio_track_gain(float gain) {
-  LOG_INFO("%s: set gain to %f", __func__, gain);
+  LOG_DEBUG("%s: set gain to %f", __func__, gain);
   LockGuard lock(g_mutex);
 
 #ifndef OS_GENERIC

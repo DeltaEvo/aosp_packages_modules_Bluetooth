@@ -1,5 +1,5 @@
-android_test {
-    name: "BumbleBluetoothTests",
+android_test_helper_app {
+    name: "BumbleBluetoothTestsApp",
     defaults: ["framework-bluetooth-tests-defaults"],
 
     min_sdk_version: "current",
@@ -24,9 +24,27 @@ android_test {
     // Include all test java files.
     srcs: ["src/**/*.java"],
 
-    data:[":bumble_pandora_server"],
-
     platform_apis: true,
+    test_suites: [
+        "device-tests",
+    ],
+}
+
+// This empty test host is needed for building required host binary
+// "bumble_pandora_server" and include it in test zip
+java_test_host {
+    name: "BumbleBluetoothTests",
+
+    libs: [
+        "tradefed",
+    ],
+
+    data: [
+        ":BumbleBluetoothTestsApp"
+    ],
+
+    required: ["bumble_pandora_server"],
+
     test_suites: [
         "device-tests",
     ],

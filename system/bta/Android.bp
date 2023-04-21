@@ -136,6 +136,13 @@ cc_library_static {
     generated_headers: [
         "LeAudioSetConfigSchemas_h",
     ],
+    target: {
+        android: {
+            whole_static_libs: [
+                "libPlatformProperties",
+            ],
+        },
+    },
     host_supported: true,
     min_sdk_version: "Tiramisu",
 }
@@ -227,6 +234,42 @@ cc_test {
         ":audio_set_configurations_json",
         ":audio_set_scenarios_bfbs",
         ":audio_set_scenarios_json",
+    ],
+}
+
+// bta unit tests for target
+cc_test {
+    name: "net_test_bta_security",
+    defaults: [
+        "fluoride_bta_defaults",
+        "mts_defaults",
+    ],
+    test_suites: ["device-tests"],
+    srcs: [
+        ":TestCommonLogMsg",
+        ":TestCommonMockFunctions",
+        ":TestMockBtif",
+        ":TestMockDevice",
+        ":TestMockStack",
+        "test/bta_hf_client_security_test.cc",
+    ],
+    shared_libs: [
+        "android.hardware.bluetooth.audio@2.0",
+        "android.hardware.bluetooth.audio@2.1",
+        "libcrypto",
+        "liblog",
+        "libprotobuf-cpp-lite",
+    ],
+    static_libs: [
+        "crypto_toolbox_for_tests",
+        "libbluetooth-types",
+        "libbt-audio-hal-interface",
+        "libbt-bta",
+        "libbt-bta-core",
+        "libbt-common",
+        "libbt-protos-lite",
+        "libbtcore",
+        "libosi",
     ],
 }
 
@@ -560,6 +603,9 @@ cc_test {
             sanitize: {
                 misc_undefined: ["bounds"],
             },
+            whole_static_libs: [
+                "libPlatformProperties",
+            ],
         },
     },
     include_dirs: [
@@ -709,6 +755,9 @@ cc_test {
             shared_libs: [
                 "android.hardware.bluetooth.audio-V3-ndk",
                 "libbinder_ndk",
+            ],
+            whole_static_libs: [
+                "libPlatformProperties",
             ],
         },
     },
