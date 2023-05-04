@@ -1,3 +1,17 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::analyzer::ast as analyzer_ast;
 use crate::backends::rust::{
     constraint_to_value, find_constrained_parent_fields, mask_bits, types, ToUpperCamelCase,
@@ -133,9 +147,9 @@ impl<'a> FieldParser<'a> {
                     let enum_id = format_ident!("{enum_id}");
                     let tag_id = format_ident!("{}", tag_id.to_upper_camel_case());
                     quote! {
-                        if #v != #enum_id::#tag_id as #value_type {
+                        if #v != #enum_id::#tag_id.into()  {
                             return Err(Error::InvalidFixedValue {
-                                expected: #enum_id::#tag_id as u64,
+                                expected: #value_type::from(#enum_id::#tag_id) as u64,
                                 actual: #v as u64,
                             });
                         }
@@ -153,15 +167,12 @@ impl<'a> FieldParser<'a> {
                     }
                 }
                 ast::FieldDesc::Typedef { id, type_id } => {
-                    let id = format_ident!("{id}");
-                    let type_id = format_ident!("{type_id}");
-                    let from_u = format_ident!("from_u{}", value_type.width);
                     // TODO(mgeisler): Remove the `unwrap` from the
                     // generated code and return the error to the
                     // caller.
-                    quote! {
-                        let #id = #type_id::#from_u(#v).unwrap();
-                    }
+                    let id = format_ident!("{id}");
+                    let type_id = format_ident!("{type_id}");
+                    quote! { let #id = #type_id::try_from(#v).unwrap(); }
                 }
                 ast::FieldDesc::Reserved { .. } => {
                     if single_value {
@@ -545,13 +556,11 @@ impl<'a> FieldParser<'a> {
         }
 
         if let Some(ast::DeclDesc::Enum { id, width, .. }) = decl.map(|decl| &decl.desc) {
-            let element_type = types::Integer::new(*width);
             let get_uint = types::get_uint(self.endianness, *width, span);
             let type_id = format_ident!("{id}");
-            let from_u = format_ident!("from_u{}", element_type.width);
             let packet_name = &self.packet_name;
             return quote! {
-                #type_id::#from_u(#get_uint).ok_or_else(|| Error::InvalidEnumValueError {
+                #type_id::try_from(#get_uint).map_err(|_| Error::InvalidEnumValueError {
                     obj: #packet_name.to_string(),
                     field: String::new(), // TODO(mgeisler): fill out or remove
                     value: 0,
@@ -625,7 +634,7 @@ impl<'a> FieldParser<'a> {
         let packet_data_child = format_ident!("{}DataChild", self.packet_name);
         self.code.push(quote! {
             let child = match (#(#constrained_field_idents),*) {
-                #(#match_values => {
+                #(#match_values if #child_ids_data::conforms(&payload) => {
                     let mut cell = Cell::new(payload);
                     let child_data = #child_ids_data::parse_inner(&mut cell #child_parse_args)?;
                     // TODO(mgeisler): communicate back to user if !cell.get().is_empty()?
