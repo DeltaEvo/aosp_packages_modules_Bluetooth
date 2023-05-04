@@ -1,4 +1,18 @@
-from typing import Optional, List, Dict, Union, Tuple
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import Optional, List, Dict, Union, Tuple, Set
 from .ast import *
 
 
@@ -68,6 +82,7 @@ def make_reserved_field(width: int) -> ReservedField:
 def get_packet_field(packet: Union[PacketDeclaration, StructDeclaration], id: str) -> Optional[Field]:
     """Return the field with selected identifier declared in the provided
     packet or its ancestors."""
+    id = '_payload_' if id == 'payload' else id
     for f in packet.fields:
         if getattr(f, 'id', None) == id:
             return f
@@ -79,6 +94,16 @@ def get_packet_field(packet: Union[PacketDeclaration, StructDeclaration], id: st
         return get_packet_field(parent, id)
     else:
         return None
+
+
+def get_packet_fields(decl: Union[PacketDeclaration, StructDeclaration]) -> List[Field]:
+    """Return the list of fields declared in the selected packet and its parents.
+    Payload fields are removed from the parent declarations."""
+
+    fields = []
+    if decl.parent:
+        fields = [f for f in get_packet_fields(decl.parent) if not isinstance(f, (PayloadField, BodyField))]
+    return fields + decl.fields
 
 
 def get_packet_shift(packet: Union[PacketDeclaration, StructDeclaration]) -> int:
@@ -129,7 +154,8 @@ def get_packet_ancestor(
 
 
 def get_derived_packets(
-    decl: Union[PacketDeclaration, StructDeclaration]
+    decl: Union[PacketDeclaration, StructDeclaration],
+    traverse: bool = True,
 ) -> List[Tuple[List[Constraint], Union[PacketDeclaration, StructDeclaration]]]:
     """Return the list of packets or structs that immediately derive from the
     selected packet or struct, coupled with the field constraints.
@@ -139,7 +165,7 @@ def get_derived_packets(
     children = []
     for d in decl.file.declarations:
         if type(d) is type(decl) and d.parent_id == decl.id:
-            if (len(d.fields) == 1 and isinstance(d.fields[0], (PayloadField, BodyField))):
+            if (len(d.fields) == 1 and isinstance(d.fields[0], (PayloadField, BodyField))) and traverse:
                 children.extend([(d.constraints + sub_constraints, sub_child)
                                  for (sub_constraints, sub_child) in get_derived_packets(d)])
             else:
@@ -265,6 +291,32 @@ def get_field_offset_from_end(field: Field) -> Optional[int]:
             return None
         offset += size
     return offset
+
+
+def get_unconstrained_parent_fields(decl: Union[PacketDeclaration, StructDeclaration]) -> List[Field]:
+    """Return the list of fields from the parent declarations that have an identifier
+    but that do not have a value fixed by any of the parent constraints.
+    The fields are returned in order of declaration."""
+
+    def constraint_ids(constraints: List[Constraint]) -> Set[str]:
+        return set([c.id for c in constraints])
+
+    def aux(decl: Optional[Declaration], constraints: Set[str]) -> List[Field]:
+        if decl is None:
+            return []
+        fields = aux(decl.parent, constraints.union(constraint_ids(decl.constraints)))
+        for f in decl.fields:
+            if (isinstance(f, (ScalarField, ArrayField, TypedefField)) and not f.id in constraints):
+                fields.append(f)
+        return fields
+
+    return aux(decl.parent, constraint_ids(decl.constraints))
+
+
+def get_parent_constraints(decl: Union[PacketDeclaration, StructDeclaration]) -> List[Constraint]:
+    """Return the list of constraints from the current and parent declarations."""
+    parent_constraints = get_parent_constraints(decl.parent) if decl.parent else []
+    return parent_constraints + decl.constraints
 
 
 def is_bit_field(field: Field) -> bool:

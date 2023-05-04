@@ -1,3 +1,17 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 
@@ -7,9 +21,11 @@ use super::utils::get_integer_type;
 
 pub fn generate_enum(id: &str, tags: &[ast::Tag], width: usize) -> TokenStream {
     let id_ident = format_ident!("{id}");
-    let tag_ids = tags.iter().map(|tag| format_ident!("{}", tag.id)).collect::<Vec<_>>();
-    let tag_values =
-        tags.iter().map(|tag| Literal::u64_unsuffixed(tag.value as u64)).collect::<Vec<_>>();
+    let tag_ids = tags.iter().map(|tag| format_ident!("{}", tag.id())).collect::<Vec<_>>();
+    let tag_values = tags
+        .iter()
+        .map(|tag| Literal::u64_unsuffixed(tag.value().unwrap() as u64))
+        .collect::<Vec<_>>();
     let backing_ident = get_integer_type(width);
 
     quote! {

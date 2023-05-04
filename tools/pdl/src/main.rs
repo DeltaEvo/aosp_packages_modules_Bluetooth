@@ -1,7 +1,21 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //! PDL parser and analyzer.
 
+use argh::FromArgs;
 use codespan_reporting::term::{self, termcolor};
-use structopt::StructOpt;
 
 mod analyzer;
 mod ast;
@@ -12,7 +26,7 @@ mod parser;
 mod test_utils;
 mod utils;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum OutputFormat {
     JSON,
     Rust,
@@ -34,25 +48,25 @@ impl std::str::FromStr for OutputFormat {
     }
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "pdl-parser", about = "Packet Description Language parser tool.")]
+#[derive(FromArgs, Debug)]
+/// PDL analyzer and generator.
 struct Opt {
-    /// Print tool version and exit.
-    #[structopt(short, long = "--version")]
+    #[argh(switch)]
+    /// print tool version and exit.
     version: bool,
 
-    /// Generate output in this format ("json", "rust", "rust_no_alloc", "rust_no_alloc_test"). The output
+    #[argh(option, default = "OutputFormat::JSON")]
+    /// generate output in this format ("json", "rust", "rust_no_alloc", "rust_no_alloc_test"). The output
     /// will be printed on stdout in both cases.
-    #[structopt(short, long = "--output-format", name = "FORMAT", default_value = "JSON")]
     output_format: OutputFormat,
 
-    /// Input file.
-    #[structopt(name = "FILE")]
+    #[argh(positional)]
+    /// input file.
     input_file: String,
 }
 
 fn main() -> Result<(), String> {
-    let opt = Opt::from_args();
+    let opt: Opt = argh::from_env();
 
     if opt.version {
         println!("Packet Description Language parser version 1.0");
