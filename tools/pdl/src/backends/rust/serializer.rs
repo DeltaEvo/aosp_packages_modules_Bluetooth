@@ -1,3 +1,17 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::analyzer::ast as analyzer_ast;
 use crate::backends::rust::{mask_bits, types, ToUpperCamelCase};
 use crate::{ast, lint};
@@ -80,7 +94,11 @@ impl<'a> FieldSerializer<'a> {
                 let field_type = types::Integer::new(width);
                 let enum_id = format_ident!("{enum_id}");
                 let tag_id = format_ident!("{}", tag_id.to_upper_camel_case());
-                self.chunk.push(BitField { value: quote!(#enum_id::#tag_id), field_type, shift });
+                self.chunk.push(BitField {
+                    value: quote!(#field_type::from(#enum_id::#tag_id)),
+                    field_type,
+                    shift,
+                });
             }
             ast::FieldDesc::FixedScalar { value, .. } => {
                 let field_type = types::Integer::new(width);
@@ -90,11 +108,8 @@ impl<'a> FieldSerializer<'a> {
             ast::FieldDesc::Typedef { id, .. } => {
                 let field_name = format_ident!("{id}");
                 let field_type = types::Integer::new(width);
-                let to_u = format_ident!("to_u{}", field_type.width);
-                // TODO(mgeisler): remove `unwrap` and return error to
-                // caller in generated code.
                 self.chunk.push(BitField {
-                    value: quote!(self.#field_name.#to_u().unwrap()),
+                    value: quote!(#field_type::from(self.#field_name)),
                     field_type,
                     shift,
                 });
@@ -254,11 +269,10 @@ impl<'a> FieldSerializer<'a> {
             }
             None => {
                 if let Some(ast::DeclDesc::Enum { width, .. }) = decl.map(|decl| &decl.desc) {
-                    let field_type = types::Integer::new(*width);
-                    let to_u = format_ident!("to_u{}", field_type.width);
+                    let element_type = types::Integer::new(*width);
                     types::put_uint(
                         self.endianness,
-                        &quote!(elem.#to_u().unwrap()),
+                        &quote!(#element_type::from(elem)),
                         *width,
                         self.span,
                     )
