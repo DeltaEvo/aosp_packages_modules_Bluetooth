@@ -1201,6 +1201,7 @@ class LeAudioClientImpl : public LeAudioClient {
   }
 
   void RemoveDevice(const RawAddress& address) override {
+    LOG_INFO(": %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
     if (!leAudioDevice) {
       return;
@@ -1253,6 +1254,8 @@ class LeAudioClientImpl : public LeAudioClient {
   }
 
   void Connect(const RawAddress& address) override {
+    LOG_INFO(": %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
+
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
     if (!leAudioDevice) {
       leAudioDevices_.Add(address, DeviceConnectState::CONNECTING_BY_USER);
@@ -1425,6 +1428,7 @@ class LeAudioClientImpl : public LeAudioClient {
   }
 
   void Disconnect(const RawAddress& address) override {
+    LOG_INFO(": %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
 
     if (!leAudioDevice) {
@@ -1523,13 +1527,14 @@ class LeAudioClientImpl : public LeAudioClient {
     }
 
     BtaGattQueue::Clean(leAudioDevice->conn_id_);
-    BTA_GATTC_Close(leAudioDevice->conn_id_);
 
     /* Remote in bad state, force ACL Disconnection. */
     if (acl_force_disconnect) {
       leAudioDevice->DisconnectAcl();
       leAudioDevice->SetConnectionState(
           DeviceConnectState::DISCONNECTING_AND_RECOVER);
+    } else {
+      BTA_GATTC_Close(leAudioDevice->conn_id_);
     }
   }
 
@@ -3473,20 +3478,21 @@ class LeAudioClientImpl : public LeAudioClient {
   }
 
   void Dump(int fd) {
+    dprintf(fd, "  APP ID: %d \n", gatt_if_);
     dprintf(fd, "  Active group: %d\n", active_group_id_);
-    dprintf(fd, "    reconnection mode: %s \n",
+    dprintf(fd, "  reconnection mode: %s \n",
             (reconnection_mode_ == BTM_BLE_BKG_CONNECT_ALLOW_LIST
-                 ? " Allow List"
-                 : " Targeted Announcements"));
-    dprintf(fd, "    configuration: %s  (0x%08hx)\n",
+                 ? "Allow List"
+                 : "Targeted Announcements"));
+    dprintf(fd, "  configuration: %s  (0x%08hx)\n",
             bluetooth::common::ToString(configuration_context_type_).c_str(),
             configuration_context_type_);
-    dprintf(fd, "    source metadata context type mask: %s\n",
+    dprintf(fd, "  source metadata context type mask: %s\n",
             metadata_context_types_.source.to_string().c_str());
-    dprintf(fd, "    sink metadata context type mask: %s\n",
+    dprintf(fd, "  sink metadata context type mask: %s\n",
             metadata_context_types_.sink.to_string().c_str());
-    dprintf(fd, "    TBS state: %s\n", in_call_ ? " In call" : "No calls");
-    dprintf(fd, "    Start time: ");
+    dprintf(fd, "  TBS state: %s\n", in_call_ ? " In call" : "No calls");
+    dprintf(fd, "  Start time: ");
     for (auto t : stream_start_history_queue_) {
       dprintf(fd, ", %d ms", static_cast<int>(t));
     }

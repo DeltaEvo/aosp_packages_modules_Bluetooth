@@ -8,6 +8,9 @@ corrosion_import_crate(
 
 corrosion_set_env_vars(generate-canonical-tests CARGO_HOME=${Rust_CARGO_HOME})
 corrosion_set_env_vars(pdl CARGO_HOME=${Rust_CARGO_HOME})
+corrosion_set_hostbuild(pdl)
+
+get_property(pdl_EXECUTABLE TARGET pdl PROPERTY EXECUTABLE_PATH)
 
 # These tests depend on the tempfile crate which was not imported because
 # the crate remove_dir_all does not have a compatible version.
@@ -15,11 +18,55 @@ set_tests_properties(cargo-test_pdl PROPERTIES DISABLED True)
 set_tests_properties(cargo-test_generate-canonical-tests PROPERTIES DISABLED True)
 
 android_license(
-    TARGET "pdl"
+    TARGET pdl
     LIBNAME None
     SPDX None
     LICENSE None
     LOCAL None)
+
+# Generate the Rust/C++ backend for a .pdl specification file.
+function(pdl_gen)
+  # Parse arguments.
+  set(options)
+  set(oneValueArgs NAME INPUT OUTPUT LANG)
+  cmake_parse_arguments(pdl "${options}" "${oneValueArgs}"
+                        "${multiValueArgs}" ${ARGN})
+
+  if(NOT pdl_NAME)
+    message(FATAL_ERROR "Error: name not specified")
+  endif()
+
+  if(NOT pdl_INPUT)
+    message(FATAL_ERROR "Error: output file not specified")
+  endif()
+
+  if(NOT pdl_OUTPUT)
+    message(FATAL_ERROR "Error: output file not specified")
+  endif()
+
+  set(pdl_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/pdl_gen)
+  set(pdl_OUTPUT "${pdl_OUTPUT_DIR}/${pdl_OUTPUT}")
+
+  get_filename_component(pdl_INPUT_ABSOLUTE ${pdl_INPUT} ABSOLUTE)
+  get_filename_component(pdl_OUTPUT_ABSOLUTE ${pdl_OUTPUT} ABSOLUTE)
+  get_filename_component(pdl_OUTPUT_DIR ${pdl_OUTPUT_ABSOLUTE} DIRECTORY)
+  set(${pdl_NAME} "${pdl_OUTPUT_ABSOLUTE}" PARENT_SCOPE)
+
+  file(MAKE_DIRECTORY ${pdl_OUTPUT_DIR})
+
+  if(pdl_LANG STREQUAL "rust")
+    add_custom_command(
+        OUTPUT "${pdl_OUTPUT_ABSOLUTE}"
+        COMMAND
+        ${pdl_EXECUTABLE}
+                --output-format rust
+                "${pdl_INPUT_ABSOLUTE}"
+                    > "${pdl_OUTPUT_ABSOLUTE}"
+        COMMENT "Generating rust module from ${pdl_INPUT}"
+        VERBATIM
+        DEPENDS pdl ${pdl_INPUT_ABSOLUTE})
+  endif()
+endfunction()
 
 # ~~~
 # ! foobar : Compile .pdl files to C++/Rust!
@@ -135,6 +182,24 @@ target_include_directories(
 target_link_libraries(libscriptedbeaconpayload-protos-lite
                       PRIVATE protobuf::libprotobuf)
 
+android_add_library(
+  TARGET librootcanal_config LICENSE Apache-2.0
+  SOURCE_DIR ${ROOTCANAL_ROOT} SRC ${librootcanal_config_src})
+
+protobuf_generate_with_plugin(
+  TARGET librootcanal_config
+  PROTOS ${ROOTCANAL_ROOT}/config.proto
+  APPEND_PATH
+  PROTOPATH -I${AOSP_ROOT}/external/protobuf/src
+  PROTOC_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/config)
+
+target_include_directories(
+  librootcanal_config
+  PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/config ${AOSP_ROOT}/external/protobuf/src)
+
+target_link_libraries(librootcanal_config
+                      PRIVATE protobuf::libprotobuf)
+
 add_library(libbt-rootcanal.headers INTERFACE)
 target_include_directories(libbt-rootcanal.headers INTERFACE ${ROOTCANAL_ROOT})
 target_link_libraries(libbt-rootcanal.headers
@@ -215,7 +280,7 @@ android_add_library(
        android-emu-base-logging
        BluetoothPacketSources
        crypto
-       jsoncpp
+       librootcanal_config
        libscriptedbeaconpayload-protos-lite)
 
 target_include_directories(
@@ -226,9 +291,10 @@ target_include_directories(
          ${ROOTCANAL_ROOT}
          ${BT_ROOT}/gd
          ${BT_ROOT}
-         ${CMAKE_CURRENT_BINARY_DIR}/packet_gen)
+         ${CMAKE_CURRENT_BINARY_DIR}/packet_gen
+         ${CMAKE_CURRENT_BINARY_DIR}/config)
 
 target_compile_options(libbt-rootcanal
                        PUBLIC -Wno-inconsistent-missing-override)
 
-add_subdirectory(lmp)
+add_subdirectory(rust)
