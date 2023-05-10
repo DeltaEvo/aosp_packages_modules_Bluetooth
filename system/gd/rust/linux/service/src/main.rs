@@ -1,3 +1,4 @@
+use btstack::bluetooth_qa::BluetoothQA;
 use clap::{App, AppSettings, Arg};
 use dbus::{channel::MatchingReceiver, message::MatchRule};
 use dbus_crossroads::Crossroads;
@@ -24,6 +25,7 @@ use btstack::{
     bluetooth_gatt::BluetoothGatt,
     bluetooth_logging::BluetoothLogging,
     bluetooth_media::BluetoothMedia,
+    dis::DeviceInformation,
     socket_manager::BluetoothSocketManager,
     suspend::Suspend,
     Message, Stack,
@@ -38,6 +40,7 @@ mod iface_bluetooth;
 mod iface_bluetooth_admin;
 mod iface_bluetooth_gatt;
 mod iface_bluetooth_media;
+mod iface_bluetooth_qa;
 mod iface_bluetooth_telephony;
 mod iface_logging;
 
@@ -46,6 +49,15 @@ const ADMIN_SETTINGS_FILE_PATH: &str = "/var/lib/bluetooth/admin_policy.json";
 // The maximum ACL disconnect timeout is 3.5s defined by BTA_DM_DISABLE_TIMER_MS
 // and BTA_DM_DISABLE_TIMER_RETRIAL_MS
 const STACK_TURN_OFF_TIMEOUT_MS: Duration = Duration::from_millis(4000);
+
+const VERBOSE_ONLY_LOG_TAGS: &[&str] = &[
+    "bt_bta_av", // AV apis
+    "btm_sco",   // SCO data path logs
+    "l2c_csm",   // L2CAP state machine
+    "l2c_link",  // L2CAP link layer logs
+    "sco_hci",   // SCO over HCI
+    "uipc",      // Userspace IPC implementation
+];
 
 fn make_object_name(idx: i32, name: &str) -> String {
     String::from(format!("/org/chromium/bluetooth/hci{}/{}", idx, name))
@@ -71,6 +83,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .help("The Virtual index"),
         )
         .arg(Arg::with_name("debug").long("debug").short("d").help("Enables debug level logs"))
+        .arg(
+            Arg::with_name("verbose-debug")
+                .long("verbose-debug")
+                .short("v")
+                .help("Enables VERBOSE and additional tags for debug logging. Use with --debug."),
+        )
         .arg(Arg::from_usage("[init-flags] 'Fluoride INIT_ flags'").multiple(true))
         .arg(
             Arg::with_name("log-output")
@@ -83,6 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
 
     let is_debug = matches.is_present("debug");
+    let is_verbose_debug = matches.is_present("verbose-debug");
     let log_output = matches.value_of("log-output").unwrap_or("syslog");
 
     let adapter_index = matches.value_of("index").map_or(0, |idx| idx.parse::<i32>().unwrap_or(0));
@@ -96,11 +115,24 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Set GD debug flag if debug is enabled.
     if is_debug {
-        init_flags.push(String::from("INIT_logging_debug_enabled_for_all=true"));
+        // Limit tags if verbose debug logging isn't enabled.
+        if !is_verbose_debug {
+            init_flags.push(format!(
+                "INIT_logging_debug_disabled_for_tags={}",
+                VERBOSE_ONLY_LOG_TAGS.join(",")
+            ));
+            init_flags.push(String::from("INIT_default_log_level_str=LOG_DEBUG"));
+        } else {
+            init_flags.push(String::from("INIT_default_log_level_str=LOG_VERBOSE"));
+        }
     }
 
     // Forward --hci to Fluoride.
     init_flags.push(format!("--hci={}", hci_index));
+    let logging = Arc::new(Mutex::new(Box::new(BluetoothLogging::new(is_debug, log_output))));
+
+    // Always treat discovery as classic only
+    init_flags.push(String::from("INIT_classic_discovery_only=true"));
 
     let (tx, rx) = Stack::create_channel();
     let sig_notifier = Arc::new((Mutex::new(false), Condvar::new()));
@@ -131,10 +163,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
         adapter_index,
         tx.clone(),
-        intf.clone(),
-        bluetooth_media.clone(),
         sig_notifier.clone(),
+        intf.clone(),
         bluetooth_admin.clone(),
+        bluetooth_gatt.clone(),
+        bluetooth_media.clone(),
     ))));
     let suspend = Arc::new(Mutex::new(Box::new(Suspend::new(
         bluetooth.clone(),
@@ -143,8 +176,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         bluetooth_media.clone(),
         tx.clone(),
     ))));
-    let logging = Arc::new(Mutex::new(Box::new(BluetoothLogging::new(is_debug, log_output))));
-    let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(tx.clone()))));
+    let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(
+        tx.clone(),
+        bluetooth_admin.clone(),
+    ))));
+    let bluetooth_qa = Arc::new(Mutex::new(Box::new(BluetoothQA::new(tx.clone()))));
+
+    let dis =
+        Arc::new(Mutex::new(Box::new(DeviceInformation::new(bluetooth_gatt.clone(), tx.clone()))));
 
     topstack::get_runtime().block_on(async {
         // Connect to D-Bus system bus.
@@ -187,6 +226,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             suspend.clone(),
             bt_sock_mgr.clone(),
             bluetooth_admin.clone(),
+            dis.clone(),
+            bluetooth_qa.clone(),
         ));
 
         // Set up the disconnect watcher to monitor client disconnects.
@@ -211,7 +252,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
         );
-        let qa_iface = iface_bluetooth::export_bluetooth_qa_dbus_intf(
+        let qa_iface = iface_bluetooth_qa::export_bluetooth_qa_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+        let qa_legacy_iface = iface_bluetooth::export_bluetooth_qa_legacy_dbus_intf(
             conn.clone(),
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
@@ -280,7 +326,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         cr.lock().unwrap().insert(
             make_object_name(adapter_index, "adapter"),
-            &[adapter_iface, qa_iface, socket_mgr_iface, suspend_iface],
+            &[adapter_iface, qa_legacy_iface, socket_mgr_iface, suspend_iface],
             mixin,
         );
 
@@ -326,6 +372,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             logging.clone(),
         );
 
+        cr.lock().unwrap().insert(
+            make_object_name(adapter_index, "qa"),
+            &[qa_iface],
+            bluetooth_qa.clone(),
+        );
+
         // Hold locks and initialize all interfaces. This must be done AFTER DBus is
         // initialized so DBus can properly enforce user policies.
         {
@@ -363,6 +415,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 signal::sigaction(signal::SIGTERM, &sig_action).unwrap();
             }
         }
+
+        // Initialize the bluetooth_qa
+        bluetooth.lock().unwrap().cache_discoverable_mode_into_qa();
 
         // Serve clients forever.
         future::pending::<()>().await;

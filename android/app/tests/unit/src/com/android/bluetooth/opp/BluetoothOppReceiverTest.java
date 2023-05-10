@@ -49,6 +49,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.TestUtils;
 
 import com.google.common.base.Objects;
 
@@ -60,6 +61,7 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -72,7 +74,7 @@ public class BluetoothOppReceiverTest {
     BluetoothOppReceiver mReceiver;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mContext = spy(new ContextWrapper(
                 InstrumentationRegistry.getInstrumentation().getTargetContext()));
@@ -85,6 +87,7 @@ public class BluetoothOppReceiverTest {
         Intents.init();
 
         BluetoothOppTestUtils.enableOppActivities(true, mContext);
+        TestUtils.wakeUpAndDismissKeyGuard();
     }
 
     @After

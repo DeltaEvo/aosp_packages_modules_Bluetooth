@@ -42,6 +42,7 @@ import android.os.Message;
 import android.os.ParcelUuid;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.sysprop.BluetoothProperties;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
@@ -384,7 +385,9 @@ public class BluetoothMapService extends ProfileService {
                 case USER_TIMEOUT:
                     if (mIsWaitingAuthorization) {
                         Intent intent = new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_CANCEL);
-                        intent.setPackage(getString(R.string.pairing_ui_package));
+                        intent.setPackage(SystemProperties.get(
+                                Utils.PAIRING_UI_PROPERTY,
+                                getString(R.string.pairing_ui_package)));
                         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
                         intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                 BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
@@ -686,6 +689,7 @@ public class BluetoothMapService extends ProfileService {
         mSessionStatusHandler = new MapServiceMessageHandler(looper);
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         filter.addAction(BluetoothDevice.ACTION_SDP_RECORD);
@@ -693,6 +697,7 @@ public class BluetoothMapService extends ProfileService {
 
         // We need two filters, since Type only applies to the ACTION_MESSAGE_SENT
         IntentFilter filterMessageSent = new IntentFilter();
+        filterMessageSent.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filterMessageSent.addAction(BluetoothMapContentObserver.ACTION_MESSAGE_SENT);
         try {
             filterMessageSent.addDataType("message/*");
@@ -951,7 +956,9 @@ public class BluetoothMapService extends ProfileService {
         if (sendIntent) {
             // This will trigger Settings app's dialog.
             Intent intent = new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_REQUEST);
-            intent.setPackage(getString(R.string.pairing_ui_package));
+            intent.setPackage(SystemProperties.get(
+                    Utils.PAIRING_UI_PROPERTY,
+                    getString(R.string.pairing_ui_package)));
             intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                     BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);

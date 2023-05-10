@@ -1,6 +1,20 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //! PDL parser and analyzer.
 
-use clap::Parser;
+use argh::FromArgs;
 use codespan_reporting::term::{self, termcolor};
 
 mod analyzer;
@@ -10,6 +24,7 @@ mod lint;
 mod parser;
 #[cfg(test)]
 mod test_utils;
+mod utils;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -33,35 +48,35 @@ impl std::str::FromStr for OutputFormat {
     }
 }
 
-#[derive(Parser, Debug)]
-#[clap(name = "pdl-parser", about = "Packet Description Language parser tool.")]
+#[derive(FromArgs, Debug)]
+/// PDL analyzer and generator.
 struct Opt {
-    /// Print tool version and exit.
-    #[clap(short, long = "version")]
+    #[argh(switch)]
+    /// print tool version and exit.
     version: bool,
 
-    /// Generate output in this format ("json", "rust", "rust_no_alloc", "rust_no_alloc_test"). The output
+    #[argh(option, default = "OutputFormat::JSON")]
+    /// generate output in this format ("json", "rust", "rust_no_alloc", "rust_no_alloc_test"). The output
     /// will be printed on stdout in both cases.
-    #[clap(short, long = "output-format", name = "FORMAT", default_value = "JSON")]
     output_format: OutputFormat,
 
-    /// Input file.
-    #[clap(name = "FILE")]
+    #[argh(positional)]
+    /// input file.
     input_file: String,
 }
 
-fn main() -> std::process::ExitCode {
-    let opt = Opt::parse();
+fn main() -> Result<(), String> {
+    let opt: Opt = argh::from_env();
 
     if opt.version {
         println!("Packet Description Language parser version 1.0");
-        return std::process::ExitCode::SUCCESS;
+        return Ok(());
     }
 
     let mut sources = ast::SourceDatabase::new();
     match parser::parse_file(&mut sources, opt.input_file) {
         Ok(file) => {
-            let _analyzed_file = match analyzer::analyze(&file) {
+            let analyzed_file = match analyzer::analyze(&file) {
                 Ok(file) => file,
                 Err(diagnostics) => {
                     diagnostics
@@ -71,7 +86,7 @@ fn main() -> std::process::ExitCode {
                                 .lock(),
                         )
                         .expect("Could not print analyzer diagnostics");
-                    return std::process::ExitCode::FAILURE;
+                    return Err(String::from("Analysis failed"));
                 }
             };
 
@@ -80,7 +95,7 @@ fn main() -> std::process::ExitCode {
                     println!("{}", backends::json::generate(&file).unwrap())
                 }
                 OutputFormat::Rust => {
-                    println!("{}", backends::rust::generate(&sources, &file))
+                    println!("{}", backends::rust::generate(&sources, &analyzed_file))
                 }
                 OutputFormat::RustNoAlloc => {
                     let schema = backends::intermediate::generate(&file).unwrap();
@@ -93,25 +108,14 @@ fn main() -> std::process::ExitCode {
                     )
                 }
             }
-            std::process::ExitCode::SUCCESS
+            Ok(())
         }
 
         Err(err) => {
             let writer = termcolor::StandardStream::stderr(termcolor::ColorChoice::Always);
             let config = term::Config::default();
             term::emit(&mut writer.lock(), &config, &sources, &err).expect("Could not print error");
-            std::process::ExitCode::FAILURE
+            Err(String::from("Error while parsing input"))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use clap::CommandFactory;
-
-    #[test]
-    fn verify_opt() {
-        Opt::command().debug_assert();
     }
 }

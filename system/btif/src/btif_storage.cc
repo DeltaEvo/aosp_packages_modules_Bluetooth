@@ -85,7 +85,6 @@ using bluetooth::Uuid;
 #define BTIF_STORAGE_KEY_ADAPTER_NAME "Name"
 #define BTIF_STORAGE_KEY_ADAPTER_SCANMODE "ScanMode"
 #define BTIF_STORAGE_KEY_LOCAL_IO_CAPS "LocalIOCaps"
-#define BTIF_STORAGE_KEY_LOCAL_IO_CAPS_BLE "LocalIOCapsBLE"
 #define BTIF_STORAGE_KEY_ADAPTER_DISC_TIMEOUT "DiscoveryTimeout"
 #define BTIF_STORAGE_KEY_GATT_CLIENT_SUPPORTED "GattClientSupportedFeatures"
 #define BTIF_STORAGE_KEY_GATT_CLIENT_DB_HASH "GattClientDatabaseHash"
@@ -120,7 +119,7 @@ using bluetooth::Uuid;
  *  External functions
  ******************************************************************************/
 
-extern void btif_gatts_add_bonded_dev_from_nv(const RawAddress& bda);
+void btif_gatts_add_bonded_dev_from_nv(const RawAddress& bda);
 
 /*******************************************************************************
  *  Internal Functions
@@ -176,10 +175,6 @@ static int prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
       break;
     case BT_PROPERTY_LOCAL_IO_CAPS:
       btif_config_set_int("Adapter", BTIF_STORAGE_KEY_LOCAL_IO_CAPS,
-                          *(int*)prop->val);
-      break;
-    case BT_PROPERTY_LOCAL_IO_CAPS_BLE:
-      btif_config_set_int("Adapter", BTIF_STORAGE_KEY_LOCAL_IO_CAPS_BLE,
                           *(int*)prop->val);
       break;
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
@@ -305,12 +300,6 @@ static int cfg2prop(const RawAddress* remote_bd_addr, bt_property_t* prop) {
         ret = btif_config_get_int("Adapter", BTIF_STORAGE_KEY_LOCAL_IO_CAPS,
                                   (int*)prop->val);
       break;
-    case BT_PROPERTY_LOCAL_IO_CAPS_BLE:
-      if (prop->len >= (int)sizeof(int))
-        ret = btif_config_get_int("Adapter", BTIF_STORAGE_KEY_LOCAL_IO_CAPS_BLE,
-                                  (int*)prop->val);
-      break;
-
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
       if (prop->len >= (int)sizeof(int))
         ret = btif_config_get_int(
@@ -608,22 +597,6 @@ uint8_t btif_storage_get_local_io_caps() {
                                           BTM_LOCAL_IO_CAPS);
 }
 
-/*******************************************************************************
- *
- * Function         btif_storage_get_io_caps_ble
- *
- * Description      BTIF storage API - Fetches the local Input/Output
- *                  capabilities of the BLE device.
- *
- * Returns          Returns local IO Capability of BLE device. If not stored,
- *                  returns BTM_LOCAL_IO_CAPS_BLE.
- *
- ******************************************************************************/
-uint8_t btif_storage_get_local_io_caps_ble() {
-  return btif_storage_get_io_cap_property(BT_PROPERTY_LOCAL_IO_CAPS_BLE,
-                                          BTM_LOCAL_IO_CAPS_BLE);
-}
-
 /** Helper function for fetching a bt_property of the adapter. */
 bt_status_t btif_storage_get_adapter_prop(bt_property_type_t type, void* buf,
                                           int size, bt_property_t* property) {
@@ -829,8 +802,13 @@ bt_status_t btif_storage_add_remote_device(const RawAddress* remote_bd_addr,
   /* TODO: If writing a property, fails do we go back undo the earlier
    * written properties? */
   for (i = 0; i < num_properties; i++) {
-    /* Ignore the RSSI as this is not stored in DB */
-    if (properties[i].type == BT_PROPERTY_REMOTE_RSSI) continue;
+    /* Ignore properties that are not stored in DB */
+    if (properties[i].type == BT_PROPERTY_REMOTE_RSSI ||
+        properties[i].type == BT_PROPERTY_REMOTE_IS_COORDINATED_SET_MEMBER ||
+        properties[i].type == BT_PROPERTY_REMOTE_ASHA_CAPABILITY ||
+        properties[i].type == BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID) {
+      continue;
+    }
 
     /* address for remote device needs special handling as we also store
      * timestamp */

@@ -1,3 +1,7 @@
+//! Build file to generate packets
+//!
+//! Run `cargo install .` in `tools/pdl` to ensure `pdl` is in your
+//! path.
 use std::{
     env,
     fs::File,
@@ -11,7 +15,7 @@ fn main() {
     let dest_file = File::create(dest_path).unwrap();
 
     let pdl = Command::new("pdl")
-        .args(&["--output-format", "rust_no_alloc", "src/packets.pdl"])
+        .args(["--output-format", "rust_no_alloc", "src/packets.pdl"])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -22,7 +26,7 @@ fn main() {
     rustfmt.wait().unwrap();
 
     if let Some(err) = rustfmt.stderr {
-        panic!("{:?}", err);
+        panic!("{err:?}");
     }
 
     println!("cargo:rerun-if-changed=build.rs");

@@ -84,8 +84,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
      */
     private static final String OPP_PROVIDER =
             BluetoothOppProvider.class.getCanonicalName();
-    private static final String OPP_FILE_PROVIDER =
-            BluetoothOppFileProvider.class.getCanonicalName();
     private static final String INCOMING_FILE_CONFIRM_ACTIVITY =
             BluetoothOppIncomingFileConfirmActivity.class.getCanonicalName();
     private static final String TRANSFER_ACTIVITY =
@@ -224,6 +222,7 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
         mBatchId = 1;
 
         IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         registerReceiver(mBluetoothReceiver, filter);
 
         if (V) {
@@ -243,7 +242,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
         }
 
         setComponentAvailable(OPP_PROVIDER, true);
-        setComponentAvailable(OPP_FILE_PROVIDER, true);
         setComponentAvailable(INCOMING_FILE_CONFIRM_ACTIVITY, true);
         setComponentAvailable(TRANSFER_ACTIVITY, true);
         setComponentAvailable(TRANSFER_HISTORY_ACTIVITY, true);
@@ -263,7 +261,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
         getContentResolver().registerContentObserver(BluetoothShare.CONTENT_URI, true, mObserver);
         mNotifier = new BluetoothOppNotification(this);
         mNotifier.mNotificationMgr.cancelAll();
-        mNotifier.updateNotification();
         updateFromProvider();
         setBluetoothOppService(this);
         mAdapterService.notifyActivityAttributionInfo(
@@ -285,7 +282,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
         mHandler.sendMessage(mHandler.obtainMessage(STOP_LISTENER));
 
         setComponentAvailable(OPP_PROVIDER, false);
-        setComponentAvailable(OPP_FILE_PROVIDER, false);
         setComponentAvailable(INCOMING_FILE_CONFIRM_ACTIVITY, false);
         setComponentAvailable(TRANSFER_ACTIVITY, false);
         setComponentAvailable(TRANSFER_HISTORY_ACTIVITY, false);
@@ -400,7 +396,9 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
                         }
                     }
 
-                    mNotifier.cancelNotifications();
+                    if (mNotifier != null) {
+                        mNotifier.cancelNotifications();
+                    }
                     break;
                 case START_LISTENER:
                     if (mAdapterService.isEnabled()) {
@@ -1115,11 +1113,6 @@ public class BluetoothOppService extends ProfileService implements IObexConnecti
 
     // Run in a background thread at boot.
     private static void trimDatabase(ContentResolver contentResolver) {
-        if (contentResolver.acquireContentProviderClient(BluetoothShare.CONTENT_URI) == null) {
-            Log.w(TAG, "ContentProvider doesn't exist");
-            return;
-        }
-
         // remove the invisible/unconfirmed inbound shares
         int delNum = contentResolver.delete(BluetoothShare.CONTENT_URI, WHERE_INVISIBLE_UNCONFIRMED,
                 null);

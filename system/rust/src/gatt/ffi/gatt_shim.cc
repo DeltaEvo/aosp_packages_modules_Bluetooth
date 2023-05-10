@@ -30,8 +30,8 @@
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-extern bt_status_t do_in_jni_thread(const base::Location& from_here,
-                                    base::OnceClosure task);
+bt_status_t do_in_jni_thread(const base::Location& from_here,
+                             base::OnceClosure task);
 
 namespace {
 std::optional<RawAddress> AddressOfConnection(uint16_t conn_id) {
@@ -50,11 +50,10 @@ std::optional<RawAddress> AddressOfConnection(uint16_t conn_id) {
 namespace bluetooth {
 namespace gatt {
 
-void GattServerCallbacks::OnServerReadCharacteristic(uint16_t conn_id,
-                                                     uint32_t trans_id,
-                                                     uint16_t attr_handle,
-                                                     uint32_t offset,
-                                                     bool is_long) const {
+void GattServerCallbacks::OnServerRead(uint16_t conn_id, uint32_t trans_id,
+                                       uint16_t attr_handle,
+                                       AttributeBackingType attr_type,
+                                       uint32_t offset, bool is_long) const {
   auto addr = AddressOfConnection(conn_id);
   if (!addr.has_value()) {
     LOG_WARN(
@@ -63,16 +62,28 @@ void GattServerCallbacks::OnServerReadCharacteristic(uint16_t conn_id,
     return;
   }
 
-  do_in_jni_thread(
-      FROM_HERE,
-      base::Bind(callbacks.request_read_characteristic_cb, conn_id, trans_id,
-                 addr.value(), attr_handle, offset, is_long));
+  switch (attr_type) {
+    case AttributeBackingType::CHARACTERISTIC:
+      do_in_jni_thread(
+          FROM_HERE,
+          base::Bind(callbacks.request_read_characteristic_cb, conn_id,
+                     trans_id, addr.value(), attr_handle, offset, is_long));
+      break;
+    case AttributeBackingType::DESCRIPTOR:
+      do_in_jni_thread(
+          FROM_HERE,
+          base::Bind(callbacks.request_read_descriptor_cb, conn_id, trans_id,
+                     addr.value(), attr_handle, offset, is_long));
+      break;
+    default:
+      LOG_ALWAYS_FATAL("Unexpected backing type %d", attr_type);
+  }
 }
 
-void GattServerCallbacks::OnServerWriteCharacteristic(
-    uint16_t conn_id, uint32_t trans_id, uint16_t attr_handle, uint32_t offset,
-    bool need_response, bool is_prepare,
-    ::rust::Slice<const uint8_t> value) const {
+void GattServerCallbacks::OnServerWrite(
+    uint16_t conn_id, uint32_t trans_id, uint16_t attr_handle,
+    AttributeBackingType attr_type, uint32_t offset, bool need_response,
+    bool is_prepare, ::rust::Slice<const uint8_t> value) const {
   auto addr = AddressOfConnection(conn_id);
   if (!addr.has_value()) {
     LOG_WARN(
@@ -84,11 +95,44 @@ void GattServerCallbacks::OnServerWriteCharacteristic(
   auto buf = new uint8_t[value.size()];
   std::copy(value.begin(), value.end(), buf);
 
+  switch (attr_type) {
+    case AttributeBackingType::CHARACTERISTIC:
+      do_in_jni_thread(
+          FROM_HERE,
+          base::Bind(callbacks.request_write_characteristic_cb, conn_id,
+                     trans_id, addr.value(), attr_handle, offset, need_response,
+                     is_prepare, base::Owned(buf), value.size()));
+      break;
+    case AttributeBackingType::DESCRIPTOR:
+      do_in_jni_thread(
+          FROM_HERE,
+          base::Bind(callbacks.request_write_descriptor_cb, conn_id, trans_id,
+                     addr.value(), attr_handle, offset, need_response,
+                     is_prepare, base::Owned(buf), value.size()));
+      break;
+    default:
+      LOG_ALWAYS_FATAL("Unexpected backing type %hhu", attr_type);
+  }
+}
+
+void GattServerCallbacks::OnIndicationSentConfirmation(uint16_t conn_id,
+                                                       int status) const {
+  do_in_jni_thread(FROM_HERE,
+                   base::Bind(callbacks.indication_sent_cb, conn_id, status));
+}
+
+void GattServerCallbacks::OnExecute(uint16_t conn_id, uint32_t trans_id,
+                                    bool execute) const {
+  auto addr = AddressOfConnection(conn_id);
+  if (!addr.has_value()) {
+    LOG_WARN("Dropping server execute write since connection %d not found",
+             conn_id);
+    return;
+  }
+
   do_in_jni_thread(
-      FROM_HERE,
-      base::Bind(callbacks.request_write_characteristic_cb, conn_id, trans_id,
-                 addr.value(), attr_handle, offset, need_response, is_prepare,
-                 base::Owned(buf), value.size()));
+      FROM_HERE, base::Bind(callbacks.request_exec_write_cb, conn_id, trans_id,
+                            addr.value(), execute));
 }
 
 }  // namespace gatt

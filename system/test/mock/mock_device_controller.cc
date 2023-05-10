@@ -34,6 +34,9 @@
 #include "types/raw_address.h"
 
 // Mock include file to share data between tests and mock
+#include "stack/include/btm_api_types.h"
+#include "stack/include/btm_status.h"
+#include "stack/include/hcidefs.h"
 #include "test/mock/mock_device_controller.h"
 
 // Mocked compile conditionals, if any
@@ -240,6 +243,11 @@ bool supports_set_min_encryption_key_size(void) {
   return HCI_SET_MIN_ENCRYPTION_KEY_SIZE_SUPPORTED(supported_commands);
 }
 
+#define HCI_READ_ENCRYPTION_KEY_SIZE_SUPPORTED(x) ((x)[20] & 0x10)
+bool supports_read_encryption_key_size(void) {
+  return HCI_READ_ENCRYPTION_KEY_SIZE_SUPPORTED(supported_commands);
+}
+
 bool supports_ble(void) { return ble_supported; }
 
 bool supports_ble_privacy(void) {
@@ -440,6 +448,7 @@ const controller_t interface = {
     supports_encryption_pause,
     supports_configure_data_path,
     supports_set_min_encryption_key_size,
+    supports_read_encryption_key_size,
 
     supports_ble,
     supports_ble_packet_extension,

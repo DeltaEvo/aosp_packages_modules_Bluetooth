@@ -32,10 +32,7 @@
 //       may need attention to prune the inclusion set.
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
-#include "common/metrics.h"
-#include "main/shim/metrics_api.h"
-#include "main/shim/shim.h"
-#include "stack/include/stack_metrics_logging.h"
+
 #include "types/raw_address.h"
 
 // Mock include file to share data between tests and mock
@@ -134,7 +131,7 @@ void log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum key,
 void log_hfp_audio_packet_loss_stats(const RawAddress& address,
                                      int num_decoded_frames,
                                      double packet_loss_ratio) {
-  mock_function_count_map[__func__]++;
+  inc_func_call_count(__func__);
   test::mock::stack_metrics_logging::log_hfp_audio_packet_loss_stats(
       address, num_decoded_frames, packet_loss_ratio);
 }

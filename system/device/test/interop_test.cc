@@ -24,10 +24,12 @@
 #include "device/include/interop_config.h"
 #include "types/raw_address.h"
 
-#if defined(OS_GENERIC)
+#ifndef __ANDROID__
 #include <base/files/file_util.h>
+#include <unistd.h>
 
 #include <filesystem>
+#include <system_error>
 
 static const std::filesystem::path kStaticConfigFileConfigFile =
     std::filesystem::temp_directory_path() / "interop_database.conf";
@@ -97,18 +99,23 @@ extern const module_t interop_module;
 class InteropTest : public ::testing::Test {
  protected:
   virtual void SetUp() override {
-#if defined(OS_GENERIC)
+#ifndef __ANDROID__
     FILE* fp = fopen(INTEROP_STATIC_FILE_PATH, "wte");
     ASSERT_NE(fp, nullptr);
     ASSERT_EQ(fwrite(INTEROP_STATIC_FILE_CONTENT, 1,
                      sizeof(INTEROP_STATIC_FILE_CONTENT), fp),
               sizeof(INTEROP_STATIC_FILE_CONTENT));
+    // Force data to be flushed on disk and not only in user-space
+    ASSERT_EQ(fsync(fileno(fp)), 0)
+        << "Associated ERRNO error is: " << strerror(errno);
     ASSERT_EQ(fclose(fp), 0);
 #endif
   }
   virtual void TearDown() override {
-#if defined(OS_GENERIC)
-    EXPECT_TRUE(std::filesystem::remove(kStaticConfigFileConfigFile));
+#ifndef __ANDROID__
+    std::error_code ec;
+    EXPECT_TRUE(std::filesystem::remove(kStaticConfigFileConfigFile, ec))
+        << "Associated error is: " << ec;
 #endif
   }
 };
@@ -125,7 +132,7 @@ TEST_F(InteropTest, test_lookup_hit) {
   RawAddress::FromString("34:c7:31:12:34:56", test_address);
   EXPECT_TRUE(interop_match_addr(INTEROP_DISABLE_AUTO_PAIRING, &test_address));
 
-#if !defined(OS_GENERIC)
+#ifdef __ANDROID__
   RawAddress::FromString("9c:df:03:12:34:56", test_address);
   EXPECT_TRUE(interop_match_addr(INTEROP_AUTO_RETRY_PAIRING, &test_address));
 
@@ -416,7 +423,7 @@ TEST_F(InteropTest, test_name_hit) {
   EXPECT_TRUE(interop_match_name(INTEROP_DISABLE_AUTO_PAIRING, "BMW M3"));
   EXPECT_TRUE(interop_match_name(INTEROP_DISABLE_AUTO_PAIRING, "Audi"));
 
-#if !defined(OS_GENERIC)
+#ifdef __ANDROID__
   EXPECT_TRUE(interop_match_name(INTEROP_DISABLE_AUTO_PAIRING,
                                  "Caramel"));  // Starts with "Car" ;)
 

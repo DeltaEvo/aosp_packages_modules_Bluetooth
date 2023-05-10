@@ -95,6 +95,8 @@ static headset::bthf_call_state_t from_rust_call_state(rusty::CallState state) {
       return headset::BTHF_CALL_STATE_INCOMING;
     case rusty::CallState::Dialing:
       return headset::BTHF_CALL_STATE_DIALING;
+    case rusty::CallState::Alerting:
+      return headset::BTHF_CALL_STATE_ALERTING;
     case rusty::CallState::Active:
       return headset::BTHF_CALL_STATE_ACTIVE;
     case rusty::CallState::Held:
@@ -154,7 +156,12 @@ class DBusHeadsetCallbacks : public headset::Callbacks {
 
   void WbsCallback(headset::bthf_wbs_config_t wbs, RawAddress* addr) override {
     LOG_INFO("WbsCallback %d from %s", wbs, ADDRESS_TO_LOGGABLE_CSTR(*addr));
-    rusty::hfp_caps_update_callback(wbs == headset::BTHF_WBS_YES, *addr);
+    rusty::hfp_wbs_caps_update_callback(wbs == headset::BTHF_WBS_YES, *addr);
+  }
+
+  void SwbCallback(headset::bthf_swb_config_t swb, RawAddress* addr) override {
+    LOG_INFO("SwbCallback %d from %s", swb, ADDRESS_TO_LOGGABLE_CSTR(*addr));
+    rusty::hfp_swb_caps_update_callback(swb == headset::BTHF_SWB_YES, *addr);
   }
 
   void AtChldCallback(headset::bthf_chld_type_t chld, RawAddress* bd_addr) override {

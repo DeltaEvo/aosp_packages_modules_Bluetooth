@@ -1,4 +1,17 @@
-use crate::lint;
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use codespan_reporting::diagnostic;
 use codespan_reporting::files;
 use serde::Serialize;
@@ -56,15 +69,31 @@ pub struct Endianness {
     pub value: EndiannessValue,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename = "tag")]
-pub struct Tag {
+pub struct TagValue {
     pub id: String,
     pub loc: SourceRange,
     pub value: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename = "tag")]
+pub struct TagRange {
+    pub id: String,
+    pub loc: SourceRange,
+    pub range: std::ops::RangeInclusive<usize>,
+    pub tags: Vec<TagValue>,
+}
+
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum Tag {
+    Value(TagValue),
+    Range(TagRange),
+}
+
+#[derive(Debug, Serialize, Clone)]
 #[serde(tag = "kind", rename = "constraint")]
 pub struct Constraint {
     pub id: String,
@@ -112,7 +141,7 @@ pub enum FieldDesc {
     Group { group_id: String, constraints: Vec<Constraint> },
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Clone)]
 pub struct Field<A: Annotation> {
     pub loc: SourceRange,
     #[serde(skip_serializing)]
@@ -128,7 +157,7 @@ pub struct TestCase {
     pub input: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind")]
 pub enum DeclDesc<A: Annotation> {
     #[serde(rename = "checksum_declaration")]
@@ -235,6 +264,76 @@ impl ops::Add<SourceRange> for SourceRange {
     }
 }
 
+impl Eq for Endianness {}
+impl PartialEq for Endianness {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out loc.
+        self.value == other.value
+    }
+}
+
+impl Eq for TagValue {}
+impl PartialEq for TagValue {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out loc.
+        self.id == other.id && self.value == other.value
+    }
+}
+
+impl Eq for TagRange {}
+impl PartialEq for TagRange {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out loc.
+        self.id == other.id && self.range == other.range && self.tags == other.tags
+    }
+}
+
+impl Tag {
+    pub fn id(&self) -> &str {
+        match self {
+            Tag::Value(TagValue { id, .. }) | Tag::Range(TagRange { id, .. }) => id,
+        }
+    }
+
+    pub fn loc(&self) -> &SourceRange {
+        match self {
+            Tag::Value(TagValue { loc, .. }) | Tag::Range(TagRange { loc, .. }) => loc,
+        }
+    }
+
+    pub fn value(&self) -> Option<usize> {
+        match self {
+            Tag::Value(TagValue { value, .. }) => Some(*value),
+            Tag::Range(_) => None,
+        }
+    }
+}
+
+impl Eq for Constraint {}
+impl PartialEq for Constraint {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out loc.
+        self.id == other.id && self.value == other.value && self.tag_id == other.tag_id
+    }
+}
+
+impl Eq for TestCase {}
+impl PartialEq for TestCase {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out loc.
+        self.input == other.input
+    }
+}
+
+impl<A: Annotation + std::cmp::PartialEq> Eq for File<A> {}
+impl<A: Annotation + std::cmp::PartialEq> PartialEq for File<A> {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out comments and PDL
+        // version information.
+        self.endianness == other.endianness && self.declarations == other.declarations
+    }
+}
+
 impl<A: Annotation> File<A> {
     pub fn new(file: FileId) -> File<A> {
         File {
@@ -256,6 +355,14 @@ impl<A: Annotation> File<A> {
     /// declarations, use with caution.
     pub fn iter_children<'d>(&'d self, decl: &'d Decl<A>) -> impl Iterator<Item = &'d Decl<A>> {
         self.declarations.iter().filter(|other_decl| other_decl.parent_id() == decl.id())
+    }
+}
+
+impl<A: Annotation + std::cmp::PartialEq> Eq for Decl<A> {}
+impl<A: Annotation + std::cmp::PartialEq> PartialEq for Decl<A> {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out loc and annot.
+        self.desc == other.desc
     }
 }
 
@@ -335,31 +442,6 @@ impl<A: Annotation> Decl<A> {
         }
     }
 
-    /// Determine the size of a declaration type in bits, if possible.
-    ///
-    /// If the type is dynamically sized (e.g. contains an array or
-    /// payload), `None` is returned. If `skip_payload` is set,
-    /// payload and body fields are counted as having size `0` rather
-    /// than a variable size.
-    pub fn width(&self, scope: &lint::Scope<'_>, skip_payload: bool) -> Option<usize> {
-        match &self.desc {
-            DeclDesc::Enum { width, .. } | DeclDesc::Checksum { width, .. } => Some(*width),
-            DeclDesc::CustomField { width, .. } => *width,
-            DeclDesc::Packet { fields, parent_id, .. }
-            | DeclDesc::Struct { fields, parent_id, .. } => {
-                let mut packet_size = match parent_id {
-                    None => 0,
-                    Some(id) => scope.typedef.get(id.as_str())?.width(scope, true)?,
-                };
-                for field in fields.iter() {
-                    packet_size += field.width(scope, skip_payload)?;
-                }
-                Some(packet_size)
-            }
-            DeclDesc::Group { .. } | DeclDesc::Test { .. } => None,
-        }
-    }
-
     pub fn fields(&self) -> std::slice::Iter<'_, Field<A>> {
         match &self.desc {
             DeclDesc::Packet { fields, .. }
@@ -379,6 +461,14 @@ impl<A: Annotation> Decl<A> {
             DeclDesc::Group { .. } => "group",
             DeclDesc::Test { .. } => "test",
         }
+    }
+}
+
+impl<A: Annotation> Eq for Field<A> {}
+impl<A: Annotation> PartialEq for Field<A> {
+    fn eq(&self, other: &Self) -> bool {
+        // Implement structual equality, leave out loc and annot.
+        self.desc == other.desc
     }
 }
 
@@ -403,62 +493,6 @@ impl<A: Annotation> Field<A> {
             FieldDesc::Array { id, .. }
             | FieldDesc::Scalar { id, .. }
             | FieldDesc::Typedef { id, .. } => Some(id),
-        }
-    }
-
-    pub fn is_bitfield(&self, scope: &lint::Scope<'_>) -> bool {
-        match &self.desc {
-            FieldDesc::Size { .. }
-            | FieldDesc::Count { .. }
-            | FieldDesc::ElementSize { .. }
-            | FieldDesc::FixedScalar { .. }
-            | FieldDesc::FixedEnum { .. }
-            | FieldDesc::Reserved { .. }
-            | FieldDesc::Scalar { .. } => true,
-            FieldDesc::Typedef { type_id, .. } => {
-                let field = scope.typedef.get(type_id.as_str());
-                matches!(field, Some(Decl { desc: DeclDesc::Enum { .. }, .. }))
-            }
-            _ => false,
-        }
-    }
-
-    pub fn declaration<'a>(
-        &self,
-        scope: &'a lint::Scope<'a>,
-    ) -> Option<&'a crate::parser::ast::Decl> {
-        match &self.desc {
-            FieldDesc::FixedEnum { enum_id, .. } => scope.typedef.get(enum_id).copied(),
-            FieldDesc::Array { type_id: Some(type_id), .. } => scope.typedef.get(type_id).copied(),
-            FieldDesc::Typedef { type_id, .. } => scope.typedef.get(type_id.as_str()).copied(),
-            _ => None,
-        }
-    }
-
-    /// Determine the size of a field in bits, if possible.
-    ///
-    /// If the field is dynamically sized (e.g. unsized array or
-    /// payload field), `None` is returned. If `skip_payload` is set,
-    /// payload and body fields are counted as having size `0` rather
-    /// than a variable size.
-    pub fn width(&self, scope: &lint::Scope<'_>, skip_payload: bool) -> Option<usize> {
-        match &self.desc {
-            FieldDesc::Scalar { width, .. }
-            | FieldDesc::Size { width, .. }
-            | FieldDesc::Count { width, .. }
-            | FieldDesc::ElementSize { width, .. }
-            | FieldDesc::Reserved { width, .. }
-            | FieldDesc::FixedScalar { width, .. } => Some(*width),
-            FieldDesc::FixedEnum { .. } => self.declaration(scope)?.width(scope, false),
-            FieldDesc::Padding { .. } => todo!(),
-            FieldDesc::Array { size: Some(size), width, .. } => {
-                let width = width.or_else(|| self.declaration(scope)?.width(scope, false))?;
-                Some(width * size)
-            }
-            FieldDesc::Typedef { .. } => self.declaration(scope)?.width(scope, false),
-            FieldDesc::Checksum { .. } => Some(0),
-            FieldDesc::Payload { .. } | FieldDesc::Body { .. } if skip_payload => Some(0),
-            _ => None,
         }
     }
 

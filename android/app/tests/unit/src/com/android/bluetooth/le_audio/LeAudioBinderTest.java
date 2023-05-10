@@ -149,6 +149,15 @@ public class LeAudioBinderTest {
     }
 
     @Test
+    public void setActiveDevice_withNullDevice_callsRemoveActiveDevice() {
+        AttributionSource source = new AttributionSource.Builder(0).build();
+        final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
+
+        mBinder.setActiveDevice(null, source, recv);
+        verify(mMockService).removeActiveDevice(true);
+    }
+
+    @Test
     public void getActiveDevices() {
         AttributionSource source = new AttributionSource.Builder(0).build();
         final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
@@ -306,8 +315,9 @@ public class LeAudioBinderTest {
     public void startBroadcast() {
         BluetoothLeBroadcastSettings broadcastSettings = buildBroadcastSettingsFromMetadata();
         AttributionSource source = new AttributionSource.Builder(0).build();
+        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.startBroadcast(broadcastSettings, source);
+        mBinder.startBroadcast(broadcastSettings, source, recv);
         verify(mMockService).createBroadcast(broadcastSettings);
     }
 
@@ -315,8 +325,9 @@ public class LeAudioBinderTest {
     public void stopBroadcast() {
         int id = 1;
         AttributionSource source = new AttributionSource.Builder(0).build();
+        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.stopBroadcast(id, source);
+        mBinder.stopBroadcast(id, source, recv);
         verify(mMockService).stopBroadcast(id);
     }
 
@@ -325,8 +336,9 @@ public class LeAudioBinderTest {
         int id = 1;
         BluetoothLeBroadcastSettings broadcastSettings = buildBroadcastSettingsFromMetadata();
         AttributionSource source = new AttributionSource.Builder(0).build();
+        final SynchronousResultReceiver<Void> recv = SynchronousResultReceiver.get();
 
-        mBinder.updateBroadcast(id, broadcastSettings, source);
+        mBinder.updateBroadcast(id, broadcastSettings, source, recv);
         verify(mMockService).updateBroadcast(id, broadcastSettings);
     }
 

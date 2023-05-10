@@ -19,6 +19,7 @@
 #include <base/strings/string_number_conversions.h>
 
 #include <deque>
+#include <mutex>
 #include <optional>
 
 #include "advertise_data_parser.h"
@@ -177,6 +178,7 @@ inline lc3_pcm_format bits_to_lc3_bits(uint8_t bits_per_sample) {
 
 class LeAudioClientImpl;
 LeAudioClientImpl* instance;
+std::mutex instance_mutex;
 LeAudioSourceAudioHalClient::Callbacks* audioSinkReceiver;
 LeAudioSinkAudioHalClient::Callbacks* audioSourceReceiver;
 CigCallbacks* stateMachineHciCallbacks;
@@ -459,7 +461,7 @@ class LeAudioClientImpl : public LeAudioClient {
         group_id, ToString(group->GetState()).c_str(),
         ToString(group->GetTargetState()).c_str());
     group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-
+    group->CigClearCis();
     group->PrintDebugState();
 
     /* There is an issue with a setting up stream or any other operation which
@@ -508,31 +510,73 @@ class LeAudioClientImpl : public LeAudioClient {
 
   void SuspendedForReconfiguration() {
     if (audio_sender_state_ > AudioState::IDLE) {
+      LeAudioLogHistory::Get()->AddLogHistory(
+          kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+          kLogAfSuspendForReconfig + "LocalSource",
+          "r_state: " + ToString(audio_receiver_state_) +
+              "s_state: " + ToString(audio_sender_state_));
       le_audio_source_hal_client_->SuspendedForReconfiguration();
     }
     if (audio_receiver_state_ > AudioState::IDLE) {
+      LeAudioLogHistory::Get()->AddLogHistory(
+          kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+          kLogAfSuspendForReconfig + "LocalSink",
+          "r_state: " + ToString(audio_receiver_state_) +
+              "s_state: " + ToString(audio_sender_state_));
       le_audio_sink_hal_client_->SuspendedForReconfiguration();
     }
   }
 
   void ReconfigurationComplete(uint8_t directions) {
     if (directions & le_audio::types::kLeAudioDirectionSink) {
+      LeAudioLogHistory::Get()->AddLogHistory(
+          kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+          kLogAfReconfigComplete + "LocalSource",
+          "r_state: " + ToString(audio_receiver_state_) +
+              "s_state: " + ToString(audio_sender_state_));
+
       le_audio_source_hal_client_->ReconfigurationComplete();
     }
     if (directions & le_audio::types::kLeAudioDirectionSource) {
+      LeAudioLogHistory::Get()->AddLogHistory(
+          kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+          kLogAfReconfigComplete + "LocalSink",
+          "r_state: " + ToString(audio_receiver_state_) +
+              "s_state: " + ToString(audio_sender_state_));
+
       le_audio_sink_hal_client_->ReconfigurationComplete();
     }
   }
 
+  void CancelLocalAudioSourceStreamingRequest() {
+    le_audio_source_hal_client_->CancelStreamingRequest();
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+        kLogAfCancel + "LocalSource",
+        "s_state: " + ToString(audio_sender_state_));
+
+    audio_sender_state_ = AudioState::IDLE;
+  }
+
+  void CancelLocalAudioSinkStreamingRequest() {
+    le_audio_sink_hal_client_->CancelStreamingRequest();
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+        kLogAfCancel + "LocalSink",
+        "s_state: " + ToString(audio_receiver_state_));
+
+    audio_receiver_state_ = AudioState::IDLE;
+  }
+
   void CancelStreamingRequest() {
     if (audio_sender_state_ >= AudioState::READY_TO_START) {
-      le_audio_source_hal_client_->CancelStreamingRequest();
-      audio_sender_state_ = AudioState::IDLE;
+      CancelLocalAudioSourceStreamingRequest();
     }
 
     if (audio_receiver_state_ >= AudioState::READY_TO_START) {
-      le_audio_sink_hal_client_->CancelStreamingRequest();
-      audio_receiver_state_ = AudioState::IDLE;
+      CancelLocalAudioSinkStreamingRequest();
     }
   }
 
@@ -955,6 +999,27 @@ class LeAudioClientImpl : public LeAudioClient {
     in_call_ = in_call;
   }
 
+  void SendAudioProfilePreferences(
+      const int group_id, bool is_output_preference_le_audio,
+      bool is_duplex_preference_le_audio) override {
+    LOG_INFO(
+        "group_id: %d, is_output_preference_le_audio: %d, "
+        "is_duplex_preference_le_audio: %d",
+        group_id, is_output_preference_le_audio, is_duplex_preference_le_audio);
+    if (group_id == bluetooth::groups::kGroupUnknown) {
+      LOG_WARN("Unknown group_id");
+      return;
+    }
+    LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
+    if (!group) {
+      LOG_WARN("group_id %d does not exist", group_id);
+      return;
+    }
+
+    group->is_output_preference_le_audio = is_output_preference_le_audio;
+    group->is_duplex_preference_le_audio = is_duplex_preference_le_audio;
+  }
+
   void StartAudioSession(LeAudioDeviceGroup* group,
                          LeAudioCodecConfiguration* source_config,
                          LeAudioCodecConfiguration* sink_config) {
@@ -999,6 +1064,42 @@ class LeAudioClientImpl : public LeAudioClient {
 
     le_audio_sink_hal_client_->Start(audio_framework_sink_config,
                                      audioSourceReceiver);
+  }
+
+  bool isOutputPreferenceLeAudio(const RawAddress& address) {
+    LOG_INFO(" address: %s, active_group_id_: %d",
+             address.ToStringForLogging().c_str(), active_group_id_);
+    std::vector<RawAddress> active_leaudio_devices =
+        GetGroupDevices(active_group_id_);
+    if (std::find(active_leaudio_devices.begin(), active_leaudio_devices.end(),
+                  address) == active_leaudio_devices.end()) {
+      LOG_INFO("Device %s is not active for LE Audio",
+               address.ToStringForLogging().c_str());
+      return false;
+    }
+
+    LeAudioDeviceGroup* group = aseGroups_.FindById(active_group_id_);
+    LOG_INFO(" active_group_id: %d, is_output_preference_le_audio_: %d",
+             group->group_id_, group->is_output_preference_le_audio);
+    return group->is_output_preference_le_audio;
+  }
+
+  bool isDuplexPreferenceLeAudio(const RawAddress& address) {
+    LOG_INFO(" address: %s, active_group_id_: %d",
+             address.ToStringForLogging().c_str(), active_group_id_);
+    std::vector<RawAddress> active_leaudio_devices =
+        GetGroupDevices(active_group_id_);
+    if (std::find(active_leaudio_devices.begin(), active_leaudio_devices.end(),
+                  address) == active_leaudio_devices.end()) {
+      LOG_INFO("Device %s is not active for LE Audio",
+               address.ToStringForLogging().c_str());
+      return false;
+    }
+
+    LeAudioDeviceGroup* group = aseGroups_.FindById(active_group_id_);
+    LOG_INFO(" active_group_id: %d, is_duplex_preference_le_audio: %d",
+             group->group_id_, group->is_duplex_preference_le_audio);
+    return group->is_duplex_preference_le_audio;
   }
 
   void GroupSetActive(const int group_id) override {
@@ -1099,16 +1200,67 @@ class LeAudioClientImpl : public LeAudioClient {
     callbacks_->OnGroupStatus(active_group_id_, GroupStatus::ACTIVE);
   }
 
+  void SetEnableState(const RawAddress& address, bool enabled) override {
+    LOG_INFO(" %s: %s", ADDRESS_TO_LOGGABLE_CSTR(address),
+             (enabled ? "enabled" : "disabled"));
+    auto leAudioDevice = leAudioDevices_.FindByAddress(address);
+    if (leAudioDevice == nullptr) {
+      LOG_WARN("%s is null", ADDRESS_TO_LOGGABLE_CSTR(address));
+      return;
+    }
+
+    auto group_id = leAudioDevice->group_id_;
+    auto group = aseGroups_.FindById(group_id);
+    if (group == nullptr) {
+      LOG_WARN("Group %d is not available", group_id);
+      return;
+    }
+
+    if (enabled) {
+      group->Enable(gatt_if_, reconnection_mode_);
+    } else {
+      group->Disable(gatt_if_);
+    }
+  }
+
   void RemoveDevice(const RawAddress& address) override {
+    LOG_INFO(": %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
     if (!leAudioDevice) {
       return;
     }
 
-    if (leAudioDevice->conn_id_ != GATT_INVALID_CONN_ID) {
-      Disconnect(address);
-      leAudioDevice->SetConnectionState(DeviceConnectState::REMOVING);
-      return;
+    /* Remove device from the background connect if it is there */
+    BTA_GATTC_CancelOpen(gatt_if_, address, false);
+    btif_storage_set_leaudio_autoconnect(address, false);
+
+    LOG_INFO("%s, state: %s", ADDRESS_TO_LOGGABLE_CSTR(address),
+             bluetooth::common::ToString(leAudioDevice->GetConnectionState())
+                 .c_str());
+    auto connection_state = leAudioDevice->GetConnectionState();
+    switch (connection_state) {
+      case DeviceConnectState::REMOVING:
+      case DeviceConnectState::PENDING_REMOVAL:
+        /* Just return, and let device disconnect */
+        return;
+      case DeviceConnectState::CONNECTED:
+      case DeviceConnectState::CONNECTED_AUTOCONNECT_GETTING_READY:
+      case DeviceConnectState::CONNECTED_BY_USER_GETTING_READY:
+        /* ACL exist in this case, disconnect and mark as removing */
+        Disconnect(address);
+        [[fallthrough]];
+      case DeviceConnectState::DISCONNECTING:
+      case DeviceConnectState::DISCONNECTING_AND_RECOVER:
+        /* Device is disconnecting, just mark it shall be removed after all. */
+        leAudioDevice->SetConnectionState(DeviceConnectState::REMOVING);
+        return;
+      case DeviceConnectState::CONNECTING_BY_USER:
+        BTA_GATTC_CancelOpen(gatt_if_, address, true);
+        [[fallthrough]];
+      case DeviceConnectState::CONNECTING_AUTOCONNECT:
+      case DeviceConnectState::DISCONNECTED:
+        /* Do nothing, just remove device  */
+        break;
     }
 
     /* Remove the group assignment if not yet removed. It might happen that the
@@ -1124,6 +1276,8 @@ class LeAudioClientImpl : public LeAudioClient {
   }
 
   void Connect(const RawAddress& address) override {
+    LOG_INFO(": %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
+
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
     if (!leAudioDevice) {
       leAudioDevices_.Add(address, DeviceConnectState::CONNECTING_BY_USER);
@@ -1137,6 +1291,17 @@ class LeAudioClientImpl : public LeAudioClient {
 
         return;
       }
+
+      if (leAudioDevice->group_id_ != bluetooth::groups::kGroupUnknown) {
+        auto group = GetGroupIfEnabled(leAudioDevice->group_id_);
+        if (!group) {
+          LOG_WARN(" %s, trying to connect to disabled group id %d",
+                   ADDRESS_TO_LOGGABLE_CSTR(address), leAudioDevice->group_id_);
+          callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
+          return;
+        }
+      }
+
       leAudioDevice->SetConnectionState(DeviceConnectState::CONNECTING_BY_USER);
 
       le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
@@ -1267,24 +1432,26 @@ class LeAudioClientImpl : public LeAudioClient {
     return SerializeAses(leAudioDevice, out);
   }
 
-  void BackgroundConnectIfGroupConnected(LeAudioDevice* leAudioDevice) {
-    DLOG(INFO) << __func__ << ADDRESS_TO_LOGGABLE_STR(leAudioDevice->address_);
-    auto group = aseGroups_.FindById(leAudioDevice->group_id_);
-    if (!group) {
-      DLOG(INFO) << __func__ << " Device is not yet part of the group. ";
+  void BackgroundConnectIfNeeded(LeAudioDevice* leAudioDevice) {
+    auto group = GetGroupIfEnabled(leAudioDevice->group_id_);
+    if (group == nullptr) {
+      LOG_INFO(" Device %s is not yet part of the group %d. ",
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_),
+               leAudioDevice->group_id_);
       return;
     }
 
-    if (!group->IsAnyDeviceConnected()) {
-      DLOG(INFO) << __func__ << " group: " << leAudioDevice->group_id_
-                 << " is not connected";
+    if (!leAudioDevice->autoconnect_flag_ && !group->IsAnyDeviceConnected()) {
+      LOG_DEBUG("Device %s not in the background connect",
+                ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
       return;
     }
 
-    DLOG(INFO) << __func__ << " Add "
-               << ADDRESS_TO_LOGGABLE_STR(leAudioDevice->address_)
-               << " to background connect to connected group: "
-               << leAudioDevice->group_id_;
+    LOG_INFO(
+        "Add %s added to background connect. autoconnect flag: %d "
+        "group_connected: %d",
+        ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_),
+        leAudioDevice->group_id_, group->IsAnyDeviceConnected());
 
     leAudioDevice->SetConnectionState(
         DeviceConnectState::CONNECTING_AUTOCONNECT);
@@ -1293,6 +1460,7 @@ class LeAudioClientImpl : public LeAudioClient {
   }
 
   void Disconnect(const RawAddress& address) override {
+    LOG_INFO(": %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
 
     if (!leAudioDevice) {
@@ -1302,58 +1470,87 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    /* cancel pending direct connect */
-    if (leAudioDevice->GetConnectionState() ==
-        DeviceConnectState::CONNECTING_BY_USER) {
-      BTA_GATTC_CancelOpen(gatt_if_, address, true);
-    }
+    auto connection_state = leAudioDevice->GetConnectionState();
+    LOG_INFO("%s, state: %s", ADDRESS_TO_LOGGABLE_CSTR(address),
+             bluetooth::common::ToString(connection_state).c_str());
 
-    /* Removes all registrations for connection */
-    BTA_GATTC_CancelOpen(0, address, false);
+    switch (connection_state) {
+      case DeviceConnectState::CONNECTING_BY_USER:
+        /* Timeout happen on the Java layer. Device probably not in the range.
+         * Cancel just direct connection and keep background if it is there.
+         */
+        BTA_GATTC_CancelOpen(gatt_if_, address, true);
+        break;
+      case DeviceConnectState::CONNECTED: {
+        /* User is disconnecting the device, we shall remove the autoconnect
+         * flag for this device and all others if not TA is used
+         */
+        /* If target announcement is used, do not remove autoconnect
+         */
+        bool remove_from_autoconnect =
+            (reconnection_mode_ != BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS);
 
-    if (leAudioDevice->conn_id_ != GATT_INVALID_CONN_ID) {
-      /* User is disconnecting the device, we shall remove the autoconnect
-       * flag for this device and all others
-       */
-      LOG_INFO("Removing autoconnect flag for group_id %d",
-               leAudioDevice->group_id_);
+        if (leAudioDevice->autoconnect_flag_ && remove_from_autoconnect) {
+          LOG_INFO("Removing autoconnect flag for group_id %d",
+                   leAudioDevice->group_id_);
 
-      auto group = aseGroups_.FindById(leAudioDevice->group_id_);
+          /* Removes device from background connect */
+          BTA_GATTC_CancelOpen(gatt_if_, address, false);
+          btif_storage_set_leaudio_autoconnect(address, false);
+          leAudioDevice->autoconnect_flag_ = false;
+        }
 
-      if (leAudioDevice->autoconnect_flag_) {
-        btif_storage_set_leaudio_autoconnect(address, false);
-        leAudioDevice->autoconnect_flag_ = false;
-      }
-
-      if (group) {
-        /* Remove devices from auto connect mode */
-        for (auto dev = group->GetFirstDevice(); dev;
-             dev = group->GetNextDevice(dev)) {
-          if (dev->GetConnectionState() ==
-              DeviceConnectState::CONNECTING_AUTOCONNECT) {
-            btif_storage_set_leaudio_autoconnect(address, false);
-            dev->autoconnect_flag_ = false;
-            BTA_GATTC_CancelOpen(gatt_if_, address, false);
-            dev->SetConnectionState(DeviceConnectState::DISCONNECTED);
+        auto group = aseGroups_.FindById(leAudioDevice->group_id_);
+        if (group && remove_from_autoconnect) {
+          /* Remove devices from auto connect mode */
+          for (auto dev = group->GetFirstDevice(); dev;
+               dev = group->GetNextDevice(dev)) {
+            if (dev->GetConnectionState() ==
+                DeviceConnectState::CONNECTING_AUTOCONNECT) {
+              btif_storage_set_leaudio_autoconnect(address, false);
+              dev->autoconnect_flag_ = false;
+              BTA_GATTC_CancelOpen(gatt_if_, address, false);
+              dev->SetConnectionState(DeviceConnectState::DISCONNECTED);
+            }
           }
         }
-      }
 
-      if (group &&
-          group->GetState() ==
-              le_audio::types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-        leAudioDevice->closing_stream_for_disconnection_ = true;
-        groupStateMachine_->StopStream(group);
-        return;
+        if (group &&
+            group->GetState() ==
+                le_audio::types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+          leAudioDevice->closing_stream_for_disconnection_ = true;
+          groupStateMachine_->StopStream(group);
+          return;
+        }
       }
-      DisconnectDevice(leAudioDevice);
-      return;
+        [[fallthrough]];
+      case DeviceConnectState::CONNECTED_BY_USER_GETTING_READY:
+        /* Timeout happen on the Java layer before native got ready with the
+         * device */
+        DisconnectDevice(leAudioDevice);
+        return;
+      case DeviceConnectState::CONNECTED_AUTOCONNECT_GETTING_READY:
+        /* Java is not aware about autoconnect actions,
+         * therefore this should not happen.
+         */
+        LOG_WARN("Should not happen - disconnect device");
+        DisconnectDevice(leAudioDevice);
+        return;
+      case DeviceConnectState::DISCONNECTED:
+      case DeviceConnectState::DISCONNECTING:
+      case DeviceConnectState::DISCONNECTING_AND_RECOVER:
+      case DeviceConnectState::CONNECTING_AUTOCONNECT:
+      case DeviceConnectState::PENDING_REMOVAL:
+      case DeviceConnectState::REMOVING:
+        LOG_WARN("%s, invalid state %s", ADDRESS_TO_LOGGABLE_CSTR(address),
+                 bluetooth::common::ToString(connection_state).c_str());
+        break;
     }
 
     /* If this is a device which is a part of the group which is connected,
      * lets start backgroup connect
      */
-    BackgroundConnectIfGroupConnected(leAudioDevice);
+    BackgroundConnectIfNeeded(leAudioDevice);
   }
 
   void DisconnectDevice(LeAudioDevice* leAudioDevice,
@@ -1362,14 +1559,19 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTING);
+    if (leAudioDevice->GetConnectionState() != DeviceConnectState::REMOVING) {
+      leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTING);
+    }
 
     BtaGattQueue::Clean(leAudioDevice->conn_id_);
-    BTA_GATTC_Close(leAudioDevice->conn_id_);
 
     /* Remote in bad state, force ACL Disconnection. */
     if (acl_force_disconnect) {
       leAudioDevice->DisconnectAcl();
+      leAudioDevice->SetConnectionState(
+          DeviceConnectState::DISCONNECTING_AND_RECOVER);
+    } else {
+      BTA_GATTC_Close(leAudioDevice->conn_id_);
     }
   }
 
@@ -1659,6 +1861,39 @@ class LeAudioClientImpl : public LeAudioClient {
     LeAudioCharValueHandle(conn_id, hdl, len, value);
   }
 
+  LeAudioDeviceGroup* GetGroupIfEnabled(int group_id) {
+    auto group = aseGroups_.FindById(group_id);
+    if (group == nullptr) {
+      LOG_INFO("Group %d does not exist", group_id);
+      return nullptr;
+    }
+    if (!group->IsEnabled()) {
+      LOG_INFO("Group %d is disabled", group_id);
+      return nullptr;
+    }
+    return group;
+  }
+
+  void AddToBackgroundConnectCheckGroupConnected(LeAudioDevice* leAudioDevice) {
+    /* If device belongs to streaming group, add it on allow list */
+    auto address = leAudioDevice->address_;
+    auto group = GetGroupIfEnabled(leAudioDevice->group_id_);
+
+    if (group != nullptr && group->IsAnyDeviceConnected()) {
+      LOG_INFO("Group %d in connected state. Adding %s to allow list ",
+               leAudioDevice->group_id_, ADDRESS_TO_LOGGABLE_CSTR(address));
+      /* Make sure TA is canceled before adding to allow list */
+      BTA_GATTC_CancelOpen(gatt_if_, address, false);
+      BTA_GATTC_Open(gatt_if_, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
+    } else {
+      LOG_INFO(
+          "Adding %s to backgroud connect (default reconnection_mode "
+          "(0x%02x))",
+          ADDRESS_TO_LOGGABLE_CSTR(address), reconnection_mode_);
+      BTA_GATTC_Open(gatt_if_, address, reconnection_mode_, false);
+    }
+  }
+
   void OnGattConnected(tGATT_STATUS status, uint16_t conn_id,
                        tGATT_IF client_if, RawAddress address,
                        tBT_TRANSPORT transport, uint16_t mtu) {
@@ -1668,13 +1903,19 @@ class LeAudioClientImpl : public LeAudioClient {
 
     LOG_INFO("%s, status 0x%02x", ADDRESS_TO_LOGGABLE_CSTR(address), status);
 
+    /* Remove device from the background connect (it might be either Allow list
+     * or TA) and it will be added back on disconnection
+     */
+    BTA_GATTC_CancelOpen(gatt_if_, address, false);
+
     if (status != GATT_SUCCESS) {
       /* autoconnect connection failed, that's ok */
       if (leAudioDevice->GetConnectionState() ==
               DeviceConnectState::CONNECTING_AUTOCONNECT ||
           leAudioDevice->autoconnect_flag_) {
         LOG_INFO("Device not available now, do background connect.");
-        BTA_GATTC_Open(gatt_if_, address, reconnection_mode_, false);
+        leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
+        AddToBackgroundConnectCheckGroupConnected(leAudioDevice);
         return;
       }
 
@@ -1687,6 +1928,16 @@ class LeAudioClientImpl : public LeAudioClient {
           leAudioDevice->group_id_, address, ConnectionState::CONNECTED,
           le_audio::ConnectionStatus::FAILED);
       return;
+    }
+
+    if (leAudioDevice->group_id_ != bluetooth::groups::kGroupUnknown) {
+      auto group = GetGroupIfEnabled(leAudioDevice->group_id_);
+      if (group == nullptr) {
+        LOG_WARN(
+            "LeAudio profile is disabled for group_id: %d. %s is not connected",
+            leAudioDevice->group_id_, ADDRESS_TO_LOGGABLE_CSTR(address));
+        return;
+      }
     }
 
     if (controller_get_interface()->supports_ble_2m_phy()) {
@@ -1791,18 +2042,21 @@ class LeAudioClientImpl : public LeAudioClient {
   void changeMtuIfPossible(LeAudioDevice* leAudioDevice) {
     if (leAudioDevice->mtu_ == GATT_DEF_BLE_MTU_SIZE) {
       LOG(INFO) << __func__ << ", Configure MTU";
-      BtaGattQueue::ConfigureMtu(leAudioDevice->conn_id_, GATT_MAX_MTU_SIZE);
+      /* Use here kBapMinimumAttMtu, because we know that GATT will request
+       * GATT_MAX_MTU_SIZE on ATT anyways. We also know that GATT will use this
+       * kBapMinimumAttMtu as an input for Data Length Update procedure in the controller.
+       */
+      BtaGattQueue::ConfigureMtu(leAudioDevice->conn_id_, kBapMinimumAttMtu);
     }
   }
 
   void OnEncryptionComplete(const RawAddress& address, uint8_t status) {
-    LOG(INFO) << __func__ << " "
-              << ADDRESS_TO_LOGGABLE_STR(address) << "status: " << int{status};
-
+    LOG_INFO("%s status 0x%02x ", ADDRESS_TO_LOGGABLE_CSTR(address), status);
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
-    if (leAudioDevice == NULL) {
-      LOG(WARNING) << "Skipping unknown device"
-                   << ADDRESS_TO_LOGGABLE_STR(address);
+    if (leAudioDevice == NULL ||
+        (leAudioDevice->conn_id_ == GATT_INVALID_CONN_ID)) {
+      LOG_WARN("Skipping device which is %s",
+               (leAudioDevice ? " not connected by service." : " null"));
       return;
     }
 
@@ -1849,9 +2103,112 @@ class LeAudioClientImpl : public LeAudioClient {
         &le_audio::uuid::kPublishedAudioCapabilityServiceUuid);
   }
 
+  void checkGroupConnectionStateAfterMemberDisconnect(int group_id) {
+    /* This is fired t=kGroupConnectedWatchDelayMs after group member
+     * got disconencted while ather group members were connected.
+     * We want to check here if there is any group member connected.
+     * If so we should add other group members to allow list for better
+     * reconnection experiance. If  all group members are disconnected
+     * i e.g. devices intentionally disconnected for other
+     * purposes like pairing with other device, then we do nothing here and
+     * device stay on the default reconnection policy (i.e. targeted
+     * announcements)
+     */
+    auto group = aseGroups_.FindById(group_id);
+    if (group == nullptr || !group->IsAnyDeviceConnected()) {
+      LOG_INFO("Group %d is not streaming", group_id);
+      return;
+    }
+
+    /* if group is still connected, make sure that other not connected
+     * set members are in the allow list for the quick reconnect.
+     * E.g. for the earbud case, probably one of the earbud is in the case now.
+     */
+    group->AddToAllowListNotConnectedGroupMembers(gatt_if_);
+  }
+
+  void scheduleGroupConnectedCheck(int group_id) {
+    LOG_INFO("Schedule group_id %d connected check.", group_id);
+    do_in_main_thread_delayed(
+        FROM_HERE,
+        base::BindOnce(
+            &LeAudioClientImpl::checkGroupConnectionStateAfterMemberDisconnect,
+            base::Unretained(this), group_id),
+#if BASE_VER < 931007
+        base::TimeDelta::FromMilliseconds(kGroupConnectedWatchDelayMs)
+#else
+        base::Milliseconds(kDeviceAttachDelayMs)
+#endif
+    );
+  }
+
+  void autoConnect(RawAddress address) {
+    auto leAudioDevice = leAudioDevices_.FindByAddress(address);
+    if (leAudioDevice == nullptr) {
+      LOG_WARN("Device %s not valid anymore",
+               ADDRESS_TO_LOGGABLE_CSTR(address));
+      return;
+    }
+
+    BackgroundConnectIfNeeded(leAudioDevice);
+  }
+
+  void scheduleAutoConnect(RawAddress& address) {
+    LOG_INFO("Schedule auto connect %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
+    do_in_main_thread_delayed(
+        FROM_HERE,
+        base::BindOnce(&LeAudioClientImpl::autoConnect, base::Unretained(this),
+                       address),
+#if BASE_VER < 931007
+        base::TimeDelta::FromMilliseconds(kAutoConnectAfterOwnDisconnectDelayMs)
+#else
+        base::Milliseconds(kDeviceAttachDelayMs)
+#endif
+    );
+  }
+
+  void recoveryReconnect(RawAddress address) {
+    LOG_INFO("Reconnecting to %s after timeout on state machine.",
+             ADDRESS_TO_LOGGABLE_CSTR(address));
+    LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
+
+    if (leAudioDevice == nullptr ||
+        leAudioDevice->GetConnectionState() !=
+            DeviceConnectState::DISCONNECTING_AND_RECOVER) {
+      LOG_WARN("Device %s, not interested in recovery connect anymore",
+               ADDRESS_TO_LOGGABLE_CSTR(address));
+      return;
+    }
+
+    auto group = GetGroupIfEnabled(leAudioDevice->group_id_);
+
+    if (group != nullptr) {
+      leAudioDevice->SetConnectionState(
+          DeviceConnectState::CONNECTING_AUTOCONNECT);
+      BTA_GATTC_Open(gatt_if_, address, BTM_BLE_DIRECT_CONNECTION, false);
+    } else {
+      leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
+    }
+  }
+
+  void scheduleRecoveryReconnect(RawAddress& address) {
+    LOG_INFO("Schedule reconnecting to %s after timeout on state machine.",
+             ADDRESS_TO_LOGGABLE_CSTR(address));
+    do_in_main_thread_delayed(
+        FROM_HERE,
+        base::BindOnce(&LeAudioClientImpl::recoveryReconnect,
+                       base::Unretained(this), address),
+#if BASE_VER < 931007
+        base::TimeDelta::FromMilliseconds(kRecoveryReconnectDelayMs)
+#else
+        base::Milliseconds(kDeviceAttachDelayMs)
+#endif
+    );
+  }
+
   void OnGattDisconnected(uint16_t conn_id, tGATT_IF client_if,
                           RawAddress address, tGATT_DISCONN_REASON reason) {
-    LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
+    LeAudioDevice* leAudioDevice = leAudioDevices_.FindByConnId(conn_id);
 
     if (!leAudioDevice) {
       LOG(ERROR) << ", skipping unknown leAudioDevice, address: "
@@ -1862,8 +2219,6 @@ class LeAudioClientImpl : public LeAudioClient {
     BtaGattQueue::Clean(leAudioDevice->conn_id_);
     LeAudioDeviceGroup* group = aseGroups_.FindById(leAudioDevice->group_id_);
 
-    groupStateMachine_->ProcessHciNotifAclDisconnected(group, leAudioDevice);
-
     DeregisterNotifications(leAudioDevice);
 
     callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
@@ -1871,6 +2226,8 @@ class LeAudioClientImpl : public LeAudioClient {
     leAudioDevice->mtu_ = 0;
     leAudioDevice->closing_stream_for_disconnection_ = false;
     leAudioDevice->encrypted_ = false;
+
+    groupStateMachine_->ProcessHciNotifAclDisconnected(group, leAudioDevice);
 
     le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
         leAudioDevice->group_id_, address, ConnectionState::DISCONNECTED,
@@ -1884,16 +2241,72 @@ class LeAudioClientImpl : public LeAudioClient {
       leAudioDevices_.Remove(address);
       return;
     }
-    /* Attempt background re-connect if disconnect was not intended locally
+
+    auto connection_state = leAudioDevice->GetConnectionState();
+    LOG_INFO("%s, autoconnect %d, reason 0x%02x, connection state %s",
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_),
+             leAudioDevice->autoconnect_flag_, reason,
+             bluetooth::common::ToString(connection_state).c_str());
+
+    if (connection_state == DeviceConnectState::DISCONNECTING_AND_RECOVER) {
+      /* We are back after disconnecting device which was in a bad state.
+       * lets try to reconnected - 30 sec with direct connect and later fallback
+       * to default background reconnection mode.
+       * Since GATT notifies us before ACL was dropped, let's wait a bit
+       * before we do reconnect.
+       */
+      scheduleRecoveryReconnect(address);
+      return;
+    }
+
+    /* Attempt background re-connect if disconnect was not initiated locally
      * or if autoconnect is set and device got disconnected because of some
      * issues
      */
-    if (reason != GATT_CONN_TERMINATE_LOCAL_HOST ||
-        leAudioDevice->autoconnect_flag_) {
+    if (group == nullptr || !group->IsEnabled()) {
+      LOG_ERROR("Group id %d (%p) disabled or null", leAudioDevice->group_id_,
+                group);
+      leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
+      return;
+    }
+
+    if (reason == GATT_CONN_TERMINATE_LOCAL_HOST) {
+      if (leAudioDevice->autoconnect_flag_) {
+        /* In this case ACL might not yet been disconnected */
+        scheduleAutoConnect(address);
+      } else {
+        /* Just acknowledge disconnected state*/
+        leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
+      }
+      return;
+    }
+
+    /* Remote disconnects from us or Timeout happens */
+    /* In this case ACL is disconnected */
+    if (reason == GATT_CONN_TIMEOUT) {
       leAudioDevice->SetConnectionState(
           DeviceConnectState::CONNECTING_AUTOCONNECT);
+
+      /* If timeout try to reconnect for 30 sec.*/
+      BTA_GATTC_Open(gatt_if_, address, BTM_BLE_DIRECT_CONNECTION, false);
+      return;
+    }
+
+    /* In other disconnect resons we act based on the autoconnect_flag_ */
+    if (leAudioDevice->autoconnect_flag_) {
+      leAudioDevice->SetConnectionState(
+          DeviceConnectState::CONNECTING_AUTOCONNECT);
+
       BTA_GATTC_Open(gatt_if_, address, reconnection_mode_, false);
+      if (group->IsAnyDeviceConnected()) {
+        /* If all set is disconnecting, let's give it some time.
+         * If not all get disconnected, and there will be group member
+         * connected we want to put disconnected devices to allow list
+         */
+        scheduleGroupConnectedCheck(leAudioDevice->group_id_);
+      }
     } else {
+      /* Just acknowledge disconnected state*/
       leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
     }
   }
@@ -1971,9 +2384,9 @@ class LeAudioClientImpl : public LeAudioClient {
 
   void OnServiceChangeEvent(const RawAddress& address) {
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
-    if (!leAudioDevice) {
-      LOG_WARN("Skipping unknown leAudioDevice %s",
-               ADDRESS_TO_LOGGABLE_CSTR(address));
+    if (!leAudioDevice || (leAudioDevice->conn_id_ == GATT_INVALID_CONN_ID)) {
+      LOG_WARN("Skipping unknown leAudioDevice %s (%p)",
+               ADDRESS_TO_LOGGABLE_CSTR(address), leAudioDevice);
       return;
     }
     ClearDeviceInformationAndStartSearch(leAudioDevice);
@@ -1986,15 +2399,29 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
+    /**
+     * BAP 1.01. 3.6.1
+     * ATT and EATT transport requirements
+     * The Unicast Client shall support a minimum ATT_MTU of 64 octets for one
+     * Unenhanced ATT bearer, or for at least one Enhanced ATT bearer if the
+     * Unicast Client supports Enhanced ATT bearers.
+     *
+     */
+    if (mtu < 64) {
+      LOG_ERROR("Device %s MTU is too low (%d). Disconnecting from LE Audio",
+                ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_), mtu);
+      Disconnect(leAudioDevice->address_);
+      return;
+    }
+
     leAudioDevice->mtu_ = mtu;
   }
 
   void OnGattServiceDiscoveryDone(const RawAddress& address) {
     LeAudioDevice* leAudioDevice = leAudioDevices_.FindByAddress(address);
-    if (!leAudioDevice) {
-      DLOG(ERROR) << __func__
-                  << ", skipping unknown leAudioDevice, address: "
-                  << ADDRESS_TO_LOGGABLE_STR(address);
+    if (!leAudioDevice || (leAudioDevice->conn_id_ == GATT_INVALID_CONN_ID)) {
+      LOG_VERBOSE("skipping unknown leAudioDevice, address %s (%p) ",
+                  ADDRESS_TO_LOGGABLE_CSTR(address), leAudioDevice);
       return;
     }
 
@@ -2932,6 +3359,28 @@ class LeAudioClientImpl : public LeAudioClient {
     if (written != to_write) LOG(ERROR) << __func__ << ", not all data sinked";
   }
 
+  void ConfirmLocalAudioSourceStreamingRequest() {
+    le_audio_source_hal_client_->ConfirmStreamingRequest();
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+        kLogAfResumeConfirm + "LocalSource",
+        "s_state: " + ToString(audio_sender_state_) + "-> STARTED");
+
+    audio_sender_state_ = AudioState::STARTED;
+  }
+
+  void ConfirmLocalAudioSinkStreamingRequest() {
+    le_audio_sink_hal_client_->ConfirmStreamingRequest();
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+        kLogAfResumeConfirm + "LocalSink",
+        "r_state: " + ToString(audio_receiver_state_) + "-> STARTED");
+
+    audio_receiver_state_ = AudioState::STARTED;
+  }
+
   bool StartSendingAudio(int group_id) {
     LOG(INFO) << __func__;
 
@@ -2987,14 +3436,17 @@ class LeAudioClientImpl : public LeAudioClient {
     }
 
     le_audio_source_hal_client_->UpdateRemoteDelay(remote_delay_ms);
-    le_audio_source_hal_client_->ConfirmStreamingRequest();
-    audio_sender_state_ = AudioState::STARTED;
-    /* We update the target audio allocation before streamStarted that the
-     * offloder would know how to configure offloader encoder. We should check
-     * if we need to update the current
-     * allocation here as the target allocation and the current allocation is
-     * different */
-    updateOffloaderIfNeeded(group);
+    ConfirmLocalAudioSourceStreamingRequest();
+
+    if (CodecManager::GetInstance()->GetAidlVersionInUsed() <
+        AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
+      /* We update the target audio allocation before streamStarted that the
+       * offloder would know how to configure offloader encoder. We should check
+       * if we need to update the current
+       * allocation here as the target allocation and the current allocation is
+       * different */
+      updateOffloaderIfNeeded(group);
+    }
 
     return true;
   }
@@ -3051,14 +3503,17 @@ class LeAudioClientImpl : public LeAudioClient {
           lc3_setup_decoder(dt_us, sr_hz, af_hz, lc3_decoder_right_mem);
     }
     le_audio_sink_hal_client_->UpdateRemoteDelay(remote_delay_ms);
-    le_audio_sink_hal_client_->ConfirmStreamingRequest();
-    audio_receiver_state_ = AudioState::STARTED;
-    /* We update the target audio allocation before streamStarted that the
-     * offloder would know how to configure offloader decoder. We should check
-     * if we need to update the current
-     * allocation here as the target allocation and the current allocation is
-     * different */
-    updateOffloaderIfNeeded(group);
+    ConfirmLocalAudioSinkStreamingRequest();
+
+    if (CodecManager::GetInstance()->GetAidlVersionInUsed() <
+        AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
+      /* We update the target audio allocation before streamStarted that the
+       * offloder would know how to configure offloader encoder. We should check
+       * if we need to update the current
+       * allocation here as the target allocation and the current allocation is
+       * different */
+      updateOffloaderIfNeeded(group);
+    }
   }
 
   void SuspendAudio(void) {
@@ -3127,20 +3582,21 @@ class LeAudioClientImpl : public LeAudioClient {
   }
 
   void Dump(int fd) {
+    dprintf(fd, "  APP ID: %d \n", gatt_if_);
     dprintf(fd, "  Active group: %d\n", active_group_id_);
-    dprintf(fd, "    reconnection mode: %s \n",
+    dprintf(fd, "  reconnection mode: %s \n",
             (reconnection_mode_ == BTM_BLE_BKG_CONNECT_ALLOW_LIST
-                 ? " Allow List"
-                 : " Targeted Announcements"));
-    dprintf(fd, "    configuration: %s  (0x%08hx)\n",
+                 ? "Allow List"
+                 : "Targeted Announcements"));
+    dprintf(fd, "  configuration: %s  (0x%08hx)\n",
             bluetooth::common::ToString(configuration_context_type_).c_str(),
             configuration_context_type_);
-    dprintf(fd, "    source metadata context type mask: %s\n",
+    dprintf(fd, "  source metadata context type mask: %s\n",
             metadata_context_types_.source.to_string().c_str());
-    dprintf(fd, "    sink metadata context type mask: %s\n",
+    dprintf(fd, "  sink metadata context type mask: %s\n",
             metadata_context_types_.sink.to_string().c_str());
-    dprintf(fd, "    TBS state: %s\n", in_call_ ? " In call" : "No calls");
-    dprintf(fd, "    Start time: ");
+    dprintf(fd, "  TBS state: %s\n", in_call_ ? " In call" : "No calls");
+    dprintf(fd, "  Start time: ");
     for (auto t : stream_start_history_queue_) {
       dprintf(fd, ", %d ms", static_cast<int>(t));
     }
@@ -3297,6 +3753,11 @@ class LeAudioClientImpl : public LeAudioClient {
         "audio_sender_state_: %s",
         active_group_id_, ToString(audio_receiver_state_).c_str(),
         ToString(audio_sender_state_).c_str());
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogAfCallBt, active_group_id_, RawAddress::kEmpty,
+        kLogAfSuspend + "LocalSource",
+        "r_state: " + ToString(audio_receiver_state_) +
+            ", s_state: " + ToString(audio_sender_state_));
 
     /* Note: This callback is from audio hal driver.
      * Bluetooth peer is a Sink for Audio Framework.
@@ -3328,6 +3789,12 @@ class LeAudioClientImpl : public LeAudioClient {
     LOG_INFO("OUT: audio_receiver_state_: %s,  audio_sender_state_: %s",
              ToString(audio_receiver_state_).c_str(),
              ToString(audio_sender_state_).c_str());
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+        kLogAfSuspendConfirm + "LocalSource",
+        "r_state: " + ToString(audio_receiver_state_) +
+            "s_state: " + ToString(audio_sender_state_));
   }
 
   void OnLocalAudioSourceResume() {
@@ -3336,6 +3803,12 @@ class LeAudioClientImpl : public LeAudioClient {
         "audio_sender_state_: %s",
         active_group_id_, ToString(audio_receiver_state_).c_str(),
         ToString(audio_sender_state_).c_str());
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogAfCallBt, active_group_id_, RawAddress::kEmpty,
+        kLogAfResume + "LocalSource",
+        "r_state: " + ToString(audio_receiver_state_) +
+            ", s_state: " + ToString(audio_sender_state_));
+
     /* Note: This callback is from audio hal driver.
      * Bluetooth peer is a Sink for Audio Framework.
      * e.g. Peer is a speaker
@@ -3344,7 +3817,6 @@ class LeAudioClientImpl : public LeAudioClient {
     if (!group) {
       LOG(ERROR) << __func__
                  << ", Invalid group: " << static_cast<int>(active_group_id_);
-      le_audio_source_hal_client_->CancelStreamingRequest();
       return;
     }
 
@@ -3354,7 +3826,7 @@ class LeAudioClientImpl : public LeAudioClient {
             le_audio::types::kLeAudioDirectionSink)) {
       LOG(ERROR) << __func__ << ", invalid resume request for context type: "
                  << ToHexString(configuration_context_type_);
-      le_audio_source_hal_client_->CancelStreamingRequest();
+      CancelLocalAudioSourceStreamingRequest();
       return;
     }
 
@@ -3368,7 +3840,7 @@ class LeAudioClientImpl : public LeAudioClient {
     switch (audio_sender_state_) {
       case AudioState::STARTED:
         /* Looks like previous Confirm did not get to the Audio Framework*/
-        le_audio_source_hal_client_->ConfirmStreamingRequest();
+        ConfirmLocalAudioSourceStreamingRequest();
         break;
       case AudioState::IDLE:
         switch (audio_receiver_state_) {
@@ -3377,18 +3849,60 @@ class LeAudioClientImpl : public LeAudioClient {
             if (OnAudioResume(group)) {
               audio_sender_state_ = AudioState::READY_TO_START;
             } else {
-              le_audio_source_hal_client_->CancelStreamingRequest();
+              CancelLocalAudioSourceStreamingRequest();
             }
             break;
           case AudioState::READY_TO_START:
+            audio_sender_state_ = AudioState::READY_TO_START;
+            if (!IsDirectionAvailableForCurrentConfiguration(
+                    group, le_audio::types::kLeAudioDirectionSink)) {
+              LOG_WARN(
+                  " sink is not configured. \n audio_receiver_state: %s \n"
+                  "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                  "Reconfiguring to %s",
+                  ToString(audio_receiver_state_).c_str(),
+                  ToString(audio_sender_state_).c_str(),
+                  (group->IsPendingConfiguration() ? "true" : "false"),
+                  ToString(configuration_context_type_).c_str());
+              group->PrintDebugState();
+              SetConfigurationAndStopStreamWhenNeeded(
+                  group, configuration_context_type_);
+            }
+            break;
           case AudioState::STARTED:
             audio_sender_state_ = AudioState::READY_TO_START;
-            /* If signalling part is completed trigger start receiving audio
+            /* If signalling part is completed trigger start sending audio
              * here, otherwise it'll be called on group streaming state callback
              */
             if (group->GetState() ==
                 AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-              StartSendingAudio(active_group_id_);
+              if (IsDirectionAvailableForCurrentConfiguration(
+                      group, le_audio::types::kLeAudioDirectionSink)) {
+                StartSendingAudio(active_group_id_);
+              } else {
+                LOG_WARN(
+                    " sink is not configured. \n audio_receiver_state: %s \n"
+                    "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                    "Reconfiguring to %s",
+                    ToString(audio_receiver_state_).c_str(),
+                    ToString(audio_sender_state_).c_str(),
+                    (group->IsPendingConfiguration() ? "true" : "false"),
+                    ToString(configuration_context_type_).c_str());
+                group->PrintDebugState();
+                SetConfigurationAndStopStreamWhenNeeded(
+                    group, configuration_context_type_);
+              }
+            } else {
+              LOG_ERROR(
+                  " called in wrong state. \n audio_receiver_state: %s \n"
+                  "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                  "Reconfiguring to %s",
+                  ToString(audio_receiver_state_).c_str(),
+                  ToString(audio_sender_state_).c_str(),
+                  (group->IsPendingConfiguration() ? "true" : "false"),
+                  ToString(configuration_context_type_).c_str());
+              group->PrintDebugState();
+              CancelStreamingRequest();
             }
             break;
           case AudioState::RELEASING:
@@ -3398,21 +3912,50 @@ class LeAudioClientImpl : public LeAudioClient {
             audio_sender_state_ = audio_receiver_state_;
             break;
           case AudioState::READY_TO_RELEASE:
-            LOG_WARN(
-                " called in wrong state. \n audio_receiver_state: %s \n"
-                "audio_sender_state: %s \n",
-                ToString(audio_receiver_state_).c_str(),
-                ToString(audio_sender_state_).c_str());
-            CancelStreamingRequest();
+            /* If the other direction is streaming we can start sending audio */
+            if (group->GetState() ==
+                AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+              if (IsDirectionAvailableForCurrentConfiguration(
+                      group, le_audio::types::kLeAudioDirectionSink)) {
+                StartSendingAudio(active_group_id_);
+              } else {
+                LOG_WARN(
+                    " sink is not configured. \n audio_receiver_state: %s \n"
+                    "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                    "Reconfiguring to %s",
+                    ToString(audio_receiver_state_).c_str(),
+                    ToString(audio_sender_state_).c_str(),
+                    (group->IsPendingConfiguration() ? "true" : "false"),
+                    ToString(configuration_context_type_).c_str());
+                group->PrintDebugState();
+                SetConfigurationAndStopStreamWhenNeeded(
+                    group, configuration_context_type_);
+              }
+            } else {
+              LOG_ERROR(
+                  " called in wrong state. \n audio_receiver_state: %s \n"
+                  "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                  "Reconfiguring to %s",
+                  ToString(audio_receiver_state_).c_str(),
+                  ToString(audio_sender_state_).c_str(),
+                  (group->IsPendingConfiguration() ? "true" : "false"),
+                  ToString(configuration_context_type_).c_str());
+              group->PrintDebugState();
+              CancelStreamingRequest();
+            }
             break;
         }
         break;
       case AudioState::READY_TO_START:
-        LOG_WARN(
+        LOG_ERROR(
             " called in wrong state. \n audio_receiver_state: %s \n"
-            "audio_sender_state: %s \n",
+            "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+            "Reconfiguring to %s",
             ToString(audio_receiver_state_).c_str(),
-            ToString(audio_sender_state_).c_str());
+            ToString(audio_sender_state_).c_str(),
+            (group->IsPendingConfiguration() ? "true" : "false"),
+            ToString(configuration_context_type_).c_str());
+        group->PrintDebugState();
         CancelStreamingRequest();
         break;
       case AudioState::READY_TO_RELEASE:
@@ -3422,10 +3965,9 @@ class LeAudioClientImpl : public LeAudioClient {
           case AudioState::IDLE:
           case AudioState::READY_TO_RELEASE:
             /* Stream is up just restore it */
-            audio_sender_state_ = AudioState::STARTED;
             if (alarm_is_scheduled(suspend_timeout_))
               alarm_cancel(suspend_timeout_);
-            le_audio_source_hal_client_->ConfirmStreamingRequest();
+            ConfirmLocalAudioSourceStreamingRequest();
             le_audio::MetricsCollector::Get()->OnStreamStarted(
                 active_group_id_, configuration_context_type_);
             break;
@@ -3447,6 +3989,11 @@ class LeAudioClientImpl : public LeAudioClient {
         "audio_sender_state_: %s",
         active_group_id_, ToString(audio_receiver_state_).c_str(),
         ToString(audio_sender_state_).c_str());
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogAfCallBt, active_group_id_, RawAddress::kEmpty,
+        kLogAfSuspend + "LocalSink",
+        "r_state: " + ToString(audio_receiver_state_) +
+            ", s_state: " + ToString(audio_sender_state_));
 
     StartVbcCloseTimeout();
 
@@ -3478,6 +4025,12 @@ class LeAudioClientImpl : public LeAudioClient {
     LOG_INFO("OUT: audio_receiver_state_: %s,  audio_sender_state_: %s",
              ToString(audio_receiver_state_).c_str(),
              ToString(audio_sender_state_).c_str());
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogBtCallAf, active_group_id_, RawAddress::kEmpty,
+        kLogAfSuspendConfirm + "LocalSink",
+        "r_state: " + ToString(audio_receiver_state_) +
+            "s_state: " + ToString(audio_sender_state_));
   }
 
   inline bool IsDirectionAvailableForCurrentConfiguration(
@@ -3494,6 +4047,12 @@ class LeAudioClientImpl : public LeAudioClient {
         "audio_sender_state_: %s",
         active_group_id_, ToString(audio_receiver_state_).c_str(),
         ToString(audio_sender_state_).c_str());
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogAfCallBt, active_group_id_, RawAddress::kEmpty,
+        kLogAfResume + "LocalSink",
+        "r_state: " + ToString(audio_receiver_state_) +
+            ", s_state: " + ToString(audio_sender_state_));
+
     /* Stop the VBC close watchdog if needed */
     StopVbcCloseTimeout();
 
@@ -3505,7 +4064,6 @@ class LeAudioClientImpl : public LeAudioClient {
     if (!group) {
       LOG(ERROR) << __func__
                  << ", Invalid group: " << static_cast<int>(active_group_id_);
-      le_audio_sink_hal_client_->CancelStreamingRequest();
       return;
     }
 
@@ -3522,7 +4080,7 @@ class LeAudioClientImpl : public LeAudioClient {
             le_audio::types::kLeAudioDirectionSource)) {
       LOG(ERROR) << __func__ << ", invalid resume request for context type: "
                  << ToHexString(configuration_context_type_);
-      le_audio_sink_hal_client_->CancelStreamingRequest();
+      CancelLocalAudioSinkStreamingRequest();
       return;
     }
 
@@ -3535,7 +4093,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     switch (audio_receiver_state_) {
       case AudioState::STARTED:
-        le_audio_sink_hal_client_->ConfirmStreamingRequest();
+        ConfirmLocalAudioSinkStreamingRequest();
         break;
       case AudioState::IDLE:
         switch (audio_sender_state_) {
@@ -3543,28 +4101,60 @@ class LeAudioClientImpl : public LeAudioClient {
             if (OnAudioResume(group)) {
               audio_receiver_state_ = AudioState::READY_TO_START;
             } else {
-              le_audio_sink_hal_client_->CancelStreamingRequest();
+              CancelLocalAudioSinkStreamingRequest();
             }
             break;
           case AudioState::READY_TO_START:
+            audio_receiver_state_ = AudioState::READY_TO_START;
+            if (!IsDirectionAvailableForCurrentConfiguration(
+                    group, le_audio::types::kLeAudioDirectionSource)) {
+              LOG_WARN(
+                  " source is not configured. \n audio_receiver_state: %s \n"
+                  "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                  "Reconfiguring to %s",
+                  ToString(audio_receiver_state_).c_str(),
+                  ToString(audio_sender_state_).c_str(),
+                  (group->IsPendingConfiguration() ? "true" : "false"),
+                  ToString(configuration_context_type_).c_str());
+              group->PrintDebugState();
+              SetConfigurationAndStopStreamWhenNeeded(
+                  group, configuration_context_type_);
+            }
+            break;
           case AudioState::STARTED:
             audio_receiver_state_ = AudioState::READY_TO_START;
-            /* If signalling part is completed trigger start reveivin audio
+            /* If signalling part is completed trigger start receiving audio
              * here, otherwise it'll be called on group streaming state callback
              */
             if (group->GetState() ==
                 AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-              if (!IsDirectionAvailableForCurrentConfiguration(
+              if (IsDirectionAvailableForCurrentConfiguration(
                       group, le_audio::types::kLeAudioDirectionSource)) {
+                StartReceivingAudio(active_group_id_);
+              } else {
                 LOG_WARN(
-                    "Local audio sink was resumed when not in a proper "
-                    "configuration. This should not happen. Reconfiguring to "
-                    "VOICEASSISTANTS.");
+                    " source is not configured. \n audio_receiver_state: %s \n"
+                    "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                    "Reconfiguring to %s",
+                    ToString(audio_receiver_state_).c_str(),
+                    ToString(audio_sender_state_).c_str(),
+                    (group->IsPendingConfiguration() ? "true" : "false"),
+                    ToString(configuration_context_type_).c_str());
+                group->PrintDebugState();
                 SetConfigurationAndStopStreamWhenNeeded(
-                    group, LeAudioContextType::VOICEASSISTANTS);
-                break;
+                    group, configuration_context_type_);
               }
-              StartReceivingAudio(active_group_id_);
+            } else {
+              LOG_ERROR(
+                  " called in wrong state. \n audio_receiver_state: %s \n"
+                  "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                  "Reconfiguring to %s",
+                  ToString(audio_receiver_state_).c_str(),
+                  ToString(audio_sender_state_).c_str(),
+                  (group->IsPendingConfiguration() ? "true" : "false"),
+                  ToString(configuration_context_type_).c_str());
+              group->PrintDebugState();
+              CancelStreamingRequest();
             }
             break;
           case AudioState::RELEASING:
@@ -3574,21 +4164,51 @@ class LeAudioClientImpl : public LeAudioClient {
             audio_receiver_state_ = audio_sender_state_;
             break;
           case AudioState::READY_TO_RELEASE:
-            LOG_WARN(
-                " called in wrong state. \n audio_receiver_state: %s \n"
-                "audio_sender_state: %s \n",
-                ToString(audio_receiver_state_).c_str(),
-                ToString(audio_sender_state_).c_str());
-            CancelStreamingRequest();
+            /* If the other direction is streaming we can start receiving audio
+             */
+            if (group->GetState() ==
+                AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+              if (IsDirectionAvailableForCurrentConfiguration(
+                      group, le_audio::types::kLeAudioDirectionSource)) {
+                StartReceivingAudio(active_group_id_);
+              } else {
+                LOG_WARN(
+                    " source is not configured. \n audio_receiver_state: %s \n"
+                    "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                    "Reconfiguring to %s",
+                    ToString(audio_receiver_state_).c_str(),
+                    ToString(audio_sender_state_).c_str(),
+                    (group->IsPendingConfiguration() ? "true" : "false"),
+                    ToString(configuration_context_type_).c_str());
+                group->PrintDebugState();
+                SetConfigurationAndStopStreamWhenNeeded(
+                    group, configuration_context_type_);
+              }
+            } else {
+              LOG_ERROR(
+                  " called in wrong state. \n audio_receiver_state: %s \n"
+                  "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+                  "Reconfiguring to %s",
+                  ToString(audio_receiver_state_).c_str(),
+                  ToString(audio_sender_state_).c_str(),
+                  (group->IsPendingConfiguration() ? "true" : "false"),
+                  ToString(configuration_context_type_).c_str());
+              group->PrintDebugState();
+              CancelStreamingRequest();
+            }
             break;
         }
         break;
       case AudioState::READY_TO_START:
-        LOG_WARN(
+        LOG_ERROR(
             " called in wrong state. \n audio_receiver_state: %s \n"
-            "audio_sender_state: %s \n",
+            "audio_sender_state: %s \n isPendingConfiguration: %s \n "
+            "Reconfiguring to %s",
             ToString(audio_receiver_state_).c_str(),
-            ToString(audio_sender_state_).c_str());
+            ToString(audio_sender_state_).c_str(),
+            (group->IsPendingConfiguration() ? "true" : "false"),
+            ToString(configuration_context_type_).c_str());
+        group->PrintDebugState();
         CancelStreamingRequest();
         break;
       case AudioState::READY_TO_RELEASE:
@@ -3598,10 +4218,9 @@ class LeAudioClientImpl : public LeAudioClient {
           case AudioState::READY_TO_START:
           case AudioState::READY_TO_RELEASE:
             /* Stream is up just restore it */
-            audio_receiver_state_ = AudioState::STARTED;
             if (alarm_is_scheduled(suspend_timeout_))
               alarm_cancel(suspend_timeout_);
-            le_audio_sink_hal_client_->ConfirmStreamingRequest();
+            ConfirmLocalAudioSinkStreamingRequest();
             break;
           case AudioState::RELEASING:
             /* Wait until releasing is completed */
@@ -4150,6 +4769,13 @@ class LeAudioClientImpl : public LeAudioClient {
       LOG_DEBUG("Changing configuration context from %s to %s",
                 ToString(configuration_context_type_).c_str(),
                 ToString(new_configuration_context).c_str());
+
+      LeAudioLogHistory::Get()->AddLogHistory(
+          kLogAfCallBt, active_group_id_, RawAddress::kEmpty,
+          kLogAfMetadataUpdate + "Reconfigure",
+          ToString(configuration_context_type_) + "->" +
+              ToString(new_configuration_context));
+
       if (SetConfigurationAndStopStreamWhenNeeded(group,
                                                   new_configuration_context)) {
         return;
@@ -4163,6 +4789,13 @@ class LeAudioClientImpl : public LeAudioClient {
           ToString(configuration_context_type_).c_str(),
           ToString(metadata_context_types_.sink).c_str(),
           ToString(metadata_context_types_.source).c_str());
+
+      LeAudioLogHistory::Get()->AddLogHistory(
+          kLogAfCallBt, active_group_id_, RawAddress::kEmpty,
+          kLogAfMetadataUpdate + "Updating...",
+          "Sink: " + ToString(metadata_context_types_.sink) +
+              "Source: " + ToString(metadata_context_types_.source));
+
       GroupStream(group->group_id_, configuration_context_type_,
                   metadata_context_types_);
     }
@@ -4488,6 +5121,10 @@ class LeAudioClientImpl : public LeAudioClient {
 
         if (group) {
           updateOffloaderIfNeeded(group);
+          if (reconnection_mode_ ==
+              BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS) {
+            group->AddToAllowListNotConnectedGroupMembers(gatt_if_);
+          }
         }
 
         if (audio_sender_state_ == AudioState::READY_TO_START)
@@ -4600,9 +5237,14 @@ class LeAudioClientImpl : public LeAudioClient {
 
   /* Reconnection mode */
   tBTM_BLE_CONN_TYPE reconnection_mode_;
+  static constexpr uint64_t kGroupConnectedWatchDelayMs = 3000;
+  static constexpr uint64_t kRecoveryReconnectDelayMs = 2000;
+  static constexpr uint64_t kAutoConnectAfterOwnDisconnectDelayMs = 1000;
 
   static constexpr char kNotifyUpperLayerAboutGroupBeingInIdleDuringCall[] =
       "persist.bluetooth.leaudio.notify.idle.during.call";
+
+  static constexpr uint16_t kBapMinimumAttMtu = 64;
 
   /* Current stream configuration */
   LeAudioCodecConfiguration current_source_codec_config;
@@ -4673,7 +5315,7 @@ class LeAudioClientImpl : public LeAudioClient {
 void le_audio_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
   if (!p_data || !instance) return;
 
-  LOG_DEBUG("event = %d", static_cast<int>(event));
+  LOG_INFO("event = %d", static_cast<int>(event));
 
   switch (event) {
     case BTA_GATTC_DEREG_EVT:
@@ -4918,6 +5560,7 @@ void LeAudioClient::Initialize(
     base::Closure initCb, base::Callback<bool()> hal_2_1_verifier,
     const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>&
         offloading_preference) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     LOG(ERROR) << "Already initialized";
     return;
@@ -4954,6 +5597,7 @@ void LeAudioClient::Initialize(
 }
 
 void LeAudioClient::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   DeviceGroups::DebugDump(fd);
 
   dprintf(fd, "LeAudio Manager: \n");
@@ -4966,10 +5610,12 @@ void LeAudioClient::DebugDump(int fd) {
   LeAudioSourceAudioHalClient::DebugDump(fd);
   le_audio::AudioSetConfigurationProvider::DebugDump(fd);
   IsoManager::GetInstance()->Dump(fd);
+  LeAudioLogHistory::DebugDump(fd);
   dprintf(fd, "\n");
 }
 
 void LeAudioClient::Cleanup(base::Callback<void()> cleanupCb) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (!instance) {
     LOG(ERROR) << "Not initialized";
     return;

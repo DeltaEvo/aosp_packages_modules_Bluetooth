@@ -25,6 +25,7 @@
 #include "hci/acl_manager/acl_scheduler.h"
 #include "hci/acl_manager/classic_impl.h"
 #include "hci/acl_manager/connection_management_callbacks.h"
+#include "hci/acl_manager/le_acceptlist_callbacks.h"
 #include "hci/acl_manager/le_acl_connection.h"
 #include "hci/acl_manager/le_impl.h"
 #include "hci/acl_manager/round_robin_scheduler.h"
@@ -49,6 +50,7 @@ using acl_manager::ClassicAclConnection;
 using acl_manager::ConnectionCallbacks;
 
 using acl_manager::le_impl;
+using acl_manager::LeAcceptlistCallbacks;
 using acl_manager::LeAclConnection;
 using acl_manager::LeConnectionCallbacks;
 
@@ -228,6 +230,14 @@ void AclManager::RegisterLeCallbacks(LeConnectionCallbacks* callbacks, os::Handl
       common::Unretained(handler));
 }
 
+void AclManager::RegisterLeAcceptlistCallbacks(LeAcceptlistCallbacks* callbacks) {
+  ASSERT(callbacks != nullptr);
+  CallOn(
+      pimpl_->le_impl_,
+      &le_impl::handle_register_le_acceptlist_callbacks,
+      common::Unretained(callbacks));
+}
+
 void AclManager::UnregisterLeCallbacks(LeConnectionCallbacks* callbacks, std::promise<void> promise) {
   ASSERT(callbacks != nullptr);
   CallOn(pimpl_->le_impl_, &le_impl::handle_unregister_le_callbacks, common::Unretained(callbacks), std::move(promise));
@@ -305,21 +315,6 @@ void AclManager::CancelLeConnect(AddressWithType address_with_type) {
 
 void AclManager::RemoveFromBackgroundList(AddressWithType address_with_type) {
   CallOn(pimpl_->le_impl_, &le_impl::remove_device_from_background_connection_list, address_with_type);
-}
-
-void AclManager::CancelLeConnectAndRemoveFromBackgroundList(AddressWithType address_with_type) {
-  CallOn(
-      pimpl_->le_impl_,
-      &le_impl::cancel_connection_and_remove_device_from_background_connection_list,
-      address_with_type);
-}
-
-void AclManager::AddDeviceToFilterAcceptList(AddressWithType address_with_type) {
-  CallOn(pimpl_->le_impl_, &le_impl::add_device_to_connect_list, address_with_type);
-}
-
-void AclManager::RemoveDeviceFromFilterAcceptList(AddressWithType address_with_type) {
-  CallOn(pimpl_->le_impl_, &le_impl::remove_device_from_connect_list, address_with_type);
 }
 
 void AclManager::ClearFilterAcceptList() {

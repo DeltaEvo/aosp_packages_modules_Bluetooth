@@ -191,7 +191,7 @@ public final class BluetoothQualityReport implements Parcelable {
             mValue = val;
         }
 
-        public static String getName(int val) {
+        public static String toString(int val) {
             for (ConnState state : sAllStates) {
                 if (state.mValue == val) {
                     return state.toString();
@@ -308,8 +308,8 @@ public final class BluetoothQualityReport implements Parcelable {
      * @hide
      */
     @SystemApi
-    public @NonNull String getQualityReportIdString() {
-        return mBqrCommon.getQualityReportIdString();
+    public static @NonNull String qualityReportIdToString(@QualityReportId int id) {
+        return BqrCommon.qualityReportIdToString(id);
     }
 
     /**
@@ -479,10 +479,7 @@ public final class BluetoothQualityReport implements Parcelable {
 
     /**
      * BluetoothQualityReport to String.
-     *
-     * @hide
      */
-    @SystemApi
     @Override
     @NonNull
     public String toString() {
@@ -552,7 +549,7 @@ public final class BluetoothQualityReport implements Parcelable {
          * Sets the Remote Device Address (big-endian) attribute for the new instance of {@link
          * BluetoothQualityReport}.
          *
-         * @param remoteAddr The Remote Device Address (big-endian) attribute
+         * @param remoteAddr the Remote Device Address (big-endian) attribute
          * @hide
          */
         @NonNull
@@ -566,7 +563,7 @@ public final class BluetoothQualityReport implements Parcelable {
          * Sets the Link Manager Protocol Version attribute for the new instance of {@link
          * BluetoothQualityReport}.
          *
-         * @param lmpVer The Link Manager Protocol Version attribute
+         * @param lmpVer the Link Manager Protocol Version attribute
          * @hide
          */
         @NonNull
@@ -580,7 +577,7 @@ public final class BluetoothQualityReport implements Parcelable {
          * Sets the Link Manager Protocol SubVersion attribute for the new instance of {@link
          * BluetoothQualityReport}.
          *
-         * @param lmpSubVer The Link Manager Protocol SubVersion attribute
+         * @param lmpSubVer the Link Manager Protocol SubVersion attribute
          * @hide
          */
         @NonNull
@@ -594,7 +591,7 @@ public final class BluetoothQualityReport implements Parcelable {
          * Sets the Manufacturer Id attribute for the new instance of {@link
          * BluetoothQualityReport}.
          *
-         * @param manufacturerId The Manufacturer Id attribute
+         * @param manufacturerId the Manufacturer Id attribute
          * @hide
          */
         @NonNull
@@ -608,7 +605,7 @@ public final class BluetoothQualityReport implements Parcelable {
          * Sets the Remote Device Name attribute for the new instance of {@link
          * BluetoothQualityReport}.
          *
-         * @param remoteName The Remote Device Name attribute
+         * @param remoteName the Remote Device Name attribute
          * @hide
          */
         @NonNull
@@ -622,7 +619,7 @@ public final class BluetoothQualityReport implements Parcelable {
          * Sets the Bluetooth Class of Remote Device attribute for the new instance of {@link
          * BluetoothQualityReport}.
          *
-         * @param bluetoothClass The Remote Class of Device attribute
+         * @param bluetoothClass the Remote Class of Device attribute
          * @hide
          */
         @NonNull
@@ -768,8 +765,8 @@ public final class BluetoothQualityReport implements Parcelable {
             return mQualityReportId;
         }
 
-        String getQualityReportIdString() {
-            switch (mQualityReportId) {
+        static String qualityReportIdToString(@QualityReportId int id) {
+            switch (id) {
                 case QUALITY_REPORT_ID_MONITOR:
                     return "Quality monitor";
                 case QUALITY_REPORT_ID_APPROACH_LSTO:
@@ -799,12 +796,13 @@ public final class BluetoothQualityReport implements Parcelable {
         /**
          * Get the string of packet type.
          *
+         * @param packetType packet type of the connection
          * @return the string of packet type
          * @hide
          */
         @SystemApi
-        public @Nullable String getPacketTypeString() {
-            PacketType type = PacketType.fromOrdinal(mPacketType);
+        public static @Nullable String packetTypeToString(int packetType) {
+            PacketType type = PacketType.fromOrdinal(packetType);
             return type.toString();
         }
 
@@ -860,17 +858,18 @@ public final class BluetoothQualityReport implements Parcelable {
         /**
          * Get the connection Role of the connection, "Central" or "Peripheral".
          *
+         * @param connectionRole connection Role of the connection
          * @return the connection Role String
          * @hide
          */
         @SystemApi
-        public @NonNull String getConnectionRoleString() {
-            if (mConnectionRole == CONNECTION_ROLE_CENTRAL) {
+        public static @NonNull String connectionRoleToString(int connectionRole) {
+            if (connectionRole == CONNECTION_ROLE_CENTRAL) {
                 return "Central";
-            } else if (mConnectionRole == CONNECTION_ROLE_PERIPHERAL) {
+            } else if (connectionRole == CONNECTION_ROLE_PERIPHERAL) {
                 return "Peripheral";
             } else {
-                return "INVALID:" + mConnectionRole;
+                return "INVALID:" + connectionRole;
             }
         }
 
@@ -1109,10 +1108,7 @@ public final class BluetoothQualityReport implements Parcelable {
 
         /**
          * BqrCommon to String.
-         *
-         * @hide
          */
-        @SystemApi
         @Override
         @NonNull
         public String toString() {
@@ -1120,12 +1116,12 @@ public final class BluetoothQualityReport implements Parcelable {
             str =
                     "  BqrCommon: {\n"
                             + "    mQualityReportId: "
-                            + getQualityReportIdString()
+                            + qualityReportIdToString(getQualityReportId())
                             + "("
                             + String.format("0x%02X", mQualityReportId)
                             + ")"
                             + ", mPacketType: "
-                            + getPacketTypeString()
+                            + packetTypeToString(mPacketType)
                             + "("
                             + String.format("0x%02X", mPacketType)
                             + ")"
@@ -1241,12 +1237,13 @@ public final class BluetoothQualityReport implements Parcelable {
         /**
          * Get the string of conn state of sco.
          *
+         * @param connectionState connection state of sco
          * @return the string of conn state
          * @hide
          */
         @SystemApi
-        public @Nullable String getConnStateString() {
-            return ConnState.getName(mConnState);
+        public static @Nullable String connStateToString(int connectionState) {
+            return ConnState.toString(connectionState);
         }
 
         /**
@@ -1369,10 +1366,7 @@ public final class BluetoothQualityReport implements Parcelable {
 
         /**
          * BqrVsLsto to String.
-         *
-         * @hide
          */
-        @SystemApi
         @Override
         @NonNull
         public String toString() {
@@ -1380,7 +1374,7 @@ public final class BluetoothQualityReport implements Parcelable {
             str =
                     "  BqrVsLsto: {\n"
                             + "    mConnState: "
-                            + getConnStateString()
+                            + connStateToString(getConnState())
                             + "("
                             + String.format("0x%02X", mConnState)
                             + ")"
@@ -1529,12 +1523,13 @@ public final class BluetoothQualityReport implements Parcelable {
         /**
          * Get the string of link quality for the current connection.
          *
+         * @param linkQuality link quality for the current connection
          * @return the string of link quality
          * @hide
          */
         @SystemApi
-        public @Nullable String getLinkQualityString() {
-            LinkQuality q = LinkQuality.fromOrdinal(mLinkQuality);
+        public static @Nullable String linkQualityToString(int linkQuality) {
+            LinkQuality q = LinkQuality.fromOrdinal(linkQuality);
             return q.toString();
         }
 
@@ -1580,10 +1575,7 @@ public final class BluetoothQualityReport implements Parcelable {
 
         /**
          * BqrVsA2dpChoppy to String.
-         *
-         * @hide
          */
-        @SystemApi
         @Override
         @NonNull
         public String toString() {
@@ -1603,7 +1595,7 @@ public final class BluetoothQualityReport implements Parcelable {
                             + ", mAclTxQueueLength: "
                             + mAclTxQueueLength
                             + ", mLinkQuality: "
-                            + getLinkQualityString()
+                            + linkQualityToString(mLinkQuality)
                             + "("
                             + String.format("0x%02X", mLinkQuality)
                             + ")"
@@ -1741,12 +1733,13 @@ public final class BluetoothQualityReport implements Parcelable {
         /**
          * Get the string of air mode.
          *
+         * @param airFormat the value of Air Mode parameter in Synchronous Connection Complete event
          * @return the string of air mode
          * @hide
          */
         @SystemApi
-        public @Nullable String getAirFormatString() {
-            AirMode m = AirMode.fromOrdinal(mAirFormat);
+        public static @Nullable String airFormatToString(int airFormat) {
+            AirMode m = AirMode.fromOrdinal(airFormat);
             return m.toString();
         }
 
@@ -1957,10 +1950,7 @@ public final class BluetoothQualityReport implements Parcelable {
 
         /**
          * BqrVsScoChoppy to String.
-         *
-         * @hide
          */
-        @SystemApi
         @Override
         @NonNull
         public String toString() {
@@ -1974,7 +1964,7 @@ public final class BluetoothQualityReport implements Parcelable {
                             + ", mWindowEsco: "
                             + mWindowEsco
                             + ", mAirFormat: "
-                            + getAirFormatString()
+                            + airFormatToString(mAirFormat)
                             + "("
                             + String.format("0x%02X", mAirFormat)
                             + ")"
@@ -2138,11 +2128,12 @@ public final class BluetoothQualityReport implements Parcelable {
         /**
          * Get the string of the Connect Fail ID.
          *
+         * @param id the connect fail reason
          * @return the string of the id
          * @hide
          */
         @SystemApi
-        public @NonNull String getConnectFailIdString(@ConnectFailId int id) {
+        public static @NonNull String connectFailIdToString(@ConnectFailId int id) {
             switch (id) {
                 case CONNECT_FAIL_ID_NO_ERROR:
                     return "No error";
@@ -2161,10 +2152,7 @@ public final class BluetoothQualityReport implements Parcelable {
 
         /**
          * BqrConnectFail to String.
-         *
-         * @hide
          */
-        @SystemApi
         @Override
         @NonNull
         public String toString() {
@@ -2172,7 +2160,7 @@ public final class BluetoothQualityReport implements Parcelable {
             str =
                     "  BqrConnectFail: {\n"
                             + "    mFailReason: "
-                            + getConnectFailIdString(mFailReason)
+                            + connectFailIdToString(mFailReason)
                             + " ("
                             + String.format("0x%02X", mFailReason)
                             + ")"

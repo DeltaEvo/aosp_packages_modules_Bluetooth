@@ -153,7 +153,7 @@ void mock_connection_le_on_connected(
 }
 void mock_connection_le_on_failed(const tBLE_BD_ADDR& address_with_type,
                                   uint16_t handle, bool enhanced,
-                                  tHCI_STATUS status, bool locally_initiated) {}
+                                  tHCI_STATUS status) {}
 static std::promise<uint16_t> mock_connection_le_on_disconnected_promise;
 void mock_connection_le_on_disconnected(tHCI_STATUS status, uint16_t handle,
                                         tHCI_STATUS reason) {
@@ -778,4 +778,9 @@ TEST_F(MainShimTest, ticks_to_milliseconds) {
 TEST_F(MainShimTest, ticks_to_seconds) {
   ASSERT_THAT(kTicksInSec,
               DoubleNear(ticks_to_seconds(kTicks), kMaxAbsoluteError));
+}
+
+TEST_F(MainShimTest, DumpConnectionHistory) {
+  auto acl = MakeAcl();
+  acl->DumpConnectionHistory(1);
 }

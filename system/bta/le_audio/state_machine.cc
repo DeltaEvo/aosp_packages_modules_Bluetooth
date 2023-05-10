@@ -19,6 +19,7 @@
 
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
+#include <base/strings/string_number_conversions.h>
 
 #include <map>
 
@@ -32,6 +33,7 @@
 #include "devices.h"
 #include "gd/common/strings.h"
 #include "hcimsgs.h"
+#include "le_audio_log_history.h"
 #include "le_audio_types.h"
 #include "osi/include/alarm.h"
 #include "osi/include/log.h"
@@ -124,11 +126,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
  public:
   LeAudioGroupStateMachineImpl(Callbacks* state_machine_callbacks_)
       : state_machine_callbacks_(state_machine_callbacks_),
-        watchdog_(alarm_new("LeAudioStateMachineTimer")) {}
+        watchdog_(alarm_new("LeAudioStateMachineTimer")) {
+    log_history_ = LeAudioLogHistory::Get();
+  }
 
   ~LeAudioGroupStateMachineImpl() {
     alarm_free(watchdog_);
     watchdog_ = nullptr;
+    log_history_->Cleanup();
+    log_history_ = nullptr;
   }
 
   bool AttachToStream(LeAudioDeviceGroup* group,
@@ -179,6 +185,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           LOG_INFO("Could not activate device, try to configure it again");
         }
 
+        /* Deactivate previousely activated ASEs in case if there were just a
+         * reconfiguration (group target state as CODEC CONFIGURED) and no
+         * deactivation. Currently activated ASEs cannot be used for different
+         * context.
+         */
+        group->Deactivate();
+
         /* We are going to reconfigure whole group. Clear Cises.*/
         ReleaseCisIds(group);
 
@@ -194,7 +207,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         group->CigGenerateCisIds(context_type);
         /* All ASEs should aim to achieve target state */
         SetTargetState(group, AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
-        PrepareAndSendCodecConfigToTheGroup(group);
+        if (!PrepareAndSendCodecConfigToTheGroup(group)) {
+          group->PrintDebugState();
+          ClearGroup(group, true);
+        }
         break;
 
       case AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED: {
@@ -252,6 +268,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       return false;
     }
 
+    group->Deactivate();
     ReleaseCisIds(group);
 
     if (!group->Configure(context_type, metadata_context_types, ccid_lists)) {
@@ -294,12 +311,18 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     ParseAseStatusHeader(arh, len, value);
 
+    auto state = static_cast<AseState>(arh.state);
+
     LOG_INFO(" %s , ASE id: %d, state changed %s -> %s ",
              ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_), +ase->id,
-             ToString(ase->state).c_str(),
-             ToString(AseState(arh.state)).c_str());
+             ToString(ase->state).c_str(), ToString(state).c_str());
 
-    switch (static_cast<AseState>(arh.state)) {
+    log_history_->AddLogHistory(
+        kLogAseStateNotif, leAudioDevice->group_id_, leAudioDevice->address_,
+        "ASE_ID " + std::to_string(arh.id) + ": " + ToString(state),
+        "curr: " + ToString(ase->state));
+
+    switch (state) {
       case AseState::BTA_LE_AUDIO_ASE_STATE_IDLE:
         AseStateMachineProcessIdle(arh, ase, group, leAudioDevice);
         break;
@@ -346,6 +369,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       LOG_ERROR(", group is null");
       return;
     }
+
+    log_history_->AddLogHistory(kLogHciEvent, group->group_id_,
+                                RawAddress::kEmpty,
+                                kLogCisCreateOp + "STATUS=" + loghex(status));
 
     if (status != HCI_SUCCESS) {
       if (status == HCI_ERR_COMMAND_DISALLOWED) {
@@ -407,6 +434,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                                              LeAudioDeviceGroup* group) {
     group->SetCigState(CigState::NONE);
 
+    log_history_->AddLogHistory(kLogHciEvent, group->group_id_,
+                                RawAddress::kEmpty,
+                                kLogCigRemoveOp + " STATUS=" + loghex(status));
     if (status != HCI_SUCCESS) {
       LOG_ERROR(
           "Could not recover from the COMMAND DISALLOAD on CigCreate. Status "
@@ -429,6 +459,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       ProcessHciNotifyOnCigRemoveRecovering(status, group);
       return;
     }
+
+    log_history_->AddLogHistory(kLogHciEvent, group->group_id_,
+                                RawAddress::kEmpty,
+                                kLogCigRemoveOp + " STATUS=" + loghex(status));
 
     if (status != HCI_SUCCESS) {
       group->SetCigState(CigState::CREATED);
@@ -460,6 +494,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                                        LeAudioDevice* leAudioDevice,
                                        uint8_t status,
                                        uint16_t conn_handle) override {
+    log_history_->AddLogHistory(
+        kLogHciEvent, group->group_id_, leAudioDevice->address_,
+        kLogSetDataPathOp + "cis_h:" + loghex(conn_handle) +
+            " STATUS=" + loghex(status));
+
     if (status) {
       LOG(ERROR) << __func__ << ", failed to setup data path";
       StopStream(group);
@@ -471,7 +510,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     auto ase = leAudioDevice->GetFirstActiveAseByDataPathState(
         AudioStreamDataPathState::CIS_ESTABLISHED);
 
-    if (ase->cis_conn_hdl != conn_handle) {
+    if (!ase || ase->cis_conn_hdl != conn_handle) {
       LOG(ERROR) << __func__ << " Cannot find ase by handle " << +conn_handle;
       return;
     }
@@ -503,13 +542,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     ASSERT_LOG(ase, "shouldn't be called without an active ASE");
-    PrepareDataPath(ase);
+    PrepareDataPath(group->group_id_, ase);
   }
 
   void ProcessHciNotifRemoveIsoDataPath(LeAudioDeviceGroup* group,
                                         LeAudioDevice* leAudioDevice,
                                         uint8_t status,
                                         uint16_t conn_hdl) override {
+    log_history_->AddLogHistory(
+        kLogHciEvent, group->group_id_, leAudioDevice->address_,
+        kLogRemoveDataPathOp + "STATUS=" + loghex(status));
+
     if (status != HCI_SUCCESS) {
       LOG_ERROR(
           "failed to remove ISO data path, reason: 0x%0x - contining stream "
@@ -539,6 +582,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     if (do_disconnect) {
       RemoveCisFromStreamConfiguration(group, leAudioDevice, conn_hdl);
       IsoManager::GetInstance()->DisconnectCis(conn_hdl, HCI_ERR_PEER_USER);
+
+      log_history_->AddLogHistory(
+          kLogStateMachineTag, group->group_id_, leAudioDevice->address_,
+          kLogCisDisconnectOp + "cis_h:" + loghex(conn_hdl));
     }
   }
 
@@ -590,12 +637,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     IsoManager::GetInstance()->RemoveCig(group->group_id_);
     LOG_DEBUG("Group: %p, id: %d cig state: %s", group, group->group_id_,
               ToString(group->cig_state_).c_str());
+    log_history_->AddLogHistory(kLogStateMachineTag, group->group_id_,
+                                RawAddress::kEmpty, kLogCigRemoveOp);
   }
 
   void ProcessHciNotifAclDisconnected(LeAudioDeviceGroup* group,
                                       LeAudioDevice* leAudioDevice) {
     FreeLinkQualityReports(leAudioDevice);
-    leAudioDevice->conn_id_ = GATT_INVALID_CONN_ID;
     /* mark ASEs as not used. */
     leAudioDevice->DeactivateAllAses();
 
@@ -640,12 +688,14 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
      */
     group->UpdateAudioContextTypeAvailability();
 
-    /* ACL of one of the device has been dropped.
-     * If there is active CIS, do nothing here. Just update the available
-     * contexts table.
-     */
-    if (group->IsAnyDeviceConnected() && !group->HaveAllCisesDisconnected()) {
-      if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) &&
+    if (group->IsAnyDeviceConnected()) {
+      /*
+       * ACL of one of the device has been dropped. If number of CISes has
+       * changed notify upper layer so the offloader can be updated with CIS
+       * information.
+       */
+      if (!group->HaveAllCisesDisconnected() &&
+          (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) &&
           (group->GetTargetState() ==
            AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING)) {
         /* We keep streaming but want others to let know user that it might be
@@ -660,18 +710,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     /* Group is not connected and all the CISes are down.
      * Clean states and destroy HCI group
      */
-    group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
-    group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+    ClearGroup(group, true);
+  }
 
-    /* Clear group pending status */
-    group->ClearPendingAvailableContextsChange();
-    group->ClearPendingConfiguration();
-
-    if (alarm_is_scheduled(watchdog_)) alarm_cancel(watchdog_);
-    ReleaseCisIds(group);
-    state_machine_callbacks_->StatusReportCb(group->group_id_,
-                                             GroupStreamStatus::IDLE);
-    RemoveCigForGroup(group);
+  void cancel_watchdog_if_needed(int group_id) {
+    if (alarm_is_scheduled(watchdog_)) {
+      log_history_->AddLogHistory(kLogStateMachineTag, group_id,
+                                  RawAddress::kEmpty, "WATCHDOG STOPPED");
+      alarm_cancel(watchdog_);
+    }
   }
 
   void ProcessHciNotifCisEstablished(
@@ -679,6 +726,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       const bluetooth::hci::iso_manager::cis_establish_cmpl_evt* event)
       override {
     auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(event->cis_conn_hdl);
+
+    log_history_->AddLogHistory(
+        kLogHciEvent, group->group_id_, leAudioDevice->address_,
+        kLogCisEstablishedOp + "cis_h:" + loghex(event->cis_conn_hdl) +
+            " STATUS=" + loghex(event->status));
 
     if (event->status) {
       if (ases_pair.sink)
@@ -756,11 +808,32 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     /* Cis establishment may came after setting group state to streaming, e.g.
      * for autonomous scenario when ase is sink */
     if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING &&
-        group->IsGroupStreamReady()) {
+        group->GetFirstActiveDeviceByDataPathState(
+            AudioStreamDataPathState::CIS_ESTABLISHED)) {
       /* No more transition for group */
-      alarm_cancel(watchdog_);
+      cancel_watchdog_if_needed(group->group_id_);
       PrepareDataPath(group);
     }
+  }
+
+  static void WriteToControlPoint(LeAudioDevice* leAudioDevice,
+                                  std::vector<uint8_t> value) {
+    tGATT_WRITE_TYPE write_type = GATT_WRITE_NO_RSP;
+
+    if (value.size() > (leAudioDevice->mtu_ - 3)) {
+      LOG_WARN("%s, using long write procedure (%d > %d)",
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_),
+               static_cast<int>(value.size()), (leAudioDevice->mtu_ - 3));
+
+      /* Note, that this type is actually LONG WRITE.
+       * Meaning all the Prepare Writes plus Execute is handled in the stack
+       */
+      write_type = GATT_WRITE_PREPARE;
+    }
+
+    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
+                                      leAudioDevice->ctp_hdls_.val_hdl, value,
+                                      write_type, NULL, NULL);
   }
 
   static void RemoveDataPathByCisHandle(LeAudioDevice* leAudioDevice,
@@ -785,6 +858,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
 
     IsoManager::GetInstance()->RemoveIsoDataPath(cis_conn_hdl, value);
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogStateMachineTag, leAudioDevice->group_id_, leAudioDevice->address_,
+        kLogRemoveDataPathOp + " cis_h:" + loghex(cis_conn_hdl));
   }
 
   void ProcessHciNotifCisDisconnected(
@@ -795,6 +872,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     FreeLinkQualityReports(leAudioDevice);
 
     auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(event->cis_conn_hdl);
+
+    log_history_->AddLogHistory(
+        kLogHciEvent, group->group_id_, leAudioDevice->address_,
+        kLogCisDisconnectedOp + "cis_h:" + loghex(event->cis_conn_hdl) +
+            " REASON=" + loghex(event->reason));
 
     /* If this is peer disconnecting CIS, make sure to clear data path */
     if (event->reason != HCI_ERR_CONN_CAUSE_LOCAL_HOST) {
@@ -858,7 +940,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
              AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED) &&
             group->HaveAllCisesDisconnected()) {
           /* No more transition for group */
-          alarm_cancel(watchdog_);
+          cancel_watchdog_if_needed(group->group_id_);
 
           state_machine_callbacks_->StatusReportCb(
               group->group_id_, GroupStreamStatus::SUSPENDED);
@@ -886,9 +968,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
          * In such an event, there is need to notify upper layer about state
          * from here.
          */
-        if (alarm_is_scheduled(watchdog_)) {
-          alarm_cancel(watchdog_);
-        }
+        cancel_watchdog_if_needed(group->group_id_);
 
         if (current_group_state == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
           LOG_INFO(
@@ -933,9 +1013,12 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
       le_audio::client_parser::ascs::PrepareAseCtpAudioReceiverStopReady(ids,
                                                                          value);
-      BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                        leAudioDevice->ctp_hdls_.val_hdl, value,
-                                        GATT_WRITE_NO_RSP, NULL, NULL);
+      WriteToControlPoint(leAudioDevice, value);
+
+      log_history_->AddLogHistory(kLogControlPointCmd, leAudioDevice->group_id_,
+                                  leAudioDevice->address_,
+                                  kLogAseStopReadyOp + "ASE_ID " +
+                                      std::to_string(ases_pair.source->id));
     }
 
     /* Tear down CIS's data paths within the group */
@@ -962,16 +1045,21 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       "persist.bluetooth.leaudio.device.set.state.timeoutms";
   Callbacks* state_machine_callbacks_;
   alarm_t* watchdog_;
+  LeAudioLogHistory* log_history_;
 
   /* This callback is called on timeout during transition to target state */
   void OnStateTransitionTimeout(int group_id) {
+    log_history_->AddLogHistory(kLogStateMachineTag, group_id,
+                                RawAddress::kEmpty, "WATCHDOG FIRED");
     state_machine_callbacks_->OnStateTransitionTimeout(group_id);
   }
 
   void SetTargetState(LeAudioDeviceGroup* group, AseState state) {
+    auto current_state = ToString(group->GetTargetState());
+    auto new_state = ToString(state);
+
     LOG_DEBUG("Watchdog watch started for group=%d transition from %s to %s",
-              group->group_id_, ToString(group->GetTargetState()).c_str(),
-              ToString(state).c_str());
+              group->group_id_, current_state.c_str(), new_state.c_str());
 
     group->SetTargetState(state);
 
@@ -980,7 +1068,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     timeoutMs =
         osi_property_get_int32(kStateTransitionTimeoutMsProp, timeoutMs);
 
-    if (alarm_is_scheduled(watchdog_)) alarm_cancel(watchdog_);
+    cancel_watchdog_if_needed(group->group_id_);
 
     alarm_set_on_mloop(
         watchdog_, timeoutMs,
@@ -988,6 +1076,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           if (instance) instance->OnStateTransitionTimeout(PTR_TO_INT(data));
         },
         INT_TO_PTR(group->group_id_));
+
+    log_history_->AddLogHistory(kLogStateMachineTag, group->group_id_,
+                                RawAddress::kEmpty, "WATCHDOG STARTED");
   }
 
   void AddCisToStreamConfiguration(LeAudioDeviceGroup* group,
@@ -1333,6 +1424,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         .max_trans_lat_mtos = max_trans_lat_mtos,
         .cis_cfgs = std::move(cis_cfgs),
     };
+
+    log_history_->AddLogHistory(
+        kLogStateMachineTag, group->group_id_, RawAddress::kEmpty,
+        kLogCigCreateOp + "#CIS: " + std::to_string(param.cis_cfgs.size()));
+
     group->SetCigState(CigState::CREATING);
     IsoManager::GetInstance()->CreateCig(group->group_id_, std::move(param));
     LOG_DEBUG("Group: %p, id: %d cig state: %s", group, group->group_id_,
@@ -1343,6 +1439,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
   static void CisCreateForDevice(LeAudioDevice* leAudioDevice) {
     std::vector<EXT_CIS_CREATE_CFG> conn_pairs;
     struct ase* ase = leAudioDevice->GetFirstActiveAse();
+
+    std::stringstream extra_stream;
     do {
       /* First in ase pair is Sink, second Source */
       auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(ase->cis_conn_hdl);
@@ -1361,10 +1459,16 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           BTM_GetHCIConnHandle(leAudioDevice->address_, BT_TRANSPORT_LE);
       conn_pairs.push_back({.cis_conn_handle = ase->cis_conn_hdl,
                             .acl_conn_handle = acl_handle});
-      LOG(INFO) << __func__ << " cis handle: " << +ase->cis_conn_hdl
-                << " acl handle : " << loghex(+acl_handle);
-
+      LOG_INFO(" cis handle: 0x%04x, acl handle: 0x%04x", ase->cis_conn_hdl,
+               acl_handle);
+      extra_stream << "cis_h:" << loghex(ase->cis_conn_hdl)
+                   << " acl_h:" << loghex(acl_handle) << ";;";
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogStateMachineTag, leAudioDevice->group_id_, RawAddress::kEmpty,
+        kLogCisCreateOp + "#CIS: " + std::to_string(conn_pairs.size()),
+        extra_stream.str());
 
     IsoManager::GetInstance()->EstablishCis(
         {.conn_pairs = std::move(conn_pairs)});
@@ -1411,7 +1515,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         {.conn_pairs = std::move(conn_pairs)});
   }
 
-  static void PrepareDataPath(const struct ase* ase) {
+  static void PrepareDataPath(int group_id, const struct ase* ase) {
     /* TODO: Handle HW offloading decode as we handle here, force to use SW
      * decode for now */
     auto data_path_id = bluetooth::hci::iso_manager::kIsoDataPathHci;
@@ -1433,6 +1537,12 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         .controller_delay = 0x00000000,
         .codec_conf = std::vector<uint8_t>(),
     };
+
+    LeAudioLogHistory::Get()->AddLogHistory(
+        kLogStateMachineTag, group_id, RawAddress::kEmpty,
+        kLogSetDataPathOp + "cis_h:" + loghex(ase->cis_conn_hdl),
+        "direction: " + loghex(param.data_path_dir));
+
     IsoManager::GetInstance()->SetupIsoDataPath(ase->cis_conn_hdl,
                                                 std::move(param));
   }
@@ -1446,7 +1556,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     auto* ase = leAudioDevice->GetFirstActiveAseByDataPathState(
         AudioStreamDataPathState::CIS_ESTABLISHED);
     LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
-    PrepareDataPath(ase);
+    PrepareDataPath(group->group_id_, ase);
   }
 
   static void ReleaseDataPath(LeAudioDeviceGroup* group) {
@@ -1459,6 +1569,20 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     LOG_ASSERT(ase) << __func__
                     << " Shouldn't be called without an active ASE.";
     RemoveDataPathByCisHandle(leAudioDevice, ase->cis_conn_hdl);
+  }
+
+  void SetAseState(LeAudioDevice* leAudioDevice, struct ase* ase,
+                   AseState state) {
+    LOG_INFO("%s, ase_id: %d, %s -> %s",
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_), ase->id,
+             ToString(ase->state).c_str(), ToString(state).c_str());
+
+    log_history_->AddLogHistory(
+        kLogStateMachineTag, leAudioDevice->group_id_, leAudioDevice->address_,
+        "ASE_ID " + std::to_string(ase->id) + ": " + kLogStateChangedOp,
+        ToString(ase->state) + "->" + ToString(state));
+
+    ase->state = state;
   }
 
   void AseStateMachineProcessIdle(
@@ -1476,7 +1600,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         }
         break;
       case AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING: {
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
+        SetAseState(leAudioDevice, ase, AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
         ase->active = false;
         ase->configured_for_context_type =
             le_audio::types::LeAudioContextType::UNINITIALIZED;
@@ -1520,7 +1644,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           return;
         }
 
-        if (alarm_is_scheduled(watchdog_)) alarm_cancel(watchdog_);
+        cancel_watchdog_if_needed(group->group_id_);
         ReleaseCisIds(group);
         state_machine_callbacks_->StatusReportCb(group->group_id_,
                                                  GroupStreamStatus::IDLE);
@@ -1539,8 +1663,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
   void PrepareAndSendQoSToTheGroup(LeAudioDeviceGroup* group) {
     LeAudioDevice* leAudioDevice = group->GetFirstActiveDevice();
     if (!leAudioDevice) {
-      LOG(ERROR) << __func__ << ", no active devices in group";
-      StopStream(group);
+      LOG_ERROR("No active device for the group");
+      group->PrintDebugState();
+      ClearGroup(group, true);
       return;
     }
 
@@ -1554,7 +1679,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     LOG_INFO("group_id: %d", group->group_id_);
     auto leAudioDevice = group->GetFirstActiveDevice();
     if (!leAudioDevice) {
-      LOG(ERROR) << __func__ << ", no active devices in group";
+      LOG_ERROR("No active device for the group");
       return false;
     }
 
@@ -1570,6 +1695,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     struct le_audio::client_parser::ascs::ctp_codec_conf conf;
     std::vector<struct le_audio::client_parser::ascs::ctp_codec_conf> confs;
     struct ase* ase;
+    std::stringstream msg_stream;
+    std::stringstream extra_stream;
 
     if (!group->CigAssignCisIds(leAudioDevice)) {
       LOG_ERROR(" unable to assign CIS IDs");
@@ -1579,6 +1706,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     if (group->GetCigState() == CigState::CREATED)
       group->CigAssignCisConnHandlesToAses(leAudioDevice);
+
+    msg_stream << kLogAseConfigOp;
 
     ase = leAudioDevice->GetFirstActiveAse();
     ASSERT_LOG(ase, "shouldn't be called without an active ASE");
@@ -1592,13 +1721,24 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       conf.codec_id = ase->codec_id;
       conf.codec_config = ase->codec_config;
       confs.push_back(conf);
+
+      msg_stream << "ASE_ID " << +conf.ase_id << ",";
+      if (ase->direction == le_audio::types::kLeAudioDirectionSink) {
+        extra_stream << "snk,";
+      } else {
+        extra_stream << "src,";
+      }
+      extra_stream << +conf.codec_id.coding_format << ","
+                   << +conf.target_latency << ";;";
     }
 
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpCodecConfig(confs, value);
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
+
+    log_history_->AddLogHistory(kLogControlPointCmd, group->group_id_,
+                                leAudioDevice->address_, msg_stream.str(),
+                                extra_stream.str());
   }
 
   void AseStateMachineProcessCodecConfigured(
@@ -1671,7 +1811,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         ase->preferred_pres_delay_min = rsp.preferred_pres_delay_min;
         ase->preferred_pres_delay_max = rsp.preferred_pres_delay_max;
 
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
 
         if (group->GetTargetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
           /* This is autonomus change of the remote device */
@@ -1735,7 +1876,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
               group->group_id_, GroupStreamStatus::CONFIGURED_BY_USER);
 
           /* No more transition for group */
-          alarm_cancel(watchdog_);
+          cancel_watchdog_if_needed(group->group_id_);
           return;
         }
 
@@ -1822,7 +1963,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
               group->group_id_, GroupStreamStatus::CONFIGURED_BY_USER);
 
           /* No more transition for group */
-          alarm_cancel(watchdog_);
+          cancel_watchdog_if_needed(group->group_id_);
           return;
         }
 
@@ -1837,7 +1978,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         break;
       case AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING:
         LeAudioDevice* leAudioDeviceNext;
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
         ase->active = false;
 
         if (!leAudioDevice->HaveAllActiveAsesSameState(
@@ -1882,7 +2024,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
             return;
           }
 
-          if (alarm_is_scheduled(watchdog_)) alarm_cancel(watchdog_);
+          cancel_watchdog_if_needed(group->group_id_);
 
           state_machine_callbacks_->StatusReportCb(
               group->group_id_, GroupStreamStatus::CONFIGURED_AUTONOMOUS);
@@ -1909,7 +2051,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     switch (ase->state) {
       case AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED: {
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
 
         if (!leAudioDevice->HaveAllActiveAsesSameState(
                 AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED)) {
@@ -1948,17 +2091,18 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           return;
         }
 
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
 
         /* Process the Disable Transition of the rest of group members if no
          * more ASE notifications has to come from this device. */
-        if (leAudioDevice->IsReadyToSuspendStream())
-          ProcessGroupDisable(group);
+        if (leAudioDevice->IsReadyToSuspendStream()) ProcessGroupDisable(group);
 
         break;
 
       case AseState::BTA_LE_AUDIO_ASE_STATE_DISABLING: {
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
 
         /* More ASEs notification from this device has to come for this group */
         if (!group->HaveAllActiveDevicesAsesTheSameState(
@@ -1972,7 +2116,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         if (group->GetTargetState() ==
             AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED) {
           /* No more transition for group */
-          alarm_cancel(watchdog_);
+          cancel_watchdog_if_needed(group->group_id_);
 
           state_machine_callbacks_->StatusReportCb(
               group->group_id_, GroupStreamStatus::SUSPENDED);
@@ -1995,13 +2139,33 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
   }
 
+  void ClearGroup(LeAudioDeviceGroup* group, bool report_idle_state) {
+    LOG_DEBUG("group_id: %d", group->group_id_);
+    group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+    group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+
+    /* Clear group pending status */
+    group->ClearPendingAvailableContextsChange();
+    group->ClearPendingConfiguration();
+
+    cancel_watchdog_if_needed(group->group_id_);
+    ReleaseCisIds(group);
+    RemoveCigForGroup(group);
+
+    if (report_idle_state) {
+      state_machine_callbacks_->StatusReportCb(group->group_id_,
+                                               GroupStreamStatus::IDLE);
+    }
+  }
+
   void PrepareAndSendEnableToTheGroup(LeAudioDeviceGroup* group) {
     LOG_INFO("group_id: %d", group->group_id_);
 
     auto leAudioDevice = group->GetFirstActiveDevice();
     if (!leAudioDevice) {
-      LOG_ERROR("No active for the group,");
-      StopStream(group);
+      LOG_ERROR("No active device for the group");
+      group->PrintDebugState();
+      ClearGroup(group, true);
       return;
     }
 
@@ -2016,6 +2180,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     std::vector<struct le_audio::client_parser::ascs::ctp_enable> confs;
     std::vector<uint8_t> value;
     struct ase* ase;
+    std::stringstream msg_stream;
+    std::stringstream extra_stream;
+
+    msg_stream << kLogAseEnableOp;
 
     ase = leAudioDevice->GetFirstActiveAse();
     LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
@@ -2026,15 +2194,24 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       conf.ase_id = ase->id;
       conf.metadata = ase->metadata;
       confs.push_back(conf);
+
+      /* Below is just for log history */
+      msg_stream << "ASE_ID " << +ase->id << ",";
+      extra_stream << "meta: "
+                   << base::HexEncode(conf.metadata.data(),
+                                      conf.metadata.size())
+                   << ";;";
+
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
+
+    le_audio::client_parser::ascs::PrepareAseCtpEnable(confs, value);
+    WriteToControlPoint(leAudioDevice, value);
 
     LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
              ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
-    le_audio::client_parser::ascs::PrepareAseCtpEnable(confs, value);
-
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    log_history_->AddLogHistory(kLogControlPointCmd, leAudioDevice->group_id_,
+                                leAudioDevice->address_, msg_stream.str(),
+                                extra_stream.str());
   }
 
   GroupStreamStatus PrepareAndSendDisableToTheGroup(LeAudioDeviceGroup* group) {
@@ -2042,8 +2219,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     auto leAudioDevice = group->GetFirstActiveDevice();
     if (!leAudioDevice) {
-      LOG_ERROR("Shall not be called if there is no active device.");
-      StopStream(group);
+      LOG_ERROR("No active device for the group");
+      group->PrintDebugState();
+      ClearGroup(group, false);
       return GroupStreamStatus::IDLE;
     }
 
@@ -2058,12 +2236,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     ase* ase = leAudioDevice->GetFirstActiveAse();
     LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
 
+    std::stringstream msg_stream;
+    msg_stream << kLogAseDisableOp;
+
     std::vector<uint8_t> ids;
     do {
       LOG_DEBUG("device: %s, ase_id: %d, cis_id: %d, ase state: %s",
                 ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_), ase->id,
                 ase->cis_id, ToString(ase->state).c_str());
       ids.push_back(ase->id);
+
+      msg_stream << "ASE_ID " << +ase->id << ", ";
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
 
     LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
@@ -2071,16 +2254,19 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpDisable(ids, value);
 
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
+
+    log_history_->AddLogHistory(kLogControlPointCmd, leAudioDevice->group_id_,
+                                leAudioDevice->address_, msg_stream.str());
   }
 
   GroupStreamStatus PrepareAndSendReleaseToTheGroup(LeAudioDeviceGroup* group) {
     LOG_INFO("group_id: %d", group->group_id_);
     LeAudioDevice* leAudioDevice = group->GetFirstActiveDevice();
     if (!leAudioDevice) {
-      LOG_ERROR(" Shouldn't be called without an active device.");
+      LOG_ERROR("No active device for the group");
+      group->PrintDebugState();
+      ClearGroup(group, false);
       return GroupStreamStatus::IDLE;
     }
 
@@ -2097,21 +2283,25 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     LOG_ASSERT(ase) << __func__ << " shouldn't be called without an active ASE";
 
     std::vector<uint8_t> ids;
+    std::stringstream stream;
+    stream << kLogAseReleaseOp;
+
     do {
       LOG_DEBUG("device: %s, ase_id: %d, cis_id: %d, ase state: %s",
                 ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_), ase->id,
                 ase->cis_id, ToString(ase->state).c_str());
       ids.push_back(ase->id);
+      stream << "ASE_ID " << +ase->id << ",";
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
+
+    std::vector<uint8_t> value;
+    le_audio::client_parser::ascs::PrepareAseCtpRelease(ids, value);
+    WriteToControlPoint(leAudioDevice, value);
 
     LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
              ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
-    std::vector<uint8_t> value;
-    le_audio::client_parser::ascs::PrepareAseCtpRelease(ids, value);
-
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    log_history_->AddLogHistory(kLogControlPointCmd, leAudioDevice->group_id_,
+                                leAudioDevice->address_, stream.str());
   }
 
   void PrepareAndSendConfigQos(LeAudioDeviceGroup* group,
@@ -2120,6 +2310,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     bool validate_transport_latency = false;
     bool validate_max_sdu_size = false;
+
+    std::stringstream msg_stream;
+    msg_stream << kLogAseQoSConfigOp;
+
+    std::stringstream extra_stream;
 
     for (struct ase* ase = leAudioDevice->GetFirstActiveAse(); ase != nullptr;
          ase = leAudioDevice->GetNextActiveAse(ase)) {
@@ -2151,10 +2346,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         return;
       }
 
+      msg_stream << "ASE " << +conf.ase_id << ",";
       if (ase->direction == le_audio::types::kLeAudioDirectionSink) {
         conf.max_transport_latency = group->GetMaxTransportLatencyMtos();
+        extra_stream << "snk,";
       } else {
         conf.max_transport_latency = group->GetMaxTransportLatencyStom();
+        extra_stream << "src,";
       }
 
       if (conf.max_transport_latency >
@@ -2166,6 +2364,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         validate_max_sdu_size = true;
       }
       confs.push_back(conf);
+
+      // dir...cis_id,sdu,lat,rtn,phy,frm;;
+      extra_stream << +conf.cis << "," << +conf.max_sdu << ","
+                   << +conf.max_transport_latency << "," << +conf.retrans_nb
+                   << "," << +conf.phy << "," << +conf.framing << ";;";
     }
 
     if (confs.size() == 0 || !validate_transport_latency ||
@@ -2176,13 +2379,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       return;
     }
 
-    LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
-             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
     std::vector<uint8_t> value;
     le_audio::client_parser::ascs::PrepareAseCtpConfigQos(confs, value);
-    BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                      leAudioDevice->ctp_hdls_.val_hdl, value,
-                                      GATT_WRITE_NO_RSP, NULL, NULL);
+    WriteToControlPoint(leAudioDevice, value);
+
+    LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+             ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
+    log_history_->AddLogHistory(kLogControlPointCmd, group->group_id_,
+                                leAudioDevice->address_, msg_stream.str(),
+                                extra_stream.str());
   }
 
   void PrepareAndSendUpdateMetadata(
@@ -2191,6 +2396,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       const BidirectionalPair<std::vector<uint8_t>>& ccid_lists) {
     std::vector<struct le_audio::client_parser::ascs::ctp_update_metadata>
         confs;
+
+    std::stringstream msg_stream;
+    msg_stream << kLogAseUpdateMetadataOp;
+
+    std::stringstream extra_stream;
 
     if (!leAudioDevice->IsMetadataChanged(context_types, ccid_lists)) return;
 
@@ -2211,6 +2421,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         continue;
       }
 
+      msg_stream << "ASE_ID " << +ase->id << ",";
+      if (ase->direction == le_audio::types::kLeAudioDirectionSink) {
+        extra_stream << "snk,";
+      } else {
+        extra_stream << "src,";
+      }
+
       /* Filter multidirectional audio context for each ase direction */
       auto directional_audio_context =
           context_types.get(ase->direction) &
@@ -2228,19 +2445,25 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
       conf.ase_id = ase->id;
       conf.metadata = ase->metadata;
-
       confs.push_back(conf);
+
+      extra_stream << "meta: "
+                   << base::HexEncode(conf.metadata.data(),
+                                      conf.metadata.size())
+                   << ";;";
     }
 
     if (confs.size() != 0) {
-      LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
-               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
       std::vector<uint8_t> value;
       le_audio::client_parser::ascs::PrepareAseCtpUpdateMetadata(confs, value);
+      WriteToControlPoint(leAudioDevice, value);
 
-      BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                        leAudioDevice->ctp_hdls_.val_hdl, value,
-                                        GATT_WRITE_NO_RSP, NULL, NULL);
+      LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
+
+      log_history_->AddLogHistory(kLogControlPointCmd, leAudioDevice->group_id_,
+                                  leAudioDevice->address_, msg_stream.str(),
+                                  extra_stream.str());
     }
   }
 
@@ -2248,23 +2471,26 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                                         struct ase* ase) {
     std::vector<uint8_t> ids;
     std::vector<uint8_t> value;
+    std::stringstream stream;
+
+    stream << kLogAseStartReadyOp;
 
     do {
-      if (ase->direction == le_audio::types::kLeAudioDirectionSource)
+      if (ase->direction == le_audio::types::kLeAudioDirectionSource) {
+        stream << "ASE_ID " << +ase->id << ",";
         ids.push_back(ase->id);
+      }
     } while ((ase = leAudioDevice->GetNextActiveAse(ase)));
 
     if (ids.size() > 0) {
-      LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
-               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
       le_audio::client_parser::ascs::PrepareAseCtpAudioReceiverStartReady(
           ids, value);
+      WriteToControlPoint(leAudioDevice, value);
 
-      BtaGattQueue::WriteCharacteristic(leAudioDevice->conn_id_,
-                                        leAudioDevice->ctp_hdls_.val_hdl, value,
-                                        GATT_WRITE_NO_RSP, NULL, NULL);
-
-      return;
+      LOG_INFO("group_id: %d, %s", leAudioDevice->group_id_,
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
+      log_history_->AddLogHistory(kLogControlPointCmd, leAudioDevice->group_id_,
+                                  leAudioDevice->address_, stream.str());
     }
   }
 
@@ -2278,7 +2504,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     switch (ase->state) {
       case AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED:
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING);
 
         if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
           if (ase->data_path_state < AudioStreamDataPathState::CIS_PENDING) {
@@ -2357,7 +2584,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           return;
         }
 
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
         if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
           /* We are here because of the reconnection of the single device. */
@@ -2373,7 +2601,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       case AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING: {
         std::vector<uint8_t> value;
 
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
 
         if (!group->HaveAllActiveDevicesAsesTheSameState(
                 AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING)) {
@@ -2383,8 +2612,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           return;
         }
 
+        /* This case may happen because of the reconnection device. */
         if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-          /* We are here because of the reconnection of the single device. */
+          /* Not all CISes establish evens came */
+          if (group->GetFirstActiveDeviceByDataPathState(
+                  AudioStreamDataPathState::CIS_PENDING))
+            return;
+
+          /* Streaming status notification came after setting data path */
+          if (!group->GetFirstActiveDeviceByDataPathState(
+                  AudioStreamDataPathState::CIS_ESTABLISHED))
+            return;
           PrepareDataPath(group);
           return;
         }
@@ -2398,7 +2636,7 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         if (group->GetTargetState() ==
             AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
           /* No more transition for group */
-          alarm_cancel(watchdog_);
+          cancel_watchdog_if_needed(group->group_id_);
           PrepareDataPath(group);
 
           return;
@@ -2462,7 +2700,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         /* TODO: Disable */
         break;
       case AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING:
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_DISABLING;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_DISABLING);
 
         /* Process the Disable Transition of the rest of group members if no
          * more ASE notifications has to come from this device. */
@@ -2507,6 +2746,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     RemoveCisFromStreamConfiguration(group, leAudioDevice, ase->cis_conn_hdl);
     IsoManager::GetInstance()->DisconnectCis(ase->cis_conn_hdl,
                                              HCI_ERR_PEER_USER);
+    log_history_->AddLogHistory(
+        kLogStateMachineTag, group->group_id_, leAudioDevice->address_,
+        kLogCisDisconnectOp + "cis_h:" + loghex(ase->cis_conn_hdl));
   }
 
   void AseStateMachineProcessReleasing(
@@ -2521,14 +2763,16 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     switch (ase->state) {
       case AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED:
       case AseState::BTA_LE_AUDIO_ASE_STATE_DISABLING: {
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING);
         break;
       }
       case AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED:
         /* At this point all of the active ASEs within group are released. */
         RemoveCigForGroup(group);
 
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING);
         if (group->HaveAllActiveDevicesAsesTheSameState(
                 AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING))
           group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING);
@@ -2537,7 +2781,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
       case AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING:
       case AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING: {
-        ase->state = AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING;
+        SetAseState(leAudioDevice, ase,
+                    AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING);
 
         /* Happens when bi-directional completive ASE releasing state came */
         if (ase->data_path_state == AudioStreamDataPathState::CIS_DISCONNECTING)

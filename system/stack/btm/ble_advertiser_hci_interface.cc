@@ -49,9 +49,9 @@ using status_cb = BleAdvertiserHciInterface::status_cb;
 
 using hci_cmd_cb = base::OnceCallback<void(
     uint8_t* /* return_parameters */, uint16_t /* return_parameters_length*/)>;
-extern void btu_hcif_send_cmd_with_cb(const base::Location& posted_from,
-                                      uint16_t opcode, uint8_t* params,
-                                      uint8_t params_len, hci_cmd_cb cb);
+void btu_hcif_send_cmd_with_cb(const base::Location& posted_from,
+                               uint16_t opcode, uint8_t* params,
+                               uint8_t params_len, hci_cmd_cb cb);
 
 namespace {
 BleAdvertiserHciInterface* instance = nullptr;
@@ -84,6 +84,11 @@ void parameters_response_parser(BleAdvertiserHciInterface::parameters_cb cb,
   int8_t tx_power;
 
   uint8_t* pp = ret_params;
+  if (ret_params_len < 2) {
+    LOG(ERROR) << "unexpected ret_params_len: " << ret_params_len;
+    return;
+  }
+
   STREAM_TO_UINT8(status, pp);
   STREAM_TO_INT8(tx_power, pp);
 
@@ -292,10 +297,14 @@ class BleAdvertiserVscHciInterfaceImpl : public BleAdvertiserHciInterface {
     uint8_t sub_event, adv_inst, change_reason;
     uint16_t conn_handle;
 
+    if (length < 1) {
+      return;
+    }
+
     STREAM_TO_UINT8(sub_event, p);
     length--;
 
-    if (sub_event != HCI_VSE_SUBCODE_BLE_MULTI_ADV_ST_CHG || length != 4) {
+    if (sub_event != HCI_VSE_SUBCODE_BLE_MULTI_ADV_ST_CHG || length < 4) {
       return;
     }
 

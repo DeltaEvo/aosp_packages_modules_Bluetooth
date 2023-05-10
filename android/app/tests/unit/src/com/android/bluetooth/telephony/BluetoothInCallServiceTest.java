@@ -117,6 +117,7 @@ public class BluetoothInCallServiceTest {
         public IBinder onBind(Intent intent) {
             IBinder binder = super.onBind(intent);
             IntentFilter intentFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+            intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
             registerReceiver(mBluetoothAdapterReceiver, intentFilter);
             mTelephonyManager = getSystemService(TelephonyManager.class);
             mTelecomManager = getSystemService(TelecomManager.class);
@@ -171,7 +172,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testHeadsetAnswerCall() throws Exception {
-        BluetoothCall mockCall = createRingingCall();
+        BluetoothCall mockCall = createRingingCall(UUID.randomUUID());
 
         boolean callAnswered = mBluetoothInCallService.answerCall();
         verify(mockCall).answer(any(int.class));
@@ -189,7 +190,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testHeadsetHangupCall() throws Exception {
-        BluetoothCall mockCall = createForegroundCall();
+        BluetoothCall mockCall = createForegroundCall(UUID.randomUUID());
 
         boolean callHungup = mBluetoothInCallService.hangupCall();
 
@@ -207,7 +208,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testHeadsetSendDTMF() throws Exception {
-        BluetoothCall mockCall = createForegroundCall();
+        BluetoothCall mockCall = createForegroundCall(UUID.randomUUID());
 
         boolean sentDtmf = mBluetoothInCallService.sendDtmf(TEST_DTMF_TONE);
 
@@ -267,7 +268,7 @@ public class BluetoothInCallServiceTest {
     @Test
     public void testListCurrentCallsOneCall() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
-        BluetoothCall activeCall = createActiveCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
         when(activeCall.getState()).thenReturn(Call.STATE_ACTIVE);
         calls.add(activeCall);
         mBluetoothInCallService.onCallAdded(activeCall);
@@ -289,7 +290,7 @@ public class BluetoothInCallServiceTest {
      */
     @Test
     public void testBluetoothCallQualityReport() {
-        BluetoothCall activeCall = createForegroundCall();
+        BluetoothCall activeCall = createForegroundCall(UUID.randomUUID());
         when(activeCall.isCallNull()).thenReturn(false);
         mBluetoothInCallService.onCallAdded(activeCall);
 
@@ -320,7 +321,7 @@ public class BluetoothInCallServiceTest {
     @Test
     public void testListCurrentCallsSilentRinging() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
-        BluetoothCall silentRingingCall = createActiveCall();
+        BluetoothCall silentRingingCall = createActiveCall(UUID.randomUUID());
         when(silentRingingCall.getState()).thenReturn(Call.STATE_RINGING);
         when(silentRingingCall.isSilentRingingRequested()).thenReturn(true);
         calls.add(silentRingingCall);
@@ -346,9 +347,9 @@ public class BluetoothInCallServiceTest {
         // we are transitioning into a conference.
         // BluetoothCall has been put into a CDMA "conference" with one BluetoothCall on hold.
         ArrayList<BluetoothCall> calls = new ArrayList<>();
-        BluetoothCall parentCall = createActiveCall();
-        final BluetoothCall confCall1 = getMockCall();
-        final BluetoothCall confCall2 = createHeldCall();
+        BluetoothCall parentCall = createActiveCall(UUID.randomUUID());
+        final BluetoothCall confCall1 = getMockCall(UUID.randomUUID());
+        final BluetoothCall confCall2 = createHeldCall(UUID.randomUUID());
         calls.add(parentCall);
         calls.add(confCall1);
         calls.add(confCall2);
@@ -407,11 +408,11 @@ public class BluetoothInCallServiceTest {
     public void testListCurrentCallsCdmaHold() throws Exception {
         // BluetoothCall has been put into a CDMA "conference" with one BluetoothCall on hold.
         List<BluetoothCall> calls = new ArrayList<BluetoothCall>();
-        BluetoothCall parentCall = createActiveCall();
+        BluetoothCall parentCall = createActiveCall(UUID.randomUUID());
         when(parentCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
-        final BluetoothCall foregroundCall = getMockCall();
+        final BluetoothCall foregroundCall = getMockCall(UUID.randomUUID());
         when(foregroundCall.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
-        final BluetoothCall heldCall = createHeldCall();
+        final BluetoothCall heldCall = createHeldCall(UUID.randomUUID());
         when(heldCall.getHandle()).thenReturn(Uri.parse("tel:555-0002"));
         calls.add(parentCall);
         calls.add(foregroundCall);
@@ -459,9 +460,9 @@ public class BluetoothInCallServiceTest {
     public void testListCurrentCallsCdmaConference() throws Exception {
         // BluetoothCall is in a true CDMA conference
         ArrayList<BluetoothCall> calls = new ArrayList<>();
-        BluetoothCall parentCall = createActiveCall();
-        final BluetoothCall confCall1 = getMockCall();
-        final BluetoothCall confCall2 = createHeldCall();
+        BluetoothCall parentCall = createActiveCall(UUID.randomUUID());
+        final BluetoothCall confCall1 = getMockCall(UUID.randomUUID());
+        final BluetoothCall confCall2 = createHeldCall(UUID.randomUUID());
         when(parentCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
         when(confCall1.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
         when(confCall2.getHandle()).thenReturn(Uri.parse("tel:555-0002"));
@@ -512,7 +513,7 @@ public class BluetoothInCallServiceTest {
         // This test does not define a value for getForegroundCall(), so this ringing
         // BluetoothCall will be treated as if it is a waiting BluetoothCall
         // when listCurrentCalls() is invoked.
-        BluetoothCall waitingCall = createRingingCall();
+        BluetoothCall waitingCall = createRingingCall(UUID.randomUUID());
         calls.add(waitingCall);
         mBluetoothInCallService.onCallAdded(waitingCall);
 
@@ -536,7 +537,7 @@ public class BluetoothInCallServiceTest {
     public void testNewCallClccResponse() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
         when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
-        BluetoothCall newCall = createForegroundCall();
+        BluetoothCall newCall = createForegroundCall(UUID.randomUUID());
         calls.add(newCall);
         mBluetoothInCallService.onCallAdded(newCall);
 
@@ -554,7 +555,7 @@ public class BluetoothInCallServiceTest {
     public void testRingingCallClccResponse() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
         when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
-        BluetoothCall ringingCall = createForegroundCall();
+        BluetoothCall ringingCall = createForegroundCall(UUID.randomUUID());
         calls.add(ringingCall);
         mBluetoothInCallService.onCallAdded(ringingCall);
 
@@ -578,7 +579,7 @@ public class BluetoothInCallServiceTest {
     public void testCallClccCache() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
         when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
-        BluetoothCall ringingCall = createForegroundCall();
+        BluetoothCall ringingCall = createForegroundCall(UUID.randomUUID());
         calls.add(ringingCall);
         mBluetoothInCallService.onCallAdded(ringingCall);
 
@@ -596,7 +597,7 @@ public class BluetoothInCallServiceTest {
 
         // Test Caching of old BluetoothCall indices in clcc
         when(ringingCall.getState()).thenReturn(Call.STATE_ACTIVE);
-        BluetoothCall newHoldingCall = createHeldCall();
+        BluetoothCall newHoldingCall = createHeldCall(UUID.randomUUID());
         calls.add(0, newHoldingCall);
         mBluetoothInCallService.onCallAdded(newHoldingCall);
 
@@ -619,7 +620,7 @@ public class BluetoothInCallServiceTest {
     public void testAlertingCallClccResponse() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
         when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
-        BluetoothCall dialingCall = createForegroundCall();
+        BluetoothCall dialingCall = createForegroundCall(UUID.randomUUID());
         calls.add(dialingCall);
         mBluetoothInCallService.onCallAdded(dialingCall);
 
@@ -643,7 +644,7 @@ public class BluetoothInCallServiceTest {
     public void testHoldingCallClccResponse() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
         when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
-        BluetoothCall dialingCall = createForegroundCall();
+        BluetoothCall dialingCall = createForegroundCall(UUID.randomUUID());
         calls.add(dialingCall);
         mBluetoothInCallService.onCallAdded(dialingCall);
 
@@ -653,7 +654,7 @@ public class BluetoothInCallServiceTest {
         when(dialingCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
         when(dialingCall.getGatewayInfo()).thenReturn(
                 new GatewayInfo(null, null, Uri.parse("tel:555-0000")));
-        BluetoothCall holdingCall = createHeldCall();
+        BluetoothCall holdingCall = createHeldCall(UUID.randomUUID());
         calls.add(holdingCall);
         mBluetoothInCallService.onCallAdded(holdingCall);
 
@@ -678,7 +679,7 @@ public class BluetoothInCallServiceTest {
     @Test
     public void testListCurrentCallsImsConference() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
-        BluetoothCall parentCall = createActiveCall();
+        BluetoothCall parentCall = createActiveCall(UUID.randomUUID());
 
         addCallCapability(parentCall, Connection.CAPABILITY_CONFERENCE_HAS_NO_CHILDREN);
         when(parentCall.isConference()).thenReturn(true);
@@ -701,9 +702,9 @@ public class BluetoothInCallServiceTest {
     @Test
     public void testListCurrentCallsHeldImsCepConference() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
-        BluetoothCall parentCall = createHeldCall();
-        BluetoothCall childCall1 = createActiveCall();
-        BluetoothCall childCall2 = createActiveCall();
+        BluetoothCall parentCall = createHeldCall(UUID.randomUUID());
+        BluetoothCall childCall1 = createActiveCall(UUID.randomUUID());
+        BluetoothCall childCall2 = createActiveCall(UUID.randomUUID());
         when(parentCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
         when(childCall1.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
         when(childCall2.getHandle()).thenReturn(Uri.parse("tel:555-0002"));
@@ -744,7 +745,7 @@ public class BluetoothInCallServiceTest {
     @Test
     public void testListCurrentCallsConferenceGetChildrenIsEmpty() throws Exception {
         ArrayList<BluetoothCall> calls = new ArrayList<>();
-        BluetoothCall conferenceCall = createActiveCall();
+        BluetoothCall conferenceCall = createActiveCall(UUID.randomUUID());
         when(conferenceCall.getHandle()).thenReturn(Uri.parse("tel:555-1234"));
 
         addCallCapability(conferenceCall, Connection.CAPABILITY_MANAGE_CONFERENCE);
@@ -767,7 +768,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testQueryPhoneState() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         when(ringingCall.getHandle()).thenReturn(Uri.parse("tel:5550000"));
 
         clearInvocations(mMockBluetoothHeadset);
@@ -779,9 +780,9 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testCDMAConferenceQueryState() throws Exception {
-        BluetoothCall parentConfCall = createActiveCall();
-        final BluetoothCall confCall1 = getMockCall();
-        final BluetoothCall confCall2 = getMockCall();
+        BluetoothCall parentConfCall = createActiveCall(UUID.randomUUID());
+        final BluetoothCall confCall1 = getMockCall(UUID.randomUUID());
+        final BluetoothCall confCall2 = getMockCall(UUID.randomUUID());
         mBluetoothInCallService.onCallAdded(confCall1);
         mBluetoothInCallService.onCallAdded(confCall2);
         when(parentConfCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
@@ -801,7 +802,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldTypeReleaseHeldRinging() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         Log.i("BluetoothInCallService", "asdf start " + Integer.toString(ringingCall.hashCode()));
 
         boolean didProcess = mBluetoothInCallService.processChld(CHLD_TYPE_RELEASEHELD);
@@ -812,7 +813,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldTypeReleaseHeldHold() throws Exception {
-        BluetoothCall onHoldCall = createHeldCall();
+        BluetoothCall onHoldCall = createHeldCall(UUID.randomUUID());
         boolean didProcess = mBluetoothInCallService.processChld(CHLD_TYPE_RELEASEHELD);
 
         verify(onHoldCall).disconnect();
@@ -821,8 +822,8 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldReleaseActiveRinging() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
 
         boolean didProcess = mBluetoothInCallService.processChld(
                 CHLD_TYPE_RELEASEACTIVE_ACCEPTHELD);
@@ -834,8 +835,8 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldReleaseActiveHold() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
-        BluetoothCall heldCall = createHeldCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
+        BluetoothCall heldCall = createHeldCall(UUID.randomUUID());
 
         boolean didProcess = mBluetoothInCallService.processChld(
                 CHLD_TYPE_RELEASEACTIVE_ACCEPTHELD);
@@ -848,7 +849,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldHoldActiveRinging() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
 
         boolean didProcess = mBluetoothInCallService.processChld(
                 CHLD_TYPE_HOLDACTIVE_ACCEPTHELD);
@@ -859,7 +860,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldHoldActiveUnhold() throws Exception {
-        BluetoothCall heldCall = createHeldCall();
+        BluetoothCall heldCall = createHeldCall(UUID.randomUUID());
 
         boolean didProcess = mBluetoothInCallService.processChld(
                 CHLD_TYPE_HOLDACTIVE_ACCEPTHELD);
@@ -870,7 +871,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldHoldActiveHold() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
         addCallCapability(activeCall, Connection.CAPABILITY_HOLD);
 
         boolean didProcess = mBluetoothInCallService.processChld(
@@ -882,7 +883,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldAddHeldToConfHolding() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
         addCallCapability(activeCall, Connection.CAPABILITY_MERGE_CONFERENCE);
 
         boolean didProcess = mBluetoothInCallService.processChld(CHLD_TYPE_ADDHELDTOCONF);
@@ -893,9 +894,9 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testProcessChldAddHeldToConf() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
         removeCallCapability(activeCall, Connection.CAPABILITY_MERGE_CONFERENCE);
-        BluetoothCall conferenceableCall = getMockCall();
+        BluetoothCall conferenceableCall = getMockCall(UUID.randomUUID());
         ArrayList<Integer> conferenceableCalls = new ArrayList<>();
         conferenceableCalls.add(conferenceableCall.getId());
         mBluetoothInCallService.onCallAdded(conferenceableCall);
@@ -912,10 +913,10 @@ public class BluetoothInCallServiceTest {
     public void testProcessChldHoldActiveSwapConference() throws Exception {
         // Create an active CDMA BluetoothCall with a BluetoothCall on hold
         // and simulate a swapConference().
-        BluetoothCall parentCall = createActiveCall();
-        final BluetoothCall foregroundCall = getMockCall();
+        BluetoothCall parentCall = createActiveCall(UUID.randomUUID());
+        final BluetoothCall foregroundCall = getMockCall(UUID.randomUUID());
         when(foregroundCall.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
-        final BluetoothCall heldCall = createHeldCall();
+        final BluetoothCall heldCall = createHeldCall(UUID.randomUUID());
         when(heldCall.getHandle()).thenReturn(Uri.parse("tel:555-0002"));
         addCallCapability(parentCall, Connection.CAPABILITY_SWAP_CONFERENCE);
         removeCallCapability(parentCall, Connection.CAPABILITY_CONFERENCE_HAS_NO_CHILDREN);
@@ -939,7 +940,7 @@ public class BluetoothInCallServiceTest {
     // Testing the CallsManager Listener Functionality on Bluetooth
     @Test
     public void testOnCallAddedRinging() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         when(ringingCall.getHandle()).thenReturn(Uri.parse("tel:555000"));
 
         mBluetoothInCallService.onCallAdded(ringingCall);
@@ -950,7 +951,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testSilentRingingCallState() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         when(ringingCall.isSilentRingingRequested()).thenReturn(true);
         when(ringingCall.getHandle()).thenReturn(Uri.parse("tel:555000"));
 
@@ -963,9 +964,9 @@ public class BluetoothInCallServiceTest {
     @Test
     public void testOnCallAddedCdmaActiveHold() throws Exception {
         // BluetoothCall has been put into a CDMA "conference" with one BluetoothCall on hold.
-        BluetoothCall parentCall = createActiveCall();
-        final BluetoothCall foregroundCall = getMockCall();
-        final BluetoothCall heldCall = createHeldCall();
+        BluetoothCall parentCall = createActiveCall(UUID.randomUUID());
+        final BluetoothCall foregroundCall = getMockCall(UUID.randomUUID());
+        final BluetoothCall heldCall = createHeldCall(UUID.randomUUID());
         when(foregroundCall.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
         when(heldCall.getHandle()).thenReturn(Uri.parse("tel:555-0002"));
         addCallCapability(parentCall, Connection.CAPABILITY_MERGE_CONFERENCE);
@@ -983,20 +984,53 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallRemoved() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
         mBluetoothInCallService.onCallAdded(activeCall);
         doReturn(null).when(mMockCallInfo).getActiveCall();
         when(activeCall.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
-        mBluetoothInCallService.onCallRemoved(activeCall);
+
+        mBluetoothInCallService.onCallRemoved(activeCall, true /* forceRemoveCallback */);
 
         verify(mMockBluetoothHeadset).phoneStateChanged(eq(0), eq(0), eq(CALL_STATE_IDLE),
                 eq(""), eq(128), nullable(String.class));
     }
 
     @Test
+    public void testOnDetailsChangeExternalRemovesCall() throws Exception {
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
+        mBluetoothInCallService.onCallAdded(activeCall);
+        doReturn(null).when(mMockCallInfo).getActiveCall();
+        when(activeCall.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
+
+        when(activeCall.isExternalCall()).thenReturn(true);
+        mBluetoothInCallService.getCallback(activeCall).onDetailsChanged(activeCall, null);
+
+        verify(mMockBluetoothHeadset).phoneStateChanged(eq(0), eq(0), eq(CALL_STATE_IDLE),
+                eq(""), eq(128), nullable(String.class));
+    }
+
+    @Test
+    public void testOnDetailsChangeExternalAddsCall() throws Exception {
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
+        mBluetoothInCallService.onCallAdded(activeCall);
+        when(activeCall.getHandle()).thenReturn(Uri.parse("tel:555-0001"));
+        BluetoothInCallService.CallStateCallback callBack = mBluetoothInCallService.getCallback(
+                activeCall);
+
+        when(activeCall.isExternalCall()).thenReturn(true);
+        callBack.onDetailsChanged(activeCall, null);
+
+        when(activeCall.isExternalCall()).thenReturn(false);
+        callBack.onDetailsChanged(activeCall, null);
+
+        verify(mMockBluetoothHeadset).phoneStateChanged(eq(1), eq(0), eq(CALL_STATE_IDLE),
+                eq(""), eq(128), nullable(String.class));
+    }
+
+    @Test
     public void testOnCallStateChangedConnectingCall() throws Exception {
-        BluetoothCall activeCall = getMockCall();
-        BluetoothCall connectingCall = getMockCall();
+        BluetoothCall activeCall = getMockCall(UUID.randomUUID());
+        BluetoothCall connectingCall = getMockCall(UUID.randomUUID());
         when(connectingCall.getState()).thenReturn(Call.STATE_CONNECTING);
         ArrayList<BluetoothCall> calls = new ArrayList<>();
         calls.add(connectingCall);
@@ -1014,7 +1048,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallAddedAudioProcessing() throws Exception {
-        BluetoothCall call = getMockCall();
+        BluetoothCall call = getMockCall(UUID.randomUUID());
         when(call.getState()).thenReturn(Call.STATE_AUDIO_PROCESSING);
         mBluetoothInCallService.onCallAdded(call);
 
@@ -1024,7 +1058,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChangedRingingToAudioProcessing() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         when(ringingCall.getHandle()).thenReturn(Uri.parse("tel:555000"));
 
         mBluetoothInCallService.onCallAdded(ringingCall);
@@ -1044,7 +1078,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChangedAudioProcessingToSimulatedRinging() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         when(ringingCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
         mBluetoothInCallService.onCallAdded(ringingCall);
         mBluetoothInCallService.getCallback(ringingCall)
@@ -1056,7 +1090,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChangedAudioProcessingToActive() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
         when(activeCall.getState()).thenReturn(Call.STATE_ACTIVE);
         mBluetoothInCallService.onCallAdded(activeCall);
         mBluetoothInCallService.getCallback(activeCall)
@@ -1068,7 +1102,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChangedDialing() throws Exception {
-        BluetoothCall activeCall = createActiveCall();
+        BluetoothCall activeCall = createActiveCall(UUID.randomUUID());
 
         // make "mLastState" STATE_CONNECTING
         BluetoothInCallService.CallStateCallback callback =
@@ -1085,7 +1119,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChangedAlerting() throws Exception {
-        BluetoothCall outgoingCall = createOutgoingCall();
+        BluetoothCall outgoingCall = createOutgoingCall(UUID.randomUUID());
         mBluetoothInCallService.onCallAdded(outgoingCall);
         mBluetoothInCallService.getCallback(outgoingCall)
                 .onStateChanged(outgoingCall, Call.STATE_DIALING);
@@ -1098,7 +1132,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChangedDisconnected() throws Exception {
-        BluetoothCall disconnectedCall = createDisconnectedCall();
+        BluetoothCall disconnectedCall = createDisconnectedCall(UUID.randomUUID());
         doReturn(true).when(mMockCallInfo).hasOnlyDisconnectedCalls();
         mBluetoothInCallService.onCallAdded(disconnectedCall);
         mBluetoothInCallService.getCallback(disconnectedCall)
@@ -1109,7 +1143,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChanged() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         when(ringingCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
         mBluetoothInCallService.onCallAdded(ringingCall);
 
@@ -1129,7 +1163,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testOnCallStateChangedGSMSwap() throws Exception {
-        BluetoothCall heldCall = createHeldCall();
+        BluetoothCall heldCall = createHeldCall(UUID.randomUUID());
         when(heldCall.getHandle()).thenReturn(Uri.parse("tel:555-0000"));
         mBluetoothInCallService.onCallAdded(heldCall);
         doReturn(2).when(mMockCallInfo).getNumHeldCalls();
@@ -1147,9 +1181,9 @@ public class BluetoothInCallServiceTest {
         // Start with two calls that are being merged into a CDMA conference call. The
         // onIsConferencedChanged method will be called multiple times during the call. Make sure
         // that the bluetooth phone state is updated properly.
-        BluetoothCall parentCall = createActiveCall();
-        BluetoothCall activeCall = getMockCall();
-        BluetoothCall heldCall = createHeldCall();
+        BluetoothCall parentCall = createActiveCall(UUID.randomUUID());
+        BluetoothCall activeCall = getMockCall(UUID.randomUUID());
+        BluetoothCall heldCall = createHeldCall(UUID.randomUUID());
         mBluetoothInCallService.onCallAdded(parentCall);
         mBluetoothInCallService.onCallAdded(activeCall);
         mBluetoothInCallService.onCallAdded(heldCall);
@@ -1197,7 +1231,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testBluetoothAdapterReceiver() throws Exception {
-        BluetoothCall ringingCall = createRingingCall();
+        BluetoothCall ringingCall = createRingingCall(UUID.randomUUID());
         when(ringingCall.getHandle()).thenReturn(Uri.parse("tel:5550000"));
 
         Intent intent = new Intent(BluetoothAdapter.ACTION_STATE_CHANGED);
@@ -1285,7 +1319,7 @@ public class BluetoothInCallServiceTest {
 
     @Test
     public void testGetTbsTerminationReason() {
-        BluetoothCall call = getMockCall();
+        BluetoothCall call = getMockCall(UUID.randomUUID());
 
         when(call.getDisconnectCause()).thenReturn(null);
         Assert.assertEquals(mBluetoothInCallService.getTbsTerminationReason(call),
@@ -1414,6 +1448,125 @@ public class BluetoothInCallServiceTest {
                 requestId, BluetoothLeCallControl.RESULT_ERROR_UNKNOWN_CALL_ID);
     }
 
+    @Test
+    public void testLeCallControlCallback_onJoinCalls() {
+        BluetoothLeCallControlProxy callControlProxy = mock(BluetoothLeCallControlProxy.class);
+        mBluetoothInCallService.mBluetoothLeCallControl = callControlProxy;
+        BluetoothLeCallControl.Callback callback =
+                mBluetoothInCallService.mBluetoothLeCallControlCallback;
+
+        int requestId = 1;
+        UUID baseCallId = UUID.randomUUID();
+        UUID firstJoiningCallId = UUID.randomUUID();
+        UUID secondJoiningCallId = UUID.randomUUID();
+        List<UUID> uuids = new ArrayList<>(Arrays.asList(baseCallId, firstJoiningCallId,
+                secondJoiningCallId));
+        ArrayList<BluetoothCall> calls = new ArrayList<>();
+        BluetoothCall baseCall = createActiveCall(baseCallId);
+        BluetoothCall firstCall = createRingingCall(firstJoiningCallId);
+        BluetoothCall secondCall = createRingingCall(secondJoiningCallId);
+        when(baseCall.getState()).thenReturn(Call.STATE_ACTIVE);
+        when(firstCall.getState()).thenReturn(Call.STATE_RINGING);
+        when(secondCall.getState()).thenReturn(Call.STATE_RINGING);
+        calls.add(baseCall);
+        calls.add(firstCall);
+        calls.add(secondCall);
+        mBluetoothInCallService.onCallAdded(baseCall);
+        mBluetoothInCallService.onCallAdded(firstCall);
+        mBluetoothInCallService.onCallAdded(secondCall);
+        when(baseCall.getHandle()).thenReturn(Uri.parse("tel:111-111"));
+        when(firstCall.getHandle()).thenReturn(Uri.parse("tel:222-222"));
+        when(secondCall.getHandle()).thenReturn(Uri.parse("tel:333-333"));
+        when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
+
+        doReturn(baseCall).when(mMockCallInfo).getCallByCallId(baseCallId);
+        doReturn(firstCall).when(mMockCallInfo).getCallByCallId(firstJoiningCallId);
+        doReturn(secondCall).when(mMockCallInfo).getCallByCallId(secondJoiningCallId);
+
+        callback.onJoinCalls(requestId, uuids);
+
+        verify(callControlProxy).requestResult(
+                requestId, BluetoothLeCallControl.RESULT_SUCCESS);
+        verify(baseCall, times(2)).conference(any(BluetoothCall.class));
+    }
+
+    @Test
+    public void testLeCallControlCallback_onJoinCalls_omitDoubledCalls() {
+        BluetoothLeCallControlProxy callControlProxy = mock(BluetoothLeCallControlProxy.class);
+        mBluetoothInCallService.mBluetoothLeCallControl = callControlProxy;
+        BluetoothLeCallControl.Callback callback =
+                mBluetoothInCallService.mBluetoothLeCallControlCallback;
+
+        int requestId = 1;
+        UUID baseCallId = UUID.randomUUID();
+        UUID firstJoiningCallId = UUID.randomUUID();
+        List<UUID> uuids = new ArrayList<>(Arrays.asList(baseCallId, firstJoiningCallId,
+                firstJoiningCallId));
+        ArrayList<BluetoothCall> calls = new ArrayList<>();
+        BluetoothCall baseCall = createActiveCall(baseCallId);
+        BluetoothCall firstCall = createRingingCall(firstJoiningCallId);
+        when(baseCall.getState()).thenReturn(Call.STATE_ACTIVE);
+        when(firstCall.getState()).thenReturn(Call.STATE_RINGING);
+        calls.add(baseCall);
+        calls.add(firstCall);
+        mBluetoothInCallService.onCallAdded(baseCall);
+        mBluetoothInCallService.onCallAdded(firstCall);
+        when(baseCall.getHandle()).thenReturn(Uri.parse("tel:111-111"));
+        when(firstCall.getHandle()).thenReturn(Uri.parse("tel:222-222"));
+        when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
+
+        doReturn(baseCall).when(mMockCallInfo).getCallByCallId(baseCallId);
+        doReturn(firstCall).when(mMockCallInfo).getCallByCallId(firstJoiningCallId);
+
+        callback.onJoinCalls(requestId, uuids);
+
+        verify(callControlProxy).requestResult(
+                requestId, BluetoothLeCallControl.RESULT_SUCCESS);
+        verify(baseCall, times(1)).conference(any(BluetoothCall.class));
+    }
+
+    @Test
+    public void testLeCallControlCallback_onJoinCalls_omitNullCalls() {
+        BluetoothLeCallControlProxy callControlProxy = mock(BluetoothLeCallControlProxy.class);
+        mBluetoothInCallService.mBluetoothLeCallControl = callControlProxy;
+        BluetoothLeCallControl.Callback callback =
+                mBluetoothInCallService.mBluetoothLeCallControlCallback;
+
+        int requestId = 1;
+        UUID baseCallId = UUID.randomUUID();
+        UUID firstJoiningCallId = UUID.randomUUID();
+        UUID secondJoiningCallId = UUID.randomUUID();
+        List<UUID> uuids = new ArrayList<>(Arrays.asList(baseCallId, firstJoiningCallId,
+                secondJoiningCallId));
+        ArrayList<BluetoothCall> calls = new ArrayList<>();
+        BluetoothCall baseCall = createActiveCall(baseCallId);
+        BluetoothCall firstCall = createRingingCall(firstJoiningCallId);
+        BluetoothCall secondCall = createRingingCall(secondJoiningCallId);
+        when(baseCall.getState()).thenReturn(Call.STATE_ACTIVE);
+        when(firstCall.getState()).thenReturn(Call.STATE_RINGING);
+        when(secondCall.getState()).thenReturn(Call.STATE_RINGING);
+        calls.add(baseCall);
+        calls.add(firstCall);
+        calls.add(secondCall);
+        mBluetoothInCallService.onCallAdded(baseCall);
+        mBluetoothInCallService.onCallAdded(firstCall);
+        mBluetoothInCallService.onCallAdded(secondCall);
+        when(baseCall.getHandle()).thenReturn(Uri.parse("tel:111-111"));
+        when(firstCall.getHandle()).thenReturn(Uri.parse("tel:222-222"));
+        when(secondCall.getHandle()).thenReturn(Uri.parse("tel:333-333"));
+        when(mMockCallInfo.getBluetoothCalls()).thenReturn(calls);
+
+        doReturn(baseCall).when(mMockCallInfo).getCallByCallId(null);
+        doReturn(firstCall).when(mMockCallInfo).getCallByCallId(firstJoiningCallId);
+        doReturn(secondCall).when(mMockCallInfo).getCallByCallId(secondJoiningCallId);
+
+        callback.onJoinCalls(requestId, uuids);
+
+        verify(callControlProxy).requestResult(
+                requestId, BluetoothLeCallControl.RESULT_SUCCESS);
+        verify(firstCall, times(1)).conference(any(BluetoothCall.class));
+    }
+
     private void addCallCapability(BluetoothCall call, int capability) {
         when(call.can(capability)).thenReturn(true);
     }
@@ -1422,39 +1575,39 @@ public class BluetoothInCallServiceTest {
         when(call.can(capability)).thenReturn(false);
     }
 
-    private BluetoothCall createActiveCall() {
-        BluetoothCall call = getMockCall();
+    private BluetoothCall createActiveCall(UUID uuid) {
+        BluetoothCall call = getMockCall(uuid);
         when(mMockCallInfo.getActiveCall()).thenReturn(call);
         return call;
     }
 
-    private BluetoothCall createRingingCall() {
-        BluetoothCall call = getMockCall();
+    private BluetoothCall createRingingCall(UUID uuid) {
+        BluetoothCall call = getMockCall(uuid);
         Log.i("BluetoothInCallService", "asdf creaete " + Integer.toString(call.hashCode()));
         when(mMockCallInfo.getRingingOrSimulatedRingingCall()).thenReturn(call);
         return call;
     }
 
-    private BluetoothCall createHeldCall() {
-        BluetoothCall call = getMockCall();
+    private BluetoothCall createHeldCall(UUID uuid) {
+        BluetoothCall call = getMockCall(uuid);
         when(mMockCallInfo.getHeldCall()).thenReturn(call);
         return call;
     }
 
-    private BluetoothCall createOutgoingCall() {
-        BluetoothCall call = getMockCall();
+    private BluetoothCall createOutgoingCall(UUID uuid) {
+        BluetoothCall call = getMockCall(uuid);
         when(mMockCallInfo.getOutgoingCall()).thenReturn(call);
         return call;
     }
 
-    private BluetoothCall createDisconnectedCall() {
-        BluetoothCall call = getMockCall();
+    private BluetoothCall createDisconnectedCall(UUID uuid) {
+        BluetoothCall call = getMockCall(uuid);
         when(mMockCallInfo.getCallByState(Call.STATE_DISCONNECTED)).thenReturn(call);
         return call;
     }
 
-    private BluetoothCall createForegroundCall() {
-        BluetoothCall call = getMockCall();
+    private BluetoothCall createForegroundCall(UUID uuid) {
+        BluetoothCall call = getMockCall(uuid);
         when(mMockCallInfo.getForegroundCall()).thenReturn(call);
         return call;
     }
@@ -1483,10 +1636,10 @@ public class BluetoothInCallServiceTest {
                 .build();
     }
 
-    private BluetoothCall getMockCall() {
+    private BluetoothCall getMockCall(UUID uuid) {
         BluetoothCall call = mock(com.android.bluetooth.telephony.BluetoothCall.class);
-        Integer uuid = UUID.randomUUID().hashCode();
-        when(call.getId()).thenReturn(uuid);
+        Integer integerUuid = uuid.hashCode();
+        when(call.getId()).thenReturn(integerUuid);
         return call;
     }
 }

@@ -114,6 +114,16 @@ class AvrcpMediaInterfaceImpl : public MediaInterface {
     }
   }
 
+  uint16_t AddPlayer(std::string name, bool browsing_supported) {
+    playerList_.push_back(MediaPlayerInfo{player_id_, name, browsing_supported});
+
+    if (mediaCb_)
+      mediaCb_->SendFolderUpdate(
+          /*available_players*/ true, /*addressed_players*/ true, /*uids_changed*/ false);
+
+    return player_id_++;
+  }
+
  private:
   MediaCallbacks* mediaCb_;
 
@@ -123,6 +133,8 @@ class AvrcpMediaInterfaceImpl : public MediaInterface {
   std::vector<MediaPlayerInfo> playerList_;
   std::vector<SongInfo> nowPlayingList_;
   uint16_t currentPlayer_;
+
+  uint16_t player_id_ = 0;
 };
 
 class VolumeInterfaceImpl : public VolumeInterface {
@@ -288,7 +300,7 @@ int A2dpIntf::config_codec(RawAddress addr, ::rust::Vec<A2dpCodecConfig> codec_p
 }
 
 void A2dpIntf::cleanup() const {
-  // TODO: Implement.
+  intf_->cleanup();
 }
 bool A2dpIntf::set_audio_config(A2dpCodecConfig rconfig) const {
   bluetooth::audio::a2dp::AudioConfig config = {
@@ -303,6 +315,9 @@ bool A2dpIntf::start_audio_request() const {
 }
 bool A2dpIntf::stop_audio_request() const {
   return bluetooth::audio::a2dp::StopRequest();
+}
+bool A2dpIntf::suspend_audio_request() const {
+  return bluetooth::audio::a2dp::SuspendRequest();
 }
 RustPresentationPosition A2dpIntf::get_presentation_position() const {
   bluetooth::audio::a2dp::PresentationPosition p = bluetooth::audio::a2dp::GetPresentationPosition();
@@ -333,7 +348,7 @@ std::unique_ptr<AvrcpIntf> GetAvrcpProfile(const unsigned char* btif) {
 AvrcpIntf::~AvrcpIntf() {}
 
 void AvrcpIntf::init() {
-  intf_->Init(&mAvrcpInterface, &mVolumeInterface);
+  intf_->Init(&mAvrcpInterface, &mVolumeInterface, nullptr);
 }
 
 void AvrcpIntf::cleanup() {
@@ -368,6 +383,10 @@ void AvrcpIntf::set_position(int64_t position) {
 void AvrcpIntf::set_metadata(
     const ::rust::String& title, const ::rust::String& artist, const ::rust::String& album, int64_t length_us) {
   mAvrcpInterface.SetMetadata(std::string(title), std::string(artist), std::string(album), length_us);
+}
+
+uint16_t AvrcpIntf::add_player(const ::rust::String& name, bool browsing_supported) {
+  return mAvrcpInterface.AddPlayer(std::string(name), browsing_supported);
 }
 
 }  // namespace rust

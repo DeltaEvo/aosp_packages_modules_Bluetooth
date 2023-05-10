@@ -157,15 +157,11 @@ future_t* device_iot_config_module_init(void) {
     return future_new_immediate(FUTURE_FAIL);
   }
 
-  LOG_EVENT_INT(BT_IOT_CONFIG_SOURCE_TAG_NUM, device_iot_config_source);
-
   return future_new_immediate(FUTURE_SUCCESS);
 }
 
 future_t* device_iot_config_module_start_up(void) {
   LOG_INFO("");
-  device_iot_config_int_add_one(IOT_CONF_KEY_SECTION_ADAPTER,
-                                IOT_CONF_KEY_BT_ONOFF_COUNT);
   return future_new_immediate(FUTURE_SUCCESS);
 }
 

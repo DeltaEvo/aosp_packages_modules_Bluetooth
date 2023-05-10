@@ -1,7 +1,8 @@
 use lazy_static::lazy_static;
 use log::{error, info};
 use paste::paste;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Mutex;
 
@@ -89,19 +90,44 @@ macro_rules! create_setter_fn {
 }
 
 macro_rules! init_flags {
-    (flags: { $($flag:ident $(: $type:ty)? $(= $default:tt)?,)* }
+    (
+        name: $name:ident
+        $($args:tt)*
+    ) => {
+        init_flags_struct! {
+            name: $name
+            $($args)*
+        }
+
+        init_flags_getters! {
+            $($args)*
+        }
+    }
+}
+
+trait FlagHolder: Default {
+    fn get_defaults_for_test() -> Self;
+    fn parse(flags: Vec<String>) -> Self;
+    fn dump(&self) -> BTreeMap<&'static str, String>;
+    fn reconcile(self) -> Self;
+}
+
+macro_rules! init_flags_struct {
+    (
+     name: $name:ident
+     flags: { $($flag:ident $(: $type:ty)? $(= $default:tt)?,)* }
      dynamic_flags: { $($dy_flag:ident $(: $dy_type:ty)? $(= $dy_default:tt)?,)* }
      extra_fields: { $($extra_field:ident : $extra_field_type:ty $(= $extra_default:tt)?,)* }
      extra_parsed_flags: { $($extra_flag:tt => $extra_flag_fn:ident(_, _ $(,$extra_args:tt)*),)*}
      dependencies: { $($parent:ident => $child:ident),* }) => {
 
-        struct InitFlags {
+        struct $name {
             $($flag : type_expand!($($type)?),)*
             $($dy_flag : type_expand!($($dy_type)?),)*
             $($extra_field : $extra_field_type,)*
         }
 
-        impl Default for InitFlags {
+        impl Default for $name {
             fn default() -> Self {
                 Self {
                     $($flag : default_value!($($type)? $(= $default)?),)*
@@ -111,17 +137,23 @@ macro_rules! init_flags {
             }
         }
 
-        /// Sets all bool flags to true
-        /// Set all other flags and extra fields to their default type value
-        pub fn set_all_for_testing() {
-            *FLAGS.lock().unwrap() = InitFlags {
-                $($flag: test_value!($($type)?),)*
-                $($dy_flag: test_value!($($dy_type)?),)*
-                $($extra_field: test_value!($extra_field_type),)*
-            };
-        }
+        impl FlagHolder for $name {
+            fn get_defaults_for_test() -> Self {
+                Self {
+                    $($flag: test_value!($($type)?),)*
+                    $($dy_flag: test_value!($($dy_type)?),)*
+                    $($extra_field: test_value!($extra_field_type),)*
+                }
+            }
 
-        impl InitFlags {
+            fn dump(&self) -> BTreeMap<&'static str, String> {
+                [
+                    $((stringify!($flag), format!("{}", self.$flag)),)*
+                    $((stringify!($dy_flag), format!("{}", self.$dy_flag)),)*
+                    $((stringify!($extra_field), format!("{}", self.$extra_field)),)*
+                ].into()
+            }
+
             fn parse(flags: Vec<String>) -> Self {
                 let mut init_flags = Self::default();
 
@@ -149,6 +181,7 @@ macro_rules! init_flags {
                 init_flags.reconcile()
             }
 
+            #[allow(unused_mut)]
             fn reconcile(mut self) -> Self {
                 loop {
                     // dependencies can be specified in any order
@@ -158,17 +191,11 @@ macro_rules! init_flags {
                     })*
                     break;
                 }
-
-                // TODO: acl should not be off if l2cap is on, but need to reconcile legacy code
-                if self.gd_l2cap {
-                  // TODO This can never be turned off  self.gd_acl = false;
-                }
-
                 self
             }
         }
 
-        impl fmt::Display for InitFlags {
+        impl fmt::Display for $name {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 write!(f, concat!(
                     concat!($(concat!(stringify!($flag), "={}")),*),
@@ -179,6 +206,17 @@ macro_rules! init_flags {
                     $(self.$extra_field),*)
             }
         }
+
+    }
+}
+
+macro_rules! init_flags_getters {
+    (
+     flags: { $($flag:ident $(: $type:ty)? $(= $default:tt)?,)* }
+     dynamic_flags: { $($dy_flag:ident $(: $dy_type:ty)? $(= $dy_default:tt)?,)* }
+     extra_fields: { $($extra_field:ident : $extra_field_type:ty $(= $extra_default:tt)?,)* }
+     extra_parsed_flags: { $($extra_flag:tt => $extra_flag_fn:ident(_, _ $(,$extra_args:tt)*),)*}
+     dependencies: { $($parent:ident => $child:ident),* }) => {
 
         $(create_getter_fn!($flag $($type)?);)*
 
@@ -219,7 +257,7 @@ macro_rules! init_flags {
 
 #[derive(Default)]
 struct ExplicitTagSettings {
-    map: HashMap<String, bool>,
+    map: HashMap<String, i32>,
 }
 
 impl fmt::Display for ExplicitTagSettings {
@@ -228,34 +266,105 @@ impl fmt::Display for ExplicitTagSettings {
     }
 }
 
-fn parse_logging_tag(flags: &mut InitFlags, values: Vec<&str>, enabled: bool) {
-    for tag in values[1].split(',') {
-        flags.logging_debug_explicit_tag_settings.map.insert(tag.to_string(), enabled);
+struct LogLevel(i32);
+
+impl TryFrom<&str> for LogLevel {
+    type Error = &'static str;
+
+    fn try_from(tag_value: &str) -> Result<Self, Self::Error> {
+        match tag_value {
+            "LOG_FATAL" => Ok(LogLevel(LOG_TAG_FATAL)),
+            "LOG_ERROR" => Ok(LogLevel(LOG_TAG_ERROR)),
+            "LOG_WARN" => Ok(LogLevel(LOG_TAG_WARN)),
+            "LOG_NOTICE" => Ok(LogLevel(LOG_TAG_NOTICE)),
+            "LOG_INFO" => Ok(LogLevel(LOG_TAG_INFO)),
+            "LOG_DEBUG" => Ok(LogLevel(LOG_TAG_DEBUG)),
+            "LOG_VERBOSE" => Ok(LogLevel(LOG_TAG_VERBOSE)),
+            _ => Err("Invalid tag value"),
+        }
     }
 }
 
-/// Return true if `tag` is enabled in the flag
-pub fn is_debug_logging_enabled_for_tag(tag: &str) -> bool {
-    let guard = FLAGS.lock().unwrap();
-    *guard
-        .logging_debug_explicit_tag_settings
-        .map
-        .get(tag)
-        .unwrap_or(&guard.logging_debug_enabled_for_all)
+fn deprecated_set_debug_logging_enabled_for_all(flags: &mut InitFlags, values: Vec<&str>) {
+    let truthy: bool = values[1].parse().unwrap_or(false);
+    flags.default_log_level = if truthy { LOG_TAG_VERBOSE } else { LOG_TAG_INFO };
+
+    // Leave a note that this flag is deprecated in the logs.
+    log::error!(
+        "DEPRECATED flag used: INIT_logging_debug_enabled_for_all. Use INIT_default_log_level_str=LOG_VERBOSE instead.",
+    );
+}
+
+fn parse_log_level(flags: &mut InitFlags, values: Vec<&str>) {
+    if let Ok(v) = LogLevel::try_from(values[1]) {
+        flags.default_log_level = v.0;
+    }
+}
+
+fn parse_logging_tag(flags: &mut InitFlags, values: Vec<&str>) {
+    for tag in values[1].split(',') {
+        let tagstr = tag.to_string();
+        let pair = tagstr.split(':').collect::<Vec<&str>>();
+        if pair.len() == 2 {
+            if let Ok(v) = LogLevel::try_from(pair[1]) {
+                flags.logging_explicit_tag_settings.map.insert(pair[0].into(), v.0);
+            }
+        }
+    }
+}
+
+fn parse_debug_logging_tag(flags: &mut InitFlags, values: Vec<&str>, enabled: bool) {
+    let log_level: i32 = if enabled { LOG_TAG_VERBOSE } else { LOG_TAG_INFO };
+
+    for tag in values[1].split(',') {
+        flags.logging_explicit_tag_settings.map.insert(tag.to_string(), log_level);
+    }
 }
 
 fn parse_hci_adapter(flags: &mut InitFlags, values: Vec<&str>) {
     flags.hci_adapter = values[1].parse().unwrap_or(0);
 }
 
+/// Returns the log level for given flag.
+pub fn get_log_level_for_tag(tag: &str) -> i32 {
+    let guard = FLAGS.lock().unwrap();
+    *guard.logging_explicit_tag_settings.map.get(tag).unwrap_or(&guard.default_log_level)
+}
+
+/// Sets all bool flags to true
+/// Set all other flags and extra fields to their default type value
+pub fn set_all_for_testing() {
+    *FLAGS.lock().unwrap() = InitFlags::get_defaults_for_test();
+}
+
+// Keep these values in sync with the values in gd/os/log_tags.h
+// They are used to control the log level for each tag.
+
+/// Fatal log level.
+pub const LOG_TAG_FATAL: i32 = 0;
+/// Error log level.
+pub const LOG_TAG_ERROR: i32 = 1;
+/// Warning log level.
+pub const LOG_TAG_WARN: i32 = 2;
+/// Notice log level.
+pub const LOG_TAG_NOTICE: i32 = 3;
+/// Info log level. This is usually the default log level on most systems.
+pub const LOG_TAG_INFO: i32 = 4;
+/// Debug log level.
+pub const LOG_TAG_DEBUG: i32 = 5;
+/// Verbose log level.
+pub const LOG_TAG_VERBOSE: i32 = 6;
+
 init_flags!(
-    // LINT.IfChange
+    name: InitFlags
     flags: {
+        always_send_services_if_gatt_disc_done = true,
         always_use_private_gatt_for_debugging,
         asynchronously_start_l2cap_coc = true,
         btaa_hci = true,
         bta_dm_clear_conn_id_on_client_close = true,
         btm_dm_flush_discovery_queue_on_search_cancel,
+        classic_discovery_only,
         clear_hidd_interrupt_cid_on_disconnect = true,
         delay_hidh_cleanup_until_hidh_ready_start = true,
         device_iot_config_logging,
@@ -270,42 +379,47 @@ init_flags!(
         gd_link_policy,
         gd_remote_name_request,
         gd_rust,
-        gd_security,
         hci_adapter: i32,
         hfp_dynamic_version = true,
         irk_rotation,
         leaudio_targeted_announcement_reconnection_mode = true,
         pass_phy_update_callback = true,
-        pbap_pse_dynamic_version_upgrade = false, // Disabled while figuring out how to please pts
+        pbap_pse_dynamic_version_upgrade = false,
         periodic_advertising_adi = true,
-        private_gatt,
+        private_gatt = true,
         queue_l2cap_coc_while_encrypting = true,
+        read_encryption_key_size = true,
         redact_log = true,
-        rust_event_loop,
+        rust_event_loop = true,
+        sco_codec_timeout_clear,
         sdp_serialization = true,
         sdp_skip_rnr_if_known = true,
         bluetooth_quality_report_callback = true,
         set_min_encryption = true,
         subrating = true,
         trigger_advertising_callbacks_on_first_resume_after_pause = true,
+        use_unified_connection_manager,
     }
     // dynamic flags can be updated at runtime and should be accessed directly
     // to check.
     dynamic_flags: {
-        logging_debug_enabled_for_all,
+        default_log_level : i32 = LOG_TAG_INFO,
     }
     // extra_fields are not a 1 to 1 match with "INIT_*" flags
     extra_fields: {
-        logging_debug_explicit_tag_settings: ExplicitTagSettings,
+        logging_explicit_tag_settings: ExplicitTagSettings,
     }
-    // LINT.ThenChange(/system/gd/common/init_flags.fbs)
     extra_parsed_flags: {
-        "INIT_logging_debug_enabled_for_tags" => parse_logging_tag(_, _, true),
-        "INIT_logging_debug_disabled_for_tags" => parse_logging_tag(_, _, false),
+        "INIT_default_log_level_str" => parse_log_level(_, _),
+        "INIT_log_level_for_tags" => parse_logging_tag(_, _),
+        "INIT_logging_debug_enabled_for_all" => deprecated_set_debug_logging_enabled_for_all(_, _),
+        "INIT_logging_debug_enabled_for_tags" => parse_debug_logging_tag(_, _, true),
+        "INIT_logging_debug_disabled_for_tags" => parse_debug_logging_tag(_, _, false),
         "--hci" => parse_hci_adapter(_, _),
     }
     dependencies: {
-        gd_core => gd_security
+        always_use_private_gatt_for_debugging => private_gatt,
+        private_gatt => rust_event_loop
     }
 );
 
@@ -325,6 +439,14 @@ pub fn load(raw_flags: Vec<String>) {
     let flags = InitFlags::parse(raw_flags);
     info!("Flags loaded: {}", flags);
     *FLAGS.lock().unwrap() = flags;
+
+    // re-init to respect log levels set by flags
+    crate::init_logging();
+}
+
+/// Dumps all flag K-V pairs, storing values as strings
+pub fn dump() -> BTreeMap<&'static str, String> {
+    FLAGS.lock().unwrap().dump()
 }
 
 #[cfg(test)]
@@ -373,22 +495,24 @@ mod tests {
     fn explicit_flag() {
         let _guard = ASYNC_LOCK.lock().unwrap();
         test_load(vec![
-            "INIT_logging_debug_enabled_for_all=true",
+            "INIT_default_log_level_str=LOG_VERBOSE",
             "INIT_logging_debug_enabled_for_tags=foo,bar",
-            "INIT_logging_debug_disabled_for_tags=foo,bar2",
+            "INIT_logging_debug_disabled_for_tags=foo,bar2,fizz",
             "INIT_logging_debug_enabled_for_tags=bar2",
+            "INIT_log_level_for_tags=fizz:LOG_WARN,buzz:LOG_NOTICE",
         ]);
-        assert!(!is_debug_logging_enabled_for_tag("foo"));
-        assert!(is_debug_logging_enabled_for_tag("bar"));
-        assert!(is_debug_logging_enabled_for_tag("bar2"));
-        assert!(is_debug_logging_enabled_for_tag("unknown_flag"));
-        assert!(logging_debug_enabled_for_all_is_enabled());
-        FLAGS.lock().unwrap().logging_debug_enabled_for_all = false;
-        assert!(!is_debug_logging_enabled_for_tag("foo"));
-        assert!(is_debug_logging_enabled_for_tag("bar"));
-        assert!(is_debug_logging_enabled_for_tag("bar2"));
-        assert!(!is_debug_logging_enabled_for_tag("unknown_flag"));
-        assert!(!logging_debug_enabled_for_all_is_enabled());
+
+        assert!(get_log_level_for_tag("foo") == LOG_TAG_INFO);
+        assert!(get_log_level_for_tag("bar") == LOG_TAG_VERBOSE);
+        assert!(get_log_level_for_tag("bar2") == LOG_TAG_VERBOSE);
+        assert!(get_log_level_for_tag("unknown_flag") == LOG_TAG_VERBOSE);
+        assert!(get_default_log_level() == LOG_TAG_VERBOSE);
+        FLAGS.lock().unwrap().default_log_level = LOG_TAG_INFO;
+        assert!(get_log_level_for_tag("foo") == LOG_TAG_INFO);
+        assert!(get_log_level_for_tag("bar") == LOG_TAG_VERBOSE);
+        assert!(get_log_level_for_tag("bar2") == LOG_TAG_VERBOSE);
+        assert!(get_log_level_for_tag("unknown_flag") == LOG_TAG_INFO);
+        assert!(get_default_log_level() == LOG_TAG_INFO);
     }
     #[test]
     fn test_redact_logging() {
@@ -404,13 +528,60 @@ mod tests {
     #[test]
     fn test_runtime_update() {
         let _guard = ASYNC_LOCK.lock().unwrap();
-        test_load(vec!["INIT_btaa_hci=true", "INIT_logging_debug_enabled_for_all=true"]);
+        test_load(vec!["INIT_btaa_hci=true", "INIT_default_log_level_str=LOG_WARN"]);
         assert!(btaa_hci_is_enabled());
-        assert!(logging_debug_enabled_for_all_is_enabled());
+        assert!(get_default_log_level() == LOG_TAG_WARN);
 
-        update_logging_debug_enabled_for_all(false);
-        assert!(!logging_debug_enabled_for_all_is_enabled());
-        update_logging_debug_enabled_for_all(true);
-        assert!(logging_debug_enabled_for_all_is_enabled());
+        update_default_log_level(LOG_TAG_DEBUG);
+        assert!(get_default_log_level() == LOG_TAG_DEBUG);
+        update_default_log_level(LOG_TAG_ERROR);
+        assert!(get_default_log_level() == LOG_TAG_ERROR);
+    }
+    #[test]
+    fn test_default_log_level() {
+        // Default log level can be provided via int value or string.
+        // The string version is just for ease-of-use.
+        let _guard = ASYNC_LOCK.lock().unwrap();
+        test_load(vec!["INIT_default_log_level=1"]);
+        assert!(get_default_log_level() == LOG_TAG_ERROR);
+        test_load(vec!["INIT_default_log_level_str=LOG_VERBOSE"]);
+        assert!(get_default_log_level() == LOG_TAG_VERBOSE);
+        test_load(vec!["INIT_default_log_level_str=LOG_VERBOSE", "INIT_default_log_level=0"]);
+        assert!(get_default_log_level() == LOG_TAG_FATAL);
+    }
+    #[test]
+    fn test_deprecated_logging_flag() {
+        let _guard = ASYNC_LOCK.lock().unwrap();
+        test_load(vec!["INIT_default_log_level_str=1", "INIT_logging_debug_enabled_for_all=true"]);
+        assert!(get_default_log_level() == LOG_TAG_VERBOSE);
+        test_load(vec!["INIT_logging_debug_enabled_for_all=false"]);
+        assert!(get_default_log_level() == LOG_TAG_INFO);
+    }
+
+    init_flags_struct!(
+        name: InitFlagsForTest
+        flags: {
+            cat,
+        }
+        dynamic_flags: {
+            dog: i32 = 8,
+        }
+        extra_fields: {
+            elephant: String,
+        }
+        extra_parsed_flags: {}
+        dependencies: {}
+    );
+
+    #[test]
+    fn test_dumpsys() {
+        let flags = InitFlagsForTest { dog: 3, elephant: "Go bears!".into(), ..Default::default() };
+
+        let out = flags.dump();
+
+        assert_eq!(out.len(), 3);
+        assert_eq!(out["cat"], "false");
+        assert_eq!(out["dog"], "3");
+        assert_eq!(out["elephant"], "Go bears!");
     }
 }

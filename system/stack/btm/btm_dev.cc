@@ -38,11 +38,13 @@
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
+#include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;
+void gatt_consolidate(const RawAddress& identity_addr, const RawAddress& rpa);
 
 namespace {
 
@@ -144,7 +146,7 @@ void wipe_secrets_and_remove(tBTM_SEC_DEV_REC* p_dev_rec) {
 }
 
 /** Removes the device from acceptlist */
-extern void BTM_AcceptlistRemove(const RawAddress& address);
+void BTM_AcceptlistRemove(const RawAddress& address);
 
 /** Free resources associated with the device associated with |bd_addr| address.
  *
@@ -157,10 +159,6 @@ extern void BTM_AcceptlistRemove(const RawAddress& address);
  * Returns true if removed OK, false if not found or ACL link is active.
  */
 bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecDeleteDevice(bd_addr);
-  }
-
   if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE) ||
       BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR)) {
     LOG_WARN("%s FAILED: Cannot Delete when connection to %s is active",
@@ -172,11 +170,19 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
   if (p_dev_rec != NULL) {
     RawAddress bda = p_dev_rec->bd_addr;
 
-    if (p_dev_rec->ble.in_controller_list & BTM_ACCEPTLIST_BIT) {
-      LOG_INFO("Remove device %s from filter accept list before delete record",
-               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    LOG_INFO("Remove device %s from filter accept list before delete record",
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    if (bluetooth::common::init_flags::
+            use_unified_connection_manager_is_enabled()) {
+      bluetooth::connection::GetConnectionManager()
+          .stop_all_connections_to_device(
+              bluetooth::connection::ResolveRawAddress(p_dev_rec->bd_addr));
+    } else {
       BTM_AcceptlistRemove(p_dev_rec->bd_addr);
     }
+
+    const auto device_type = p_dev_rec->device_type;
+    const auto bond_type = p_dev_rec->bond_type;
 
     /* Clear out any saved BLE keys */
     btm_sec_clear_ble_keys(p_dev_rec);
@@ -184,11 +190,10 @@ bool BTM_SecDeleteDevice(const RawAddress& bd_addr) {
     /* Tell controller to get rid of the link key, if it has one stored */
     BTM_DeleteStoredLinkKey(&bda, NULL);
     LOG_INFO("%s %s complete", __func__, ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-    BTM_LogHistory(
-        kBtmLogTag, bd_addr, "Device removed",
-        base::StringPrintf("device_type:%s bond_type:%s",
-                           DeviceTypeText(p_dev_rec->device_type).c_str(),
-                           bond_type_text(p_dev_rec->bond_type).c_str()));
+    BTM_LogHistory(kBtmLogTag, bd_addr, "Device removed",
+                   base::StringPrintf("device_type:%s bond_type:%s",
+                                      DeviceTypeText(device_type).c_str(),
+                                      bond_type_text(bond_type).c_str()));
   } else {
     LOG_WARN("%s Unable to delete link key for unknown device %s", __func__,
              ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
@@ -467,6 +472,12 @@ void btm_consolidate_dev(tBTM_SEC_DEV_REC* p_target_rec) {
   }
 }
 
+BTM_CONSOLIDATION_CB* btm_consolidate_cb = nullptr;
+
+void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* cb) {
+  btm_consolidate_cb = cb;
+}
+
 /* combine security records of established LE connections after Classic pairing
  * succeeded. */
 void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
@@ -513,11 +524,16 @@ void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
       /* remove the old LE record */
       wipe_secrets_and_remove(p_dev_rec);
 
+      btm_acl_consolidate(bd_addr, ble_conn_addr);
+      L2CA_Consolidate(bd_addr, ble_conn_addr);
+      gatt_consolidate(bd_addr, ble_conn_addr);
+      if (btm_consolidate_cb) btm_consolidate_cb(bd_addr, ble_conn_addr);
+
       /* To avoid race conditions between central/peripheral starting encryption
        * at same time, initiate it just from central. */
       if (L2CA_GetBleConnRole(ble_conn_addr) == HCI_ROLE_CENTRAL) {
         LOG_INFO("Will encrypt existing connection");
-        BTM_SetEncryption(ble_conn_addr, BT_TRANSPORT_LE, nullptr, nullptr,
+        BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, nullptr, nullptr,
                           BTM_BLE_SEC_ENCRYPT);
       }
     }
@@ -619,6 +635,7 @@ tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void) {
   p_dev_rec->bond_type = tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN;
   p_dev_rec->timestamp = btm_cb.dev_rec_count++;
   p_dev_rec->rmt_io_caps = BTM_IO_CAP_UNKNOWN;
+  p_dev_rec->suggested_tx_octets = 0;
 
   return p_dev_rec;
 }

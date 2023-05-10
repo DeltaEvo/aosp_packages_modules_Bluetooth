@@ -43,7 +43,8 @@ class AclConnectionHandler {
   void Reset(std::function<void(TaskId)> stopStream);
 
   bool CreatePendingConnection(bluetooth::hci::Address addr,
-                               bool authenticate_on_connect);
+                               bool authenticate_on_connect,
+                               bool allow_role_switch);
   bool HasPendingConnection(bluetooth::hci::Address addr) const;
   bool CancelPendingConnection(bluetooth::hci::Address addr);
   bool AuthenticatePendingConnection() const;
@@ -85,12 +86,16 @@ class AclConnectionHandler {
   uint16_t GetHandle(bluetooth::hci::AddressWithType addr) const;
   uint16_t GetHandleOnlyAddress(bluetooth::hci::Address addr) const;
   bluetooth::hci::AddressWithType GetAddress(uint16_t handle) const;
+  std::optional<AddressWithType> GetAddressSafe(uint16_t handle) const;
   bluetooth::hci::Address GetScoAddress(uint16_t handle) const;
   bluetooth::hci::AddressWithType GetOwnAddress(uint16_t handle) const;
   bluetooth::hci::AddressWithType GetResolvedAddress(uint16_t handle) const;
 
   void Encrypt(uint16_t handle);
   bool IsEncrypted(uint16_t handle) const;
+
+  void SetRssi(uint16_t handle, int8_t rssi);
+  int8_t GetRssi(uint16_t handle) const;
 
   Phy::Type GetPhyType(uint16_t handle) const;
 
@@ -147,6 +152,7 @@ class AclConnectionHandler {
   std::chrono::steady_clock::duration TimeUntilLinkExpired(
       uint16_t handle) const;
   bool HasLinkExpired(uint16_t handle) const;
+  bool IsRoleSwitchAllowedForPendingConnection() const;
 
  private:
   std::unordered_map<uint16_t, AclConnection> acl_connections_;
@@ -156,6 +162,7 @@ class AclConnectionHandler {
   bluetooth::hci::Address pending_connection_address_{
       bluetooth::hci::Address::kEmpty};
   bool authenticate_pending_classic_connection_{false};
+  bool pending_classic_connection_allow_role_switch_{false};
   bool le_connection_pending_{false};
   bluetooth::hci::AddressWithType pending_le_connection_address_{
       bluetooth::hci::Address::kEmpty,

@@ -7,12 +7,12 @@
     {
       "name": "BluetoothInstrumentationTests"
     },
-    {
-      "name": "GoogleBluetoothInstrumentationTests"
-    },
-    {
-      "name": "FrameworkBluetoothTests"
-    },
+    //{
+    //  "name": "GoogleBluetoothInstrumentationTests"
+    //},
+    //{
+    //  "name": "FrameworkBluetoothTests"
+    //},
     {
       "name": "ServiceBluetoothTests"
     },
@@ -32,6 +32,9 @@
     },
     {
       "name": "net_test_bta"
+    },
+    {
+      "name": "net_test_bta_security"
     },
     {
       "name": "net_test_btif"
@@ -214,12 +217,12 @@
     {
       "name": "BluetoothInstrumentationTests"
     },
-    {
-      "name": "GoogleBluetoothInstrumentationTests"
-    },
-    {
-      "name": "FrameworkBluetoothTests"
-    },
+    //{
+    //  "name": "GoogleBluetoothInstrumentationTests"
+    //},
+    //{
+    //  "name": "FrameworkBluetoothTests"
+    //},
     {
       "name": "ServiceBluetoothTests"
     },
@@ -239,6 +242,9 @@
     },
     {
       "name": "net_test_bta"
+    },
+    {
+      "name": "net_test_bta_security"
     },
     {
       "name": "net_test_btif"

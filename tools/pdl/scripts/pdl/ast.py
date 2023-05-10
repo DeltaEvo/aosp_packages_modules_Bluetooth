@@ -1,5 +1,19 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 constructors_ = dict()
 
@@ -37,7 +51,9 @@ class Node:
 @node('tag')
 class Tag(Node):
     id: str
-    value: int
+    value: Optional[int] = field(default=None)
+    range: Optional[Tuple[int, int]] = field(default=None)
+    tags: Optional[List['Tag']] = field(default=None)
 
 
 @node('constraint')
@@ -238,6 +254,10 @@ class File:
     def byteorder(self) -> str:
         return 'little' if self.endianness.value == 'little_endian' else 'big'
 
+    @property
+    def byteorder_short(self, short: bool = False) -> str:
+        return 'le' if self.endianness.value == 'little_endian' else 'be'
+
 
 def convert_(obj: object) -> object:
     if obj is None:
@@ -247,6 +267,8 @@ def convert_(obj: object) -> object:
     if isinstance(obj, list):
         return [convert_(elt) for elt in obj]
     if isinstance(obj, object):
+        if 'start' in obj.keys() and 'end' in obj.keys():
+            return (objs.start, obj.end)
         kind = obj['kind']
         loc = obj['loc']
         loc = SourceRange(loc['file'], SourceLocation(**loc['start']), SourceLocation(**loc['end']))

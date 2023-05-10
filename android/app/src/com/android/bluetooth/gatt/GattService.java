@@ -84,6 +84,7 @@ import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AbstractionLayer;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.BluetoothAdapterProxy;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.CompanionManager;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.util.NumberUtils;
@@ -304,7 +305,7 @@ public class GattService extends ProfileService {
         final MacAddress parsedAddress = MacAddress
                 .fromString(scanResult.getDevice().getAddress());
         if (mAdapterService.getLocationDenylistMac().test(parsedAddress.toByteArray())) {
-            Log.v(TAG, "Skipping device matching denylist: " + parsedAddress);
+            Log.v(TAG, "Skipping device matching denylist: " + scanResult.getDevice());
             return true;
         }
         final ScanRecord scanRecord = scanResult.getScanRecord();
@@ -3641,6 +3642,11 @@ public class GattService extends ProfileService {
                     + opportunistic + ", phy=" + phy);
         }
         statsLogAppPackage(address, attributionSource.getUid(), clientIf);
+        if (isDirect) {
+          MetricsLogger.getInstance().count(BluetoothProtoEnums.GATT_CLIENT_CONNECT_IS_DIRECT, 1);
+        } else {
+          MetricsLogger.getInstance().count(BluetoothProtoEnums.GATT_CLIENT_CONNECT_IS_AUTOCONNECT, 1);
+        }
         statsLogGattConnectionStateChange(
                 BluetoothProfile.GATT, address, clientIf,
                 BluetoothProtoEnums.CONNECTION_STATE_CONNECTING, -1);

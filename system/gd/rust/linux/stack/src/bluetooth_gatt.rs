@@ -12,6 +12,7 @@ use bt_topshim::profiles::gatt::{
     GattScannerInbandCallbacks, GattScannerInbandCallbacksDispatcher, GattServerCallbacks,
     GattServerCallbacksDispatcher, GattStatus, LePhy, MsftAdvMonitor, MsftAdvMonitorPattern,
 };
+use bt_topshim::sysprop;
 use bt_topshim::topstack;
 use bt_utils::adv_parser;
 use bt_utils::array_utils;
@@ -294,8 +295,11 @@ impl ServerContextMap {
         }
     }
 
-    fn get_callback_from_callback_id(&self, callback_id: u32) -> Option<&GattServerCallback> {
-        self.callbacks.get_by_id(callback_id)
+    fn get_callback_from_callback_id(
+        &mut self,
+        callback_id: u32,
+    ) -> Option<&mut GattServerCallback> {
+        self.callbacks.get_by_id_mut(callback_id)
     }
 
     fn add_connection(&mut self, server_id: i32, conn_id: i32, address: &String) {
@@ -520,6 +524,9 @@ pub trait IBluetoothGatt {
     /// Enumerates all GATT services on a connected device.
     fn discover_services(&self, client_id: i32, addr: String);
 
+    /// Discovers all GATT services on a connected device. Only used by PTS.
+    fn btif_gattc_discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String);
+
     /// Search a GATT service on a connected device based on a UUID.
     fn discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String);
 
@@ -680,7 +687,11 @@ pub struct BluetoothGattDescriptor {
 }
 
 impl BluetoothGattDescriptor {
-    fn new(uuid: Uuid128Bit, instance_id: i32, permissions: i32) -> BluetoothGattDescriptor {
+    pub(crate) fn new(
+        uuid: Uuid128Bit,
+        instance_id: i32,
+        permissions: i32,
+    ) -> BluetoothGattDescriptor {
         BluetoothGattDescriptor { uuid, instance_id, permissions }
     }
 }
@@ -698,16 +709,27 @@ pub struct BluetoothGattCharacteristic {
 }
 
 impl BluetoothGattCharacteristic {
-    pub const PROPERTY_BROADCAST: i32 = 0x01;
-    pub const PROPERTY_READ: i32 = 0x02;
-    pub const PROPERTY_WRITE_NO_RESPONSE: i32 = 0x04;
-    pub const PROPERTY_WRITE: i32 = 0x08;
-    pub const PROPERTY_NOTIFY: i32 = 0x10;
-    pub const PROPERTY_INDICATE: i32 = 0x20;
-    pub const PROPERTY_SIGNED_WRITE: i32 = 0x40;
-    pub const PROPERTY_EXTENDED_PROPS: i32 = 0x80;
+    // Properties are u8 but i32 in these apis.
+    pub const PROPERTY_BROADCAST: i32 = 1 << 0;
+    pub const PROPERTY_READ: i32 = 1 << 1;
+    pub const PROPERTY_WRITE_NO_RESPONSE: i32 = 1 << 2;
+    pub const PROPERTY_WRITE: i32 = 1 << 3;
+    pub const PROPERTY_NOTIFY: i32 = 1 << 4;
+    pub const PROPERTY_INDICATE: i32 = 1 << 5;
+    pub const PROPERTY_SIGNED_WRITE: i32 = 1 << 6;
+    pub const PROPERTY_EXTENDED_PROPS: i32 = 1 << 7;
 
-    fn new(
+    // Permissions are u16 but i32 in these apis.
+    pub const PERMISSION_READ: i32 = 1 << 0;
+    pub const PERMISSION_READ_ENCRYPTED: i32 = 1 << 1;
+    pub const PERMISSION_READ_ENCRYPED_MITM: i32 = 1 << 2;
+    pub const PERMISSION_WRITE: i32 = 1 << 4;
+    pub const PERMISSION_WRITE_ENCRYPTED: i32 = 1 << 5;
+    pub const PERMISSION_WRITE_ENCRYPTED_MITM: i32 = 1 << 6;
+    pub const PERMISSION_WRITE_SIGNED: i32 = 1 << 7;
+    pub const PERMISSION_WRITE_SIGNED_MITM: i32 = 1 << 8;
+
+    pub(crate) fn new(
         uuid: Uuid128Bit,
         instance_id: i32,
         properties: i32,
@@ -741,7 +763,11 @@ pub struct BluetoothGattService {
 }
 
 impl BluetoothGattService {
-    fn new(uuid: Uuid128Bit, instance_id: i32, service_type: i32) -> BluetoothGattService {
+    pub(crate) fn new(
+        uuid: Uuid128Bit,
+        instance_id: i32,
+        service_type: i32,
+    ) -> BluetoothGattService {
         BluetoothGattService {
             uuid,
             instance_id,
@@ -887,11 +913,11 @@ impl BluetoothGattService {
 /// Callback for GATT Client API.
 pub trait IBluetoothGattCallback: RPCProxy {
     /// When the `register_client` request is done.
-    fn on_client_registered(&self, _status: GattStatus, _client_id: i32);
+    fn on_client_registered(&mut self, _status: GattStatus, _client_id: i32);
 
     /// When there is a change in the state of a GATT client connection.
     fn on_client_connection_state(
-        &self,
+        &mut self,
         _status: GattStatus,
         _client_id: i32,
         _connected: bool,
@@ -899,14 +925,14 @@ pub trait IBluetoothGattCallback: RPCProxy {
     );
 
     /// When there is a change of PHY.
-    fn on_phy_update(&self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus);
+    fn on_phy_update(&mut self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus);
 
     /// The completion of IBluetoothGatt::read_phy.
-    fn on_phy_read(&self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus);
+    fn on_phy_read(&mut self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus);
 
     /// When GATT db is available.
     fn on_search_complete(
-        &self,
+        &mut self,
         _addr: String,
         _services: Vec<BluetoothGattService>,
         _status: GattStatus,
@@ -914,7 +940,7 @@ pub trait IBluetoothGattCallback: RPCProxy {
 
     /// The completion of IBluetoothGatt::read_characteristic.
     fn on_characteristic_read(
-        &self,
+        &mut self,
         _addr: String,
         _status: GattStatus,
         _handle: i32,
@@ -922,29 +948,35 @@ pub trait IBluetoothGattCallback: RPCProxy {
     );
 
     /// The completion of IBluetoothGatt::write_characteristic.
-    fn on_characteristic_write(&self, _addr: String, _status: GattStatus, _handle: i32);
+    fn on_characteristic_write(&mut self, _addr: String, _status: GattStatus, _handle: i32);
 
     /// When a reliable write is completed.
-    fn on_execute_write(&self, _addr: String, _status: GattStatus);
+    fn on_execute_write(&mut self, _addr: String, _status: GattStatus);
 
     /// The completion of IBluetoothGatt::read_descriptor.
-    fn on_descriptor_read(&self, _addr: String, _status: GattStatus, _handle: i32, _value: Vec<u8>);
+    fn on_descriptor_read(
+        &mut self,
+        _addr: String,
+        _status: GattStatus,
+        _handle: i32,
+        _value: Vec<u8>,
+    );
 
     /// The completion of IBluetoothGatt::write_descriptor.
-    fn on_descriptor_write(&self, _addr: String, _status: GattStatus, _handle: i32);
+    fn on_descriptor_write(&mut self, _addr: String, _status: GattStatus, _handle: i32);
 
     /// When notification or indication is received.
-    fn on_notify(&self, _addr: String, _handle: i32, _value: Vec<u8>);
+    fn on_notify(&mut self, _addr: String, _handle: i32, _value: Vec<u8>);
 
     /// The completion of IBluetoothGatt::read_remote_rssi.
-    fn on_read_remote_rssi(&self, _addr: String, _rssi: i32, _status: GattStatus);
+    fn on_read_remote_rssi(&mut self, _addr: String, _rssi: i32, _status: GattStatus);
 
     /// The completion of IBluetoothGatt::configure_mtu.
-    fn on_configure_mtu(&self, _addr: String, _mtu: i32, _status: GattStatus);
+    fn on_configure_mtu(&mut self, _addr: String, _mtu: i32, _status: GattStatus);
 
     /// When a connection parameter changes.
     fn on_connection_updated(
-        &self,
+        &mut self,
         _addr: String,
         _interval: i32,
         _latency: i32,
@@ -953,26 +985,26 @@ pub trait IBluetoothGattCallback: RPCProxy {
     );
 
     /// When there is an addition, removal, or change of a GATT service.
-    fn on_service_changed(&self, _addr: String);
+    fn on_service_changed(&mut self, _addr: String);
 }
 
 /// Callback for GATT Server API.
 pub trait IBluetoothGattServerCallback: RPCProxy {
     /// When the `register_server` request is done.
-    fn on_server_registered(&self, _status: GattStatus, _server_id: i32);
+    fn on_server_registered(&mut self, _status: GattStatus, _server_id: i32);
 
     /// When there is a change in the state of a GATT server connection.
-    fn on_server_connection_state(&self, _server_id: i32, _connected: bool, _addr: String);
+    fn on_server_connection_state(&mut self, _server_id: i32, _connected: bool, _addr: String);
 
     /// When there is a service added to the GATT server.
-    fn on_service_added(&self, _status: GattStatus, _service: BluetoothGattService);
+    fn on_service_added(&mut self, _status: GattStatus, _service: BluetoothGattService);
 
     /// When a service has been removed from the GATT server.
-    fn on_service_removed(&self, status: GattStatus, handle: i32);
+    fn on_service_removed(&mut self, status: GattStatus, handle: i32);
 
     /// When a remote device has requested to read a characteristic.
     fn on_characteristic_read_request(
-        &self,
+        &mut self,
         _addr: String,
         _trans_id: i32,
         _offset: i32,
@@ -982,7 +1014,7 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
 
     /// When a remote device has requested to read a descriptor.
     fn on_descriptor_read_request(
-        &self,
+        &mut self,
         _addr: String,
         _trans_id: i32,
         _offset: i32,
@@ -992,7 +1024,7 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
 
     /// When a remote device has requested to write to a characteristic.
     fn on_characteristic_write_request(
-        &self,
+        &mut self,
         _addr: String,
         _trans_id: i32,
         _offset: i32,
@@ -1005,7 +1037,7 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
 
     /// When a remote device has requested to write to a descriptor.
     fn on_descriptor_write_request(
-        &self,
+        &mut self,
         _addr: String,
         _trans_id: i32,
         _offset: i32,
@@ -1017,23 +1049,23 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
     );
 
     /// When a previously prepared write is to be executed.
-    fn on_execute_write(&self, _addr: String, _trans_id: i32, _exec_write: bool);
+    fn on_execute_write(&mut self, _addr: String, _trans_id: i32, _exec_write: bool);
 
     /// When a notification or indication has been sent to a remote device.
-    fn on_notification_sent(&self, _addr: String, _status: GattStatus);
+    fn on_notification_sent(&mut self, _addr: String, _status: GattStatus);
 
     /// When the MTU for a given connection changes
-    fn on_mtu_changed(&self, addr: String, mtu: i32);
+    fn on_mtu_changed(&mut self, addr: String, mtu: i32);
 
     /// When there is a change of PHY.
-    fn on_phy_update(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus);
+    fn on_phy_update(&mut self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus);
 
     /// The completion of IBluetoothGatt::server_read_phy.
-    fn on_phy_read(&self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus);
+    fn on_phy_read(&mut self, addr: String, tx_phy: LePhy, rx_phy: LePhy, status: GattStatus);
 
     /// When the connection parameters for a given connection changes.
     fn on_connection_updated(
-        &self,
+        &mut self,
         addr: String,
         interval: i32,
         latency: i32,
@@ -1043,7 +1075,7 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
 
     /// When the subrate change event for a given connection is received.
     fn on_subrate_change(
-        &self,
+        &mut self,
         addr: String,
         subrate_factor: i32,
         latency: i32,
@@ -1057,37 +1089,43 @@ pub trait IBluetoothGattServerCallback: RPCProxy {
 /// `IBluetoothGatt::register_scanner_callback`.
 pub trait IScannerCallback: RPCProxy {
     /// When the `register_scanner` request is done.
-    fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus);
+    fn on_scanner_registered(&mut self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus);
 
     /// When an LE advertisement matching aggregate filters is detected. This callback is shared
     /// among all scanner callbacks and is triggered for *every* advertisement that the controller
     /// receives. For listening to the beginning and end of a specific scanner's advertisements
     /// detected while in RSSI range, use on_advertisement_found and on_advertisement_lost below.
-    fn on_scan_result(&self, scan_result: ScanResult);
+    fn on_scan_result(&mut self, scan_result: ScanResult);
 
     /// When an LE advertisement matching aggregate filters is found. The criteria of
     /// how a device is considered found is specified by ScanFilter.
-    fn on_advertisement_found(&self, scanner_id: u8, scan_result: ScanResult);
+    fn on_advertisement_found(&mut self, scanner_id: u8, scan_result: ScanResult);
 
     /// When an LE advertisement matching aggregate filters is no longer detected. The criteria of
     /// how a device is considered lost is specified by ScanFilter.
     // TODO(b/269343922): Rename this to on_advertisement_lost for symmetry with
     // on_advertisement_found.
-    fn on_advertisement_lost(&self, scanner_id: u8, scan_result: ScanResult);
+    fn on_advertisement_lost(&mut self, scanner_id: u8, scan_result: ScanResult);
 
     /// When LE Scan module changes suspend mode due to system suspend/resume.
-    fn on_suspend_mode_change(&self, suspend_mode: SuspendMode);
+    fn on_suspend_mode_change(&mut self, suspend_mode: SuspendMode);
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 #[repr(u8)]
 /// GATT write type.
-enum GattDbElementType {
+pub(crate) enum GattDbElementType {
     PrimaryService = 0,
     SecondaryService = 1,
     IncludedService = 2,
     Characteristic = 3,
     Descriptor = 4,
+}
+
+impl Into<i32> for GattDbElementType {
+    fn into(self) -> i32 {
+        self.to_u8().unwrap_or(0).into()
+    }
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive, Copy, Clone)]
@@ -1302,6 +1340,8 @@ pub struct BluetoothGatt {
     reliable_queue: HashSet<String>,
     scanner_callbacks: Callbacks<dyn IScannerCallback + Send>,
     scanners: Arc<Mutex<ScannersMap>>,
+    scan_suspend_mode: SuspendMode,
+    paused_scanner_ids: Vec<u8>,
     advertisers: Advertisers,
 
     adv_mon_add_cb_sender: CallbackSender<(u8, u8)>,
@@ -1332,6 +1372,8 @@ impl BluetoothGatt {
             reliable_queue: HashSet::new(),
             scanner_callbacks: Callbacks::new(tx.clone(), Message::ScannerCallbackDisconnected),
             scanners: scanners.clone(),
+            scan_suspend_mode: SuspendMode::Normal,
+            paused_scanner_ids: Vec::new(),
             small_rng: SmallRng::from_entropy(),
             advertisers: Advertisers::new(tx.clone()),
             adv_mon_add_cb_sender: async_helper_msft_adv_monitor_add.get_callback_sender(),
@@ -1452,14 +1494,60 @@ impl BluetoothGatt {
         self.scanner_callbacks.remove_callback(callback_id)
     }
 
+    /// Set the suspend mode.
+    pub fn set_scan_suspend_mode(&mut self, suspend_mode: SuspendMode) {
+        if suspend_mode != self.scan_suspend_mode {
+            self.scan_suspend_mode = suspend_mode.clone();
+
+            // Notify current suspend mode to all active callbacks.
+            self.scanner_callbacks.for_all_callbacks(|callback| {
+                callback.on_suspend_mode_change(suspend_mode.clone());
+            });
+        }
+    }
+
     /// Enters suspend mode for LE Scan.
     ///
     /// This "pauses" all operations managed by this module to prepare for system suspend. A
     /// callback is triggered to let clients know that this module is in suspend mode and some
     /// subsequent API calls will be blocked in this mode.
-    pub fn scan_enter_suspend(&mut self) {
-        // TODO(b/224603540): Implement
-        log::error!("TODO - scan_enter_suspend");
+    pub fn scan_enter_suspend(&mut self) -> BtStatus {
+        if self.get_scan_suspend_mode() != SuspendMode::Normal {
+            return BtStatus::Busy;
+        }
+        self.set_scan_suspend_mode(SuspendMode::Suspending);
+
+        // Collect the scanners that will be paused so that they can be re-enabled at resume.
+        let paused_scanner_ids = self
+            .scanners
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(_uuid, scanner)| {
+                if let (true, Some(scanner_id)) = (scanner.is_active, scanner.scanner_id) {
+                    Some(scanner_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Note: We can't simply disable the LE scanning. When a filter is offloaded
+        // with the MSFT extension and it is monitoring a device, it sends a
+        // `Monitor Device Event` to indicate that monitoring is stopped and this
+        // can cause an early wake-up. Until we fix the disable + mask solution, we
+        // must remove all monitors before suspend and re-monitor them on resume.
+        for &scanner_id in &paused_scanner_ids {
+            self.stop_scan(scanner_id);
+            if let Some(scanner) =
+                Self::find_scanner_by_id(&mut self.scanners.lock().unwrap(), scanner_id)
+            {
+                scanner.is_suspended = true;
+            }
+        }
+        self.paused_scanner_ids = paused_scanner_ids;
+        self.set_scan_suspend_mode(SuspendMode::Suspended);
+        return BtStatus::Success;
     }
 
     /// Exits suspend mode for LE Scan.
@@ -1467,9 +1555,19 @@ impl BluetoothGatt {
     /// To be called after system resume/wake up. This "unpauses" the operations that were "paused"
     /// due to suspend. A callback is triggered to let clients when this module has exited suspend
     /// mode.
-    pub fn scan_exit_suspend(&mut self) {
-        // TODO(b/224603540): Implement
-        log::error!("TODO - scan_exit_suspend");
+    pub fn scan_exit_suspend(&mut self) -> BtStatus {
+        if self.get_scan_suspend_mode() != SuspendMode::Suspended {
+            return BtStatus::Busy;
+        }
+        self.set_scan_suspend_mode(SuspendMode::Resuming);
+
+        // The resume_scan() will add and reenable the monitors individually.
+        for scanner_id in self.paused_scanner_ids.drain(..).collect::<Vec<_>>() {
+            self.resume_scan(scanner_id);
+        }
+        self.set_scan_suspend_mode(SuspendMode::Normal);
+
+        return BtStatus::Success;
     }
 
     fn find_scanner_by_id<'a>(
@@ -1477,6 +1575,105 @@ impl BluetoothGatt {
         scanner_id: u8,
     ) -> Option<&'a mut ScannerInfo> {
         scanners.values_mut().find(|scanner| scanner.scanner_id == Some(scanner_id))
+    }
+
+    /// The resume_scan method is used to resume scanning after system suspension.
+    /// It assumes that scanner.filter has already had the filter data.
+    fn resume_scan(&mut self, scanner_id: u8) -> BtStatus {
+        let scan_suspend_mode = self.get_scan_suspend_mode();
+        if scan_suspend_mode != SuspendMode::Normal && scan_suspend_mode != SuspendMode::Resuming {
+            return BtStatus::Busy;
+        }
+
+        let filter = {
+            let mut scanners_lock = self.scanners.lock().unwrap();
+            if let Some(scanner) = Self::find_scanner_by_id(&mut scanners_lock, scanner_id) {
+                if scanner.is_suspended {
+                    scanner.is_suspended = false;
+                    scanner.is_active = true;
+                    // When a scanner resumes from a suspended state, the
+                    // scanner.filter has already had the filter data.
+                    scanner.filter.clone()
+                } else {
+                    log::warn!(
+                        "This Scanner {} is supposed to resume from suspended state",
+                        scanner_id
+                    );
+                    return BtStatus::Fail;
+                }
+            } else {
+                log::warn!("Scanner {} not found", scanner_id);
+                return BtStatus::Fail;
+            }
+        };
+
+        self.add_monitor_and_update_scan(scanner_id, filter)
+    }
+
+    fn add_monitor_and_update_scan(
+        &mut self,
+        scanner_id: u8,
+        filter: Option<ScanFilter>,
+    ) -> BtStatus {
+        let has_active_unfiltered_scanner = self
+            .scanners
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
+
+        let gatt_async = self.gatt_async.clone();
+        let scanners = self.scanners.clone();
+        let is_msft_supported = self.is_msft_supported();
+
+        tokio::spawn(async move {
+            // The three operations below (monitor add, monitor enable, update scan) happen one
+            // after another, and cannot be interleaved with other GATT async operations.
+            // So acquire the GATT async lock in the beginning of this block and will be released
+            // at the end of this block.
+            // TODO(b/217274432): Consider not using async model but instead add actions when
+            // handling callbacks.
+            let mut gatt_async = gatt_async.lock().await;
+
+            // Add and enable the monitor filter only when the MSFT extension is supported.
+            if is_msft_supported {
+                if let Some(filter) = filter {
+                    let monitor_handle =
+                        match gatt_async.msft_adv_monitor_add((&filter).into()).await {
+                            Ok((handle, 0)) => handle,
+                            _ => {
+                                log::error!("Error adding advertisement monitor");
+                                return;
+                            }
+                        };
+
+                    if let Some(scanner) =
+                        Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
+                    {
+                        // The monitor handle is needed in stop_scan().
+                        scanner.monitor_handle = Some(monitor_handle);
+                    }
+
+                    log::debug!("Added adv monitor handle = {}", monitor_handle);
+                }
+
+                if !gatt_async
+                    .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
+                    .await
+                    .map_or(false, |status| status == 0)
+                {
+                    // TODO(b/266752123):
+                    // Intel controller throws "Command Disallowed" error if we tried to enable/disable
+                    // filter but it's already at the same state. This is harmless but we can improve
+                    // the state machine to avoid calling enable/disable if it's already at that state
+                    log::error!("Error updating Advertisement Monitor enable");
+                }
+            }
+
+            gatt_async.update_scan().await;
+        });
+
+        BtStatus::Success
     }
 
     /// Remove an advertiser callback and unregisters all advertising sets associated with that callback.
@@ -1552,6 +1749,31 @@ impl BluetoothGatt {
 
         self.advertisers.set_suspend_mode(SuspendMode::Normal);
     }
+
+    /// Start an active scan on given scanner id. This will look up and assign
+    /// the correct ScanSettings for it as well.
+    pub(crate) fn start_active_scan(&mut self, scanner_id: u8) -> BtStatus {
+        let interval: u16 = sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanInterval)
+            .try_into()
+            .expect("Bad value configured for LeInquiryScanInterval");
+        let window: u16 = sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanWindow)
+            .try_into()
+            .expect("Bad value configured for LeInquiryScanWindow");
+
+        self.gatt
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .scanner
+            .set_scan_parameters(scanner_id, interval, window);
+
+        self.start_scan(scanner_id, ScanSettings::default(), /*filter=*/ None)
+    }
+
+    pub(crate) fn stop_active_scan(&mut self, scanner_id: u8) -> BtStatus {
+        self.stop_scan(scanner_id)
+    }
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -1578,11 +1800,20 @@ struct ScannerInfo {
     filter: Option<ScanFilter>,
     // Adv monitor handle, if exists.
     monitor_handle: Option<u8>,
+    // Used by start_scan() to determine if it is called because of system resuming.
+    is_suspended: bool,
 }
 
 impl ScannerInfo {
     fn new(callback_id: u32) -> Self {
-        Self { callback_id, scanner_id: None, is_active: false, filter: None, monitor_handle: None }
+        Self {
+            callback_id,
+            scanner_id: None,
+            is_active: false,
+            filter: None,
+            monitor_handle: None,
+            is_suspended: false,
+        }
     }
 }
 
@@ -1667,6 +1898,11 @@ impl IBluetoothGatt for BluetoothGatt {
         _settings: ScanSettings,
         filter: Option<ScanFilter>,
     ) -> BtStatus {
+        let scan_suspend_mode = self.get_scan_suspend_mode();
+        if scan_suspend_mode != SuspendMode::Normal && scan_suspend_mode != SuspendMode::Resuming {
+            return BtStatus::Busy;
+        }
+
         // Multiplexing scanners happens at this layer. The implementations of start_scan
         // and stop_scan maintains the state of all registered scanners and based on the states
         // update the scanning and/or filter states of libbluetooth.
@@ -1682,68 +1918,16 @@ impl IBluetoothGatt for BluetoothGatt {
             }
         }
 
-        let has_active_unfiltered_scanner = self
-            .scanners
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
-
-        let gatt_async = self.gatt_async.clone();
-        let scanners = self.scanners.clone();
-        let is_msft_supported = self.is_msft_supported();
-
-        tokio::spawn(async move {
-            // The three operations below (monitor add, monitor enable, update scan) happen one
-            // after another, and cannot be interleaved with other GATT async operations.
-            // So acquire the GATT async lock in the beginning of this block and will be released
-            // at the end of this block.
-            // TODO(b/217274432): Consider not using async model but instead add actions when
-            // handling callbacks.
-            let mut gatt_async = gatt_async.lock().await;
-
-            // Add and enable the monitor filter only when the MSFT extension is supported.
-            if is_msft_supported {
-                if let Some(filter) = filter {
-                    let monitor_handle =
-                        match gatt_async.msft_adv_monitor_add((&filter).into()).await {
-                            Ok((handle, 0)) => handle,
-                            _ => {
-                                log::error!("Error adding advertisement monitor");
-                                return;
-                            }
-                        };
-
-                    if let Some(scanner) =
-                        Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
-                    {
-                        // The monitor handle is needed in stop_scan().
-                        scanner.monitor_handle = Some(monitor_handle);
-                    }
-
-                    log::debug!("Added adv monitor handle = {}", monitor_handle);
-                }
-
-                if !gatt_async
-                    .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
-                    .await
-                    .map_or(false, |status| status == 0)
-                {
-                    // TODO(b/266752123):
-                    // Intel controller throws "Command Disallowed" error if we tried to enable/disable
-                    // filter but it's already at the same state. This is harmless but we can improve
-                    // the state machine to avoid calling enable/disable if it's already at that state
-                    log::error!("Error updating Advertisement Monitor enable");
-                }
-            }
-
-            gatt_async.update_scan().await;
-        });
-
-        BtStatus::Success
+        return self.add_monitor_and_update_scan(scanner_id, filter);
     }
 
     fn stop_scan(&mut self, scanner_id: u8) -> BtStatus {
+        let scan_suspend_mode = self.get_scan_suspend_mode();
+        if scan_suspend_mode != SuspendMode::Normal && scan_suspend_mode != SuspendMode::Suspending
+        {
+            return BtStatus::Busy;
+        }
+
         let monitor_handle = {
             let mut scanners_lock = self.scanners.lock().unwrap();
 
@@ -1795,8 +1979,7 @@ impl IBluetoothGatt for BluetoothGatt {
     }
 
     fn get_scan_suspend_mode(&self) -> SuspendMode {
-        // TODO(b/224603540): Implement.
-        return SuspendMode::Normal;
+        self.scan_suspend_mode.clone()
     }
 
     // Advertising
@@ -2159,6 +2342,26 @@ impl IBluetoothGatt for BluetoothGatt {
         }
 
         self.gatt.as_ref().unwrap().lock().unwrap().client.search_service(conn_id.unwrap(), uuid);
+    }
+
+    fn btif_gattc_discover_service_by_uuid(&self, client_id: i32, addr: String, uuid: String) {
+        let conn_id = match self.context_map.get_conn_id_from_address(client_id, &addr) {
+            None => return,
+            Some(id) => id,
+        };
+
+        let uuid = match UuidHelper::parse_string(uuid) {
+            None => return,
+            Some(uuid) => uuid,
+        };
+
+        self.gatt
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .client
+            .btif_gattc_discover_service_by_uuid(conn_id, &uuid);
     }
 
     fn read_characteristic(&self, client_id: i32, addr: String, handle: i32, auth_req: i32) {
@@ -3246,7 +3449,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         let cbid = self.server_context_map.get_by_uuid(&app_uuid.uu).map(|server| server.cbid);
         match cbid {
             Some(cbid) => {
-                if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                if let Some(cb) =
+                    self.server_context_map.get_callback_from_callback_id(cbid).as_mut()
+                {
                     cb.on_server_registered(status, server_id)
                 }
             }
@@ -3267,7 +3472,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         let cbid = self.server_context_map.get_by_server_id(server_id).map(|server| server.cbid);
         match cbid {
             Some(cbid) => {
-                if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                if let Some(cb) =
+                    self.server_context_map.get_callback_from_callback_id(cbid).as_mut()
+                {
                     cb.on_server_connection_state(server_id, is_connected, addr.to_string());
                 }
             }
@@ -3293,7 +3500,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
                 self.server_context_map.get_by_server_id(server_id).map(|server| server.cbid);
             match cbid {
                 Some(cbid) => {
-                    if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                    if let Some(cb) =
+                        self.server_context_map.get_callback_from_callback_id(cbid).as_mut()
+                    {
                         cb.on_service_added(status, service);
                     }
                 }
@@ -3309,12 +3518,15 @@ impl BtifGattServerCallbacks for BluetoothGatt {
             self.server_context_map.delete_service(server_id, handle);
         }
 
-        if let Some(cb) = self
+        let cbid = self
             .server_context_map
             .get_by_server_id(server_id)
-            .and_then(|server| self.server_context_map.get_callback_from_callback_id(server.cbid))
-        {
-            cb.on_service_removed(status, handle);
+            .and_then(|server| Some(server.cbid));
+
+        if let Some(cbid) = cbid {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
+                cb.on_service_removed(status, handle);
+            }
         }
     }
 
@@ -3332,7 +3544,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         if let Some(cbid) =
             self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
         {
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
                 cb.on_characteristic_read_request(
                     addr.to_string(),
                     trans_id,
@@ -3358,7 +3570,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         if let Some(cbid) =
             self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
         {
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
                 cb.on_descriptor_read_request(addr.to_string(), trans_id, offset, is_long, handle);
             }
         }
@@ -3381,7 +3593,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         if let Some(cbid) =
             self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
         {
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
                 cb.on_characteristic_write_request(
                     addr.to_string(),
                     trans_id,
@@ -3413,7 +3625,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         if let Some(cbid) =
             self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
         {
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
                 cb.on_descriptor_write_request(
                     addr.to_string(),
                     trans_id,
@@ -3440,7 +3652,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         if let Some(cbid) =
             self.server_context_map.get_by_conn_id(conn_id).map(|server| server.cbid)
         {
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
                 cb.on_execute_write(addr.to_string(), trans_id, exec_write != 0);
             }
         }
@@ -3461,7 +3673,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
             }
 
             let cbid = server.cbid;
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
                 cb.on_notification_sent(address.to_string(), status);
             }
 
@@ -3476,7 +3688,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
                 let cbid = server.cbid;
                 let congestion_queue: Vec<_> = server.congestion_queue.drain(..).collect();
 
-                if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+                if let Some(cb) =
+                    self.server_context_map.get_callback_from_callback_id(cbid).as_mut()
+                {
                     for callback in congestion_queue {
                         cb.on_notification_sent(callback.0.clone(), callback.1);
                     }
@@ -3490,7 +3704,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
             let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
             let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
 
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+            if let Some(cb) =
+                self.server_context_map.get_callback_from_callback_id(server_cbid).as_mut()
+            {
                 cb.on_mtu_changed(address, mtu);
             }
 
@@ -3503,7 +3719,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
             let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
             let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
 
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+            if let Some(cb) =
+                self.server_context_map.get_callback_from_callback_id(server_cbid).as_mut()
+            {
                 cb.on_phy_update(
                     address,
                     LePhy::from_u8(tx_phy).unwrap_or_default(),
@@ -3527,7 +3745,7 @@ impl BtifGattServerCallbacks for BluetoothGatt {
         if let Some(cbid) =
             self.server_context_map.get_by_server_id(server_id).map(|server| server.cbid)
         {
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid) {
+            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(cbid).as_mut() {
                 cb.on_phy_read(
                     addr.to_string(),
                     LePhy::from_u8(tx_phy).unwrap_or_default(),
@@ -3550,7 +3768,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
             let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
             let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
 
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+            if let Some(cb) =
+                self.server_context_map.get_callback_from_callback_id(server_cbid).as_mut()
+            {
                 cb.on_connection_updated(
                     address,
                     interval as i32,
@@ -3577,7 +3797,9 @@ impl BtifGattServerCallbacks for BluetoothGatt {
             let address = self.server_context_map.get_address_from_conn_id(conn_id)?;
             let server_cbid = self.server_context_map.get_by_conn_id(conn_id)?.cbid;
 
-            if let Some(cb) = self.server_context_map.get_callback_from_callback_id(server_cbid) {
+            if let Some(cb) =
+                self.server_context_map.get_callback_from_callback_id(server_cbid).as_mut()
+            {
                 cb.on_subrate_change(
                     address,
                     subrate_factor as i32,
@@ -3846,8 +4068,7 @@ impl BtifGattScannerCallbacks for BluetoothGatt {
 
         if let Some(info) = scanner_info {
             info.scanner_id = Some(scanner_id);
-            let callback = self.scanner_callbacks.get_by_id(info.callback_id);
-            if let Some(cb) = callback {
+            if let Some(cb) = self.scanner_callbacks.get_by_id_mut(info.callback_id) {
                 cb.on_scanner_registered(uuid.uu, scanner_id, status);
             } else {
                 log::warn!("There is no callback for scanner UUID {}", uuid);
@@ -4184,9 +4405,9 @@ mod tests {
     }
 
     impl IBluetoothGattCallback for TestBluetoothGattCallback {
-        fn on_client_registered(&self, _status: GattStatus, _client_id: i32) {}
+        fn on_client_registered(&mut self, _status: GattStatus, _client_id: i32) {}
         fn on_client_connection_state(
-            &self,
+            &mut self,
             _status: GattStatus,
             _client_id: i32,
             _connected: bool,
@@ -4195,7 +4416,7 @@ mod tests {
         }
 
         fn on_phy_update(
-            &self,
+            &mut self,
             _addr: String,
             _tx_phy: LePhy,
             _rx_phy: LePhy,
@@ -4203,10 +4424,17 @@ mod tests {
         ) {
         }
 
-        fn on_phy_read(&self, _addr: String, _tx_phy: LePhy, _rx_phy: LePhy, _status: GattStatus) {}
+        fn on_phy_read(
+            &mut self,
+            _addr: String,
+            _tx_phy: LePhy,
+            _rx_phy: LePhy,
+            _status: GattStatus,
+        ) {
+        }
 
         fn on_search_complete(
-            &self,
+            &mut self,
             _addr: String,
             _services: Vec<BluetoothGattService>,
             _status: GattStatus,
@@ -4214,7 +4442,7 @@ mod tests {
         }
 
         fn on_characteristic_read(
-            &self,
+            &mut self,
             _addr: String,
             _status: GattStatus,
             _handle: i32,
@@ -4222,12 +4450,12 @@ mod tests {
         ) {
         }
 
-        fn on_characteristic_write(&self, _addr: String, _status: GattStatus, _handle: i32) {}
+        fn on_characteristic_write(&mut self, _addr: String, _status: GattStatus, _handle: i32) {}
 
-        fn on_execute_write(&self, _addr: String, _status: GattStatus) {}
+        fn on_execute_write(&mut self, _addr: String, _status: GattStatus) {}
 
         fn on_descriptor_read(
-            &self,
+            &mut self,
             _addr: String,
             _status: GattStatus,
             _handle: i32,
@@ -4235,16 +4463,16 @@ mod tests {
         ) {
         }
 
-        fn on_descriptor_write(&self, _addr: String, _status: GattStatus, _handle: i32) {}
+        fn on_descriptor_write(&mut self, _addr: String, _status: GattStatus, _handle: i32) {}
 
-        fn on_notify(&self, _addr: String, _handle: i32, _value: Vec<u8>) {}
+        fn on_notify(&mut self, _addr: String, _handle: i32, _value: Vec<u8>) {}
 
-        fn on_read_remote_rssi(&self, _addr: String, _rssi: i32, _status: GattStatus) {}
+        fn on_read_remote_rssi(&mut self, _addr: String, _rssi: i32, _status: GattStatus) {}
 
-        fn on_configure_mtu(&self, _addr: String, _mtu: i32, _status: GattStatus) {}
+        fn on_configure_mtu(&mut self, _addr: String, _mtu: i32, _status: GattStatus) {}
 
         fn on_connection_updated(
-            &self,
+            &mut self,
             _addr: String,
             _interval: i32,
             _latency: i32,
@@ -4253,7 +4481,7 @@ mod tests {
         ) {
         }
 
-        fn on_service_changed(&self, _addr: String) {}
+        fn on_service_changed(&mut self, _addr: String) {}
     }
 
     impl RPCProxy for TestBluetoothGattCallback {

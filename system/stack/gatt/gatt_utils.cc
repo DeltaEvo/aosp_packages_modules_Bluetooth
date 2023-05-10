@@ -32,6 +32,7 @@
 #include "bt_target.h"  // Must be first to define build configuration
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
+#include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/eatt/eatt.h"
 #include "stack/gatt/connection_manager.h"
@@ -451,6 +452,9 @@ tGATT_TCB* gatt_allocate_tcb_by_bdaddr(const RawAddress& bda,
     p_tcb->transport = transport;
     p_tcb->peer_bda = bda;
     p_tcb->eatt = 0;
+    p_tcb->pending_user_mtu_exchange_value = 0;
+    p_tcb->conn_ids_waiting_for_mtu_exchange = std::list<uint16_t>();
+    p_tcb->max_user_mtu = 0;
     gatt_sr_init_cl_status(*p_tcb);
     gatt_cl_init_sr_status(*p_tcb);
 
@@ -458,6 +462,29 @@ tGATT_TCB* gatt_allocate_tcb_by_bdaddr(const RawAddress& bda,
   }
 
   return NULL;
+}
+
+uint16_t gatt_get_mtu(const RawAddress& bda, tBT_TRANSPORT transport) {
+  tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, transport);
+  if (!p_tcb) return 0;
+
+  return p_tcb->payload_size;
+}
+
+bool gatt_is_pending_mtu_exchange(tGATT_TCB* p_tcb) {
+  return p_tcb->pending_user_mtu_exchange_value != 0;
+}
+
+void gatt_set_conn_id_waiting_for_mtu_exchange(tGATT_TCB* p_tcb,
+                                               uint16_t conn_id) {
+  auto it = std::find(p_tcb->conn_ids_waiting_for_mtu_exchange.begin(),
+                      p_tcb->conn_ids_waiting_for_mtu_exchange.end(), conn_id);
+  if (it == p_tcb->conn_ids_waiting_for_mtu_exchange.end()) {
+    p_tcb->conn_ids_waiting_for_mtu_exchange.push_back(conn_id);
+    LOG_INFO("Put conn_id=0x%04x on wait list", conn_id);
+  } else {
+    LOG_INFO("Conn_id=0x%04x already on wait list", conn_id);
+  }
 }
 
 /** gatt_build_uuid_to_stream will convert 32bit UUIDs to 128bit. This function
@@ -677,7 +704,7 @@ void gatt_rsp_timeout(void* data) {
   }
 }
 
-extern void gatts_proc_srv_chg_ind_ack(tGATT_TCB tcb);
+void gatts_proc_srv_chg_ind_ack(tGATT_TCB tcb);
 
 /*******************************************************************************
  *
@@ -1467,20 +1494,27 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
     gatt_disconnect(p_tcb);
   }
 
-  if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
-    if (!connection_manager::is_background_connection(bda)) {
-      BTM_AcceptlistRemove(bda);
-      LOG_INFO(
-          "Gatt connection manager has no background record but "
-          " removed filter acceptlist gatt_if:%hhu peer:%s",
-          gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
-    } else {
-      LOG_INFO(
-          "Gatt connection manager maintains a background record"
-          " preserving filter acceptlist gatt_if:%hhu peer:%s",
-          gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
+  if (bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    bluetooth::connection::GetConnectionManager().stop_direct_connection(
+        gatt_if, bluetooth::connection::ResolveRawAddress(bda));
+  } else {
+    if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
+      if (!connection_manager::is_background_connection(bda)) {
+        BTM_AcceptlistRemove(bda);
+        LOG_INFO(
+            "Gatt connection manager has no background record but "
+            " removed filter acceptlist gatt_if:%hhu peer:%s",
+            gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
+      } else {
+        LOG_INFO(
+            "Gatt connection manager maintains a background record"
+            " preserving filter acceptlist gatt_if:%hhu peer:%s",
+            gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
+      }
     }
   }
+
   return true;
 }
 
@@ -1592,6 +1626,13 @@ void gatt_end_operation(tGATT_CLCB* p_clcb, tGATT_STATUS status, void* p_data) {
     if (p_clcb->operation == GATTC_OPTYPE_READ) {
       cb_data.att_value.handle = p_clcb->s_handle;
       cb_data.att_value.len = p_clcb->counter;
+
+      if (cb_data.att_value.len > GATT_MAX_ATTR_LEN) {
+        LOG(WARNING) << __func__
+                     << StringPrintf(" Large cb_data.att_value, size=%d",
+                                     cb_data.att_value.len);
+        cb_data.att_value.len = GATT_MAX_ATTR_LEN;
+      }
 
       if (p_data && p_clcb->counter)
         memcpy(cb_data.att_value.value, p_data, cb_data.att_value.len);
@@ -1729,5 +1770,13 @@ uint8_t* gatt_dbg_op_name(uint8_t op_code) {
 bool gatt_auto_connect_dev_remove(tGATT_IF gatt_if, const RawAddress& bd_addr) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bd_addr, BT_TRANSPORT_LE);
   if (p_tcb) gatt_update_app_use_link_flag(gatt_if, p_tcb, false, false);
-  return connection_manager::background_connect_remove(gatt_if, bd_addr);
+  if (bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    bluetooth::connection::GetConnectionManager().remove_background_connection(
+        gatt_if, bluetooth::connection::ResolveRawAddress(bd_addr));
+    // TODO(aryarahul): handle failure case
+    return true;
+  } else {
+    return connection_manager::background_connect_remove(gatt_if, bd_addr);
+  }
 }

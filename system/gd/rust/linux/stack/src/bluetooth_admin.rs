@@ -45,14 +45,14 @@ pub struct PolicyEffect {
 
 pub trait IBluetoothAdminPolicyCallback: RPCProxy {
     /// This gets called when service allowlist changed.
-    fn on_service_allowlist_changed(&self, allowlist: Vec<Uuid128Bit>);
+    fn on_service_allowlist_changed(&mut self, allowlist: Vec<Uuid128Bit>);
     /// This gets called when
     /// 1. a new device is found by adapter
     /// 2. the policy effect to a device is changed due to
     ///    the remote services changed or
     ///    the service allowlist changed.
     fn on_device_policy_effect_changed(
-        &self,
+        &mut self,
         device: BluetoothDevice,
         new_policy_effect: Option<PolicyEffect>,
     );
@@ -64,6 +64,7 @@ pub struct BluetoothAdmin {
     allowed_services: HashSet<Uuid128Bit>,
     callbacks: Callbacks<dyn IBluetoothAdminPolicyCallback + Send>,
     device_policy_affect_cache: HashMap<BluetoothDevice, Option<PolicyEffect>>,
+    tx: Sender<Message>,
 }
 
 impl BluetoothAdmin {
@@ -75,6 +76,7 @@ impl BluetoothAdmin {
             allowed_services: HashSet::new(), //empty means allowed all services
             callbacks: Callbacks::new(tx.clone(), Message::AdminCallbackDisconnected),
             device_policy_affect_cache: HashMap::new(),
+            tx: tx.clone(),
         };
 
         if admin.load_config().is_err() {
@@ -222,8 +224,14 @@ impl IBluetoothAdmin for BluetoothAdmin {
                 warn!("Failed to write config");
             }
 
+            let allowed_services = self.get_allowed_services();
             self.callbacks.for_all_callbacks(|cb| {
-                cb.on_service_allowlist_changed(self.get_allowed_services());
+                cb.on_service_allowlist_changed(allowed_services.clone());
+            });
+
+            let txl = self.tx.clone();
+            tokio::spawn(async move {
+                let _ = txl.send(Message::AdminPolicyChanged).await;
             });
 
             for (device, effect) in self.device_policy_affect_cache.clone().iter() {

@@ -37,11 +37,11 @@ bool bluetooth::shim::is_gd_l2cap_enabled() {
   inc_func_call_count(__func__);
   return false;
 }
-bool bluetooth::shim::is_gd_security_enabled() {
+bool bluetooth::shim::is_gd_shim_enabled() {
   inc_func_call_count(__func__);
   return false;
 }
-bool bluetooth::shim::is_gd_shim_enabled() {
+bool bluetooth::shim::is_classic_discovery_only_enabled() {
   inc_func_call_count(__func__);
   return false;
 }

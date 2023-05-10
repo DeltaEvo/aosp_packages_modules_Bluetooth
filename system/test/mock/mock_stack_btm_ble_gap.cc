@@ -90,7 +90,7 @@ bool btm_ble_topology_check(tBTM_BLE_STATE_MASK request_state_mask) {
 }
 tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
                            tBTM_INQ_RESULTS_CB* p_results_cb,
-                           tBTM_CMPL_CB* p_cmpl_cb) {
+                           tBTM_CMPL_CB* p_cmpl_cb, bool low_latency_scan) {
   inc_func_call_count(__func__);
   return BTM_SUCCESS;
 }
@@ -152,6 +152,11 @@ void btm_ble_increment_link_topology_mask(uint8_t link_role) {
   inc_func_call_count(__func__);
 }
 void btm_ble_init(void) { inc_func_call_count(__func__); }
+bool btm_ble_get_appearance_as_cod(std::vector<uint8_t> const& data,
+                                   DEV_CLASS dev_class) {
+  inc_func_call_count(__func__);
+  return false;
+}
 void btm_ble_process_adv_addr(RawAddress& bda, tBLE_ADDR_TYPE* addr_type) {
   inc_func_call_count(__func__);
 }
@@ -211,7 +216,6 @@ void btm_ble_update_mode_operation(uint8_t link_role, const RawAddress* bd_addr,
 void btm_ble_write_adv_enable_complete(uint8_t* p, uint16_t evt_len) {
   inc_func_call_count(__func__);
 }
-void btm_clear_all_pending_le_entry(void) { inc_func_call_count(__func__); }
 void btm_send_hci_set_scan_params(uint8_t scan_type, uint16_t scan_int,
                                   uint16_t scan_win,
                                   tBLE_ADDR_TYPE addr_type_own,

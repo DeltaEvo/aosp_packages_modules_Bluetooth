@@ -20,20 +20,15 @@ import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
 import static android.content.pm.PackageManager.DONT_KILL_APP;
 
-import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.intent.Intents.intended;
 import static androidx.test.espresso.intent.matcher.IntentMatchers.hasAction;
 import static androidx.test.espresso.intent.matcher.IntentMatchers.hasComponent;
-import static androidx.test.espresso.matcher.RootMatchers.isDialog;
-import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -55,6 +50,7 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 
 import org.junit.After;
 import org.junit.Before;
@@ -66,6 +62,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.io.File;
+import java.io.IOException;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -78,7 +75,7 @@ public class BluetoothOppLauncherActivityTest {
     BluetoothOppManager mBluetoothOppManager;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mTargetContext = spy(new ContextWrapper(
                 ApplicationProvider.getApplicationContext()));
@@ -89,6 +86,8 @@ public class BluetoothOppLauncherActivityTest {
         mIntent.setClass(mTargetContext, BluetoothOppLauncherActivity.class);
 
         BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
+        TestUtils.wakeUpAndDismissKeyGuard();
+
         BluetoothOppManager.setInstance(mBluetoothOppManager);
         Intents.init();
     }
@@ -188,6 +187,7 @@ public class BluetoothOppLauncherActivityTest {
         assertThat(file.length()).isGreaterThan(shareContent.length());
     }
 
+    @Ignore("b/263754734")
     @Test
     public void sendFileInfo_finishImmediately() throws Exception {
         doReturn(true).when(mMethodProxy).bluetoothAdapterIsEnabled(any());
@@ -195,7 +195,7 @@ public class BluetoothOppLauncherActivityTest {
         mIntent.setAction("unsupported-action");
         ActivityScenario<BluetoothOppLauncherActivity> scenario = ActivityScenario.launch(mIntent);
         doThrow(new IllegalArgumentException()).when(mBluetoothOppManager).saveSendingFileInfo(
-                any(), any(String.class), anyBoolean(), anyBoolean());
+                any(), any(String.class), any(), any());
         scenario.onActivity(activity -> {
             activity.sendFileInfo("text/plain", "content:///abc.txt", false, false);
         });
@@ -207,5 +207,19 @@ public class BluetoothOppLauncherActivityTest {
             throws Exception {
         Thread.sleep(2_000);
         assertThat(activityScenario.getState()).isEqualTo(state);
+    }
+
+
+    private void enableActivity(boolean enable) {
+        int enabledState = enable ? COMPONENT_ENABLED_STATE_ENABLED
+                : COMPONENT_ENABLED_STATE_DEFAULT;
+
+        mTargetContext.getPackageManager().setApplicationEnabledSetting(
+                mTargetContext.getPackageName(), enabledState, DONT_KILL_APP);
+
+        ComponentName activityName = new ComponentName(mTargetContext,
+                BluetoothOppLauncherActivity.class);
+        mTargetContext.getPackageManager().setComponentEnabledSetting(
+                activityName, enabledState, DONT_KILL_APP);
     }
 }

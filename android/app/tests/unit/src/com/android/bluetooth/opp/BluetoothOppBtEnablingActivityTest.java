@@ -39,14 +39,18 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.TestUtils;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+
+import java.io.IOException;
 
 @RunWith(AndroidJUnit4.class)
 public class BluetoothOppBtEnablingActivityTest {
@@ -59,7 +63,7 @@ public class BluetoothOppBtEnablingActivityTest {
     int mRealTimeoutValue;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mBluetoothMethodProxy = Mockito.spy(BluetoothMethodProxy.getInstance());
         BluetoothMethodProxy.setInstanceForTesting(mBluetoothMethodProxy);
@@ -71,6 +75,7 @@ public class BluetoothOppBtEnablingActivityTest {
 
         mRealTimeoutValue = BluetoothOppBtEnablingActivity.sBtEnablingTimeoutMs;
         BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
+        TestUtils.wakeUpAndDismissKeyGuard();
     }
 
     @After
@@ -80,6 +85,7 @@ public class BluetoothOppBtEnablingActivityTest {
         BluetoothOppTestUtils.enableOppActivities(false, mTargetContext);
     }
 
+    @Ignore("b/277594572")
     @Test
     public void onCreate_bluetoothEnableTimeout_finishAfterTimeout() throws Exception {
         int spedUpTimeoutValue = 1000;

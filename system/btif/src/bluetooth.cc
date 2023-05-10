@@ -50,7 +50,6 @@
 #include <unistd.h>
 
 #include "audio_hal_interface/a2dp_encoding.h"
-#include "bt_utils.h"
 #include "bta/hh/bta_hh_int.h"  // for HID HACK profile methods
 #include "bta/include/bta_ar_api.h"
 #include "bta/include/bta_csis_api.h"
@@ -79,6 +78,7 @@
 #include "btif_metrics_logging.h"
 #include "btif_pan.h"
 #include "btif_profile_storage.h"
+#include "btif_rc.h"
 #include "btif_sock.h"
 #include "btif_storage.h"
 #include "common/address_obfuscator.h"
@@ -174,12 +174,12 @@ extern CsisClientInterface* btif_csis_client_get_interface();
 /* Volume Control client */
 extern VolumeControlInterface* btif_volume_control_get_interface();
 
-extern bt_status_t btif_av_sink_execute_service(bool b_enable);
-extern bt_status_t btif_hh_execute_service(bool b_enable);
-extern bt_status_t btif_hf_client_execute_service(bool b_enable);
-extern bt_status_t btif_sdp_execute_service(bool b_enable);
-extern bt_status_t btif_hh_connect(const RawAddress* bd_addr);
-extern bt_status_t btif_hd_execute_service(bool b_enable);
+bt_status_t btif_av_sink_execute_service(bool b_enable);
+bt_status_t btif_hh_execute_service(bool b_enable);
+bt_status_t btif_hf_client_execute_service(bool b_enable);
+bt_status_t btif_sdp_execute_service(bool b_enable);
+bt_status_t btif_hh_connect(const RawAddress* bd_addr);
+bt_status_t btif_hd_execute_service(bool b_enable);
 
 /*******************************************************************************
  *  Callbacks from bluetooth::core (see go/invisalign-bt)
@@ -334,8 +334,6 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .btif_hh_connect = btif_hh_connect,
       .btif_hh_virtual_unplug = btif_hh_virtual_unplug,
       .bta_hh_read_ssr_param = bta_hh_read_ssr_param,
-      .bta_hh_le_is_hh_gatt_if = bta_hh_le_is_hh_gatt_if,
-      .bta_hh_cleanup_disable = bta_hh_cleanup_disable,
 
       // AVDTP
       .btif_av_set_dynamic_audio_buffer_size =
@@ -467,6 +465,10 @@ static bool get_wbs_supported() {
   return hfp_hal_interface::get_wbs_supported();
 }
 
+static bool get_swb_supported() {
+  return hfp_hal_interface::get_swb_supported();
+}
+
 bool is_common_criteria_mode() {
   return is_bluetooth_uid() && common_criteria_mode;
 }
@@ -489,7 +491,7 @@ static int get_adapter_properties(void) {
 static int get_adapter_property(bt_property_type_t type) {
   /* Allow get_adapter_property only for BDADDR and BDNAME if BT is disabled */
   if (!btif_is_enabled() && (type != BT_PROPERTY_BDADDR) &&
-      (type != BT_PROPERTY_BDNAME) && (type != BT_PROPERTY_CLASS_OF_DEVICE))
+      (type != BT_PROPERTY_BDNAME))
     return BT_STATUS_NOT_READY;
 
   do_in_main_thread(FROM_HERE, base::BindOnce(btif_get_adapter_property, type));
@@ -505,7 +507,6 @@ static int set_adapter_property(const bt_property_t* property) {
     case BT_PROPERTY_ADAPTER_DISCOVERABLE_TIMEOUT:
     case BT_PROPERTY_CLASS_OF_DEVICE:
     case BT_PROPERTY_LOCAL_IO_CAPS:
-    case BT_PROPERTY_LOCAL_IO_CAPS_BLE:
       break;
     default:
       return BT_STATUS_FAIL;
@@ -767,6 +768,7 @@ static void dump(int fd, const char** arguments) {
   btif_debug_conn_dump(fd);
   btif_debug_bond_event_dump(fd);
   btif_debug_linkkey_type_dump(fd);
+  btif_debug_rc_dump(fd);
   btif_debug_a2dp_dump(fd);
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
@@ -1120,6 +1122,7 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .set_event_filter_connection_setup_all_devices =
         set_event_filter_connection_setup_all_devices,
     .get_wbs_supported = get_wbs_supported,
+    .get_swb_supported = get_swb_supported,
     .metadata_changed = metadata_changed,
     .interop_match_addr = interop_match_addr,
     .interop_match_name = interop_match_name,

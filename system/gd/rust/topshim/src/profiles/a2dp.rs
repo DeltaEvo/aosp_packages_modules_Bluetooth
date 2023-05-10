@@ -199,6 +199,7 @@ pub mod ffi {
         fn set_audio_config(self: &A2dpIntf, config: A2dpCodecConfig) -> bool;
         fn start_audio_request(self: &A2dpIntf) -> bool;
         fn stop_audio_request(self: &A2dpIntf) -> bool;
+        fn suspend_audio_request(self: &A2dpIntf) -> bool;
         fn cleanup(self: &A2dpIntf);
         fn get_presentation_position(self: &A2dpIntf) -> RustPresentationPosition;
         // A2dp sink functions
@@ -221,6 +222,11 @@ pub mod ffi {
             codecs_selectable_capabilities: &Vec<A2dpCodecConfig>,
         );
         fn mandatory_codec_preferred_callback(addr: RawAddress);
+
+        // Currently only by qualification tests.
+        fn sink_audio_config_callback(addr: RawAddress, sample_rate: u32, channel_count: u8);
+        fn sink_connection_state_callback(addr: RawAddress, state: u32, error: A2dpError);
+        fn sink_audio_state_callback(addr: RawAddress, state: u32);
     }
 }
 
@@ -374,6 +380,11 @@ impl A2dp {
         self.internal.stop_audio_request();
     }
 
+    #[profile_enabled_or]
+    pub fn suspend_audio_request(&self) {
+        self.internal.suspend_audio_request();
+    }
+
     #[profile_enabled_or_default]
     pub fn get_presentation_position(&self) -> PresentationPosition {
         self.internal.get_presentation_position()
@@ -382,7 +393,9 @@ impl A2dp {
 
 #[derive(Debug)]
 pub enum A2dpSinkCallbacks {
-    ConnectionState(RawAddress, BtavConnectionState),
+    ConnectionState(RawAddress, BtavConnectionState, A2dpError),
+    AudioState(RawAddress, BtavAudioState),
+    AudioConfig(RawAddress, u32, u8),
 }
 
 pub struct A2dpSinkCallbacksDispatcher {
@@ -390,6 +403,15 @@ pub struct A2dpSinkCallbacksDispatcher {
 }
 
 type A2dpSinkCb = Arc<Mutex<A2dpSinkCallbacksDispatcher>>;
+
+cb_variant!(A2dpSinkCb, sink_connection_state_callback -> A2dpSinkCallbacks::ConnectionState,
+    RawAddress, u32 -> BtavConnectionState, FfiA2dpError -> A2dpError,{
+        let _2 = _2.into();
+});
+
+cb_variant!(A2dpSinkCb, sink_audio_state_callback -> A2dpSinkCallbacks::AudioState, RawAddress, u32 -> BtavAudioState);
+
+cb_variant!(A2dpSinkCb, sink_audio_config_callback -> A2dpSinkCallbacks::AudioConfig, RawAddress, u32, u8);
 
 pub struct A2dpSink {
     internal: cxx::UniquePtr<ffi::A2dpSinkIntf>,

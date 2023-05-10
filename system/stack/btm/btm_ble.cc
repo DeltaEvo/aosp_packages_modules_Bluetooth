@@ -40,6 +40,7 @@
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/crypto_toolbox/crypto_toolbox.h"
+#include "stack/eatt/eatt.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_types.h"
@@ -54,25 +55,36 @@
 
 extern tBTM_CB btm_cb;
 
-extern bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
-                                     const RawAddress& new_pseudo_addr);
-extern void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
-                                    uint8_t tx_phy, uint8_t rx_phy);
-
+bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
+                              const RawAddress& new_pseudo_addr);
+void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
+                             uint8_t tx_phy, uint8_t rx_phy);
 
 #ifndef PROPERTY_BLE_PRIVACY_ENABLED
 #define PROPERTY_BLE_PRIVACY_ENABLED "bluetooth.core.gap.le.privacy.enabled"
 #endif
+
+// Pairing parameters defined in Vol 3, Part H, Chapter 3.5.1 - 3.5.2
+// All present in the exact decimal values, not hex
+// Ex: bluetooth.core.smp.le.ctkd.initiator_key_distribution 15(0x0f)
+static const char kPropertyCtkdAuthRequest[] =
+    "bluetooth.core.smp.le.ctkd.auth_request";
+static const char kPropertyCtkdIoCapabilities[] =
+    "bluetooth.core.smp.le.ctkd.io_capabilities";
+// Vol 3, Part H, Chapter 3.6.1, Figure 3.11
+// |EncKey(1)|IdKey(1)|SignKey(1)|LinkKey(1)|Reserved(4)|
+static const char kPropertyCtkdInitiatorKeyDistribution[] =
+    "bluetooth.core.smp.le.ctkd.initiator_key_distribution";
+static const char kPropertyCtkdResponderKeyDistribution[] =
+    "bluetooth.core.smp.le.ctkd.responder_key_distribution";
+static const char kPropertyCtkdMaxKeySize[] =
+    "bluetooth.core.smp.le.ctkd.max_key_size";
 
 /******************************************************************************/
 /* External Function to be called by other modules                            */
 /******************************************************************************/
 void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
                          tBLE_ADDR_TYPE addr_type) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecAddBleDevice(bd_addr, dev_type, addr_type);
-  }
-
   LOG_DEBUG("dev_type=0x%x", dev_type);
 
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
@@ -157,10 +169,6 @@ bool BTM_GetRemoteDeviceName(const RawAddress& bd_addr, BD_NAME bd_name) {
  ******************************************************************************/
 void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
                       tBTM_LE_KEY_TYPE key_type) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecAddBleKey(bd_addr, p_le_key, key_type);
-  }
-
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   if (!p_dev_rec || !p_le_key ||
       (key_type != BTM_LE_KEY_PENC && key_type != BTM_LE_KEY_PID &&
@@ -197,10 +205,6 @@ void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
  *
  ******************************************************************************/
 void BTM_BleLoadLocalKeys(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleLoadLocalKeys(key_type, p_key);
-  }
-
   tBTM_DEVCB* p_devcb = &btm_cb.devcb;
   BTM_TRACE_DEBUG("%s", __func__);
   if (p_key != NULL) {
@@ -223,28 +227,14 @@ void BTM_BleLoadLocalKeys(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key) {
 
 /** Returns local device encryption root (ER) */
 const Octet16& BTM_GetDeviceEncRoot() {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_GetDeviceEncRoot();
-  }
   return btm_cb.devcb.ble_encryption_key_value;
 }
 
 /** Returns local device identity root (IR). */
-const Octet16& BTM_GetDeviceIDRoot() {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_GetDeviceIDRoot();
-  }
-  return btm_cb.devcb.id_keys.irk;
-}
+const Octet16& BTM_GetDeviceIDRoot() { return btm_cb.devcb.id_keys.irk; }
 
 /** Return local device DHK. */
-const Octet16& BTM_GetDeviceDHK() {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_GetDeviceDHK();
-  }
-  return btm_cb.devcb.id_keys.dhk;
-}
-
+const Octet16& BTM_GetDeviceDHK() { return btm_cb.devcb.id_keys.dhk; }
 
 /*******************************************************************************
  *
@@ -261,9 +251,6 @@ const Octet16& BTM_GetDeviceDHK() {
  *
  ******************************************************************************/
 void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecurityGrant(bd_addr, res);
-  }
   tSMP_STATUS res_smp =
       (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_REPEATED_ATTEMPTS;
   BTM_TRACE_DEBUG("BTM_SecurityGrant");
@@ -286,9 +273,6 @@ void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
  ******************************************************************************/
 void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res,
                          uint32_t passkey) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tSMP_STATUS res_smp =
       (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_PASSKEY_ENTRY_FAIL;
@@ -316,9 +300,6 @@ void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res,
  *
  ******************************************************************************/
 void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tSMP_STATUS res_smp =
       (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_PASSKEY_ENTRY_FAIL;
@@ -350,9 +331,6 @@ void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res) {
  ******************************************************************************/
 void BTM_BleOobDataReply(const RawAddress& bd_addr, uint8_t res, uint8_t len,
                          uint8_t* p_data) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleOobDataReply(bd_addr, res, len, p_data);
-  }
   tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_OOB_FAIL;
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
 
@@ -382,10 +360,6 @@ void BTM_BleOobDataReply(const RawAddress& bd_addr, uint8_t res, uint8_t len,
  ******************************************************************************/
 void BTM_BleSecureConnectionOobDataReply(const RawAddress& bd_addr,
                                          uint8_t* p_c, uint8_t* p_r) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleSecureConnectionOobDataReply(bd_addr, p_c,
-                                                                p_r);
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
 
   BTM_TRACE_DEBUG("%s:", __func__);
@@ -430,11 +404,6 @@ void BTM_BleSetPrefConnParams(const RawAddress& bd_addr, uint16_t min_conn_int,
                               uint16_t max_conn_int,
                               uint16_t peripheral_latency,
                               uint16_t supervision_tout) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleSetPrefConnParams(
-        bd_addr, min_conn_int, max_conn_int, peripheral_latency,
-        supervision_tout);
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
 
   BTM_TRACE_API(
@@ -566,10 +535,6 @@ void BTM_ReadDevInfo(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
  ******************************************************************************/
 bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
                                        tBT_TRANSPORT transport) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_ReadConnectedTransportAddress(remote_bda,
-                                                              transport);
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(*remote_bda);
 
   /* if no device can be located, return */
@@ -608,10 +573,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
  *
  ******************************************************************************/
 bool BTM_UseLeLink(const RawAddress& bd_addr) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_UseLeLink(bd_addr);
-  }
-
   if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR)) {
     return false;
   } else if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
@@ -631,10 +592,24 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
     return BTM_ILLEGAL_VALUE;
   }
 
+  LOG_INFO("%s, %d", ADDRESS_TO_LOGGABLE_CSTR(bd_addr), tx_pdu_length);
+
+  auto p_dev_rec = btm_find_dev(bd_addr);
+  if (p_dev_rec == NULL) {
+    LOG_ERROR("Device %s not found", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    return BTM_UNKNOWN_ADDR;
+  }
+
   if (tx_pdu_length > BTM_BLE_DATA_SIZE_MAX)
     tx_pdu_length = BTM_BLE_DATA_SIZE_MAX;
   else if (tx_pdu_length < BTM_BLE_DATA_SIZE_MIN)
     tx_pdu_length = BTM_BLE_DATA_SIZE_MIN;
+
+  if (p_dev_rec->get_suggested_tx_octets() >= tx_pdu_length) {
+    LOG_INFO(" Suggested TX octect already set to controller %d >= %d",
+             p_dev_rec->get_suggested_tx_octets(), tx_pdu_length);
+    return BTM_SUCCESS;
+  }
 
   uint16_t tx_time = BTM_BLE_DATA_TX_TIME_MAX_LEGACY;
 
@@ -651,6 +626,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
   if (bluetooth::shim::is_gd_l2cap_enabled()) {
     uint16_t handle = bluetooth::shim::L2CA_GetLeHandle(bd_addr);
     btsnd_hcic_ble_set_data_length(handle, tx_pdu_length, tx_time);
+    p_dev_rec->set_suggested_tx_octect(tx_pdu_length);
     return BTM_SUCCESS;
   }
 
@@ -668,6 +644,7 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
       tx_time, controller_get_interface()->get_ble_maximum_tx_time());
 
   btsnd_hcic_ble_set_data_length(hci_handle, tx_pdu_length, tx_time);
+  p_dev_rec->set_suggested_tx_octect(tx_pdu_length);
 
   return BTM_SUCCESS;
 }
@@ -706,9 +683,6 @@ void read_phy_cb(
 void BTM_BleReadPhy(
     const RawAddress& bd_addr,
     base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleReadPhy(bd_addr, cb);
-  }
   BTM_TRACE_DEBUG("%s", __func__);
 
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
@@ -742,10 +716,6 @@ void doNothing(uint8_t* data, uint16_t len) {}
 
 void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
                    uint16_t phy_options) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleSetPhy(bd_addr, tx_phys, rx_phys,
-                                          phy_options);
-  }
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     LOG_INFO(
         "Unable to set phy preferences because no le acl is connected to "
@@ -1523,13 +1493,20 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
     else if (p_dev_rec->sec_flags & ~BTM_SEC_LE_LINK_KEY_KNOWN) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
     }
-    /* Add logic handle for KEY_MISSING */
+    /* LTK missing on peripheral */
     else if (p_dev_rec->role_central && (p_dev_rec->sec_status == HCI_ERR_KEY_MISSING)) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_KEY_MISSING, true);
     }
     else if (p_dev_rec->role_central)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
   }
+
+  if (encr_enable) {
+    /* Link is encrypted, start EATT */
+    bluetooth::eatt::EattExtension::GetInstance()->Connect(
+        p_dev_rec->ble.pseudo_addr);
+  }
+
   /* to notify GATT to send data if any request is pending */
   gatt_notify_enc_cmpl(p_dev_rec->ble.pseudo_addr);
 }
@@ -1686,11 +1663,18 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
                             tBTM_LE_IO_REQ* p_data) {
   uint8_t callback_rc = BTM_SUCCESS;
   BTM_TRACE_DEBUG("%s", __func__);
-  if (btm_cb.api.p_le_callback) {
-    /* the callback function implementation may change the IO capability... */
-    callback_rc = (*btm_cb.api.p_le_callback)(
-        BTM_LE_IO_REQ_EVT, p_dev_rec->bd_addr, (tBTM_LE_EVT_DATA*)p_data);
-  }
+  p_data->io_cap =
+      osi_property_get_int32(kPropertyCtkdIoCapabilities, BTM_IO_CAP_UNKNOWN);
+  p_data->auth_req = osi_property_get_int32(kPropertyCtkdAuthRequest,
+                                            BTM_LE_AUTH_REQ_SC_MITM_BOND);
+  p_data->init_keys = osi_property_get_int32(
+      kPropertyCtkdInitiatorKeyDistribution, SMP_BR_SEC_DEFAULT_KEY);
+  p_data->resp_keys = osi_property_get_int32(
+      kPropertyCtkdResponderKeyDistribution, SMP_BR_SEC_DEFAULT_KEY);
+  p_data->max_key_size =
+      osi_property_get_int32(kPropertyCtkdMaxKeySize, BTM_BLE_MAX_KEY_SIZE);
+  // No OOB data for BR/EDR
+  p_data->oob_data = false;
 
   return callback_rc;
 }
@@ -1906,10 +1890,6 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
  ******************************************************************************/
 bool BTM_BleDataSignature(const RawAddress& bd_addr, uint8_t* p_text,
                           uint16_t len, BLE_SIGNATURE signature) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleDataSignature(bd_addr, p_text, len,
-                                                 signature);
-  }
   tBTM_SEC_DEV_REC* p_rec = btm_find_dev(bd_addr);
 
   BTM_TRACE_DEBUG("%s", __func__);
@@ -1968,10 +1948,6 @@ bool BTM_BleDataSignature(const RawAddress& bd_addr, uint8_t* p_text,
  ******************************************************************************/
 bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
                             uint16_t len, uint32_t counter, uint8_t* p_comp) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleVerifySignature(bd_addr, p_orig, len,
-                                                   counter, p_comp);
-  }
   bool verified = false;
   tBTM_SEC_DEV_REC* p_rec = btm_find_dev(bd_addr);
   uint8_t p_mac[BTM_CMAC_TLEN_SIZE];

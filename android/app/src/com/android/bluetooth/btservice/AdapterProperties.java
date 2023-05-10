@@ -34,6 +34,7 @@ import android.bluetooth.BluetoothHeadsetClient;
 import android.bluetooth.BluetoothHearingAid;
 import android.bluetooth.BluetoothHidDevice;
 import android.bluetooth.BluetoothHidHost;
+import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothMap;
 import android.bluetooth.BluetoothMapClient;
 import android.bluetooth.BluetoothPan;
@@ -94,7 +95,6 @@ class AdapterProperties {
     private volatile int mDiscoverableTimeout;
     private volatile ParcelUuid[] mUuids;
     private volatile int mLocalIOCapability = BluetoothAdapter.IO_CAPABILITY_UNKNOWN;
-    private volatile int mLocalIOCapabilityBLE = BluetoothAdapter.IO_CAPABILITY_UNKNOWN;
 
     private CopyOnWriteArrayList<BluetoothDevice> mBondedDevices =
             new CopyOnWriteArrayList<BluetoothDevice>();
@@ -199,6 +199,9 @@ class AdapterProperties {
                 case BluetoothPbap.ACTION_CONNECTION_STATE_CHANGED:
                     sendConnectionStateChange(BluetoothProfile.PBAP, intent);
                     break;
+                case BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED:
+                    sendConnectionStateChange(BluetoothProfile.LE_AUDIO, intent);
+                    break;
                 default:
                     Log.w(TAG, "Received unknown intent " + intent);
                     break;
@@ -242,6 +245,7 @@ class AdapterProperties {
                 && !SystemProperties.getBoolean(A2DP_OFFLOAD_DISABLED_PROPERTY, false);
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothHeadsetClient.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
@@ -255,6 +259,7 @@ class AdapterProperties {
         filter.addAction(BluetoothMapClient.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothSap.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothPbapClient.ACTION_CONNECTION_STATE_CHANGED);
+        filter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED);
         mService.registerReceiver(mReceiver, filter);
         mReceiverRegistered = true;
         invalidateBluetoothCaches();
@@ -321,42 +326,6 @@ class AdapterProperties {
         }
     }
 
-    /**
-     * Set the Bluetooth Class of Device (CoD) of the adapter.
-     *
-     * <p>Bluetooth stack stores some adapter properties in native BT stack storage and some in the
-     * Java Android stack. Bluetooth CoD is stored in the Android layer through
-     * {@link android.provider.Settings.Global#BLUETOOTH_CLASS_OF_DEVICE}.
-     *
-     * <p>Due to this, the getAdapterPropertyNative and adapterPropertyChangedCallback methods don't
-     * actually update mBluetoothClass. Hence, we update the field mBluetoothClass every time we
-     * successfully update BluetoothClass.
-     *
-     * @param bluetoothClass BluetoothClass of the device
-     */
-    boolean setBluetoothClass(BluetoothClass bluetoothClass) {
-        synchronized (mObject) {
-            boolean result =
-                    mService.setAdapterPropertyNative(AbstractionLayer.BT_PROPERTY_CLASS_OF_DEVICE,
-                            bluetoothClass.getClassOfDeviceBytes());
-
-            if (result) {
-                mBluetoothClass = bluetoothClass;
-            }
-
-            return result;
-        }
-    }
-
-    /**
-     * @return the BluetoothClass of the Bluetooth adapter.
-     */
-    BluetoothClass getBluetoothClass() {
-        synchronized (mObject) {
-            return mBluetoothClass;
-        }
-    }
-
     boolean setIoCapability(int capability) {
         synchronized (mObject) {
             boolean result = mService.setAdapterPropertyNative(
@@ -373,26 +342,6 @@ class AdapterProperties {
     int getIoCapability() {
         synchronized (mObject) {
             return mLocalIOCapability;
-        }
-    }
-
-    boolean setLeIoCapability(int capability) {
-        synchronized (mObject) {
-            boolean result = mService.setAdapterPropertyNative(
-                    AbstractionLayer.BT_PROPERTY_LOCAL_IO_CAPS_BLE,
-                    Utils.intToByteArray(capability));
-
-            if (result) {
-                mLocalIOCapabilityBLE = capability;
-            }
-
-            return result;
-        }
-    }
-
-    int getLeIoCapability() {
-        synchronized (mObject) {
-            return mLocalIOCapabilityBLE;
         }
     }
 
@@ -680,6 +629,7 @@ class AdapterProperties {
                 if (!mBondedDevices.contains(device)) {
                     debugLog("Adding bonded device:" + device);
                     mBondedDevices.add(device);
+                    cleanupPrevBondRecordsFor(device);
                 }
             } else if (state == BluetoothDevice.BOND_NONE) {
                 // remove device from list
@@ -692,6 +642,35 @@ class AdapterProperties {
             invalidateGetBondStateCache();
         } catch (Exception ee) {
             Log.w(TAG, "onBondStateChanged: Exception ", ee);
+        }
+    }
+
+    void cleanupPrevBondRecordsFor(BluetoothDevice currentDevice) {
+        String currentAddress = currentDevice.getAddress();
+        String currentIdentityAddress = mService.getIdentityAddress(currentAddress);
+        debugLog("cleanupPrevBondRecordsFor: " + currentDevice);
+        if (currentIdentityAddress == null) {
+            return;
+        }
+
+        for (BluetoothDevice device : mBondedDevices) {
+            String address = device.getAddress();
+            String identityAddress = mService.getIdentityAddress(address);
+            if (currentIdentityAddress.equals(identityAddress) && !currentAddress.equals(address)) {
+                if (mService.removeBondNative(Utils.getBytesFromAddress(device.getAddress()))) {
+                    mBondedDevices.remove(device);
+                    infoLog("Removing old bond record: "
+                                    + device
+                                    + " for current device: "
+                                    + currentDevice);
+                } else {
+                    Log.e(TAG, "Unexpected error while removing old bond record:"
+                                    + device
+                                    + " for current device: "
+                                    + currentDevice);
+                }
+                break;
+            }
         }
     }
 
@@ -1040,11 +1019,6 @@ class AdapterProperties {
                         debugLog("mLocalIOCapability set to " + mLocalIOCapability);
                         break;
 
-                    case AbstractionLayer.BT_PROPERTY_LOCAL_IO_CAPS_BLE:
-                        mLocalIOCapabilityBLE = Utils.byteArrayToInt(val);
-                        debugLog("mLocalIOCapabilityBLE set to " + mLocalIOCapabilityBLE);
-                        break;
-
                     case AbstractionLayer.BT_PROPERTY_WL_MEDIA_PLAYERS_LIST:
                         int pos = 0;
                         for (int j = 0; j < val.length; j++) {
@@ -1204,7 +1178,7 @@ class AdapterProperties {
         final BroadcastOptions options = Utils.getTempBroadcastOptions();
         if (SdkLevel.isAtLeastU()) {
             options.setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT);
-            options.setDeferUntilActive(true);
+            options.setDeferralPolicy(BroadcastOptions.DEFERRAL_POLICY_UNTIL_ACTIVE);
         }
         return options.toBundle();
     }
@@ -1214,7 +1188,6 @@ class AdapterProperties {
         writer.println(TAG);
         writer.println("  " + "Name: " + getName());
         writer.println("  " + "Address: " + Utils.getAddressStringFromByte(mAddress));
-        writer.println("  " + "BluetoothClass: " + getBluetoothClass());
         writer.println("  " + "ScanMode: " + dumpScanMode(getScanMode()));
         writer.println("  " + "ConnectionState: " + dumpConnectionState(getConnectionState()));
         writer.println("  " + "State: " + BluetoothAdapter.nameForState(getState()));

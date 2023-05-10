@@ -321,6 +321,7 @@ public class MapClientService extends ProfileService {
 
         mMapReceiver = new MapBroadcastReceiver();
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_SDP_RECORD);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         registerReceiver(mMapReceiver, filter);
@@ -339,9 +340,11 @@ public class MapClientService extends ProfileService {
             Log.d(TAG, "stop()");
         }
 
-        mAdapterService.notifyActivityAttributionInfo(
-                getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
+        if (mAdapterService != null) {
+            mAdapterService.notifyActivityAttributionInfo(
+                    getAttributionSource(),
+                    AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
+        }
         if (mMapReceiver != null) {
             unregisterReceiver(mMapReceiver);
             mMapReceiver = null;

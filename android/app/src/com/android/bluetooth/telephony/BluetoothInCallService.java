@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.telephony;
 
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothHeadset;
@@ -30,6 +31,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.provider.DeviceConfig;
 import android.telecom.BluetoothCallQualityReport;
 import android.telecom.Call;
 import android.telecom.CallAudioState;
@@ -50,6 +52,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.bluetooth.hfp.BluetoothHeadsetProxy;
 import com.android.bluetooth.tbs.BluetoothLeCallControlProxy;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -58,6 +61,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -71,6 +75,7 @@ import java.util.concurrent.Executors;
 public class BluetoothInCallService extends InCallService {
 
     private static final String TAG = "BluetoothInCallService";
+    private static final String CLCC_INFERENCE = "ConferenceCallInference";
 
     // match up with bthf_call_state_t of bt_hf.h
     private static final int CALL_STATE_ACTIVE = 0;
@@ -129,6 +134,14 @@ public class BluetoothInCallService extends InCallService {
     @VisibleForTesting
     public final HashMap<Integer, BluetoothCall> mBluetoothCallHashMap = new HashMap<>();
 
+    private final HashMap<Integer, BluetoothCall> mBluetoothConferenceCallInference =
+            new HashMap<>();
+
+    private final Map<String, Integer> mClccInferenceIndexMap = new HashMap<>();
+
+    // A queue record the removal order of bluetooth calls
+    private final Queue<Integer> mBluetoothCallQueue = new ArrayDeque<>();
+
     // A map from Calls to indexes used to identify calls for CLCC (C* List Current Calls).
     private final Map<String, Integer> mClccIndexMap = new HashMap<>();
 
@@ -154,8 +167,9 @@ public class BluetoothInCallService extends InCallService {
                             setBluetoothHeadset(new BluetoothHeadsetProxy((BluetoothHeadset) proxy));
                             updateHeadsetWithCallState(true /* force */);
                         } else {
-                           setBluetoothLeCallControl(new BluetoothLeCallControlProxy((BluetoothLeCallControl) proxy));
-                           sendTbsCurrentCallsList();
+                            setBluetoothLeCallControl(new BluetoothLeCallControlProxy((
+                                    BluetoothLeCallControl) proxy));
+                            sendTbsCurrentCallsList();
                         }
                     }
                 }
@@ -268,7 +282,7 @@ public class BluetoothInCallService extends InCallService {
                 return;
             }
             if (call.isExternalCall()) {
-                onCallRemoved(call);
+                onCallRemoved(call, false /* forceRemoveCallback */);
             } else {
                 onCallAdded(call);
             }
@@ -606,18 +620,35 @@ public class BluetoothInCallService extends InCallService {
         onCallAdded(new BluetoothCall(call));
     }
 
-    public void onCallRemoved(BluetoothCall call) {
-        if (call.isExternalCall()) {
-            return;
-        }
+    /**
+     * Called when a {@code BluetoothCall} has been removed from this in-call session.
+     *
+     * @param call the {@code BluetoothCall} to remove
+     * @param forceRemoveCallback if true, this will always unregister this {@code InCallService} as
+     *                            a callback for the given {@code BluetoothCall}, when false, this
+     *                            will not remove the callback when the {@code BluetoothCall} is
+     *                            external so that the call can be added back if no longer external.
+     */
+    public void onCallRemoved(BluetoothCall call, boolean forceRemoveCallback) {
         Log.d(TAG, "onCallRemoved");
         CallStateCallback callback = getCallback(call);
-        if (callback != null) {
+        if (callback != null && (forceRemoveCallback || !call.isExternalCall())) {
             call.unregisterCallback(callback);
         }
 
         if (mBluetoothCallHashMap.containsKey(call.getId())) {
             mBluetoothCallHashMap.remove(call.getId());
+
+            mBluetoothCallQueue.add(call.getId());
+            mBluetoothConferenceCallInference.put(call.getId(), call);
+            mClccInferenceIndexMap.put(getClccMapKey(call), mClccIndexMap.get(getClccMapKey(call)));
+            // queue size limited to 2 because merge operation only happens on 2 calls
+            // we are only interested in last 2 calls merged
+            if (mBluetoothCallQueue.size() > 2) {
+                Integer callId = mBluetoothCallQueue.peek();
+                mBluetoothCallQueue.remove();
+                mBluetoothConferenceCallInference.remove(callId);
+            }
         }
 
         mClccIndexMap.remove(getClccMapKey(call));
@@ -636,7 +667,7 @@ public class BluetoothInCallService extends InCallService {
             Log.w(TAG, "onCallRemoved, BluetoothCall is removed before registered");
             return;
         }
-        onCallRemoved(bluetoothCall);
+        onCallRemoved(bluetoothCall, true /* forceRemoveCallback */);
     }
 
     @Override
@@ -656,6 +687,7 @@ public class BluetoothInCallService extends InCallService {
                 .getProfileProxy(this, mProfileListener, BluetoothProfile.LE_CALL_CONTROL);
         mBluetoothAdapterReceiver = new BluetoothAdapterReceiver();
         IntentFilter intentFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         registerReceiver(mBluetoothAdapterReceiver, intentFilter);
         mOnCreateCalled = true;
     }
@@ -687,12 +719,16 @@ public class BluetoothInCallService extends InCallService {
         }
         if (mBluetoothLeCallControl != null) {
             mBluetoothLeCallControl.unregisterBearer();
+            mBluetoothLeCallControl.closeBluetoothLeCallControlProxy(this);
         }
         mProfileListener = null;
         sInstance = null;
         mCallbacks.clear();
         mBluetoothCallHashMap.clear();
         mClccIndexMap.clear();
+        mBluetoothConferenceCallInference.clear();
+        mClccInferenceIndexMap.clear();
+        mBluetoothCallQueue.clear();
         mMaxNumberOfCalls = 0;
     }
 
@@ -704,6 +740,53 @@ public class BluetoothInCallService extends InCallService {
 
     private void sendListOfCalls(boolean shouldLog) {
         Collection<BluetoothCall> calls = mCallInfo.getBluetoothCalls();
+        boolean isInferenceEnabled =
+                DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BLUETOOTH, CLCC_INFERENCE, false);
+        Log.d(TAG, "is conference call inference enabled: " + isInferenceEnabled);
+        for (BluetoothCall call : calls) {
+            if (isInferenceEnabled && call.isConference()
+                    && call.getChildrenIds().size() < 2
+                    && !mBluetoothConferenceCallInference.isEmpty()) {
+                Log.d(TAG, "conference call inferred size: "
+                        + mBluetoothConferenceCallInference.size()
+                        + "current size: " + mBluetoothCallHashMap.size());
+                // Do conference call inference until at least 2 children arrive
+                // If carrier does send children info, then inference will end when info arrives.
+                // If carrier does not send children info, then inference won't impact actual value.
+                for (BluetoothCall inferredCall : mBluetoothConferenceCallInference.values()) {
+                    int index = mClccInferenceIndexMap.get(getClccMapKey(inferredCall));
+                    // save the index so later on when real children arrive, index is the same
+                    mClccIndexMap.put(getClccMapKey(inferredCall), index);
+                    int direction = inferredCall.isIncoming() ? 1 : 0;
+                    int state = CALL_STATE_ACTIVE;
+                    boolean isPartOfConference = true;
+                    final Uri addressUri;
+                    if (inferredCall.getGatewayInfo() != null) {
+                        addressUri = inferredCall.getGatewayInfo().getOriginalAddress();
+                    } else {
+                        addressUri = inferredCall.getHandle();
+                    }
+                    String address = addressUri == null ? null : addressUri.getSchemeSpecificPart();
+                    if (address != null) {
+                        address = PhoneNumberUtils.stripSeparators(address);
+                    }
+
+                    int addressType =
+                            address == null ? -1 : PhoneNumberUtils.toaFromString(address);
+                    Log.i(TAG, "sending inferred clcc for BluetoothCall "
+                            + index + ", "
+                            + direction + ", "
+                            + state + ", "
+                            + isPartOfConference + ", "
+                            + addressType);
+                    mBluetoothHeadset.clccResponse(
+                            index, direction, state, 0, isPartOfConference, address, addressType);
+                }
+                sendClccEndMarker();
+                return;
+            }
+        }
+
         for (BluetoothCall call : calls) {
             // We don't send the parent conference BluetoothCall to the bluetooth device.
             // We do, however want to send conferences that have no children to the bluetooth
@@ -1463,8 +1546,12 @@ public class BluetoothInCallService extends InCallService {
         String uri = addressUri == null ? null : addressUri.toString();
         int callFlags = call.isIncoming() ? 0 : BluetoothLeCall.FLAG_OUTGOING_CALL;
 
-        return new BluetoothLeCall(call.getTbsCallId(), uri, call.getCallerDisplayName(), state,
-                       callFlags);
+        String friendlyName = call.getCallerDisplayName();
+        if (TextUtils.isEmpty(friendlyName)) {
+            friendlyName = call.getContactDisplayName();
+        }
+
+        return new BluetoothLeCall(call.getTbsCallId(), uri, friendlyName, state, callFlags);
     }
 
     private void sendTbsCurrentCallsList() {
@@ -1552,6 +1639,49 @@ public class BluetoothInCallService extends InCallService {
         @Override
         public void onPlaceCall(int requestId, UUID callId, String uri) {
             mBluetoothLeCallControl.requestResult(requestId, BluetoothLeCallControl.RESULT_ERROR_APPLICATION);
+        }
+
+        @Override
+        public void onJoinCalls(int requestId, @NonNull List<UUID> callIds) {
+            synchronized (LOCK) {
+                Log.i(TAG, "TBS - onJoinCalls");
+                int result = BluetoothLeCallControl.RESULT_SUCCESS;
+                List<UUID> alreadyJoinedCalls = new ArrayList<>();
+                BluetoothCall baseCallInstance = null;
+
+                if (callIds.size() < 2) {
+                    Log.e(TAG, "TBS - onJoinCalls, join call number is invalid: " + callIds.size());
+                    result = BluetoothLeCallControl.RESULT_ERROR_UNKNOWN_CALL_ID;
+                    mBluetoothLeCallControl.requestResult(requestId, result);
+                    return;
+                }
+
+                for (UUID callToJoinUuid : callIds) {
+                    BluetoothCall callToJoinInstance = mCallInfo.getCallByCallId(callToJoinUuid);
+
+                    /* Skip invalid and already add device */
+                    if ((callToJoinInstance == null)
+                            || (alreadyJoinedCalls.contains(callToJoinUuid))) {
+                        continue;
+                    }
+
+                    /* Lets make first valid call the base call */
+                    if (baseCallInstance == null) {
+                        baseCallInstance = callToJoinInstance;
+                        alreadyJoinedCalls.add(callToJoinUuid);
+                        continue;
+                    }
+
+                    baseCallInstance.conference(callToJoinInstance);
+                    alreadyJoinedCalls.add(callToJoinUuid);
+                }
+
+                if ((baseCallInstance == null) || (alreadyJoinedCalls.size() < 2)) {
+                    result = BluetoothLeCallControl.RESULT_ERROR_UNKNOWN_CALL_ID;
+                }
+
+                mBluetoothLeCallControl.requestResult(requestId, result);
+            }
         }
     };
 }
