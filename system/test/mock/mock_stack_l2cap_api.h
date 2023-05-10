@@ -421,6 +421,15 @@ struct L2CA_SetLeGattTimeout {
   };
 };
 extern struct L2CA_SetLeGattTimeout L2CA_SetLeGattTimeout;
+// Name: L2CA_MarkLeLinkAsActive
+// Params: const RawAddress& rem_bda
+// Returns: bool
+struct L2CA_MarkLeLinkAsActive {
+  std::function<bool(const RawAddress& rem_bda)> body{
+      [](const RawAddress& rem_bda) { return false; }};
+  bool operator()(const RawAddress& rem_bda) { return body(rem_bda); };
+};
+extern struct L2CA_MarkLeLinkAsActive L2CA_MarkLeLinkAsActive;
 // Name: L2CA_DataWrite
 // Params: uint16_t cid, BT_HDR* p_data
 // Returns: uint8_t
@@ -476,6 +485,22 @@ struct L2CA_IsLinkEstablished {
   };
 };
 extern struct L2CA_IsLinkEstablished L2CA_IsLinkEstablished;
+// Name: L2CA_LeCreditDefault
+// Params:
+// Returns: uint16_t
+struct L2CA_LeCreditDefault {
+  std::function<uint16_t()> body{[]() { return 0; }};
+  uint16_t operator()() { return body(); };
+};
+extern struct L2CA_LeCreditDefault L2CA_LeCreditDefault;
+// Name: L2CA_LeCreditThreshold
+// Params:
+// Returns: uint16_t
+struct L2CA_LeCreditThreshold {
+  std::function<uint16_t()> body{[]() { return 0; }};
+  uint16_t operator()() { return body(); };
+};
+extern struct L2CA_LeCreditThreshold L2CA_LeCreditThreshold;
 
 }  // namespace stack_l2cap_api
 }  // namespace mock

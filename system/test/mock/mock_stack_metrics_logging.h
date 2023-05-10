@@ -34,6 +34,7 @@ extern std::map<std::string, int> mock_function_count_map;
 //       may need attention to prune the inclusion set.
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
+
 #include "common/metrics.h"
 #include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
@@ -95,19 +96,19 @@ struct log_link_layer_connection_event {
 };
 extern struct log_link_layer_connection_event log_link_layer_connection_event;
 // Name: log_smp_pairing_event
-// Params: const RawAddress& address, uint8_t smp_cmd,
+// Params: const RawAddress& address, uint16_t smp_cmd,
 // android::bluetooth::DirectionEnum direction, uint8_t smp_fail_reason Returns:
 // void
 struct log_smp_pairing_event {
-  std::function<void(const RawAddress& address, uint8_t smp_cmd,
+  std::function<void(const RawAddress& address, uint16_t smp_cmd,
                      android::bluetooth::DirectionEnum direction,
-                     uint8_t smp_fail_reason)>
-      body{[](const RawAddress& address, uint8_t smp_cmd,
+                     uint16_t smp_fail_reason)>
+      body{[](const RawAddress& address, uint16_t smp_cmd,
               android::bluetooth::DirectionEnum direction,
-              uint8_t smp_fail_reason) {}};
-  void operator()(const RawAddress& address, uint8_t smp_cmd,
+              uint16_t smp_fail_reason) {}};
+  void operator()(const RawAddress& address, uint16_t smp_cmd,
                   android::bluetooth::DirectionEnum direction,
-                  uint8_t smp_fail_reason) {
+                  uint16_t smp_fail_reason) {
     body(address, smp_cmd, direction, smp_fail_reason);
   };
 };
@@ -136,6 +137,29 @@ extern struct log_sdp_attribute log_sdp_attribute;
 // const std::string& model, const std::string& hardware_version, const
 // std::string& software_version Returns: void
 struct log_manufacturer_info {
+  std::function<void(const RawAddress& address,
+                     android::bluetooth::AddressTypeEnum address_type,
+                     android::bluetooth::DeviceInfoSrcEnum source_type,
+                     const std::string& source_name,
+                     const std::string& manufacturer, const std::string& model,
+                     const std::string& hardware_version,
+                     const std::string& software_version)>
+      body2{[](const RawAddress& address,
+               android::bluetooth::AddressTypeEnum address_type,
+               android::bluetooth::DeviceInfoSrcEnum source_type,
+               const std::string& source_name, const std::string& manufacturer,
+               const std::string& model, const std::string& hardware_version,
+               const std::string& software_version) {}};
+  void operator()(const RawAddress& address,
+                  android::bluetooth::AddressTypeEnum address_type,
+                  android::bluetooth::DeviceInfoSrcEnum source_type,
+                  const std::string& source_name,
+                  const std::string& manufacturer, const std::string& model,
+                  const std::string& hardware_version,
+                  const std::string& software_version) {
+    body2(address, address_type, source_type, source_name, manufacturer, model,
+          hardware_version, software_version);
+  };
   std::function<void(const RawAddress& address,
                      android::bluetooth::DeviceInfoSrcEnum source_type,
                      const std::string& source_name,

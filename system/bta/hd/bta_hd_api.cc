@@ -79,7 +79,10 @@ void BTA_HdEnable(tBTA_HD_CBACK* p_cback) {
 void BTA_HdDisable(void) {
   APPL_TRACE_API("%s", __func__);
 
-  bta_sys_deregister(BTA_ID_HD);
+  if (!bluetooth::common::init_flags::
+          delay_hidh_cleanup_until_hidh_ready_start_is_enabled()) {
+    bta_sys_deregister(BTA_ID_HD);
+  }
 
   BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
   p_buf->event = BTA_HD_API_DISABLE_EVT;
@@ -128,7 +131,6 @@ extern void BTA_HdRegisterApp(tBTA_HD_APP_INFO* p_app_info,
 
   if (p_app_info->descriptor.dl_len > BTA_HD_APP_DESCRIPTOR_LEN) {
     p_app_info->descriptor.dl_len = BTA_HD_APP_DESCRIPTOR_LEN;
-    android_errorWriteLog(0x534e4554, "113111784");
   }
   p_buf->d_len = p_app_info->descriptor.dl_len;
   memcpy(p_buf->d_data, p_app_info->descriptor.dsc_list,

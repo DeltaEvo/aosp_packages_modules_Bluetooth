@@ -30,6 +30,7 @@ import android.provider.CallLog.Calls;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothObexTransport;
+import com.android.bluetooth.ObexAppParameters;
 import com.android.bluetooth.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.obex.ClientSession;
@@ -246,7 +247,7 @@ class PbapClientConnectionHandler extends Handler {
                 break;
 
             case MSG_DOWNLOAD:
-                mAccountCreated = addAccount(mAccount);
+                mAccountCreated = addAccount();
                 if (!mAccountCreated) {
                     Log.e(TAG, "Account creation failed.");
                     return;
@@ -455,8 +456,8 @@ class PbapClientConnectionHandler extends Handler {
     }
 
     @VisibleForTesting
-    boolean addAccount(Account account) {
-        if (mAccountManager.addAccountExplicitly(account, null, null)) {
+    boolean addAccount() {
+        if (mAccountManager.addAccountExplicitly(mAccount, null, null)) {
             if (DBG) {
                 Log.d(TAG, "Added account " + mAccount);
             }

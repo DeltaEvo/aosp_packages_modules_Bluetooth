@@ -26,6 +26,9 @@
 #define LOG_TAG "bt_bta_dm"
 
 #include <base/logging.h>
+#ifdef OS_ANDROID
+#include <bta.sysprop.h>
+#endif
 
 #include <cstdint>
 
@@ -157,16 +160,18 @@ static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result);
 #define BTA_DM_SWITCH_DELAY_TIMER_MS 500
 #endif
 
-namespace {
-
 // Time to wait after receiving shutdown request to delay the actual shutdown
 // process. This time may be zero which invokes immediate shutdown.
-#ifndef BTA_DISABLE_DELAY
-constexpr uint64_t kDisableDelayTimerInMs = 0;
+static uint64_t get_DisableDelayTimerInMs() {
+#ifndef OS_ANDROID
+  return 200;
 #else
-constexpr uint64_t kDisableDelayTimerInMs =
-    static_cast<uint64_t>(BTA_DISABLE_DELAY);
+  static const uint64_t kDisableDelayTimerInMs =
+      android::sysprop::bluetooth::Bta::disable_delay().value_or(200);
+  return kDisableDelayTimerInMs;
 #endif
+}
+namespace {
 
 struct WaitForAllAclConnectionsToDrain {
   uint64_t time_to_wait_in_ms;
@@ -353,8 +358,10 @@ void BTA_dm_on_hw_on() {
    * graceful shutdown.
    */
   bta_dm_search_cb.search_timer = alarm_new("bta_dm_search.search_timer");
+  bool delay_close_gatt =
+      osi_property_get_bool("bluetooth.gatt.delay_close.enabled", true);
   bta_dm_search_cb.gatt_close_timer =
-      alarm_new("bta_dm_search.gatt_close_timer");
+      delay_close_gatt ? alarm_new("bta_dm_search.gatt_close_timer") : nullptr;
   bta_dm_search_cb.pending_discovery_queue = fixed_queue_new(SIZE_MAX);
 
   memset(&bta_dm_conn_srvcs, 0, sizeof(bta_dm_conn_srvcs));
@@ -448,15 +455,15 @@ void bta_dm_disable() {
 
   if (BTM_GetNumAclLinks() == 0) {
     // We can shut down faster if there are no ACL links
-    switch (kDisableDelayTimerInMs) {
+    switch (get_DisableDelayTimerInMs()) {
       case 0:
         LOG_DEBUG("Immediately disabling device manager");
         bta_dm_disable_conn_down_timer_cback(nullptr);
         break;
       default:
         LOG_DEBUG("Set timer to delay disable initiation:%lu ms",
-                  static_cast<unsigned long>(kDisableDelayTimerInMs));
-        alarm_set_on_mloop(bta_dm_cb.disable_timer, kDisableDelayTimerInMs,
+                  static_cast<unsigned long>(get_DisableDelayTimerInMs()));
+        alarm_set_on_mloop(bta_dm_cb.disable_timer, get_DisableDelayTimerInMs(),
                            bta_dm_disable_conn_down_timer_cback, nullptr);
     }
   } else {
@@ -1143,7 +1150,8 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
                   BD_NAME_LEN + 1);
 
           result.disc_ble_res.services = &gatt_uuids;
-          bta_dm_search_cb.p_search_cback(BTA_DM_DISC_BLE_RES_EVT, &result);
+          bta_dm_search_cb.p_search_cback(BTA_DM_GATT_OVER_SDP_RES_EVT,
+                                          &result);
         }
       } else {
         /* SDP_DB_FULL means some records with the
@@ -1300,45 +1308,57 @@ void bta_dm_search_cmpl() {
 
   uint16_t conn_id = bta_dm_search_cb.conn_id;
 
-  /* no BLE connection, i.e. Classic service discovery end */
-  if (conn_id == GATT_INVALID_CONN_ID) {
-    bta_dm_search_cb.p_search_cback(BTA_DM_DISC_CMPL_EVT, nullptr);
-    bta_dm_execute_queued_request();
-    return;
-  }
-
-  btgatt_db_element_t* db = NULL;
-  int count = 0;
-  BTA_GATTC_GetGattDb(conn_id, 0x0000, 0xFFFF, &db, &count);
-
-  if (count == 0) {
-    LOG_INFO("Empty GATT database - no BLE services discovered");
-    bta_dm_search_cb.p_search_cback(BTA_DM_DISC_CMPL_EVT, nullptr);
-    bta_dm_execute_queued_request();
-    return;
-  }
-
-  std::vector<Uuid> gatt_services;
-
-  for (int i = 0; i < count; i++) {
-    // we process service entries only
-    if (db[i].type == BTGATT_DB_PRIMARY_SERVICE) {
-      gatt_services.push_back(db[i].uuid);
-    }
-  }
-  osi_free(db);
-
   tBTA_DM_SEARCH result;
+  std::vector<Uuid> gatt_services;
   result.disc_ble_res.services = &gatt_services;
   result.disc_ble_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
   strlcpy((char*)result.disc_ble_res.bd_name, (char*)bta_dm_search_cb.peer_name,
           BD_NAME_LEN + 1);
 
-  LOG_INFO("GATT services discovered using LE Transport");
+  bool send_gatt_results =
+      bluetooth::common::init_flags::
+              always_send_services_if_gatt_disc_done_is_enabled()
+          ? bta_dm_search_cb.gatt_disc_active
+          : false;
+
+  /* no BLE connection, i.e. Classic service discovery end */
+  if (conn_id == GATT_INVALID_CONN_ID) {
+    if (bta_dm_search_cb.gatt_disc_active) {
+      LOG_WARN(
+          "GATT active but no BLE connection, likely disconnected midway "
+          "through");
+    } else {
+      LOG_INFO("No BLE connection, processing classic results");
+    }
+  } else {
+    btgatt_db_element_t* db = NULL;
+    int count = 0;
+    BTA_GATTC_GetGattDb(conn_id, 0x0000, 0xFFFF, &db, &count);
+    if (count != 0) {
+      for (int i = 0; i < count; i++) {
+        // we process service entries only
+        if (db[i].type == BTGATT_DB_PRIMARY_SERVICE) {
+          gatt_services.push_back(db[i].uuid);
+        }
+      }
+      osi_free(db);
+      LOG_INFO(
+          "GATT services discovered using LE Transport, will always send to "
+          "upper layer");
+      send_gatt_results = true;
+    } else {
+      LOG_WARN("Empty GATT database - no BLE services discovered");
+    }
+  }
+
   // send all result back to app
-  bta_dm_search_cb.p_search_cback(BTA_DM_DISC_BLE_RES_EVT, &result);
+  if (send_gatt_results) {
+    LOG_INFO("Sending GATT results to upper layer");
+    bta_dm_search_cb.p_search_cback(BTA_DM_GATT_OVER_LE_RES_EVT, &result);
+  }
 
   bta_dm_search_cb.p_search_cback(BTA_DM_DISC_CMPL_EVT, nullptr);
+  bta_dm_search_cb.gatt_disc_active = false;
 
   bta_dm_execute_queued_request();
 }
@@ -1356,10 +1376,15 @@ void bta_dm_search_cmpl() {
 void bta_dm_disc_result(tBTA_DM_MSG* p_data) {
   APPL_TRACE_EVENT("%s", __func__);
 
+  /* disc_res.device_type is set only when GATT discovery is finished in
+   * bta_dm_gatt_disc_complete */
+  bool is_gatt_over_ble = ((p_data->disc_result.result.disc_res.device_type &
+                            BT_DEVICE_TYPE_BLE) != 0);
+
   /* if any BR/EDR service discovery has been done, report the event */
-  if ((bta_dm_search_cb.services &
-       ((BTA_ALL_SERVICE_MASK | BTA_USER_SERVICE_MASK) &
-        ~BTA_BLE_SERVICE_MASK)))
+  if (!is_gatt_over_ble && (bta_dm_search_cb.services &
+                            ((BTA_ALL_SERVICE_MASK | BTA_USER_SERVICE_MASK) &
+                             ~BTA_BLE_SERVICE_MASK)))
     bta_dm_search_cb.p_search_cback(BTA_DM_DISC_RES_EVT,
                                     &p_data->disc_result.result);
 
@@ -1709,6 +1734,14 @@ static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
     /* Do not perform RNR for LE devices at inquiry complete*/
     bta_dm_search_cb.name_discover_done = true;
   }
+  // If we already have the name we can skip getting the name
+  if (BTM_IsRemoteNameKnown(remote_bd_addr, transport) &&
+      bluetooth::common::init_flags::sdp_skip_rnr_if_known_is_enabled()) {
+    LOG_DEBUG("Security record already known skipping read remote name peer:%s",
+              PRIVATE_ADDRESS(remote_bd_addr));
+    bta_dm_search_cb.name_discover_done = true;
+  }
+
   /* if name discovery is not done and application needs remote name */
   if ((!bta_dm_search_cb.name_discover_done) &&
       ((bta_dm_search_cb.p_btm_inq_info == NULL) ||
@@ -1847,6 +1880,8 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
   result.inq_res.p_eir = const_cast<uint8_t*>(p_eir);
   result.inq_res.eir_len = eir_len;
 
+  result.inq_res.ble_evt_type = p_inq->ble_evt_type;
+
   p_inq_info = BTM_InqDbRead(p_inq->remote_bd_addr);
   if (p_inq_info != NULL) {
     /* initialize remt_name_not_required to false so that we get the name by
@@ -1892,7 +1927,7 @@ static void bta_dm_inq_cmpl_cb(void* p_result) {
 static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
                                                 UNUSED_ATTR DEV_CLASS dc,
                                                 tBTM_BD_NAME bd_name) {
-  tBTM_REMOTE_DEV_NAME rem_name;
+  tBTM_REMOTE_DEV_NAME rem_name = {};
   tBTM_STATUS btm_status;
 
   APPL_TRACE_DEBUG("%s name=<%s>", __func__, bd_name);
@@ -1906,7 +1941,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
       rem_name.length = BD_NAME_LEN;
     }
     rem_name.status = BTM_SUCCESS;
-
+    rem_name.hci_status = HCI_SUCCESS;
     bta_dm_remname_cback(&rem_name);
   } else {
     /* get name of device */
@@ -1927,6 +1962,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
       rem_name.length = 0;
       rem_name.remote_bd_name[0] = 0;
       rem_name.status = btm_status;
+      rem_name.hci_status = HCI_SUCCESS;
       bta_dm_remname_cback(&rem_name);
     }
   }
@@ -1954,11 +1990,28 @@ static void bta_dm_remname_cback(void* p) {
       BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
     }
   } else {
-    // if we got a different response, ignore it
+    // if we got a different response, maybe ignore it
     // we will have made a request directly from BTM_ReadRemoteDeviceName so we
     // expect a dedicated response for us
-    LOG_INFO("ignoring remote name response in DM callback since it's for the wrong bd_addr");
-    return;
+    if (p_remote_name->hci_status == HCI_ERR_CONNECTION_EXISTS) {
+      if (bluetooth::shim::is_gd_security_enabled()) {
+        bluetooth::shim::BTM_SecDeleteRmtNameNotifyCallback(
+            &bta_dm_service_search_remname_cback);
+      } else {
+        BTM_SecDeleteRmtNameNotifyCallback(
+            &bta_dm_service_search_remname_cback);
+      }
+      LOG_INFO(
+          "Assume command failed due to disconnection hci_status:%s peer:%s",
+          hci_error_code_text(p_remote_name->hci_status).c_str(),
+          PRIVATE_ADDRESS(p_remote_name->bd_addr));
+    } else {
+      LOG_INFO(
+          "Ignored remote name response for the wrong address exp:%s act:%s",
+          PRIVATE_ADDRESS(bta_dm_search_cb.peer_bdaddr),
+          PRIVATE_ADDRESS(p_remote_name->bd_addr));
+      return;
+    }
   }
 
   /* remote name discovery is done but it could be failed */
@@ -3967,13 +4020,26 @@ static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status) {
   bta_sys_sendmsg(p_msg);
 
   if (conn_id != GATT_INVALID_CONN_ID) {
-    /* start a GATT channel close delay timer */
-    bta_sys_start_timer(bta_dm_search_cb.gatt_close_timer,
-                        BTA_DM_GATT_CLOSE_DELAY_TOUT,
-                        BTA_DM_DISC_CLOSE_TOUT_EVT, 0);
     bta_dm_search_cb.pending_close_bda = bta_dm_search_cb.peer_bdaddr;
+    // Gatt will be close immediately if bluetooth.gatt.delay_close.enabled is
+    // set to false. If property is true / unset there will be a delay
+    if (bta_dm_search_cb.gatt_close_timer != nullptr) {
+      /* start a GATT channel close delay timer */
+      bta_sys_start_timer(bta_dm_search_cb.gatt_close_timer,
+                          BTA_DM_GATT_CLOSE_DELAY_TOUT,
+                          BTA_DM_DISC_CLOSE_TOUT_EVT, 0);
+    } else {
+      p_msg = (tBTA_DM_MSG*)osi_malloc(sizeof(tBTA_DM_MSG));
+      p_msg->hdr.event = BTA_DM_DISC_CLOSE_TOUT_EVT;
+      p_msg->hdr.layer_specific = 0;
+      bta_sys_sendmsg(p_msg);
+    }
+  } else {
+    if (bluetooth::common::init_flags::
+            bta_dm_clear_conn_id_on_client_close_is_enabled()) {
+      bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
+    }
   }
-  bta_dm_search_cb.gatt_disc_active = false;
 }
 
 /*******************************************************************************
@@ -4014,9 +4080,11 @@ void btm_dm_start_gatt_discovery(const RawAddress& bd_addr) {
     BTA_GATTC_ServiceSearchRequest(bta_dm_search_cb.conn_id, nullptr);
   } else {
     if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
-      BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr, true, true);
+      BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr,
+                     BTM_BLE_DIRECT_CONNECTION, true);
     } else {
-      BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr, true, false);
+      BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr,
+                     BTM_BLE_DIRECT_CONNECTION, false);
     }
   }
 }
@@ -4102,7 +4170,8 @@ static void bta_dm_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
       break;
 
     case BTA_GATTC_CLOSE_EVT:
-      LOG_DEBUG("BTA_GATTC_CLOSE_EVT reason = %d", p_data->close.reason);
+      LOG_INFO("BTA_GATTC_CLOSE_EVT reason = %d", p_data->close.reason);
+
       /* in case of disconnect before search is completed */
       if ((bta_dm_search_cb.state != BTA_DM_SEARCH_IDLE) &&
           (bta_dm_search_cb.state != BTA_DM_SEARCH_ACTIVE) &&
@@ -4157,6 +4226,8 @@ tBTA_DM_PEER_DEVICE* allocate_device_for(const RawAddress& bd_addr,
                                          tBT_TRANSPORT transport) {
   return ::allocate_device_for(bd_addr, transport);
 }
+
+void bta_dm_remname_cback(void* p) { ::bta_dm_remname_cback(p); }
 
 }  // namespace testing
 }  // namespace legacy

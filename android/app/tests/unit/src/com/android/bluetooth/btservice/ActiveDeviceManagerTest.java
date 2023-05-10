@@ -32,6 +32,7 @@ import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothHearingAid;
 import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
@@ -123,6 +124,8 @@ public class ActiveDeviceManagerTest {
         mMostRecentDevice = null;
 
         when(mA2dpService.setActiveDevice(any())).thenReturn(true);
+        when(mHeadsetService.getHfpCallAudioPolicy(any())).thenReturn(
+                new BluetoothSinkAudioPolicy.Builder().build());
         when(mHeadsetService.setActiveDevice(any())).thenReturn(true);
         when(mHearingAidService.setActiveDevice(any())).thenReturn(true);
         when(mLeAudioService.setActiveDevice(any())).thenReturn(true);
@@ -244,8 +247,6 @@ public class ActiveDeviceManagerTest {
      */
     @Test
     public void onlyHeadsetConnected_setHeadsetActive() {
-        when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_IN_CALL);
-
         headsetConnected(mHeadsetDevice);
         verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(mHeadsetDevice);
     }
@@ -255,8 +256,6 @@ public class ActiveDeviceManagerTest {
      */
     @Test
     public void secondHeadsetConnected_setSecondHeadsetActive() {
-        when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_IN_CALL);
-
         headsetConnected(mHeadsetDevice);
         verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(mHeadsetDevice);
 
@@ -269,8 +268,6 @@ public class ActiveDeviceManagerTest {
      */
     @Test
     public void lastHeadsetDisconnected_clearHeadsetActive() {
-        when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_IN_CALL);
-
         headsetConnected(mHeadsetDevice);
         verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(mHeadsetDevice);
 
@@ -283,8 +280,6 @@ public class ActiveDeviceManagerTest {
      */
     @Test
     public void headsetActiveDeviceSelected_setActive() {
-        when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_IN_CALL);
-
         headsetConnected(mHeadsetDevice);
         verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(mHeadsetDevice);
 
@@ -315,6 +310,24 @@ public class ActiveDeviceManagerTest {
         Mockito.clearInvocations(mHeadsetService);
         headsetDisconnected(mSecondaryAudioDevice);
         verify(mHeadsetService, timeout(TIMEOUT_MS)).setActiveDevice(mHeadsetDevice);
+    }
+
+    /**
+     * A headset device with connecting audio policy set to NOT ALLOWED.
+     */
+    @Test
+    public void notAllowedConnectingPolicyHeadsetConnected_noSetActiveDevice() {
+        // setting connecting policy to NOT ALLOWED
+        when(mHeadsetService.getHfpCallAudioPolicy(mHeadsetDevice))
+                .thenReturn(new BluetoothSinkAudioPolicy.Builder()
+                        .setCallEstablishPolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                        .setActiveDevicePolicyAfterConnection(
+                                BluetoothSinkAudioPolicy.POLICY_NOT_ALLOWED)
+                        .setInBandRingtonePolicy(BluetoothSinkAudioPolicy.POLICY_ALLOWED)
+                        .build());
+
+        headsetConnected(mHeadsetDevice);
+        verify(mHeadsetService, never()).setActiveDevice(mHeadsetDevice);
     }
 
     /**
@@ -521,7 +534,7 @@ public class ActiveDeviceManagerTest {
     public void leAudioActive_setHeadsetActiveExplicitly() {
         Assume.assumeTrue("Ignore test when LeAudioService is not enabled",
                 LeAudioService.isEnabled());
-        when(mAudioManager.getMode()).thenReturn(AudioManager.MODE_IN_CALL);
+
         leAudioActiveDeviceChanged(mLeAudioDevice);
         headsetConnected(mA2dpHeadsetDevice);
         headsetActiveDeviceChanged(mA2dpHeadsetDevice);

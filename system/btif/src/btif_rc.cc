@@ -599,22 +599,23 @@ void handle_rc_features(btif_rc_device_cb_t* p_dev) {
     rc_features = (btrc_remote_features_t)(rc_features | BTRC_FEAT_BROWSE);
   }
 
-#if (AVRC_ADV_CTRL_INCLUDED == TRUE)
+  if (p_dev->rc_features & BTA_AV_FEAT_METADATA) {
+    rc_features = (btrc_remote_features_t)(rc_features | BTRC_FEAT_METADATA);
+  }
+
+  if (!avrcp_absolute_volume_is_enabled()) {
+    return;
+  }
+
   if ((p_dev->rc_features & BTA_AV_FEAT_ADV_CTRL) &&
       (p_dev->rc_features & BTA_AV_FEAT_RCTG)) {
     rc_features =
         (btrc_remote_features_t)(rc_features | BTRC_FEAT_ABSOLUTE_VOLUME);
   }
-#endif
-
-  if (p_dev->rc_features & BTA_AV_FEAT_METADATA) {
-    rc_features = (btrc_remote_features_t)(rc_features | BTRC_FEAT_METADATA);
-  }
 
   BTIF_TRACE_DEBUG("%s: rc_features: 0x%x", __func__, rc_features);
   HAL_CBACK(bt_rc_callbacks, remote_features_cb, p_dev->rc_addr, rc_features);
 
-#if (AVRC_ADV_CTRL_INCLUDED == TRUE)
   BTIF_TRACE_DEBUG(
       "%s: Checking for feature flags in btif_rc_handler with label: %d",
       __func__, p_dev->rc_vol_label);
@@ -640,7 +641,6 @@ void handle_rc_features(btif_rc_device_cb_t* p_dev) {
       register_volumechange(p_dev->rc_vol_label, p_dev);
     }
   }
-#endif
 }
 
 /***************************************************************************
@@ -734,12 +734,12 @@ void handle_rc_connect(tBTA_AV_RC_OPEN* p_rc_open) {
     do_in_jni_thread(FROM_HERE,
                      base::Bind(bt_rc_ctrl_callbacks->connection_state_cb, true,
                                 false, p_dev->rc_addr));
-  }
-  /* report connection state if remote device is AVRCP target */
-  handle_rc_ctrl_features(p_dev);
+    /* report connection state if remote device is AVRCP target */
+    handle_rc_ctrl_features(p_dev);
 
-  /* report psm if remote device is AVRCP target */
-  handle_rc_ctrl_psm(p_dev);
+    /* report psm if remote device is AVRCP target */
+    handle_rc_ctrl_psm(p_dev);
+  }
 }
 
 /***************************************************************************
@@ -1958,6 +1958,11 @@ static bt_status_t register_notification_rsp(
   BTIF_TRACE_EVENT("%s: event_id: %s", __func__,
                    dump_rc_notification_event_id(event_id));
   std::unique_lock<std::mutex> lock(btif_rc_cb.lock);
+
+  if (event_id > MAX_RC_NOTIFICATIONS) {
+    BTIF_TRACE_ERROR("Invalid event id");
+    return BT_STATUS_PARM_INVALID;
+  }
 
   memset(&(avrc_rsp.reg_notif), 0, sizeof(tAVRC_REG_NOTIF_RSP));
 
@@ -3593,7 +3598,6 @@ static void handle_app_cur_val_response(tBTA_AV_META_MSG* pmeta_msg,
   app_settings.num_attr = p_rsp->num_val;
 
   if (app_settings.num_attr > BTRC_MAX_APP_SETTINGS) {
-    android_errorWriteLog(0x534e4554, "73824150");
     app_settings.num_attr = BTRC_MAX_APP_SETTINGS;
   }
 
@@ -3651,29 +3655,31 @@ static void handle_app_attr_txt_response(tBTA_AV_META_MSG* pmeta_msg,
      * for standard attributes.
      */
     p_app_settings->num_ext_attrs = 0;
-    for (xx = 0; xx < p_app_settings->ext_attr_index; xx++) {
+    for (xx = 0;
+         xx < p_app_settings->ext_attr_index && xx < AVRC_MAX_APP_ATTR_SIZE;
+         xx++) {
       osi_free_and_reset((void**)&p_app_settings->ext_attrs[xx].p_str);
     }
     p_app_settings->ext_attr_index = 0;
 
-    if (p_dev) {
-      for (xx = 0; xx < p_app_settings->num_attrs; xx++) {
-        attrs[xx] = p_app_settings->attrs[xx].attr_id;
-      }
-
-      do_in_jni_thread(
-          FROM_HERE,
-          base::Bind(bt_rc_ctrl_callbacks->playerapplicationsetting_cb,
-                     p_dev->rc_addr, p_app_settings->num_attrs,
-                     p_app_settings->attrs, 0, nullptr));
-      get_player_app_setting_cmd(xx, attrs, p_dev);
+    for (xx = 0; xx < p_app_settings->num_attrs && xx < AVRC_MAX_APP_ATTR_SIZE;
+         xx++) {
+      attrs[xx] = p_app_settings->attrs[xx].attr_id;
     }
+
+    do_in_jni_thread(
+        FROM_HERE, base::Bind(bt_rc_ctrl_callbacks->playerapplicationsetting_cb,
+                              p_dev->rc_addr, p_app_settings->num_attrs,
+                              p_app_settings->attrs, 0, nullptr));
+    get_player_app_setting_cmd(xx, attrs, p_dev);
+
     return;
   }
 
   for (xx = 0; xx < p_rsp->num_attr; xx++) {
     uint8_t x;
-    for (x = 0; x < p_app_settings->num_ext_attrs; x++) {
+    for (x = 0; x < p_app_settings->num_ext_attrs && x < AVRC_MAX_APP_ATTR_SIZE;
+         x++) {
       if (p_app_settings->ext_attrs[x].attr_id == p_rsp->p_attrs[xx].attr_id) {
         p_app_settings->ext_attrs[x].charset_id = p_rsp->p_attrs[xx].charset_id;
         p_app_settings->ext_attrs[x].str_len = p_rsp->p_attrs[xx].str_len;
@@ -3683,7 +3689,9 @@ static void handle_app_attr_txt_response(tBTA_AV_META_MSG* pmeta_msg,
     }
   }
 
-  for (xx = 0; xx < p_app_settings->ext_attrs[0].num_val; xx++) {
+  for (xx = 0;
+       xx < p_app_settings->ext_attrs[0].num_val && xx < BTRC_MAX_APP_ATTR_SIZE;
+       xx++) {
     vals[xx] = p_app_settings->ext_attrs[0].ext_attr_val[xx].val;
   }
   get_player_app_setting_value_text_cmd(vals, xx, p_dev);
@@ -3727,11 +3735,13 @@ static void handle_app_attr_val_txt_response(
      * for standard attributes.
      */
     p_app_settings->num_ext_attrs = 0;
-    for (xx = 0; xx < p_app_settings->ext_attr_index; xx++) {
+    for (xx = 0;
+         xx < p_app_settings->ext_attr_index && xx < AVRC_MAX_APP_ATTR_SIZE;
+         xx++) {
       int x;
       btrc_player_app_ext_attr_t* p_ext_attr = &p_app_settings->ext_attrs[xx];
 
-      for (x = 0; x < p_ext_attr->num_val; x++)
+      for (x = 0; x < p_ext_attr->num_val && x < BTRC_MAX_APP_ATTR_SIZE; x++)
         osi_free_and_reset((void**)&p_ext_attr->ext_attr_val[x].p_str);
       p_ext_attr->num_val = 0;
       osi_free_and_reset((void**)&p_app_settings->ext_attrs[xx].p_str);
@@ -3750,11 +3760,17 @@ static void handle_app_attr_val_txt_response(
     return;
   }
 
+  if (p_app_settings->ext_val_index >= AVRC_MAX_APP_ATTR_SIZE) {
+    BTIF_TRACE_ERROR("ext_val_index is 0x%02x, overflow!",
+                     p_app_settings->ext_val_index);
+    return;
+  }
+
   for (xx = 0; xx < p_rsp->num_attr; xx++) {
     uint8_t x;
     btrc_player_app_ext_attr_t* p_ext_attr;
     p_ext_attr = &p_app_settings->ext_attrs[p_app_settings->ext_val_index];
-    for (x = 0; x < p_rsp->num_attr; x++) {
+    for (x = 0; x < p_rsp->num_attr && x < BTRC_MAX_APP_ATTR_SIZE; x++) {
       if (p_ext_attr->ext_attr_val[x].val == p_rsp->p_attrs[xx].attr_id) {
         p_ext_attr->ext_attr_val[x].charset_id = p_rsp->p_attrs[xx].charset_id;
         p_ext_attr->ext_attr_val[x].str_len = p_rsp->p_attrs[xx].str_len;
@@ -3807,10 +3823,12 @@ static void handle_app_attr_val_txt_response(
  **************************************************************************/
 static void cleanup_app_attr_val_txt_response(
     btif_rc_player_app_settings_t* p_app_settings) {
-  for (uint8_t xx = 0; xx < p_app_settings->ext_attr_index; xx++) {
+  for (uint8_t xx = 0;
+       xx < p_app_settings->ext_attr_index && xx < AVRC_MAX_APP_ATTR_SIZE;
+       xx++) {
     int x;
     btrc_player_app_ext_attr_t* p_ext_attr = &p_app_settings->ext_attrs[xx];
-    for (x = 0; x < p_ext_attr->num_val; x++) {
+    for (x = 0; x < p_ext_attr->num_val && x < BTRC_MAX_APP_ATTR_SIZE; x++) {
       osi_free_and_reset((void**)&p_ext_attr->ext_attr_val[x].p_str);
     }
     p_ext_attr->num_val = 0;

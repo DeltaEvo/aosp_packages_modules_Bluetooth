@@ -51,7 +51,9 @@ enum {
   BTA_GATTS_API_OPEN_EVT,
   BTA_GATTS_API_CANCEL_OPEN_EVT,
   BTA_GATTS_API_CLOSE_EVT,
-  BTA_GATTS_API_DISABLE_EVT
+  BTA_GATTS_API_DISABLE_EVT,
+
+  BTA_GATTS_API_INIT_BONDED_EVT,
 };
 typedef uint16_t tBTA_GATTS_INT_EVT;
 
@@ -107,12 +109,17 @@ typedef struct {
   BT_HDR_RIGID hdr;
   RawAddress remote_bda;
   tGATT_IF server_if;
-  bool is_direct;
+  tBTM_BLE_CONN_TYPE connection_type;
   tBT_TRANSPORT transport;
-
 } tBTA_GATTS_API_OPEN;
 
-typedef tBTA_GATTS_API_OPEN tBTA_GATTS_API_CANCEL_OPEN;
+typedef struct {
+  BT_HDR_RIGID hdr;
+  RawAddress remote_bda;
+  tGATT_IF server_if;
+  bool is_direct;
+  tBT_TRANSPORT transport;
+} tBTA_GATTS_API_CANCEL_OPEN;
 
 typedef union {
   BT_HDR_RIGID hdr;

@@ -977,7 +977,7 @@ bool gatt_tcb_is_cid_busy(tGATT_TCB& tcb, uint16_t cid) {
  *
  ******************************************************************************/
 tGATT_CLCB* gatt_clcb_alloc(uint16_t conn_id) {
-  tGATT_CLCB clcb;
+  tGATT_CLCB clcb = {};
   tGATT_IF gatt_if = GATT_GET_GATT_IF(conn_id);
   uint8_t tcb_idx = GATT_GET_TCB_IDX(conn_id);
   tGATT_TCB* p_tcb = gatt_get_tcb_by_idx(tcb_idx);
@@ -1138,6 +1138,7 @@ uint16_t gatt_tcb_get_payload_size_rx(tGATT_TCB& tcb, uint16_t cid) {
 void gatt_clcb_dealloc(tGATT_CLCB* p_clcb) {
   if (p_clcb) {
     alarm_free(p_clcb->gatt_rsp_timer_ent);
+    gatt_clcb_invalidate(p_clcb->p_tcb, p_clcb);
     for (auto clcb_it = gatt_cb.clcb_queue.begin();
          clcb_it != gatt_cb.clcb_queue.end(); clcb_it++) {
       if (&(*clcb_it) == p_clcb) {
@@ -1160,6 +1161,17 @@ void gatt_clcb_dealloc(tGATT_CLCB* p_clcb) {
 void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb) {
   std::deque<tGATT_CMD_Q>* cl_cmd_q_p;
   uint16_t cid = p_clcb->cid;
+
+  if (!p_tcb->pending_enc_clcb.empty()) {
+    for (size_t i = 0; i < p_tcb->pending_enc_clcb.size(); i++) {
+      if (p_tcb->pending_enc_clcb.at(i) == p_clcb) {
+        LOG_WARN("Removing clcb (%p) for conn id=0x%04x from pending_enc_clcb",
+                 p_clcb, p_clcb->conn_id);
+        p_tcb->pending_enc_clcb.at(i) = NULL;
+        break;
+      }
+    }
+  }
 
   if (cid == p_tcb->att_lcid) {
     cl_cmd_q_p = &p_tcb->cl_cmd_q;
@@ -1186,10 +1198,15 @@ void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb) {
   if (iter->to_send) {
     /* If command was not send, just remove the entire element */
     cl_cmd_q_p->erase(iter);
+    LOG_WARN("Removing scheduled clcb (%p) for conn_id=0x%04x", p_clcb,
+             p_clcb->conn_id);
   } else {
     /* If command has been sent, just invalidate p_clcb pointer for proper
      * response handling */
     iter->p_clcb = NULL;
+    LOG_WARN(
+        "Invalidating clcb (%p) for already sent request on conn_id=0x%04x",
+        p_clcb, p_clcb->conn_id);
   }
 }
 /*******************************************************************************
@@ -1449,11 +1466,18 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   }
 
   if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
-    BTM_AcceptlistRemove(bda);
-    LOG_INFO(
-        "GATT connection manager has no record but removed filter acceptlist "
-        "gatt_if:%hhu peer:%s",
-        gatt_if, PRIVATE_ADDRESS(bda));
+    if (!connection_manager::is_background_connection(bda)) {
+      BTM_AcceptlistRemove(bda);
+      LOG_INFO(
+          "Gatt connection manager has no background record but "
+          " removed filter acceptlist gatt_if:%hhu peer:%s",
+          gatt_if, PRIVATE_ADDRESS(bda));
+    } else {
+      LOG_INFO(
+          "Gatt connection manager maintains a background record"
+          " preserving filter acceptlist gatt_if:%hhu peer:%s",
+          gatt_if, PRIVATE_ADDRESS(bda));
+    }
   }
   return true;
 }
@@ -1566,6 +1590,13 @@ void gatt_end_operation(tGATT_CLCB* p_clcb, tGATT_STATUS status, void* p_data) {
     if (p_clcb->operation == GATTC_OPTYPE_READ) {
       cb_data.att_value.handle = p_clcb->s_handle;
       cb_data.att_value.len = p_clcb->counter;
+
+      if (cb_data.att_value.len > GATT_MAX_ATTR_LEN) {
+        LOG(WARNING) << __func__
+                     << StringPrintf(" Large cb_data.att_value, size=%d",
+                                     cb_data.att_value.len);
+        cb_data.att_value.len = GATT_MAX_ATTR_LEN;
+      }
 
       if (p_data && p_clcb->counter)
         memcpy(cb_data.att_value.value, p_data, cb_data.att_value.len);
@@ -1691,10 +1722,12 @@ uint8_t* gatt_dbg_op_name(uint8_t op_code) {
     pseduo_op_code_idx = 0x15; /* just an index to op_code_name */
   }
 
-  if (pseduo_op_code_idx <= GATT_OP_CODE_MAX)
+  #define ARR_SIZE(a) (sizeof(a)/sizeof(a[0]))
+  if (pseduo_op_code_idx < ARR_SIZE(op_code_name))
     return (uint8_t*)op_code_name[pseduo_op_code_idx];
   else
     return (uint8_t*)"Op Code Exceed Max";
+  #undef ARR_SIZE
 }
 
 /** Remove the application interface for the specified background device */

@@ -84,6 +84,11 @@ void parameters_response_parser(BleAdvertiserHciInterface::parameters_cb cb,
   int8_t tx_power;
 
   uint8_t* pp = ret_params;
+  if (ret_params_len < 2) {
+    LOG(ERROR) << "unexpected ret_params_len: " << ret_params_len;
+    return;
+  }
+
   STREAM_TO_UINT8(status, pp);
   STREAM_TO_INT8(tx_power, pp);
 
@@ -167,7 +172,6 @@ class BleAdvertiserVscHciInterfaceImpl : public BleAdvertiserHciInterface {
     memset(param, 0, BTM_BLE_MULTI_ADV_WRITE_DATA_LEN);
 
     if (data_length > BTM_BLE_AD_DATA_LEN) {
-      android_errorWriteLog(0x534e4554, "121145627");
       LOG(ERROR) << __func__
                  << ": data_length=" << static_cast<int>(data_length)
                  << ", is longer than size limit " << BTM_BLE_AD_DATA_LEN;
@@ -194,7 +198,6 @@ class BleAdvertiserVscHciInterfaceImpl : public BleAdvertiserHciInterface {
     memset(param, 0, BTM_BLE_MULTI_ADV_WRITE_DATA_LEN);
 
     if (scan_response_data_length > BTM_BLE_AD_DATA_LEN) {
-      android_errorWriteLog(0x534e4554, "121145627");
       LOG(ERROR) << __func__ << ": scan_response_data_length="
                  << static_cast<int>(scan_response_data_length)
                  << ", is longer than size limit " << BTM_BLE_AD_DATA_LEN;
@@ -294,10 +297,14 @@ class BleAdvertiserVscHciInterfaceImpl : public BleAdvertiserHciInterface {
     uint8_t sub_event, adv_inst, change_reason;
     uint16_t conn_handle;
 
+    if (length < 1) {
+      return;
+    }
+
     STREAM_TO_UINT8(sub_event, p);
     length--;
 
-    if (sub_event != HCI_VSE_SUBCODE_BLE_MULTI_ADV_ST_CHG || length != 4) {
+    if (sub_event != HCI_VSE_SUBCODE_BLE_MULTI_ADV_ST_CHG || length < 4) {
       return;
     }
 
@@ -393,7 +400,6 @@ class BleAdvertiserLegacyHciInterfaceImpl : public BleAdvertiserHciInterface {
     uint8_t param[HCIC_PARAM_SIZE_BLE_WRITE_ADV_DATA + 1];
 
     if (data_length > HCIC_PARAM_SIZE_BLE_WRITE_ADV_DATA) {
-      android_errorWriteLog(0x534e4554, "121145627");
       LOG(ERROR) << __func__
                  << ": data_length=" << static_cast<int>(data_length)
                  << ", is longer than size limit "
@@ -419,7 +425,6 @@ class BleAdvertiserLegacyHciInterfaceImpl : public BleAdvertiserHciInterface {
     uint8_t param[HCIC_PARAM_SIZE_BLE_WRITE_ADV_DATA + 1];
 
     if (scan_response_data_length > HCIC_PARAM_SIZE_BLE_WRITE_ADV_DATA) {
-      android_errorWriteLog(0x534e4554, "121145627");
       LOG(ERROR) << __func__ << ": scan_response_data_length="
                  << static_cast<int>(scan_response_data_length)
                  << ", is longer than size limit "

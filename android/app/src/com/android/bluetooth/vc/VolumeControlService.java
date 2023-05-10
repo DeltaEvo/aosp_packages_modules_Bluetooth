@@ -345,7 +345,8 @@ public class VolumeControlService extends ProfileService {
         return sVolumeControlService;
     }
 
-    private static synchronized void setVolumeControlService(VolumeControlService instance) {
+    @VisibleForTesting
+    static synchronized void setVolumeControlService(VolumeControlService instance) {
         if (DBG) {
             Log.d(TAG, "setVolumeControlService(): set to: " + instance);
         }
@@ -984,6 +985,8 @@ public class VolumeControlService extends ProfileService {
                 return;
             }
             if (sm.getConnectionState() != BluetoothProfile.STATE_DISCONNECTED) {
+                Log.i(TAG, "Disconnecting device because it was unbonded.");
+                disconnect(device);
                 return;
             }
             removeStateMachine(device);
@@ -1065,8 +1068,8 @@ public class VolumeControlService extends ProfileService {
             if (mIsTesting) {
                 return mService;
             }
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
-                    || !Utils.checkServiceAvailable(mService, TAG)
+            if (!Utils.checkServiceAvailable(mService, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
                 return null;
             }

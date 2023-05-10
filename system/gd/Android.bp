@@ -394,6 +394,7 @@ cc_test {
         ":BluetoothShimTestSources",
         ":BluetoothSecurityUnitTestSources",
         ":BluetoothStorageUnitTestSources",
+        ":BluetoothBtaaSources_linux_generic_tests",
     ],
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
@@ -414,6 +415,7 @@ cc_test {
         "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
+        "libbt-platform-protos-lite"
     ],
     shared_libs: [
         "libcrypto",
@@ -718,6 +720,7 @@ genrule {
         "common/init_flags.fbs",
         "dumpsys_data.fbs",
         "hci/hci_acl_manager.fbs",
+        "hci/hci_controller.fbs",
         "l2cap/classic/l2cap_classic_module.fbs",
         "shim/dumpsys.fbs",
         "os/wakelock_manager.fbs",
@@ -728,6 +731,7 @@ genrule {
         "dumpsys.bfbs",
         "dumpsys_data.bfbs",
         "hci_acl_manager.bfbs",
+        "hci_controller.bfbs",
         "l2cap_classic_module.bfbs",
         "wakelock_manager.bfbs",
     ],
@@ -744,6 +748,7 @@ genrule {
         "common/init_flags.fbs",
         "dumpsys_data.fbs",
         "hci/hci_acl_manager.fbs",
+        "hci/hci_controller.fbs",
         "l2cap/classic/l2cap_classic_module.fbs",
         "shim/dumpsys.fbs",
         "os/wakelock_manager.fbs",
@@ -753,6 +758,7 @@ genrule {
         "dumpsys_data_generated.h",
         "dumpsys_generated.h",
         "hci_acl_manager_generated.h",
+        "hci_controller_generated.h",
         "init_flags_generated.h",
         "l2cap_classic_module_generated.h",
         "wakelock_manager_generated.h",
@@ -766,22 +772,10 @@ genrule {
     ],
     cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/system/gd --out=$(genDir) --num_shards=10 $(in)",
     srcs: [
-        "hci/hci_packets.pdl",
         "l2cap/l2cap_packets.pdl",
         "security/smp_packets.pdl",
     ],
     out: [
-        "hci/hci_packets_python3.cc",
-        "hci/hci_packets_python3_shard_0.cc",
-        "hci/hci_packets_python3_shard_1.cc",
-        "hci/hci_packets_python3_shard_2.cc",
-        "hci/hci_packets_python3_shard_3.cc",
-        "hci/hci_packets_python3_shard_4.cc",
-        "hci/hci_packets_python3_shard_5.cc",
-        "hci/hci_packets_python3_shard_6.cc",
-        "hci/hci_packets_python3_shard_7.cc",
-        "hci/hci_packets_python3_shard_8.cc",
-        "hci/hci_packets_python3_shard_9.cc",
         "l2cap/l2cap_packets_python3.cc",
         "l2cap/l2cap_packets_python3_shard_0.cc",
         "l2cap/l2cap_packets_python3_shard_1.cc",
@@ -909,3 +903,20 @@ cc_library_host_shared {
     ],
     rtti: true,
 }
+
+// Generate the python parser+serializer backend for
+// hci_packets.pdl.
+genrule {
+    name: "gd_hci_packets_python3_gen",
+    defaults: [ "pdl_python_generator_defaults" ],
+    cmd: "$(location :pdl) $(in) |" +
+        " $(location :pdl_python_generator)" +
+        " --output $(out) --custom-type-location blueberry.utils.bluetooth",
+    srcs: [
+        ":BluetoothHciPackets",
+    ],
+    out:  [
+        "hci_packets.py",
+    ],
+}
+

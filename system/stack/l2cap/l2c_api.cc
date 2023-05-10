@@ -33,11 +33,17 @@
 #include <string>
 
 #include "device/include/controller.h"  // TODO Remove
+#include "gd/common/init_flags.h"
+#include "gd/os/system_properties.h"
+#include "gd/os/metrics.h"
+#include "hci/include/btsnoop.h"
 #include "main/shim/shim.h"
+#include "main/shim/metrics_api.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2c_api.h"
 #include "stack/l2cap/l2c_int.h"
 #include "types/raw_address.h"
@@ -62,6 +68,29 @@ uint16_t L2CA_Register2(uint16_t psm, const tL2CAP_APPL_INFO& p_cb_info,
   BTM_SetSecurityLevel(false, "", 0, sec_level, psm, 0, 0);
   return ret;
 }
+
+uint16_t L2CA_LeCreditDefault() {
+  static const uint16_t sL2CAP_LE_CREDIT_DEFAULT =
+      bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.l2cap.le.credit_default.value", 0xffff);
+  return sL2CAP_LE_CREDIT_DEFAULT;
+}
+
+uint16_t L2CA_LeCreditThreshold() {
+  static const uint16_t sL2CAP_LE_CREDIT_THRESHOLD =
+      bluetooth::os::GetSystemPropertyUint32Base(
+          "bluetooth.l2cap.le.credit_threshold.value", 0x0040);
+  return sL2CAP_LE_CREDIT_THRESHOLD;
+}
+
+static bool check_l2cap_credit() {
+  CHECK(L2CA_LeCreditThreshold() < L2CA_LeCreditDefault())
+      << "Threshold must be smaller than default credits";
+  return true;
+}
+
+// Replace static assert with startup assert depending of the config
+static const bool enforce_assert = check_l2cap_credit();
 
 /*******************************************************************************
  *
@@ -563,7 +592,16 @@ uint16_t L2CA_ConnectLECocReq(uint16_t psm, const RawAddress& p_bd_addr,
   if (p_lcb->link_state == LST_CONNECTED) {
     if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE) {
       L2CAP_TRACE_DEBUG("%s LE Link is up", __func__);
-      l2c_csm_execute(p_ccb, L2CEVT_L2CA_CONNECT_REQ, NULL);
+      // post this asynchronously to avoid out-of-order callback invocation
+      // should this operation fail
+      if (bluetooth::common::init_flags::
+              asynchronously_start_l2cap_coc_is_enabled()) {
+        do_in_main_thread(FROM_HERE,
+                          base::Bind(&l2c_csm_execute, base::Unretained(p_ccb),
+                                     L2CEVT_L2CA_CONNECT_REQ, nullptr));
+      } else {
+        l2c_csm_execute(p_ccb, L2CEVT_L2CA_CONNECT_REQ, NULL);
+      }
     }
   }
 
@@ -843,8 +881,8 @@ std::vector<uint16_t> L2CA_ConnectCreditBasedReq(uint16_t psm,
  *
  *  Description      Start reconfigure procedure on Connection Oriented Channel.
  *
- *  Parameters:      Vector of channels for which configuration should be changed
- *                   New local channel configuration
+ *  Parameters:      Vector of channels for which configuration should be
+ *changed New local channel configuration
  *
  *  Return value:    true if peer is connected
  *
@@ -1314,6 +1352,16 @@ bool L2CA_ConnectFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda) {
   }
 
   if (transport == BT_TRANSPORT_LE) {
+    auto argument_list = std::vector<std::pair<bluetooth::os::ArgumentType, int>>();
+    argument_list.push_back(std::make_pair(bluetooth::os::ArgumentType::L2CAP_CID, fixed_cid));
+
+    bluetooth::shim::LogMetricBluetoothLEConnectionMetricEvent(
+        rem_bda,
+        android::bluetooth::le::LeConnectionOriginType::ORIGIN_NATIVE,
+        android::bluetooth::le::LeConnectionType::CONNECTION_TYPE_LE_ACL,
+        android::bluetooth::le::LeConnectionState::STATE_LE_ACL_START,
+        argument_list);
+
     bool ret = l2cu_create_conn_le(p_lcb);
     if (!ret) {
       LOG_WARN("Unable to create fixed channel le connection fixed_cid:0x%04x",
@@ -1544,6 +1592,16 @@ bool L2CA_SetLeGattTimeout(const RawAddress& rem_bda, uint16_t idle_tout) {
     l2cu_no_dynamic_ccbs(p_lcb);
   }
 
+  return true;
+}
+
+bool L2CA_MarkLeLinkAsActive(const RawAddress& rem_bda) {
+  tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(rem_bda, BT_TRANSPORT_LE);
+  if (p_lcb == NULL) {
+    return false;
+  }
+  LOG(INFO) << __func__ << "setting link to " << rem_bda << " as active";
+  p_lcb->with_active_local_clients = true;
   return true;
 }
 

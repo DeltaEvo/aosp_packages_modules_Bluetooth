@@ -107,6 +107,8 @@ typedef uint8_t tL2CAP_CHNL_DATA_RATE;
 #define L2C_IS_VALID_PSM(psm) (((psm)&0x0101) == 0x0001)
 #define L2C_IS_VALID_LE_PSM(psm) (((psm) > 0x0000) && ((psm) < 0x0100))
 
+#define L2CAP_NO_IDLE_TIMEOUT 0xFFFF
+
 /*****************************************************************************
  *  Type Definitions
  ****************************************************************************/
@@ -178,14 +180,11 @@ constexpr uint16_t L2CAP_LE_CREDIT_MAX = 65535;
 
 // This is initial amout of credits we send, and amount to which we increase
 // credits once they fall below threshold
-constexpr uint16_t L2CAP_LE_CREDIT_DEFAULT = 0xffff;
+uint16_t L2CA_LeCreditDefault();
 
 // If credit count on remote fall below this value, we send back credits to
 // reach default value.
-constexpr uint16_t L2CAP_LE_CREDIT_THRESHOLD = 0x0040;
-
-static_assert(L2CAP_LE_CREDIT_THRESHOLD < L2CAP_LE_CREDIT_DEFAULT,
-              "Threshold must be smaller than default credits");
+uint16_t L2CA_LeCreditThreshold();
 
 // Max number of CIDs in the L2CAP CREDIT BASED CONNECTION REQUEST
 constexpr uint16_t L2CAP_CREDIT_BASED_MAX_CIDS = 5;
@@ -197,7 +196,7 @@ struct tL2CAP_LE_CFG_INFO {
   uint16_t result; /* Only used in confirm messages */
   uint16_t mtu = 100;
   uint16_t mps = 100;
-  uint16_t credits = L2CAP_LE_CREDIT_DEFAULT;
+  uint16_t credits = L2CA_LeCreditDefault();
   uint8_t number_of_channels = L2CAP_CREDIT_BASED_MAX_CIDS;
 };
 
@@ -839,6 +838,8 @@ extern bool L2CA_RemoveFixedChnl(uint16_t fixed_cid, const RawAddress& rem_bda);
  ******************************************************************************/
 extern bool L2CA_SetLeGattTimeout(const RawAddress& rem_bda,
                                   uint16_t idle_tout);
+
+extern bool L2CA_MarkLeLinkAsActive(const RawAddress& rem_bda);
 
 extern bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda,
                                      uint16_t min_int, uint16_t max_int,

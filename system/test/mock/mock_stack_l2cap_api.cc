@@ -93,11 +93,14 @@ struct L2CA_ConnectFixedChnl L2CA_ConnectFixedChnl;
 struct L2CA_SendFixedChnlData L2CA_SendFixedChnlData;
 struct L2CA_RemoveFixedChnl L2CA_RemoveFixedChnl;
 struct L2CA_SetLeGattTimeout L2CA_SetLeGattTimeout;
+struct L2CA_MarkLeLinkAsActive L2CA_MarkLeLinkAsActive;
 struct L2CA_DataWrite L2CA_DataWrite;
 struct L2CA_LECocDataWrite L2CA_LECocDataWrite;
 struct L2CA_SetChnlFlushability L2CA_SetChnlFlushability;
 struct L2CA_FlushChannel L2CA_FlushChannel;
 struct L2CA_IsLinkEstablished L2CA_IsLinkEstablished;
+struct L2CA_LeCreditDefault L2CA_LeCreditDefault;
+struct L2CA_LeCreditThreshold L2CA_LeCreditThreshold;
 
 }  // namespace stack_l2cap_api
 }  // namespace mock
@@ -259,6 +262,10 @@ bool L2CA_SetLeGattTimeout(const RawAddress& rem_bda, uint16_t idle_tout) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_SetLeGattTimeout(rem_bda, idle_tout);
 }
+bool L2CA_MarkLeLinkAsActive(const RawAddress& rem_bda) {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_MarkLeLinkAsActive(rem_bda);
+}
 uint8_t L2CA_DataWrite(uint16_t cid, BT_HDR* p_data) {
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_DataWrite(cid, p_data);
@@ -281,6 +288,14 @@ bool L2CA_IsLinkEstablished(const RawAddress& bd_addr,
   mock_function_count_map[__func__]++;
   return test::mock::stack_l2cap_api::L2CA_IsLinkEstablished(bd_addr,
                                                              transport);
+}
+uint16_t L2CA_LeCreditDefault() {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_LeCreditDefault();
+}
+uint16_t L2CA_LeCreditThreshold() {
+  mock_function_count_map[__func__]++;
+  return test::mock::stack_l2cap_api::L2CA_LeCreditThreshold();
 }
 
 // END mockcify generation

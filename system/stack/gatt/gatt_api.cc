@@ -21,7 +21,7 @@
  *  this file contains GATT interface functions
  *
  ******************************************************************************/
-#include "gatt_api.h"
+#include "stack/include/gatt_api.h"
 
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
@@ -31,13 +31,16 @@
 
 #include "bt_target.h"
 #include "device/include/controller.h"
-#include "gatt_int.h"
+#include "gd/os/system_properties.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
+#include "osi/include/list.h"
 #include "osi/include/log.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/gatt/connection_manager.h"
+#include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
@@ -304,7 +307,7 @@ tGATT_STATUS GATTS_AddService(tGATT_IF gatt_if, btgatt_db_element_t* service,
   elem.type = list.asgn_range.is_primary ? GATT_UUID_PRI_SERVICE
                                          : GATT_UUID_SEC_SERVICE;
 
-  if (elem.type == GATT_UUID_PRI_SERVICE) {
+  if (elem.type == GATT_UUID_PRI_SERVICE && gatt_cb.over_br_enabled) {
     Uuid* p_uuid = gatts_get_service_uuid(elem.p_db);
     if (*p_uuid != Uuid::From16Bit(UUID_SERVCLASS_GMCS_SERVER) &&
         *p_uuid != Uuid::From16Bit(UUID_SERVCLASS_GTBS_SERVER)) {
@@ -894,7 +897,8 @@ tGATT_STATUS GATTC_Read(uint16_t conn_id, tGATT_READ_TYPE type,
   }
 
   /* start security check */
-  if (gatt_security_check_start(p_clcb)) p_tcb->pending_enc_clcb.push(p_clcb);
+  if (gatt_security_check_start(p_clcb))
+    p_tcb->pending_enc_clcb.push_back(p_clcb);
   return GATT_SUCCESS;
 }
 
@@ -943,7 +947,8 @@ tGATT_STATUS GATTC_Write(uint16_t conn_id, tGATT_WRITE_TYPE type,
     p->offset = 0;
   }
 
-  if (gatt_security_check_start(p_clcb)) p_tcb->pending_enc_clcb.push(p_clcb);
+  if (gatt_security_check_start(p_clcb))
+    p_tcb->pending_enc_clcb.push_back(p_clcb);
   return GATT_SUCCESS;
 }
 
@@ -1037,17 +1042,27 @@ tGATT_STATUS GATTC_SendHandleValueConfirm(uint16_t conn_id, uint16_t cid) {
  *
  * Parameter        bd_addr:   target device bd address.
  *                  idle_tout: timeout value in seconds.
+ *                  transport: transport option.
+ *                  is_active: whether we should use this as a signal that an
+ *                             active client now exists (which changes link
+ *                             timeout logic, see
+ *                             t_l2c_linkcb.with_active_local_clients for
+ *                             details).
  *
  * Returns          void
  *
  ******************************************************************************/
 void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
-                         tBT_TRANSPORT transport) {
+                         tBT_TRANSPORT transport, bool is_active) {
   bool status = false;
 
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bd_addr, transport);
   if (p_tcb != nullptr) {
     status = L2CA_SetLeGattTimeout(bd_addr, idle_tout);
+
+    if (is_active) {
+      status &= L2CA_MarkLeLinkAsActive(bd_addr);
+    }
 
     if (idle_tout == GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP) {
       L2CA_SetIdleTimeoutByBdAddr(
@@ -1055,8 +1070,8 @@ void GATT_SetIdleTimeout(const RawAddress& bd_addr, uint16_t idle_tout,
     }
   }
 
-  LOG_INFO("idle_timeout=%d, status=%d, (1-OK 0-not performed)", idle_tout,
-           +status);
+  LOG_INFO("idle_timeout=%d, is_active=%d, status=%d (1-OK 0-not performed)",
+           idle_tout, is_active, +status);
 }
 
 /*******************************************************************************
@@ -1239,29 +1254,32 @@ void GATT_StartIf(tGATT_IF gatt_if) {
  *
  * Parameters       gatt_if: applicaiton interface
  *                  bd_addr: peer device address.
- *                  is_direct: is a direct conenection or a background auto
- *                             connection
+ *                  connection_type: is a direct conenection or a background
+ *                  auto connection or targeted announcements
  *
  * Returns          true if connection started; false if connection start
  *                  failure.
  *
  ******************************************************************************/
-bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct,
-                  tBT_TRANSPORT transport, bool opportunistic) {
+bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                  bool opportunistic) {
   uint8_t phy = controller_get_interface()->get_le_all_initiating_phys();
-  return GATT_Connect(gatt_if, bd_addr, is_direct, transport, opportunistic,
-                      phy);
+  return GATT_Connect(gatt_if, bd_addr, connection_type, transport,
+                      opportunistic, phy);
 }
 
-bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct,
-                  tBT_TRANSPORT transport, bool opportunistic,
-                  uint8_t initiating_phys) {
+bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                  bool opportunistic, uint8_t initiating_phys) {
   /* Make sure app is registered */
   tGATT_REG* p_reg = gatt_get_regcb(gatt_if);
   if (!p_reg) {
     LOG_ERROR("Unable to find registered app gatt_if=%d", +gatt_if);
     return false;
   }
+
+  bool is_direct = (connection_type == BTM_BLE_DIRECT_CONNECTION);
 
   if (!is_direct && transport != BT_TRANSPORT_LE) {
     LOG_WARN("Unsupported transport for background connection gatt_if=%d",
@@ -1290,8 +1308,14 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr, bool is_direct,
                bd_addr.ToString().c_str(), +gatt_if);
       ret = false;
     } else {
-      LOG_DEBUG("Adding to accept list device:%s", PRIVATE_ADDRESS(bd_addr));
-      ret = connection_manager::background_connect_add(gatt_if, bd_addr);
+      LOG_DEBUG("Adding to background connect to device:%s",
+                PRIVATE_ADDRESS(bd_addr));
+      if (connection_type == BTM_BLE_BKG_CONNECT_ALLOW_LIST) {
+        ret = connection_manager::background_connect_add(gatt_if, bd_addr);
+      } else {
+        ret = connection_manager::background_connect_targeted_announcement_add(
+            gatt_if, bd_addr);
+      }
     }
   }
 
@@ -1457,4 +1481,49 @@ bool GATT_GetConnIdIfConnected(tGATT_IF gatt_if, const RawAddress& bd_addr,
 
   LOG_DEBUG("status=%d", status);
   return status;
+}
+
+static void gatt_bonded_check_add_address(const RawAddress& bda) {
+  if (!gatt_is_bda_in_the_srv_chg_clt_list(bda)) {
+    gatt_add_a_bonded_dev_for_srv_chg(bda);
+  }
+}
+
+std::optional<bool> OVERRIDE_GATT_LOAD_BONDED = std::nullopt;
+
+static bool gatt_load_bonded_is_enabled() {
+  static const bool sGATT_LOAD_BONDED = bluetooth::os::GetSystemPropertyBool(
+      "bluetooth.gatt.load_bonded.enabled", false);
+  if (OVERRIDE_GATT_LOAD_BONDED.has_value()) {
+    return OVERRIDE_GATT_LOAD_BONDED.value();
+  }
+  return sGATT_LOAD_BONDED;
+}
+
+/* Initialize GATTS list of bonded device service change updates.
+ *
+ * Addresses for bonded devices (publict for BR/EDR or pseudo for BLE) are added
+ * to GATTS service change control list so that updates are sent to bonded
+ * devices on next connect after any handles for GATTS services change due to
+ * services added/removed.
+ */
+void gatt_load_bonded(void) {
+  const bool load_bonded = gatt_load_bonded_is_enabled();
+  LOG_INFO("load bonded: %s", load_bonded ? "True" : "False");
+  if (!load_bonded) {
+    return;
+  }
+  for (tBTM_SEC_DEV_REC* p_dev_rec : btm_get_sec_dev_rec()) {
+    if (p_dev_rec->is_link_key_known()) {
+      LOG_VERBOSE("Add bonded BR/EDR transport %s",
+                  PRIVATE_ADDRESS(p_dev_rec->bd_addr));
+      gatt_bonded_check_add_address(p_dev_rec->bd_addr);
+    }
+    if (p_dev_rec->is_le_link_key_known()) {
+      VLOG(1) << " add bonded BLE " << p_dev_rec->ble.pseudo_addr;
+      LOG_VERBOSE("Add bonded BLE %s",
+                  PRIVATE_ADDRESS(p_dev_rec->ble.pseudo_addr));
+      gatt_bonded_check_add_address(p_dev_rec->ble.pseudo_addr);
+    }
+  }
 }

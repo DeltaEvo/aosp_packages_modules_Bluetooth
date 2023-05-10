@@ -42,19 +42,6 @@ extern bt_interface_t bluetoothInterface;
 
 namespace android {
 // Both
-// OOB_ADDRESS_SIZE is 6 bytes address + 1 byte address type
-#define OOB_ADDRESS_SIZE 7
-#define OOB_C_SIZE 16
-#define OOB_R_SIZE 16
-#define OOB_NAME_MAX_SIZE 256
-// Classic
-#define OOB_DATA_LEN_SIZE 2
-#define OOB_COD_SIZE 3
-// LE
-#define OOB_TK_SIZE 16
-#define OOB_LE_FLAG_SIZE 1
-#define OOB_LE_ROLE_SIZE 1
-#define OOB_LE_APPEARANCE_SIZE 2
 
 #define TRANSPORT_AUTO 0
 #define TRANSPORT_BREDR 1
@@ -1264,7 +1251,7 @@ static jboolean set_data(JNIEnv* env, bt_oob_data_t& oob_data, jobject oobData,
     }
 
     oobDataLengthBytes = env->GetByteArrayElements(oobDataLength, NULL);
-    memcpy(oob_data.oob_data_length, oobDataLengthBytes, len);
+    memcpy(oob_data.oob_data_length, oobDataLengthBytes, OOB_DATA_LEN_SIZE);
     env->ReleaseByteArrayElements(oobDataLength, oobDataLengthBytes, 0);
 
     // Optional
@@ -1810,6 +1797,35 @@ static jboolean allowLowLatencyAudioNative(JNIEnv* env, jobject obj,
   return true;
 }
 
+static void metadataChangedNative(JNIEnv* env, jobject obj, jbyteArray address,
+                                  jint key, jbyteArray value) {
+  ALOGV("%s", __func__);
+  if (!sBluetoothInterface) return;
+  jbyte* addr = env->GetByteArrayElements(address, nullptr);
+  if (addr == nullptr) {
+    jniThrowIOException(env, EINVAL);
+    return;
+  }
+  RawAddress addr_obj = {};
+  addr_obj.FromOctets((uint8_t*)addr);
+
+  if (value == NULL) {
+    ALOGE("metadataChangedNative() ignoring NULL array");
+    return;
+  }
+
+  uint16_t len = (uint16_t)env->GetArrayLength(value);
+  jbyte* p_value = env->GetByteArrayElements(value, NULL);
+  if (p_value == NULL) return;
+
+  std::vector<uint8_t> val_vec(reinterpret_cast<uint8_t*>(p_value),
+                               reinterpret_cast<uint8_t*>(p_value + len));
+  env->ReleaseByteArrayElements(value, p_value, 0);
+
+  sBluetoothInterface->metadata_changed(addr_obj, key, std::move(val_vec));
+  return;
+}
+
 static JNINativeMethod sMethods[] = {
     /* name, signature, funcPtr */
     {"classInitNative", "()V", (void*)classInitNative},
@@ -1852,6 +1868,7 @@ static JNINativeMethod sMethods[] = {
     {"requestMaximumTxDataLengthNative", "([B)V",
      (void*)requestMaximumTxDataLengthNative},
     {"allowLowLatencyAudioNative", "(Z[B)Z", (void*)allowLowLatencyAudioNative},
+    {"metadataChangedNative", "([BI[B)V", (void*)metadataChangedNative},
 };
 
 int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {

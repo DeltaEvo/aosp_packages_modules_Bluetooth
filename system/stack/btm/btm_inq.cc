@@ -27,6 +27,7 @@
 
 #define LOG_TAG "bluetooth"
 
+#include <base/logging.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +42,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "stack/btm/btm_ble_int.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
@@ -49,8 +51,6 @@
 #include "stack/include/inq_hci_link_interface.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 namespace {
 constexpr char kBtmLogTag[] = "SCAN";
@@ -498,17 +498,19 @@ void BTM_CancelInquiry(void) {
  ******************************************************************************/
 tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
                              tBTM_CMPL_CB* p_cmpl_cb) {
-  tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
-
   if (bluetooth::shim::is_gd_shim_enabled()) {
     return bluetooth::shim::BTM_StartInquiry(p_results_cb, p_cmpl_cb);
   }
 
   /* Only one active inquiry is allowed in this implementation.
      Also do not allow an inquiry if the inquiry filter is being updated */
-  if (p_inq->inq_active) {
-    LOG(ERROR) << __func__ << ": BTM_BUSY";
-    return (BTM_BUSY);
+  if (btm_cb.btm_inq_vars.inq_active) {
+    LOG_WARN(
+        "Active device discovery already in progress inq_active:0x%02x"
+        " state:%hhu counter:%u",
+        btm_cb.btm_inq_vars.inq_active, btm_cb.btm_inq_vars.state,
+        btm_cb.btm_inq_vars.inq_counter);
+    return BTM_BUSY;
   }
 
   /*** Make sure the device is ready ***/
@@ -521,6 +523,8 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
 
   /* Save the inquiry parameters to be used upon the completion of
    * setting/clearing the inquiry filter */
+  tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
+
   p_inq->inqparms = {};
   p_inq->inqparms.mode = BTM_GENERAL_INQUIRY | BTM_BLE_GENERAL_INQUIRY;
   p_inq->inqparms.duration = BTIF_DM_DEFAULT_INQ_MAX_DURATION;
@@ -532,8 +536,8 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
   p_inq->inq_cmpl_info.num_resp = 0; /* Clear the results counter */
   p_inq->inq_active = p_inq->inqparms.mode;
 
-  BTM_TRACE_DEBUG("BTM_StartInquiry: p_inq->inq_active = 0x%02x",
-                  p_inq->inq_active);
+  LOG_DEBUG("Starting device discovery inq_active:0x%02x",
+            btm_cb.btm_inq_vars.inq_active);
 
   if (controller_get_interface()->supports_ble()) {
     btm_ble_start_inquiry(p_inq->inqparms.duration);
@@ -638,6 +642,11 @@ tBTM_STATUS BTM_CancelRemoteDeviceName(void) {
     return (BTM_CMD_STARTED);
   } else
     return (BTM_WRONG_MODE);
+}
+
+bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
+  return (p_dev_rec == nullptr) ? false : p_dev_rec->is_name_known();
 }
 
 /*******************************************************************************
@@ -755,7 +764,7 @@ tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda) {
  *
  ******************************************************************************/
 void btm_inq_db_reset(void) {
-  tBTM_REMOTE_DEV_NAME rem_name;
+  tBTM_REMOTE_DEV_NAME rem_name = {};
   tBTM_INQUIRY_VAR_ST* p_inq = &btm_cb.btm_inq_vars;
   uint8_t num_responses;
   uint8_t temp_inq_active;
@@ -785,6 +794,7 @@ void btm_inq_db_reset(void) {
 
     if (p_inq->p_remname_cmpl_cb) {
       rem_name.status = BTM_DEV_RESET;
+      rem_name.hci_status = HCI_SUCCESS;
 
       (*p_inq->p_remname_cmpl_cb)(&rem_name);
       p_inq->p_remname_cmpl_cb = NULL;
@@ -1074,7 +1084,6 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
 
     constexpr uint16_t extended_inquiry_result_size = 254;
     if (hci_evt_len - 1 != extended_inquiry_result_size) {
-      android_errorWriteLog(0x534e4554, "141620271");
       BTM_TRACE_ERROR("%s: can't fit %d results in %d bytes", __func__,
                       num_resp, hci_evt_len);
       return;
@@ -1083,7 +1092,6 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
              inq_res_mode == BTM_INQ_RESULT_WITH_RSSI) {
     constexpr uint16_t inquiry_result_size = 14;
     if (hci_evt_len < num_resp * inquiry_result_size) {
-      android_errorWriteLog(0x534e4554, "141620271");
       BTM_TRACE_ERROR("%s: can't fit %d results in %d bytes", __func__,
                       num_resp, hci_evt_len);
       return;
@@ -1440,6 +1448,7 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
       rem_name.length = (evt_len < BD_NAME_LEN) ? evt_len : BD_NAME_LEN;
       rem_name.remote_bd_name[rem_name.length] = 0;
       rem_name.status = BTM_SUCCESS;
+      rem_name.hci_status = hci_status;
       temp_evt_len = rem_name.length;
 
       while (temp_evt_len > 0) {
@@ -1447,12 +1456,11 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
         temp_evt_len--;
       }
       rem_name.remote_bd_name[rem_name.length] = 0;
-    }
-
-    /* If processing a stand alone remote name then report the error in the
-       callback */
-    else {
+    } else {
+      /* If processing a stand alone remote name then report the error in the
+         callback */
       rem_name.status = BTM_BAD_VALUE_RET;
+      rem_name.hci_status = hci_status;
       rem_name.length = 0;
       rem_name.remote_bd_name[0] = 0;
     }

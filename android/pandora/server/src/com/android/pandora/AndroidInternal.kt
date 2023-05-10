@@ -17,7 +17,21 @@
 package com.android.pandora
 
 import android.util.Log
+import android.content.Context
+import com.google.protobuf.Empty
 import io.grpc.stub.StreamObserver
+import android.provider.Telephony.*
+import android.telephony.SmsManager
+import android.telephony.SubscriptionManager
+import android.telephony.TelephonyManager
+import android.net.Uri
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import androidx.test.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -27,9 +41,18 @@ import pandora.AndroidProto.*
 private const val TAG = "PandoraAndroidInternal"
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-class AndroidInternal : AndroidImplBase() {
+class AndroidInternal(val context: Context) : AndroidImplBase() {
 
   private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+  private val INCOMING_FILE_ACCEPT_BTN = "ACCEPT"
+  private val INCOMING_FILE_TITLE = "Incoming file"
+  private val INCOMING_FILE_WAIT_TIMEOUT = 2000L
+
+  private val bluetoothManager = context.getSystemService(BluetoothManager::class.java)!!
+  private val bluetoothAdapter = bluetoothManager.adapter
+  private var telephonyManager = context.getSystemService(TelephonyManager::class.java)
+  private val DEFAULT_MESSAGE_LEN = 130
+  private var device: UiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
   fun deinit() {
     scope.cancel()
@@ -39,6 +62,39 @@ class AndroidInternal : AndroidImplBase() {
     grpcUnary(scope, responseObserver) {
       Log.i(TAG, request.text)
       LogResponse.getDefaultInstance()
+    }
+  }
+
+  override fun setAccessPermission(request: SetAccessPermissionRequest, responseObserver: StreamObserver<Empty>) {
+    grpcUnary<Empty>(scope, responseObserver) {
+      val bluetoothDevice = request.address.toBluetoothDevice(bluetoothAdapter)
+      when (request.accessType!!) {
+        AccessType.ACCESS_MESSAGE -> bluetoothDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
+        AccessType.ACCESS_PHONEBOOK -> bluetoothDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
+        AccessType.ACCESS_SIM -> bluetoothDevice.setSimAccessPermission(BluetoothDevice.ACCESS_ALLOWED)
+        else -> {}
+      }
+      Empty.getDefaultInstance()
+    }
+  }
+
+  override fun sendSMS(request: Empty, responseObserver: StreamObserver<Empty>) {
+    grpcUnary<Empty>(scope, responseObserver) {
+      val smsManager = SmsManager.getDefault()
+      val defaultSmsSub = SubscriptionManager.getDefaultSmsSubscriptionId()
+      telephonyManager = telephonyManager.createForSubscriptionId(defaultSmsSub)
+      val avdPhoneNumber = telephonyManager.getLine1Number()
+
+      smsManager.sendTextMessage(avdPhoneNumber, avdPhoneNumber, generateAlphanumericString(DEFAULT_MESSAGE_LEN), null, null)
+      Empty.getDefaultInstance()
+    }
+  }
+
+  override fun acceptIncomingFile(request: Empty, responseObserver: StreamObserver<Empty>) {
+    grpcUnary<Empty>(scope, responseObserver) {
+      device.wait(Until.findObject(By.text(INCOMING_FILE_TITLE)), INCOMING_FILE_WAIT_TIMEOUT).click()
+      device.wait(Until.findObject(By.text(INCOMING_FILE_ACCEPT_BTN)), INCOMING_FILE_WAIT_TIMEOUT).click()
+      Empty.getDefaultInstance()
     }
   }
 }
