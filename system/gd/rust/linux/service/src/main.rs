@@ -1,3 +1,4 @@
+use btstack::bluetooth_qa::BluetoothQA;
 use clap::{App, AppSettings, Arg};
 use dbus::{channel::MatchingReceiver, message::MatchRule};
 use dbus_crossroads::Crossroads;
@@ -24,6 +25,7 @@ use btstack::{
     bluetooth_gatt::BluetoothGatt,
     bluetooth_logging::BluetoothLogging,
     bluetooth_media::BluetoothMedia,
+    dis::DeviceInformation,
     socket_manager::BluetoothSocketManager,
     suspend::Suspend,
     Message, Stack,
@@ -38,6 +40,7 @@ mod iface_bluetooth;
 mod iface_bluetooth_admin;
 mod iface_bluetooth_gatt;
 mod iface_bluetooth_media;
+mod iface_bluetooth_qa;
 mod iface_bluetooth_telephony;
 mod iface_logging;
 
@@ -126,6 +129,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Forward --hci to Fluoride.
     init_flags.push(format!("--hci={}", hci_index));
+    let logging = Arc::new(Mutex::new(Box::new(BluetoothLogging::new(is_debug, log_output))));
 
     // Always treat discovery as classic only
     init_flags.push(String::from("INIT_classic_discovery_only=true"));
@@ -172,8 +176,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         bluetooth_media.clone(),
         tx.clone(),
     ))));
-    let logging = Arc::new(Mutex::new(Box::new(BluetoothLogging::new(is_debug, log_output))));
-    let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(tx.clone()))));
+    let bt_sock_mgr = Arc::new(Mutex::new(Box::new(BluetoothSocketManager::new(
+        tx.clone(),
+        bluetooth_admin.clone(),
+    ))));
+    let qa = Arc::new(Mutex::new(Box::new(BluetoothQA::new(tx.clone()))));
+    let dis =
+        Arc::new(Mutex::new(Box::new(DeviceInformation::new(bluetooth_gatt.clone(), tx.clone()))));
 
     topstack::get_runtime().block_on(async {
         // Connect to D-Bus system bus.
@@ -216,6 +225,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             suspend.clone(),
             bt_sock_mgr.clone(),
             bluetooth_admin.clone(),
+            dis.clone(),
         ));
 
         // Set up the disconnect watcher to monitor client disconnects.
@@ -236,6 +246,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // Register D-Bus method handlers of IBluetooth.
         let adapter_iface = iface_bluetooth::export_bluetooth_dbus_intf(
+            conn.clone(),
+            &mut cr.lock().unwrap(),
+            disconnect_watcher.clone(),
+        );
+        let qa_iface = iface_bluetooth_qa::export_bluetooth_qa_dbus_intf(
             conn.clone(),
             &mut cr.lock().unwrap(),
             disconnect_watcher.clone(),
@@ -354,6 +369,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             &[logging_iface],
             logging.clone(),
         );
+
+        cr.lock().unwrap().insert(make_object_name(adapter_index, "qa"), &[qa_iface], qa.clone());
 
         // Hold locks and initialize all interfaces. This must be done AFTER DBus is
         // initialized so DBus can properly enforce user policies.

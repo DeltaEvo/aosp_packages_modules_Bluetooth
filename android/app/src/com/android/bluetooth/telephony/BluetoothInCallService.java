@@ -16,6 +16,7 @@
 
 package com.android.bluetooth.telephony;
 
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothHeadset;
@@ -269,7 +270,7 @@ public class BluetoothInCallService extends InCallService {
                 return;
             }
             if (call.isExternalCall()) {
-                onCallRemoved(call);
+                onCallRemoved(call, false /* forceRemoveCallback */);
             } else {
                 onCallAdded(call);
             }
@@ -607,13 +608,19 @@ public class BluetoothInCallService extends InCallService {
         onCallAdded(new BluetoothCall(call));
     }
 
-    public void onCallRemoved(BluetoothCall call) {
-        if (call.isExternalCall()) {
-            return;
-        }
+    /**
+     * Called when a {@code BluetoothCall} has been removed from this in-call session.
+     *
+     * @param call the {@code BluetoothCall} to remove
+     * @param forceRemoveCallback if true, this will always unregister this {@code InCallService} as
+     *                            a callback for the given {@code BluetoothCall}, when false, this
+     *                            will not remove the callback when the {@code BluetoothCall} is
+     *                            external so that the call can be added back if no longer external.
+     */
+    public void onCallRemoved(BluetoothCall call, boolean forceRemoveCallback) {
         Log.d(TAG, "onCallRemoved");
         CallStateCallback callback = getCallback(call);
-        if (callback != null) {
+        if (callback != null && (forceRemoveCallback || !call.isExternalCall())) {
             call.unregisterCallback(callback);
         }
 
@@ -637,7 +644,7 @@ public class BluetoothInCallService extends InCallService {
             Log.w(TAG, "onCallRemoved, BluetoothCall is removed before registered");
             return;
         }
-        onCallRemoved(bluetoothCall);
+        onCallRemoved(bluetoothCall, true /* forceRemoveCallback */);
     }
 
     @Override
@@ -1465,8 +1472,12 @@ public class BluetoothInCallService extends InCallService {
         String uri = addressUri == null ? null : addressUri.toString();
         int callFlags = call.isIncoming() ? 0 : BluetoothLeCall.FLAG_OUTGOING_CALL;
 
-        return new BluetoothLeCall(call.getTbsCallId(), uri, call.getCallerDisplayName(), state,
-                       callFlags);
+        String friendlyName = call.getCallerDisplayName();
+        if (TextUtils.isEmpty(friendlyName)) {
+            friendlyName = call.getContactDisplayName();
+        }
+
+        return new BluetoothLeCall(call.getTbsCallId(), uri, friendlyName, state, callFlags);
     }
 
     private void sendTbsCurrentCallsList() {
@@ -1554,6 +1565,49 @@ public class BluetoothInCallService extends InCallService {
         @Override
         public void onPlaceCall(int requestId, UUID callId, String uri) {
             mBluetoothLeCallControl.requestResult(requestId, BluetoothLeCallControl.RESULT_ERROR_APPLICATION);
+        }
+
+        @Override
+        public void onJoinCalls(int requestId, @NonNull List<UUID> callIds) {
+            synchronized (LOCK) {
+                Log.i(TAG, "TBS - onJoinCalls");
+                int result = BluetoothLeCallControl.RESULT_SUCCESS;
+                List<UUID> alreadyJoinedCalls = new ArrayList<>();
+                BluetoothCall baseCallInstance = null;
+
+                if (callIds.size() < 2) {
+                    Log.e(TAG, "TBS - onJoinCalls, join call number is invalid: " + callIds.size());
+                    result = BluetoothLeCallControl.RESULT_ERROR_UNKNOWN_CALL_ID;
+                    mBluetoothLeCallControl.requestResult(requestId, result);
+                    return;
+                }
+
+                for (UUID callToJoinUuid : callIds) {
+                    BluetoothCall callToJoinInstance = mCallInfo.getCallByCallId(callToJoinUuid);
+
+                    /* Skip invalid and already add device */
+                    if ((callToJoinInstance == null)
+                            || (alreadyJoinedCalls.contains(callToJoinUuid))) {
+                        continue;
+                    }
+
+                    /* Lets make first valid call the base call */
+                    if (baseCallInstance == null) {
+                        baseCallInstance = callToJoinInstance;
+                        alreadyJoinedCalls.add(callToJoinUuid);
+                        continue;
+                    }
+
+                    baseCallInstance.conference(callToJoinInstance);
+                    alreadyJoinedCalls.add(callToJoinUuid);
+                }
+
+                if ((baseCallInstance == null) || (alreadyJoinedCalls.size() < 2)) {
+                    result = BluetoothLeCallControl.RESULT_ERROR_UNKNOWN_CALL_ID;
+                }
+
+                mBluetoothLeCallControl.requestResult(requestId, result);
+            }
         }
     };
 }

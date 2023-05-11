@@ -344,17 +344,18 @@ init_flags!(
         pass_phy_update_callback = true,
         pbap_pse_dynamic_version_upgrade = true,
         periodic_advertising_adi = true,
-        private_gatt,
+        private_gatt = true,
         queue_l2cap_coc_while_encrypting = true,
         read_encryption_key_size = true,
         redact_log = true,
-        rust_event_loop,
+        rust_event_loop = true,
         sdp_serialization = true,
         sdp_skip_rnr_if_known = true,
         bluetooth_quality_report_callback = true,
         set_min_encryption = true,
         subrating = true,
         trigger_advertising_callbacks_on_first_resume_after_pause = true,
+        use_unified_connection_manager,
     }
     // dynamic flags can be updated at runtime and should be accessed directly
     // to check.
@@ -375,6 +376,8 @@ init_flags!(
         "--hci" => parse_hci_adapter(_, _),
     }
     dependencies: {
+        always_use_private_gatt_for_debugging => private_gatt,
+        private_gatt => rust_event_loop,
         gd_core => gd_security
     }
 );
@@ -395,6 +398,9 @@ pub fn load(raw_flags: Vec<String>) {
     let flags = InitFlags::parse(raw_flags);
     info!("Flags loaded: {}", flags);
     *FLAGS.lock().unwrap() = flags;
+
+    // re-init to respect log levels set by flags
+    crate::init_logging();
 }
 
 #[cfg(test)]

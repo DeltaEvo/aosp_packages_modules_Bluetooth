@@ -23,6 +23,10 @@
 #include <tuple>
 #include <vector>
 
+#ifdef OS_ANDROID
+#include <android/sysprop/BluetoothProperties.sysprop.h>
+#endif
+
 #include "audio_hal_client/audio_hal_client.h"
 #include "bt_types.h"
 #include "bta_groups.h"
@@ -37,6 +41,9 @@
 
 namespace le_audio {
 
+// Maps to BluetoothProfile#LE_AUDIO
+#define LE_AUDIO_PROFILE_CONSTANT 22
+
 /* Enums */
 enum class DeviceConnectState : uint8_t {
   /* Initial state */
@@ -48,6 +55,9 @@ enum class DeviceConnectState : uint8_t {
   REMOVING,
   /* Disconnecting */
   DISCONNECTING,
+  /* Disconnecting for recover - after that we want direct connect to be
+     initiated */
+  DISCONNECTING_AND_RECOVER,
   /* Device will be removed after scheduled action is finished: One of such
    * action is taking Stream to IDLE
    */
@@ -248,6 +258,10 @@ class LeAudioDeviceGroup {
   types::AudioLocations snk_audio_locations_;
   types::AudioLocations src_audio_locations_;
 
+  /* Whether LE Audio is preferred for OUTPUT_ONLY and DUPLEX cases */
+  bool is_output_preference_le_audio;
+  bool is_duplex_preference_le_audio;
+
   std::vector<struct types::cis> cises_;
   explicit LeAudioDeviceGroup(const int group_id)
       : group_id_(group_id),
@@ -265,7 +279,20 @@ class LeAudioDeviceGroup {
         pending_group_available_contexts_change_(
             types::LeAudioContextType::UNINITIALIZED),
         target_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
-        current_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {}
+        current_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
+#ifdef OS_ANDROID
+    // 22 maps to BluetoothProfile#LE_AUDIO
+    is_output_preference_le_audio = android::sysprop::BluetoothProperties::
+                                        getDefaultOutputOnlyAudioProfile() ==
+                                    LE_AUDIO_PROFILE_CONSTANT;
+    is_duplex_preference_le_audio =
+        android::sysprop::BluetoothProperties::getDefaultDuplexAudioProfile() ==
+        LE_AUDIO_PROFILE_CONSTANT;
+#else
+    is_output_preference_le_audio = true;
+    is_duplex_preference_le_audio = true;
+#endif
+  }
   ~LeAudioDeviceGroup(void);
 
   void AddNode(const std::shared_ptr<LeAudioDevice>& leAudioDevice);
@@ -286,7 +313,8 @@ class LeAudioDeviceGroup {
   LeAudioDevice* GetFirstDevice(void);
   LeAudioDevice* GetFirstDeviceWithActiveContext(
       types::LeAudioContextType context_type);
-  le_audio::types::LeAudioConfigurationStrategy GetGroupStrategy(void);
+  le_audio::types::LeAudioConfigurationStrategy GetGroupStrategy(
+      int expected_group_size);
   int GetAseCount(uint8_t direction);
   LeAudioDevice* GetNextDevice(LeAudioDevice* leAudioDevice);
   LeAudioDevice* GetNextDeviceWithActiveContext(
@@ -405,6 +433,7 @@ class LeAudioDeviceGroup {
   }
 
   bool IsInTransition(void);
+  bool IsStreaming(void);
   bool IsReleasingOrIdle(void);
 
   void PrintDebugState(void);

@@ -4073,10 +4073,11 @@ TEST_F(UnicastTest, TwoEarbuds2ndDisconnected) {
     InjectCisDisconnected(group_id, ase.cis_conn_hdl);
   }
 
-  EXPECT_CALL(mock_gatt_interface_,
-              Open(_, device->address_,
-                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, false))
-      .Times(1);
+  /* It is called twice. Once with BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS,
+   * and then after delay with BTM_BLE_BKG_CONNECT_ALLOW_LIST
+   */
+  EXPECT_CALL(mock_gatt_interface_, Open(_, device->address_, _, false))
+      .Times(2);
 
   // Record NumOfConnected when groupStateMachine_ gets notified about the
   // disconnection
@@ -4162,12 +4163,12 @@ TEST_F(UnicastTest, TwoEarbudsStreamingProfileDisconnect) {
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
 }
 
-TEST_F(UnicastTest, TwoEarbudsWithSourceSupporting32kHz) {
+TEST_F(UnicastTest, EarbudsWithStereoSinkMonoSourceSupporting32kHz) {
   const RawAddress test_address0 = GetTestAddress(0);
   int group_id = 0;
   SetSampleDatabaseEarbudsValid(
       1, test_address0, codec_spec_conf::kLeAudioLocationStereo,
-      codec_spec_conf::kLeAudioLocationStereo, default_channel_cnt,
+      codec_spec_conf::kLeAudioLocationFrontLeft, default_channel_cnt,
       default_channel_cnt, 0x0024,
       /* source sample freq 32/16khz */ true, /*add_csis*/
       true,                                   /*add_cas*/
@@ -4641,6 +4642,10 @@ TEST_F(UnicastTest, SpeakerStreamingTimeout) {
 
   // Verify Data transfer on one audio source cis
   TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920);
+
+  // Do not accept direct connect, but expect it to arrive.
+  ON_CALL(mock_gatt_interface_, Open(_, _, BTM_BLE_DIRECT_CONNECTION, _))
+      .WillByDefault(Return());
 
   state_machine_callbacks_->OnStateTransitionTimeout(group_id);
 

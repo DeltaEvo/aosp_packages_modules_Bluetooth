@@ -156,12 +156,13 @@ struct Controller::impl {
       le_number_supported_advertising_sets_ = 1;
     }
 
-    if (is_supported(OpCode::LE_READ_PERIODIC_ADVERTISING_LIST_SIZE) && module_.SupportsBlePeriodicAdvertising()) {
+    if (is_supported(OpCode::LE_READ_PERIODIC_ADVERTISER_LIST_SIZE) &&
+        module_.SupportsBlePeriodicAdvertising()) {
       hci_->EnqueueCommand(
           LeReadPeriodicAdvertiserListSizeBuilder::Create(),
           handler->BindOnceOn(this, &Controller::impl::le_read_periodic_advertiser_list_size_handler));
     } else {
-      LOG_INFO("LE_READ_PERIODIC_ADVERTISING_LIST_SIZE not supported, defaulting to 0");
+      LOG_INFO("LE_READ_PERIODIC_ADVERTISER_LIST_SIZE not supported, defaulting to 0");
       le_periodic_advertiser_list_size_ = 0;
     }
     if (is_supported(OpCode::LE_SET_HOST_FEATURE) && module_.SupportsBleConnectedIsochronousStreamCentral()) {
@@ -176,13 +177,6 @@ struct Controller::impl {
           LeSetHostFeatureBuilder::Create(
               LeHostFeatureBits::CONNECTION_SUBRATING_HOST_SUPPORT, Enable::ENABLED),
           handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
-    }
-
-    if (is_supported(OpCode::READ_DEFAULT_ERRONEOUS_DATA_REPORTING)) {
-      hci_->EnqueueCommand(
-          ReadDefaultErroneousDataReportingBuilder::Create(),
-          handler->BindOnceOn(
-              this, &Controller::impl::read_default_erroneous_data_reporting_handler));
     }
 
     // Skip vendor capabilities check if configured.
@@ -386,35 +380,6 @@ struct Controller::impl {
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
-  }
-
-  void read_default_erroneous_data_reporting_handler(CommandCompleteView view) {
-    auto complete_view = ReadDefaultErroneousDataReportingCompleteView::Create(view);
-    ASSERT(complete_view.IsValid());
-    ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(
-        status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
-    Enable erroneous_data_reporting = complete_view.GetErroneousDataReporting();
-    LOG_INFO("read default erroneous data reporting: %hhu", erroneous_data_reporting);
-
-    // Enable Erroneous Data Reporting if it is disabled and the write command is supported.
-    if (erroneous_data_reporting == Enable::DISABLED &&
-        is_supported(OpCode::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING)) {
-      std::unique_ptr<WriteDefaultErroneousDataReportingBuilder> packet =
-          WriteDefaultErroneousDataReportingBuilder::Create(Enable::ENABLED);
-      hci_->EnqueueCommand(
-          std::move(packet),
-          module_.GetHandler()->BindOnceOn(
-              this, &Controller::impl::write_default_erroneous_data_reporting_handler));
-    }
-  }
-
-  void write_default_erroneous_data_reporting_handler(CommandCompleteView view) {
-    auto complete_view = WriteDefaultErroneousDataReportingCompleteView::Create(view);
-    ASSERT(complete_view.IsValid());
-    ErrorCode status = complete_view.GetStatus();
-    ASSERT_LOG(
-        status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
   }
 
   void le_read_local_supported_features_handler(CommandCompleteView view) {
@@ -912,7 +877,7 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS)
       OP_CODE_MAPPING(LE_REMOVE_ADVERTISING_SET)
       OP_CODE_MAPPING(LE_CLEAR_ADVERTISING_SETS)
-      OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_PARAM)
+      OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_PARAMETERS)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_DATA)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_ENABLE)
       OP_CODE_MAPPING(LE_SET_EXTENDED_SCAN_PARAMETERS)
@@ -921,10 +886,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_CREATE_SYNC)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_TERMINATE_SYNC)
-      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_CLEAR_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_READ_PERIODIC_ADVERTISING_LIST_SIZE)
+      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_CLEAR_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_READ_PERIODIC_ADVERTISER_LIST_SIZE)
       OP_CODE_MAPPING(LE_READ_TRANSMIT_POWER)
       OP_CODE_MAPPING(LE_READ_RF_PATH_COMPENSATION_POWER)
       OP_CODE_MAPPING(LE_WRITE_RF_PATH_COMPENSATION_POWER)

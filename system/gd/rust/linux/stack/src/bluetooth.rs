@@ -196,7 +196,7 @@ pub trait IBluetooth {
     fn sdp_search(&self, device: BluetoothDevice, uuid: Uuid128Bit) -> bool;
 
     /// Creates a new SDP record.
-    fn create_sdp_record(&self, sdp_record: BtSdpRecord) -> bool;
+    fn create_sdp_record(&mut self, sdp_record: BtSdpRecord) -> bool;
 
     /// Removes the SDP record associated with the provided handle.
     fn remove_sdp_record(&self, handle: i32) -> bool;
@@ -209,6 +209,9 @@ pub trait IBluetooth {
 
     /// Returns whether WBS is supported.
     fn is_wbs_supported(&self) -> bool;
+
+    /// Returns whether SWB is supported.
+    fn is_swb_supported(&self) -> bool;
 }
 
 /// Adapter API for Bluetooth qualification and verification.
@@ -367,29 +370,29 @@ impl BluetoothDeviceContext {
 /// The interface for adapter callbacks registered through `IBluetooth::register_callback`.
 pub trait IBluetoothCallback: RPCProxy {
     /// When any adapter property changes.
-    fn on_adapter_property_changed(&self, prop: BtPropertyType);
+    fn on_adapter_property_changed(&mut self, prop: BtPropertyType);
 
     /// When any of the adapter local address is changed.
-    fn on_address_changed(&self, addr: String);
+    fn on_address_changed(&mut self, addr: String);
 
     /// When the adapter name is changed.
-    fn on_name_changed(&self, name: String);
+    fn on_name_changed(&mut self, name: String);
 
     /// When the adapter's discoverable mode is changed.
-    fn on_discoverable_changed(&self, discoverable: bool);
+    fn on_discoverable_changed(&mut self, discoverable: bool);
 
     /// When a device is found via discovery.
-    fn on_device_found(&self, remote_device: BluetoothDevice);
+    fn on_device_found(&mut self, remote_device: BluetoothDevice);
 
     /// When a device is cleared from discovered devices cache.
-    fn on_device_cleared(&self, remote_device: BluetoothDevice);
+    fn on_device_cleared(&mut self, remote_device: BluetoothDevice);
 
     /// When the discovery state is changed.
-    fn on_discovering_changed(&self, discovering: bool);
+    fn on_discovering_changed(&mut self, discovering: bool);
 
     /// When there is a pairing/bonding process and requires agent to display the event to UI.
     fn on_ssp_request(
-        &self,
+        &mut self,
         remote_device: BluetoothDevice,
         cod: u32,
         variant: BtSspVariant,
@@ -397,21 +400,21 @@ pub trait IBluetoothCallback: RPCProxy {
     );
 
     /// When there is a pin request to display the event to client.
-    fn on_pin_request(&self, remote_device: BluetoothDevice, cod: u32, min_16_digit: bool);
+    fn on_pin_request(&mut self, remote_device: BluetoothDevice, cod: u32, min_16_digit: bool);
 
     /// When a bonding attempt has completed.
-    fn on_bond_state_changed(&self, status: u32, device_address: String, state: u32);
+    fn on_bond_state_changed(&mut self, status: u32, device_address: String, state: u32);
 
     /// When an SDP search has completed.
     fn on_sdp_search_complete(
-        &self,
+        &mut self,
         remote_device: BluetoothDevice,
         searched_uuid: Uuid128Bit,
         sdp_records: Vec<BtSdpRecord>,
     );
 
     /// When an SDP record has been successfully created.
-    fn on_sdp_record_created(&self, record: BtSdpRecord, handle: i32);
+    fn on_sdp_record_created(&mut self, record: BtSdpRecord, handle: i32);
 }
 
 /// An interface for other modules to track found remote devices.
@@ -432,10 +435,10 @@ pub trait IBluetoothDeviceCallback {
 
 pub trait IBluetoothConnectionCallback: RPCProxy {
     /// Notification sent when a remote device completes HCI connection.
-    fn on_device_connected(&self, remote_device: BluetoothDevice);
+    fn on_device_connected(&mut self, remote_device: BluetoothDevice);
 
     /// Notification sent when a remote device completes HCI disconnection.
-    fn on_device_disconnected(&self, remote_device: BluetoothDevice);
+    fn on_device_disconnected(&mut self, remote_device: BluetoothDevice);
 }
 
 /// Implementation of the adapter API.
@@ -644,10 +647,10 @@ impl Bluetooth {
     }
 
     fn update_local_address(&mut self, addr: &RawAddress) {
-        self.local_address = Some(*addr);
+        self.local_address = Some(addr.clone());
 
         self.callbacks.for_all_callbacks(|callback| {
-            callback.on_address_changed(self.local_address.unwrap().to_string());
+            callback.on_address_changed(addr.to_string());
         });
     }
 
@@ -712,6 +715,20 @@ impl Bluetooth {
         Ok(())
     }
 
+    /// Returns whether the adapter is connectable.
+    pub(crate) fn get_connectable_internal(&self) -> bool {
+        match self.properties.get(&BtPropertyType::AdapterScanMode) {
+            Some(prop) => match prop {
+                BluetoothProperty::AdapterScanMode(mode) => match *mode {
+                    BtScanMode::Connectable | BtScanMode::ConnectableDiscoverable => true,
+                    _ => false,
+                },
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     /// Sets the adapter's connectable mode for classic connections.
     pub(crate) fn set_connectable_internal(&mut self, mode: bool) -> bool {
         self.is_connectable = mode;
@@ -721,6 +738,23 @@ impl Bluetooth {
         self.intf.lock().unwrap().set_adapter_property(BluetoothProperty::AdapterScanMode(
             if mode { BtScanMode::Connectable } else { BtScanMode::None_ },
         )) == 0
+    }
+
+    /// Returns adapter's discoverable mode.
+    pub(crate) fn get_discoverable_mode(&self) -> BtDiscMode {
+        let off_mode = BtDiscMode::NonDiscoverable;
+
+        match self.properties.get(&BtPropertyType::AdapterScanMode) {
+            Some(prop) => match prop {
+                BluetoothProperty::AdapterScanMode(mode) => match *mode {
+                    BtScanMode::ConnectableDiscoverable => BtDiscMode::GeneralDiscoverable,
+                    BtScanMode::ConnectableLimitedDiscoverable => BtDiscMode::LimitedDiscoverable,
+                    _ => off_mode,
+                },
+                _ => off_mode,
+            },
+            _ => off_mode,
+        }
     }
 
     /// Returns all bonded and connected devices.
@@ -1135,6 +1169,12 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     Err(err) => warn!("create_pid_file() error: {}", err),
                     _ => (),
                 }
+
+                // Inform the rest of the stack we're ready.
+                let txl = self.tx.clone();
+                tokio::spawn(async move {
+                    let _ = txl.send(Message::AdapterReady).await;
+                });
             }
         }
     }
@@ -1554,7 +1594,7 @@ impl BleDiscoveryCallbacks {
 
 // Handle BLE scanner results.
 impl IScannerCallback for BleDiscoveryCallbacks {
-    fn on_scanner_registered(&self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus) {
+    fn on_scanner_registered(&mut self, uuid: Uuid128Bit, scanner_id: u8, status: GattStatus) {
         let tx = self.tx.clone();
         tokio::spawn(async move {
             let _ = tx
@@ -1565,7 +1605,7 @@ impl IScannerCallback for BleDiscoveryCallbacks {
         });
     }
 
-    fn on_scan_result(&self, scan_result: ScanResult) {
+    fn on_scan_result(&mut self, scan_result: ScanResult) {
         let tx = self.tx.clone();
         tokio::spawn(async move {
             let _ = tx
@@ -1576,9 +1616,9 @@ impl IScannerCallback for BleDiscoveryCallbacks {
         });
     }
 
-    fn on_advertisement_found(&self, _scanner_id: u8, _scan_result: ScanResult) {}
-    fn on_advertisement_lost(&self, _scanner_id: u8, _scan_result: ScanResult) {}
-    fn on_suspend_mode_change(&self, _suspend_mode: SuspendMode) {}
+    fn on_advertisement_found(&mut self, _scanner_id: u8, _scan_result: ScanResult) {}
+    fn on_advertisement_lost(&mut self, _scanner_id: u8, _scan_result: ScanResult) {}
+    fn on_suspend_mode_change(&mut self, _suspend_mode: SuspendMode) {}
 }
 
 impl RPCProxy for BleDiscoveryCallbacks {
@@ -1978,16 +2018,6 @@ impl IBluetooth for Bluetooth {
             return false;
         }
 
-        let is_bonding = match self.found_devices.get(&device.address) {
-            Some(d) => d.bond_state == BtBondState::Bonding,
-            None => false,
-        };
-
-        if !is_bonding {
-            warn!("Can't set pairing confirmation. Device {} isn't bonding.", device.address);
-            return false;
-        }
-
         self.intf.lock().unwrap().ssp_reply(
             &addr.unwrap(),
             BtSspVariant::PasskeyConfirmation,
@@ -2162,13 +2192,14 @@ impl IBluetooth for Bluetooth {
         self.sdp.as_ref().unwrap().sdp_search(&mut addr.unwrap(), &uu) == BtStatus::Success
     }
 
-    fn create_sdp_record(&self, sdp_record: BtSdpRecord) -> bool {
+    fn create_sdp_record(&mut self, sdp_record: BtSdpRecord) -> bool {
         let mut handle: i32 = -1;
         let mut sdp_record = sdp_record;
         match self.sdp.as_ref().unwrap().create_sdp_record(&mut sdp_record, &mut handle) {
             BtStatus::Success => {
+                let record_clone = sdp_record.clone();
                 self.callbacks.for_all_callbacks(|callback| {
-                    callback.on_sdp_record_created(sdp_record.clone(), handle);
+                    callback.on_sdp_record_created(record_clone.clone(), handle);
                 });
                 true
             }
@@ -2368,6 +2399,10 @@ impl IBluetooth for Bluetooth {
     fn is_wbs_supported(&self) -> bool {
         self.intf.lock().unwrap().get_wbs_supported()
     }
+
+    fn is_swb_supported(&self) -> bool {
+        self.intf.lock().unwrap().get_swb_supported()
+    }
 }
 
 impl BtifSdpCallbacks for Bluetooth {
@@ -2379,7 +2414,7 @@ impl BtifSdpCallbacks for Bluetooth {
         _count: i32,
         records: Vec<BtSdpRecord>,
     ) {
-        let uuid = match UuidHelper::from_string(uuid.to_string()) {
+        let uuid_to_send = match UuidHelper::from_string(uuid.to_string()) {
             Some(uu) => uu,
             None => return,
         };
@@ -2387,8 +2422,25 @@ impl BtifSdpCallbacks for Bluetooth {
             Some(info) => info,
             None => BluetoothDevice::new(address.to_string(), "".to_string()),
         };
+
+        // The SDP records we get back do not populate the UUID so we populate it ourselves before
+        // sending them on.
+        let mut records = records;
+        records.iter_mut().for_each(|record| {
+            match record {
+                BtSdpRecord::HeaderOverlay(header) => header.uuid = uuid.clone(),
+                BtSdpRecord::MapMas(record) => record.hdr.uuid = uuid.clone(),
+                BtSdpRecord::MapMns(record) => record.hdr.uuid = uuid.clone(),
+                BtSdpRecord::PbapPse(record) => record.hdr.uuid = uuid.clone(),
+                BtSdpRecord::PbapPce(record) => record.hdr.uuid = uuid.clone(),
+                BtSdpRecord::OppServer(record) => record.hdr.uuid = uuid.clone(),
+                BtSdpRecord::SapServer(record) => record.hdr.uuid = uuid.clone(),
+                BtSdpRecord::Dip(record) => record.hdr.uuid = uuid.clone(),
+                BtSdpRecord::Mps(record) => record.hdr.uuid = uuid.clone(),
+            };
+        });
         self.callbacks.for_all_callbacks(|callback| {
-            callback.on_sdp_search_complete(device_info.clone(), uuid, records.clone());
+            callback.on_sdp_search_complete(device_info.clone(), uuid_to_send, records.clone());
         });
         debug!(
             "Sdp search result found: Status({:?}) Address({:?}) Uuid({:?})",
@@ -2472,16 +2524,7 @@ impl BtifHHCallbacks for Bluetooth {
 
 impl IBluetoothQALegacy for Bluetooth {
     fn get_connectable(&self) -> bool {
-        match self.properties.get(&BtPropertyType::AdapterScanMode) {
-            Some(prop) => match prop {
-                BluetoothProperty::AdapterScanMode(mode) => match *mode {
-                    BtScanMode::Connectable | BtScanMode::ConnectableDiscoverable => true,
-                    _ => false,
-                },
-                _ => false,
-            },
-            _ => false,
-        }
+        self.get_connectable_internal()
     }
 
     fn set_connectable(&mut self, mode: bool) -> bool {

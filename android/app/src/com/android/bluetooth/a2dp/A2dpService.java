@@ -18,7 +18,6 @@ package com.android.bluetooth.a2dp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
-import static com.android.bluetooth.ChangeIds.ENFORCE_CODEC_CONFIG_PRIVILEGED;
 import static com.android.bluetooth.Utils.checkCallerTargetSdk;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 import static com.android.bluetooth.Utils.enforceCdmAssociation;
@@ -26,10 +25,10 @@ import static com.android.bluetooth.Utils.hasBluetoothPrivilegedPermission;
 
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
-import android.app.compat.CompatChanges;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothA2dp.OptionalCodecsPreferenceStatus;
 import android.bluetooth.BluetoothA2dp.OptionalCodecsSupportStatus;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothCodecConfig;
 import android.bluetooth.BluetoothCodecStatus;
 import android.bluetooth.BluetoothDevice;
@@ -47,6 +46,7 @@ import android.media.AudioManager;
 import android.media.BluetoothProfileConnectionInfo;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.HandlerThread;
 import android.sysprop.BluetoothProperties;
 import android.util.Log;
@@ -1491,20 +1491,9 @@ public class A2dpService extends ProfileService {
             if (service == null) {
                 return;
             }
-            boolean checkPrivilegedNeeded = false;
-            final int callingUid = Binder.getCallingUid();
-            final long token = Binder.clearCallingIdentity();
-            try {
-                checkPrivilegedNeeded =
-                        CompatChanges.isChangeEnabled(ENFORCE_CODEC_CONFIG_PRIVILEGED, callingUid);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-            if (checkPrivilegedNeeded) {
-                enforceBluetoothPrivilegedPermission(service);
-            } else if (!hasBluetoothPrivilegedPermission(service)) {
+            if (!hasBluetoothPrivilegedPermission(service)) {
                 enforceCdmAssociation(service.mCompanionDeviceManager, service,
-                            source.getPackageName(), Binder.getCallingUid(), device);
+                        source.getPackageName(), Binder.getCallingUid(), device);
             }
             service.setCodecConfigPreference(device, codecConfig);
         }
@@ -1666,5 +1655,26 @@ public class A2dpService extends ProfileService {
         }
         mA2dpCodecConfig.switchCodecByBufferSize(
                 device, isLowLatency, getCodecStatus(device).getCodecConfig().getCodecType());
+    }
+
+    /**
+     * Sends the preferred audio profile change requested from a call to
+     * {@link BluetoothAdapter#setPreferredAudioProfiles(BluetoothDevice, Bundle)} to the audio
+     * framework to apply the change. The audio framework will call
+     * {@link BluetoothAdapter#notifyActiveDeviceChangeApplied(BluetoothDevice)} once the
+     * change is successfully applied.
+     *
+     * @return the number of requests sent to the audio framework
+     */
+    public int sendPreferredAudioProfileChangeToAudioFramework() {
+        synchronized (mStateMachines) {
+            if (mActiveDevice == null) {
+                Log.e(TAG, "sendPreferredAudioProfileChangeToAudioFramework: no active device");
+                return 0;
+            }
+            mAudioManager.handleBluetoothActiveDeviceChanged(mActiveDevice, mActiveDevice,
+                    BluetoothProfileConnectionInfo.createA2dpInfo(false, -1));
+            return 1;
+        }
     }
 }
