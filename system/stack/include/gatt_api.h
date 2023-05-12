@@ -213,6 +213,8 @@ typedef enum : uint16_t {
 
   GATT_CONN_FAILED_ESTABLISHMENT = HCI_ERR_CONN_FAILED_ESTABLISHMENT,
 
+  GATT_CONN_TERMINATED_POWER_OFF = HCI_ERR_REMOTE_POWER_OFF,
+
   BTA_GATT_CONN_NONE = 0x0101, /* 0x0101 no connection to cancel  */
 
 } tGATT_DISCONN_REASON;
@@ -232,6 +234,7 @@ inline std::string gatt_disconnection_reason_text(
     CASE_RETURN_TEXT(GATT_CONN_LMP_TIMEOUT);
     CASE_RETURN_TEXT(GATT_CONN_FAILED_ESTABLISHMENT);
     CASE_RETURN_TEXT(BTA_GATT_CONN_NONE);
+    CASE_RETURN_TEXT(GATT_CONN_TERMINATED_POWER_OFF);
     default:
       return base::StringPrintf("UNKNOWN[%hu]", reason);
   }
@@ -1068,8 +1071,7 @@ extern void GATT_StartIf(tGATT_IF gatt_if);
  *
  * Parameters       gatt_if: applicaiton interface
  *                  bd_addr: peer device address.
- *                  is_direct: is a direct connection or a background auto
- *                             connection
+ *                  connection_type: connection type
  *                  transport : Physical transport for GATT connection
  *                              (BR/EDR or LE)
  *                  opportunistic: will not keep device connected if other apps
@@ -1080,11 +1082,12 @@ extern void GATT_StartIf(tGATT_IF gatt_if);
  *
  ******************************************************************************/
 extern bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                         bool is_direct, tBT_TRANSPORT transport,
-                         bool opportunistic);
+                         tBTM_BLE_CONN_TYPE connection_type,
+                         tBT_TRANSPORT transport, bool opportunistic);
 extern bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                         bool is_direct, tBT_TRANSPORT transport,
-                         bool opportunistic, uint8_t initiating_phys);
+                         tBTM_BLE_CONN_TYPE connection_type,
+                         tBT_TRANSPORT transport, bool opportunistic,
+                         uint8_t initiating_phys);
 
 /*******************************************************************************
  *
@@ -1186,5 +1189,8 @@ extern void gatt_notify_enc_cmpl(const RawAddress& bd_addr);
 /** Reset bg device list. If called after controller reset, set |after_reset| to
  * true, as there is no need to wipe controller acceptlist in this case. */
 extern void gatt_reset_bgdev_list(bool after_reset);
+
+// Initialize GATTS list of bonded device service change updates.
+extern void gatt_load_bonded(void);
 
 #endif /* GATT_API_H */

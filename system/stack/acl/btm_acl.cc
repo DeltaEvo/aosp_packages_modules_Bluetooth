@@ -43,13 +43,16 @@
 #include "common/metrics.h"
 #include "device/include/controller.h"
 #include "device/include/interop.h"
+#include "gd/metrics/metrics_state.h"
 #include "include/l2cap_hci_link_interface.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/controller.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/l2c_api.h"
+#include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
+#include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -71,6 +74,7 @@
 #include "stack/include/sco_hci_link_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
+#include "os/metrics.h"
 
 void BTM_update_version_info(const RawAddress& bd_addr,
                              const remote_version_info& remote_version_info);
@@ -339,6 +343,11 @@ void btm_acl_process_sca_cmpl_pkt(uint8_t len, uint8_t* data) {
   uint8_t sca;
   uint8_t status;
 
+  if (len < 4) {
+    LOG_WARN("Malformatted packet, not containing enough data");
+    return;
+  }
+
   STREAM_TO_UINT8(status, data);
 
   if (status != HCI_SUCCESS) {
@@ -401,14 +410,14 @@ void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
   p_acl->transport = transport;
   p_acl->switch_role_failed_attempts = 0;
   p_acl->reset_switch_role();
-  BTM_PM_OnConnected(hci_handle, bda);
 
   LOG_DEBUG(
       "Created new ACL connection peer:%s role:%s handle:0x%04x transport:%s",
       PRIVATE_ADDRESS(bda), RoleText(p_acl->link_role).c_str(), hci_handle,
       bt_transport_text(transport).c_str());
 
-  if (transport == BT_TRANSPORT_BR_EDR) {
+  if (p_acl->is_transport_br_edr()) {
+    BTM_PM_OnConnected(hci_handle, bda);
     btm_set_link_policy(p_acl, btm_cb.acl_cb_.DefaultLinkPolicy());
   }
 
@@ -474,8 +483,10 @@ void btm_acl_removed(uint16_t handle) {
   }
   p_acl->in_use = false;
   NotifyAclLinkDown(*p_acl);
+  if (p_acl->is_transport_br_edr()) {
+    BTM_PM_OnDisconnected(handle);
+  }
   p_acl->Reset();
-  BTM_PM_OnDisconnected(handle);
 }
 
 /*******************************************************************************
@@ -630,18 +641,21 @@ void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
     return;
   }
 
-  /* if we are trying to drop encryption on an encrypted connection, drop the
-   * connection */
-  if (p->is_encrypted && !encr_enable) {
-    LOG(ERROR) << __func__
-               << " attempting to decrypt encrypted connection, disconnecting. "
-                  "handle: "
-               << loghex(handle);
+  /* Common Criteria mode only: if we are trying to drop encryption on an
+   * encrypted connection, drop the connection */
+  if (bluetooth::os::ParameterProvider::IsCommonCriteriaMode()) {
+    if (p->is_encrypted && !encr_enable) {
+      LOG(ERROR)
+          << __func__
+          << " attempting to decrypt encrypted connection, disconnecting. "
+             "handle: "
+          << loghex(handle);
 
-    acl_disconnect_from_handle(handle, HCI_ERR_HOST_REJECT_SECURITY,
-                               "stack::btu::btu_hcif::read_drop_encryption "
-                               "Connection Already Encrypted");
-    return;
+      acl_disconnect_from_handle(handle, HCI_ERR_HOST_REJECT_SECURITY,
+                                 "stack::btu::btu_hcif::read_drop_encryption "
+                                 "Connection Already Encrypted");
+      return;
+    }
   }
 
   p->is_encrypted = encr_enable;
@@ -1768,7 +1782,7 @@ void btm_read_tx_power_timeout(UNUSED_ATTR void* data) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
+void btm_read_tx_power_complete(uint8_t* p, uint16_t evt_len, bool is_ble) {
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_tx_power_cmpl_cb;
   tBTM_TX_POWER_RESULT result;
 
@@ -1777,6 +1791,10 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
 
   /* If there was a registered callback, call it */
   if (p_cb) {
+    if (evt_len < 1) {
+      goto err_out;
+    }
+
     STREAM_TO_UINT8(result.hci_status, p);
 
     if (result.hci_status == HCI_SUCCESS) {
@@ -1784,6 +1802,11 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
 
       if (!is_ble) {
         uint16_t handle;
+
+        if (evt_len < 4) {
+          goto err_out;
+        }
+
         STREAM_TO_UINT16(handle, p);
         STREAM_TO_UINT8(result.tx_power, p);
 
@@ -1792,6 +1815,10 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
           result.rem_bda = p_acl_cb->remote_addr;
         }
       } else {
+        if (evt_len < 2) {
+          goto err_out;
+        }
+
         STREAM_TO_UINT8(result.tx_power, p);
         result.rem_bda = btm_cb.devcb.read_tx_pwr_addr;
       }
@@ -1805,6 +1832,11 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
 
     (*p_cb)(&result);
   }
+
+  return;
+
+ err_out:
+  LOG_ERROR("Bogus event packet, too short");
 }
 
 /*******************************************************************************
@@ -1834,7 +1866,7 @@ void btm_read_rssi_timeout(UNUSED_ATTR void* data) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_rssi_complete(uint8_t* p) {
+void btm_read_rssi_complete(uint8_t* p, uint16_t evt_len) {
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_rssi_cmpl_cb;
   tBTM_RSSI_RESULT result;
 
@@ -1843,11 +1875,19 @@ void btm_read_rssi_complete(uint8_t* p) {
 
   /* If there was a registered callback, call it */
   if (p_cb) {
+    if (evt_len < 1) {
+      goto err_out;
+    }
+
     STREAM_TO_UINT8(result.hci_status, p);
     result.status = BTM_ERR_PROCESSING;
 
     if (result.hci_status == HCI_SUCCESS) {
       uint16_t handle;
+
+      if (evt_len < 4) {
+        goto err_out;
+      }
       STREAM_TO_UINT16(handle, p);
 
       STREAM_TO_UINT8(result.rssi, p);
@@ -1863,6 +1903,11 @@ void btm_read_rssi_complete(uint8_t* p) {
     }
     (*p_cb)(&result);
   }
+
+  return;
+
+err_out:
+  LOG_ERROR("Bogus event packet, too short");
 }
 
 /*******************************************************************************
@@ -1997,7 +2042,7 @@ void btm_read_link_quality_timeout(UNUSED_ATTR void* data) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_link_quality_complete(uint8_t* p) {
+void btm_read_link_quality_complete(uint8_t* p, uint16_t evt_len) {
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_link_qual_cmpl_cb;
   tBTM_LINK_QUALITY_RESULT result;
 
@@ -2006,11 +2051,19 @@ void btm_read_link_quality_complete(uint8_t* p) {
 
   /* If there was a registered callback, call it */
   if (p_cb) {
+    if (evt_len < 1) {
+      goto err_out;
+    }
+
     STREAM_TO_UINT8(result.hci_status, p);
 
     if (result.hci_status == HCI_SUCCESS) {
       uint16_t handle;
       result.status = BTM_SUCCESS;
+
+      if (evt_len < 4) {
+        goto err_out;
+      }
 
       STREAM_TO_UINT16(handle, p);
 
@@ -2030,6 +2083,11 @@ void btm_read_link_quality_complete(uint8_t* p) {
 
     (*p_cb)(&result);
   }
+
+  return;
+
+err_out:
+  LOG_ERROR("Bogus Link Quality event packet, size: %d", evt_len);
 }
 
 /*******************************************************************************
@@ -2612,6 +2670,15 @@ void acl_create_classic_connection(const RawAddress& bd_addr,
   return bluetooth::shim::ACL_CreateClassicConnection(bd_addr);
 }
 
+void btm_connection_request(const RawAddress& bda,
+                            const bluetooth::types::ClassOfDevice& cod) {
+  // Copy Cod information
+  DEV_CLASS dc;
+  dc[0] = cod.cod[2], dc[1] = cod.cod[1], dc[2] = cod.cod[0];
+
+  btm_sec_conn_req(bda, dc);
+}
+
 void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc) {
   btm_sec_conn_req(bda, dc);
   l2c_link_hci_conn_req(bda);
@@ -2711,9 +2778,18 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr) {
     return false;
   }
 
-    bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
-                                                /* is_direct */ true);
-    return true;
+  // argument list
+  auto argument_list = std::vector<std::pair<bluetooth::os::ArgumentType, int>>();
+
+  bluetooth::shim::LogMetricBluetoothLEConnectionMetricEvent(
+      bd_addr, android::bluetooth::le::LeConnectionOriginType::ORIGIN_NATIVE,
+      android::bluetooth::le::LeConnectionType::CONNECTION_TYPE_LE_ACL,
+      android::bluetooth::le::LeConnectionState::STATE_LE_ACL_START,
+      argument_list);
+
+  bluetooth::shim::ACL_AcceptLeConnectionFrom(address_with_type,
+                                              /* is_direct */ true);
+  return true;
 }
 
 bool acl_create_le_connection(const RawAddress& bd_addr) {

@@ -34,6 +34,7 @@
 #include "l2c_api.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
+#include "osi/include/properties.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
@@ -122,8 +123,11 @@ void gatt_init(void) {
 
   L2CA_RegisterFixedChannel(L2CAP_ATT_CID, &fixed_reg);
 
+  gatt_cb.over_br_enabled =
+      osi_property_get_bool("bluetooth.gatt.over_bredr.enabled", true);
   /* Now, register with L2CAP for ATT PSM over BR/EDR */
-  if (!L2CA_Register2(BT_PSM_ATT, dyn_info, false /* enable_snoop */, nullptr,
+  if (gatt_cb.over_br_enabled &&
+      !L2CA_Register2(BT_PSM_ATT, dyn_info, false /* enable_snoop */, nullptr,
                       GATT_MAX_MTU_SIZE, 0, BTM_SEC_NONE)) {
     LOG(ERROR) << "ATT Dynamic Registration failed";
   }
@@ -905,6 +909,13 @@ void gatt_add_a_bonded_dev_for_srv_chg(const RawAddress& bda) {
 /** This function is called to send a service chnaged indication to the
  * specified bd address */
 void gatt_send_srv_chg_ind(const RawAddress& peer_bda) {
+  static const uint16_t sGATT_DEFAULT_START_HANDLE =
+      (uint16_t)osi_property_get_int32(
+          "bluetooth.gatt.default_start_handle_for_srvc_change.value",
+          GATT_GATT_START_HANDLE);
+  static const uint16_t sGATT_LAST_HANDLE = (uint16_t)osi_property_get_int32(
+      "bluetooth.gatt.last_handle_for_srvc_change.value", 0xFFFF);
+
   VLOG(1) << __func__;
 
   if (!gatt_cb.handle_of_h_r) return;
@@ -917,8 +928,8 @@ void gatt_send_srv_chg_ind(const RawAddress& peer_bda) {
 
   uint8_t handle_range[GATT_SIZE_OF_SRV_CHG_HNDL_RANGE];
   uint8_t* p = handle_range;
-  UINT16_TO_STREAM(p, GATT_DEFAULT_START_HANDLE);
-  UINT16_TO_STREAM(p, GATT_LAST_HANDLE);
+  UINT16_TO_STREAM(p, sGATT_DEFAULT_START_HANDLE);
+  UINT16_TO_STREAM(p, sGATT_LAST_HANDLE);
   GATTS_HandleValueIndication(conn_id, gatt_cb.handle_of_h_r,
                               GATT_SIZE_OF_SRV_CHG_HNDL_RANGE, handle_range);
 }

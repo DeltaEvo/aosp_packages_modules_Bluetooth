@@ -252,7 +252,8 @@ public class HearingAidService extends ProfileService {
         return sHearingAidService;
     }
 
-    private static synchronized void setHearingAidService(HearingAidService instance) {
+    @VisibleForTesting
+    static synchronized void setHearingAidService(HearingAidService instance) {
         if (DBG) {
             Log.d(TAG, "setHearingAidService(): set to: " + instance);
         }
@@ -771,12 +772,6 @@ public class HearingAidService extends ProfileService {
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED,
                 BluetoothProfile.HEARING_AID, mAdapterService.obfuscateAddress(device),
                 mAdapterService.getMetricId(device));
-
-        Intent intent = new Intent(BluetoothHearingAid.ACTION_ACTIVE_DEVICE_CHANGED);
-        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
-        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
-                | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
 
         boolean stopAudio = device == null
                 && (getConnectionState(mPreviousAudioDevice) != BluetoothProfile.STATE_CONNECTED);

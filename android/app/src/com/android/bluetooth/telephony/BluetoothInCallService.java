@@ -267,7 +267,7 @@ public class BluetoothInCallService extends InCallService {
                 return;
             }
             if (call.isExternalCall()) {
-                onCallRemoved(call);
+                onCallRemoved(call, false /* forceRemoveCallback */);
             } else {
                 onCallAdded(call);
             }
@@ -605,13 +605,19 @@ public class BluetoothInCallService extends InCallService {
         onCallAdded(new BluetoothCall(call));
     }
 
-    public void onCallRemoved(BluetoothCall call) {
-        if (call.isExternalCall()) {
-            return;
-        }
+    /**
+     * Called when a {@code BluetoothCall} has been removed from this in-call session.
+     *
+     * @param call the {@code BluetoothCall} to remove
+     * @param forceRemoveCallback if true, this will always unregister this {@code InCallService} as
+     *                            a callback for the given {@code BluetoothCall}, when false, this
+     *                            will not remove the callback when the {@code BluetoothCall} is
+     *                            external so that the call can be added back if no longer external.
+     */
+    public void onCallRemoved(BluetoothCall call, boolean forceRemoveCallback) {
         Log.d(TAG, "onCallRemoved");
         CallStateCallback callback = getCallback(call);
-        if (callback != null) {
+        if (callback != null && (forceRemoveCallback || !call.isExternalCall())) {
             call.unregisterCallback(callback);
         }
 
@@ -635,7 +641,7 @@ public class BluetoothInCallService extends InCallService {
             Log.w(TAG, "onCallRemoved, BluetoothCall is removed before registered");
             return;
         }
-        onCallRemoved(bluetoothCall);
+        onCallRemoved(bluetoothCall, true /* forceRemoveCallback */);
     }
 
     @Override
@@ -708,7 +714,7 @@ public class BluetoothInCallService extends InCallService {
             // We do, however want to send conferences that have no children to the bluetooth
             // device (e.g. IMS Conference).
             boolean isConferenceWithNoChildren = isConferenceWithNoChildren(call);
-            Log.i(TAG, "sendListOfCalls isConferenceWithNoChildren " + isConferenceWithNoChildren 
+            Log.i(TAG, "sendListOfCalls isConferenceWithNoChildren " + isConferenceWithNoChildren
                 + ", call.getChildrenIds() size " + call.getChildrenIds().size());
             if (!call.isConference() || isConferenceWithNoChildren) {
                 sendClccForCall(call, shouldLog);
@@ -1479,7 +1485,9 @@ public class BluetoothInCallService extends InCallService {
         mBluetoothLeCallControl.currentCallsList(tbsCalls);
     }
 
-    private final BluetoothLeCallControl.Callback mBluetoothLeCallControlCallback = new BluetoothLeCallControl.Callback() {
+    @VisibleForTesting
+    final BluetoothLeCallControl.Callback mBluetoothLeCallControlCallback =
+            new BluetoothLeCallControl.Callback() {
 
         @Override
         public void onAcceptCall(int requestId, UUID callId) {
