@@ -77,14 +77,14 @@ extern tBTM_CB btm_cb;
    BTM_SEC_LE_LINK_KEY_KNOWN | BTM_SEC_LE_LINK_KEY_AUTHED)
 
 void btm_inq_stop_on_ssp(void);
-extern void btm_ble_advertiser_notify_terminated_legacy(
-    uint8_t status, uint16_t connection_handle);
-extern bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
-                                     const RawAddress& new_pseudo_addr);
-extern void bta_dm_remove_device(const RawAddress& bd_addr);
-extern void bta_dm_process_remove_device(const RawAddress& bd_addr);
-extern void btm_inq_clear_ssp(void);
-extern void HACK_acl_check_sm4(tBTM_SEC_DEV_REC& p_dev_rec);
+void btm_ble_advertiser_notify_terminated_legacy(uint8_t status,
+                                                 uint16_t connection_handle);
+bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
+                              const RawAddress& new_pseudo_addr);
+void bta_dm_remove_device(const RawAddress& bd_addr);
+void bta_dm_process_remove_device(const RawAddress& bd_addr);
+void btm_inq_clear_ssp(void);
+void HACK_acl_check_sm4(tBTM_SEC_DEV_REC& p_dev_rec);
 
 /*******************************************************************************
  *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
@@ -161,6 +161,18 @@ static bool concurrentPeerAuthIsEnabled() {
   static const bool sCONCURRENT_PEER_AUTH_IS_ENABLED = osi_property_get_bool(
       "bluetooth.btm.sec.concurrent_peer_auth.enabled", true);
   return sCONCURRENT_PEER_AUTH_IS_ENABLED;
+}
+
+/**
+ * Whether we should handle encryption change events from a peer device, while
+ * we are in the IDLE state. This matters if we are waiting to retry encryption
+ * following an LMP timeout, and then we get an encryption change event from the
+ * peer.
+ */
+static bool handleUnexpectedEncryptionChange() {
+  static const bool sHandleUnexpectedEncryptionChange = osi_property_get_bool(
+      "bluetooth.btm.sec.handle_unexpected_encryption_change.enabled", false);
+  return sHandleUnexpectedEncryptionChange;
 }
 
 void NotifyBondingCanceled(tBTM_STATUS btm_status) {
@@ -3470,11 +3482,15 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
                       __func__, p_dev_rec, p_dev_rec->p_callback);
       p_dev_rec->p_callback = NULL;
       l2cu_resubmit_pending_sec_req(&p_dev_rec->bd_addr);
+      return;
     } else if (!concurrentPeerAuthIsEnabled() &&
                p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
       p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
+      return;
     }
-    return;
+    if (!handleUnexpectedEncryptionChange()) {
+      return;
+    }
   }
 
   p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
