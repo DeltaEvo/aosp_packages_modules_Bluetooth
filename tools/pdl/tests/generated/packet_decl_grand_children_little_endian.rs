@@ -1,8 +1,6 @@
 // @generated rust packets from test
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{FromPrimitive, ToPrimitive};
 use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -10,6 +8,19 @@ use std::sync::Arc;
 use thiserror::Error;
 
 type Result<T> = std::result::Result<T, Error>;
+
+#[doc = r" Private prevents users from creating arbitrary scalar values"]
+#[doc = r" in situations where the value needs to be validated."]
+#[doc = r" Users can freely deref the value, but only the backend"]
+#[doc = r" may create it."]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Private<T>(T);
+impl<T> std::ops::Deref for Private<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -27,58 +38,64 @@ pub enum Error {
     ImpossibleStructError,
     #[error("when parsing field {obj}.{field}, {value} is not a valid {type_} value")]
     InvalidEnumValueError { obj: String, field: String, value: u64, type_: String },
+    #[error("expected child {expected}, got {actual}")]
+    InvalidChildError { expected: &'static str, actual: String },
 }
-
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub struct TryFromError(&'static str);
 
 pub trait Packet {
     fn to_bytes(self) -> Bytes;
     fn to_vec(self) -> Vec<u8>;
 }
 
-#[derive(FromPrimitive, ToPrimitive, Debug, Hash, Eq, PartialEq, Clone, Copy)]
 #[repr(u64)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "u16", into = "u16"))]
 pub enum Enum16 {
     A = 0x1,
     B = 0x2,
 }
-#[cfg(feature = "serde")]
-impl serde::Serialize for Enum16 {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_u64(*self as u64)
-    }
-}
-#[cfg(feature = "serde")]
-struct Enum16Visitor;
-#[cfg(feature = "serde")]
-impl<'de> serde::de::Visitor<'de> for Enum16Visitor {
-    type Value = Enum16;
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a valid discriminant")
-    }
-    fn visit_u64<E>(self, value: u64) -> std::result::Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
+impl TryFrom<u16> for Enum16 {
+    type Error = u16;
+    fn try_from(value: u16) -> std::result::Result<Self, Self::Error> {
         match value {
             0x1 => Ok(Enum16::A),
             0x2 => Ok(Enum16::B),
-            _ => Err(E::custom(format!("invalid discriminant: {value}"))),
+            _ => Err(value),
         }
     }
 }
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Enum16 {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_u64(Enum16Visitor)
+impl From<&Enum16> for u16 {
+    fn from(value: &Enum16) -> Self {
+        match value {
+            Enum16::A => 0x1,
+            Enum16::B => 0x2,
+        }
+    }
+}
+impl From<Enum16> for u16 {
+    fn from(value: Enum16) -> Self {
+        (&value).into()
+    }
+}
+impl From<Enum16> for i32 {
+    fn from(value: Enum16) -> Self {
+        u16::from(value) as Self
+    }
+}
+impl From<Enum16> for i64 {
+    fn from(value: Enum16) -> Self {
+        u16::from(value) as Self
+    }
+}
+impl From<Enum16> for u32 {
+    fn from(value: Enum16) -> Self {
+        u16::from(value) as Self
+    }
+}
+impl From<Enum16> for u64 {
+    fn from(value: Enum16) -> Self {
+        u16::from(value) as Self
     }
 }
 
@@ -144,7 +161,14 @@ impl ParentData {
                 got: bytes.get().remaining(),
             });
         }
-        let foo = Enum16::from_u16(bytes.get_mut().get_u16_le()).unwrap();
+        let foo = Enum16::try_from(bytes.get_mut().get_u16_le()).map_err(|_| {
+            Error::InvalidEnumValueError {
+                obj: "Parent".to_string(),
+                field: "foo".to_string(),
+                value: bytes.get_mut().get_u16_le() as u64,
+                type_: "Enum16".to_string(),
+            }
+        })?;
         if bytes.get().remaining() < 2 {
             return Err(Error::InvalidLengthError {
                 obj: "Parent".to_string(),
@@ -152,7 +176,14 @@ impl ParentData {
                 got: bytes.get().remaining(),
             });
         }
-        let bar = Enum16::from_u16(bytes.get_mut().get_u16_le()).unwrap();
+        let bar = Enum16::try_from(bytes.get_mut().get_u16_le()).map_err(|_| {
+            Error::InvalidEnumValueError {
+                obj: "Parent".to_string(),
+                field: "bar".to_string(),
+                value: bytes.get_mut().get_u16_le() as u64,
+                type_: "Enum16".to_string(),
+            }
+        })?;
         if bytes.get().remaining() < 2 {
             return Err(Error::InvalidLengthError {
                 obj: "Parent".to_string(),
@@ -160,7 +191,14 @@ impl ParentData {
                 got: bytes.get().remaining(),
             });
         }
-        let baz = Enum16::from_u16(bytes.get_mut().get_u16_le()).unwrap();
+        let baz = Enum16::try_from(bytes.get_mut().get_u16_le()).map_err(|_| {
+            Error::InvalidEnumValueError {
+                obj: "Parent".to_string(),
+                field: "baz".to_string(),
+                value: bytes.get_mut().get_u16_le() as u64,
+                type_: "Enum16".to_string(),
+            }
+        })?;
         if bytes.get().remaining() < 1 {
             return Err(Error::InvalidLengthError {
                 obj: "Parent".to_string(),
@@ -179,7 +217,7 @@ impl ParentData {
         let payload = &bytes.get()[..payload_size];
         bytes.get_mut().advance(payload_size);
         let child = match (foo) {
-            (Enum16::A) => {
+            (Enum16::A) if ChildData::conforms(&payload) => {
                 let mut cell = Cell::new(payload);
                 let child_data = ChildData::parse_inner(&mut cell, bar, baz)?;
                 ParentDataChild::Child(Arc::new(child_data))
@@ -190,9 +228,9 @@ impl ParentData {
         Ok(Self { foo, bar, baz, child })
     }
     fn write_to(&self, buffer: &mut BytesMut) {
-        buffer.put_u16_le(self.foo.to_u16().unwrap());
-        buffer.put_u16_le(self.bar.to_u16().unwrap());
-        buffer.put_u16_le(self.baz.to_u16().unwrap());
+        buffer.put_u16_le(u16::from(self.foo));
+        buffer.put_u16_le(u16::from(self.bar));
+        buffer.put_u16_le(u16::from(self.baz));
         if self.child.get_total_size() > 0xff {
             panic!(
                 "Invalid length for {}::{}: {} > {}",
@@ -244,7 +282,7 @@ impl Parent {
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         let data = ParentData::parse_inner(&mut bytes)?;
-        Ok(Self::new(Arc::new(data)).unwrap())
+        Self::new(Arc::new(data))
     }
     pub fn specialize(&self) -> ParentChild {
         match &self.parent.child {
@@ -255,7 +293,7 @@ impl Parent {
             ParentDataChild::None => ParentChild::None,
         }
     }
-    fn new(parent: Arc<ParentData>) -> std::result::Result<Self, &'static str> {
+    fn new(parent: Arc<ParentData>) -> Result<Self> {
         Ok(Self { parent })
     }
     pub fn get_bar(&self) -> Enum16 {
@@ -356,11 +394,18 @@ impl ChildData {
                 got: bytes.get().remaining(),
             });
         }
-        let quux = Enum16::from_u16(bytes.get_mut().get_u16_le()).unwrap();
+        let quux = Enum16::try_from(bytes.get_mut().get_u16_le()).map_err(|_| {
+            Error::InvalidEnumValueError {
+                obj: "Child".to_string(),
+                field: "quux".to_string(),
+                value: bytes.get_mut().get_u16_le() as u64,
+                type_: "Enum16".to_string(),
+            }
+        })?;
         let payload = bytes.get();
         bytes.get_mut().advance(payload.len());
         let child = match (bar, quux) {
-            (Enum16::A, Enum16::A) => {
+            (Enum16::A, Enum16::A) if GrandChildData::conforms(&payload) => {
                 let mut cell = Cell::new(payload);
                 let child_data = GrandChildData::parse_inner(&mut cell, baz)?;
                 ChildDataChild::GrandChild(Arc::new(child_data))
@@ -371,7 +416,7 @@ impl ChildData {
         Ok(Self { quux, child })
     }
     fn write_to(&self, buffer: &mut BytesMut) {
-        buffer.put_u16_le(self.quux.to_u16().unwrap());
+        buffer.put_u16_le(u16::from(self.quux));
         match &self.child {
             ChildDataChild::GrandChild(child) => child.write_to(buffer),
             ChildDataChild::Payload(payload) => buffer.put_slice(payload),
@@ -411,9 +456,9 @@ impl From<Child> for Parent {
     }
 }
 impl TryFrom<Parent> for Child {
-    type Error = TryFromError;
-    fn try_from(packet: Parent) -> std::result::Result<Child, TryFromError> {
-        Child::new(packet.parent).map_err(TryFromError)
+    type Error = Error;
+    fn try_from(packet: Parent) -> Result<Child> {
+        Child::new(packet.parent)
     }
 }
 impl Child {
@@ -424,7 +469,7 @@ impl Child {
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         let data = ParentData::parse_inner(&mut bytes)?;
-        Ok(Self::new(Arc::new(data)).unwrap())
+        Self::new(Arc::new(data))
     }
     pub fn specialize(&self) -> ChildChild {
         match &self.child.child {
@@ -435,10 +480,15 @@ impl Child {
             ChildDataChild::None => ChildChild::None,
         }
     }
-    fn new(parent: Arc<ParentData>) -> std::result::Result<Self, &'static str> {
+    fn new(parent: Arc<ParentData>) -> Result<Self> {
         let child = match &parent.child {
             ParentDataChild::Child(value) => value.clone(),
-            _ => return Err("Could not parse data, wrong child type"),
+            _ => {
+                return Err(Error::InvalidChildError {
+                    expected: stringify!(ParentDataChild::Child),
+                    actual: format!("{:?}", &parent.child),
+                })
+            }
         };
         Ok(Self { parent, child })
     }
@@ -547,7 +597,7 @@ impl GrandChildData {
         let payload = bytes.get();
         bytes.get_mut().advance(payload.len());
         let child = match (baz) {
-            (Enum16::A) => {
+            (Enum16::A) if GrandGrandChildData::conforms(&payload) => {
                 let mut cell = Cell::new(payload);
                 let child_data = GrandGrandChildData::parse_inner(&mut cell)?;
                 GrandChildDataChild::GrandGrandChild(Arc::new(child_data))
@@ -604,9 +654,9 @@ impl From<GrandChild> for Child {
     }
 }
 impl TryFrom<Parent> for GrandChild {
-    type Error = TryFromError;
-    fn try_from(packet: Parent) -> std::result::Result<GrandChild, TryFromError> {
-        GrandChild::new(packet.parent).map_err(TryFromError)
+    type Error = Error;
+    fn try_from(packet: Parent) -> Result<GrandChild> {
+        GrandChild::new(packet.parent)
     }
 }
 impl GrandChild {
@@ -617,7 +667,7 @@ impl GrandChild {
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         let data = ParentData::parse_inner(&mut bytes)?;
-        Ok(Self::new(Arc::new(data)).unwrap())
+        Self::new(Arc::new(data))
     }
     pub fn specialize(&self) -> GrandChildChild {
         match &self.grandchild.child {
@@ -628,14 +678,24 @@ impl GrandChild {
             GrandChildDataChild::None => GrandChildChild::None,
         }
     }
-    fn new(parent: Arc<ParentData>) -> std::result::Result<Self, &'static str> {
+    fn new(parent: Arc<ParentData>) -> Result<Self> {
         let child = match &parent.child {
             ParentDataChild::Child(value) => value.clone(),
-            _ => return Err("Could not parse data, wrong child type"),
+            _ => {
+                return Err(Error::InvalidChildError {
+                    expected: stringify!(ParentDataChild::Child),
+                    actual: format!("{:?}", &parent.child),
+                })
+            }
         };
         let grandchild = match &child.child {
             ChildDataChild::GrandChild(value) => value.clone(),
-            _ => return Err("Could not parse data, wrong child type"),
+            _ => {
+                return Err(Error::InvalidChildError {
+                    expected: stringify!(ChildDataChild::GrandChild),
+                    actual: format!("{:?}", &child.child),
+                })
+            }
         };
         Ok(Self { parent, child, grandchild })
     }
@@ -804,9 +864,9 @@ impl From<GrandGrandChild> for GrandChild {
     }
 }
 impl TryFrom<Parent> for GrandGrandChild {
-    type Error = TryFromError;
-    fn try_from(packet: Parent) -> std::result::Result<GrandGrandChild, TryFromError> {
-        GrandGrandChild::new(packet.parent).map_err(TryFromError)
+    type Error = Error;
+    fn try_from(packet: Parent) -> Result<GrandGrandChild> {
+        GrandGrandChild::new(packet.parent)
     }
 }
 impl GrandGrandChild {
@@ -817,7 +877,7 @@ impl GrandGrandChild {
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         let data = ParentData::parse_inner(&mut bytes)?;
-        Ok(Self::new(Arc::new(data)).unwrap())
+        Self::new(Arc::new(data))
     }
     pub fn specialize(&self) -> GrandGrandChildChild {
         match &self.grandgrandchild.child {
@@ -827,18 +887,33 @@ impl GrandGrandChild {
             GrandGrandChildDataChild::None => GrandGrandChildChild::None,
         }
     }
-    fn new(parent: Arc<ParentData>) -> std::result::Result<Self, &'static str> {
+    fn new(parent: Arc<ParentData>) -> Result<Self> {
         let child = match &parent.child {
             ParentDataChild::Child(value) => value.clone(),
-            _ => return Err("Could not parse data, wrong child type"),
+            _ => {
+                return Err(Error::InvalidChildError {
+                    expected: stringify!(ParentDataChild::Child),
+                    actual: format!("{:?}", &parent.child),
+                })
+            }
         };
         let grandchild = match &child.child {
             ChildDataChild::GrandChild(value) => value.clone(),
-            _ => return Err("Could not parse data, wrong child type"),
+            _ => {
+                return Err(Error::InvalidChildError {
+                    expected: stringify!(ChildDataChild::GrandChild),
+                    actual: format!("{:?}", &child.child),
+                })
+            }
         };
         let grandgrandchild = match &grandchild.child {
             GrandChildDataChild::GrandGrandChild(value) => value.clone(),
-            _ => return Err("Could not parse data, wrong child type"),
+            _ => {
+                return Err(Error::InvalidChildError {
+                    expected: stringify!(GrandChildDataChild::GrandGrandChild),
+                    actual: format!("{:?}", &grandchild.child),
+                })
+            }
         };
         Ok(Self { parent, child, grandchild, grandgrandchild })
     }
