@@ -29,10 +29,12 @@
 #include "advertise_data_parser.h"
 #include "btif/include/btif_common.h"
 #include "hci/address.h"
+#include "hci/enum_helper.h"
 #include "hci/le_scanning_manager.h"
 #include "hci/msft.h"
 #include "include/hardware/ble_scanner.h"
 #include "main/shim/ble_scanner_interface_impl.h"
+#include "main/shim/config.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
@@ -40,9 +42,6 @@
 #include "main/shim/shim.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/btm_log_history.h"
-#include "storage/device.h"
-#include "storage/le_device.h"
-#include "storage/storage_module.h"
 #include "types/ble_address_with_type.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -126,12 +125,16 @@ void btm_ble_process_adv_pkt_cont_for_inquiry(
     uint8_t advertising_sid, int8_t tx_power, int8_t rssi,
     uint16_t periodic_adv_int, std::vector<uint8_t> advertising_data);
 
-void btif_dm_update_ble_remote_properties(const RawAddress& bd_addr,
-                                          BD_NAME bd_name,
-                                          tBT_DEVICE_TYPE dev_type);
+extern void btif_dm_update_ble_remote_properties(const RawAddress& bd_addr,
+                                                 BD_NAME bd_name,
+                                                 DEV_CLASS dev_class,
+                                                 tBT_DEVICE_TYPE dev_type);
 
 void btm_ble_process_adv_addr(RawAddress& raw_address,
                               tBLE_ADDR_TYPE* address_type);
+
+extern bool btm_ble_get_appearance_as_cod(std::vector<uint8_t> const& data,
+                                          DEV_CLASS dev_class);
 
 using bluetooth::shim::BleScannerInterfaceImpl;
 
@@ -717,6 +720,11 @@ bool BleScannerInterfaceImpl::parse_filter_command(
   advertising_packet_content_filter_command.tds_flags = apcf_command.tds_flags;
   advertising_packet_content_filter_command.tds_flags_mask =
       apcf_command.tds_flags_mask;
+  advertising_packet_content_filter_command.meta_data_type =
+      static_cast<bluetooth::hci::ApcfMetaDataType>(
+          apcf_command.meta_data_type);
+  advertising_packet_content_filter_command.meta_data.assign(
+      apcf_command.meta_data.begin(), apcf_command.meta_data.end());
   advertising_packet_content_filter_command.data.assign(
       apcf_command.data.begin(), apcf_command.data.end());
   advertising_packet_content_filter_command.data_mask.assign(
@@ -758,6 +766,8 @@ void BleScannerInterfaceImpl::handle_remote_properties(
         advertising_data, HCI_EIR_SHORTENED_LOCAL_NAME_TYPE, &remote_name_len);
   }
 
+  bt_bdname_t bdname = {0};
+
   // update device name
   if (p_eir_remote_name) {
     if (!address_cache_.find(bd_addr)) {
@@ -772,31 +782,46 @@ void BleScannerInterfaceImpl::handle_remote_properties(
           return;
         }
 
-        bt_bdname_t bdname;
         memcpy(bdname.name, p_eir_remote_name, remote_name_len);
         if (remote_name_len < BD_NAME_LEN + 1)
           bdname.name[remote_name_len] = '\0';
-
-        btif_dm_update_ble_remote_properties(bd_addr, bdname.name, device_type);
+        btif_dm_update_ble_remote_properties(bd_addr, bdname.name, NULL,
+                                             device_type);
       }
     }
   }
-  auto* storage_module = bluetooth::shim::GetStorage();
+
+  DEV_CLASS dev_class;
+  if (btm_ble_get_appearance_as_cod(advertising_data, dev_class)) {
+    btif_dm_update_ble_remote_properties(bd_addr, bdname.name, dev_class,
+                                         device_type);
+  }
+
   bluetooth::hci::Address address = ToGdAddress(bd_addr);
 
+  std::string device_type_property = "";
   // update device type
-  auto mutation = storage_module->Modify();
-  bluetooth::storage::Device device =
-      storage_module->GetDeviceByLegacyKey(address);
-  mutation.Add(device.SetDeviceType(device_type));
-  mutation.Commit();
-
+  switch (device_type) {
+    case bluetooth::hci::DeviceType::UNKNOWN:
+      device_type_property = "UNKNOWN";
+      break;
+    case bluetooth::hci::DeviceType::BR_EDR:
+      device_type_property = "BR_EDR";
+      break;
+    case bluetooth::hci::DeviceType::LE:
+      device_type_property = "LE";
+      break;
+    case bluetooth::hci::DeviceType::DUAL:
+      device_type_property = "DUAL";
+      break;
+  }
+  bluetooth::shim::BtifConfigInterface::SetStr(address.ToString(), "DevType",
+                                               device_type_property);
   // update address type
-  auto mutation2 = storage_module->Modify();
-  bluetooth::storage::LeDevice le_device = device.Le();
-  mutation2.Add(
-      le_device.SetAddressType((bluetooth::hci::AddressType)addr_type));
-  mutation2.Commit();
+  std::string address_type = bluetooth::hci::AddressTypeText(
+      static_cast<bluetooth::hci::AddressType>(addr_type));
+  bluetooth::shim::BtifConfigInterface::SetStr(address.ToString(), "AddrType",
+                                               address_type);
 }
 
 void BleScannerInterfaceImpl::AddressCache::add(const RawAddress& p_bda) {

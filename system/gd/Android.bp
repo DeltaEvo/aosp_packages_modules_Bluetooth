@@ -98,7 +98,6 @@ cc_defaults {
     name: "libbluetooth_gd_defaults",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     target: {
@@ -175,7 +174,6 @@ cc_defaults {
         "libbluetooth-protos",
         "libbluetooth_rust_interop",
         "libbt-platform-protos-lite",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
     ],
@@ -195,6 +193,7 @@ cc_library {
         "com.android.btservices",
     ],
     min_sdk_version: "31",
+    static_libs: ["libchrome"],
 }
 
 cc_library {
@@ -209,6 +208,7 @@ cc_library {
         "-DFUZZ_TARGET",
         "-DUSE_FAKE_TIMERS",
     ],
+    static_libs: ["libchrome"],
 }
 
 cc_library {
@@ -222,13 +222,13 @@ cc_library {
     cflags: [
         "-DUSE_FAKE_TIMERS",
     ],
+    static_libs: ["libchrome"],
 }
 
 cc_binary {
     name: "bluetooth_stack_with_facade",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     srcs: [
@@ -262,9 +262,9 @@ cc_binary {
         "libbluetooth-protos",
         "libbluetooth_gd",
         "libbluetooth_rust_interop",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
+        "libchrome",
         "libflatbuffers-cpp",
     ],
     shared_libs: [
@@ -309,7 +309,6 @@ cc_test {
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "gd_defaults",
-        "libchrome_support_defaults",
         "mts_defaults",
     ],
     host_supported: true,
@@ -384,10 +383,10 @@ cc_test {
         "libbluetooth_rust_interop",
         "libbt-platform-protos-lite",
         "libbt-platform-protos-lite",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libc++fs",
+        "libchrome",
         "libflatbuffers-cpp",
         "libgmock",
     ],
@@ -406,7 +405,6 @@ cc_test {
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "gd_defaults",
-        "libchrome_support_defaults",
         "mts_defaults",
     ],
     include_dirs: ["packages/modules/Bluetooth/system/gd"],
@@ -428,7 +426,6 @@ cc_test {
     },
     static_libs: [
         "libbluetooth_rust_interop",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
     ],
@@ -462,7 +459,6 @@ cc_defaults {
         "libbluetooth-protos",
         "libbluetooth_gd_fuzzing",
         "libbluetooth_rust_interop",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
@@ -539,7 +535,6 @@ cc_benchmark {
     name: "bluetooth_benchmark_gd",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     srcs: [
@@ -549,6 +544,7 @@ cc_benchmark {
     static_libs: [
         "libbluetooth_gd",
         "libbt_shim_bridge",
+        "libchrome",
     ],
 }
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- *  Copyright 2014 Google, Inc.
+ *  Copyright 1999-2012 Broadcom Corporation
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,6 +18,27 @@
 
 #pragma once
 
-#include "osi/include/config.h"
+#include <cstdint>
 
-std::unique_ptr<config_t> btif_config_transcode(const char* xml_filename);
+#include "bt_target.h"
+#include "stack/include/sdp_status.h"
+
+/* Device Identification (DI) data structure
+ */
+/* Used to set the DI record */
+typedef struct t_sdp_di_record {
+  uint16_t vendor;
+  uint16_t vendor_id_source;
+  uint16_t product;
+  uint16_t version;
+  bool primary_record;
+  char client_executable_url[SDP_MAX_ATTR_LEN]; /* optional */
+  char service_description[SDP_MAX_ATTR_LEN];   /* optional */
+  char documentation_url[SDP_MAX_ATTR_LEN];     /* optional */
+} tSDP_DI_RECORD;
+
+/* Used to get the DI record */
+typedef struct t_sdp_di_get_record {
+  uint16_t spec_id;
+  tSDP_DI_RECORD rec;
+} tSDP_DI_GET_RECORD;

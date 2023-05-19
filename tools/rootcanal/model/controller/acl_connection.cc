@@ -26,28 +26,13 @@ AclConnection::AclConnection(AddressWithType address,
       resolved_address_(resolved_address),
       type_(phy_type),
       role_(role),
+      established_timestamp_(std::chrono::steady_clock::now()),
       last_packet_timestamp_(std::chrono::steady_clock::now()),
       timeout_(std::chrono::seconds(1)) {}
 
 void AclConnection::Encrypt() { encrypted_ = true; };
 
 bool AclConnection::IsEncrypted() const { return encrypted_; };
-
-AddressWithType AclConnection::GetAddress() const { return address_; }
-
-void AclConnection::SetAddress(AddressWithType address) { address_ = address; }
-
-AddressWithType AclConnection::GetOwnAddress() const { return own_address_; }
-
-AddressWithType AclConnection::GetResolvedAddress() const {
-  return resolved_address_;
-}
-
-void AclConnection::SetOwnAddress(AddressWithType address) {
-  own_address_ = address;
-}
-
-Phy::Type AclConnection::GetPhyType() const { return type_; }
 
 uint16_t AclConnection::GetLinkPolicySettings() const {
   return link_policy_settings_;

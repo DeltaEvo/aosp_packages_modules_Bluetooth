@@ -345,7 +345,10 @@ class LinkLayerController {
       uint8_t retransmission_effort, uint16_t packet_types);
   ErrorCode RejectSynchronousConnection(Address bd_addr, uint16_t reason);
 
+  // Returns true if any ACL connection exists.
   bool HasAclConnection();
+  // Returns true if the specified ACL connection handle is valid.
+  bool HasAclConnection(uint16_t connection_handle);
 
   void HandleIso(bluetooth::hci::IsoView iso);
 
@@ -600,10 +603,12 @@ class LinkLayerController {
  protected:
   void SendLinkLayerPacket(
       std::unique_ptr<model::packets::LinkLayerPacketBuilder> packet,
-      int8_t tx_power = 0);
+      int8_t tx_power = 0,
+      std::chrono::milliseconds delay = std::chrono::milliseconds(0));
   void SendLeLinkLayerPacket(
       std::unique_ptr<model::packets::LinkLayerPacketBuilder> packet,
-      int8_t tx_power = 0);
+      int8_t tx_power = 0,
+      std::chrono::milliseconds delay = std::chrono::milliseconds(0));
 
   void IncomingAclPacket(model::packets::LinkLayerPacketView incoming,
                          int8_t rssi);
@@ -708,6 +713,10 @@ class LinkLayerController {
   void IncomingPingRequest(model::packets::LinkLayerPacketView incoming);
   void IncomingRoleSwitchRequest(model::packets::LinkLayerPacketView incoming);
   void IncomingRoleSwitchResponse(model::packets::LinkLayerPacketView incoming);
+
+  void IncomingLlPhyReq(model::packets::LinkLayerPacketView incoming);
+  void IncomingLlPhyRsp(model::packets::LinkLayerPacketView incoming);
+  void IncomingLlPhyUpdateInd(model::packets::LinkLayerPacketView incoming);
 
  public:
   bool IsEventUnmasked(bluetooth::hci::EventCode event) const;
@@ -990,6 +999,12 @@ class LinkLayerController {
 
   // Extended advertising sets.
   std::unordered_map<uint8_t, ExtendedAdvertiser> extended_advertisers_{};
+
+  // Local phy preferences, defaults to LE 1M Phy.
+  uint8_t default_tx_phys_{0x1};
+  uint8_t default_rx_phys_{0x1};
+  uint8_t requested_tx_phys_{0x1};
+  uint8_t requested_rx_phys_{0x1};
 
   struct PeriodicAdvertiserListEntry {
     bluetooth::hci::AdvertiserAddressType advertiser_address_type;

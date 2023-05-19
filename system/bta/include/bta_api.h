@@ -743,6 +743,18 @@ void BTA_dm_init();
 
 /*******************************************************************************
  *
+ * Function         BTA_EnableTestMode
+ *
+ * Description      Enables bluetooth device under test mode
+ *
+ *
+ * Returns          tBTA_STATUS
+ *
+ ******************************************************************************/
+extern void BTA_EnableTestMode(void);
+
+/*******************************************************************************
+ *
  * Function         BTA_DmSetDeviceName
  *
  * Description      This function sets the Bluetooth name of the local device.
@@ -1146,11 +1158,13 @@ void BTA_DmBleObserve(bool start, uint8_t duration,
  * Parameters       start: start or stop the scan procedure,
  *                  duration_sec: Duration of the scan. Continuous scan if 0 is
  *                                passed,
+ *                  low_latency_scan: whether this is a low latency scan,
+ *                                    default is false,
  *
  * Returns          void
  *
  ******************************************************************************/
-void BTA_DmBleScan(bool start, uint8_t duration);
+void BTA_DmBleScan(bool start, uint8_t duration, bool low_latency_scan = false);
 
 /*******************************************************************************
  *
@@ -1410,4 +1424,7 @@ void BTA_DmBleSubrateRequest(const RawAddress& bd_addr, uint16_t subrate_min,
  *
  ******************************************************************************/
 bool BTA_DmCheckLeAudioCapable(const RawAddress& address);
+
+void DumpsysBtaDm(int fd);
+
 #endif /* BTA_API_H */

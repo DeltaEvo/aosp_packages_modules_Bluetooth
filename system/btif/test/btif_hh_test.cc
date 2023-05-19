@@ -44,7 +44,6 @@ uint8_t btu_trace_level = BT_TRACE_LEVEL_DEBUG;
 
 module_t bt_utils_module;
 module_t gd_controller_module;
-module_t gd_idle_module;
 module_t gd_shim_module;
 module_t osi_module;
 module_t rust_module;
@@ -134,6 +133,8 @@ bt_callbacks_t bt_callbacks = {
     .le_address_associate_cb = nullptr,     // le_address_associate_callback
     .acl_state_changed_cb = nullptr,        // acl_state_changed_callback
     .thread_evt_cb = nullptr,               // callback_thread_event
+    .dut_mode_recv_cb = nullptr,            // dut_mode_recv_callback
+    .le_test_mode_cb = nullptr,             // le_test_mode_callback
     .energy_info_cb = nullptr,              // energy_info_callback
     .link_quality_report_cb = nullptr,      // link_quality_report_callback
     .generate_local_oob_data_cb = nullptr,  // generate_local_oob_data_callback

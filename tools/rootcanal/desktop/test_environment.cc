@@ -49,11 +49,10 @@ TestEnvironment::TestEnvironment(
     std::function<std::shared_ptr<AsyncDataChannelConnector>(AsyncManager*)>
         open_connector,
     int test_port, int hci_port, int link_port, int link_ble_port,
-    const std::string& config_str, const std::string& default_commands_file,
+    const std::string& config_str,
     bool enable_hci_sniffer, bool enable_baseband_sniffer,
     bool enable_pcap_filter, bool disable_address_reuse)
-    : default_commands_file_(default_commands_file),
-      enable_hci_sniffer_(enable_hci_sniffer),
+    : enable_hci_sniffer_(enable_hci_sniffer),
       enable_baseband_sniffer_(enable_baseband_sniffer),
       enable_pcap_filter_(enable_pcap_filter) {
   test_socket_server_ = open_server(&async_manager_, test_port);
@@ -68,19 +67,19 @@ TestEnvironment::TestEnvironment(
   rootcanal::configuration::Configuration* config =
       new rootcanal::configuration::Configuration();
   if (!google::protobuf::TextFormat::ParseFromString(config_str, config) ||
-      config->controllers_size() == 0) {
+      config->tcp_server_size() == 0) {
     // Default configuration with default hci port if the input
     // configuration cannot be used.
     SetUpHciServer(open_server, hci_port, rootcanal::ControllerProperties());
   } else {
     // Open an HCI server for all configurations requested by
     // the caller.
-    int num_controllers = config->controllers_size();
+    int num_controllers = config->tcp_server_size();
     for (int index = 0; index < num_controllers; index++) {
-      rootcanal::configuration::Controller const& controller =
-          config->controllers(index);
-      SetUpHciServer(open_server, controller.tcp_port(),
-                     rootcanal::ControllerProperties(controller));
+      rootcanal::configuration::TcpServer const& tcp_server =
+          config->tcp_server(index);
+      SetUpHciServer(open_server, tcp_server.tcp_port(),
+                     rootcanal::ControllerProperties(tcp_server.configuration()));
     }
   }
 }
@@ -98,32 +97,38 @@ void TestEnvironment::SetUpHciServer(
   server->SetOnConnectCallback([this, properties = std::move(properties)](
                                    std::shared_ptr<AsyncDataChannel> socket,
                                    AsyncDataChannelServer* server) {
-    auto transport = HciSocketTransport::Create(socket);
-    if (enable_hci_sniffer_) {
-      transport = HciSniffer::Create(transport);
-    }
-    auto device = HciDevice::Create(transport, properties);
+    // AddHciConnection needs to be executed in task thread to
+    // prevent data races on test model.
     async_manager_.ExecAsync(socket_user_id_, std::chrono::milliseconds(0),
-                             [=]() { test_model_.AddHciConnection(device); });
-    if (enable_hci_sniffer_) {
-      auto filename = device->GetAddress().ToString() + ".pcap";
-      for (auto i = 0; std::filesystem::exists(filename); i++) {
-        filename =
-            device->GetAddress().ToString() + "_" + std::to_string(i) + ".pcap";
+                             [=]() {
+      auto transport = HciSocketTransport::Create(socket);
+      if (enable_hci_sniffer_) {
+        transport = HciSniffer::Create(transport);
       }
-      auto file = std::make_shared<std::ofstream>(filename, std::ios::binary);
-      auto sniffer = std::static_pointer_cast<HciSniffer>(transport);
+      auto device = HciDevice::Create(transport, properties);
+      test_model_.AddHciConnection(device);
 
-      // Add PCAP output stream.
-      sniffer->SetOutputStream(file);
+      if (enable_hci_sniffer_) {
+        auto filename = device->GetAddress().ToString() + ".pcap";
+        for (auto i = 0; std::filesystem::exists(filename); i++) {
+          filename =
+              device->GetAddress().ToString() + "_" + std::to_string(i) + ".pcap";
+        }
+        auto file = std::make_shared<std::ofstream>(filename, std::ios::binary);
+        auto sniffer = std::static_pointer_cast<HciSniffer>(transport);
 
-      // Add a PCAP filter if the option is enabled.
-      // TODO: ideally the filter should be shared between all transport
-      // instances to use the same user information remapping between traces.
-      if (enable_pcap_filter_) {
-        sniffer->SetPcapFilter(std::make_shared<rootcanal::PcapFilter>());
+        // Add PCAP output stream.
+        sniffer->SetOutputStream(file);
+
+        // Add a PCAP filter if the option is enabled.
+        // TODO: ideally the filter should be shared between all transport
+        // instances to use the same user information remapping between traces.
+        if (enable_pcap_filter_) {
+          sniffer->SetPcapFilter(std::make_shared<rootcanal::PcapFilter>());
+        }
       }
-    }
+    });
+
     server->StartListening();
   });
   hci_socket_servers_.emplace_back(std::move(server));
@@ -232,10 +237,12 @@ void TestEnvironment::SetUpTestChannel() {
 
   test_channel_.AddPhy({"BR_EDR"});
   test_channel_.AddPhy({"LOW_ENERGY"});
+  test_channel_.AddDevice({"beacon", "be:ac:01:55:00:01", "1000"});
+  test_channel_.AddDeviceToPhy({"0", "1"});
+  test_channel_.AddDevice({"beacon", "be:ac:01:55:00:02", "1000"});
+  test_channel_.AddDeviceToPhy({"1", "1"});
   test_channel_.SetTimerPeriod({"5"});
   test_channel_.StartTimer({});
-
-  test_channel_.FromFile(default_commands_file_);
 
   if (!transport_configured) {
     LOG_ERROR("Test channel SetUp failed.");

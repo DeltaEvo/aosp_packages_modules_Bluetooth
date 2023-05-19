@@ -186,12 +186,14 @@ struct BTA_DmBleRequestMaxTxDataLength {
 extern struct BTA_DmBleRequestMaxTxDataLength BTA_DmBleRequestMaxTxDataLength;
 
 // Name: BTA_DmBleScan
-// Params: bool start, uint8_t duration
+// Params: bool start, uint8_t duration, bool low_latency_scan
 // Return: void
 struct BTA_DmBleScan {
-  std::function<void(bool start, uint8_t duration)> body{
-      [](bool start, uint8_t duration) {}};
-  void operator()(bool start, uint8_t duration) { body(start, duration); };
+  std::function<void(bool start, uint8_t duration, bool low_latency_scan)> body{
+      [](bool start, uint8_t duration, bool low_latency_scan) {}};
+  void operator()(bool start, uint8_t duration, bool low_latency_scan) {
+    body(start, duration, low_latency_scan);
+  };
 };
 extern struct BTA_DmBleScan BTA_DmBleScan;
 
@@ -417,6 +419,15 @@ struct BTA_DmSetLocalDiRecord {
   };
 };
 extern struct BTA_DmSetLocalDiRecord BTA_DmSetLocalDiRecord;
+
+// Name: BTA_EnableTestMode
+// Params: void
+// Return: void
+struct BTA_EnableTestMode {
+  std::function<void(void)> body{[](void) {}};
+  void operator()(void) { body(); };
+};
+extern struct BTA_EnableTestMode BTA_EnableTestMode;
 
 // Name: BTA_GetEirService
 // Params: uint8_t* p_eir, size_t eir_len, tBTA_SERVICE_MASK* p_services

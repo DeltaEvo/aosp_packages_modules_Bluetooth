@@ -189,6 +189,15 @@ void DualModeController::HandleCommand(
     send_event_(bluetooth::hci::LoopbackCommandBuilder::Create(
         std::move(raw_builder_ptr)));
   }
+  // Quirk to reset the host stack when a command is received before the Hci
+  // Reset command.
+  else if (properties_.quirks.hardware_error_before_reset &&
+           !controller_reset_ &&
+           op_code != OpCode::RESET) {
+    LOG_WARN("Received command %s before HCI Reset; sending the Hardware"
+             " Error event", OpCodeText(op_code).c_str());
+    send_event_(bluetooth::hci::HardwareErrorBuilder::Create(0x42));
+  }
   // Command is both supported and implemented.
   // Invoke the registered handler.
   else if (is_supported_command && is_implemented_command) {
@@ -276,6 +285,7 @@ void DualModeController::Reset(CommandView command) {
     loopback_mode_ = LoopbackMode::NO_LOOPBACK;
   }
 
+  controller_reset_ = true;
   send_event_(bluetooth::hci::ResetCompleteBuilder::Create(kNumCommandPackets,
                                                            ErrorCode::SUCCESS));
 }
@@ -289,6 +299,35 @@ void DualModeController::ReadBufferSize(CommandView command) {
       properties_.acl_data_packet_length, properties_.sco_data_packet_length,
       properties_.total_num_acl_data_packets,
       properties_.total_num_sco_data_packets));
+}
+
+void DualModeController::ReadFailedContactCounter(CommandView command) {
+  auto command_view =
+      bluetooth::hci::ReadFailedContactCounterView::Create(command);
+  ASSERT(command_view.IsValid());
+
+  uint16_t connection_handle = command_view.GetConnectionHandle();
+  uint16_t failed_contact_counter = 0;
+  ErrorCode status = link_layer_controller_.HasAclConnection(connection_handle)
+                         ? ErrorCode::SUCCESS
+                         : ErrorCode::UNKNOWN_CONNECTION;
+
+  send_event_(bluetooth::hci::ReadFailedContactCounterCompleteBuilder::Create(
+      kNumCommandPackets, status, connection_handle, failed_contact_counter));
+}
+
+void DualModeController::ResetFailedContactCounter(CommandView command) {
+  auto command_view =
+      bluetooth::hci::ReadFailedContactCounterView::Create(command);
+  ASSERT(command_view.IsValid());
+
+  uint16_t connection_handle = command_view.GetConnectionHandle();
+  ErrorCode status = link_layer_controller_.HasAclConnection(connection_handle)
+                         ? ErrorCode::SUCCESS
+                         : ErrorCode::UNKNOWN_CONNECTION;
+
+  send_event_(bluetooth::hci::ResetFailedContactCounterCompleteBuilder::Create(
+      kNumCommandPackets, status, connection_handle));
 }
 
 void DualModeController::ReadRssi(CommandView command) {
@@ -1814,8 +1853,8 @@ void DualModeController::LeSetDefaultPhy(CommandView command) {
   ASSERT(command_view.IsValid());
   ErrorCode status = link_layer_controller_.LeSetDefaultPhy(
       command_view.GetAllPhysNoTransmitPreference(),
-      command_view.GetAllPhysNoReceivePreference(),
-      command_view.GetTxPhysBitmask(), command_view.GetRxPhysBitmask());
+      command_view.GetAllPhysNoReceivePreference(), command_view.GetTxPhys(),
+      command_view.GetRxPhys());
   send_event_(bluetooth::hci::LeSetDefaultPhyCompleteBuilder::Create(
       kNumCommandPackets, status));
 }
@@ -1826,9 +1865,8 @@ void DualModeController::LeSetPhy(CommandView command) {
   ErrorCode status = link_layer_controller_.LeSetPhy(
       command_view.GetConnectionHandle(),
       command_view.GetAllPhysNoTransmitPreference(),
-      command_view.GetAllPhysNoReceivePreference(),
-      command_view.GetTxPhysBitmask(), command_view.GetRxPhysBitmask(),
-      command_view.GetPhyOptions());
+      command_view.GetAllPhysNoReceivePreference(), command_view.GetTxPhys(),
+      command_view.GetRxPhys(), command_view.GetPhyOptions());
   send_event_(bluetooth::hci::LeSetPhyStatusBuilder::Create(
       status, kNumCommandPackets));
 }
@@ -3501,10 +3539,10 @@ const std::unordered_map<OpCode, DualModeController::CommandHandler>
         //&DualModeController::ReadLocalSupportedControllerDelay},
 
         // STATUS_PARAMETERS
-        //{OpCode::READ_FAILED_CONTACT_COUNTER,
-        //&DualModeController::ReadFailedContactCounter},
-        //{OpCode::RESET_FAILED_CONTACT_COUNTER,
-        //&DualModeController::ResetFailedContactCounter},
+        {OpCode::READ_FAILED_CONTACT_COUNTER,
+         &DualModeController::ReadFailedContactCounter},
+        {OpCode::RESET_FAILED_CONTACT_COUNTER,
+         &DualModeController::ResetFailedContactCounter},
         //{OpCode::READ_LINK_QUALITY, &DualModeController::ReadLinkQuality},
         {OpCode::READ_RSSI, &DualModeController::ReadRssi},
         //{OpCode::READ_AFH_CHANNEL_MAP,

@@ -128,17 +128,16 @@ fn generate_unit_tests(input: &str, packet_names: &[&str], module_name: &str) {
     }
 
     // TODO(mgeisler): make the generated code clean from warnings.
-    println!("#![allow(warnings, missing_docs)]");
-    println!();
-    println!(
-        "{}",
-        &quote! {
-            use #module::Packet;
-            use serde_json::json;
+    let code = quote! {
+        #![allow(warnings, missing_docs)]
 
-            #(#tests)*
-        }
-    );
+        use #module::Packet;
+        use serde_json::json;
+
+        #(#tests)*
+    };
+    let syntax_tree = syn::parse2::<syn::File>(code).expect("Could not parse {code:#?}");
+    println!("{}", prettyplease::unparse(&syntax_tree));
 }
 
 fn main() {
@@ -173,6 +172,8 @@ fn main() {
             "Packet_Array_Field_UnsizedElement_UnknownSize",
             "Packet_Array_Field_UnsizedElement_VariableCount",
             "Packet_Array_Field_UnsizedElement_VariableSize",
+            "Packet_Array_Field_SizedElement_VariableSize_Padded",
+            "Packet_Array_Field_UnsizedElement_VariableCount_Padded",
             "Packet_Body_Field_UnknownSize",
             "Packet_Body_Field_UnknownSize_Terminal",
             "Packet_Body_Field_VariableSize",
@@ -226,6 +227,8 @@ fn main() {
             "Struct_Array_Field_UnsizedElement_VariableCount",
             "Struct_Array_Field_UnsizedElement_VariableSize",
             "Struct_Array_Field_UnsizedElement_VariableSize",
+            "Struct_Array_Field_SizedElement_VariableSize_Padded",
+            "Struct_Array_Field_UnsizedElement_VariableCount_Padded",
             "Struct_Enum_Field",
             "Struct_FixedEnum_Field",
             "Struct_FixedScalar_Field",

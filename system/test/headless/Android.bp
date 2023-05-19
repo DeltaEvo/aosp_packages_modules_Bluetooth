@@ -97,7 +97,6 @@ cc_binary {
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-stack-core",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libbtdevice",
@@ -134,7 +133,6 @@ cc_binary {
         "libhidlbase",
         "libjsoncpp",
         "liblog", // __android_log_print
-        "libtinyxml2",
         "libutils",
     ],
     ldflags: ["-rdynamic"],

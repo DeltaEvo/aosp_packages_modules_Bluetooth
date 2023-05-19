@@ -899,25 +899,85 @@ fn generate_enum_decl(
     }
 }
 
+/// Generate the declaration for a custom field of static size.
+///
+/// * `id` - Enum identifier.
+/// * `width` - Width of the backing type of the enum, in bits.
+fn generate_custom_field_decl(id: &str, width: usize) -> proc_macro2::TokenStream {
+    let id = format_ident!("{}", id);
+    let backing_type = types::Integer::new(width);
+    let backing_type_str = proc_macro2::Literal::string(&format!("u{}", backing_type.width));
+    let max_value = mask_bits(width, "usize");
+    let common = quote! {
+        impl From<&#id> for #backing_type {
+            fn from(value: &#id) -> #backing_type {
+                value.0
+            }
+        }
+
+        impl From<#id> for #backing_type {
+            fn from(value: #id) -> #backing_type {
+                value.0
+            }
+        }
+    };
+
+    if backing_type.width == width {
+        quote! {
+            #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+            #[cfg_attr(feature = "serde", serde(from = #backing_type_str, into = #backing_type_str))]
+            pub struct #id(#backing_type);
+
+            #common
+
+            impl From<#backing_type> for #id {
+                fn from(value: #backing_type) -> Self {
+                    #id(value)
+                }
+            }
+        }
+    } else {
+        quote! {
+            #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+            #[cfg_attr(feature = "serde", serde(try_from = #backing_type_str, into = #backing_type_str))]
+            pub struct #id(#backing_type);
+
+            #common
+
+            impl TryFrom<#backing_type> for #id {
+                type Error = #backing_type;
+                fn try_from(value: #backing_type) -> std::result::Result<Self, Self::Error> {
+                    if value > #max_value {
+                        Err(value)
+                    } else {
+                        Ok(#id(value))
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn generate_decl(
     scope: &lint::Scope<'_>,
     file: &analyzer_ast::File,
     decl: &analyzer_ast::Decl,
-) -> String {
+) -> proc_macro2::TokenStream {
     match &decl.desc {
-        ast::DeclDesc::Packet { id, .. } => {
-            generate_packet_decl(scope, file.endianness.value, id).to_string()
-        }
+        ast::DeclDesc::Packet { id, .. } => generate_packet_decl(scope, file.endianness.value, id),
         ast::DeclDesc::Struct { id, parent_id: None, .. } => {
             // TODO(mgeisler): handle structs with parents. We could
             // generate code for them, but the code is not useful
             // since it would require the caller to unpack everything
             // manually. We either need to change the API, or
             // implement the recursive (de)serialization.
-            generate_struct_decl(scope, file.endianness.value, id).to_string()
+            generate_struct_decl(scope, file.endianness.value, id)
         }
-        ast::DeclDesc::Enum { id, tags, width } => {
-            generate_enum_decl(id, tags, *width, false).to_string()
+        ast::DeclDesc::Enum { id, tags, width } => generate_enum_decl(id, tags, *width, false),
+        ast::DeclDesc::CustomField { id, width: Some(width), .. } => {
+            generate_custom_field_decl(id, *width)
         }
         _ => todo!("unsupported Decl::{:?}", decl),
     }
@@ -928,18 +988,18 @@ fn generate_decl(
 /// The code is not formatted, pipe it through `rustfmt` to get
 /// readable source code.
 pub fn generate(sources: &ast::SourceDatabase, file: &analyzer_ast::File) -> String {
-    let mut code = String::new();
-
     let source = sources.get(file.file).expect("could not read source");
-    code.push_str(&preamble::generate(Path::new(source.name())));
+    let preamble = preamble::generate(Path::new(source.name()));
 
     let scope = lint::Scope::new(file);
-    for decl in &file.declarations {
-        code.push_str(&generate_decl(&scope, file, decl));
-        code.push_str("\n\n");
-    }
+    let decls = file.declarations.iter().map(|decl| generate_decl(&scope, file, decl));
+    let code = quote! {
+        #preamble
 
-    code
+        #(#decls)*
+    };
+    let syntax_tree = syn::parse2(code).expect("Could not parse code");
+    prettyplease::unparse(&syntax_tree)
 }
 
 #[cfg(test)]
@@ -948,7 +1008,7 @@ mod tests {
     use crate::analyzer;
     use crate::ast;
     use crate::parser::parse_inline;
-    use crate::test_utils::{assert_snapshot_eq, rustfmt};
+    use crate::test_utils::{assert_snapshot_eq, format_rust};
     use paste::paste;
 
     /// Parse a string fragment as a PDL file.
@@ -1031,7 +1091,7 @@ mod tests {
                     let actual_code = generate(&db, &file);
                     assert_snapshot_eq(
                         &format!("tests/generated/{name}_{endianness}.rs"),
-                        &rustfmt(&actual_code),
+                        &format_rust(&actual_code),
                     );
                 }
             }
@@ -1101,6 +1161,20 @@ mod tests {
             B = 1,
             C = 2..255,
         }
+        "#
+    );
+
+    test_pdl!(
+        custom_field_declaration,
+        r#"
+        // Still unsupported.
+        // custom_field Dynamic "dynamic"
+
+        // Should generate a type with From<u32> implementation.
+        custom_field ExactSize : 32 "exact_size"
+
+        // Should generate a type with TryFrom<u32> implementation.
+        custom_field TruncatedSize : 24 "truncated_size"
         "#
     );
 
@@ -1252,12 +1326,40 @@ mod tests {
     );
 
     test_pdl!(
+        packet_decl_array_with_padding,
+        "
+          struct Foo {
+            _count_(a): 40,
+            a: 16[],
+          }
+
+          packet Bar {
+            a: Foo[],
+            _padding_ [128],
+          }
+        "
+    );
+
+    test_pdl!(
         packet_decl_reserved_field,
         "
           packet Foo {
             _reserved_: 40,
           }
         "
+    );
+
+    test_pdl!(
+        packet_decl_custom_field,
+        r#"
+          custom_field Bar1 : 24 "exact"
+          custom_field Bar2 : 32 "truncated"
+
+          packet Foo {
+            a: Bar1,
+            b: Bar2,
+          }
+        "#
     );
 
     test_pdl!(
