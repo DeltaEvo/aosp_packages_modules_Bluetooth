@@ -26,6 +26,7 @@
 #define LOG_TAG "bt_btm_ble"
 
 #include <base/logging.h>
+#include <base/strings/stringprintf.h>
 
 #include <cstdint>
 
@@ -45,6 +46,7 @@
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
+#include "stack/include/btm_log_history.h"
 #include "stack/include/btu.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/l2cap_security_interface.h"
@@ -63,6 +65,10 @@ void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
 #ifndef PROPERTY_BLE_PRIVACY_ENABLED
 #define PROPERTY_BLE_PRIVACY_ENABLED "bluetooth.core.gap.le.privacy.enabled"
 #endif
+
+namespace {
+constexpr char kBtmLogTag[] = "SEC";
+}
 
 // Pairing parameters defined in Vol 3, Part H, Chapter 3.5.1 - 3.5.2
 // All present in the exact decimal values, not hex
@@ -85,10 +91,6 @@ static const char kPropertyCtkdMaxKeySize[] =
 /******************************************************************************/
 void BTM_SecAddBleDevice(const RawAddress& bd_addr, tBT_DEVICE_TYPE dev_type,
                          tBLE_ADDR_TYPE addr_type) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecAddBleDevice(bd_addr, dev_type, addr_type);
-  }
-
   LOG_DEBUG("dev_type=0x%x", dev_type);
 
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
@@ -173,10 +175,6 @@ bool BTM_GetRemoteDeviceName(const RawAddress& bd_addr, BD_NAME bd_name) {
  ******************************************************************************/
 void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
                       tBTM_LE_KEY_TYPE key_type) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecAddBleKey(bd_addr, p_le_key, key_type);
-  }
-
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   if (!p_dev_rec || !p_le_key ||
       (key_type != BTM_LE_KEY_PENC && key_type != BTM_LE_KEY_PID &&
@@ -213,10 +211,6 @@ void BTM_SecAddBleKey(const RawAddress& bd_addr, tBTM_LE_KEY_VALUE* p_le_key,
  *
  ******************************************************************************/
 void BTM_BleLoadLocalKeys(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleLoadLocalKeys(key_type, p_key);
-  }
-
   tBTM_DEVCB* p_devcb = &btm_cb.devcb;
   BTM_TRACE_DEBUG("%s", __func__);
   if (p_key != NULL) {
@@ -239,28 +233,14 @@ void BTM_BleLoadLocalKeys(uint8_t key_type, tBTM_BLE_LOCAL_KEYS* p_key) {
 
 /** Returns local device encryption root (ER) */
 const Octet16& BTM_GetDeviceEncRoot() {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_GetDeviceEncRoot();
-  }
   return btm_cb.devcb.ble_encryption_key_value;
 }
 
 /** Returns local device identity root (IR). */
-const Octet16& BTM_GetDeviceIDRoot() {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_GetDeviceIDRoot();
-  }
-  return btm_cb.devcb.id_keys.irk;
-}
+const Octet16& BTM_GetDeviceIDRoot() { return btm_cb.devcb.id_keys.irk; }
 
 /** Return local device DHK. */
-const Octet16& BTM_GetDeviceDHK() {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_GetDeviceDHK();
-  }
-  return btm_cb.devcb.id_keys.dhk;
-}
-
+const Octet16& BTM_GetDeviceDHK() { return btm_cb.devcb.id_keys.dhk; }
 
 /*******************************************************************************
  *
@@ -277,11 +257,12 @@ const Octet16& BTM_GetDeviceDHK() {
  *
  ******************************************************************************/
 void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecurityGrant(bd_addr, res);
-  }
-  tSMP_STATUS res_smp =
+  const tSMP_STATUS res_smp =
       (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_REPEATED_ATTEMPTS;
+  BTM_LogHistory(kBtmLogTag, bd_addr, "Granted",
+                 base::StringPrintf("passkey_status:%s",
+                                    smp_status_text(res_smp).c_str()));
+
   BTM_TRACE_DEBUG("BTM_SecurityGrant");
   SMP_SecurityGrant(bd_addr, res_smp);
 }
@@ -302,17 +283,18 @@ void BTM_SecurityGrant(const RawAddress& bd_addr, uint8_t res) {
  ******************************************************************************/
 void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res,
                          uint32_t passkey) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
-  tSMP_STATUS res_smp =
-      (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_PASSKEY_ENTRY_FAIL;
-
   if (p_dev_rec == NULL) {
     BTM_TRACE_ERROR("Passkey reply to Unknown device");
     return;
   }
+
+  const tSMP_STATUS res_smp =
+      (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_PASSKEY_ENTRY_FAIL;
+  BTM_LogHistory(kBtmLogTag, bd_addr, "Passkey reply",
+                 base::StringPrintf("transport:%s authenticate_status:%s",
+                                    bt_transport_text(BT_TRANSPORT_LE).c_str(),
+                                    smp_status_text(res_smp).c_str()));
 
   p_dev_rec->sec_flags |= BTM_SEC_LE_AUTHENTICATED;
   BTM_TRACE_DEBUG("BTM_BlePasskeyReply");
@@ -332,17 +314,19 @@ void BTM_BlePasskeyReply(const RawAddress& bd_addr, uint8_t res,
  *
  ******************************************************************************/
 void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
-  tSMP_STATUS res_smp =
-      (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_PASSKEY_ENTRY_FAIL;
-
   if (p_dev_rec == NULL) {
     BTM_TRACE_ERROR("Passkey reply to Unknown device");
     return;
   }
+  const tSMP_STATUS res_smp =
+      (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_PASSKEY_ENTRY_FAIL;
+
+  BTM_LogHistory(kBtmLogTag, bd_addr, "Confirm reply",
+                 base::StringPrintf(
+                     "transport:%s numeric_comparison_authenticate_status:%s",
+                     bt_transport_text(BT_TRANSPORT_LE).c_str(),
+                     smp_status_text(res_smp).c_str()));
 
   p_dev_rec->sec_flags |= BTM_SEC_LE_AUTHENTICATED;
   BTM_TRACE_DEBUG("%s", __func__);
@@ -366,18 +350,17 @@ void BTM_BleConfirmReply(const RawAddress& bd_addr, uint8_t res) {
  ******************************************************************************/
 void BTM_BleOobDataReply(const RawAddress& bd_addr, uint8_t res, uint8_t len,
                          uint8_t* p_data) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleOobDataReply(bd_addr, res, len, p_data);
-  }
-  tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_OOB_FAIL;
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
-
-  BTM_TRACE_DEBUG("%s:", __func__);
-
   if (p_dev_rec == NULL) {
     BTM_TRACE_ERROR("%s: Unknown device", __func__);
     return;
   }
+
+  const tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_OOB_FAIL;
+  BTM_LogHistory(kBtmLogTag, bd_addr, "Oob data reply",
+                 base::StringPrintf("transport:%s authenticate_status:%s",
+                                    bt_transport_text(BT_TRANSPORT_LE).c_str(),
+                                    smp_status_text(res_smp).c_str()));
 
   p_dev_rec->sec_flags |= BTM_SEC_LE_AUTHENTICATED;
   SMP_OobDataReply(bd_addr, res_smp, len, p_data);
@@ -398,18 +381,16 @@ void BTM_BleOobDataReply(const RawAddress& bd_addr, uint8_t res, uint8_t len,
  ******************************************************************************/
 void BTM_BleSecureConnectionOobDataReply(const RawAddress& bd_addr,
                                          uint8_t* p_c, uint8_t* p_r) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleSecureConnectionOobDataReply(bd_addr, p_c,
-                                                                p_r);
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
-
-  BTM_TRACE_DEBUG("%s:", __func__);
-
   if (p_dev_rec == NULL) {
     BTM_TRACE_ERROR("%s: Unknown device", __func__);
     return;
   }
+
+  BTM_LogHistory(
+      kBtmLogTag, bd_addr, "Oob data reply",
+      base::StringPrintf("transport:%s",
+                         bt_transport_text(BT_TRANSPORT_LE).c_str()));
 
   p_dev_rec->sec_flags |= BTM_SEC_LE_AUTHENTICATED;
 
@@ -446,11 +427,6 @@ void BTM_BleSetPrefConnParams(const RawAddress& bd_addr, uint16_t min_conn_int,
                               uint16_t max_conn_int,
                               uint16_t peripheral_latency,
                               uint16_t supervision_tout) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleSetPrefConnParams(
-        bd_addr, min_conn_int, max_conn_int, peripheral_latency,
-        supervision_tout);
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
 
   BTM_TRACE_API(
@@ -582,10 +558,6 @@ void BTM_ReadDevInfo(const RawAddress& remote_bda, tBT_DEVICE_TYPE* p_dev_type,
  ******************************************************************************/
 bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
                                        tBT_TRANSPORT transport) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_ReadConnectedTransportAddress(remote_bda,
-                                                              transport);
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(*remote_bda);
 
   /* if no device can be located, return */
@@ -624,10 +596,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
  *
  ******************************************************************************/
 bool BTM_UseLeLink(const RawAddress& bd_addr) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_UseLeLink(bd_addr);
-  }
-
   if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_BR_EDR)) {
     return false;
   } else if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
@@ -738,9 +706,6 @@ void read_phy_cb(
 void BTM_BleReadPhy(
     const RawAddress& bd_addr,
     base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleReadPhy(bd_addr, cb);
-  }
   BTM_TRACE_DEBUG("%s", __func__);
 
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
@@ -774,10 +739,6 @@ void doNothing(uint8_t* data, uint16_t len) {}
 
 void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
                    uint16_t phy_options) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleSetPhy(bd_addr, tx_phys, rx_phys,
-                                          phy_options);
-  }
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
     LOG_INFO(
         "Unable to set phy preferences because no le acl is connected to "
@@ -1331,7 +1292,7 @@ void btm_ble_link_sec_check(const RawAddress& bd_addr,
     return;
   }
 
-  if (p_dev_rec->sec_state == BTM_SEC_STATE_ENCRYPTING ||
+  if (p_dev_rec->is_security_state_encrypting() ||
       p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
     /* race condition: discard the security request while central is encrypting
      * the link */
@@ -1493,7 +1454,7 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk,
     return BTM_WRONG_MODE;
   }
 
-  if (p_rec->sec_state == BTM_SEC_STATE_ENCRYPTING) {
+  if (p_rec->is_security_state_encrypting()) {
     BTM_TRACE_WARNING("Link Encryption is active, Busy!");
     return BTM_BUSY;
   }
@@ -1511,7 +1472,7 @@ tBTM_STATUS btm_ble_start_encrypt(const RawAddress& bda, bool use_stk,
   }
 
   if (p_rec->sec_state == BTM_SEC_STATE_IDLE)
-    p_rec->sec_state = BTM_SEC_STATE_ENCRYPTING;
+    p_rec->sec_state = BTM_SEC_STATE_LE_ENCRYPTING;
 
   return BTM_CMD_STARTED;
 }
@@ -1539,7 +1500,7 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
 
   BTM_TRACE_DEBUG("btm_ble_link_encrypted encr_enable=%d", encr_enable);
 
-  enc_cback = (p_dev_rec->sec_state == BTM_SEC_STATE_ENCRYPTING);
+  enc_cback = p_dev_rec->is_security_state_le_encrypting();
 
   smp_link_encrypted(bd_addr, encr_enable);
 
@@ -1952,10 +1913,6 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
  ******************************************************************************/
 bool BTM_BleDataSignature(const RawAddress& bd_addr, uint8_t* p_text,
                           uint16_t len, BLE_SIGNATURE signature) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleDataSignature(bd_addr, p_text, len,
-                                                 signature);
-  }
   tBTM_SEC_DEV_REC* p_rec = btm_find_dev(bd_addr);
 
   BTM_TRACE_DEBUG("%s", __func__);
@@ -2014,10 +1971,6 @@ bool BTM_BleDataSignature(const RawAddress& bd_addr, uint8_t* p_text,
  ******************************************************************************/
 bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
                             uint16_t len, uint32_t counter, uint8_t* p_comp) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleVerifySignature(bd_addr, p_orig, len,
-                                                   counter, p_comp);
-  }
   bool verified = false;
   tBTM_SEC_DEV_REC* p_rec = btm_find_dev(bd_addr);
   uint8_t p_mac[BTM_CMAC_TLEN_SIZE];
