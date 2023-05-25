@@ -19,6 +19,7 @@ cc_defaults {
     tidy_checks: [
         "-*",
         "readability-*",
+
         "-readability-function-size",
         "-readability-identifier-length",
         "-readability-implicit-bool-conversion",
@@ -117,8 +118,8 @@ cc_library_static {
         "librootcanal_config",
     ],
     whole_static_libs: [
-        "librootcanal_rs",
         "librootcanal_config",
+        "librootcanal_rs",
     ],
     shared_libs: [
         "libbase",
@@ -170,13 +171,13 @@ cc_library_host_shared {
     stl: "libc++_static",
     static_libs: [
         "libcrypto",
-        "librootcanal_config",
         "libprotobuf-cpp-full",
+        "librootcanal_config",
     ],
     whole_static_libs: [
         "libbase",
-        "librootcanal_rs",
         "liblog",
+        "librootcanal_rs",
     ],
     cflags: [
         "-fexceptions",
@@ -322,6 +323,7 @@ cc_test_host {
     srcs: [
         "test/async_manager_unittest.cc",
         "test/h4_parser_unittest.cc",
+        "test/pcap_filter_unittest.cc",
         "test/posix_socket_unittest.cc",
     ],
     header_libs: [
@@ -436,16 +438,9 @@ genrule {
 
 genrule {
     name: "rootcanal_hci_packets_rust_gen",
-    tools: [
-        "bluetooth_packetgen",
-    ],
-    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/tools/rootcanal/packets --out=$(genDir) $(in) --rust",
-    srcs: [
-        "packets/hci/hci_packets.pdl",
-    ],
-    out: [
-        "hci/hci_packets.rs",
-    ],
+    defaults: ["pdl_rust_generator_defaults"],
+    srcs: ["packets/hci/hci_packets.pdl"],
+    out: ["hci_packets.rs"],
 }
 
 // bt_vhci_forwarder in cuttlefish depends on this H4Packetizer implementation.

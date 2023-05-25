@@ -32,10 +32,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.BroadcastOptions;
-import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothHearingAid;
-import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
 import android.bluetooth.BluetoothStatusCodes;
@@ -72,16 +69,15 @@ import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.sysprop.BluetoothProperties;
-import android.text.TextUtils;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.SynchronousResultReceiver;
@@ -141,8 +137,6 @@ class BluetoothManagerService {
     private static final int ADD_PROXY_DELAY_MS = 100;
     // Delay for retrying enable and disable in msec
     private static final int ENABLE_DISABLE_DELAY_MS = 300;
-    private static final int DELAY_BEFORE_RESTART_DUE_TO_INIT_FLAGS_CHANGED_MS = 300;
-    private static final int DELAY_FOR_RETRY_INIT_FLAG_CHECK_MS = 86400000;
 
     private static final int MESSAGE_ENABLE = 1;
     @VisibleForTesting
@@ -162,7 +156,6 @@ class BluetoothManagerService {
     private static final int MESSAGE_ADD_PROXY_DELAYED = 400;
     private static final int MESSAGE_BIND_PROFILE_SERVICE = 401;
     private static final int MESSAGE_RESTORE_USER_SETTING = 500;
-    private static final int MESSAGE_INIT_FLAGS_CHANGED = 600;
 
     private static final int RESTORE_SETTING_TO_ON = 1;
     private static final int RESTORE_SETTING_TO_OFF = 0;
@@ -221,8 +214,6 @@ class BluetoothManagerService {
     private BluetoothModeChangeHelper mBluetoothModeChangeHelper;
 
     private BluetoothAirplaneModeListener mBluetoothAirplaneModeListener;
-
-    private BluetoothDeviceConfigListener mBluetoothDeviceConfigListener;
 
     private BluetoothNotificationManager mBluetoothNotificationManager;
 
@@ -284,7 +275,7 @@ class BluetoothManagerService {
     private final BluetoothHandler mHandler;
     private int mErrorRecoveryRetryCounter;
 
-    private boolean mIsHearingAidProfileSupported;
+    private final boolean mIsHearingAidProfileSupported;
 
     // Save a ProfileServiceConnections object for each of the bound
     // bluetooth profile services
@@ -319,11 +310,6 @@ class BluetoothManagerService {
             sendDisableMsg(BluetoothProtoEnums.ENABLE_DISABLE_REASON_DISALLOWED,
                     mContext.getPackageName());
         }
-    }
-
-    @VisibleForTesting
-    public void onInitFlagsChanged() {
-        // TODO(b/265386284)
     }
 
     boolean onFactoryReset(AttributionSource source) {
@@ -600,17 +586,6 @@ class BluetoothManagerService {
                         mHandler.sendMessage(msg);
                     }
                 }
-            } else if (BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED.equals(action)
-                    || BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED.equals(action)
-                    || BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED.equals(action)) {
-                final int state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE,
-                        BluetoothProfile.STATE_CONNECTED);
-                if (mHandler.hasMessages(MESSAGE_INIT_FLAGS_CHANGED)
-                        && state == BluetoothProfile.STATE_DISCONNECTED
-                        && !mBluetoothModeChangeHelper.isMediaProfileConnected()) {
-                    Log.i(TAG, "Device disconnected, reactivating pending flag changes");
-                    onInitFlagsChanged();
-                }
             } else if (action.equals(Intent.ACTION_SHUTDOWN)) {
                 Log.i(TAG, "Device is shutting down.");
                 mShutdownInProgress = true;
@@ -684,24 +659,10 @@ class BluetoothManagerService {
                             .orElse(isAshaEnabledByDefault);
         }
 
-        String value = SystemProperties.get(
-                "persist.sys.fflag.override.settings_bluetooth_hearing_aid");
-
-        if (!TextUtils.isEmpty(value)) {
-            boolean isHearingAidEnabled = Boolean.parseBoolean(value);
-            Log.v(TAG, "set feature flag HEARING_AID_SETTINGS to " + isHearingAidEnabled);
-            if (isHearingAidEnabled && !mIsHearingAidProfileSupported) {
-                // Overwrite to enable support by FeatureFlag
-                mIsHearingAidProfileSupported = true;
-            }
-        }
-
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED);
         filter.addAction(BluetoothAdapter.ACTION_BLUETOOTH_ADDRESS_CHANGED);
         filter.addAction(Intent.ACTION_SETTING_RESTORED);
-        filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
-        filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(Intent.ACTION_SHUTDOWN);
         filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         mContext.registerReceiver(mReceiver, filter);
@@ -1155,35 +1116,6 @@ class BluetoothManagerService {
 
     boolean isHearingAidProfileSupported() {
         return mIsHearingAidProfileSupported;
-    }
-
-    private boolean isDeviceProvisioned() {
-        return Settings.Global.getInt(mContentResolver, Settings.Global.DEVICE_PROVISIONED,
-                0) != 0;
-    }
-
-    // Monitor change of BLE scan only mode settings.
-    private void registerForProvisioningStateChange() {
-        ContentObserver contentObserver = new ContentObserver(null) {
-            @Override
-            public void onChange(boolean selfChange) {
-                if (!isDeviceProvisioned()) {
-                    if (DBG) {
-                        Log.d(TAG, "DEVICE_PROVISIONED setting changed, but device is not "
-                                + "provisioned");
-                    }
-                    return;
-                }
-                if (mHandler.hasMessages(MESSAGE_INIT_FLAGS_CHANGED)) {
-                    Log.i(TAG, "Device provisioned, reactivating pending flag changes");
-                    onInitFlagsChanged();
-                }
-            }
-        };
-
-        mContentResolver.registerContentObserver(
-                Settings.Global.getUriFor(Settings.Global.DEVICE_PROVISIONED), false,
-                contentObserver);
     }
 
     // Monitor change of BLE scan only mode settings.
@@ -1657,8 +1589,6 @@ class BluetoothManagerService {
         if (mBluetoothAirplaneModeListener != null) {
             mBluetoothAirplaneModeListener.start(mBluetoothModeChangeHelper);
         }
-        registerForProvisioningStateChange();
-        mBluetoothDeviceConfigListener = new BluetoothDeviceConfigListener(this, DBG);
         loadApmEnhancementStateFromResource();
     }
 
@@ -1670,9 +1600,7 @@ class BluetoothManagerService {
         mBluetoothModeChangeHelper = bluetoothModeChangeHelper;
     }
 
-    /**
-     * Load whether APM Enhancement feature should be enabled from overlay
-     */
+    /** Load whether APM Enhancement feature should be enabled from overlay */
     @VisibleForTesting
     void loadApmEnhancementStateFromResource() {
         String btPackageName = mBluetoothModeChangeHelper.getBluetoothPackageName();
@@ -1681,20 +1609,21 @@ class BluetoothManagerService {
             return;
         }
         try {
-            Resources resources = mContext.getPackageManager()
-                    .getResourcesForApplication(btPackageName);
-            int apmEnhancement = resources.getIdentifier("config_bluetooth_apm_enhancement_enabled",
-                    "bool", btPackageName);
-            Settings.Global.putInt(mContext.getContentResolver(),
-                    APM_ENHANCEMENT, resources.getBoolean(apmEnhancement) ? 1 : 0);
+            Resources resources =
+                    mContext.getPackageManager().getResourcesForApplication(btPackageName);
+            int apmEnhancement =
+                    resources.getIdentifier(
+                            "config_bluetooth_apm_enhancement_enabled", "bool", btPackageName);
+            Settings.Global.putInt(
+                    mContext.getContentResolver(),
+                    APM_ENHANCEMENT,
+                    resources.getBoolean(apmEnhancement) ? 1 : 0);
         } catch (Exception e) {
             Log.e(TAG, "Unable to set whether APM enhancement should be enabled");
         }
     }
 
-    /**
-     * Called when switching to a different foreground user.
-     */
+    /** Called when switching to a different foreground user. */
     void handleSwitchUser(UserHandle userHandle) {
         if (DBG) {
             Log.d(TAG, "User " + userHandle + " switched");
@@ -1711,8 +1640,8 @@ class BluetoothManagerService {
     }
 
     /**
-     * This class manages the clients connected to a given ProfileService
-     * and maintains the connection with that service.
+     * This class manages the clients connected to a given ProfileService and maintains the
+     * connection with that service.
      */
     private final class ProfileServiceConnections
             implements ServiceConnection, IBinder.DeathRecipient {
@@ -2544,36 +2473,6 @@ class BluetoothManagerService {
                     }
                     break;
                 }
-                case MESSAGE_INIT_FLAGS_CHANGED: {
-                    if (DBG) {
-                        Log.d(TAG, "MESSAGE_INIT_FLAGS_CHANGED");
-                    }
-                    mHandler.removeMessages(MESSAGE_INIT_FLAGS_CHANGED);
-                    if (mBluetoothModeChangeHelper.isMediaProfileConnected()) {
-                        Log.i(TAG, "Delaying MESSAGE_INIT_FLAGS_CHANGED by "
-                                + DELAY_FOR_RETRY_INIT_FLAG_CHECK_MS
-                                + " ms due to existing connections");
-                        mHandler.sendEmptyMessageDelayed(
-                                MESSAGE_INIT_FLAGS_CHANGED,
-                                DELAY_FOR_RETRY_INIT_FLAG_CHECK_MS);
-                        break;
-                    }
-                    if (!isDeviceProvisioned()) {
-                        Log.i(TAG, "Delaying MESSAGE_INIT_FLAGS_CHANGED by "
-                                + DELAY_FOR_RETRY_INIT_FLAG_CHECK_MS
-                                +  "ms because device is not provisioned");
-                        mHandler.sendEmptyMessageDelayed(
-                                MESSAGE_INIT_FLAGS_CHANGED,
-                                DELAY_FOR_RETRY_INIT_FLAG_CHECK_MS);
-                        break;
-                    }
-                    if (mBluetooth != null && isEnabled()) {
-                        Log.i(TAG, "Restarting Bluetooth due to init flag change");
-                        restartForReason(
-                                BluetoothProtoEnums.ENABLE_DISABLE_REASON_INIT_FLAGS_CHANGED);
-                    }
-                    break;
-                }
             }
         }
 
@@ -2904,6 +2803,19 @@ class BluetoothManagerService {
             }
             mActiveLogs.add(
                     new ActiveLog(reason, packageName, enable, System.currentTimeMillis()));
+
+            int state =
+                    enable
+                            ? BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__ENABLED
+                            : BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__DISABLED;
+
+            BluetoothStatsLog.write_non_chained(
+                    BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED,
+                    Binder.getCallingUid(),
+                    null,
+                    state,
+                    reason,
+                    packageName);
         }
     }
 

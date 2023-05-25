@@ -58,7 +58,10 @@ class AndroidInternal(val context: Context) : AndroidImplBase(), Closeable {
   private val INCOMING_FILE_TITLE = "Incoming file"
   private val INCOMING_FILE_WAIT_TIMEOUT = 2000L
 
-  private val BT_DEVICE_SELECT_WAIT_TIMEOUT = 3000L
+  // PTS does not configure the Extended Inquiry Response with the
+  // device name; the device will be found after the Inquiry Timeout
+  // (12.8sec) has elapsed.
+  private val BT_DEVICE_SELECT_WAIT_TIMEOUT = 20000L
   private val IMAGE_FILE_NAME = "OPP_TEST_IMAGE.bmp"
 
   private val bluetoothManager = context.getSystemService(BluetoothManager::class.java)!!
@@ -141,18 +144,15 @@ class AndroidInternal(val context: Context) : AndroidImplBase(), Closeable {
     }
   }
 
-  override fun sendFile(request: Empty, responseObserver: StreamObserver<Empty>) {
+  override fun sendFile(request: SendFileRequest, responseObserver: StreamObserver<Empty>) {
     grpcUnary<Empty>(scope, responseObserver) {
       initiateSendFile(getImageId(IMAGE_FILE_NAME), "image/bmp")
-      waitAndSelectBluetoothDevice()
+      waitAndSelectBluetoothDevice(request.name)
       Empty.getDefaultInstance()
     }
   }
 
-  override fun sendPing(
-    request: SendPingRequest,
-    responseObserver: StreamObserver<Empty>
-  ) {
+  override fun sendPing(request: SendPingRequest, responseObserver: StreamObserver<Empty>) {
     grpcUnary<Empty>(scope, responseObserver) {
       val pingStatus =
         Runtime.getRuntime().exec("ping -I bt-pan -c 1 ${request.ipAddress}").waitFor()
@@ -160,12 +160,10 @@ class AndroidInternal(val context: Context) : AndroidImplBase(), Closeable {
     }
   }
 
-  suspend private fun waitAndSelectBluetoothDevice() {
+  suspend private fun waitAndSelectBluetoothDevice(name: String) {
     var selectJob =
       scope.async {
-        device
-          .wait(Until.findObject(By.textContains("Cuttlefish")), BT_DEVICE_SELECT_WAIT_TIMEOUT)
-          .click()
+        device.wait(Until.findObject(By.textContains(name)), BT_DEVICE_SELECT_WAIT_TIMEOUT).click()
       }
     selectJob.await()
   }

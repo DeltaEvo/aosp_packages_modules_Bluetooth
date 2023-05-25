@@ -2043,20 +2043,20 @@ LinkLayerController::~LinkLayerController() {}
 
 void LinkLayerController::SendLeLinkLayerPacket(
     std::unique_ptr<model::packets::LinkLayerPacketBuilder> packet,
-    int8_t tx_power, std::chrono::milliseconds delay) {
+    int8_t tx_power) {
   std::shared_ptr<model::packets::LinkLayerPacketBuilder> shared_packet =
       std::move(packet);
-  ScheduleTask(delay, [this, shared_packet, tx_power]() {
+  ScheduleTask(kNoDelayMs, [this, shared_packet, tx_power]() {
     send_to_remote_(shared_packet, Phy::Type::LOW_ENERGY, tx_power);
   });
 }
 
 void LinkLayerController::SendLinkLayerPacket(
     std::unique_ptr<model::packets::LinkLayerPacketBuilder> packet,
-    int8_t tx_power, std::chrono::milliseconds delay) {
+    int8_t tx_power) {
   std::shared_ptr<model::packets::LinkLayerPacketBuilder> shared_packet =
       std::move(packet);
-  ScheduleTask(delay, [this, shared_packet, tx_power]() {
+  ScheduleTask(kNoDelayMs, [this, shared_packet, tx_power]() {
     send_to_remote_(shared_packet, Phy::Type::BR_EDR, tx_power);
   });
 }
@@ -2143,20 +2143,9 @@ ErrorCode LinkLayerController::SendAclToRemote(
     return ErrorCode::UNKNOWN_CONNECTION;
   }
 
-  AclConnection& connection = connections_.GetAclConnection(handle);
-  AddressWithType my_address = connection.GetOwnAddress();
-  AddressWithType destination = connection.GetAddress();
+  AddressWithType my_address = connections_.GetOwnAddress(handle);
+  AddressWithType destination = connections_.GetAddress(handle);
   Phy::Type phy = connections_.GetPhyType(handle);
-
-  // The PTS test L2CAP/CMC/BV-13-C flakes if the first ACL packet is
-  // sent too early after the connection establishment; the PTS in
-  // this case is handling the packet before the Connection Complete
-  // event and this causes the test to fail.
-  std::chrono::milliseconds connection_uptime =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          connection.GetUptime());
-  std::chrono::milliseconds delay =
-      connection_uptime > 100ms ? 0ms : 100ms - connection_uptime;
 
   auto acl_packet_payload = acl_packet.GetPayload();
   auto acl = model::packets::AclBuilder::Create(
@@ -2167,14 +2156,14 @@ ErrorCode LinkLayerController::SendAclToRemote(
 
   switch (phy) {
     case Phy::Type::BR_EDR:
-      SendLinkLayerPacket(std::move(acl), 0, delay);
+      SendLinkLayerPacket(std::move(acl));
       break;
     case Phy::Type::LOW_ENERGY:
-      SendLeLinkLayerPacket(std::move(acl), 0, delay);
+      SendLeLinkLayerPacket(std::move(acl));
       break;
   }
 
-  ScheduleTask(delay, [this, handle]() {
+  ScheduleTask(kNoDelayMs, [this, handle]() {
     send_event_(bluetooth::hci::NumberOfCompletedPacketsBuilder::Create(
         {bluetooth::hci::CompletedPackets(handle, 1)}));
   });
@@ -2702,7 +2691,6 @@ void LinkLayerController::IncomingInquiryPacket(
               static_cast<uint8_t>(GetPageScanRepetitionMode()),
               class_of_device_, GetClockOffset(), rssi,
               extended_inquiry_response_));
-
     } break;
     default:
       LOG_WARN("Unhandled Incoming Inquiry of type %d",
@@ -2770,13 +2758,13 @@ void LinkLayerController::IncomingInquiryResponsePacket(
               basic_inquiry_response);
       ASSERT(inquiry_response.IsValid());
 
-      send_event_(bluetooth::hci::ExtendedInquiryResultRawBuilder::Create(
+      send_event_(bluetooth::hci::ExtendedInquiryResultBuilder::Create(
           inquiry_response.GetSourceAddress(),
           static_cast<bluetooth::hci::PageScanRepetitionMode>(
               inquiry_response.GetPageScanRepetitionMode()),
           inquiry_response.GetClassOfDevice(),
           inquiry_response.GetClockOffset(), inquiry_response.GetRssi(),
-          extended_inquiry_response_));
+          inquiry_response.GetExtendedInquiryResponse()));
     } break;
     default:
       LOG_WARN("Unhandled Incoming Inquiry Response of type %d",
@@ -3192,7 +3180,7 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
   if (LegacyAdvertising() && should_send_advertising_report &&
       !should_send_directed_advertising_report &&
       IsLeEventUnmasked(SubeventCode::ADVERTISING_REPORT)) {
-    bluetooth::hci::LeAdvertisingResponseRaw response;
+    bluetooth::hci::LeAdvertisingResponse response;
     response.address_type_ = resolved_advertising_address.GetAddressType();
     response.address_ = resolved_advertising_address.GetAddress();
     response.advertising_data_ = advertising_data;
@@ -3216,14 +3204,13 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
         break;
     }
 
-    send_event_(
-        bluetooth::hci::LeAdvertisingReportRawBuilder::Create({response}));
+    send_event_(bluetooth::hci::LeAdvertisingReportBuilder::Create({response}));
   }
 
   // Extended scanning.
   if (ExtendedAdvertising() && should_send_advertising_report &&
       IsLeEventUnmasked(SubeventCode::EXTENDED_ADVERTISING_REPORT)) {
-    bluetooth::hci::LeExtendedAdvertisingResponseRaw response;
+    bluetooth::hci::LeExtendedAdvertisingResponse response;
     response.connectable_ = connectable_advertising;
     response.scannable_ = scannable_advertising;
     response.directed_ = directed_advertising;
@@ -3252,8 +3239,8 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
     }
     response.advertising_data_ = advertising_data;
 
-    send_event_(bluetooth::hci::LeExtendedAdvertisingReportRawBuilder::Create(
-        {response}));
+    send_event_(
+        bluetooth::hci::LeExtendedAdvertisingReportBuilder::Create({response}));
   }
 
   // Did the user enable Active scanning ?
@@ -3646,7 +3633,7 @@ void LinkLayerController::ScanIncomingLeExtendedAdvertisingPdu(
 
   if (should_send_advertising_report &&
       IsLeEventUnmasked(SubeventCode::EXTENDED_ADVERTISING_REPORT)) {
-    bluetooth::hci::LeExtendedAdvertisingResponseRaw response;
+    bluetooth::hci::LeExtendedAdvertisingResponse response;
     response.connectable_ = connectable_advertising;
     response.scannable_ = scannable_advertising;
     response.directed_ = directed_advertising;
@@ -3691,7 +3678,7 @@ void LinkLayerController::ScanIncomingLeExtendedAdvertisingPdu(
           std::vector(advertising_data.begin() + offset,
                       advertising_data.begin() + offset + fragment_size);
       offset += fragment_size;
-      send_event_(bluetooth::hci::LeExtendedAdvertisingReportRawBuilder::Create(
+      send_event_(bluetooth::hci::LeExtendedAdvertisingReportBuilder::Create(
           {response}));
     } while (offset < advertising_data.size());
   }
@@ -5050,19 +5037,18 @@ void LinkLayerController::IncomingLeScanResponsePacket(
 
   if (LegacyAdvertising() && should_send_advertising_report &&
       IsLeEventUnmasked(SubeventCode::ADVERTISING_REPORT)) {
-    bluetooth::hci::LeAdvertisingResponseRaw response;
+    bluetooth::hci::LeAdvertisingResponse response;
     response.event_type_ = bluetooth::hci::AdvertisingEventType::SCAN_RESPONSE;
     response.address_ = resolved_advertising_address.GetAddress();
     response.address_type_ = resolved_advertising_address.GetAddressType();
     response.advertising_data_ = scan_response.GetScanResponseData();
     response.rssi_ = rssi;
-    send_event_(
-        bluetooth::hci::LeAdvertisingReportRawBuilder::Create({response}));
+    send_event_(bluetooth::hci::LeAdvertisingReportBuilder::Create({response}));
   }
 
   if (ExtendedAdvertising() && should_send_advertising_report &&
       IsLeEventUnmasked(SubeventCode::EXTENDED_ADVERTISING_REPORT)) {
-    bluetooth::hci::LeExtendedAdvertisingResponseRaw response;
+    bluetooth::hci::LeExtendedAdvertisingResponse response;
     response.address_ = resolved_advertising_address.GetAddress();
     response.address_type_ =
         static_cast<bluetooth::hci::DirectAdvertisingAddressType>(
@@ -5076,8 +5062,8 @@ void LinkLayerController::IncomingLeScanResponsePacket(
     response.tx_power_ = 0x7F;
     response.advertising_data_ = scan_response.GetScanResponseData();
     response.rssi_ = rssi;
-    send_event_(bluetooth::hci::LeExtendedAdvertisingReportRawBuilder::Create(
-        {response}));
+    send_event_(
+        bluetooth::hci::LeExtendedAdvertisingReportBuilder::Create({response}));
   }
 }
 
