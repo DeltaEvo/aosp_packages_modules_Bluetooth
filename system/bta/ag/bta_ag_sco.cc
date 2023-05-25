@@ -30,6 +30,7 @@
 #include "bt_target.h"  // Must be first to define build configuration
 #include "bt_trace.h"   // Legacy trace logging
 #include "bta/ag/bta_ag_int.h"
+#include "common/init_flags.h"
 #include "device/include/controller.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/log.h"
@@ -766,6 +767,15 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           break;
 
         case BTA_AG_SCO_CLOSE_E:
+          if (bluetooth::common::init_flags::
+                  sco_codec_timeout_clear_is_enabled()) {
+            /* remove listening connection */
+            bta_ag_remove_sco(p_scb, false);
+
+            if (p_scb == p_sco->p_curr_scb) p_sco->p_curr_scb = nullptr;
+
+            bta_ag_create_sco(p_scb, false);
+          }
           /* sco open is not started yet. just go back to listening */
           p_sco->state = BTA_AG_SCO_LISTEN_ST;
           break;
@@ -1104,6 +1114,7 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           /* If last SCO instance then finish shutting down */
           if (!bta_ag_other_scb_open(p_scb)) {
             p_sco->state = BTA_AG_SCO_SHUTDOWN_ST;
+            bta_sys_sco_unuse(BTA_ID_AG, p_scb->app_id, p_scb->peer_addr);
           } else /* Other instance is still listening */
           {
             p_sco->state = BTA_AG_SCO_LISTEN_ST;
