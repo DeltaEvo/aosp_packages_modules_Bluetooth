@@ -54,7 +54,6 @@ static_library("btif") {
     "src/btif_csis_client.cc",
     "src/btif_config.cc",
     "src/btif_config_cache.cc",
-    "src/btif_config_transcode.cc",
     "src/btif_core.cc",
     "src/btif_debug_conn.cc",
     "src/btif_dm.cc",
@@ -114,7 +113,6 @@ static_library("btif") {
     "//bt/system/stack/include",
     "//bt/system/internal_include",
     "//bt/system/udrv/include",
-    "//bt/system/utils/include",
     "//bt/system/vnd/include",
     "//bt/system/profile/avrcp",
   ]

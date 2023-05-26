@@ -120,13 +120,12 @@ struct Controller::impl {
     }
 
     // SSP is managed by security layer once enabled
-    if (!common::init_flags::gd_security_is_enabled()) {
-      write_simple_pairing_mode(Enable::ENABLED);
-      if (module_.SupportsSecureConnections()) {
-        hci_->EnqueueCommand(
-            WriteSecureConnectionsHostSupportBuilder::Create(Enable::ENABLED),
-            handler->BindOnceOn(this, &Controller::impl::write_secure_connections_host_support_complete_handler));
-      }
+    write_simple_pairing_mode(Enable::ENABLED);
+    if (module_.SupportsSecureConnections()) {
+      hci_->EnqueueCommand(
+          WriteSecureConnectionsHostSupportBuilder::Create(Enable::ENABLED),
+          handler->BindOnceOn(
+              this, &Controller::impl::write_secure_connections_host_support_complete_handler));
     }
     if (is_supported(OpCode::LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH) && module_.SupportsBleDataPacketLengthExtension()) {
       hci_->EnqueueCommand(
@@ -156,12 +155,13 @@ struct Controller::impl {
       le_number_supported_advertising_sets_ = 1;
     }
 
-    if (is_supported(OpCode::LE_READ_PERIODIC_ADVERTISING_LIST_SIZE) && module_.SupportsBlePeriodicAdvertising()) {
+    if (is_supported(OpCode::LE_READ_PERIODIC_ADVERTISER_LIST_SIZE) &&
+        module_.SupportsBlePeriodicAdvertising()) {
       hci_->EnqueueCommand(
           LeReadPeriodicAdvertiserListSizeBuilder::Create(),
           handler->BindOnceOn(this, &Controller::impl::le_read_periodic_advertiser_list_size_handler));
     } else {
-      LOG_INFO("LE_READ_PERIODIC_ADVERTISING_LIST_SIZE not supported, defaulting to 0");
+      LOG_INFO("LE_READ_PERIODIC_ADVERTISER_LIST_SIZE not supported, defaulting to 0");
       le_periodic_advertiser_list_size_ = 0;
     }
     if (is_supported(OpCode::LE_SET_HOST_FEATURE) && module_.SupportsBleConnectedIsochronousStreamCentral()) {
@@ -176,6 +176,13 @@ struct Controller::impl {
           LeSetHostFeatureBuilder::Create(
               LeHostFeatureBits::CONNECTION_SUBRATING_HOST_SUPPORT, Enable::ENABLED),
           handler->BindOnceOn(this, &Controller::impl::le_set_host_feature_handler));
+    }
+
+    if (is_supported(OpCode::READ_DEFAULT_ERRONEOUS_DATA_REPORTING)) {
+      hci_->EnqueueCommand(
+          ReadDefaultErroneousDataReportingBuilder::Create(),
+          handler->BindOnceOn(
+              this, &Controller::impl::read_default_erroneous_data_reporting_handler));
     }
 
     // Skip vendor capabilities check if configured.
@@ -379,6 +386,62 @@ struct Controller::impl {
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
+  }
+
+  void read_default_erroneous_data_reporting_handler(CommandCompleteView view) {
+    ASSERT(view.GetCommandOpCode() == OpCode::READ_DEFAULT_ERRONEOUS_DATA_REPORTING);
+    auto complete_view = ReadDefaultErroneousDataReportingCompleteView::Create(view);
+    // Check to see that the opcode was correct.
+    // ASSERT(complete_view.IsValid()) is not used here to avoid process abort.
+    // Some devices, such as mokey_go32, may claim to support it but do not
+    // actually do so (b/277589118).
+    if (!complete_view.IsValid()) {
+      LOG_ERROR("invalid command complete view");
+      return;
+    }
+
+    ErrorCode status = complete_view.GetStatus();
+    // This is an optional feature to enhance audio quality. It is okay
+    // to just return if the status is not SUCCESS.
+    if (status != ErrorCode::SUCCESS) {
+      LOG_ERROR("Unexpected status: %s", ErrorCodeText(status).c_str());
+      return;
+    }
+
+    Enable erroneous_data_reporting = complete_view.GetErroneousDataReporting();
+    LOG_INFO("erroneous data reporting: %hhu", erroneous_data_reporting);
+
+    // Enable Erroneous Data Reporting if it is disabled and the write command is supported.
+    if (erroneous_data_reporting == Enable::DISABLED &&
+        is_supported(OpCode::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING)) {
+      std::unique_ptr<WriteDefaultErroneousDataReportingBuilder> packet =
+          WriteDefaultErroneousDataReportingBuilder::Create(Enable::ENABLED);
+      hci_->EnqueueCommand(
+          std::move(packet),
+          module_.GetHandler()->BindOnceOn(
+              this, &Controller::impl::write_default_erroneous_data_reporting_handler));
+    }
+  }
+
+  void write_default_erroneous_data_reporting_handler(CommandCompleteView view) {
+    ASSERT(view.GetCommandOpCode() == OpCode::WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING);
+    auto complete_view = WriteDefaultErroneousDataReportingCompleteView::Create(view);
+    // Check to see that the opcode was correct.
+    // ASSERT(complete_view.IsValid()) is not used here to avoid process abort.
+    // Some devices, such as mokey_go32, may claim to support it but do not
+    // actually do so (b/277589118).
+    if (!complete_view.IsValid()) {
+      LOG_ERROR("invalid command complete view");
+      return;
+    }
+
+    ErrorCode status = complete_view.GetStatus();
+    // This is an optional feature to enhance audio quality. It is okay
+    // to just return if the status is not SUCCESS.
+    if (status != ErrorCode::SUCCESS) {
+      LOG_ERROR("Unexpected status: %s", ErrorCodeText(status).c_str());
+      return;
+    }
   }
 
   void le_read_local_supported_features_handler(CommandCompleteView view) {
@@ -876,7 +939,7 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS)
       OP_CODE_MAPPING(LE_REMOVE_ADVERTISING_SET)
       OP_CODE_MAPPING(LE_CLEAR_ADVERTISING_SETS)
-      OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_PARAM)
+      OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_PARAMETERS)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_DATA)
       OP_CODE_MAPPING(LE_SET_PERIODIC_ADVERTISING_ENABLE)
       OP_CODE_MAPPING(LE_SET_EXTENDED_SCAN_PARAMETERS)
@@ -885,10 +948,10 @@ struct Controller::impl {
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_CREATE_SYNC)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL)
       OP_CODE_MAPPING(LE_PERIODIC_ADVERTISING_TERMINATE_SYNC)
-      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_CLEAR_PERIODIC_ADVERTISING_LIST)
-      OP_CODE_MAPPING(LE_READ_PERIODIC_ADVERTISING_LIST_SIZE)
+      OP_CODE_MAPPING(LE_ADD_DEVICE_TO_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_CLEAR_PERIODIC_ADVERTISER_LIST)
+      OP_CODE_MAPPING(LE_READ_PERIODIC_ADVERTISER_LIST_SIZE)
       OP_CODE_MAPPING(LE_READ_TRANSMIT_POWER)
       OP_CODE_MAPPING(LE_READ_RF_PATH_COMPENSATION_POWER)
       OP_CODE_MAPPING(LE_WRITE_RF_PATH_COMPENSATION_POWER)
@@ -1159,17 +1222,6 @@ void Controller::Reset() {
 
 void Controller::LeRand(LeRandCallback cb) {
   CallOn(impl_.get(), &impl::le_rand, cb);
-}
-
-void Controller::AllowWakeByHid() {
-  // Allow Classic HID
-  auto class_of_device = ClassOfDevice::FromUint32Legacy(COD_HID_MAJOR).value();
-  auto class_of_device_mask = ClassOfDevice::FromUint32Legacy(COD_HID_MASK).value();
-  auto auto_accept_flag = AutoAcceptFlag::AUTO_ACCEPT_OFF;
-  std::unique_ptr<SetEventFilterConnectionSetupClassOfDeviceBuilder> packet =
-      SetEventFilterConnectionSetupClassOfDeviceBuilder::Create(
-          class_of_device, class_of_device_mask, auto_accept_flag);
-  CallOn(impl_.get(), &impl::set_event_filter, std::move(packet));
 }
 
 void Controller::SetEventFilterClearAll() {

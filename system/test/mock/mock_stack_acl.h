@@ -40,6 +40,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_client_interface.h"
 #include "test/common/mock_functions.h"
+#include "types/class_of_device.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -193,10 +194,14 @@ extern struct acl_create_le_connection acl_create_le_connection;
 // Params: uint8_t id, const RawAddress& bd_addr
 // Returns: bool
 struct acl_create_le_connection_with_id {
-  std::function<bool(uint8_t id, const RawAddress& bd_addr)> body{
-      [](uint8_t id, const RawAddress& bd_addr) { return false; }};
-  bool operator()(uint8_t id, const RawAddress& bd_addr) {
-    return body(id, bd_addr);
+  std::function<bool(uint8_t id, const RawAddress& bd_addr,
+                     tBLE_ADDR_TYPE addr_type)>
+      body{[](uint8_t id, const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type) {
+        return false;
+      }};
+  bool operator()(uint8_t id, const RawAddress& bd_addr,
+                  tBLE_ADDR_TYPE addr_type) {
+    return body(id, bd_addr, addr_type);
   };
 };
 extern struct acl_create_le_connection_with_id acl_create_le_connection_with_id;
@@ -856,6 +861,20 @@ struct btm_acl_connected {
   };
 };
 extern struct btm_acl_connected btm_acl_connected;
+// Name: btm_connection_request
+// Params: const RawAddress& bda, const bluetooth::types::ClassOfDevice& cod
+// Returns: void
+struct btm_connection_request {
+  std::function<void(const RawAddress& bda,
+                     const bluetooth::types::ClassOfDevice& cod)>
+      body{[](const RawAddress& bda,
+              const bluetooth::types::ClassOfDevice& cod) { ; }};
+  void operator()(const RawAddress& bda,
+                  const bluetooth::types::ClassOfDevice& cod) {
+    body(bda, cod);
+  };
+};
+extern struct btm_acl_connection_request btm_acl_connection_request;
 // Name: btm_acl_connection_request
 // Params: const RawAddress& bda, uint8_t* dc
 // Returns: void

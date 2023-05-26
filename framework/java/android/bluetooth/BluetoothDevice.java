@@ -3270,6 +3270,9 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             if (iGatt == null) {
                 // BLE is not supported
                 return null;
+            } else if (NULL_MAC_ADDRESS.equals(mAddress)) {
+                Log.e(TAG, "Unable to connect gatt, invalid address " + mAddress);
+                return null;
             }
             BluetoothGatt gatt = new BluetoothGatt(
                     iGatt, this, transport, opportunistic, phy, mAttributionSource);
@@ -3434,11 +3437,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     @IntDef(
         prefix = { "FEATURE_" },
         value = {
-            /** Remote support status of audio policy feature is unknown/unconfigured **/
             BluetoothStatusCodes.FEATURE_NOT_CONFIGURED,
-            /** Remote support status of audio policy feature is supported **/
             BluetoothStatusCodes.FEATURE_SUPPORTED,
-            /** Remote support status of audio policy feature is not supported **/
             BluetoothStatusCodes.FEATURE_NOT_SUPPORTED,
         }
     )

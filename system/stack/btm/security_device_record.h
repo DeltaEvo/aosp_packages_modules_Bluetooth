@@ -112,7 +112,6 @@ struct tBTM_SEC_BLE {
 
   tBLE_BD_ADDR identity_address_with_type;
 
-#define BTM_ACCEPTLIST_BIT 0x01
 #define BTM_RESOLVING_LIST_BIT 0x02
   uint8_t in_controller_list; /* in controller resolving list or not */
   uint8_t resolving_list_index;
@@ -171,6 +170,7 @@ typedef enum : uint8_t {
   BTM_SEC_STATE_DELAY_FOR_ENC = 7,
   BTM_SEC_STATE_DISCONNECTING_BLE = 8,
   BTM_SEC_STATE_DISCONNECTING_BOTH = 9,
+  BTM_SEC_STATE_LE_ENCRYPTING = 10,
 } tSECURITY_STATE;
 
 static inline std::string security_state_text(const tSECURITY_STATE& state) {
@@ -185,6 +185,7 @@ static inline std::string security_state_text(const tSECURITY_STATE& state) {
     CASE_RETURN_TEXT(BTM_SEC_STATE_DELAY_FOR_ENC);
     CASE_RETURN_TEXT(BTM_SEC_STATE_DISCONNECTING_BLE);
     CASE_RETURN_TEXT(BTM_SEC_STATE_DISCONNECTING_BOTH);
+    CASE_RETURN_TEXT(BTM_SEC_STATE_LE_ENCRYPTING);
     default:
       return base::StringPrintf("UNKNOWN[%hhu]", state);
   }
@@ -225,11 +226,13 @@ struct tBTM_SEC_DEV_REC {
   void* p_ref_data;
   uint32_t timestamp; /* Timestamp of the last connection   */
   uint16_t hci_handle;     /* Handle to connection when exists   */
+  uint16_t suggested_tx_octets; /* Recently suggested tx octects for data length
+                                   extension */
   uint16_t clock_offset;   /* Latest known clock offset          */
   RawAddress bd_addr;      /* BD_ADDR of the device              */
   DEV_CLASS dev_class;     /* DEV_CLASS of the device            */
   LinkKey link_key;        /* Device link key                    */
-  tHCI_STATUS sec_status;      /* status for pin_or_key_missing      */
+  tHCI_STATUS sec_status;  /* Status in encryption change event  */
 
  public:
   RawAddress RemoteAddress() const { return bd_addr; }
@@ -333,8 +336,15 @@ struct tBTM_SEC_DEV_REC {
   bool is_security_state_authenticating() const {
     return sec_state == BTM_SEC_STATE_AUTHENTICATING;
   }
-  bool is_security_state_encrypting() const {
+  bool is_security_state_bredr_encrypting() const {
     return sec_state == BTM_SEC_STATE_ENCRYPTING;
+  }
+  bool is_security_state_le_encrypting() const {
+    return sec_state == BTM_SEC_STATE_LE_ENCRYPTING;
+  }
+  bool is_security_state_encrypting() const {
+    return (is_security_state_bredr_encrypting() ||
+            is_security_state_le_encrypting());
   }
   bool is_security_state_getting_name() const {
     return sec_state == BTM_SEC_STATE_GETTING_NAME;
@@ -357,6 +367,13 @@ struct tBTM_SEC_DEV_REC {
   bool is_security_state_br_edr_and_ble() const {
     return sec_state == BTM_SEC_STATE_DISCONNECTING_BOTH;
   }
+
+  /* Data length extension */
+  void set_suggested_tx_octect(uint16_t octets) {
+    suggested_tx_octets = octets;
+  }
+
+  uint16_t get_suggested_tx_octets() const { return suggested_tx_octets; }
 
  private:
   bool is_originator;         /* true if device is originating connection */
@@ -459,3 +476,14 @@ struct tBTM_SEC_DEV_REC {
         PRIVATE_NAME(sec_bd_name));
   }
 };
+
+inline std::string bond_type_text(
+    const tBTM_SEC_DEV_REC::tBTM_BOND_TYPE& bond_type) {
+  switch (bond_type) {
+    CASE_RETURN_TEXT(tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN);
+    CASE_RETURN_TEXT(tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT);
+    CASE_RETURN_TEXT(tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY);
+    default:
+      return base::StringPrintf("UNKNOWN[%hhu]", bond_type);
+  }
+}

@@ -436,7 +436,7 @@ TEST_F(ControllerTest, is_supported_test) {
   ASSERT_TRUE(controller_->IsSupported(OpCode::ACCEPT_CONNECTION_REQUEST));
   ASSERT_FALSE(controller_->IsSupported(OpCode::LE_REMOVE_ADVERTISING_SET));
   ASSERT_FALSE(controller_->IsSupported(OpCode::LE_CLEAR_ADVERTISING_SETS));
-  ASSERT_FALSE(controller_->IsSupported(OpCode::LE_SET_PERIODIC_ADVERTISING_PARAM));
+  ASSERT_FALSE(controller_->IsSupported(OpCode::LE_SET_PERIODIC_ADVERTISING_PARAMETERS));
 }
 
 TEST_F(Controller055Test, feature_spec_version_055_test) {
@@ -526,10 +526,6 @@ TEST_F(ControllerTest, leRandTest) {
 
   ASSERT_EQ(std::future_status::ready, le_rand_set_future.wait_for(2s));
   ASSERT_EQ(kRandomNumber, le_rand_set_future.get());
-}
-
-TEST_F(ControllerTest, AllowWakeByHidTest) {
-  controller_->AllowWakeByHid();
 }
 
 TEST_F(ControllerTest, Dumpsys) {

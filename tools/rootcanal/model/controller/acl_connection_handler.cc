@@ -27,7 +27,7 @@ using ::bluetooth::hci::Address;
 using ::bluetooth::hci::AddressType;
 using ::bluetooth::hci::AddressWithType;
 
-void AclConnectionHandler::Reset(std::function<void(AsyncTaskId)> stopStream) {
+void AclConnectionHandler::Reset(std::function<void(TaskId)> stopStream) {
   // Leave no dangling periodic task.
   for (auto& [_, sco_connection] : sco_connections_) {
     sco_connection.StopStream(stopStream);
@@ -55,14 +55,16 @@ uint16_t AclConnectionHandler::GetUnusedHandle() {
   return unused_handle;
 }
 
-bool AclConnectionHandler::CreatePendingConnection(
-    Address addr, bool authenticate_on_connect) {
+bool AclConnectionHandler::CreatePendingConnection(Address addr,
+                                                   bool authenticate_on_connect,
+                                                   bool allow_role_switch) {
   if (classic_connection_pending_) {
     return false;
   }
   classic_connection_pending_ = true;
   pending_connection_address_ = addr;
   authenticate_pending_classic_connection_ = authenticate_on_connect;
+  pending_classic_connection_allow_role_switch_ = allow_role_switch;
   return true;
 }
 
@@ -158,8 +160,8 @@ uint16_t AclConnectionHandler::CreateLeConnection(AddressWithType addr,
   return kReservedHandle;
 }
 
-bool AclConnectionHandler::Disconnect(
-    uint16_t handle, std::function<void(AsyncTaskId)> stopStream) {
+bool AclConnectionHandler::Disconnect(uint16_t handle,
+                                      std::function<void(TaskId)> stopStream) {
   if (HasScoHandle(handle)) {
     sco_connections_.at(handle).StopStream(std::move(stopStream));
     sco_connections_.erase(handle);
@@ -195,9 +197,20 @@ uint16_t AclConnectionHandler::GetHandleOnlyAddress(
   return kReservedHandle;
 }
 
+AclConnection& AclConnectionHandler::GetAclConnection(uint16_t handle) {
+  ASSERT_LOG(HasHandle(handle), "Unknown handle %d", handle);
+  return acl_connections_.at(handle);
+}
+
 AddressWithType AclConnectionHandler::GetAddress(uint16_t handle) const {
   ASSERT_LOG(HasHandle(handle), "Unknown handle %hd", handle);
   return acl_connections_.at(handle).GetAddress();
+}
+
+std::optional<AddressWithType> AclConnectionHandler::GetAddressSafe(
+    uint16_t handle) const {
+  return HasHandle(handle) ? acl_connections_.at(handle).GetAddress()
+                           : std::optional<AddressWithType>();
 }
 
 Address AclConnectionHandler::GetScoAddress(uint16_t handle) const {
@@ -228,6 +241,16 @@ bool AclConnectionHandler::IsEncrypted(uint16_t handle) const {
     return false;
   }
   return acl_connections_.at(handle).IsEncrypted();
+}
+
+void AclConnectionHandler::SetRssi(uint16_t handle, int8_t rssi) {
+  if (HasHandle(handle)) {
+    acl_connections_.at(handle).SetRssi(rssi);
+  }
+}
+
+int8_t AclConnectionHandler::GetRssi(uint16_t handle) const {
+  return HasHandle(handle) ? acl_connections_.at(handle).GetRssi() : 0;
 }
 
 Phy::Type AclConnectionHandler::GetPhyType(uint16_t handle) const {
@@ -515,7 +538,7 @@ void AclConnectionHandler::CancelPendingScoConnection(
 
 bool AclConnectionHandler::AcceptPendingScoConnection(
     bluetooth::hci::Address addr, ScoLinkParameters const& parameters,
-    std::function<AsyncTaskId()> startStream) {
+    std::function<TaskId()> startStream) {
   for (auto& pair : sco_connections_) {
     if (std::get<ScoConnection>(pair).GetAddress() == addr) {
       std::get<ScoConnection>(pair).SetLinkParameters(parameters);
@@ -529,7 +552,7 @@ bool AclConnectionHandler::AcceptPendingScoConnection(
 
 bool AclConnectionHandler::AcceptPendingScoConnection(
     bluetooth::hci::Address addr, ScoConnectionParameters const& parameters,
-    std::function<AsyncTaskId()> startStream) {
+    std::function<TaskId()> startStream) {
   for (auto& pair : sco_connections_) {
     if (std::get<ScoConnection>(pair).GetAddress() == addr) {
       bool ok =
@@ -604,6 +627,10 @@ std::chrono::steady_clock::duration AclConnectionHandler::TimeUntilLinkExpired(
 
 bool AclConnectionHandler::HasLinkExpired(uint16_t handle) const {
   return acl_connections_.at(handle).HasExpired();
+}
+
+bool AclConnectionHandler::IsRoleSwitchAllowedForPendingConnection() const {
+  return pending_classic_connection_allow_role_switch_;
 }
 
 }  // namespace rootcanal

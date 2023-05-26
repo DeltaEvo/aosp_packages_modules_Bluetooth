@@ -23,6 +23,9 @@
  ******************************************************************************/
 #include "avrc_api.h"
 
+#ifdef __ANDROID__
+#include <avrcp.sysprop.h>
+#endif
 #include <base/logging.h>
 #include <string.h>
 
@@ -74,6 +77,25 @@ static const uint8_t avrc_ctrl_event_map[] = {
 /* Flags definitions for AVRC_MsgReq */
 #define AVRC_MSG_MASK_IS_VENDOR_CMD 0x01
 #define AVRC_MSG_MASK_IS_CONTINUATION_RSP 0x02
+
+/******************************************************************************
+ *
+ * Function         avrcp_absolute_volume_is_enabled
+ *
+ * Description      Check if config support advance control (absolute volume)
+ *
+ * Returns          return true if absolute_volume is enabled
+ *
+ *****************************************************************************/
+bool avrcp_absolute_volume_is_enabled() {
+#ifdef __ANDROID__
+  static const bool absolute_volume =
+      android::sysprop::bluetooth::Avrcp::absolute_volume().value_or(true);
+  return absolute_volume;
+#else
+  return true;
+#endif
+}
 
 /******************************************************************************
  *
@@ -959,10 +981,14 @@ static BT_HDR* avrc_pass_msg(tAVRC_MSG_PASS* p_msg) {
  *
  *****************************************************************************/
 uint16_t AVRC_GetControlProfileVersion() {
+  char volume_disabled[PROPERTY_VALUE_MAX] = {0};
+  osi_property_get("persist.bluetooth.disableabsvol", volume_disabled, "false");
+
   uint16_t profile_version = AVRC_REV_1_3;
   char avrcp_version[PROPERTY_VALUE_MAX] = {0};
   osi_property_get(AVRC_CONTROL_VERSION_PROPERTY, avrcp_version,
-                   AVRC_1_3_STRING);
+                   strncmp(volume_disabled, "true", 4) == 0 ? AVRC_1_3_STRING
+                                                            : AVRC_1_4_STRING);
 
   if (!strncmp(AVRC_1_6_STRING, avrcp_version, sizeof(AVRC_1_6_STRING))) {
     profile_version = AVRC_REV_1_6;
@@ -1422,7 +1448,6 @@ void AVRC_SaveControllerVersion(const RawAddress& bdaddr,
   } else if (btif_config_set_bin(
                  bdaddr.ToString(), AVRCP_CONTROLLER_VERSION_CONFIG_KEY,
                  (const uint8_t*)&new_version, sizeof(new_version))) {
-    btif_config_save();
     LOG_INFO("store AVRC controller version %x for %s into config.",
              new_version, ADDRESS_TO_LOGGABLE_CSTR(bdaddr));
   } else {

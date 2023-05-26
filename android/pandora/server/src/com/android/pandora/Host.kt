@@ -41,10 +41,10 @@ import android.os.ParcelUuid
 import android.util.Log
 import com.google.protobuf.ByteString
 import com.google.protobuf.Empty
-import io.grpc.Status
 import io.grpc.stub.StreamObserver
-import java.nio.ByteBuffer
 import java.io.Closeable
+import java.lang.IllegalArgumentException
+import java.nio.ByteBuffer
 import java.time.Duration
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -65,6 +65,38 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import pandora.HostGrpc.HostImplBase
 import pandora.HostProto.*
+
+object ByteArrayOps {
+  public fun getUShortAt(input: ByteArray, index: Int): UShort {
+    return (((input[index + 1].toUInt() and 0xffU) shl 8) or (input[index].toUInt() and 0xffU))
+      .toUShort()
+  }
+
+  public fun getShortAt(input: ByteArray, index: Int): Short {
+    return getUShortAt(input, index).toShort()
+  }
+
+  public fun getUIntAt(input: ByteArray, index: Int): UInt {
+    return (((input[index + 3].toUInt() and 0xffU) shl 24) or
+      ((input[index + 2].toUInt() and 0xffU) shl 16) or
+      ((input[index + 1].toUInt() and 0xffU) shl 8) or
+      (input[index].toUInt() and 0xffU))
+  }
+
+  public fun getIntAt(input: ByteArray, index: Int): Int {
+    return getUIntAt(input, index).toInt()
+  }
+
+  public fun getUInt24At(input: ByteArray, index: Int): UInt {
+    return (((input[index + 2].toUInt() and 0xffU) shl 16) or
+      ((input[index + 1].toUInt() and 0xffU) shl 8) or
+      (input[index].toUInt() and 0xffU))
+  }
+
+  public fun getInt24At(input: ByteArray, index: Int): Int {
+    return getUInt24At(input, index).toInt()
+  }
+}
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
 class Host(
@@ -139,6 +171,7 @@ class Host(
 
       initiatedConnection.clear()
       waitedAclConnection.clear()
+      waitedAclDisconnection.clear()
 
       bluetoothAdapter.clearBluetooth()
 
@@ -158,6 +191,8 @@ class Host(
       Log.i(TAG, "reset")
       initiatedConnection.clear()
       waitedAclConnection.clear()
+      waitedAclDisconnection.clear()
+
       rebootBluetooth()
 
       Empty.getDefaultInstance()
@@ -245,14 +280,14 @@ class Host(
     responseObserver: StreamObserver<WaitConnectionResponse>
   ) {
     grpcUnary(scope, responseObserver) {
-      if (request.address.isEmpty()) throw Status.UNKNOWN.asException()
+      if (request.address.isEmpty())
+        throw IllegalArgumentException("Request address field must be set")
       var bluetoothDevice = request.address.toBluetoothDevice(bluetoothAdapter)
 
       Log.i(TAG, "waitConnection: device=$bluetoothDevice")
 
       if (!bluetoothAdapter.isEnabled) {
-        Log.e(TAG, "Bluetooth is not enabled, cannot waitConnection")
-        throw Status.UNKNOWN.asException()
+        throw RuntimeException("Bluetooth is not enabled, cannot waitConnection")
       }
 
       if (!bluetoothDevice.isConnected() || waitedAclConnection.contains(bluetoothDevice)) {
@@ -277,21 +312,28 @@ class Host(
       val bluetoothDevice = request.connection.toBluetoothDevice(bluetoothAdapter)
       Log.i(TAG, "waitDisconnection: device=$bluetoothDevice")
       if (!bluetoothAdapter.isEnabled) {
-        Log.e(TAG, "Bluetooth is not enabled, cannot waitDisconnection")
-        throw Status.UNKNOWN.asException()
+        throw RuntimeException("Bluetooth is not enabled, cannot waitDisconnection")
       }
-      if (bluetoothDevice.bondState != BluetoothDevice.BOND_NONE) {
+      if (
+        bluetoothDevice.bondState != BluetoothDevice.BOND_NONE &&
+          !waitedAclDisconnection.contains(bluetoothDevice)
+      ) {
         flow
           .filter { it.action == BluetoothDevice.ACTION_ACL_DISCONNECTED }
           .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
           .first()
       }
+
+      waitedAclDisconnection.add(bluetoothDevice)
+
       Empty.getDefaultInstance()
     }
   }
 
   override fun connect(request: ConnectRequest, responseObserver: StreamObserver<ConnectResponse>) {
     grpcUnary(scope, responseObserver) {
+      if (request.address.isEmpty())
+        throw IllegalArgumentException("Request address field must be set")
       val bluetoothDevice = request.address.toBluetoothDevice(bluetoothAdapter)
 
       Log.i(TAG, "connect: address=$bluetoothDevice")
@@ -325,18 +367,13 @@ class Host(
       Log.i(TAG, "disconnect: device=$bluetoothDevice")
 
       if (!bluetoothDevice.isConnected()) {
-        Log.e(TAG, "Device is not connected, cannot disconnect")
-        throw Status.UNKNOWN.asException()
+        throw RuntimeException("Device is not connected, cannot disconnect")
       }
 
       when (request.connection.transport) {
         TRANSPORT_BREDR -> {
           Log.i(TAG, "disconnect BR_EDR")
           bluetoothDevice.disconnect()
-          flow
-            .filter { it.action == BluetoothDevice.ACTION_ACL_DISCONNECTED }
-            .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
-            .first()
         }
         TRANSPORT_LE -> {
           Log.i(TAG, "disconnect LE")
@@ -350,18 +387,20 @@ class Host(
               instance
             }
           if (gattInstance.isDisconnected()) {
-            Log.e(TAG, "Device is not connected, cannot disconnect")
-            throw Status.UNKNOWN.asException()
+            throw RuntimeException("Device is not connected, cannot disconnect")
           }
 
+          bluetoothDevice.disconnect()
           gattInstance.disconnectInstance()
-          gattInstance.waitForState(BluetoothProfile.STATE_DISCONNECTED)
         }
         else -> {
-          Log.e(TAG, "Device type UNKNOWN")
-          throw Status.UNKNOWN.asException()
+          throw RuntimeException("Device type UNKNOWN")
         }
       }
+      flow
+        .filter { it.action == BluetoothDevice.ACTION_ACL_DISCONNECTED }
+        .filter { it.getBluetoothDeviceExtra() == bluetoothDevice }
+        .first()
 
       Empty.getDefaultInstance()
     }
@@ -377,8 +416,7 @@ class Host(
         ownAddressType != OwnAddressType.RANDOM &&
           ownAddressType != OwnAddressType.RESOLVABLE_OR_RANDOM
       ) {
-        Log.e(TAG, "connectLE: Unsupported OwnAddressType: $ownAddressType")
-        throw Status.UNKNOWN.asException()
+        throw RuntimeException("connectLE: Unsupported OwnAddressType: $ownAddressType")
       }
       val (address, type) =
         when (request.getAddressCase()!!) {
@@ -390,7 +428,8 @@ class Host(
             Pair(request.publicIdentity, BluetoothDevice.ADDRESS_TYPE_PUBLIC)
           ConnectLERequest.AddressCase.RANDOM_STATIC_IDENTITY ->
             Pair(request.randomStaticIdentity, BluetoothDevice.ADDRESS_TYPE_RANDOM)
-          ConnectLERequest.AddressCase.ADDRESS_NOT_SET -> throw Status.UNKNOWN.asException()
+          ConnectLERequest.AddressCase.ADDRESS_NOT_SET ->
+            throw IllegalArgumentException("Request address field must be set")
         }
       Log.i(TAG, "connectLE: $address")
       val bluetoothDevice = scanLeDevice(address.decodeAsMacAddressToString(), type)!!
@@ -458,20 +497,46 @@ class Host(
             !dataTypesRequest.getIncompleteServiceClassUuids32List().isEmpty() or
             !dataTypesRequest.getIncompleteServiceClassUuids128List().isEmpty()
         ) {
-          Log.e(TAG, "Incomplete Service Class Uuids not supported")
-          throw Status.UNKNOWN.asException()
+          throw RuntimeException("Incomplete Service Class Uuids not supported")
         }
 
-        for (service_uuid in dataTypesRequest.getCompleteServiceClassUuids16List()) {
-          val uuid16 = "0000${service_uuid}-0000-1000-8000-00805F9B34FB"
-          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(uuid16))
+        // Handle service uuids
+        for (uuid16 in dataTypesRequest.getCompleteServiceClassUuids16List()) {
+          val parcel_uuid16 = ParcelUuid.fromString("0000${uuid16}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceUuid(parcel_uuid16)
         }
-        for (service_uuid in dataTypesRequest.getCompleteServiceClassUuids32List()) {
-          val uuid32 = "${service_uuid}-0000-1000-8000-00805F9B34FB"
-          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(service_uuid))
+        for (uuid32 in dataTypesRequest.getCompleteServiceClassUuids32List()) {
+          val parcel_uuid32 = ParcelUuid.fromString("${uuid32}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceUuid(parcel_uuid32)
         }
-        for (service_uuid in dataTypesRequest.getCompleteServiceClassUuids128List()) {
-          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(service_uuid))
+        for (uuid128 in dataTypesRequest.getCompleteServiceClassUuids128List()) {
+          advertisingDataBuilder.addServiceUuid(ParcelUuid.fromString(uuid128))
+        }
+
+        // Handle Service solicitation uuids
+        for (uuid16 in dataTypesRequest.getServiceSolicitationUuids16List()) {
+          val parcel_uuid16 = ParcelUuid.fromString("0000${uuid16}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceSolicitationUuid(parcel_uuid16)
+        }
+        for (uuid32 in dataTypesRequest.getServiceSolicitationUuids32List()) {
+          val parcel_uuid32 = ParcelUuid.fromString("${uuid32}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceSolicitationUuid(parcel_uuid32)
+        }
+        for (uuid128 in dataTypesRequest.getServiceSolicitationUuids128List()) {
+          advertisingDataBuilder.addServiceSolicitationUuid(ParcelUuid.fromString(uuid128))
+        }
+
+        // Handle service data uuids
+        for ((uuid16, data) in dataTypesRequest.getServiceDataUuid16()) {
+          val parcel_uuid16 = ParcelUuid.fromString("0000${uuid16}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceData(parcel_uuid16, data.toByteArray())
+        }
+        for ((uuid32, data) in dataTypesRequest.getServiceDataUuid32()) {
+          val parcel_uuid32 = ParcelUuid.fromString("${uuid32}-0000-1000-8000-00805F9B34FB")
+          advertisingDataBuilder.addServiceData(parcel_uuid32, data.toByteArray())
+        }
+        for ((uuid128, data) in dataTypesRequest.getServiceDataUuid128()) {
+          advertisingDataBuilder.addServiceData(ParcelUuid.fromString(uuid128), data.toByteArray())
         }
 
         advertisingDataBuilder
@@ -537,43 +602,104 @@ class Host(
 
               var dataTypesBuilder =
                 DataTypes.newBuilder().setTxPowerLevel(scanRecord.getTxPowerLevel())
+
               scanData[ScanRecord.DATA_TYPE_LOCAL_NAME_SHORT]?.let {
                 dataTypesBuilder.setShortenedLocalName(it.decodeToString())
               }
                 ?: run { dataTypesBuilder.setIncludeShortenedLocalName(false) }
+
               scanData[ScanRecord.DATA_TYPE_LOCAL_NAME_COMPLETE]?.let {
                 dataTypesBuilder.setCompleteLocalName(it.decodeToString())
               }
                 ?: run { dataTypesBuilder.setIncludeCompleteLocalName(false) }
 
+              scanData[ScanRecord.DATA_TYPE_ADVERTISING_INTERVAL]?.let {
+                dataTypesBuilder.setAdvertisingInterval(ByteArrayOps.getShortAt(it, 0).toInt())
+              }
+
+              scanData[ScanRecord.DATA_TYPE_ADVERTISING_INTERVAL_LONG]?.let {
+                dataTypesBuilder.setAdvertisingInterval(ByteArrayOps.getIntAt(it, 0))
+              }
+
+              scanData[ScanRecord.DATA_TYPE_APPEARANCE]?.let {
+                dataTypesBuilder.setAppearance(ByteArrayOps.getShortAt(it, 0).toInt())
+              }
+
+              scanData[ScanRecord.DATA_TYPE_CLASS_OF_DEVICE]?.let {
+                dataTypesBuilder.setClassOfDevice(ByteArrayOps.getInt24At(it, 0))
+              }
+
+              scanData[ScanRecord.DATA_TYPE_URI]?.let {
+                dataTypesBuilder.setUri(it.decodeToString())
+              }
+
+              scanData[ScanRecord.DATA_TYPE_LE_SUPPORTED_FEATURES]?.let {
+                dataTypesBuilder.setLeSupportedFeatures(ByteString.copyFrom(it))
+              }
+
+              scanData[ScanRecord.DATA_TYPE_SLAVE_CONNECTION_INTERVAL_RANGE]?.let {
+                dataTypesBuilder.setPeripheralConnectionIntervalMin(
+                  ByteArrayOps.getShortAt(it, 0).toInt()
+                )
+                dataTypesBuilder.setPeripheralConnectionIntervalMax(
+                  ByteArrayOps.getShortAt(it, 2).toInt()
+                )
+              }
+
               for (serviceDataEntry in serviceData) {
                 val parcelUuid = serviceDataEntry.key
-                Log.d(TAG, parcelUuid.uuid.toString())
+                Log.d(TAG, parcelUuid.uuid.toString().uppercase())
 
                 // use upper case uuid as the key
                 if (BluetoothUuid.is16BitUuid(parcelUuid)) {
                   val uuid16 = parcelUuid.uuid.toString().substring(4, 8).uppercase()
-                  dataTypesBuilder.addIncompleteServiceClassUuids16(uuid16)
                   dataTypesBuilder.putServiceDataUuid16(
                     uuid16,
                     ByteString.copyFrom(serviceDataEntry.value)
                   )
                 } else if (BluetoothUuid.is32BitUuid(parcelUuid)) {
                   val uuid32 = parcelUuid.uuid.toString().substring(0, 8).uppercase()
-                  dataTypesBuilder.addIncompleteServiceClassUuids32(uuid32)
                   dataTypesBuilder.putServiceDataUuid32(
                     uuid32,
                     ByteString.copyFrom(serviceDataEntry.value)
                   )
                 } else {
                   val uuid128 = parcelUuid.uuid.toString().uppercase()
-                  dataTypesBuilder.addIncompleteServiceClassUuids128(uuid128)
                   dataTypesBuilder.putServiceDataUuid128(
                     uuid128,
                     ByteString.copyFrom(serviceDataEntry.value)
                   )
                 }
               }
+
+              for (serviceUuid in scanRecord.serviceSolicitationUuids ?: listOf<ParcelUuid>()) {
+                Log.d(TAG, serviceUuid.uuid.toString().uppercase())
+                if (BluetoothUuid.is16BitUuid(serviceUuid)) {
+                  val uuid16 = serviceUuid.uuid.toString().substring(4, 8).uppercase()
+                  dataTypesBuilder.addServiceSolicitationUuids16(uuid16)
+                } else if (BluetoothUuid.is32BitUuid(serviceUuid)) {
+                  val uuid32 = serviceUuid.uuid.toString().substring(0, 8).uppercase()
+                  dataTypesBuilder.addServiceSolicitationUuids32(uuid32)
+                } else {
+                  val uuid128 = serviceUuid.uuid.toString().uppercase()
+                  dataTypesBuilder.addServiceSolicitationUuids128(uuid128)
+                }
+              }
+
+              for (serviceUuid in scanRecord.serviceUuids ?: listOf<ParcelUuid>()) {
+                Log.d(TAG, serviceUuid.uuid.toString().uppercase())
+                if (BluetoothUuid.is16BitUuid(serviceUuid)) {
+                  val uuid16 = serviceUuid.uuid.toString().substring(4, 8).uppercase()
+                  dataTypesBuilder.addIncompleteServiceClassUuids16(uuid16)
+                } else if (BluetoothUuid.is32BitUuid(serviceUuid)) {
+                  val uuid32 = serviceUuid.uuid.toString().substring(0, 8).uppercase()
+                  dataTypesBuilder.addIncompleteServiceClassUuids32(uuid32)
+                } else {
+                  val uuid128 = serviceUuid.uuid.toString().uppercase()
+                  dataTypesBuilder.addIncompleteServiceClassUuids128(uuid128)
+                }
+              }
+
               // Flags DataTypes CSSv10 1.3 Flags
               val mode: DiscoverabilityMode =
                 when (result.scanRecord.advertiseFlags and 0b11) {
@@ -582,17 +708,17 @@ class Host(
                   else -> DiscoverabilityMode.NOT_DISCOVERABLE
                 }
               dataTypesBuilder.setLeDiscoverabilityMode(mode)
-              var manufacturerData = ByteBuffer.allocate(32)
-              val manufacteurSpecificDatas = scanRecord.getManufacturerSpecificData()
-              for (i in 0..manufacteurSpecificDatas.size() - 1) {
-                val id = manufacteurSpecificDatas.keyAt(i)
+              var manufacturerData = ByteBuffer.allocate(512)
+              val manufacturerSpecificDatas = scanRecord.getManufacturerSpecificData()
+              for (i in 0..manufacturerSpecificDatas.size() - 1) {
+                val id = manufacturerSpecificDatas.keyAt(i)
                 manufacturerData
                   .put(id.toByte())
                   .put(id.shr(8).toByte())
-                  .put(manufacteurSpecificDatas.get(id))
+                  .put(manufacturerSpecificDatas.get(id))
               }
               dataTypesBuilder.setManufacturerSpecificData(
-                ByteString.copyFrom(manufacturerData.array())
+                ByteString.copyFrom(manufacturerData.array(), 0, manufacturerData.position())
               )
               val primaryPhy =
                 when (result.getPrimaryPhy()) {
@@ -600,12 +726,22 @@ class Host(
                   BluetoothDevice.PHY_LE_CODED -> PrimaryPhy.PRIMARY_CODED
                   else -> PrimaryPhy.UNRECOGNIZED
                 }
+              val secondaryPhy =
+                when (result.getSecondaryPhy()) {
+                  ScanResult.PHY_UNUSED -> SecondaryPhy.SECONDARY_NONE
+                  BluetoothDevice.PHY_LE_1M -> SecondaryPhy.SECONDARY_1M
+                  BluetoothDevice.PHY_LE_2M -> SecondaryPhy.SECONDARY_2M
+                  BluetoothDevice.PHY_LE_CODED -> SecondaryPhy.SECONDARY_CODED
+                  else -> SecondaryPhy.UNRECOGNIZED
+                }
               var scanningResponseBuilder =
                 ScanningResponse.newBuilder()
                   .setLegacy(result.isLegacy())
                   .setConnectable(result.isConnectable())
-                  .setSid(result.getPeriodicAdvertisingInterval())
+                  .setTruncated(result.getDataStatus() == ScanResult.DATA_TRUNCATED)
+                  .setSid(result.getAdvertisingSid())
                   .setPrimaryPhy(primaryPhy)
+                  .setSecondaryPhy(secondaryPhy)
                   .setTxPower(result.getTxPower())
                   .setRssi(result.getRssi())
                   .setPeriodicAdvertisingInterval(result.getPeriodicAdvertisingInterval().toFloat())

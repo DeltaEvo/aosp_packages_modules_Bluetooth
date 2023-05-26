@@ -50,6 +50,7 @@ class A2dpIntf {
   bool set_audio_config(A2dpCodecConfig rconfig) const;
   bool start_audio_request() const;
   bool stop_audio_request() const;
+  bool suspend_audio_request() const;
   RustPresentationPosition get_presentation_position() const;
 
  private:
@@ -75,6 +76,8 @@ class AvrcpIntf {
   void set_position(int64_t position_us);
   void set_metadata(
       const ::rust::String& title, const ::rust::String& artist, const ::rust::String& album, int64_t length_us);
+  // Used by qualification
+  uint16_t add_player(const ::rust::String& name, bool browsing_supported);
 
  private:
   bluetooth::avrcp::ServiceInterface* intf_;

@@ -24,6 +24,7 @@
 
 #include <list>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -33,7 +34,6 @@
 #include "bta_groups.h"
 #include "bta_has_api.h"
 #include "bta_le_audio_uuids.h"
-#include "btm_int.h"
 #include "btm_sec.h"
 #include "device/include/controller.h"
 #include "gap_api.h"
@@ -86,11 +86,12 @@ void btif_storage_set_leaudio_has_active_preset(const RawAddress& address,
                                                 uint8_t active_preset);
 void btif_storage_remove_leaudio_has(const RawAddress& address);
 
-extern bool gatt_profile_get_eatt_support(const RawAddress& remote_bda);
+bool gatt_profile_get_eatt_support(const RawAddress& remote_bda);
 
 namespace {
 class HasClientImpl;
 HasClientImpl* instance;
+std::mutex instance_mutex;
 
 /**
  * -----------------------------------------------------------------------------
@@ -908,6 +909,7 @@ class HasClientImpl : public HasClient {
 
   void Dump(int fd) const {
     std::stringstream stream;
+    stream << " APP ID: " << +gatt_if_ << " \n";
     if (devices_.size()) {
       stream << "  {\"Known HAS devices\": [";
       for (const auto& device : devices_) {
@@ -1872,25 +1874,13 @@ class HasClientImpl : public HasClient {
     /* verify bond */
     if (BTM_IsEncrypted(device->addr, BT_TRANSPORT_LE)) {
       /* if link has been encrypted */
-      if (device->isGattServiceValid()) {
-        instance->OnEncrypted(*device);
-      } else {
-        BTA_GATTC_ServiceSearchRequest(device->conn_id,
-                                       &kUuidHearingAccessService);
-      }
+      OnEncrypted(*device);
       return;
     }
 
-    int result = BTM_SetEncryption(
-        evt.remote_bda, BT_TRANSPORT_LE,
-        [](const RawAddress* bd_addr, tBT_TRANSPORT transport, void* p_ref_data,
-           tBTM_STATUS status) {
-          if (instance)
-            instance->OnLeEncryptionComplete(*bd_addr, status == BTM_SUCCESS);
-        },
-        nullptr, BTM_BLE_SEC_ENCRYPT);
-
-    DLOG(INFO) << __func__ << ": Encryption request result: " << result;
+    int result = BTM_SetEncryption(device->addr, BT_TRANSPORT_LE, nullptr,
+                                   nullptr, BTM_BLE_SEC_ENCRYPT);
+    LOG_INFO("Encryption required. Request result: 0x%02x", result);
   }
 
   void OnGattDisconnected(const tBTA_GATTC_CLOSE& evt) {
@@ -2112,6 +2102,7 @@ alarm_callback_t HasCtpGroupOpCoordinator::cb = [](void*) {};
 
 void HasClient::Initialize(bluetooth::has::HasClientCallbacks* callbacks,
                            base::Closure initCb) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   if (instance) {
     LOG(ERROR) << "Already initialized!";
     return;
@@ -2140,6 +2131,7 @@ void HasClient::AddFromStorage(const RawAddress& addr, uint8_t features,
 };
 
 void HasClient::CleanUp() {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   HasClientImpl* ptr = instance;
   instance = nullptr;
 
@@ -2152,6 +2144,7 @@ void HasClient::CleanUp() {
 };
 
 void HasClient::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Hearing Access Service Client:\n");
   if (instance)
     instance->Dump(fd);

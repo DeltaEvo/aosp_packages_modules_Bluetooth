@@ -12,6 +12,7 @@ pub const A2DP_SINK: &str = "0000110B-0000-1000-8000-00805F9B34FB";
 pub const A2DP_SOURCE: &str = "0000110A-0000-1000-8000-00805F9B34FB";
 pub const ADV_AUDIO_DIST: &str = "0000110D-0000-1000-8000-00805F9B34FB";
 pub const BAS: &str = "0000180F-0000-1000-8000-00805F9B34FB";
+pub const DIS: &str = "0000180A-0000-1000-8000-00805F9B34FB";
 pub const HSP: &str = "00001108-0000-1000-8000-00805F9B34FB";
 pub const HSP_AG: &str = "00001112-0000-1000-8000-00805F9B34FB";
 pub const HFP: &str = "0000111E-0000-1000-8000-00805F9B34FB";
@@ -40,13 +41,14 @@ pub const COORDINATED_SET: &str = "00001846-0000-1000-8000-00805F9B34FB";
 pub const BASE_UUID: &str = "00000000-0000-1000-8000-00805F9B34FB";
 
 /// List of profiles that with known uuids.
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, FromPrimitive, ToPrimitive, Copy)]
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord, FromPrimitive, ToPrimitive, Copy)]
 #[repr(u32)]
 pub enum Profile {
     A2dpSink,
     A2dpSource,
     AdvAudioDist,
     Bas,
+    Dis,
     Hsp,
     HspAg,
     Hfp,
@@ -110,6 +112,8 @@ lazy_static! {
     static ref SUPPORTED_PROFILES: HashSet<Profile> = [
         Profile::A2dpSink,
         Profile::A2dpSource,
+        Profile::AvrcpController,
+        Profile::AvrcpTarget,
         Profile::Bas,
         Profile::Hsp,
         Profile::Hfp,
@@ -133,6 +137,7 @@ lazy_static! {
         (UuidHelper::from_string(A2DP_SOURCE).unwrap(), Profile::A2dpSource),
         (UuidHelper::from_string(ADV_AUDIO_DIST).unwrap(), Profile::AdvAudioDist),
         (UuidHelper::from_string(BAS).unwrap(), Profile::Bas),
+        (UuidHelper::from_string(DIS).unwrap(), Profile::Dis),
         (UuidHelper::from_string(HSP).unwrap(), Profile::Hsp),
         (UuidHelper::from_string(HSP_AG).unwrap(), Profile::HspAg),
         (UuidHelper::from_string(HFP).unwrap(), Profile::Hfp),

@@ -23,6 +23,7 @@
 #include "common/bidi_queue.h"
 #include "common/callback.h"
 #include "hci/acl_manager/connection_callbacks.h"
+#include "hci/acl_manager/le_acceptlist_callbacks.h"
 #include "hci/acl_manager/le_connection_callbacks.h"
 #include "hci/address.h"
 #include "hci/address_with_type.h"
@@ -78,6 +79,9 @@ public:
  // Should register only once when user module starts.
  virtual void RegisterLeCallbacks(acl_manager::LeConnectionCallbacks* callbacks, os::Handler* handler);
  virtual void UnregisterLeCallbacks(acl_manager::LeConnectionCallbacks* callbacks, std::promise<void> promise);
+ void RegisterLeAcceptlistCallbacks(acl_manager::LeAcceptlistCallbacks* callbacks);
+ void UnregisterLeAcceptlistCallbacks(
+     acl_manager::LeAcceptlistCallbacks* callbacks, std::promise<void> promise);
 
  // Generates OnConnectSuccess if connected, or OnConnectFail otherwise
  virtual void CreateConnection(Address address);
@@ -112,10 +116,7 @@ public:
  virtual void IsOnBackgroundList(AddressWithType address_with_type, std::promise<bool> promise);
 
  virtual void CancelLeConnect(AddressWithType address_with_type);
- virtual void CancelLeConnectAndRemoveFromBackgroundList(AddressWithType address_with_type);
 
- virtual void AddDeviceToFilterAcceptList(AddressWithType address_with_type);
- virtual void RemoveDeviceFromFilterAcceptList(AddressWithType address_with_type);
  virtual void ClearFilterAcceptList();
 
  virtual void AddDeviceToResolvingList(
@@ -146,6 +147,7 @@ public:
  // Virtual ACL disconnect emitted during suspend.
  virtual void OnClassicSuspendInitiatedDisconnect(uint16_t handle, ErrorCode reason);
  virtual void OnLeSuspendInitiatedDisconnect(uint16_t handle, ErrorCode reason);
+ virtual void SetSystemSuspendState(bool suspended);
 
  static const ModuleFactory Factory;
 

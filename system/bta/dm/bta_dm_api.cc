@@ -52,6 +52,7 @@ void BTA_dm_init() {
   /* if UUID list is not provided as static data */
   bta_sys_eir_register(bta_dm_eir_update_uuid);
   bta_sys_cust_eir_register(bta_dm_eir_update_cust_uuid);
+  BTM_SetConsolidationCallback(bta_dm_consolidate);
 }
 
 /** This function sets the Bluetooth name of local device */
@@ -95,24 +96,12 @@ void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback) {
  *
  ******************************************************************************/
 void BTA_DmSearchCancel(void) {
-  bta_dm_search_clear_queue();
+  tBTA_DM_API_DISCOVERY_CANCEL* p_msg =
+      (tBTA_DM_API_DISCOVERY_CANCEL*)osi_calloc(
+          sizeof(tBTA_DM_API_DISCOVERY_CANCEL));
 
-  switch (bta_dm_search_get_state()) {
-    case BTA_DM_SEARCH_IDLE:
-      bta_dm_search_cancel_notify();
-      break;
-    case BTA_DM_SEARCH_ACTIVE:
-      bta_dm_search_set_state(BTA_DM_SEARCH_CANCELLING);
-      bta_dm_search_cancel();
-      break;
-    case BTA_DM_SEARCH_CANCELLING:
-      bta_dm_search_cancel_notify();
-      break;
-    case BTA_DM_DISCOVER_ACTIVE:
-      bta_dm_search_set_state(BTA_DM_SEARCH_CANCELLING);
-      bta_dm_search_cancel_notify();
-      break;
-  }
+  p_msg->hdr.event = BTA_DM_API_SEARCH_CANCEL_EVT;
+  bta_sys_sendmsg(p_msg);
 }
 
 /*******************************************************************************
@@ -599,8 +588,8 @@ void BTA_DmCloseACL(const RawAddress& bd_addr, bool remove_dev,
  * Returns          void.
  *
  ******************************************************************************/
-extern void BTA_DmBleObserve(bool start, uint8_t duration,
-                             tBTA_DM_SEARCH_CBACK* p_results_cb) {
+void BTA_DmBleObserve(bool start, uint8_t duration,
+                      tBTA_DM_SEARCH_CBACK* p_results_cb) {
   APPL_TRACE_API("%s:start = %d ", __func__, start);
   do_in_main_thread(
       FROM_HERE, base::Bind(bta_dm_ble_observe, start, duration, p_results_cb));
@@ -616,14 +605,16 @@ extern void BTA_DmBleObserve(bool start, uint8_t duration,
  * Parameters       start: start or stop the scan procedure,
  *                  duration_sec: Duration of the scan. Continuous scan if 0 is
  *                                passed,
+ *                  low_latency_scan: whether this is an low latency scan,
+ *                                    default is false.
  *
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleScan(bool start, uint8_t duration_sec) {
+void BTA_DmBleScan(bool start, uint8_t duration_sec, bool low_latency_scan) {
   APPL_TRACE_API("%s:start = %d ", __func__, start);
-  do_in_main_thread(FROM_HERE,
-                    base::Bind(bta_dm_ble_scan, start, duration_sec));
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_ble_scan, start, duration_sec,
+                                          low_latency_scan));
 }
 
 /*******************************************************************************
@@ -734,15 +725,19 @@ void BTA_DmSetEventFilterConnectionSetupAllDevices() {
 }
 
 void BTA_DmAllowWakeByHid(
+    std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices) {
   APPL_TRACE_API("BTA_DmAllowWakeByHid");
-  do_in_main_thread(FROM_HERE,
-                    base::Bind(bta_dm_allow_wake_by_hid, le_hid_devices));
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_allow_wake_by_hid,
+                                          std::move(classic_hid_devices),
+                                          std::move(le_hid_devices)));
 }
 
-void BTA_DmRestoreFilterAcceptList() {
+void BTA_DmRestoreFilterAcceptList(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices) {
   APPL_TRACE_API("BTA_DmRestoreFilterAcceptList");
-  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_restore_filter_accept_list));
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_restore_filter_accept_list,
+                                          std::move(le_devices)));
 }
 
 void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask) {

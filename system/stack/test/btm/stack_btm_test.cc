@@ -28,7 +28,6 @@
 #include "btif/include/btif_hh.h"
 #include "common/init_flags.h"
 #include "hci/include/hci_layer.h"
-#include "hci/include/hci_packet_factory.h"
 #include "internal_include/stack_config.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
@@ -44,8 +43,8 @@
 #include "stack/include/sec_hci_link_interface.h"
 #include "stack/l2cap/l2c_int.h"
 #include "test/common/mock_functions.h"
-#include "test/mock/mock_osi_list.h"
 #include "test/mock/mock_device_iot_config.h"
+#include "test/mock/mock_osi_list.h"
 #include "test/mock/mock_stack_hcic_hcicmds.h"
 #include "types/raw_address.h"
 
@@ -138,8 +137,7 @@ TEST_F(StackBtmTest, InformClientOnConnectionSuccess) {
   RawAddress bda({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 
   btm_acl_connected(bda, 2, HCI_SUCCESS, false);
-  ASSERT_EQ(static_cast<size_t>(1),
-            mock_function_count_map.count("BTA_dm_acl_up"));
+  ASSERT_EQ(1, get_func_call_count("BTA_dm_acl_up"));
 
   get_btm_client_interface().lifecycle.btm_free();
 }
@@ -150,8 +148,7 @@ TEST_F(StackBtmTest, NoInformClientOnConnectionFail) {
   RawAddress bda({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
 
   btm_acl_connected(bda, 2, HCI_ERR_NO_CONNECTION, false);
-  ASSERT_EQ(static_cast<size_t>(0),
-            mock_function_count_map.count("BTA_dm_acl_up"));
+  ASSERT_EQ(0, get_func_call_count("BTA_dm_acl_up"));
 
   get_btm_client_interface().lifecycle.btm_free();
 }
@@ -311,13 +308,11 @@ TEST_F(StackBtmWithInitFreeTest, btm_sec_encrypt_change) {
 
   // With le device encryption enable
   btm_sec_encrypt_change(ble_handle, HCI_SUCCESS, 0x01);
-  ASSERT_EQ(BTM_SEC_IN_USE | BTM_SEC_LE_AUTHENTICATED | BTM_SEC_LE_ENCRYPTED,
-            device_record->sec_flags);
+  ASSERT_EQ(BTM_SEC_IN_USE | BTM_SEC_LE_ENCRYPTED, device_record->sec_flags);
 
   // With le device encryption disable
   btm_sec_encrypt_change(ble_handle, HCI_SUCCESS, 0x00);
-  ASSERT_EQ(BTM_SEC_IN_USE | BTM_SEC_LE_AUTHENTICATED,
-            device_record->sec_flags);
+  ASSERT_EQ(BTM_SEC_IN_USE, device_record->sec_flags);
   device_record->sec_flags = BTM_SEC_IN_USE;
 
   wipe_secrets_and_remove(device_record);
@@ -400,4 +395,63 @@ TEST_F(StackBtmWithInitFreeTest, btm_sec_allocate_dev_rec__all) {
   // allocated by the btm module and freed when the device record
   // list is freed.
   // Further, the memory for each record is reused when necessary.
+}
+
+TEST_F(StackBtmTest, btm_oob_data_text) {
+  std::vector<std::pair<tBTM_OOB_DATA, std::string>> datas = {
+      std::make_pair(BTM_OOB_NONE, "BTM_OOB_NONE"),
+      std::make_pair(BTM_OOB_PRESENT_192, "BTM_OOB_PRESENT_192"),
+      std::make_pair(BTM_OOB_PRESENT_256, "BTM_OOB_PRESENT_256"),
+      std::make_pair(BTM_OOB_PRESENT_192_AND_256,
+                     "BTM_OOB_PRESENT_192_AND_256"),
+      std::make_pair(BTM_OOB_UNKNOWN, "BTM_OOB_UNKNOWN"),
+  };
+  for (const auto& data : datas) {
+    ASSERT_STREQ(data.second.c_str(), btm_oob_data_text(data.first).c_str());
+  }
+  auto unknown = base::StringPrintf("UNKNOWN[%hhu]",
+                                    std::numeric_limits<std::uint8_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               btm_oob_data_text(static_cast<tBTM_OOB_DATA>(
+                                     std::numeric_limits<std::uint8_t>::max()))
+                   .c_str());
+}
+
+TEST_F(StackBtmTest, bond_type_text) {
+  std::vector<std::pair<tBTM_SEC_DEV_REC::tBTM_BOND_TYPE, std::string>> datas =
+      {
+          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN,
+                         "tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN"),
+          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT,
+                         "tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT"),
+          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY,
+                         "tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY"),
+      };
+  for (const auto& data : datas) {
+    ASSERT_STREQ(data.second.c_str(), bond_type_text(data.first).c_str());
+  }
+  auto unknown = base::StringPrintf("UNKNOWN[%hhu]",
+                                    std::numeric_limits<std::uint8_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               bond_type_text(static_cast<tBTM_SEC_DEV_REC::tBTM_BOND_TYPE>(
+                                  std::numeric_limits<std::uint8_t>::max()))
+                   .c_str());
+}
+
+TEST_F(StackBtmWithInitFreeTest, wipe_secrets_and_remove) {
+  bluetooth::common::InitFlags::SetAllForTesting();
+
+  RawAddress bd_addr = RawAddress({0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6});
+  const uint16_t classic_handle = 0x1234;
+  const uint16_t ble_handle = 0x9876;
+
+  // Setup device
+  tBTM_SEC_DEV_REC* device_record = btm_sec_allocate_dev_rec();
+  ASSERT_NE(nullptr, device_record);
+  ASSERT_EQ(BTM_SEC_IN_USE, device_record->sec_flags);
+  device_record->bd_addr = bd_addr;
+  device_record->hci_handle = classic_handle;
+  device_record->ble_hci_handle = ble_handle;
+
+  wipe_secrets_and_remove(device_record);
 }

@@ -25,19 +25,19 @@ import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.BluetoothUuid;
-import android.bluetooth.IBluetoothHeadset;
 import android.content.Context;
 import android.media.AudioManager;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.telecom.TelecomManager;
+import android.telephony.TelephonyManager;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
@@ -45,7 +45,6 @@ import com.android.bluetooth.btservice.storage.DatabaseManager;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -86,6 +85,7 @@ public class HeadsetServiceTest {
     @Mock private HeadsetSystemInterface mSystemInterface;
     @Mock private AudioManager mAudioManager;
     @Mock private HeadsetPhoneState mPhoneState;
+    @Mock private TelecomManager mTelecomManager;
 
     @Before
     public void setUp() throws Exception {
@@ -143,12 +143,15 @@ public class HeadsetServiceTest {
         }).when(mObjectsFactory).makeStateMachine(any(), any(), any(), any(), any(), any());
         doReturn(mSystemInterface).when(mObjectsFactory).makeSystemInterface(any());
         doReturn(mNativeInterface).when(mObjectsFactory).getNativeInterface();
+        doReturn(mTelecomManager).when(mObjectsFactory).getTelecomManager(any());
+
         TestUtils.startService(mServiceRule, HeadsetService.class);
         mHeadsetService = HeadsetService.getHeadsetService();
         Assert.assertNotNull(mHeadsetService);
         verify(mAdapterService).notifyActivityAttributionInfo(any(), any());
         verify(mObjectsFactory).makeSystemInterface(mHeadsetService);
         verify(mObjectsFactory).getNativeInterface();
+        verify(mObjectsFactory).getTelecomManager(any());
         mHeadsetService.setForceScoAudio(true);
     }
 
@@ -703,6 +706,21 @@ public class HeadsetServiceTest {
     }
 
     /**
+     * Test to verify that {@link HeadsetService#ShouldCallAudioBeActive()} succeeds even when
+     * {@link HeadsetSystemInterface} has not all call infos.
+     */
+    @Test
+    public void testShouldCallAudioBeActive_missingInfo() {
+        when(mTelecomManager.getCallState()).thenReturn(TelephonyManager.CALL_STATE_IDLE);
+        Assert.assertFalse(mHeadsetService.shouldCallAudioBeActive());
+        when(mTelecomManager.getCallState()).thenReturn(TelephonyManager.CALL_STATE_OFFHOOK);
+        Assert.assertTrue(mHeadsetService.shouldCallAudioBeActive());
+        when(mTelecomManager.getCallState()).thenReturn(TelephonyManager.CALL_STATE_RINGING);
+        Assert.assertTrue(mHeadsetService.shouldCallAudioBeActive());
+        when(mTelecomManager.getCallState()).thenReturn(TelephonyManager.CALL_STATE_IDLE);
+    }
+
+    /**
      * Verifies that phone state change will trigger a system-wide saving of call state even when
      * no device is connected
      *
@@ -719,6 +737,7 @@ public class HeadsetServiceTest {
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
         verify(mAudioManager, never()).setA2dpSuspended(true);
+        verify(mAudioManager, never()).setLeAudioSuspended(true);
         HeadsetTestUtils.verifyPhoneStateChangeSetters(mPhoneState, headsetCallState,
                 ASYNC_CALL_TIMEOUT_MILLIS);
     }
@@ -776,8 +795,9 @@ public class HeadsetServiceTest {
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
 
-        // Should not ask Audio HAL to suspend A2DP without active device
+        // Should not ask Audio HAL to suspend A2DP or LE Audio without active device
         verify(mAudioManager, never()).setA2dpSuspended(true);
+        verify(mAudioManager, never()).setLeAudioSuspended(true);
         // Make sure we notify device about this change
         verify(mStateMachines.get(mCurrentDevice)).sendMessage(
                 HeadsetStateMachine.CALL_STATE_CHANGED, headsetCallState);
@@ -794,8 +814,9 @@ public class HeadsetServiceTest {
                 headsetCallState.mType, headsetCallState.mName, false);
         TestUtils.waitForLooperToFinishScheduledTask(
                 mHeadsetService.getStateMachinesThreadLooper());
-        // Ask Audio HAL to suspend A2DP
+        // Ask Audio HAL to suspend A2DP and LE Audio
         verify(mAudioManager).setA2dpSuspended(true);
+        verify(mAudioManager).setLeAudioSuspended(true);
         // Make sure state is updated
         verify(mStateMachines.get(mCurrentDevice)).sendMessage(
                 HeadsetStateMachine.CALL_STATE_CHANGED, headsetCallState);
@@ -858,8 +879,9 @@ public class HeadsetServiceTest {
         mHeadsetService.phoneStateChanged(headsetCallState.mNumActive,
                 headsetCallState.mNumHeld, headsetCallState.mCallState, headsetCallState.mNumber,
                 headsetCallState.mType, headsetCallState.mName, false);
-        // Ask Audio HAL to suspend A2DP
+        // Ask Audio HAL to suspend A2DP and LE Audio
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setLeAudioSuspended(true);
         // Make sure we notify devices about this change
         for (BluetoothDevice device : connectedDevices) {
             verify(mStateMachines.get(device)).sendMessage(HeadsetStateMachine.CALL_STATE_CHANGED,

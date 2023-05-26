@@ -54,6 +54,7 @@ class Acl : public hci::acl_manager::ConnectionCallbacks,
   // hci::acl_manager::ConnectionCallbacks
   void OnConnectSuccess(
       std::unique_ptr<hci::acl_manager::ClassicAclConnection>) override;
+  void OnConnectRequest(hci::Address, hci::ClassOfDevice) override;
   void OnConnectFail(hci::Address, hci::ErrorCode reason,
                      bool locally_initiated) override;
 
@@ -66,8 +67,7 @@ class Acl : public hci::acl_manager::ConnectionCallbacks,
   void OnLeConnectSuccess(
       hci::AddressWithType,
       std::unique_ptr<hci::acl_manager::LeAclConnection>) override;
-  void OnLeConnectFail(hci::AddressWithType, hci::ErrorCode reason,
-                       bool locally_initiated) override;
+  void OnLeConnectFail(hci::AddressWithType, hci::ErrorCode reason) override;
   void OnLeLinkDisconnected(uint16_t handle, hci::ErrorCode reason);
   bluetooth::hci::AddressWithType GetConnectionLocalAddress(
       const RawAddress& remote_bda);
@@ -118,17 +118,13 @@ class Acl : public hci::acl_manager::ConnectionCallbacks,
   void Dump(int fd) const;
   void DumpConnectionHistory(int fd) const;
 
-  void DisconnectAllForSuspend();
   void Shutdown();
   void FinalShutdown();
-  void LeRand(LeRandCallback cb);
 
   void ClearFilterAcceptList();
-
-  void AddDeviceToFilterAcceptList(
-      const hci::AddressWithType& address_with_type);
-
-  void ClearEventFilter();
+  void DisconnectAllForSuspend();
+  void LeRand(LeRandCallback cb);
+  void SetSystemSuspendState(bool suspended);
 
  protected:
   void on_incoming_acl_credits(uint16_t handle, uint16_t credits);

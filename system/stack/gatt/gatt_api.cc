@@ -38,6 +38,8 @@
 #include "osi/include/allocator.h"
 #include "osi/include/list.h"
 #include "osi/include/log.h"
+#include "rust/src/connection/ffi/connection_shim.h"
+#include "stack/arbiter/acl_arbiter.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/gatt/gatt_int.h"
@@ -48,7 +50,7 @@
 
 using bluetooth::Uuid;
 
-extern bool BTM_BackgroundConnectAddressKnown(const RawAddress& address);
+bool BTM_BackgroundConnectAddressKnown(const RawAddress& address);
 /**
  * Add an service handle range to the list in decending order of the start
  * handle. Return reference to the newly added element.
@@ -712,13 +714,144 @@ tGATT_STATUS GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu) {
 
   /* For this request only ATT CID is valid */
   p_clcb->cid = L2CAP_ATT_CID;
-  p_clcb->p_tcb->payload_size = mtu;
   p_clcb->operation = GATTC_OPTYPE_CONFIG;
   tGATT_CL_MSG gatt_cl_msg;
-  gatt_cl_msg.mtu = mtu;
-  LOG_DEBUG("Configuring ATT mtu size conn_id:%hu mtu:%hu", conn_id, mtu);
 
-  return attp_send_cl_msg(*p_clcb->p_tcb, p_clcb, GATT_REQ_MTU, &gatt_cl_msg);
+  bluetooth::shim::arbiter::GetArbiter().OnOutgoingMtuReq(tcb_idx);
+
+  /* Since GATT MTU Exchange can be done only once, and it is impossible to
+   * predict what MTU will be requested by other applications, let's use
+   * max possible MTU in the request. */
+  gatt_cl_msg.mtu = GATT_MAX_MTU_SIZE;
+
+  LOG_INFO("Configuring ATT mtu size conn_id:%hu mtu:%hu user mtu %hu", conn_id,
+           gatt_cl_msg.mtu, mtu);
+
+  auto result =
+      attp_send_cl_msg(*p_clcb->p_tcb, p_clcb, GATT_REQ_MTU, &gatt_cl_msg);
+  if (result == GATT_SUCCESS) {
+    p_clcb->p_tcb->pending_user_mtu_exchange_value = mtu;
+  }
+  return result;
+}
+
+/******************************************************************************
+ *
+ * Function         GATTC_TryMtuRequest
+ *
+ * Description      This function shall be called before calling
+ *                  GATTC_ConfgureMTU in order to check if operation is
+ *                  available to do.
+ *
+ * Parameters        remote_bda : peer device address. (input)
+ *                   transport  : physical transport of the GATT connection
+ *                                 (BR/EDR or LE) (input)
+ *                   conn_id    : connection id  (input)
+ *                   current_mtu: current mtu on the link (output)
+ *
+ * Returns          tGATTC_TryMtuRequestResult:
+ *                  - MTU_EXCHANGE_NOT_DONE_YET: There was no MTU Exchange
+ *                      procedure on the link. User can call GATTC_ConfigureMTU
+ *                      now.
+ *                  - MTU_EXCHANGE_NOT_ALLOWED : Not allowed for BR/EDR or if
+ *                      link does not exist
+ *                  - MTU_EXCHANGE_ALREADY_DONE: MTU Exchange is done. MTU
+ *                      should be taken from current_mtu
+ *                  - MTU_EXCHANGE_IN_PROGRESS : Other use is doing MTU
+ *                      Exchange. Conn_id is stored for result.
+ *
+ ******************************************************************************/
+tGATTC_TryMtuRequestResult GATTC_TryMtuRequest(const RawAddress& remote_bda,
+                                               tBT_TRANSPORT transport,
+                                               uint16_t conn_id,
+                                               uint16_t* current_mtu) {
+  LOG_INFO("%s conn_id=0x%04x", remote_bda.ToString().c_str(), conn_id);
+  *current_mtu = GATT_DEF_BLE_MTU_SIZE;
+
+  if (transport == BT_TRANSPORT_BR_EDR) {
+    LOG_ERROR("Device %s connected over BR/EDR",
+              ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
+    return MTU_EXCHANGE_NOT_ALLOWED;
+  }
+
+  tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(remote_bda, transport);
+  if (!p_tcb) {
+    LOG_ERROR("Device %s is not connected ",
+              ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
+    return MTU_EXCHANGE_DEVICE_DISCONNECTED;
+  }
+
+  if (gatt_is_pending_mtu_exchange(p_tcb)) {
+    LOG_DEBUG("Continue MTU pending for other client.");
+    /* MTU Exchange is in progress, started by other GATT Client.
+     * Wait until it is completed.
+     */
+    gatt_set_conn_id_waiting_for_mtu_exchange(p_tcb, conn_id);
+    return MTU_EXCHANGE_IN_PROGRESS;
+  }
+
+  uint16_t mtu = gatt_get_mtu(remote_bda, transport);
+  if (mtu == GATT_DEF_BLE_MTU_SIZE || mtu == 0) {
+    LOG_DEBUG("MTU not yet updated for %s",
+              ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
+    return MTU_EXCHANGE_NOT_DONE_YET;
+  }
+
+  *current_mtu = mtu;
+  return MTU_EXCHANGE_ALREADY_DONE;
+}
+
+/*******************************************************************************
+ * Function         GATTC_UpdateUserAttMtuIfNeeded
+ *
+ * Description      This function to be called when user requested MTU after
+ *                  MTU Exchange has been already done. This will update data
+ *                  length in the controller.
+ *
+ * Parameters        remote_bda : peer device address. (input)
+ *                   transport  : physical transport of the GATT connection
+ *                                 (BR/EDR or LE) (input)
+ *                   user_mtu: user request mtu
+ *
+ ******************************************************************************/
+void GATTC_UpdateUserAttMtuIfNeeded(const RawAddress& remote_bda,
+                                    tBT_TRANSPORT transport,
+                                    uint16_t user_mtu) {
+  LOG_INFO("%s, mtu=%hu", ADDRESS_TO_LOGGABLE_CSTR(remote_bda), user_mtu);
+  tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(remote_bda, transport);
+  if (!p_tcb) {
+    LOG_WARN("Transport control block not found");
+    return;
+  }
+
+  LOG_INFO("%s, current mtu: %d, max_user_mtu:%d, user_mtu: %d",
+           ADDRESS_TO_LOGGABLE_CSTR(remote_bda), p_tcb->payload_size,
+           p_tcb->max_user_mtu, user_mtu);
+
+  if (p_tcb->payload_size < user_mtu) {
+    LOG_INFO("User requested more than what GATT can handle. Trim it.");
+    user_mtu = p_tcb->payload_size;
+  }
+
+  if (p_tcb->max_user_mtu >= user_mtu) {
+    return;
+  }
+
+  p_tcb->max_user_mtu = user_mtu;
+  BTM_SetBleDataLength(remote_bda, user_mtu);
+}
+
+std::list<uint16_t> GATTC_GetAndRemoveListOfConnIdsWaitingForMtuRequest(
+    const RawAddress& remote_bda) {
+  std::list result = std::list<uint16_t>();
+
+  tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(remote_bda, BT_TRANSPORT_LE);
+  if (!p_tcb || p_tcb->conn_ids_waiting_for_mtu_exchange.empty()) {
+    return result;
+  }
+
+  result.swap(p_tcb->conn_ids_waiting_for_mtu_exchange);
+  return result;
 }
 
 /*******************************************************************************
@@ -1195,7 +1328,12 @@ void GATT_Deregister(tGATT_IF gatt_if) {
     }
   }
 
-  connection_manager::on_app_deregistered(gatt_if);
+  if (bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    bluetooth::connection::GetConnectionManager().remove_client(gatt_if);
+  } else {
+    connection_manager::on_app_deregistered(gatt_if);
+  }
 
   *p_reg = {};
 }
@@ -1269,8 +1407,9 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
 }
 
 bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
-                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
-                  bool opportunistic, uint8_t initiating_phys) {
+                  tBLE_ADDR_TYPE addr_type, tBTM_BLE_CONN_TYPE connection_type,
+                  tBT_TRANSPORT transport, bool opportunistic,
+                  uint8_t initiating_phys) {
   /* Make sure app is registered */
   tGATT_REG* p_reg = gatt_get_regcb(gatt_if);
   if (!p_reg) {
@@ -1295,7 +1434,8 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
   if (is_direct) {
     LOG_DEBUG("Starting direct connect gatt_if=%u address=%s", gatt_if,
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-    ret = gatt_act_connect(p_reg, bd_addr, transport, initiating_phys);
+    ret =
+        gatt_act_connect(p_reg, bd_addr, addr_type, transport, initiating_phys);
   } else {
     LOG_DEBUG("Starting background connect gatt_if=%u address=%s", gatt_if,
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
@@ -1309,11 +1449,24 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
     } else {
       LOG_DEBUG("Adding to background connect to device:%s",
                 ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-      if (connection_type == BTM_BLE_BKG_CONNECT_ALLOW_LIST) {
-        ret = connection_manager::background_connect_add(gatt_if, bd_addr);
+      if (bluetooth::common::init_flags::
+              use_unified_connection_manager_is_enabled()) {
+        if (connection_type == BTM_BLE_BKG_CONNECT_ALLOW_LIST) {
+          bluetooth::connection::GetConnectionManager()
+              .add_background_connection(
+                  gatt_if, bluetooth::connection::ResolveRawAddress(bd_addr));
+          ret = true;  // TODO(aryarahul): error handling
+        } else {
+          LOG_ALWAYS_FATAL("unimplemented, TODO(aryarahul)");
+        }
       } else {
-        ret = connection_manager::background_connect_targeted_announcement_add(
-            gatt_if, bd_addr);
+        if (connection_type == BTM_BLE_BKG_CONNECT_ALLOW_LIST) {
+          ret = connection_manager::background_connect_add(gatt_if, bd_addr);
+        } else {
+          ret =
+              connection_manager::background_connect_targeted_announcement_add(
+                  gatt_if, bd_addr);
+        }
       }
     }
   }
@@ -1332,6 +1485,13 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
   }
 
   return ret;
+}
+
+bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
+                  tBTM_BLE_CONN_TYPE connection_type, tBT_TRANSPORT transport,
+                  bool opportunistic, uint8_t initiating_phys) {
+  return GATT_Connect(gatt_if, bd_addr, BLE_ADDR_PUBLIC, connection_type,
+                      transport, opportunistic, initiating_phys);
 }
 
 /*******************************************************************************
@@ -1385,11 +1545,18 @@ bool GATT_CancelConnect(tGATT_IF gatt_if, const RawAddress& bd_addr,
     }
   }
 
-  if (!connection_manager::remove_unconditional(bd_addr)) {
-    LOG(ERROR)
-        << __func__
-        << ": no app associated with the bg device for unconditional removal";
-    return false;
+  if (bluetooth::common::init_flags::
+          use_unified_connection_manager_is_enabled()) {
+    bluetooth::connection::GetConnectionManager()
+        .stop_all_connections_to_device(
+            bluetooth::connection::ResolveRawAddress(bd_addr));
+  } else {
+    if (!connection_manager::remove_unconditional(bd_addr)) {
+      LOG(ERROR) << __func__
+                 << ": no app associated with the bg device for unconditional "
+                    "removal ";
+      return false;
+    }
   }
 
   return true;

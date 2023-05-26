@@ -25,7 +25,6 @@
 #include "hci/address.h"
 #include "hci/address_with_type.h"
 #include "isochronous_connection_handler.h"
-#include "model/setup/async_manager.h"
 #include "phy.h"
 #include "sco_connection.h"
 
@@ -37,12 +36,15 @@ class AclConnectionHandler {
   AclConnectionHandler() = default;
   virtual ~AclConnectionHandler() = default;
 
+  using TaskId = uint32_t;
+
   // Reset the connection manager state, stopping any pending
   // SCO connections.
-  void Reset(std::function<void(AsyncTaskId)> stopStream);
+  void Reset(std::function<void(TaskId)> stopStream);
 
   bool CreatePendingConnection(bluetooth::hci::Address addr,
-                               bool authenticate_on_connect);
+                               bool authenticate_on_connect,
+                               bool allow_role_switch);
   bool HasPendingConnection(bluetooth::hci::Address addr) const;
   bool CancelPendingConnection(bluetooth::hci::Address addr);
   bool AuthenticatePendingConnection() const;
@@ -57,10 +59,10 @@ class AclConnectionHandler {
   void CancelPendingScoConnection(bluetooth::hci::Address addr);
   bool AcceptPendingScoConnection(bluetooth::hci::Address addr,
                                   ScoLinkParameters const& parameters,
-                                  std::function<AsyncTaskId()> startStream);
+                                  std::function<TaskId()> startStream);
   bool AcceptPendingScoConnection(bluetooth::hci::Address addr,
                                   ScoConnectionParameters const& parameters,
-                                  std::function<AsyncTaskId()> startStream);
+                                  std::function<TaskId()> startStream);
   uint16_t GetScoHandle(bluetooth::hci::Address addr) const;
   ScoConnectionParameters GetScoConnectionParameters(
       bluetooth::hci::Address addr) const;
@@ -77,19 +79,27 @@ class AclConnectionHandler {
   uint16_t CreateLeConnection(bluetooth::hci::AddressWithType addr,
                               bluetooth::hci::AddressWithType own_addr,
                               bluetooth::hci::Role role);
-  bool Disconnect(uint16_t handle, std::function<void(AsyncTaskId)> stopStream);
+  bool Disconnect(uint16_t handle, std::function<void(TaskId)> stopStream);
   bool HasHandle(uint16_t handle) const;
   bool HasScoHandle(uint16_t handle) const;
 
   uint16_t GetHandle(bluetooth::hci::AddressWithType addr) const;
   uint16_t GetHandleOnlyAddress(bluetooth::hci::Address addr) const;
   bluetooth::hci::AddressWithType GetAddress(uint16_t handle) const;
+  std::optional<AddressWithType> GetAddressSafe(uint16_t handle) const;
   bluetooth::hci::Address GetScoAddress(uint16_t handle) const;
   bluetooth::hci::AddressWithType GetOwnAddress(uint16_t handle) const;
   bluetooth::hci::AddressWithType GetResolvedAddress(uint16_t handle) const;
 
+  // Return the AclConnection for the selected connection handle, asserts
+  // if the handle is not currently used.
+  AclConnection& GetAclConnection(uint16_t handle);
+
   void Encrypt(uint16_t handle);
   bool IsEncrypted(uint16_t handle) const;
+
+  void SetRssi(uint16_t handle, int8_t rssi);
+  int8_t GetRssi(uint16_t handle) const;
 
   Phy::Type GetPhyType(uint16_t handle) const;
 
@@ -146,6 +156,7 @@ class AclConnectionHandler {
   std::chrono::steady_clock::duration TimeUntilLinkExpired(
       uint16_t handle) const;
   bool HasLinkExpired(uint16_t handle) const;
+  bool IsRoleSwitchAllowedForPendingConnection() const;
 
  private:
   std::unordered_map<uint16_t, AclConnection> acl_connections_;
@@ -155,6 +166,7 @@ class AclConnectionHandler {
   bluetooth::hci::Address pending_connection_address_{
       bluetooth::hci::Address::kEmpty};
   bool authenticate_pending_classic_connection_{false};
+  bool pending_classic_connection_allow_role_switch_{false};
   bool le_connection_pending_{false};
   bluetooth::hci::AddressWithType pending_le_connection_address_{
       bluetooth::hci::Address::kEmpty,

@@ -51,8 +51,6 @@ public class SdpManager {
     public static final byte PBAP_REPO_SIM = 0x01 << 1;
     public static final byte PBAP_REPO_SPEED_DAIL = 0x01 << 2;
     public static final byte PBAP_REPO_FAVORITES = 0x01 << 3;
-    public static final int PBAP_RFCOMM_CHANNEL = 19;
-    public static final int PBAP_L2CAP_PSM = 0x1025;
 
     /* Variables to keep track of ongoing and queued search requests.
      * mTrackerLock must be held, when using/changing sSdpSearchTracker
@@ -188,8 +186,9 @@ public class SdpManager {
             addressString = sAdapterService.getIdentityAddress(addressString);
             ParcelUuid uuid = Utils.byteArrayToUuid(uuidBytes)[0];
             for (SdpSearchInstance inst : mList) {
-                if (inst.getDevice().getAddress().equals(addressString) && inst.getUuid()
-                        .equals(uuid)) {
+                String instAddressString =
+                        sAdapterService.getIdentityAddress(inst.getDevice().getAddress());
+                if (instAddressString.equals(addressString) && inst.getUuid().equals(uuid)) {
                     return inst;
                 }
             }
@@ -197,10 +196,11 @@ public class SdpManager {
         }
 
         boolean isSearching(BluetoothDevice device, ParcelUuid uuid) {
-            String addressString = device.getAddress();
+            String addressString = sAdapterService.getIdentityAddress(device.getAddress());
             for (SdpSearchInstance inst : mList) {
-                if (inst.getDevice().getAddress().equals(addressString) && inst.getUuid()
-                        .equals(uuid)) {
+                String instAddressString =
+                        sAdapterService.getIdentityAddress(inst.getDevice().getAddress());
+                if (instAddressString.equals(addressString) && inst.getUuid().equals(uuid)) {
                     return inst.isSearching();
                 }
             }

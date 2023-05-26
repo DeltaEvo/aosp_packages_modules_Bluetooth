@@ -1,34 +1,54 @@
-from mobly import suite_runner
-from avatar import bumble_server
+import site
 
-import example
-import gatt_test
+site.main()
 
+import argparse
 import logging
+import os
 import sys
 
-from bumble_experimental.gatt import GATTService
-from pandora_experimental.gatt_grpc_aio import add_GATTServicer_to_server
+from argparse import Namespace
+from mobly import suite_runner
+from typing import List, Tuple
 
-_TEST_CLASSES_LIST = [example.ExampleTest, gatt_test.GattTest]
+_BUMBLE_BTSNOOP_FMT = 'bumble_btsnoop_{pid}_{instance}.log'
+
+# Import test modules.
+import asha_test
+import classic_ssp_test
+import example
+import gatt_test
+import le_advertising_test
+import smp_test
+
+_TEST_CLASSES_LIST = [
+    example.ExampleTest,
+    asha_test.ASHATest,
+    gatt_test.GattTest,
+    le_advertising_test.LeAdvertisingTest,
+    smp_test.SmpTest,
+    classic_ssp_test.ClassicSspTest,
+]
 
 
-def _bumble_servicer_hook(server: bumble_server.Server) -> None:
-  add_GATTServicer_to_server(GATTService(server.bumble.device), server.server)
+def _parse_cli_args() -> Tuple[Namespace, List[str]]:
+    parser = argparse.ArgumentParser(description='Avatar test runner.')
+    parser.add_argument('-o', '--log_path', type=str, metavar='<PATH>', help='Path to the test configuration file.')
+    return parser.parse_known_args()
 
 
 if __name__ == "__main__":
-  logging.basicConfig(level=logging.DEBUG)
-  # This is a hack because of `b/166468397`
-  argv = sys.argv[idx+1:] if (idx := sys.argv.index('--')) else sys.argv[1:]
+    logging.basicConfig(level=logging.INFO)
 
-  # Mobly tradefed is using these arguments for specific java tests
-  argv = [arg for arg in argv if not arg.startswith(('--device_serial', '--log_path'))]
+    # This is a hack for `tradefed` because of `b/166468397`.
+    if '--' in sys.argv:
+        index = sys.argv.index('--')
+        sys.argv = sys.argv[:1] + sys.argv[index + 1 :]
 
-  # register experimental bumble servicers hook.
-  bumble_server.register_servicer_hook(_bumble_servicer_hook)
+    # Enable bumble snoop logger.
+    ns, argv = _parse_cli_args()
+    if ns.log_path:
+        os.environ.setdefault('BUMBLE_SNOOPER', f'btsnoop:file:{ns.log_path}/{_BUMBLE_BTSNOOP_FMT}')
 
-  suite_runner.run_suite(
-      argv=argv,
-      test_classes=_TEST_CLASSES_LIST,
-  )
+    # Run the test suite.
+    suite_runner.run_suite(_TEST_CLASSES_LIST, argv)  # type: ignore

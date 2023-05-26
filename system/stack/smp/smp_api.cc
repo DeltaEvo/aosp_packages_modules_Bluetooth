@@ -28,7 +28,6 @@
 #include <string.h>
 
 #include "bt_target.h"
-#include "bt_utils.h"
 #include "gd/os/log.h"
 #include "gd/os/rand.h"
 #include "l2c_api.h"
@@ -567,10 +566,13 @@ void SMP_SecureConnectionOobDataReply(uint8_t* p_data) {
  * Description      This function is called to generate a public key to be
  *                  passed to a remote device via Out of Band transport.
  *
+ * Returns          true if the request is successfully sent and executed by the
+ *                  state machine, false otherwise
+ *
  ******************************************************************************/
-void SMP_CrLocScOobData() {
+bool SMP_CrLocScOobData() {
   tSMP_INT_DATA smp_int_data;
-  smp_sm_event(&smp_cb, SMP_CR_LOC_SC_OOB_DATA_EVT, &smp_int_data);
+  return smp_sm_event(&smp_cb, SMP_CR_LOC_SC_OOB_DATA_EVT, &smp_int_data);
 }
 
 /*******************************************************************************

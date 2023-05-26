@@ -15,6 +15,7 @@
  */
 package com.android.bluetooth;
 
+import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,11 +30,13 @@ import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.MessageQueue;
-import android.os.Process;
+import android.service.media.MediaBrowserService;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.rule.ServiceTestRule;
+import androidx.test.uiautomator.UiDevice;
 
+import com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 
@@ -94,7 +97,7 @@ public class TestUtils {
             throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         Assert.assertNull("AdapterService.getAdapterService() must be null before setting another"
                 + " AdapterService", AdapterService.getAdapterService());
-        Assert.assertNotNull(adapterService);
+        Assert.assertNotNull("Adapter service should not be null", adapterService);
         // We cannot mock AdapterService.getAdapterService() with Mockito.
         // Hence we need to use reflection to call a private method to
         // initialize properly the AdapterService.sAdapterService field.
@@ -119,7 +122,7 @@ public class TestUtils {
         Assert.assertSame("AdapterService.getAdapterService() must return the same object as the"
                         + " supplied adapterService in this method", adapterService,
                 AdapterService.getAdapterService());
-        Assert.assertNotNull(adapterService);
+        Assert.assertNotNull("Adapter service should not be null", adapterService);
         Method method =
                 AdapterService.class.getDeclaredMethod("clearAdapterService", AdapterService.class);
         method.setAccessible(true);
@@ -142,7 +145,7 @@ public class TestUtils {
     public static <T extends ProfileService> void startService(ServiceTestRule serviceTestRule,
             Class<T> profileServiceClass) throws TimeoutException {
         AdapterService adapterService = AdapterService.getAdapterService();
-        Assert.assertNotNull(adapterService);
+        Assert.assertNotNull("Adapter service should not be null", adapterService);
         Assert.assertTrue("AdapterService.getAdapterService() must return a mocked or spied object"
                 + " before calling this method", MockUtil.isMock(adapterService));
         Intent startIntent =
@@ -364,6 +367,25 @@ public class TestUtils {
             return null;
         }
         return adapterConfig;
+    }
+
+    /**
+     * Prepare the intent to start bluetooth browser media service.
+     *
+     * @return intent with the appropriate component & action set.
+     */
+    public static Intent prepareIntentToStartBluetoothBrowserMediaService() {
+        final Intent intent = new Intent(InstrumentationRegistry.getTargetContext(),
+                BluetoothMediaBrowserService.class);
+        intent.setAction(MediaBrowserService.SERVICE_INTERFACE);
+        return intent;
+    }
+
+    public static void wakeUpAndDismissKeyGuard() throws Exception {
+        final UiDevice device = UiDevice.getInstance(
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation());
+        device.wakeUp();
+        device.executeShellCommand("wm dismiss-keyguard");
     }
 
     /**

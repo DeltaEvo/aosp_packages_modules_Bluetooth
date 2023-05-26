@@ -18,9 +18,11 @@
 
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
+#include <frameworks/proto_logging/stats/enums/bluetooth/le/enums.pb.h>
 
 #include <unordered_map>
 #include "types/raw_address.h"
+#include "metrics/metrics_state.h"
 
 namespace bluetooth {
 namespace shim {
@@ -84,6 +86,17 @@ void LogMetricA2dpAudioOverrunEvent(const RawAddress& address,
  */
 void LogMetricA2dpPlaybackEvent(const RawAddress& raw_address,
                                 int playback_state, int audio_coding_mode);
+
+/**
+ * Log HFP audio capture packet loss statistics
+ *
+ * @param address HFP device associated with this stats
+ * @param num_decoded_frames number of decoded frames
+ * @param packet_loss_ratio ratio of packet loss frames
+ */
+void LogMetricHfpPacketLossStats(const RawAddress& address,
+                                 int num_decoded_frames,
+                                 double packet_loss_ratio);
 
 /**
  * Log read RSSI result
@@ -209,5 +222,12 @@ void LogMetricManufacturerInfo(
     const std::string& software_version);
 
 bool CountCounterMetrics(int32_t key, int64_t count);
+
+void LogMetricBluetoothLEConnectionMetricEvent(
+    const RawAddress& raw_address,
+    android::bluetooth::le::LeConnectionOriginType origin_type,
+    android::bluetooth::le::LeConnectionType connection_type,
+    android::bluetooth::le::LeConnectionState transaction_state,
+    std::vector<std::pair<os::ArgumentType, int>> argument_list);
 }  // namespace shim
 }  // namespace bluetooth

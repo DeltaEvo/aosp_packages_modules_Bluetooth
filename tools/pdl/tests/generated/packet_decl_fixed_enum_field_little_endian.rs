@@ -1,8 +1,6 @@
 // @generated rust packets from test
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{FromPrimitive, ToPrimitive};
 use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -10,6 +8,19 @@ use std::sync::Arc;
 use thiserror::Error;
 
 type Result<T> = std::result::Result<T, Error>;
+
+#[doc = r" Private prevents users from creating arbitrary scalar values"]
+#[doc = r" in situations where the value needs to be validated."]
+#[doc = r" Users can freely deref the value, but only the backend"]
+#[doc = r" may create it."]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Private<T>(T);
+impl<T> std::ops::Deref for Private<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -27,67 +38,88 @@ pub enum Error {
     ImpossibleStructError,
     #[error("when parsing field {obj}.{field}, {value} is not a valid {type_} value")]
     InvalidEnumValueError { obj: String, field: String, value: u64, type_: String },
+    #[error("expected child {expected}, got {actual}")]
+    InvalidChildError { expected: &'static str, actual: String },
 }
-
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub struct TryFromError(&'static str);
 
 pub trait Packet {
     fn to_bytes(self) -> Bytes;
     fn to_vec(self) -> Vec<u8>;
 }
 
-#[derive(FromPrimitive, ToPrimitive, Debug, Hash, Eq, PartialEq, Clone, Copy)]
 #[repr(u64)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "u8", into = "u8"))]
 pub enum Enum7 {
     A = 0x1,
     B = 0x2,
 }
-#[cfg(feature = "serde")]
-impl serde::Serialize for Enum7 {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_u64(*self as u64)
-    }
-}
-#[cfg(feature = "serde")]
-struct Enum7Visitor;
-#[cfg(feature = "serde")]
-impl<'de> serde::de::Visitor<'de> for Enum7Visitor {
-    type Value = Enum7;
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a valid discriminant")
-    }
-    fn visit_u64<E>(self, value: u64) -> std::result::Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
+impl TryFrom<u8> for Enum7 {
+    type Error = u8;
+    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         match value {
             0x1 => Ok(Enum7::A),
             0x2 => Ok(Enum7::B),
-            _ => Err(E::custom(format!("invalid discriminant: {value}"))),
+            _ => Err(value),
         }
     }
 }
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Enum7 {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_u64(Enum7Visitor)
+impl From<&Enum7> for u8 {
+    fn from(value: &Enum7) -> Self {
+        match value {
+            Enum7::A => 0x1,
+            Enum7::B => 0x2,
+        }
+    }
+}
+impl From<Enum7> for u8 {
+    fn from(value: Enum7) -> Self {
+        (&value).into()
+    }
+}
+impl From<Enum7> for i8 {
+    fn from(value: Enum7) -> Self {
+        u8::from(value) as Self
+    }
+}
+impl From<Enum7> for i16 {
+    fn from(value: Enum7) -> Self {
+        u8::from(value) as Self
+    }
+}
+impl From<Enum7> for i32 {
+    fn from(value: Enum7) -> Self {
+        u8::from(value) as Self
+    }
+}
+impl From<Enum7> for i64 {
+    fn from(value: Enum7) -> Self {
+        u8::from(value) as Self
+    }
+}
+impl From<Enum7> for u16 {
+    fn from(value: Enum7) -> Self {
+        u8::from(value) as Self
+    }
+}
+impl From<Enum7> for u32 {
+    fn from(value: Enum7) -> Self {
+        u8::from(value) as Self
+    }
+}
+impl From<Enum7> for u64 {
+    fn from(value: Enum7) -> Self {
+        u8::from(value) as Self
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FooData {
     b: u64,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Foo {
     #[cfg_attr(feature = "serde", serde(flatten))]
@@ -102,7 +134,12 @@ impl FooData {
     fn conforms(bytes: &[u8]) -> bool {
         bytes.len() >= 8
     }
-    fn parse(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
+    fn parse(bytes: &[u8]) -> Result<Self> {
+        let mut cell = Cell::new(bytes);
+        let packet = Self::parse_inner(&mut cell)?;
+        Ok(packet)
+    }
+    fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         if bytes.get().remaining() < 8 {
             return Err(Error::InvalidLengthError {
                 obj: "Foo".to_string(),
@@ -111,20 +148,23 @@ impl FooData {
             });
         }
         let chunk = bytes.get_mut().get_u64_le();
-        if (chunk & 0x7f) as u8 != Enum7::A as u8 {
+        if (chunk & 0x7f) as u8 != u8::from(Enum7::A) {
             return Err(Error::InvalidFixedValue {
-                expected: Enum7::A as u64,
+                expected: u8::from(Enum7::A) as u64,
                 actual: (chunk & 0x7f) as u8 as u64,
             });
         }
-        let b = ((chunk >> 7) & 0x1ffffffffffffffu64);
+        let b = ((chunk >> 7) & 0x1ff_ffff_ffff_ffff_u64);
         Ok(Self { b })
     }
     fn write_to(&self, buffer: &mut BytesMut) {
-        if self.b > 0x1ffffffffffffffu64 {
-            panic!("Invalid value for {}::{}: {} > {}", "Foo", "b", self.b, 0x1ffffffffffffffu64);
+        if self.b > 0x1ff_ffff_ffff_ffff_u64 {
+            panic!(
+                "Invalid value for {}::{}: {} > {}",
+                "Foo", "b", self.b, 0x1ff_ffff_ffff_ffff_u64
+            );
         }
-        let value = (Enum7::A as u64) | (self.b << 7);
+        let value = (u8::from(Enum7::A) as u64) | (self.b << 7);
         buffer.put_u64_le(value);
     }
     fn get_total_size(&self) -> usize {
@@ -158,16 +198,13 @@ impl Foo {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         let mut cell = Cell::new(bytes);
         let packet = Self::parse_inner(&mut cell)?;
-        if !cell.get().is_empty() {
-            return Err(Error::InvalidPacketError);
-        }
         Ok(packet)
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
-        let data = FooData::parse(&mut bytes)?;
-        Ok(Self::new(Arc::new(data)).unwrap())
+        let data = FooData::parse_inner(&mut bytes)?;
+        Self::new(Arc::new(data))
     }
-    fn new(foo: Arc<FooData>) -> std::result::Result<Self, &'static str> {
+    fn new(foo: Arc<FooData>) -> Result<Self> {
         Ok(Self { foo })
     }
     pub fn get_b(&self) -> u64 {

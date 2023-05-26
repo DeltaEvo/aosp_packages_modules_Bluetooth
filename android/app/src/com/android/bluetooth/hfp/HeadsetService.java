@@ -47,6 +47,8 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.sysprop.BluetoothProperties;
 import android.telecom.PhoneAccount;
+import android.telecom.TelecomManager;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
@@ -141,6 +143,8 @@ public class HeadsetService extends ProfileService {
     private VoiceRecognitionTimeoutEvent mVoiceRecognitionTimeoutEvent;
     // Timeout when voice recognition is started by remote device
     @VisibleForTesting static int sStartVrTimeoutMs = 5000;
+    // Used to retrieve call state before BluetoothInCallService is connected
+    public TelecomManager mTelecomManager;
     private ArrayList<StateMachineTask> mPendingClccResponses = new ArrayList<>();
     private boolean mStarted;
     private boolean mCreated;
@@ -191,20 +195,23 @@ public class HeadsetService extends ProfileService {
         mNativeInterface = HeadsetObjectsFactory.getInstance().getNativeInterface();
         // Add 1 to allow a pending device to be connecting or disconnecting
         mNativeInterface.init(mMaxHeadsetConnections + 1, isInbandRingingEnabled());
-        // Step 5: Check if state machine table is empty, crash if not
+        // Step 5: Get TelecomManager
+        mTelecomManager = HeadsetObjectsFactory.getInstance().getTelecomManager(this);
+        // Step 6: Check if state machine table is empty, crash if not
         if (mStateMachines.size() > 0) {
             throw new IllegalStateException(
                     "start(): mStateMachines is not empty, " + mStateMachines.size()
                             + " is already created. Was stop() called properly?");
         }
-        // Step 6: Setup broadcast receivers
+        // Step 7: Setup broadcast receivers
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         filter.addAction(AudioManager.ACTION_VOLUME_CHANGED);
         filter.addAction(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         registerReceiver(mHeadsetReceiver, filter);
-        // Step 7: Mark service as started
+        // Step 8: Mark service as started
         mStarted = true;
         BluetoothDevice activeDevice = getActiveDevice();
         String deviceAddress = activeDevice != null ?
@@ -1849,6 +1856,7 @@ public class HeadsetService extends ProfileService {
             if (mActiveDevice != null && callState != HeadsetHalConstants.CALL_STATE_DISCONNECTED
                     && !mSystemInterface.isCallIdle() && isCallIdleBefore) {
                 mSystemInterface.getAudioManager().setA2dpSuspended(true);
+                mSystemInterface.getAudioManager().setLeAudioSuspended(true);
             }
         });
         doForEachConnectedStateMachine(
@@ -1859,6 +1867,7 @@ public class HeadsetService extends ProfileService {
                     && mSystemInterface.isCallIdle() && !isAudioOn()) {
                 // Resume A2DP when call ended and SCO is not connected
                 mSystemInterface.getAudioManager().setA2dpSuspended(false);
+                mSystemInterface.getAudioManager().setLeAudioSuspended(false);
             }
         });
         if (callState == HeadsetHalConstants.CALL_STATE_IDLE) {
@@ -2035,9 +2044,35 @@ public class HeadsetService extends ProfileService {
         }
     }
 
-    private boolean shouldCallAudioBeActive() {
-        return mSystemInterface.isInCall() || (mSystemInterface.isRinging()
-                && isInbandRingingEnabled());
+    /**
+     * Check if there is an active or ringing call
+     *
+     * <p>This will check for both {@link HeadsetSystemInterface} state and {@link TelecomManager}
+     * state as {@link HeadsetSystemInterface} values are provided by {@link BluetoothInCallService}
+     * which can be bound to Telecom after the call to {@link #connectAudio} is made.
+     *
+     * @return whether there is an active or ringing call
+     */
+    @VisibleForTesting
+    boolean shouldCallAudioBeActive() {
+        int telecomCallState = TelephonyManager.CALL_STATE_IDLE;
+        if (mTelecomManager != null) {
+            telecomCallState = mTelecomManager.getCallState();
+        }
+        Log.i(
+                TAG,
+                "shouldCallAudioBeActive: "
+                        + "Telecom state: "
+                        + telecomCallState
+                        + ", HeadsetSystemInterface inCall: "
+                        + mSystemInterface.isInCall()
+                        + ", isRinging: "
+                        + mSystemInterface.isRinging());
+        return ((mSystemInterface.isInCall()
+                        || telecomCallState == TelephonyManager.CALL_STATE_OFFHOOK)
+                || ((mSystemInterface.isRinging()
+                                || telecomCallState == TelephonyManager.CALL_STATE_RINGING)
+                        && isInbandRingingEnabled()));
     }
 
     /**
@@ -2094,6 +2129,7 @@ public class HeadsetService extends ProfileService {
                 // Unsuspend A2DP when SCO connection is gone and call state is idle
                 if (mSystemInterface.isCallIdle()) {
                     mSystemInterface.getAudioManager().setA2dpSuspended(false);
+                    mSystemInterface.getAudioManager().setLeAudioSuspended(false);
                 }
             }
         }

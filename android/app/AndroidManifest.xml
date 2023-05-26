@@ -160,6 +160,7 @@
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService"/>
             </intent-filter>
+            <meta-data android:name="androidx.car.app.launchable" android:value="true" />
         </service>
         <provider android:process="@string/process"
              android:name="com.android.bluetooth.avrcpcontroller.AvrcpCoverArtProvider"
@@ -360,14 +361,6 @@
              android:process="@string/process">
             <path-permission android:pathPrefix="/btopp"
                  android:permission="android.permission.ACCESS_BLUETOOTH_SHARE"/>
-        </provider>
-        <provider android:name="com.android.bluetooth.opp.BluetoothOppFileProvider"
-             android:authorities="com.android.bluetooth.opp.fileprovider"
-             android:grantUriPermissions="true"
-             android:enabled="false"
-             android:exported="false">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
-                 android:resource="@xml/file_paths"/>
         </provider>
         <receiver android:process="@string/process"
              android:name="com.android.bluetooth.opp.BluetoothOppReceiver"

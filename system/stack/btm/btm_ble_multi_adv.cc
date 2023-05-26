@@ -46,7 +46,7 @@ using RegisterCb =
 using IdTxPowerStatusCb = base::Callback<void(
     uint8_t /* inst_id */, int8_t /* tx_power */, uint8_t /* status */)>;
 using SetEnableData = BleAdvertiserHciInterface::SetEnableData;
-extern void btm_gen_resolvable_private_addr(
+void btm_gen_resolvable_private_addr(
     base::Callback<void(const RawAddress& rpa)> cb);
 
 constexpr int ADV_DATA_LEN_MAX = 251;
@@ -976,11 +976,6 @@ class BleAdvertisingManagerImpl
 
       p_inst->timeout_cb.Run(status);
       return;
-    }
-
-    if (BTM_BleLocalPrivacyEnabled() &&
-        advertising_handle <= BTM_BLE_MULTI_ADV_MAX) {
-      btm_acl_update_conn_addr(connection_handle, p_inst->own_address);
     }
 
     VLOG(1) << "reneabling advertising";

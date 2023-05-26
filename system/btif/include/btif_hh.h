@@ -46,7 +46,7 @@
 #define BTIF_HH_POLLING_SLEEP_DURATION_US 5000
 
 #ifndef ENABLE_UHID_SET_REPORT
-#if defined(OS_ANDROID) || defined(TARGET_FLOSS)
+#if defined(__ANDROID__) || defined(TARGET_FLOSS)
 #define ENABLE_UHID_SET_REPORT 1
 #else
 #define ENABLE_UHID_SET_REPORT 0
@@ -91,7 +91,6 @@ typedef struct {
   bthh_connection_state_t dev_status;
   uint8_t dev_handle;
   RawAddress bd_addr;
-  bool le_hid;
   tBTA_HH_ATTR_MASK attr_mask;
   uint8_t sub_class;
   uint8_t app_id;
@@ -104,8 +103,7 @@ typedef struct {
   fixed_queue_t* get_rpt_id_queue;
 #if ENABLE_UHID_SET_REPORT
   fixed_queue_t* set_rpt_id_queue;
-#endif  // ENSABLE_UHID_SET_REPORT
-  uint8_t get_rpt_snt;
+#endif // ENABLE_UHID_SET_REPORT
   bool local_vup;  // Indicated locally initiated VUP
 } btif_hh_device_t;
 
@@ -135,22 +133,18 @@ typedef struct {
 
 extern btif_hh_cb_t btif_hh_cb;
 
-extern btif_hh_device_t* btif_hh_find_connected_dev_by_handle(uint8_t handle);
-extern void btif_hh_remove_device(RawAddress bd_addr);
-extern bool btif_hh_add_added_dev(const RawAddress& bda,
-                                  tBTA_HH_ATTR_MASK attr_mask);
-extern bt_status_t btif_hh_virtual_unplug(const RawAddress* bd_addr);
-extern void btif_hh_disconnect(RawAddress* bd_addr);
-extern void btif_hh_setreport(btif_hh_device_t* p_dev,
-                              bthh_report_type_t r_type, uint16_t size,
-                              uint8_t* report);
-extern void btif_hh_senddata(btif_hh_device_t* p_dev, uint16_t size,
-                             uint8_t* report);
-extern void btif_hh_getreport(btif_hh_device_t* p_dev,
-                              bthh_report_type_t r_type, uint8_t reportId,
-                              uint16_t bufferSize);
-extern void btif_hh_service_registration(bool enable);
+btif_hh_device_t* btif_hh_find_connected_dev_by_handle(uint8_t handle);
+void btif_hh_remove_device(RawAddress bd_addr);
+bool btif_hh_add_added_dev(const RawAddress& bda, tBTA_HH_ATTR_MASK attr_mask);
+bt_status_t btif_hh_virtual_unplug(const RawAddress* bd_addr);
+void btif_hh_disconnect(RawAddress* bd_addr);
+void btif_hh_setreport(btif_hh_device_t* p_dev, bthh_report_type_t r_type,
+                       uint16_t size, uint8_t* report);
+void btif_hh_senddata(btif_hh_device_t* p_dev, uint16_t size, uint8_t* report);
+void btif_hh_getreport(btif_hh_device_t* p_dev, bthh_report_type_t r_type,
+                       uint8_t reportId, uint16_t bufferSize);
+void btif_hh_service_registration(bool enable);
 
-extern void DumpsysHid(int fd);
+void DumpsysHid(int fd);
 
 #endif

@@ -189,7 +189,7 @@ public final class ScanFilter implements Parcelable {
             dest.writeInt(mAddressType);
             dest.writeInt(mIrk == null ? 0 : 1);
             if (mIrk != null) {
-                dest.writeByteArray(Arrays.copyOfRange(mIrk, 0, 16 + 1));
+                dest.writeByteArray(Arrays.copyOfRange(mIrk, 0, 16));
             }
         }
 
@@ -1025,7 +1025,7 @@ public final class ScanFilter implements Parcelable {
         /**
          * Set filter information for a transport block in Transport Discovery Service advertisement
          *
-         * Use {@link BluetoothAdapter#isOffloadedTransportDiscoveryDataScanSupported()} to check
+         * Use {@link BluetoothAdapter#getOffloadedTransportDiscoveryDataScanSupported()} to check
          * whether transport discovery data filtering is supported on this device before calling
          * this method.
          *
@@ -1043,7 +1043,7 @@ public final class ScanFilter implements Parcelable {
             if (bluetoothAdapter == null) {
                 throw new IllegalArgumentException("BluetoothAdapter is null");
             }
-            if (bluetoothAdapter.isOffloadedTransportDiscoveryDataScanSupported()
+            if (bluetoothAdapter.getOffloadedTransportDiscoveryDataScanSupported()
                     != BluetoothStatusCodes.FEATURE_SUPPORTED) {
                 throw new IllegalArgumentException(
                         "Transport Discovery Data filter is not supported");

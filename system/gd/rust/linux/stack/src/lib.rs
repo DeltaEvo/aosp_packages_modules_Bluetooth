@@ -13,11 +13,15 @@ pub mod bluetooth_adv;
 pub mod bluetooth_gatt;
 pub mod bluetooth_logging;
 pub mod bluetooth_media;
+pub mod bluetooth_qa;
 pub mod callbacks;
+pub mod dis;
 pub mod socket_manager;
 pub mod suspend;
 pub mod uuid;
 
+use bluetooth_qa::BluetoothQA;
+use bt_topshim::btif::BtDiscMode;
 use log::debug;
 use num_derive::{FromPrimitive, ToPrimitive};
 use std::sync::{Arc, Mutex};
@@ -37,6 +41,7 @@ use crate::bluetooth_gatt::{
     dispatch_le_scanner_callbacks, dispatch_le_scanner_inband_callbacks, BluetoothGatt,
 };
 use crate::bluetooth_media::{BluetoothMedia, MediaActions};
+use crate::dis::{DeviceInformation, ServiceCallbacks};
 use crate::socket_manager::{BluetoothSocketManager, SocketActions};
 use crate::suspend::Suspend;
 use bt_topshim::{
@@ -53,6 +58,9 @@ use bt_topshim::{
 pub enum Message {
     // Shuts down the stack.
     Shutdown,
+
+    // Adapter is enabled and ready.
+    AdapterReady,
 
     // Callbacks from libbluetooth
     A2dp(A2dpCallbacks),
@@ -113,6 +121,16 @@ pub enum Message {
 
     // Admin policy related
     AdminCallbackDisconnected(u32),
+    HidHostEnable,
+    AdminPolicyChanged,
+
+    // Dis callbacks
+    Dis(ServiceCallbacks),
+
+    // Qualification Only
+    QaAddMediaPlayer(String, bool),
+    QaRfcommSendMsc(u8, String),
+    QaOnDiscoverableModeChanged(BtDiscMode),
 }
 
 /// Represents suspend mode of a module.
@@ -148,6 +166,8 @@ impl Stack {
         suspend: Arc<Mutex<Box<Suspend>>>,
         bluetooth_socketmgr: Arc<Mutex<Box<BluetoothSocketManager>>>,
         bluetooth_admin: Arc<Mutex<Box<BluetoothAdmin>>>,
+        bluetooth_dis: Arc<Mutex<Box<DeviceInformation>>>,
+        bluetooth_qa: Arc<Mutex<Box<BluetoothQA>>>,
     ) {
         loop {
             let m = rx.recv().await;
@@ -160,6 +180,14 @@ impl Stack {
             match m.unwrap() {
                 Message::Shutdown => {
                     bluetooth.lock().unwrap().disable();
+                }
+
+                Message::AdapterReady => {
+                    // Initialize objects that need the adapter to be fully
+                    // enabled before running.
+
+                    // Register device information service.
+                    bluetooth_dis.lock().unwrap().initialize();
                 }
 
                 Message::A2dp(a) => {
@@ -316,6 +344,25 @@ impl Stack {
                 }
                 Message::AdminCallbackDisconnected(id) => {
                     bluetooth_admin.lock().unwrap().unregister_admin_policy_callback(id);
+                }
+                Message::HidHostEnable => {
+                    bluetooth.lock().unwrap().enable_hidhost();
+                }
+                Message::AdminPolicyChanged => {
+                    bluetooth_socketmgr.lock().unwrap().handle_admin_policy_changed();
+                }
+                Message::Dis(callback) => {
+                    bluetooth_dis.lock().unwrap().handle_callbacks(&callback);
+                }
+                // Qualification Only
+                Message::QaAddMediaPlayer(name, browsing_supported) => {
+                    bluetooth_media.lock().unwrap().add_player(name, browsing_supported);
+                }
+                Message::QaRfcommSendMsc(dlci, addr) => {
+                    bluetooth_socketmgr.lock().unwrap().rfcomm_send_msc(dlci, addr);
+                }
+                Message::QaOnDiscoverableModeChanged(mode) => {
+                    bluetooth_qa.lock().unwrap().handle_discoverable_mode_changed(mode);
                 }
             }
         }

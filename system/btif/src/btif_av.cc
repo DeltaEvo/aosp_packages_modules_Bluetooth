@@ -55,6 +55,7 @@
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
+#include "stack/include/avrc_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btu.h"  // do_in_main_thread
@@ -2909,8 +2910,6 @@ static void bta_av_sink_media_callback(const RawAddress& peer_address,
                                        tBTA_AV_EVT event,
                                        tBTA_AV_MEDIA* p_data) {
   BTIF_TRACE_EVENT("%s: event=%d", __func__, event);
-  BTIF_TRACE_EVENT("%s: address=%s", __func__,
-                   ADDRESS_TO_LOGGABLE_CSTR(p_data->avk_config.bd_addr));
 
   switch (event) {
     case BTA_AV_SINK_MEDIA_DATA_EVT: {
@@ -2927,6 +2926,9 @@ static void bta_av_sink_media_callback(const RawAddress& peer_address,
     }
     case BTA_AV_SINK_MEDIA_CFG_EVT: {
       btif_av_sink_config_req_t config_req;
+
+      BTIF_TRACE_EVENT("%s: address=%s", __func__,
+                       ADDRESS_TO_LOGGABLE_CSTR(p_data->avk_config.bd_addr));
 
       // Update the codec info of the A2DP Sink decoder
       btif_a2dp_sink_update_decoder((uint8_t*)(p_data->avk_config.codec_info));
@@ -3413,9 +3415,10 @@ bt_status_t btif_av_source_execute_service(bool enable) {
       features |= BTA_AV_FEAT_DELAY_RPT;
     }
 
-#if (AVRC_ADV_CTRL_INCLUDED == TRUE)
-    features |= BTA_AV_FEAT_RCCT | BTA_AV_FEAT_ADV_CTRL | BTA_AV_FEAT_BROWSE;
-#endif
+    if (avrcp_absolute_volume_is_enabled()) {
+      features |= BTA_AV_FEAT_RCCT | BTA_AV_FEAT_ADV_CTRL | BTA_AV_FEAT_BROWSE;
+    }
+
     BTA_AvEnable(features, bta_av_source_callback);
     btif_av_source.RegisterAllBtaHandles();
     return BT_STATUS_SUCCESS;

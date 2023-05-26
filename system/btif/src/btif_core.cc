@@ -75,12 +75,12 @@ static void bt_jni_msg_ready(void* context);
 // TODO(armansito): Find a better way than searching by a hardcoded path.
 #if defined(TARGET_FLOSS)
 #define BTE_DID_CONF_FILE "/var/lib/bluetooth/bt_did.conf"
-#elif defined(OS_GENERIC)
-#define BTE_DID_CONF_FILE "bt_did.conf"
-#else  // !defined(OS_GENERIC)
+#elif defined(__ANDROID__)
 #define BTE_DID_CONF_FILE \
   "/apex/com.android.btservices/etc/bluetooth/bt_did.conf"
-#endif  // defined(OS_GENERIC)
+#else  // !defined(__ANDROID__)
+#define BTE_DID_CONF_FILE "bt_did.conf"
+#endif  // defined(__ANDROID__)
 #endif  // BTE_DID_CONF_FILE
 
 #define CODEC_TYPE_NUMBER 32
@@ -145,8 +145,7 @@ bt_status_t btif_transfer_context(tBTIF_CBACK* p_cback, uint16_t event,
     memcpy(p_msg->p_param, p_params, param_len); /* callback parameter data */
   }
 
-  do_in_jni_thread(base::Bind(&bt_jni_msg_ready, p_msg));
-  return BT_STATUS_SUCCESS;
+  return do_in_jni_thread(base::Bind(&bt_jni_msg_ready, p_msg));
 }
 
 /**
@@ -264,7 +263,6 @@ void btif_enable_bluetooth_evt() {
     LOG_INFO("%s: Storing '%s' into the config file", __func__,
             ADDRESS_TO_LOGGABLE_CSTR(local_bd_addr));
     btif_config_set_str("Adapter", "Address", bdstr.c_str());
-    btif_config_save();
 
     // fire HAL callback for property change
     bt_property_t prop;
@@ -325,7 +323,7 @@ bt_status_t btif_cleanup_bluetooth() {
  ****************************************************************************/
 
 static bt_status_t btif_in_get_adapter_properties(void) {
-  const static uint32_t NUM_ADAPTER_PROPERTIES = 8;
+  const static uint32_t NUM_ADAPTER_PROPERTIES = 7;
   bt_property_t properties[NUM_ADAPTER_PROPERTIES];
   uint32_t num_props = 0;
 
@@ -337,7 +335,6 @@ static bt_status_t btif_in_get_adapter_properties(void) {
   Uuid local_uuids[BT_MAX_NUM_UUIDS];
   bt_status_t status;
   bt_io_cap_t local_bt_io_cap;
-  bt_io_cap_t local_bt_io_cap_ble;
 
   /* RawAddress */
   BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_BDADDR,
@@ -385,12 +382,6 @@ static bt_status_t btif_in_get_adapter_properties(void) {
   /* LOCAL IO Capabilities */
   BTIF_STORAGE_FILL_PROPERTY(&properties[num_props], BT_PROPERTY_LOCAL_IO_CAPS,
                              sizeof(bt_io_cap_t), &local_bt_io_cap);
-  btif_storage_get_adapter_property(&properties[num_props]);
-  num_props++;
-
-  BTIF_STORAGE_FILL_PROPERTY(&properties[num_props],
-                             BT_PROPERTY_LOCAL_IO_CAPS_BLE, sizeof(bt_io_cap_t),
-                             &local_bt_io_cap_ble);
   btif_storage_get_adapter_property(&properties[num_props]);
   num_props++;
 
@@ -444,11 +435,6 @@ static bt_status_t btif_in_get_remote_device_properties(RawAddress* bd_addr) {
       BT_STATUS_SUCCESS, *bd_addr, num_props, remote_properties);
 
   return BT_STATUS_SUCCESS;
-}
-
-static void btif_core_storage_adapter_notify_empty_success() {
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(
-      BT_STATUS_SUCCESS, 0, NULL);
 }
 
 static void btif_core_storage_adapter_write(bt_property_t* prop) {
@@ -661,18 +647,7 @@ void btif_set_adapter_property(bt_property_t* property) {
          if required */
       btif_core_storage_adapter_write(property);
     } break;
-    case BT_PROPERTY_CLASS_OF_DEVICE: {
-      DEV_CLASS dev_class;
-      memcpy(dev_class, property->val, DEV_CLASS_LEN);
-
-      BTIF_TRACE_EVENT("set property dev_class : 0x%02x%02x%02x", dev_class[0],
-                       dev_class[1], dev_class[2]);
-
-      BTM_SetDeviceClass(dev_class);
-      btif_core_storage_adapter_notify_empty_success();
-    } break;
-    case BT_PROPERTY_LOCAL_IO_CAPS:
-    case BT_PROPERTY_LOCAL_IO_CAPS_BLE: {
+    case BT_PROPERTY_LOCAL_IO_CAPS: {
       // Changing IO Capability of stack at run-time is not currently supported.
       // This call changes the stored value which will affect the stack next
       // time it starts up.

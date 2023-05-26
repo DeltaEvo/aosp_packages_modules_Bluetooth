@@ -30,10 +30,6 @@
 #include "link_layer_controller.h"
 #include "model/controller/vendor_commands/csr.h"
 #include "model/devices/device.h"
-#include "model/setup/async_manager.h"
-#ifndef ROOTCANAL_LMP
-#include "security_manager.h"
-#endif /* !ROOTCANAL_LMP */
 
 namespace rootcanal {
 
@@ -51,45 +47,29 @@ using ::bluetooth::hci::CommandView;
 // the controller's default constructor. Be sure to name your method after the
 // corresponding Bluetooth command in the Core Specification with the prefix
 // "Hci" to distinguish it as a controller command.
-class DualModeController
-    : public Device,
-      public std::enable_shared_from_this<DualModeController> {
-  static constexpr uint16_t kSecurityManagerNumKeys = 15;
-
+class DualModeController : public Device {
  public:
-  // Sets all of the methods to be used as callbacks in the HciHandler.
-  DualModeController(const std::string& properties_filename = "",
-                     uint16_t num_keys = kSecurityManagerNumKeys);
-
+  DualModeController(ControllerProperties properties = ControllerProperties());
+  DualModeController(DualModeController&&) = delete;
+  DualModeController(const DualModeController&) = delete;
   ~DualModeController() = default;
 
+  DualModeController& operator=(const DualModeController&) = delete;
+
   // Device methods.
-  virtual std::string GetTypeString() const override;
+  std::string GetTypeString() const override;
 
-  virtual void ReceiveLinkLayerPacket(
-      model::packets::LinkLayerPacketView incoming, Phy::Type type,
-      int8_t rssi) override;
+  void ReceiveLinkLayerPacket(model::packets::LinkLayerPacketView incoming,
+                              Phy::Type type, int8_t rssi) override;
 
-  virtual void Tick() override;
-  virtual void Close() override;
+  void Tick() override;
+  void Close() override;
 
   // Route commands and data from the stack.
   void HandleAcl(std::shared_ptr<std::vector<uint8_t>> acl_packet);
   void HandleCommand(std::shared_ptr<std::vector<uint8_t>> command_packet);
   void HandleSco(std::shared_ptr<std::vector<uint8_t>> sco_packet);
   void HandleIso(std::shared_ptr<std::vector<uint8_t>> iso_packet);
-
-  // Set the callbacks for scheduling tasks.
-  void RegisterTaskScheduler(
-      std::function<AsyncTaskId(std::chrono::milliseconds, TaskCallback)>
-          task_scheduler);
-
-  void RegisterPeriodicTaskScheduler(
-      std::function<AsyncTaskId(std::chrono::milliseconds,
-                                std::chrono::milliseconds, TaskCallback)>
-          periodic_task_scheduler);
-
-  void RegisterTaskCancel(std::function<void(AsyncTaskId)> cancel);
 
   // Set the callbacks for sending packets to the HCI.
   void RegisterEventChannel(
@@ -138,26 +118,8 @@ class DualModeController
   // 7.1.9
   void RejectConnectionRequest(CommandView command);
 
-  // 7.1.10
-  void LinkKeyRequestReply(CommandView command);
-
-  // 7.1.11
-  void LinkKeyRequestNegativeReply(CommandView command);
-
-  // 7.1.12
-  void PinCodeRequestReply(CommandView command);
-
-  // 7.1.13
-  void PinCodeRequestNegativeReply(CommandView command);
-
   // 7.1.14
   void ChangeConnectionPacketType(CommandView command);
-
-  // 7.1.15
-  void AuthenticationRequested(CommandView command);
-
-  // 7.1.16
-  void SetConnectionEncryption(CommandView command);
 
   // 7.1.17
   void ChangeConnectionLinkKey(CommandView command);
@@ -192,38 +154,11 @@ class DualModeController
   // 7.1.28
   void RejectSynchronousConnection(CommandView command);
 
-  // 7.1.29
-  void IoCapabilityRequestReply(CommandView command);
-
-  // 7.1.30
-  void UserConfirmationRequestReply(CommandView command);
-
-  // 7.1.31
-  void UserConfirmationRequestNegativeReply(CommandView command);
-
-  // 7.1.32
-  void UserPasskeyRequestReply(CommandView command);
-
-  // 7.1.33
-  void UserPasskeyRequestNegativeReply(CommandView command);
-
-  // 7.1.34
-  void RemoteOobDataRequestReply(CommandView command);
-
-  // 7.1.35
-  void RemoteOobDataRequestNegativeReply(CommandView command);
-
-  // 7.1.36
-  void IoCapabilityRequestNegativeReply(CommandView command);
-
   // 7.1.45
   void EnhancedSetupSynchronousConnection(CommandView command);
 
   // 7.1.46
   void EnhancedAcceptSynchronousConnection(CommandView command);
-
-  // 7.1.53
-  void RemoteOobExtendedDataRequestReply(CommandView command);
 
   // Link Policy Commands
   // Bluetooth Core Specification Version 4.2 Volume 2 Part E 7.2
@@ -372,9 +307,6 @@ class DualModeController
   // 7.3.61
   void ReadInquiryResponseTransmitPowerLevel(CommandView command);
 
-  // 7.3.63
-  void SendKeypressNotification(CommandView command);
-
   // 7.3.66
   void EnhancedFlush(CommandView command);
 
@@ -416,6 +348,9 @@ class DualModeController
 
   // Status Parameters Commands
   // Bluetooth Core Specification Version 4.2 Volume 2 Part E 7.5
+
+  // 7.5.4
+  void ReadRssi(CommandView command);
 
   // 7.5.7
   void ReadEncryptionKeySize(CommandView command);
@@ -520,17 +455,15 @@ class DualModeController
   // 7.8.35
   void LeWriteSuggestedDefaultDataLength(CommandView command);
 
-  // 7.8.38
+  // 7.8.38 - 7.8.41
   void LeAddDeviceToResolvingList(CommandView command);
-
-  // 7.8.39
   void LeRemoveDeviceFromResolvingList(CommandView command);
-
-  // 7.8.40
   void LeClearResolvingList(CommandView command);
-
-  // 7.8.41
   void LeReadResolvingListSize(CommandView command);
+
+  // 7.8.42 - 7.8.43
+  void LeReadPeerResolvableAddress(CommandView command);
+  void LeReadLocalResolvableAddress(CommandView command);
 
   // 7.8.44
   void LeSetAddressResolutionEnable(CommandView command);
@@ -540,6 +473,10 @@ class DualModeController
 
   // 7.8.46
   void LeReadMaximumDataLength(CommandView command);
+
+  void LeReadPhy(CommandView command);
+  void LeSetDefaultPhy(CommandView command);
+  void LeSetPhy(CommandView command);
 
   // 7.8.52
   void LeSetAdvertisingSetRandomAddress(CommandView command);
@@ -567,6 +504,22 @@ class DualModeController
 
   // 7.8.60
   void LeClearAdvertisingSets(CommandView command);
+
+  // 7.8.61 - 7.8.63
+  void LeSetPeriodicAdvertisingParameters(CommandView command);
+  void LeSetPeriodicAdvertisingData(CommandView command);
+  void LeSetPeriodicAdvertisingEnable(CommandView command);
+
+  // 7.8.67 - 7.8.69
+  void LePeriodicAdvertisingCreateSync(CommandView command);
+  void LePeriodicAdvertisingCreateSyncCancel(CommandView command);
+  void LePeriodicAdvertisingTerminateSync(CommandView command);
+
+  // 7.8.70 - 7.8.73
+  void LeAddDeviceToPeriodicAdvertiserList(CommandView command);
+  void LeRemoveDeviceFromPeriodicAdvertiserList(CommandView command);
+  void LeClearPeriodicAdvertiserList(CommandView command);
+  void LeReadPeriodicAdvertiserListSize(CommandView command);
 
   // 7.8.64
   void LeSetExtendedScanParameters(CommandView command);
@@ -621,9 +574,8 @@ class DualModeController
   void CsrReadPskey(CsrPskey pskey, std::vector<uint8_t>& value);
   void CsrWritePskey(CsrPskey pskey, std::vector<uint8_t> const& value);
 
-  void SetTimerPeriod(std::chrono::milliseconds new_period);
-  void StartTimer();
-  void StopTimer();
+  // Command pass-through.
+  void ForwardToLm(CommandView command);
 
  protected:
   // Controller configuration.
@@ -648,7 +600,11 @@ class DualModeController
   // Loopback mode (Vol 4, Part E § 7.6.1).
   // The local loopback mode is used to pass the android Vendor Test Suite
   // with RootCanal.
-  bluetooth::hci::LoopbackMode loopback_mode_;
+  bluetooth::hci::LoopbackMode loopback_mode_{LoopbackMode::NO_LOOPBACK};
+
+  // Flag set to true after the HCI Reset command has been received
+  // the first time.
+  bool controller_reset_{false};
 
   // Map command opcodes to the corresponding bit index in the
   // supported command mask.
@@ -662,13 +618,6 @@ class DualModeController
   using CommandHandler =
       std::function<void(DualModeController*, bluetooth::hci::CommandView)>;
   static const std::unordered_map<OpCode, CommandHandler> hci_command_handlers_;
-
-#ifndef ROOTCANAL_LMP
-  SecurityManager security_manager_;
-#endif /* ROOTCANAL_LMP */
-
-  DualModeController(const DualModeController& other) = delete;
-  DualModeController& operator=(const DualModeController& other) = delete;
 };
 
 }  // namespace rootcanal

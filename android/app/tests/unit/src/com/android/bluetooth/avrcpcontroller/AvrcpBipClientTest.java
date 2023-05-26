@@ -25,6 +25,7 @@ import static org.mockito.Mockito.doReturn;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.content.Intent;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.rule.ServiceTestRule;
@@ -49,6 +50,9 @@ public class AvrcpBipClientTest {
     @Rule
     public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
+    @Rule
+    public final ServiceTestRule mBluetoothBrowserMediaServiceTestRule = new ServiceTestRule();
+
     @Mock
     private AdapterService mAdapterService;
 
@@ -65,6 +69,9 @@ public class AvrcpBipClientTest {
         doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
         TestUtils.startService(mServiceRule, AvrcpControllerService.class);
         mService = AvrcpControllerService.getAvrcpControllerService();
+        final Intent bluetoothBrowserMediaServiceStartIntent =
+                TestUtils.prepareIntentToStartBluetoothBrowserMediaService();
+        mBluetoothBrowserMediaServiceTestRule.startService(bluetoothBrowserMediaServiceStartIntent);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mTestDevice = mAdapter.getRemoteDevice("00:01:02:03:04:05");
@@ -137,7 +144,7 @@ public class AvrcpBipClientTest {
         AvrcpBipClient client = new AvrcpBipClient(mTestDevice, TEST_PSM,
                 mArtManager.new BipClientCallback(mTestDevice));
 
-        String expected = "<AvrcpBipClient" + " device=" + mTestDevice.getAddress() + " psm="
+        String expected = "<AvrcpBipClient" + " device=" + mTestDevice + " psm="
                 + TEST_PSM + " state=" + client.getStateName() + ">";
         assertThat(client.toString()).isEqualTo(expected);
     }

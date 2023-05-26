@@ -30,7 +30,6 @@
 #include "hardware/bt_gatt.h"
 #include "rust/cxx.h"
 #include "rust/src/gatt/ffi/gatt_shim.h"
-#include "src/core/ffi.rs.h"
 #include "src/gatt/ffi.rs.h"
 #include "utils/Log.h"
 #define info(fmt, ...) ALOGI("%s(L%d): " fmt, __func__, __LINE__, ##__VA_ARGS__)
@@ -1393,10 +1392,6 @@ static void initializeNative(JNIEnv* env, jobject object) {
       JniDistanceMeasurementCallbacks::GetInstance());
 
   mCallbacksObj = env->NewGlobalRef(object);
-
-  auto callbacks = std::make_unique<bluetooth::gatt::GattServerCallbacks>(
-      sGattServerCallbacks);
-  bluetooth::rust_shim::init(std::move(callbacks));
 }
 
 static void cleanupNative(JNIEnv* env, jobject object) {
@@ -1471,13 +1466,14 @@ static void gattClientScanNative(JNIEnv* env, jobject object, jboolean start) {
 }
 
 static void gattClientConnectNative(JNIEnv* env, jobject object, jint clientif,
-                                    jstring address, jboolean isDirect,
-                                    jint transport, jboolean opportunistic,
+                                    jstring address, jint addressType,
+                                    jboolean isDirect, jint transport,
+                                    jboolean opportunistic,
                                     jint initiating_phys) {
   if (!sGattIf) return;
 
-  sGattIf->client->connect(clientif, str2addr(env, address), isDirect,
-                           transport, opportunistic, initiating_phys);
+  sGattIf->client->connect(clientif, str2addr(env, address), addressType,
+                           isDirect, transport, opportunistic, initiating_phys);
 }
 
 static void gattClientDisconnectNative(JNIEnv* env, jobject object,
@@ -1790,6 +1786,8 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
   jfieldID orgFid = env->GetFieldID(entryClazz, "org_id", "I");
   jfieldID TDSFlagsFid = env->GetFieldID(entryClazz, "tds_flags", "I");
   jfieldID TDSFlagsMaskFid = env->GetFieldID(entryClazz, "tds_flags_mask", "I");
+  jfieldID metaDataTypeFid = env->GetFieldID(entryClazz, "meta_data_type", "I");
+  jfieldID metaDataFid = env->GetFieldID(entryClazz, "meta_data", "[B");
 
   for (int i = 0; i < numFilters; ++i) {
     ApcfCommand curr{};
@@ -1858,7 +1856,7 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
 
     curr.company_mask = env->GetIntField(current.get(), companyMaskFid);
 
-    curr.ad_type = env->GetByteField(current.get(), adTypeFid);
+    curr.ad_type = env->GetIntField(current.get(), adTypeFid);
 
     ScopedLocalRef<jbyteArray> data(
         env, (jbyteArray)env->GetObjectField(current.get(), dataFid));
@@ -1885,6 +1883,19 @@ static void gattClientScanFilterAddNative(JNIEnv* env, jobject object,
     curr.org_id = env->GetIntField(current.get(), orgFid);
     curr.tds_flags = env->GetIntField(current.get(), TDSFlagsFid);
     curr.tds_flags_mask = env->GetIntField(current.get(), TDSFlagsMaskFid);
+    curr.meta_data_type = env->GetIntField(current.get(), metaDataTypeFid);
+
+    ScopedLocalRef<jbyteArray> meta_data(
+        env, (jbyteArray)env->GetObjectField(current.get(), metaDataFid));
+    if (meta_data.get() != NULL) {
+      jbyte* data_array = env->GetByteArrayElements(meta_data.get(), 0);
+      int data_len = env->GetArrayLength(meta_data.get());
+      if (data_array && data_len) {
+        curr.meta_data =
+            std::vector<uint8_t>(data_array, data_array + data_len);
+        env->ReleaseByteArrayElements(meta_data.get(), data_array, JNI_ABORT);
+      }
+    }
 
     native_filters.push_back(curr);
   }
@@ -2146,8 +2157,13 @@ static void gattServerSendIndicationNative(JNIEnv* env, jobject object,
   jbyte* array = env->GetByteArrayElements(val, 0);
   int val_len = env->GetArrayLength(val);
 
-  sGattIf->server->send_indication(server_if, attr_handle, conn_id,
-                                   /*confirm*/ 1, (uint8_t*)array, val_len);
+  if (bluetooth::gatt::is_connection_isolated(conn_id)) {
+    auto data = ::rust::Slice<const uint8_t>((uint8_t*)array, val_len);
+    bluetooth::gatt::send_indication(server_if, attr_handle, conn_id, data);
+  } else {
+    sGattIf->server->send_indication(server_if, attr_handle, conn_id,
+                                     /*confirm*/ 1, (uint8_t*)array, val_len);
+  }
 
   env->ReleaseByteArrayElements(val, array, JNI_ABORT);
 }
@@ -2328,11 +2344,19 @@ static PeriodicAdvertisingParameters parsePeriodicParams(JNIEnv* env,
   return p;
 }
 
-static void ble_advertising_set_started_cb(int reg_id, uint8_t advertiser_id,
+static void ble_advertising_set_started_cb(int reg_id, int server_if,
+                                           uint8_t advertiser_id,
                                            int8_t tx_power, uint8_t status) {
   std::shared_lock<std::shared_mutex> lock(callbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid() || !mAdvertiseCallbacksObj) return;
+
+  // tie advertiser ID to server_if, once the advertisement has started
+  if (status == 0 /* AdvertisingCallback::AdvertisingStatus::SUCCESS */ &&
+      server_if != 0) {
+    bluetooth::gatt::associate_server_with_advertiser(server_if, advertiser_id);
+  }
+
   sCallbackEnv->CallVoidMethod(mAdvertiseCallbacksObj,
                                method_onAdvertisingSetStarted, reg_id,
                                advertiser_id, tx_power, status);
@@ -2375,15 +2399,10 @@ static void startAdvertisingSetNative(
       periodic_data_data, periodic_data_data + periodic_data_len);
   env->ReleaseByteArrayElements(periodic_data, periodic_data_data, JNI_ABORT);
 
-  auto advertiser_id = sGattIf->advertiser->StartAdvertisingSet(
-      reg_id, base::Bind(&ble_advertising_set_started_cb, reg_id), params,
-      data_vec, scan_resp_vec, periodicParams, periodic_data_vec, duration,
-      maxExtAdvEvents, base::Bind(ble_advertising_set_timeout_cb));
-
-  // tie advertiser ID to server_if
-  if (server_if != 0) {
-    bluetooth::gatt::associate_server_with_advertiser(server_if, advertiser_id);
-  }
+  sGattIf->advertiser->StartAdvertisingSet(
+      reg_id, base::Bind(&ble_advertising_set_started_cb, reg_id, server_if),
+      params, data_vec, scan_resp_vec, periodicParams, periodic_data_vec,
+      duration, maxExtAdvEvents, base::Bind(ble_advertising_set_timeout_cb));
 }
 
 static void stopAdvertisingSetNative(JNIEnv* env, jobject object,
@@ -2758,7 +2777,7 @@ static JNINativeMethod sMethods[] = {
      (void*)gattClientRegisterAppNative},
     {"gattClientUnregisterAppNative", "(I)V",
      (void*)gattClientUnregisterAppNative},
-    {"gattClientConnectNative", "(ILjava/lang/String;ZIZI)V",
+    {"gattClientConnectNative", "(ILjava/lang/String;IZIZI)V",
      (void*)gattClientConnectNative},
     {"gattClientDisconnectNative", "(ILjava/lang/String;I)V",
      (void*)gattClientDisconnectNative},

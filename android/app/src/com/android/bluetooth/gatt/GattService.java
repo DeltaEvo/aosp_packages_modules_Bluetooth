@@ -84,6 +84,7 @@ import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AbstractionLayer;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.BluetoothAdapterProxy;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.CompanionManager;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.util.NumberUtils;
@@ -304,7 +305,7 @@ public class GattService extends ProfileService {
         final MacAddress parsedAddress = MacAddress
                 .fromString(scanResult.getDevice().getAddress());
         if (mAdapterService.getLocationDenylistMac().test(parsedAddress.toByteArray())) {
-            Log.v(TAG, "Skipping device matching denylist: " + parsedAddress);
+            Log.v(TAG, "Skipping device matching denylist: " + scanResult.getDevice());
             return true;
         }
         final ScanRecord scanRecord = scanResult.getScanRecord();
@@ -800,25 +801,26 @@ public class GattService extends ProfileService {
         }
 
         @Override
-        public void clientConnect(int clientIf, String address, boolean isDirect, int transport,
-                boolean opportunistic, int phy, AttributionSource attributionSource,
+        public void clientConnect(int clientIf, String address, int addressType, boolean isDirect,
+                int transport, boolean opportunistic, int phy, AttributionSource attributionSource,
                 SynchronousResultReceiver receiver) {
             try {
-                clientConnect(clientIf, address, isDirect, transport, opportunistic, phy,
-                        attributionSource);
+                clientConnect(clientIf, address, addressType, isDirect, transport, opportunistic,
+                        phy, attributionSource);
                 receiver.send(null);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
         }
-        private void clientConnect(int clientIf, String address, boolean isDirect, int transport,
-                boolean opportunistic, int phy, AttributionSource attributionSource) {
+        private void clientConnect(int clientIf, String address, int addressType, boolean isDirect,
+                int transport, boolean opportunistic, int phy,
+                AttributionSource attributionSource) {
             GattService service = getService();
             if (service == null) {
                 return;
             }
-            service.clientConnect(clientIf, address, isDirect, transport, opportunistic, phy,
-                    attributionSource);
+            service.clientConnect(clientIf, address, addressType, isDirect, transport,
+                    opportunistic, phy, attributionSource);
         }
 
         @Override
@@ -3627,23 +3629,29 @@ public class GattService extends ProfileService {
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    void clientConnect(int clientIf, String address, boolean isDirect, int transport,
-            boolean opportunistic, int phy, AttributionSource attributionSource) {
+    void clientConnect(int clientIf, String address, int addressType, boolean isDirect,
+            int transport, boolean opportunistic, int phy, AttributionSource attributionSource) {
         if (!Utils.checkConnectPermissionForDataDelivery(
                 this, attributionSource, "GattService clientConnect")) {
             return;
         }
 
         if (DBG) {
-            Log.d(TAG, "clientConnect() - address=" + address + ", isDirect=" + isDirect
-                    + ", opportunistic=" + opportunistic + ", phy=" + phy);
+            Log.d(TAG, "clientConnect() - address=" + address + ", addressType="
+                    + addressType + ", isDirect=" + isDirect + ", opportunistic="
+                    + opportunistic + ", phy=" + phy);
         }
         statsLogAppPackage(address, attributionSource.getUid(), clientIf);
+        if (isDirect) {
+          MetricsLogger.getInstance().count(BluetoothProtoEnums.GATT_CLIENT_CONNECT_IS_DIRECT, 1);
+        } else {
+          MetricsLogger.getInstance().count(BluetoothProtoEnums.GATT_CLIENT_CONNECT_IS_AUTOCONNECT, 1);
+        }
         statsLogGattConnectionStateChange(
                 BluetoothProfile.GATT, address, clientIf,
                 BluetoothProtoEnums.CONNECTION_STATE_CONNECTING, -1);
-        mNativeInterface.gattClientConnect(clientIf, address, isDirect, transport, opportunistic,
-                phy);
+        mNativeInterface.gattClientConnect(clientIf, address, addressType, isDirect, transport,
+                opportunistic, phy);
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)

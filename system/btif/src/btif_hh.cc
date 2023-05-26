@@ -63,9 +63,6 @@
 
 static int btif_hh_keylockstates = 0;  // The current key state of each key
 
-// TODO This is duplicated in header file with different value
-#define BTIF_HH_DEV_DISCONNECTED 3
-
 #define BTIF_TIMEOUT_VUP_MS (3 * 1000)
 
 /* HH request events */
@@ -95,6 +92,8 @@ typedef struct hid_kb_list {
 btif_hh_cb_t btif_hh_cb;
 
 static bthh_callbacks_t* bt_hh_callbacks = NULL;
+static bthh_profile_enable_t bt_hh_enable_type = {.hidp_enabled = true,
+                                                  .hogp_enabled = true};
 
 /* List of HID keyboards for which the NUMLOCK state needs to be
  * turned ON by default. Add devices to this list to apply the
@@ -118,19 +117,18 @@ static tHID_KB_LIST hid_kb_numlock_on_list[] = {{LOGITECH_KB_MX5500_PRODUCT_ID,
 /*******************************************************************************
  *  Externs
  ******************************************************************************/
-extern bool check_cod(const RawAddress* remote_bdaddr, uint32_t cod);
-extern bool check_cod_hid(const RawAddress* remote_bdaddr);
-extern void bta_hh_co_destroy(int fd);
-extern void bta_hh_co_send_hid_info(btif_hh_device_t* p_dev,
-                                    const char* dev_name, uint16_t vendor_id,
-                                    uint16_t product_id, uint16_t version,
-                                    uint8_t ctry_code, int dscp_len,
-                                    uint8_t* p_dscp);
-extern void bta_hh_co_write(int fd, uint8_t* rpt, uint16_t len);
-extern void bte_hh_evt(tBTA_HH_EVT event, tBTA_HH* p_data);
-extern void btif_dm_hh_open_failed(RawAddress* bdaddr);
-extern void btif_hd_service_registration();
-extern void btif_hh_timer_timeout(void* data);
+bool check_cod(const RawAddress* remote_bdaddr, uint32_t cod);
+bool check_cod_hid(const RawAddress* remote_bdaddr);
+void bta_hh_co_destroy(int fd);
+void bta_hh_co_send_hid_info(btif_hh_device_t* p_dev, const char* dev_name,
+                             uint16_t vendor_id, uint16_t product_id,
+                             uint16_t version, uint8_t ctry_code, int dscp_len,
+                             uint8_t* p_dscp);
+void bta_hh_co_write(int fd, uint8_t* rpt, uint16_t len);
+void bte_hh_evt(tBTA_HH_EVT event, tBTA_HH* p_data);
+void btif_dm_hh_open_failed(RawAddress* bdaddr);
+void btif_hd_service_registration();
+void btif_hh_timer_timeout(void* data);
 
 /*******************************************************************************
  *  Functions
@@ -359,7 +357,7 @@ static btif_hh_device_t* btif_hh_find_connected_dev_by_bda(
  *
  * Returns      void
  ******************************************************************************/
-void btif_hh_stop_vup_timer(RawAddress* bd_addr) {
+static void btif_hh_stop_vup_timer(RawAddress* bd_addr) {
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_bda(*bd_addr);
 
   if (p_dev != NULL) {
@@ -376,7 +374,7 @@ void btif_hh_stop_vup_timer(RawAddress* bd_addr) {
  *
  * Returns      void
  ******************************************************************************/
-void btif_hh_start_vup_timer(const RawAddress* bd_addr) {
+static void btif_hh_start_vup_timer(const RawAddress* bd_addr) {
   BTIF_TRACE_DEBUG("%s", __func__);
 
   btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_bda(*bd_addr);
@@ -386,6 +384,66 @@ void btif_hh_start_vup_timer(const RawAddress* bd_addr) {
   p_dev->vup_timer = alarm_new("btif_hh.vup_timer");
   alarm_set_on_mloop(p_dev->vup_timer, BTIF_TIMEOUT_VUP_MS,
                      btif_hh_timer_timeout, p_dev);
+}
+
+static void hh_connect_complete(uint8_t handle, RawAddress& bda,
+                                BTIF_HH_STATUS status) {
+  bthh_connection_state_t state = BTHH_CONN_STATE_CONNECTED;
+  btif_hh_cb.status = status;
+
+  if (status != BTIF_HH_DEV_CONNECTED) {
+    state = BTHH_CONN_STATE_DISCONNECTED;
+    BTA_HhClose(handle);
+  }
+  HAL_CBACK(bt_hh_callbacks, connection_state_cb, &bda, state);
+}
+
+static void hh_open_handler(tBTA_HH_CONN& conn) {
+  LOG_DEBUG("status = %d, handle = %d", conn.status, conn.handle);
+
+  HAL_CBACK(bt_hh_callbacks, connection_state_cb, (RawAddress*)&conn.bda,
+            BTHH_CONN_STATE_CONNECTING);
+  btif_hh_cb.pending_conn_address = RawAddress::kEmpty;
+
+  if (conn.status != BTA_HH_OK) {
+    btif_dm_hh_open_failed(&conn.bda);
+    btif_hh_device_t* p_dev = btif_hh_find_dev_by_bda(conn.bda);
+    if (p_dev != NULL) {
+      btif_hh_stop_vup_timer(&(p_dev->bd_addr));
+      p_dev->dev_status = BTHH_CONN_STATE_DISCONNECTED;
+    }
+    hh_connect_complete(conn.handle, conn.bda, BTIF_HH_DEV_DISCONNECTED);
+    return;
+  }
+
+  /* Initialize device driver */
+  if (!bta_hh_co_open(conn.handle, conn.sub_class, conn.attr_mask,
+                      conn.app_id)) {
+    LOG_WARN("Failed to find the uhid driver");
+    hh_connect_complete(conn.handle, conn.bda, BTIF_HH_DEV_DISCONNECTED);
+    return;
+  }
+
+  btif_hh_device_t* p_dev = btif_hh_find_connected_dev_by_handle(conn.handle);
+  if (p_dev == NULL) {
+    /* The connect request must have come from device side and exceeded the
+     * connected HID device number. */
+    LOG_WARN("Cannot find device with handle %d", conn.handle);
+    hh_connect_complete(conn.handle, conn.bda, BTIF_HH_DEV_DISCONNECTED);
+    return;
+  }
+
+  LOG_INFO("Found device, getting dscp info for handle %d", conn.handle);
+
+  p_dev->bd_addr = conn.bda;
+  p_dev->dev_status = BTHH_CONN_STATE_CONNECTED;
+  hh_connect_complete(conn.handle, conn.bda, BTIF_HH_DEV_CONNECTED);
+  // Send set_idle if the peer_device is a keyboard
+  if (check_cod(&conn.bda, COD_HID_KEYBOARD) ||
+      check_cod(&conn.bda, COD_HID_COMBO)) {
+    BTA_HhSetIdle(conn.handle, 0);
+  }
+  BTA_HhGetDscpInfo(conn.handle);
 }
 
 /*******************************************************************************
@@ -613,11 +671,11 @@ bt_status_t btif_hh_connect(const RawAddress* bd_addr) {
   BTA_HhOpen(*bd_addr);
 
   do_in_jni_thread(base::Bind(
-      [](RawAddress* bd_addr) {
-        HAL_CBACK(bt_hh_callbacks, connection_state_cb, bd_addr,
+      [](RawAddress bd_addr) {
+        HAL_CBACK(bt_hh_callbacks, connection_state_cb, &bd_addr,
                   BTHH_CONN_STATE_CONNECTING);
       },
-      (RawAddress*)bd_addr));
+      *bd_addr));
   return BT_STATUS_SUCCESS;
 }
 
@@ -704,7 +762,8 @@ void btif_hh_service_registration(bool enable) {
       btif_hd_service_registration();
     }
   } else if (enable) {
-    BTA_HhEnable(bte_hh_evt);
+    BTA_HhEnable(bte_hh_evt, bt_hh_enable_type.hidp_enabled,
+                 bt_hh_enable_type.hogp_enabled);
   } else {
     btif_hh_cb.service_dereg_active = TRUE;
     BTA_HhDisable();
@@ -772,6 +831,10 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
       break;
 
     case BTA_HH_DISABLE_EVT:
+      if (btif_hh_cb.status == BTIF_HH_DISABLING) {
+        bt_hh_callbacks = NULL;
+      }
+
       btif_hh_cb.status = BTIF_HH_DISABLED;
       if (btif_hh_cb.service_dereg_active) {
         BTIF_TRACE_DEBUG("BTA_HH_DISABLE_EVT: enabling HID Device service");
@@ -795,76 +858,16 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
       break;
 
     case BTA_HH_OPEN_EVT:
-      BTIF_TRACE_DEBUG("BTA_HH_OPEN_EVT: status = %d, handle = %d",
-                       p_data->dev_status.status, p_data->dev_status.handle);
-      HAL_CBACK(bt_hh_callbacks, connection_state_cb,
-                (RawAddress*)&p_data->conn.bda, BTHH_CONN_STATE_CONNECTING);
-      btif_hh_cb.pending_conn_address = RawAddress::kEmpty;
-      if (p_data->conn.status == BTA_HH_OK) {
-        p_dev = btif_hh_find_connected_dev_by_handle(p_data->conn.handle);
-        if (p_dev == NULL) {
-          BTIF_TRACE_WARNING(
-              "BTA_HH_OPEN_EVT: Error, cannot find device with handle %d",
-              p_data->conn.handle);
-          btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_DISCONNECTED;
-          // The connect request must come from device side and exceeded the
-          // connected
-          // HID device number.
-          BTA_HhClose(p_data->conn.handle);
-          HAL_CBACK(bt_hh_callbacks, connection_state_cb,
-                    (RawAddress*)&p_data->conn.bda,
-                    BTHH_CONN_STATE_DISCONNECTED);
-        } else if (p_dev->fd < 0) {
-          BTIF_TRACE_WARNING(
-              "BTA_HH_OPEN_EVT: Error, failed to find the uhid driver...");
-          p_dev->bd_addr = p_data->conn.bda;
-          p_dev->le_hid = p_data->conn.le_hid;
-          // remove the connection  and then try again to reconnect from the
-          // mouse side to recover
-          btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_DISCONNECTED;
-          BTA_HhClose(p_data->conn.handle);
-        } else {
-          BTIF_TRACE_WARNING(
-              "BTA_HH_OPEN_EVT: Found device...Getting dscp info for handle "
-              "... %d",
-              p_data->conn.handle);
-          p_dev->bd_addr = p_data->conn.bda;
-          p_dev->le_hid = p_data->conn.le_hid;
-          btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_CONNECTED;
-          // Send set_idle if the peer_device is a keyboard
-          if (check_cod(&p_data->conn.bda, COD_HID_KEYBOARD) ||
-              check_cod(&p_data->conn.bda, COD_HID_COMBO))
-            BTA_HhSetIdle(p_data->conn.handle, 0);
-          BTA_HhGetDscpInfo(p_data->conn.handle);
-          p_dev->dev_status = BTHH_CONN_STATE_CONNECTED;
-          HAL_CBACK(bt_hh_callbacks, connection_state_cb, &(p_dev->bd_addr),
-                    p_dev->dev_status);
-        }
-      } else {
-        RawAddress* bdaddr = &p_data->conn.bda;
-        btif_dm_hh_open_failed(bdaddr);
-        p_dev = btif_hh_find_dev_by_bda(*bdaddr);
-        if (p_dev != NULL) {
-          btif_hh_stop_vup_timer(&(p_dev->bd_addr));
-          if (p_dev->fd >= 0) {
-            bta_hh_co_destroy(p_dev->fd);
-            p_dev->fd = -1;
-          }
-          p_dev->dev_status = BTHH_CONN_STATE_DISCONNECTED;
-        }
-        HAL_CBACK(bt_hh_callbacks, connection_state_cb,
-                  (RawAddress*)&p_data->conn.bda, BTHH_CONN_STATE_DISCONNECTED);
-        btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_DISCONNECTED;
-      }
+      hh_open_handler(p_data->conn);
       break;
 
     case BTA_HH_CLOSE_EVT:
       BTIF_TRACE_DEBUG("BTA_HH_CLOSE_EVT: status = %d, handle = %d",
                        p_data->dev_status.status, p_data->dev_status.handle);
-      HAL_CBACK(bt_hh_callbacks, connection_state_cb,
-                (RawAddress*)&p_data->conn.bda, BTHH_CONN_STATE_DISCONNECTING);
       p_dev = btif_hh_find_connected_dev_by_handle(p_data->dev_status.handle);
       if (p_dev != NULL) {
+        HAL_CBACK(bt_hh_callbacks, connection_state_cb, &(p_dev->bd_addr),
+                  BTHH_CONN_STATE_DISCONNECTING);
         BTIF_TRACE_DEBUG("%s: uhid fd=%d local_vup=%d", __func__, p_dev->fd,
                          p_dev->local_vup);
         btif_hh_stop_vup_timer(&(p_dev->bd_addr));
@@ -874,6 +877,13 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
         if (p_dev->local_vup) {
           p_dev->local_vup = false;
           BTA_DmRemoveDevice(p_dev->bd_addr);
+        } else if (p_data->dev_status.status == BTA_HH_HS_SERVICE_CHANGED) {
+          /* Local disconnection due to service change in the HOGP device.
+             HID descriptor would be read again, so remove it from cache. */
+          LOG_WARN(
+              "Removing cached descriptor due to service change, handle = %d",
+              p_data->dev_status.handle);
+          btif_storage_remove_hid_info(p_dev->bd_addr);
         }
 
         btif_hh_cb.status = (BTIF_HH_STATUS)BTIF_HH_DEV_DISCONNECTED;
@@ -892,22 +902,23 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
       break;
 
     case BTA_HH_GET_RPT_EVT: {
-      BT_HDR* hdr = p_data->hs_data.rsp_data.p_rpt_data;
-      uint8_t* data = NULL;
-      uint16_t len = 0;
-
       BTIF_TRACE_DEBUG("BTA_HH_GET_RPT_EVT: status = %d, handle = %d",
                        p_data->hs_data.status, p_data->hs_data.handle);
       p_dev = btif_hh_find_connected_dev_by_handle(p_data->hs_data.handle);
       if (p_dev) {
-        /* p_rpt_data is NULL in HANDSHAKE response case */
-        if (hdr) {
-          data = (uint8_t*)(hdr + 1) + hdr->offset;
-          len = hdr->len;
+        BT_HDR* hdr = p_data->hs_data.rsp_data.p_rpt_data;
+
+        if (hdr) { /* Get report response */
+          uint8_t* data = (uint8_t*)(hdr + 1) + hdr->offset;
+          uint16_t len = hdr->len;
           HAL_CBACK(bt_hh_callbacks, get_report_cb,
                     (RawAddress*)&(p_dev->bd_addr),
                     (bthh_status_t)p_data->hs_data.status, data, len);
-        } else {
+
+          bta_hh_co_get_rpt_rsp(p_dev->dev_handle,
+                                (tBTA_HH_STATUS)p_data->hs_data.status, data,
+                                len);
+        } else { /* Handshake */
           HAL_CBACK(bt_hh_callbacks, handshake_cb,
                     (RawAddress*)&(p_dev->bd_addr),
                     (bthh_status_t)p_data->hs_data.status);
@@ -927,17 +938,7 @@ static void btif_hh_upstreams_evt(uint16_t event, char* p_param) {
         HAL_CBACK(bt_hh_callbacks, handshake_cb, (RawAddress*)&(p_dev->bd_addr),
                   (bthh_status_t)p_data->hs_data.status);
 
-#if ENABLE_UHID_SET_REPORT
-        if (p_dev->le_hid && p_dev->set_rpt_id_queue) {
-          /* There is no handshake response for HOGP. Conclude the
-           * UHID_SET_REPORT procedure here. */
-          uint32_t* set_rpt_id =
-              (uint32_t*)fixed_queue_try_peek_first(p_dev->set_rpt_id_queue);
-          if (set_rpt_id) {
-            bta_hh_co_set_rpt_rsp(p_dev->dev_handle, p_data->dev_status.status);
-          }
-        }
-#endif  // ENABLE_UHID_SET_REPORT
+        bta_hh_co_set_rpt_rsp(p_dev->dev_handle, p_data->dev_status.status);
       }
       break;
 
@@ -1803,7 +1804,8 @@ static void cleanup(void) {
   BTIF_TRACE_EVENT("%s", __func__);
   btif_hh_device_t* p_dev;
   int i;
-  if (btif_hh_cb.status == BTIF_HH_DISABLED) {
+  if (btif_hh_cb.status == BTIF_HH_DISABLED ||
+      btif_hh_cb.status == BTIF_HH_DISABLING) {
     BTIF_TRACE_WARNING("%s: HH disabling or disabled already, status = %d",
                        __func__, btif_hh_cb.status);
     return;
@@ -1814,7 +1816,6 @@ static void cleanup(void) {
      */
     btif_hh_cb.service_dereg_active = FALSE;
     btif_disable_service(BTA_HID_SERVICE_ID);
-    bt_hh_callbacks = NULL;
   }
   for (i = 0; i < BTIF_HH_MAX_HID; i++) {
     p_dev = &btif_hh_cb.devices[i];
@@ -1828,6 +1829,21 @@ static void cleanup(void) {
       p_dev->hh_poll_thread_id = -1;
     }
   }
+}
+
+/*******************************************************************************
+ *
+ * Function         configure_enabled_profiles
+ *
+ * Description      Configure HIDP or HOGP enablement. Require to cleanup and
+ *re-init to take effect.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+static void configure_enabled_profiles(bool enable_hidp, bool enable_hogp) {
+  bt_hh_enable_type.hidp_enabled = enable_hidp;
+  bt_hh_enable_type.hogp_enabled = enable_hogp;
 }
 
 static const bthh_interface_t bthhInterface = {
@@ -1846,6 +1862,7 @@ static const bthh_interface_t bthhInterface = {
     set_report,
     send_data,
     cleanup,
+    configure_enabled_profiles,
 };
 
 /*******************************************************************************
@@ -1860,7 +1877,8 @@ static const bthh_interface_t bthhInterface = {
 bt_status_t btif_hh_execute_service(bool b_enable) {
   if (b_enable) {
     /* Enable and register with BTA-HH */
-    BTA_HhEnable(bte_hh_evt);
+    BTA_HhEnable(bte_hh_evt, bt_hh_enable_type.hidp_enabled,
+                 bt_hh_enable_type.hogp_enabled);
   } else {
     /* Disable HH */
     BTA_HhDisable();
