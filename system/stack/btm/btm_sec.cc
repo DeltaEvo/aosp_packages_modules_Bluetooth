@@ -77,14 +77,14 @@ extern tBTM_CB btm_cb;
    BTM_SEC_LE_LINK_KEY_KNOWN | BTM_SEC_LE_LINK_KEY_AUTHED)
 
 void btm_inq_stop_on_ssp(void);
-extern void btm_ble_advertiser_notify_terminated_legacy(
-    uint8_t status, uint16_t connection_handle);
-extern bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
-                                     const RawAddress& new_pseudo_addr);
-extern void bta_dm_remove_device(const RawAddress& bd_addr);
-extern void bta_dm_process_remove_device(const RawAddress& bd_addr);
-extern void btm_inq_clear_ssp(void);
-extern void HACK_acl_check_sm4(tBTM_SEC_DEV_REC& p_dev_rec);
+void btm_ble_advertiser_notify_terminated_legacy(uint8_t status,
+                                                 uint16_t connection_handle);
+bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
+                              const RawAddress& new_pseudo_addr);
+void bta_dm_remove_device(const RawAddress& bd_addr);
+void bta_dm_process_remove_device(const RawAddress& bd_addr);
+void btm_inq_clear_ssp(void);
+void HACK_acl_check_sm4(tBTM_SEC_DEV_REC& p_dev_rec);
 
 /*******************************************************************************
  *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
@@ -116,7 +116,6 @@ static tBTM_STATUS btm_sec_send_hci_disconnect(tBTM_SEC_DEV_REC* p_dev_rec,
                                                tHCI_STATUS reason,
                                                uint16_t conn_handle,
                                                std::string comment);
-tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state);
 
 static bool btm_dev_authenticated(tBTM_SEC_DEV_REC* p_dev_rec);
 static bool btm_dev_encrypted(tBTM_SEC_DEV_REC* p_dev_rec);
@@ -161,6 +160,18 @@ static bool concurrentPeerAuthIsEnabled() {
   static const bool sCONCURRENT_PEER_AUTH_IS_ENABLED = osi_property_get_bool(
       "bluetooth.btm.sec.concurrent_peer_auth.enabled", true);
   return sCONCURRENT_PEER_AUTH_IS_ENABLED;
+}
+
+/**
+ * Whether we should handle encryption change events from a peer device, while
+ * we are in the IDLE state. This matters if we are waiting to retry encryption
+ * following an LMP timeout, and then we get an encryption change event from the
+ * peer.
+ */
+static bool handleUnexpectedEncryptionChange() {
+  static const bool sHandleUnexpectedEncryptionChange = osi_property_get_bool(
+      "bluetooth.btm.sec.handle_unexpected_encryption_change.enabled", false);
+  return sHandleUnexpectedEncryptionChange;
 }
 
 void NotifyBondingCanceled(tBTM_STATUS btm_status) {
@@ -220,6 +231,23 @@ static bool btm_dev_16_digit_authenticated(tBTM_SEC_DEV_REC* p_dev_rec) {
 
 /*******************************************************************************
  *
+ * Function         btm_sec_find_dev_by_sec_state
+ *
+ * Description      Look for the record in the device database for the device
+ *                  which is being authenticated or encrypted
+ *
+ * Returns          Pointer to the record or NULL
+ *
+ ******************************************************************************/
+static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
+  list_node_t* n = list_foreach(btm_cb.sec_dev_rec, is_sec_state_equal, &state);
+  if (n) return static_cast<tBTM_SEC_DEV_REC*>(list_node(n));
+
+  return nullptr;
+}
+
+/*******************************************************************************
+ *
  * Function         BTM_SecRegister
  *
  * Description      Application manager calls this function to register for
@@ -231,10 +259,6 @@ static bool btm_dev_16_digit_authenticated(tBTM_SEC_DEV_REC* p_dev_rec) {
  *
  ******************************************************************************/
 bool BTM_SecRegister(const tBTM_APPL_INFO* p_cb_info) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecRegister(p_cb_info);
-  }
-
   BTM_TRACE_EVENT("%s application registered", __func__);
 
   LOG_INFO("%s p_cb_info->p_le_callback == 0x%p", __func__,
@@ -899,11 +923,6 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
 tBTM_STATUS BTM_SecBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                         tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type,
                         uint8_t pin_len, uint8_t* p_pin) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecBond(bd_addr, addr_type, transport,
-                                        device_type);
-  }
-
   if (transport == BT_TRANSPORT_AUTO) {
     if (addr_type == BLE_ADDR_PUBLIC) {
       transport =
@@ -938,10 +957,6 @@ tBTM_STATUS BTM_SecBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SecBondCancel(const RawAddress& bd_addr) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SecBondCancel(bd_addr);
-  }
-
   tBTM_SEC_DEV_REC* p_dev_rec;
 
   BTM_TRACE_API("BTM_SecBondCancel()  State: %s flags:0x%x",
@@ -1062,11 +1077,6 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
                               tBT_TRANSPORT transport,
                               tBTM_SEC_CALLBACK* p_callback, void* p_ref_data,
                               tBTM_BLE_SEC_ACT sec_act) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_SetEncryption(bd_addr, transport, p_callback,
-                                              p_ref_data, sec_act);
-  }
-
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   if (p_dev_rec == nullptr) {
     LOG_ERROR("Unable to set encryption for unknown device");
@@ -1201,7 +1211,7 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
 
 bool BTM_SecIsSecurityPending(const RawAddress& bd_addr) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
-  return p_dev_rec && (p_dev_rec->sec_state == BTM_SEC_STATE_ENCRYPTING ||
+  return p_dev_rec && (p_dev_rec->is_security_state_encrypting() ||
                        p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING);
 }
 
@@ -1268,15 +1278,20 @@ static tBTM_STATUS btm_sec_send_hci_disconnect(tBTM_SEC_DEV_REC* p_dev_rec,
  *
  ******************************************************************************/
 void BTM_ConfirmReqReply(tBTM_STATUS res, const RawAddress& bd_addr) {
-  ASSERT_LOG(!bluetooth::shim::is_gd_shim_enabled(), "Unreachable code path");
-
   BTM_TRACE_EVENT("BTM_ConfirmReqReply() State: %s  Res: %u",
                   btm_pair_state_descr(btm_cb.pairing_state), res);
 
   /* If timeout already expired or has been canceled, ignore the reply */
   if ((btm_cb.pairing_state != BTM_PAIR_STATE_WAIT_NUMERIC_CONFIRM) ||
-      (btm_cb.pairing_bda != bd_addr))
+      (btm_cb.pairing_bda != bd_addr)) {
+    LOG_WARN(
+        "Ignore confirm request reply as bonding has been canceled or timer "
+        "expired");
     return;
+  }
+
+  BTM_LogHistory(kBtmLogTag, bd_addr, "Confirm reply",
+                 base::StringPrintf("status:%s", btm_status_text(res).c_str()));
 
   btm_sec_change_pairing_state(BTM_PAIR_STATE_WAIT_AUTH_COMPLETE);
 
@@ -1308,8 +1323,6 @@ void BTM_ConfirmReqReply(tBTM_STATUS res, const RawAddress& bd_addr) {
  ******************************************************************************/
 void BTM_PasskeyReqReply(tBTM_STATUS res, const RawAddress& bd_addr,
                          uint32_t passkey) {
-  ASSERT_LOG(!bluetooth::shim::is_gd_shim_enabled(), "Unreachable code path");
-
   BTM_TRACE_API("BTM_PasskeyReqReply: State: %s  res:%d",
                 btm_pair_state_descr(btm_cb.pairing_state), res);
 
@@ -1835,11 +1848,6 @@ tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr,
   tBTM_STATUS rc;
   bool transport = false; /* should check PSM range in LE connection oriented
                              L2CAP connection */
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::btm_sec_mx_access_request(
-        bd_addr, is_originator, security_required, p_callback, p_ref_data);
-  }
-
   LOG_DEBUG("Multiplex access request device:%s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
   /* Find or get oldest record */
@@ -3086,7 +3094,7 @@ static void btm_sec_auth_collision(uint16_t handle) {
           p_dev_rec->sec_state);
       /* We will restart authentication after timeout */
       if (p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING ||
-          p_dev_rec->sec_state == BTM_SEC_STATE_ENCRYPTING)
+          p_dev_rec->is_security_state_bredr_encrypting())
         p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
 
       btm_cb.p_collided_dev_rec = p_dev_rec;
@@ -3442,18 +3450,22 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
   }
 
   /* If this encryption was started by peer do not need to do anything */
-  if (p_dev_rec->sec_state != BTM_SEC_STATE_ENCRYPTING) {
+  if (!p_dev_rec->is_security_state_bredr_encrypting()) {
     if (BTM_SEC_STATE_DELAY_FOR_ENC == p_dev_rec->sec_state) {
       p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
       BTM_TRACE_DEBUG("%s: clearing callback. p_dev_rec=%p, p_callback=%p",
                       __func__, p_dev_rec, p_dev_rec->p_callback);
       p_dev_rec->p_callback = NULL;
       l2cu_resubmit_pending_sec_req(&p_dev_rec->bd_addr);
+      return;
     } else if (!concurrentPeerAuthIsEnabled() &&
                p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
       p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
+      return;
     }
-    return;
+    if (!handleUnexpectedEncryptionChange()) {
+      return;
+    }
   }
 
   p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
@@ -4414,9 +4426,10 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
           .c_str(),
       p_dev_rec->sec_state);
 
-  if (p_dev_rec->sec_state != BTM_SEC_STATE_IDLE) {
-    LOG_DEBUG(
-        "Security state is idle indicating remote name request is outstanding");
+  if (p_dev_rec->sec_state != BTM_SEC_STATE_IDLE &&
+      p_dev_rec->sec_state != BTM_SEC_STATE_LE_ENCRYPTING) {
+    LOG_INFO("No immediate action taken in busy state: %s",
+              security_state_text(p_dev_rec->sec_state).c_str());
     return (BTM_CMD_STARTED);
   }
 
@@ -4682,23 +4695,6 @@ bool is_sec_state_equal(void* data, void* context) {
   if (p_dev_rec->sec_state == *state) return false;
 
   return true;
-}
-
-/*******************************************************************************
- *
- * Function         btm_sec_find_dev_by_sec_state
- *
- * Description      Look for the record in the device database for the device
- *                  which is being authenticated or encrypted
- *
- * Returns          Pointer to the record or NULL
- *
- ******************************************************************************/
-tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
-  list_node_t* n = list_foreach(btm_cb.sec_dev_rec, is_sec_state_equal, &state);
-  if (n) return static_cast<tBTM_SEC_DEV_REC*>(list_node(n));
-
-  return NULL;
 }
 
 /*******************************************************************************

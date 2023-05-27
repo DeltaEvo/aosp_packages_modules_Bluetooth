@@ -40,6 +40,7 @@
 
 constexpr size_t kMaxLogSize = 255;
 constexpr size_t kBtmLogHistoryBufferSize = 200;
+constexpr size_t kMaxInquiryScanHistory = 10;
 
 extern bluetooth::common::TimestamperInMilliseconds timestamper_in_milliseconds;
 
@@ -116,6 +117,7 @@ typedef struct {
   uint16_t psm;
   bool is_orig;
   tBTM_SEC_CALLBACK* p_callback;
+  tSMP_SIRK_CALLBACK* p_sirk_callback;
   void* p_ref_data;
   uint16_t rfcomm_security_requirement;
   tBT_TRANSPORT transport;
@@ -163,6 +165,10 @@ typedef struct tBTM_DEVCB {
   tBTM_CMPL_CB* p_tx_power_cmpl_cb; /* Callback function to be called       */
 
   DEV_CLASS dev_class; /* Local device class                   */
+
+  tBTM_CMPL_CB*
+      p_le_test_cmd_cmpl_cb; /* Callback function to be called when
+                             LE test mode command has been sent successfully */
 
   RawAddress read_tx_pwr_addr; /* read TX power target address     */
 
@@ -313,6 +319,11 @@ typedef struct tBTM_CB {
       long long start_time_ms;
       unsigned long results;
     } classic_inquiry, le_scan, le_inquiry, le_observe, le_legacy_scan;
+    std::unique_ptr<
+        bluetooth::common::TimestampedCircularBuffer<tBTM_INQUIRY_CMPL>>
+        inquiry_history_ = std::make_unique<
+            bluetooth::common::TimestampedCircularBuffer<tBTM_INQUIRY_CMPL>>(
+            kMaxInquiryScanHistory);
   } neighbor;
 
   void Init(uint8_t initial_security_mode) {

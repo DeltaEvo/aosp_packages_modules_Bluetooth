@@ -196,7 +196,7 @@ bool btif_a2dp_sink_init() {
 
   /* Schedule the rest of the operations */
   if (!btif_a2dp_sink_cb.worker_thread.EnableRealTimeScheduling()) {
-#if defined(OS_ANDROID)
+#if defined(__ANDROID__)
     LOG(FATAL) << __func__
                << ": Failed to increase A2DP decoder thread priority";
 #endif
@@ -480,7 +480,7 @@ static void btif_a2dp_sink_audio_handle_stop_decoding() {
 
   {
     LockGuard lock(g_mutex);
-#ifndef OS_GENERIC
+#ifdef __ANDROID__
     BtifAvrcpAudioTrackPause(btif_a2dp_sink_cb.audio_track);
 #endif
   }
@@ -496,7 +496,7 @@ static void btif_a2dp_sink_clear_track_event() {
   LOG_INFO("%s", __func__);
   LockGuard lock(g_mutex);
 
-#ifndef OS_GENERIC
+#ifdef __ANDROID__
   BtifAvrcpAudioTrackStop(btif_a2dp_sink_cb.audio_track);
   BtifAvrcpAudioTrackDelete(btif_a2dp_sink_cb.audio_track);
 #endif
@@ -509,7 +509,7 @@ static void btif_a2dp_sink_audio_handle_start_decoding() {
   if (btif_a2dp_sink_cb.decode_alarm != nullptr)
     return;  // Already started decoding
 
-#ifndef OS_GENERIC
+#ifdef __ANDROID__
   BtifAvrcpAudioTrackStart(btif_a2dp_sink_cb.audio_track);
 #endif
 
@@ -523,7 +523,7 @@ static void btif_a2dp_sink_audio_handle_start_decoding() {
 }
 
 static void btif_a2dp_sink_on_decode_complete(uint8_t* data, uint32_t len) {
-#ifndef OS_GENERIC
+#ifdef __ANDROID__
   BtifAvrcpAudioTrackWriteData(btif_a2dp_sink_cb.audio_track,
                                reinterpret_cast<void*>(data), len);
 #endif
@@ -649,7 +649,7 @@ static void btif_a2dp_sink_decoder_update_event(
 
   APPL_TRACE_DEBUG("%s: create audio track", __func__);
   btif_a2dp_sink_cb.audio_track =
-#ifndef OS_GENERIC
+#ifdef __ANDROID__
       BtifAvrcpAudioTrackCreate(sample_rate, bits_per_sample, channel_count);
 #else
       NULL;
@@ -682,8 +682,11 @@ uint8_t btif_a2dp_sink_enqueue_buf(BT_HDR* p_pkt) {
   fixed_queue_enqueue(btif_a2dp_sink_cb.rx_audio_queue, p_msg);
   if (fixed_queue_length(btif_a2dp_sink_cb.rx_audio_queue) ==
       MAX_A2DP_DELAYED_START_FRAME_COUNT) {
-    BTIF_TRACE_DEBUG("%s: Initiate decoding", __func__);
-    btif_a2dp_sink_audio_handle_start_decoding();
+    BTIF_TRACE_DEBUG("%s: Initiate decoding. Current focus state:%d", __func__,
+                     btif_a2dp_sink_cb.rx_focus_state);
+    if (btif_a2dp_sink_cb.rx_focus_state == BTIF_A2DP_SINK_FOCUS_GRANTED) {
+      btif_a2dp_sink_audio_handle_start_decoding();
+    }
   }
 
   return fixed_queue_length(btif_a2dp_sink_cb.rx_audio_queue);
@@ -738,7 +741,7 @@ void btif_a2dp_sink_set_audio_track_gain(float gain) {
   LOG_DEBUG("%s: set gain to %f", __func__, gain);
   LockGuard lock(g_mutex);
 
-#ifndef OS_GENERIC
+#ifdef __ANDROID__
   BtifAvrcpSetAudioTrackGain(btif_a2dp_sink_cb.audio_track, gain);
 #endif
 }

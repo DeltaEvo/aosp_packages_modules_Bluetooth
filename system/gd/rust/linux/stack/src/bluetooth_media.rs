@@ -104,7 +104,7 @@ pub trait IBluetoothMedia {
     /// Returns true iff A2DP audio has started.
     fn get_a2dp_audio_started(&mut self, address: String) -> bool;
 
-    /// Returns the negotiated codec (CVSD=1, mSBC=2) to use if HFP audio has started.
+    /// Returns the negotiated codec (CVSD=1, mSBC=2, LC3=4) to use if HFP audio has started.
     /// Returns 0 if HFP audio hasn't started.
     fn get_hfp_audio_final_codecs(&mut self, address: String) -> u8;
 
@@ -471,8 +471,7 @@ impl BluetoothMedia {
                 self.a2dp_audio_state.insert(addr, state);
             }
             A2dpCallbacks::AudioConfig(addr, _config, _local_caps, a2dp_caps) => {
-                // TODO(b/254808917): revert to debug log once fixed
-                info!("[{}]: a2dp updated audio config: {:?}", DisplayAddress(&addr), a2dp_caps);
+                debug!("[{}]: a2dp updated audio config: {:?}", DisplayAddress(&addr), a2dp_caps);
                 self.a2dp_caps.insert(addr, a2dp_caps);
             }
             A2dpCallbacks::MandatoryCodecPreferred(_addr) => {}
@@ -769,13 +768,36 @@ impl BluetoothMedia {
                     .unwrap()
                     .set_battery_info(self.battery_provider_id, battery_set);
             }
-            HfpCallbacks::CapsUpdate(wbs_supported, addr) => {
-                let hfp_cap = match wbs_supported {
-                    true => HfpCodecCapability::CVSD | HfpCodecCapability::MSBC,
-                    false => HfpCodecCapability::CVSD,
-                };
-
-                self.hfp_cap.insert(addr, hfp_cap);
+            HfpCallbacks::WbsCapsUpdate(wbs_supported, addr) => {
+                if let Some(cur_hfp_cap) = self.hfp_cap.get_mut(&addr) {
+                    if wbs_supported {
+                        *cur_hfp_cap |= HfpCodecCapability::MSBC;
+                    } else if (*cur_hfp_cap & HfpCodecCapability::MSBC) == HfpCodecCapability::MSBC
+                    {
+                        *cur_hfp_cap ^= HfpCodecCapability::MSBC;
+                    }
+                } else {
+                    let new_hfp_cap = match wbs_supported {
+                        true => HfpCodecCapability::CVSD | HfpCodecCapability::MSBC,
+                        false => HfpCodecCapability::CVSD,
+                    };
+                    self.hfp_cap.insert(addr, new_hfp_cap);
+                }
+            }
+            HfpCallbacks::SwbCapsUpdate(swb_supported, addr) => {
+                if let Some(cur_hfp_cap) = self.hfp_cap.get_mut(&addr) {
+                    if swb_supported {
+                        *cur_hfp_cap |= HfpCodecCapability::LC3;
+                    } else if (*cur_hfp_cap & HfpCodecCapability::LC3) == HfpCodecCapability::LC3 {
+                        *cur_hfp_cap ^= HfpCodecCapability::LC3;
+                    }
+                } else {
+                    let new_hfp_cap = match swb_supported {
+                        true => HfpCodecCapability::CVSD | HfpCodecCapability::LC3,
+                        false => HfpCodecCapability::CVSD,
+                    };
+                    self.hfp_cap.insert(addr, new_hfp_cap);
+                }
             }
             HfpCallbacks::IndicatorQuery(addr) => {
                 match self.hfp.as_mut() {
@@ -1290,8 +1312,7 @@ impl BluetoothMedia {
     }
 
     fn start_audio_request_impl(&mut self) -> bool {
-        // TODO(b/254808917): revert to debug log once fixed
-        info!("Start audio request");
+        debug!("Start audio request");
 
         match self.a2dp.as_mut() {
             Some(a2dp) => a2dp.start_audio_request(),
@@ -1846,7 +1867,7 @@ impl IBluetoothMedia for BluetoothMedia {
         true
     }
 
-    // TODO(b/263808543): Currently this is designed to be called from both the
+    // TODO(b/278963515): Currently this is designed to be called from both the
     // UI and via disconnection callbacks. Remove this workaround once the
     // proper fix has landed.
     fn disconnect(&mut self, address: String) {
@@ -1872,7 +1893,7 @@ impl IBluetoothMedia for BluetoothMedia {
         for profile in connected_profiles {
             match profile {
                 uuid::Profile::A2dpSink => {
-                    // Some headsets (b/263808543) will try reconnecting to A2DP
+                    // Some headsets (b/278963515) will try reconnecting to A2DP
                     // when HFP is running but (requested to be) disconnected.
                     if connected_profiles.contains(&Profile::Hfp) {
                         continue;
@@ -1979,14 +2000,6 @@ impl IBluetoothMedia for BluetoothMedia {
     }
 
     fn set_active_device(&mut self, address: String) {
-        // During MPS tests, there might be some A2DP stream manipulation unexpected to CRAS.
-        // CRAS would then attempt to reset the active device. Ignore it during test.
-        // TODO(b/265988575): CRAS is migrating to use ResetActiveDevice instead. Remove this
-        // after the migration is done.
-        if !self.is_complete_profiles_required() && address == String::from("00:00:00:00:00:00") {
-            return;
-        }
-
         let addr = match RawAddress::from_string(address.clone()) {
             None => {
                 warn!("Invalid device address for set_active_device");
@@ -2128,8 +2141,7 @@ impl IBluetoothMedia for BluetoothMedia {
             return;
         }
 
-        // TODO(b/254808917): revert to debug log once fixed
-        info!("Stop audio request");
+        debug!("Stop audio request");
 
         match self.a2dp.as_mut() {
             Some(a2dp) => a2dp.stop_audio_request(),
@@ -2171,6 +2183,7 @@ impl IBluetoothMedia for BluetoothMedia {
 
         match self.hfp_audio_state.get(&addr) {
             Some(BthfAudioState::Connected) => match self.hfp_cap.get(&addr) {
+                Some(caps) if (*caps & HfpCodecCapability::LC3) == HfpCodecCapability::LC3 => 4,
                 Some(caps) if (*caps & HfpCodecCapability::MSBC) == HfpCodecCapability::MSBC => 2,
                 Some(caps) if (*caps & HfpCodecCapability::CVSD) == HfpCodecCapability::CVSD => 1,
                 _ => {

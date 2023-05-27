@@ -35,10 +35,12 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -52,8 +54,9 @@ public class BluetoothMapSettingsTest {
     ActivityScenario<BluetoothMapSettings> mActivityScenario;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         enableActivity(true);
+        TestUtils.wakeUpAndDismissKeyGuard();
         mIntent = new Intent();
         mIntent.setClass(mTargetContext, BluetoothMapSettings.class);
         mActivityScenario = ActivityScenario.launch(mIntent);

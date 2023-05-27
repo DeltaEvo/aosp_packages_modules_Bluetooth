@@ -477,6 +477,9 @@ fn generate_packet_decl(
                     #parent_data_child::#prev_parent_id(#prev_parent_id_lower)
                 });
             }
+        } else if scope.iter_children(parent_id).next().is_some() {
+            field.push(format_ident!("child"));
+            value.push(quote! { #parent_data_child::None });
         }
 
         quote! {
@@ -565,9 +568,9 @@ fn generate_packet_decl(
             )*
 
             impl TryFrom<#top_level_packet> for #id_packet {
-                type Error = TryFromError;
-                fn try_from(packet: #top_level_packet) -> std::result::Result<#id_packet, TryFromError> {
-                    #id_packet::new(packet.#top_level_id_lower).map_err(TryFromError)
+                type Error = Error;
+                fn try_from(packet: #top_level_packet) -> Result<#id_packet> {
+                    #id_packet::new(packet.#top_level_id_lower)
                 }
             }
         }
@@ -634,17 +637,19 @@ fn generate_packet_decl(
 
             fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
                 let data = #top_level_data::parse_inner(&mut bytes)?;
-                Ok(Self::new(Arc::new(data)).unwrap())
+                Self::new(Arc::new(data))
             }
 
             #specialize
 
-            fn new(#top_level_id_lower: Arc<#top_level_data>)
-                   -> std::result::Result<Self, &'static str> {
+            fn new(#top_level_id_lower: Arc<#top_level_data>) -> Result<Self> {
                 #(
                     let #parent_shifted_lower_ids = match &#parent_lower_ids.child {
                         #parent_data_child::#parent_shifted_ids(value) => value.clone(),
-                        _ => return Err("Could not parse data, wrong child type"),
+                        _ => return Err(Error::InvalidChildError {
+                            expected: stringify!(#parent_data_child::#parent_shifted_ids),
+                            actual: format!("{:?}", &#parent_lower_ids.child),
+                        }),
                     };
                 )*
                 Ok(Self { #(#parent_lower_ids),* })
@@ -770,6 +775,7 @@ fn generate_enum_decl(
     // Generate the variant cases for the enum declaration.
     // Tags declared in ranges are flattened in the same declaration.
     let use_variant_values = is_primitive && (is_complete || !open);
+    let repr_u64 = use_variant_values.then(|| quote! { #[repr(u64)] });
     let mut variants = vec![];
     for tag in tags.iter() {
         match tag {
@@ -857,6 +863,7 @@ fn generate_enum_decl(
     let derived_into_types = derived_signed_into_types.chain(derived_unsigned_into_types);
 
     quote! {
+        #repr_u64
         #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[cfg_attr(feature = "serde", serde(try_from = #backing_type_str, into = #backing_type_str))]
@@ -895,25 +902,85 @@ fn generate_enum_decl(
     }
 }
 
+/// Generate the declaration for a custom field of static size.
+///
+/// * `id` - Enum identifier.
+/// * `width` - Width of the backing type of the enum, in bits.
+fn generate_custom_field_decl(id: &str, width: usize) -> proc_macro2::TokenStream {
+    let id = format_ident!("{}", id);
+    let backing_type = types::Integer::new(width);
+    let backing_type_str = proc_macro2::Literal::string(&format!("u{}", backing_type.width));
+    let max_value = mask_bits(width, &format!("u{}", backing_type.width));
+    let common = quote! {
+        impl From<&#id> for #backing_type {
+            fn from(value: &#id) -> #backing_type {
+                value.0
+            }
+        }
+
+        impl From<#id> for #backing_type {
+            fn from(value: #id) -> #backing_type {
+                value.0
+            }
+        }
+    };
+
+    if backing_type.width == width {
+        quote! {
+            #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+            #[cfg_attr(feature = "serde", serde(from = #backing_type_str, into = #backing_type_str))]
+            pub struct #id(#backing_type);
+
+            #common
+
+            impl From<#backing_type> for #id {
+                fn from(value: #backing_type) -> Self {
+                    #id(value)
+                }
+            }
+        }
+    } else {
+        quote! {
+            #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+            #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+            #[cfg_attr(feature = "serde", serde(try_from = #backing_type_str, into = #backing_type_str))]
+            pub struct #id(#backing_type);
+
+            #common
+
+            impl TryFrom<#backing_type> for #id {
+                type Error = #backing_type;
+                fn try_from(value: #backing_type) -> std::result::Result<Self, Self::Error> {
+                    if value > #max_value {
+                        Err(value)
+                    } else {
+                        Ok(#id(value))
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn generate_decl(
     scope: &lint::Scope<'_>,
     file: &analyzer_ast::File,
     decl: &analyzer_ast::Decl,
-) -> String {
+) -> proc_macro2::TokenStream {
     match &decl.desc {
-        ast::DeclDesc::Packet { id, .. } => {
-            generate_packet_decl(scope, file.endianness.value, id).to_string()
-        }
+        ast::DeclDesc::Packet { id, .. } => generate_packet_decl(scope, file.endianness.value, id),
         ast::DeclDesc::Struct { id, parent_id: None, .. } => {
             // TODO(mgeisler): handle structs with parents. We could
             // generate code for them, but the code is not useful
             // since it would require the caller to unpack everything
             // manually. We either need to change the API, or
             // implement the recursive (de)serialization.
-            generate_struct_decl(scope, file.endianness.value, id).to_string()
+            generate_struct_decl(scope, file.endianness.value, id)
         }
-        ast::DeclDesc::Enum { id, tags, width } => {
-            generate_enum_decl(id, tags, *width, false).to_string()
+        ast::DeclDesc::Enum { id, tags, width } => generate_enum_decl(id, tags, *width, false),
+        ast::DeclDesc::CustomField { id, width: Some(width), .. } => {
+            generate_custom_field_decl(id, *width)
         }
         _ => todo!("unsupported Decl::{:?}", decl),
     }
@@ -924,18 +991,18 @@ fn generate_decl(
 /// The code is not formatted, pipe it through `rustfmt` to get
 /// readable source code.
 pub fn generate(sources: &ast::SourceDatabase, file: &analyzer_ast::File) -> String {
-    let mut code = String::new();
-
     let source = sources.get(file.file).expect("could not read source");
-    code.push_str(&preamble::generate(Path::new(source.name())));
+    let preamble = preamble::generate(Path::new(source.name()));
 
     let scope = lint::Scope::new(file);
-    for decl in &file.declarations {
-        code.push_str(&generate_decl(&scope, file, decl));
-        code.push_str("\n\n");
-    }
+    let decls = file.declarations.iter().map(|decl| generate_decl(&scope, file, decl));
+    let code = quote! {
+        #preamble
 
-    code
+        #(#decls)*
+    };
+    let syntax_tree = syn::parse2(code).expect("Could not parse code");
+    prettyplease::unparse(&syntax_tree)
 }
 
 #[cfg(test)]
@@ -944,7 +1011,7 @@ mod tests {
     use crate::analyzer;
     use crate::ast;
     use crate::parser::parse_inline;
-    use crate::test_utils::{assert_snapshot_eq, rustfmt};
+    use crate::test_utils::{assert_snapshot_eq, format_rust};
     use paste::paste;
 
     /// Parse a string fragment as a PDL file.
@@ -1027,7 +1094,7 @@ mod tests {
                     let actual_code = generate(&db, &file);
                     assert_snapshot_eq(
                         &format!("tests/generated/{name}_{endianness}.rs"),
-                        &rustfmt(&actual_code),
+                        &format_rust(&actual_code),
                     );
                 }
             }
@@ -1097,6 +1164,20 @@ mod tests {
             B = 1,
             C = 2..255,
         }
+        "#
+    );
+
+    test_pdl!(
+        custom_field_declaration,
+        r#"
+        // Still unsupported.
+        // custom_field Dynamic "dynamic"
+
+        // Should generate a type with From<u32> implementation.
+        custom_field ExactSize : 32 "exact_size"
+
+        // Should generate a type with TryFrom<u32> implementation.
+        custom_field TruncatedSize : 24 "truncated_size"
         "#
     );
 
@@ -1248,12 +1329,40 @@ mod tests {
     );
 
     test_pdl!(
+        packet_decl_array_with_padding,
+        "
+          struct Foo {
+            _count_(a): 40,
+            a: 16[],
+          }
+
+          packet Bar {
+            a: Foo[],
+            _padding_ [128],
+          }
+        "
+    );
+
+    test_pdl!(
         packet_decl_reserved_field,
         "
           packet Foo {
             _reserved_: 40,
           }
         "
+    );
+
+    test_pdl!(
+        packet_decl_custom_field,
+        r#"
+          custom_field Bar1 : 24 "exact"
+          custom_field Bar2 : 32 "truncated"
+
+          packet Foo {
+            a: Bar1,
+            b: Bar2,
+          }
+        "#
     );
 
     test_pdl!(
@@ -1365,6 +1474,52 @@ mod tests {
 
           packet GrandGrandChild : GrandChild (baz = A) {
               _body_,
+          }
+        "
+    );
+
+    test_pdl!(
+        packet_decl_parent_with_no_payload,
+        "
+          enum Enum8 : 8 {
+            A = 0,
+          }
+
+          packet Parent {
+            v : Enum8,
+          }
+
+          packet Child : Parent (v = A) {
+          }
+        "
+    );
+
+    test_pdl!(
+        packet_decl_parent_with_alias_child,
+        "
+          enum Enum8 : 8 {
+            A = 0,
+            B = 1,
+            C = 2,
+          }
+
+          packet Parent {
+            v : Enum8,
+            _payload_,
+          }
+
+          packet AliasChild : Parent {
+            _payload_
+          }
+
+          packet NormalChild : Parent (v = A) {
+          }
+
+          packet NormalGrandChild1 : AliasChild (v = B) {
+          }
+
+          packet NormalGrandChild2 : AliasChild (v = C) {
+              _payload_
           }
         "
     );

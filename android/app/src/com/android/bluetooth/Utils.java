@@ -98,7 +98,7 @@ public final class Utils {
     private static final String ENABLE_DUAL_MODE_AUDIO =
             "persist.bluetooth.enable_dual_mode_audio";
     private static boolean sDualModeEnabled =
-            SystemProperties.getBoolean(ENABLE_DUAL_MODE_AUDIO, false);;
+            SystemProperties.getBoolean(ENABLE_DUAL_MODE_AUDIO, false);
 
     private static final String KEY_TEMP_ALLOW_LIST_DURATION_MS = "temp_allow_list_duration_ms";
     private static final long DEFAULT_TEMP_ALLOW_LIST_DURATION_MS = 20_000;
@@ -1189,5 +1189,43 @@ public final class Utils {
         }
 
         return string;
+    }
+
+    /**
+     * Check if BLE is supported by this platform
+     * @param context current device context
+     * @return true if BLE is supported, false otherwise
+     */
+    public static boolean isBleSupported(Context context) {
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
+    }
+
+    /**
+     * Check if this is an automotive device
+     * @param context current device context
+     * @return true if this Android device is an automotive device, false otherwise
+     */
+    public static boolean isAutomotive(Context context) {
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE);
+    }
+
+    /**
+     * Check if this is a watch device
+     * @param context current device context
+     * @return true if this Android device is a watch device, false otherwise
+     */
+    public static boolean isWatch(Context context) {
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
+    }
+
+    /**
+     * Check if this is a TV device
+     * @param context current device context
+     * @return true if this Android device is a TV device, false otherwise
+     */
+    public static boolean isTv(Context context) {
+        PackageManager pm = context.getPackageManager();
+        return pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
+                || pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK);
     }
 }

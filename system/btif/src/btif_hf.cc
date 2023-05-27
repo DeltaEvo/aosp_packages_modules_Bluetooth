@@ -26,11 +26,11 @@
  ******************************************************************************/
 
 #define LOG_TAG "bt_btif_hf"
-
 #include <base/functional/callback.h>
 #include <base/logging.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
-#ifdef OS_ANDROID
+
+#ifdef __ANDROID__
 #include <hfp.sysprop.h>
 #endif
 
@@ -143,7 +143,7 @@ static bool is_active_device(const RawAddress& bd_addr) {
 }
 
 static tBTA_SERVICE_MASK get_BTIF_HF_SERVICES() {
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
   static const tBTA_SERVICE_MASK hf_services =
       android::sysprop::bluetooth::Hfp::hf_services().value_or(
           BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK);
@@ -160,7 +160,7 @@ static uint32_t get_hf_features() {
    BTA_AG_FEAT_ECS | BTA_AG_FEAT_EXTERR | BTA_AG_FEAT_VREC |      \
    BTA_AG_FEAT_CODEC | BTA_AG_FEAT_HF_IND | BTA_AG_FEAT_ESCO_S4 | \
    BTA_AG_FEAT_UNAT)
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
   static const uint32_t hf_features =
       android::sysprop::bluetooth::Hfp::hf_features().value_or(
           DEFAULT_BTIF_HF_FEATURES);
@@ -575,18 +575,29 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
       bt_hf_callbacks->KeyPressedCallback(&btif_hf_cb[idx].connected_bda);
       break;
 
-    case BTA_AG_WBS_EVT:
+    case BTA_AG_CODEC_EVT:
       BTIF_TRACE_DEBUG(
-          "BTA_AG_WBS_EVT Set codec status %d codec %d 1=CVSD 2=MSBC",
+          "BTA_AG_CODEC_EVT Set codec status %d codec %d 1=CVSD 2=MSBC 4=LC3",
           p_data->val.hdr.status, p_data->val.num);
       if (p_data->val.num == BTM_SCO_CODEC_CVSD) {
         bt_hf_callbacks->WbsCallback(BTHF_WBS_NO,
                                      &btif_hf_cb[idx].connected_bda);
+        bt_hf_callbacks->SwbCallback(BTHF_SWB_NO,
+                                     &btif_hf_cb[idx].connected_bda);
       } else if (p_data->val.num == BTM_SCO_CODEC_MSBC) {
         bt_hf_callbacks->WbsCallback(BTHF_WBS_YES,
                                      &btif_hf_cb[idx].connected_bda);
+        bt_hf_callbacks->SwbCallback(BTHF_SWB_NO,
+                                     &btif_hf_cb[idx].connected_bda);
+      } else if (p_data->val.num == BTM_SCO_CODEC_LC3) {
+        bt_hf_callbacks->WbsCallback(BTHF_WBS_NO,
+                                     &btif_hf_cb[idx].connected_bda);
+        bt_hf_callbacks->SwbCallback(BTHF_SWB_YES,
+                                     &btif_hf_cb[idx].connected_bda);
       } else {
         bt_hf_callbacks->WbsCallback(BTHF_WBS_NONE,
+                                     &btif_hf_cb[idx].connected_bda);
+        bt_hf_callbacks->SwbCallback(BTHF_SWB_NONE,
                                      &btif_hf_cb[idx].connected_bda);
       }
       break;
@@ -625,9 +636,14 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
       /* If the peer supports mSBC and the BTIF preferred codec is also mSBC,
        * then we should set the BTA AG Codec to mSBC. This would trigger a +BCS
        * to mSBC at the time of SCO connection establishment */
-      if (hfp_hal_interface::get_wbs_supported() &&
-          (p_data->val.num & BTM_SCO_CODEC_MSBC)) {
-        BTIF_TRACE_EVENT("%s: btif_hf override-Preferred Codec to MSBC",
+      if (hfp_hal_interface::get_swb_supported() &&
+          (p_data->val.num & BTM_SCO_CODEC_LC3)) {
+        BTIF_TRACE_EVENT("%s: btif_hf override-Preferred Codec to LC3",
+                         __func__);
+        BTA_AgSetCodec(btif_hf_cb[idx].handle, BTM_SCO_CODEC_LC3);
+      } else if (hfp_hal_interface::get_wbs_supported() &&
+                 (p_data->val.num & BTM_SCO_CODEC_MSBC)) {
+        BTIF_TRACE_EVENT("%s: btif_hf override-Preferred Codec to mSBC",
                          __func__);
         BTA_AgSetCodec(btif_hf_cb[idx].handle, BTM_SCO_CODEC_MSBC);
       } else {
@@ -636,13 +652,17 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
         BTA_AgSetCodec(btif_hf_cb[idx].handle, BTM_SCO_CODEC_CVSD);
       }
       break;
+
     case BTA_AG_AT_BCS_EVT:
       BTIF_TRACE_DEBUG("%s: AG final selected codec is 0x%02x 1=CVSD 2=MSBC",
                        __func__, p_data->val.num);
       /* No BTHF_WBS_NONE case, because HF1.6 supported device can send BCS */
       /* Only CVSD is considered narrow band speech */
       bt_hf_callbacks->WbsCallback(
-          (p_data->val.num == BTM_SCO_CODEC_CVSD) ? BTHF_WBS_NO : BTHF_WBS_YES,
+          (p_data->val.num == BTM_SCO_CODEC_MSBC) ? BTHF_WBS_YES : BTHF_WBS_NO,
+          &btif_hf_cb[idx].connected_bda);
+      bt_hf_callbacks->SwbCallback(
+          (p_data->val.num == BTM_SCO_CODEC_LC3) ? BTHF_SWB_YES : BTHF_SWB_NO,
           &btif_hf_cb[idx].connected_bda);
       break;
 
@@ -1516,7 +1536,7 @@ void HeadsetInterface::Cleanup() {
     }
   }
 
-  bt_hf_callbacks = nullptr;
+  do_in_jni_thread(FROM_HERE, base::Bind([]() { bt_hf_callbacks = nullptr; }));
 }
 
 bt_status_t HeadsetInterface::SetScoOffloadEnabled(bool value) {
@@ -1567,6 +1587,7 @@ bt_status_t HeadsetInterface::SetActiveDevice(RawAddress* active_device_addr) {
  *
  ******************************************************************************/
 bt_status_t ExecuteService(bool b_enable) {
+  LOG_INFO("service starts to: %s", b_enable ? "Initialize" : "Shutdown");
   const char* service_names_raw[] = BTIF_HF_SERVICE_NAMES;
   std::vector<std::string> service_names;
   for (const char* service_name_raw : service_names_raw) {

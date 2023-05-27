@@ -18,7 +18,7 @@ use crate::backends::rust::{
 };
 use crate::{ast, lint};
 use quote::{format_ident, quote};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 fn size_field_ident(id: &str) -> proc_macro2::Ident {
     format_ident!("{}_size", id.trim_matches('_'))
@@ -63,12 +63,13 @@ impl<'a> FieldParser<'a> {
     pub fn add(&mut self, field: &'a analyzer_ast::Field) {
         match &field.desc {
             _ if self.scope.is_bitfield(field) => self.add_bit_field(field),
-            ast::FieldDesc::Padding { .. } => todo!("Padding fields are not supported"),
+            ast::FieldDesc::Padding { .. } => (),
             ast::FieldDesc::Array { id, width, type_id, size, .. } => self.add_array_field(
                 id,
                 *width,
                 type_id.as_deref(),
                 *size,
+                field.annot.padded_size,
                 self.scope.get_field_declaration(field),
             ),
             ast::FieldDesc::Typedef { id, type_id } => self.add_typedef_field(id, type_id),
@@ -91,7 +92,7 @@ impl<'a> FieldParser<'a> {
         let end_offset = self.offset + size;
 
         let wanted = proc_macro2::Literal::usize_unsuffixed(size);
-        self.check_size(&quote!(#wanted));
+        self.check_size(self.span, &quote!(#wanted));
 
         let chunk_type = types::Integer::new(self.shift);
         // TODO(mgeisler): generate Rust variable names which cannot
@@ -147,7 +148,7 @@ impl<'a> FieldParser<'a> {
                     let enum_id = format_ident!("{enum_id}");
                     let tag_id = format_ident!("{}", tag_id.to_upper_camel_case());
                     quote! {
-                        if #v != #enum_id::#tag_id.into()  {
+                        if #v != #value_type::from(#enum_id::#tag_id)  {
                             return Err(Error::InvalidFixedValue {
                                 expected: #value_type::from(#enum_id::#tag_id) as u64,
                                 actual: #v as u64,
@@ -167,12 +168,19 @@ impl<'a> FieldParser<'a> {
                     }
                 }
                 ast::FieldDesc::Typedef { id, type_id } => {
-                    // TODO(mgeisler): Remove the `unwrap` from the
-                    // generated code and return the error to the
-                    // caller.
+                    let field_name = id;
+                    let type_name = type_id;
+                    let packet_name = &self.packet_name;
                     let id = format_ident!("{id}");
                     let type_id = format_ident!("{type_id}");
-                    quote! { let #id = #type_id::try_from(#v).unwrap(); }
+                    quote! {
+                        let #id = #type_id::try_from(#v).map_err(|_| Error::InvalidEnumValueError {
+                            obj: #packet_name.to_string(),
+                            field: #field_name.to_string(),
+                            value: #v as u64,
+                            type_: #type_name.to_string(),
+                        })?;
+                    }
                 }
                 ast::FieldDesc::Reserved { .. } => {
                     if single_value {
@@ -245,9 +253,8 @@ impl<'a> FieldParser<'a> {
         Some(offset)
     }
 
-    fn check_size(&mut self, wanted: &proc_macro2::TokenStream) {
+    fn check_size(&mut self, span: &proc_macro2::Ident, wanted: &proc_macro2::TokenStream) {
         let packet_name = &self.packet_name;
-        let span = self.span;
         self.code.push(quote! {
             if #span.get().remaining() < #wanted {
                 return Err(Error::InvalidLengthError {
@@ -270,6 +277,7 @@ impl<'a> FieldParser<'a> {
         // `size`: the size of the array in number of elements (if
         // known). If None, the array is a Vec with a dynamic size.
         size: Option<usize>,
+        padding_size: Option<usize>,
         decl: Option<&analyzer_ast::Decl>,
     ) {
         enum ElementWidth {
@@ -305,18 +313,29 @@ impl<'a> FieldParser<'a> {
 
         // TODO size modifier
 
-        // TODO padded_size
+        let span = match padding_size {
+            Some(padding_size) => {
+                let span = self.span;
+                self.check_size(span, &quote!(#padding_size));
+                self.code.push(quote! {
+                    let (head, tail) = #span.get().split_at(#padding_size);
+                    let mut head = &mut Cell::new(head);
+                    #span.replace(tail);
+                });
+                format_ident!("head")
+            }
+            None => self.span.clone(),
+        };
 
         let id = format_ident!("{id}");
-        let span = self.span;
 
-        let parse_element = self.parse_array_element(self.span, width, type_id, decl);
+        let parse_element = self.parse_array_element(&span, width, type_id, decl);
         match (element_width, &array_shape) {
             (ElementWidth::Unknown, ArrayShape::SizeField(size_field)) => {
                 // The element width is not known, but the array full
                 // octet size is known by size field. Parse elements
                 // item by item as a vector.
-                self.check_size(&quote!(#size_field));
+                self.check_size(&span, &quote!(#size_field));
                 let parse_element =
                     self.parse_array_element(&format_ident!("head"), width, type_id, decl);
                 self.code.push(quote! {
@@ -338,7 +357,11 @@ impl<'a> FieldParser<'a> {
                     // TODO(mgeisler): use
                     // https://doc.rust-lang.org/std/array/fn.try_from_fn.html
                     // when stabilized.
-                    let #id = [0; #count].map(|_| #parse_element.unwrap());
+                    let #id = (0..#count)
+                        .map(|_| #parse_element)
+                        .collect::<Result<Vec<_>>>()?
+                        .try_into()
+                        .map_err(|_| Error::InvalidPacketError)?;
                 });
             }
             (ElementWidth::Unknown, ArrayShape::CountField(count_field)) => {
@@ -372,18 +395,22 @@ impl<'a> FieldParser<'a> {
                     let element_width = syn::Index::from(element_width);
                     quote!(#count * #element_width)
                 };
-                self.check_size(&array_size);
+                self.check_size(&span, &quote! { #array_size });
                 self.code.push(quote! {
                     // TODO(mgeisler): use
                     // https://doc.rust-lang.org/std/array/fn.try_from_fn.html
                     // when stabilized.
-                    let #id = [0; #count].map(|_| #parse_element.unwrap());
+                    let #id = (0..#count)
+                        .map(|_| #parse_element)
+                        .collect::<Result<Vec<_>>>()?
+                        .try_into()
+                        .map_err(|_| Error::InvalidPacketError)?;
                 });
             }
-            (ElementWidth::Static(_), ArrayShape::CountField(count_field)) => {
+            (ElementWidth::Static(element_width), ArrayShape::CountField(count_field)) => {
                 // The element width is known, and the array element
                 // count is known dynamically by the count field.
-                self.check_size(&quote!(#count_field));
+                self.check_size(&span, &quote!(#count_field * #element_width));
                 self.code.push(quote! {
                     let #id = (0..#count_field)
                         .map(|_| #parse_element)
@@ -396,7 +423,7 @@ impl<'a> FieldParser<'a> {
                 // is known by size field, or unknown (in which case
                 // it is the remaining span length).
                 let array_size = if let ArrayShape::SizeField(size_field) = &array_shape {
-                    self.check_size(&quote!(#size_field));
+                    self.check_size(&span, &quote!(#size_field));
                     quote!(#size_field)
                 } else {
                     quote!(#span.get().remaining())
@@ -444,27 +471,40 @@ impl<'a> FieldParser<'a> {
         let id = format_ident!("{id}");
         let type_id = format_ident!("{type_id}");
 
-        match self.scope.get_decl_width(decl, true) {
-            None => self.code.push(quote! {
+        self.code.push(match self.scope.get_decl_width(decl, true) {
+            None => quote! {
                 let #id = #type_id::parse_inner(&mut #span)?;
-            }),
+            },
             Some(width) => {
                 assert_eq!(width % 8, 0, "Typedef field type size is not a multiple of 8");
-                let width = syn::Index::from(width / 8);
-                self.code.push(if let ast::DeclDesc::Checksum { .. } = &decl.desc {
-                    // TODO: handle checksum fields.
-                    quote! {
-                        #span.get_mut().advance(#width);
+                match &decl.desc {
+                    ast::DeclDesc::Checksum { .. } => todo!(),
+                    ast::DeclDesc::CustomField { .. } if [8, 16, 32, 64].contains(&width) => {
+                        let get_uint = types::get_uint(self.endianness, width, span);
+                        quote! {
+                            let #id = #get_uint.into();
+                        }
                     }
-                } else {
-                    quote! {
-                        let (head, tail) = #span.get().split_at(#width);
-                        #span.replace(tail);
-                        let #id = #type_id::parse(head)?;
+                    ast::DeclDesc::CustomField { .. } => {
+                        let get_uint = types::get_uint(self.endianness, width, span);
+                        quote! {
+                            let #id = (#get_uint)
+                                .try_into()
+                                .unwrap(); // Value is masked and conversion must succeed.
+                        }
                     }
-                });
+                    ast::DeclDesc::Struct { .. } => {
+                        let width = syn::Index::from(width / 8);
+                        quote! {
+                            let (head, tail) = #span.get().split_at(#width);
+                            #span.replace(tail);
+                            let #id = #type_id::parse(head)?;
+                        }
+                    }
+                    _ => unreachable!(),
+                }
             }
-        }
+        });
     }
 
     /// Parse body and payload fields.
@@ -503,7 +543,7 @@ impl<'a> FieldParser<'a> {
             // payload and update the span in case fields are placed
             // after the payload.
             let size_field = size_field_ident(field_id);
-            self.check_size(&quote!(#size_field ));
+            self.check_size(self.span, &quote!(#size_field ));
             self.code.push(quote! {
                 let payload = &#span.get()[..#size_field];
                 #span.get_mut().advance(#size_field);
@@ -525,7 +565,7 @@ impl<'a> FieldParser<'a> {
                 "Payload field offset from end of packet is not a multiple of 8"
             );
             let offset_from_end = syn::Index::from(offset_from_end / 8);
-            self.check_size(&quote!(#offset_from_end));
+            self.check_size(self.span, &quote!(#offset_from_end));
             self.code.push(quote! {
                 let payload = &#span.get()[..#span.get().len() - #offset_from_end];
                 #span.get_mut().advance(payload.len());
@@ -587,51 +627,75 @@ impl<'a> FieldParser<'a> {
             return;
         }
 
-        let child_ids = children
+        // Gather fields that are constrained in immediate child declarations.
+        // Keep the fields sorted by name.
+        // TODO: fields that are only matched in grand children will not be included.
+        let constrained_fields = children
             .iter()
-            .map(|child| format_ident!("{}", child.id().unwrap()))
-            .collect::<Vec<_>>();
-        let child_ids_data = child_ids.iter().map(|ident| format_ident!("{ident}Data"));
+            .flat_map(|child| child.constraints().map(|c| &c.id))
+            .collect::<BTreeSet<_>>();
 
-        // Set of field names (sorted by name).
-        let mut constrained_fields = BTreeSet::new();
-        // Maps (child name, field name) -> value.
-        let mut constraint_values = HashMap::new();
+        let mut match_values = Vec::new();
+        let mut child_parse_args = Vec::new();
+        let mut child_ids_data = Vec::new();
+        let mut child_ids = Vec::new();
+        let get_constraint_value = |mut constraints: std::slice::Iter<'_, ast::Constraint>,
+                                    id: &str|
+         -> Option<proc_macro2::TokenStream> {
+            constraints.find(|c| c.id == id).map(|c| constraint_to_value(packet_scope, c))
+        };
 
         for child in children.iter() {
-            match &child.desc {
-                ast::DeclDesc::Packet { id, constraints, .. }
-                | ast::DeclDesc::Struct { id, constraints, .. } => {
-                    for constraint in constraints.iter() {
-                        constrained_fields.insert(&constraint.id);
-                        constraint_values.insert(
-                            (id.as_str(), &constraint.id),
-                            constraint_to_value(packet_scope, constraint),
-                        );
-                    }
-                }
-                _ => unreachable!("Invalid child: {child:?}"),
-            }
-        }
+            let tuple_values = constrained_fields
+                .iter()
+                .map(|id| {
+                    get_constraint_value(child.constraints(), id).map(|v| vec![v]).unwrap_or_else(
+                        || {
+                            self.scope
+                                .file
+                                .iter_children(child)
+                                .filter_map(|d| get_constraint_value(d.constraints(), id))
+                                .collect()
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
 
-        let wildcard = quote!(_);
-        let match_values = children.iter().map(|child| {
-            let child_id = child.id().unwrap();
-            let values = constrained_fields.iter().map(|field_name| {
-                constraint_values.get(&(child_id, field_name)).unwrap_or(&wildcard)
-            });
-            quote! {
-                (#(#values),*)
+            // If no constraint values are found for the tuple just skip the child
+            // packet as it would capture unwanted input packets.
+            if tuple_values.iter().all(|v| v.is_empty()) {
+                continue;
             }
-        });
-        let constrained_field_idents =
-            constrained_fields.iter().map(|field| format_ident!("{field}"));
-        let child_parse_args = children.iter().map(|child| {
+
+            let tuple_values = tuple_values
+                .iter()
+                .map(|v| v.is_empty().then_some(quote!(_)).unwrap_or_else(|| quote!( #(#v)|* )))
+                .collect::<Vec<_>>();
+
             let fields = find_constrained_parent_fields(self.scope, child.id().unwrap())
                 .map(|field| format_ident!("{}", field.id().unwrap()));
-            quote!(#(, #fields)*)
-        });
+
+            match_values.push(quote!( (#(#tuple_values),*) ));
+            child_parse_args.push(quote!( #(, #fields)*));
+            child_ids_data.push(format_ident!("{}Data", child.id().unwrap()));
+            child_ids.push(format_ident!("{}", child.id().unwrap()));
+        }
+
+        let constrained_field_idents =
+            constrained_fields.iter().map(|field| format_ident!("{field}"));
         let packet_data_child = format_ident!("{}DataChild", self.packet_name);
+
+        // Parsing of packet children requires having a payload field;
+        // it is allowed to inherit from a packet with empty payload, in this
+        // case generate an empty payload value.
+        if !decl
+            .fields()
+            .any(|f| matches!(&f.desc, ast::FieldDesc::Payload { .. } | ast::FieldDesc::Body))
+        {
+            self.code.push(quote! {
+                let payload: &[u8] = &[];
+            })
+        }
         self.code.push(quote! {
             let child = match (#(#constrained_field_idents),*) {
                 #(#match_values if #child_ids_data::conforms(&payload) => {

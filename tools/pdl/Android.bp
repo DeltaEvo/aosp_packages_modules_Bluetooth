@@ -15,6 +15,7 @@ rust_defaults {
         "libcodespan_reporting",
         "libheck",
         "libpest",
+        "libprettyplease",
         "libproc_macro2",
         "libquote",
         "libserde",
@@ -41,6 +42,8 @@ rust_binary_host {
 filegroup {
     name: "pdl_generated_files",
     srcs: [
+        "tests/generated/custom_field_declaration_big_endian.rs",
+        "tests/generated/custom_field_declaration_little_endian.rs",
         "tests/generated/enum_declaration_big_endian.rs",
         "tests/generated/enum_declaration_little_endian.rs",
         "tests/generated/packet_decl_8bit_enum_array_big_endian.rs",
@@ -75,10 +78,14 @@ filegroup {
         "tests/generated/packet_decl_array_unknown_element_width_dynamic_count_little_endian.rs",
         "tests/generated/packet_decl_array_unknown_element_width_dynamic_size_big_endian.rs",
         "tests/generated/packet_decl_array_unknown_element_width_dynamic_size_little_endian.rs",
+        "tests/generated/packet_decl_array_with_padding_big_endian.rs",
+        "tests/generated/packet_decl_array_with_padding_little_endian.rs",
         "tests/generated/packet_decl_child_packets_big_endian.rs",
         "tests/generated/packet_decl_child_packets_little_endian.rs",
         "tests/generated/packet_decl_complex_scalars_big_endian.rs",
         "tests/generated/packet_decl_complex_scalars_little_endian.rs",
+        "tests/generated/packet_decl_custom_field_big_endian.rs",
+        "tests/generated/packet_decl_custom_field_little_endian.rs",
         "tests/generated/packet_decl_empty_big_endian.rs",
         "tests/generated/packet_decl_empty_little_endian.rs",
         "tests/generated/packet_decl_fixed_enum_field_big_endian.rs",
@@ -91,6 +98,10 @@ filegroup {
         "tests/generated/packet_decl_mask_scalar_value_little_endian.rs",
         "tests/generated/packet_decl_mixed_scalars_enums_big_endian.rs",
         "tests/generated/packet_decl_mixed_scalars_enums_little_endian.rs",
+        "tests/generated/packet_decl_parent_with_alias_child_big_endian.rs",
+        "tests/generated/packet_decl_parent_with_alias_child_little_endian.rs",
+        "tests/generated/packet_decl_parent_with_no_payload_big_endian.rs",
+        "tests/generated/packet_decl_parent_with_no_payload_little_endian.rs",
         "tests/generated/packet_decl_payload_field_unknown_size_big_endian.rs",
         "tests/generated/packet_decl_payload_field_unknown_size_little_endian.rs",
         "tests/generated/packet_decl_payload_field_unknown_size_terminal_big_endian.rs",
@@ -115,15 +126,7 @@ rust_test_host {
         "libpaste",
     ],
     test_suites: ["general-tests"],
-    enabled: false, // rustfmt is only available on x86.
-    arch: {
-        x86_64: {
-            enabled: true,
-        },
-    },
     data: [
-        ":rustfmt",
-        ":rustfmt.toml",
         ":pdl_generated_files",
     ],
 }
@@ -147,13 +150,8 @@ rust_test_host {
 
 genrule_defaults {
     name: "pdl_rust_generator_defaults",
-    cmd: "set -o pipefail;" +
-        " $(location :pdl) --output-format rust $(in) |" +
-        " $(location :rustfmt) > $(out)",
-    tools: [
-        ":pdl",
-        ":rustfmt",
-    ],
+    cmd: "$(location :pdl) --output-format rust $(in) > $(out)",
+    tools: [":pdl"],
     defaults_visibility: [
         "//external/uwb/src",
         "//packages/modules/Bluetooth:__subpackages__",
@@ -246,6 +244,7 @@ rust_binary_host {
     name: "pdl_generate_tests",
     srcs: ["src/bin/generate-canonical-tests.rs"],
     rustlibs: [
+        "libprettyplease",
         "libproc_macro2",
         "libquote",
         "libserde",
@@ -255,32 +254,20 @@ rust_binary_host {
     ],
 }
 
-genrule_defaults {
-    name: "pdl_rust_generator_src_defaults",
-    tools: [
-        ":pdl_generate_tests",
-        ":rustfmt",
-    ],
-}
-
 genrule {
     name: "pdl_rust_generator_tests_le_src",
-    cmd: "set -o pipefail;" +
-        " $(location :pdl_generate_tests) $(in) pdl_le_backend |" +
-        " $(location :rustfmt) > $(out)",
+    cmd: "$(location :pdl_generate_tests) $(in) pdl_le_backend > $(out)",
     srcs: ["tests/canonical/le_test_vectors.json"],
     out: ["le_canonical.rs"],
-    defaults: ["pdl_rust_generator_src_defaults"],
+    tools: [":pdl_generate_tests"],
 }
 
 genrule {
     name: "pdl_rust_generator_tests_be_src",
-    cmd: "set -o pipefail;" +
-        " $(location :pdl_generate_tests) $(in) pdl_be_backend |" +
-        " $(location :rustfmt) > $(out)",
+    cmd: "$(location :pdl_generate_tests) $(in) pdl_be_backend > $(out)",
     srcs: ["tests/canonical/be_test_vectors.json"],
     out: ["be_canonical.rs"],
-    defaults: ["pdl_rust_generator_src_defaults"],
+    tools: [":pdl_generate_tests"],
 }
 
 rust_test_host {
@@ -398,13 +385,8 @@ python_test_host {
 // Defaults for the rust_noalloc backend
 genrule_defaults {
     name: "pdl_rust_noalloc_generator_defaults",
-    cmd: "set -o pipefail;" +
-        " $(location :pdl) --output-format rust_no_alloc $(in) |" +
-        " $(location :rustfmt) > $(out)",
-    tools: [
-        ":pdl",
-        ":rustfmt",
-    ],
+    cmd: "$(location :pdl) --output-format rust_no_alloc $(in) > $(out)",
+    tools: [":pdl"],
 }
 
 // Generate the rust_noalloc backend srcs against the little-endian test vectors
@@ -476,7 +458,9 @@ genrule {
     ],
     srcs: [
         "tests/canonical/le_test_file.pdl",
+
         "tests/canonical/le_test_vectors.json",
+
         ":pdl_cxx_canonical_le_src_gen",
     ],
     out: [
@@ -523,7 +507,9 @@ genrule {
     ],
     srcs: [
         ":pdl_be_test_file",
+
         "tests/canonical/be_test_vectors.json",
+
         ":pdl_cxx_canonical_be_src_gen",
     ],
     out: [
@@ -539,12 +525,12 @@ cc_test_host {
         "scripts",
     ],
     generated_headers: [
-        "pdl_cxx_canonical_le_src_gen",
         "pdl_cxx_canonical_be_src_gen",
+        "pdl_cxx_canonical_le_src_gen",
     ],
     generated_sources: [
-        "pdl_cxx_canonical_le_test_gen",
         "pdl_cxx_canonical_be_test_gen",
+        "pdl_cxx_canonical_le_test_gen",
     ],
     static_libs: [
         "libgtest",

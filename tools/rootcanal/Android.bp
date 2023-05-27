@@ -37,7 +37,6 @@ cc_defaults {
         "gd_defaults",
     ],
     cflags: [
-        "-DROOTCANAL_LMP",
         "-fvisibility=hidden",
     ],
     local_include_dirs: [
@@ -82,7 +81,6 @@ cc_library_static {
         "model/controller/le_advertiser.cc",
         "model/controller/link_layer_controller.cc",
         "model/controller/sco_connection.cc",
-        "model/controller/security_manager.cc",
         "model/devices/baseband_sniffer.cc",
         "model/devices/beacon.cc",
         "model/devices/beacon_swarm.cc",
@@ -116,17 +114,32 @@ cc_library_static {
         "rootcanal_hci_packets_cxx_gen",
         "rootcanal_link_layer_packets_cxx_gen",
     ],
+    export_static_lib_headers: [
+        "librootcanal_config",
+    ],
     whole_static_libs: [
-        "liblmp",
+        "librootcanal_config",
+        "librootcanal_rs",
     ],
     shared_libs: [
         "libbase",
         "libcrypto",
     ],
     static_libs: [
-        "libjsoncpp",
         "libscriptedbeaconpayload-protos-lite",
     ],
+}
+
+// This library contains the generated headers for the
+// RootCanal configuration file / parameter.
+cc_library_static {
+    name: "librootcanal_config",
+    host_supported: true,
+    vendor_available: true,
+    proto: {
+        export_proto_headers: true,
+    },
+    srcs: ["config.proto"],
 }
 
 // This library implements a foreigh function interface over DualModeController
@@ -148,7 +161,6 @@ cc_library_host_shared {
         "model/controller/le_advertiser.cc",
         "model/controller/link_layer_controller.cc",
         "model/controller/sco_connection.cc",
-        "model/controller/security_manager.cc",
         "model/devices/device.cc",
         "model/setup/async_manager.cc",
     ],
@@ -159,12 +171,13 @@ cc_library_host_shared {
     stl: "libc++_static",
     static_libs: [
         "libcrypto",
-        "libjsoncpp",
+        "libprotobuf-cpp-full",
+        "librootcanal_config",
     ],
     whole_static_libs: [
         "libbase",
-        "liblmp",
         "liblog",
+        "librootcanal_rs",
     ],
     cflags: [
         "-fexceptions",
@@ -217,8 +230,6 @@ cc_library_static {
 cc_test_host {
     name: "rootcanal_hci_test",
     defaults: [
-        "clang_coverage_bin",
-        "clang_file_coverage",
         "rootcanal_defaults",
     ],
     srcs: [
@@ -263,10 +274,10 @@ cc_test_host {
     shared_libs: [
         "libbase",
         "libcrypto",
+        "libprotobuf-cpp-full",
     ],
     static_libs: [
         "libbt-rootcanal",
-        "libjsoncpp",
     ],
 }
 
@@ -279,6 +290,8 @@ python_test_host {
         ":link_layer_packets_python3_gen",
         "py/bluetooth.py",
         "py/controller.py",
+        "test/LL/CON_/CEN/*.py",
+        "test/LL/CON_/PER/*.py",
         "test/LL/DDI/ADV/*.py",
         "test/LL/DDI/SCN/*.py",
         "test/main.py",
@@ -303,8 +316,6 @@ python_test_host {
 cc_test_host {
     name: "rootcanal_test_host",
     defaults: [
-        "clang_coverage_bin",
-        "clang_file_coverage",
         "fluoride_common_options",
     ],
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
@@ -312,8 +323,8 @@ cc_test_host {
     srcs: [
         "test/async_manager_unittest.cc",
         "test/h4_parser_unittest.cc",
+        "test/pcap_filter_unittest.cc",
         "test/posix_socket_unittest.cc",
-        "test/security_manager_unittest.cc",
     ],
     header_libs: [
         "libbluetooth_headers",
@@ -361,8 +372,7 @@ cc_binary_host {
         "libc++fs",
         "libcrypto",
         "libgflags",
-        "libjsoncpp",
-        "libprotobuf-cpp-lite",
+        "libprotobuf-cpp-full",
         "libscriptedbeaconpayload-protos-lite",
     ],
     sanitize: {
@@ -428,16 +438,9 @@ genrule {
 
 genrule {
     name: "rootcanal_hci_packets_rust_gen",
-    tools: [
-        "bluetooth_packetgen",
-    ],
-    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/tools/rootcanal/packets --out=$(genDir) $(in) --rust",
-    srcs: [
-        "packets/hci/hci_packets.pdl",
-    ],
-    out: [
-        "hci/hci_packets.rs",
-    ],
+    defaults: ["pdl_rust_generator_defaults"],
+    srcs: ["packets/hci/hci_packets.pdl"],
+    out: ["hci_packets.rs"],
 }
 
 // bt_vhci_forwarder in cuttlefish depends on this H4Packetizer implementation.

@@ -212,6 +212,15 @@ impl IBluetoothCallback for BtCallback {
         );
     }
 
+    fn on_pin_display(&mut self, remote_device: BluetoothDevice, pincode: String) {
+        print_info!(
+            "Device [{}: {}] would like to pair, enter pin code {} on the remote",
+            &remote_device.address,
+            &remote_device.name,
+            pincode
+        );
+    }
+
     fn on_bond_state_changed(&mut self, status: u32, address: String, state: u32) {
         print_info!("Bonding state changed: [{}] state: {}, Status = {}", address, state, status);
 
@@ -248,10 +257,19 @@ impl IBluetoothCallback for BtCallback {
 
     fn on_sdp_search_complete(
         &mut self,
-        _remote_device: BluetoothDevice,
-        _searched_uuid: Uuid128Bit,
-        _sdp_records: Vec<BtSdpRecord>,
+        remote_device: BluetoothDevice,
+        searched_uuid: Uuid128Bit,
+        sdp_records: Vec<BtSdpRecord>,
     ) {
+        print_info!(
+            "SDP search of {} for UUID {} returned {} results",
+            remote_device.address,
+            UuidWrapper(&searched_uuid),
+            sdp_records.len()
+        );
+        if !sdp_records.is_empty() {
+            print_info!("{:?}", sdp_records);
+        }
     }
 
     fn on_sdp_record_created(&mut self, record: BtSdpRecord, handle: i32) {

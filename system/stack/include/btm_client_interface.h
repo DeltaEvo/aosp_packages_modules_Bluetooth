@@ -160,13 +160,16 @@ struct btm_client_interface_t {
     bool (*BTM_SecIsSecurityPending)(const RawAddress& bd_addr);
     bool (*BTM_IsLinkKeyKnown)(const RawAddress& bd_addr,
                                tBT_TRANSPORT transport);
+    void (*BTM_BleSirkConfirmDeviceReply)(const RawAddress& bd_addr,
+                                          uint8_t res);
   } security;
 
   struct {
     tBTM_STATUS (*BTM_BleGetEnergyInfo)(tBTM_BLE_ENERGY_INFO_CBACK* callback);
     tBTM_STATUS (*BTM_BleObserve)(bool start, uint8_t duration,
                                   tBTM_INQ_RESULTS_CB* p_results_cb,
-                                  tBTM_CMPL_CB* p_cmpl_cb);
+                                  tBTM_CMPL_CB* p_cmpl_cb,
+                                  bool low_latency_scan);
     tBTM_STATUS (*BTM_SetBleDataLength)(const RawAddress& bd_addr,
                                         uint16_t tx_pdu_length);
     void (*BTM_BleConfirmReply)(const RawAddress& bd_addr, uint8_t res);

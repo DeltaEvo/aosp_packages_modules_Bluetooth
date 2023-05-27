@@ -67,6 +67,7 @@ struct BTA_DmSetBlePrefConnParams BTA_DmSetBlePrefConnParams;
 struct BTA_DmSetDeviceName BTA_DmSetDeviceName;
 struct BTA_DmSetEncryption BTA_DmSetEncryption;
 struct BTA_DmSetLocalDiRecord BTA_DmSetLocalDiRecord;
+struct BTA_EnableTestMode BTA_EnableTestMode;
 struct BTA_GetEirService BTA_GetEirService;
 struct BTA_VendorInit BTA_VendorInit;
 struct BTA_dm_init BTA_dm_init;
@@ -123,9 +124,9 @@ void BTA_DmBleRequestMaxTxDataLength(const RawAddress& remote_device) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_api::BTA_DmBleRequestMaxTxDataLength(remote_device);
 }
-void BTA_DmBleScan(bool start, uint8_t duration) {
+void BTA_DmBleScan(bool start, uint8_t duration, bool low_latency_scan) {
   inc_func_call_count(__func__);
-  test::mock::bta_dm_api::BTA_DmBleScan(start, duration);
+  test::mock::bta_dm_api::BTA_DmBleScan(start, duration, low_latency_scan);
 }
 void BTA_DmBleSecurityGrant(const RawAddress& bd_addr,
                             tBTA_DM_BLE_SEC_GRANT res) {
@@ -214,6 +215,10 @@ tBTA_STATUS BTA_DmSetLocalDiRecord(tSDP_DI_RECORD* p_device_info,
   inc_func_call_count(__func__);
   return test::mock::bta_dm_api::BTA_DmSetLocalDiRecord(p_device_info,
                                                         p_handle);
+}
+void BTA_EnableTestMode(void) {
+  inc_func_call_count(__func__);
+  test::mock::bta_dm_api::BTA_EnableTestMode();
 }
 void BTA_GetEirService(const uint8_t* p_eir, size_t eir_len,
                        tBTA_SERVICE_MASK* p_services) {

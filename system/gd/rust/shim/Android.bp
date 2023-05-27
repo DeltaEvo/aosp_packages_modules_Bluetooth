@@ -32,23 +32,11 @@ rust_defaults {
     crate_name: "bt_shim",
     srcs: ["src/lib.rs"],
     rustlibs: [
-        "libbluetooth_rs",
-        "libbt_common",
-        "libbt_facade_helpers",
-        "libbt_packets",
+        "libbt_common_only_init_flags",
         "libcxx",
-        "libfutures",
-        "liblazy_static",
-        "liblog_rust",
-        "libnix",
-        "libnum_traits",
-        "libtokio",
     ],
     proc_macros: [
         "libpaste",
-    ],
-    static_libs: [
-        "libbt_callbacks_cxx",
     ],
     apex_available: [
         "com.android.btservices",
@@ -70,30 +58,21 @@ cc_library_static {
     name: "libbt_shim_bridge",
     defaults: [
         "gd_ffi_defaults",
-        "libchrome_support_defaults",
     ],
     generated_headers: [
         "cxx-bridge-header",
         "libbt_init_flags_bridge_header",
-        "libbt_message_loop_thread_bridge_header",
-        "libbt_shim_bridge_header",
     ],
     generated_sources: [
         "libbt_init_flags_bridge_code",
-        "libbt_message_loop_thread_bridge_code",
-        "libbt_shim_bridge_code",
     ],
     export_generated_headers: [
         "cxx-bridge-header",
         "libbt_init_flags_bridge_header",
-        "libbt_message_loop_thread_bridge_header",
-        "libbt_shim_bridge_header",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system/gd",
     ],
-    header_libs: ["libbt_callbacks_cxx_headers"],
-    export_header_lib_headers: ["libbt_callbacks_cxx_headers"],
     cflags: [
         "-Wno-unused-const-variable",
     ],
@@ -108,7 +87,6 @@ cc_library_static {
     name: "libbluetooth_rust_interop",
     defaults: [
         "gd_ffi_defaults",
-        "libchrome_support_defaults",
     ],
     static_libs: [
         "libbt_shim_bridge",
@@ -119,51 +97,6 @@ cc_library_static {
         "com.android.btservices",
     ],
     min_sdk_version: "30",
-}
-
-cc_library_static {
-    name: "libbt_callbacks_cxx",
-    defaults: [
-        "gd_ffi_defaults",
-        "libchrome_support_defaults",
-    ],
-    header_libs: ["libbt_callbacks_cxx_headers"],
-    srcs: ["callbacks/callbacks.cc"],
-    generated_headers: [
-        "cxx-bridge-header",
-        "libbt_shim_bridge_header",
-    ],
-    host_supported: true,
-    apex_available: [
-        "com.android.btservices",
-    ],
-    min_sdk_version: "30",
-}
-
-cc_library_headers {
-    name: "libbt_callbacks_cxx_headers",
-    local_include_dirs: ["callbacks"],
-    host_supported: true,
-    apex_available: [
-        "com.android.btservices",
-    ],
-    min_sdk_version: "30",
-}
-
-genrule {
-    name: "libbt_shim_bridge_header",
-    tools: ["cxxbridge"],
-    cmd: "$(location cxxbridge) $(in) --header > $(out)",
-    srcs: ["src/bridge.rs"],
-    out: ["src/bridge.rs.h"],
-}
-
-genrule {
-    name: "libbt_shim_bridge_code",
-    tools: ["cxxbridge"],
-    cmd: "$(location cxxbridge) $(in) >> $(out)",
-    srcs: ["src/bridge.rs"],
-    out: ["bridge.cc"],
 }
 
 genrule {
@@ -180,20 +113,4 @@ genrule {
     cmd: "$(location cxxbridge) $(in) >> $(out)",
     srcs: ["src/init_flags.rs"],
     out: ["init_flags.cc"],
-}
-
-genrule {
-    name: "libbt_message_loop_thread_bridge_header",
-    tools: ["cxxbridge"],
-    cmd: "$(location cxxbridge) $(in) --header > $(out)",
-    srcs: ["src/message_loop_thread.rs"],
-    out: ["src/message_loop_thread.rs.h"],
-}
-
-genrule {
-    name: "libbt_message_loop_thread_bridge_code",
-    tools: ["cxxbridge"],
-    cmd: "$(location cxxbridge) $(in) >> $(out)",
-    srcs: ["src/message_loop_thread.rs"],
-    out: ["message_loop_thread.cc"],
 }

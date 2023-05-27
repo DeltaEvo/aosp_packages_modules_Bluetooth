@@ -234,10 +234,20 @@ fn build_commands() -> HashMap<String, CommandOption> {
         },
     );
     command_options.insert(
+        String::from("sdp"),
+        CommandOption {
+            rules: vec![String::from("sdp search <address> <uuid>")],
+            description: String::from("Service Discovery Protocol utilities."),
+            function_pointer: CommandHandler::cmd_sdp,
+        },
+    );
+    command_options.insert(
         String::from("socket"),
         CommandOption {
             rules: vec![
                 String::from("socket listen <auth-required> <Bredr|LE>"),
+                String::from("socket listen-rfcomm <scn>"),
+                String::from("socket send-msc <dlci> <address>"),
                 String::from(
                     "socket connect <address> <l2cap|rfcomm> <psm|uuid> <auth-required> <Bredr|LE>",
                 ),
@@ -472,12 +482,14 @@ impl CommandHandler {
                 let context = self.lock_context();
                 let adapter_dbus = context.adapter_dbus.as_ref().unwrap();
                 let qa_legacy_dbus = context.qa_legacy_dbus.as_ref().unwrap();
+                let qa_dbus = context.qa_dbus.as_ref().unwrap();
                 let name = adapter_dbus.get_name();
                 let uuids = adapter_dbus.get_uuids();
                 let is_discoverable = adapter_dbus.get_discoverable();
                 let is_connectable = qa_legacy_dbus.get_connectable();
                 let alias = qa_legacy_dbus.get_alias();
                 let modalias = qa_legacy_dbus.get_modalias();
+                let discoverable_mode = qa_dbus.get_discoverable_mode();
                 let discoverable_timeout = adapter_dbus.get_discoverable_timeout();
                 let cod = adapter_dbus.get_bluetooth_class();
                 let multi_adv_supported = adapter_dbus.is_multi_advertisement_supported();
@@ -501,6 +513,7 @@ impl CommandHandler {
                 print_info!("Modalias: {}", modalias);
                 print_info!("State: {}", if enabled { "enabled" } else { "disabled" });
                 print_info!("Discoverable: {}", is_discoverable);
+                print_info!("Discoverable mode: {:?}", discoverable_mode);
                 print_info!("DiscoverableTimeout: {}s", discoverable_timeout);
                 print_info!("Connectable: {}", is_connectable);
                 print_info!("Class: {:#06x}", cod);
@@ -613,10 +626,10 @@ impl CommandHandler {
 
         match &command[..] {
             "start" => {
-                self.lock_context().adapter_dbus.as_ref().unwrap().start_discovery();
+                self.lock_context().adapter_dbus.as_mut().unwrap().start_discovery();
             }
             "stop" => {
-                self.lock_context().adapter_dbus.as_ref().unwrap().cancel_discovery();
+                self.lock_context().adapter_dbus.as_mut().unwrap().cancel_discovery();
             }
             _ => return Err(CommandError::InvalidArgs),
         }
@@ -651,7 +664,7 @@ impl CommandHandler {
                 let success = self
                     .lock_context()
                     .adapter_dbus
-                    .as_ref()
+                    .as_mut()
                     .unwrap()
                     .create_bond(device.clone(), BtTransport::Auto);
 
@@ -1386,6 +1399,34 @@ impl CommandHandler {
         Ok(())
     }
 
+    fn cmd_sdp(&mut self, args: &Vec<String>) -> CommandResult {
+        if !self.lock_context().adapter_ready {
+            return Err(self.adapter_not_ready());
+        }
+
+        let command = get_arg(args, 0)?;
+
+        match &command[..] {
+            "search" => {
+                let device = BluetoothDevice {
+                    address: String::from(get_arg(args, 1)?),
+                    name: String::from(""),
+                };
+                let uuid = match UuidHelper::parse_string(get_arg(args, 2)?) {
+                    Some(uu) => uu.uu,
+                    None => return Err(CommandError::Failed("Invalid UUID".into())),
+                };
+                let success =
+                    self.lock_context().adapter_dbus.as_ref().unwrap().sdp_search(device, uuid);
+                if !success {
+                    return Err("Unable to execute SDP search".into());
+                }
+            }
+            _ => return Err(CommandError::InvalidArgs),
+        }
+        Ok(())
+    }
+
     fn cmd_socket(&mut self, args: &Vec<String>) -> CommandResult {
         if !self.lock_context().adapter_ready {
             return Err(self.adapter_not_ready());
@@ -1424,6 +1465,33 @@ impl CommandHandler {
                 };
 
                 self.context.lock().unwrap().socket_test_schedule = Some(schedule);
+            }
+            "send-msc" => {
+                let dlci =
+                    String::from(get_arg(args, 1)?).parse::<u8>().or(Err("Failed parsing DLCI"))?;
+                let addr = String::from(get_arg(args, 2)?);
+                self.context.lock().unwrap().qa_dbus.as_mut().unwrap().rfcomm_send_msc(dlci, addr);
+            }
+            "listen-rfcomm" => {
+                let scn = String::from(get_arg(args, 1)?)
+                    .parse::<i32>()
+                    .or(Err("Failed parsing Service Channel Number"))?;
+                let SocketResult { status, id } = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .socket_manager_dbus
+                    .as_mut()
+                    .unwrap()
+                    .listen_using_rfcomm(callback_id, Some(scn), None, None, None);
+                if status != BtStatus::Success {
+                    return Err(format!(
+                        "Failed to request for listening using rfcomm, status = {:?}",
+                        status,
+                    )
+                    .into());
+                }
+                print_info!("Requested for listening using rfcomm on socket {}", id);
             }
             "listen" => {
                 let auth_required = String::from(get_arg(args, 1)?)

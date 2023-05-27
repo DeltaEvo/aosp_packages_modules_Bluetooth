@@ -256,6 +256,17 @@ public class LeAudioNativeInterface {
     }
 
     /**
+     * Enable/Disable LeAudio for the group.
+     *
+     * @param device the remote device
+     * @param enabled true if enabled, false to disabled
+     * @return true on success, otherwise false.
+     */
+    public boolean setEnableState(BluetoothDevice device, boolean enabled) {
+        return setEnableStateNative(getByteAddress(device), enabled);
+    }
+
+    /**
      * Add new Node into a group.
      * @param groupId group identifier
      * @param device remote device
@@ -316,12 +327,31 @@ public class LeAudioNativeInterface {
         setInCallNative(inCall);
     }
 
+    /**
+     * Sends the audio preferences for the groupId to the native stack.
+     *
+     * @param groupId is the groupId corresponding to the preferences
+     * @param isOutputPreferenceLeAudio whether LEA is preferred for OUTPUT_ONLY
+     * @param isDuplexPreferenceLeAudio whether LEA is preferred for DUPLEX
+     */
+    public void sendAudioProfilePreferences(int groupId, boolean isOutputPreferenceLeAudio,
+            boolean isDuplexPreferenceLeAudio) {
+        if (DBG) {
+            Log.d(TAG, "sendAudioProfilePreferences groupId=" + groupId
+                    + ", isOutputPreferenceLeAudio=" + isOutputPreferenceLeAudio
+                    + ", isDuplexPreferenceLeAudio=" + isDuplexPreferenceLeAudio);
+        }
+        sendAudioProfilePreferencesNative(groupId, isOutputPreferenceLeAudio,
+                isDuplexPreferenceLeAudio);
+    }
+
     // Native methods that call into the JNI interface
     private static native void classInitNative();
     private native void initNative(BluetoothLeAudioCodecConfig[] codecConfigOffloading);
     private native void cleanupNative();
     private native boolean connectLeAudioNative(byte[] address);
     private native boolean disconnectLeAudioNative(byte[] address);
+    private native boolean setEnableStateNative(byte[] address, boolean enabled);
     private native boolean groupAddNodeNative(int groupId, byte[] address);
     private native boolean groupRemoveNodeNative(int groupId, byte[] address);
     private native void groupSetActiveNative(int groupId);
@@ -330,4 +360,7 @@ public class LeAudioNativeInterface {
             BluetoothLeAudioCodecConfig outputCodecConfig);
     private native void setCcidInformationNative(int ccid, int contextType);
     private native void setInCallNative(boolean inCall);
+    /*package*/
+    private native void sendAudioProfilePreferencesNative(int groupId,
+            boolean isOutputPreferenceLeAudio, boolean isDuplexPreferenceLeAudio);
 }

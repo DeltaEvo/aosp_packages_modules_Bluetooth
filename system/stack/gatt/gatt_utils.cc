@@ -46,6 +46,8 @@
 
 uint8_t btm_ble_read_sec_key_size(const RawAddress& bd_addr);
 
+using namespace bluetooth::legacy::stack::sdp;
+
 using base::StringPrintf;
 using bluetooth::Uuid;
 using bluetooth::eatt::EattExtension;
@@ -704,7 +706,7 @@ void gatt_rsp_timeout(void* data) {
   }
 }
 
-extern void gatts_proc_srv_chg_ind_ack(tGATT_TCB tcb);
+void gatts_proc_srv_chg_ind_ack(tGATT_TCB tcb);
 
 /*******************************************************************************
  *
@@ -851,7 +853,7 @@ tGATT_STATUS gatt_send_error_rsp(tGATT_TCB& tcb, uint16_t cid, uint8_t err_code,
   msg.error.reason = err_code;
   msg.error.handle = handle;
 
-  uint16_t payload_size = gatt_tcb_get_payload_size_tx(tcb, cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(tcb, cid);
   p_buf = attp_build_sr_msg(tcb, GATT_RSP_ERROR, &msg, payload_size);
   if (p_buf != NULL) {
     status = attp_send_sr_msg(tcb, cid, p_buf);
@@ -881,13 +883,14 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
   VLOG(1) << __func__
           << StringPrintf(" s_hdl=0x%x  s_hdl=0x%x", start_hdl, end_hdl);
 
-  uint32_t sdp_handle = SDP_CreateRecord();
+  uint32_t sdp_handle = get_legacy_stack_sdp_api()->handle.SDP_CreateRecord();
   if (sdp_handle == 0) return 0;
 
   switch (uuid.GetShortestRepresentationSize()) {
     case Uuid::kNumBytes16: {
       uint16_t tmp = uuid.As16Bit();
-      SDP_AddServiceClassIdList(sdp_handle, 1, &tmp);
+      get_legacy_stack_sdp_api()->handle.SDP_AddServiceClassIdList(sdp_handle,
+                                                                   1, &tmp);
       break;
     }
 
@@ -895,16 +898,18 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
       UINT8_TO_BE_STREAM(p, (UUID_DESC_TYPE << 3) | SIZE_FOUR_BYTES);
       uint32_t tmp = uuid.As32Bit();
       UINT32_TO_BE_STREAM(p, tmp);
-      SDP_AddAttribute(sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST,
-                       DATA_ELE_SEQ_DESC_TYPE, (uint32_t)(p - buff), buff);
+      get_legacy_stack_sdp_api()->handle.SDP_AddAttribute(
+          sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST, DATA_ELE_SEQ_DESC_TYPE,
+          (uint32_t)(p - buff), buff);
       break;
     }
 
     case Uuid::kNumBytes128:
       UINT8_TO_BE_STREAM(p, (UUID_DESC_TYPE << 3) | SIZE_SIXTEEN_BYTES);
       ARRAY_TO_BE_STREAM(p, uuid.To128BitBE().data(), (int)Uuid::kNumBytes128);
-      SDP_AddAttribute(sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST,
-                       DATA_ELE_SEQ_DESC_TYPE, (uint32_t)(p - buff), buff);
+      get_legacy_stack_sdp_api()->handle.SDP_AddAttribute(
+          sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST, DATA_ELE_SEQ_DESC_TYPE,
+          (uint32_t)(p - buff), buff);
       break;
   }
 
@@ -918,11 +923,13 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
   proto_elem_list[1].params[0] = start_hdl;
   proto_elem_list[1].params[1] = end_hdl;
 
-  SDP_AddProtocolList(sdp_handle, 2, proto_elem_list);
+  get_legacy_stack_sdp_api()->handle.SDP_AddProtocolList(sdp_handle, 2,
+                                                         proto_elem_list);
 
   /* Make the service browseable */
   uint16_t list = UUID_SERVCLASS_PUBLIC_BROWSE_GROUP;
-  SDP_AddUuidSequence(sdp_handle, ATTR_ID_BROWSE_GROUP_LIST, 1, &list);
+  get_legacy_stack_sdp_api()->handle.SDP_AddUuidSequence(
+      sdp_handle, ATTR_ID_BROWSE_GROUP_LIST, 1, &list);
 
   return (sdp_handle);
 }
@@ -1119,39 +1126,21 @@ uint16_t gatt_tcb_get_att_cid(tGATT_TCB& tcb, bool eatt_support) {
 
 /*******************************************************************************
  *
- * Function         gatt_tcb_get_payload_size_tx
+ * Function         gatt_tcb_get_payload_size
  *
  * Description      This function gets payload size for the GATT operation
  *
- * Returns          Payload size for sending data
+ * Returns          Payload size for sending/receiving data
  *
  ******************************************************************************/
-uint16_t gatt_tcb_get_payload_size_tx(tGATT_TCB& tcb, uint16_t cid) {
+uint16_t gatt_tcb_get_payload_size(tGATT_TCB& tcb, uint16_t cid) {
   if (!tcb.eatt || (cid == tcb.att_lcid)) return tcb.payload_size;
 
   EattChannel* channel =
       EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
 
-  return channel->tx_mtu_;
-}
-
-/*******************************************************************************
- *
- * Function         gatt_tcb_get_payload_size_rx
- *
- * Description      This function gets payload size for the GATT operation
- *
- * Returns          Payload size for receiving data
- *
- ******************************************************************************/
-
-uint16_t gatt_tcb_get_payload_size_rx(tGATT_TCB& tcb, uint16_t cid) {
-  if (!tcb.eatt || (cid == tcb.att_lcid)) return tcb.payload_size;
-
-  EattChannel* channel =
-      EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
-
-  return channel->rx_mtu_;
+  /* ATT MTU for EATT is min from tx and rx mtu*/
+  return std::min<uint16_t>(channel->tx_mtu_, channel->rx_mtu_);
 }
 
 /*******************************************************************************

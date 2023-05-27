@@ -1,18 +1,16 @@
-// @generated rust packets from test
-
+#![rustfmt::skip]
+/// @generated rust packets from test.
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
+use std::cell::Cell;
 use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
-
 type Result<T> = std::result::Result<T, Error>;
-
-#[doc = r" Private prevents users from creating arbitrary scalar values"]
-#[doc = r" in situations where the value needs to be validated."]
-#[doc = r" Users can freely deref the value, but only the backend"]
-#[doc = r" may create it."]
+/// Private prevents users from creating arbitrary scalar values
+/// in situations where the value needs to be validated.
+/// Users can freely deref the value, but only the backend
+/// may create it.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Private<T>(T);
 impl<T> std::ops::Deref for Private<T> {
@@ -21,7 +19,6 @@ impl<T> std::ops::Deref for Private<T> {
         &self.0
     }
 }
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Packet parsing failed")]
@@ -32,23 +29,22 @@ pub enum Error {
     InvalidFixedValue { expected: u64, actual: u64 },
     #[error("when parsing {obj} needed length of {wanted} but got {got}")]
     InvalidLengthError { obj: String, wanted: usize, got: usize },
-    #[error("array size ({array} bytes) is not a multiple of the element size ({element} bytes)")]
+    #[error(
+        "array size ({array} bytes) is not a multiple of the element size ({element} bytes)"
+    )]
     InvalidArraySize { array: usize, element: usize },
     #[error("Due to size restrictions a struct could not be parsed.")]
     ImpossibleStructError,
     #[error("when parsing field {obj}.{field}, {value} is not a valid {type_} value")]
     InvalidEnumValueError { obj: String, field: String, value: u64, type_: String },
+    #[error("expected child {expected}, got {actual}")]
+    InvalidChildError { expected: &'static str, actual: String },
 }
-
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub struct TryFromError(&'static str);
-
 pub trait Packet {
     fn to_bytes(self) -> Bytes;
     fn to_vec(self) -> Vec<u8>;
 }
-
+#[repr(u64)]
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "u8", into = "u8"))]
@@ -114,7 +110,7 @@ impl From<Enum7> for u64 {
         u8::from(value) as Self
     }
 }
-
+#[repr(u64)]
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "u16", into = "u16"))]
@@ -170,7 +166,6 @@ impl From<Enum9> for u64 {
         u16::from(value) as Self
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FooData {
@@ -211,9 +206,21 @@ impl FooData {
             });
         }
         let chunk = bytes.get_mut().get_uint_le(3) as u32;
-        let x = Enum7::try_from((chunk & 0x7f) as u8).unwrap();
+        let x = Enum7::try_from((chunk & 0x7f) as u8)
+            .map_err(|_| Error::InvalidEnumValueError {
+                obj: "Foo".to_string(),
+                field: "x".to_string(),
+                value: (chunk & 0x7f) as u8 as u64,
+                type_: "Enum7".to_string(),
+            })?;
         let y = ((chunk >> 7) & 0x1f) as u8;
-        let z = Enum9::try_from(((chunk >> 12) & 0x1ff) as u16).unwrap();
+        let z = Enum9::try_from(((chunk >> 12) & 0x1ff) as u16)
+            .map_err(|_| Error::InvalidEnumValueError {
+                obj: "Foo".to_string(),
+                field: "z".to_string(),
+                value: ((chunk >> 12) & 0x1ff) as u16 as u64,
+                type_: "Enum9".to_string(),
+            })?;
         let w = ((chunk >> 21) & 0x7) as u8;
         Ok(Self { x, y, z, w })
     }
@@ -224,10 +231,8 @@ impl FooData {
         if self.w > 0x7 {
             panic!("Invalid value for {}::{}: {} > {}", "Foo", "w", self.w, 0x7);
         }
-        let value = (u8::from(self.x) as u32)
-            | ((self.y as u32) << 7)
-            | ((u16::from(self.z) as u32) << 12)
-            | ((self.w as u32) << 21);
+        let value = (u8::from(self.x) as u32) | ((self.y as u32) << 7)
+            | ((u16::from(self.z) as u32) << 12) | ((self.w as u32) << 21);
         buffer.put_uint_le(value as u64, 3);
     }
     fn get_total_size(&self) -> usize {
@@ -265,9 +270,9 @@ impl Foo {
     }
     fn parse_inner(mut bytes: &mut Cell<&[u8]>) -> Result<Self> {
         let data = FooData::parse_inner(&mut bytes)?;
-        Ok(Self::new(Arc::new(data)).unwrap())
+        Self::new(Arc::new(data))
     }
-    fn new(foo: Arc<FooData>) -> std::result::Result<Self, &'static str> {
+    fn new(foo: Arc<FooData>) -> Result<Self> {
         Ok(Self { foo })
     }
     pub fn get_w(&self) -> u8 {
@@ -291,7 +296,12 @@ impl Foo {
 }
 impl FooBuilder {
     pub fn build(self) -> Foo {
-        let foo = Arc::new(FooData { w: self.w, x: self.x, y: self.y, z: self.z });
+        let foo = Arc::new(FooData {
+            w: self.w,
+            x: self.x,
+            y: self.y,
+            z: self.z,
+        });
         Foo::new(foo).unwrap()
     }
 }
