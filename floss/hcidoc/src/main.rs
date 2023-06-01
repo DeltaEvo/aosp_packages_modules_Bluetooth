@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate num_derive;
-
 use clap::{Arg, ArgAction, Command};
 use std::io::Write;
 
@@ -17,7 +14,10 @@ fn main() {
         .version("0.1")
         .author("Abhishek Pandit-Subedi <abhishekpandit@google.com>")
         .about("Analyzes a linux HCI snoop log for specific behaviors and errors.")
-        .arg(Arg::new("filename"))
+        .arg(
+            Arg::new("filename")
+                .help("Path to the snoop log. If omitted, read from stdin instead."),
+        )
         .arg(
             Arg::new("signals")
                 .short('s')
@@ -28,10 +28,7 @@ fn main() {
 
     let filename = match matches.get_one::<String>("filename") {
         Some(f) => f,
-        None => {
-            println!("No filename parameter given.");
-            return;
-        }
+        None => "",
     };
 
     let report_signals = match matches.get_one::<bool>("signals") {
@@ -39,10 +36,14 @@ fn main() {
         None => false,
     };
 
-    let mut parser = match LogParser::new(filename.as_str()) {
+    let mut parser = match LogParser::new(filename) {
         Ok(p) => p,
         Err(e) => {
-            println!("Failed to load parser on {}: {}", filename, e);
+            println!(
+                "Failed to load parser on {}: {}",
+                if filename.len() == 0 { "stdin" } else { filename },
+                e
+            );
             return;
         }
     };

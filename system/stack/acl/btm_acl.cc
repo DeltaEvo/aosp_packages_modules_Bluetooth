@@ -53,6 +53,7 @@
 #include "main/shim/l2c_api.h"
 #include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
+#include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -95,8 +96,8 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle,
 void BTM_db_reset(void);
 
 extern tBTM_CB btm_cb;
-extern void btm_iot_save_remote_properties(tACL_CONN* p_acl_cb);
-extern void btm_iot_save_remote_versions(tACL_CONN* p_acl_cb);
+void btm_iot_save_remote_properties(tACL_CONN* p_acl_cb);
+void btm_iot_save_remote_versions(tACL_CONN* p_acl_cb);
 
 struct StackAclBtmAcl {
   tACL_CONN* acl_allocate_connection();
@@ -147,7 +148,7 @@ constexpr uint16_t BTM_ACL_EXCEPTION_PKTS_MASK =
      HCI_PKT_TYPES_MASK_NO_2_DH3 | HCI_PKT_TYPES_MASK_NO_3_DH3 |
      HCI_PKT_TYPES_MASK_NO_2_DH5 | HCI_PKT_TYPES_MASK_NO_3_DH5);
 
-inline bool IsEprAvailable(const tACL_CONN& p_acl) {
+static bool IsEprAvailable(const tACL_CONN& p_acl) {
   if (!p_acl.peer_lmp_feature_valid[0]) {
     LOG_WARN("Checking incomplete feature page read");
     return false;
@@ -674,6 +675,23 @@ void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
   if (p == nullptr) {
     LOG_WARN("Unable to find active acl");
     return;
+  }
+
+  /* Common Criteria mode only: if we are trying to drop encryption on an
+   * encrypted connection, drop the connection */
+  if (bluetooth::os::ParameterProvider::IsCommonCriteriaMode()) {
+    if (p->is_encrypted && !encr_enable) {
+      LOG(ERROR)
+          << __func__
+          << " attempting to decrypt encrypted connection, disconnecting. "
+             "handle: "
+          << loghex(handle);
+
+      acl_disconnect_from_handle(handle, HCI_ERR_HOST_REJECT_SECURITY,
+                                 "stack::btu::btu_hcif::read_drop_encryption "
+                                 "Connection Already Encrypted");
+      return;
+    }
   }
 
   p->is_encrypted = encr_enable;

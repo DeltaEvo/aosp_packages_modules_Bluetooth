@@ -147,6 +147,17 @@ using OnDisconnect = std::function<void(HciHandle, hci::ErrorCode reason)>;
 
 constexpr char kConnectionDescriptorTimeFormat[] = "%Y-%m-%d %H:%M:%S";
 
+constexpr unsigned MillisPerSecond = 1000;
+std::string EpochMillisToString(long long time_ms) {
+  time_t time_sec = time_ms / MillisPerSecond;
+  struct tm tm;
+  localtime_r(&time_sec, &tm);
+  std::string s = common::StringFormatTime(kConnectionDescriptorTimeFormat, tm);
+  return base::StringPrintf(
+      "%s.%03u", s.c_str(),
+      static_cast<unsigned int>(time_ms % MillisPerSecond));
+}
+
 inline bool IsRpa(const hci::AddressWithType address_with_type) {
   return address_with_type.GetAddressType() ==
              hci::AddressType::RANDOM_DEVICE_ADDRESS &&
@@ -191,6 +202,8 @@ class ShadowAcceptlist {
   }
 
   void Clear() { acceptlist_set_.clear(); }
+
+  uint8_t GetMaxSize() const { return max_acceptlist_size_; }
 
  private:
   uint8_t max_acceptlist_size_{0};
@@ -238,6 +251,8 @@ class ShadowAddressResolutionList {
   size_t Size() const { return address_resolution_set_.size(); }
 
   void Clear() { address_resolution_set_.clear(); }
+
+  uint8_t GetMaxSize() const { return max_address_resolution_size_; }
 
  private:
   uint8_t max_address_resolution_size_{0};
@@ -1146,8 +1161,7 @@ struct shim::legacy::Acl::impl {
     }
     const auto acceptlist = shadow_acceptlist_.GetCopy();
     LOG_DEBUG("Shadow le accept list  size:%-3zu controller_max_size:%hhu",
-              acceptlist.size(),
-              controller_get_interface()->get_ble_acceptlist_size());
+              acceptlist.size(), shadow_acceptlist_.GetMaxSize());
     for (auto& entry : acceptlist) {
       LOG_DEBUG("acceptlist:%s", ADDRESS_TO_LOGGABLE_CSTR(entry));
     }
@@ -1178,8 +1192,7 @@ struct shim::legacy::Acl::impl {
     LOG_DUMPSYS(fd,
                 "Shadow le accept list              size:%-3zu "
                 "controller_max_size:%hhu",
-                acceptlist.size(),
-                controller_get_interface()->get_ble_acceptlist_size());
+                acceptlist.size(), shadow_acceptlist_.GetMaxSize());
     unsigned cnt = 0;
     for (auto& entry : acceptlist) {
       LOG_DUMPSYS(fd, "  %03u %s", ++cnt, ADDRESS_TO_LOGGABLE_CSTR(entry));
@@ -1189,7 +1202,7 @@ struct shim::legacy::Acl::impl {
                 "Shadow le address resolution list  size:%-3zu "
                 "controller_max_size:%hhu",
                 address_resolution_list.size(),
-                controller_get_interface()->get_ble_resolving_list_max_size());
+                shadow_address_resolution_list_.GetMaxSize());
     cnt = 0;
     for (auto& entry : address_resolution_list) {
       LOG_DUMPSYS(fd, "  %03u %s", ++cnt, ADDRESS_TO_LOGGABLE_CSTR(entry));
@@ -1336,6 +1349,20 @@ void DumpsysNeighbor(int fd) {
                  btm_cb.neighbor.le_scan.start_time_ms) /
                     1000.0,
                 btm_cb.neighbor.le_scan.results);
+  }
+  const auto copy = btm_cb.neighbor.inquiry_history_->Pull();
+  LOG_DUMPSYS(fd, "Last %zu inquiry scans:", copy.size());
+  for (const auto& it : copy) {
+    LOG_DUMPSYS(fd,
+                "  %s - %s duration_ms:%-5llu num_resp:%-2u"
+                " std:%-2u rssi:%-2u ext:%-2u %12s",
+                EpochMillisToString(it.entry.start_time_ms).c_str(),
+                EpochMillisToString(it.timestamp).c_str(),
+                it.timestamp - it.entry.start_time_ms, it.entry.num_resp,
+                it.entry.resp_type[BTM_INQ_RESULT_STANDARD],
+                it.entry.resp_type[BTM_INQ_RESULT_WITH_RSSI],
+                it.entry.resp_type[BTM_INQ_RESULT_EXTENDED],
+                btm_inquiry_cmpl_status_text(it.entry.status).c_str());
   }
 }
 #undef DUMPSYS_TAG

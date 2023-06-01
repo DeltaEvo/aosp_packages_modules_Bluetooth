@@ -117,6 +117,10 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
     fn on_pin_request(&mut self, remote_device: BluetoothDevice, cod: u32, min_16_digit: bool) {
         dbus_generated!()
     }
+    #[dbus_method("OnPinDisplay")]
+    fn on_pin_display(&mut self, remote_device: BluetoothDevice, pincode: String) {
+        dbus_generated!()
+    }
     #[dbus_method("OnBondStateChanged")]
     fn on_bond_state_changed(&mut self, status: u32, address: String, state: u32) {
         dbus_generated!()
@@ -482,12 +486,12 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("StartDiscovery")]
-    fn start_discovery(&self) -> bool {
+    fn start_discovery(&mut self) -> bool {
         dbus_generated!()
     }
 
     #[dbus_method("CancelDiscovery")]
-    fn cancel_discovery(&self) -> bool {
+    fn cancel_discovery(&mut self) -> bool {
         dbus_generated!()
     }
 
@@ -502,7 +506,7 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("CreateBond")]
-    fn create_bond(&self, device: BluetoothDevice, transport: BtTransport) -> bool {
+    fn create_bond(&mut self, device: BluetoothDevice, transport: BtTransport) -> bool {
         dbus_generated!()
     }
 
@@ -633,6 +637,11 @@ impl IBluetooth for IBluetoothDBus {
 
     #[dbus_method("IsWbsSupported")]
     fn is_wbs_supported(&self) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("IsSwbSupported")]
+    fn is_swb_supported(&self) -> bool {
         dbus_generated!()
     }
 }

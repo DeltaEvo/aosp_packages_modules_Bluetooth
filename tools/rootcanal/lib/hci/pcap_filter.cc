@@ -77,8 +77,7 @@ std::vector<uint8_t> PcapFilter::FilterHciCommand(
     case OpCode::LE_SET_PERIODIC_ADVERTISING_DATA:
       return FilterLeSetPeriodicAdvertisingData(command);
     case OpCode::LE_MULTI_ADVT: {
-      auto le_multi_advt_command =
-          LeMultiAdvtView::Create(LeAdvertisingCommandView::Create(command));
+      auto le_multi_advt_command = LeMultiAdvtView::Create(command);
       ASSERT(le_multi_advt_command.IsValid());
       switch (le_multi_advt_command.GetSubCmd()) {
         case SubOcf::SET_DATA:
@@ -169,39 +168,48 @@ static std::vector<uint8_t> FilterHciIso(std::vector<uint8_t> const& packet) {
 }
 
 // Replace device names in GAP entries.
-void PcapFilter::FilterGapData(std::vector<GapData>& gap_data) {
-  for (GapData& entry : gap_data) {
-    switch (entry.data_type_) {
-      case GapDataType::COMPLETE_LOCAL_NAME:
-      case GapDataType::SHORTENED_LOCAL_NAME:
-        entry.data_ = ChangeDeviceName(entry.data_);
-        break;
-      default:
-        break;
-    }
-  }
-}
+// TODO: extended advertising reports can be chunked across multiple
+// events, and a single GAP data entry can be segmented in two.
+// The filter should account for that and keep a state for partial
+// GAP entries.
+void PcapFilter::FilterGapData(uint8_t* gap_data, size_t gap_data_len) {
+  size_t offset = 0;
+  while ((offset + 2) <= gap_data_len) {
+    size_t length = gap_data[offset];
+    GapDataType data_type = static_cast<GapDataType>(gap_data[offset + 1]);
 
-void PcapFilter::FilterLengthAndData(
-    std::vector<bluetooth::hci::LengthAndData>& gap_data) {
-  for (LengthAndData& entry : gap_data) {
-    if (entry.data_.empty()) {
+    // Truncated entry.
+    if ((offset + length + 1) > gap_data_len) {
+      break;
+    }
+
+    // Empty entry.
+    if (length == 0) {
+      offset += 1;
       continue;
     }
-    switch (GapDataType(entry.data_[0])) {
+
+    // Apply the filter to entries that contain user data.
+    switch (data_type) {
       case GapDataType::COMPLETE_LOCAL_NAME:
       case GapDataType::SHORTENED_LOCAL_NAME: {
-        std::vector<uint8_t> device_name(entry.data_.begin() + 1,
-                                         entry.data_.end());
-        device_name = ChangeDeviceName(device_name);
-        entry.data_.insert(device_name.begin(), device_name.end(),
-                           entry.data_.begin() + 1);
+        auto start_pos = gap_data + offset + 1;
+        auto end_pos = gap_data + offset + length;
+        std::vector<uint8_t> new_name =
+            ChangeDeviceName(std::vector<uint8_t>{start_pos, end_pos});
+        std::copy(new_name.begin(), new_name.end(), start_pos);
         break;
       }
       default:
         break;
     }
+
+    offset += length + 1;
   }
+}
+
+void PcapFilter::FilterGapData(std::vector<uint8_t>& gap_data) {
+  FilterGapData(gap_data.data(), gap_data.size());
 }
 
 // Replace the local device name.
@@ -220,9 +228,10 @@ std::vector<uint8_t> PcapFilter::FilterWriteExtendedInquiryResponse(
   auto parameters = WriteExtendedInquiryResponseView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> extended_inquiry_response =
+  std::array<uint8_t, 240> extended_inquiry_response =
       parameters.GetExtendedInquiryResponse();
-  FilterGapData(extended_inquiry_response);
+  FilterGapData(extended_inquiry_response.data(),
+                extended_inquiry_response.size());
   return WriteExtendedInquiryResponseBuilder::Create(
              parameters.GetFecRequired(), extended_inquiry_response)
       ->SerializeToBytes();
@@ -231,11 +240,10 @@ std::vector<uint8_t> PcapFilter::FilterWriteExtendedInquiryResponse(
 // Replace the device names in the GAP entries of the advertising data.
 std::vector<uint8_t> PcapFilter::FilterLeSetAdvertisingData(
     CommandView& command) {
-  auto parameters = LeSetAdvertisingDataView::Create(
-      LeAdvertisingCommandView::Create(command));
+  auto parameters = LeSetAdvertisingDataView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> advertising_data = parameters.GetAdvertisingData();
+  std::vector<uint8_t> advertising_data = parameters.GetAdvertisingData();
   FilterGapData(advertising_data);
   return LeSetAdvertisingDataBuilder::Create(advertising_data)
       ->SerializeToBytes();
@@ -244,11 +252,10 @@ std::vector<uint8_t> PcapFilter::FilterLeSetAdvertisingData(
 // Replace the device names in the GAP entries of the scan response data.
 std::vector<uint8_t> PcapFilter::FilterLeSetScanResponseData(
     CommandView& command) {
-  auto parameters = LeSetScanResponseDataView::Create(
-      LeAdvertisingCommandView::Create(command));
+  auto parameters = LeSetScanResponseDataView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> advertising_data = parameters.GetAdvertisingData();
+  std::vector<uint8_t> advertising_data = parameters.GetAdvertisingData();
   FilterGapData(advertising_data);
   return LeSetScanResponseDataBuilder::Create(advertising_data)
       ->SerializeToBytes();
@@ -257,11 +264,10 @@ std::vector<uint8_t> PcapFilter::FilterLeSetScanResponseData(
 // Replace the device names in the GAP entries of the extended advertising data.
 std::vector<uint8_t> PcapFilter::FilterLeSetExtendedAdvertisingData(
     CommandView& command) {
-  auto parameters = LeSetExtendedAdvertisingDataView::Create(
-      LeAdvertisingCommandView::Create(command));
+  auto parameters = LeSetExtendedAdvertisingDataView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> advertising_data = parameters.GetAdvertisingData();
+  std::vector<uint8_t> advertising_data = parameters.GetAdvertisingData();
   FilterGapData(advertising_data);
   return LeSetExtendedAdvertisingDataBuilder::Create(
              parameters.GetAdvertisingHandle(), parameters.GetOperation(),
@@ -273,11 +279,10 @@ std::vector<uint8_t> PcapFilter::FilterLeSetExtendedAdvertisingData(
 // data.
 std::vector<uint8_t> PcapFilter::FilterLeSetExtendedScanResponseData(
     CommandView& command) {
-  auto parameters = LeSetExtendedScanResponseDataView::Create(
-      LeAdvertisingCommandView::Create(command));
+  auto parameters = LeSetExtendedScanResponseDataView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> advertising_data = parameters.GetScanResponseData();
+  std::vector<uint8_t> advertising_data = parameters.GetScanResponseData();
   FilterGapData(advertising_data);
   return LeSetExtendedScanResponseDataBuilder::Create(
              parameters.GetAdvertisingHandle(), parameters.GetOperation(),
@@ -289,11 +294,10 @@ std::vector<uint8_t> PcapFilter::FilterLeSetExtendedScanResponseData(
 // data.
 std::vector<uint8_t> PcapFilter::FilterLeSetPeriodicAdvertisingData(
     bluetooth::hci::CommandView& command) {
-  auto parameters = LeSetPeriodicAdvertisingDataView::Create(
-      LeAdvertisingCommandView::Create(command));
+  auto parameters = LeSetPeriodicAdvertisingDataView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> advertising_data = parameters.GetAdvertisingData();
+  std::vector<uint8_t> advertising_data = parameters.GetAdvertisingData();
   FilterGapData(advertising_data);
   return LeSetPeriodicAdvertisingDataBuilder::Create(
              parameters.GetAdvertisingHandle(), parameters.GetOperation(),
@@ -307,7 +311,7 @@ std::vector<uint8_t> PcapFilter::FilterLeMultiAdvtSetData(
   auto parameters = LeMultiAdvtSetDataView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> advertising_data = parameters.GetAdvertisingData();
+  std::vector<uint8_t> advertising_data = parameters.GetAdvertisingData();
   FilterGapData(advertising_data);
   return LeMultiAdvtSetDataBuilder::Create(advertising_data,
                                            parameters.GetAdvertisingInstance())
@@ -320,7 +324,7 @@ std::vector<uint8_t> PcapFilter::FilterLeMultiAdvtSetScanResp(
   auto parameters = LeMultiAdvtSetScanRespView::Create(command);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> advertising_data = parameters.GetAdvertisingData();
+  std::vector<uint8_t> advertising_data = parameters.GetAdvertisingData();
   FilterGapData(advertising_data);
   return LeMultiAdvtSetScanRespBuilder::Create(
              advertising_data, parameters.GetAdvertisingInstance())
@@ -351,10 +355,11 @@ std::vector<uint8_t> PcapFilter::FilterReadExtendedInquiryResponseComplete(
       ReadExtendedInquiryResponseCompleteView::Create(command_complete);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> extended_inquiry_response =
+  std::array<uint8_t, 240> extended_inquiry_response =
       parameters.GetExtendedInquiryResponse();
   if (parameters.GetStatus() == ErrorCode::SUCCESS) {
-    FilterGapData(extended_inquiry_response);
+    FilterGapData(extended_inquiry_response.data(),
+                  extended_inquiry_response.size());
   }
 
   return ReadExtendedInquiryResponseCompleteBuilder::Create(
@@ -385,10 +390,10 @@ std::vector<uint8_t> PcapFilter::FilterExtendedInquiryResult(
   auto parameters = ExtendedInquiryResultView::Create(event);
   ASSERT(parameters.IsValid());
 
-  std::vector<GapData> extended_inquiry_response =
+  std::array<uint8_t, 240> extended_inquiry_response =
       parameters.GetExtendedInquiryResponse();
-  FilterGapData(extended_inquiry_response);
-
+  FilterGapData(extended_inquiry_response.data(),
+                extended_inquiry_response.size());
   return ExtendedInquiryResultBuilder::Create(
              parameters.GetAddress(), parameters.GetPageScanRepetitionMode(),
              parameters.GetClassOfDevice(), parameters.GetClockOffset(),
@@ -404,7 +409,7 @@ std::vector<uint8_t> PcapFilter::FilterLeAdvertisingReport(
 
   std::vector<LeAdvertisingResponse> responses = parameters.GetResponses();
   for (auto& response : responses) {
-    FilterLengthAndData(response.advertising_data_);
+    FilterGapData(response.advertising_data_);
   }
 
   return LeAdvertisingReportBuilder::Create(responses)->SerializeToBytes();
@@ -420,7 +425,7 @@ std::vector<uint8_t> PcapFilter::FilterLeExtendedAdvertisingReport(
   std::vector<LeExtendedAdvertisingResponse> responses =
       parameters.GetResponses();
   for (auto& response : responses) {
-    FilterLengthAndData(response.advertising_data_);
+    FilterGapData(response.advertising_data_);
   }
 
   return LeExtendedAdvertisingReportBuilder::Create(responses)

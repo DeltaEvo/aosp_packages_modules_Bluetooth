@@ -70,6 +70,7 @@ import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
+import com.android.bluetooth.csip.CsipSetCoordinatorService;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.mcp.McpService;
 import com.android.bluetooth.tbs.TbsGatt;
@@ -147,6 +148,9 @@ public class LeAudioService extends ProfileService {
 
     @VisibleForTesting
     VolumeControlService mVolumeControlService;
+
+    @VisibleForTesting
+    CsipSetCoordinatorService mCsipSetCoordinatorService;
 
     @VisibleForTesting
     RemoteCallbackList<IBluetoothLeBroadcastCallback> mBroadcastCallbacks;
@@ -241,6 +245,7 @@ public class LeAudioService extends ProfileService {
             mTmapGattServer.start(mTmapRoleMask);
         } catch (IllegalStateException e) {
             Log.e(TAG, "Fail to start TmapGattServer", e);
+            mTmapGattServer = null;
             return false;
         }
 
@@ -280,6 +285,7 @@ public class LeAudioService extends ProfileService {
 
         // Setup broadcast receivers
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         mBondStateChangedReceiver = new BondStateChangedReceiver();
         registerReceiver(mBondStateChangedReceiver, filter);
@@ -440,6 +446,7 @@ public class LeAudioService extends ProfileService {
         mMcpService = null;
         mTbsService = null;
         mVolumeControlService = null;
+        mCsipSetCoordinatorService = null;
 
         return true;
     }
@@ -502,6 +509,17 @@ public class LeAudioService extends ProfileService {
         }
 
         return descriptor;
+    }
+
+    private void setEnabledState(BluetoothDevice device, boolean enabled) {
+        if (DBG) {
+            Log.d(TAG, "setEnabledState: address:" + device + " enabled: " + enabled);
+        }
+        if (!mLeAudioNativeIsInitialized) {
+            Log.e(TAG, "setEnabledState, mLeAudioNativeIsInitialized is not initialized");
+            return;
+        }
+        mLeAudioNativeInterface.setEnableState(device, enabled);
     }
 
     public boolean connect(BluetoothDevice device) {
@@ -1165,15 +1183,20 @@ public class LeAudioService extends ProfileService {
 
         @Override
         public void onScanFailed(int errorCode) {
-            Log.w(TAG, "Scan failed " + errorCode + " scan retries: " + mScanRetries);
+            Log.w(TAG, "Scan failed err: " + errorCode + " scan retries: " + mScanRetries);
             switch(errorCode) {
-                case SCAN_FAILED_INTERNAL_ERROR: {
+                case SCAN_FAILED_INTERNAL_ERROR:
+                case SCAN_FAILED_APPLICATION_REGISTRATION_FAILED:
                     if (mScanRetries < mMaxScanRetires) {
                         mScanRetries++;
                         Log.w(TAG, "Failed to start. Let's retry");
                         mHandler.post(() -> startAudioServersBackgroundScan(/* retry = */ true));
                     }
-                }
+                    break;
+                default:
+                    /* Indicate scan is no running */
+                    mScanCallback = null;
+                    break;
             }
         }
     }
@@ -1201,16 +1224,20 @@ public class LeAudioService extends ProfileService {
                 byte[] addressBytes = Utils.getBytesFromAddress(address);
                 BluetoothDevice device = mAdapterService.getDeviceFromByte(addressBytes);
 
-                /* Don't expose already exposed active device */
-                if (device.equals(mExposedActiveDevice)) {
-                    return;
-                }
-
                 if (DBG) {
                     Log.d(TAG, " onAudioDevicesAdded: " + device + ", device type: "
                             + deviceInfo.getType() + ", isSink: " + deviceInfo.isSink()
                             + " isSource: " + deviceInfo.isSource());
                 }
+
+                /* Don't expose already exposed active device */
+                if (device.equals(mExposedActiveDevice)) {
+                    if (DBG) {
+                        Log.d(TAG, " onAudioDevicesAdded: " + device + " is already exposed");
+                    }
+                    return;
+                }
+
 
                 if ((deviceInfo.isSink() && !device.equals(mActiveAudioOutDevice))
                         || (deviceInfo.isSource() && !device.equals(mActiveAudioInDevice))) {
@@ -1295,9 +1322,7 @@ public class LeAudioService extends ProfileService {
                 volume = getAudioDeviceGroupVolume(groupId);
             }
 
-            final boolean suppressNoisyIntent = hasFallbackDevice || mActiveAudioOutDevice != null
-                    || (getConnectionState(previousActiveOutDevice)
-                    == BluetoothProfile.STATE_CONNECTED);
+            final boolean suppressNoisyIntent = hasFallbackDevice || mActiveAudioOutDevice != null;
 
             mAudioManager.handleBluetoothActiveDeviceChanged(mActiveAudioOutDevice,
                     previousActiveOutDevice, BluetoothProfileConnectionInfo.createLeAudioOutputInfo(
@@ -1690,7 +1715,11 @@ public class LeAudioService extends ProfileService {
             }
         }
 
-        mAudioServersScanner.stopScan(mScanCallback);
+        try {
+            mAudioServersScanner.stopScan(mScanCallback);
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Fail to stop scanner, consider it stopped", e);
+        }
 
         /* Callback is the indicator for scanning being enabled */
         mScanCallback = null;
@@ -1740,7 +1769,12 @@ public class LeAudioService extends ProfileService {
                 .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                 .build();
 
-        mAudioServersScanner.startScan(filterList, settings, mScanCallback);
+        try {
+            mAudioServersScanner.startScan(filterList, settings, mScanCallback);
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Fail to start scanner, consider it stopped", e);
+            mScanCallback = null;
+        }
     }
 
     // Suppressed since this is part of a local process
@@ -2348,6 +2382,27 @@ public class LeAudioService extends ProfileService {
     }
 
     /**
+     * Sends the preferred audio profiles for a dual mode audio device to the native stack.
+     *
+     * @param groupId is the group id of the device which had a preference change
+     * @param isOutputPreferenceLeAudio {@code true} if {@link BluetoothProfile#LE_AUDIO} is
+     * preferred for {@link BluetoothAdapter#AUDIO_MODE_OUTPUT_ONLY}, {@code false} if it is
+     * {@link BluetoothProfile#A2DP}
+     * @param isDuplexPreferenceLeAudio {@code true} if {@link BluetoothProfile#LE_AUDIO} is
+     * preferred for {@link BluetoothAdapter#AUDIO_MODE_DUPLEX}, {@code false} if it is
+     * {@link BluetoothProfile#HEADSET}
+     */
+    public void sendAudioProfilePreferencesToNative(int groupId, boolean isOutputPreferenceLeAudio,
+            boolean isDuplexPreferenceLeAudio) {
+        if (!mLeAudioNativeIsInitialized) {
+            Log.e(TAG, "Le Audio not initialized properly.");
+            return;
+        }
+        mLeAudioNativeInterface.sendAudioProfilePreferences(groupId, isOutputPreferenceLeAudio,
+                isDuplexPreferenceLeAudio);
+    }
+
+    /**
      * Set Inactive by HFP during handover
      */
     public void setInactiveForHfpHandover(BluetoothDevice hfpHandoverDevice) {
@@ -2388,12 +2443,50 @@ public class LeAudioService extends ProfileService {
                 connectionPolicy)) {
             return false;
         }
+
         if (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_ALLOWED) {
+            setEnabledState(device, /* enabled = */ true);
+            // Authorizes LEA GATT server services if already assigned to a group
+            int groupId = getGroupId(device);
+            if (groupId != LE_AUDIO_GROUP_ID_INVALID) {
+                setAuthorizationForRelatedProfiles(device, true);
+            }
             connect(device);
         } else if (connectionPolicy == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+            setEnabledState(device, /* enabled = */ false);
+            // Remove authorization for LEA GATT server services
+            setAuthorizationForRelatedProfiles(device, false);
             disconnect(device);
         }
+        setLeAudioGattClientProfilesPolicy(device, connectionPolicy);
         return true;
+    }
+
+    /**
+     * Sets the connection policy for LE Audio GATT client profiles
+     * @param device is the remote device
+     * @param connectionPolicy is the connection policy we wish to set
+     */
+    private void setLeAudioGattClientProfilesPolicy(BluetoothDevice device, int connectionPolicy) {
+        if (DBG) {
+            Log.d(TAG, "setLeAudioGattClientProfilesPolicy for device " + device + " to policy="
+                    + connectionPolicy);
+        }
+        if (mVolumeControlService == null) {
+            mVolumeControlService = mServiceFactory.getVolumeControlService();
+        }
+        if (mVolumeControlService != null) {
+            mVolumeControlService.setConnectionPolicy(device, connectionPolicy);
+        }
+
+        if (mCsipSetCoordinatorService == null) {
+            mCsipSetCoordinatorService = mServiceFactory.getCsipSetCoordinatorService();
+        }
+
+        // Disallow setting CSIP to forbidden until characteristic reads are complete
+        if (mCsipSetCoordinatorService != null) {
+            mCsipSetCoordinatorService.setConnectionPolicy(device, connectionPolicy);
+        }
     }
 
     /**
@@ -2409,8 +2502,12 @@ public class LeAudioService extends ProfileService {
      * @hide
      */
     public int getConnectionPolicy(BluetoothDevice device) {
-        return mDatabaseManager
+        int connection_policy = mDatabaseManager
                 .getProfileConnectionPolicy(device, BluetoothProfile.LE_AUDIO);
+        if (DBG) {
+            Log.d(TAG, device + " connection policy = " + connection_policy);
+        }
+        return connection_policy;
     }
 
     /**
@@ -2530,7 +2627,9 @@ public class LeAudioService extends ProfileService {
 
         synchronized (mGroupLock) {
             for (BluetoothDevice device : mDeviceDescriptors.keySet()) {
-                setAuthorizationForRelatedProfiles(device, true);
+                if (getConnectionPolicy(device) != BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+                    setAuthorizationForRelatedProfiles(device, true);
+                }
             }
         }
 
@@ -2945,6 +3044,10 @@ public class LeAudioService extends ProfileService {
      * @return the lead device of the CSIP group or {@code null} if the group does not exist
      */
     public BluetoothDevice getLeadDevice(BluetoothDevice device) {
+        if (device == null) {
+            Log.w(TAG, "getLeadDevice called with null device.");
+            return null;
+        }
         int groupId = getGroupId(device);
         if (groupId == LE_AUDIO_GROUP_ID_INVALID) {
             return null;
@@ -3484,20 +3587,32 @@ public class LeAudioService extends ProfileService {
 
         @Override
         public void startBroadcast(
-                BluetoothLeBroadcastSettings broadcastSettings, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service != null) {
-                enforceBluetoothPrivilegedPermission(service);
-                service.createBroadcast(broadcastSettings);
+                BluetoothLeBroadcastSettings broadcastSettings, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    service.createBroadcast(broadcastSettings);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
         }
 
         @Override
-        public void stopBroadcast(int broadcastId, AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service != null) {
-                enforceBluetoothPrivilegedPermission(service);
-                service.stopBroadcast(broadcastId);
+        public void stopBroadcast(int broadcastId, AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    service.stopBroadcast(broadcastId);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
         }
 
@@ -3505,11 +3620,17 @@ public class LeAudioService extends ProfileService {
         public void updateBroadcast(
                 int broadcastId,
                 BluetoothLeBroadcastSettings broadcastSettings,
-                AttributionSource source) {
-            LeAudioService service = getService(source);
-            if (service != null) {
-                enforceBluetoothPrivilegedPermission(service);
-                service.updateBroadcast(broadcastId, broadcastSettings);
+                AttributionSource source,
+                SynchronousResultReceiver receiver) {
+            try {
+                LeAudioService service = getService(source);
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    service.updateBroadcast(broadcastId, broadcastSettings);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
             }
         }
 
@@ -3632,6 +3753,7 @@ public class LeAudioService extends ProfileService {
         ProfileService.println(sb, "  currentlyActiveGroupId: " + getActiveGroupId());
         ProfileService.println(sb, "  mActiveAudioOutDevice: " + mActiveAudioOutDevice);
         ProfileService.println(sb, "  mActiveAudioInDevice: " + mActiveAudioInDevice);
+        ProfileService.println(sb, "  mExposedActiveDevice: " + mExposedActiveDevice);
         ProfileService.println(sb, "  mHfpHandoverDevice:" + mHfpHandoverDevice);
         ProfileService.println(sb, "  mLeAudioIsInbandRingtoneSupported:"
                                 + mLeAudioInbandRingtoneSupportedByPlatform);

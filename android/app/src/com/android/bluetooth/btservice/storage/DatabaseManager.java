@@ -392,6 +392,9 @@ public class DatabaseManager {
             logMetadataChange(data, profileStr + " connection policy changed: "
                                     + oldConnectionPolicy + " -> " + newConnectionPolicy);
 
+            Log.v(TAG, "setProfileConnectionPolicy: device " + device.getAnonymizedAddress()
+                    + " profile=" + profileStr + ", connectionPolicy=" + newConnectionPolicy);
+
             data.setProfileConnectionPolicy(profile, newConnectionPolicy);
             updateDatabase(data);
             return true;
@@ -944,6 +947,7 @@ public class DatabaseManager {
         mHandler = new DatabaseHandler(mHandlerThread.getLooper());
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         mAdapterService.registerReceiver(mReceiver, filter);

@@ -249,6 +249,7 @@ typedef enum : uint8_t {
   BTA_DM_REPORT_BONDING_EVT = 32,    /*handle for pin or key missing*/
   BTA_DM_LE_ADDR_ASSOC_EVT = 33,     /* identity address association event */
   BTA_DM_LINK_UP_FAILED_EVT = 34,    /* Create connection failed event */
+  BTA_DM_SIRK_VERIFICATION_REQ_EVT = 35,
 } tBTA_DM_SEC_EVT;
 
 /* Structure associated with BTA_DM_PIN_REQ_EVT */
@@ -527,6 +528,7 @@ typedef struct {
   size_t num_uuids;
   bluetooth::Uuid* p_uuid_list;
   tBTA_STATUS result;
+  tHCI_STATUS hci_status;
 } tBTA_DM_DISC_RES;
 
 /* Structure associated with tBTA_DM_DISC_BLE_RES */
@@ -742,6 +744,18 @@ void BTA_dm_init();
 
 /*******************************************************************************
  *
+ * Function         BTA_EnableTestMode
+ *
+ * Description      Enables bluetooth device under test mode
+ *
+ *
+ * Returns          tBTA_STATUS
+ *
+ ******************************************************************************/
+extern void BTA_EnableTestMode(void);
+
+/*******************************************************************************
+ *
  * Function         BTA_DmSetDeviceName
  *
  * Description      This function sets the Bluetooth name of the local device.
@@ -750,7 +764,7 @@ void BTA_dm_init();
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmSetDeviceName(const char* p_name);
+void BTA_DmSetDeviceName(const char* p_name);
 
 /*******************************************************************************
  *
@@ -766,7 +780,7 @@ extern void BTA_DmSetDeviceName(const char* p_name);
  * Returns          void
  *
  ******************************************************************************/
-extern bool BTA_DmSetVisibility(bt_scan_mode_t mode);
+bool BTA_DmSetVisibility(bt_scan_mode_t mode);
 
 /*******************************************************************************
  *
@@ -782,7 +796,7 @@ extern bool BTA_DmSetVisibility(bt_scan_mode_t mode);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback);
+void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback);
 
 /*******************************************************************************
  *
@@ -795,7 +809,7 @@ extern void BTA_DmSearch(tBTA_DM_SEARCH_CBACK* p_cback);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmSearchCancel(void);
+void BTA_DmSearchCancel(void);
 
 /*******************************************************************************
  *
@@ -808,9 +822,8 @@ extern void BTA_DmSearchCancel(void);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmDiscover(const RawAddress& bd_addr,
-                           tBTA_DM_SEARCH_CBACK* p_cback,
-                           tBT_TRANSPORT transport);
+void BTA_DmDiscover(const RawAddress& bd_addr, tBTA_DM_SEARCH_CBACK* p_cback,
+                    tBT_TRANSPORT transport);
 
 /*******************************************************************************
  *
@@ -838,8 +851,8 @@ tBTA_STATUS BTA_DmGetCachedRemoteName(const RawAddress& remote_device,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
-                       tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type);
+void BTA_DmBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
+                tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type);
 
 /*******************************************************************************
  *
@@ -852,7 +865,7 @@ extern void BTA_DmBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBondCancel(const RawAddress& bd_addr);
+void BTA_DmBondCancel(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -867,8 +880,8 @@ extern void BTA_DmBondCancel(const RawAddress& bd_addr);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmPinReply(const RawAddress& bd_addr, bool accept,
-                           uint8_t pin_len, uint8_t* p_pin);
+void BTA_DmPinReply(const RawAddress& bd_addr, bool accept, uint8_t pin_len,
+                    uint8_t* p_pin);
 
 /*******************************************************************************
  *
@@ -880,7 +893,7 @@ extern void BTA_DmPinReply(const RawAddress& bd_addr, bool accept,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmLocalOob(void);
+void BTA_DmLocalOob(void);
 
 /*******************************************************************************
  *
@@ -892,7 +905,7 @@ extern void BTA_DmLocalOob(void);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmConfirm(const RawAddress& bd_addr, bool accept);
+void BTA_DmConfirm(const RawAddress& bd_addr, bool accept);
 
 /*******************************************************************************
  *
@@ -907,9 +920,9 @@ extern void BTA_DmConfirm(const RawAddress& bd_addr, bool accept);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
-                            const LinkKey& link_key, uint8_t key_type,
-                            uint8_t pin_length);
+void BTA_DmAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
+                     const LinkKey& link_key, uint8_t key_type,
+                     uint8_t pin_length);
 
 /*******************************************************************************
  *
@@ -924,7 +937,7 @@ extern void BTA_DmAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
  *                  BTA_FAIL if operation failed.
  *
  ******************************************************************************/
-extern tBTA_STATUS BTA_DmRemoveDevice(const RawAddress& bd_addr);
+tBTA_STATUS BTA_DmRemoveDevice(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -939,8 +952,8 @@ extern tBTA_STATUS BTA_DmRemoveDevice(const RawAddress& bd_addr);
  * Returns          None
  *
  ******************************************************************************/
-extern void BTA_GetEirService(const uint8_t* p_eir, size_t eir_len,
-                              tBTA_SERVICE_MASK* p_services);
+void BTA_GetEirService(const uint8_t* p_eir, size_t eir_len,
+                       tBTA_SERVICE_MASK* p_services);
 
 /*******************************************************************************
  *
@@ -951,7 +964,7 @@ extern void BTA_GetEirService(const uint8_t* p_eir, size_t eir_len,
  * Returns          true if the device is NOT connected, false otherwise.
  *
  ******************************************************************************/
-extern bool BTA_DmGetConnectionState(const RawAddress& bd_addr);
+bool BTA_DmGetConnectionState(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -962,8 +975,8 @@ extern bool BTA_DmGetConnectionState(const RawAddress& bd_addr);
  * Returns          BTA_SUCCESS if record set sucessfully, otherwise error code.
  *
  ******************************************************************************/
-extern tBTA_STATUS BTA_DmSetLocalDiRecord(tSDP_DI_RECORD* p_device_info,
-                                          uint32_t* p_handle);
+tBTA_STATUS BTA_DmSetLocalDiRecord(tSDP_DI_RECORD* p_device_info,
+                                   uint32_t* p_handle);
 
 /*******************************************************************************
  *
@@ -982,8 +995,8 @@ extern tBTA_STATUS BTA_DmSetLocalDiRecord(tSDP_DI_RECORD* p_device_info,
  * Returns          void.
  *
  ******************************************************************************/
-extern void BTA_DmCloseACL(const RawAddress& bd_addr, bool remove_dev,
-                           tBT_TRANSPORT transport);
+void BTA_DmCloseACL(const RawAddress& bd_addr, bool remove_dev,
+                    tBT_TRANSPORT transport);
 
 /* BLE related API functions */
 /*******************************************************************************
@@ -998,8 +1011,8 @@ extern void BTA_DmCloseACL(const RawAddress& bd_addr, bool remove_dev,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleSecurityGrant(const RawAddress& bd_addr,
-                                   tBTA_DM_BLE_SEC_GRANT res);
+void BTA_DmBleSecurityGrant(const RawAddress& bd_addr,
+                            tBTA_DM_BLE_SEC_GRANT res);
 
 /*******************************************************************************
  *
@@ -1015,8 +1028,8 @@ extern void BTA_DmBleSecurityGrant(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBlePasskeyReply(const RawAddress& bd_addr, bool accept,
-                                  uint32_t passkey);
+void BTA_DmBlePasskeyReply(const RawAddress& bd_addr, bool accept,
+                           uint32_t passkey);
 
 /*******************************************************************************
  *
@@ -1031,7 +1044,7 @@ extern void BTA_DmBlePasskeyReply(const RawAddress& bd_addr, bool accept,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleConfirmReply(const RawAddress& bd_addr, bool accept);
+void BTA_DmBleConfirmReply(const RawAddress& bd_addr, bool accept);
 
 /*******************************************************************************
  *
@@ -1048,9 +1061,8 @@ extern void BTA_DmBleConfirmReply(const RawAddress& bd_addr, bool accept);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmAddBleDevice(const RawAddress& bd_addr,
-                               tBLE_ADDR_TYPE addr_type,
-                               tBT_DEVICE_TYPE dev_type);
+void BTA_DmAddBleDevice(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
+                        tBT_DEVICE_TYPE dev_type);
 
 /*******************************************************************************
  *
@@ -1067,9 +1079,8 @@ extern void BTA_DmAddBleDevice(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmAddBleKey(const RawAddress& bd_addr,
-                            tBTA_LE_KEY_VALUE* p_le_key,
-                            tBTM_LE_KEY_TYPE key_type);
+void BTA_DmAddBleKey(const RawAddress& bd_addr, tBTA_LE_KEY_VALUE* p_le_key,
+                     tBTM_LE_KEY_TYPE key_type);
 
 /*******************************************************************************
  *
@@ -1088,11 +1099,10 @@ extern void BTA_DmAddBleKey(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmSetBlePrefConnParams(const RawAddress& bd_addr,
-                                       uint16_t min_conn_int,
-                                       uint16_t max_conn_int,
-                                       uint16_t peripheral_latency,
-                                       uint16_t supervision_tout);
+void BTA_DmSetBlePrefConnParams(const RawAddress& bd_addr,
+                                uint16_t min_conn_int, uint16_t max_conn_int,
+                                uint16_t peripheral_latency,
+                                uint16_t supervision_tout);
 
 /*******************************************************************************
  *
@@ -1117,10 +1127,9 @@ extern void BTA_DmSetBlePrefConnParams(const RawAddress& bd_addr,
  *
  *
  ******************************************************************************/
-extern void BTA_DmSetEncryption(const RawAddress& bd_addr,
-                                tBT_TRANSPORT transport,
-                                tBTA_DM_ENCRYPT_CBACK* p_callback,
-                                tBTM_BLE_SEC_ACT sec_act);
+void BTA_DmSetEncryption(const RawAddress& bd_addr, tBT_TRANSPORT transport,
+                         tBTA_DM_ENCRYPT_CBACK* p_callback,
+                         tBTM_BLE_SEC_ACT sec_act);
 
 /*******************************************************************************
  *
@@ -1137,8 +1146,8 @@ extern void BTA_DmSetEncryption(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleObserve(bool start, uint8_t duration,
-                             tBTA_DM_SEARCH_CBACK* p_results_cb);
+void BTA_DmBleObserve(bool start, uint8_t duration,
+                      tBTA_DM_SEARCH_CBACK* p_results_cb);
 
 /*******************************************************************************
  *
@@ -1150,11 +1159,13 @@ extern void BTA_DmBleObserve(bool start, uint8_t duration,
  * Parameters       start: start or stop the scan procedure,
  *                  duration_sec: Duration of the scan. Continuous scan if 0 is
  *                                passed,
+ *                  low_latency_scan: whether this is a low latency scan,
+ *                                    default is false,
  *
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleScan(bool start, uint8_t duration);
+void BTA_DmBleScan(bool start, uint8_t duration, bool low_latency_scan = false);
 
 /*******************************************************************************
  *
@@ -1169,8 +1180,36 @@ extern void BTA_DmBleScan(bool start, uint8_t duration);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleCsisObserve(bool observe,
-                                 tBTA_DM_SEARCH_CBACK* p_results_cb);
+void BTA_DmBleCsisObserve(bool observe, tBTA_DM_SEARCH_CBACK* p_results_cb);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmSirkSecCbRegister
+ *
+ * Description      This procedure registeres in requested a callback for
+ *                  verification by CSIS potential set member.
+ *
+ * Parameters       p_cback     - callback to member verificator
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmSirkSecCbRegister(tBTA_DM_SEC_CBACK* p_cback);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmSirkConfirmDeviceReply
+ *
+ * Description      This procedure confirms requested to validate set device.
+ *
+ * Parameters       bd_addr     - BD address of the peer
+ *                  accept      - True if device is authorized by CSIS, false
+ *                                otherwise.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmSirkConfirmDeviceReply(const RawAddress& bd_addr, bool accept);
 
 /*******************************************************************************
  *
@@ -1183,7 +1222,7 @@ extern void BTA_DmBleCsisObserve(bool observe,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleConfigLocalPrivacy(bool privacy_enable);
+void BTA_DmBleConfigLocalPrivacy(bool privacy_enable);
 
 /*******************************************************************************
  *
@@ -1197,8 +1236,8 @@ extern void BTA_DmBleConfigLocalPrivacy(bool privacy_enable);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleEnableRemotePrivacy(const RawAddress& bd_addr,
-                                         bool privacy_enable);
+void BTA_DmBleEnableRemotePrivacy(const RawAddress& bd_addr,
+                                  bool privacy_enable);
 
 /*******************************************************************************
  *
@@ -1216,11 +1255,10 @@ extern void BTA_DmBleEnableRemotePrivacy(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleUpdateConnectionParams(const RawAddress& bd_addr,
-                                            uint16_t min_int, uint16_t max_int,
-                                            uint16_t latency, uint16_t timeout,
-                                            uint16_t min_ce_len,
-                                            uint16_t max_ce_len);
+void BTA_DmBleUpdateConnectionParams(const RawAddress& bd_addr,
+                                     uint16_t min_int, uint16_t max_int,
+                                     uint16_t latency, uint16_t timeout,
+                                     uint16_t min_ce_len, uint16_t max_ce_len);
 
 /*******************************************************************************
  *
@@ -1231,7 +1269,7 @@ extern void BTA_DmBleUpdateConnectionParams(const RawAddress& bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleRequestMaxTxDataLength(const RawAddress& remote_device);
+void BTA_DmBleRequestMaxTxDataLength(const RawAddress& remote_device);
 
 /*******************************************************************************
  *
@@ -1244,7 +1282,7 @@ extern void BTA_DmBleRequestMaxTxDataLength(const RawAddress& remote_device);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleGetEnergyInfo(tBTA_BLE_ENERGY_INFO_CBACK* p_cmpl_cback);
+void BTA_DmBleGetEnergyInfo(tBTA_BLE_ENERGY_INFO_CBACK* p_cmpl_cback);
 
 /*******************************************************************************
  *
@@ -1256,7 +1294,7 @@ extern void BTA_DmBleGetEnergyInfo(tBTA_BLE_ENERGY_INFO_CBACK* p_cmpl_cback);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_VendorInit(void);
+void BTA_VendorInit(void);
 
 /*******************************************************************************
  *
@@ -1267,7 +1305,7 @@ extern void BTA_VendorInit(void);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmClearEventFilter(void);
+void BTA_DmClearEventFilter(void);
 
 /*******************************************************************************
  *
@@ -1278,7 +1316,7 @@ extern void BTA_DmClearEventFilter(void);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmClearEventMask(void);
+void BTA_DmClearEventMask(void);
 
 /*******************************************************************************
  *
@@ -1289,7 +1327,7 @@ extern void BTA_DmClearEventMask(void);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmDisconnectAllAcls(void);
+void BTA_DmDisconnectAllAcls(void);
 
 /*******************************************************************************
  *
@@ -1300,7 +1338,7 @@ extern void BTA_DmDisconnectAllAcls(void);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmClearFilterAcceptList(void);
+void BTA_DmClearFilterAcceptList(void);
 
 using LeRandCallback = base::Callback<void(uint64_t)>;
 /*******************************************************************************
@@ -1312,7 +1350,7 @@ using LeRandCallback = base::Callback<void(uint64_t)>;
  * Returns          cb: callback to receive the resulting random number
  *
  ******************************************************************************/
-extern void BTA_DmLeRand(LeRandCallback cb);
+void BTA_DmLeRand(LeRandCallback cb);
 
 /*******************************************************************************
  *
@@ -1323,7 +1361,7 @@ extern void BTA_DmLeRand(LeRandCallback cb);
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmSetEventFilterConnectionSetupAllDevices();
+void BTA_DmSetEventFilterConnectionSetupAllDevices();
 
 /*******************************************************************************
  *
@@ -1334,7 +1372,7 @@ extern void BTA_DmSetEventFilterConnectionSetupAllDevices();
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmAllowWakeByHid(
+void BTA_DmAllowWakeByHid(
     std::vector<RawAddress> classic_hid_devices,
     std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
 
@@ -1347,7 +1385,7 @@ extern void BTA_DmAllowWakeByHid(
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmRestoreFilterAcceptList(
+void BTA_DmRestoreFilterAcceptList(
     std::vector<std::pair<RawAddress, uint8_t>> le_devices);
 
 /*******************************************************************************
@@ -1362,7 +1400,7 @@ extern void BTA_DmRestoreFilterAcceptList(
  *                disabled in the final value.
  *
  *******************************************************************************/
-extern void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
+void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
 
 /*******************************************************************************
  *
@@ -1373,7 +1411,7 @@ extern void BTA_DmSetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
  * Parameters
  *
  *******************************************************************************/
-extern void BTA_DmSetEventFilterInquiryResultAllDevices();
+void BTA_DmSetEventFilterInquiryResultAllDevices();
 
 /*******************************************************************************
  *
@@ -1384,7 +1422,7 @@ extern void BTA_DmSetEventFilterInquiryResultAllDevices();
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleResetId(void);
+void BTA_DmBleResetId(void);
 
 /*******************************************************************************
  *
@@ -1402,10 +1440,9 @@ extern void BTA_DmBleResetId(void);
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleSubrateRequest(const RawAddress& bd_addr,
-                                    uint16_t subrate_min, uint16_t subrate_max,
-                                    uint16_t max_latency, uint16_t cont_num,
-                                    uint16_t timeout);
+void BTA_DmBleSubrateRequest(const RawAddress& bd_addr, uint16_t subrate_min,
+                             uint16_t subrate_max, uint16_t max_latency,
+                             uint16_t cont_num, uint16_t timeout);
 
 /*******************************************************************************
  *
@@ -1416,5 +1453,8 @@ extern void BTA_DmBleSubrateRequest(const RawAddress& bd_addr,
  * Returns          True if Le Audio capable device, false otherwise
  *
  ******************************************************************************/
-extern bool BTA_DmCheckLeAudioCapable(const RawAddress& address);
+bool BTA_DmCheckLeAudioCapable(const RawAddress& address);
+
+void DumpsysBtaDm(int fd);
+
 #endif /* BTA_API_H */

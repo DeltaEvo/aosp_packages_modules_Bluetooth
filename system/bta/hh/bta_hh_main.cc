@@ -49,7 +49,7 @@ static void bta_hh_better_state_machine(tBTA_HH_DEV_CB* p_cb, uint16_t event,
       switch (event) {
         case BTA_HH_API_OPEN_EVT:
           p_cb->state = BTA_HH_W4_CONN_ST;
-          bta_hh_start_sdp(p_cb, p_data);
+          bta_hh_connect(p_cb, p_data);
           break;
         case BTA_HH_INT_OPEN_EVT:
           p_cb->state = BTA_HH_W4_CONN_ST;
@@ -299,7 +299,7 @@ void bta_hh_sm_execute(tBTA_HH_DEV_CB* p_cb, uint16_t event,
  * Returns          void
  *
  ******************************************************************************/
-bool bta_hh_hdl_event(BT_HDR_RIGID* p_msg) {
+bool bta_hh_hdl_event(const BT_HDR_RIGID* p_msg) {
   uint8_t index = BTA_HH_IDX_INVALID;
   tBTA_HH_DEV_CB* p_cb = NULL;
 

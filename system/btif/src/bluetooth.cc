@@ -51,6 +51,7 @@
 
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "bta/hh/bta_hh_int.h"  // for HID HACK profile methods
+#include "bta/include/bta_api.h"
 #include "bta/include/bta_ar_api.h"
 #include "bta/include/bta_csis_api.h"
 #include "bta/include/bta_has_api.h"
@@ -78,6 +79,7 @@
 #include "btif_metrics_logging.h"
 #include "btif_pan.h"
 #include "btif_profile_storage.h"
+#include "btif_rc.h"
 #include "btif_sock.h"
 #include "btif_storage.h"
 #include "common/address_obfuscator.h"
@@ -173,12 +175,12 @@ extern CsisClientInterface* btif_csis_client_get_interface();
 /* Volume Control client */
 extern VolumeControlInterface* btif_volume_control_get_interface();
 
-extern bt_status_t btif_av_sink_execute_service(bool b_enable);
-extern bt_status_t btif_hh_execute_service(bool b_enable);
-extern bt_status_t btif_hf_client_execute_service(bool b_enable);
-extern bt_status_t btif_sdp_execute_service(bool b_enable);
-extern bt_status_t btif_hh_connect(const RawAddress* bd_addr);
-extern bt_status_t btif_hd_execute_service(bool b_enable);
+bt_status_t btif_av_sink_execute_service(bool b_enable);
+bt_status_t btif_hh_execute_service(bool b_enable);
+bt_status_t btif_hf_client_execute_service(bool b_enable);
+bt_status_t btif_sdp_execute_service(bool b_enable);
+bt_status_t btif_hh_connect(const RawAddress* bd_addr);
+bt_status_t btif_hd_execute_service(bool b_enable);
 
 /*******************************************************************************
  *  Callbacks from bluetooth::core (see go/invisalign-bt)
@@ -324,6 +326,7 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .invoke_le_address_associate_cb = invoke_le_address_associate_cb,
       .invoke_acl_state_changed_cb = invoke_acl_state_changed_cb,
       .invoke_thread_evt_cb = invoke_thread_evt_cb,
+      .invoke_le_test_mode_cb = invoke_le_test_mode_cb,
       .invoke_energy_info_cb = invoke_energy_info_cb,
       .invoke_link_quality_report_cb = invoke_link_quality_report_cb};
   static auto configInterface = ConfigInterfaceImpl();
@@ -476,6 +479,10 @@ static bool get_wbs_supported() {
   return hfp_hal_interface::get_wbs_supported();
 }
 
+static bool get_swb_supported() {
+  return hfp_hal_interface::get_swb_supported();
+}
+
 bool is_common_criteria_mode() {
   return is_bluetooth_uid() && common_criteria_mode;
 }
@@ -498,7 +505,7 @@ static int get_adapter_properties(void) {
 static int get_adapter_property(bt_property_type_t type) {
   /* Allow get_adapter_property only for BDADDR and BDNAME if BT is disabled */
   if (!btif_is_enabled() && (type != BT_PROPERTY_BDADDR) &&
-      (type != BT_PROPERTY_BDNAME) && (type != BT_PROPERTY_CLASS_OF_DEVICE))
+      (type != BT_PROPERTY_BDNAME))
     return BT_STATUS_NOT_READY;
 
   do_in_main_thread(FROM_HERE, base::BindOnce(btif_get_adapter_property, type));
@@ -775,6 +782,7 @@ static void dump(int fd, const char** arguments) {
   btif_debug_conn_dump(fd);
   btif_debug_bond_event_dump(fd);
   btif_debug_linkkey_type_dump(fd);
+  btif_debug_rc_dump(fd);
   btif_debug_a2dp_dump(fd);
   btif_debug_av_dump(fd);
   bta_debug_av_dump(fd);
@@ -801,6 +809,7 @@ static void dump(int fd, const char** arguments) {
   bluetooth::bqr::DebugDump(fd);
   PAN_Dumpsys(fd);
   DumpsysHid(fd);
+  DumpsysBtaDm(fd);
   bluetooth::shim::Dump(fd, arguments);
 }
 
@@ -909,6 +918,55 @@ static const void* get_profile_interface(const char* profile_id) {
   }
 
   return NULL;
+}
+
+int dut_mode_configure(uint8_t enable) {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  if (!stack_manager_get_interface()->get_stack_is_running())
+    return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dut_mode_configure, enable));
+  return BT_STATUS_SUCCESS;
+}
+
+int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  if (!btif_is_dut_mode()) return BT_STATUS_FAIL;
+
+  uint8_t* copy = (uint8_t*)osi_calloc(len);
+  memcpy(copy, buf, len);
+
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(
+                        [](uint16_t opcode, uint8_t* buf, uint8_t len) {
+                          btif_dut_mode_send(opcode, buf, len);
+                          osi_free(buf);
+                        },
+                        opcode, copy, len));
+  return BT_STATUS_SUCCESS;
+}
+
+int le_test_mode(uint16_t opcode, uint8_t* buf, uint8_t len) {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  switch (opcode) {
+    case HCI_BLE_TRANSMITTER_TEST:
+      if (len != 3) return BT_STATUS_PARM_INVALID;
+      do_in_main_thread(FROM_HERE, base::BindOnce(btif_ble_transmitter_test,
+                                                  buf[0], buf[1], buf[2]));
+      break;
+    case HCI_BLE_RECEIVER_TEST:
+      if (len != 1) return BT_STATUS_PARM_INVALID;
+      do_in_main_thread(FROM_HERE,
+                        base::BindOnce(btif_ble_receiver_test, buf[0]));
+      break;
+    case HCI_BLE_TEST_END:
+      do_in_main_thread(FROM_HERE, base::BindOnce(btif_ble_test_end));
+      break;
+    default:
+      return BT_STATUS_UNSUPPORTED;
+  }
+  return BT_STATUS_SUCCESS;
 }
 
 static bt_os_callouts_t* wakelock_os_callouts_saved = nullptr;
@@ -1102,6 +1160,9 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .pin_reply = pin_reply,
     .ssp_reply = ssp_reply,
     .get_profile_interface = get_profile_interface,
+    .dut_mode_configure = dut_mode_configure,
+    .dut_mode_send = dut_mode_send,
+    .le_test_mode = le_test_mode,
     .set_os_callouts = set_os_callouts,
     .read_energy_info = read_energy_info,
     .dump = dump,
@@ -1128,6 +1189,7 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .set_event_filter_connection_setup_all_devices =
         set_event_filter_connection_setup_all_devices,
     .get_wbs_supported = get_wbs_supported,
+    .get_swb_supported = get_swb_supported,
     .metadata_changed = metadata_changed,
     .interop_match_addr = interop_match_addr,
     .interop_match_name = interop_match_name,
@@ -1371,6 +1433,15 @@ void invoke_thread_evt_cb(bt_cb_thread_evt event) {
                                     }
                                   },
                                   event));
+}
+
+void invoke_le_test_mode_cb(bt_status_t status, uint16_t count) {
+  do_in_jni_thread(FROM_HERE, base::BindOnce(
+                                  [](bt_status_t status, uint16_t count) {
+                                    HAL_CBACK(bt_hal_cbacks, le_test_mode_cb,
+                                              status, count);
+                                  },
+                                  status, count));
 }
 
 // takes ownership of |uid_data|

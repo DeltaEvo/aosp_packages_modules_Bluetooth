@@ -38,7 +38,10 @@
 #include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/hidd_api.h"
+#include "stack/include/sdp_api.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth::legacy::stack::sdp;
 
 static void bta_hd_cback(const RawAddress& bd_addr, uint8_t event,
                          uint32_t data, BT_HDR* pdata);
@@ -128,7 +131,7 @@ void bta_hd_api_disable(void) {
 
   /* Remove service record */
   if (bta_hd_cb.sdp_handle != 0) {
-    SDP_DeleteRecord(bta_hd_cb.sdp_handle);
+    get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(bta_hd_cb.sdp_handle);
     bta_sys_remove_uuid(UUID_SERVCLASS_HUMAN_INTERFACE);
   }
 
@@ -185,11 +188,11 @@ void bta_hd_register_act(tBTA_HD_DATA* p_data) {
 
   /* Remove old record if for some reason it's already registered */
   if (bta_hd_cb.sdp_handle != 0) {
-    SDP_DeleteRecord(bta_hd_cb.sdp_handle);
+    get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(bta_hd_cb.sdp_handle);
   }
 
   bta_hd_cb.use_report_id = use_report_id;
-  bta_hd_cb.sdp_handle = SDP_CreateRecord();
+  bta_hd_cb.sdp_handle = get_legacy_stack_sdp_api()->handle.SDP_CreateRecord();
   HID_DevAddRecord(bta_hd_cb.sdp_handle, p_app_data->name,
                    p_app_data->description, p_app_data->provider,
                    p_app_data->subclass, p_app_data->d_len, p_app_data->d_data);
@@ -233,7 +236,7 @@ void bta_hd_unregister_act() {
   HID_DevSetIncomingPolicy(FALSE);
 
   if (bta_hd_cb.sdp_handle != 0) {
-    SDP_DeleteRecord(bta_hd_cb.sdp_handle);
+    get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(bta_hd_cb.sdp_handle);
   }
 
   bta_hd_cb.sdp_handle = 0;
@@ -276,7 +279,7 @@ void bta_hd_unregister2_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_connect_act(tBTA_HD_DATA* p_data) {
+void bta_hd_connect_act(tBTA_HD_DATA* p_data) {
   tHID_STATUS ret;
   tBTA_HD_DEVICE_CTRL* p_ctrl = (tBTA_HD_DEVICE_CTRL*)p_data;
   tBTA_HD cback_data;
@@ -310,7 +313,7 @@ extern void bta_hd_connect_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_disconnect_act() {
+void bta_hd_disconnect_act() {
   tHID_STATUS ret;
   tBTA_HD cback_data;
 
@@ -338,7 +341,7 @@ extern void bta_hd_disconnect_act() {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_add_device_act(tBTA_HD_DATA* p_data) {
+void bta_hd_add_device_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_DEVICE_CTRL* p_ctrl = (tBTA_HD_DEVICE_CTRL*)p_data;
 
   APPL_TRACE_API("%s", __func__);
@@ -355,7 +358,7 @@ extern void bta_hd_add_device_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_remove_device_act(tBTA_HD_DATA* p_data) {
+void bta_hd_remove_device_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_DEVICE_CTRL* p_ctrl = (tBTA_HD_DEVICE_CTRL*)p_data;
 
   APPL_TRACE_API("%s", __func__);
@@ -372,7 +375,7 @@ extern void bta_hd_remove_device_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_send_report_act(tBTA_HD_DATA* p_data) {
+void bta_hd_send_report_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_SEND_REPORT* p_report = (tBTA_HD_SEND_REPORT*)p_data;
   uint8_t channel;
   uint8_t report_id;
@@ -400,7 +403,7 @@ extern void bta_hd_send_report_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_report_error_act(tBTA_HD_DATA* p_data) {
+void bta_hd_report_error_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_REPORT_ERR* p_report = (tBTA_HD_REPORT_ERR*)p_data;
   tHID_STATUS ret;
 
@@ -422,7 +425,7 @@ extern void bta_hd_report_error_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_vc_unplug_act() {
+void bta_hd_vc_unplug_act() {
   tHID_STATUS ret;
 
   APPL_TRACE_API("%s", __func__);
@@ -450,7 +453,7 @@ extern void bta_hd_vc_unplug_act() {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_open_act(tBTA_HD_DATA* p_data) {
+void bta_hd_open_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
   tBTA_HD cback_data;
 
@@ -474,7 +477,7 @@ extern void bta_hd_open_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_close_act(tBTA_HD_DATA* p_data) {
+void bta_hd_close_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
   tBTA_HD cback_data;
   tBTA_HD_EVT cback_event = BTA_HD_CLOSE_EVT;
@@ -504,7 +507,7 @@ extern void bta_hd_close_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_intr_data_act(tBTA_HD_DATA* p_data) {
+void bta_hd_intr_data_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
   BT_HDR* p_msg = p_cback->p_data;
   uint16_t len = p_msg->len;
@@ -542,7 +545,7 @@ extern void bta_hd_intr_data_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_get_report_act(tBTA_HD_DATA* p_data) {
+void bta_hd_get_report_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
   bool rep_size_follows = p_cback->data;
   BT_HDR* p_msg = p_cback->p_data;
@@ -590,7 +593,7 @@ extern void bta_hd_get_report_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_set_report_act(tBTA_HD_DATA* p_data) {
+void bta_hd_set_report_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
   BT_HDR* p_msg = p_cback->p_data;
   uint16_t len = p_msg->len;
@@ -635,7 +638,7 @@ extern void bta_hd_set_report_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_set_protocol_act(tBTA_HD_DATA* p_data) {
+void bta_hd_set_protocol_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
   tBTA_HD cback_data;
 
@@ -656,7 +659,7 @@ extern void bta_hd_set_protocol_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_vc_unplug_done_act(tBTA_HD_DATA* p_data) {
+void bta_hd_vc_unplug_done_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
   tBTA_HD cback_data;
 
@@ -681,7 +684,7 @@ extern void bta_hd_vc_unplug_done_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_suspend_act(tBTA_HD_DATA* p_data) {
+void bta_hd_suspend_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
 
   APPL_TRACE_API("%s", __func__);
@@ -698,7 +701,7 @@ extern void bta_hd_suspend_act(tBTA_HD_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void bta_hd_exit_suspend_act(tBTA_HD_DATA* p_data) {
+void bta_hd_exit_suspend_act(tBTA_HD_DATA* p_data) {
   tBTA_HD_CBACK_DATA* p_cback = (tBTA_HD_CBACK_DATA*)p_data;
 
   APPL_TRACE_API("%s", __func__);

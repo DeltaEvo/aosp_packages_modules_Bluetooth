@@ -69,6 +69,12 @@ void BTIF_dm_report_inquiry_status_change(uint8_t status) {
 void bte_dm_evt(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data) {
   inc_func_call_count(__func__);
 }
+void btif_ble_receiver_test(uint8_t rx_freq) { inc_func_call_count(__func__); }
+void btif_ble_test_end() { inc_func_call_count(__func__); }
+void btif_ble_transmitter_test(uint8_t tx_freq, uint8_t test_data_len,
+                               uint8_t packet_payload) {
+  inc_func_call_count(__func__);
+}
 void btif_debug_bond_event_dump(int fd) { inc_func_call_count(__func__); }
 void btif_dm_ble_sec_req_evt(tBTA_DM_BLE_SEC_REQ* p_ble_req, bool is_consent) {
   inc_func_call_count(__func__);
@@ -141,7 +147,7 @@ void btif_dm_ssp_reply(const RawAddress bd_addr, bt_ssp_variant_t variant,
 }
 void btif_dm_start_discovery(void) { inc_func_call_count(__func__); }
 void btif_dm_update_ble_remote_properties(const RawAddress& bd_addr,
-                                          BD_NAME bd_name,
+                                          BD_NAME bd_name, DEV_CLASS dev_class,
                                           tBT_DEVICE_TYPE dev_type) {
   inc_func_call_count(__func__);
 }

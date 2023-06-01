@@ -1834,10 +1834,8 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
 
   CisType cis_type;
   std::vector<std::pair<uint16_t, uint32_t>>* streams;
-  std::vector<std::pair<uint16_t, uint32_t>>*
-      offloader_streams_target_allocation;
-  std::vector<std::pair<uint16_t, uint32_t>>*
-      offloader_streams_current_allocation;
+  std::vector<stream_map_info>* offloader_streams_target_allocation;
+  std::vector<stream_map_info>* offloader_streams_current_allocation;
   std::string tag;
   uint32_t available_allocations = 0;
   bool* changed_flag;
@@ -1875,7 +1873,9 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
 
   if (offloader_streams_target_allocation->size() == 0) {
     *is_initial = true;
-  } else if (*is_initial) {
+  } else if (*is_initial ||
+             CodecManager::GetInstance()->GetAidlVersionInUsed() >=
+                 AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
     // As multiple CISes phone call case, the target_allocation already have the
     // previous data, but the is_initial flag not be cleared. We need to clear
     // here to avoid make duplicated target allocation stream map.
@@ -1895,24 +1895,16 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
   if (*is_initial && !not_all_cises_connected) {
     *changed_flag = false;
   }
-
-  /* Note: For the offloader case we simplify allocation to only Left and Right.
-   * If we need 2 CISes and only one is connected, the connected one will have
-   * allocation set to stereo (left | right) and other one will have allocation
-   * set to 0. Offloader in this case shall mix left and right and send it on
-   * connected CIS. If there is only single CIS with stereo allocation, it means
-   * that peer device support channel count 2 and offloader shall send two
-   * channels in the single CIS.
-   */
-
   for (auto& cis_entry : cises_) {
     if ((cis_entry.type == CisType::CIS_TYPE_BIDIRECTIONAL ||
          cis_entry.type == cis_type) &&
         cis_entry.conn_handle != 0) {
       uint32_t target_allocation = 0;
       uint32_t current_allocation = 0;
+      bool is_active = false;
       for (const auto& s : *streams) {
         if (s.first == cis_entry.conn_handle) {
+          is_active = true;
           target_allocation = AdjustAllocationForOffloader(s.second);
           current_allocation = target_allocation;
           if (not_all_cises_connected) {
@@ -1931,15 +1923,17 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
 
       LOG_INFO(
           "%s: Cis handle 0x%04x, target allocation  0x%08x, current "
-          "allocation 0x%08x",
+          "allocation 0x%08x, active: %d",
           tag.c_str(), cis_entry.conn_handle, target_allocation,
-          current_allocation);
-      if (*is_initial) {
-        offloader_streams_target_allocation->emplace_back(
-            std::make_pair(cis_entry.conn_handle, target_allocation));
+          current_allocation, is_active);
+
+      if (*is_initial || CodecManager::GetInstance()->GetAidlVersionInUsed() >=
+                             AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
+        offloader_streams_target_allocation->emplace_back(stream_map_info(
+            cis_entry.conn_handle, target_allocation, is_active));
       }
-      offloader_streams_current_allocation->emplace_back(
-          std::make_pair(cis_entry.conn_handle, current_allocation));
+      offloader_streams_current_allocation->emplace_back(stream_map_info(
+          cis_entry.conn_handle, current_allocation, is_active));
     }
   }
 }
@@ -1955,6 +1949,60 @@ void LeAudioDeviceGroup::SetPendingConfiguration(void) {
 void LeAudioDeviceGroup::ClearPendingConfiguration(void) {
   stream_conf.pending_configuration = false;
 }
+
+void LeAudioDeviceGroup::Disable(int gatt_if) {
+  enabled_ = false;
+
+  for (auto& device_iter : leAudioDevices_) {
+    if (!device_iter.lock()->autoconnect_flag_) {
+      continue;
+    }
+
+    auto connection_state = device_iter.lock()->GetConnectionState();
+    auto address = device_iter.lock()->address_;
+
+    btif_storage_set_leaudio_autoconnect(address, false);
+    device_iter.lock()->autoconnect_flag_ = false;
+
+    LOG_INFO("Group %d in state %s. Removing %s from background connect",
+             group_id_, bluetooth::common::ToString(GetState()).c_str(),
+             ADDRESS_TO_LOGGABLE_CSTR(address));
+
+    BTA_GATTC_CancelOpen(gatt_if, address, false);
+
+    if (connection_state == DeviceConnectState::CONNECTING_AUTOCONNECT) {
+      device_iter.lock()->SetConnectionState(DeviceConnectState::DISCONNECTED);
+    }
+  }
+}
+
+void LeAudioDeviceGroup::Enable(int gatt_if,
+                                tBTM_BLE_CONN_TYPE reconnection_mode) {
+  enabled_ = true;
+  for (auto& device_iter : leAudioDevices_) {
+    if (device_iter.lock()->autoconnect_flag_) {
+      continue;
+    }
+
+    auto address = device_iter.lock()->address_;
+    auto connection_state = device_iter.lock()->GetConnectionState();
+
+    btif_storage_set_leaudio_autoconnect(address, true);
+    device_iter.lock()->autoconnect_flag_ = true;
+
+    LOG_INFO("Group %d in state %s. Adding %s from background connect",
+             group_id_, bluetooth::common::ToString(GetState()).c_str(),
+             ADDRESS_TO_LOGGABLE_CSTR(address));
+
+    if (connection_state == DeviceConnectState::DISCONNECTED) {
+      BTA_GATTC_Open(gatt_if, address, reconnection_mode, false);
+      device_iter.lock()->SetConnectionState(
+          DeviceConnectState::CONNECTING_AUTOCONNECT);
+    }
+  }
+}
+
+bool LeAudioDeviceGroup::IsEnabled(void) { return enabled_; };
 
 void LeAudioDeviceGroup::AddToAllowListNotConnectedGroupMembers(int gatt_if) {
   for (const auto& device_iter : leAudioDevices_) {
@@ -1977,27 +2025,6 @@ void LeAudioDeviceGroup::AddToAllowListNotConnectedGroupMembers(int gatt_if) {
     BTA_GATTC_Open(gatt_if, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
     device_iter.lock()->SetConnectionState(
         DeviceConnectState::CONNECTING_AUTOCONNECT);
-  }
-}
-
-void LeAudioDeviceGroup::RemoveFromAllowListNotConnectedGroupMembers(
-    int gatt_if) {
-  for (const auto& device_iter : leAudioDevices_) {
-    auto connection_state = device_iter.lock()->GetConnectionState();
-    if (connection_state != DeviceConnectState::CONNECTING_AUTOCONNECT) {
-      continue;
-    }
-
-    auto address = device_iter.lock()->address_;
-    LOG_INFO(
-        "Group %d in state %s. Adding %s back to target announcement"
-        "reconnect policy",
-        group_id_, bluetooth::common::ToString(GetState()).c_str(),
-        ADDRESS_TO_LOGGABLE_CSTR(address));
-
-    BTA_GATTC_CancelOpen(gatt_if, address, false);
-    BTA_GATTC_Open(gatt_if, address, BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS,
-                   false);
   }
 }
 
@@ -2094,6 +2121,7 @@ void LeAudioDeviceGroup::PrintDebugState(void) {
   std::stringstream debug_str;
 
   debug_str << "\n Groupd id: " << group_id_
+            << (enabled_ ? " enabled" : " disabled")
             << ", state: " << bluetooth::common::ToString(GetState())
             << ", target state: "
             << bluetooth::common::ToString(GetTargetState())
@@ -2149,6 +2177,7 @@ void LeAudioDeviceGroup::Dump(int fd, int active_group_id) {
   auto* active_conf = GetActiveConfiguration();
 
   stream << "\n    == Group id: " << group_id_
+         << (enabled_ ? " enabled" : " disabled")
          << " == " << (is_active ? ",\tActive\n" : ",\tInactive\n")
          << "      state: " << GetState()
          << ",\ttarget state: " << GetTargetState()
@@ -3085,7 +3114,8 @@ void LeAudioDevices::Dump(int fd, int group_id) {
 void LeAudioDevices::Cleanup(tGATT_IF client_if) {
   for (auto const& device : leAudioDevices_) {
     auto connection_state = device->GetConnectionState();
-    if (connection_state == DeviceConnectState::DISCONNECTED) {
+    if (connection_state == DeviceConnectState::DISCONNECTED ||
+        connection_state == DeviceConnectState::DISCONNECTING) {
       continue;
     }
 

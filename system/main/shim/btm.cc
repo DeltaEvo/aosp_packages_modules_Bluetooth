@@ -53,32 +53,36 @@ static constexpr bool kPassiveScanning = false;
 
 using BtmRemoteDeviceName = tBTM_REMOTE_DEV_NAME;
 
-extern void btm_process_cancel_complete(tHCI_STATUS status, uint8_t mode);
-extern void btm_process_inq_complete(tHCI_STATUS status, uint8_t result_type);
-extern void btm_ble_process_adv_addr(RawAddress& raw_address,
-                                     tBLE_ADDR_TYPE* address_type);
-extern void btm_ble_process_adv_pkt_cont(
-    uint16_t event_type, tBLE_ADDR_TYPE address_type,
-    const RawAddress& raw_address, uint8_t primary_phy, uint8_t secondary_phy,
-    uint8_t advertising_sid, int8_t tx_power, int8_t rssi,
-    uint16_t periodic_adv_int, uint8_t data_len, const uint8_t* data,
-    const RawAddress& original_bda);
+void btm_process_cancel_complete(tHCI_STATUS status, uint8_t mode);
+void btm_process_inq_complete(tHCI_STATUS status, uint8_t result_type);
+void btm_ble_process_adv_addr(RawAddress& raw_address,
+                              tBLE_ADDR_TYPE* address_type);
+void btm_ble_process_adv_pkt_cont(uint16_t event_type,
+                                  tBLE_ADDR_TYPE address_type,
+                                  const RawAddress& raw_address,
+                                  uint8_t primary_phy, uint8_t secondary_phy,
+                                  uint8_t advertising_sid, int8_t tx_power,
+                                  int8_t rssi, uint16_t periodic_adv_int,
+                                  uint8_t data_len, const uint8_t* data,
+                                  const RawAddress& original_bda);
 
-extern void btm_api_process_inquiry_result(const RawAddress& raw_address,
-                                           uint8_t page_scan_rep_mode,
-                                           DEV_CLASS device_class,
-                                           uint16_t clock_offset);
+void btm_api_process_inquiry_result(const RawAddress& raw_address,
+                                    uint8_t page_scan_rep_mode,
+                                    DEV_CLASS device_class,
+                                    uint16_t clock_offset);
 
-extern void btm_api_process_inquiry_result_with_rssi(RawAddress raw_address,
-                                                     uint8_t page_scan_rep_mode,
-                                                     DEV_CLASS device_class,
-                                                     uint16_t clock_offset,
-                                                     int8_t rssi);
+void btm_api_process_inquiry_result_with_rssi(RawAddress raw_address,
+                                              uint8_t page_scan_rep_mode,
+                                              DEV_CLASS device_class,
+                                              uint16_t clock_offset,
+                                              int8_t rssi);
 
-extern void btm_api_process_extended_inquiry_result(
-    RawAddress raw_address, uint8_t page_scan_rep_mode, DEV_CLASS device_class,
-    uint16_t clock_offset, int8_t rssi, const uint8_t* eir_data,
-    size_t eir_len);
+void btm_api_process_extended_inquiry_result(RawAddress raw_address,
+                                             uint8_t page_scan_rep_mode,
+                                             DEV_CLASS device_class,
+                                             uint16_t clock_offset, int8_t rssi,
+                                             const uint8_t* eir_data,
+                                             size_t eir_len);
 
 namespace bluetooth {
 
@@ -171,73 +175,6 @@ Btm::Btm(os::Handler* handler, neighbor::InquiryModule* inquiry)
     : scanning_timer_(handler), observing_timer_(handler) {
   ASSERT(handler != nullptr);
   ASSERT(inquiry != nullptr);
-  bluetooth::neighbor::InquiryCallbacks inquiry_callbacks = {
-      .result = std::bind(&Btm::OnInquiryResult, this, std::placeholders::_1),
-      .result_with_rssi =
-          std::bind(&Btm::OnInquiryResultWithRssi, this, std::placeholders::_1),
-      .extended_result =
-          std::bind(&Btm::OnExtendedInquiryResult, this, std::placeholders::_1),
-      .complete =
-          std::bind(&Btm::OnInquiryComplete, this, std::placeholders::_1)};
-  inquiry->RegisterCallbacks(std::move(inquiry_callbacks));
-}
-
-void Btm::OnInquiryResult(bluetooth::hci::InquiryResultView view) {
-  for (auto& response : view.GetResponses()) {
-    btm_api_process_inquiry_result(
-        ToRawAddress(response.bd_addr_),
-        static_cast<uint8_t>(response.page_scan_repetition_mode_),
-        response.class_of_device_.data(), response.clock_offset_);
-  }
-}
-
-void Btm::OnInquiryResultWithRssi(
-    bluetooth::hci::InquiryResultWithRssiView view) {
-  for (auto& response : view.GetResponses()) {
-    btm_api_process_inquiry_result_with_rssi(
-        ToRawAddress(response.address_),
-        static_cast<uint8_t>(response.page_scan_repetition_mode_),
-        response.class_of_device_.data(), response.clock_offset_,
-        response.rssi_);
-  }
-}
-
-void Btm::OnExtendedInquiryResult(
-    bluetooth::hci::ExtendedInquiryResultView view) {
-  constexpr size_t kMaxExtendedInquiryResponse = 240;
-  uint8_t gap_data_buffer[kMaxExtendedInquiryResponse];
-  uint8_t* data = nullptr;
-  size_t data_len = 0;
-
-  if (!view.GetExtendedInquiryResponse().empty()) {
-    bzero(gap_data_buffer, sizeof(gap_data_buffer));
-    uint8_t* p = gap_data_buffer;
-    for (auto gap_data : view.GetExtendedInquiryResponse()) {
-      *p++ = gap_data.data_.size() + sizeof(gap_data.data_type_);
-      *p++ = static_cast<uint8_t>(gap_data.data_type_);
-      p = (uint8_t*)memcpy(p, &gap_data.data_[0], gap_data.data_.size()) +
-          gap_data.data_.size();
-    }
-    data = gap_data_buffer;
-    data_len = p - data;
-  }
-
-  btm_api_process_extended_inquiry_result(
-      ToRawAddress(view.GetAddress()),
-      static_cast<uint8_t>(view.GetPageScanRepetitionMode()),
-      view.GetClassOfDevice().data(), view.GetClockOffset(), view.GetRssi(),
-      data, data_len);
-}
-
-void Btm::OnInquiryComplete(bluetooth::hci::ErrorCode status) {
-  limited_inquiry_active_ = false;
-  general_inquiry_active_ = false;
-  legacy_inquiry_complete_callback_((static_cast<uint16_t>(status) == 0)
-                                        ? (BTM_SUCCESS)
-                                        : (BTM_ERR_PROCESSING),
-                                    active_inquiry_mode_);
-
-  active_inquiry_mode_ = kInquiryModeOff;
 }
 
 void Btm::SetStandardInquiryResultMode() {
@@ -505,25 +442,7 @@ BtmStatus Btm::CancelAllReadRemoteDeviceName() {
   return BTM_UNDEFINED;
 }
 
-void Btm::StartAdvertising() {
-  if (advertiser_id_ == hci::LeAdvertisingManager::kInvalidId) {
-    LOG_WARN("%s Already advertising; please stop prior to starting again",
-             __func__);
-    return;
-  }
-
-  hci::AdvertisingConfig config = {};
-  advertiser_id_ = GetAdvertising()->ExtendedCreateAdvertiser(
-      0x00, config,
-      common::Bind([](hci::Address, hci::AddressType) { /*OnScan*/ }),
-      common::Bind([](hci::ErrorCode, uint8_t, uint8_t) { /*OnTerminated*/ }),
-      0, 0, GetGdShimHandler());
-  if (advertiser_id_ == hci::LeAdvertisingManager::kInvalidId) {
-    LOG_WARN("%s Unable to start advertising", __func__);
-    return;
-  }
-  LOG_INFO("%s Started advertising", __func__);
-}
+void Btm::StartAdvertising() { LOG_ALWAYS_FATAL("unreachable"); }
 
 void Btm::StopAdvertising() {
   if (advertiser_id_ == hci::LeAdvertisingManager::kInvalidId) {

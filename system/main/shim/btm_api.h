@@ -553,6 +553,46 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
 
 /*******************************************************************************
  *
+ * Function         BTM_BleReceiverTest
+ *
+ * Description      This function is called to start the LE Receiver test
+ *
+ * Parameter       rx_freq - Frequency Range
+ *               p_cmd_cmpl_cback - Command Complete callback
+ *
+ ******************************************************************************/
+void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback);
+
+/*******************************************************************************
+ *
+ * Function         BTM_BleTransmitterTest
+ *
+ * Description      This function is called to start the LE Transmitter test
+ *
+ * Parameter       tx_freq - Frequency Range
+ *                       test_data_len - Length in bytes of payload data in each
+ *                                       packet
+ *                       packet_payload - Pattern to use in the payload
+ *                       p_cmd_cmpl_cback - Command Complete callback
+ *
+ ******************************************************************************/
+void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
+                            uint8_t packet_payload,
+                            tBTM_CMPL_CB* p_cmd_cmpl_cback);
+
+/*******************************************************************************
+ *
+ * Function         BTM_BleTestEnd
+ *
+ * Description     This function is called to stop the in-progress TX or RX test
+ *
+ * Parameter       p_cmd_cmpl_cback - Command complete callback
+ *
+ ******************************************************************************/
+void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback);
+
+/*******************************************************************************
+ *
  * Function         BTM_UseLeLink
  *
  * Description      Select the underlying physical link to use.
@@ -670,42 +710,6 @@ bool BTM_BleSecurityProcedureIsRunning(const RawAddress& bd_addr);
  ******************************************************************************/
 uint8_t BTM_BleGetSupportedKeySize(const RawAddress& bd_addr);
 
-void BTM_LE_PF_local_name(tBTM_BLE_SCAN_COND_OP action,
-                          tBTM_BLE_PF_FILT_INDEX filt_index,
-                          std::vector<uint8_t> name, tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_srvc_data(tBTM_BLE_SCAN_COND_OP action,
-                         tBTM_BLE_PF_FILT_INDEX filt_index);
-
-void BTM_LE_PF_manu_data(tBTM_BLE_SCAN_COND_OP action,
-                         tBTM_BLE_PF_FILT_INDEX filt_index, uint16_t company_id,
-                         uint16_t company_id_mask, std::vector<uint8_t> data,
-                         std::vector<uint8_t> data_mask,
-                         tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_srvc_data_pattern(tBTM_BLE_SCAN_COND_OP action,
-                                 tBTM_BLE_PF_FILT_INDEX filt_index,
-                                 std::vector<uint8_t> data,
-                                 std::vector<uint8_t> data_mask,
-                                 tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_addr_filter(tBTM_BLE_SCAN_COND_OP action,
-                           tBTM_BLE_PF_FILT_INDEX filt_index, tBLE_BD_ADDR addr,
-                           tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_uuid_filter(tBTM_BLE_SCAN_COND_OP action,
-                           tBTM_BLE_PF_FILT_INDEX filt_index,
-                           tBTM_BLE_PF_COND_TYPE filter_type,
-                           const bluetooth::Uuid& uuid,
-                           tBTM_BLE_PF_LOGIC_TYPE cond_logic,
-                           const bluetooth::Uuid& uuid_mask,
-                           tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_set(tBTM_BLE_PF_FILT_INDEX filt_index,
-                   std::vector<ApcfCommand> commands, tBTM_BLE_PF_CFG_CBACK cb);
-void BTM_LE_PF_clear(tBTM_BLE_PF_FILT_INDEX filt_index,
-                     tBTM_BLE_PF_CFG_CBACK cb);
-
 /*******************************************************************************
  *
  * Function         BTM_BleAdvFilterParamSetup
@@ -718,30 +722,6 @@ void BTM_BleAdvFilterParamSetup(
     tBTM_BLE_SCAN_COND_OP action, tBTM_BLE_PF_FILT_INDEX filt_index,
     std::unique_ptr<btgatt_filt_param_setup_t> p_filt_params,
     tBTM_BLE_PF_PARAM_CB cb);
-
-/*******************************************************************************
- *
- * Function         BTM_BleUpdateAdvFilterPolicy
- *
- * Description      This function update the filter policy of advertiser.
- *
- * Parameter        adv_policy: advertising filter policy
- *
- * Return           void
- ******************************************************************************/
-void BTM_BleUpdateAdvFilterPolicy(tBTM_BLE_AFP adv_policy);
-
-/*******************************************************************************
- *
- * Function         BTM_BleEnableDisableFilterFeature
- *
- * Description      Enable or disable the APCF feature
- *
- * Parameters       enable - true - enables APCF, false - disables APCF
- *
- ******************************************************************************/
-void BTM_BleEnableDisableFilterFeature(uint8_t enable,
-                                       tBTM_BLE_PF_STATUS_CBACK p_stat_cback);
 
 /*******************************************************************************
  *
@@ -920,6 +900,23 @@ void BTM_WritePageTimeout(uint16_t timeout);
  *
  ******************************************************************************/
 void BTM_WriteVoiceSettings(uint16_t settings);
+
+/*******************************************************************************
+ *
+ * Function         BTM_EnableTestMode
+ *
+ * Description      Send HCI the enable device under test command.
+ *
+ *                  Note: Controller can only be taken out of this mode by
+ *                      resetting the controller.
+ *
+ * Returns
+ *      BTM_SUCCESS         Command sent.
+ *      BTM_NO_RESOURCES    If out of resources to send the command.
+ *
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_EnableTestMode(void);
 
 /*******************************************************************************
  *

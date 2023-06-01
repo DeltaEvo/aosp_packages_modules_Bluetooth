@@ -673,6 +673,7 @@ public class SapService extends ProfileService {
     protected boolean start() {
         Log.v(TAG, "start()");
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
@@ -810,9 +811,10 @@ public class SapService extends ProfileService {
         } // Can only be null during shutdown
     }
 
-    private SapBroadcastReceiver mSapReceiver = new SapBroadcastReceiver();
+    @VisibleForTesting SapBroadcastReceiver mSapReceiver = new SapBroadcastReceiver();
 
-    private class SapBroadcastReceiver extends BroadcastReceiver {
+    @VisibleForTesting
+    class SapBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
 
@@ -843,7 +845,8 @@ public class SapService extends ProfileService {
                 Log.v(TAG, " - Received BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY");
 
                 int requestType = intent.getIntExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE, -1);
-                if (requestType != BluetoothDevice.REQUEST_TYPE_SIM_ACCESS) {
+                if (requestType != BluetoothDevice.REQUEST_TYPE_SIM_ACCESS
+                        || !mIsWaitingAuthorization) {
                     return;
                 }
 

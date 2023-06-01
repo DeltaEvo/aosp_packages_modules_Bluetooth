@@ -35,8 +35,11 @@
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth::legacy::stack::sdp;
 
 using bluetooth::Uuid;
 
@@ -53,6 +56,12 @@ void BTA_dm_init() {
   bta_sys_eir_register(bta_dm_eir_update_uuid);
   bta_sys_cust_eir_register(bta_dm_eir_update_cust_uuid);
   BTM_SetConsolidationCallback(bta_dm_consolidate);
+}
+
+/** Enables bluetooth device under test mode */
+void BTA_EnableTestMode(void) {
+  do_in_main_thread(FROM_HERE,
+                    base::Bind(base::IgnoreResult(BTM_EnableTestMode)));
 }
 
 /** This function sets the Bluetooth name of local device */
@@ -317,8 +326,8 @@ tBTA_STATUS BTA_DmSetLocalDiRecord(tSDP_DI_RECORD* p_device_info,
   tBTA_STATUS status = BTA_FAILURE;
 
   if (bta_dm_di_cb.di_num < BTA_DI_NUM_MAX) {
-    if (SDP_SetLocalDiRecord((tSDP_DI_RECORD*)p_device_info, p_handle) ==
-        SDP_SUCCESS) {
+    if (get_legacy_stack_sdp_api()->device_id.SDP_SetLocalDiRecord(
+            (tSDP_DI_RECORD*)p_device_info, p_handle) == SDP_SUCCESS) {
       if (!p_device_info->primary_record) {
         bta_dm_di_cb.di_handle[bta_dm_di_cb.di_num] = *p_handle;
         bta_dm_di_cb.di_num++;
@@ -588,8 +597,8 @@ void BTA_DmCloseACL(const RawAddress& bd_addr, bool remove_dev,
  * Returns          void.
  *
  ******************************************************************************/
-extern void BTA_DmBleObserve(bool start, uint8_t duration,
-                             tBTA_DM_SEARCH_CBACK* p_results_cb) {
+void BTA_DmBleObserve(bool start, uint8_t duration,
+                      tBTA_DM_SEARCH_CBACK* p_results_cb) {
   APPL_TRACE_API("%s:start = %d ", __func__, start);
   do_in_main_thread(
       FROM_HERE, base::Bind(bta_dm_ble_observe, start, duration, p_results_cb));
@@ -605,14 +614,16 @@ extern void BTA_DmBleObserve(bool start, uint8_t duration,
  * Parameters       start: start or stop the scan procedure,
  *                  duration_sec: Duration of the scan. Continuous scan if 0 is
  *                                passed,
+ *                  low_latency_scan: whether this is an low latency scan,
+ *                                    default is false.
  *
  * Returns          void
  *
  ******************************************************************************/
-extern void BTA_DmBleScan(bool start, uint8_t duration_sec) {
+void BTA_DmBleScan(bool start, uint8_t duration_sec, bool low_latency_scan) {
   APPL_TRACE_API("%s:start = %d ", __func__, start);
-  do_in_main_thread(FROM_HERE,
-                    base::Bind(bta_dm_ble_scan, start, duration_sec));
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_ble_scan, start, duration_sec,
+                                          low_latency_scan));
 }
 
 /*******************************************************************************
@@ -788,6 +799,43 @@ void BTA_DmBleSubrateRequest(const RawAddress& bd_addr, uint16_t subrate_min,
   do_in_main_thread(FROM_HERE,
                     base::Bind(bta_dm_ble_subrate_request, bd_addr, subrate_min,
                                subrate_max, max_latency, cont_num, timeout));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmSirkSecCbRegister
+ *
+ * Description      This procedure registeres in requested a callback for
+ *                  verification by CSIP potential set member.
+ *
+ * Parameters       p_cback     - callback to member verificator
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmSirkSecCbRegister(tBTA_DM_SEC_CBACK* p_cback) {
+  LOG_DEBUG("");
+  do_in_main_thread(FROM_HERE,
+                    base::Bind(bta_dm_ble_sirk_sec_cb_register, p_cback));
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmSirkConfirmDeviceReply
+ *
+ * Description      This procedure confirms requested to validate set device.
+ *
+ * Parameters       bd_addr     - BD address of the peer
+ *                  accept      - True if device is authorized by CSIP, false
+ *                                otherwise.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmSirkConfirmDeviceReply(const RawAddress& bd_addr, bool accept) {
+  LOG_DEBUG("");
+  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_ble_sirk_confirm_device_reply,
+                                          bd_addr, accept));
 }
 
 bool BTA_DmCheckLeAudioCapable(const RawAddress& address) {

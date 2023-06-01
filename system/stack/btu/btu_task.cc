@@ -42,8 +42,6 @@
 using bluetooth::common::MessageLoopThread;
 using bluetooth::hci::IsoManager;
 
-void btm_route_sco_data(BT_HDR* p_msg);
-
 /* Define BTU storage area */
 uint8_t btu_trace_level = HCI_INITIAL_TRACE_LEVEL;
 
@@ -60,10 +58,6 @@ void btu_hci_msg_process(BT_HDR* p_msg) {
     case BT_EVT_TO_BTU_L2C_SEG_XMIT:
       /* L2CAP segment transmit complete */
       acl_link_segments_xmitted(p_msg);
-      break;
-
-    case BT_EVT_TO_BTU_HCI_SCO:
-      btm_route_sco_data(p_msg);
       break;
 
     case BT_EVT_TO_BTU_HCI_EVT:
@@ -121,7 +115,7 @@ void main_thread_start_up() {
     LOG(FATAL) << __func__ << ": unable to start btu message loop thread.";
   }
   if (!main_thread.EnableRealTimeScheduling()) {
-#if defined(OS_ANDROID)
+#if defined(__ANDROID__)
     LOG(FATAL) << __func__ << ": unable to enable real time scheduling";
 #else
     LOG(ERROR) << __func__ << ": unable to enable real time scheduling";
@@ -140,7 +134,7 @@ bool is_on_main_thread() {
 #include <sys/syscall.h> /* For SYS_xxx definitions */
 #include <unistd.h>
   return main_thread.GetThreadId() == syscall(__NR_gettid);
-#elif defined(OS_ANDROID)
+#elif defined(__ANDROID__)
 #include <sys/types.h>
 #include <unistd.h>
   return main_thread.GetThreadId() == gettid();

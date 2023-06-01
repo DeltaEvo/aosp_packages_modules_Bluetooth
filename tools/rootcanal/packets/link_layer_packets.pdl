@@ -6,15 +6,14 @@ custom_field ClassOfDevice : 24 "hci/"
 enum PacketType : 8 {
     UNKNOWN = 0x00,
     ACL = 0x01,
-    DISCONNECT = 0x02,
-    ENCRYPT_CONNECTION = 0x03,
-    ENCRYPT_CONNECTION_RESPONSE = 0x04,
-    EVENT = 0x05,
+    SCO = 0x02,
+
+    LE_CONNECTED_ISOCHRONOUS_PDU = 0x03,
+    LE_BROADCAST_ISOCHRONOUS_PDU = 0x04,
+
+    DISCONNECT = 0x05,
     INQUIRY = 0x06,
     INQUIRY_RESPONSE = 0x07,
-    IO_CAPABILITY_REQUEST = 0x08,
-    IO_CAPABILITY_RESPONSE = 0x09,
-    IO_CAPABILITY_NEGATIVE_RESPONSE = 0x0A,
     LE_LEGACY_ADVERTISING_PDU = 0x0B,
     LE_EXTENDED_ADVERTISING_PDU = 0x37,
     LE_PERIODIC_ADVERTISING_PDU = 0x40,
@@ -37,19 +36,8 @@ enum PacketType : 8 {
     READ_REMOTE_VERSION_INFORMATION_RESPONSE = 0x1C,
     REMOTE_NAME_REQUEST = 0x1D,
     REMOTE_NAME_REQUEST_RESPONSE = 0x1E,
-    SCO = 0x1F,
     LE_ENCRYPT_CONNECTION = 0x20,
     LE_ENCRYPT_CONNECTION_RESPONSE = 0x21,
-    ISO = 0x22,
-    ISO_CONNECTION_REQUEST = 0x23,
-    ISO_CONNECTION_RESPONSE = 0x24,
-    OOB_DATA = 0x25,
-    OOB_DATA_RESPONSE = 0x26,
-    PASSKEY = 0x27,
-    PASSKEY_FAILED = 0x28,
-    KEYPRESS_NOTIFICATION = 0x29,
-    PIN_REQUEST = 0x2A,
-    PIN_RESPONSE = 0x2B,
     LE_READ_REMOTE_FEATURES = 0x2C,
     LE_READ_REMOTE_FEATURES_RESPONSE = 0x2D,
     LE_CONNECTION_PARAMETER_REQUEST = 0x2E,
@@ -58,14 +46,18 @@ enum PacketType : 8 {
     SCO_CONNECTION_REQUEST = 0x30,
     SCO_CONNECTION_RESPONSE = 0x31,
     SCO_DISCONNECT = 0x32,
-    RSSI_WRAPPER = 0x33,
 
     LMP = 0x34,
+    LLCP = 0x41,
 
     PING_REQUEST = 0x35,
     PING_RESPONSE = 0x36,
     ROLE_SWITCH_REQUEST = 0x38,
     ROLE_SWITCH_RESPONSE = 0x39,
+
+    LL_PHY_REQ = 0x50,
+    LL_PHY_RSP = 0x51,
+    LL_PHY_UPDATE_IND = 0x52,
 }
 
 packet LinkLayerPacket {
@@ -81,16 +73,22 @@ packet Acl : LinkLayerPacket (type = ACL) {
   data: 8[],
 }
 
+packet Sco : LinkLayerPacket (type = SCO) {
+  _payload_,
+}
+
+packet LeConnectedIsochronousPdu : LinkLayerPacket (type = LE_CONNECTED_ISOCHRONOUS_PDU) {
+  cig_id: 8,
+  cis_id: 8,
+  sequence_number: 16,
+  data: 8[],
+}
+
+packet LeBroadcastIsochronousPdu : LinkLayerPacket (type = LE_BROADCAST_ISOCHRONOUS_PDU) {
+}
+
 packet Disconnect : LinkLayerPacket (type = DISCONNECT) {
   reason : 8,
-}
-
-packet EncryptConnection : LinkLayerPacket (type = ENCRYPT_CONNECTION) {
-  key : 8[],
-}
-
-packet EncryptConnectionResponse : LinkLayerPacket (type = ENCRYPT_CONNECTION_RESPONSE) {
-  key : 8[],
 }
 
 enum InquiryState : 8 {
@@ -128,22 +126,6 @@ packet InquiryResponseWithRssi : BasicInquiryResponse (inquiry_type = RSSI)  {
 packet ExtendedInquiryResponse : BasicInquiryResponse (inquiry_type = EXTENDED)  {
   rssi: 8,
   extended_inquiry_response : 8[240],
-}
-
-packet IoCapabilityRequest : LinkLayerPacket (type = IO_CAPABILITY_REQUEST) {
-  io_capability : 8,
-  oob_data_present : 8,
-  authentication_requirements : 8,
-}
-
-packet IoCapabilityResponse : LinkLayerPacket (type = IO_CAPABILITY_RESPONSE) {
-  io_capability : 8,
-  oob_data_present : 8,
-  authentication_requirements : 8,
-}
-
-packet IoCapabilityNegativeResponse : LinkLayerPacket (type = IO_CAPABILITY_NEGATIVE_RESPONSE) {
-  reason : 8,
 }
 
 enum AddressType : 8 {
@@ -291,10 +273,6 @@ packet RemoteNameRequestResponse : LinkLayerPacket (type = REMOTE_NAME_REQUEST_R
   name : 8[248],
 }
 
-packet Sco : LinkLayerPacket (type = SCO) {
-  _payload_,
-}
-
 packet LeEncryptConnection : LinkLayerPacket (type = LE_ENCRYPT_CONNECTION) {
   rand : 8[8],
   ediv : 16,
@@ -307,109 +285,12 @@ packet LeEncryptConnectionResponse : LinkLayerPacket (type = LE_ENCRYPT_CONNECTI
   ltk : 8[16],
 }
 
-enum StartContinuation : 1 {
-  START = 0,
-  CONTINUATION = 1,
-}
-
-enum Complete : 1 {
-  INCOMPLETE = 0,
-  COMPLETE = 1,
-}
-
-packet IsoDataPacket : LinkLayerPacket (type = ISO) {
-  handle : 12,
-  _reserved_ : 4,
-  sc : StartContinuation,
-  cmplt : Complete,
-  _reserved_ : 6,
-  _size_(_payload_) : 16,
-  _payload_,
-}
-
-packet IsoStart : IsoDataPacket (sc = START) {
-  time_offset : 24,
-  _payload_,
-}
-
-packet IsoContinuation : IsoDataPacket (sc = CONTINUATION) {
-  _payload_,
-}
-
-packet IsoConnectionRequest : LinkLayerPacket (type = ISO_CONNECTION_REQUEST) {
-  // Group
-  cig_id : 8,
-  sdu_interval_m_to_s : 32,
-  sdu_interval_s_to_m : 32,
-  interleaved : 1,
-  framed : 1,
-  _reserved_ : 6,
-  latency_m_to_s : 16,
-  latency_s_to_m : 16,
-  // Stream parameters
-  id : 8,
-  max_sdu_m_to_s_ : 16,
-  max_sdu_s_to_m_ : 16,
-  // For the response
-  requester_cis_handle : 12,
-  _reserved_ : 4,
-  requester_acl_handle : 12,
-  _reserved_ : 4,
-}
-
-packet IsoConnectionResponse  : LinkLayerPacket (type = ISO_CONNECTION_RESPONSE){
-  status : 8, // ErrorCode (SUCCESS == connected)
-  requester_cis_handle : 12,
-  _reserved_ : 4,
-  requester_acl_handle : 12,
-  _reserved_ : 4,
-  // For the link layer
-  responder_cis_handle : 12,
-  _reserved_ : 4,
-}
-
-packet OobData : LinkLayerPacket (type = OOB_DATA){
-  c_p_194 : 8[16],
-  r_p_194 : 8[16],
-  c_p_256 : 8[16],
-  r_p_256 : 8[16],
-}
-
-packet OobDataResponse : LinkLayerPacket (type = OOB_DATA_RESPONSE){
-  matched : 1,
-  _reserved_ : 7,
-}
-
 enum PasskeyNotificationType : 8 {
   ENTRY_STARTED = 0x00,
   DIGIT_ENTERED = 0x01,
   DIGIT_ERASED = 0x02,
   CLEARED = 0x03,
   ENTRY_COMPLETED = 0x04,
-}
-
-packet Passkey : LinkLayerPacket (type = PASSKEY){
-  passkey : 20,
-  _reserved_ : 4,
-}
-
-packet PasskeyFailed : LinkLayerPacket (type = PASSKEY_FAILED){
-}
-
-packet KeypressNotification : LinkLayerPacket (type = KEYPRESS_NOTIFICATION){
-  notification_type : PasskeyNotificationType,
-}
-
-packet PinRequest : LinkLayerPacket (type = PIN_REQUEST) {
-  _size_(pin_code) : 5, // 0x01 - 0x10
-  _reserved_ : 3,
-  pin_code : 8[], // string parameter, first octet first
-}
-
-packet PinResponse : LinkLayerPacket (type = PIN_RESPONSE) {
-  _size_(pin_code) : 5, // 0x01 - 0x10
-  _reserved_ : 3,
-  pin_code : 8[], // string parameter, first octet first
 }
 
 packet LeReadRemoteFeatures : LinkLayerPacket (type = LE_READ_REMOTE_FEATURES) {
@@ -464,6 +345,10 @@ packet Lmp : LinkLayerPacket (type = LMP) {
   _payload_,
 }
 
+packet Llcp : LinkLayerPacket (type = LLCP) {
+  _payload_,
+}
+
 packet PingRequest : LinkLayerPacket (type = PING_REQUEST) {
 }
 
@@ -477,4 +362,20 @@ packet RoleSwitchRequest : LinkLayerPacket (type = ROLE_SWITCH_REQUEST) {
 packet RoleSwitchResponse : LinkLayerPacket (type = ROLE_SWITCH_RESPONSE) {
   status: 8,
   initiator_new_role: 8,
+}
+
+packet LlPhyReq : LinkLayerPacket (type = LL_PHY_REQ) {
+  tx_phys: 8,
+  rx_phys: 8,
+}
+
+packet LlPhyRsp : LinkLayerPacket (type = LL_PHY_RSP) {
+  tx_phys: 8,
+  rx_phys: 8,
+}
+
+packet LlPhyUpdateInd : LinkLayerPacket (type = LL_PHY_UPDATE_IND) {
+  phy_c_to_p: 8,
+  phy_p_to_c: 8,
+  instant: 16,
 }

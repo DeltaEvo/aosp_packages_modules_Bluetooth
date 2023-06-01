@@ -19,21 +19,12 @@ cc_defaults {
     target: {
         android: {
             test_config_template: "AndroidTestTemplate.xml",
-            cflags: [
-                "-DOS_ANDROID",
-                "-DOS_LINUX_GENERIC",
-            ],
             shared_libs: [
                 "liblog",
             ],
             sanitize: {
                 misc_undefined: ["bounds"],
             },
-        },
-        host: {
-            cflags: [
-                "-DOS_LINUX_GENERIC",
-            ],
         },
         darwin: {
             enabled: false,
@@ -47,43 +38,8 @@ cc_defaults {
         "-Wno-unused-result",
         "-fvisibility=hidden",
     ],
-    conlyflags: [
-        "-std=c99",
-    ],
+    c_std: "c99",
     header_libs: ["jni_headers"],
-}
-
-// Enables code coverage for a set of source files. Must be combined with
-// "clang_coverage_bin" in order to work. See //test/gen_coverage.py for more information
-// on generating code coverage.
-cc_defaults {
-    name: "gd_clang_file_coverage",
-    target: {
-        glibc: {
-            cflags: [
-                "-fcoverage-mapping",
-                "-fprofile-instr-generate",
-            ],
-        },
-    },
-}
-
-// Enabled code coverage on a binary. These flags allow libraries that were
-// compiled with "clang_file_coverage" to be properly linked together in
-// order to create a binary that will create a profraw file when ran. Note
-// these flags themselves don't enable code coverage for the source files
-// compiled in the binary. See //test/gen_coverage.py for more information
-// on generating code coverage.
-cc_defaults {
-    name: "gd_clang_coverage_bin",
-    target: {
-        glibc: {
-            ldflags: [
-                "-fcoverage-mapping",
-                "-fprofile-instr-generate",
-            ],
-        },
-    },
 }
 
 cc_defaults {
@@ -139,9 +95,7 @@ cc_defaults {
 cc_defaults {
     name: "libbluetooth_gd_defaults",
     defaults: [
-        "gd_clang_file_coverage",
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     target: {
@@ -218,7 +172,6 @@ cc_defaults {
         "libbluetooth-protos",
         "libbluetooth_rust_interop",
         "libbt-platform-protos-lite",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
     ],
@@ -238,6 +191,7 @@ cc_library {
         "com.android.btservices",
     ],
     min_sdk_version: "31",
+    static_libs: ["libchrome"],
 }
 
 cc_library {
@@ -252,6 +206,7 @@ cc_library {
         "-DFUZZ_TARGET",
         "-DUSE_FAKE_TIMERS",
     ],
+    static_libs: ["libchrome"],
 }
 
 cc_library {
@@ -265,14 +220,13 @@ cc_library {
     cflags: [
         "-DUSE_FAKE_TIMERS",
     ],
+    static_libs: ["libchrome"],
 }
 
 cc_binary {
     name: "bluetooth_stack_with_facade",
     defaults: [
-        "gd_clang_coverage_bin",
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     srcs: [
@@ -306,9 +260,9 @@ cc_binary {
         "libbluetooth-protos",
         "libbluetooth_gd",
         "libbluetooth_rust_interop",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
+        "libchrome",
         "libflatbuffers-cpp",
     ],
     shared_libs: [
@@ -352,9 +306,7 @@ cc_test {
     test_suites: ["device-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
-        "gd_clang_coverage_bin",
         "gd_defaults",
-        "libchrome_support_defaults",
         "mts_defaults",
     ],
     host_supported: true,
@@ -429,10 +381,10 @@ cc_test {
         "libbluetooth_rust_interop",
         "libbt-platform-protos-lite",
         "libbt-platform-protos-lite",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libc++fs",
+        "libchrome",
         "libflatbuffers-cpp",
         "libgmock",
     ],
@@ -450,9 +402,7 @@ cc_test {
     test_suites: ["device-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
-        "gd_clang_coverage_bin",
         "gd_defaults",
-        "libchrome_support_defaults",
         "mts_defaults",
     ],
     include_dirs: ["packages/modules/Bluetooth/system/gd"],
@@ -474,7 +424,6 @@ cc_test {
     },
     static_libs: [
         "libbluetooth_rust_interop",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
     ],
@@ -508,7 +457,6 @@ cc_defaults {
         "libbluetooth-protos",
         "libbluetooth_gd_fuzzing",
         "libbluetooth_rust_interop",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
@@ -585,7 +533,6 @@ cc_benchmark {
     name: "bluetooth_benchmark_gd",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     srcs: [
@@ -595,6 +542,7 @@ cc_benchmark {
     static_libs: [
         "libbluetooth_gd",
         "libbt_shim_bridge",
+        "libchrome",
     ],
 }
 
@@ -924,7 +872,7 @@ cc_library_host_shared {
 genrule {
     name: "gd_hci_packets_python3_gen",
     defaults: ["pdl_python_generator_defaults"],
-    cmd: "$(location :pdl) $(in) |" +
+    cmd: "$(location :pdlc) $(in) |" +
         " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location blueberry.utils.bluetooth",
     srcs: [

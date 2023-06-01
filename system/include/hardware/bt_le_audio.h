@@ -133,6 +133,9 @@ class LeAudioClientInterface {
   /** Disconnect from LEAudio */
   virtual void Disconnect(const RawAddress& address) = 0;
 
+  /* Set enable/disable State for the LeAudio device */
+  virtual void SetEnableState(const RawAddress& address, bool enabled) = 0;
+
   /* Cleanup the LeAudio */
   virtual void Cleanup(void) = 0;
 
@@ -158,6 +161,11 @@ class LeAudioClientInterface {
 
   /* Set In call flag */
   virtual void SetInCall(bool in_call) = 0;
+
+  /* Sends a preferred audio profiles change */
+  virtual void SendAudioProfilePreferences(
+      int group_id, bool is_output_preference_le_audio,
+      bool is_duplex_preference_le_audio) = 0;
 };
 
 /* Represents the broadcast source state. */

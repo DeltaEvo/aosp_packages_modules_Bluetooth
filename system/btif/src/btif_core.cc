@@ -75,12 +75,12 @@ static void bt_jni_msg_ready(void* context);
 // TODO(armansito): Find a better way than searching by a hardcoded path.
 #if defined(TARGET_FLOSS)
 #define BTE_DID_CONF_FILE "/var/lib/bluetooth/bt_did.conf"
-#elif defined(OS_GENERIC)
-#define BTE_DID_CONF_FILE "bt_did.conf"
-#else  // !defined(OS_GENERIC)
+#elif defined(__ANDROID__)
 #define BTE_DID_CONF_FILE \
   "/apex/com.android.btservices/etc/bluetooth/bt_did.conf"
-#endif  // defined(OS_GENERIC)
+#else  // !defined(__ANDROID__)
+#define BTE_DID_CONF_FILE "bt_did.conf"
+#endif  // defined(__ANDROID__)
 #endif  // BTE_DID_CONF_FILE
 
 #define CODEC_TYPE_NUMBER 32
@@ -93,6 +93,14 @@ static void bt_jni_msg_ready(void* context);
  ******************************************************************************/
 
 static tBTA_SERVICE_MASK btif_enabled_services = 0;
+
+/*
+ * This variable should be set to 1, if the Bluedroid+BTIF libraries are to
+ * function in DUT mode.
+ *
+ * To set this, the btif_init_bluetooth needs to be called with argument as 1
+ */
+static uint8_t btif_dut_mode = 0;
 
 static MessageLoopThread jni_thread("bt_jni_thread");
 static base::AtExitManager* exit_manager;
@@ -183,6 +191,18 @@ void post_on_bt_jni(BtJniClosure closure) {
 
 /*******************************************************************************
  *
+ * Function         btif_is_dut_mode
+ *
+ * Description      checks if BTIF is currently in DUT mode
+ *
+ * Returns          true if test mode, otherwise false
+ *
+ ******************************************************************************/
+
+bool btif_is_dut_mode() { return btif_dut_mode == 1; }
+
+/*******************************************************************************
+ *
  * Function         btif_is_enabled
  *
  * Description      checks if main adapter is fully enabled
@@ -192,7 +212,8 @@ void post_on_bt_jni(BtJniClosure closure) {
  ******************************************************************************/
 
 int btif_is_enabled(void) {
-  return (stack_manager_get_interface()->get_stack_is_running());
+  return ((!btif_is_dut_mode()) &&
+          (stack_manager_get_interface()->get_stack_is_running()));
 }
 
 void btif_init_ok() {
@@ -263,7 +284,6 @@ void btif_enable_bluetooth_evt() {
     LOG_INFO("%s: Storing '%s' into the config file", __func__,
             ADDRESS_TO_LOGGABLE_CSTR(local_bd_addr));
     btif_config_set_str("Adapter", "Address", bdstr.c_str());
-    btif_config_save();
 
     // fire HAL callback for property change
     bt_property_t prop;
@@ -313,8 +333,55 @@ bt_status_t btif_cleanup_bluetooth() {
   jni_thread.ShutDown();
   delete exit_manager;
   exit_manager = nullptr;
+  btif_dut_mode = 0;
   LOG_INFO("%s finished", __func__);
   return BT_STATUS_SUCCESS;
+}
+
+/*******************************************************************************
+ *
+ * Function         btif_dut_mode_cback
+ *
+ * Description     Callback invoked on completion of vendor specific test mode
+ *                 command
+ *
+ * Returns          None
+ *
+ ******************************************************************************/
+static void btif_dut_mode_cback(UNUSED_ATTR tBTM_VSC_CMPL* p) {
+  /* For now nothing to be done. */
+}
+
+/*******************************************************************************
+ *
+ * Function         btif_dut_mode_configure
+ *
+ * Description      Configure Test Mode - 'enable' to 1 puts the device in test
+ *                       mode and 0 exits test mode
+ *
+ ******************************************************************************/
+void btif_dut_mode_configure(uint8_t enable) {
+  BTIF_TRACE_DEBUG("%s", __func__);
+
+  btif_dut_mode = enable;
+  if (enable == 1) {
+    BTA_EnableTestMode();
+  } else {
+    // Can't do in process reset anyways - just quit
+    kill(getpid(), SIGKILL);
+  }
+}
+
+/*******************************************************************************
+ *
+ * Function         btif_dut_mode_send
+ *
+ * Description     Sends a HCI Vendor specific command to the controller
+ *
+ ******************************************************************************/
+void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
+  BTIF_TRACE_DEBUG("%s", __func__);
+  BTM_VendorSpecificCommand(opcode, len, buf, btif_dut_mode_cback);
 }
 
 /*****************************************************************************
@@ -436,11 +503,6 @@ static bt_status_t btif_in_get_remote_device_properties(RawAddress* bd_addr) {
       BT_STATUS_SUCCESS, *bd_addr, num_props, remote_properties);
 
   return BT_STATUS_SUCCESS;
-}
-
-static void btif_core_storage_adapter_notify_empty_success() {
-  GetInterfaceToProfiles()->events->invoke_adapter_properties_cb(
-      BT_STATUS_SUCCESS, 0, NULL);
 }
 
 static void btif_core_storage_adapter_write(bt_property_t* prop) {
@@ -652,16 +714,6 @@ void btif_set_adapter_property(bt_property_t* property) {
          will change the SCAN_MODE property after setting timeout,
          if required */
       btif_core_storage_adapter_write(property);
-    } break;
-    case BT_PROPERTY_CLASS_OF_DEVICE: {
-      DEV_CLASS dev_class;
-      memcpy(dev_class, property->val, DEV_CLASS_LEN);
-
-      BTIF_TRACE_EVENT("set property dev_class : 0x%02x%02x%02x", dev_class[0],
-                       dev_class[1], dev_class[2]);
-
-      BTM_SetDeviceClass(dev_class);
-      btif_core_storage_adapter_notify_empty_success();
     } break;
     case BT_PROPERTY_LOCAL_IO_CAPS: {
       // Changing IO Capability of stack at run-time is not currently supported.
