@@ -245,6 +245,7 @@ public class LeAudioService extends ProfileService {
             mTmapGattServer.start(mTmapRoleMask);
         } catch (IllegalStateException e) {
             Log.e(TAG, "Fail to start TmapGattServer", e);
+            mTmapGattServer = null;
             return false;
         }
 
@@ -1321,9 +1322,7 @@ public class LeAudioService extends ProfileService {
                 volume = getAudioDeviceGroupVolume(groupId);
             }
 
-            final boolean suppressNoisyIntent = hasFallbackDevice || mActiveAudioOutDevice != null
-                    || (getConnectionState(previousActiveOutDevice)
-                    == BluetoothProfile.STATE_CONNECTED);
+            final boolean suppressNoisyIntent = hasFallbackDevice || mActiveAudioOutDevice != null;
 
             mAudioManager.handleBluetoothActiveDeviceChanged(mActiveAudioOutDevice,
                     previousActiveOutDevice, BluetoothProfileConnectionInfo.createLeAudioOutputInfo(
@@ -1716,7 +1715,11 @@ public class LeAudioService extends ProfileService {
             }
         }
 
-        mAudioServersScanner.stopScan(mScanCallback);
+        try {
+            mAudioServersScanner.stopScan(mScanCallback);
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Fail to stop scanner, consider it stopped", e);
+        }
 
         /* Callback is the indicator for scanning being enabled */
         mScanCallback = null;
@@ -1766,7 +1769,12 @@ public class LeAudioService extends ProfileService {
                 .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                 .build();
 
-        mAudioServersScanner.startScan(filterList, settings, mScanCallback);
+        try {
+            mAudioServersScanner.startScan(filterList, settings, mScanCallback);
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Fail to start scanner, consider it stopped", e);
+            mScanCallback = null;
+        }
     }
 
     // Suppressed since this is part of a local process
@@ -3036,6 +3044,10 @@ public class LeAudioService extends ProfileService {
      * @return the lead device of the CSIP group or {@code null} if the group does not exist
      */
     public BluetoothDevice getLeadDevice(BluetoothDevice device) {
+        if (device == null) {
+            Log.w(TAG, "getLeadDevice called with null device.");
+            return null;
+        }
         int groupId = getGroupId(device);
         if (groupId == LE_AUDIO_GROUP_ID_INVALID) {
             return null;

@@ -136,6 +136,7 @@ cc_library_static {
                 "libPlatformProperties",
             ],
             srcs: ["src/btif_avrcp_audio_track.cc"],
+            shared_libs: ["libaaudio"],
         },
         host: {
             srcs: [
@@ -154,6 +155,9 @@ cc_library_static {
         "libbt-stack",
         "libbt-stack-core",
         "libbtif-core",
+    ],
+    shared_libs: [
+        "android.hardware.bluetooth.audio@2.1",
     ],
     cflags: [
         "-DBUILDCFG",
@@ -210,6 +214,7 @@ cc_library_static {
     target: {
         android: {
             srcs: ["src/btif_avrcp_audio_track.cc"],
+            shared_libs: ["libaaudio"],
         },
         host: {
             srcs: [
@@ -224,6 +229,9 @@ cc_library_static {
         "libaudio-a2dp-hw-utils",
         "libbt-audio-hal-interface",
         "libbt-stack-core",
+    ],
+    shared_libs: [
+        "libcrypto",
     ],
     cflags: [
         /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/

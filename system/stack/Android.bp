@@ -276,6 +276,7 @@ cc_library_static {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
+        "BluetoothGeneratedPackets_h",
     ],
     cflags: [
         /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
@@ -284,6 +285,10 @@ cc_library_static {
     static_libs: [
         "libbluetooth_core_rs",
         "libbt-hci",
+    ],
+    shared_libs: [
+        "libPlatformProperties",
+        "libcrypto",
     ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
@@ -1114,6 +1119,7 @@ cc_test {
         "test/btm/peer_packet_types_test.cc",
         "test/btm/sco_hci_test.cc",
         "test/btm/stack_btm_test.cc",
+        "test/btm/sco_pkt_status_test.cc",
         "test/common/mock_eatt.cc",
         "test/stack_include_test.cc",
     ],

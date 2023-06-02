@@ -322,23 +322,6 @@ bool BTM_HasEirService(const uint32_t* p_eir_uuid, uint16_t uuid16);
 
 /*******************************************************************************
  *
- * Function         BTM_HasInquiryEirService
- *
- * Description      Return if a UUID is in the bit map of a UUID list.
- *
- * Parameters       p_results - inquiry results
- *                  uuid16 - UUID 16-bit
- *
- * Returns          BTM_EIR_FOUND - if found
- *                  BTM_EIR_NOT_FOUND - if not found and it is a complete list
- *                  BTM_EIR_UNKNOWN - if not found and it is not complete list
- *
- ******************************************************************************/
-tBTM_EIR_SEARCH_RESULT BTM_HasInquiryEirService(tBTM_INQ_RESULTS* p_results,
-                                                uint16_t uuid16);
-
-/*******************************************************************************
- *
  * Function         BTM_AddEirService
  *
  * Description      This function is called to add a service in the bit map UUID
@@ -710,42 +693,6 @@ bool BTM_BleSecurityProcedureIsRunning(const RawAddress& bd_addr);
  ******************************************************************************/
 uint8_t BTM_BleGetSupportedKeySize(const RawAddress& bd_addr);
 
-void BTM_LE_PF_local_name(tBTM_BLE_SCAN_COND_OP action,
-                          tBTM_BLE_PF_FILT_INDEX filt_index,
-                          std::vector<uint8_t> name, tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_srvc_data(tBTM_BLE_SCAN_COND_OP action,
-                         tBTM_BLE_PF_FILT_INDEX filt_index);
-
-void BTM_LE_PF_manu_data(tBTM_BLE_SCAN_COND_OP action,
-                         tBTM_BLE_PF_FILT_INDEX filt_index, uint16_t company_id,
-                         uint16_t company_id_mask, std::vector<uint8_t> data,
-                         std::vector<uint8_t> data_mask,
-                         tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_srvc_data_pattern(tBTM_BLE_SCAN_COND_OP action,
-                                 tBTM_BLE_PF_FILT_INDEX filt_index,
-                                 std::vector<uint8_t> data,
-                                 std::vector<uint8_t> data_mask,
-                                 tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_addr_filter(tBTM_BLE_SCAN_COND_OP action,
-                           tBTM_BLE_PF_FILT_INDEX filt_index, tBLE_BD_ADDR addr,
-                           tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_uuid_filter(tBTM_BLE_SCAN_COND_OP action,
-                           tBTM_BLE_PF_FILT_INDEX filt_index,
-                           tBTM_BLE_PF_COND_TYPE filter_type,
-                           const bluetooth::Uuid& uuid,
-                           tBTM_BLE_PF_LOGIC_TYPE cond_logic,
-                           const bluetooth::Uuid& uuid_mask,
-                           tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_set(tBTM_BLE_PF_FILT_INDEX filt_index,
-                   std::vector<ApcfCommand> commands, tBTM_BLE_PF_CFG_CBACK cb);
-void BTM_LE_PF_clear(tBTM_BLE_PF_FILT_INDEX filt_index,
-                     tBTM_BLE_PF_CFG_CBACK cb);
-
 /*******************************************************************************
  *
  * Function         BTM_BleAdvFilterParamSetup
@@ -758,30 +705,6 @@ void BTM_BleAdvFilterParamSetup(
     tBTM_BLE_SCAN_COND_OP action, tBTM_BLE_PF_FILT_INDEX filt_index,
     std::unique_ptr<btgatt_filt_param_setup_t> p_filt_params,
     tBTM_BLE_PF_PARAM_CB cb);
-
-/*******************************************************************************
- *
- * Function         BTM_BleUpdateAdvFilterPolicy
- *
- * Description      This function update the filter policy of advertiser.
- *
- * Parameter        adv_policy: advertising filter policy
- *
- * Return           void
- ******************************************************************************/
-void BTM_BleUpdateAdvFilterPolicy(tBTM_BLE_AFP adv_policy);
-
-/*******************************************************************************
- *
- * Function         BTM_BleEnableDisableFilterFeature
- *
- * Description      Enable or disable the APCF feature
- *
- * Parameters       enable - true - enables APCF, false - disables APCF
- *
- ******************************************************************************/
-void BTM_BleEnableDisableFilterFeature(uint8_t enable,
-                                       tBTM_BLE_PF_STATUS_CBACK p_stat_cback);
 
 /*******************************************************************************
  *
@@ -1274,6 +1197,18 @@ void BTM_EScoConnRsp(uint16_t sco_inx, uint8_t hci_status,
  *
  ******************************************************************************/
 uint8_t BTM_GetNumScoLinks(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_GetScoDebugDump
+ *
+ * Description      Get the status of SCO. This function is only used for
+ *                  testing and debugging purposes.
+ *
+ * Returns          Data with SCO related debug dump.
+ *
+ ******************************************************************************/
+tBTM_SCO_DEBUG_DUMP BTM_GetScoDebugDump(void);
 
 /*****************************************************************************
  *  SECURITY MANAGEMENT FUNCTIONS
