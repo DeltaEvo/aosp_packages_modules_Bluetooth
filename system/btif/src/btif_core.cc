@@ -75,12 +75,12 @@ static void bt_jni_msg_ready(void* context);
 // TODO(armansito): Find a better way than searching by a hardcoded path.
 #if defined(TARGET_FLOSS)
 #define BTE_DID_CONF_FILE "/var/lib/bluetooth/bt_did.conf"
-#elif defined(OS_GENERIC)
-#define BTE_DID_CONF_FILE "bt_did.conf"
-#else  // !defined(OS_GENERIC)
+#elif defined(__ANDROID__)
 #define BTE_DID_CONF_FILE \
   "/apex/com.android.btservices/etc/bluetooth/bt_did.conf"
-#endif  // defined(OS_GENERIC)
+#else  // !defined(__ANDROID__)
+#define BTE_DID_CONF_FILE "bt_did.conf"
+#endif  // defined(__ANDROID__)
 #endif  // BTE_DID_CONF_FILE
 
 #define CODEC_TYPE_NUMBER 32
@@ -263,7 +263,6 @@ void btif_enable_bluetooth_evt() {
     LOG_INFO("%s: Storing '%s' into the config file", __func__,
             ADDRESS_TO_LOGGABLE_CSTR(local_bd_addr));
     btif_config_set_str("Adapter", "Address", bdstr.c_str());
-    btif_config_save();
 
     // fire HAL callback for property change
     bt_property_t prop;
