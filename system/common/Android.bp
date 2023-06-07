@@ -38,6 +38,7 @@ cc_library_static {
     },
     shared_libs: [
         "libcrypto",
+        "libcutils",
     ],
     min_sdk_version: "Tiramisu",
 }
@@ -75,6 +76,7 @@ cc_test {
     target: {
         android: {
             srcs: ["metrics_unittest.cc"],
+            shared_libs: ["libstatssocket"],
         },
     },
     shared_libs: [

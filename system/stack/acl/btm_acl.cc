@@ -53,6 +53,7 @@
 #include "main/shim/l2c_api.h"
 #include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
+#include "os/metrics.h"
 #include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
@@ -73,12 +74,12 @@
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_iso_api.h"
 #include "stack/include/btu.h"
+#include "stack/include/btu_hcif.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/sco_hci_link_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
-#include "os/metrics.h"
 
 #ifndef PROPERTY_LINK_SUPERVISION_TIMEOUT
 #define PROPERTY_LINK_SUPERVISION_TIMEOUT \
@@ -2882,10 +2883,6 @@ void acl_rcv_acl_data(BT_HDR* p_msg) {
     return;
   }
   l2c_rcv_acl_data(p_msg);
-}
-
-void acl_link_segments_xmitted(BT_HDR* p_msg) {
-  l2c_link_segments_xmitted(p_msg);
 }
 
 void acl_packets_completed(uint16_t handle, uint16_t credits) {

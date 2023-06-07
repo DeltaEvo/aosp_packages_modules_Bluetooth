@@ -262,8 +262,11 @@ cc_test {
         "libaaudio",
         "libbinder_ndk",
         "libcrypto",
+        "libcutils",
         "libfmq",
         "libhidlbase",
+        "libstatssocket",
+        "libutils",
     ],
     static_libs: [
         "android.hardware.audio.common-V1-ndk",
@@ -411,6 +414,11 @@ cc_test {
         "libosi",
         "libosi-AllocationTestHarness",
     ],
+    target: {
+        android: {
+            shared_libs: ["libstatssocket"],
+        },
+    },
     cflags: ["-DBUILDCFG"],
     sanitize: {
         address: true,
@@ -573,6 +581,7 @@ cc_test {
         "libcutils",
         "libhidlbase",
         "liblog",
+        "libutils",
     ],
     static_libs: [
         "android.hardware.bluetooth.a2dp@1.0",
@@ -609,6 +618,7 @@ cc_test {
             ],
             shared_libs: [
                 "libbinder_ndk",
+                "libstatssocket",
             ],
         },
     },
@@ -705,6 +715,7 @@ cc_test {
         "libcutils",
         "libhidlbase",
         "liblog",
+        "libutils",
     ],
     static_libs: [
         "android.hardware.bluetooth.a2dp@1.0",
@@ -739,6 +750,7 @@ cc_test {
             ],
             shared_libs: [
                 "libbinder_ndk",
+                "libstatssocket",
             ],
         },
     },

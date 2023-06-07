@@ -137,15 +137,6 @@ constexpr uint8_t PHY_LE_CODED = 0x04;
 constexpr uint8_t NO_ADI_PRESENT = 0xFF;
 constexpr uint8_t TX_POWER_NOT_PRESENT = 0x7F;
 
-typedef struct {
-  uint8_t pcm_intf_rate; /* PCM interface rate: 0: 128kbps, 1: 256 kbps;
-                             2:512 bps; 3: 1024kbps; 4: 2048kbps */
-  uint8_t frame_type;    /* frame type: 0: short; 1: long */
-  uint8_t sync_mode;     /* sync mode: 0: peripheral; 1: central */
-  uint8_t clock_mode;    /* clock mode: 0: peripheral; 1: central */
-
-} tBTM_SCO_PCM_PARAM;
-
 /*****************************************************************************
  *  ACL CHANNEL MANAGEMENT
  ****************************************************************************/
@@ -160,9 +151,6 @@ typedef struct {
 
 /* Define an invalid SCO index and an invalid HCI handle */
 #define BTM_INVALID_SCO_INDEX 0xFFFF
-
-/* Define an invalid SCO disconnect reason */
-#define BTM_INVALID_SCO_DISC_REASON 0xFFFF
 
 #define BTM_SCO_LINK_ONLY_MASK \
   (ESCO_PKT_TYPES_MASK_HV1 | ESCO_PKT_TYPES_MASK_HV2 | ESCO_PKT_TYPES_MASK_HV3)
@@ -180,7 +168,7 @@ typedef uint8_t tBTM_SCO_TYPE;
 /*******************
  * SCO Codec Types
  *******************/
-// TODO(google) This should use common definitions
+// TODO(b/285458890) This should use common definitions
 #define BTM_SCO_CODEC_NONE 0x0000
 #define BTM_SCO_CODEC_CVSD 0x0001
 #define BTM_SCO_CODEC_MSBC 0x0002
@@ -201,8 +189,6 @@ typedef uint16_t tBTM_SCO_CODEC_TYPE;
 /*******************
  * SCO Data Status
  *******************/
-typedef uint8_t tBTM_SCO_DATA_FLAG;
-
 /***************************
  *  SCO Callback Functions
  ***************************/

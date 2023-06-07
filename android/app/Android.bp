@@ -112,8 +112,12 @@ cc_library_shared {
         "libaaudio",
         "libbinder_ndk",
         "libcrypto",
+        "libcutils",
         "libfmq",
+        "libhidlbase",
         "libnativehelper",
+        "libstatssocket",
+        "libutils",
     ],
     sanitize: {
         scs: true,

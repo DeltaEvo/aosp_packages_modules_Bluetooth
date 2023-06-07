@@ -15,8 +15,6 @@ cc_defaults {
         "-Wextra",
         // there are too many unused parameters in all the code.
         "-Wno-unused-parameter",
-        // http://b/264549607
-        "-Wno-deprecated-builtins",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system/gd",
@@ -114,7 +112,6 @@ cc_defaults {
         "com.android.btservices",
     ],
     static_libs: [
-        "android.hardware.bluetooth.a2dp@1.0",
         "libbt-protos-lite",
         "libflatbuffers-cpp",
         "libprotobuf-cpp-lite",
@@ -130,20 +127,12 @@ cc_defaults {
         "libbluetooth_gd",
         "libstatslog_bt",
     ],
-    shared_libs: [
-        "libcutils",
-        "libhidlbase",
-        "libutils",
-    ],
     target: {
         darwin: {
             // libstatslog_bt -> libbinder doesn't build on mac
             enabled: false,
         },
         android: {
-            shared_libs: [
-                "libstatssocket",
-            ],
             sanitize: {
                 misc_undefined: ["bounds"],
             },
