@@ -13,12 +13,13 @@ use crate::bt_adv::AdvSet;
 use crate::bt_gatt::GattClientContext;
 use crate::callbacks::{
     AdminCallback, AdvertisingSetCallback, BtCallback, BtConnectionCallback, BtManagerCallback,
-    BtSocketManagerCallback, ScannerCallback, SuspendCallback,
+    BtSocketManagerCallback, MediaCallback, QACallback, ScannerCallback, SuspendCallback,
 };
 use crate::command_handler::{CommandHandler, SocketSchedule};
 use crate::dbus_iface::{
-    BluetoothAdminDBus, BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, BluetoothQADBus,
-    BluetoothQALegacyDBus, BluetoothSocketManagerDBus, BluetoothTelephonyDBus, SuspendDBus,
+    BluetoothAdminDBus, BluetoothDBus, BluetoothGattDBus, BluetoothManagerDBus, BluetoothMediaDBus,
+    BluetoothQADBus, BluetoothQALegacyDBus, BluetoothSocketManagerDBus, BluetoothTelephonyDBus,
+    SuspendDBus,
 };
 use crate::editor::AsyncEditor;
 use bt_topshim::topstack;
@@ -95,6 +96,9 @@ pub(crate) struct ClientContext {
     /// Proxy for Telephony interface.
     pub(crate) telephony_dbus: Option<BluetoothTelephonyDBus>,
 
+    /// Proxy for Media interface.
+    pub(crate) media_dbus: Option<BluetoothMediaDBus>,
+
     /// Channel to send actions to take in the foreground
     fg: mpsc::Sender<ForegroundActions>,
 
@@ -121,6 +125,9 @@ pub(crate) struct ClientContext {
 
     /// Identifies the callback to receive IBluetoothSocketManagerCallback method calls.
     socket_manager_callback_id: Option<u32>,
+
+    /// Identifies the callback to receive IBluetoothQACallback method calls.
+    qa_callback_id: Option<u32>,
 
     /// Is btclient running in restricted mode?
     is_restricted: bool,
@@ -165,6 +172,7 @@ impl ClientContext {
             suspend_dbus: None,
             socket_manager_dbus: None,
             telephony_dbus: None,
+            media_dbus: None,
             fg: tx,
             dbus_connection,
             dbus_crossroads,
@@ -174,6 +182,7 @@ impl ClientContext {
             active_scanner_ids: HashSet::new(),
             adv_sets: HashMap::new(),
             socket_manager_callback_id: None,
+            qa_callback_id: None,
             is_restricted,
             gatt_client_context: GattClientContext::new(),
             socket_test_schedule: None,
@@ -223,6 +232,8 @@ impl ClientContext {
         self.suspend_dbus = Some(SuspendDBus::new(conn.clone(), idx));
 
         self.telephony_dbus = Some(BluetoothTelephonyDBus::new(conn.clone(), idx));
+
+        self.media_dbus = Some(BluetoothMediaDBus::new(conn.clone(), idx));
 
         // Trigger callback registration in the foreground
         let fg = self.fg.clone();
@@ -464,6 +475,10 @@ async fn start_interactive_shell(
                     format!("/org/chromium/bluetooth/client/{}/admin_callback", adapter);
                 let socket_manager_cb_objpath: String =
                     format!("/org/chromium/bluetooth/client/{}/socket_manager_callback", adapter);
+                let qa_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/qa_manager_callback", adapter);
+                let media_cb_objpath: String =
+                    format!("/org/chromium/bluetooth/client/{}/bluetooth_media_callback", adapter);
 
                 let dbus_connection = context.lock().unwrap().dbus_connection.clone();
                 let dbus_crossroads = context.lock().unwrap().dbus_crossroads.clone();
@@ -568,6 +583,23 @@ async fn start_interactive_shell(
                 context.lock().unwrap().socket_manager_callback_id =
                     Some(socket_manager_callback_id);
 
+                let qa_callback_id = context
+                    .lock()
+                    .unwrap()
+                    .qa_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
+                    .register_qa_callback(Box::new(QACallback::new(
+                        qa_cb_objpath.clone(),
+                        context.clone(),
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetoothQA::RegisterCallback");
+                context.lock().unwrap().qa_callback_id = Some(qa_callback_id);
+
                 // When adapter is ready, Suspend API is also ready. Register as an observer.
                 // TODO(b/224606285): Implement suspend debug utils in btclient.
                 context.lock().unwrap().suspend_dbus.as_mut().unwrap().register_callback(Box::new(
@@ -577,6 +609,21 @@ async fn start_interactive_shell(
                         dbus_crossroads.clone(),
                     ),
                 ));
+
+                context
+                    .lock()
+                    .unwrap()
+                    .media_dbus
+                    .as_mut()
+                    .unwrap()
+                    .rpc
+                    .register_callback(Box::new(MediaCallback::new(
+                        media_cb_objpath,
+                        dbus_connection.clone(),
+                        dbus_crossroads.clone(),
+                    )))
+                    .await
+                    .expect("D-Bus error on IBluetoothMedia::RegisterCallback");
 
                 context.lock().unwrap().adapter_ready = true;
                 let adapter_address = context.lock().unwrap().update_adapter_address();

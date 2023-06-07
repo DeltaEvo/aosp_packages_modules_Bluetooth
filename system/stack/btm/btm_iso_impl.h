@@ -33,6 +33,7 @@
 #include "device/include/controller.h"
 #include "hci/include/hci_layer.h"
 #include "internal_include/stack_config.h"
+#include "main/shim/hci_layer.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
@@ -54,6 +55,7 @@ static constexpr uint8_t kStateFlagHasDataPathSet = 0x04;
 static constexpr uint8_t kStateFlagIsBroadcast = 0x10;
 
 constexpr char kBtmLogTag[] = "ISO";
+static bool iso_impl_initialized_ = false;
 
 struct iso_sync_info {
   uint32_t first_sync_ts;
@@ -94,9 +96,10 @@ struct iso_impl {
   iso_impl() {
     iso_credits_ = controller_get_interface()->get_iso_buffer_count();
     iso_buffer_size_ = controller_get_interface()->get_iso_data_size();
+    iso_impl_initialized_ = true;
   }
 
-  ~iso_impl() {}
+  ~iso_impl() { iso_impl_initialized_ = false; }
 
   void handle_register_cis_callbacks(CigCallbacks* callbacks) {
     LOG_ASSERT(callbacks != nullptr) << "Invalid CIG callbacks";
@@ -120,6 +123,11 @@ struct iso_impl {
     uint8_t cis_cnt;
     uint16_t conn_handle;
     cig_create_cmpl_evt evt;
+
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
 
     LOG_ASSERT(cig_callbacks_ != nullptr) << "Invalid CIG callbacks";
     LOG_ASSERT(len >= 3) << "Invalid packet length: " << +len;
@@ -214,6 +222,11 @@ struct iso_impl {
   void on_remove_cig(uint8_t* stream, uint16_t len) {
     cig_remove_cmpl_evt evt;
 
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
+
     LOG_ASSERT(cig_callbacks_ != nullptr) << "Invalid CIG callbacks";
     LOG_ASSERT(len == 2) << "Invalid packet length: " << +len;
 
@@ -264,6 +277,11 @@ struct iso_impl {
       struct iso_manager::cis_establish_params conn_params, uint8_t* stream,
       uint16_t len) {
     uint8_t status;
+
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
 
     LOG_ASSERT(len == 2) << "Invalid packet length: " << +len;
 
@@ -335,6 +353,11 @@ struct iso_impl {
     uint8_t status;
     uint16_t conn_handle;
 
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
+
     STREAM_TO_UINT8(status, stream);
     STREAM_TO_UINT16(conn_handle, stream);
 
@@ -394,6 +417,11 @@ struct iso_impl {
 
     STREAM_TO_UINT8(status, stream);
     STREAM_TO_UINT16(conn_handle, stream);
+
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
 
     iso_base* iso = GetIsoIfKnown(conn_handle);
     if (iso == nullptr) {
@@ -456,6 +484,10 @@ struct iso_impl {
 
     STREAM_TO_UINT16(conn_handle, stream);
 
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
     iso_base* iso = GetIsoIfKnown(conn_handle);
     if (iso == nullptr) {
       /* That could happen when ACL has been disconnected while waiting on the
@@ -517,10 +549,6 @@ struct iso_impl {
     return packet;
   }
 
-  void send_iso_data_hci_packet(BT_HDR* packet) {
-    bte_main_hci_send(packet, MSG_STACK_TO_HC_HCI_ISO | 0x0001);
-  }
-
   void send_iso_data(uint16_t iso_handle, const uint8_t* data,
                      uint16_t data_len) {
     iso_base* iso = GetIsoIfKnown(iso_handle);
@@ -565,7 +593,9 @@ struct iso_impl {
     BT_HDR* packet =
         prepare_ts_hci_packet(iso_handle, ts, iso->sync_info.seq_nb, data_len);
     memcpy(packet->data + kIsoDataInTsBtHdrOffset, data, data_len);
-    send_iso_data_hci_packet(packet);
+    auto hci = bluetooth::shim::hci_layer_get_interface();
+    packet->event = MSG_STACK_TO_HC_HCI_ISO | 0x0001;
+    hci->transmit_downward(packet->event, packet);
   }
 
   void process_cis_est_pkt(uint8_t len, uint8_t* data) {
@@ -616,6 +646,11 @@ struct iso_impl {
   }
 
   void disconnection_complete(uint16_t handle, uint8_t reason) {
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
+
     /* Check if this is an ISO handle */
     auto cis = GetCisIfKnown(handle);
     if (cis == nullptr) return;

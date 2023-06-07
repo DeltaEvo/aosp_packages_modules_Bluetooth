@@ -38,11 +38,10 @@
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btu.h"
+#include "stack/include/btu_hcif.h"
 
 using bluetooth::common::MessageLoopThread;
 using bluetooth::hci::IsoManager;
-
-void btm_route_sco_data(BT_HDR* p_msg);
 
 /* Define BTU storage area */
 uint8_t btu_trace_level = HCI_INITIAL_TRACE_LEVEL;
@@ -60,10 +59,6 @@ void btu_hci_msg_process(BT_HDR* p_msg) {
     case BT_EVT_TO_BTU_L2C_SEG_XMIT:
       /* L2CAP segment transmit complete */
       acl_link_segments_xmitted(p_msg);
-      break;
-
-    case BT_EVT_TO_BTU_HCI_SCO:
-      btm_route_sco_data(p_msg);
       break;
 
     case BT_EVT_TO_BTU_HCI_EVT:

@@ -21,6 +21,7 @@
 
 #include "btm_sco_hfp_hal.h"
 #include "device/include/esco_parameters.h"
+#include "stack/btm/sco_pkt_status.h"
 #include "stack/include/btm_api_types.h"
 
 #define BTM_MSBC_CODE_SIZE 240
@@ -75,14 +76,12 @@ bool fill_plc_stats(int* num_decoded_frames, double* packet_loss_ratio);
 
 /* Try to enqueue a packet to a buffer.
  * Args:
- *    data - Pointer to received packet data bytes.
- *    pkt_size - Length of input packet. Passing packet with inconsistent size
- *        from the pkt_size set in init() will fail the call.
+ *    data - Vector of received packet data bytes.
  *    corrupted - If the current mSBC packet read is corrupted.
  * Returns:
- *    The length of enqueued bytes. 0 if failed.
+ *    true if enqueued, false if it failed.
  */
-size_t enqueue_packet(const uint8_t* data, size_t pkt_size, bool corrupted);
+bool enqueue_packet(const std::vector<uint8_t>& data, bool corrupted);
 
 /* Try to decode mSBC frames from the packets in the buffer.
  * Args:
@@ -110,6 +109,11 @@ size_t encode(int16_t* data, size_t len);
  */
 size_t dequeue_packet(const uint8_t** output);
 
+/* Get mSBC packets' status record.
+ * Returns:
+ *      Pointer to the record struct, nullptr if not valid.
+ */
+tBTM_SCO_PKT_STATUS* get_pkt_status();
 }  // namespace bluetooth::audio::sco::wbs
 
 #ifndef CASE_RETURN_TEXT
@@ -204,13 +208,9 @@ typedef struct {
     return nullptr;
   }
 
-  void Init() {
-    hfp_hal_interface::init();
-    def_esco_parms = esco_parameters_for_codec(
-        ESCO_CODEC_CVSD_S3, hfp_hal_interface::get_offload_enabled());
-  }
+  void Init();
 
-  void Free() { bluetooth::audio::sco::cleanup(); }
+  void Free();
 
   uint16_t get_index(const tSCO_CONN* p_sco) const {
     CHECK(p_sco != nullptr);
@@ -227,9 +227,6 @@ typedef struct {
 
 void btm_sco_chk_pend_rolechange(uint16_t hci_handle);
 void btm_sco_disc_chk_pend_for_modechange(uint16_t hci_handle);
-
-/* Visible for test only */
-BT_HDR* btm_sco_make_packet(std::vector<uint8_t> data, uint16_t sco_handle);
 
 /* Send a SCO packet */
 void btm_send_sco_packet(std::vector<uint8_t> data);

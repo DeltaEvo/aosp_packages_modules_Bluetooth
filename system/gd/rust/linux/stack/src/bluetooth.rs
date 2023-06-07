@@ -47,7 +47,7 @@ use crate::callbacks::Callbacks;
 use crate::uuid::{Profile, UuidHelper, HOGP};
 use crate::{Message, RPCProxy, SuspendMode};
 
-const FLOSS_VER: u16 = 0x0001;
+pub(crate) const FLOSS_VER: u16 = 0x0001;
 const DEFAULT_DISCOVERY_TIMEOUT_MS: u64 = 12800;
 const MIN_ADV_INSTANCES_FOR_MULTI_ADV: u8 = 5;
 
@@ -179,6 +179,9 @@ pub trait IBluetooth {
 
     /// Gets whether the remote device can wake the system.
     fn get_remote_wake_allowed(&self, device: BluetoothDevice) -> bool;
+
+    /// Gets the vendor and product information of the remote device.
+    fn get_remote_vendor_product_info(&self, device: BluetoothDevice) -> BtVendorProductInfo;
 
     /// Returns a list of connected devices.
     fn get_connected_devices(&self) -> Vec<BluetoothDevice>;
@@ -374,6 +377,13 @@ impl BluetoothDeviceContext {
 pub trait IBluetoothCallback: RPCProxy {
     /// When any adapter property changes.
     fn on_adapter_property_changed(&mut self, prop: BtPropertyType);
+
+    /// When any device properties change.
+    fn on_device_properties_changed(
+        &mut self,
+        remote_device: BluetoothDevice,
+        props: Vec<BtPropertyType>,
+    );
 
     /// When any of the adapter local address is changed.
     fn on_address_changed(&mut self, addr: String);
@@ -767,14 +777,55 @@ impl Bluetooth {
         }
     }
 
-    /// Caches the discoverable mode into BluetoothQA.
-    pub fn cache_discoverable_mode_into_qa(&self) {
-        let disc_mode = self.get_discoverable_mode_internal();
+    /// Returns adapter's alias.
+    pub(crate) fn get_alias_internal(&self) -> String {
+        let name = self.get_name();
+        if !name.is_empty() {
+            return name;
+        }
 
-        let txl = self.tx.clone();
-        tokio::spawn(async move {
-            let _ = txl.send(Message::QaOnDiscoverableModeChanged(disc_mode)).await;
-        });
+        // If the adapter name is empty, generate one based on local BDADDR
+        // so that test programs can have a friendly name for the adapter.
+        match self.local_address {
+            None => "floss_0000".to_string(),
+            Some(addr) => format!("floss_{:02X}{:02X}", addr.address[4], addr.address[5]),
+        }
+    }
+
+    pub(crate) fn get_hid_report_internal(
+        &mut self,
+        addr: String,
+        report_type: BthhReportType,
+        report_id: u8,
+    ) -> BtStatus {
+        if let Some(mut addr) = RawAddress::from_string(addr) {
+            self.hh.as_mut().unwrap().get_report(&mut addr, report_type, report_id, 128)
+        } else {
+            BtStatus::InvalidParam
+        }
+    }
+
+    pub(crate) fn set_hid_report_internal(
+        &mut self,
+        addr: String,
+        report_type: BthhReportType,
+        report: String,
+    ) -> BtStatus {
+        if let Some(mut addr) = RawAddress::from_string(addr) {
+            let mut rb = report.clone().into_bytes();
+            self.hh.as_mut().unwrap().set_report(&mut addr, report_type, rb.as_mut_slice())
+        } else {
+            BtStatus::InvalidParam
+        }
+    }
+
+    pub(crate) fn send_hid_data_internal(&mut self, addr: String, data: String) -> BtStatus {
+        if let Some(mut addr) = RawAddress::from_string(addr) {
+            let mut rb = data.clone().into_bytes();
+            self.hh.as_mut().unwrap().send_data(&mut addr, rb.as_mut_slice())
+        } else {
+            BtStatus::InvalidParam
+        }
     }
 
     /// Returns all bonded and connected devices.
@@ -1021,11 +1072,11 @@ impl Bluetooth {
     /// Remove the paused flag to allow clients to begin discovery, and if there is already a
     /// pending request, start discovery.
     fn resume_discovery(&mut self) {
+        self.is_discovery_paused = false;
         if self.pending_discovery {
             self.pending_discovery = false;
             self.start_discovery();
         }
-        self.is_discovery_paused = false;
     }
 }
 
@@ -1259,8 +1310,6 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     });
                 }
                 BluetoothProperty::AdapterScanMode(mode) => {
-                    self.cache_discoverable_mode_into_qa();
-
                     self.callbacks.for_all_callbacks(|callback| {
                         callback
                             .on_discoverable_changed(*mode == BtScanMode::ConnectableDiscoverable);
@@ -1536,6 +1585,14 @@ impl BtifBluetoothCallbacks for Bluetooth {
                             .await;
                     });
                 }
+
+                let info = &d.info.clone();
+                self.callbacks.for_all_callbacks(|callback| {
+                    callback.on_device_properties_changed(
+                        info.clone(),
+                        properties.clone().into_iter().map(|x| x.get_type()).collect(),
+                    );
+                });
 
                 self.bluetooth_admin
                     .lock()
@@ -2169,6 +2226,13 @@ impl IBluetooth for Bluetooth {
         }
     }
 
+    fn get_remote_vendor_product_info(&self, device: BluetoothDevice) -> BtVendorProductInfo {
+        match self.get_remote_device_property(&device, &BtPropertyType::VendorProductInfo) {
+            Some(BluetoothProperty::VendorProductInfo(p)) => p.clone(),
+            _ => BtVendorProductInfo { vendor_id_src: 0, vendor_id: 0, product_id: 0, version: 0 },
+        }
+    }
+
     fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
         let bonded_connected: HashMap<String, BluetoothDevice> = self
             .bonded_devices
@@ -2615,6 +2679,7 @@ impl BtifHHCallbacks for Bluetooth {
     }
 }
 
+// TODO(b/261143122): Remove these once we migrate to BluetoothQA entirely
 impl IBluetoothQALegacy for Bluetooth {
     fn get_connectable(&self) -> bool {
         self.get_connectable_internal()
@@ -2625,17 +2690,7 @@ impl IBluetoothQALegacy for Bluetooth {
     }
 
     fn get_alias(&self) -> String {
-        let name = self.get_name();
-        if !name.is_empty() {
-            return name;
-        }
-
-        // If the adapter name is empty, generate one based on local BDADDR
-        // so that test programs can have a friendly name for the adapter.
-        match self.local_address {
-            None => "floss_0000".to_string(),
-            Some(addr) => format!("floss_{:02X}{:02X}", addr.address[4], addr.address[5]),
-        }
+        self.get_alias_internal()
     }
 
     fn get_modalias(&self) -> String {
@@ -2648,11 +2703,7 @@ impl IBluetoothQALegacy for Bluetooth {
         report_type: BthhReportType,
         report_id: u8,
     ) -> BtStatus {
-        if let Some(mut addr) = RawAddress::from_string(addr) {
-            self.hh.as_mut().unwrap().get_report(&mut addr, report_type, report_id, 128)
-        } else {
-            BtStatus::InvalidParam
-        }
+        self.get_hid_report_internal(addr, report_type, report_id)
     }
 
     fn set_hid_report(
@@ -2661,20 +2712,10 @@ impl IBluetoothQALegacy for Bluetooth {
         report_type: BthhReportType,
         report: String,
     ) -> BtStatus {
-        if let Some(mut addr) = RawAddress::from_string(addr) {
-            let mut rb = report.clone().into_bytes();
-            self.hh.as_mut().unwrap().set_report(&mut addr, report_type, rb.as_mut_slice())
-        } else {
-            BtStatus::InvalidParam
-        }
+        self.set_hid_report_internal(addr, report_type, report)
     }
 
     fn send_hid_data(&mut self, addr: String, data: String) -> BtStatus {
-        if let Some(mut addr) = RawAddress::from_string(addr) {
-            let mut rb = data.clone().into_bytes();
-            self.hh.as_mut().unwrap().send_data(&mut addr, rb.as_mut_slice())
-        } else {
-            BtStatus::InvalidParam
-        }
+        self.send_hid_data_internal(addr, data)
     }
 }

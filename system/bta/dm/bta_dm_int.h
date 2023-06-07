@@ -506,13 +506,11 @@ extern tBTA_DM_SEARCH_CB bta_dm_search_cb;
 /* DI control block */
 extern tBTA_DM_DI_CB bta_dm_di_cb;
 
-bool bta_dm_search_sm_execute(BT_HDR_RIGID* p_msg);
+bool bta_dm_search_sm_execute(const BT_HDR_RIGID* p_msg);
 void bta_dm_search_sm_disable(void);
 
 void bta_dm_enable(tBTA_DM_SEC_CBACK*);
 void bta_dm_disable();
-void bta_dm_init_cb(void);
-void bta_dm_deinit_cb(void);
 void bta_dm_ble_sirk_sec_cb_register(tBTA_DM_SEC_CBACK*);
 void bta_dm_ble_sirk_confirm_device_reply(const RawAddress& bd_addr,
                                           bool accept);

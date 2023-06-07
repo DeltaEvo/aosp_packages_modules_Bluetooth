@@ -30,7 +30,6 @@ mod ffi {
         fn gd_hal_snoop_logger_socket_is_enabled() -> bool;
         fn gd_l2cap_is_enabled() -> bool;
         fn gd_link_policy_is_enabled() -> bool;
-        fn gd_remote_name_request_is_enabled() -> bool;
         fn get_default_log_level() -> i32;
         fn get_hci_adapter() -> i32;
         fn get_log_level_for_tag(tag: &str) -> i32;
@@ -57,6 +56,7 @@ mod ffi {
         fn trigger_advertising_callbacks_on_first_resume_after_pause_is_enabled() -> bool;
         fn use_unified_connection_manager_is_enabled() -> bool;
         fn sdp_return_classic_services_when_le_discovery_fails_is_enabled() -> bool;
+        fn use_rsi_from_cached_inqiry_results_is_enabled() -> bool;
     }
 }
 

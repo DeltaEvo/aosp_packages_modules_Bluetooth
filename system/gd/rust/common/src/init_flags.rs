@@ -379,7 +379,6 @@ init_flags!(
         gd_hal_snoop_logger_filtering = true,
         gd_l2cap,
         gd_link_policy,
-        gd_remote_name_request = true,
         gd_rust,
         hci_adapter: i32,
         hfp_dynamic_version = true,
@@ -403,6 +402,7 @@ init_flags!(
         trigger_advertising_callbacks_on_first_resume_after_pause = true,
         use_unified_connection_manager,
         sdp_return_classic_services_when_le_discovery_fails = true,
+        use_rsi_from_cached_inqiry_results = false,
     }
     // dynamic flags can be updated at runtime and should be accessed directly
     // to check.

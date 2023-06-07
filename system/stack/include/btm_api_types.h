@@ -81,12 +81,6 @@ typedef void(tBTM_VSC_CMPL_CB)(tBTM_VSC_CMPL* p1);
 #define BTM_EIR_MAX_SERVICES 46
 
 /* search result in EIR of inquiry database */
-#define BTM_EIR_FOUND 0
-#define BTM_EIR_NOT_FOUND 1
-#define BTM_EIR_UNKNOWN 2
-
-typedef uint8_t tBTM_EIR_SEARCH_RESULT;
-
 typedef enum : uint8_t {
   BTM_BLE_SEC_NONE = 0,
   /* encrypt the link using current key */
@@ -143,15 +137,6 @@ constexpr uint8_t PHY_LE_CODED = 0x04;
 constexpr uint8_t NO_ADI_PRESENT = 0xFF;
 constexpr uint8_t TX_POWER_NOT_PRESENT = 0x7F;
 
-typedef struct {
-  uint8_t pcm_intf_rate; /* PCM interface rate: 0: 128kbps, 1: 256 kbps;
-                             2:512 bps; 3: 1024kbps; 4: 2048kbps */
-  uint8_t frame_type;    /* frame type: 0: short; 1: long */
-  uint8_t sync_mode;     /* sync mode: 0: peripheral; 1: central */
-  uint8_t clock_mode;    /* clock mode: 0: peripheral; 1: central */
-
-} tBTM_SCO_PCM_PARAM;
-
 /*****************************************************************************
  *  ACL CHANNEL MANAGEMENT
  ****************************************************************************/
@@ -186,7 +171,7 @@ typedef uint8_t tBTM_SCO_TYPE;
 /*******************
  * SCO Codec Types
  *******************/
-// TODO(google) This should use common definitions
+// TODO(b/285458890) This should use common definitions
 #define BTM_SCO_CODEC_NONE 0x0000
 #define BTM_SCO_CODEC_CVSD 0x0001
 #define BTM_SCO_CODEC_MSBC 0x0002
@@ -207,8 +192,6 @@ typedef uint16_t tBTM_SCO_CODEC_TYPE;
 /*******************
  * SCO Data Status
  *******************/
-typedef uint8_t tBTM_SCO_DATA_FLAG;
-
 /***************************
  *  SCO Callback Functions
  ***************************/
@@ -251,6 +234,27 @@ typedef union {
  *  eSCO Callback Functions
  ***************************/
 typedef void(tBTM_ESCO_CBACK)(tBTM_ESCO_EVT event, tBTM_ESCO_EVT_DATA* p_data);
+
+/**************************
+ * SCO Types for Debugging and Testing
+ **************************/
+
+/* Define the structure for the WBS packet status dump.  */
+typedef struct {
+  uint64_t begin_ts_raw_us;
+  uint64_t end_ts_raw_us;
+  std::string status_in_hex;
+  std::string status_in_binary;
+} tBTM_SCO_MSBC_PKT_STATUS_DATA;
+
+/* Returned by BTM_GetScoDebugDump */
+typedef struct {
+  bool is_active;
+  bool is_wbs;
+  int total_num_decoded_frames;
+  double pkt_loss_ratio;
+  tBTM_SCO_MSBC_PKT_STATUS_DATA latest_msbc_data;
+} tBTM_SCO_DEBUG_DUMP;
 
 /*****************************************************************************
  *  SECURITY MANAGEMENT

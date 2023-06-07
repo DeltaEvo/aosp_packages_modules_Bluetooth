@@ -29,6 +29,7 @@
 #include "stack/include/hfp_msbc_decoder.h"
 #include "stack/include/hfp_msbc_encoder.h"
 #include "test/common/mock_functions.h"
+#include "test/fake/fake_osi.h"
 #include "udrv/include/uipc.h"
 
 extern bluetooth::core::CoreInterface* GetInterfaceToProfiles();
@@ -43,7 +44,7 @@ using testing::Ge;
 using testing::Le;
 using testing::Test;
 
-const uint8_t msbc_zero_packet[] = {
+const std::vector<uint8_t> msbc_zero_packet{
     0x01, 0x08, 0xad, 0x00, 0x00, 0xc5, 0x00, 0x00, 0x00, 0x00, 0x77, 0x6d,
     0xb6, 0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6d, 0xdd, 0xb6, 0xdb, 0x77,
     0x6d, 0xb6, 0xdd, 0xdb, 0x6d, 0xb7, 0x76, 0xdb, 0x6d, 0xdd, 0xb6, 0xdb,
@@ -77,6 +78,7 @@ class ScoHciTest : public Test {
  protected:
   void SetUp() override {
     reset_mock_function_count_map();
+    fake_osi_ = std::make_unique<test::fake::FakeOsi>();
     mock_uipc_init_ret = nullptr;
     mock_uipc_read_ret = 0;
     mock_uipc_send_ret = true;
@@ -85,6 +87,7 @@ class ScoHciTest : public Test {
     GetInterfaceToProfiles()->msbcCodec = &codec;
   }
   void TearDown() override {}
+  std::unique_ptr<test::fake::FakeOsi> fake_osi_;
 };
 
 class ScoHciWithOpenCleanTest : public ScoHciTest {
@@ -189,30 +192,17 @@ TEST_F(ScoHciWbsTest, WbsInit) {
 }
 
 TEST_F(ScoHciWbsTest, WbsEnqueuePacketWithoutInit) {
-  uint8_t payload[60];
+  std::vector<uint8_t> payload{60, 0};
   // Return 0 if buffer is uninitialized
-  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, sizeof(payload),
-                                                       false),
-            size_t(0));
+  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, false), false);
 }
 
 TEST_F(ScoHciWbsWithInitCleanTest, WbsEnqueuePacket) {
-  uint8_t payload[60];
-  // Return 0 if payload is invalid
-  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(nullptr, sizeof(payload),
-                                                       false),
-            size_t(0));
-  // Return 0 if packet size is consistent
-  ASSERT_EQ(
-      bluetooth::audio::sco::wbs::enqueue_packet(payload, size_t(72), false),
-      size_t(0));
-  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, sizeof(payload),
-                                                       false),
-            size_t(60));
+  std::vector<uint8_t> payload;
+  for (size_t i = 0; i < 60; i++) payload.push_back(0);
+  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, false), true);
   // Return 0 if buffer is full
-  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, sizeof(payload),
-                                                       false),
-            size_t(0));
+  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, false), false);
 }
 
 TEST_F(ScoHciWbsTest, WbsDecodeWithoutInit) {
@@ -224,15 +214,14 @@ TEST_F(ScoHciWbsTest, WbsDecodeWithoutInit) {
 
 TEST_F(ScoHciWbsWithInitCleanTest, WbsDecode) {
   const uint8_t* decoded = nullptr;
-  uint8_t payload[60] = {0};
+  std::vector<uint8_t> payload;
+  for (size_t i = 0; i < 60; i++) payload.push_back(0);
 
   // No data to decode
   ASSERT_EQ(bluetooth::audio::sco::wbs::decode(&decoded), size_t(0));
   ASSERT_EQ(decoded, nullptr);
   // Fill in invalid packet, all zeros.
-  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, sizeof(payload),
-                                                       false),
-            sizeof(payload));
+  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(payload, false), true);
 
   // Return all zero frames when there comes an invalid packet.
   // This is expected even with PLC as there is no history in the PLC buffer.
@@ -244,9 +233,8 @@ TEST_F(ScoHciWbsWithInitCleanTest, WbsDecode) {
   }
 
   decoded = nullptr;
-  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(msbc_zero_packet,
-                                                       sizeof(payload), false),
-            sizeof(msbc_zero_packet));
+  ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(msbc_zero_packet, false),
+            true);
   ASSERT_EQ(bluetooth::audio::sco::wbs::decode(&decoded),
             size_t(BTM_MSBC_CODE_SIZE));
   ASSERT_NE(decoded, nullptr);
@@ -322,9 +310,10 @@ TEST_F(ScoHciWbsWithInitCleanTest, WbsPlc) {
                           0, -100, -200, -300, -400, -300, -200, -100};
   int16_t data[120];
   int16_t expect_data[120];
+  std::vector<uint8_t> encoded_vec;
+  for (size_t i = 0; i < 60; i++) encoded_vec.push_back(0);
   const uint8_t* encoded = nullptr;
   const uint8_t* decoded = nullptr;
-  uint8_t invalid_pkt[60] = {0};
   size_t lost_pkt_idx = 17;
 
   // Simulate a run without any packet loss
@@ -339,8 +328,9 @@ TEST_F(ScoHciWbsWithInitCleanTest, WbsPlc) {
     ASSERT_NE(encoded, nullptr);
 
     // Simulate the reception of the packet
-    ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(encoded, 60, false),
-              size_t(60));
+    std::copy(encoded, encoded + size_t(60), encoded_vec.data());
+    ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(encoded_vec, false),
+              true);
     ASSERT_EQ(bluetooth::audio::sco::wbs::decode(&decoded),
               size_t(BTM_MSBC_CODE_SIZE));
     ASSERT_NE(decoded, nullptr);
@@ -362,9 +352,11 @@ TEST_F(ScoHciWbsWithInitCleanTest, WbsPlc) {
     ASSERT_NE(encoded, nullptr);
 
     // Substitute to invalid packet to simulate packet loss.
+    std::copy(encoded, encoded + size_t(60), encoded_vec.data());
     ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(
-                  i != lost_pkt_idx ? encoded : invalid_pkt, 60, false),
-              size_t(60));
+                  i != lost_pkt_idx ? encoded_vec : std::vector<uint8_t>(60, 0),
+                  false),
+              true);
     ASSERT_EQ(bluetooth::audio::sco::wbs::decode(&decoded),
               size_t(BTM_MSBC_CODE_SIZE));
     decode_count++;
@@ -404,9 +396,10 @@ TEST_F(ScoHciWbsWithInitCleanTest, WbsPlc) {
     ASSERT_NE(encoded, nullptr);
 
     // Substitute to report packet corrupted to simulate packet loss.
+    std::copy(encoded, encoded + size_t(60), encoded_vec.data());
     ASSERT_EQ(bluetooth::audio::sco::wbs::enqueue_packet(
-                  encoded, 60, i == corrupted_pkt_idx),
-              size_t(60));
+                  encoded_vec, i == corrupted_pkt_idx),
+              true);
     ASSERT_EQ(bluetooth::audio::sco::wbs::decode(&decoded),
               size_t(BTM_MSBC_CODE_SIZE));
     decode_count++;
