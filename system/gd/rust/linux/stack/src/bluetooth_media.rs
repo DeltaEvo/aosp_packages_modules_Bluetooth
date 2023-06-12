@@ -23,7 +23,7 @@ use bt_utils::uinput::UInput;
 use itertools::Itertools;
 use log::{debug, info, warn};
 use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -73,6 +73,9 @@ pub trait IBluetoothMedia {
 
     /// connect to available but missing media profiles
     fn connect(&mut self, address: String);
+
+    /// disconnect all profiles from the device
+    /// NOTE: do not call this function from outside unless `is_complete_profiles_required`
     fn disconnect(&mut self, address: String);
 
     // Set the device as the active A2DP device
@@ -111,7 +114,12 @@ pub trait IBluetoothMedia {
     fn get_presentation_position(&mut self) -> PresentationPosition;
 
     /// Start the SCO setup to connect audio
-    fn start_sco_call(&mut self, address: String, sco_offload: bool, force_cvsd: bool) -> bool;
+    fn start_sco_call(
+        &mut self,
+        address: String,
+        sco_offload: bool,
+        disabled_codecs: HfpCodecCapability,
+    ) -> bool;
     fn stop_sco_call(&mut self, address: String);
 
     /// Set the current playback status: e.g., playing, paused, stopped, etc. The method is a copy
@@ -124,6 +132,9 @@ pub trait IBluetoothMedia {
     /// copy of the existing CRAS API, hence not following Floss API conventions. PlayerMetadata is
     /// a custom data type that requires special handlng.
     fn set_player_metadata(&mut self, metadata: PlayerMetadata);
+
+    // Trigger a debug log dump.
+    fn trigger_debug_dump(&mut self);
 }
 
 pub trait IBluetoothMediaCallback: RPCProxy {
@@ -154,6 +165,20 @@ pub trait IBluetoothMediaCallback: RPCProxy {
     /// waiting for the audio client to issue a reconnection request. We need
     /// to notify audio client of this event for it to do appropriate handling.
     fn on_hfp_audio_disconnected(&mut self, addr: String);
+
+    /// Triggered when there is a HFP dump is received. This should only be used
+    /// for debugging and testing purpose.
+    fn on_hfp_debug_dump(
+        &mut self,
+        active: bool,
+        wbs: bool,
+        total_num_decoded_frames: i32,
+        pkt_loss_ratio: f64,
+        begin_ts: u64,
+        end_ts: u64,
+        pkt_status_in_hex: String,
+        pkt_status_in_binary: String,
+    );
 }
 
 pub trait IBluetoothTelephony {
@@ -350,6 +375,7 @@ impl BluetoothMedia {
         self.delay_volume_update.remove(&profile);
 
         if is_profile_critical && self.is_complete_profiles_required() {
+            BluetoothMedia::disconnect_device(self.tx.clone(), addr);
             self.notify_critical_profile_disconnected(addr);
         }
 
@@ -458,9 +484,6 @@ impl BluetoothMedia {
                         self.a2dp_caps.remove(&addr);
                         self.a2dp_audio_state.remove(&addr);
                         self.rm_connected_profile(addr, uuid::Profile::A2dpSink, true);
-                        if self.is_complete_profiles_required() {
-                            self.disconnect(addr.to_string());
-                        }
                     }
                     _ => {
                         self.a2dp_states.insert(addr, state);
@@ -476,6 +499,13 @@ impl BluetoothMedia {
             }
             A2dpCallbacks::MandatoryCodecPreferred(_addr) => {}
         }
+    }
+
+    fn disconnect_device(txl: Sender<Message>, addr: RawAddress) {
+        let device = BluetoothDevice::new(addr.to_string(), "".to_string());
+        topstack::get_runtime().spawn(async move {
+            let _ = txl.send(Message::DisconnectDevice(device)).await;
+        });
     }
 
     pub fn dispatch_avrcp_callbacks(&mut self, cb: AvrcpCallbacks) {
@@ -646,7 +676,11 @@ impl BluetoothMedia {
                         // This is only used for Bluetooth HFP qualification.
                         if self.phone_ops_enabled && self.phone_state.num_active > 0 {
                             debug!("[{}]: Connect SCO due to active call.", DisplayAddress(&addr));
-                            self.start_sco_call_impl(addr.to_string(), false, false);
+                            self.start_sco_call_impl(
+                                addr.to_string(),
+                                false,
+                                HfpCodecCapability::NONE,
+                            );
                         }
                     }
                     BthfConnectionState::Disconnected => {
@@ -655,9 +689,6 @@ impl BluetoothMedia {
                         self.hfp_cap.remove(&addr);
                         self.hfp_audio_state.remove(&addr);
                         self.rm_connected_profile(addr, uuid::Profile::Hfp, true);
-                        if self.is_complete_profiles_required() {
-                            self.disconnect(addr.to_string());
-                        }
                     }
                     BthfConnectionState::Connecting => {
                         info!("[{}]: hfp connecting.", DisplayAddress(&addr));
@@ -852,7 +883,7 @@ impl BluetoothMedia {
                 self.phone_state_change("".into());
 
                 debug!("[{}]: Start SCO call due to ATA", DisplayAddress(&addr));
-                self.start_sco_call_impl(addr.to_string(), false, false);
+                self.start_sco_call_impl(addr.to_string(), false, HfpCodecCapability::NONE);
             }
             HfpCallbacks::HangupCall(addr) => {
                 if !self.hangup_call_impl() {
@@ -914,6 +945,41 @@ impl BluetoothMedia {
                         command
                     );
                 }
+            }
+            HfpCallbacks::DebugDump(
+                active,
+                wbs,
+                total_num_decoded_frames,
+                pkt_loss_ratio,
+                begin_ts,
+                end_ts,
+                pkt_status_in_hex,
+                pkt_status_in_binary,
+            ) => {
+                debug!("[HFP] DebugDump: active:{} wbs:{}", active, wbs);
+                if wbs {
+                    debug!(
+                        "total_num_decoded_frames:{} pkt_loss_ratio:{}",
+                        total_num_decoded_frames, pkt_loss_ratio
+                    );
+                    debug!("begin_ts:{} end_ts:{}", begin_ts, end_ts);
+                    debug!(
+                        "pkt_status_in_hex:{} pkt_status_in_binary:{}",
+                        pkt_status_in_hex, pkt_status_in_binary
+                    );
+                }
+                self.callbacks.lock().unwrap().for_all_callbacks(|callback| {
+                    callback.on_hfp_debug_dump(
+                        active,
+                        wbs,
+                        total_num_decoded_frames,
+                        pkt_loss_ratio,
+                        begin_ts,
+                        end_ts,
+                        pkt_status_in_hex.clone(),
+                        pkt_status_in_binary.clone(),
+                    );
+                });
             }
         }
     }
@@ -1165,7 +1231,7 @@ impl BluetoothMedia {
                     addr.to_string(),
                     name.clone(),
                     cur_a2dp_caps.unwrap_or(&Vec::new()).to_vec(),
-                    *cur_hfp_cap.unwrap_or(&HfpCodecCapability::UNSUPPORTED),
+                    *cur_hfp_cap.unwrap_or(&HfpCodecCapability::NONE),
                     absolute_volume,
                 );
 
@@ -1358,7 +1424,7 @@ impl BluetoothMedia {
         &mut self,
         address: String,
         sco_offload: bool,
-        force_cvsd: bool,
+        disabled_codecs: HfpCodecCapability,
     ) -> bool {
         match (|| -> Result<(), &str> {
             let addr = RawAddress::from_string(address.clone())
@@ -1366,7 +1432,8 @@ impl BluetoothMedia {
             info!("Start sco call for {}", DisplayAddress(&addr));
 
             let hfp = self.hfp.as_mut().ok_or("Uninitialized HFP to start the sco call")?;
-            if hfp.connect_audio(addr, sco_offload, force_cvsd) != 0 {
+            let disabled_codecs = disabled_codecs.try_into().expect("Can't parse disabled_codecs");
+            if hfp.connect_audio(addr, sco_offload, disabled_codecs) != 0 {
                 return Err("SCO connect_audio status failed");
             }
             info!("SCO connect_audio status success");
@@ -1867,9 +1934,9 @@ impl IBluetoothMedia for BluetoothMedia {
         true
     }
 
-    // TODO(b/278963515): Currently this is designed to be called from both the
-    // UI and via disconnection callbacks. Remove this workaround once the
-    // proper fix has landed.
+    // This may not disconnect all media profiles at once, but once the stack
+    // is notified of the disconnection callback, `disconnect_device` will be
+    // invoked as necessary to ensure the device is removed.
     fn disconnect(&mut self, address: String) {
         let addr = match RawAddress::from_string(address.clone()) {
             None => {
@@ -1895,6 +1962,7 @@ impl IBluetoothMedia for BluetoothMedia {
                 uuid::Profile::A2dpSink => {
                     // Some headsets (b/278963515) will try reconnecting to A2DP
                     // when HFP is running but (requested to be) disconnected.
+                    // TODO: Remove this workaround once proper fix lands.
                     if connected_profiles.contains(&Profile::Hfp) {
                         continue;
                     }
@@ -2149,8 +2217,13 @@ impl IBluetoothMedia for BluetoothMedia {
         };
     }
 
-    fn start_sco_call(&mut self, address: String, sco_offload: bool, force_cvsd: bool) -> bool {
-        self.start_sco_call_impl(address, sco_offload, force_cvsd)
+    fn start_sco_call(
+        &mut self,
+        address: String,
+        sco_offload: bool,
+        disabled_codecs: HfpCodecCapability,
+    ) -> bool {
+        self.start_sco_call_impl(address, sco_offload, disabled_codecs)
     }
 
     fn stop_sco_call(&mut self, address: String) {
@@ -2230,6 +2303,13 @@ impl IBluetoothMedia for BluetoothMedia {
         match self.avrcp.as_mut() {
             Some(avrcp) => avrcp.set_metadata(&metadata),
             None => warn!("Uninitialized AVRCP to set player playback status"),
+        };
+    }
+
+    fn trigger_debug_dump(&mut self) {
+        match self.hfp.as_mut() {
+            Some(hfp) => hfp.debug_dump(),
+            None => warn!("Uninitialized HFP to dump debug log"),
         };
     }
 }
@@ -2356,7 +2436,7 @@ impl IBluetoothTelephony for BluetoothMedia {
             }
         }) {
             info!("Start SCO call due to call answered");
-            self.start_sco_call_impl(addr.to_string(), false, false);
+            self.start_sco_call_impl(addr.to_string(), false, HfpCodecCapability::NONE);
         }
 
         true
@@ -2416,7 +2496,7 @@ impl IBluetoothTelephony for BluetoothMedia {
     }
 
     fn audio_connect(&mut self, address: String) -> bool {
-        self.start_sco_call_impl(address, false, false)
+        self.start_sco_call_impl(address, false, HfpCodecCapability::NONE)
     }
 
     fn audio_disconnect(&mut self, address: String) {

@@ -182,7 +182,8 @@ class ShimUi : public bluetooth::security::UI {
       // Call sp_cback for IO_RSP
       tBTM_SP_IO_RSP io_rsp_evt_data;
       io_rsp_evt_data.bd_addr = bluetooth::ToRawAddress(address.GetAddress());
-      io_rsp_evt_data.io_cap = gd_legacy_io_caps_map_[data.GetRemoteIoCaps()];
+      io_rsp_evt_data.io_cap = static_cast<tBTM_IO_CAP>(
+          gd_legacy_io_caps_map_[data.GetRemoteIoCaps()]);
       io_rsp_evt_data.auth_req =
           gd_legacy_auth_reqs_map_[data.GetRemoteAuthReqs()];
       io_rsp_evt_data.auth_req = BTM_AUTH_AP_YES;
@@ -392,13 +393,6 @@ bool bluetooth::shim::BTM_HasEirService(const uint32_t* p_eir_uuid,
   return false;
 }
 
-tBTM_EIR_SEARCH_RESULT bluetooth::shim::BTM_HasInquiryEirService(
-    tBTM_INQ_RESULTS* p_results, uint16_t uuid16) {
-  LOG_INFO("UNIMPLEMENTED %s", __func__);
-  CHECK(p_results != nullptr);
-  return BTM_EIR_UNKNOWN;
-}
-
 void bluetooth::shim::BTM_AddEirService(uint32_t* p_eir_uuid, uint16_t uuid16) {
   LOG_INFO("UNIMPLEMENTED %s", __func__);
   CHECK(p_eir_uuid != nullptr);
@@ -529,11 +523,6 @@ uint16_t bluetooth::shim::BTM_GetHCIConnHandle(const RawAddress& remote_bda,
 
 void bluetooth::shim::BTM_SecClearSecurityFlags(const RawAddress& bd_addr) {
   // TODO(optedoblivion): Call RemoveBond on device address
-}
-
-char* bluetooth::shim::BTM_SecReadDevName(const RawAddress& address) {
-  static char name[] = "TODO: See if this is needed";
-  return name;
 }
 
 bool bluetooth::shim::BTM_SecAddRmtNameNotifyCallback(

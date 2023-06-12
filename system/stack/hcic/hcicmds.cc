@@ -28,7 +28,6 @@
 #include <string.h>
 
 #include "bt_target.h"
-#include "btu.h"
 #include "device/include/device_iot_config.h"
 #include "device/include/esco_parameters.h"
 #include "gd/common/init_flags.h"
@@ -39,9 +38,9 @@
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btu.h"
+#include "stack/include/btu_hcif.h"
 #include "types/raw_address.h"
-
-void bte_main_hci_send(BT_HDR* p_msg, uint16_t event);
 
 /* Message by message.... */
 
@@ -710,47 +709,12 @@ void btsnd_hcic_set_conn_encrypt(uint16_t handle, bool enable) {
 void btsnd_hcic_rmt_name_req(const RawAddress& bd_addr,
                              uint8_t page_scan_rep_mode, uint8_t page_scan_mode,
                              uint16_t clock_offset) {
-  if (bluetooth::common::init_flags::gd_remote_name_request_is_enabled()) {
-    bluetooth::shim::ACL_RemoteNameRequest(bd_addr, page_scan_rep_mode,
-                                           page_scan_mode, clock_offset);
-    return;
-  }
-
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_RMT_NAME_REQ;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_RMT_NAME_REQUEST);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_RMT_NAME_REQ);
-
-  BDADDR_TO_STREAM(pp, bd_addr);
-  UINT8_TO_STREAM(pp, page_scan_rep_mode);
-  UINT8_TO_STREAM(pp, page_scan_mode);
-  UINT16_TO_STREAM(pp, clock_offset);
-
-  btm_acl_paging(p, bd_addr);
+  bluetooth::shim::ACL_RemoteNameRequest(bd_addr, page_scan_rep_mode,
+                                         page_scan_mode, clock_offset);
 }
 
 void btsnd_hcic_rmt_name_req_cancel(const RawAddress& bd_addr) {
-  if (bluetooth::common::init_flags::gd_remote_name_request_is_enabled()) {
-    bluetooth::shim::ACL_CancelRemoteNameRequest(bd_addr);
-    return;
-  }
-
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_RMT_NAME_REQ_CANCEL;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_RMT_NAME_REQUEST_CANCEL);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_RMT_NAME_REQ_CANCEL);
-
-  BDADDR_TO_STREAM(pp, bd_addr);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
+  bluetooth::shim::ACL_CancelRemoteNameRequest(bd_addr);
 }
 
 void btsnd_hcic_rmt_ext_features(uint16_t handle, uint8_t page_num) {
@@ -1680,28 +1644,28 @@ void btsnd_hcic_write_pagescan_type(uint8_t type) {
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }
 
-/* Must have room to store BT_HDR + max VSC length + callback pointer */
-#if (HCI_CMD_BUF_SIZE < 268)
-#error "HCI_CMD_BUF_SIZE must be larger than 268"
-#endif
+static void btsnd_hcic_vendor_spec_complete(tBTM_VSC_CMPL_CB* p_vsc_cplt_cback,
+                                            uint16_t opcode, uint8_t* data,
+                                            uint16_t len) {
+  /* If there was a callback address for vcs complete, call it */
+  if (p_vsc_cplt_cback) {
+    tBTM_VSC_CMPL vcs_cplt_params;
+    vcs_cplt_params.opcode = opcode;
+    vcs_cplt_params.param_len = len;
+    vcs_cplt_params.p_param_buf = data;
+    /* Call the VSC complete callback function */
+    (*p_vsc_cplt_cback)(&vcs_cplt_params);
+  }
+}
 
-void btsnd_hcic_vendor_spec_cmd(void* buffer, uint16_t opcode, uint8_t len,
-                                uint8_t* p_data, void* p_cmd_cplt_cback) {
-  BT_HDR* p = (BT_HDR*)buffer;
-  uint8_t* pp = (uint8_t*)(p + 1);
+void btsnd_hcic_vendor_spec_cmd(uint16_t opcode, uint8_t len, uint8_t* p_data,
+                                tBTM_VSC_CMPL_CB* p_cmd_cplt_cback) {
+  uint16_t v_opcode = HCI_GRP_VENDOR_SPECIFIC | opcode;
 
-  p->len = HCIC_PREAMBLE_SIZE + len;
-  p->offset = sizeof(void*);
-
-  *((void**)pp) =
-      p_cmd_cplt_cback; /* Store command complete callback in buffer */
-  pp += sizeof(void*);  /* Skip over callback pointer */
-
-  UINT16_TO_STREAM(pp, HCI_GRP_VENDOR_SPECIFIC | opcode);
-  UINT8_TO_STREAM(pp, len);
-  ARRAY_TO_STREAM(pp, p_data, len);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
+  btu_hcif_send_cmd_with_cb(
+      FROM_HERE, v_opcode, p_data, len,
+      base::BindOnce(&btsnd_hcic_vendor_spec_complete,
+                     base::Unretained(p_cmd_cplt_cback), v_opcode));
 }
 
 void btsnd_hcic_configure_data_path(uint8_t data_path_direction,

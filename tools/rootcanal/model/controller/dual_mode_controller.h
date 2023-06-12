@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -49,6 +50,9 @@ using ::bluetooth::hci::CommandView;
 // "Hci" to distinguish it as a controller command.
 class DualModeController : public Device {
  public:
+  // Unique instance identifier.
+  const int id_;
+
   DualModeController(ControllerProperties properties = ControllerProperties());
   DualModeController(DualModeController&&) = delete;
   DualModeController(const DualModeController&) = delete;
@@ -253,6 +257,9 @@ class DualModeController : public Device {
   // 7.3.28
   void WriteVoiceSetting(CommandView command);
 
+  // 7.3.35
+  void ReadTransmitPowerLevel(CommandView command);
+
   // 7.3.36
   void ReadSynchronousFlowControlEnable(CommandView command);
 
@@ -312,6 +319,9 @@ class DualModeController : public Device {
 
   // 7.3.69
   void SetEventMaskPage2(CommandView command);
+
+  // 7.3.74
+  void ReadEnhancedTransmitPowerLevel(CommandView command);
 
   // 7.3.79
   void WriteLeHostSupport(CommandView command);
@@ -557,9 +567,9 @@ class DualModeController : public Device {
   // Implement the command specific to the CSR controller
   // used specifically by the PTS tool to pass certification tests.
   void CsrVendorCommand(CommandView command);
-  void CsrReadVarid(CsrVarid varid, std::vector<uint8_t>& value);
-  void CsrWriteVarid(CsrVarid varid, std::vector<uint8_t> const& value);
-  void CsrReadPskey(CsrPskey pskey, std::vector<uint8_t>& value);
+  void CsrReadVarid(CsrVarid varid, std::vector<uint8_t>& value) const;
+  void CsrWriteVarid(CsrVarid varid, std::vector<uint8_t> const& value) const;
+  void CsrReadPskey(CsrPskey pskey, std::vector<uint8_t>& value) const;
   void CsrWritePskey(CsrPskey pskey, std::vector<uint8_t> const& value);
 
   // Command pass-through.
@@ -571,7 +581,7 @@ class DualModeController : public Device {
   ControllerProperties properties_;
 
   // Link Layer state.
-  LinkLayerController link_layer_controller_{address_, properties_};
+  LinkLayerController link_layer_controller_{address_, properties_, id_};
 
  private:
   // Send a HCI_Command_Complete event for the specified op_code with
@@ -590,6 +600,9 @@ class DualModeController : public Device {
   // The local loopback mode is used to pass the android Vendor Test Suite
   // with RootCanal.
   bluetooth::hci::LoopbackMode loopback_mode_{LoopbackMode::NO_LOOPBACK};
+
+  // Random value generator, always seeded with 0 to be deterministic.
+  std::mt19937_64 random_generator_{};
 
   // Flag set to true after the HCI Reset command has been received
   // the first time.

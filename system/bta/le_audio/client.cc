@@ -953,9 +953,14 @@ class LeAudioClientImpl : public LeAudioClient {
     }
 
     if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
-      LOG_ERROR(", group already stopped: %s",
-                ToString(group->GetState()).c_str());
-
+      if (group->GetTargetState() != AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
+        LOG_WARN(" group %d was about to stream, but got canceled: %s",
+                 group_id, ToString(group->GetTargetState()).c_str());
+        group->SetTargetState(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
+      } else {
+        LOG_WARN(", group %d already stopped: %s", group_id,
+                 ToString(group->GetState()).c_str());
+      }
       return;
     }
 
@@ -1892,9 +1897,10 @@ class LeAudioClientImpl : public LeAudioClient {
 
     if (status != GATT_SUCCESS) {
       /* autoconnect connection failed, that's ok */
-      if (leAudioDevice->GetConnectionState() ==
-              DeviceConnectState::CONNECTING_AUTOCONNECT ||
-          leAudioDevice->autoconnect_flag_) {
+      if (status != GATT_ILLEGAL_PARAMETER &&
+          (leAudioDevice->GetConnectionState() ==
+               DeviceConnectState::CONNECTING_AUTOCONNECT ||
+           leAudioDevice->autoconnect_flag_)) {
         LOG_INFO("Device not available now, do background connect.");
         leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
         AddToBackgroundConnectCheckGroupConnected(leAudioDevice);
@@ -1903,8 +1909,8 @@ class LeAudioClientImpl : public LeAudioClient {
 
       leAudioDevice->SetConnectionState(DeviceConnectState::DISCONNECTED);
 
-      LOG(ERROR) << "Failed to connect to LeAudio leAudioDevice, status: "
-                 << +status;
+      LOG_ERROR("Failed to connect to LeAudio leAudioDevice, status: 0x%02x",
+                status);
       callbacks_->OnConnectionState(ConnectionState::DISCONNECTED, address);
       le_audio::MetricsCollector::Get()->OnConnectionStateChanged(
           leAudioDevice->group_id_, address, ConnectionState::CONNECTED,

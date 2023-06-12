@@ -262,8 +262,12 @@ cc_test {
         "libaaudio",
         "libbinder_ndk",
         "libcrypto",
+        "libcutils",
         "libfmq",
         "libhidlbase",
+        "liblog",
+        "libstatssocket",
+        "libutils",
     ],
     static_libs: [
         "android.hardware.audio.common-V1-ndk",
@@ -344,6 +348,7 @@ cc_test {
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
+    shared_libs: ["liblog"],
 }
 
 // btif avrcp audio track unit tests
@@ -376,6 +381,7 @@ cc_test {
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
+    shared_libs: ["liblog"],
 }
 
 // btif rc unit tests for target
@@ -394,6 +400,9 @@ cc_test {
     include_dirs: btifCommonIncludes,
     srcs: [
         ":TestCommonLogMsg",
+        ":TestCommonMockFunctions",
+        ":TestMockCommon",
+        ":TestMockOsi",
         "test/btif_rc_test.cc",
     ],
     header_libs: ["libbluetooth_headers"],
@@ -408,9 +417,13 @@ cc_test {
         "libbt-protos-lite",
         "libchrome",
         "libevent",
-        "libosi",
         "libosi-AllocationTestHarness",
     ],
+    target: {
+        android: {
+            shared_libs: ["libstatssocket"],
+        },
+    },
     cflags: ["-DBUILDCFG"],
     sanitize: {
         address: true,
@@ -573,6 +586,7 @@ cc_test {
         "libcutils",
         "libhidlbase",
         "liblog",
+        "libutils",
     ],
     static_libs: [
         "android.hardware.bluetooth.a2dp@1.0",
@@ -609,6 +623,7 @@ cc_test {
             ],
             shared_libs: [
                 "libbinder_ndk",
+                "libstatssocket",
             ],
         },
     },
@@ -705,6 +720,7 @@ cc_test {
         "libcutils",
         "libhidlbase",
         "liblog",
+        "libutils",
     ],
     static_libs: [
         "android.hardware.bluetooth.a2dp@1.0",
@@ -739,6 +755,7 @@ cc_test {
             ],
             shared_libs: [
                 "libbinder_ndk",
+                "libstatssocket",
             ],
         },
     },

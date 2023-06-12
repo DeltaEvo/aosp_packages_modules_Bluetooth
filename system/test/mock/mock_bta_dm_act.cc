@@ -67,7 +67,6 @@ struct bta_dm_ci_rmt_oob_act bta_dm_ci_rmt_oob_act;
 struct bta_dm_close_acl bta_dm_close_acl;
 struct bta_dm_close_gatt_conn bta_dm_close_gatt_conn;
 struct bta_dm_confirm bta_dm_confirm;
-struct bta_dm_deinit_cb bta_dm_deinit_cb;
 struct bta_dm_disable bta_dm_disable;
 struct bta_dm_disc_result bta_dm_disc_result;
 struct bta_dm_remote_name_cmpl bta_dm_remote_name_cmpl;
@@ -78,7 +77,6 @@ struct bta_dm_enable bta_dm_enable;
 struct bta_dm_encrypt_cback bta_dm_encrypt_cback;
 struct bta_dm_execute_queued_request bta_dm_execute_queued_request;
 struct bta_dm_free_sdp_db bta_dm_free_sdp_db;
-struct bta_dm_init_cb bta_dm_init_cb;
 struct bta_dm_inq_cmpl bta_dm_inq_cmpl;
 struct bta_dm_is_search_request_queued bta_dm_is_search_request_queued;
 struct bta_dm_pin_reply bta_dm_pin_reply;
@@ -243,10 +241,6 @@ void bta_dm_confirm(const RawAddress& bd_addr, bool accept) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_confirm(bd_addr, accept);
 }
-void bta_dm_deinit_cb(void) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_deinit_cb();
-}
 void bta_dm_disable() {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_disable();
@@ -288,10 +282,6 @@ void bta_dm_execute_queued_request() {
 void bta_dm_free_sdp_db() {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_free_sdp_db();
-}
-void bta_dm_init_cb(void) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_init_cb();
 }
 void bta_dm_inq_cmpl(uint8_t num) {
   inc_func_call_count(__func__);

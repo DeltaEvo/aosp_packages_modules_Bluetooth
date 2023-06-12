@@ -823,7 +823,7 @@ class HeadsetInterface : Interface {
                    bool inband_ringing_enabled) override;
   bt_status_t Connect(RawAddress* bd_addr) override;
   bt_status_t Disconnect(RawAddress* bd_addr) override;
-  bt_status_t ConnectAudio(RawAddress* bd_addr, bool force_cvsd) override;
+  bt_status_t ConnectAudio(RawAddress* bd_addr, int disabled_codecs) override;
   bt_status_t DisconnectAudio(RawAddress* bd_addr) override;
   bt_status_t isNoiseReductionSupported(RawAddress* bd_addr) override;
   bt_status_t isVoiceRecognitionSupported(RawAddress* bd_addr) override;
@@ -859,6 +859,7 @@ class HeadsetInterface : Interface {
   bt_status_t SetScoAllowed(bool value) override;
   bt_status_t SendBsir(bool value, RawAddress* bd_addr) override;
   bt_status_t SetActiveDevice(RawAddress* active_device_addr) override;
+  bt_status_t DebugDump() override;
 };
 
 bt_status_t HeadsetInterface::Init(Callbacks* callbacks, int max_hf_clients,
@@ -916,7 +917,7 @@ bt_status_t HeadsetInterface::Disconnect(RawAddress* bd_addr) {
 }
 
 bt_status_t HeadsetInterface::ConnectAudio(RawAddress* bd_addr,
-                                           bool force_cvsd) {
+                                           int disabled_codecs) {
   CHECK_BTHF_INIT();
   int idx = btif_hf_idx_by_bdaddr(bd_addr);
   if ((idx < 0) || (idx >= BTA_AG_MAX_NUM_CLIENTS)) {
@@ -934,7 +935,7 @@ bt_status_t HeadsetInterface::ConnectAudio(RawAddress* bd_addr,
                               base::Unretained(bt_hf_callbacks),
                               BTHF_AUDIO_STATE_CONNECTING,
                               &btif_hf_cb[idx].connected_bda));
-  BTA_AgAudioOpen(btif_hf_cb[idx].handle, force_cvsd);
+  BTA_AgAudioOpen(btif_hf_cb[idx].handle, disabled_codecs);
 
   DEVICE_IOT_CONFIG_ADDR_INT_ADD_ONE(*bd_addr, IOT_CONF_KEY_HFP_SCO_CONN_COUNT);
 
@@ -1574,6 +1575,19 @@ bt_status_t HeadsetInterface::SetActiveDevice(RawAddress* active_device_addr) {
   CHECK_BTHF_INIT();
   active_bda = *active_device_addr;
   BTA_AgSetActiveDevice(*active_device_addr);
+  return BT_STATUS_SUCCESS;
+}
+
+bt_status_t HeadsetInterface::DebugDump() {
+  CHECK_BTHF_INIT();
+  tBTM_SCO_DEBUG_DUMP debug_dump = BTM_GetScoDebugDump();
+  bt_hf_callbacks->DebugDumpCallback(
+      debug_dump.is_active, debug_dump.is_wbs,
+      debug_dump.total_num_decoded_frames, debug_dump.pkt_loss_ratio,
+      debug_dump.latest_msbc_data.begin_ts_raw_us,
+      debug_dump.latest_msbc_data.end_ts_raw_us,
+      debug_dump.latest_msbc_data.status_in_hex.c_str(),
+      debug_dump.latest_msbc_data.status_in_binary.c_str());
   return BT_STATUS_SUCCESS;
 }
 

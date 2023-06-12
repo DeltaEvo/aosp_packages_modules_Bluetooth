@@ -1468,6 +1468,12 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
           num_properties++;
         }
 
+        BTIF_TRACE_DEBUG("%s clock_offset is 0x%x", __func__,
+            p_search_data->inq_res.clock_offset);
+        if (p_search_data->inq_res.clock_offset & BTM_CLOCK_OFFSET_VALID) {
+          btif_set_device_clockoffset(bdaddr, (int)p_search_data->inq_res.clock_offset);
+        }
+
         /* DEV_TYPE */
         /* FixMe: Assumption is that bluetooth.h and BTE enums match */
 
@@ -1759,9 +1765,8 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
         pairing_cb.sdp_attempts = 0;
 
         // Send UUIDs discovered through EIR to Java to unblock pairing intent
-        // when SDP failed or no UUID is discovered
-        if (p_data->disc_res.result != BTA_SUCCESS ||
-            p_data->disc_res.num_uuids == 0) {
+        // when SDP failed
+        if (p_data->disc_res.result != BTA_SUCCESS) {
           auto uuids_iter = eir_uuids_cache.find(bd_addr);
           if (uuids_iter != eir_uuids_cache.end()) {
             num_eir_uuids = uuids_iter->second.size();
@@ -1840,6 +1845,8 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
       std::set<Uuid> uuids;
       RawAddress& bd_addr = p_data->disc_ble_res.bd_addr;
       RawAddress static_addr_copy = pairing_cb.static_bdaddr;
+      bool lea_supported =
+          is_le_audio_capable_during_service_discovery(bd_addr);
 
       if (event == BTA_DM_GATT_OVER_LE_RES_EVT) {
         LOG_INFO("New GATT over LE UUIDs for %s:",
@@ -1894,7 +1901,7 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
           return;
         }
 
-        if (is_le_audio_capable_during_service_discovery(bd_addr)) {
+        if (lea_supported) {
           if (bluetooth::common::init_flags::
                   sdp_return_classic_services_when_le_discovery_fails_is_enabled()) {
             LOG_INFO(
@@ -1903,9 +1910,12 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
             // LEA device w/o this flag
             // TODO: we might want to remove bond or do some action on
             // half-discovered device
+            LOG_WARN("No GATT service found for the LE Audio device %s",
+                     ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
             return;
           }
         } else {
+          LOG_INFO("LE audio not supported, no need to report any UUIDs");
           return;
         }
       }

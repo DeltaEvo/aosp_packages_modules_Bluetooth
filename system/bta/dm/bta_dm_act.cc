@@ -126,7 +126,7 @@ static void bta_dm_disable_conn_down_timer_cback(void* data);
 void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id, uint8_t app_id,
                      const RawAddress& peer_addr);
 static void bta_dm_adjust_roles(bool delay_role_switch);
-static char* bta_dm_get_remname(void);
+static const char* bta_dm_get_remname(void);
 static void bta_dm_bond_cancel_complete_cback(tBTM_STATUS result);
 
 static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr,
@@ -399,7 +399,7 @@ tBTA_DM_STATE bta_dm_search_get_state() { return bta_dm_search_cb.state; }
  * Returns          void
  *
  ******************************************************************************/
-void bta_dm_init_cb(void) {
+static void bta_dm_init_cb(void) {
   bta_dm_cb = {};
   bta_dm_cb.disable_timer = alarm_new("bta_dm.disable_timer");
   bta_dm_cb.switch_delay_timer = alarm_new("bta_dm.switch_delay_timer");
@@ -420,7 +420,7 @@ void bta_dm_init_cb(void) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_dm_deinit_cb(void) {
+static void bta_dm_deinit_cb(void) {
   /*
    * TODO: Should alarm_free() the bta_dm_cb timers during graceful
    * shutdown.
@@ -873,7 +873,7 @@ void bta_dm_bond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
             DeviceTypeText(device_type).c_str());
 
   tBTA_DM_SEC sec_event;
-  char* p_name;
+  const char* p_name;
 
   tBTM_STATUS status =
       BTM_SecBond(bd_addr, addr_type, transport, device_type, 0, NULL);
@@ -1157,7 +1157,7 @@ void bta_dm_remote_name_cmpl(const tBTA_DM_MSG* p_data) {
                      PRIVATE_NAME(remote_name_msg.bd_name)));
 
   tBTM_INQ_INFO* p_btm_inq_info = BTM_InqDbRead(remote_name_msg.bd_addr);
-  if (remote_name_msg.bd_name[0] != '\0' && bta_dm_search_cb.p_btm_inq_info) {
+  if (!bd_name_is_empty(remote_name_msg.bd_name) && p_btm_inq_info) {
     p_btm_inq_info->appl_knows_rem_name = true;
   }
 
@@ -1885,14 +1885,12 @@ static void bta_dm_find_services(const RawAddress& bd_addr) {
         bta_dm_search_cb.service_index = BTA_MAX_SERVICE_ID;
 
       } else {
-#ifndef TARGET_FLOSS
         if (uuid == Uuid::From16Bit(UUID_PROTOCOL_L2CAP)) {
           if (!is_sdp_pbap_pce_disabled(bd_addr)) {
             LOG_DEBUG("SDP search for PBAP Client ");
             BTA_SdpSearch(bd_addr, Uuid::From16Bit(UUID_SERVCLASS_PBAP_PCE));
           }
         }
-#endif
         bta_dm_search_cb.service_index++;
         return;
       }
@@ -2152,6 +2150,7 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
   result.inq_res.device_type = p_inq->device_type;
   result.inq_res.flag = p_inq->flag;
   result.inq_res.include_rsi = p_inq->include_rsi;
+  result.inq_res.clock_offset = p_inq->clock_offset;
 
   /* application will parse EIR to find out remote device name */
   result.inq_res.p_eir = const_cast<uint8_t*>(p_eir);
@@ -3161,14 +3160,13 @@ static void bta_dm_adjust_roles(bool delay_role_switch) {
  *
  * Returns          char * - Pointer to the remote device name
  ******************************************************************************/
-static char* bta_dm_get_remname(void) {
-  char* p_name = (char*)bta_dm_search_cb.peer_name;
-  char* p_temp;
+static const char* bta_dm_get_remname(void) {
+  const char* p_name = (const char*)bta_dm_search_cb.peer_name;
 
   /* If the name isn't already stored, try retrieving from BTM */
   if (*p_name == '\0') {
-    p_temp = BTM_SecReadDevName(bta_dm_search_cb.peer_bdaddr);
-    if (p_temp != NULL) p_name = p_temp;
+    const char* p_temp = BTM_SecReadDevName(bta_dm_search_cb.peer_bdaddr);
+    if (p_temp != NULL) p_name = (const char*)p_temp;
   }
 
   return p_name;
@@ -3860,7 +3858,8 @@ static void ble_io_req(const RawAddress& bd_addr, tBTM_IO_CAP* p_io_cap,
 
   btif_dm_set_oob_for_le_io_req(bd_addr, p_oob_data, p_auth_req);
 
-  if (bte_appl_cfg.ble_io_cap <= 4) *p_io_cap = bte_appl_cfg.ble_io_cap;
+  if (bte_appl_cfg.ble_io_cap <= 4)
+    *p_io_cap = static_cast<tBTM_IO_CAP>(bte_appl_cfg.ble_io_cap);
 
   if (bte_appl_cfg.ble_init_key <= BTM_BLE_INITIATOR_KEY_SIZE)
     *p_init_key = bte_appl_cfg.ble_init_key;
@@ -3886,7 +3885,7 @@ static uint8_t bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
                                     tBTM_LE_EVT_DATA* p_data) {
   tBTM_STATUS status = BTM_SUCCESS;
   tBTA_DM_SEC sec_event;
-  char* p_name = NULL;
+  const char* p_name = NULL;
 
   if (!bta_dm_cb.p_sec_cback) return BTM_NOT_AUTHORIZED;
 
@@ -4802,6 +4801,9 @@ tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data) {
 }
 
 void btm_set_local_io_caps(uint8_t io_caps) { ::btm_local_io_caps = io_caps; }
+
+void bta_dm_init_cb() { ::bta_dm_init_cb(); }
+void bta_dm_deinit_cb() { ::bta_dm_deinit_cb(); }
 
 }  // namespace testing
 }  // namespace legacy

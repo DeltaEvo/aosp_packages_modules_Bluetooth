@@ -270,8 +270,10 @@ cc_test {
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
         "libcrypto",
+        "libcutils",
         "liblog",
         "libprotobuf-cpp-lite",
+        "libstatssocket",
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
@@ -439,6 +441,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "liblog",
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
@@ -482,6 +485,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "liblog",
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
@@ -536,6 +540,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "liblog",
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
@@ -842,6 +847,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "liblog",
     ],
     static_libs: [
         "libbt-common",
@@ -904,6 +910,7 @@ cc_test {
         "libcrypto",
         "libfmq",
         "libhidlbase",
+        "liblog",
     ],
     static_libs: [
         "libbt-audio-hal-interface",
@@ -964,6 +971,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "liblog",
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
@@ -1029,6 +1037,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "liblog",
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
