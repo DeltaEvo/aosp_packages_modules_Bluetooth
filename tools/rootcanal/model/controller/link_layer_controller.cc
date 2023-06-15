@@ -284,7 +284,6 @@ ErrorCode LinkLayerController::LeSetRandomAddress(Address random_address) {
     return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
   }
 
-  INFO(id_, "device random address configured to {}", random_address);
   random_address_ = random_address;
   return ErrorCode::SUCCESS;
 }
@@ -1957,6 +1956,11 @@ void LinkLayerController::SetLocalName(std::vector<uint8_t> const& local_name) {
   ASSERT(local_name.size() <= local_name_.size());
   local_name_.fill(0);
   std::copy(local_name.begin(), local_name.end(), local_name_.begin());
+}
+
+void LinkLayerController::SetExtendedInquiryResponse(
+    std::array<uint8_t, 240> const& extended_inquiry_response) {
+  extended_inquiry_response_ = extended_inquiry_response;
 }
 
 void LinkLayerController::SetExtendedInquiryResponse(

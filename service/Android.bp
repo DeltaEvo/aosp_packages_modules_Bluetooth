@@ -33,7 +33,13 @@ java_defaults {
     name: "service-bluetooth-common-defaults",
     defaults: ["bluetooth-module-sdk-version-defaults"],
     errorprone: {
-        javacflags: ["-Xep:CheckReturnValue:ERROR"],
+        javacflags: [
+            "-Xep:AlreadyChecked:ERROR",
+            "-Xep:CheckReturnValue:ERROR",
+            "-Xep:ClassCanBeStatic:ERROR",
+            "-Xep:EqualsIncompatibleType:ERROR",
+            "-Xep:ReferenceEquality:ERROR",
+        ],
     },
     product_variables: {
         pdk: {

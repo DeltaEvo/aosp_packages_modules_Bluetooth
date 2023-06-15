@@ -2739,7 +2739,11 @@ void btm_io_capabilities_rsp(const uint8_t* p) {
   tBTM_SP_IO_RSP evt_data;
 
   STREAM_TO_BDADDR(evt_data.bd_addr, p);
-  STREAM_TO_UINT8(evt_data.io_cap, p);
+
+  uint8_t io_cap;
+  STREAM_TO_UINT8(io_cap, p);
+  evt_data.io_cap = static_cast<tBTM_IO_CAP>(io_cap);
+
   STREAM_TO_UINT8(evt_data.oob_data, p);
   STREAM_TO_UINT8(evt_data.auth_req, p);
 
@@ -4952,6 +4956,7 @@ static void btm_sec_check_pending_enc_req(tBTM_SEC_DEV_REC* p_dev_rec,
           (*p_e->p_callback)(&p_dev_rec->bd_addr, transport, p_e->p_ref_data,
                              res);
         fixed_queue_try_remove_from_queue(btm_cb.sec_pending_q, (void*)p_e);
+        osi_free(p_e);
       }
     }
   }

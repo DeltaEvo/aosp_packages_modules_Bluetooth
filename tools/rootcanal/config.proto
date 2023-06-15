@@ -6,6 +6,10 @@ option optimize_for = CODE_SIZE;
 enum ControllerPreset {
   // Version 5.3, all features enabled, all quirks disabled.
   DEFAULT = 0;
+  // Official PTS dongle, Laird BL654.
+  LAIRD_BL654 = 1;
+  // Official PTS dongle, CSR rck.
+  CSR_RCK_PTS_DONGLE = 2;
 }
 
 message ControllerFeatures {
@@ -14,6 +18,9 @@ message ControllerFeatures {
   optional bool ll_privacy = 3;
   optional bool le_2m_phy = 4;
   optional bool le_coded_phy = 5;
+  // Enable the support for both LL Connected Isochronous Stream Central
+  // and LL Connected Isochronous Stream Peripheral.
+  optional bool le_connected_isochronous_stream = 6;
 }
 
 message ControllerQuirks {
