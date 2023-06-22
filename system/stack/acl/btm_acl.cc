@@ -2305,7 +2305,7 @@ void btm_acl_paging(BT_HDR* p, const RawAddress& bda) {
  *
  ******************************************************************************/
 void btm_acl_notif_conn_collision(const RawAddress& bda) {
-  do_in_main_thread(FROM_HERE, base::Bind(bta_sys_notify_collision, bda));
+  do_in_main_thread(FROM_HERE, base::BindOnce(bta_sys_notify_collision, bda));
 }
 
 bool BTM_BLE_IS_RESOLVE_BDA(const RawAddress& x) {
@@ -2730,11 +2730,6 @@ void btm_connection_request(const RawAddress& bda,
   dc[0] = cod.cod[2], dc[1] = cod.cod[1], dc[2] = cod.cod[0];
 
   btm_sec_conn_req(bda, dc);
-}
-
-void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc) {
-  btm_sec_conn_req(bda, dc);
-  l2c_link_hci_conn_req(bda);
 }
 
 void acl_accept_connection_request(const RawAddress& bd_addr, uint8_t role) {

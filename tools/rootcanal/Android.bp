@@ -19,7 +19,6 @@ cc_defaults {
     tidy_checks: [
         "-*",
         "readability-*",
-
         "-readability-function-size",
         "-readability-identifier-length",
         "-readability-implicit-bool-conversion",
@@ -32,12 +31,22 @@ cc_defaults {
     tidy_flags: [
         "--header-filter=^.*tools\\/rootcanal\\/(model|include|net|desktop)\\/(.(?!\\.pb\\.h))*$",
     ],
-    defaults: [
-        "fluoride_common_options",
-        "gd_defaults",
-    ],
+    sanitize: {
+        address: true,
+        all_undefined: true,
+        misc_undefined: ["bounds"],
+    },
+    c_std: "c99",
+    cpp_std: "c++17",
     cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
         "-fvisibility=hidden",
+        "-DGOOGLE_PROTOBUF_NO_RTTI",
+    ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system/gd",
     ],
     local_include_dirs: [
         "include",
@@ -126,6 +135,7 @@ cc_library_static {
     static_libs: [
         "libscriptedbeaconpayload-protos-lite",
     ],
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // This library contains the generated headers for the
@@ -147,6 +157,9 @@ cc_library_host_shared {
     defaults: [
         "rootcanal_defaults",
     ],
+    sanitize: {
+        address: false,
+    },
     srcs: [
         ":BluetoothPacketSources",
         ":lib_sources",
@@ -179,6 +192,7 @@ cc_library_host_shared {
     cflags: [
         "-fexceptions",
     ],
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Generate the python parser+serializer backend for
@@ -292,6 +306,7 @@ cc_test_host {
     static_libs: [
         "libbt-rootcanal",
     ],
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Implement the Bluetooth official LL test suite for root-canal.
@@ -310,6 +325,7 @@ python_test_host {
         "test/LL/CON_/PER/*.py",
         "test/LL/DDI/ADV/*.py",
         "test/LL/DDI/SCN/*.py",
+        "test/LMP/LIH/*.py",
         "test/main.py",
     ],
     data: [
@@ -362,6 +378,7 @@ cc_test_host {
             enabled: false,
         },
     },
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Linux RootCanal Executable
@@ -390,10 +407,6 @@ cc_binary_host {
         "libprotobuf-cpp-full",
         "libscriptedbeaconpayload-protos-lite",
     ],
-    sanitize: {
-        address: true,
-        all_undefined: true,
-    },
     target: {
         // TODO(b/181290178) remove it when sanitize option is supported by linux_bionic as well
         linux_bionic: {
@@ -407,6 +420,7 @@ cc_binary_host {
             enabled: false,
         },
     },
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 genrule {

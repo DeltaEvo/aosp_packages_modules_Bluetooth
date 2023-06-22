@@ -41,13 +41,26 @@ tests = [
     'LL.DDI.SCN.BV_18_C',
     'LL.DDI.SCN.BV_19_C',
     'LL.DDI.SCN.BV_79_C',
+    'LMP.LIH.BV_01_C',
+    'LMP.LIH.BV_02_C',
+    'LMP.LIH.BV_78_C',
+    'LMP.LIH.BV_79_C',
+    'LMP.LIH.BV_142_C',
+    'LMP.LIH.BV_143_C',
+    'LMP.LIH.BV_144_C',
+    'LMP.LIH.BV_149_C',
 ]
+
+
+def include_test(test: str, patterns) -> bool:
+    return not patterns or any(test.startswith(prefix) for prefix in patterns)
+
 
 if __name__ == "__main__":
     suite = unittest.TestSuite()
+    patterns = [arg for arg in sys.argv[1:] if not arg.startswith('-')]
     for test in tests:
-        if len(sys.argv) > 1 and test not in sys.argv:
-            continue
-        module = importlib.import_module(f'test.{test}')
-        suite.addTest(unittest.defaultTestLoader.loadTestsFromModule(module))
+        if include_test(test, patterns):
+            module = importlib.import_module(f'test.{test}')
+            suite.addTest(unittest.defaultTestLoader.loadTestsFromModule(module))
     unittest.TextTestRunner(verbosity=3).run(suite)
