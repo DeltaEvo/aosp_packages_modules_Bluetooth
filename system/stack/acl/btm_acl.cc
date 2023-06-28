@@ -390,6 +390,11 @@ void btm_acl_process_sca_cmpl_pkt(uint8_t len, uint8_t* data) {
   uint8_t sca;
   uint8_t status;
 
+  if (len < 4) {
+    LOG_WARN("Malformatted packet, not containing enough data");
+    return;
+  }
+
   STREAM_TO_UINT8(status, data);
 
   if (status != HCI_SUCCESS) {
@@ -546,8 +551,6 @@ void btm_acl_device_down(void) {
   }
   BTM_db_reset();
 }
-
-void btm_acl_set_paging(bool value) { btm_cb.is_paging = value; }
 
 void btm_acl_update_inquiry_status(uint8_t status) {
   btm_cb.is_inquiry = status == BTM_INQUIRY_STARTED;
@@ -1818,7 +1821,7 @@ tBTM_STATUS BTM_ReadTxPower(const RawAddress& remote_bda,
 #define BTM_READ_RSSI_TYPE_CUR 0x00
 #define BTM_READ_RSSI_TYPE_MAX 0X01
 
-  VLOG(2) << __func__ << ": RemBdAddr: " << remote_bda;
+  VLOG(2) << __func__ << ": RemBdAddr: " << ADDRESS_TO_LOGGABLE_STR(remote_bda);
 
   /* If someone already waiting on the version, do not allow another */
   if (btm_cb.devcb.p_tx_power_cmpl_cb) return (BTM_BUSY);
@@ -1871,7 +1874,7 @@ void btm_read_tx_power_timeout(UNUSED_ATTR void* data) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
+void btm_read_tx_power_complete(uint8_t* p, uint16_t evt_len, bool is_ble) {
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_tx_power_cmpl_cb;
   tBTM_TX_POWER_RESULT result;
 
@@ -1880,6 +1883,10 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
 
   /* If there was a registered callback, call it */
   if (p_cb) {
+    if (evt_len < 1) {
+      goto err_out;
+    }
+
     STREAM_TO_UINT8(result.hci_status, p);
 
     if (result.hci_status == HCI_SUCCESS) {
@@ -1887,6 +1894,11 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
 
       if (!is_ble) {
         uint16_t handle;
+
+        if (evt_len < 4) {
+          goto err_out;
+        }
+
         STREAM_TO_UINT16(handle, p);
         STREAM_TO_UINT8(result.tx_power, p);
 
@@ -1895,6 +1907,10 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
           result.rem_bda = p_acl_cb->remote_addr;
         }
       } else {
+        if (evt_len < 2) {
+          goto err_out;
+        }
+
         STREAM_TO_UINT8(result.tx_power, p);
         result.rem_bda = btm_cb.devcb.read_tx_pwr_addr;
       }
@@ -1908,6 +1924,11 @@ void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
 
     (*p_cb)(&result);
   }
+
+  return;
+
+ err_out:
+  LOG_ERROR("Bogus event packet, too short");
 }
 
 /*******************************************************************************
@@ -1937,7 +1958,7 @@ void btm_read_rssi_timeout(UNUSED_ATTR void* data) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_rssi_complete(uint8_t* p) {
+void btm_read_rssi_complete(uint8_t* p, uint16_t evt_len) {
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_rssi_cmpl_cb;
   tBTM_RSSI_RESULT result;
 
@@ -1946,11 +1967,19 @@ void btm_read_rssi_complete(uint8_t* p) {
 
   /* If there was a registered callback, call it */
   if (p_cb) {
+    if (evt_len < 1) {
+      goto err_out;
+    }
+
     STREAM_TO_UINT8(result.hci_status, p);
     result.status = BTM_ERR_PROCESSING;
 
     if (result.hci_status == HCI_SUCCESS) {
       uint16_t handle;
+
+      if (evt_len < 4) {
+        goto err_out;
+      }
       STREAM_TO_UINT16(handle, p);
 
       STREAM_TO_UINT8(result.rssi, p);
@@ -1966,6 +1995,11 @@ void btm_read_rssi_complete(uint8_t* p) {
     }
     (*p_cb)(&result);
   }
+
+  return;
+
+err_out:
+  LOG_ERROR("Bogus event packet, too short");
 }
 
 /*******************************************************************************
@@ -2100,7 +2134,7 @@ void btm_read_link_quality_timeout(UNUSED_ATTR void* data) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_link_quality_complete(uint8_t* p) {
+void btm_read_link_quality_complete(uint8_t* p, uint16_t evt_len) {
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_link_qual_cmpl_cb;
   tBTM_LINK_QUALITY_RESULT result;
 
@@ -2109,11 +2143,19 @@ void btm_read_link_quality_complete(uint8_t* p) {
 
   /* If there was a registered callback, call it */
   if (p_cb) {
+    if (evt_len < 1) {
+      goto err_out;
+    }
+
     STREAM_TO_UINT8(result.hci_status, p);
 
     if (result.hci_status == HCI_SUCCESS) {
       uint16_t handle;
       result.status = BTM_SUCCESS;
+
+      if (evt_len < 4) {
+        goto err_out;
+      }
 
       STREAM_TO_UINT16(handle, p);
 
@@ -2133,6 +2175,11 @@ void btm_read_link_quality_complete(uint8_t* p) {
 
     (*p_cb)(&result);
   }
+
+  return;
+
+err_out:
+  LOG_ERROR("Bogus Link Quality event packet, size: %d", evt_len);
 }
 
 /*******************************************************************************
@@ -2226,78 +2273,6 @@ void btm_cont_rswitch_from_handle(uint16_t hci_handle) {
 
 /*******************************************************************************
  *
- * Function         btm_acl_resubmit_page
- *
- * Description      send pending page request
- *
- ******************************************************************************/
-void btm_acl_resubmit_page(void) {
-  BT_HDR* p_buf;
-  uint8_t* pp;
-  /* If there were other page request schedule can start the next one */
-  p_buf = (BT_HDR*)fixed_queue_try_dequeue(btm_cb.page_queue);
-  if (p_buf != NULL) {
-    /* skip 3 (2 bytes opcode and 1 byte len) to get to the bd_addr
-     * for both create_conn and rmt_name */
-    pp = (uint8_t*)(p_buf + 1) + p_buf->offset + 3;
-
-    RawAddress bda;
-    STREAM_TO_BDADDR(bda, pp);
-
-    btm_cb.connecting_bda = bda;
-    memcpy(btm_cb.connecting_dc, btm_get_dev_class(bda), DEV_CLASS_LEN);
-
-    btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p_buf);
-  } else {
-    btm_cb.paging = false;
-  }
-}
-
-/*******************************************************************************
- *
- * Function         btm_acl_reset_paging
- *
- * Description      set paging to false and free the page queue - called at
- *                  hci_reset
- *
- ******************************************************************************/
-void btm_acl_reset_paging(void) {
-  BT_HDR* p;
-  /* If we sent reset we are definitely not paging any more */
-  while ((p = (BT_HDR*)fixed_queue_try_dequeue(btm_cb.page_queue)) != NULL)
-    osi_free(p);
-
-  btm_cb.paging = false;
-}
-
-/*******************************************************************************
- *
- * Function         btm_acl_paging
- *
- * Description      send a paging command or queue it in btm_cb
- *
- ******************************************************************************/
-void btm_acl_paging(BT_HDR* p, const RawAddress& bda) {
-  if (!BTM_IsAclConnectionUp(bda, BT_TRANSPORT_BR_EDR)) {
-    VLOG(1) << "connecting_bda: " << btm_cb.connecting_bda;
-    if (btm_cb.paging && bda == btm_cb.connecting_bda) {
-      fixed_queue_enqueue(btm_cb.page_queue, p);
-    } else {
-      btm_cb.connecting_bda = bda;
-      memcpy(btm_cb.connecting_dc, btm_get_dev_class(bda), DEV_CLASS_LEN);
-
-      btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-    }
-
-    btm_cb.paging = true;
-  } else /* ACL is already up */
-  {
-    btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-  }
-}
-
-/*******************************************************************************
- *
  * Function         btm_acl_notif_conn_collision
  *
  * Description      Send connection collision event to upper layer if registered
@@ -2305,7 +2280,7 @@ void btm_acl_paging(BT_HDR* p, const RawAddress& bda) {
  *
  ******************************************************************************/
 void btm_acl_notif_conn_collision(const RawAddress& bda) {
-  do_in_main_thread(FROM_HERE, base::Bind(bta_sys_notify_collision, bda));
+  do_in_main_thread(FROM_HERE, base::BindOnce(bta_sys_notify_collision, bda));
 }
 
 bool BTM_BLE_IS_RESOLVE_BDA(const RawAddress& x) {
@@ -2635,7 +2610,6 @@ void on_acl_br_edr_connected(const RawAddress& bda, uint16_t handle,
     btm_sec_connected(bda, handle, HCI_SUCCESS, enc_mode);
   }
   delayed_role_change_ = nullptr;
-  btm_acl_set_paging(false);
   l2c_link_hci_conn_comp(HCI_SUCCESS, handle, bda);
   uint16_t link_supervision_timeout =
       osi_property_get_int32(PROPERTY_LINK_SUPERVISION_TIMEOUT, 8000);
@@ -2669,7 +2643,6 @@ void on_acl_br_edr_failed(const RawAddress& bda, tHCI_STATUS status,
     btm_sec_connected(bda, HCI_INVALID_HANDLE, status, false);
   }
   delayed_role_change_ = nullptr;
-  btm_acl_set_paging(false);
   l2c_link_hci_conn_comp(status, HCI_INVALID_HANDLE, bda);
 
   acl_set_locally_initiated(locally_initiated);
@@ -2730,11 +2703,6 @@ void btm_connection_request(const RawAddress& bda,
   dc[0] = cod.cod[2], dc[1] = cod.cod[1], dc[2] = cod.cod[0];
 
   btm_sec_conn_req(bda, dc);
-}
-
-void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc) {
-  btm_sec_conn_req(bda, dc);
-  l2c_link_hci_conn_req(bda);
 }
 
 void acl_accept_connection_request(const RawAddress& bd_addr, uint8_t role) {
@@ -2883,10 +2851,6 @@ void acl_rcv_acl_data(BT_HDR* p_msg) {
     return;
   }
   l2c_rcv_acl_data(p_msg);
-}
-
-void acl_link_segments_xmitted(BT_HDR* p_msg) {
-  l2c_link_segments_xmitted(p_msg);
 }
 
 void acl_packets_completed(uint16_t handle, uint16_t credits) {

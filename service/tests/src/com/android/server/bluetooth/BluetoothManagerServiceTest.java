@@ -26,6 +26,7 @@ import static com.android.server.bluetooth.BluetoothManagerService.MESSAGE_BLUET
 import static com.android.server.bluetooth.BluetoothManagerService.MESSAGE_DISABLE;
 import static com.android.server.bluetooth.BluetoothManagerService.MESSAGE_ENABLE;
 import static com.android.server.bluetooth.BluetoothManagerService.MESSAGE_REGISTER_STATE_CHANGE_CALLBACK;
+import static com.android.server.bluetooth.BluetoothManagerService.MESSAGE_TIMEOUT_BIND;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -181,24 +182,18 @@ public class BluetoothManagerServiceTest {
                 .hasUserRestrictionForUser(eq(UserManager.DISALLOW_BLUETOOTH_SHARING), any());
 
         // Check if disable message sent once for system user only
-        // Since Message object is recycled after processed, use proxy function to get what value
 
         // test run on user -1, should not turning Bluetooth off
         mManagerService.onUserRestrictionsChanged(UserHandle.CURRENT);
-        verify(mBluetoothServerProxy, times(0))
-                .handlerSendWhatMessage(any(), eq(BluetoothManagerService.MESSAGE_DISABLE));
+        assertThat(mLooper.nextMessage()).isNull();
 
         // called from SYSTEM user, should try to toggle Bluetooth off
         mManagerService.onUserRestrictionsChanged(UserHandle.SYSTEM);
-        verify(mBluetoothServerProxy)
-                .handlerSendWhatMessage(any(), eq(BluetoothManagerService.MESSAGE_DISABLE));
         syncHandler(MESSAGE_DISABLE);
     }
 
     @Test
     public void testApmEnhancementEnabled() {
-        mManagerService.setBluetoothModeChangeHelper(new BluetoothModeChangeHelper(mContext));
-
         // Change the apm enhancement enabled value to 0
         Settings.Global.putInt(mContext.getContentResolver(), "apm_enhancement_enabled", 0);
         assertThat(
@@ -207,11 +202,43 @@ public class BluetoothManagerServiceTest {
                 .isEqualTo(0);
 
         // Confirm that apm enhancement enabled value has been updated to 1
-        mManagerService.loadApmEnhancementStateFromResource();
+        mManagerService.setApmEnhancementState();
         assertThat(
                         Settings.Global.getInt(
                                 mContext.getContentResolver(), "apm_enhancement_enabled", 0))
                 .isEqualTo(1);
+    }
+
+    @Test
+    public void enable_bindFailure_removesTimeout() throws Exception {
+        doReturn(false)
+                .when(mContext)
+                .bindServiceAsUser(
+                        any(Intent.class),
+                        any(ServiceConnection.class),
+                        anyInt(),
+                        any(UserHandle.class));
+        mManagerService.enableBle("enable_bindFailure_removesTimeout", mBinder);
+        syncHandler(MESSAGE_ENABLE);
+
+        // TODO(b/280518177): Failed to start should be noted / reported in metrics
+        // Maybe show a popup or a crash notification
+        // Should we attempt to re-bind ?
+    }
+
+    @Test
+    public void enable_bindTimeout() throws Exception {
+        mManagerService.enableBle("enable_bindTimeout", mBinder);
+        syncHandler(MESSAGE_ENABLE);
+
+        mLooper.moveTimeForward(120_000); // 120 seconds
+        syncHandler(MESSAGE_TIMEOUT_BIND);
+        // Force handling the message now without waiting for the timeout to fire
+
+        // TODO(b/280518177): A lot of stuff is wrong here since when a timeout occur:
+        //   * No error is printed to the user
+        //   * Code stop trying to start the bluetooth.
+        //   * if user ask to enable again, it will start a second bind but the first still run
     }
 
     private void acceptBluetoothBinding(IBinder binder, String name, int n) {
@@ -273,7 +300,7 @@ public class BluetoothManagerServiceTest {
 
     private IBluetoothCallback transition_offToOn() throws Exception {
         IBluetoothCallback btCallback = transition_offToBleOn();
-        verify(mAdapterBinder, times(1)).onLeServiceUp(any());
+        verify(mAdapterBinder, times(1)).startBrEdr(any());
 
         // AdapterService go to turning_on and start all profile on its own
         btCallback.onBluetoothStateChange(STATE_BLE_ON, STATE_TURNING_ON);
@@ -303,7 +330,7 @@ public class BluetoothManagerServiceTest {
         transition_offToBleOn();
 
         // Check that there was no transition to STATE_ON
-        verify(mAdapterBinder, times(0)).onLeServiceUp(any());
+        verify(mAdapterBinder, times(0)).startBrEdr(any());
         assertThat(mManagerService.getState()).isEqualTo(STATE_BLE_ON);
     }
 

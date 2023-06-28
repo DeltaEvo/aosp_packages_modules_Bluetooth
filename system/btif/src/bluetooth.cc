@@ -106,6 +106,8 @@
 #include "stack/include/avdt_api.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btu.h"
+#include "stack/include/hfp_lc3_decoder.h"
+#include "stack/include/hfp_lc3_encoder.h"
 #include "stack/include/hfp_msbc_decoder.h"
 #include "stack/include/hfp_msbc_encoder.h"
 #include "stack/include/hidh_api.h"
@@ -231,6 +233,28 @@ struct MSBCCodec : bluetooth::core::CodecInterface {
   }
 };
 
+struct LC3Codec : bluetooth::core::CodecInterface {
+  LC3Codec() : bluetooth::core::CodecInterface(){};
+
+  void initialize() override {
+    hfp_lc3_decoder_init();
+    hfp_lc3_encoder_init();
+  }
+
+  void cleanup() override {
+    hfp_lc3_encoder_cleanup();
+    hfp_lc3_decoder_cleanup();
+  }
+
+  uint32_t encodePacket(int16_t* input, uint8_t* output) {
+    return hfp_lc3_encode_frames(input, output);
+  }
+
+  bool decodePacket(const uint8_t* i_buf, int16_t* o_buf, size_t out_len) {
+    return hfp_lc3_decoder_decode_packet(i_buf, o_buf, out_len);
+  }
+};
+
 struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
   using bluetooth::core::CoreInterface::CoreInterface;
 
@@ -331,6 +355,7 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .invoke_link_quality_report_cb = invoke_link_quality_report_cb};
   static auto configInterface = ConfigInterfaceImpl();
   static auto msbcCodecInterface = MSBCCodec();
+  static auto lc3CodecInterface = LC3Codec();
   static auto profileInterface = bluetooth::core::HACK_ProfileInterface{
       // HID
       .btif_hh_connect = btif_hh_connect,
@@ -352,7 +377,7 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
 
   static auto interfaceForCore =
       CoreInterfaceImpl(&eventCallbacks, &configInterface, &msbcCodecInterface,
-                        &profileInterface);
+                        &lc3CodecInterface, &profileInterface);
   return &interfaceForCore;
 }
 
@@ -375,28 +400,16 @@ static bool is_profile(const char* p1, const char* p2) {
  *
  ****************************************************************************/
 
-#ifdef OS_ANDROID
-const std::vector<std::string> get_allowed_bt_package_name(void);
-void handle_migration(const std::string& dst,
-                      const std::vector<std::string>& allowed_bt_package_name);
-#endif
-
 static int init(bt_callbacks_t* callbacks, bool start_restricted,
                 bool is_common_criteria_mode, int config_compare_result,
                 const char** init_flags, bool is_atv,
                 const char* user_data_directory) {
+  (void)user_data_directory;
   LOG_INFO(
       "%s: start restricted = %d ; common criteria mode = %d, config compare "
       "result = %d",
       __func__, start_restricted, is_common_criteria_mode,
       config_compare_result);
-
-#ifdef OS_ANDROID
-  if (user_data_directory != nullptr) {
-    handle_migration(std::string(user_data_directory),
-                     get_allowed_bt_package_name());
-  }
-#endif
 
   bluetooth::common::InitFlags::Load(init_flags);
 

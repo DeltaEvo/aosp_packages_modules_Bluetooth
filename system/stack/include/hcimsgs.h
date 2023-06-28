@@ -28,6 +28,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_name.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btm_api_types.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -287,8 +288,8 @@ void btsnd_hcic_enhanced_accept_synchronous_connection(
 #define HCID_GET_EVENT(u16) \
   (uint8_t)(((u16) >> HCI_DATA_EVENT_OFFSET) & HCI_DATA_EVENT_MASK)
 
-void btsnd_hcic_vendor_spec_cmd(void* buffer, uint16_t opcode, uint8_t len,
-                                uint8_t* p_data, void* p_cmd_cplt_cback);
+void btsnd_hcic_vendor_spec_cmd(uint16_t opcode, uint8_t len, uint8_t* p_data,
+                                tBTM_VSC_CMPL_CB* p_cmd_cplt_cback);
 
 /*******************************************************************************
  * BLE Commands
@@ -304,8 +305,6 @@ void btsnd_hcic_vendor_spec_cmd(void* buffer, uint16_t opcode, uint8_t len,
 /* ULP HCI command */
 void btsnd_hcic_ble_set_local_used_feat(uint8_t feat_set[8]);
 
-void btsnd_hcic_ble_set_random_addr(const RawAddress& random_addr);
-
 void btsnd_hcic_ble_write_adv_params(uint16_t adv_int_min, uint16_t adv_int_max,
                                      uint8_t adv_type,
                                      tBLE_ADDR_TYPE addr_type_own,
@@ -318,8 +317,6 @@ void btsnd_hcic_ble_read_adv_chnl_tx_power(void);
 
 void btsnd_hcic_ble_set_adv_data(uint8_t data_len, uint8_t* p_data);
 
-void btsnd_hcic_ble_set_scan_rsp_data(uint8_t data_len, uint8_t* p_scan_rsp);
-
 void btsnd_hcic_ble_set_adv_enable(uint8_t adv_enable);
 
 void btsnd_hcic_ble_set_scan_params(uint8_t scan_type, uint16_t scan_int,
@@ -328,17 +325,6 @@ void btsnd_hcic_ble_set_scan_params(uint8_t scan_type, uint16_t scan_int,
 
 void btsnd_hcic_ble_set_scan_enable(uint8_t scan_enable, uint8_t duplicate);
 
-void btsnd_hcic_ble_create_ll_conn(uint16_t scan_int, uint16_t scan_win,
-                                   uint8_t init_filter_policy,
-                                   tBLE_ADDR_TYPE addr_type_peer,
-                                   const RawAddress& bda_peer,
-                                   tBLE_ADDR_TYPE addr_type_own,
-                                   uint16_t conn_int_min, uint16_t conn_int_max,
-                                   uint16_t conn_latency, uint16_t conn_timeout,
-                                   uint16_t min_ce_len, uint16_t max_ce_len);
-
-void btsnd_hcic_ble_create_conn_cancel(void);
-
 void btsnd_hcic_ble_read_acceptlist_size(void);
 
 void btsnd_hcic_ble_upd_ll_conn_params(uint16_t handle, uint16_t conn_int_min,
@@ -346,11 +332,6 @@ void btsnd_hcic_ble_upd_ll_conn_params(uint16_t handle, uint16_t conn_int_min,
                                        uint16_t conn_latency,
                                        uint16_t conn_timeout, uint16_t min_len,
                                        uint16_t max_len);
-
-void btsnd_hcic_ble_set_host_chnl_class(
-    uint8_t chnl_map[HCIC_BLE_CHNL_MAP_SIZE]);
-
-void btsnd_hcic_ble_read_chnl_map(uint16_t handle);
 
 void btsnd_hcic_ble_read_remote_feat(uint16_t handle);
 
@@ -365,11 +346,6 @@ void btsnd_hcic_ble_ltk_req_reply(uint16_t handle, const Octet16& ltk);
 void btsnd_hcic_ble_ltk_req_neg_reply(uint16_t handle);
 
 void btsnd_hcic_ble_read_supported_states(void);
-
-void btsnd_hcic_ble_write_host_supported(uint8_t le_host_spt,
-                                         uint8_t simul_le_host_spt);
-
-void btsnd_hcic_ble_read_host_supported(void);
 
 void btsnd_hcic_ble_receiver_test(uint8_t rx_freq);
 
@@ -416,20 +392,8 @@ struct EXT_CONN_PHY_CFG {
   uint16_t max_ce_len;
 };
 
-void btsnd_hcic_ble_ext_create_conn(uint8_t init_filter_policy,
-                                    uint8_t addr_type_own,
-                                    uint8_t addr_type_peer,
-                                    const RawAddress& bda_peer,
-                                    uint8_t initiating_phys,
-                                    EXT_CONN_PHY_CFG* phy_cfg);
-
 void btsnd_hcic_ble_read_resolvable_addr_peer(uint8_t addr_type_peer,
                                               const RawAddress& bda_peer);
-
-void btsnd_hcic_ble_read_resolvable_addr_local(uint8_t addr_type_peer,
-                                               const RawAddress& bda_peer);
-
-void btsnd_hcic_ble_set_addr_resolution_enable(uint8_t addr_resolution_enable);
 
 void btsnd_hcic_ble_set_rand_priv_addr_timeout(uint16_t rpa_timout);
 
@@ -437,9 +401,6 @@ void btsnd_hcic_read_authenticated_payload_tout(uint16_t handle);
 
 void btsnd_hcic_write_authenticated_payload_tout(uint16_t handle,
                                                  uint16_t timeout);
-
-void btsnd_hcic_read_iso_tx_sync(
-    uint16_t iso_handle, base::OnceCallback<void(uint8_t*, uint16_t)> cb);
 
 struct EXT_CIS_CFG {
   uint8_t cis_id;
@@ -500,9 +461,6 @@ void btsnd_hcic_create_big(uint8_t big_handle, uint8_t adv_handle,
 
 void btsnd_hcic_term_big(uint8_t big_handle, uint8_t reason);
 
-void btsnd_hcic_big_term_sync(uint8_t big_handle,
-                              base::OnceCallback<void(uint8_t*, uint16_t)> cb);
-
 void btsnd_hcic_setup_iso_data_path(
     uint16_t iso_handle, uint8_t data_path_dir, uint8_t data_path_id,
     uint8_t codec_id_format, uint16_t codec_id_company,
@@ -537,9 +495,6 @@ void btsnd_hci_ble_remove_device_from_periodic_advertiser_list(
     base::OnceCallback<void(uint8_t*, uint16_t)> cb);
 
 void btsnd_hci_ble_clear_periodic_advertiser_list(
-    base::OnceCallback<void(uint8_t*, uint16_t)> cb);
-
-void btsnd_hci_ble_read_periodic_advertiser_list_size(
     base::OnceCallback<void(uint8_t*, uint16_t)> cb);
 
 void btsnd_hcic_ble_set_periodic_advertising_receive_enable(

@@ -54,9 +54,14 @@
 #include "stack/include/inq_hci_link_interface.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
+#include "btif/include/btif_config.h"
 
 namespace {
 constexpr char kBtmLogTag[] = "SCAN";
+
+struct {
+  bool inq_by_rssi{false};
+} internal_;
 
 void btm_log_history_scan_mode(uint8_t scan_mode) {
   static uint8_t scan_mode_cached_ = 0xff;
@@ -127,6 +132,10 @@ using bluetooth::Uuid;
 
 #ifndef PROPERTY_INQ_SCAN_WINDOW
 #define PROPERTY_INQ_SCAN_WINDOW "bluetooth.core.classic.inq_scan_window"
+#endif
+
+#ifndef PROPERTY_INQ_BY_RSSI
+#define PROPERTY_INQ_BY_RSSI "persist.bluetooth.inq_by_rssi"
 #endif
 
 #define BTIF_DM_DEFAULT_INQ_MAX_DURATION 10
@@ -959,6 +968,7 @@ void btm_inq_db_init(void) {
   btm_cb.btm_inq_vars.remote_name_timer =
       alarm_new("btm_inq.remote_name_timer");
   btm_cb.btm_inq_vars.no_inc_ssp = BTM_NO_SSP_ON_INQUIRY;
+  internal_.inq_by_rssi = osi_property_get_bool(PROPERTY_INQ_BY_RSSI, false);
 }
 
 void btm_inq_db_free(void) {
@@ -1150,6 +1160,7 @@ tINQ_DB_ENT* btm_inq_db_find(const RawAddress& p_bda) {
 tINQ_DB_ENT* btm_inq_db_new(const RawAddress& p_bda) {
   uint16_t xx;
   uint64_t ot = UINT64_MAX;
+  int8_t i_rssi = 0;
 
   std::lock_guard<std::mutex> lock(inq_db_lock_);
   tINQ_DB_ENT* p_ent = inq_db_;
@@ -1164,9 +1175,16 @@ tINQ_DB_ENT* btm_inq_db_new(const RawAddress& p_bda) {
       return (p_ent);
     }
 
-    if (p_ent->time_of_resp < ot) {
-      p_old = p_ent;
-      ot = p_ent->time_of_resp;
+    if (internal_.inq_by_rssi) {
+      if (p_ent->inq_info.results.rssi < i_rssi) {
+        p_old = p_ent;
+        i_rssi = p_ent->inq_info.results.rssi;
+      }
+    } else {
+      if (p_ent->time_of_resp < ot) {
+        p_old = p_ent;
+        ot = p_ent->time_of_resp;
+      }
     }
   }
 
@@ -1579,14 +1597,26 @@ tBTM_STATUS btm_initiate_rem_name(const RawAddress& remote_bda, uint8_t origin,
       tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
       if (p_i && (p_i->inq_info.results.inq_result_type & BTM_INQ_RESULT_BR)) {
         tBTM_INQ_INFO* p_cur = &p_i->inq_info;
+        uint16_t clock_offset = p_cur->results.clock_offset | BTM_CLOCK_OFFSET_VALID;
+        int clock_offset_in_cfg = 0;
+        if (0 == (p_cur->results.clock_offset & BTM_CLOCK_OFFSET_VALID)) {
+          if (btif_get_device_clockoffset(remote_bda, &clock_offset_in_cfg)) {
+            clock_offset = clock_offset_in_cfg;
+          }
+        }
+
         btsnd_hcic_rmt_name_req(
             remote_bda, p_cur->results.page_scan_rep_mode,
-            p_cur->results.page_scan_mode,
-            (uint16_t)(p_cur->results.clock_offset | BTM_CLOCK_OFFSET_VALID));
+            p_cur->results.page_scan_mode, clock_offset);
       } else {
+        uint16_t clock_offset = 0;
+        int clock_offset_in_cfg = 0;
+        if (btif_get_device_clockoffset(remote_bda, &clock_offset_in_cfg)) {
+          clock_offset = clock_offset_in_cfg;
+        }
         /* Otherwise use defaults and mark the clock offset as invalid */
         btsnd_hcic_rmt_name_req(remote_bda, HCI_PAGE_SCAN_REP_MODE_R1,
-                                HCI_MANDATARY_PAGE_SCAN_MODE, 0);
+                                HCI_MANDATARY_PAGE_SCAN_MODE, clock_offset);
       }
 
       p_inq->remname_active = true;

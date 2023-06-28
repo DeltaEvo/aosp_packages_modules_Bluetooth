@@ -152,9 +152,6 @@ constexpr uint8_t TX_POWER_NOT_PRESENT = 0x7F;
 /* Define an invalid SCO index and an invalid HCI handle */
 #define BTM_INVALID_SCO_INDEX 0xFFFF
 
-/* Define an invalid SCO disconnect reason */
-#define BTM_INVALID_SCO_DISC_REASON 0xFFFF
-
 #define BTM_SCO_LINK_ONLY_MASK \
   (ESCO_PKT_TYPES_MASK_HV1 | ESCO_PKT_TYPES_MASK_HV2 | ESCO_PKT_TYPES_MASK_HV3)
 
@@ -181,13 +178,6 @@ typedef uint16_t tBTM_SCO_CODEC_TYPE;
 /*******************
  * SCO Voice Settings
  *******************/
-#define BTM_VOICE_SETTING_CVSD                                         \
-  ((uint16_t)(HCI_INP_CODING_LINEAR | HCI_INP_DATA_FMT_2S_COMPLEMENT | \
-              HCI_INP_SAMPLE_SIZE_16BIT | HCI_AIR_CODING_FORMAT_CVSD))
-
-#define BTM_VOICE_SETTING_TRANS                                        \
-  ((uint16_t)(HCI_INP_CODING_LINEAR | HCI_INP_DATA_FMT_2S_COMPLEMENT | \
-              HCI_INP_SAMPLE_SIZE_16BIT | HCI_AIR_CODING_FORMAT_TRANSPNT))
 
 /*******************
  * SCO Data Status
@@ -203,15 +193,6 @@ typedef void(tBTM_SCO_CB)(uint16_t sco_inx);
 /* tBTM_ESCO_CBACK event types */
 #define BTM_ESCO_CONN_REQ_EVT 2
 typedef uint8_t tBTM_ESCO_EVT;
-
-/* Structure passed with SCO change command and events.
- * Used by both Sync and Enhanced sync messaging
- */
-typedef struct {
-  uint16_t max_latency_ms;
-  uint16_t packet_types;
-  uint8_t retransmission_effort;
-} tBTM_CHG_ESCO_PARAMS;
 
 /* Returned by BTM_ReadEScoLinkParms() */
 struct tBTM_ESCO_DATA {

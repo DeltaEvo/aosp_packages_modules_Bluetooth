@@ -126,7 +126,7 @@ static void bta_dm_disable_conn_down_timer_cback(void* data);
 void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id, uint8_t app_id,
                      const RawAddress& peer_addr);
 static void bta_dm_adjust_roles(bool delay_role_switch);
-static char* bta_dm_get_remname(void);
+static const char* bta_dm_get_remname(void);
 static void bta_dm_bond_cancel_complete_cback(tBTM_STATUS result);
 
 static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr,
@@ -867,13 +867,14 @@ void bta_dm_close_acl(const RawAddress& bd_addr, bool remove_dev,
 /** Bonds with peer device */
 void bta_dm_bond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
                  tBT_TRANSPORT transport, tBT_DEVICE_TYPE device_type) {
-  LOG_DEBUG("Bonding with peer device:%s type:%s transport:%s type:%s",
-            ADDRESS_TO_LOGGABLE_CSTR(bd_addr), AddressTypeText(addr_type).c_str(),
-            bt_transport_text(transport).c_str(),
-            DeviceTypeText(device_type).c_str());
+  LOG_INFO("Bonding with peer device:%s type:%s transport:%s type:%s",
+           ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
+           AddressTypeText(addr_type).c_str(),
+           bt_transport_text(transport).c_str(),
+           DeviceTypeText(device_type).c_str());
 
   tBTA_DM_SEC sec_event;
-  char* p_name;
+  const char* p_name;
 
   tBTM_STATUS status =
       BTM_SecBond(bd_addr, addr_type, transport, device_type, 0, NULL);
@@ -2150,6 +2151,7 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
   result.inq_res.device_type = p_inq->device_type;
   result.inq_res.flag = p_inq->flag;
   result.inq_res.include_rsi = p_inq->include_rsi;
+  result.inq_res.clock_offset = p_inq->clock_offset;
 
   /* application will parse EIR to find out remote device name */
   result.inq_res.p_eir = const_cast<uint8_t*>(p_eir);
@@ -2726,8 +2728,8 @@ static void handle_role_change(const RawAddress& bd_addr, tHCI_ROLE new_role,
 
 void BTA_dm_report_role_change(const RawAddress bd_addr, tHCI_ROLE new_role,
                                tHCI_STATUS hci_status) {
-  do_in_main_thread(
-      FROM_HERE, base::Bind(handle_role_change, bd_addr, new_role, hci_status));
+  do_in_main_thread(FROM_HERE, base::BindOnce(handle_role_change, bd_addr,
+                                              new_role, hci_status));
 }
 
 void handle_remote_features_complete(const RawAddress& bd_addr) {
@@ -2750,7 +2752,7 @@ void handle_remote_features_complete(const RawAddress& bd_addr) {
 
 void BTA_dm_notify_remote_features_complete(const RawAddress bd_addr) {
   do_in_main_thread(FROM_HERE,
-                    base::Bind(handle_remote_features_complete, bd_addr));
+                    base::BindOnce(handle_remote_features_complete, bd_addr));
 }
 
 static tBTA_DM_PEER_DEVICE* allocate_device_for(const RawAddress& bd_addr,
@@ -2813,8 +2815,8 @@ void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
 
 void BTA_dm_acl_up(const RawAddress bd_addr, tBT_TRANSPORT transport,
                    uint16_t acl_handle) {
-  do_in_main_thread(FROM_HERE,
-                    base::Bind(bta_dm_acl_up, bd_addr, transport, acl_handle));
+  do_in_main_thread(
+      FROM_HERE, base::BindOnce(bta_dm_acl_up, bd_addr, transport, acl_handle));
 }
 
 static void bta_dm_acl_up_failed(const RawAddress bd_addr,
@@ -2830,8 +2832,8 @@ static void bta_dm_acl_up_failed(const RawAddress bd_addr,
 
 void BTA_dm_acl_up_failed(const RawAddress bd_addr, tBT_TRANSPORT transport,
                           tHCI_STATUS status) {
-  do_in_main_thread(
-      FROM_HERE, base::Bind(bta_dm_acl_up_failed, bd_addr, transport, status));
+  do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_acl_up_failed, bd_addr,
+                                              transport, status));
 }
 
 static void bta_dm_acl_down(const RawAddress& bd_addr,
@@ -2916,7 +2918,8 @@ static void bta_dm_acl_down(const RawAddress& bd_addr,
 }
 
 void BTA_dm_acl_down(const RawAddress bd_addr, tBT_TRANSPORT transport) {
-  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_acl_down, bd_addr, transport));
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(bta_dm_acl_down, bd_addr, transport));
 }
 
 /*******************************************************************************
@@ -3159,14 +3162,13 @@ static void bta_dm_adjust_roles(bool delay_role_switch) {
  *
  * Returns          char * - Pointer to the remote device name
  ******************************************************************************/
-static char* bta_dm_get_remname(void) {
-  char* p_name = (char*)bta_dm_search_cb.peer_name;
-  char* p_temp;
+static const char* bta_dm_get_remname(void) {
+  const char* p_name = (const char*)bta_dm_search_cb.peer_name;
 
   /* If the name isn't already stored, try retrieving from BTM */
   if (*p_name == '\0') {
-    p_temp = BTM_SecReadDevName(bta_dm_search_cb.peer_bdaddr);
-    if (p_temp != NULL) p_name = p_temp;
+    const char* p_temp = BTM_SecReadDevName(bta_dm_search_cb.peer_bdaddr);
+    if (p_temp != NULL) p_name = (const char*)p_temp;
   }
 
   return p_name;
@@ -3858,7 +3860,8 @@ static void ble_io_req(const RawAddress& bd_addr, tBTM_IO_CAP* p_io_cap,
 
   btif_dm_set_oob_for_le_io_req(bd_addr, p_oob_data, p_auth_req);
 
-  if (bte_appl_cfg.ble_io_cap <= 4) *p_io_cap = bte_appl_cfg.ble_io_cap;
+  if (bte_appl_cfg.ble_io_cap <= 4)
+    *p_io_cap = static_cast<tBTM_IO_CAP>(bte_appl_cfg.ble_io_cap);
 
   if (bte_appl_cfg.ble_init_key <= BTM_BLE_INITIATOR_KEY_SIZE)
     *p_init_key = bte_appl_cfg.ble_init_key;
@@ -3884,7 +3887,7 @@ static uint8_t bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
                                     tBTM_LE_EVT_DATA* p_data) {
   tBTM_STATUS status = BTM_SUCCESS;
   tBTA_DM_SEC sec_event;
-  char* p_name = NULL;
+  const char* p_name = NULL;
 
   if (!bta_dm_cb.p_sec_cback) return BTM_NOT_AUTHORIZED;
 

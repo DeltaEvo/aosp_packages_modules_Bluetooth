@@ -16,9 +16,6 @@ cc_defaults {
         // there are too many unused parameters in all the code.
         "-Wno-unused-parameter",
     ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system/gd",
-    ],
 }
 
 // Fuzzable defaults are the subset of defaults that are used in fuzzing, which
@@ -70,9 +67,6 @@ cc_defaults {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-    ],
-    shared_libs: [
-        "liblog",
     ],
     cpp_std: "c++17",
     min_sdk_version: "current",

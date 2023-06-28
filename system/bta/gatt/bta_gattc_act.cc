@@ -205,7 +205,7 @@ void bta_gattc_register(const Uuid& app_uuid, tBTA_GATTC_CBACK* p_cback,
             +client_if, app_uuid.ToString().c_str());
 
         do_in_main_thread(FROM_HERE,
-                          base::Bind(&bta_gattc_start_if, client_if));
+                          base::BindOnce(&bta_gattc_start_if, client_if));
 
         status = GATT_SUCCESS;
         break;
@@ -418,8 +418,9 @@ static void bta_gattc_init_bk_conn(const tBTA_GATTC_API_OPEN* p_data,
                     p_data->connection_type, p_data->transport, false)) {
     LOG_ERROR("Unable to connect to remote bd_addr=%s",
               ADDRESS_TO_LOGGABLE_CSTR(p_data->remote_bda));
-    bta_gattc_send_open_cback(p_clreg, GATT_ERROR, p_data->remote_bda,
-                              GATT_INVALID_CONN_ID, BT_TRANSPORT_LE, 0);
+    bta_gattc_send_open_cback(p_clreg, GATT_ILLEGAL_PARAMETER,
+                              p_data->remote_bda, GATT_INVALID_CONN_ID,
+                              BT_TRANSPORT_LE, 0);
     return;
   }
 
@@ -1335,7 +1336,7 @@ static void bta_gattc_enc_cmpl_cback(tGATT_IF gattc_if, const RawAddress& bda) {
   VLOG(1) << __func__ << ": cif:" << +gattc_if;
 
   do_in_main_thread(FROM_HERE,
-                    base::Bind(&bta_gattc_process_enc_cmpl, gattc_if, bda));
+                    base::BindOnce(&bta_gattc_process_enc_cmpl, gattc_if, bda));
 }
 
 /** process refresh API to delete cache and start a new discovery if currently

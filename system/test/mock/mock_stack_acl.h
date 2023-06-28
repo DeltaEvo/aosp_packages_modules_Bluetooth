@@ -743,14 +743,6 @@ struct acl_disconnect_from_handle {
   };
 };
 extern struct acl_disconnect_from_handle acl_disconnect_from_handle;
-// Name: acl_link_segments_xmitted
-// Params: BT_HDR* p_msg
-// Returns: void
-struct acl_link_segments_xmitted {
-  std::function<void(BT_HDR* p_msg)> body{[](BT_HDR* p_msg) { ; }};
-  void operator()(BT_HDR* p_msg) { body(p_msg); };
-};
-extern struct acl_link_segments_xmitted acl_link_segments_xmitted;
 // Name: acl_packets_completed
 // Params: uint16_t handle, uint16_t credits
 // Returns: void
@@ -865,16 +857,7 @@ struct btm_connection_request {
     body(bda, cod);
   };
 };
-extern struct btm_acl_connection_request btm_acl_connection_request;
-// Name: btm_acl_connection_request
-// Params: const RawAddress& bda, uint8_t* dc
-// Returns: void
-struct btm_acl_connection_request {
-  std::function<void(const RawAddress& bda, uint8_t* dc)> body{
-      [](const RawAddress& bda, uint8_t* dc) { ; }};
-  void operator()(const RawAddress& bda, uint8_t* dc) { body(bda, dc); };
-};
-extern struct btm_acl_connection_request btm_acl_connection_request;
+extern struct btm_connection_request btm_connection_request;
 // Name: btm_acl_created
 // Params: const RawAddress& bda, uint16_t hci_handle, tHCI_ROLE link_role,
 // tBT_TRANSPORT transport Returns: void
@@ -939,15 +922,6 @@ struct btm_acl_notif_conn_collision {
   void operator()(const RawAddress& bda) { body(bda); };
 };
 extern struct btm_acl_notif_conn_collision btm_acl_notif_conn_collision;
-// Name: btm_acl_paging
-// Params: BT_HDR* p, const RawAddress& bda
-// Returns: void
-struct btm_acl_paging {
-  std::function<void(BT_HDR* p, const RawAddress& bda)> body{
-      [](BT_HDR* p, const RawAddress& bda) { ; }};
-  void operator()(BT_HDR* p, const RawAddress& bda) { body(p, bda); };
-};
-extern struct btm_acl_paging btm_acl_paging;
 // Name: btm_acl_process_sca_cmpl_pkt
 // Params: uint8_t len, uint8_t* data
 // Returns: void
@@ -965,22 +939,6 @@ struct btm_acl_removed {
   void operator()(uint16_t handle) { body(handle); };
 };
 extern struct btm_acl_removed btm_acl_removed;
-// Name: btm_acl_reset_paging
-// Params: void
-// Returns: void
-struct btm_acl_reset_paging {
-  std::function<void(void)> body{[](void) { ; }};
-  void operator()(void) { body(); };
-};
-extern struct btm_acl_reset_paging btm_acl_reset_paging;
-// Name: btm_acl_resubmit_page
-// Params: void
-// Returns: void
-struct btm_acl_resubmit_page {
-  std::function<void(void)> body{[](void) { ; }};
-  void operator()(void) { body(); };
-};
-extern struct btm_acl_resubmit_page btm_acl_resubmit_page;
 // Name: btm_acl_role_changed
 // Params: tHCI_STATUS hci_status, const RawAddress& bd_addr, tHCI_ROLE
 // new_role Returns: void
@@ -995,14 +953,6 @@ struct btm_acl_role_changed {
   };
 };
 extern struct btm_acl_role_changed btm_acl_role_changed;
-// Name: btm_acl_set_paging
-// Params: bool value
-// Returns: void
-struct btm_acl_set_paging {
-  std::function<void(bool value)> body{[](bool value) { ; }};
-  void operator()(bool value) { body(value); };
-};
-extern struct btm_acl_set_paging btm_acl_set_paging;
 // Name: btm_acl_update_conn_addr
 // Params: uint16_t handle, const RawAddress& address
 // Returns: void
@@ -1128,8 +1078,8 @@ extern struct btm_read_failed_contact_counter_timeout
 // Params: uint8_t* p
 // Returns: void
 struct btm_read_link_quality_complete {
-  std::function<void(uint8_t* p)> body{[](uint8_t* p) { ; }};
-  void operator()(uint8_t* p) { body(p); };
+  std::function<void(uint8_t* p, uint16_t evt_len)> body{[](uint8_t* p, uint16_t evt_len) { ; }};
+  void operator()(uint8_t* p, uint16_t evt_len) { body(p, evt_len); };
 };
 extern struct btm_read_link_quality_complete btm_read_link_quality_complete;
 // Name: btm_read_link_quality_timeout
@@ -1217,8 +1167,9 @@ extern struct btm_read_remote_version_complete btm_read_remote_version_complete;
 // Params: uint8_t* p
 // Returns: void
 struct btm_read_rssi_complete {
-  std::function<void(uint8_t* p)> body{[](uint8_t* p) { ; }};
-  void operator()(uint8_t* p) { body(p); };
+  std::function<void(uint8_t* p, uint16_t evt_len)> body{
+      [](uint8_t* pm, uint16_t evt_len) { ; }};
+  void operator()(uint8_t* p, uint16_t evt_len) { body(p, evt_len); };
 };
 extern struct btm_read_rssi_complete btm_read_rssi_complete;
 // Name: btm_read_rssi_timeout
@@ -1234,9 +1185,11 @@ extern struct btm_read_rssi_timeout btm_read_rssi_timeout;
 // Params: uint8_t* p, bool is_ble
 // Returns: void
 struct btm_read_tx_power_complete {
-  std::function<void(uint8_t* p, bool is_ble)> body{
-      [](uint8_t* p, bool is_ble) { ; }};
-  void operator()(uint8_t* p, bool is_ble) { body(p, is_ble); };
+  std::function<void(uint8_t* p, uint16_t evt_len, bool is_ble)> body{
+      [](uint8_t* p, uint16_t evt_len, bool is_ble) { ; }};
+  void operator()(uint8_t* p, uint16_t evt_len, bool is_ble) {
+    body(p, evt_len, is_ble);
+  };
 };
 extern struct btm_read_tx_power_complete btm_read_tx_power_complete;
 // Name: btm_read_tx_power_timeout

@@ -177,8 +177,8 @@ void BTA_GATTS_AddService(tGATT_IF server_if,
                           std::vector<btgatt_db_element_t> service,
                           BTA_GATTS_AddServiceCb cb) {
   do_in_main_thread(FROM_HERE,
-                    base::Bind(&bta_gatts_add_service_impl, server_if,
-                               std::move(service), std::move(cb)));
+                    base::BindOnce(&bta_gatts_add_service_impl, server_if,
+                                   std::move(service), std::move(cb)));
 }
 
 /*******************************************************************************
@@ -242,6 +242,12 @@ void BTA_GATTS_StopService(uint16_t service_id) {
 void BTA_GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_id,
                                      std::vector<uint8_t> value,
                                      bool need_confirm) {
+
+  if (value.size() > sizeof(tBTA_GATTS_API_INDICATION::value)) {
+    LOG(ERROR) << __func__ << "data to indicate is too long";
+    return;
+  }
+
   tBTA_GATTS_API_INDICATION* p_buf =
       (tBTA_GATTS_API_INDICATION*)osi_calloc(sizeof(tBTA_GATTS_API_INDICATION));
 

@@ -94,12 +94,12 @@ cc_library_static {
     srcs: [
         // AVRCP Target Service
         "avrcp/avrcp_service.cc",
+        // Callouts
         "co/bta_av_co.cc",
         "co/bta_hh_co.cc",
         "co/bta_pan_co.cc",
         // HAL layer
         "src/bluetooth.cc",
-        "src/bluetooth_data_migration.cc",
         // BTIF implementation
         "src/btif_a2dp.cc",
         "src/btif_a2dp_control.cc",
@@ -265,6 +265,7 @@ cc_test {
         "libcutils",
         "libfmq",
         "libhidlbase",
+        "liblog",
         "libstatssocket",
         "libutils",
     ],
@@ -347,6 +348,7 @@ cc_test {
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
+    shared_libs: ["liblog"],
 }
 
 // btif avrcp audio track unit tests
@@ -379,6 +381,7 @@ cc_test {
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
+    shared_libs: ["liblog"],
 }
 
 // btif rc unit tests for target
@@ -397,6 +400,9 @@ cc_test {
     include_dirs: btifCommonIncludes,
     srcs: [
         ":TestCommonLogMsg",
+        ":TestCommonMockFunctions",
+        ":TestMockCommon",
+        ":TestMockOsi",
         "test/btif_rc_test.cc",
     ],
     header_libs: ["libbluetooth_headers"],
@@ -411,7 +417,6 @@ cc_test {
         "libbt-protos-lite",
         "libchrome",
         "libevent",
-        "libosi",
         "libosi-AllocationTestHarness",
     ],
     target: {

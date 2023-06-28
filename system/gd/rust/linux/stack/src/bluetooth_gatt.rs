@@ -20,7 +20,7 @@ use bt_utils::array_utils;
 use crate::async_helper::{AsyncHelper, CallbackSender};
 use crate::bluetooth::{Bluetooth, IBluetooth};
 use crate::bluetooth_adv::{
-    AdvertiseData, Advertisers, AdvertisingSetInfo, AdvertisingSetParameters,
+    AdvertiseData, AdvertiserId, Advertisers, AdvertisingSetInfo, AdvertisingSetParameters,
     IAdvertisingSetCallback, PeriodicAdvertisingParameters, INVALID_REG_ID,
 };
 use crate::callbacks::Callbacks;
@@ -1615,13 +1615,6 @@ impl BluetoothGatt {
         scanner_id: u8,
         filter: Option<ScanFilter>,
     ) -> BtStatus {
-        let has_active_unfiltered_scanner = self
-            .scanners
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
-
         let gatt_async = self.gatt_async.clone();
         let scanners = self.scanners.clone();
         let is_msft_supported = self.is_msft_supported();
@@ -1656,6 +1649,12 @@ impl BluetoothGatt {
 
                     log::debug!("Added adv monitor handle = {}", monitor_handle);
                 }
+
+                let has_active_unfiltered_scanner = scanners
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
 
                 if !gatt_async
                     .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
@@ -1737,6 +1736,10 @@ impl BluetoothGatt {
 
     /// Exits suspend mode for LE advertising.
     pub fn advertising_exit_suspend(&mut self) {
+        for id in self.advertisers.stopped_sets().map(|s| s.adv_id()).collect::<Vec<_>>() {
+            self.gatt.as_ref().unwrap().lock().unwrap().advertiser.unregister(id);
+            self.advertisers.remove_by_advertiser_id(id as AdvertiserId);
+        }
         for s in self.advertisers.paused_sets_mut() {
             s.set_paused(false);
             self.gatt.as_ref().unwrap().lock().unwrap().advertiser.enable(
@@ -1941,14 +1944,8 @@ impl IBluetoothGatt for BluetoothGatt {
             }
         };
 
-        let has_active_unfiltered_scanner = self
-            .scanners
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
-
         let gatt_async = self.gatt_async.clone();
+        let scanners = self.scanners.clone();
         let is_msft_supported = self.is_msft_supported();
         tokio::spawn(async move {
             // The two operations below (monitor remove, update scan) happen one after another, and
@@ -1962,6 +1959,12 @@ impl IBluetoothGatt for BluetoothGatt {
                 if let Some(handle) = monitor_handle {
                     let _res = gatt_async.msft_adv_monitor_remove(handle).await;
                 }
+
+                let has_active_unfiltered_scanner = scanners
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|(_uuid, scanner)| scanner.is_active && scanner.filter.is_none());
 
                 if !gatt_async
                     .msft_adv_monitor_enable(!has_active_unfiltered_scanner)
@@ -2057,18 +2060,24 @@ impl IBluetoothGatt for BluetoothGatt {
     }
 
     fn stop_advertising_set(&mut self, advertiser_id: i32) {
-        if self.advertisers.suspend_mode() != SuspendMode::Normal {
+        let s = if let Some(s) = self.advertisers.get_by_advertiser_id(advertiser_id) {
+            s.clone()
+        } else {
             return;
-        }
+        };
 
-        let s = self.advertisers.get_by_advertiser_id(advertiser_id);
-        if None == s {
+        if self.advertisers.suspend_mode() != SuspendMode::Normal {
+            if !s.is_stopped() {
+                warn!("Deferred advertisement unregistering due to suspending");
+                self.advertisers.get_mut_by_advertiser_id(advertiser_id).unwrap().set_stopped();
+                if let Some(cb) = self.advertisers.get_callback(&s) {
+                    cb.on_advertising_set_stopped(advertiser_id);
+                }
+            }
             return;
         }
-        let s = s.unwrap().clone();
 
         self.gatt.as_ref().unwrap().lock().unwrap().advertiser.unregister(s.adv_id());
-
         if let Some(cb) = self.advertisers.get_callback(&s) {
             cb.on_advertising_set_stopped(advertiser_id);
         }

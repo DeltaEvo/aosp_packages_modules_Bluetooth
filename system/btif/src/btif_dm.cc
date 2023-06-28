@@ -504,6 +504,12 @@ bool check_cod_hid(const RawAddress& bd_addr) {
   return (get_cod(&bd_addr) & COD_HID_MASK) == COD_HID_MAJOR;
 }
 
+bool check_cod_hid_major(const RawAddress& bd_addr, uint32_t cod) {
+  uint32_t remote_cod = get_cod(&bd_addr);
+  return (remote_cod & COD_HID_MASK) == COD_HID_MAJOR &&
+         (remote_cod & COD_HID_SUB_MAJOR) == (cod & COD_HID_SUB_MAJOR);
+}
+
 bool check_cod_le_audio(const RawAddress& bd_addr) {
   return (get_cod(&bd_addr) & COD_CLASS_LE_AUDIO) == COD_CLASS_LE_AUDIO;
 }
@@ -790,7 +796,7 @@ bool is_le_audio_capable_during_service_discovery(const RawAddress& bd_addr) {
  ******************************************************************************/
 static void btif_dm_cb_create_bond(const RawAddress bd_addr,
                                    tBT_TRANSPORT transport) {
-  bool is_hid = check_cod(&bd_addr, COD_HID_POINTING);
+  bool is_hid = check_cod_hid_major(bd_addr, COD_HID_POINTING);
   bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDING);
 
   if (transport == BT_TRANSPORT_AUTO && is_device_le_audio_capable(bd_addr)) {
@@ -946,7 +952,7 @@ static void btif_dm_pin_req_evt(tBTA_DM_PIN_REQ* p_pin_req) {
         check_cod(&bd_addr, COD_AV_HEADPHONES) ||
         check_cod(&bd_addr, COD_AV_PORTABLE_AUDIO) ||
         check_cod(&bd_addr, COD_AV_HIFI_AUDIO) ||
-        check_cod(&bd_addr, COD_HID_POINTING)) {
+        check_cod_hid_major(bd_addr, COD_HID_POINTING)) {
       /*  Check if this device can be auto paired  */
       if (!interop_match_addr(INTEROP_DISABLE_AUTO_PAIRING, &bd_addr) &&
           !interop_match_name(INTEROP_DISABLE_AUTO_PAIRING,
@@ -962,8 +968,8 @@ static void btif_dm_pin_req_evt(tBTA_DM_PIN_REQ* p_pin_req) {
         BTA_DmPinReply(bd_addr, true, 4, pin_code.pin);
         return;
       }
-    } else if (check_cod(&bd_addr, COD_HID_KEYBOARD) ||
-               check_cod(&bd_addr, COD_HID_COMBO)) {
+    } else if (check_cod_hid_major(bd_addr, COD_HID_KEYBOARD) ||
+               check_cod_hid_major(bd_addr, COD_HID_COMBO)) {
       if ((interop_match_addr(INTEROP_KEYBOARD_REQUIRES_FIXED_PIN, &bd_addr) ==
            true) &&
           (pairing_cb.autopair_attempts == 0)) {
@@ -1039,7 +1045,7 @@ static void btif_dm_ssp_cfm_req_evt(tBTA_DM_SP_CFM_REQ* p_ssp_cfm_req) {
   if (p_ssp_cfm_req->just_works &&
       !(p_ssp_cfm_req->loc_auth_req & BTM_AUTH_BONDS) &&
       !(p_ssp_cfm_req->rmt_auth_req & BTM_AUTH_BONDS) &&
-      !(check_cod((RawAddress*)&p_ssp_cfm_req->bd_addr, COD_HID_POINTING)))
+      !(check_cod_hid_major(p_ssp_cfm_req->bd_addr, COD_HID_POINTING)))
     pairing_cb.bond_type = tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY;
   else
     pairing_cb.bond_type = tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT;
@@ -1137,9 +1143,8 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
   bt_bond_state_t state = BT_BOND_STATE_NONE;
   bool skip_sdp = false;
 
-  BTIF_TRACE_DEBUG("%s: bond state=%d, success=%d, key_present=%d", __func__,
-                   pairing_cb.state, p_auth_cmpl->success,
-                   p_auth_cmpl->key_present);
+  LOG_INFO("%s: bond state=%d, success=%d, key_present=%d", __func__,
+           pairing_cb.state, p_auth_cmpl->success, p_auth_cmpl->key_present);
 
   pairing_cb.fail_reason = p_auth_cmpl->fail_reason;
 
@@ -1279,6 +1284,8 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
     // Do not call bond_state_changed_cb yet. Wait until remote service
     // discovery is complete
   } else {
+    LOG_WARN("Bonding failed with failure reason: 0x%02x",
+             p_auth_cmpl->fail_reason);
     bool is_bonded_device_removed = false;
     // Map the HCI fail reason  to  bt status
     switch (p_auth_cmpl->fail_reason) {
@@ -1340,7 +1347,7 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
         status = BT_STATUS_FAIL;
     }
     /* Special Handling for HID Devices */
-    if (check_cod(&bd_addr, COD_HID_POINTING)) {
+    if (check_cod_hid_major(bd_addr, COD_HID_POINTING)) {
       /* Remove Device as bonded in nvram as authentication failed */
       BTIF_TRACE_DEBUG("%s(): removing hid pointing device from nvram",
                        __func__);
@@ -1466,6 +1473,12 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
                                      BT_PROPERTY_CLASS_OF_DEVICE, sizeof(cod),
                                      &cod);
           num_properties++;
+        }
+
+        BTIF_TRACE_DEBUG("%s clock_offset is 0x%x", __func__,
+            p_search_data->inq_res.clock_offset);
+        if (p_search_data->inq_res.clock_offset & BTM_CLOCK_OFFSET_VALID) {
+          btif_set_device_clockoffset(bdaddr, (int)p_search_data->inq_res.clock_offset);
         }
 
         /* DEV_TYPE */
@@ -1759,9 +1772,8 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
         pairing_cb.sdp_attempts = 0;
 
         // Send UUIDs discovered through EIR to Java to unblock pairing intent
-        // when SDP failed or no UUID is discovered
-        if (p_data->disc_res.result != BTA_SUCCESS ||
-            p_data->disc_res.num_uuids == 0) {
+        // when SDP failed
+        if (p_data->disc_res.result != BTA_SUCCESS) {
           auto uuids_iter = eir_uuids_cache.find(bd_addr);
           if (uuids_iter != eir_uuids_cache.end()) {
             num_eir_uuids = uuids_iter->second.size();
@@ -3505,7 +3517,8 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
     bond_state_changed(status, bd_addr, BT_BOND_STATE_BONDING);
   }
   bond_state_changed(status, bd_addr, state);
-  // TODO(240451061): Calling `stop_oob_advertiser();` gets command disallowed...
+  // TODO(240451061): Calling `stop_oob_advertiser();` gets command
+  // disallowed...
 }
 
 void btif_dm_load_ble_local_keys(void) {

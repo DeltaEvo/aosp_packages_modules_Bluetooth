@@ -227,11 +227,11 @@ public class AdapterService extends Service {
     static final String BLUETOOTH_ENABLE_LE_AUDIO_ALLOW_LIST =
             "persist.bluetooth.leaudio.enable_allow_list";
 
-    private static final String PHONEBOOK_ACCESS_PERMISSION_PREFERENCE_FILE =
+    static final String PHONEBOOK_ACCESS_PERMISSION_PREFERENCE_FILE =
             "phonebook_access_permission";
-    private static final String MESSAGE_ACCESS_PERMISSION_PREFERENCE_FILE =
+    static final String MESSAGE_ACCESS_PERMISSION_PREFERENCE_FILE =
             "message_access_permission";
-    private static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
+    static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
 
@@ -4240,23 +4240,25 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public void onLeServiceUp(AttributionSource source, SynchronousResultReceiver receiver) {
+        public void startBrEdr(AttributionSource source, SynchronousResultReceiver receiver) {
             try {
-                onLeServiceUp(source);
+                startBrEdr(source);
                 receiver.send(null);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
         }
+
         @VisibleForTesting
-        @RequiresPermission(allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-        })
-        void onLeServiceUp(AttributionSource source) {
+        @RequiresPermission(
+                allOf = {
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                })
+        void startBrEdr(AttributionSource source) {
             AdapterService service = getService();
             if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "onLeServiceUp")
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "startBrEdr")
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return;
             }
@@ -4267,23 +4269,25 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public void onBrEdrDown(AttributionSource source, SynchronousResultReceiver receiver) {
+        public void stopBle(AttributionSource source, SynchronousResultReceiver receiver) {
             try {
-                onBrEdrDown(source);
+                stopBle(source);
                 receiver.send(null);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
         }
+
         @VisibleForTesting
-        @RequiresPermission(allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-        })
-        void onBrEdrDown(AttributionSource source) {
+        @RequiresPermission(
+                allOf = {
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                })
+        void stopBle(AttributionSource source) {
             AdapterService service = getService();
             if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "onBrEdrDown")
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "stopBle")
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return;
             }

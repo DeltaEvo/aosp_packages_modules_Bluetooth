@@ -478,7 +478,8 @@ static bt_status_t btif_in_fetch_bonded_devices(
     }
     if (!btif_in_fetch_bonded_ble_device(name, add, p_bonded_devices) &&
         !bt_linkkey_file_found) {
-      LOG_VERBOSE("No link key or ble key found for device:%s", name.c_str());
+      LOG_VERBOSE("No link key or ble key found for device:%s",
+                  ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     }
   }
   return BT_STATUS_SUCCESS;
@@ -584,9 +585,9 @@ static uint8_t btif_storage_get_io_cap_property(bt_property_type_t type,
  *                  returns BTM_LOCAL_IO_CAPS.
  *
  ******************************************************************************/
-uint8_t btif_storage_get_local_io_caps() {
-  return btif_storage_get_io_cap_property(BT_PROPERTY_LOCAL_IO_CAPS,
-                                          BTM_LOCAL_IO_CAPS);
+tBTM_IO_CAP btif_storage_get_local_io_caps() {
+  return static_cast<tBTM_IO_CAP>(btif_storage_get_io_cap_property(
+      BT_PROPERTY_LOCAL_IO_CAPS, BTM_LOCAL_IO_CAPS));
 }
 
 /** Helper function for fetching a bt_property of the adapter. */
@@ -1366,6 +1367,9 @@ bt_status_t btif_in_fetch_bonded_ble_device(
   tBLE_ADDR_TYPE addr_type;
   bool device_added = false;
   bool key_found = false;
+  RawAddress bd_addr;
+
+  RawAddress::FromString(remote_bd_addr, bd_addr);
 
   if (!btif_config_get_int(remote_bd_addr, "DevType", &device_type))
     return BT_STATUS_FAIL;
@@ -1373,10 +1377,7 @@ bt_status_t btif_in_fetch_bonded_ble_device(
   if ((device_type & BT_DEVICE_TYPE_BLE) == BT_DEVICE_TYPE_BLE ||
       btif_has_ble_keys(remote_bd_addr)) {
     BTIF_TRACE_DEBUG("%s Found a LE device: %s", __func__,
-                     remote_bd_addr.c_str());
-
-    RawAddress bd_addr;
-    RawAddress::FromString(remote_bd_addr, bd_addr);
+                     ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
     if (btif_storage_get_remote_addr_type(&bd_addr, &addr_type) !=
         BT_STATUS_SUCCESS) {
