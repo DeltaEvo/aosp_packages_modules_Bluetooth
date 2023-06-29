@@ -78,9 +78,6 @@ std::ostream& operator<<(std::ostream& os, const DeviceConnectState& state) {
     case DeviceConnectState::DISCONNECTING_AND_RECOVER:
       char_value_ = "DISCONNECTING_AND_RECOVER";
       break;
-    case DeviceConnectState::PENDING_REMOVAL:
-      char_value_ = "PENDING_REMOVAL";
-      break;
     case DeviceConnectState::CONNECTING_BY_USER:
       char_value_ = "CONNECTING_BY_USER";
       break;
@@ -1832,7 +1829,7 @@ bool LeAudioDeviceGroup::IsCisPartOfCurrentStream(uint16_t cis_conn_hdl) {
       stream_conf.source_streams.begin(), stream_conf.source_streams.end(),
       [cis_conn_hdl](auto& pair) { return cis_conn_hdl == pair.first; });
 
-  return iter != stream_conf.sink_streams.end();
+  return (iter != stream_conf.source_streams.end());
 }
 
 void LeAudioDeviceGroup::StreamOffloaderUpdated(uint8_t direction) {
@@ -1966,9 +1963,7 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
 
   if (offloader_streams_target_allocation->size() == 0) {
     *is_initial = true;
-  } else if (*is_initial ||
-             CodecManager::GetInstance()->GetAidlVersionInUsed() >=
-                 AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
+  } else if (*is_initial || LeAudioHalVerifier::SupportsStreamActiveApi()) {
     // As multiple CISes phone call case, the target_allocation already have the
     // previous data, but the is_initial flag not be cleared. We need to clear
     // here to avoid make duplicated target allocation stream map.
@@ -2020,8 +2015,7 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
           tag.c_str(), cis_entry.conn_handle, target_allocation,
           current_allocation, is_active);
 
-      if (*is_initial || CodecManager::GetInstance()->GetAidlVersionInUsed() >=
-                             AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
+      if (*is_initial || LeAudioHalVerifier::SupportsStreamActiveApi()) {
         offloader_streams_target_allocation->emplace_back(stream_map_info(
             cis_entry.conn_handle, target_allocation, is_active));
       }

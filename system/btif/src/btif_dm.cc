@@ -1143,9 +1143,8 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
   bt_bond_state_t state = BT_BOND_STATE_NONE;
   bool skip_sdp = false;
 
-  BTIF_TRACE_DEBUG("%s: bond state=%d, success=%d, key_present=%d", __func__,
-                   pairing_cb.state, p_auth_cmpl->success,
-                   p_auth_cmpl->key_present);
+  LOG_INFO("%s: bond state=%d, success=%d, key_present=%d", __func__,
+           pairing_cb.state, p_auth_cmpl->success, p_auth_cmpl->key_present);
 
   pairing_cb.fail_reason = p_auth_cmpl->fail_reason;
 
@@ -1285,6 +1284,8 @@ static void btif_dm_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
     // Do not call bond_state_changed_cb yet. Wait until remote service
     // discovery is complete
   } else {
+    LOG_WARN("Bonding failed with failure reason: 0x%02x",
+             p_auth_cmpl->fail_reason);
     bool is_bonded_device_removed = false;
     // Map the HCI fail reason  to  bt status
     switch (p_auth_cmpl->fail_reason) {
@@ -3516,7 +3517,8 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
     bond_state_changed(status, bd_addr, BT_BOND_STATE_BONDING);
   }
   bond_state_changed(status, bd_addr, state);
-  // TODO(240451061): Calling `stop_oob_advertiser();` gets command disallowed...
+  // TODO(240451061): Calling `stop_oob_advertiser();` gets command
+  // disallowed...
 }
 
 void btif_dm_load_ble_local_keys(void) {

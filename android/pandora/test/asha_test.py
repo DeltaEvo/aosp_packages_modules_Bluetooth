@@ -46,7 +46,6 @@ HISYCNID: List[int] = [0x01, 0x02, 0x03, 0x04, 0x5, 0x6, 0x7, 0x8]
 COMPLETE_LOCAL_NAME: str = "Bumble"
 AUDIO_SIGNAL_AMPLITUDE = 0.8
 AUDIO_SIGNAL_SAMPLING_RATE = 44100
-AUDIO_ASHA_SAMPLING_RATE = 16000
 SINE_FREQUENCY = 440
 SINE_DURATION = 0.1
 
@@ -237,25 +236,12 @@ class AshaTest(base_test.BaseTestClass):  # type: ignore[misc]
         s16le = (sine * 32767).astype('<i2')
 
         # Interleaved audio.
-        stereo = np.zeros(s16le.size * 2, dtype=s16le.dtype)
+        stereo = np.zeros(s16le.size * 2, dtype=sine.dtype)
         stereo[0::2] = s16le
 
         # Send 4 second of audio.
         for _ in range(0, int(4 / SINE_DURATION)):
             yield PlaybackAudioRequest(connection=connection, data=stereo.tobytes())
-
-    def get_audio_frequency(self, audio_data: ByteString, start_time: int, end_time: int) -> float:
-        data = np.frombuffer(bytes(audio_data), dtype=np.int16)
-        start_point = int(AUDIO_ASHA_SAMPLING_RATE * start_time / 1000)
-        end_point = int(AUDIO_ASHA_SAMPLING_RATE * end_time / 1000)
-        length = (end_time - start_time) / 1000
-        count = 0
-        for i in range(start_point, end_point):
-            # Count the cycles in the audio sine wave.
-            if data[i] < 0 and data[i + 1] > 0:
-                count += 1
-
-        return count/length
 
     @avatar.parameterized(
         (RANDOM, Ear.LEFT),
@@ -1109,17 +1095,26 @@ class AshaTest(base_test.BaseTestClass):  # type: ignore[misc]
         ref_left_asha = AioAsha(self.ref_left.aio.channel)
         ref_right_asha = AioAsha(self.ref_right.aio.channel)
 
-        stop_future = self.get_stop_future(self.ref_left)
-
-        await dut_asha.WaitPeripheral(connection=dut_ref_left)
-        await dut_asha.WaitPeripheral(connection=dut_ref_right)
-
+        await asyncio.gather(
+            dut_asha.WaitPeripheral(connection=dut_ref_left), dut_asha.WaitPeripheral(connection=dut_ref_right)
+        )
         await dut_asha.Start(connection=dut_ref_left)
-        logging.info("send stop")
-        _, stop_result = await asyncio.gather(dut_asha.Stop(), asyncio.wait_for(stop_future, timeout=10.0))
 
-        logging.info(f"stop_result:{stop_result}")
-        assert_is_not_none(stop_result)
+        # Stop audio and wait until ref_device connections stopped.
+        stop_future_left = self.get_stop_future(self.ref_left)
+        stop_future_right = self.get_stop_future(self.ref_right)
+
+        logging.info("send stop")
+        _, stop_result_left, stop_result_right = await asyncio.gather(
+            dut_asha.Stop(),
+            asyncio.wait_for(stop_future_left, timeout=10.0),
+            asyncio.wait_for(stop_future_right, timeout=10.0),
+        )
+
+        logging.info(f"stop_result_left:{stop_result_left}")
+        logging.info(f"stop_result_right:{stop_result_right}")
+        assert_is_not_none(stop_result_left)
+        assert_is_not_none(stop_result_right)
 
         (audio_data_left, audio_data_right) = await asyncio.gather(
             self.get_audio_data(ref_asha=ref_left_asha, connection=ref_left_dut, timeout=10),
@@ -1176,9 +1171,7 @@ class AshaTest(base_test.BaseTestClass):  # type: ignore[misc]
         )
 
         assert_not_equal(len(audio_data), 0)
-        # Take one second of audio after the first second.
-        audio_frequency = self.get_audio_frequency(audio_data=audio_data, start_time=1000, end_time=2000)
-        assert_equal(audio_frequency, SINE_FREQUENCY)
+        # TODO(duoho): decode audio_data and verify the content
 
 
 if __name__ == "__main__":

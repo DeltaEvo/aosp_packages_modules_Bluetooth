@@ -760,20 +760,19 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
                                       uint8_t* p_pin) {
   tBTM_SEC_DEV_REC* p_dev_rec;
   tBTM_STATUS status;
-  VLOG(1) << __func__ << " BDA: " << bd_addr;
-
-  BTM_TRACE_DEBUG("%s: Transport used %d, bd_addr=%s", __func__, transport,
-                  ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+  LOG_INFO("%s: Transport used %d, bd_addr=%s", __func__, transport,
+           ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
   /* Other security process is in progress */
   if (btm_cb.pairing_state != BTM_PAIR_STATE_IDLE) {
-    BTM_TRACE_ERROR("BTM_SecBond: already busy in state: %s",
-                    btm_pair_state_descr(btm_cb.pairing_state));
+    LOG_ERROR("BTM_SecBond: already busy in state: %s",
+              btm_pair_state_descr(btm_cb.pairing_state));
     return (BTM_WRONG_MODE);
   }
 
   p_dev_rec = btm_find_or_alloc_dev(bd_addr);
   if (p_dev_rec == NULL) {
+    LOG_ERROR("No memory to allocate new p_dev_rec");
     return (BTM_NO_RESOURCES);
   }
 
@@ -796,8 +795,10 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
   }
 
   /* Tell controller to get rid of the link key if it has one stored */
-  if ((BTM_DeleteStoredLinkKey(&bd_addr, NULL)) != BTM_SUCCESS)
+  if ((BTM_DeleteStoredLinkKey(&bd_addr, NULL)) != BTM_SUCCESS) {
+    LOG_ERROR("Failed to delete stored link keys");
     return (BTM_NO_RESOURCES);
+  }
 
   /* Save the PIN code if we got a valid one */
   if (p_pin && (pin_len <= PIN_CODE_LEN) && (pin_len != 0)) {
@@ -939,6 +940,9 @@ tBTM_STATUS BTM_SecBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
   if ((transport == BT_TRANSPORT_LE && (dev_type & BT_DEVICE_TYPE_BLE) == 0) ||
       (transport == BT_TRANSPORT_BR_EDR &&
        (dev_type & BT_DEVICE_TYPE_BREDR) == 0)) {
+    LOG_WARN(
+        "Can't start bonding - requested transport and transport we've seen "
+        "device on don't match");
     return BTM_ILLEGAL_ACTION;
   }
   return btm_sec_bond_by_transport(bd_addr, addr_type, transport, pin_len,
@@ -2083,8 +2087,14 @@ static void btm_sec_bond_cancel_complete(void) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_create_conn_cancel_complete(const uint8_t* p) {
+void btm_create_conn_cancel_complete(const uint8_t* p, uint16_t evt_len) {
   uint8_t status;
+
+  if (evt_len < 1 + BD_ADDR_LEN) {
+     BTM_TRACE_ERROR("%s malformatted event packet, too short", __func__);
+     return;
+  }
+
   STREAM_TO_UINT8(status, p);
   RawAddress bd_addr;
   STREAM_TO_BDADDR(bd_addr, p);
@@ -2237,7 +2247,8 @@ static tBTM_STATUS btm_sec_dd_create_conn(tBTM_SEC_DEV_REC* p_dev_rec) {
   /* set up the control block to indicated dedicated bonding */
   btm_cb.pairing_flags |= BTM_PAIR_FLAGS_DISC_WHEN_DONE;
 
-  VLOG(1) << "Security Manager: " << p_dev_rec->bd_addr;
+  VLOG(1) << "Security Manager: "
+          << ADDRESS_TO_LOGGABLE_STR(p_dev_rec->bd_addr);
 
   btm_sec_change_pairing_state(BTM_PAIR_STATE_WAIT_PIN_REQ);
 
@@ -2278,7 +2289,6 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
        !BTM_IsAclConnectionUp(btm_cb.connecting_bda, BT_TRANSPORT_BR_EDR)) ||
       (p_bd_addr && !BTM_IsAclConnectionUp(*p_bd_addr, BT_TRANSPORT_BR_EDR))) {
     LOG_WARN("Remote read request complete with no underlying link connection");
-    btm_acl_resubmit_page();
   }
 
   /* If remote name request failed, p_bd_addr is null and we need to search */
@@ -2808,7 +2818,8 @@ void btm_proc_sp_req_evt(tBTM_SP_EVT event, const uint8_t* p) {
   /* All events start with bd_addr */
   STREAM_TO_BDADDR(p_bda, p);
 
-  VLOG(2) << " BDA: " << p_bda << " event: 0x" << std::hex << +event
+  VLOG(2) << " BDA: " << ADDRESS_TO_LOGGABLE_STR(p_bda) << " event: 0x"
+          << std::hex << +event
           << " State: " << btm_pair_state_descr(btm_cb.pairing_state);
 
   p_dev_rec = btm_find_dev(p_bda);
@@ -3016,7 +3027,7 @@ void btm_rem_oob_req(const uint8_t* p) {
 
   STREAM_TO_BDADDR(p_bda, p);
 
-  VLOG(2) << __func__ << " BDA: " << p_bda;
+  VLOG(2) << __func__ << " BDA: " << ADDRESS_TO_LOGGABLE_STR(p_bda);
   p_dev_rec = btm_find_dev(p_bda);
   if ((p_dev_rec != NULL) && btm_cb.api.p_sp_callback) {
     evt_data.bd_addr = p_dev_rec->bd_addr;
@@ -3048,13 +3059,23 @@ void btm_rem_oob_req(const uint8_t* p) {
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_local_oob_complete(uint8_t* p) {
+void btm_read_local_oob_complete(uint8_t* p, uint16_t evt_len) {
   tBTM_SP_LOC_OOB evt_data;
-  uint8_t status = *p++;
+  uint8_t status;
+  if (evt_len < 1) {
+    goto err_out;
+  }
+
+  STREAM_TO_UINT8(status, p);
 
   BTM_TRACE_EVENT("btm_read_local_oob_complete:%d", status);
   if (status == HCI_SUCCESS) {
     evt_data.status = BTM_SUCCESS;
+
+    if (evt_len < 1 + 32) {
+      goto err_out;
+    }
+
     STREAM_TO_ARRAY16(evt_data.c.data(), p);
     STREAM_TO_ARRAY16(evt_data.r.data(), p);
   } else
@@ -3065,6 +3086,11 @@ void btm_read_local_oob_complete(uint8_t* p) {
     btm_sp_evt_data.loc_oob = evt_data;
     (*btm_cb.api.p_sp_callback)(BTM_SP_LOC_OOB_EVT, &btm_sp_evt_data);
   }
+
+  return;
+
+err_out:
+  BTM_TRACE_ERROR("%s malformatted event packet, too short", __func__);
 }
 
 /*******************************************************************************
@@ -3163,7 +3189,7 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status) {
             << btm_pair_state_descr(btm_cb.pairing_state)
             << " handle:" << handle << " status:" << status
             << "dev->sec_state:" << p_dev_rec->sec_state
-            << " bda:" << p_dev_rec->bd_addr
+            << " bda:" << ADDRESS_TO_LOGGABLE_STR(p_dev_rec->bd_addr)
             << "RName:" << p_dev_rec->sec_bd_name;
   } else {
     VLOG(2) << __func__ << ": Security Manager: in state: "
@@ -3531,8 +3557,6 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
   bool addr_matched;
   uint8_t bit_shift = 0;
 
-  btm_acl_resubmit_page();
-
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bda);
   if (!p_dev_rec) {
     LOG_DEBUG(
@@ -3710,7 +3734,7 @@ void btm_sec_connected(const RawAddress& bda, uint16_t handle,
       VLOG(1) << __func__
               << ": device security record associated with this bda has been "
                  "removed! bda="
-              << bda << ", do not callback!";
+              << ADDRESS_TO_LOGGABLE_STR(bda) << ", do not callback!";
       return;
     }
 
@@ -3832,8 +3856,6 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason,
     LOG_WARN("Got uncommon disconnection reason:%s handle:0x%04x comment:%s",
              hci_error_code_text(reason).c_str(), handle, comment.c_str());
   }
-
-  btm_acl_resubmit_page();
 
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(handle);
   if (p_dev_rec == nullptr) {
@@ -4044,7 +4066,8 @@ void btm_sec_link_key_notification(const RawAddress& p_bda,
        ((p_dev_rec->dev_class[1] & BTM_COD_MAJOR_CLASS_MASK) !=
         BTM_COD_MAJOR_PERIPHERAL)) &&
       !ltk_derived_lk) {
-    VLOG(2) << __func__ << " Delayed BDA: " << p_bda << " Type:" << +key_type;
+    VLOG(2) << __func__ << " Delayed BDA: " << ADDRESS_TO_LOGGABLE_STR(p_bda)
+            << " Type:" << +key_type;
 
     p_dev_rec->link_key_not_sent = true;
 
@@ -4096,7 +4119,7 @@ void btm_sec_link_key_request(const uint8_t* p_event) {
   STREAM_TO_BDADDR(bda, p_event);
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_or_alloc_dev(bda);
 
-  VLOG(2) << __func__ << " bda: " << bda;
+  VLOG(2) << __func__ << " bda: " << ADDRESS_TO_LOGGABLE_STR(bda);
   if (!concurrentPeerAuthIsEnabled()) {
     p_dev_rec->sec_state = BTM_SEC_STATE_AUTHENTICATING;
   }
