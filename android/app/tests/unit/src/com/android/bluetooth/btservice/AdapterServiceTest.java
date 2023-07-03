@@ -25,6 +25,7 @@ import android.app.AlarmManager;
 import android.app.admin.DevicePolicyManager;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.IBluetoothCallback;
 import android.content.AttributionSource;
 import android.content.Context;
@@ -40,7 +41,7 @@ import android.os.Bundle;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.Process;
-import android.os.SystemProperties;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.permission.PermissionCheckerManager;
@@ -138,14 +139,15 @@ public class AdapterServiceTest {
 
     private static final int CONTEXT_SWITCH_MS = 100;
     private static final int PROFILE_SERVICE_TOGGLE_TIME_MS = 200;
-    private static final int GATT_START_TIME_MS = 500;
+    private static final int GATT_START_TIME_MS = 1000;
     private static final int ONE_SECOND_MS = 1000;
     private static final int NATIVE_INIT_MS = 8000;
-    private static final int NATIVE_DISABLE_MS = 1000;
+    private static final int NATIVE_DISABLE_MS = 8000;
 
     private final AttributionSource mAttributionSource = new AttributionSource.Builder(
             Process.myUid()).build();
 
+    private BluetoothManager mBluetoothManager;
     private PowerManager mPowerManager;
     private PermissionCheckerManager mPermissionCheckerManager;
     private PermissionManager mPermissionManager;
@@ -242,6 +244,9 @@ public class AdapterServiceTest {
         mPermissionManager = InstrumentationRegistry.getTargetContext()
                 .getSystemService(PermissionManager.class);
 
+        mBluetoothManager = InstrumentationRegistry.getTargetContext()
+                .getSystemService(BluetoothManager.class);
+
         when(mMockContext.getCacheDir()).thenReturn(InstrumentationRegistry.getTargetContext()
                 .getCacheDir());
         when(mMockContext.getApplicationInfo()).thenReturn(mMockApplicationInfo);
@@ -279,6 +284,10 @@ public class AdapterServiceTest {
                 .thenReturn(mBatteryStatsManager);
         when(mMockContext.getSystemServiceName(BatteryStatsManager.class))
                 .thenReturn(Context.BATTERY_STATS_SERVICE);
+        when(mMockContext.getSystemService(Context.BLUETOOTH_SERVICE))
+                .thenReturn(mBluetoothManager);
+        when(mMockContext.getSystemServiceName(BluetoothManager.class))
+                .thenReturn(Context.BLUETOOTH_SERVICE);
         when(mMockContext.getSharedPreferences(anyString(), anyInt()))
                 .thenReturn(InstrumentationRegistry.getTargetContext()
                         .getSharedPreferences("AdapterServiceTestPrefs", Context.MODE_PRIVATE));
@@ -345,10 +354,10 @@ public class AdapterServiceTest {
 
     private void verifyStateChange(int prevState, int currState, int callNumber, int timeoutMs) {
         try {
-            verify(mIBluetoothCallback, timeout(timeoutMs)
-                    .times(callNumber)).onBluetoothStateChange(prevState, currState);
-        } catch (Exception e) {
-            // the mocked onBluetoothStateChange doesn't throw exceptions
+            verify(mIBluetoothCallback, timeout(timeoutMs).times(callNumber))
+                .onBluetoothStateChange(prevState, currState);
+        } catch (RemoteException e) {
+            // the mocked onBluetoothStateChange doesn't throw RemoteException
         }
     }
 
@@ -373,7 +382,7 @@ public class AdapterServiceTest {
         verifyStateChange(BluetoothAdapter.STATE_BLE_TURNING_ON, BluetoothAdapter.STATE_BLE_ON,
                 invocationNumber + 1, NATIVE_INIT_MS);
 
-        mServiceBinder.onLeServiceUp(mAttributionSource);
+        mServiceBinder.startBrEdr(mAttributionSource);
 
         verifyStateChange(BluetoothAdapter.STATE_BLE_ON, BluetoothAdapter.STATE_TURNING_ON,
                 invocationNumber + 1, CONTEXT_SWITCH_MS);
@@ -426,7 +435,7 @@ public class AdapterServiceTest {
         verifyStateChange(BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_BLE_ON,
                 invocationNumber + 1, PROFILE_SERVICE_TOGGLE_TIME_MS);
 
-        mServiceBinder.onBrEdrDown(mAttributionSource);
+        mServiceBinder.stopBle(mAttributionSource);
 
         verifyStateChange(BluetoothAdapter.STATE_BLE_ON, BluetoothAdapter.STATE_BLE_TURNING_OFF,
                 invocationNumber + 1, CONTEXT_SWITCH_MS);
@@ -551,7 +560,7 @@ public class AdapterServiceTest {
         verifyStateChange(BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_BLE_ON, 1,
                 CONTEXT_SWITCH_MS);
 
-        mServiceBinder.onBrEdrDown(mAttributionSource);
+        mServiceBinder.stopBle(mAttributionSource);
 
         verifyStateChange(BluetoothAdapter.STATE_BLE_ON, BluetoothAdapter.STATE_BLE_TURNING_OFF, 1,
                 CONTEXT_SWITCH_MS);
@@ -586,7 +595,7 @@ public class AdapterServiceTest {
         verifyStateChange(BluetoothAdapter.STATE_BLE_TURNING_ON, BluetoothAdapter.STATE_BLE_ON, 1,
                 NATIVE_INIT_MS);
 
-        mServiceBinder.onLeServiceUp(mAttributionSource);
+        mServiceBinder.startBrEdr(mAttributionSource);
 
         verifyStateChange(BluetoothAdapter.STATE_BLE_ON, BluetoothAdapter.STATE_TURNING_ON, 1,
                 CONTEXT_SWITCH_MS);
@@ -656,8 +665,9 @@ public class AdapterServiceTest {
         Assert.assertTrue(mAdapterService.getState() == BluetoothAdapter.STATE_ON);
 
         Assert.assertFalse(
-                SystemProperties.get(AdapterService.BLUETOOTH_BTSNOOP_LOG_MODE_PROPERTY,
-                        "full").equals("full"));
+                (BluetoothProperties.snoop_log_mode()
+                                .orElse(BluetoothProperties.snoop_log_mode_values.EMPTY))
+                        .equals(BluetoothProperties.snoop_log_mode_values.FULL));
 
         BluetoothProperties.snoop_log_mode(BluetoothProperties.snoop_log_mode_values.FULL);
 
@@ -674,9 +684,12 @@ public class AdapterServiceTest {
         verifyStateChange(BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_BLE_ON, 1,
                 CONTEXT_SWITCH_MS);
 
-        // Don't call onBrEdrDown().  The Adapter should turn itself off.
+        // Don't call stopBle().  The Adapter should turn itself off.
 
-        verifyStateChange(BluetoothAdapter.STATE_BLE_ON, BluetoothAdapter.STATE_BLE_TURNING_OFF, 1,
+        verifyStateChange(
+                BluetoothAdapter.STATE_BLE_ON,
+                BluetoothAdapter.STATE_BLE_TURNING_OFF,
+                1,
                 CONTEXT_SWITCH_MS);
 
         // Stop GATT

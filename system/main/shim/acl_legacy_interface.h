@@ -34,11 +34,12 @@ namespace shim {
 namespace legacy {
 
 typedef struct {
-  void (*on_connected)(const RawAddress& bda, uint16_t handle,
-                       uint8_t enc_mode);
+  void (*on_connected)(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
+                       bool locally_initiated);
   void (*on_connect_request)(const RawAddress& bda,
                              const types::ClassOfDevice&);
-  void (*on_failed)(const RawAddress& bda, tHCI_STATUS status);
+  void (*on_failed)(const RawAddress& bda, tHCI_STATUS status,
+                    bool locally_initiated);
   void (*on_disconnected)(tHCI_STATUS status, uint16_t handle,
                           tHCI_STATUS reason);
 } acl_classic_connection_interface_t;
@@ -48,7 +49,8 @@ typedef struct {
                        tHCI_ROLE role, uint16_t conn_interval,
                        uint16_t conn_latency, uint16_t conn_timeout,
                        const RawAddress& local_rpa, const RawAddress& peer_rpa,
-                       tBLE_ADDR_TYPE peer_addr_type);
+                       tBLE_ADDR_TYPE peer_addr_type,
+                       bool can_read_discoverable_characteristics);
   void (*on_failed)(const tBLE_BD_ADDR& address_with_type, uint16_t handle,
                     bool enhanced, tHCI_STATUS status);
   void (*on_disconnected)(tHCI_STATUS status, uint16_t handle,
@@ -127,6 +129,10 @@ typedef struct {
       uint16_t manufacturer_name, uint16_t sub_version);
   void (*on_phy_update)(tGATT_STATUS status, uint16_t handle, uint8_t tx_phy,
                         uint8_t rx_phy);
+
+  void (*on_le_subrate_change)(uint16_t handle, uint16_t subrate_factor,
+                               uint16_t latency, uint16_t cont_num,
+                               uint16_t timeout, uint8_t status);
 } acl_le_link_interface_t;
 
 typedef struct {
@@ -147,7 +153,7 @@ typedef struct {
   acl_link_interface_t link;
 } acl_interface_t;
 
-const acl_interface_t GetAclInterface();
+const acl_interface_t& GetAclInterface();
 
 }  // namespace legacy
 }  // namespace shim

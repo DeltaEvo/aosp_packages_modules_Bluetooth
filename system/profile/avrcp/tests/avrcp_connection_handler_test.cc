@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -33,6 +33,14 @@ using ::testing::SaveArg;
 using ::testing::SaveArgPointee;
 using ::testing::SetArgPointee;
 using ::testing::StrictMock;
+
+bool btif_av_peer_is_connected_sink(const RawAddress& peer_address) {
+  return true;
+}
+bool btif_av_peer_is_connected_source(const RawAddress& peer_address) {
+  return false;
+}
+bool btif_av_both_enable(void) { return false; }
 
 namespace bluetooth {
 namespace avrcp {

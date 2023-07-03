@@ -78,7 +78,7 @@ void LogMetricLinkLayerConnectionEvent(
         common::ToHexString(hci_cmd).c_str(),
         common::ToHexString(hci_event).c_str(),
         common::ToHexString(hci_ble_event).c_str(),
-        address ? address->ToString().c_str() : "(NULL)",
+        address ? ADDRESS_TO_LOGGABLE_CSTR(*address) : "(NULL)",
         connection_handle,
         common::ToHexString(link_type).c_str(),
         ret);
@@ -119,7 +119,7 @@ void LogMetricA2dpAudioUnderrunEvent(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, encoding_interval_nanos %s, num_missing_pcm_bytes %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         std::to_string(encoding_interval_nanos).c_str(),
         num_missing_pcm_bytes,
         ret);
@@ -150,7 +150,7 @@ void LogMetricA2dpAudioOverrunEvent(
     LOG_WARN(
         "Failed to log for %s, encoding_interval_nanos %s, num_dropped_buffers %d, "
         "num_dropped_encoded_frames %d, num_dropped_encoded_bytes %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         std::to_string(encoding_interval_nanos).c_str(),
         num_dropped_buffers,
         num_dropped_encoded_frames,
@@ -169,12 +169,15 @@ void LogMetricA2dpPlaybackEvent(const Address& address, int playback_state, int 
   if (ret < 0) {
     LOG_WARN(
         "Failed to log for %s, playback_state %d, audio_coding_mode %d,error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         playback_state,
         audio_coding_mode,
         ret);
   }
 }
+
+void LogMetricHfpPacketLossStats(
+    const Address& address, int num_decoded_frames, double packet_loss_ratio) {}
 
 void LogMetricReadRssiResult(const Address& address, uint16_t handle, uint32_t cmd_status, int8_t rssi) {
   int metric_id = 0;
@@ -185,7 +188,7 @@ void LogMetricReadRssiResult(const Address& address, uint16_t handle, uint32_t c
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, handle %d, status %s, rssi %d dBm, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(cmd_status).c_str(),
         rssi,
@@ -209,7 +212,7 @@ void LogMetricReadFailedContactCounterResult(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, handle %d, status %s, failed_contact_counter %d packets, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(cmd_status).c_str(),
         failed_contact_counter,
@@ -228,7 +231,7 @@ void LogMetricReadTxPowerLevelResult(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, handle %d, status %s, transmit_power_level %d packets, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(cmd_status).c_str(),
         transmit_power_level,
@@ -247,7 +250,7 @@ void LogMetricSmpPairingEvent(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, smp_cmd %s, direction %d, smp_fail_reason %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         common::ToHexString(smp_cmd).c_str(),
         direction,
         common::ToHexString(smp_fail_reason).c_str(),
@@ -281,7 +284,7 @@ void LogMetricClassicPairingEvent(
     LOG_WARN(
         "Failed for %s, handle %d, hci_cmd %s, hci_event %s, cmd_status %s, "
         "reason %s, event_value %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         handle,
         common::ToHexString(hci_cmd).c_str(),
         common::ToHexString(hci_event).c_str(),
@@ -312,7 +315,7 @@ void LogMetricSdpAttribute(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, protocol_uuid %s, attribute_id %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         common::ToHexString(protocol_uuid).c_str(),
         common::ToHexString(attribute_id).c_str(),
         ret);
@@ -349,7 +352,7 @@ void LogMetricSocketConnectionState(
     LOG_WARN(
         "Failed for %s, port %d, type %d, state %d, tx_bytes %s, rx_bytes %s, uid %d, server_port %d, "
         "socket_role %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         port,
         type,
         connection_state,
@@ -394,7 +397,7 @@ void LogMetricManufacturerInfo(
         "Failed for %s, source_type %d, source_name %s, manufacturer %s, model %s, "
         "hardware_version %s, "
         "software_version %s, MAC address type %d MAC address prefix %d %d %d, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         source_type,
         source_name.c_str(),
         manufacturer.c_str(),
@@ -418,7 +421,7 @@ void LogMetricBluetoothHalCrashReason(
   if (ret < 0) {
     LOG_WARN(
         "Failed for %s, error_code %s, vendor_error_code %s, error %d",
-        address.ToString().c_str(),
+        ADDRESS_TO_LOGGABLE_CSTR(address),
         common::ToHexString(error_code).c_str(),
         common::ToHexString(vendor_error_code).c_str(),
         ret);
@@ -426,7 +429,8 @@ void LogMetricBluetoothHalCrashReason(
 }
 
 void LogMetricBluetoothLocalSupportedFeatures(uint32_t page_num, uint64_t features) {
-  int ret = stats_write(BLUETOOTH_LOCAL_SUPPORTED_FEATURES_REPORTED, page_num, features);
+  int ret = stats_write(
+      BLUETOOTH_LOCAL_SUPPORTED_FEATURES_REPORTED, page_num, static_cast<int64_t>(features));
   if (ret < 0) {
     LOG_WARN(
         "Failed for LogMetricBluetoothLocalSupportedFeatures, "
@@ -539,8 +543,9 @@ void LogMetricBluetoothLEConnection(os::LEConnectionSessionOptions session_optio
 
   if (ret < 0) {
     LOG_WARN(
-        "Failed BluetoothLeSessionConnected - ACL Connection State: %s, Origin Type:  "
+        "Failed BluetoothLeSessionConnected - Address: %s, ACL Connection State: %s, Origin Type:  "
         "%s",
+        ADDRESS_TO_LOGGABLE_CSTR(session_options.remote_address),
         common::ToHexString(session_options.acl_connection_state).c_str(),
         common::ToHexString(session_options.origin_type).c_str());
   }
