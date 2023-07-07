@@ -13,34 +13,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+
+// clang-format off
+// This needs to be included before Backtrace.h to avoid a redefinition
+// of DISALLOW_COPY_AND_ASSIGN
+#include "log.h"
+// clang-format on
+
 #include <client/linux/handler/exception_handler.h>
 #include <gflags/gflags.h>
 #include <unwindstack/AndroidUnwinder.h>
 
+#include <fstream>
 #include <future>
 #include <optional>
 
 #include "model/setup/async_manager.h"
 #include "net/posix/posix_async_socket_connector.h"
 #include "net/posix/posix_async_socket_server.h"
-#include "os/log.h"
 #include "test_environment.h"
 
-using ::android::bluetooth::root_canal::TestEnvironment;
 using ::android::net::PosixAsyncSocketConnector;
 using ::android::net::PosixAsyncSocketServer;
 using rootcanal::AsyncManager;
+using rootcanal::TestEnvironment;
+using namespace rootcanal;
 
-DEFINE_string(controller_properties_file, "",
-              "controller_properties.json file path");
-DEFINE_string(default_commands_file, "",
-              "commands file which root-canal runs it as default");
+DEFINE_string(controller_properties_file, "", "deprecated");
+DEFINE_string(configuration, "", "controller configuration (see config.proto)");
+DEFINE_string(configuration_file, "",
+              "controller configuration file path (see config.proto)");
+DEFINE_string(default_commands_file, "", "deprecated");
+DEFINE_bool(enable_log_color, false, "enable log colors");
 DEFINE_bool(enable_hci_sniffer, false, "enable hci sniffer");
-
-constexpr uint16_t kTestPort = 6401;
-constexpr uint16_t kHciServerPort = 6402;
-constexpr uint16_t kLinkServerPort = 6403;
-constexpr uint16_t kLinkBleServerPort = 6404;
+DEFINE_bool(enable_baseband_sniffer, false, "enable baseband sniffer");
+DEFINE_bool(enable_pcap_filter, false, "enable PCAP filter");
+DEFINE_bool(disable_address_reuse, false,
+            "prevent rootcanal from reusing device addresses");
+DEFINE_uint32(test_port, 6401, "test tcp port");
+DEFINE_uint32(hci_port, 6402, "hci server tcp port");
+DEFINE_uint32(link_port, 6403, "link server tcp port");
+DEFINE_uint32(link_ble_port, 6404, "le link server tcp port");
 
 extern "C" const char* __asan_default_options() {
   return "detect_container_overflow=0";
@@ -54,22 +67,22 @@ bool crash_callback(const void* crash_context, size_t crash_context_size,
     auto* ctx =
         static_cast<const google_breakpad::ExceptionHandler::CrashContext*>(
             crash_context);
-    *tid = ctx->tid;
+    tid = ctx->tid;
     int signal_number = ctx->siginfo.si_signo;
-    LOG_ERROR("Process crashed, signal: %s[%d], tid: %d",
-              strsignal(signal_number), signal_number, ctx->tid);
+    ERROR("Process crashed, signal: {}[{}], tid: {}", strsignal(signal_number),
+          signal_number, ctx->tid);
   } else {
-    LOG_ERROR("Process crashed, signal: unknown, tid: unknown");
+    ERROR("Process crashed, signal: unknown, tid: unknown");
   }
   unwindstack::AndroidLocalUnwinder unwinder;
   unwindstack::AndroidUnwinderData data;
   if (!unwinder.Unwind(tid, data)) {
-    LOG_ERROR("Unwind failed");
+    ERROR("Unwind failed");
     return false;
   }
-  LOG_ERROR("Backtrace:");
+  ERROR("Backtrace:");
   for (const auto& frame : data.frames) {
-    LOG_ERROR("%s", unwinder.FormatFrame(frame).c_str());
+    ERROR("{}", unwinder.FormatFrame(frame));
   }
   return true;
 }
@@ -82,51 +95,57 @@ int main(int argc, char** argv) {
   eh.set_crash_handler(crash_callback);
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
+  rootcanal::log::SetLogColorEnable(FLAGS_enable_log_color);
 
-  LOG_INFO("main");
-  uint16_t test_port = kTestPort;
-  uint16_t hci_server_port = kHciServerPort;
-  uint16_t link_server_port = kLinkServerPort;
-  uint16_t link_ble_server_port = kLinkBleServerPort;
+  INFO("starting rootcanal");
 
-  for (int arg = 0; arg < argc; arg++) {
-    int port = (int)strtol(argv[arg], nullptr, 0);
-    LOG_INFO("%d: %s (%d)", arg, argv[arg], port);
-    if (port < 0 || port > 0xffff) {
-      LOG_WARN("%s out of range", argv[arg]);
-    } else {
-      switch (arg) {
-        case 0:  // executable name
-          break;
-        case 1:
-          test_port = port;
-          break;
-        case 2:
-          hci_server_port = port;
-          break;
-        case 3:
-          link_server_port = port;
-          break;
-        case 4:
-          link_ble_server_port = port;
-          break;
-        default:
-          LOG_WARN("Ignored option %s", argv[arg]);
-      }
-    }
+  if (FLAGS_test_port > UINT16_MAX) {
+    ERROR("test_port out of range: {}", FLAGS_test_port);
+    return -1;
   }
-  AsyncManager am;
+
+  if (FLAGS_hci_port > UINT16_MAX) {
+    ERROR("hci_port out of range: {}", FLAGS_hci_port);
+    return -1;
+  }
+
+  if (FLAGS_link_port > UINT16_MAX) {
+    ERROR("link_port out of range: {}", FLAGS_link_port);
+    return -1;
+  }
+
+  if (FLAGS_link_ble_port > UINT16_MAX) {
+    ERROR("link_ble_port out of range: {}", FLAGS_link_ble_port);
+    return -1;
+  }
+
+  std::string configuration_str;
+  if (!FLAGS_configuration.empty()) {
+    configuration_str = FLAGS_configuration;
+  } else if (!FLAGS_configuration_file.empty()) {
+    std::ifstream file(FLAGS_configuration_file);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    configuration_str.assign(buffer.str());
+  }
+
   TestEnvironment root_canal(
-      std::make_shared<PosixAsyncSocketServer>(test_port, &am),
-      std::make_shared<PosixAsyncSocketServer>(hci_server_port, &am),
-      std::make_shared<PosixAsyncSocketServer>(link_server_port, &am),
-      std::make_shared<PosixAsyncSocketServer>(link_ble_server_port, &am),
-      std::make_shared<PosixAsyncSocketConnector>(&am),
-      FLAGS_controller_properties_file, FLAGS_default_commands_file,
-      FLAGS_enable_hci_sniffer);
+      [](AsyncManager* am, int port) {
+        return std::make_shared<PosixAsyncSocketServer>(port, am);
+      },
+      [](AsyncManager* am) {
+        return std::make_shared<PosixAsyncSocketConnector>(am);
+      },
+      static_cast<int>(FLAGS_test_port), static_cast<int>(FLAGS_hci_port),
+      static_cast<int>(FLAGS_link_port), static_cast<int>(FLAGS_link_ble_port),
+      configuration_str, FLAGS_enable_hci_sniffer,
+      FLAGS_enable_baseband_sniffer, FLAGS_enable_pcap_filter,
+      FLAGS_disable_address_reuse);
+
   std::promise<void> barrier;
   std::future<void> barrier_future = barrier.get_future();
   root_canal.initialize(std::move(barrier));
   barrier_future.wait();
   root_canal.close();
+  return 0;
 }

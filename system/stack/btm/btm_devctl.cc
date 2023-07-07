@@ -34,7 +34,6 @@
 #include "btif/include/btif_bqr.h"
 #include "common/message_loop_thread.h"
 #include "hci/include/hci_layer.h"
-#include "hci/include/hci_packet_factory.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/controller.h"
 #include "main/shim/entry.h"
@@ -51,8 +50,8 @@
 
 extern tBTM_CB btm_cb;
 
-extern void btm_inq_db_reset(void);
-extern void btm_pm_reset(void);
+void btm_inq_db_reset(void);
+void btm_pm_reset(void);
 /******************************************************************************/
 /*               L O C A L    D A T A    D E F I N I T I O N S                */
 /******************************************************************************/
@@ -192,7 +191,7 @@ void BTM_reset_complete() {
 
   btm_pm_reset();
 
-  l2c_link_init();
+  l2c_link_init(controller->get_acl_buffer_count_classic());
 
   // setup the random number generator
   std::srand(std::time(nullptr));
@@ -454,41 +453,11 @@ uint8_t* BTM_ReadDeviceClass(void) {
  ******************************************************************************/
 void BTM_VendorSpecificCommand(uint16_t opcode, uint8_t param_len,
                                uint8_t* p_param_buf, tBTM_VSC_CMPL_CB* p_cb) {
-  /* Allocate a buffer to hold HCI command plus the callback function */
-  void* p_buf = osi_malloc(sizeof(BT_HDR) + sizeof(tBTM_CMPL_CB*) + param_len +
-                           HCIC_PREAMBLE_SIZE);
-
   BTM_TRACE_EVENT("BTM: %s: Opcode: 0x%04X, ParamLen: %i.", __func__, opcode,
                   param_len);
 
   /* Send the HCI command (opcode will be OR'd with HCI_GRP_VENDOR_SPECIFIC) */
-  btsnd_hcic_vendor_spec_cmd(p_buf, opcode, param_len, p_param_buf,
-                             (void*)p_cb);
-}
-
-/*******************************************************************************
- *
- * Function         btm_vsc_complete
- *
- * Description      This function is called when local HCI Vendor Specific
- *                  Command complete message is received from the HCI.
- *
- * Returns          void
- *
- ******************************************************************************/
-void btm_vsc_complete(uint8_t* p, uint16_t opcode, uint16_t evt_len,
-                      tBTM_VSC_CMPL_CB* p_vsc_cplt_cback) {
-  tBTM_VSC_CMPL vcs_cplt_params;
-
-  /* If there was a callback address for vcs complete, call it */
-  if (p_vsc_cplt_cback) {
-    /* Pass paramters to the callback function */
-    vcs_cplt_params.opcode = opcode;     /* Number of bytes in return info */
-    vcs_cplt_params.param_len = evt_len; /* Number of bytes in return info */
-    vcs_cplt_params.p_param_buf = p;
-    (*p_vsc_cplt_cback)(
-        &vcs_cplt_params); /* Call the VSC complete callback function */
-  }
+  btsnd_hcic_vendor_spec_cmd(opcode, param_len, p_param_buf, p_cb);
 }
 
 /*******************************************************************************
@@ -559,18 +528,20 @@ void btm_vendor_specific_evt(const uint8_t* p, uint8_t evt_len) {
   const uint8_t* bqr_ptr = p;
   uint8_t event_code;
   uint8_t len;
-  STREAM_TO_UINT8(event_code, bqr_ptr);
-  STREAM_TO_UINT8(len, bqr_ptr);
-  // Check if there's at least a subevent code
-  if (len > 1 && evt_len > 1 && event_code == HCI_VENDOR_SPECIFIC_EVT) {
-    uint8_t sub_event_code;
-    STREAM_TO_UINT8(sub_event_code, bqr_ptr);
-    if (sub_event_code == HCI_VSE_SUBCODE_BQR_SUB_EVT) {
-      // Excluding the HCI Event packet header and 1 octet sub-event code
-      int16_t bqr_parameter_length = evt_len - HCIE_PREAMBLE_SIZE - 1;
-      const uint8_t* p_bqr_event = bqr_ptr;
-      // The stream currently points to the BQR sub-event parameters
-      switch (sub_event_code) {
+
+  if (evt_len >= 2) {
+    STREAM_TO_UINT8(event_code, bqr_ptr);
+    STREAM_TO_UINT8(len, bqr_ptr);
+    // Check if there's at least a subevent code
+    if (len > 1 && evt_len >= 2 + 1 && event_code == HCI_VENDOR_SPECIFIC_EVT) {
+      uint8_t sub_event_code;
+      STREAM_TO_UINT8(sub_event_code, bqr_ptr);
+      if (sub_event_code == HCI_VSE_SUBCODE_BQR_SUB_EVT) {
+        // Excluding the HCI Event packet header and 1 octet sub-event code
+        int16_t bqr_parameter_length = evt_len - HCIE_PREAMBLE_SIZE - 1;
+        const uint8_t* p_bqr_event = bqr_ptr;
+        // The stream currently points to the BQR sub-event parameters
+        switch (sub_event_code) {
         case bluetooth::bqr::QUALITY_REPORT_ID_LMP_LL_MESSAGE_TRACE:
           if (bqr_parameter_length >= bluetooth::bqr::kLogDumpParamTotalLen) {
             bluetooth::bqr::DumpLmpLlMessage(bqr_parameter_length, p_bqr_event);
@@ -591,6 +562,7 @@ void btm_vendor_specific_evt(const uint8_t* p, uint8_t evt_len) {
 
         default:
           LOG_INFO("Unhandled BQR subevent 0x%02hxx", sub_event_code);
+        }
       }
     }
   }
@@ -667,7 +639,7 @@ tBTM_STATUS BTM_EnableTestMode(void) {
   }
 
   /* mask off all of event from controller */
-  bluetooth::shim::controller_clear_event_mask();
+  bluetooth::shim::BTM_ClearEventMask();
 
   /* Send the HCI command */
   btsnd_hcic_enable_test_mode();
@@ -689,6 +661,11 @@ tBTM_STATUS BTM_EnableTestMode(void) {
  ******************************************************************************/
 tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
                                     tBTM_CMPL_CB* p_cb) {
+  /* Read and Write STORED link key stems from a legacy use-case and is no
+   * longer expected to be used. Disable explicitly for Floss and queue overall
+   * deletion from Fluoride.
+   */
+#if !defined(TARGET_FLOSS)
   /* Check if the previous command is completed */
   if (btm_cb.devcb.p_stored_link_key_cmpl_cb) return (BTM_BUSY);
 
@@ -706,6 +683,7 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
   } else {
     btsnd_hcic_delete_stored_key(*bd_addr, delete_all_flag);
   }
+#endif
 
   return (BTM_SUCCESS);
 }
@@ -721,7 +699,7 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-void btm_delete_stored_link_key_complete(uint8_t* p) {
+void btm_delete_stored_link_key_complete(uint8_t* p, uint16_t evt_len) {
   tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_stored_link_key_cmpl_cb;
   tBTM_DELETE_STORED_LINK_KEY_COMPLETE result;
 
@@ -731,6 +709,11 @@ void btm_delete_stored_link_key_complete(uint8_t* p) {
   if (p_cb) {
     /* Set the call back event to indicate command complete */
     result.event = BTM_CB_EVT_DELETE_STORED_LINK_KEYS;
+
+    if (evt_len < 3) {
+      LOG(ERROR) << __func__ << "Malformatted event packet, too short";
+      return;
+    }
 
     /* Extract the result fields from the HCI event */
     STREAM_TO_UINT8(result.status, p);

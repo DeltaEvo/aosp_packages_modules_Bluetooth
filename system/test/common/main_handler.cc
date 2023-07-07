@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
-#include <base/callback_forward.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback_forward.h>
 #include <base/location.h>
 #include <base/time/time.h>
 #include <sys/types.h>
@@ -53,8 +53,8 @@ bt_status_t do_in_main_thread_delayed(const base::Location& from_here,
 }
 
 void post_on_bt_main(BtMainClosure closure) {
-  ASSERT(do_in_main_thread(
-             FROM_HERE, base::Bind(do_post_on_bt_main, std::move(closure))) ==
+  ASSERT(do_in_main_thread(FROM_HERE, base::BindOnce(do_post_on_bt_main,
+                                                     std::move(closure))) ==
          BT_STATUS_SUCCESS);
 }
 
@@ -77,22 +77,3 @@ void sync_main_handler() {
   post_on_bt_main([&promise]() { promise.set_value(); });
   future.wait_for(std::chrono::milliseconds(sync_timeout_in_ms));
 };
-
-bool is_on_main_thread() {
-  // Pthreads doesn't have the concept of a thread ID, so we have to reach down
-  // into the kernel.
-#if defined(OS_MACOSX)
-  return main_thread.GetThreadId() == pthread_mach_thread_np(pthread_self());
-#elif defined(OS_LINUX)
-#include <sys/syscall.h> /* For SYS_xxx definitions */
-#include <unistd.h>
-  return main_thread.GetThreadId() == syscall(__NR_gettid);
-#elif defined(OS_ANDROID)
-#include <sys/types.h>
-#include <unistd.h>
-  return main_thread.GetThreadId() == gettid();
-#else
-  LOG(ERROR) << __func__ << "Unable to determine if on main thread";
-  return true;
-#endif
-}

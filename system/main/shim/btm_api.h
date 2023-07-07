@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "base/functional/callback.h"
 #include "device/include/esco_parameters.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/neighbor_inquiry.h"
@@ -123,6 +124,23 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
 void BTM_BleOpportunisticObserve(bool enable,
                                  tBTM_INQ_RESULTS_CB* p_results_cb);
 
+/*******************************************************************************
+ *
+ * Function         BTM_BleTargetAnnouncementObserve
+ *
+ * Description      Register/Unregister client interested in the targeted
+ *                  announcements. Not that it is client responsible for parsing
+ *                  advertising data.
+ *
+ * Parameters       start: start or stop observe.
+ *                  p_results_cb: callback for results.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTM_BleTargetAnnouncementObserve(bool enable,
+                                      tBTM_INQ_RESULTS_CB* p_results_cb);
+
 void BTM_EnableInterlacedInquiryScan();
 
 void BTM_EnableInterlacedPageScan();
@@ -208,7 +226,7 @@ void BTM_CancelInquiry(void);
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadRemoteDeviceName(const RawAddress& remote_bda,
-                                     tBTM_CMPL_CB* p_cb,
+                                     tBTM_NAME_CMPL_CB* p_cb,
                                      tBT_TRANSPORT transport);
 
 /*******************************************************************************
@@ -301,23 +319,6 @@ tBTM_STATUS BTM_ClearInqDb(const RawAddress* p_bda);
  *
  ******************************************************************************/
 bool BTM_HasEirService(const uint32_t* p_eir_uuid, uint16_t uuid16);
-
-/*******************************************************************************
- *
- * Function         BTM_HasInquiryEirService
- *
- * Description      Return if a UUID is in the bit map of a UUID list.
- *
- * Parameters       p_results - inquiry results
- *                  uuid16 - UUID 16-bit
- *
- * Returns          BTM_EIR_FOUND - if found
- *                  BTM_EIR_NOT_FOUND - if not found and it is a complete list
- *                  BTM_EIR_UNKNOWN - if not found and it is not complete list
- *
- ******************************************************************************/
-tBTM_EIR_SEARCH_RESULT BTM_HasInquiryEirService(tBTM_INQ_RESULTS* p_results,
-                                                uint16_t uuid16);
 
 /*******************************************************************************
  *
@@ -692,42 +693,6 @@ bool BTM_BleSecurityProcedureIsRunning(const RawAddress& bd_addr);
  ******************************************************************************/
 uint8_t BTM_BleGetSupportedKeySize(const RawAddress& bd_addr);
 
-void BTM_LE_PF_local_name(tBTM_BLE_SCAN_COND_OP action,
-                          tBTM_BLE_PF_FILT_INDEX filt_index,
-                          std::vector<uint8_t> name, tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_srvc_data(tBTM_BLE_SCAN_COND_OP action,
-                         tBTM_BLE_PF_FILT_INDEX filt_index);
-
-void BTM_LE_PF_manu_data(tBTM_BLE_SCAN_COND_OP action,
-                         tBTM_BLE_PF_FILT_INDEX filt_index, uint16_t company_id,
-                         uint16_t company_id_mask, std::vector<uint8_t> data,
-                         std::vector<uint8_t> data_mask,
-                         tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_srvc_data_pattern(tBTM_BLE_SCAN_COND_OP action,
-                                 tBTM_BLE_PF_FILT_INDEX filt_index,
-                                 std::vector<uint8_t> data,
-                                 std::vector<uint8_t> data_mask,
-                                 tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_addr_filter(tBTM_BLE_SCAN_COND_OP action,
-                           tBTM_BLE_PF_FILT_INDEX filt_index, tBLE_BD_ADDR addr,
-                           tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_uuid_filter(tBTM_BLE_SCAN_COND_OP action,
-                           tBTM_BLE_PF_FILT_INDEX filt_index,
-                           tBTM_BLE_PF_COND_TYPE filter_type,
-                           const bluetooth::Uuid& uuid,
-                           tBTM_BLE_PF_LOGIC_TYPE cond_logic,
-                           const bluetooth::Uuid& uuid_mask,
-                           tBTM_BLE_PF_CFG_CBACK cb);
-
-void BTM_LE_PF_set(tBTM_BLE_PF_FILT_INDEX filt_index,
-                   std::vector<ApcfCommand> commands, tBTM_BLE_PF_CFG_CBACK cb);
-void BTM_LE_PF_clear(tBTM_BLE_PF_FILT_INDEX filt_index,
-                     tBTM_BLE_PF_CFG_CBACK cb);
-
 /*******************************************************************************
  *
  * Function         BTM_BleAdvFilterParamSetup
@@ -740,30 +705,6 @@ void BTM_BleAdvFilterParamSetup(
     tBTM_BLE_SCAN_COND_OP action, tBTM_BLE_PF_FILT_INDEX filt_index,
     std::unique_ptr<btgatt_filt_param_setup_t> p_filt_params,
     tBTM_BLE_PF_PARAM_CB cb);
-
-/*******************************************************************************
- *
- * Function         BTM_BleUpdateAdvFilterPolicy
- *
- * Description      This function update the filter policy of advertiser.
- *
- * Parameter        adv_policy: advertising filter policy
- *
- * Return           void
- ******************************************************************************/
-void BTM_BleUpdateAdvFilterPolicy(tBTM_BLE_AFP adv_policy);
-
-/*******************************************************************************
- *
- * Function         BTM_BleEnableDisableFilterFeature
- *
- * Description      Enable or disable the APCF feature
- *
- * Parameters       enable - true - enables APCF, false - disables APCF
- *
- ******************************************************************************/
-void BTM_BleEnableDisableFilterFeature(uint8_t enable,
-                                       tBTM_BLE_PF_STATUS_CBACK p_stat_cback);
 
 /*******************************************************************************
  *
@@ -1257,6 +1198,18 @@ void BTM_EScoConnRsp(uint16_t sco_inx, uint8_t hci_status,
  ******************************************************************************/
 uint8_t BTM_GetNumScoLinks(void);
 
+/*******************************************************************************
+ *
+ * Function         BTM_GetScoDebugDump
+ *
+ * Description      Get the status of SCO. This function is only used for
+ *                  testing and debugging purposes.
+ *
+ * Returns          Data with SCO related debug dump.
+ *
+ ******************************************************************************/
+tBTM_SCO_DEBUG_DUMP BTM_GetScoDebugDump(void);
+
 /*****************************************************************************
  *  SECURITY MANAGEMENT FUNCTIONS
  ****************************************************************************/
@@ -1623,18 +1576,6 @@ tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
- * Function         BTM_SecReadDevName
- *
- * Description      Looks for the device name in the security database for the
- *                  specified BD address.
- *
- * Returns          Pointer to the name or NULL
- *
- ******************************************************************************/
-char* BTM_SecReadDevName(const RawAddress& bd_addr);
-
-/*******************************************************************************
- *
  * Function         BTM_GetHCIConnHandle
  *
  * Description      This function is called to get the handle for an ACL
@@ -1820,6 +1761,114 @@ tBTM_STATUS BTM_BleGetEnergyInfo(tBTM_BLE_ENERGY_INFO_CBACK* p_ener_cback);
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ClearEventFilter(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_ClearEventMask
+ *
+ * Description      Clears the event mask in the controller
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_ClearEventMask(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_ClearFilterAcceptList
+ *
+ * Description      Clears the connect list in the controller
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_ClearFilterAcceptList(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_DisconnectAllAcls
+ *
+ * Description      Disconnects all of the ACL connections
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_DisconnectAllAcls(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_LeRand
+ *
+ * Description      Retrieves a random number from the controller
+ *
+ * Parameters       cb - The callback to receive the random number
+ *
+ * Returns          Return btm status
+ *
+ ******************************************************************************/
+using LeRandCallback = base::Callback<void(uint64_t)>;
+tBTM_STATUS BTM_LeRand(LeRandCallback);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetEventFilterConnectionSetupAllDevices
+ *
+ * Description    Tell the controller to allow all devices
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetEventFilterConnectionSetupAllDevices(void);
+
+/*******************************************************************************
+ *
+ * Function        BTM_AllowWakeByHid
+ *
+ * Description     Allow the device to be woken by HID devices
+ *
+ * Parameters      std::vector of RawAddress
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_AllowWakeByHid(
+    std::vector<RawAddress> classic_hid_devices,
+    std::vector<std::pair<RawAddress, uint8_t>> le_hid_devices);
+
+/*******************************************************************************
+ *
+ * Function        BTM_RestoreFilterAcceptList
+ *
+ * Description    Floss: Restore the state of the for the filter accept list
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_RestoreFilterAcceptList(
+    std::vector<std::pair<RawAddress, uint8_t>> le_devices);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetDefaultEventMaskExcept
+ *
+ * Description    Floss: Set the default event mask for Classic and LE except
+ *                the given values (they will be disabled in the final set
+ *                mask).
+ *
+ * Parameters     Bits set for event mask and le event mask that should be
+ *                disabled in the final value.
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetDefaultEventMaskExcept(uint64_t mask, uint64_t le_mask);
+
+/*******************************************************************************
+ *
+ * Function        BTM_SetEventFilterInquiryResultAllDevices
+ *
+ * Description    Floss: Set the event filter to inquiry result device all
+ *
+ * Parameters
+ *
+ *******************************************************************************/
+tBTM_STATUS BTM_SetEventFilterInquiryResultAllDevices(void);
 
 /*******************************************************************************
  *

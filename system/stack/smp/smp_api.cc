@@ -28,7 +28,6 @@
 #include <string.h>
 
 #include "bt_target.h"
-#include "bt_utils.h"
 #include "gd/os/log.h"
 #include "gd/os/rand.h"
 #include "l2c_api.h"
@@ -147,7 +146,7 @@ tSMP_STATUS SMP_Pair(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type) {
 
   SMP_TRACE_EVENT("%s: state=%d br_state=%d flag=0x%x, bd_addr=%s", __func__,
                   p_cb->state, p_cb->br_state, p_cb->flags,
-                  bd_addr.ToString().c_str());
+                  ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
   if (p_cb->state != SMP_STATE_IDLE ||
       p_cb->flags & SMP_PAIR_FLAGS_WE_STARTED_DD || p_cb->smp_over_br) {
@@ -199,7 +198,7 @@ tSMP_STATUS SMP_BR_PairWith(const RawAddress& bd_addr) {
 
   SMP_TRACE_EVENT("%s: state=%d br_state=%d flag=0x%x, bd_addr=%s", __func__,
                   p_cb->state, p_cb->br_state, p_cb->flags,
-                  bd_addr.ToString().c_str());
+                  ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
   if (p_cb->state != SMP_STATE_IDLE || p_cb->smp_over_br ||
       p_cb->flags & SMP_PAIR_FLAGS_WE_STARTED_DD) {
@@ -567,10 +566,13 @@ void SMP_SecureConnectionOobDataReply(uint8_t* p_data) {
  * Description      This function is called to generate a public key to be
  *                  passed to a remote device via Out of Band transport.
  *
+ * Returns          true if the request is successfully sent and executed by the
+ *                  state machine, false otherwise
+ *
  ******************************************************************************/
-void SMP_CrLocScOobData() {
+bool SMP_CrLocScOobData() {
   tSMP_INT_DATA smp_int_data;
-  smp_sm_event(&smp_cb, SMP_CR_LOC_SC_OOB_DATA_EVT, &smp_int_data);
+  return smp_sm_event(&smp_cb, SMP_CR_LOC_SC_OOB_DATA_EVT, &smp_int_data);
 }
 
 /*******************************************************************************
@@ -581,3 +583,53 @@ void SMP_CrLocScOobData() {
  *
  ******************************************************************************/
 void SMP_ClearLocScOobData() { smp_clear_local_oob_data(); }
+
+/*******************************************************************************
+ *
+ * Function         SMP_SirkConfirmDeviceReply
+ *
+ * Description      This function is called after Security Manager submitted
+ *                  verification of device with CSIP.
+ *
+ * Parameters:      bd_addr      - Address of the device with which verification
+ *                                 was requested
+ *                  res          - comparison result SMP_SUCCESS if success
+ *
+ ******************************************************************************/
+void SMP_SirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res) {
+  LOG_ASSERT(!bluetooth::shim::is_gd_shim_enabled())
+      << "Legacy SMP API should not be invoked when GD Security is used";
+
+  tSMP_CB* p_cb = &smp_cb;
+
+  LOG_INFO("Result: %d", res);
+
+  /* If timeout already expired or has been canceled, ignore the reply */
+  if (p_cb->cb_evt != SMP_SIRK_VERIFICATION_REQ_EVT) {
+    LOG_WARN("Wrong State: %d", p_cb->state);
+    return;
+  }
+
+  if (bd_addr != p_cb->pairing_bda) {
+    LOG_WARN("Wrong confirmation BD Addr: %s vs expected %s",
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
+             ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+    return;
+  }
+
+  if (btm_find_dev(bd_addr) == NULL) {
+    LOG_ERROR("No dev CB");
+    return;
+  }
+
+  tSMP_INT_DATA smp_int_data;
+  if (res != SMP_SUCCESS) {
+    LOG_WARN("Verification fails");
+    /* send pairing failure */
+    smp_int_data.status = SMP_SIRK_DEVICE_INVALID;
+    smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
+  } else {
+    smp_int_data.status = SMP_SUCCESS;
+    smp_sm_event(p_cb, SMP_SIRK_DEVICE_VALID_EVT, &smp_int_data);
+  }
+}

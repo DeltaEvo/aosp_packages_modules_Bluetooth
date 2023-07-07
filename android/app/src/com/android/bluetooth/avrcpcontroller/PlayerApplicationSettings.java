@@ -19,6 +19,9 @@ package com.android.bluetooth.avrcpcontroller;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
 import android.util.SparseArray;
+import android.util.SparseIntArray;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 
@@ -39,25 +42,33 @@ class PlayerApplicationSettings {
     private static final byte JNI_EQUALIZER_STATUS_OFF = 0x01;
     private static final byte JNI_EQUALIZER_STATUS_ON = 0x02;
 
-    private static final byte JNI_REPEAT_STATUS_OFF = 0x01;
-    private static final byte JNI_REPEAT_STATUS_SINGLE_TRACK_REPEAT = 0x02;
-    private static final byte JNI_REPEAT_STATUS_ALL_TRACK_REPEAT = 0x03;
-    private static final byte JNI_REPEAT_STATUS_GROUP_REPEAT = 0x04;
+    @VisibleForTesting
+    static final byte JNI_REPEAT_STATUS_OFF = 0x01;
+    @VisibleForTesting
+    static final byte JNI_REPEAT_STATUS_SINGLE_TRACK_REPEAT = 0x02;
+    @VisibleForTesting
+    static final byte JNI_REPEAT_STATUS_ALL_TRACK_REPEAT = 0x03;
+    @VisibleForTesting
+    static final byte JNI_REPEAT_STATUS_GROUP_REPEAT = 0x04;
 
-    private static final byte JNI_SHUFFLE_STATUS_OFF = 0x01;
-    private static final byte JNI_SHUFFLE_STATUS_ALL_TRACK_SHUFFLE = 0x02;
-    private static final byte JNI_SHUFFLE_STATUS_GROUP_SHUFFLE = 0x03;
+    @VisibleForTesting
+    static final byte JNI_SHUFFLE_STATUS_OFF = 0x01;
+    @VisibleForTesting
+    static final byte JNI_SHUFFLE_STATUS_ALL_TRACK_SHUFFLE = 0x02;
+    @VisibleForTesting
+    static final byte JNI_SHUFFLE_STATUS_GROUP_SHUFFLE = 0x03;
 
     private static final byte JNI_SCAN_STATUS_OFF = 0x01;
     private static final byte JNI_SCAN_STATUS_ALL_TRACK_SCAN = 0x02;
     private static final byte JNI_SCAN_STATUS_GROUP_SCAN = 0x03;
 
-    private static final byte JNI_STATUS_INVALID = -1;
+    @VisibleForTesting
+    static final byte JNI_STATUS_INVALID = -1;
 
     /*
      * Hash map of current settings.
      */
-    private SparseArray<Integer> mSettings = new SparseArray<>();
+    private SparseIntArray mSettings = new SparseIntArray();
 
     /*
      * Hash map of supported values, a setting should be supported by the remote in order to enable
@@ -118,12 +129,12 @@ class PlayerApplicationSettings {
     }
 
     public int getSetting(int settingType) {
-        if (null == mSettings.get(settingType)) return -1;
-        return mSettings.get(settingType);
+        return mSettings.get(settingType, -1);
     }
 
     // Convert a native Attribute Id/Value pair into the AVRCP equivalent value.
-    private static int mapAttribIdValtoAvrcpPlayerSetting(byte attribId, byte attribVal) {
+    @VisibleForTesting
+    static int mapAttribIdValtoAvrcpPlayerSetting(byte attribId, byte attribVal) {
         if (attribId == REPEAT_STATUS) {
             switch (attribVal) {
                 case JNI_REPEAT_STATUS_ALL_TRACK_REPEAT:

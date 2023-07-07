@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "fcntl.h"
-#include "os/log.h"
+#include "log.h"
 #include "sys/select.h"
 #include "unistd.h"
 
@@ -105,7 +105,7 @@ class AsyncManager::AsyncFdWatcher {
     // start the thread if not started yet
     int started = tryStartThread();
     if (started != 0) {
-      LOG_ERROR("%s: Unable to start thread", __func__);
+      ERROR("{}: Unable to start thread", __func__);
       return started;
     }
 
@@ -136,8 +136,8 @@ class AsyncManager::AsyncFdWatcher {
     if (std::this_thread::get_id() != thread_.get_id()) {
       thread_.join();
     } else {
-      LOG_WARN("%s: Starting thread stop from inside the reading thread itself",
-               __func__);
+      WARNING("{}: Starting thread stop from inside the reading thread itself",
+              __func__);
     }
 
     {
@@ -158,8 +158,8 @@ class AsyncManager::AsyncFdWatcher {
     // set up the communication channel
     int pipe_fds[2];
     if (pipe2(pipe_fds, O_NONBLOCK)) {
-      LOG_ERROR(
-          "%s:Unable to establish a communication channel to the reading "
+      ERROR(
+          "{}: Unable to establish a communication channel to the reading "
           "thread",
           __func__);
       return -1;
@@ -169,16 +169,16 @@ class AsyncManager::AsyncFdWatcher {
 
     thread_ = std::thread([this]() { ThreadRoutine(); });
     if (!thread_.joinable()) {
-      LOG_ERROR("%s: Unable to start reading thread", __func__);
+      ERROR("{}: Unable to start reading thread", __func__);
       return -1;
     }
     return 0;
   }
 
-  int notifyThread() {
+  int notifyThread() const {
     char buffer = '0';
     if (TEMP_FAILURE_RETRY(write(notification_write_fd_, &buffer, 1)) < 0) {
-      LOG_ERROR("%s: Unable to send message to reading thread", __func__);
+      ERROR("{}: Unable to send message to reading thread", __func__);
       return -1;
     }
     return 0;
@@ -201,7 +201,7 @@ class AsyncManager::AsyncFdWatcher {
   }
 
   // check the comm channel and read everything there
-  bool consumeThreadNotifications(fd_set& read_fds) {
+  bool consumeThreadNotifications(fd_set& read_fds) const {
     if (FD_ISSET(notification_listen_fd_, &read_fds)) {
       char buffer[kNotificationBufferSize];
       while (TEMP_FAILURE_RETRY(read(notification_listen_fd_, buffer,
@@ -236,9 +236,9 @@ class AsyncManager::AsyncFdWatcher {
       // wait until there is data available to read on some FD
       int retval = select(nfds + 1, &read_fds, NULL, NULL, NULL);
       if (retval <= 0) {  // there was some error or a timeout
-        LOG_ERROR(
-            "%s: There was an error while waiting for data on the file "
-            "descriptors: %s",
+        ERROR(
+            "{}: There was an error while waiting for data on the file "
+            "descriptors: {}",
             __func__, strerror(errno));
         continue;
       }
@@ -303,6 +303,11 @@ class AsyncManager::AsyncTaskManager {
     return true;
   }
 
+  void Synchronize(const CriticalCallback& critical) {
+    std::unique_lock<std::mutex> guard(synchronization_mutex_);
+    critical();
+  }
+
   AsyncTaskManager() = default;
   AsyncTaskManager(const AsyncTaskManager&) = delete;
   AsyncTaskManager& operator=(const AsyncTaskManager&) = delete;
@@ -324,8 +329,8 @@ class AsyncManager::AsyncTaskManager {
     if (std::this_thread::get_id() != thread_.get_id()) {
       thread_.join();
     } else {
-      LOG_WARN("%s: Starting thread stop from inside the task thread itself",
-               __func__);
+      WARNING("{}: Starting thread stop from inside the task thread itself",
+              __func__);
     }
     return 0;
   }
@@ -405,8 +410,9 @@ class AsyncManager::AsyncTaskManager {
     {
       std::unique_lock<std::mutex> guard(internal_mutex_);
       // no more room for new tasks, we need a larger type for IDs
-      if (tasks_by_id_.size() == kMaxTaskId)  // TODO potentially type unsafe
+      if (tasks_by_id_.size() == kMaxTaskId) {  // TODO potentially type unsafe
         return kInvalidTaskId;
+      }
       do {
         lastTaskId_ = NextAsyncTaskId(lastTaskId_);
       } while (isTaskIdInUse(lastTaskId_));
@@ -419,7 +425,7 @@ class AsyncManager::AsyncTaskManager {
     // start thread if necessary
     int started = tryStartThread();
     if (started != 0) {
-      LOG_ERROR("%s: Unable to start thread", __func__);
+      ERROR("{}: Unable to start thread", __func__);
       return kInvalidTaskId;
     }
     // notify the thread so that it knows of the new task
@@ -443,7 +449,7 @@ class AsyncManager::AsyncTaskManager {
     running_ = true;
     thread_ = std::thread([this]() { ThreadRoutine(); });
     if (!thread_.joinable()) {
-      LOG_ERROR("%s: Unable to start task thread", __func__);
+      ERROR("{}: Unable to start task thread", __func__);
       return -1;
     }
     return 0;
@@ -475,14 +481,16 @@ class AsyncManager::AsyncTaskManager {
       }
       if (run_it) {
         const std::lock_guard<std::mutex> lock(task_p->in_callback);
-        callback();
+        Synchronize(callback);
       }
       {
         std::unique_lock<std::mutex> guard(internal_mutex_);
         // check for termination right before waiting
-        if (!running_) break;
+        if (!running_) {
+          break;
+        }
         // wait until time for the next task (if any)
-        if (task_queue_.size() > 0) {
+        if (!task_queue_.empty()) {
           // Make a copy of the time_point because wait_until takes a reference
           // to it and may read it after waiting, by which time the task may
           // have been freed (e.g. via CancelAsyncTask).
@@ -499,6 +507,7 @@ class AsyncManager::AsyncTaskManager {
   bool running_ = false;
   std::thread thread_;
   std::mutex internal_mutex_;
+  std::mutex synchronization_mutex_;
   std::condition_variable internal_cond_var_;
 
   AsyncTaskId lastTaskId_ = kInvalidTaskId;
@@ -560,7 +569,6 @@ bool AsyncManager::CancelAsyncTasksFromUser(rootcanal::AsyncUserId user_id) {
 }
 
 void AsyncManager::Synchronize(const CriticalCallback& critical) {
-  std::unique_lock<std::mutex> guard(synchronization_mutex_);
-  critical();
+  taskManager_p_->Synchronize(critical);
 }
 }  // namespace rootcanal

@@ -19,11 +19,19 @@
         <option name="test-file-name" value="FrameworkBluetoothTests.apk" />
     </target_preparer>
 
+    <target_preparer class="com.android.tradefed.targetprep.RootTargetPreparer">
+        <option name="force-root" value="true" />
+    </target_preparer>
+
     <option name="test-suite-tag" value="apct"/>
     <option name="test-tag" value="FrameworkBluetoothTests"/>
 
     <test class="com.android.tradefed.testtype.AndroidJUnitTest" >
         <option name="package" value="com.android.framework.bluetooth.tests" />
+        <!-- include and exclude filters go into /data/local/tmp/ajur/ by default
+             However it's prohibited for access by system uid packages.
+             So instead we use the app cache folder for filter -->
+        <option name="test-filter-dir" value="/data/data/com.android.bluetooth/cache" />
         <option name="hidden-api-checks" value="false"/>
         <option name="runner" value="androidx.test.runner.AndroidJUnitRunner"/>
     </test>
@@ -31,6 +39,7 @@
     <!-- Only run FrameworkBluetoothTests in MTS if the Bluetooth Mainline module is installed. -->
     <object type="module_controller"
             class="com.android.tradefed.testtype.suite.module.MainlineTestModuleController">
-        <option name="mainline-module-package-name" value="com.google.android.bluetooth" />
+        <option name="mainline-module-package-name" value="com.android.btservices" />
+        <option name="mainline-module-package-name" value="com.google.android.btservices" />
     </object>
 </configuration>

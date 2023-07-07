@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """A2DP proxy module."""
 
 import time
@@ -20,10 +19,11 @@ from typing import Optional
 from grpc import RpcError
 
 from mmi2grpc._audio import AudioSignal
-from mmi2grpc._helpers import assert_description
+from mmi2grpc._helpers import assert_description, match_description
 from mmi2grpc._proxy import ProfileProxy
-from pandora.a2dp_grpc import A2DP
-from pandora.a2dp_pb2 import Sink, Source, PlaybackAudioRequest
+from mmi2grpc._rootcanal import RootCanal
+from pandora_experimental.a2dp_grpc import A2DP
+from pandora_experimental.a2dp_pb2 import Sink, Source, PlaybackAudioRequest
 from pandora.host_grpc import Host
 from pandora.host_pb2 import Connection
 
@@ -41,23 +41,21 @@ class A2DPProxy(ProfileProxy):
     sink: Optional[Sink] = None
     source: Optional[Source] = None
 
-    def __init__(self, channel):
-        super().__init__()
+    def __init__(self, channel, rootcanal):
+        super().__init__(channel)
 
         self.host = Host(channel)
         self.a2dp = A2DP(channel)
+        self.rootcanal = rootcanal
 
         def convert_frame(data):
             return PlaybackAudioRequest(data=data, source=self.source)
-        self.audio = AudioSignal(
-            lambda frames: self.a2dp.PlaybackAudio(map(convert_frame, frames)),
-            AUDIO_SIGNAL_AMPLITUDE,
-            AUDIO_SIGNAL_SAMPLING_RATE
-        )
+
+        self.audio = AudioSignal(lambda frames: self.a2dp.PlaybackAudio(map(convert_frame, frames)),
+                                 AUDIO_SIGNAL_AMPLITUDE, AUDIO_SIGNAL_SAMPLING_RATE)
 
     @assert_description
-    def TSC_AVDTP_mmi_iut_accept_connect(
-            self, test: str, pts_addr: bytes, **kwargs):
+    def TSC_AVDTP_mmi_iut_accept_connect(self, test: str, pts_addr: bytes, **kwargs):
         """
         If necessary, take action to accept the AVDTP Signaling Channel
         Connection initiated by the tester.
@@ -71,25 +69,32 @@ class A2DPProxy(ProfileProxy):
         """
 
         if "SRC" in test:
-            self.connection = self.host.WaitConnection(
-                address=pts_addr).connection
+            self.connection = self.host.WaitConnection(address=pts_addr).connection
             try:
                 if "INT" in test:
-                    self.source = self.a2dp.OpenSource(
-                        connection=self.connection).source
+                    self.source = self.a2dp.OpenSource(connection=self.connection).source
                 else:
-                    self.source = self.a2dp.WaitSource(
-                        connection=self.connection).source
+                    self.source = self.a2dp.WaitSource(connection=self.connection).source
             except RpcError:
                 pass
         else:
-            self.connection = self.host.WaitConnection(
-                address=pts_addr).connection
+            self.connection = self.host.WaitConnection(address=pts_addr).connection
             try:
-                self.sink = self.a2dp.WaitSink(
-                    connection=self.connection).sink
+                self.sink = self.a2dp.WaitSink(connection=self.connection).sink
             except RpcError:
                 pass
+        return "OK"
+
+    @assert_description
+    def TSC_AVDTP_mmi_iut_accept_disconnect(self, **kwargs):
+        """
+        If necessary, take action to accept the AVDTP Signaling Channnel
+        Disconnection initiated by the tester.
+
+        Note: If an AVCTP signaling
+        channel was established it will also be disconnected.
+        """
+
         return "OK"
 
     @assert_description
@@ -152,22 +157,15 @@ class A2DPProxy(ProfileProxy):
         return "OK"
 
     @assert_description
-    def TSC_AVDTP_mmi_iut_initiate_out_of_range(
-            self, pts_addr: bytes, **kwargs):
+    def TSC_AVDTP_mmi_iut_initiate_out_of_range(self, pts_addr: bytes, **kwargs):
         """
         Move the IUT out of range to create a link loss scenario.
 
         Action: This
         can be also be done by placing the IUT or PTS in an RF shielded box.
          """
+        self.rootcanal.disconnect_phy()
 
-        if self.connection is None:
-            self.connection = self.host.GetConnection(
-                address=pts_addr).connection
-        self.host.Disconnect(connection=self.connection)
-        self.connection = None
-        self.sink = None
-        self.source = None
         return "OK"
 
     @assert_description
@@ -181,17 +179,14 @@ class A2DPProxy(ProfileProxy):
 
         if test == "AVDTP/SRC/ACP/SIG/SMG/BI-29-C":
             time.sleep(2)  # TODO: Remove, AVRCP SegFault
-        if test in ("A2DP/SRC/CC/BV-09-I",
-                    "A2DP/SRC/SET/BV-04-I",
-                    "AVDTP/SRC/ACP/SIG/SMG/BV-18-C",
-                    "AVDTP/SRC/ACP/SIG/SMG/BV-20-C",
-                    "AVDTP/SRC/ACP/SIG/SMG/BV-22-C"):
+        if test in ("A2DP/SRC/CC/BV-09-I", "A2DP/SRC/SET/BV-04-I", "AVDTP/SRC/ACP/SIG/SMG/BV-18-C",
+                    "AVDTP/SRC/ACP/SIG/SMG/BV-20-C", "AVDTP/SRC/ACP/SIG/SMG/BV-22-C"):
             time.sleep(1)  # TODO: Remove, AVRCP SegFault
         if test == "A2DP/SRC/SUS/BV-01-I":
             # Stream is not suspended when we receive the interaction
             time.sleep(1)
-
-        self.a2dp.Start(source=self.source)
+        if test != "A2DP/SRC/SET/BV-03-I":  # Not initiating a2dp start again for this test case
+            self.a2dp.Start(source=self.source)
         self.audio.start()
         return "OK"
 
@@ -401,6 +396,7 @@ class A2DPProxy(ProfileProxy):
         Action: Press OK when the
         IUT is ready to accept Bluetooth connections again.
         """
+        self.rootcanal.reconnect_phy_if_needed()
 
         return "OK"
 
@@ -438,17 +434,20 @@ class A2DPProxy(ProfileProxy):
         # TODO: Extract and verify attribute name and value from description
         return "OK"
 
-    @assert_description
-    def TSC_A2DP_mmi_user_confirm_optional_string_attribute(self, **kwargs):
+    @match_description
+    def TSC_A2DP_mmi_user_confirm_optional_string_attribute(self, name: str, test: str, **kwargs):
         """
         Tester found the optional SDP attribute named 'Service Name'.  Press
         'Yes' if the string displayed below is correct.
 
-        Value: Advanced Audio
-        Source
+        Value: (?P<name>[\w\s]+)
         """
 
-        # TODO: Extract and verify attribute name and value from description
+        if "SRC" in test:
+            assert name == "Advanced Audio Source", name
+        else:
+            assert name == "Advanced Audio Sink", name
+
         return "OK"
 
     @assert_description
@@ -587,4 +586,57 @@ class A2DPProxy(ProfileProxy):
         """
 
         # TODO: verify
+        return "OK"
+
+    @assert_description
+    def TSC_AVDTPEX_mmi_iut_initiate_delayreport(self, **kwargs):
+        """
+        Take action if necessary to initiate a Delay Reporting command.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVDTPEX_mmi_iut_initiate_set_configuration_delay_reporting(self, **kwargs):
+        """
+        Take action to configure a stream with Delay Reporting.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVDTPEX_mmi_iut_initiate_set_configuration_delayreport(self, **kwargs):
+        """
+        Take action to initiate a stream using delay reporting.
+
+        Note: The IUT
+        must send a Delay Report command immediately after configuration of the
+        stream.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVDTP_mmi_iut_initiate_delayreport(self, **kwargs):
+        """
+        Take action if necessary to initiate a Delay Reporting command.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_A2DP_mmi_user_verify_delay_report_value(self, **kwargs):
+        """
+        Is the delay value 3000, within a device acceptable range?
+        """
+        # TODO: verify
+        return "OK"
+
+    @match_description
+    def TSC_A2DP_mmi_iut_reject_set_configuration_error_code(self, **kwargs):
+        """
+        Please prepare the IUT to reject an AVDTP SET CONFIGURATION command with
+        error code (?P<errorcode>[A-Z_]+), then press 'OK' to continue.
+        """
+
         return "OK"

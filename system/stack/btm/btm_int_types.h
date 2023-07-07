@@ -39,7 +39,10 @@
 #define BTM_MAX_SCN_ 31  // PORT_MAX_RFC_PORTS packages/modules/Bluetooth/system/stack/include/rfcdefs.h
 
 constexpr size_t kMaxLogSize = 255;
-constexpr size_t kBtmLogHistoryBufferSize = 100;
+constexpr size_t kBtmLogHistoryBufferSize = 200;
+constexpr size_t kMaxInquiryScanHistory = 10;
+
+extern bluetooth::common::TimestamperInMilliseconds timestamper_in_milliseconds;
 
 class TimestampedStringCircularBuffer
     : public bluetooth::common::TimestampedCircularBuffer<std::string> {
@@ -47,7 +50,7 @@ class TimestampedStringCircularBuffer
   explicit TimestampedStringCircularBuffer(size_t size)
       : bluetooth::common::TimestampedCircularBuffer<std::string>(size) {}
 
-  void Push(std::string s) {
+  void Push(const std::string& s) {
     bluetooth::common::TimestampedCircularBuffer<std::string>::Push(
         s.substr(0, kMaxLogSize));
   }
@@ -114,6 +117,7 @@ typedef struct {
   uint16_t psm;
   bool is_orig;
   tBTM_SEC_CALLBACK* p_callback;
+  tSMP_SIRK_CALLBACK* p_sirk_callback;
   void* p_ref_data;
   uint16_t rfcomm_security_requirement;
   tBT_TRANSPORT transport;
@@ -285,16 +289,7 @@ typedef struct tBTM_CB {
   RawAddress connecting_bda;
   DEV_CLASS connecting_dc;
   uint8_t trace_level;
-  bool is_paging{false};  /* true, if paging is in progess */
   bool is_inquiry{false}; /* true, if inquiry is in progess */
-  fixed_queue_t* page_queue{nullptr};
-
-  bool paging{false};
-  void set_paging() { paging = true; }
-  void reset_paging() { paging = false; }
-  bool is_paging_active() const {
-    return paging;
-  }  // TODO remove all this paging state
 
   fixed_queue_t* sec_pending_q{nullptr}; /* pending sequrity requests in
                                             tBTM_SEC_QUEUE_ENTRY format */
@@ -309,6 +304,18 @@ typedef struct tBTM_CB {
   tACL_CB acl_cb_;
 
   std::shared_ptr<TimestampedStringCircularBuffer> history_{nullptr};
+
+  struct {
+    struct {
+      long long start_time_ms;
+      unsigned long results;
+    } classic_inquiry, le_scan, le_inquiry, le_observe, le_legacy_scan;
+    std::unique_ptr<
+        bluetooth::common::TimestampedCircularBuffer<tBTM_INQUIRY_CMPL>>
+        inquiry_history_ = std::make_unique<
+            bluetooth::common::TimestampedCircularBuffer<tBTM_INQUIRY_CMPL>>(
+            kMaxInquiryScanHistory);
+  } neighbor;
 
   void Init(uint8_t initial_security_mode) {
     memset(&cfg, 0, sizeof(cfg));
@@ -327,8 +334,8 @@ typedef struct tBTM_CB {
     memset(&connecting_dc, 0, sizeof(connecting_dc));
 
     acl_cb_ = {};
+    neighbor = {};
 
-    page_queue = fixed_queue_new(SIZE_MAX);
     sec_pending_q = fixed_queue_new(SIZE_MAX);
     sec_collision_timer = alarm_new("btm.sec_collision_timer");
     pairing_timer = alarm_new("btm.pairing_timer");
@@ -341,11 +348,15 @@ typedef struct tBTM_CB {
 #endif
     security_mode = initial_security_mode;
     pairing_bda = RawAddress::kAny;
-    sec_dev_rec = list_new(osi_free);
+    sec_dev_rec = list_new([](void* ptr) {
+      // Invoke destructor for all record objects and reset to default
+      // initialized value so memory may be properly freed
+      *((tBTM_SEC_DEV_REC*)ptr) = {};
+      osi_free(ptr);
+    });
 
     /* Initialize BTM component structures */
     btm_inq_vars.Init(); /* Inquiry Database and Structures */
-    acl_cb_ = {};
     sco_cb.Init();       /* SCO Database and Structures (If included) */
     devcb.Init();
 
@@ -353,6 +364,7 @@ typedef struct tBTM_CB {
         kBtmLogHistoryBufferSize);
     CHECK(history_ != nullptr);
     history_->Push(std::string("Initialized btm history"));
+    btm_available_index = 1;
   }
 
   void Free() {
@@ -361,9 +373,6 @@ typedef struct tBTM_CB {
     devcb.Free();
     sco_cb.Free();
     btm_inq_vars.Free();
-
-    fixed_queue_free(page_queue, nullptr);
-    page_queue = nullptr;
 
     fixed_queue_free(sec_pending_q, nullptr);
     sec_pending_q = nullptr;
@@ -386,6 +395,7 @@ typedef struct tBTM_CB {
   friend bool BTM_TryAllocateSCN(uint8_t scn);
   friend bool BTM_FreeSCN(uint8_t scn);
   uint8_t btm_scn[BTM_MAX_SCN_];
+  uint8_t btm_available_index;
 } tBTM_CB;
 
 /* security action for L2CAP COC channels */

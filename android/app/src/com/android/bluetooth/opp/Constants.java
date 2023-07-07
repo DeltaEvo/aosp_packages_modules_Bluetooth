@@ -38,6 +38,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.obex.HeaderSet;
 
 import java.io.IOException;
@@ -205,9 +206,13 @@ public class Constants {
     /** Notify NFC of the transfer progress periodically, or it will timeout after 20sec. */
     static final int NFC_ALIVE_CHECK_MS = 10000;
 
+    /**
+     * To log debug/verbose in OPP, use the command "setprop log.tag.BluetoothOpp DEBUG" or
+     * "setprop log.tag.BluetoothOpp VERBOSE" and then "adb root" + "adb shell "stop; start""
+     **/
     static final boolean DEBUG = true;
 
-    static final boolean VERBOSE = false;
+    static final boolean VERBOSE = Log.isLoggable(TAG, Log.VERBOSE);
 
     static final int MAX_RECORDS_IN_DATABASE = 50;
 
@@ -229,7 +234,8 @@ public class Constants {
         Uri contentUri = Uri.parse(BluetoothShare.CONTENT_URI + "/" + id);
         ContentValues updateValues = new ContentValues();
         updateValues.put(BluetoothShare.STATUS, status);
-        context.getContentResolver().update(contentUri, updateValues, null, null);
+        BluetoothMethodProxy.getInstance().contentResolverUpdate(context.getContentResolver(),
+                contentUri, updateValues, null, null);
         Constants.sendIntentIfCompleted(context, contentUri, status);
     }
 

@@ -1,4 +1,3 @@
-
 // Copyright (C) 2021 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 #include <errno.h>
 #include <gtest/gtest.h>
 #include <netdb.h>
@@ -34,7 +34,6 @@
 #include "model/setup/async_manager.h"
 #include "net/posix/posix_async_socket_connector.h"
 #include "net/posix/posix_async_socket_server.h"
-#include "os/log.h"  // for LOG_INFO
 
 namespace android {
 namespace net {
@@ -84,7 +83,7 @@ class PosixSocketTest : public testing::Test {
     pass_.SetOnConnectCallback(
         [&](std::shared_ptr<AsyncDataChannel> sock, AsyncDataChannelServer*) {
           std::unique_lock<std::mutex> guard(m);
-          sock1 = sock;
+          sock1 = std::move(sock);
           cv.notify_all();
         });
     EXPECT_TRUE(pass_.StartListening());
@@ -243,14 +242,14 @@ TEST_F(PosixSocketTest, canConnectMultiple) {
   std::vector<std::shared_ptr<AsyncDataChannel>> connections;
   bool connected = false;
 
-  pass_.SetOnConnectCallback(
-      [&](std::shared_ptr<AsyncDataChannel> sock, AsyncDataChannelServer*) {
-        std::unique_lock<std::mutex> guard(m);
-        connections.push_back(sock);
-        connected = true;
-        ASSERT_TRUE(pass_.StartListening());
-        cv.notify_all();
-      });
+  pass_.SetOnConnectCallback([&](std::shared_ptr<AsyncDataChannel> const& sock,
+                                 AsyncDataChannelServer*) {
+    std::unique_lock<std::mutex> guard(m);
+    connections.push_back(sock);
+    connected = true;
+    ASSERT_TRUE(pass_.StartListening());
+    cv.notify_all();
+  });
   ASSERT_TRUE(pass_.StartListening());
 
   for (int i = 0; i < CONNECTION_COUNT; i++) {

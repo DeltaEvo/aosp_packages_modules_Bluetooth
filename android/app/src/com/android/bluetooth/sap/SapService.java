@@ -24,6 +24,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.ParcelUuid;
 import android.os.PowerManager;
+import android.os.SystemProperties;
 import android.sysprop.BluetoothProperties;
 import android.text.TextUtils;
 import android.util.Log;
@@ -42,14 +43,19 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-@TargetApi(Build.VERSION_CODES.ECLAIR)
 public class SapService extends ProfileService {
 
     private static final String SDP_SAP_SERVICE_NAME = "SIM Access";
     private static final int SDP_SAP_VERSION = 0x0102;
     private static final String TAG = "SapService";
-    public static final boolean DEBUG = false;
-    public static final boolean VERBOSE = false;
+
+    /**
+     * To log debug/verbose in SAP, use the command "setprop log.tag.SapService DEBUG" or
+     * "setprop log.tag.SapService VERBOSE" and then "adb root" + "adb shell "stop; start""
+     **/
+
+    public static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    public static final boolean VERBOSE = Log.isLoggable(TAG, Log.VERBOSE);
 
     /* Message ID's */
     private static final int START_LISTENER = 1;
@@ -172,6 +178,9 @@ public class SapService extends ProfileService {
                                 SDP_SAP_VERSION);
             } catch (IOException e) {
                 Log.e(TAG, "Error create RfcommServerSocket ", e);
+                initSocketOK = false;
+            } catch (SecurityException e) {
+                Log.e(TAG, "Error creating RfcommServerSocket ", e);
                 initSocketOK = false;
             }
 
@@ -394,7 +403,9 @@ public class SapService extends ProfileService {
                     } else if (permission != BluetoothDevice.ACCESS_REJECTED) {
                         Intent intent =
                                 new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_REQUEST);
-                        intent.setPackage(getString(R.string.pairing_ui_package));
+                        intent.setPackage(SystemProperties.get(
+                                Utils.PAIRING_UI_PROPERTY,
+                                getString(R.string.pairing_ui_package)));
                         intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                 BluetoothDevice.REQUEST_TYPE_SIM_ACCESS);
                         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mRemoteDevice);
@@ -402,7 +413,7 @@ public class SapService extends ProfileService {
 
                         mIsWaitingAuthorization = true;
                         setUserTimeoutAlarm();
-                        sendBroadcast(intent, BLUETOOTH_CONNECT,
+                        Utils.sendBroadcast(SapService.this, intent, BLUETOOTH_CONNECT,
                                 Utils.getTempAllowlistBroadcastOptions());
 
                         if (VERBOSE) {
@@ -532,7 +543,8 @@ public class SapService extends ProfileService {
             intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
             intent.putExtra(BluetoothProfile.EXTRA_STATE, mState);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mRemoteDevice);
-            sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+            Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                    Utils.getTempAllowlistBroadcastOptions());
         }
     }
 
@@ -666,6 +678,7 @@ public class SapService extends ProfileService {
     protected boolean start() {
         Log.v(TAG, "start()");
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
@@ -769,7 +782,9 @@ public class SapService extends ProfileService {
 
     private void sendCancelUserConfirmationIntent(BluetoothDevice device) {
         Intent intent = new Intent(BluetoothDevice.ACTION_CONNECTION_ACCESS_CANCEL);
-        intent.setPackage(getString(R.string.pairing_ui_package));
+        intent.setPackage(SystemProperties.get(
+                Utils.PAIRING_UI_PROPERTY,
+                getString(R.string.pairing_ui_package)));
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                 BluetoothDevice.REQUEST_TYPE_SIM_ACCESS);
@@ -801,9 +816,10 @@ public class SapService extends ProfileService {
         } // Can only be null during shutdown
     }
 
-    private SapBroadcastReceiver mSapReceiver = new SapBroadcastReceiver();
+    @VisibleForTesting SapBroadcastReceiver mSapReceiver = new SapBroadcastReceiver();
 
-    private class SapBroadcastReceiver extends BroadcastReceiver {
+    @VisibleForTesting
+    class SapBroadcastReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
 
@@ -834,7 +850,8 @@ public class SapService extends ProfileService {
                 Log.v(TAG, " - Received BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY");
 
                 int requestType = intent.getIntExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE, -1);
-                if (requestType != BluetoothDevice.REQUEST_TYPE_SIM_ACCESS) {
+                if (requestType != BluetoothDevice.REQUEST_TYPE_SIM_ACCESS
+                        || !mIsWaitingAuthorization) {
                     return;
                 }
 
@@ -930,8 +947,8 @@ public class SapService extends ProfileService {
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private SapService getService(AttributionSource source) {
-            if (!Utils.checkCallerIsSystemOrActiveUser(TAG)
-                    || !Utils.checkServiceAvailable(mService, TAG)
+            if (!Utils.checkServiceAvailable(mService, TAG)
+                    || !Utils.checkCallerIsSystemOrActiveOrManagedUser(mService, TAG)
                     || !Utils.checkConnectPermissionForDataDelivery(mService, source, TAG)) {
                 return null;
             }

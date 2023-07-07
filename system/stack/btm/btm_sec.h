@@ -24,12 +24,18 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
 
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_device_type.h"
+#include "stack/include/bt_octets.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/security_client_callbacks.h"
+#include "stack/include/smp_api_types.h"
+#include "types/ble_address_with_type.h"
+#include "types/bt_transport.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
@@ -39,8 +45,6 @@
  *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
  ******************************************************************************/
 tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
-
-tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state);
 
 /*******************************************************************************
  *
@@ -97,6 +101,7 @@ bool BTM_IsEncrypted(const RawAddress& bd_addr, tBT_TRANSPORT transport);
 bool BTM_IsLinkKeyAuthed(const RawAddress& bd_addr, tBT_TRANSPORT transport);
 bool BTM_IsLinkKeyKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport);
 bool BTM_IsAuthenticated(const RawAddress& bd_addr, tBT_TRANSPORT transport);
+bool BTM_CanReadDiscoverableCharacteristics(const RawAddress& bd_addr);
 
 /*******************************************************************************
  *
@@ -454,7 +459,7 @@ void btm_sec_conn_req(const RawAddress& bda, uint8_t* dc);
  * Returns          void
  *
  ******************************************************************************/
-void btm_create_conn_cancel_complete(const uint8_t* p);
+void btm_create_conn_cancel_complete(const uint8_t* p, uint16_t evt_len);
 
 /*******************************************************************************
  *
@@ -507,7 +512,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
  * Returns          void
  *
  ******************************************************************************/
-void btm_sec_rmt_host_support_feat_evt(uint8_t* p);
+void btm_sec_rmt_host_support_feat_evt(const uint8_t* p);
 
 /*******************************************************************************
  *
@@ -582,7 +587,7 @@ void btm_rem_oob_req(const uint8_t* p);
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_local_oob_complete(uint8_t* p);
+void btm_read_local_oob_complete(uint8_t* p, uint16_t evt_len);
 
 /*******************************************************************************
  *
@@ -700,23 +705,6 @@ void btm_sec_update_clock_offset(uint16_t handle, uint16_t clock_offset);
 
 /*******************************************************************************
  *
- * Function         btm_sec_execute_procedure
- *
- * Description      This function is called to start required security
- *                  procedure.  There is a case when multiplexing protocol
- *                  calls this function on the originating side, connection to
- *                  the peer will not be established.  This function in this
- *                  case performs only authorization.
- *
- * Returns          BTM_SUCCESS     - permission is granted
- *                  BTM_CMD_STARTED - in process
- *                  BTM_NO_RESOURCES  - permission declined
- *
- ******************************************************************************/
-tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec);
-
-/*******************************************************************************
- *
  * Function         btm_sec_find_first_serv
  *
  * Description      Look for the first record in the service database
@@ -728,18 +716,6 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec);
 tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
 
 bool is_sec_state_equal(void* data, void* context);
-
-/*******************************************************************************
- *
- * Function         btm_sec_find_dev_by_sec_state
- *
- * Description      Look for the record in the device database for the device
- *                  which is being authenticated or encrypted
- *
- * Returns          Pointer to the record or NULL
- *
- ******************************************************************************/
-tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state);
 
 /*******************************************************************************
  *

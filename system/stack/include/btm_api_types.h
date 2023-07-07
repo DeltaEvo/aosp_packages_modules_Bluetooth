@@ -81,12 +81,6 @@ typedef void(tBTM_VSC_CMPL_CB)(tBTM_VSC_CMPL* p1);
 #define BTM_EIR_MAX_SERVICES 46
 
 /* search result in EIR of inquiry database */
-#define BTM_EIR_FOUND 0
-#define BTM_EIR_NOT_FOUND 1
-#define BTM_EIR_UNKNOWN 2
-
-typedef uint8_t tBTM_EIR_SEARCH_RESULT;
-
 typedef enum : uint8_t {
   BTM_BLE_SEC_NONE = 0,
   /* encrypt the link using current key */
@@ -129,12 +123,6 @@ typedef enum : uint8_t {
  ***************************/
 /* Definitions of the parameters passed to BTM_StartInquiry.
  */
-typedef struct /* contains the two device class condition fields */
-{
-  DEV_CLASS dev_class;
-  DEV_CLASS dev_class_mask;
-} tBTM_COD_COND;
-
 constexpr uint8_t BLE_EVT_CONNECTABLE_BIT = 0;
 constexpr uint8_t BLE_EVT_SCANNABLE_BIT = 1;
 constexpr uint8_t BLE_EVT_DIRECTED_BIT = 2;
@@ -148,15 +136,6 @@ constexpr uint8_t PHY_LE_CODED = 0x04;
 
 constexpr uint8_t NO_ADI_PRESENT = 0xFF;
 constexpr uint8_t TX_POWER_NOT_PRESENT = 0x7F;
-
-typedef struct {
-  uint8_t pcm_intf_rate; /* PCM interface rate: 0: 128kbps, 1: 256 kbps;
-                             2:512 bps; 3: 1024kbps; 4: 2048kbps */
-  uint8_t frame_type;    /* frame type: 0: short; 1: long */
-  uint8_t sync_mode;     /* sync mode: 0: peripheral; 1: central */
-  uint8_t clock_mode;    /* clock mode: 0: peripheral; 1: central */
-
-} tBTM_SCO_PCM_PARAM;
 
 /*****************************************************************************
  *  ACL CHANNEL MANAGEMENT
@@ -172,9 +151,6 @@ typedef struct {
 
 /* Define an invalid SCO index and an invalid HCI handle */
 #define BTM_INVALID_SCO_INDEX 0xFFFF
-
-/* Define an invalid SCO disconnect reason */
-#define BTM_INVALID_SCO_DISC_REASON 0xFFFF
 
 #define BTM_SCO_LINK_ONLY_MASK \
   (ESCO_PKT_TYPES_MASK_HV1 | ESCO_PKT_TYPES_MASK_HV2 | ESCO_PKT_TYPES_MASK_HV3)
@@ -192,28 +168,20 @@ typedef uint8_t tBTM_SCO_TYPE;
 /*******************
  * SCO Codec Types
  *******************/
-// TODO(google) This should use common definitions
+// TODO(b/285458890) This should use common definitions
 #define BTM_SCO_CODEC_NONE 0x0000
 #define BTM_SCO_CODEC_CVSD 0x0001
 #define BTM_SCO_CODEC_MSBC 0x0002
+#define BTM_SCO_CODEC_LC3 0x0004
 typedef uint16_t tBTM_SCO_CODEC_TYPE;
 
 /*******************
  * SCO Voice Settings
  *******************/
-#define BTM_VOICE_SETTING_CVSD                                         \
-  ((uint16_t)(HCI_INP_CODING_LINEAR | HCI_INP_DATA_FMT_2S_COMPLEMENT | \
-              HCI_INP_SAMPLE_SIZE_16BIT | HCI_AIR_CODING_FORMAT_CVSD))
-
-#define BTM_VOICE_SETTING_TRANS                                        \
-  ((uint16_t)(HCI_INP_CODING_LINEAR | HCI_INP_DATA_FMT_2S_COMPLEMENT | \
-              HCI_INP_SAMPLE_SIZE_16BIT | HCI_AIR_CODING_FORMAT_TRANSPNT))
 
 /*******************
  * SCO Data Status
  *******************/
-typedef uint8_t tBTM_SCO_DATA_FLAG;
-
 /***************************
  *  SCO Callback Functions
  ***************************/
@@ -225,15 +193,6 @@ typedef void(tBTM_SCO_CB)(uint16_t sco_inx);
 /* tBTM_ESCO_CBACK event types */
 #define BTM_ESCO_CONN_REQ_EVT 2
 typedef uint8_t tBTM_ESCO_EVT;
-
-/* Structure passed with SCO change command and events.
- * Used by both Sync and Enhanced sync messaging
- */
-typedef struct {
-  uint16_t max_latency_ms;
-  uint16_t packet_types;
-  uint8_t retransmission_effort;
-} tBTM_CHG_ESCO_PARAMS;
 
 /* Returned by BTM_ReadEScoLinkParms() */
 struct tBTM_ESCO_DATA {
@@ -256,6 +215,27 @@ typedef union {
  *  eSCO Callback Functions
  ***************************/
 typedef void(tBTM_ESCO_CBACK)(tBTM_ESCO_EVT event, tBTM_ESCO_EVT_DATA* p_data);
+
+/**************************
+ * SCO Types for Debugging and Testing
+ **************************/
+
+/* Define the structure for the WBS packet status dump.  */
+typedef struct {
+  uint64_t begin_ts_raw_us;
+  uint64_t end_ts_raw_us;
+  std::string status_in_hex;
+  std::string status_in_binary;
+} tBTM_SCO_MSBC_PKT_STATUS_DATA;
+
+/* Returned by BTM_GetScoDebugDump */
+typedef struct {
+  bool is_active;
+  bool is_wbs;
+  int total_num_decoded_frames;
+  double pkt_loss_ratio;
+  tBTM_SCO_MSBC_PKT_STATUS_DATA latest_msbc_data;
+} tBTM_SCO_DEBUG_DUMP;
 
 /*****************************************************************************
  *  SECURITY MANAGEMENT
@@ -283,6 +263,7 @@ inline std::string security_mode_text(const tSECURITY_MODE& security_mode) {
   }
 }
 
+/* BTM_SEC security masks */
 enum : uint16_t {
   /* Nothing required */
   BTM_SEC_NONE = 0x0000,
@@ -478,6 +459,26 @@ enum {
 
 typedef uint8_t tBTM_OOB_DATA;
 
+#ifndef CASE_RETURN_TEXT
+#define CASE_RETURN_TEXT(code) \
+  case code:                   \
+    return #code
+#endif
+
+inline std::string btm_oob_data_text(const tBTM_OOB_DATA& data) {
+  switch (data) {
+    CASE_RETURN_TEXT(BTM_OOB_NONE);
+    CASE_RETURN_TEXT(BTM_OOB_PRESENT_192);
+    CASE_RETURN_TEXT(BTM_OOB_PRESENT_256);
+    CASE_RETURN_TEXT(BTM_OOB_PRESENT_192_AND_256);
+    CASE_RETURN_TEXT(BTM_OOB_UNKNOWN);
+    default:
+      return std::string("UNKNOWN[") + std::to_string(data) + std::string("]");
+  }
+}
+
+#undef CASE_RETURN_TEXT
+
 /* data type for BTM_SP_IO_REQ_EVT */
 typedef struct {
   RawAddress bd_addr;     /* peer address */
@@ -602,6 +603,8 @@ typedef void(tBTM_BOND_CANCEL_CMPL_CALLBACK)(tBTM_STATUS result);
 /* KEY update event */
 #define BTM_LE_KEY_EVT (BTM_LE_LAST_FROM_SMP + 1)
 #define BTM_LE_CONSENT_REQ_EVT SMP_CONSENT_REQ_EVT
+/* Identity address associate event */
+#define BTM_LE_ADDR_ASSOC_EVT SMP_LE_ADDR_ASSOC_EVT
 typedef uint8_t tBTM_LE_EVT;
 
 enum : uint8_t {
@@ -635,12 +638,6 @@ typedef uint8_t tBTM_LE_AUTH_REQ;
 #define BTM_LE_AUTH_REQ_SC_MITM SMP_AUTH_SC_MITM_NB      /* 00101100 */
 #define BTM_LE_AUTH_REQ_SC_MITM_BOND SMP_AUTH_SC_MITM_GB /* 00101101 */
 #define BTM_LE_AUTH_REQ_MASK SMP_AUTH_MASK               /* 0x3D */
-
-/* LE security level */
-#define BTM_LE_SEC_NONE SMP_SEC_NONE
-#define BTM_LE_SEC_UNAUTHENTICATE SMP_SEC_UNAUTHENTICATE /* 1 */
-#define BTM_LE_SEC_AUTHENTICATED SMP_SEC_AUTHENTICATED   /* 4 */
-typedef uint8_t tBTM_LE_SEC;
 
 typedef struct {
   /* local IO capabilities */
