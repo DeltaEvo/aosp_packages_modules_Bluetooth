@@ -22,6 +22,7 @@ android_test {
 
     srcs: [
         "src/**/*.java",
+        "src/**/*.kt",
     ],
 
     dxflags: ["--multi-dex"],
@@ -30,9 +31,12 @@ android_test {
 
     static_libs: [
         "androidx.test.rules",
-        "mockito-target-extended-minus-junit4",
-        "platform-test-annotations",
         "frameworks-base-testutils",
+        "kotlinx_coroutines_test",
+        "mockito-target-extended-minus-junit4",
+        "platform-compat-test-rules",
+        "platform-test-annotations",
+        "service-bluetooth.change-ids",
         "truth-prebuilt",
 
         // Statically link service-bluetooth-pre-jarjar since we want to test the working copy of
@@ -46,22 +50,22 @@ android_test {
     jarjar_rules: ":bluetooth-jarjar-rules",
 
     libs: [
-        "android.test.runner",
         "android.test.base",
         "android.test.mock",
+        "android.test.runner",
         "framework-bluetooth-pre-jarjar",
     ],
 
     jni_libs: [
         // these are needed for Extended Mockito
+        "libbluetooth_jni",
         "libdexmakerjvmtiagent",
         "libstaticjvmtiagent",
-        "libbluetooth_jni",
     ],
     compile_multilib: "both",
     certificate: ":com.android.bluetooth.certificate",
 
-    min_sdk_version: "current",
+    min_sdk_version: "Tiramisu",
 
     test_suites: [
         "general-tests",

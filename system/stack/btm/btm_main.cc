@@ -30,6 +30,7 @@
 #include "osi/include/log.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/btm_client_interface.h"
+#include "stack/include/inq_hci_link_interface.h"
 #include "stack_config.h"
 #include "types/raw_address.h"
 
@@ -53,6 +54,11 @@ void btm_init(void) {
   btm_cb.Init(stack_config_get_interface()->get_pts_secure_only_mode()
                   ? BTM_SEC_MODE_SC
                   : BTM_SEC_MODE_SP);
+#ifdef TARGET_FLOSS
+  // Need to set inquery by rssi flag for Floss since Floss doesn't do
+  // btm_inq_db_init
+  btm_inq_db_set_inq_by_rssi();
+#endif
 }
 
 /** This function is called to free dynamic memory and system resource allocated by btm_init */
@@ -77,7 +83,7 @@ static void btm_log_history(const std::string& tag, const char* addr,
 
 void BTM_LogHistory(const std::string& tag, const RawAddress& bd_addr,
                     const std::string& msg, const std::string& extra) {
-  btm_log_history(tag, PRIVATE_ADDRESS(bd_addr), msg, extra);
+  btm_log_history(tag, ADDRESS_TO_LOGGABLE_CSTR(bd_addr), msg, extra);
 }
 
 void BTM_LogHistory(const std::string& tag, const RawAddress& bd_addr,
@@ -87,10 +93,12 @@ void BTM_LogHistory(const std::string& tag, const RawAddress& bd_addr,
 
 void BTM_LogHistory(const std::string& tag, const tBLE_BD_ADDR& ble_bd_addr,
                     const std::string& msg, const std::string& extra) {
-  btm_log_history(tag, PRIVATE_ADDRESS(ble_bd_addr), msg, extra);
+  btm_log_history(tag, ADDRESS_TO_LOGGABLE_CSTR(ble_bd_addr), msg, extra);
 }
 
 void BTM_LogHistory(const std::string& tag, const tBLE_BD_ADDR& ble_bd_addr,
                     const std::string& msg) {
   BTM_LogHistory(tag, ble_bd_addr, msg, std::string());
 }
+
+bluetooth::common::TimestamperInMilliseconds timestamper_in_milliseconds;
