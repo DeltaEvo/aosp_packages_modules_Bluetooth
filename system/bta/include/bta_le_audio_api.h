@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <base/bind.h>
-#include <base/callback.h>
-#include <base/callback_forward.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
+#include <base/functional/callback_forward.h>
 #include <hardware/bt_le_audio.h>
 
 #include <vector>
@@ -29,6 +29,7 @@ class LeAudioHalVerifier {
   static bool SupportsLeAudio();
   static bool SupportsLeAudioHardwareOffload();
   static bool SupportsLeAudioBroadcast();
+  static bool SupportsStreamActiveApi();
 };
 
 /* Interface class */
@@ -48,6 +49,7 @@ class LeAudioClient {
   virtual void RemoveDevice(const RawAddress& address) = 0;
   virtual void Connect(const RawAddress& address) = 0;
   virtual void Disconnect(const RawAddress& address) = 0;
+  virtual void SetEnableState(const RawAddress& address, bool enabled) = 0;
   virtual void GroupAddNode(const int group_id, const RawAddress& addr) = 0;
   virtual void GroupRemoveNode(const int group_id, const RawAddress& addr) = 0;
   virtual void GroupStream(const int group_id, const uint16_t content_type) = 0;
@@ -61,7 +63,12 @@ class LeAudioClient {
       bluetooth::le_audio::btle_audio_codec_config_t output_codec_config) = 0;
   virtual void SetCcidInformation(int ccid, int context_type) = 0;
   virtual void SetInCall(bool in_call) = 0;
+  virtual void SendAudioProfilePreferences(
+      const int group_id, bool is_output_preference_le_audio,
+      bool is_duplex_preference_le_audio) = 0;
 
+  virtual bool isOutputPreferenceLeAudio(const RawAddress& address) = 0;
+  virtual bool isDuplexPreferenceLeAudio(const RawAddress& address) = 0;
   virtual std::vector<RawAddress> GetGroupDevices(const int group_id) = 0;
   static void AddFromStorage(const RawAddress& addr, bool autoconnect,
                              int sink_audio_location, int source_audio_location,

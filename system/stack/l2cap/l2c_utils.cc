@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "device/include/controller.h"
+#include "gd/hal/snoop_logger.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
 #include "osi/include/allocator.h"
@@ -128,7 +129,7 @@ void l2cu_update_lcb_4_bonding(const RawAddress& p_bd_addr, bool is_bonding) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(p_bd_addr, BT_TRANSPORT_BR_EDR);
 
   if (p_lcb) {
-    VLOG(1) << __func__ << " BDA: " << p_bd_addr
+    VLOG(1) << __func__ << " BDA: " << ADDRESS_TO_LOGGABLE_STR(p_bd_addr)
             << " is_bonding: " << is_bonding;
     if (is_bonding) {
       p_lcb->SetBonding();
@@ -1556,6 +1557,16 @@ void l2cu_release_ccb(tL2C_CCB* p_ccb) {
   /* If already released, could be race condition */
   if (!p_ccb->in_use) return;
 
+  if (p_rcb && p_lcb && p_ccb->chnl_state >= CST_OPEN) {
+    bluetooth::shim::GetSnoopLogger()->SetL2capChannelClose(
+        p_ccb->p_lcb->Handle(), p_ccb->local_cid, p_ccb->remote_cid);
+  }
+
+  if (p_lcb) {
+    bluetooth::shim::GetSnoopLogger()->ClearL2capAcceptlist(
+        p_lcb->Handle(), p_ccb->local_cid, p_ccb->remote_cid);
+  }
+
   if (p_rcb && (p_rcb->psm != p_rcb->real_psm)) {
     BTM_SecClrServiceByPsm(p_rcb->psm);
   }
@@ -2263,28 +2274,75 @@ static void l2cu_set_acl_priority_latency_brcm(tL2C_LCB* p_lcb,
 
 /*******************************************************************************
  *
- * Function         l2cu_set_acl_priority_syna
+ * Function         l2cu_set_acl_priority_latency_syna
  *
- * Description      Sends a VSC to set the ACL priority on Synaptics chip.
+ * Description      Sends a VSC to set the ACL priority and recorded latency on
+ *                  Synaptics chip.
  *
  * Returns          void
  *
  ******************************************************************************/
 
-static void l2cu_set_acl_priority_syna(uint16_t handle,
-                                       tL2CAP_PRIORITY priority) {
-  uint8_t* pp;
-  uint8_t command[HCI_SYNA_ACL_PRIORITY_PARAM_SIZE];
+static void l2cu_set_acl_priority_latency_syna(tL2C_LCB* p_lcb,
+                                               tL2CAP_PRIORITY priority) {
   uint8_t vs_param;
+  if (priority == L2CAP_PRIORITY_HIGH) {
+    // priority to high, if using latency mode check preset latency
+    if (p_lcb->use_latency_mode &&
+        p_lcb->preset_acl_latency == L2CAP_LATENCY_LOW) {
+      LOG_INFO("Set ACL priority: High Priority and Low Latency Mode");
+      vs_param = HCI_SYNA_ACL_HIGH_PRIORITY_LOW_LATENCY;
+      p_lcb->set_latency(L2CAP_LATENCY_LOW);
+    } else {
+      LOG_INFO("Set ACL priority: High Priority Mode");
+      vs_param = HCI_SYNA_ACL_HIGH_PRIORITY;
+    }
+  } else {
+    // priority to normal
+    LOG_INFO("Set ACL priority: Normal Mode");
+    vs_param = HCI_SYNA_ACL_NORMAL_PRIORITY;
+    p_lcb->set_latency(L2CAP_LATENCY_NORMAL);
+  }
 
-  pp = command;
-  vs_param = (priority == L2CAP_PRIORITY_HIGH) ? HCI_SYNA_ACL_PRIORITY_HIGH
-                                               : HCI_SYNA_ACL_PRIORITY_LOW;
-  UINT16_TO_STREAM(pp, handle);
+  uint8_t command[HCI_SYNA_ACL_PRIORITY_PARAM_SIZE];
+  uint8_t* pp = command;
+  UINT16_TO_STREAM(pp, p_lcb->Handle());
   UINT8_TO_STREAM(pp, vs_param);
 
   BTM_VendorSpecificCommand(HCI_SYNA_SET_ACL_PRIORITY,
                             HCI_SYNA_ACL_PRIORITY_PARAM_SIZE, command, NULL);
+}
+
+/*******************************************************************************
+ *
+ * Function         l2cu_set_acl_priority_unisoc
+ *
+ * Description      Sends a VSC to set the ACL priority on Unisoc chip.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+
+static void l2cu_set_acl_priority_unisoc(tL2C_LCB* p_lcb,
+                                               tL2CAP_PRIORITY priority) {
+  uint8_t vs_param;
+  if (priority == L2CAP_PRIORITY_HIGH) {
+    // priority to high
+    LOG_INFO("Set ACL priority: High Priority Mode");
+    vs_param = HCI_UNISOC_ACL_HIGH_PRIORITY;
+  } else {
+    // priority to normal
+    LOG_INFO("Set ACL priority: Normal Mode");
+    vs_param = HCI_UNISOC_ACL_NORMAL_PRIORITY;
+  }
+
+  uint8_t command[HCI_UNISOC_ACL_PRIORITY_PARAM_SIZE];
+  uint8_t* pp = command;
+  UINT16_TO_STREAM(pp, p_lcb->Handle());
+  UINT8_TO_STREAM(pp, vs_param);
+
+  BTM_VendorSpecificCommand(HCI_UNISOC_SET_ACL_PRIORITY,
+                            HCI_UNISOC_ACL_PRIORITY_PARAM_SIZE, command, NULL);
 }
 
 /*******************************************************************************
@@ -2324,7 +2382,11 @@ bool l2cu_set_acl_priority(const RawAddress& bd_addr, tL2CAP_PRIORITY priority,
         break;
 
       case LMP_COMPID_SYNAPTICS:
-        l2cu_set_acl_priority_syna(p_lcb->Handle(), priority);
+        l2cu_set_acl_priority_latency_syna(p_lcb, priority);
+        break;
+
+      case LMP_COMPID_UNISOC:
+        l2cu_set_acl_priority_unisoc(p_lcb, priority);
         break;
 
       default:
@@ -2369,6 +2431,32 @@ static void l2cu_set_acl_latency_brcm(tL2C_LCB* p_lcb, tL2CAP_LATENCY latency) {
 
 /*******************************************************************************
  *
+ * Function         l2cu_set_acl_latency_syna
+ *
+ * Description      Sends a VSC to set the ACL latency on Synatics chip.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+
+static void l2cu_set_acl_latency_syna(tL2C_LCB* p_lcb, tL2CAP_LATENCY latency) {
+  LOG_INFO("Set ACL latency: %s",
+           latency == L2CAP_LATENCY_LOW ? "Low Latancy" : "Normal Latency");
+
+  uint8_t command[HCI_SYNA_ACL_PRIORITY_PARAM_SIZE];
+  uint8_t* pp = command;
+  uint8_t vs_param = latency == L2CAP_LATENCY_LOW
+                         ? HCI_SYNA_ACL_HIGH_PRIORITY_LOW_LATENCY
+                         : HCI_SYNA_ACL_HIGH_PRIORITY;
+  UINT16_TO_STREAM(pp, p_lcb->Handle());
+  UINT8_TO_STREAM(pp, vs_param);
+
+  BTM_VendorSpecificCommand(HCI_SYNA_SET_ACL_PRIORITY,
+                            HCI_SYNA_ACL_PRIORITY_PARAM_SIZE, command, NULL);
+}
+
+/*******************************************************************************
+ *
  * Function         l2cu_set_acl_latency
  *
  * Description      Sets the transmission latency for a channel.
@@ -2393,6 +2481,10 @@ bool l2cu_set_acl_latency(const RawAddress& bd_addr, tL2CAP_LATENCY latency) {
     switch (controller_get_interface()->get_bt_version()->manufacturer) {
       case LMP_COMPID_BROADCOM:
         l2cu_set_acl_latency_brcm(p_lcb, latency);
+        break;
+
+      case LMP_COMPID_SYNAPTICS:
+        l2cu_set_acl_latency_syna(p_lcb, latency);
         break;
 
       default:
@@ -2630,16 +2722,9 @@ void l2cu_no_dynamic_ccbs(tL2C_LCB* p_lcb) {
   // be in use even without a GATT client. We only timeout if either a dynamic
   // channel or a GATT client was used, since then we expect the client to
   // manage the lifecycle of the connection.
-
-  // FOR T ONLY: We add the outer safety-check to only do this for LE/ATT, to
-  // minimize behavioral changes outside a dessert release. But for consistency
-  // this should happen throughout on U (i.e. for classic transport + other
-  // fixed channels too)
-  if (p_lcb->p_fixed_ccbs[L2CAP_ATT_CID - L2CAP_FIRST_FIXED_CHNL] != NULL) {
-    if (bluetooth::common::init_flags::finite_att_timeout_is_enabled() &&
-        !p_lcb->with_active_local_clients) {
-      return;
-    }
+  if (bluetooth::common::init_flags::finite_att_timeout_is_enabled() &&
+      !p_lcb->with_active_local_clients) {
+    return;
   }
 
   if (timeout_ms == 0) {
@@ -3445,3 +3530,36 @@ void l2cu_check_channel_congestion(tL2C_CCB* p_ccb) {
  *
  ******************************************************************************/
 bool l2cu_is_ccb_active(tL2C_CCB* p_ccb) { return (p_ccb && p_ccb->in_use); }
+
+/*******************************************************************************
+ *
+ * Function         le_result_to_l2c_conn
+ *
+ * Description      Connvert an LE result code to L2C connection code.
+ *
+ * Returns          The converted L2C connection code.
+ *
+ ******************************************************************************/
+uint16_t le_result_to_l2c_conn(uint16_t result) {
+  tL2CAP_LE_RESULT_CODE code = (tL2CAP_LE_RESULT_CODE)result;
+  switch (code) {
+    case L2CAP_LE_RESULT_CONN_OK:
+    case L2CAP_LE_RESULT_NO_PSM:
+    case L2CAP_LE_RESULT_NO_RESOURCES:
+      return code;
+    case L2CAP_LE_RESULT_INSUFFICIENT_AUTHENTICATION:
+    case L2CAP_LE_RESULT_INSUFFICIENT_AUTHORIZATION:
+    case L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP_KEY_SIZE:
+    case L2CAP_LE_RESULT_INSUFFICIENT_ENCRYP:
+    case L2CAP_LE_RESULT_INVALID_SOURCE_CID:
+    case L2CAP_LE_RESULT_SOURCE_CID_ALREADY_ALLOCATED:
+    case L2CAP_LE_RESULT_UNACCEPTABLE_PARAMETERS:
+    case L2CAP_LE_RESULT_INVALID_PARAMETERS:
+      return L2CAP_CONN_LE_MASK | code;
+    default:
+      if (result < L2CAP_CONN_LE_MASK) {
+        return L2CAP_CONN_LE_MASK | code;
+      }
+      return L2CAP_CONN_OTHER_ERROR;
+  }
+}

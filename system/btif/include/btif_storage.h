@@ -25,6 +25,7 @@
 #include "bt_target.h"
 #include "stack/include/bt_device_type.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btm_api_types.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -38,9 +39,40 @@
     (p_prop)->val = (p_v);                            \
   } while (0)
 
+#define BTIF_STORAGE_PATH_REMOTE_SERVICE "Service"
+
+#define STORAGE_BDADDR_STRING_SZ (18) /* 00:11:22:33:44:55 */
+#define STORAGE_UUID_STRING_SIZE \
+  (36 + 1) /* 00001200-0000-1000-8000-00805f9b34fb; */
+#define STORAGE_PINLEN_STRING_MAX_SIZE (2)  /* ascii pinlen max chars */
+#define STORAGE_KEYTYPE_STRING_MAX_SIZE (1) /* ascii keytype max chars */
+
+#define STORAGE_KEY_TYPE_MAX (10)
+
 /*******************************************************************************
  *  Functions
  ******************************************************************************/
+
+/*******************************************************************************
+ *
+ * Function         btif_in_fetch_bonded_devices
+ *
+ * Description      Helper function to fetch the bonded devices
+ *                  from NVRAM
+ *
+ * Returns          BT_STATUS_SUCCESS if successful, BT_STATUS_FAIL otherwise
+ *
+ ******************************************************************************/
+bt_status_t btif_in_fetch_bonded_device(const std::string& bdstr);
+
+typedef struct {
+  uint32_t num_devices;
+  RawAddress devices[BTM_SEC_MAX_DEVICE_RECORDS];
+} btif_bonded_devices_t;
+
+bt_status_t btif_in_fetch_bonded_ble_device(
+    const std::string& remote_bd_addr, int add,
+    btif_bonded_devices_t* p_bonded_devices);
 
 /*******************************************************************************
  *
@@ -111,20 +143,7 @@ bt_status_t btif_storage_set_remote_device_property(
  *                  returns BTM_LOCAL_IO_CAPS.
  *
  ******************************************************************************/
-uint8_t btif_storage_get_local_io_caps();
-
-/*******************************************************************************
- *
- * Function         btif_storage_get_io_caps_ble
- *
- * Description      BTIF storage API - Fetches the local Input/Output
- *                  capabilities of the BLE device.
- *
- * Returns          Returns local IO Capability of BLE device. If not stored,
- *                  returns BTM_LOCAL_IO_CAPS_BLE.
- *
- ******************************************************************************/
-uint8_t btif_storage_get_local_io_caps_ble();
+tBTM_IO_CAP btif_storage_get_local_io_caps();
 
 /*******************************************************************************
  *

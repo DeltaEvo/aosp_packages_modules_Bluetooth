@@ -17,6 +17,8 @@
  *
  ******************************************************************************/
 
+#include <base/logging.h>
+
 #include <cstdint>
 #include <cstdio>
 
@@ -26,9 +28,10 @@
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
+#include "stack/include/sdp_api.h"
 #include "types/raw_address.h"
 
-#include <base/logging.h>
+using namespace bluetooth::legacy::stack::sdp;
 
 static const char* bta_hf_client_evt_str(uint16_t event);
 static const char* bta_hf_client_state_str(uint8_t state);
@@ -385,7 +388,8 @@ void bta_hf_client_collision_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
 
     /* Cancel SDP if it had been started. */
     if (client_cb->p_disc_db) {
-      (void)SDP_CancelServiceSearch(client_cb->p_disc_db);
+      get_legacy_stack_sdp_api()->service.SDP_CancelServiceSearch(
+          client_cb->p_disc_db);
       osi_free_and_reset((void**)&client_cb->p_disc_db);
     }
 
@@ -437,8 +441,11 @@ tBTA_STATUS bta_hf_client_api_enable(tBTA_HF_CLIENT_CBACK* p_cback,
   bta_sys_collision_register(BTA_ID_HS, bta_hf_client_collision_cback);
 
   /* Set the Audio service class bit */
-  tBTA_UTL_COD cod;
-  cod.service = BTM_COD_SERVICE_AUDIO;
+  tBTA_UTL_COD cod = {
+    .minor = BTM_COD_MINOR_UNCLASSIFIED,
+    .major = BTM_COD_MAJOR_UNCLASSIFIED,
+    .service = BTM_COD_SERVICE_AUDIO,
+  };
   utl_set_device_class(&cod, BTA_UTL_SET_COD_SERVICE_CLASS);
 
   /* start RFCOMM server */
@@ -679,7 +686,7 @@ void bta_hf_client_api_disable() {
  * Returns          bool
  *
  ******************************************************************************/
-bool bta_hf_client_hdl_event(BT_HDR_RIGID* p_msg) {
+bool bta_hf_client_hdl_event(const BT_HDR_RIGID* p_msg) {
   APPL_TRACE_DEBUG("%s: %s (0x%x)", __func__,
                    bta_hf_client_evt_str(p_msg->event), p_msg->event);
   bta_hf_client_sm_execute(p_msg->event, (tBTA_HF_CLIENT_DATA*)p_msg);
