@@ -6,9 +6,10 @@ import re
 from mmi2grpc._helpers import assert_description, match_description
 from mmi2grpc._proxy import ProfileProxy
 
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.security_grpc import Security
-from pandora_experimental.security_pb2 import LESecurityLevel
+from pandora.host_grpc import Host
+from pandora.host_pb2 import RANDOM
+from pandora.security_grpc import Security
+from pandora.security_pb2 import LE_LEVEL3, PairingEventAnswer
 from pandora_experimental.gatt_grpc import GATT
 
 BASE_UUID = uuid.UUID("00000000-0000-1000-8000-00805F9B34FB")
@@ -39,10 +40,10 @@ class HOGPProxy(ProfileProxy):
         to the PTS.
         """
 
-        self.connection = self.host.ConnectLE(public=pts_addr).connection
+        self.connection = self.host.ConnectLE(own_address_type=RANDOM, public=pts_addr).connection
         self.pairing_stream = self.security.OnPairing()
         def secure():
-            self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
+            self.security.Secure(connection=self.connection, le=LE_LEVEL3)
         threading.Thread(target=secure).start()
 
         return "OK"
@@ -55,11 +56,10 @@ class HOGPProxy(ProfileProxy):
         received = []
         for event in self.pairing_stream:
             if event.address == pts_addr and event.numeric_comparison == int(passkey):
-                self.pairing_stream.send(
+                self.pairing_stream.send(PairingEventAnswer(
                     event=event,
                     confirm=True,
-                )
-                self.pairing_stream.close()
+                ))
                 return "OK"
             received.append(event.numeric_comparison)
 

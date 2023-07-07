@@ -15,13 +15,17 @@
  * limitations under the License.
  */
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
+
+#include <mutex>
 
 #include "bta/include/bta_le_audio_api.h"
 #include "bta/include/bta_le_audio_broadcaster_api.h"
 #include "bta/le_audio/broadcaster/state_machine.h"
+#include "bta/le_audio/content_control_id_keeper.h"
 #include "bta/le_audio/le_audio_types.h"
 #include "bta/le_audio/le_audio_utils.h"
+#include "bta/le_audio/metrics_collector.h"
 #include "device/include/controller.h"
 #include "embdrv/lc3/include/lc3.h"
 #include "gd/common/strings.h"
@@ -37,8 +41,11 @@ using bluetooth::hci::iso_manager::big_create_cmpl_evt;
 using bluetooth::hci::iso_manager::big_terminate_cmpl_evt;
 using bluetooth::hci::iso_manager::BigCallbacks;
 using bluetooth::le_audio::BasicAudioAnnouncementData;
+using bluetooth::le_audio::BasicAudioAnnouncementSubgroup;
 using bluetooth::le_audio::BroadcastId;
+using bluetooth::le_audio::PublicBroadcastAnnouncementData;
 using le_audio::CodecManager;
+using le_audio::ContentControlIdKeeper;
 using le_audio::LeAudioCodecConfiguration;
 using le_audio::LeAudioSourceAudioHalClient;
 using le_audio::broadcaster::BigConfig;
@@ -52,12 +59,12 @@ using le_audio::types::CodecLocation;
 using le_audio::types::kLeAudioCodingFormatLC3;
 using le_audio::types::LeAudioContextType;
 using le_audio::types::LeAudioLtvMap;
-using le_audio::utils::GetAllCcids;
 using le_audio::utils::GetAllowedAudioContextsFromSourceMetadata;
 
 namespace {
 class LeAudioBroadcasterImpl;
 LeAudioBroadcasterImpl* instance;
+std::mutex instance_mutex;
 
 /* Class definitions */
 
@@ -130,8 +137,19 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     }
   }
 
-  static BasicAudioAnnouncementData prepareAnnouncement(
-      const BroadcastCodecWrapper& codec_config, LeAudioLtvMap metadata) {
+  static PublicBroadcastAnnouncementData preparePublicAnnouncement(
+      uint8_t features, const LeAudioLtvMap& metadata) {
+    PublicBroadcastAnnouncementData announcement;
+
+    /* Prepare the announcement */
+    announcement.features = features;
+    announcement.metadata = metadata.Values();
+    return announcement;
+  }
+
+  static BasicAudioAnnouncementData prepareBasicAnnouncement(
+      const BroadcastCodecWrapper& codec_config,
+      const std::vector<LeAudioLtvMap>& metadata_group) {
     BasicAudioAnnouncementData announcement;
 
     /* Prepare the announcement */
@@ -139,30 +157,33 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
 
     auto const& codec_id = codec_config.GetLeAudioCodecId();
 
-    /* Note: Currently we have a single audio source configured with a one
-     *       set of codec/pcm parameters thus we can use a single subgroup
-     *       for all the BISes. Configure common BIS codec params at the
-     *       subgroup level.
-     */
-    announcement.subgroup_configs = {{
-        .codec_config =
-            {
-                .codec_id = codec_id.coding_format,
-                .vendor_company_id = codec_id.vendor_company_id,
-                .vendor_codec_id = codec_id.vendor_codec_id,
-                .codec_specific_params =
-                    codec_config.GetSubgroupCodecSpecData().Values(),
-            },
-        .metadata = metadata.Values(),
-        .bis_configs = {},
-    }};
+    for (const LeAudioLtvMap& metadata : metadata_group) {
+      /* Note: Currently we have a single audio source configured with a one
+       *       set of codec/pcm parameters thus we can use a single subgroup
+       *       for all the BISes. Configure common BIS codec params at the
+       *       subgroup level.
+       */
+      BasicAudioAnnouncementSubgroup config = {
+          .codec_config =
+              {
+                  .codec_id = codec_id.coding_format,
+                  .vendor_company_id = codec_id.vendor_company_id,
+                  .vendor_codec_id = codec_id.vendor_codec_id,
+                  .codec_specific_params =
+                      codec_config.GetSubgroupCodecSpecData().Values(),
+              },
+          .metadata = metadata.Values(),
+          .bis_configs = {},
+      };
+      /* BIS indices range is [1-31] - BASS, Sec.3.2 Broadcast Receive State. */
+      for (size_t i = 0; i < codec_config.GetNumChannels(); ++i) {
+        config.bis_configs.push_back(
+            {.codec_specific_params =
+                 codec_config.GetBisCodecSpecData(i + 1).Values(),
+             .bis_index = static_cast<uint8_t>(i + 1)});
+      }
 
-    /* BIS indices range is [1-31] - BASS, Sec.3.2 Broadcast Receive State. */
-    for (uint8_t i = 0; i < codec_config.GetNumChannels(); ++i) {
-      announcement.subgroup_configs[0].bis_configs.push_back(
-          {.codec_specific_params =
-               codec_config.GetBisCodecSpecData(i + 1).Values(),
-           .bis_index = static_cast<uint8_t>(i + 1)});
+      announcement.subgroup_configs.push_back(config);
     }
 
     return announcement;
@@ -171,7 +192,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
   void UpdateStreamingContextTypeOnAllSubgroups(const AudioContexts& contexts) {
     LOG_DEBUG("%s context_type_map=%s", __func__, contexts.to_string().c_str());
 
-    auto ccids = GetAllCcids(contexts);
+    auto ccids = ContentControlIdKeeper::GetInstance()->GetAllCcids(contexts);
     if (ccids.empty()) {
       LOG_WARN("%s No content providers available for context_type_map=%s.",
                __func__, contexts.to_string().c_str());
@@ -242,8 +263,12 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     }
   }
 
-  void UpdateMetadata(uint32_t broadcast_id,
-                      std::vector<uint8_t> metadata) override {
+  void UpdateMetadata(
+      uint32_t broadcast_id, const std::string& broadcast_name,
+      const std::vector<uint8_t>& public_metadata,
+      const std::vector<std::vector<uint8_t>>& subgroup_metadata) override {
+    std::vector<LeAudioLtvMap> subgroup_ltvs;
+
     if (broadcasts_.count(broadcast_id) == 0) {
       LOG_ERROR("No such broadcast_id=%d", broadcast_id);
       return;
@@ -253,26 +278,38 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
 
     auto& codec_config = broadcasts_[broadcast_id]->GetCodecConfig();
 
-    /* Prepare the announcement format */
-    bool is_metadata_valid;
-    auto ltv = LeAudioLtvMap::Parse(metadata.data(), metadata.size(),
-                                    is_metadata_valid);
-    if (!is_metadata_valid) {
-      LOG_ERROR("Invalid metadata provided.");
-      return;
-    }
+    for (const std::vector<uint8_t>& metadata : subgroup_metadata) {
+      /* Prepare the announcement format */
+      bool is_metadata_valid;
+      auto ltv = LeAudioLtvMap::Parse(metadata.data(), metadata.size(), is_metadata_valid);
+      if (!is_metadata_valid) {
+        LOG_ERROR("Invalid metadata provided.");
+        return;
+      }
 
-    auto context_type = AudioContexts(LeAudioContextType::MEDIA);
+      auto context_type = AudioContexts(LeAudioContextType::MEDIA);
 
-    /* Adds multiple contexts and CCIDs regardless of the incoming audio
-     * context. Android has only two CCIDs, one for Media and one for
-     * Conversational context. Even though we are not broadcasting
-     * Conversational streams, some PTS test cases wants multiple CCIDs.
-     */
-    if (stack_config_get_interface()
-            ->get_pts_force_le_audio_multiple_contexts_metadata()) {
-      context_type =
-          LeAudioContextType::MEDIA | LeAudioContextType::CONVERSATIONAL;
+      /* Adds multiple contexts and CCIDs regardless of the incoming audio
+       * context. Android has only two CCIDs, one for Media and one for
+       * Conversational context. Even though we are not broadcasting
+       * Conversational streams, some PTS test cases wants multiple CCIDs.
+       */
+      if (stack_config_get_interface()
+              ->get_pts_force_le_audio_multiple_contexts_metadata()) {
+        context_type =
+            LeAudioContextType::MEDIA | LeAudioContextType::CONVERSATIONAL;
+        auto stream_context_vec = ltv.Find(
+            le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
+        if (stream_context_vec) {
+          auto pp = stream_context_vec.value().data();
+          if (stream_context_vec.value().size() < 2) {
+            LOG_ERROR("stream_context_vec.value() size < 2");
+            return;
+          }
+          UINT16_TO_STREAM(pp, context_type.value());
+        }
+      }
+
       auto stream_context_vec =
           ltv.Find(le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
       if (stream_context_vec) {
@@ -281,49 +318,78 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
           LOG_ERROR("stream_context_vec.value() size < 2");
           return;
         }
-        UINT16_TO_STREAM(pp, context_type.value());
+        STREAM_TO_UINT16(context_type.value_ref(), pp);
       }
+
+      // Append the CCID list
+      auto ccid_vec =
+          ContentControlIdKeeper::GetInstance()->GetAllCcids(context_type);
+      if (!ccid_vec.empty()) {
+        ltv.Add(le_audio::types::kLeAudioMetadataTypeCcidList, ccid_vec);
+      }
+
+      // Push to subgroup ltvs
+      subgroup_ltvs.push_back(ltv);
     }
 
-    auto stream_context_vec =
-        ltv.Find(le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
-    if (stream_context_vec) {
-      auto pp = stream_context_vec.value().data();
-      if (stream_context_vec.value().size() < 2) {
-        LOG_ERROR("stream_context_vec.value() size < 2");
+    if (broadcasts_[broadcast_id]->IsPublicBroadcast()) {
+      // Only update broadcast name and public metadata if current broadcast is
+      // public Otherwise ignore those fields
+      bool is_public_metadata_valid;
+      LeAudioLtvMap public_ltv =
+          LeAudioLtvMap::Parse(public_metadata.data(), public_metadata.size(),
+                               is_public_metadata_valid);
+      if (!is_public_metadata_valid) {
+        LOG_ERROR("Invalid public metadata provided.");
         return;
       }
-      STREAM_TO_UINT16(context_type.value_ref(), pp);
-    }
+      PublicBroadcastAnnouncementData pb_announcement =
+          preparePublicAnnouncement(broadcasts_[broadcast_id]
+                                        ->GetPublicBroadcastAnnouncement()
+                                        .features,
+                                    public_ltv);
 
-    // Append the CCID list
-    auto ccid_vec = GetAllCcids(context_type);
-    if (!ccid_vec.empty()) {
-      ltv.Add(le_audio::types::kLeAudioMetadataTypeCcidList, ccid_vec);
+      broadcasts_[broadcast_id]->UpdatePublicBroadcastAnnouncement(
+          broadcast_id, broadcast_name, pb_announcement);
     }
 
     BasicAudioAnnouncementData announcement =
-        prepareAnnouncement(codec_config, std::move(ltv));
+        prepareBasicAnnouncement(codec_config, subgroup_ltvs);
 
     broadcasts_[broadcast_id]->UpdateBroadcastAnnouncement(
         std::move(announcement));
   }
 
-  void CreateAudioBroadcast(std::vector<uint8_t> metadata,
-                            std::optional<bluetooth::le_audio::BroadcastCode>
-                                broadcast_code) override {
+  void CreateAudioBroadcast(
+      bool is_public, const std::string& broadcast_name,
+      const std::optional<bluetooth::le_audio::BroadcastCode>& broadcast_code,
+      const std::vector<uint8_t>& public_metadata,
+      const std::vector<uint8_t>& subgroup_quality,
+      const std::vector<std::vector<uint8_t>>& subgroup_metadata) override {
+    uint8_t public_features = 0;
+    LeAudioLtvMap public_ltv;
+    std::vector<LeAudioLtvMap> subgroup_ltvs;
+
+    if (is_public) {
+      // Prepare public broadcast announcement format
+      bool is_metadata_valid;
+      public_ltv = LeAudioLtvMap::Parse(
+          public_metadata.data(), public_metadata.size(), is_metadata_valid);
+      if (!is_metadata_valid) {
+        LOG_ERROR("Invalid metadata provided.");
+        return;
+      }
+      // Prepare public features byte
+      // bit 0 Encryption broadcast stream encrypted or not
+      // bit 1 Standard quality audio configuration present or not
+      // bit 2 High quality audio configuration present or not
+      // bit 3-7 RFU
+      public_features = static_cast<uint8_t>(broadcast_code ? 1 : 0);
+    }
+
     auto broadcast_id = available_broadcast_ids_.back();
     available_broadcast_ids_.pop_back();
     if (available_broadcast_ids_.size() == 0) GenerateBroadcastIds();
-
-    /* Prepare the announcement format */
-    bool is_metadata_valid;
-    auto ltv = LeAudioLtvMap::Parse(metadata.data(), metadata.size(),
-                                    is_metadata_valid);
-    if (!is_metadata_valid) {
-      LOG_ERROR("Invalid metadata provided.");
-      return;
-    }
 
     auto context_type = AudioContexts(LeAudioContextType::MEDIA);
 
@@ -336,31 +402,70 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
             ->get_pts_force_le_audio_multiple_contexts_metadata()) {
       context_type =
           LeAudioContextType::MEDIA | LeAudioContextType::CONVERSATIONAL;
-      auto stream_context_vec =
-          ltv.Find(le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
-      if (stream_context_vec) {
-        auto pp = stream_context_vec.value().data();
-        UINT16_TO_STREAM(pp, context_type.value());
+    }
+
+    for (const uint8_t quality : subgroup_quality) {
+      if (quality == bluetooth::le_audio::QUALITY_STANDARD) {
+        public_features |= bluetooth::le_audio::kLeAudioQualityStandard;
+      } else if (quality == bluetooth::le_audio::QUALITY_HIGH) {
+        public_features |= bluetooth::le_audio::kLeAudioQualityHigh;
       }
     }
 
-    auto stream_context_vec =
-        ltv.Find(le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
-    if (stream_context_vec) {
-      auto pp = stream_context_vec.value().data();
-      STREAM_TO_UINT16(context_type.value_ref(), pp);
-    }
+    for (const std::vector<uint8_t>& metadata : subgroup_metadata) {
+      /* Prepare the announcement format */
+      bool is_metadata_valid;
+      auto ltv = LeAudioLtvMap::Parse(metadata.data(), metadata.size(), is_metadata_valid);
+      if (!is_metadata_valid) {
+        LOG_ERROR("Invalid metadata provided.");
+        return;
+      }
 
-    // Append the CCID list
-    auto ccid_vec = GetAllCcids(context_type);
-    if (!ccid_vec.empty()) {
-      ltv.Add(le_audio::types::kLeAudioMetadataTypeCcidList, ccid_vec);
+      if (stack_config_get_interface()
+              ->get_pts_force_le_audio_multiple_contexts_metadata()) {
+        auto stream_context_vec = ltv.Find(
+            le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
+        if (stream_context_vec) {
+          if (stream_context_vec.value().size() < 2) {
+            LOG_ERROR("kLeAudioMetadataTypeStreamingAudioContext size < 2");
+            return;
+          }
+          auto pp = stream_context_vec.value().data();
+          UINT16_TO_STREAM(pp, context_type.value());
+        }
+      }
+
+      auto stream_context_vec =
+          ltv.Find(le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
+      if (stream_context_vec) {
+        if (stream_context_vec.value().size() < 2) {
+          LOG_ERROR("kLeAudioMetadataTypeStreamingAudioContext size < 2");
+          return;
+        }
+
+        auto pp = stream_context_vec.value().data();
+        STREAM_TO_UINT16(context_type.value_ref(), pp);
+      }
+
+      // Append the CCID list
+      auto ccid_vec =
+          ContentControlIdKeeper::GetInstance()->GetAllCcids(context_type);
+      if (!ccid_vec.empty()) {
+        ltv.Add(le_audio::types::kLeAudioMetadataTypeCcidList, ccid_vec);
+      }
+
+      // Push to subgroup ltvs
+      subgroup_ltvs.push_back(ltv);
     }
 
     if (CodecManager::GetInstance()->GetCodecLocation() ==
         CodecLocation::ADSP) {
       auto offload_config =
           CodecManager::GetInstance()->GetBroadcastOffloadConfig();
+      if (offload_config == nullptr) {
+        LOG_ERROR("No valid broadcast offload config");
+        return;
+      }
       BroadcastCodecWrapper codec_config(
           {.coding_format = le_audio::types::kLeAudioCodingFormatLC3,
            .vendor_company_id =
@@ -376,27 +481,37 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
                                     offload_config->max_transport_latency);
 
       BroadcastStateMachineConfig msg = {
+          .is_public = is_public,
+          .broadcast_name = broadcast_name,
           .broadcast_id = broadcast_id,
           .streaming_phy = GetStreamingPhy(),
           .codec_wrapper = codec_config,
           .qos_config = qos_config,
-          .announcement = prepareAnnouncement(codec_config, std::move(ltv)),
+          .announcement = prepareBasicAnnouncement(codec_config, subgroup_ltvs),
           .broadcast_code = std::move(broadcast_code)};
-
+      if (is_public) {
+        msg.public_announcement =
+            preparePublicAnnouncement(public_features, public_ltv);
+      }
       pending_broadcasts_.push_back(
           std::move(BroadcastStateMachine::CreateInstance(std::move(msg))));
     } else {
       auto codec_qos_pair =
           le_audio::broadcaster::getStreamConfigForContext(context_type);
       BroadcastStateMachineConfig msg = {
+          .is_public = is_public,
+          .broadcast_name = broadcast_name,
           .broadcast_id = broadcast_id,
           .streaming_phy = GetStreamingPhy(),
           .codec_wrapper = codec_qos_pair.first,
           .qos_config = codec_qos_pair.second,
           .announcement =
-              prepareAnnouncement(codec_qos_pair.first, std::move(ltv)),
+              prepareBasicAnnouncement(codec_qos_pair.first, subgroup_ltvs),
           .broadcast_code = std::move(broadcast_code)};
-
+      if (is_public) {
+        msg.public_announcement =
+            preparePublicAnnouncement(public_features, public_ltv);
+      }
       /* Create the broadcaster instance - we'll receive it's init state in the
        * async callback
        */
@@ -460,6 +575,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
 
       broadcasts_[broadcast_id]->ProcessMessage(
           BroadcastStateMachine::Message::START, nullptr);
+      le_audio::MetricsCollector::Get()->OnBroadcastStateChanged(true);
     } else {
       LOG_ERROR("No such broadcast_id=%d", broadcast_id);
     }
@@ -477,6 +593,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     broadcasts_[broadcast_id]->SetMuted(true);
     broadcasts_[broadcast_id]->ProcessMessage(
         BroadcastStateMachine::Message::STOP, nullptr);
+    le_audio::MetricsCollector::Get()->OnBroadcastStateChanged(false);
   }
 
   void DestroyAudioBroadcast(uint32_t broadcast_id) override {
@@ -489,7 +606,9 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     bluetooth::le_audio::BroadcastMetadata metadata;
     for (auto const& kv_it : broadcasts_) {
       if (kv_it.second->GetBroadcastId() == broadcast_id) {
+        metadata.is_public = kv_it.second->IsPublicBroadcast();
         metadata.broadcast_id = kv_it.second->GetBroadcastId();
+        metadata.broadcast_name = kv_it.second->GetBroadcastName();
         metadata.adv_sid = kv_it.second->GetAdvertisingSid();
         metadata.pa_interval = kv_it.second->GetPaInterval();
         metadata.addr = kv_it.second->GetOwnAddress();
@@ -497,6 +616,8 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
         metadata.broadcast_code = kv_it.second->GetBroadcastCode();
         metadata.basic_audio_announcement =
             kv_it.second->GetBroadcastAnnouncement();
+        metadata.public_announcement =
+            kv_it.second->GetPublicBroadcastAnnouncement();
         return metadata;
       }
     }
@@ -918,6 +1039,7 @@ LeAudioBroadcasterImpl::LeAudioSourceCallbacksImpl
 void LeAudioBroadcaster::Initialize(
     bluetooth::le_audio::LeAudioBroadcasterCallbacks* callbacks,
     base::Callback<bool()> audio_hal_verifier) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   LOG_INFO();
   if (instance) {
     LOG_ERROR("Already initialized");
@@ -958,6 +1080,7 @@ void LeAudioBroadcaster::Stop(void) {
 }
 
 void LeAudioBroadcaster::Cleanup(void) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   LOG_INFO();
 
   if (instance == nullptr) return;
@@ -970,6 +1093,7 @@ void LeAudioBroadcaster::Cleanup(void) {
 }
 
 void LeAudioBroadcaster::DebugDump(int fd) {
+  std::scoped_lock<std::mutex> lock(instance_mutex);
   dprintf(fd, "Le Audio Broadcaster:\n");
   if (instance) instance->Dump(fd);
   dprintf(fd, "\n");

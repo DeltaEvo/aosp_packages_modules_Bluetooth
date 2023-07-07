@@ -69,6 +69,39 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
 
     private CloseGuard mCloseGuard;
 
+    private final class LeAudioServiceListener extends ForwardingServiceListener {
+        LeAudioServiceListener(ServiceListener listener) {
+            super(listener);
+        }
+
+        @Override
+        public void onServiceConnected(int profile, BluetoothProfile proxy) {
+            try {
+                if (profile == LE_AUDIO) {
+                    // re-register the service-to-app callback
+                    synchronized (mCallbackExecutorMap) {
+                        if (mCallbackExecutorMap.isEmpty()) {
+                            return;
+                        }
+                        try {
+                            final IBluetoothLeAudio service = getService();
+                            if (service != null) {
+                                final SynchronousResultReceiver<Integer> recv =
+                                        SynchronousResultReceiver.get();
+                                service.registerCallback(mCallback, mAttributionSource, recv);
+                                recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
+                            }
+                        } catch (RemoteException | TimeoutException e) {
+                            Log.e(TAG, "Failed to register callback", e);
+                        }
+                    }
+                }
+            } finally {
+                super.onServiceConnected(profile, proxy);
+            }
+        }
+    }
+
     /**
      * This class provides a callback that is invoked when audio codec config changes on
      * the remote device.
@@ -222,6 +255,12 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED =
             "android.bluetooth.action.LE_AUDIO_ACTIVE_DEVICE_CHANGED";
+
+    /**
+     * Indicates invalid/unset audio context.
+     * @hide
+     */
+    public static final int CONTEXT_TYPE_INVALID = 0x0000;
 
     /**
      * Indicates unspecified audio content.
@@ -634,37 +673,6 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
                 }
     };
 
-
-    @SuppressLint("AndroidFrameworkBluetoothPermission")
-    private final IBluetoothStateChangeCallback mBluetoothStateChangeCallback =
-            new IBluetoothStateChangeCallback.Stub() {
-                public void onBluetoothStateChange(boolean up) {
-                    if (DBG) Log.d(TAG, "onBluetoothStateChange: up=" + up);
-                    if (up) {
-                        // re-register the service-to-app callback
-                        synchronized (mCallbackExecutorMap) {
-                            if (!mCallbackExecutorMap.isEmpty()) {
-                                try {
-                                    final IBluetoothLeAudio service = getService();
-                                    if (service != null) {
-                                        final SynchronousResultReceiver<Integer> recv =
-                                                SynchronousResultReceiver.get();
-                                        service.registerCallback(mCallback,
-                                                mAttributionSource, recv);
-                                        recv.awaitResultNoInterrupt(getSyncTimeout())
-                                                .getValue(null);
-                                    }
-                                } catch (TimeoutException e) {
-                                    Log.e(TAG, "Failed to register callback", e);
-                                } catch (RemoteException e) {
-                                    throw e.rethrowFromSystemServer();
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-
     /**
      * Create a BluetoothLeAudio proxy object for interacting with the local
      * Bluetooth LeAudio service.
@@ -673,34 +681,15 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
             BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
-
-        IBluetoothManager mgr = mAdapter.getBluetoothManager();
-        if (mgr != null) {
-            try {
-                mgr.registerStateChangeCallback(mBluetoothStateChangeCallback);
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-        }
+        mProfileConnector.connect(context, new LeAudioServiceListener(listener));
 
         mCloseGuard = new CloseGuard();
         mCloseGuard.open("close");
     }
 
-    /**
-     * @hide
-     */
+    /** @hide */
+    @Override
     public void close() {
-        IBluetoothManager mgr = mAdapter.getBluetoothManager();
-        if (mgr != null) {
-            try {
-                mgr.unregisterStateChangeCallback(mBluetoothStateChangeCallback);
-            } catch (RemoteException e) {
-                Log.e(TAG, "", e);
-            }
-        }
-
         mProfileConnector.disconnect();
     }
 
@@ -870,7 +859,8 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
     @Override
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    public @NonNull List<BluetoothDevice> getDevicesMatchingConnectionStates(
+    @NonNull
+    public List<BluetoothDevice> getDevicesMatchingConnectionStates(
             @NonNull int[] states) {
         if (VDBG) log("getDevicesMatchingStates()");
         final IBluetoothLeAudio service = getService();
@@ -1161,7 +1151,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
 
     /**
      * Add device to the given group.
-     * @param group_id group ID the device is being added to
+     * @param groupId group ID the device is being added to
      * @param device the active device
      * @return true on success, otherwise false
      * @hide
@@ -1171,7 +1161,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED
     })
-    public boolean groupAddNode(int group_id, @NonNull BluetoothDevice device) {
+    public boolean groupAddNode(int groupId, @NonNull BluetoothDevice device) {
         if (VDBG) log("groupAddNode()");
         final IBluetoothLeAudio service = getService();
         final boolean defaultValue = false;
@@ -1181,7 +1171,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
         } else if (mAdapter.isEnabled()) {
             try {
                 final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
-                service.groupAddNode(group_id, device, mAttributionSource, recv);
+                service.groupAddNode(groupId, device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -1192,7 +1182,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
 
     /**
      * Remove device from a given group.
-     * @param group_id group ID the device is being removed from
+     * @param groupId group ID the device is being removed from
      * @param device the active device
      * @return true on success, otherwise false
      *
@@ -1203,7 +1193,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED
     })
-    public boolean groupRemoveNode(int group_id, @NonNull BluetoothDevice device) {
+    public boolean groupRemoveNode(int groupId, @NonNull BluetoothDevice device) {
         if (VDBG) log("groupRemoveNode()");
         final IBluetoothLeAudio service = getService();
         final boolean defaultValue = false;
@@ -1213,7 +1203,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
         } else if (mAdapter.isEnabled()) {
             try {
                 final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
-                service.groupRemoveNode(group_id, device, mAttributionSource, recv);
+                service.groupRemoveNode(groupId, device, mAttributionSource, recv);
                 return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
             } catch (RemoteException | TimeoutException e) {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
@@ -1258,6 +1248,43 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
             }
         }
         return defaultLocation;
+    }
+
+    /**
+     * Check if inband ringtone is enabled by the LE Audio group.
+     * Group id for the device can be found with  {@link BluetoothLeAudio#getGroupId}.
+     *
+     * @param groupId LE Audio group id
+     * @return {@code true} if inband ringtone is enabled, {@code false} otherwise
+     * @hide
+     */
+    @RequiresPermission(allOf = {android.Manifest.permission.BLUETOOTH_CONNECT,
+                                android.Manifest.permission.BLUETOOTH_PRIVILEGED})
+    @SystemApi
+    public boolean isInbandRingtoneEnabled(int groupId) {
+        if (VDBG) {
+            log("isInbandRingtoneEnabled(), groupId: " + groupId);
+        }
+        final IBluetoothLeAudio service = getService();
+        final boolean defaultValue = false;
+        if (service == null) {
+            Log.w(TAG, "Proxy not attached to service");
+            if (DBG) {
+                log(Log.getStackTraceString(new Throwable()));
+            }
+        } else if (mAdapter.isEnabled()) {
+            try {
+                final SynchronousResultReceiver<Boolean> recv = SynchronousResultReceiver.get();
+                service.isInbandRingtoneEnabled(mAttributionSource, recv, groupId);
+                return recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(defaultValue);
+            } catch (TimeoutException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
+                e.rethrowFromSystemServer();
+            }
+        }
+        return defaultValue;
     }
 
     /**

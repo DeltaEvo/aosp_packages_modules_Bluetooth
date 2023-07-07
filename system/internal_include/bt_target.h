@@ -24,15 +24,6 @@
 #define BUILDCFG
 #endif
 
-#if !defined(HAS_BDROID_BUILDCFG) && !defined(HAS_NO_BDROID_BUILDCFG)
-#error \
-    "An Android.mk file did not include bdroid_CFLAGS and possibly not bdroid_C_INCLUDES"
-#endif
-
-#ifdef HAS_BDROID_BUILDCFG
-#include "bdroid_buildcfg.h"
-#endif
-
 #include "bt_types.h" /* This must be defined AFTER buildcfg.h */
 
 #ifndef FALSE
@@ -258,9 +249,10 @@
 /**************************
  * Initial SCO TX credit
  ************************/
-/* max TX SCO data packet size */
+/* The size of buffer used for TX SCO data packets. The size should be divisible
+ * by BTM_MSBC_CODE_SIZE(240) and BTM_LC3_CODE_SIZE(480). */
 #ifndef BTM_SCO_DATA_SIZE_MAX
-#define BTM_SCO_DATA_SIZE_MAX 240
+#define BTM_SCO_DATA_SIZE_MAX 480
 #endif
 
 /* The size in bytes of the BTM inquiry database. */
@@ -279,6 +271,7 @@
 #ifndef BTM_DEFAULT_CONN_INTERVAL
 #define BTM_DEFAULT_CONN_INTERVAL 0x0400
 #endif
+#define BTM_PAGE_SCAN_INTERVAL_PROPERTY "bluetooth.btm.pagescan_interval"
 
 /* When automatic inquiry scan is enabled, this sets the inquiry scan window. */
 #ifndef BTM_DEFAULT_DISC_WINDOW
