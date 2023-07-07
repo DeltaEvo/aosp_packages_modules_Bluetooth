@@ -37,11 +37,13 @@ namespace hci {
 namespace {
 
 using namespace std::literals;
+using namespace std::literals::chrono_literals;
 
 using packet::RawBuilder;
 
 using testing::_;
 using testing::InSequence;
+using testing::SaveArg;
 
 class TestController : public Controller {
  public:
@@ -59,6 +61,10 @@ class TestController : public Controller {
 
   uint16_t GetLeMaximumAdvertisingDataLength() const override {
     return 0x0672;
+  }
+
+  bool SupportsBlePeriodicAdvertising() const override {
+    return true;
   }
 
   bool SupportsBleExtendedAdvertising() const override {
@@ -94,7 +100,12 @@ class TestLeAddressManager : public LeAddressManager {
       Address public_address,
       uint8_t connect_list_size,
       uint8_t resolving_list_size)
-      : LeAddressManager(enqueue_command, handler, public_address, connect_list_size, resolving_list_size) {}
+      : LeAddressManager(
+            enqueue_command, handler, public_address, connect_list_size, resolving_list_size) {
+    address_policy_ = AddressPolicy::USE_STATIC_ADDRESS;
+    minimum_rotation_time_ = 0ms;
+    maximum_rotation_time_ = 100ms;
+  }
 
   AddressPolicy Register(LeAddressManagerCallback* callback) override {
     client_ = callback;
@@ -117,29 +128,10 @@ class TestLeAddressManager : public LeAddressManager {
     test_client_state_ = RESUMED;
   }
 
-  AddressPolicy GetAddressPolicy() override {
-    return address_policy_;
-  }
-
   void SetAddressPolicy(AddressPolicy address_policy) {
     address_policy_ = address_policy;
   }
 
-  AddressWithType GetAnotherAddress() override {
-    hci::Address address;
-    Address::FromString("05:04:03:02:01:00", address);
-    auto random_address = AddressWithType(address, AddressType::RANDOM_DEVICE_ADDRESS);
-    return random_address;
-  }
-
-  AddressWithType GetCurrentAddress() override {
-    hci::Address address;
-    Address::FromString("05:04:03:02:01:00", address);
-    auto random_address = AddressWithType(address, AddressType::RANDOM_DEVICE_ADDRESS);
-    return random_address;
-  }
-
-  AddressPolicy address_policy_ = AddressPolicy::USE_STATIC_ADDRESS;
   LeAddressManagerCallback* client_;
   bool ignore_unregister_for_testing = false;
   enum TestClientState {
@@ -257,9 +249,9 @@ class LeAdvertisingAPITest : public LeAdvertisingManagerTest {
     LeAdvertisingManagerTest::SetUp();
 
     // start advertising set
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
-    advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+    advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
     std::vector<GapData> gap_data{};
     GapData data_item{};
     data_item.data_type_ = GapDataType::FLAGS;
@@ -272,9 +264,14 @@ class LeAdvertisingAPITest : public LeAdvertisingManagerTest {
     advertising_config.scan_response = gap_data;
     advertising_config.channel_map = 1;
 
-    advertiser_id_ = le_advertising_manager_->ExtendedCreateAdvertiser(
+    EXPECT_CALL(
+        mock_advertising_callback_,
+        OnAdvertisingSetStarted(0x00, _, 0x00, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+        .WillOnce(SaveArg<1>(&advertiser_id_));
+
+    le_advertising_manager_->ExtendedCreateAdvertiser(
         0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
+
     std::vector<OpCode> adv_opcodes = {
         OpCode::LE_READ_ADVERTISING_PHYSICAL_CHANNEL_TX_POWER,
         OpCode::LE_SET_ADVERTISING_PARAMETERS,
@@ -282,9 +279,7 @@ class LeAdvertisingAPITest : public LeAdvertisingManagerTest {
         OpCode::LE_SET_ADVERTISING_DATA,
         OpCode::LE_SET_ADVERTISING_ENABLE,
     };
-    EXPECT_CALL(
-        mock_advertising_callback_,
-        OnAdvertisingSetStarted(0x00, advertiser_id_, 0x00, AdvertisingCallback::AdvertisingStatus::SUCCESS));
+
     std::vector<uint8_t> success_vector{static_cast<uint8_t>(ErrorCode::SUCCESS)};
     for (size_t i = 0; i < adv_opcodes.size(); i++) {
       ASSERT_EQ(adv_opcodes[i], test_hci_layer_->GetCommand().GetOpCode());
@@ -296,6 +291,9 @@ class LeAdvertisingAPITest : public LeAdvertisingManagerTest {
             CommandCompleteBuilder::Create(uint8_t{1}, adv_opcodes[i], std::make_unique<RawBuilder>(success_vector)));
       }
     }
+
+    sync_client_handler();
+    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
   }
 
   AdvertiserId advertiser_id_;
@@ -306,6 +304,7 @@ class LeAndroidHciAdvertisingManagerTest : public LeAdvertisingManagerTest {
   void SetUp() override {
     param_opcode_ = OpCode::LE_MULTI_ADVT;
     LeAdvertisingManagerTest::SetUp();
+    test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_RESOLVABLE_ADDRESS);
   }
 };
 
@@ -314,9 +313,9 @@ class LeAndroidHciAdvertisingAPITest : public LeAndroidHciAdvertisingManagerTest
   void SetUp() override {
     LeAndroidHciAdvertisingManagerTest::SetUp();
 
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
-    advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+    advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
     std::vector<GapData> gap_data{};
     GapData data_item{};
     data_item.data_type_ = GapDataType::FLAGS;
@@ -329,19 +328,20 @@ class LeAndroidHciAdvertisingAPITest : public LeAndroidHciAdvertisingManagerTest
     advertising_config.scan_response = gap_data;
     advertising_config.channel_map = 1;
 
-    advertiser_id_ = le_advertising_manager_->ExtendedCreateAdvertiser(
+    EXPECT_CALL(
+        mock_advertising_callback_,
+        OnAdvertisingSetStarted(0x00, _, 0x00, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+        .WillOnce(SaveArg<1>(&advertiser_id_));
+
+    le_advertising_manager_->ExtendedCreateAdvertiser(
         0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
+
     std::vector<SubOcf> sub_ocf = {
         SubOcf::SET_PARAM,
         SubOcf::SET_SCAN_RESP,
         SubOcf::SET_DATA,
-        SubOcf::SET_RANDOM_ADDR,
         SubOcf::SET_ENABLE,
     };
-    EXPECT_CALL(
-        mock_advertising_callback_,
-        OnAdvertisingSetStarted(0, advertiser_id_, 0, AdvertisingCallback::AdvertisingStatus::SUCCESS));
     for (size_t i = 0; i < sub_ocf.size(); i++) {
       auto packet = test_hci_layer_->GetCommand();
       auto sub_packet = LeMultiAdvtView::Create(LeAdvertisingCommandView::Create(packet));
@@ -349,6 +349,9 @@ class LeAndroidHciAdvertisingAPITest : public LeAndroidHciAdvertisingManagerTest
       ASSERT_EQ(sub_packet.GetSubCmd(), sub_ocf[i]);
       test_hci_layer_->IncomingEvent(LeMultiAdvtCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS, sub_ocf[i]));
     }
+
+    sync_client_handler();
+    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
   }
 
   AdvertiserId advertiser_id_;
@@ -359,9 +362,9 @@ class LeAndroidHciAdvertisingAPIPublicAddressTest : public LeAndroidHciAdvertisi
   void SetUp() override {
     LeAndroidHciAdvertisingManagerTest::SetUp();
 
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
-    advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+    advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
     std::vector<GapData> gap_data{};
     GapData data_item{};
     data_item.data_type_ = GapDataType::FLAGS;
@@ -375,18 +378,21 @@ class LeAndroidHciAdvertisingAPIPublicAddressTest : public LeAndroidHciAdvertisi
     advertising_config.channel_map = 1;
 
     test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS);
-    advertiser_id_ = le_advertising_manager_->ExtendedCreateAdvertiser(
+
+    EXPECT_CALL(
+        mock_advertising_callback_,
+        OnAdvertisingSetStarted(0x00, _, 0x00, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+        .WillOnce(SaveArg<1>(&advertiser_id_));
+
+    le_advertising_manager_->ExtendedCreateAdvertiser(
         0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
+
     std::vector<SubOcf> sub_ocf = {
         SubOcf::SET_PARAM,
         SubOcf::SET_SCAN_RESP,
         SubOcf::SET_DATA,
         SubOcf::SET_ENABLE,
     };
-    EXPECT_CALL(
-        mock_advertising_callback_,
-        OnAdvertisingSetStarted(0, advertiser_id_, 0, AdvertisingCallback::AdvertisingStatus::SUCCESS));
     for (size_t i = 0; i < sub_ocf.size(); i++) {
       auto packet = test_hci_layer_->GetCommand();
       auto sub_packet = LeMultiAdvtView::Create(LeAdvertisingCommandView::Create(packet));
@@ -394,6 +400,9 @@ class LeAndroidHciAdvertisingAPIPublicAddressTest : public LeAndroidHciAdvertisi
       ASSERT_EQ(sub_packet.GetSubCmd(), sub_ocf[i]);
       test_hci_layer_->IncomingEvent(LeMultiAdvtCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS, sub_ocf[i]));
     }
+
+    sync_client_handler();
+    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
   }
 
   AdvertiserId advertiser_id_;
@@ -414,9 +423,9 @@ class LeExtendedAdvertisingAPITest : public LeExtendedAdvertisingManagerTest {
     LeExtendedAdvertisingManagerTest::SetUp();
 
     // start advertising set
-    ExtendedAdvertisingConfig advertising_config{};
+    AdvertisingConfig advertising_config{};
     advertising_config.advertising_type = AdvertisingType::ADV_IND;
-    advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+    advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
     std::vector<GapData> gap_data{};
     GapData data_item{};
     data_item.data_type_ = GapDataType::FLAGS;
@@ -430,12 +439,14 @@ class LeExtendedAdvertisingAPITest : public LeExtendedAdvertisingManagerTest {
     advertising_config.channel_map = 1;
     advertising_config.sid = 0x01;
 
-    advertiser_id_ = le_advertising_manager_->ExtendedCreateAdvertiser(
-        0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
     EXPECT_CALL(
         mock_advertising_callback_,
-        OnAdvertisingSetStarted(0x00, advertiser_id_, -23, AdvertisingCallback::AdvertisingStatus::SUCCESS));
+        OnAdvertisingSetStarted(0x00, _, -23, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+        .WillOnce(SaveArg<1>(&advertiser_id_));
+
+    le_advertising_manager_->ExtendedCreateAdvertiser(
+        0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
+
     std::vector<OpCode> adv_opcodes = {
         OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS,
         OpCode::LE_SET_EXTENDED_SCAN_RESPONSE_DATA,
@@ -453,7 +464,9 @@ class LeExtendedAdvertisingAPITest : public LeExtendedAdvertisingManagerTest {
             CommandCompleteBuilder::Create(uint8_t{1}, adv_opcodes[i], std::make_unique<RawBuilder>(success_vector)));
       }
     }
+
     sync_client_handler();
+    ASSERT_NE(LeAdvertisingManager::kInvalidId, advertiser_id_);
   }
 
   AdvertiserId advertiser_id_;
@@ -466,9 +479,9 @@ TEST_F(LeAndroidHciAdvertisingManagerTest, startup_teardown) {}
 TEST_F(LeExtendedAdvertisingManagerTest, startup_teardown) {}
 
 TEST_F(LeAdvertisingManagerTest, create_advertiser_test) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
-  advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
   std::vector<GapData> gap_data{};
   GapData data_item{};
   data_item.data_type_ = GapDataType::FLAGS;
@@ -481,9 +494,8 @@ TEST_F(LeAdvertisingManagerTest, create_advertiser_test) {
   advertising_config.scan_response = gap_data;
   advertising_config.channel_map = 1;
 
-  auto id = le_advertising_manager_->ExtendedCreateAdvertiser(
+  le_advertising_manager_->ExtendedCreateAdvertiser(
       0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
   std::vector<OpCode> adv_opcodes = {
       OpCode::LE_READ_ADVERTISING_PHYSICAL_CHANNEL_TX_POWER,
       OpCode::LE_SET_ADVERTISING_PARAMETERS,
@@ -491,9 +503,13 @@ TEST_F(LeAdvertisingManagerTest, create_advertiser_test) {
       OpCode::LE_SET_ADVERTISING_DATA,
       OpCode::LE_SET_ADVERTISING_ENABLE,
   };
+
+  AdvertiserId id;
   EXPECT_CALL(
       mock_advertising_callback_,
-      OnAdvertisingSetStarted(0x00, id, 0x00, AdvertisingCallback::AdvertisingStatus::SUCCESS));
+      OnAdvertisingSetStarted(0x00, _, 0x00, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+      .WillOnce(SaveArg<1>(&id));
+
   std::vector<uint8_t> success_vector{static_cast<uint8_t>(ErrorCode::SUCCESS)};
   for (size_t i = 0; i < adv_opcodes.size(); i++) {
     ASSERT_EQ(adv_opcodes[i], test_hci_layer_->GetCommand().GetOpCode());
@@ -505,16 +521,18 @@ TEST_F(LeAdvertisingManagerTest, create_advertiser_test) {
           CommandCompleteBuilder::Create(uint8_t{1}, adv_opcodes[i], std::make_unique<RawBuilder>(success_vector)));
     }
   }
+  sync_client_handler();
 
   // Disable the advertiser
+  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
   le_advertising_manager_->RemoveAdvertiser(id);
   ASSERT_EQ(OpCode::LE_SET_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
 }
 
 TEST_F(LeAndroidHciAdvertisingManagerTest, create_advertiser_test) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
-  advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
   std::vector<GapData> gap_data{};
   GapData data_item{};
   data_item.data_type_ = GapDataType::FLAGS;
@@ -527,18 +545,21 @@ TEST_F(LeAndroidHciAdvertisingManagerTest, create_advertiser_test) {
   advertising_config.scan_response = gap_data;
   advertising_config.channel_map = 1;
 
-  auto id = le_advertising_manager_->ExtendedCreateAdvertiser(
+  AdvertiserId id;
+  EXPECT_CALL(
+      mock_advertising_callback_,
+      OnAdvertisingSetStarted(0, _, 0, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+      .WillOnce(SaveArg<1>(&id));
+
+  le_advertising_manager_->ExtendedCreateAdvertiser(
       0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
+
   std::vector<SubOcf> sub_ocf = {
       SubOcf::SET_PARAM,
       SubOcf::SET_SCAN_RESP,
       SubOcf::SET_DATA,
-      SubOcf::SET_RANDOM_ADDR,
       SubOcf::SET_ENABLE,
   };
-  EXPECT_CALL(
-      mock_advertising_callback_, OnAdvertisingSetStarted(0, id, 0, AdvertisingCallback::AdvertisingStatus::SUCCESS));
   for (size_t i = 0; i < sub_ocf.size(); i++) {
     auto packet = test_hci_layer_->GetCommand();
     auto sub_packet = LeMultiAdvtView::Create(LeAdvertisingCommandView::Create(packet));
@@ -546,17 +567,54 @@ TEST_F(LeAndroidHciAdvertisingManagerTest, create_advertiser_test) {
     ASSERT_EQ(sub_packet.GetSubCmd(), sub_ocf[i]);
     test_hci_layer_->IncomingEvent(LeMultiAdvtCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS, sub_ocf[i]));
   }
+  sync_client_handler();
 
   // Disable the advertiser
+  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
   le_advertising_manager_->RemoveAdvertiser(id);
   ASSERT_EQ(OpCode::LE_MULTI_ADVT, test_hci_layer_->GetCommand().GetOpCode());
   test_hci_layer_->IncomingEvent(LeMultiAdvtSetEnableCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
 }
 
-TEST_F(LeExtendedAdvertisingManagerTest, create_advertiser_test) {
-  ExtendedAdvertisingConfig advertising_config{};
+TEST_F(LeAndroidHciAdvertisingManagerTest, create_advertiser_with_rpa_test) {
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
-  advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM;
+  advertising_config.channel_map = 1;
+
+  AdvertiserId id;
+  EXPECT_CALL(
+      mock_advertising_callback_,
+      OnAdvertisingSetStarted(0, _, 0, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+      .WillOnce(SaveArg<1>(&id));
+
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
+  std::vector<SubOcf> sub_ocf = {
+      SubOcf::SET_PARAM,
+      SubOcf::SET_SCAN_RESP,
+      SubOcf::SET_DATA,
+      SubOcf::SET_RANDOM_ADDR,
+      SubOcf::SET_ENABLE,
+  };
+
+  for (size_t i = 0; i < sub_ocf.size(); i++) {
+    auto packet = test_hci_layer_->GetCommand();
+    auto sub_packet = LeMultiAdvtView::Create(LeAdvertisingCommandView::Create(packet));
+    ASSERT_TRUE(sub_packet.IsValid());
+    ASSERT_EQ(sub_packet.GetSubCmd(), sub_ocf[i]);
+    test_hci_layer_->IncomingEvent(
+        LeMultiAdvtCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS, sub_ocf[i]));
+  }
+
+  sync_client_handler();
+  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
+}
+
+TEST_F(LeExtendedAdvertisingManagerTest, create_advertiser_test) {
+  AdvertisingConfig advertising_config{};
+  advertising_config.advertising_type = AdvertisingType::ADV_IND;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
   std::vector<GapData> gap_data{};
   GapData data_item{};
   data_item.data_type_ = GapDataType::FLAGS;
@@ -570,12 +628,15 @@ TEST_F(LeExtendedAdvertisingManagerTest, create_advertiser_test) {
   advertising_config.channel_map = 1;
   advertising_config.sid = 0x01;
 
-  auto id = le_advertising_manager_->ExtendedCreateAdvertiser(
-      0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
+  AdvertiserId id;
   EXPECT_CALL(
       mock_advertising_callback_,
-      OnAdvertisingSetStarted(0x00, id, -23, AdvertisingCallback::AdvertisingStatus::SUCCESS));
+      OnAdvertisingSetStarted(0, _, -23, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+      .WillOnce(SaveArg<1>(&id));
+
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
+
   std::vector<OpCode> adv_opcodes = {
       OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS,
       OpCode::LE_SET_EXTENDED_SCAN_RESPONSE_DATA,
@@ -596,6 +657,7 @@ TEST_F(LeExtendedAdvertisingManagerTest, create_advertiser_test) {
   sync_client_handler();
 
   // Remove the advertiser
+  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
   le_advertising_manager_->RemoveAdvertiser(id);
   ASSERT_EQ(OpCode::LE_SET_EXTENDED_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
   ASSERT_EQ(OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
@@ -607,9 +669,9 @@ TEST_F(LeExtendedAdvertisingManagerTest, ignore_on_pause_on_resume_after_unregis
   test_le_address_manager->ignore_unregister_for_testing = true;
 
   // Register LeAddressManager vai ExtendedCreateAdvertiser
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
-  advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
   std::vector<GapData> gap_data{};
   GapData data_item{};
   data_item.data_type_ = GapDataType::FLAGS;
@@ -623,12 +685,15 @@ TEST_F(LeExtendedAdvertisingManagerTest, ignore_on_pause_on_resume_after_unregis
   advertising_config.channel_map = 1;
   advertising_config.sid = 0x01;
 
-  auto id = le_advertising_manager_->ExtendedCreateAdvertiser(
-      0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
-  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
+  AdvertiserId id;
   EXPECT_CALL(
       mock_advertising_callback_,
-      OnAdvertisingSetStarted(0x00, id, -23, AdvertisingCallback::AdvertisingStatus::SUCCESS));
+      OnAdvertisingSetStarted(0, _, -23, AdvertisingCallback::AdvertisingStatus::SUCCESS))
+      .WillOnce(SaveArg<1>(&id));
+
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      0x00, advertising_config, scan_callback, set_terminated_callback, 0, 0, client_handler_);
+
   std::vector<OpCode> adv_opcodes = {
       OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS,
       OpCode::LE_SET_EXTENDED_SCAN_RESPONSE_DATA,
@@ -649,6 +714,7 @@ TEST_F(LeExtendedAdvertisingManagerTest, ignore_on_pause_on_resume_after_unregis
   sync_client_handler();
 
   // Unregister LeAddressManager vai RemoveAdvertiser
+  ASSERT_NE(LeAdvertisingManager::kInvalidId, id);
   le_advertising_manager_->RemoveAdvertiser(id);
   ASSERT_EQ(OpCode::LE_SET_EXTENDED_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
   ASSERT_EQ(OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
@@ -673,9 +739,9 @@ TEST_F(LeAndroidHciAdvertisingAPIPublicAddressTest, startup_teardown) {}
 TEST_F(LeExtendedAdvertisingAPITest, startup_teardown) {}
 
 TEST_F(LeAdvertisingAPITest, set_parameter) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
-  advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
   std::vector<GapData> gap_data{};
   GapData data_item{};
   data_item.data_type_ = GapDataType::COMPLETE_LOCAL_NAME;
@@ -692,9 +758,9 @@ TEST_F(LeAdvertisingAPITest, set_parameter) {
 }
 
 TEST_F(LeAndroidHciAdvertisingAPITest, set_parameter) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
-  advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
   std::vector<GapData> gap_data{};
   GapData data_item{};
   data_item.data_type_ = GapDataType::COMPLETE_LOCAL_NAME;
@@ -714,9 +780,9 @@ TEST_F(LeAndroidHciAdvertisingAPITest, set_parameter) {
 }
 
 TEST_F(LeExtendedAdvertisingAPITest, set_parameter) {
-  ExtendedAdvertisingConfig advertising_config{};
+  AdvertisingConfig advertising_config{};
   advertising_config.advertising_type = AdvertisingType::ADV_IND;
-  advertising_config.own_address_type = OwnAddressType::PUBLIC_DEVICE_ADDRESS;
+  advertising_config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
   std::vector<GapData> gap_data{};
   GapData data_item{};
   data_item.data_type_ = GapDataType::COMPLETE_LOCAL_NAME;
@@ -1050,11 +1116,13 @@ TEST_F(LeExtendedAdvertisingAPITest, set_periodic_parameter) {
   advertising_config.max_interval = 0x1000;
   advertising_config.min_interval = 0x0006;
   le_advertising_manager_->SetPeriodicParameters(advertiser_id_, advertising_config);
-  ASSERT_EQ(OpCode::LE_SET_PERIODIC_ADVERTISING_PARAM, test_hci_layer_->GetCommand().GetOpCode());
+  ASSERT_EQ(
+      OpCode::LE_SET_PERIODIC_ADVERTISING_PARAMETERS, test_hci_layer_->GetCommand().GetOpCode());
   EXPECT_CALL(
       mock_advertising_callback_,
       OnPeriodicAdvertisingParametersUpdated(advertiser_id_, AdvertisingCallback::AdvertisingStatus::SUCCESS));
-  test_hci_layer_->IncomingEvent(LeSetPeriodicAdvertisingParamCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
+  test_hci_layer_->IncomingEvent(
+      LeSetPeriodicAdvertisingParametersCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
   sync_client_handler();
 }
 
@@ -1147,7 +1215,7 @@ TEST_F(LeExtendedAdvertisingAPITest, set_perodic_data_with_invalid_length) {
 
 TEST_F(LeExtendedAdvertisingAPITest, disable_enable_periodic_advertiser_test) {
   // disable advertiser
-  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, false);
+  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, false, false);
   ASSERT_EQ(OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
   EXPECT_CALL(
       mock_advertising_callback_,
@@ -1156,7 +1224,7 @@ TEST_F(LeExtendedAdvertisingAPITest, disable_enable_periodic_advertiser_test) {
   sync_client_handler();
 
   // enable advertiser
-  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, true);
+  le_advertising_manager_->EnablePeriodicAdvertising(advertiser_id_, true, false);
   ASSERT_EQ(OpCode::LE_SET_PERIODIC_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
   EXPECT_CALL(
       mock_advertising_callback_,
@@ -1170,7 +1238,7 @@ TEST_F(LeExtendedAdvertisingAPITest, trigger_advertiser_callbacks_if_started_whi
   auto test_le_address_manager = (TestLeAddressManager*)test_acl_manager_->GetLeAddressManager();
   auto id_promise = std::promise<uint8_t>{};
   auto id_future = id_promise.get_future();
-  le_advertising_manager_->RegisterAdvertiser(base::BindOnce(
+  le_advertising_manager_->RegisterAdvertiser(client_handler_->BindOnce(
       [](std::promise<uint8_t> promise, uint8_t id, uint8_t _status) { promise.set_value(id); },
       std::move(id_promise)));
   sync_client_handler();
@@ -1256,6 +1324,97 @@ TEST_F(LeExtendedAdvertisingAPITest, no_callbacks_on_resume) {
       LeSetExtendedAdvertisingEnableCompleteBuilder::Create(1, ErrorCode::SUCCESS));
 
   sync_client_handler();
+}
+
+TEST_F(LeExtendedAdvertisingManagerTest, use_rpa) {
+  // arrange: use RANDOM address policy
+  test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_RESOLVABLE_ADDRESS);
+
+  // act: start advertising set with RPA
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      0x00,
+      AdvertisingConfig{
+          .requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM,
+          .channel_map = 1,
+      },
+      scan_callback,
+      set_terminated_callback,
+      0,
+      0,
+      client_handler_);
+  auto command = LeAdvertisingCommandView::Create(test_hci_layer_->GetCommand());
+
+  // assert
+  ASSERT_TRUE(command.IsValid());
+  EXPECT_EQ(command.GetOpCode(), OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS);
+
+  auto set_parameters_command =
+      LeSetExtendedAdvertisingParametersView::Create(LeAdvertisingCommandView::Create(command));
+  ASSERT_TRUE(set_parameters_command.IsValid());
+  EXPECT_EQ(set_parameters_command.GetOwnAddressType(), OwnAddressType::RANDOM_DEVICE_ADDRESS);
+}
+
+TEST_F(LeExtendedAdvertisingManagerTest, use_non_resolvable_address) {
+  test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_RESOLVABLE_ADDRESS);
+
+  // start advertising set with NRPA
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      0x00,
+      AdvertisingConfig{
+          .requested_advertiser_address_type = AdvertiserAddressType::NONRESOLVABLE_RANDOM,
+          .channel_map = 1,
+      },
+      scan_callback,
+      set_terminated_callback,
+      0,
+      0,
+      client_handler_);
+
+  ASSERT_EQ(
+      test_hci_layer_->GetCommand().GetOpCode(), OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS);
+  test_hci_layer_->IncomingEvent(LeSetExtendedAdvertisingParametersCompleteBuilder::Create(
+      uint8_t{1}, ErrorCode::SUCCESS, static_cast<uint8_t>(-23)));
+
+  auto command = LeAdvertisingCommandView::Create(test_hci_layer_->GetCommand());
+  ASSERT_TRUE(command.IsValid());
+  ASSERT_EQ(command.GetOpCode(), OpCode::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS);
+
+  auto set_address_command =
+      LeSetAdvertisingSetRandomAddressView::Create(LeAdvertisingCommandView::Create(command));
+  ASSERT_TRUE(set_address_command.IsValid());
+  EXPECT_EQ(set_address_command.GetOpCode(), OpCode::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS);
+
+  // checking that it is an NRPA (first two bits = 0b00)
+  Address address = set_address_command.GetRandomAddress();
+  EXPECT_EQ(address.data()[5] >> 6, 0b00);
+}
+
+TEST_F(LeExtendedAdvertisingManagerTest, use_public_address_type_if_public_address_policy) {
+  // arrange: use PUBLIC address policy
+  test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS);
+
+  // act: start advertising set with RPA
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      0x00,
+      AdvertisingConfig{
+          .requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM,
+          .channel_map = 1,
+      },
+      scan_callback,
+      set_terminated_callback,
+      0,
+      0,
+      client_handler_);
+  auto command = LeAdvertisingCommandView::Create(test_hci_layer_->GetCommand());
+
+  // assert
+  ASSERT_TRUE(command.IsValid());
+  EXPECT_EQ(command.GetOpCode(), OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS);
+
+  auto set_parameters_command =
+      LeSetExtendedAdvertisingParametersView::Create(LeAdvertisingCommandView::Create(command));
+  ASSERT_TRUE(set_parameters_command.IsValid());
+  EXPECT_EQ(set_parameters_command.GetOwnAddressType(), OwnAddressType::PUBLIC_DEVICE_ADDRESS);
 }
 
 }  // namespace

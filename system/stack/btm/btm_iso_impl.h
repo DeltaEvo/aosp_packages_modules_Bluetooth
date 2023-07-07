@@ -17,12 +17,14 @@
 
 #pragma once
 
+#include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "bind_helpers.h"
 #include "btm_dev.h"
@@ -31,6 +33,7 @@
 #include "device/include/controller.h"
 #include "hci/include/hci_layer.h"
 #include "internal_include/stack_config.h"
+#include "main/shim/hci_layer.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
@@ -52,6 +55,7 @@ static constexpr uint8_t kStateFlagHasDataPathSet = 0x04;
 static constexpr uint8_t kStateFlagIsBroadcast = 0x10;
 
 constexpr char kBtmLogTag[] = "ISO";
+static bool iso_impl_initialized_ = false;
 
 struct iso_sync_info {
   uint32_t first_sync_ts;
@@ -92,9 +96,10 @@ struct iso_impl {
   iso_impl() {
     iso_credits_ = controller_get_interface()->get_iso_buffer_count();
     iso_buffer_size_ = controller_get_interface()->get_iso_data_size();
+    iso_impl_initialized_ = true;
   }
 
-  ~iso_impl() {}
+  ~iso_impl() { iso_impl_initialized_ = false; }
 
   void handle_register_cis_callbacks(CigCallbacks* callbacks) {
     LOG_ASSERT(callbacks != nullptr) << "Invalid CIG callbacks";
@@ -106,11 +111,23 @@ struct iso_impl {
     big_callbacks_ = callbacks;
   }
 
+  void handle_register_on_iso_traffic_active_callback(void callback(bool)) {
+    LOG_ASSERT(callback != nullptr) << "Invalid OnIsoTrafficActive callback";
+    const std::lock_guard<std::mutex> lock(
+        on_iso_traffic_active_callbacks_list_mutex_);
+    on_iso_traffic_active_callbacks_list_.push_back(callback);
+  }
+
   void on_set_cig_params(uint8_t cig_id, uint32_t sdu_itv_mtos, uint8_t* stream,
                          uint16_t len) {
     uint8_t cis_cnt;
     uint16_t conn_handle;
     cig_create_cmpl_evt evt;
+
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
 
     LOG_ASSERT(cig_callbacks_ != nullptr) << "Invalid CIG callbacks";
     LOG_ASSERT(len >= 3) << "Invalid packet length: " << +len;
@@ -160,6 +177,14 @@ struct iso_impl {
     }
 
     cig_callbacks_->OnCigEvent(evt_code, &evt);
+
+    if (evt_code == kIsoEventCigOnCreateCmpl) {
+      const std::lock_guard<std::mutex> lock(
+          on_iso_traffic_active_callbacks_list_mutex_);
+      for (auto callback : on_iso_traffic_active_callbacks_list_) {
+        callback(true);
+      }
+    }
   }
 
   void create_cig(uint8_t cig_id,
@@ -197,6 +222,11 @@ struct iso_impl {
   void on_remove_cig(uint8_t* stream, uint16_t len) {
     cig_remove_cmpl_evt evt;
 
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
+
     LOG_ASSERT(cig_callbacks_ != nullptr) << "Invalid CIG callbacks";
     LOG_ASSERT(len == 2) << "Invalid packet length: " << +len;
 
@@ -220,6 +250,14 @@ struct iso_impl {
     }
 
     cig_callbacks_->OnCigEvent(kIsoEventCigOnRemoveCmpl, &evt);
+
+    {
+      const std::lock_guard<std::mutex> lock(
+          on_iso_traffic_active_callbacks_list_mutex_);
+      for (auto callback : on_iso_traffic_active_callbacks_list_) {
+        callback(false);
+      }
+    }
   }
 
   void remove_cig(uint8_t cig_id, bool force) {
@@ -239,6 +277,11 @@ struct iso_impl {
       struct iso_manager::cis_establish_params conn_params, uint8_t* stream,
       uint16_t len) {
     uint8_t status;
+
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
 
     LOG_ASSERT(len == 2) << "Invalid packet length: " << +len;
 
@@ -310,6 +353,11 @@ struct iso_impl {
     uint8_t status;
     uint16_t conn_handle;
 
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
+
     STREAM_TO_UINT8(status, stream);
     STREAM_TO_UINT16(conn_handle, stream);
 
@@ -373,6 +421,11 @@ struct iso_impl {
     }
     STREAM_TO_UINT8(status, stream);
     STREAM_TO_UINT16(conn_handle, stream);
+
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
 
     iso_base* iso = GetIsoIfKnown(conn_handle);
     if (iso == nullptr) {
@@ -442,6 +495,10 @@ struct iso_impl {
 
     STREAM_TO_UINT16(conn_handle, stream);
 
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
     iso_base* iso = GetIsoIfKnown(conn_handle);
     if (iso == nullptr) {
       /* That could happen when ACL has been disconnected while waiting on the
@@ -503,10 +560,6 @@ struct iso_impl {
     return packet;
   }
 
-  void send_iso_data_hci_packet(BT_HDR* packet) {
-    bte_main_hci_send(packet, MSG_STACK_TO_HC_HCI_ISO | 0x0001);
-  }
-
   void send_iso_data(uint16_t iso_handle, const uint8_t* data,
                      uint16_t data_len) {
     iso_base* iso = GetIsoIfKnown(iso_handle);
@@ -551,7 +604,9 @@ struct iso_impl {
     BT_HDR* packet =
         prepare_ts_hci_packet(iso_handle, ts, iso->sync_info.seq_nb, data_len);
     memcpy(packet->data + kIsoDataInTsBtHdrOffset, data, data_len);
-    send_iso_data_hci_packet(packet);
+    auto hci = bluetooth::shim::hci_layer_get_interface();
+    packet->event = MSG_STACK_TO_HC_HCI_ISO | 0x0001;
+    hci->transmit_downward(packet->event, packet);
   }
 
   void process_cis_est_pkt(uint8_t len, uint8_t* data) {
@@ -602,6 +657,11 @@ struct iso_impl {
   }
 
   void disconnection_complete(uint16_t handle, uint8_t reason) {
+    if (!iso_impl_initialized_) {
+      LOG_WARN("iso_impl not available anymore");
+      return;
+    }
+
     /* Check if this is an ISO handle */
     auto cis = GetCisIfKnown(handle);
     if (cis == nullptr) return;
@@ -724,6 +784,14 @@ struct iso_impl {
     }
 
     big_callbacks_->OnBigEvent(kIsoEventBigOnCreateCmpl, &evt);
+
+    {
+      const std::lock_guard<std::mutex> lock(
+          on_iso_traffic_active_callbacks_list_mutex_);
+      for (auto callbacks : on_iso_traffic_active_callbacks_list_) {
+        callbacks(true);
+      }
+    }
   }
 
   void process_terminate_big_cmpl_pkt(uint8_t len, uint8_t* data) {
@@ -748,6 +816,14 @@ struct iso_impl {
 
     LOG_ASSERT(is_known_handle) << "No such big: " << +evt.big_id;
     big_callbacks_->OnBigEvent(kIsoEventBigOnTerminateCmpl, &evt);
+
+    {
+      const std::lock_guard<std::mutex> lock(
+          on_iso_traffic_active_callbacks_list_mutex_);
+      for (auto callbacks : on_iso_traffic_active_callbacks_list_) {
+        callbacks(false);
+      }
+    }
   }
 
   void create_big(uint8_t big_id, struct big_create_params big_params) {
@@ -933,6 +1009,9 @@ struct iso_impl {
     dprintf(fd, "  ISO Manager:\n");
     dprintf(fd, "    Available credits: %d\n", iso_credits_.load());
     dprintf(fd, "    Controller buffer size: %d\n", iso_buffer_size_);
+    dprintf(fd, "    Num of ISO traffic callbacks: %lu\n",
+            static_cast<unsigned long>(
+                on_iso_traffic_active_callbacks_list_.size()));
     dprintf(fd, "    CISes:\n");
     for (auto const& cis_pair : conn_hdl_to_cis_map_) {
       dprintf(fd, "      CIS Connection handle: %d\n", cis_pair.first);
@@ -970,6 +1049,8 @@ struct iso_impl {
 
   CigCallbacks* cig_callbacks_ = nullptr;
   BigCallbacks* big_callbacks_ = nullptr;
+  std::mutex on_iso_traffic_active_callbacks_list_mutex_;
+  std::list<void (*)(bool)> on_iso_traffic_active_callbacks_list_;
 };
 
 }  // namespace iso_manager

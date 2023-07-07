@@ -85,7 +85,7 @@ tPORT* port_allocate_port(uint8_t dlci, const RawAddress& bd_addr) {
           "%s: rfc_cb.port.port[%d]:%p chosen, "
           "last_port_index:%d, bd_addr=%s",
           __func__, port_index, p_port, rfc_cb.rfc.last_port_index,
-          bd_addr.ToString().c_str());
+          ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
       return p_port;
     }
   }
@@ -284,12 +284,14 @@ tRFC_MCB* port_find_mcb(const RawAddress& bd_addr) {
   for (tRFC_MCB& mcb : rfc_cb.port.rfc_mcb) {
     if ((mcb.state != RFC_MX_STATE_IDLE) && (mcb.bd_addr == bd_addr)) {
       /* Multiplexer channel found do not change anything */
-      VLOG(1) << __func__ << ": found bd_addr=" << bd_addr
+      VLOG(1) << __func__
+              << ": found bd_addr=" << ADDRESS_TO_LOGGABLE_STR(bd_addr)
               << ", rfc_mcb=" << &mcb << ", lcid=" << loghex(mcb.lcid);
       return &mcb;
     }
   }
-  VLOG(1) << __func__ << ": not found, bd_addr:" << bd_addr;
+  VLOG(1) << __func__
+          << ": not found, bd_addr:" << ADDRESS_TO_LOGGABLE_STR(bd_addr);
   return nullptr;
 }
 

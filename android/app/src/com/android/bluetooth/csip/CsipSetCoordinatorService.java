@@ -47,16 +47,20 @@ import android.util.Pair;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
+import com.android.bluetooth.le_audio.LeAudioService;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -78,9 +82,11 @@ public class CsipSetCoordinatorService extends ProfileService {
     private static CsipSetCoordinatorService sCsipSetCoordinatorService;
 
     private AdapterService mAdapterService;
+    private LeAudioService mLeAudioService;
     private DatabaseManager mDatabaseManager;
     private HandlerThread mStateMachinesThread;
     private BluetoothDevice mPreviousAudioDevice;
+    @VisibleForTesting ServiceFactory mServiceFactory = new ServiceFactory();
 
     @VisibleForTesting CsipSetCoordinatorNativeInterface mCsipSetCoordinatorNativeInterface;
 
@@ -90,7 +96,11 @@ public class CsipSetCoordinatorService extends ProfileService {
     private final Map<Integer, ParcelUuid> mGroupIdToUuidMap = new HashMap<>();
     private final Map<BluetoothDevice, Map<Integer, Integer>> mDeviceGroupIdRankMap =
             new ConcurrentHashMap<>();
+    // Tracks the number of devices in the CSIP group (greater than or equal to available devices)
     private final Map<Integer, Integer> mGroupIdToGroupSize = new HashMap<>();
+    // Tracks the number of available devices mapped to the group id
+    private final Map<Integer, Set<BluetoothDevice>> mGroupIdToConnectedDevices = new HashMap<>();
+    private final Map<BluetoothDevice, Integer> mFoundSetMemberToGroupId = new HashMap<>();
     private final Map<ParcelUuid, Map<Executor, IBluetoothCsipSetCoordinatorCallback>> mCallbacks =
             new HashMap<>();
     private final Map<Integer, Pair<UUID, IBluetoothCsipSetCoordinatorLockCallback>> mLocks =
@@ -135,6 +145,9 @@ public class CsipSetCoordinatorService extends ProfileService {
                 "CsipSetCoordinatorNativeInterface cannot be null when"
                 .concat("CsipSetCoordinatorService starts"));
 
+        // Get LE Audio service (can be null)
+        mLeAudioService = mServiceFactory.getLeAudioService();
+
         // Start handler thread for state machines
         mStateMachines.clear();
         mStateMachinesThread = new HandlerThread("CsipSetCoordinatorService.StateMachines");
@@ -142,10 +155,12 @@ public class CsipSetCoordinatorService extends ProfileService {
 
         // Setup broadcast receivers
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         mBondStateChangedReceiver = new BondStateChangedReceiver();
         registerReceiver(mBondStateChangedReceiver, filter);
         filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothCsipSetCoordinator.ACTION_CSIS_CONNECTION_STATE_CHANGED);
         mConnectionStateChangedReceiver = new ConnectionStateChangedReceiver();
         registerReceiver(mConnectionStateChangedReceiver, filter);
@@ -207,7 +222,9 @@ public class CsipSetCoordinatorService extends ProfileService {
 
         mDeviceGroupIdRankMap.clear();
         mCallbacks.clear();
+        mFoundSetMemberToGroupId.clear();
         mGroupIdToGroupSize.clear();
+        mGroupIdToConnectedDevices.clear();
         mGroupIdToUuidMap.clear();
 
         mLocks.clear();
@@ -681,7 +698,9 @@ public class CsipSetCoordinatorService extends ProfileService {
                 IBluetoothCsipSetCoordinator.CSIS_GROUP_SIZE_UNKNOWN);
     }
 
-    private void handleDeviceAvailable(BluetoothDevice device, int groupId, int rank, UUID uuid) {
+    private void handleDeviceAvailable(BluetoothDevice device, int groupId, int rank, UUID uuid,
+            int groupSize) {
+        mGroupIdToGroupSize.put(groupId, groupSize);
         ParcelUuid parcel_uuid = new ParcelUuid(uuid);
         if (!getAllGroupIds(parcel_uuid).contains(groupId)) {
             mGroupIdToUuidMap.put(groupId, parcel_uuid);
@@ -693,6 +712,47 @@ public class CsipSetCoordinatorService extends ProfileService {
 
         Map<Integer, Integer> all_device_groups = mDeviceGroupIdRankMap.get(device);
         all_device_groups.put(groupId, rank);
+    }
+
+    /**
+     * If all the group devices are now available, make sure CSIP connection policy mirrors the LEA
+     * connection policy.
+     * @param groupId is the group that has a new device available
+     */
+    private void disableCsipIfNeeded(int groupId) {
+        /* Make sure CSIP connection policy mirrors that of LeAudioService once all CSIP
+        characteristic reads have completed (ensures we can pair other set devices) */
+        if (mLeAudioService == null) {
+            mLeAudioService = mServiceFactory.getLeAudioService();
+        }
+
+        if (mLeAudioService != null) {
+            if (!mGroupIdToConnectedDevices.containsKey(groupId)) {
+                Log.w(TAG, "No connected devices for groupId=" + groupId);
+                return;
+            }
+            if (!mGroupIdToGroupSize.containsKey(groupId)) {
+                Log.w(TAG, "No group size stored for groupId=" + groupId);
+                return;
+            }
+            if (mGroupIdToConnectedDevices.get(groupId).size() < mGroupIdToGroupSize.get(groupId)) {
+                Log.d(TAG, "disableCsipIfNeeded: groupId " + groupId + "has "
+                        + mGroupIdToConnectedDevices.get(groupId).size() + " connected devices out"
+                        + " of a group size of " + mGroupIdToGroupSize.get(groupId));
+                return;
+            }
+            for (BluetoothDevice groupDevice : mGroupIdToConnectedDevices.get(groupId)) {
+                if (mLeAudioService.getConnectionPolicy(groupDevice)
+                        == BluetoothProfile.CONNECTION_POLICY_FORBIDDEN) {
+                    Log.i(TAG, "Setting CSIP connection policy to FORBIDDEN for device "
+                            + groupDevice + " after all group devices bonded because LEA "
+                            + "connection policy is FORBIDDEN");
+                    setConnectionPolicy(groupDevice, BluetoothProfile.CONNECTION_POLICY_FORBIDDEN);
+                }
+            }
+        } else {
+            Log.w(TAG, "checkIfGroupPaired: LE Audio Service is null");
+        }
     }
 
     private void executeCallback(Executor exec, IBluetoothCsipSetCoordinatorCallback callback,
@@ -774,6 +834,25 @@ public class CsipSetCoordinatorService extends ProfileService {
         }
     }
 
+    void notifySetMemberAvailable(BluetoothDevice device, int groupId) {
+        if (DBG) {
+            Log.d(TAG, "notifySetMemberAvailable: " + device + ", " + groupId);
+        }
+
+        /* Sent intent as well */
+        Intent intent = new Intent(BluetoothCsipSetCoordinator.ACTION_CSIS_SET_MEMBER_AVAILABLE);
+        intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
+        intent.putExtra(BluetoothCsipSetCoordinator.EXTRA_CSIS_GROUP_ID, groupId);
+
+        intent.addFlags(
+                Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
+                        | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        sendBroadcast(intent, BLUETOOTH_PRIVILEGED);
+
+        /* Notify registered parties */
+        handleSetMemberAvailable(device, groupId);
+    }
+
     void messageFromNative(CsipSetCoordinatorStackEvent stackEvent) {
         BluetoothDevice device = stackEvent.device;
         Log.d(TAG, "Message from native: " + stackEvent);
@@ -791,17 +870,17 @@ public class CsipSetCoordinatorService extends ProfileService {
             intent.putExtra(
                     BluetoothCsipSetCoordinator.EXTRA_CSIS_GROUP_TYPE_UUID, stackEvent.valueUuid1);
 
-            handleDeviceAvailable(device, groupId, stackEvent.valueInt3, stackEvent.valueUuid1);
+            handleDeviceAvailable(device, groupId, stackEvent.valueInt3, stackEvent.valueUuid1,
+                    stackEvent.valueInt2);
         } else if (stackEvent.type
                 == CsipSetCoordinatorStackEvent.EVENT_TYPE_SET_MEMBER_AVAILABLE) {
             Objects.requireNonNull(device, "Device should never be null, event: " + stackEvent);
-            /* Notify registered parties */
-            handleSetMemberAvailable(device, stackEvent.valueInt1);
-
-            /* Sent intent as well */
-            intent = new Intent(BluetoothCsipSetCoordinator.ACTION_CSIS_SET_MEMBER_AVAILABLE);
-            intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
-            intent.putExtra(BluetoothCsipSetCoordinator.EXTRA_CSIS_GROUP_ID, groupId);
+            if (!mFoundSetMemberToGroupId.containsKey(device)) {
+                mFoundSetMemberToGroupId.put(device, groupId);
+            }
+            if (mGroupIdToConnectedDevices.containsKey(groupId)) {
+                notifySetMemberAvailable(device, groupId);
+            }
         } else if (stackEvent.type == CsipSetCoordinatorStackEvent.EVENT_TYPE_GROUP_LOCK_CHANGED) {
             int lock_status = stackEvent.valueInt2;
             boolean lock_state = stackEvent.valueBool1;
@@ -894,12 +973,21 @@ public class CsipSetCoordinatorService extends ProfileService {
         if (DBG) {
             Log.d(TAG, "Bond state changed for device: " + device + " state: " + bondState);
         }
+        if (bondState == BluetoothDevice.BOND_BONDING
+                && mFoundSetMemberToGroupId.containsKey(device)) {
+            mFoundSetMemberToGroupId.remove(device);
+        }
+
         // Remove state machine if the bonding for a device is removed
         if (bondState != BluetoothDevice.BOND_NONE) {
             return;
         }
 
         mDeviceGroupIdRankMap.remove(device);
+        for (Map.Entry<Integer, Set<BluetoothDevice>> entry:
+                mGroupIdToConnectedDevices.entrySet()) {
+            entry.getValue().remove(device);
+        }
 
         synchronized (mStateMachines) {
             CsipSetCoordinatorStateMachine sm = mStateMachines.get(device);
@@ -948,6 +1036,18 @@ public class CsipSetCoordinatorService extends ProfileService {
                 }
                 removeStateMachine(device);
             }
+        } else if (toState == BluetoothProfile.STATE_CONNECTED) {
+            int groupId = getGroupId(device, BluetoothUuid.CAP);
+            if (!mGroupIdToConnectedDevices.containsKey(groupId)) {
+                mGroupIdToConnectedDevices.put(groupId, new HashSet<>());
+            }
+            for (Map.Entry<BluetoothDevice, Integer> entry : mFoundSetMemberToGroupId.entrySet()) {
+                if (entry.getValue() == groupId) {
+                    notifySetMemberAvailable(entry.getKey(), groupId);
+                }
+            }
+            mGroupIdToConnectedDevices.get(groupId).add(device);
+            disableCsipIfNeeded(groupId);
         }
     }
 
@@ -1265,6 +1365,12 @@ public class CsipSetCoordinatorService extends ProfileService {
         super.dump(sb);
         for (CsipSetCoordinatorStateMachine sm : mStateMachines.values()) {
             sm.dump(sb);
+        }
+        ProfileService.println(sb, "mFoundSetMemberToGroupId: ");
+        for (Map.Entry<BluetoothDevice, Integer> entry : mFoundSetMemberToGroupId.entrySet()) {
+            ProfileService.println(
+                    sb,
+                    "  member device: " + entry.getKey() + ", group ID: " + entry.getValue());
         }
     }
 }

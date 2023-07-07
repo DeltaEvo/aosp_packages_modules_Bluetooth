@@ -359,6 +359,27 @@ tBTA_GATTC_SERV* bta_gattc_srcb_alloc(const RawAddress& bda) {
   return p_tcb;
 }
 
+void bta_gattc_send_mtu_response(tBTA_GATTC_CLCB* p_clcb,
+                                 const tBTA_GATTC_DATA* p_data,
+                                 uint16_t current_mtu) {
+  GATT_CONFIGURE_MTU_OP_CB cb = p_data->api_mtu.mtu_cb;
+  if (cb) {
+    void* my_cb_data = p_data->api_mtu.mtu_cb_data;
+    cb(p_clcb->bta_conn_id, GATT_SUCCESS, my_cb_data);
+  }
+
+  tBTA_GATTC cb_data;
+  p_clcb->status = GATT_SUCCESS;
+  cb_data.cfg_mtu.conn_id = p_clcb->bta_conn_id;
+  cb_data.cfg_mtu.status = GATT_SUCCESS;
+
+  cb_data.cfg_mtu.mtu = current_mtu;
+
+  if (p_clcb->p_rcb) {
+    (*p_clcb->p_rcb->p_cback)(BTA_GATTC_CFG_MTU_EVT, &cb_data);
+  }
+}
+
 void bta_gattc_continue(tBTA_GATTC_CLCB* p_clcb) {
   if (p_clcb->p_q_cmd != NULL) {
     LOG_INFO("Already scheduled another request for conn_id = 0x%04x",
@@ -366,14 +387,49 @@ void bta_gattc_continue(tBTA_GATTC_CLCB* p_clcb) {
     return;
   }
 
-  if (p_clcb->p_q_cmd_queue.empty()) {
-    LOG_INFO("Nothing to do for conn_id = 0x%04x", p_clcb->bta_conn_id);
-    return;
-  }
+  while (!p_clcb->p_q_cmd_queue.empty()) {
+    const tBTA_GATTC_DATA* p_q_cmd = p_clcb->p_q_cmd_queue.front();
+    if (p_q_cmd->hdr.event != BTA_GATTC_API_CFG_MTU_EVT) {
+      p_clcb->p_q_cmd_queue.pop_front();
+      bta_gattc_sm_execute(p_clcb, p_q_cmd->hdr.event, p_q_cmd);
+      return;
+    }
 
-  const tBTA_GATTC_DATA* p_q_cmd = p_clcb->p_q_cmd_queue.front();
-  p_clcb->p_q_cmd_queue.pop_front();
-  bta_gattc_sm_execute(p_clcb, p_q_cmd->hdr.event, p_q_cmd);
+    /* The p_q_cmd is the MTU Request event. */
+    uint16_t current_mtu = 0;
+    auto result = GATTC_TryMtuRequest(p_clcb->bda, p_clcb->transport,
+                                      p_clcb->bta_conn_id, &current_mtu);
+    switch (result) {
+      case MTU_EXCHANGE_DEVICE_DISCONNECTED:
+        bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_CONFIG,
+                               GATT_NO_RESOURCES, NULL);
+        /* Handled, free command below and continue with a p_q_cmd_queue */
+        break;
+      case MTU_EXCHANGE_NOT_ALLOWED:
+        bta_gattc_cmpl_sendmsg(p_clcb->bta_conn_id, GATTC_OPTYPE_CONFIG,
+                               GATT_ERR_UNLIKELY, NULL);
+        /* Handled, free command below and continue with a p_q_cmd_queue */
+        break;
+      case MTU_EXCHANGE_ALREADY_DONE:
+        bta_gattc_send_mtu_response(p_clcb, p_q_cmd, current_mtu);
+        /* Handled, free command below and continue with a p_q_cmd_queue */
+        break;
+      case MTU_EXCHANGE_IN_PROGRESS:
+        LOG_WARN("Waiting p_clcb %p", p_clcb);
+        return;
+      case MTU_EXCHANGE_NOT_DONE_YET:
+        p_clcb->p_q_cmd_queue.pop_front();
+        bta_gattc_sm_execute(p_clcb, p_q_cmd->hdr.event, p_q_cmd);
+        return;
+    }
+
+    /* p_q_cmd was the MTU request and it was handled.
+     * If MTU request was handled without actually ATT request,
+     * it is ok to take another message from the queue and proceed.
+     */
+    p_clcb->p_q_cmd_queue.pop_front();
+    osi_free_and_reset((void**)&p_q_cmd);
+  }
 }
 
 bool bta_gattc_is_data_queued(tBTA_GATTC_CLCB* p_clcb,
@@ -405,7 +461,7 @@ BtaEnqueuedResult_t bta_gattc_enqueue(tBTA_GATTC_CLCB* p_clcb,
   LOG_INFO(
       "Already has a pending command to executer. Queuing for later %s conn "
       "id=0x%04x",
-      p_clcb->bda.ToString().c_str(), p_clcb->bta_conn_id);
+      ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda), p_clcb->bta_conn_id);
   p_clcb->p_q_cmd_queue.push_back(p_data);
 
   return ENQUEUED_FOR_LATER;
@@ -519,7 +575,7 @@ bool bta_gattc_mark_bg_conn(tGATT_IF client_if,
   if (!add) {
     LOG(ERROR) << __func__
                << " unable to find the bg connection mask for bd_addr="
-               << remote_bda_ptr;
+               << ADDRESS_TO_LOGGABLE_STR(remote_bda_ptr);
     return false;
   } else /* adding a new device mask */
   {
@@ -531,7 +587,7 @@ bool bta_gattc_mark_bg_conn(tGATT_IF client_if,
 
         p_cif_mask = &p_bg_tck->cif_mask;
 
-        *p_cif_mask = (1 << (client_if - 1));
+        *p_cif_mask = ((tBTA_GATTC_CIF_MASK)1 << (client_if - 1));
         return true;
       }
     }
@@ -558,7 +614,7 @@ bool bta_gattc_check_bg_conn(tGATT_IF client_if, const RawAddress& remote_bda,
   for (i = 0; i < ble_acceptlist_size() && !is_bg_conn; i++, p_bg_tck++) {
     if (p_bg_tck->in_use && (p_bg_tck->remote_bda == remote_bda ||
                              p_bg_tck->remote_bda.IsEmpty())) {
-      if (((p_bg_tck->cif_mask & (1 << (client_if - 1))) != 0) &&
+      if (((p_bg_tck->cif_mask & ((tBTA_GATTC_CIF_MASK)1 << (client_if - 1))) != 0) &&
           role == HCI_ROLE_CENTRAL)
         is_bg_conn = true;
     }

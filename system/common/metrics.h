@@ -521,6 +521,8 @@ void LogLeAudioConnectionSessionReported(
     std::vector<int64_t>& streaming_duration_nanos,
     std::vector<int32_t>& streaming_context_type);
 
+void LogLeAudioBroadcastSessionReported(int64_t duration_nanos);
+
 void LogLeBluetoothConnectionMetricEventReported(
     const RawAddress& raw_address,
     android::bluetooth::le::LeConnectionOriginType origin_type,

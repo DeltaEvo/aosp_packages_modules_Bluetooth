@@ -28,7 +28,6 @@
 #include "avdt_int.h"
 #include "avdtc_api.h"
 #include "bt_target.h"
-#include "bt_utils.h"
 #include "osi/include/osi.h"
 
 /*****************************************************************************
@@ -228,7 +227,7 @@ const uint8_t avdt_scb_st_idle[][AVDT_SCB_NUM_COLS] = {
     /* TC_DATA_EVT */
     {AVDT_SCB_DROP_PKT, AVDT_SCB_IGNORE, AVDT_SCB_IDLE_ST},
     /* CC_CLOSE_EVT */
-    {AVDT_SCB_HDL_TC_CLOSE, AVDT_SCB_CLR_VARS, AVDT_SCB_IDLE_ST}};
+    {AVDT_SCB_CLR_VARS, AVDT_SCB_IGNORE, AVDT_SCB_IDLE_ST}};
 
 /* state table for configured state */
 const uint8_t avdt_scb_st_conf[][AVDT_SCB_NUM_COLS] = {

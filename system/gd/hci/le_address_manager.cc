@@ -152,7 +152,10 @@ void LeAddressManager::SetPrivacyPolicyForInitiatorAddressForTest(
 LeAddressManager::AddressPolicy LeAddressManager::GetAddressPolicy() {
   return address_policy_;
 }
-
+bool LeAddressManager::RotatingAddress() {
+  return address_policy_ == AddressPolicy::USE_RESOLVABLE_ADDRESS ||
+         address_policy_ == AddressPolicy::USE_NON_RESOLVABLE_ADDRESS;
+}
 LeAddressManager::AddressPolicy LeAddressManager::Register(LeAddressManagerCallback* callback) {
   handler_->BindOnceOn(this, &LeAddressManager::register_client, callback).Invoke();
   return address_policy_;
@@ -211,16 +214,21 @@ void LeAddressManager::AckResume(LeAddressManagerCallback* callback) {
   handler_->BindOnceOn(this, &LeAddressManager::ack_resume, callback).Invoke();
 }
 
-AddressWithType LeAddressManager::GetCurrentAddress() {
+AddressWithType LeAddressManager::GetInitiatorAddress() {
   ASSERT(address_policy_ != AddressPolicy::POLICY_NOT_SET);
   return le_address_;
 }
 
-AddressWithType LeAddressManager::GetAnotherAddress() {
-  ASSERT(
-      address_policy_ == AddressPolicy::USE_NON_RESOLVABLE_ADDRESS ||
-      address_policy_ == AddressPolicy::USE_RESOLVABLE_ADDRESS);
+AddressWithType LeAddressManager::NewResolvableAddress() {
+  ASSERT(RotatingAddress());
   hci::Address address = generate_rpa();
+  auto random_address = AddressWithType(address, AddressType::RANDOM_DEVICE_ADDRESS);
+  return random_address;
+}
+
+AddressWithType LeAddressManager::NewNonResolvableAddress() {
+  ASSERT(RotatingAddress());
+  hci::Address address = generate_nrpa();
   auto random_address = AddressWithType(address, AddressType::RANDOM_DEVICE_ADDRESS);
   return random_address;
 }
@@ -465,6 +473,10 @@ void LeAddressManager::AddDeviceToResolvingList(
     Address peer_identity_address,
     const std::array<uint8_t, 16>& peer_irk,
     const std::array<uint8_t, 16>& local_irk) {
+  if (!supports_ble_privacy_) {
+    return;
+  }
+
   // Disable Address resolution
   auto disable_builder = hci::LeSetAddressResolutionEnableBuilder::Create(hci::Enable::DISABLED);
   Command disable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, HCICommand{std::move(disable_builder)}};
@@ -503,6 +515,10 @@ void LeAddressManager::RemoveDeviceFromFilterAcceptList(
 
 void LeAddressManager::RemoveDeviceFromResolvingList(
     PeerAddressType peer_identity_address_type, Address peer_identity_address) {
+  if (!supports_ble_privacy_) {
+    return;
+  }
+
   // Disable Address resolution
   auto disable_builder = hci::LeSetAddressResolutionEnableBuilder::Create(hci::Enable::DISABLED);
   Command disable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, HCICommand{std::move(disable_builder)}};
@@ -532,6 +548,10 @@ void LeAddressManager::ClearFilterAcceptList() {
 }
 
 void LeAddressManager::ClearResolvingList() {
+  if (!supports_ble_privacy_) {
+    return;
+  }
+
   // Disable Address resolution
   auto disable_builder = hci::LeSetAddressResolutionEnableBuilder::Create(hci::Enable::DISABLED);
   Command disable = {CommandType::SET_ADDRESS_RESOLUTION_ENABLE, HCICommand{std::move(disable_builder)}};
@@ -592,7 +612,8 @@ void LeAddressManager::OnCommandComplete(bluetooth::hci::CommandCompleteView vie
               "Received LE_SET_RANDOM_ADDRESS complete with status %s",
               ErrorCodeText(complete_view.GetStatus()).c_str());
         } else {
-          LOG_INFO("update random address : %s", cached_address_.GetAddress().ToString().c_str());
+          LOG_INFO("update random address : %s",
+                   ADDRESS_TO_LOGGABLE_CSTR(cached_address_.GetAddress()));
           le_address_ = cached_address_;
         }
       }

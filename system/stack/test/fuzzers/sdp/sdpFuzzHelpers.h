@@ -27,12 +27,17 @@
 
 #include "fuzzers/common/commonFuzzHelpers.h"
 #include "osi/include/alarm.h"
+#include "stack/include/sdp_api.h"
 #include "stack/sdp/sdpint.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth::legacy::stack::sdp;
 
 #define SDP_MAX_NUM_ELEMS 128
 #define SDP_MAX_ELEM_LEN 1024
 #define SDP_MAX_ATTRS 1024
+
+constexpr int32_t kMaxVectorSize = 1000;
 
 struct SDP_Sequence_Helper {
   uint8_t num_elem;
@@ -74,7 +79,7 @@ void cleanupSdpFuzz() {
   sdp_protolist_elem_vect.clear();
 
   // Delete all records
-  SDP_DeleteRecord(0);
+  get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(0);
   sdp_record_handles.clear();
 
   // Delete Databases
@@ -113,7 +118,8 @@ tSDP_DISC_ATVAL generateArbitrarySdpDiscAttrVal(FuzzedDataProvider* fdp) {
 std::shared_ptr<tSDP_DISC_ATTR> generateArbitrarySdpDiscAttr(
     FuzzedDataProvider* fdp, bool allow_null) {
   // Give it a chance to return a nullptr
-  if (allow_null && !fdp->ConsumeBool()) {
+  if ((allow_null && !fdp->ConsumeBool()) ||
+      sdp_disc_attr_vect.size() > kMaxVectorSize) {
     return nullptr;
   }
 
@@ -121,7 +127,8 @@ std::shared_ptr<tSDP_DISC_ATTR> generateArbitrarySdpDiscAttr(
   sdp_disc_attr_vect.push_back(new_attr);
 
   new_attr->p_next_attr = generateArbitrarySdpDiscAttr(fdp, true).get();
-  new_attr->attr_id = fdp->ConsumeIntegral<uint16_t>();
+  new_attr->attr_id = fdp->ConsumeBool() ? ATTR_ID_BT_PROFILE_DESC_LIST
+                                         : fdp->ConsumeIntegral<uint16_t>();
   new_attr->attr_len_type =
       fdp->ConsumeBool() ? 16 : fdp->ConsumeIntegral<uint16_t>();
   new_attr->attr_value = generateArbitrarySdpDiscAttrVal(fdp);

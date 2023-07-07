@@ -19,8 +19,14 @@
 #include <optional>
 #include <string>
 
+#define DEBUGGABLE_SYS_PROP_NAME "ro.debuggable"
+
 namespace bluetooth {
 namespace os {
+
+/* System Property to indicate if the dual mode audio feature is enabled */
+static const std::string kIsDualModeAudioEnabledProperty =
+    "persist.bluetooth.enable_dual_mode_audio";
 
 // Get |property| keyed system property from supported platform, return std::nullopt if the property does not exist
 // or if the platform does not support system property
@@ -45,8 +51,8 @@ bool GetSystemPropertyBool(const std::string& property, bool default_value);
 // Replace existing value if property already exists
 bool SetSystemProperty(const std::string& property, const std::string& value);
 
-// Clear system properties for host only
-void ClearSystemPropertiesForHost();
+// Clear system properties for host only return true on success
+bool ClearSystemPropertiesForHost();
 
 // Check if the vendor image is using root canal simulated Bluetooth stack
 bool IsRootCanalEnabled();

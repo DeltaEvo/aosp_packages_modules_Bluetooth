@@ -24,6 +24,7 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothAvrcpController;
 import android.content.AttributionSource;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.support.v4.media.MediaBrowserCompat.MediaItem;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.sysprop.BluetoothProperties;
@@ -33,6 +34,7 @@ import com.android.bluetooth.BluetoothPrefs;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
+import com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService.BrowseResult;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.internal.annotations.VisibleForTesting;
@@ -320,10 +322,10 @@ public class AvrcpControllerService extends ProfileService {
      * Get a List of MediaItems that are children of the specified media Id
      *
      * @param parentMediaId The player or folder to get the contents of
-     * @return List of Children if available, an empty list if there are none,
-     * or null if a search must be performed.
+     * @return List of Children if available, an empty list if there are none, or null if a search
+     *     must be performed.
      */
-    public synchronized List<MediaItem> getContents(String parentMediaId) {
+    public synchronized BrowseResult getContents(String parentMediaId) {
         if (DBG) Log.d(TAG, "getContents(" + parentMediaId + ")");
 
         BrowseTree.BrowseNode requestedNode = sBrowseTree.findBrowseNodeByID(parentMediaId);
@@ -336,27 +338,36 @@ public class AvrcpControllerService extends ProfileService {
                 }
             }
         }
-
         // If we don't find a node in the tree then do not have any way to browse for the contents.
         // Return an empty list instead.
         if (requestedNode == null) {
             if (DBG) Log.d(TAG, "Didn't find a node");
-            return new ArrayList(0);
-        } else {
-            // If we found a node and it belongs to a device then go ahead and make it active
-            BluetoothDevice device = requestedNode.getDevice();
-            if (device != null) {
-                setActiveDevice(device);
-            }
-
-            if (!requestedNode.isCached()) {
-                if (DBG) Log.d(TAG, "node is not cached");
-                refreshContents(requestedNode);
-            }
-            if (DBG) Log.d(TAG, "Returning contents");
-            return requestedNode.getContents();
+            return new BrowseResult(new ArrayList(0), BrowseResult.ERROR_MEDIA_ID_INVALID);
         }
+        if (parentMediaId.equals(BrowseTree.ROOT) && requestedNode.getChildrenCount() == 0) {
+            return new BrowseResult(null, BrowseResult.NO_DEVICE_CONNECTED);
+        }
+        // If we found a node and it belongs to a device then go ahead and make it active
+        BluetoothDevice device = requestedNode.getDevice();
+        if (device != null) {
+            setActiveDevice(device);
+        }
+
+        List<MediaItem> contents = requestedNode.getContents();
+
+        if (DBG) Log.d(TAG, "Returning contents");
+        if (!requestedNode.isCached()) {
+            if (DBG) Log.d(TAG, "node is not cached");
+            refreshContents(requestedNode);
+            /* Ongoing downloads can have partial results and we want to make sure they get sent
+             * to the client. If a download gets kicked off as a result of this request, the
+             * contents will be null until the first results arrive.
+             */
+            return new BrowseResult(contents, BrowseResult.DOWNLOAD_PENDING);
+        }
+        return new BrowseResult(contents, BrowseResult.SUCCESS);
     }
+
 
     @Override
     protected IProfileServiceBinder initBinder() {
@@ -568,6 +579,41 @@ public class AvrcpControllerService extends ProfileService {
         if (stateMachine != null) {
             stateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PROCESS_SET_ABS_VOL_CMD,
                     absVol);
+        }
+    }
+
+    /**
+     * Notify AVRCP Controller of an audio focus state change so we can make requests of the active
+     * player to stop and start playing.
+     */
+    public void onAudioFocusStateChanged(int state) {
+        if (DBG) {
+            Log.d(TAG, "onAudioFocusStateChanged(state=" + state + ")");
+        }
+
+        // Make sure the active device isn't changed while we're processing the event so play/pause
+        // commands get routed to the correct device
+        synchronized (mActiveDeviceLock) {
+            switch (state) {
+                case AudioManager.AUDIOFOCUS_GAIN:
+                    BluetoothMediaBrowserService.setActive(true);
+                    break;
+                case AudioManager.AUDIOFOCUS_LOSS:
+                    BluetoothMediaBrowserService.setActive(false);
+                    break;
+            }
+            BluetoothDevice device = getActiveDevice();
+            if (device == null) {
+                Log.w(TAG, "No active device set, ignore focus change");
+                return;
+            }
+
+            AvrcpControllerStateMachine stateMachine = mDeviceStateMap.get(device);
+            if (stateMachine == null) {
+                Log.w(TAG, "No state machine for active device.");
+                return;
+            }
+            stateMachine.sendMessage(AvrcpControllerStateMachine.AUDIO_FOCUS_STATE_CHANGE, state);
         }
     }
 
