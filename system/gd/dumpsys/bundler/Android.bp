@@ -31,6 +31,7 @@ genrule {
     visibility: [
         "//packages/modules/Bluetooth/system/gd",
         "//packages/modules/Bluetooth/system/main",
+        "//packages/modules/Bluetooth/system/rust",
     ],
     tools: [
         "flatc",
@@ -40,7 +41,8 @@ genrule {
         "bundler_schema.fbs",
     ],
     out: [
-        "bundler_schema_generated.h", "bundler_schema.bfbs",
+        "bundler_schema.bfbs",
+        "bundler_schema_generated.h",
     ],
 }
 

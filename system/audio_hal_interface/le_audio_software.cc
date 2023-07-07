@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "BTAudioClientLeAudio"
+#define LOG_TAG "BTAudioClientLeAudioStub"
 
 #include "le_audio_software.h"
 
@@ -166,8 +166,8 @@ void LeAudioClientInterface::Sink::StartSession() {
     }
     hidl::le_audio::LeAudioSinkTransport::interface->StartSession_2_1();
     return;
-  } else if (HalVersionManager::GetHalVersion() ==
-             BluetoothAudioHalVersion::VERSION_AIDL_V1) {
+  } else if (HalVersionManager::GetHalTransport() ==
+             BluetoothAudioHalTransport::AIDL) {
     AudioConfigurationAIDL audio_config;
     if (is_aidl_offload_encoding_session(is_broadcaster_)) {
       if (is_broadcaster_) {
@@ -431,8 +431,8 @@ void LeAudioClientInterface::Source::StartSession() {
     }
     hidl::le_audio::LeAudioSourceTransport::interface->StartSession_2_1();
     return;
-  } else if (HalVersionManager::GetHalVersion() ==
-             BluetoothAudioHalVersion::VERSION_AIDL_V1) {
+  } else if (HalVersionManager::GetHalTransport() ==
+             BluetoothAudioHalTransport::AIDL) {
     AudioConfigurationAIDL audio_config;
     if (aidl::le_audio::LeAudioSourceTransport::
             interface->GetTransportInstance()

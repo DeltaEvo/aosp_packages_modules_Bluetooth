@@ -18,14 +18,17 @@ package android.bluetooth.le;
 
 import static android.bluetooth.le.BluetoothLeUtils.getSyncTimeout;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresNoPermission;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
+import android.annotation.SystemApi;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGattServer;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothGatt;
-import android.bluetooth.IBluetoothManager;
 import android.bluetooth.annotations.RequiresBluetoothAdvertisePermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
 import android.content.AttributionSource;
@@ -66,7 +69,6 @@ public final class BluetoothLeAdvertiser {
     private static final int MANUFACTURER_SPECIFIC_DATA_LENGTH = 2;
 
     private final BluetoothAdapter mBluetoothAdapter;
-    private final IBluetoothManager mBluetoothManager;
     private final AttributionSource mAttributionSource;
 
     private final Handler mHandler;
@@ -85,7 +87,6 @@ public final class BluetoothLeAdvertiser {
      */
     public BluetoothLeAdvertiser(BluetoothAdapter bluetoothAdapter) {
         mBluetoothAdapter = Objects.requireNonNull(bluetoothAdapter);
-        mBluetoothManager = mBluetoothAdapter.getBluetoothManager();
         mAttributionSource = mBluetoothAdapter.getAttributionSource();
         mHandler = new Handler(Looper.getMainLooper());
     }
@@ -129,7 +130,9 @@ public final class BluetoothLeAdvertiser {
                 throw new IllegalArgumentException("callback cannot be null");
             }
             boolean isConnectable = settings.isConnectable();
-            if (totalBytes(advertiseData, isConnectable) > MAX_LEGACY_ADVERTISING_DATA_BYTES
+            boolean isDiscoverable = settings.isDiscoverable();
+            boolean hasFlags = isConnectable && isDiscoverable;
+            if (totalBytes(advertiseData, hasFlags) > MAX_LEGACY_ADVERTISING_DATA_BYTES
                     || totalBytes(scanResponse, false) > MAX_LEGACY_ADVERTISING_DATA_BYTES) {
                 postStartFailure(callback, AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE);
                 return;
@@ -142,6 +145,7 @@ public final class BluetoothLeAdvertiser {
             AdvertisingSetParameters.Builder parameters = new AdvertisingSetParameters.Builder();
             parameters.setLegacyMode(true);
             parameters.setConnectable(isConnectable);
+            parameters.setDiscoverable(isDiscoverable);
             parameters.setScannable(true); // legacy advertisements we support are always scannable
             parameters.setOwnAddressType(settings.getOwnAddressType());
             if (settings.getMode() == AdvertiseSettings.ADVERTISE_MODE_LOW_POWER) {
@@ -371,18 +375,75 @@ public final class BluetoothLeAdvertiser {
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_ADVERTISE)
     public void startAdvertisingSet(AdvertisingSetParameters parameters,
             AdvertiseData advertiseData, AdvertiseData scanResponse,
-            PeriodicAdvertisingParameters periodicParameters,
-            AdvertiseData periodicData, int duration,
-            int maxExtendedAdvertisingEvents, AdvertisingSetCallback callback,
+            PeriodicAdvertisingParameters periodicParameters, AdvertiseData periodicData,
+            int duration, int maxExtendedAdvertisingEvents, AdvertisingSetCallback callback,
             Handler handler) {
+        startAdvertisingSet(parameters, advertiseData, scanResponse, periodicParameters,
+                periodicData, duration, maxExtendedAdvertisingEvents, null, callback, handler);
+    }
+
+    /**
+     * Creates a new advertising set. If operation succeed, device will start advertising. This
+     * method returns immediately, the operation status is delivered through
+     * {@code callback.onAdvertisingSetStarted()}.
+     *
+     * <p>If the {@code gattServer} is provided, connections to this advertisement will only see
+     * the services/characteristics in this server, rather than the union of all GATT
+     * services (across all opened servers).
+     *
+     * @param parameters Advertising set parameters.
+     * @param advertiseData Advertisement data to be broadcasted. Size must not exceed {@link
+     * BluetoothAdapter#getLeMaximumAdvertisingDataLength}. If the advertisement is connectable,
+     * three bytes will be added for flags.
+     * @param scanResponse Scan response associated with the advertisement data. Size must not
+     * exceed {@link BluetoothAdapter#getLeMaximumAdvertisingDataLength}
+     * @param periodicParameters Periodic advertisng parameters. If null, periodic advertising will
+     * not be started.
+     * @param periodicData Periodic advertising data. Size must not exceed {@link
+     * BluetoothAdapter#getLeMaximumAdvertisingDataLength}
+     * @param duration advertising duration, in 10ms unit. Valid range is from 1 (10ms) to 65535
+     * (655,350 ms). 0 means advertising should continue until stopped.
+     * @param maxExtendedAdvertisingEvents maximum number of extended advertising events the
+     * controller shall attempt to send prior to terminating the extended advertising, even if the
+     * duration has not expired. Valid range is from 1 to 255. 0 means no maximum.
+     * @param gattServer the GATT server that will "own" connections derived from this advertising
+     * set.
+     * @param callback Callback for advertising set.
+     * @param handler Thread upon which the callbacks will be invoked.
+     * @throws IllegalArgumentException When any of the data parameter exceed the maximum allowable
+     * size, or unsupported advertising PHY is selected, or when attempt to use Periodic Advertising
+     * feature is made when it's not supported by the controller, or when
+     * maxExtendedAdvertisingEvents is used on a controller that doesn't support the LE Extended
+     * Advertising
+     *
+     * @hide
+     */
+    @SystemApi
+    @SuppressLint("ExecutorRegistration")
+    @RequiresBluetoothAdvertisePermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+            android.Manifest.permission.BLUETOOTH_ADVERTISE,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+    })
+    public void
+            startAdvertisingSet(@NonNull AdvertisingSetParameters parameters,
+            @Nullable AdvertiseData advertiseData, @Nullable AdvertiseData scanResponse,
+            @Nullable PeriodicAdvertisingParameters periodicParameters,
+            @Nullable AdvertiseData periodicData, int duration,
+            int maxExtendedAdvertisingEvents, @Nullable BluetoothGattServer gattServer,
+            @Nullable AdvertisingSetCallback callback,
+            @SuppressLint("ListenerLast") @NonNull Handler handler) {
         BluetoothLeUtils.checkAdapterStateOn(mBluetoothAdapter);
         if (callback == null) {
             throw new IllegalArgumentException("callback cannot be null");
         }
 
         boolean isConnectable = parameters.isConnectable();
+        boolean isDiscoverable = parameters.isDiscoverable();
+        boolean hasFlags = isConnectable && isDiscoverable;
         if (parameters.isLegacy()) {
-            if (totalBytes(advertiseData, isConnectable) > MAX_LEGACY_ADVERTISING_DATA_BYTES) {
+            if (totalBytes(advertiseData, hasFlags) > MAX_LEGACY_ADVERTISING_DATA_BYTES) {
                 throw new IllegalArgumentException("Legacy advertising data too big");
             }
 
@@ -404,7 +465,7 @@ public final class BluetoothLeAdvertiser {
             }
 
             int maxData = mBluetoothAdapter.getLeMaximumAdvertisingDataLength();
-            if (totalBytes(advertiseData, isConnectable) > maxData) {
+            if (totalBytes(advertiseData, hasFlags) > maxData) {
                 throw new IllegalArgumentException("Advertising data too big");
             }
 
@@ -439,15 +500,7 @@ public final class BluetoothLeAdvertiser {
             throw new IllegalArgumentException("duration out of range: " + duration);
         }
 
-        IBluetoothGatt gatt;
-        try {
-            gatt = mBluetoothManager.getBluetoothGatt();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to get Bluetooth GATT - ", e);
-            postStartSetFailure(handler, callback,
-                    AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR);
-            return;
-        }
+        IBluetoothGatt gatt = mBluetoothAdapter.getBluetoothGatt();
 
         if (gatt == null) {
             Log.e(TAG, "Bluetooth GATT is null");
@@ -465,14 +518,18 @@ public final class BluetoothLeAdvertiser {
         try {
             final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
             gatt.startAdvertisingSet(parameters, advertiseData, scanResponse, periodicParameters,
-                    periodicData, duration, maxExtendedAdvertisingEvents, wrapped,
-                    mAttributionSource, recv);
+                    periodicData, duration, maxExtendedAdvertisingEvents,
+                    gattServer == null ? 0 : gattServer.getServerIf(), wrapped, mAttributionSource,
+                    recv);
             recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
         } catch (TimeoutException | RemoteException e) {
             Log.e(TAG, "Failed to start advertising set - ", e);
             postStartSetFailure(handler, callback,
                     AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR);
             return;
+        } catch (SecurityException e) {
+            mCallbackWrappers.remove(callback);
+            throw e;
         }
     }
 
@@ -495,7 +552,7 @@ public final class BluetoothLeAdvertiser {
 
         IBluetoothGatt gatt;
         try {
-            gatt = mBluetoothManager.getBluetoothGatt();
+            gatt = mBluetoothAdapter.getBluetoothGatt();
             final SynchronousResultReceiver recv = SynchronousResultReceiver.get();
             gatt.stopAdvertisingSet(wrapped, mAttributionSource, recv);
             recv.awaitResultNoInterrupt(getSyncTimeout()).getValue(null);
@@ -619,8 +676,11 @@ public final class BluetoothLeAdvertiser {
                             return;
                         }
 
-                        AdvertisingSet advertisingSet = new AdvertisingSet(
-                                advertiserId, mBluetoothManager, mAttributionSource);
+                        AdvertisingSet advertisingSet =
+                                new AdvertisingSet(
+                                        advertiserId,
+                                        mBluetoothAdapter,
+                                        mAttributionSource);
                         mAdvertisingSets.put(advertiserId, advertisingSet);
                         callback.onAdvertisingSetStarted(advertisingSet, txPower, status);
                     }

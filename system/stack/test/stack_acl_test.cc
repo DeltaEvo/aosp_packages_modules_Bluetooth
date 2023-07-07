@@ -29,13 +29,13 @@
 #include "stack/include/hci_error_code.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_main_shim_acl_api.h"
+#include "test/mock/mock_stack_btm_sec.h"
 #include "types/ble_address_with_type.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
+uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
 tBTM_CB btm_cb;
-
-void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) {}
 
 namespace {
 const char* test_flags[] = {
@@ -54,16 +54,10 @@ std::set<const RawAddress> copy_of_connected_with_both_public_and_random_set();
 }  // namespace testing
 }  // namespace bluetooth
 
-void BTM_update_version_info(const RawAddress& bd_addr,
-                             const remote_version_info& remote_version_info) {}
-
-void btm_sec_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr,
-                          tHCI_ROLE new_role) {}
-
 class StackAclTest : public testing::Test {
  protected:
   void SetUp() override {
-    mock_function_count_map.clear();
+    reset_mock_function_count_map();
     bluetooth::common::InitFlags::Load(test_flags);
   }
   void TearDown() override {}

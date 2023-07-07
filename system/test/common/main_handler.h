@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <base/callback_forward.h>
+#include <base/functional/callback_forward.h>
 #include <base/location.h>
 #include <base/time/time.h>
 #include <functional>
@@ -37,4 +37,3 @@ void main_thread_shut_down();
 extern int sync_timeout_in_ms;
 void sync_main_handler();
 bluetooth::common::MessageLoopThread* get_main_thread();
-bool is_on_main_thread();

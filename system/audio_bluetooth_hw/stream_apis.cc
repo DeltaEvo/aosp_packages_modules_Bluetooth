@@ -336,7 +336,7 @@ static int out_set_parameters(struct audio_stream* stream,
     }
   }
 
-  if (params.find("routing") != params.end()) {
+  if (params.find(AUDIO_PARAMETER_STREAM_ROUTING) != params.end()) {
     auto routing_param = params.find("routing");
     LOG(INFO) << __func__ << ": state=" << out->bluetooth_output_->GetState()
               << ", stream param '" << routing_param->first.c_str() << "="
@@ -366,8 +366,33 @@ static int out_set_parameters(struct audio_stream* stream,
     }
   }
 
-  if (params.find("closing") != params.end()) {
-    if (params["closing"] == "true") {
+  if (params.find("LeAudioSuspended") != params.end() &&
+      out->bluetooth_output_->IsLeAudio()) {
+    LOG(INFO) << __func__ << ": LeAudioSuspended found LEAudio="
+              << out->bluetooth_output_->IsLeAudio();
+    if (params["LeAudioSuspended"] == "true") {
+      LOG(INFO) << __func__ << ": LeAudioSuspended true, state="
+                << out->bluetooth_output_->GetState()
+                << " stream param standby";
+      if (out->bluetooth_output_->GetState() == BluetoothStreamState::STARTED) {
+        LOG(INFO) << __func__ << ": Stream is started, suspending LE Audio";
+      } else if (out->bluetooth_output_->GetState() !=
+                 BluetoothStreamState::DISABLED) {
+        LOG(INFO) << __func__ << ": Stream is disabled, suspending LE Audio";
+      }
+    } else {
+      LOG(INFO) << __func__ << ": LeAudioSuspended false, state="
+                << out->bluetooth_output_->GetState()
+                << " stream param standby";
+      if (out->bluetooth_output_->GetState() ==
+          BluetoothStreamState::DISABLED) {
+        LOG(INFO) << __func__ << ": Stream is disabled, unsuspending LE Audio";
+      }
+    }
+  }
+
+  if (params.find(AUDIO_PARAMETER_KEY_CLOSING) != params.end()) {
+    if (params[AUDIO_PARAMETER_KEY_CLOSING] == "true") {
       LOG(INFO) << __func__ << ": state=" << out->bluetooth_output_->GetState()
                 << " stream param closing, disallow any writes?";
       if (out->bluetooth_output_->GetState() !=
@@ -379,8 +404,8 @@ static int out_set_parameters(struct audio_stream* stream,
     }
   }
 
-  if (params.find("exiting") != params.end()) {
-    if (params["exiting"] == "1") {
+  if (params.find(AUDIO_PARAMETER_KEY_EXITING) != params.end()) {
+    if (params[AUDIO_PARAMETER_KEY_EXITING] == "1") {
       LOG(INFO) << __func__ << ": state=" << out->bluetooth_output_->GetState()
                 << " stream param exiting";
       if (out->bluetooth_output_->GetState() !=
@@ -738,6 +763,9 @@ int adev_open_output_stream(struct audio_hw_device* dev,
   out->stream_out_.resume = out_resume;
   out->stream_out_.get_presentation_position = out_get_presentation_position;
   out->stream_out_.update_source_metadata = out_update_source_metadata;
+  /** Fix Coverity Scan Issue @{ */
+  out->channel_mask_ = AUDIO_CHANNEL_NONE;
+  /** @} */
 
   if (!out->bluetooth_output_->LoadAudioConfig(config)) {
     LOG(ERROR) << __func__ << ": state=" << out->bluetooth_output_->GetState()

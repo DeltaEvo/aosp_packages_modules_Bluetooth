@@ -331,26 +331,23 @@ tCONN_CB* sdp_conn_originate(const RawAddress& p_bd_addr) {
   p_ccb = sdpu_allocate_ccb();
   if (p_ccb == NULL) {
     SDP_TRACE_WARNING("%s: no spare CCB for peer %s", __func__,
-                      p_bd_addr.ToString().c_str());
+                      ADDRESS_TO_LOGGABLE_CSTR(p_bd_addr));
     return (NULL);
   }
 
   SDP_TRACE_EVENT("%s: SDP - Originate started for peer %s", __func__,
-                  p_bd_addr.ToString().c_str());
+                  ADDRESS_TO_LOGGABLE_CSTR(p_bd_addr));
+
+  /* Look for any active sdp connection on the remote device */
+  cid = sdpu_get_active_ccb_cid(p_bd_addr);
 
   /* We are the originator of this connection */
   p_ccb->con_flags |= SDP_FLAGS_IS_ORIG;
 
-  /* Save the BD Address and Channel ID. */
+  /* Save the BD Address */
   p_ccb->device_address = p_bd_addr;
 
-  /* Transition to the next appropriate state, waiting for connection confirm.
-   */
-  p_ccb->con_state = SDP_STATE_CONN_SETUP;
-
-  // Look for any active sdp connection on the remote device
-  cid = sdpu_get_active_ccb_cid(p_bd_addr);
-
+  /* Transition to the next appropriate state, waiting for connection confirm */
   if (!bluetooth::common::init_flags::sdp_serialization_is_enabled() ||
       cid == 0) {
     p_ccb->con_state = SDP_STATE_CONN_SETUP;
@@ -358,13 +355,13 @@ tCONN_CB* sdp_conn_originate(const RawAddress& p_bd_addr) {
   } else {
     p_ccb->con_state = SDP_STATE_CONN_PEND;
     SDP_TRACE_WARNING("SDP already active for peer %s. cid=%#0x",
-                      p_bd_addr.ToString().c_str(), cid);
+                      ADDRESS_TO_LOGGABLE_CSTR(p_bd_addr), cid);
   }
 
   /* Check if L2CAP started the connection process */
   if (cid == 0) {
     SDP_TRACE_WARNING("%s: SDP - Originate failed for peer %s", __func__,
-                      p_bd_addr.ToString().c_str());
+                      ADDRESS_TO_LOGGABLE_CSTR(p_bd_addr));
     sdpu_release_ccb(*p_ccb);
     return (NULL);
   }
@@ -401,6 +398,7 @@ void sdp_disconnect(tCONN_CB* p_ccb, tSDP_REASON reason) {
   /* Call user callback immediately */
   if (ccb.con_state == SDP_STATE_CONN_SETUP) {
     sdpu_callback(ccb, reason);
+    sdpu_clear_pend_ccb(ccb);
     sdpu_release_ccb(ccb);
   }
 }

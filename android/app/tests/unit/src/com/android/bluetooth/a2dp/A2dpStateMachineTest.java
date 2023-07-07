@@ -33,14 +33,13 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
+import com.android.bluetooth.btservice.ActiveDeviceManager;
 import com.android.bluetooth.btservice.AdapterService;
 
 import org.hamcrest.core.IsInstanceOf;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -53,9 +52,6 @@ import java.util.Arrays;
 @MediumTest
 @RunWith(AndroidJUnit4.class)
 public class A2dpStateMachineTest {
-    // TODO(b/240635097): remove in U
-    private static final int SOURCE_CODEC_TYPE_OPUS = 6;
-
     private BluetoothAdapter mAdapter;
     private Context mTargetContext;
     private HandlerThread mHandlerThread;
@@ -68,6 +64,7 @@ public class A2dpStateMachineTest {
     private BluetoothCodecConfig mCodecConfigOpus;
 
     @Mock private AdapterService mAdapterService;
+    @Mock private ActiveDeviceManager mActiveDeviceManager;
     @Mock private A2dpService mA2dpService;
     @Mock private A2dpNativeInterface mA2dpNativeInterface;
 
@@ -76,6 +73,8 @@ public class A2dpStateMachineTest {
         mTargetContext = InstrumentationRegistry.getTargetContext();
         // Set up mocks and test assets
         MockitoAnnotations.initMocks(this);
+        doReturn(mActiveDeviceManager).when(mAdapterService).getActiveDeviceManager();
+
         TestUtils.setAdapterService(mAdapterService);
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -108,7 +107,7 @@ public class A2dpStateMachineTest {
                     .build();
 
         mCodecConfigOpus = new BluetoothCodecConfig.Builder()
-                    .setCodecType(SOURCE_CODEC_TYPE_OPUS) // TODO(b/240635097): update in U
+                    .setCodecType(BluetoothCodecConfig.SOURCE_CODEC_TYPE_OPUS)
                     .setCodecPriority(BluetoothCodecConfig.CODEC_PRIORITY_DEFAULT)
                     .setSampleRate(BluetoothCodecConfig.SAMPLE_RATE_48000)
                     .setBitsPerSample(BluetoothCodecConfig.BITS_PER_SAMPLE_16)
