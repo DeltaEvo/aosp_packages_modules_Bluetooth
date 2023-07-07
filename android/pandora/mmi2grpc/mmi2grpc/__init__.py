@@ -32,6 +32,7 @@ from mmi2grpc.hogp import HOGPProxy
 from mmi2grpc.l2cap import L2CAPProxy
 from mmi2grpc.map import MAPProxy
 from mmi2grpc.opp import OPPProxy
+from mmi2grpc.pan import PANProxy
 from mmi2grpc.pbap import PBAPProxy
 from mmi2grpc.rfcomm import RFCOMMProxy
 from mmi2grpc.sdp import SDPProxy
@@ -40,7 +41,7 @@ from mmi2grpc._helpers import format_proxy
 from mmi2grpc._rootcanal import RootCanal
 from mmi2grpc._modem import Modem
 
-from pandora_experimental.host_grpc import Host
+from pandora.host_grpc import Host
 
 PANDORA_SERVER_PORT = 8999
 ROOTCANAL_CONTROL_PORT = 6212
@@ -74,6 +75,7 @@ class IUT:
         # Profile proxies.
         self._a2dp = None
         self._avrcp = None
+        self._bnep = None
         self._gatt = None
         self._gap = None
         self._hfp = None
@@ -82,6 +84,7 @@ class IUT:
         self._l2cap = None
         self._map = None
         self._opp = None
+        self._pan = None
         self._pbap = None
         self._rfcomm = None
         self._sdp = None
@@ -108,6 +111,7 @@ class IUT:
 
         self._a2dp = None
         self._avrcp = None
+        self._bnep = None
         self._gatt = None
         self._gap = None
         self._hfp = None
@@ -116,6 +120,7 @@ class IUT:
         self._hogp = None
         self._map = None
         self._opp = None
+        self._pan = None
         self._pbap = None
         self._rfcomm = None
         self._sdp = None
@@ -185,7 +190,10 @@ class IUT:
         # Handles A2DP and AVDTP MMIs.
         if profile in ("A2DP", "AVDTP"):
             if not self._a2dp:
-                self._a2dp = A2DPProxy(grpc.insecure_channel(f"localhost:{self.pandora_server_port}"))
+                self._a2dp = A2DPProxy(
+                    grpc.insecure_channel(f"localhost:{self.pandora_server_port}"),
+                    self.rootcanal,
+                )
             return self._a2dp.interact(test, interaction, description, pts_address)
         # Handles AVRCP and AVCTP MMIs.
         if profile in ("AVRCP", "AVCTP"):
@@ -240,6 +248,11 @@ class IUT:
             if not self._opp:
                 self._opp = OPPProxy(grpc.insecure_channel(f"localhost:{self.pandora_server_port}"))
             return self._opp.interact(test, interaction, description, pts_address)
+        # Instantiates PAN proxy and reroutes corresponding MMIs to it.
+        if profile in ("PAN", "BNEP"):
+            if not self._pan:
+                self._pan = PANProxy(grpc.insecure_channel(f"localhost:{self.pandora_server_port}"))
+            return self._pan.interact(test, interaction, description, pts_address)
         # Instantiates PBAP proxy and reroutes corresponding MMIs to it.
         if profile in ("PBAP"):
             if not self._pbap:

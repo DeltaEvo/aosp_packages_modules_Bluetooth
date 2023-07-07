@@ -897,7 +897,7 @@ public class HidDeviceService extends ProfileService {
         }
 
         Message msg = mHandler.obtainMessage(MESSAGE_GET_REPORT);
-        msg.obj = bufferSize > 0 ? new Integer(bufferSize) : null;
+        msg.obj = bufferSize > 0 ? Integer.valueOf(bufferSize) : null;
         msg.arg1 = type;
         msg.arg2 = id;
         mHandler.sendMessage(msg);
@@ -951,7 +951,7 @@ public class HidDeviceService extends ProfileService {
 
     private void setAndBroadcastConnectionState(BluetoothDevice device, int newState) {
         if (DBG) {
-            Log.d(TAG, "setAndBroadcastConnectionState(): device=" + device.getAddress()
+            Log.d(TAG, "setAndBroadcastConnectionState(): device=" + device
                     + " oldState=" + mHidDeviceState + " newState=" + newState);
         }
 
@@ -977,7 +977,8 @@ public class HidDeviceService extends ProfileService {
         intent.putExtra(BluetoothProfile.EXTRA_STATE, newState);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+        Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                Utils.getTempAllowlistBroadcastOptions());
     }
 
     private static int convertHalState(int halState) {

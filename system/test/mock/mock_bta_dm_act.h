@@ -26,7 +26,7 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
+#include "test/common/mock_functions.h"
 
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
@@ -91,13 +91,31 @@ extern struct BTA_dm_acl_down BTA_dm_acl_down;
 // Params: const RawAddress bd_addr, tBT_TRANSPORT transport
 // Return: void
 struct BTA_dm_acl_up {
-  std::function<void(const RawAddress bd_addr, tBT_TRANSPORT transport)> body{
-      [](const RawAddress bd_addr, tBT_TRANSPORT transport) {}};
-  void operator()(const RawAddress bd_addr, tBT_TRANSPORT transport) {
-    body(bd_addr, transport);
+  std::function<void(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                     uint16_t acl_handle)>
+      body{[](const RawAddress bd_addr, tBT_TRANSPORT transport,
+              uint16_t acl_handle) {}};
+  void operator()(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                  uint16_t acl_handle) {
+    body(bd_addr, transport, acl_handle);
   };
 };
 extern struct BTA_dm_acl_up BTA_dm_acl_up;
+
+// Name: BTA_dm_acl_up_failed
+// Params: const RawAddress bd_addr, tBT_TRANSPORT transport, tHCI_STATUS
+// hci_status Return: void
+struct BTA_dm_acl_up_failed {
+  std::function<void(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                     tHCI_STATUS hci_status)>
+      body{[](const RawAddress bd_addr, tBT_TRANSPORT transport,
+              tHCI_STATUS hci_status) {}};
+  void operator()(const RawAddress bd_addr, tBT_TRANSPORT transport,
+                  tHCI_STATUS hci_status) {
+    body(bd_addr, transport, hci_status);
+  };
+};
+extern struct BTA_dm_acl_up_failed BTA_dm_acl_up_failed;
 
 // Name: BTA_dm_notify_remote_features_complete
 // Params: const RawAddress bd_addr
@@ -147,10 +165,13 @@ extern struct BTA_dm_report_role_change BTA_dm_report_role_change;
 // Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
 // Return: void
 struct bta_dm_acl_up {
-  std::function<void(const RawAddress& bd_addr, tBT_TRANSPORT transport)> body{
-      [](const RawAddress& bd_addr, tBT_TRANSPORT transport) {}};
-  void operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
-    body(bd_addr, transport);
+  std::function<void(const RawAddress& bd_addr, tBT_TRANSPORT transport,
+                     uint16_t acl_handle)>
+      body{[](const RawAddress& bd_addr, tBT_TRANSPORT transport,
+              uint16_t acl_handle) {}};
+  void operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport,
+                  uint16_t acl_handle) {
+    body(bd_addr, transport, acl_handle);
   };
 };
 extern struct bta_dm_acl_up bta_dm_acl_up;
@@ -431,15 +452,6 @@ struct bta_dm_confirm {
 };
 extern struct bta_dm_confirm bta_dm_confirm;
 
-// Name: bta_dm_deinit_cb
-// Params: void
-// Return: void
-struct bta_dm_deinit_cb {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct bta_dm_deinit_cb bta_dm_deinit_cb;
-
 // Name: bta_dm_disable
 // Params:
 // Return: void
@@ -458,14 +470,15 @@ struct bta_dm_disc_result {
 };
 extern struct bta_dm_disc_result bta_dm_disc_result;
 
-// Name: bta_dm_disc_rmt_name
-// Params: tBTA_DM_MSG* p_data
+// Name: bta_dm_remote_name_cmpl
+// Params: const tBTA_DM_MSG* p_data
 // Return: void
-struct bta_dm_disc_rmt_name {
-  std::function<void(tBTA_DM_MSG* p_data)> body{[](tBTA_DM_MSG* p_data) {}};
-  void operator()(tBTA_DM_MSG* p_data) { body(p_data); };
+struct bta_dm_remote_name_cmpl {
+  std::function<void(const tBTA_DM_MSG* p_data)> body{
+      [](const tBTA_DM_MSG* p_data) {}};
+  void operator()(const tBTA_DM_MSG* p_data) { body(p_data); };
 };
-extern struct bta_dm_disc_rmt_name bta_dm_disc_rmt_name;
+extern struct bta_dm_remote_name_cmpl bta_dm_remote_name_cmpl;
 
 // Name: bta_dm_discover
 // Params: tBTA_DM_MSG* p_data
@@ -540,15 +553,6 @@ struct bta_dm_free_sdp_db {
   void operator()() { body(); };
 };
 extern struct bta_dm_free_sdp_db bta_dm_free_sdp_db;
-
-// Name: bta_dm_init_cb
-// Params: void
-// Return: void
-struct bta_dm_init_cb {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct bta_dm_init_cb bta_dm_init_cb;
 
 // Name: bta_dm_inq_cmpl
 // Params: uint8_t num
@@ -643,15 +647,6 @@ struct bta_dm_rm_cback {
   };
 };
 extern struct bta_dm_rm_cback bta_dm_rm_cback;
-
-// Name: bta_dm_rmt_name
-// Params: tBTA_DM_MSG* p_data
-// Return: void
-struct bta_dm_rmt_name {
-  std::function<void(tBTA_DM_MSG* p_data)> body{[](tBTA_DM_MSG* p_data) {}};
-  void operator()(tBTA_DM_MSG* p_data) { body(p_data); };
-};
-extern struct bta_dm_rmt_name bta_dm_rmt_name;
 
 // Name: bta_dm_sdp_result
 // Params: tBTA_DM_MSG* p_data

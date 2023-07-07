@@ -17,18 +17,33 @@
 #define LOG_TAG "bt_shim"
 
 #include "main/shim/shim.h"
-#include "main/shim/entry.h"
-#include "main/shim/stack.h"
 
+#include "btu.h"
 #include "gd/common/init_flags.h"
 #include "gd/os/log.h"
+#include "main/shim/entry.h"
+#include "main/shim/hci_layer.h"
+#include "main/shim/stack.h"
 
-future_t* IdleModuleStartUp() {
-  bluetooth::shim::Stack::GetInstance()->StartIdleMode();
-  return kReturnImmediate;
+static const hci_t* hci;
+
+void btu_hci_msg_process(BT_HDR* p_msg);
+
+static void post_to_main_message_loop(const base::Location& from_here,
+                                      BT_HDR* p_msg) {
+  if (do_in_main_thread(from_here, base::Bind(&btu_hci_msg_process, p_msg)) !=
+      BT_STATUS_SUCCESS) {
+    LOG_ERROR(": do_in_main_thread failed from %s",
+              from_here.ToString().c_str());
+  }
 }
 
 future_t* ShimModuleStartUp() {
+  hci = bluetooth::shim::hci_layer_get_interface();
+  ASSERT_LOG(hci, "%s could not get hci layer interface.", __func__);
+
+  hci->set_data_cb(base::Bind(&post_to_main_message_loop));
+
   bluetooth::shim::Stack::GetInstance()->StartEverything();
   return kReturnImmediate;
 }
@@ -38,14 +53,6 @@ future_t* GeneralShutDown() {
   return kReturnImmediate;
 }
 
-EXPORT_SYMBOL extern const module_t gd_idle_module = {
-    .name = GD_IDLE_MODULE,
-    .init = kUnusedModuleApi,
-    .start_up = IdleModuleStartUp,
-    .shut_down = GeneralShutDown,
-    .clean_up = kUnusedModuleApi,
-    .dependencies = {kUnusedModuleDependencies}};
-
 EXPORT_SYMBOL extern const module_t gd_shim_module = {
     .name = GD_SHIM_MODULE,
     .init = kUnusedModuleApi,
@@ -53,10 +60,6 @@ EXPORT_SYMBOL extern const module_t gd_shim_module = {
     .shut_down = GeneralShutDown,
     .clean_up = kUnusedModuleApi,
     .dependencies = {kUnusedModuleDependencies}};
-
-bool bluetooth::shim::is_gd_security_enabled() {
-  return bluetooth::common::init_flags::gd_security_is_enabled();
-}
 
 bool bluetooth::shim::is_gd_link_policy_enabled() {
   return bluetooth::common::init_flags::gd_link_policy_is_enabled();
@@ -80,4 +83,8 @@ bool bluetooth::shim::is_gd_dumpsys_module_started() {
 
 bool bluetooth::shim::is_gd_btaa_enabled() {
   return bluetooth::common::init_flags::btaa_hci_is_enabled();
+}
+
+bool bluetooth::shim::is_classic_discovery_only_enabled() {
+  return bluetooth::common::init_flags::classic_discovery_only_is_enabled();
 }

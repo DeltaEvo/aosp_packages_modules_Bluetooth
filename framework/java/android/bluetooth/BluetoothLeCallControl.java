@@ -399,9 +399,11 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
         mProfileConnector.connect(context, listener);
     }
 
-    /* package */ void close() {
-        if (VDBG)
-            log("close()");
+    /** @hide */
+    @Override
+    public void close() {
+        if (VDBG) log("close()");
+
         unregisterBearer();
 
         mProfileConnector.disconnect();
@@ -437,8 +439,8 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
      * @throws UnsupportedOperationException
      */
     @Override
-    public @NonNull List<BluetoothDevice> getDevicesMatchingConnectionStates(
-        @NonNull int[] states) {
+    @NonNull
+    public List<BluetoothDevice> getDevicesMatchingConnectionStates(@NonNull int[] states) {
         throw new UnsupportedOperationException("not supported");
     }
 
@@ -666,8 +668,7 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
         }
 
         try {
-            service.callStateChanged(mCcid, new ParcelUuid(callId), state,
-                mAttributionSource);
+            service.callStateChanged(mCcid, new ParcelUuid(callId), state, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
         }

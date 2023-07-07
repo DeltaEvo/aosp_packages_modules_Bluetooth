@@ -26,6 +26,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 
+import com.android.bluetooth.BluetoothEventLogger;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -41,17 +42,17 @@ import java.util.Objects;
  */
 public class MediaPlayerWrapper {
     private static final String TAG = "AudioMediaPlayerWrapper";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     static boolean sTesting = false;
     private static final int PLAYBACK_STATE_CHANGE_EVENT_LOGGER_SIZE = 5;
     private static final String PLAYBACK_STATE_CHANGE_LOGGER_EVENT_TITLE =
-            "Playback State change Event";
+            "BTAudio Playback State change Event";
 
     final Context mContext;
     private MediaController mMediaController;
     private String mPackageName;
     private Looper mLooper;
-    private final BTAudioEventLogger mPlaybackStateChangeEventLogger;
+    private final BluetoothEventLogger mPlaybackStateChangeEventLogger;
 
     private MediaData mCurrentData;
 
@@ -88,8 +89,10 @@ public class MediaPlayerWrapper {
         mMediaController = controller;
         mPackageName = controller.getPackageName();
         mLooper = looper;
-        mPlaybackStateChangeEventLogger = new BTAudioEventLogger(
-                PLAYBACK_STATE_CHANGE_EVENT_LOGGER_SIZE, PLAYBACK_STATE_CHANGE_LOGGER_EVENT_TITLE);
+        mPlaybackStateChangeEventLogger =
+                new BluetoothEventLogger(
+                        PLAYBACK_STATE_CHANGE_EVENT_LOGGER_SIZE,
+                        PLAYBACK_STATE_CHANGE_LOGGER_EVENT_TITLE);
 
         mCurrentData = new MediaData(null, null, null);
         mCurrentData.queue = Util.toMetadataList(mContext, getQueue());
@@ -106,6 +109,10 @@ public class MediaPlayerWrapper {
 
     public String getPackageName() {
         return mPackageName;
+    }
+
+    public MediaSession.Token getSessionToken() {
+        return mMediaController.getSessionToken();
     }
 
     protected List<MediaSession.QueueItem> getQueue() {
@@ -131,6 +138,27 @@ public class MediaPlayerWrapper {
     }
 
     List<Metadata> getCurrentQueue() {
+        // MediaSession#QueueItem's MediaDescription doesn't necessarily include media duration,
+        // so the playing media info metadata should be obtained by the MediaController.
+        // MediaSession doesn't include the Playlist Metadata, only the current song one.
+        Metadata mediaPlayingMetadata = getCurrentMetadata();
+
+        // The queue metadata is built with QueueId in place of MediaId, so we can't compare it.
+        // MediaDescription is usually compared via its title, artist and album.
+        if (mediaPlayingMetadata != null) {
+            for (Metadata metadata : mCurrentData.queue) {
+                if (metadata.title == null || metadata.artist == null || metadata.album == null) {
+                    // if one of the informations is missing we can't assume it is the same media.
+                    continue;
+                }
+                if (metadata.title.equals(mediaPlayingMetadata.title)
+                        && metadata.artist.equals(mediaPlayingMetadata.artist)
+                        && metadata.album.equals(mediaPlayingMetadata.album)) {
+                    // Replace default values by MediaController non default values.
+                    metadata.replaceDefaults(mediaPlayingMetadata);
+                }
+            }
+        }
         return mCurrentData.queue;
     }
 
@@ -288,7 +316,9 @@ public class MediaPlayerWrapper {
                 getPlaybackState(),
                 Util.toMetadataList(mContext, getQueue()));
 
-        mControllerCallbacks = new MediaControllerListener(mMediaController, mLooper);
+        synchronized (mCallbackLock) {
+            mControllerCallbacks = new MediaControllerListener(mMediaController, mLooper);
+        }
     }
 
     /**
@@ -298,15 +328,14 @@ public class MediaPlayerWrapper {
         // Prevent a race condition where a callback could be called while shutting down
         synchronized (mCallbackLock) {
             mRegisteredCallback = null;
+            if (mControllerCallbacks == null) return;
+            mControllerCallbacks.cleanup();
+            mControllerCallbacks = null;
         }
-
-        if (mControllerCallbacks == null) return;
-        mControllerCallbacks.cleanup();
-        mControllerCallbacks = null;
     }
 
     void updateMediaController(MediaController newController) {
-        if (newController == mMediaController) return;
+        if (Objects.equals(newController, mMediaController)) return;
 
         mMediaController = newController;
 
@@ -315,17 +344,18 @@ public class MediaPlayerWrapper {
                 d("Controller for " + mPackageName + " maybe is not activated.");
                 return;
             }
+
+            mControllerCallbacks.cleanup();
+
+            // Update the current data since it could be different on the new controller for the
+            // player
+            mCurrentData = new MediaData(
+                    Util.toMetadata(mContext, getMetadata()),
+                    getPlaybackState(),
+                    Util.toMetadataList(mContext, getQueue()));
+
+            mControllerCallbacks = new MediaControllerListener(mMediaController, mLooper);
         }
-
-        mControllerCallbacks.cleanup();
-
-        // Update the current data since it could be different on the new controller for the player
-        mCurrentData = new MediaData(
-                Util.toMetadata(mContext, getMetadata()),
-                getPlaybackState(),
-                Util.toMetadataList(mContext, getQueue()));
-
-        mControllerCallbacks = new MediaControllerListener(mMediaController, mLooper);
         d("Controller for " + mPackageName + " was updated.");
     }
 
@@ -429,7 +459,7 @@ public class MediaPlayerWrapper {
         }
 
         @Override
-        public void onMetadataChanged(@Nullable MediaMetadata metadata) {
+        public void onMetadataChanged(@Nullable MediaMetadata mediaMetadata) {
             if (!isMetadataReady()) {
                 Log.v(TAG, "onMetadataChanged(): " + mPackageName
                         + " tried to update with no queue");
@@ -438,10 +468,10 @@ public class MediaPlayerWrapper {
 
             if (DEBUG) {
                 Log.v(TAG, "onMetadataChanged(): " + mPackageName + " : "
-                        + Util.toMetadata(mContext, metadata));
+                        + Util.toMetadata(mContext, mediaMetadata));
             }
 
-            if (!Objects.equals(metadata, getMetadata())) {
+            if (!Objects.equals(mediaMetadata, getMetadata())) {
                 e("The callback metadata doesn't match controller metadata");
             }
 
@@ -453,7 +483,7 @@ public class MediaPlayerWrapper {
             // TODO: Spotify needs a metadata update debouncer as it sometimes updates the metadata
             // twice in a row with the only difference being that the song duration is rounded to
             // the nearest second.
-            if (Objects.equals(metadata, mCurrentData.metadata)) {
+            if (Objects.equals(Util.toMetadata(mContext, mediaMetadata), mCurrentData.metadata)) {
                 Log.w(TAG, "onMetadataChanged(): " + mPackageName
                         + " tried to update with no new data");
                 return;
@@ -570,8 +600,10 @@ public class MediaPlayerWrapper {
 
     @VisibleForTesting
     Handler getTimeoutHandler() {
-        if (mControllerCallbacks == null) return null;
-        return mControllerCallbacks.getTimeoutHandler();
+        synchronized (mCallbackLock) {
+            if (mControllerCallbacks == null) return null;
+            return mControllerCallbacks.getTimeoutHandler();
+        }
     }
 
     @Override

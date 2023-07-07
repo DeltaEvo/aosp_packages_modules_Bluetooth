@@ -34,6 +34,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Handler;
+import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.provider.Telephony;
 import android.util.Log;
@@ -47,6 +48,7 @@ import com.android.obex.HeaderSet;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Set;
 
 /**
@@ -172,6 +174,14 @@ public class BluetoothMethodProxy {
     }
 
     /**
+     * Proxies {@link ContentResolver#openOutputStream(Uri)}.
+     */
+    public OutputStream contentResolverOpenOutputStream(ContentResolver contentResolver, Uri uri)
+            throws FileNotFoundException {
+        return contentResolver.openOutputStream(uri);
+    }
+
+    /**
      * Proxies {@link Context#sendBroadcast(Intent)}.
      */
     public void contextSendBroadcast(Context context, @RequiresPermission Intent intent) {
@@ -183,6 +193,14 @@ public class BluetoothMethodProxy {
      */
     public boolean handlerSendEmptyMessage(Handler handler, final int what) {
         return handler.sendEmptyMessage(what);
+    }
+
+    /**
+     * Proxies {@link Handler#sendMessageDelayed(Message, long)}.
+     */
+    public boolean handlerSendMessageDelayed(Handler handler, final int what,
+            final long delayMillis) {
+        return handler.sendMessageDelayed(handler.obtainMessage(what), delayMillis);
     }
 
     /**
@@ -239,5 +257,10 @@ public class BluetoothMethodProxy {
     public AppAdvertiseStats createAppAdvertiseStats(int appUid, int id, String name,
             ContextMap map, GattService service) {
         return new AppAdvertiseStats(appUid, id, name, map, service);
+    }
+
+    /** Proxies {@link Thread#start()}. */
+    public void threadStart(Thread thread) {
+        thread.start();
     }
 }
