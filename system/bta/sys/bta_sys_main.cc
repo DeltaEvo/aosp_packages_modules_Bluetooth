@@ -24,7 +24,7 @@
 
 #define LOG_TAG "bt_bta_sys_main"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 
 #include <cstring>
@@ -166,7 +166,7 @@ bool bta_sys_is_register(uint8_t id) { return bta_sys_cb.is_reg[id]; }
 void bta_sys_sendmsg(void* p_msg) {
   if (do_in_main_thread(
           FROM_HERE,
-          base::Bind(&bta_sys_event, static_cast<BT_HDR_RIGID*>(p_msg))) !=
+          base::BindOnce(&bta_sys_event, static_cast<BT_HDR_RIGID*>(p_msg))) !=
       BT_STATUS_SUCCESS) {
     LOG(ERROR) << __func__ << ": do_in_main_thread failed";
   }

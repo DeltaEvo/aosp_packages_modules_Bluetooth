@@ -38,7 +38,6 @@
 #include "btif_api.h"
 #include "btif_common.h"
 #include "btif_config_cache.h"
-#include "btif_config_transcode.h"
 #include "btif_keystore.h"
 #include "btif_metrics_logging.h"
 #include "common/address_obfuscator.h"
@@ -55,7 +54,6 @@
 #include "raw_address.h"
 #include "stack/include/bt_octets.h"
 
-#define BT_CONFIG_SOURCE_TAG_NUM 1010001
 #define TEMPORARY_SECTION_CAPACITY 10000
 
 #define INFO_SECTION "Info"
@@ -194,7 +192,6 @@ static future_t* init(void) {
 }
 
 static future_t* shut_down(void) {
-  btif_config_flush();
   return future_new_immediate(FUTURE_SUCCESS);
 }
 
@@ -211,6 +208,31 @@ EXPORT_SYMBOL module_t btif_config_module = {.name = BTIF_CONFIG_MODULE,
                                              .start_up = NULL,
                                              .shut_down = shut_down,
                                              .clean_up = clean_up};
+
+bool btif_get_device_clockoffset(const RawAddress& bda, int* p_clock_offset) {
+  if (p_clock_offset == NULL) return false;
+
+  std::string addrstr = bda.ToString();
+  const char* bd_addr_str = addrstr.c_str();
+
+  if (!btif_config_get_int(bd_addr_str, "ClockOffset", p_clock_offset)) return false;
+
+  LOG_DEBUG("%s: Device [%s] clock_offset %d", __func__, bd_addr_str,
+            *p_clock_offset);
+  return true;
+}
+
+bool btif_set_device_clockoffset(const RawAddress& bda, int clock_offset) {
+
+  std::string addrstr = bda.ToString();
+  const char* bd_addr_str = addrstr.c_str();
+
+  if (!btif_config_set_int(bd_addr_str, "ClockOffset", clock_offset)) return false;
+
+  LOG_DEBUG("%s: Device [%s] clock_offset %d", __func__, bd_addr_str,
+            clock_offset);
+  return true;
+}
 
 bool btif_config_exist(const std::string& section, const std::string& key) {
   CHECK(bluetooth::shim::is_gd_stack_started_up());
@@ -315,20 +337,9 @@ bool btif_config_remove(const std::string& section, const std::string& key) {
   return bluetooth::shim::BtifConfigInterface::RemoveProperty(section, key);
 }
 
-void btif_config_save(void) {
-  CHECK(bluetooth::shim::is_gd_stack_started_up());
-  bluetooth::shim::BtifConfigInterface::Save();
-}
-
-void btif_config_flush(void) {
-  CHECK(bluetooth::shim::is_gd_stack_started_up());
-  bluetooth::shim::BtifConfigInterface::Flush();
-}
-
 bool btif_config_clear(void) {
   CHECK(bluetooth::shim::is_gd_stack_started_up());
   bluetooth::shim::BtifConfigInterface::Clear();
-  bluetooth::shim::BtifConfigInterface::Save();
   return true;
 }
 

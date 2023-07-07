@@ -1,9 +1,12 @@
 //! Bluetooth common library
-#[macro_use]
-extern crate lazy_static;
 
 /// Provides waking timer abstractions
 pub mod time;
+
+/// Provides parameters
+pub mod parameter_provider;
+
+pub mod bridge;
 
 #[macro_use]
 mod ready;
@@ -18,23 +21,8 @@ pub mod init_flags;
 /// Provides runtime configured system properties. Stubbed for non-Android.
 pub mod sys_prop;
 
-/// Inits logging for Android
-#[cfg(target_os = "android")]
-pub fn init_logging() {
-    android_logger::init_once(
-        android_logger::Config::default().with_tag("bt").with_min_level(log::Level::Debug),
-    );
-}
-
-/// Inits logging for host
-#[cfg(not(target_os = "android"))]
-pub fn init_logging() {
-    env_logger::Builder::new()
-        .filter(None, log::LevelFilter::Debug)
-        .parse_default_env()
-        .try_init()
-        .ok();
-}
+mod logging;
+pub use logging::*;
 
 /// Indicates the object can be converted to a GRPC service
 pub trait GrpcFacade {

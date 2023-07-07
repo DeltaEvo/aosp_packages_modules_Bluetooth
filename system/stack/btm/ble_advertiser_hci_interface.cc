@@ -18,8 +18,8 @@
 
 #include "ble_advertiser_hci_interface.h"
 
-#include <base/bind.h>
-#include <base/callback.h>
+#include <base/functional/bind.h>
+#include <base/functional/callback.h>
 #include <base/location.h>
 #include <base/logging.h>
 
@@ -31,6 +31,7 @@
 #include "btm_int_types.h"
 #include "device/include/controller.h"
 #include "osi/include/log.h"
+#include "stack/include/btu_hcif.h"
 #include "types/raw_address.h"
 
 #define BTM_BLE_MULTI_ADV_SET_RANDOM_ADDR_LEN 8
@@ -49,9 +50,9 @@ using status_cb = BleAdvertiserHciInterface::status_cb;
 
 using hci_cmd_cb = base::OnceCallback<void(
     uint8_t* /* return_parameters */, uint16_t /* return_parameters_length*/)>;
-extern void btu_hcif_send_cmd_with_cb(const base::Location& posted_from,
-                                      uint16_t opcode, uint8_t* params,
-                                      uint8_t params_len, hci_cmd_cb cb);
+void btu_hcif_send_cmd_with_cb(const base::Location& posted_from,
+                               uint16_t opcode, uint8_t* params,
+                               uint8_t params_len, hci_cmd_cb cb);
 
 namespace {
 BleAdvertiserHciInterface* instance = nullptr;
@@ -269,7 +270,7 @@ class BleAdvertiserVscHciInterfaceImpl : public BleAdvertiserHciInterface {
     command_complete.Run(HCI_ERR_ILLEGAL_COMMAND);
   }
 
-  void SetPeriodicAdvertisingEnable(uint8_t, uint8_t,
+  void SetPeriodicAdvertisingEnable(bool, bool, uint8_t,
                                     status_cb command_complete) override {
     LOG(INFO) << __func__ << " VSC can't do periodic advertising";
     command_complete.Run(HCI_ERR_ILLEGAL_COMMAND);
@@ -491,7 +492,7 @@ class BleAdvertiserLegacyHciInterfaceImpl : public BleAdvertiserHciInterface {
     command_complete.Run(HCI_ERR_ILLEGAL_COMMAND);
   }
 
-  void SetPeriodicAdvertisingEnable(uint8_t, uint8_t,
+  void SetPeriodicAdvertisingEnable(bool, bool, uint8_t,
                                     status_cb command_complete) override {
     LOG(INFO) << __func__ << "Legacy can't do periodic advertising";
     command_complete.Run(HCI_ERR_ILLEGAL_COMMAND);
@@ -693,14 +694,17 @@ class BleAdvertiserHciExtendedImpl : public BleAdvertiserHciInterface {
                HCI_LE_SET_PRIODIC_ADVERTISING_DATA_LEN, command_complete);
   }
 
-  void SetPeriodicAdvertisingEnable(uint8_t enable, uint8_t handle,
+  void SetPeriodicAdvertisingEnable(bool enable, bool include_adi,
+                                    uint8_t handle,
                                     status_cb command_complete) override {
     VLOG(1) << __func__;
     const uint16_t HCI_LE_ENABLE_PRIODIC_ADVERTISEMENT_LEN = 2;
     uint8_t param[HCI_LE_ENABLE_PRIODIC_ADVERTISEMENT_LEN];
     memset(param, 0, HCI_LE_ENABLE_PRIODIC_ADVERTISEMENT_LEN);
     uint8_t* pp = param;
-    UINT8_TO_STREAM(pp, enable);
+    const uint8_t enable_field =
+        (enable ? 1 : 0) | ((include_adi ? 1 : 0) << 1);
+    UINT8_TO_STREAM(pp, enable_field);
     UINT8_TO_STREAM(pp, handle);
     SendAdvCmd(FROM_HERE, HCI_LE_SET_PERIODIC_ADVERTISING_ENABLE, param,
                HCI_LE_ENABLE_PRIODIC_ADVERTISEMENT_LEN, command_complete);

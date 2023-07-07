@@ -63,7 +63,7 @@ import java.util.Objects;
  */
 public class PanService extends ProfileService {
     private static final String TAG = "PanService";
-    private static final boolean DBG = false;
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
     private static PanService sPanService;
 
     private static final String BLUETOOTH_IFACE_ADDR_START = "192.168.44.1";
@@ -180,7 +180,6 @@ public class PanService extends ProfileService {
             Log.w(TAG, "stop() called before start()");
             return true;
         }
-        mAdapterService = null;
         if (mTetheringManager != null) {
             mTetheringManager.unregisterTetheringEventCallback(mTetheringCallback);
             mTetheringManager = null;
@@ -507,7 +506,7 @@ public class PanService extends ProfileService {
             Intent intent = new Intent(BluetoothPan.ACTION_TETHERING_STATE_CHANGED);
             intent.putExtra(BluetoothPan.EXTRA_TETHERING_STATE,
                     mTetherOn ? BluetoothPan.TETHERING_STATE_ON : BluetoothPan.TETHERING_STATE_OFF);
-            sendBroadcast(intent, null, Utils.getTempAllowlistBroadcastOptions());
+            Utils.sendBroadcast(this, intent, null, Utils.getTempAllowlistBroadcastOptions());
         }
     }
 
