@@ -28,6 +28,7 @@
 
 #include "bt_target.h"  // Must be first to define build configuration
 #include "bta/av/bta_av_int.h"
+#include "btif/include/btif_av.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
 #include "osi/include/log.h"
@@ -149,8 +150,8 @@ void BTA_AvDeregister(tBTA_AV_HNDL hndl) {
 void BTA_AvOpen(const RawAddress& bd_addr, tBTA_AV_HNDL handle, bool use_rc,
                 uint16_t uuid) {
   LOG_INFO("%s: peer %s bta_handle:0x%x use_rc=%s uuid=0x%x", __func__,
-           bd_addr.ToString().c_str(), handle, (use_rc) ? "true" : "false",
-           uuid);
+           ADDRESS_TO_LOGGABLE_CSTR(bd_addr), handle,
+           (use_rc) ? "true" : "false", uuid);
 
   tBTA_AV_API_OPEN* p_buf =
       (tBTA_AV_API_OPEN*)osi_malloc(sizeof(tBTA_AV_API_OPEN));
@@ -161,6 +162,17 @@ void BTA_AvOpen(const RawAddress& bd_addr, tBTA_AV_HNDL handle, bool use_rc,
   p_buf->use_rc = use_rc;
   p_buf->switch_res = BTA_AV_RS_NONE;
   p_buf->uuid = uuid;
+  if (btif_av_src_sink_coexist_enabled()) {
+    if (p_buf->uuid == AVDT_TSEP_SRC) {
+      p_buf->uuid = UUID_SERVCLASS_AUDIO_SOURCE;
+      p_buf->incoming = TRUE;
+    } else if (p_buf->uuid == AVDT_TSEP_SNK) {
+      p_buf->uuid = UUID_SERVCLASS_AUDIO_SINK;
+      p_buf->incoming = TRUE;
+    } else {
+      p_buf->incoming = FALSE;
+    }
+  }
 
   bta_sys_sendmsg(p_buf);
 }
@@ -215,13 +227,17 @@ void BTA_AvDisconnect(tBTA_AV_HNDL handle) {
  * Returns          void
  *
  ******************************************************************************/
-void BTA_AvStart(tBTA_AV_HNDL handle) {
-  LOG_INFO("Starting audio/video stream data transfer bta_handle:%hhu", handle);
+void BTA_AvStart(tBTA_AV_HNDL handle, bool use_latency_mode) {
+  LOG_INFO(
+      "Starting audio/video stream data transfer bta_handle:%hhu, "
+      "use_latency_mode:%s",
+      handle, use_latency_mode ? "true" : "false");
 
-  BT_HDR_RIGID* p_buf = (BT_HDR_RIGID*)osi_malloc(sizeof(BT_HDR_RIGID));
-
-  p_buf->event = BTA_AV_API_START_EVT;
-  p_buf->layer_specific = handle;
+  tBTA_AV_DO_START* p_buf =
+      (tBTA_AV_DO_START*)osi_malloc(sizeof(tBTA_AV_DO_START));
+  p_buf->hdr.event = BTA_AV_API_START_EVT;
+  p_buf->hdr.layer_specific = handle;
+  p_buf->use_latency_mode = use_latency_mode;
 
   bta_sys_sendmsg(p_buf);
 }
@@ -610,6 +626,51 @@ void BTA_AvMetaCmd(uint8_t rc_handle, uint8_t label, tBTA_AV_CMD cmd_code,
   p_buf->rsp_code = cmd_code;
   p_buf->is_rsp = false;
   p_buf->label = label;
+
+  bta_sys_sendmsg(p_buf);
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_AvSetLatency
+ *
+ * Description      Set audio/video stream latency.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_AvSetLatency(tBTA_AV_HNDL handle, bool is_low_latency) {
+  LOG_INFO(
+      "Set audio/video stream low latency bta_handle:%hhu, is_low_latency:%s",
+      handle, is_low_latency ? "true" : "false");
+
+  tBTA_AV_API_SET_LATENCY* p_buf =
+      (tBTA_AV_API_SET_LATENCY*)osi_malloc(sizeof(tBTA_AV_API_SET_LATENCY));
+  p_buf->hdr.event = BTA_AV_API_SET_LATENCY_EVT;
+  p_buf->hdr.layer_specific = handle;
+  p_buf->is_low_latency = is_low_latency;
+
+  bta_sys_sendmsg(p_buf);
+}
+
+/*******************************************************************************
+ *
+ * Function         BTA_AvSetPeerSep
+ *
+ * Description      Set peer sep in order to delete wrong avrcp handle
+ *                  there are may be two avrcp handle at start, delete the
+ *                  wrong when a2dp connected
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_AvSetPeerSep(const RawAddress& bdaddr, uint8_t sep) {
+  tBTA_AV_API_PEER_SEP* p_buf =
+      (tBTA_AV_API_PEER_SEP*)osi_malloc(sizeof(tBTA_AV_API_PEER_SEP));
+
+  p_buf->hdr.event = BTA_AV_API_PEER_SEP_EVT;
+  p_buf->addr = bdaddr;
+  p_buf->sep = sep;
 
   bta_sys_sendmsg(p_buf);
 }

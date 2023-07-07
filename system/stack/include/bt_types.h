@@ -28,7 +28,6 @@
 #include "stack/include/bt_dev_class.h"
 #include "stack/include/bt_device_type.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_name.h"
 #include "stack/include/bt_octets.h"
 #ifdef __cplusplus
 #include "include/hardware/bluetooth.h"
@@ -52,8 +51,6 @@
 /************************************/
 /* HCI Event                        */
 #define BT_EVT_TO_BTU_HCI_EVT 0x1000
-/* ACL Data from HCI                */
-#define BT_EVT_TO_BTU_HCI_ACL 0x1100
 /* SCO Data from HCI                */
 #define BT_EVT_TO_BTU_HCI_SCO 0x1200
 /* HCI Transport Error              */
@@ -62,14 +59,8 @@
 /* Serial Port Data                 */
 #define BT_EVT_TO_BTU_SP_DATA 0x1500
 
-/* HCI command from upper layer     */
-#define BT_EVT_TO_BTU_HCI_CMD 0x1600
-
 /* ISO Data from HCI                */
 #define BT_EVT_TO_BTU_HCI_ISO 0x1700
-
-/* L2CAP segment(s) transmitted     */
-#define BT_EVT_TO_BTU_L2C_SEG_XMIT 0x1900
 
 /* To LM                            */
 /************************************/

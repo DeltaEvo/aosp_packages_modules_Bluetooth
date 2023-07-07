@@ -67,8 +67,6 @@ public class MapClientTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when MapClientService is not enabled",
-                MapClientService.isEnabled());
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         when(mAdapterService.getDatabase()).thenReturn(mDatabaseManager);
@@ -82,9 +80,6 @@ public class MapClientTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!MapClientService.isEnabled()) {
-            return;
-        }
         TestUtils.stopService(mServiceRule, MapClientService.class);
         mService = MapClientService.getMapClientService();
         Assert.assertNull(mService);
@@ -122,11 +117,13 @@ public class MapClientTest {
 
         // is the statemachine created
         Map<BluetoothDevice, MceStateMachine> map = mService.getInstanceMap();
-        Assert.assertEquals(1, map.size());
-        Assert.assertNotNull(map.get(device));
-        TestUtils.waitForLooperToFinishScheduledTask(mService.getMainLooper());
 
-        Assert.assertEquals(map.get(device).getState(), BluetoothProfile.STATE_CONNECTING);
+        Assert.assertEquals(1, map.size());
+        MceStateMachine sm = map.get(device);
+        Assert.assertNotNull(sm);
+        TestUtils.waitForLooperToFinishScheduledTask(sm.getHandler().getLooper());
+
+        Assert.assertEquals(BluetoothProfile.STATE_CONNECTING, sm.getState());
         mService.cleanupDevice(device);
         Assert.assertNull(mService.getInstanceMap().get(device));
     }

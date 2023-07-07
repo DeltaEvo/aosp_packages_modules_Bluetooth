@@ -19,13 +19,23 @@
 #include <hci/hci_packets.h>
 
 #include "hci/address.h"
-#include "os/log.h"
+#include "log.h"
 
 namespace rootcanal {
 
 using ::bluetooth::hci::Address;
 using ::bluetooth::hci::AddressType;
 using ::bluetooth::hci::AddressWithType;
+
+void AclConnectionHandler::Reset(std::function<void(TaskId)> stopStream) {
+  // Leave no dangling periodic task.
+  for (auto& [_, sco_connection] : sco_connections_) {
+    sco_connection.StopStream(stopStream);
+  }
+
+  sco_connections_.clear();
+  acl_connections_.clear();
+}
 
 bool AclConnectionHandler::HasHandle(uint16_t handle) const {
   return acl_connections_.count(handle) != 0;
@@ -36,8 +46,11 @@ bool AclConnectionHandler::HasScoHandle(uint16_t handle) const {
 }
 
 uint16_t AclConnectionHandler::GetUnusedHandle() {
+  // Keep a reserved range of handles for CIS connections implemented
+  // in the rust module.
   while (HasHandle(last_handle_) || HasScoHandle(last_handle_) ||
-         isochronous_connection_handler_.HasHandle(last_handle_)) {
+         (last_handle_ >= kCisHandleRangeStart &&
+          last_handle_ < kCisHandleRangeEnd)) {
     last_handle_ = (last_handle_ + 1) % kReservedHandle;
   }
   uint16_t unused_handle = last_handle_;
@@ -45,14 +58,16 @@ uint16_t AclConnectionHandler::GetUnusedHandle() {
   return unused_handle;
 }
 
-bool AclConnectionHandler::CreatePendingConnection(
-    Address addr, bool authenticate_on_connect) {
+bool AclConnectionHandler::CreatePendingConnection(Address addr,
+                                                   bool authenticate_on_connect,
+                                                   bool allow_role_switch) {
   if (classic_connection_pending_) {
     return false;
   }
   classic_connection_pending_ = true;
   pending_connection_address_ = addr;
   authenticate_pending_classic_connection_ = authenticate_on_connect;
+  pending_classic_connection_allow_role_switch_ = allow_role_switch;
   return true;
 }
 
@@ -81,18 +96,17 @@ bool AclConnectionHandler::CreatePendingLeConnection(
     auto connection = std::get<AclConnection>(pair);
     if (connection.GetAddress() == peer ||
         connection.GetResolvedAddress() == resolved_peer) {
-      LOG_INFO("%s: %s is already connected", __func__,
-               peer.ToString().c_str());
+      INFO("{}: {} is already connected", __func__, peer);
       if (connection.GetResolvedAddress() == resolved_peer) {
-        LOG_INFO("%s: allowing a second connection with %s", __func__,
-                 resolved_peer.ToString().c_str());
+        INFO("{}: allowing a second connection with {}", __func__,
+             resolved_peer);
       } else {
         return false;
       }
     }
   }
   if (le_connection_pending_) {
-    LOG_INFO("%s: connection already pending", __func__);
+    INFO("{}: connection already pending", __func__);
     return false;
   }
   le_connection_pending_ = true;
@@ -127,27 +141,31 @@ uint16_t AclConnectionHandler::CreateConnection(Address addr,
         AclConnection{
             AddressWithType{addr, AddressType::PUBLIC_DEVICE_ADDRESS},
             AddressWithType{own_addr, AddressType::PUBLIC_DEVICE_ADDRESS},
-            AddressWithType(), Phy::Type::BR_EDR});
+            AddressWithType(), Phy::Type::BR_EDR,
+            bluetooth::hci::Role::CENTRAL});
     return handle;
   }
   return kReservedHandle;
 }
 
 uint16_t AclConnectionHandler::CreateLeConnection(AddressWithType addr,
-                                                  AddressWithType own_addr) {
+                                                  AddressWithType own_addr,
+                                                  bluetooth::hci::Role role) {
   AddressWithType resolved_peer = pending_le_connection_resolved_address_;
   if (CancelPendingLeConnection(addr)) {
     uint16_t handle = GetUnusedHandle();
-    acl_connections_.emplace(
-        handle,
-        AclConnection{addr, own_addr, resolved_peer, Phy::Type::LOW_ENERGY});
+    acl_connections_.emplace(handle,
+                             AclConnection{addr, own_addr, resolved_peer,
+                                           Phy::Type::LOW_ENERGY, role});
     return handle;
   }
   return kReservedHandle;
 }
 
-bool AclConnectionHandler::Disconnect(uint16_t handle) {
+bool AclConnectionHandler::Disconnect(uint16_t handle,
+                                      std::function<void(TaskId)> stopStream) {
   if (HasScoHandle(handle)) {
+    sco_connections_.at(handle).StopStream(std::move(stopStream));
     sco_connections_.erase(handle);
     return true;
   }
@@ -181,9 +199,20 @@ uint16_t AclConnectionHandler::GetHandleOnlyAddress(
   return kReservedHandle;
 }
 
+AclConnection& AclConnectionHandler::GetAclConnection(uint16_t handle) {
+  ASSERT_LOG(HasHandle(handle), "Unknown handle %d", handle);
+  return acl_connections_.at(handle);
+}
+
 AddressWithType AclConnectionHandler::GetAddress(uint16_t handle) const {
   ASSERT_LOG(HasHandle(handle), "Unknown handle %hd", handle);
   return acl_connections_.at(handle).GetAddress();
+}
+
+std::optional<AddressWithType> AclConnectionHandler::GetAddressSafe(
+    uint16_t handle) const {
+  return HasHandle(handle) ? acl_connections_.at(handle).GetAddress()
+                           : std::optional<AddressWithType>();
 }
 
 Address AclConnectionHandler::GetScoAddress(uint16_t handle) const {
@@ -216,6 +245,16 @@ bool AclConnectionHandler::IsEncrypted(uint16_t handle) const {
   return acl_connections_.at(handle).IsEncrypted();
 }
 
+void AclConnectionHandler::SetRssi(uint16_t handle, int8_t rssi) {
+  if (HasHandle(handle)) {
+    acl_connections_.at(handle).SetRssi(rssi);
+  }
+}
+
+int8_t AclConnectionHandler::GetRssi(uint16_t handle) const {
+  return HasHandle(handle) ? acl_connections_.at(handle).GetRssi() : 0;
+}
+
 Phy::Type AclConnectionHandler::GetPhyType(uint16_t handle) const {
   if (!HasHandle(handle)) {
     return Phy::Type::BR_EDR;
@@ -223,219 +262,30 @@ Phy::Type AclConnectionHandler::GetPhyType(uint16_t handle) const {
   return acl_connections_.at(handle).GetPhyType();
 }
 
-std::unique_ptr<bluetooth::hci::LeSetCigParametersCompleteBuilder>
-AclConnectionHandler::SetCigParameters(
-    uint8_t id, uint32_t sdu_interval_m_to_s, uint32_t sdu_interval_s_to_m,
-    bluetooth::hci::ClockAccuracy /* accuracy */,
-    bluetooth::hci::Packing packing, bluetooth::hci::Enable framed,
-    uint16_t max_transport_latency_m_to_s_,
-    uint16_t max_transport_latency_s_to_m_,
-    std::vector<bluetooth::hci::CisParametersConfig>& streams) {
-  std::vector<uint16_t> handles;
-  GroupParameters group_parameters{
-      .id = id,
-      .sdu_interval_m_to_s = sdu_interval_m_to_s,
-      .sdu_interval_s_to_m = sdu_interval_s_to_m,
-      .interleaved = packing == bluetooth::hci::Packing::INTERLEAVED,
-      .framed = framed == bluetooth::hci::Enable::ENABLED,
-      .max_transport_latency_m_to_s = max_transport_latency_m_to_s_,
-      .max_transport_latency_s_to_m = max_transport_latency_s_to_m_};
-  std::vector<StreamParameters> stream_parameters;
-  for (size_t i = 0; i < streams.size(); i++) {
-    auto handle = GetUnusedHandle();
-    StreamParameters a{.group_id = group_parameters.id,
-                       .stream_id = streams[i].cis_id_,
-                       .max_sdu_m_to_s = streams[i].max_sdu_m_to_s_,
-                       .max_sdu_s_to_m = streams[i].max_sdu_s_to_m_,
-                       .rtn_m_to_s = streams[i].rtn_m_to_s_,
-                       .rtn_s_to_m = streams[i].rtn_s_to_m_,
-                       .handle = handle};
-    handles.push_back(handle);
-    stream_parameters.push_back(std::move(a));
-  }
+uint16_t AclConnectionHandler::GetAclLinkPolicySettings(uint16_t handle) const {
+  return acl_connections_.at(handle).GetLinkPolicySettings();
+};
 
-  return isochronous_connection_handler_.SetCigParameters(
-      group_parameters, stream_parameters, std::move(handles));
+void AclConnectionHandler::SetAclLinkPolicySettings(uint16_t handle,
+                                                    uint16_t settings) {
+  acl_connections_.at(handle).SetLinkPolicySettings(settings);
 }
 
-void AclConnectionHandler::CreatePendingCis(
-    bluetooth::hci::CreateCisConfig config) {
-  CisHandles handles;
-  handles.cis_handle_ = config.cis_connection_handle_;
-  handles.acl_handle_ = config.acl_connection_handle_;
-  handles.remote_cis_handle_ = kReservedHandle;
-  pending_streams_.emplace_back(std::move(handles));
-}
+bluetooth::hci::Role AclConnectionHandler::GetAclRole(uint16_t handle) const {
+  return acl_connections_.at(handle).GetRole();
+};
 
-bool AclConnectionHandler::ConnectCis(uint16_t handle) {
-  size_t position;
-  CisHandles connection;
-  for (position = 0; position < pending_streams_.size(); position++) {
-    if (handle == pending_streams_[position].cis_handle_) {
-      LOG_INFO("Found handle 0x%04hx", handle);
-      connection = pending_streams_[position];
-      pending_streams_.erase(pending_streams_.begin() + position);
-      connected_streams_.push_back(connection);
-      ASSERT(connection.cis_handle_ != kReservedHandle);
-      ASSERT(connection.acl_handle_ != kReservedHandle);
-      ASSERT(connection.remote_cis_handle_ != kReservedHandle);
-      return true;
-    }
-  }
-
-  LOG_INFO("No pending CIS connection with handle 0x%04hx", handle);
-  return false;
-}
-
-void AclConnectionHandler::SetRemoteCisHandle(uint16_t handle,
-                                              uint16_t remote_handle) {
-  for (size_t position = 0; position < pending_streams_.size(); position++) {
-    if (handle == pending_streams_[position].cis_handle_) {
-      LOG_INFO("Added remote handle 0x%04hx to handle 0x%04hx", remote_handle,
-               pending_streams_[position].cis_handle_);
-      pending_streams_[position].remote_cis_handle_ = remote_handle;
-      return;
-    }
-  }
-  LOG_INFO("Couldn't find CIS connection with handle 0x%04hx", handle);
-}
-
-bool AclConnectionHandler::RejectCis(uint16_t handle) {
-  size_t position;
-  for (position = 0; position < pending_streams_.size(); position++) {
-    if (handle == pending_streams_[position].cis_handle_) {
-      pending_streams_.erase(pending_streams_.begin() + position);
-      break;
-    }
-  }
-  if (position == pending_streams_.size()) {
-    LOG_INFO("No pending connection with handle 0x%hx", handle);
-    return false;
-  }
-  return true;
-}
-
-uint16_t AclConnectionHandler::GetPendingAclHandle(uint16_t cis_handle) const {
-  size_t position;
-  uint16_t handle = 0xffff;
-  for (position = 0; position < pending_streams_.size(); position++) {
-    if (cis_handle == pending_streams_[position].cis_handle_) {
-      handle = pending_streams_[position].acl_handle_;
-      break;
-    }
-  }
-  if (position == pending_streams_.size()) {
-    LOG_INFO("No pending connection with handle 0x%hx", cis_handle);
-  }
-  return handle;
-}
-
-bool AclConnectionHandler::DisconnectCis(uint16_t cis_handle) {
-  size_t position;
-  for (position = 0; position < connected_streams_.size(); position++) {
-    if (cis_handle == connected_streams_[position].cis_handle_) {
-      connected_streams_.erase(connected_streams_.begin() + position);
-      break;
-    }
-  }
-  if (position == connected_streams_.size()) {
-    LOG_INFO("No connected stream 0x%hx", cis_handle);
-    return false;
-  }
-  return true;
-}
-
-bluetooth::hci::ErrorCode AclConnectionHandler::RemoveCig(uint8_t cig_id) {
-  for (const auto& stream : connected_streams_) {
-    if (isochronous_connection_handler_.GetGroupId(stream.cis_handle_) ==
-        cig_id) {
-      return bluetooth::hci::ErrorCode::COMMAND_DISALLOWED;
-    }
-  }
-  for (const auto& stream : pending_streams_) {
-    if (isochronous_connection_handler_.GetGroupId(stream.cis_handle_) ==
-        cig_id) {
-      return bluetooth::hci::ErrorCode::COMMAND_DISALLOWED;
-    }
-  }
-  auto status = isochronous_connection_handler_.RemoveCig(cig_id);
-  if (status == bluetooth::hci::ErrorCode::SUCCESS) {
-    // Clean up?
-  }
-  return status;
-}
-
-bool AclConnectionHandler::HasPendingCisConnection(uint16_t handle) const {
-  for (const auto& config : pending_streams_) {
-    if (config.cis_handle_ == handle) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool AclConnectionHandler::HasPendingCis() const {
-  return !pending_streams_.empty();
-}
-
-bool AclConnectionHandler::HasConnectedCis(uint16_t handle) const {
-  for (const auto& cs : connected_streams_) {
-    if (handle == cs.cis_handle_) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool AclConnectionHandler::HasCisHandle(uint16_t handle) const {
-  for (const auto& cs : pending_streams_) {
-    if (handle == cs.cis_handle_) {
-      return true;
-    }
-  }
-  for (const auto& cs : connected_streams_) {
-    if (handle == cs.cis_handle_) {
-      return true;
-    }
-  }
-  return isochronous_connection_handler_.HasHandle(handle);
-}
-
-uint16_t AclConnectionHandler::GetAclHandleForCisHandle(
-    uint16_t cis_handle) const {
-  for (const auto& cs : connected_streams_) {
-    if (cis_handle == cs.cis_handle_) {
-      return cs.acl_handle_;
-    }
-  }
-  return kReservedHandle;
-}
-
-uint16_t AclConnectionHandler::GetRemoteCisHandleForCisHandle(
-    uint16_t cis_handle) const {
-  for (const auto& cs : connected_streams_) {
-    if (cis_handle == cs.cis_handle_) {
-      return cs.remote_cis_handle_;
-    }
-  }
-  return kReservedHandle;
-}
-
-GroupParameters AclConnectionHandler::GetGroupParameters(uint8_t id) const {
-  return isochronous_connection_handler_.GetGroupParameters(id);
-}
-
-StreamParameters AclConnectionHandler::GetStreamParameters(
-    uint16_t handle) const {
-  return isochronous_connection_handler_.GetStreamParameters(handle);
+void AclConnectionHandler::SetAclRole(uint16_t handle,
+                                      bluetooth::hci::Role role) {
+  acl_connections_.at(handle).SetRole(role);
 }
 
 void AclConnectionHandler::CreateScoConnection(
     bluetooth::hci::Address addr, ScoConnectionParameters const& parameters,
-    ScoState state, bool legacy) {
+    ScoState state, ScoDatapath datapath, bool legacy) {
   uint16_t sco_handle = GetUnusedHandle();
-  sco_connections_.emplace(sco_handle,
-                           ScoConnection(addr, parameters, state, legacy));
+  sco_connections_.emplace(
+      sco_handle, ScoConnection(addr, parameters, state, datapath, legacy));
 }
 
 bool AclConnectionHandler::HasPendingScoConnection(
@@ -482,11 +332,13 @@ void AclConnectionHandler::CancelPendingScoConnection(
 }
 
 bool AclConnectionHandler::AcceptPendingScoConnection(
-    bluetooth::hci::Address addr, ScoLinkParameters const& parameters) {
+    bluetooth::hci::Address addr, ScoLinkParameters const& parameters,
+    std::function<TaskId()> startStream) {
   for (auto& pair : sco_connections_) {
     if (std::get<ScoConnection>(pair).GetAddress() == addr) {
       std::get<ScoConnection>(pair).SetLinkParameters(parameters);
       std::get<ScoConnection>(pair).SetState(ScoState::SCO_STATE_OPENED);
+      std::get<ScoConnection>(pair).StartStream(std::move(startStream));
       return true;
     }
   }
@@ -494,13 +346,17 @@ bool AclConnectionHandler::AcceptPendingScoConnection(
 }
 
 bool AclConnectionHandler::AcceptPendingScoConnection(
-    bluetooth::hci::Address addr, ScoConnectionParameters const& parameters) {
+    bluetooth::hci::Address addr, ScoConnectionParameters const& parameters,
+    std::function<TaskId()> startStream) {
   for (auto& pair : sco_connections_) {
     if (std::get<ScoConnection>(pair).GetAddress() == addr) {
       bool ok =
           std::get<ScoConnection>(pair).NegotiateLinkParameters(parameters);
       std::get<ScoConnection>(pair).SetState(ok ? ScoState::SCO_STATE_OPENED
                                                 : ScoState::SCO_STATE_CLOSED);
+      if (ok) {
+        std::get<ScoConnection>(pair).StartStream(std::move(startStream));
+      }
       return ok;
     }
   }
@@ -544,6 +400,32 @@ std::vector<uint16_t> AclConnectionHandler::GetAclHandles() const {
     keys.push_back(pair.first);
   }
   return keys;
+}
+
+void AclConnectionHandler::ResetLinkTimer(uint16_t handle) {
+  acl_connections_.at(handle).ResetLinkTimer();
+}
+
+std::chrono::steady_clock::duration
+AclConnectionHandler::TimeUntilLinkNearExpiring(uint16_t handle) const {
+  return acl_connections_.at(handle).TimeUntilNearExpiring();
+}
+
+bool AclConnectionHandler::IsLinkNearExpiring(uint16_t handle) const {
+  return acl_connections_.at(handle).IsNearExpiring();
+}
+
+std::chrono::steady_clock::duration AclConnectionHandler::TimeUntilLinkExpired(
+    uint16_t handle) const {
+  return acl_connections_.at(handle).TimeUntilExpired();
+}
+
+bool AclConnectionHandler::HasLinkExpired(uint16_t handle) const {
+  return acl_connections_.at(handle).HasExpired();
+}
+
+bool AclConnectionHandler::IsRoleSwitchAllowedForPendingConnection() const {
+  return pending_classic_connection_allow_role_switch_;
 }
 
 }  // namespace rootcanal

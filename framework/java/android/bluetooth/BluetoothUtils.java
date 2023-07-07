@@ -35,10 +35,8 @@ public final class BluetoothUtils {
      */
     private BluetoothUtils() {}
 
-    /**
-     * Timeout value for synchronous binder call
-     */
-    private static final Duration SYNC_CALLS_TIMEOUT = Duration.ofSeconds(5);
+    /** Timeout value for synchronous binder call */
+    private static final Duration SYNC_CALLS_TIMEOUT = Duration.ofSeconds(3);
 
     /**
      * @return timeout value for synchronous binder call
@@ -52,7 +50,10 @@ public final class BluetoothUtils {
      */
     public static final UserHandle USER_HANDLE_NULL = UserHandle.of(-10000);
 
-    static class TypeValueEntry {
+    /**
+     * Class for Length-Value-Entry array parsing
+     */
+    public static class TypeValueEntry {
         private final int mType;
         private final byte[] mValue;
 
@@ -174,5 +175,17 @@ public final class BluetoothUtils {
             currentPos += entry.getValue().length;
         }
         return result;
+    }
+
+    /**
+     * Convert an address to an obfuscate one for logging purpose
+     * @param address Mac address to be log
+     * @return Loggable mac address
+     */
+    public static String toAnonymizedAddress(String address) {
+        if (address == null || address.length() != 17) {
+            return null;
+        }
+        return "XX:XX:XX:XX" + address.substring(11);
     }
 }

@@ -26,10 +26,9 @@
 #include <utility>      // for move
 #include <vector>       // for vector
 
+#include "log.h"
 #include "model/hci/h4_parser.h"     // for H4Parser, ClientDisconnectCa...
-#include "model/hci/hci_protocol.h"  // for PacketReadCallback, AsyncDataChannel
 #include "net/async_data_channel.h"  // for AsyncDataChannel
-#include "os/log.h"                  // for LOG_ERROR, LOG_ALWAYS_FATAL
 
 namespace rootcanal {
 
@@ -39,57 +38,62 @@ H4DataChannelPacketizer::H4DataChannelPacketizer(
     PacketReadCallback sco_cb, PacketReadCallback iso_cb,
     ClientDisconnectCallback disconnect_cb)
     : uart_socket_(socket),
-      h4_parser_(command_cb, event_cb, acl_cb, sco_cb, iso_cb),
+      h4_parser_(command_cb, event_cb, acl_cb, sco_cb, iso_cb, true),
       disconnect_cb_(std::move(disconnect_cb)) {}
 
 size_t H4DataChannelPacketizer::Send(uint8_t type, const uint8_t* data,
                                      size_t length) {
   ssize_t ret = uart_socket_->Send(&type, sizeof(type));
   if (ret == -1) {
-    LOG_ERROR("Error writing to UART (%s)", strerror(errno));
+    ERROR("Error writing to UART ({})", strerror(errno));
   }
   size_t to_be_written = ret;
 
   ret = uart_socket_->Send(data, length);
   if (ret == -1) {
-    LOG_ERROR("Error writing to UART (%s)", strerror(errno));
+    ERROR("Error writing to UART ({})", strerror(errno));
   }
   to_be_written += ret;
 
   if (to_be_written != length + sizeof(type)) {
-    LOG_ERROR("%d / %d bytes written - something went wrong...",
-              static_cast<int>(to_be_written),
-              static_cast<int>(length + sizeof(type)));
+    ERROR("{} / {} bytes written - something went wrong...", to_be_written,
+          length + sizeof(type));
   }
   return to_be_written;
 }
 
 void H4DataChannelPacketizer::OnDataReady(
-    std::shared_ptr<AsyncDataChannel> socket) {
-  ssize_t bytes_to_read = h4_parser_.BytesRequested();
-  std::vector<uint8_t> buffer(bytes_to_read);
+   std::shared_ptr<AsyncDataChannel> socket) {
 
-  ssize_t bytes_read = socket->Recv(buffer.data(), bytes_to_read);
-  if (bytes_read == 0) {
-    LOG_INFO("remote disconnected!");
-    disconnected_ = true;
-    disconnect_cb_();
-    return;
-  } else if (bytes_read < 0) {
-    if (errno == EAGAIN) {
-      // No data, try again later.
-      return;
-    } else if (errno == ECONNRESET) {
-      // They probably rejected our packet
+  // Continue reading from the async data channel as long as bytes
+  // are available to read. Otherwise this limits the number of HCI
+  // packets parsed to one every 3 ticks.
+  for (;;) {
+    ssize_t bytes_to_read = h4_parser_.BytesRequested();
+    std::vector<uint8_t> buffer(bytes_to_read);
+
+    ssize_t bytes_read = socket->Recv(buffer.data(), bytes_to_read);
+    if (bytes_read == 0) {
+      INFO("remote disconnected!");
       disconnected_ = true;
       disconnect_cb_();
       return;
-    } else {
-      LOG_ALWAYS_FATAL("Read error in %u: %s", h4_parser_.CurrentState(),
-                       strerror(errno));
     }
+    if (bytes_read < 0) {
+      if (errno == EAGAIN) {
+        // No data, try again later.
+        return;
+      }
+      if (errno == ECONNRESET) {
+        // They probably rejected our packet
+        disconnected_ = true;
+        disconnect_cb_();
+        return;
+      }
+      FATAL("Read error in {}: {}", h4_parser_.CurrentState(), strerror(errno));
+    }
+    h4_parser_.Consume(buffer.data(), bytes_read);
   }
-  h4_parser_.Consume(buffer.data(), bytes_read);
 }
 
 }  // namespace rootcanal

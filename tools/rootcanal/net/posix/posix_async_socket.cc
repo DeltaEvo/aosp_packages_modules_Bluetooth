@@ -21,15 +21,18 @@
 
 #include <functional>  // for __base
 
+#include "log.h"
 #include "model/setup/async_manager.h"  // for AsyncManager
-#include "os/log.h"                     // for LOG_INFO
-#include "osi/include/osi.h"            // for OSI_NO_INTR
+
+#ifdef _WIN32
+#include "msvc-posix.h"
+#endif
 
 /* set  for very verbose debugging */
-#ifndef DEBUG
+#ifdef NDEBUG
 #define DD(...) (void)0
 #else
-#define DD(...) LOG_INFO(__VA_ARGS__)
+#define DD(...) INFO(__VA_ARGS__)
 #endif
 
 namespace android {
@@ -63,13 +66,19 @@ PosixAsyncSocket::PosixAsyncSocket(PosixAsyncSocket&& other) {
 PosixAsyncSocket::~PosixAsyncSocket() { Close(); }
 
 ssize_t PosixAsyncSocket::Recv(uint8_t* buffer, uint64_t bufferSize) {
+  if (fd_ == -1) {
+    // Socket was closed locally.
+    return 0;
+  }
+
   errno = 0;
   ssize_t res = 0;
-  OSI_NO_INTR(res = read(fd_, buffer, bufferSize));
+  REPEAT_UNTIL_NO_INTR(res = read(fd_, buffer, bufferSize));
+
   if (res < 0) {
-    DD("Recv < 0: %s (%d)", strerror(errno), fd_);
+    DD("Recv < 0: {} ({})", strerror(errno), fd_);
   }
-  DD("%zd bytes (%d)", res, fd_);
+  DD("{} bytes ({})", res, fd_);
   return res;
 };
 
@@ -85,9 +94,10 @@ ssize_t PosixAsyncSocket::Send(const uint8_t* buffer, uint64_t bufferSize) {
   // the socket.
   const int sendFlags = 0;
 #endif
-  OSI_NO_INTR(res = send(fd_, buffer, bufferSize, sendFlags));
 
-  DD("%zd bytes (%d)", res, fd_);
+  REPEAT_UNTIL_NO_INTR(res = send(fd_, buffer, bufferSize, sendFlags));
+
+  DD("{} bytes ({})", res, fd_);
   return res;
 }
 
@@ -97,11 +107,8 @@ bool PosixAsyncSocket::Connected() {
   }
   char buf;
   if (recv(fd_, &buf, 1, MSG_PEEK | MSG_DONTWAIT) != 1) {
-    DD("Recv not 1, could be connected: %s (%d)", strerror(errno), fd_);
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      return true;
-    }
-    return false;
+    DD("Recv not 1, could be connected: {} ({})", strerror(errno), fd_);
+    return errno == EAGAIN || errno == EWOULDBLOCK;
   }
 
   // We saw a byte in the queue, we are likely connected.
@@ -122,13 +129,13 @@ void PosixAsyncSocket::Close() {
              &error_code_size);
 
   // shutdown sockets if possible,
-  OSI_NO_INTR(shutdown(fd_, SHUT_RDWR));
+  REPEAT_UNTIL_NO_INTR(shutdown(fd_, SHUT_RDWR));
 
   error_code = ::close(fd_);
   if (error_code == -1) {
-    LOG_INFO("Failed to close: %s (%d)", strerror(errno), fd_);
+    INFO("Failed to close: {} ({})", strerror(errno), fd_);
   }
-  LOG_INFO("(%d)", fd_);
+  INFO("({})", fd_);
   fd_ = -1;
 }
 

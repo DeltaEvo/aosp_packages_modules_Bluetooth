@@ -1,3 +1,19 @@
+/*
+ * Copyright 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef TEST_VENDOR_LIB_ASYNC_MANAGER_H_
 #define TEST_VENDOR_LIB_ASYNC_MANAGER_H_
 
@@ -77,18 +93,18 @@ class AsyncManager {
                                     std::chrono::milliseconds period,
                                     const TaskCallback& callback);
 
-  // Cancels the/every future occurrence of the action specified by this id. It
-  // is guaranteed that the associated callback will not be called after this
-  // method returns (it could be called during the execution of the method).
-  // The calling thread may block until the scheduling thread acknowledges the
-  // cancellation.
+  // Cancels the/every future occurrence of the action specified by this id.
+  // The following invariants will hold:
+  // - The task will not be invoked after this method returns
+  // - If the task is currently running it will block until the task is
+  //   completed, unless cancel is called from the running task.
   bool CancelAsyncTask(AsyncTaskId async_task_id);
 
-  // Cancels the/every future occurrence of the action specified by this id. It
-  // is guaranteed that the associated callback will not be called after this
-  // method returns (it could be called during the execution of the method).
-  // The calling thread may block until the scheduling thread acknowledges the
-  // cancellation.
+  // Cancels the/every future occurrence of the action specified by this id.
+  // The following invariants will hold:
+  // - The task will not be invoked after this method returns
+  // - If the task is currently running it will block until the task is
+  //   completed, unless cancel is called from the running task.
   bool CancelAsyncTasksFromUser(AsyncUserId user_id);
 
   // Execs the given code in a synchronized manner. It is guaranteed that code
@@ -98,7 +114,7 @@ class AsyncManager {
   // made from inside a CriticalCallback, since that would cause a lock to be
   // acquired twice with unpredictable results. It is strongly recommended to
   // have very simple CriticalCallbacks, preferably using lambda expressions.
-  void Synchronize(const CriticalCallback&);
+  void Synchronize(const CriticalCallback& critical_callback);
 
   AsyncManager();
   AsyncManager(const AsyncManager&) = delete;
@@ -119,8 +135,6 @@ class AsyncManager {
   // destroying the other one
   std::unique_ptr<AsyncFdWatcher> fdWatcher_p_;
   std::unique_ptr<AsyncTaskManager> taskManager_p_;
-
-  std::mutex synchronization_mutex_;
 };
 }  // namespace rootcanal
 #endif  // TEST_VENDOR_LIB_ASYNC_MANAGER_H_

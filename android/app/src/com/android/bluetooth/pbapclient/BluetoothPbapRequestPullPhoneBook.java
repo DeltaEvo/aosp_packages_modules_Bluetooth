@@ -19,6 +19,7 @@ package com.android.bluetooth.pbapclient;
 import android.accounts.Account;
 import android.util.Log;
 
+import com.android.bluetooth.ObexAppParameters;
 import com.android.obex.HeaderSet;
 import com.android.vcard.VCardEntry;
 
@@ -27,10 +28,8 @@ import java.io.InputStream;
 import java.util.ArrayList;
 
 final class BluetoothPbapRequestPullPhoneBook extends BluetoothPbapRequest {
-
-    private static final boolean VDBG = Utils.VDBG;
-
-    private static final String TAG = "BtPbapReqPullPhoneBook";
+    private static final String TAG = "PbapClient.PullPb";
+    private static final boolean VDBG = Log.isLoggable(TAG, Log.VERBOSE);
 
     private static final String TYPE = "x-bt/phonebook";
 

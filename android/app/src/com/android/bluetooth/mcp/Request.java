@@ -103,6 +103,75 @@ public final class Request {
         public static final int FIRST_GROUP = 0x040000;
         public static final int LAST_GROUP = 0x080000;
         public static final int GOTO_GROUP = 0x100000;
+
+        static String toString(int opcodes) {
+            StringBuilder sb = new StringBuilder();
+            boolean is_complex = false;
+
+            sb.append("0x" + Integer.toHexString(opcodes) + " (");
+            for (int i = 1; i <= opcodes; i <<= 1) {
+                int opcode = opcodes & i;
+                if (opcode != 0) {
+                    if (is_complex) {
+                        sb.append(" | ");
+                    } else {
+                        is_complex = true;
+                    }
+                    sb.append(singleOpcodeToString(opcode));
+                }
+            }
+            sb.append(")");
+            return sb.toString();
+        }
+
+        private static String singleOpcodeToString(int opcode) {
+            switch (opcode) {
+                case 0x01:
+                    return "PLAY";
+                case 0x02:
+                    return "PAUSE";
+                case 0x04:
+                    return "FAST_REWIND";
+                case 0x08:
+                    return "FAST_FORWARD";
+                case 0x10:
+                    return "STOP";
+                case 0x20:
+                    return "MOVE_RELATIVE";
+                case 0x40:
+                    return "PREVIOUS_SEGMENT";
+                case 0x80:
+                    return "NEXT_SEGMENT";
+                case 0x0100:
+                    return "FIRST_SEGMENT";
+                case 0x0200:
+                    return "LAST_SEGMENT";
+                case 0x0400:
+                    return "GOTO_SEGMENT";
+                case 0x0800:
+                    return "PREVIOUS_TRACK";
+                case 0x1000:
+                    return "NEXT_TRACK";
+                case 0x2000:
+                    return "FIRST_TRACK";
+                case 0x4000:
+                    return "LAST_TRACK";
+                case 0x8000:
+                    return "GOTO_TRACK";
+                case 0x010000:
+                    return "PREVIOUS_GROUP";
+                case 0x020000:
+                    return "NEXT_GROUP";
+                case 0x040000:
+                    return "FIRST_GROUP";
+                case 0x080000:
+                    return "LAST_GROUP";
+                case 0x100000:
+                    return "GOTO_GROUP";
+                default:
+                    return "0x" + Integer.toHexString(opcode);
+            }
+        }
     }
 
     /**
@@ -130,6 +199,55 @@ public final class Request {
         public static final int FIRST_GROUP = 0x42;
         public static final int LAST_GROUP = 0x43;
         public static final int GOTO_GROUP = 0x44;
+
+        static String toString(int opcode) {
+            switch(opcode) {
+                case 0x01:
+                    return "PLAY(0x01)";
+                case 0x02:
+                    return "PAUSE(0x02)";
+                case 0x03:
+                    return "FAST_REWIND(0x03)";
+                case 0x04:
+                    return "FAST_FORWARD(0x04)";
+                case 0x05:
+                    return "STOP(0x05)";
+                case 0x10:
+                    return "MOVE_RELATIVE(0x10)";
+                case 0x20:
+                    return "PREVIOUS_SEGMENT(0x20)";
+                case 0x21:
+                    return "NEXT_SEGMENT(0x21)";
+                case 0x22:
+                    return "FIRST_SEGMENT(0x22)";
+                case 0x23:
+                    return "LAST_SEGMENT(0x23)";
+                case 0x24:
+                    return "GOTO_SEGMENT(0x24)";
+                case 0x30:
+                    return "PREVIOUS_TRACK(0x30)";
+                case 0x31:
+                    return "NEXT_TRACK(0x31)";
+                case 0x32:
+                    return "FIRST_TRACK(0x32)";
+                case 0x33:
+                    return "LAST_TRACK(0x33)";
+                case 0x34:
+                    return "GOTO_TRACK(0x34)";
+                case 0x40:
+                    return "PREVIOUS_GROUP(0x40)";
+                case 0x41:
+                    return "NEXT_GROUP(0x41)";
+                case 0x42:
+                    return "FIRST_GROUP(0x42)";
+                case 0x43:
+                    return "LAST_GROUP(0x43)";
+                case 0x44:
+                    return "GOTO_GROUP(0x44)";
+                default:
+                    return "UNKNOWN(0x" + Integer.toHexString(opcode) + ")";
+            }
+        }
     }
 
     /* Map opcodes which are written to 'Media Control Point' characteristics to their corresponding

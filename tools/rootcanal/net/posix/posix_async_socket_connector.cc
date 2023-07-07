@@ -24,9 +24,8 @@
 
 #include <type_traits>  // for remove_extent_t
 
+#include "log.h"
 #include "net/posix/posix_async_socket.h"  // for PosixAsyncSocket
-#include "os/log.h"                        // for LOG_INFO
-#include "osi/include/osi.h"               // for OSI_NO_INTR
 
 namespace android {
 namespace net {
@@ -38,22 +37,20 @@ std::shared_ptr<AsyncDataChannel>
 PosixAsyncSocketConnector::ConnectToRemoteServer(
     const std::string& server, int port,
     const std::chrono::milliseconds timeout) {
-  LOG_INFO("Connecting to %s:%d in %d ms", server.c_str(), port,
-           (int)timeout.count());
+  INFO("Connecting to {}:{} in {} ms", server, port, timeout.count());
   int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
   std::shared_ptr<PosixAsyncSocket> pas =
       std::make_shared<PosixAsyncSocket>(socket_fd, am_);
 
   if (socket_fd < 1) {
-    LOG_INFO("socket() call failed: %s", strerror(errno));
+    INFO("socket() call failed: {}", strerror(errno));
     return pas;
   }
 
   struct hostent* host;
   host = gethostbyname(server.c_str());
   if (host == NULL) {
-    LOG_INFO("gethostbyname() failed for %s: %s", server.c_str(),
-             strerror(errno));
+    INFO("gethostbyname() failed for {}: {}", server, strerror(errno));
     pas->Close();
     return pas;
   }
@@ -67,10 +64,10 @@ PosixAsyncSocketConnector::ConnectToRemoteServer(
   int result =
       connect(socket_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
 
-  if (result != 0 &&
-      !(errno == EWOULDBLOCK || errno == EAGAIN || errno == EINPROGRESS)) {
-    LOG_INFO("Failed to connect to %s:%d, error:  %s", server.c_str(), port,
-             strerror(errno));
+  if (result != 0 && errno != EWOULDBLOCK && errno != EAGAIN &&
+      errno != EINPROGRESS) {
+    INFO("Failed to connect to {}:{}, error: {}", server, port,
+         strerror(errno));
     pas->Close();
     return pas;
   }
@@ -83,11 +80,13 @@ PosixAsyncSocketConnector::ConnectToRemoteServer(
           .revents = 0,
       },
   };
+
   int numFdsReady = 0;
-  OSI_NO_INTR(numFdsReady = ::poll(fds, 1, timeout.count()));
+  REPEAT_UNTIL_NO_INTR(numFdsReady = ::poll(fds, 1, timeout.count()));
+
   if (numFdsReady <= 0) {
-    LOG_INFO("Failed to connect to %s:%d, error:  %s", server.c_str(), port,
-             strerror(errno));
+    INFO("Failed to connect to {}:{}, error: {}", server, port,
+         strerror(errno));
     pas->Close();
     return pas;
   }
@@ -98,8 +97,8 @@ PosixAsyncSocketConnector::ConnectToRemoteServer(
   socklen_t sslen = sizeof(ss);
 
   if (getpeername(socket_fd, (struct sockaddr*)&ss, &sslen) < 0) {
-    LOG_INFO("Failed to connect to %s:%d, error:  %s", server.c_str(), port,
-             strerror(errno));
+    INFO("Failed to connect to {}:{}, error: {}", server, port,
+         strerror(errno));
     pas->Close();
     return pas;
   }
@@ -111,13 +110,12 @@ PosixAsyncSocketConnector::ConnectToRemoteServer(
       err) {
     // Either getsockopt failed or there was an error associated
     // with the socket. The connection did not succeed.
-    LOG_INFO("Failed to connect to %s:%d, error:  %s", server.c_str(), port,
-             strerror(err));
+    INFO("Failed to connect to {}:{}, error:  {}", server, port, strerror(err));
     pas->Close();
     return pas;
   }
 
-  LOG_INFO("Connected to %s:%d (%d)", server.c_str(), port, socket_fd);
+  INFO("Connected to {}:{} ({})", server, port, socket_fd);
   return pas;
 }
 

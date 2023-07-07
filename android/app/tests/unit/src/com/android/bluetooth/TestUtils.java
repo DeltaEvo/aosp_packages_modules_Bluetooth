@@ -15,6 +15,7 @@
  */
 package com.android.bluetooth;
 
+import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,11 +30,13 @@ import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.MessageQueue;
-import android.os.Process;
+import android.service.media.MediaBrowserService;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.rule.ServiceTestRule;
+import androidx.test.uiautomator.UiDevice;
 
+import com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 
@@ -58,16 +61,18 @@ import java.util.concurrent.TimeoutException;
 public class TestUtils {
     private static final int SERVICE_TOGGLE_TIMEOUT_MS = 1000;    // 1s
 
+    private static String sSystemScreenOffTimeout = "10000";
+
     /**
      * Utility method to replace obj.fieldName with newValue where obj is of type c
      *
-     * @param c type of obj
+     * @param c         type of obj
      * @param fieldName field name to be replaced
-     * @param obj instance of type c whose fieldName is to be replaced, null for static fields
-     * @param newValue object used to replace fieldName
+     * @param obj       instance of type c whose fieldName is to be replaced, null for static fields
+     * @param newValue  object used to replace fieldName
      * @return the old value of fieldName that got replaced, caller is responsible for restoring
-     *         it back to obj
-     * @throws NoSuchFieldException when fieldName is not found in type c
+     * it back to obj
+     * @throws NoSuchFieldException   when fieldName is not found in type c
      * @throws IllegalAccessException when fieldName cannot be accessed in type c
      */
     public static Object replaceField(final Class c, final String fieldName, final Object obj,
@@ -84,17 +89,18 @@ public class TestUtils {
      * Set the return value of {@link AdapterService#getAdapterService()} to a test specified value
      *
      * @param adapterService the designated {@link AdapterService} in test, must not be null, can
-     * be mocked or spied
-     * @throws NoSuchMethodException when setAdapterService method is not found
-     * @throws IllegalAccessException when setAdapterService method cannot be accessed
+     *                       be mocked or spied
+     * @throws NoSuchMethodException     when setAdapterService method is not found
+     * @throws IllegalAccessException    when setAdapterService method cannot be accessed
      * @throws InvocationTargetException when setAdapterService method cannot be invoked, which
-     * should never happen since setAdapterService is a static method
+     *                                   should never happen since setAdapterService is a static
+     *                                   method
      */
     public static void setAdapterService(AdapterService adapterService)
             throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         Assert.assertNull("AdapterService.getAdapterService() must be null before setting another"
                 + " AdapterService", AdapterService.getAdapterService());
-        Assert.assertNotNull(adapterService);
+        Assert.assertNotNull("Adapter service should not be null", adapterService);
         // We cannot mock AdapterService.getAdapterService() with Mockito.
         // Hence we need to use reflection to call a private method to
         // initialize properly the AdapterService.sAdapterService field.
@@ -108,18 +114,19 @@ public class TestUtils {
      * Clear the return value of {@link AdapterService#getAdapterService()} to null
      *
      * @param adapterService the {@link AdapterService} used when calling
-     * {@link TestUtils#setAdapterService(AdapterService)}
-     * @throws NoSuchMethodException when clearAdapterService method is not found
-     * @throws IllegalAccessException when clearAdapterService method cannot be accessed
+     *                       {@link TestUtils#setAdapterService(AdapterService)}
+     * @throws NoSuchMethodException     when clearAdapterService method is not found
+     * @throws IllegalAccessException    when clearAdapterService method cannot be accessed
      * @throws InvocationTargetException when clearAdappterService method cannot be invoked,
-     * which should never happen since clearAdapterService is a static method
+     *                                   which should never happen since clearAdapterService is a
+     *                                   static method
      */
     public static void clearAdapterService(AdapterService adapterService)
             throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         Assert.assertSame("AdapterService.getAdapterService() must return the same object as the"
                         + " supplied adapterService in this method", adapterService,
                 AdapterService.getAdapterService());
-        Assert.assertNotNull(adapterService);
+        Assert.assertNotNull("Adapter service should not be null", adapterService);
         Method method =
                 AdapterService.class.getDeclaredMethod("clearAdapterService", AdapterService.class);
         method.setAccessible(true);
@@ -133,16 +140,19 @@ public class TestUtils {
      * {@link #setAdapterService(AdapterService)} must be called with a mocked
      * {@link AdapterService} before calling this method
      *
-     * @param serviceTestRule the {@link ServiceTestRule} used to execute the service start request
+     * @param serviceTestRule     the {@link ServiceTestRule} used to execute the service start
+     *                            request
      * @param profileServiceClass a class from one of {@link ProfileService}'s child classes
      * @throws TimeoutException when service failed to start within either default timeout of
-     * {@link ServiceTestRule#DEFAULT_TIMEOUT} (normally 5s) or user specified time when creating
-     * {@link ServiceTestRule} through {@link ServiceTestRule#withTimeout(long, TimeUnit)} method
+     *                          {@link ServiceTestRule#DEFAULT_TIMEOUT} (normally 5s) or user
+     *                          specified time when creating
+     *                          {@link ServiceTestRule} through
+     *                          {@link ServiceTestRule#withTimeout(long, TimeUnit)} method
      */
     public static <T extends ProfileService> void startService(ServiceTestRule serviceTestRule,
             Class<T> profileServiceClass) throws TimeoutException {
         AdapterService adapterService = AdapterService.getAdapterService();
-        Assert.assertNotNull(adapterService);
+        Assert.assertNotNull("Adapter service should not be null", adapterService);
         Assert.assertTrue("AdapterService.getAdapterService() must return a mocked or spied object"
                 + " before calling this method", MockUtil.isMock(adapterService));
         Intent startIntent =
@@ -164,11 +174,14 @@ public class TestUtils {
      * {@link #setAdapterService(AdapterService)} must be called with a mocked
      * {@link AdapterService} before calling this method
      *
-     * @param serviceTestRule the {@link ServiceTestRule} used to execute the service start request
+     * @param serviceTestRule     the {@link ServiceTestRule} used to execute the service start
+     *                            request
      * @param profileServiceClass a class from one of {@link ProfileService}'s child classes
      * @throws TimeoutException when service failed to start within either default timeout of
-     * {@link ServiceTestRule#DEFAULT_TIMEOUT} (normally 5s) or user specified time when creating
-     * {@link ServiceTestRule} through {@link ServiceTestRule#withTimeout(long, TimeUnit)} method
+     *                          {@link ServiceTestRule#DEFAULT_TIMEOUT} (normally 5s) or user
+     *                          specified time when creating
+     *                          {@link ServiceTestRule} through
+     *                          {@link ServiceTestRule#withTimeout(long, TimeUnit)} method
      */
     public static <T extends ProfileService> void stopService(ServiceTestRule serviceTestRule,
             Class<T> profileServiceClass) throws TimeoutException {
@@ -186,13 +199,18 @@ public class TestUtils {
         verify(adapterService, timeout(SERVICE_TOGGLE_TIMEOUT_MS)).onProfileServiceStateChanged(
                 profile.capture(), eq(BluetoothAdapter.STATE_OFF));
         Assert.assertEquals(profileServiceClass.getName(), profile.getValue().getClass().getName());
+        ArgumentCaptor<ProfileService> profile2 = ArgumentCaptor.forClass(profileServiceClass);
+        verify(adapterService, timeout(SERVICE_TOGGLE_TIMEOUT_MS)).removeProfile(
+                profile2.capture());
+        Assert.assertEquals(profileServiceClass.getName(),
+                profile2.getValue().getClass().getName());
     }
 
     /**
      * Create a test device.
      *
      * @param bluetoothAdapter the Bluetooth adapter to use
-     * @param id the test device ID. It must be an integer in the interval [0, 0xFF].
+     * @param id               the test device ID. It must be an integer in the interval [0, 0xFF].
      * @return {@link BluetoothDevice} test device for the device ID
      */
     public static BluetoothDevice getTestDevice(BluetoothAdapter bluetoothAdapter, int id) {
@@ -205,25 +223,21 @@ public class TestUtils {
     }
 
     public static Resources getTestApplicationResources(Context context) {
-        for (String name: context.getPackageManager().getPackagesForUid(Process.BLUETOOTH_UID)) {
-            if (name.contains(".android.bluetooth.tests")) {
-                try {
-                    return context.getPackageManager().getResourcesForApplication(name);
-                } catch (PackageManager.NameNotFoundException e) {
-                    assertWithMessage("Setup Failure: Unable to get test application resources"
-                            + e.toString()).fail();
-                }
-            }
+        try {
+            return context.getPackageManager().getResourcesForApplication(
+                    "com.android.bluetooth.tests");
+        } catch (PackageManager.NameNotFoundException e) {
+            assertWithMessage("Setup Failure: Unable to get test application resources"
+                    + e.toString()).fail();
+            return null;
         }
-        assertWithMessage("Could not find tests package").fail();
-        return null;
     }
 
     /**
      * Wait and verify that an intent has been received.
      *
      * @param timeoutMs the time (in milliseconds) to wait for the intent
-     * @param queue the queue for the intent
+     * @param queue     the queue for the intent
      * @return the received intent
      */
     public static Intent waitForIntent(int timeoutMs, BlockingQueue<Intent> queue) {
@@ -241,8 +255,8 @@ public class TestUtils {
      * Wait and verify that no intent has been received.
      *
      * @param timeoutMs the time (in milliseconds) to wait and verify no intent
-     * has been received
-     * @param queue the queue for the intent
+     *                  has been received
+     * @param queue     the queue for the intent
      * @return the received intent. Should be null under normal circumstances
      */
     public static Intent waitForNoIntent(int timeoutMs, BlockingQueue<Intent> queue) {
@@ -336,16 +350,16 @@ public class TestUtils {
      * Read Bluetooth adapter configuration from the filesystem
      *
      * @return A {@link HashMap} of Bluetooth configs in the format:
-     *  section -> key1 -> value1
-     *          -> key2 -> value2
-     *  Assume no empty section name, no duplicate keys in the same section
+     * section -> key1 -> value1
+     * -> key2 -> value2
+     * Assume no empty section name, no duplicate keys in the same section
      */
     public static HashMap<String, HashMap<String, String>> readAdapterConfig() {
         HashMap<String, HashMap<String, String>> adapterConfig = new HashMap<>();
         try (BufferedReader reader =
-                new BufferedReader(new FileReader("/data/misc/bluedroid/bt_config.conf"))) {
+                     new BufferedReader(new FileReader("/data/misc/bluedroid/bt_config.conf"))) {
             String section = "";
-            for (String line; (line = reader.readLine()) != null;) {
+            for (String line; (line = reader.readLine()) != null; ) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#")) {
                     continue;
@@ -366,6 +380,51 @@ public class TestUtils {
             return null;
         }
         return adapterConfig;
+    }
+
+    /**
+     * Prepare the intent to start bluetooth browser media service.
+     *
+     * @return intent with the appropriate component & action set.
+     */
+    public static Intent prepareIntentToStartBluetoothBrowserMediaService() {
+        final Intent intent = new Intent(InstrumentationRegistry.getTargetContext(),
+                BluetoothMediaBrowserService.class);
+        intent.setAction(MediaBrowserService.SERVICE_INTERFACE);
+        return intent;
+    }
+
+    public static void setUpUiTest() throws Exception {
+        final UiDevice device = UiDevice.getInstance(
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation());
+        // Turn on screen and unlock
+        device.wakeUp();
+        device.executeShellCommand("wm dismiss-keyguard");
+
+        // Disable animation
+        device.executeShellCommand("settings put global window_animation_scale 0.0");
+        device.executeShellCommand("settings put global transition_animation_scale 0.0");
+        device.executeShellCommand("settings put global animator_duration_scale 0.0");
+
+        // change device screen_off_timeout
+        sSystemScreenOffTimeout =
+                device.executeShellCommand("settings get system screen_off_timeout");
+        device.executeShellCommand("settings put system screen_off_timeout 30000");
+    }
+
+    public static void tearDownUiTest() throws Exception {
+        final UiDevice device = UiDevice.getInstance(
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation());
+        device.executeShellCommand("wm dismiss-keyguard");
+
+        // Re-enable animation
+        device.executeShellCommand("settings put global window_animation_scale 1.0");
+        device.executeShellCommand("settings put global transition_animation_scale 1.0");
+        device.executeShellCommand("settings put global animator_duration_scale 1.0");
+
+        // restore screen_off_timeout
+        device.executeShellCommand("settings put system screen_off_timeout "
+                + sSystemScreenOffTimeout);
     }
 
     /**

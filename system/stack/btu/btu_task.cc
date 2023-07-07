@@ -18,7 +18,7 @@
 
 #define LOG_TAG "bt_btu_task"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/run_loop.h>
 #include <base/threading/thread.h>
@@ -38,11 +38,10 @@
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btu.h"
+#include "stack/include/btu_hcif.h"
 
 using bluetooth::common::MessageLoopThread;
 using bluetooth::hci::IsoManager;
-
-void btm_route_sco_data(BT_HDR* p_msg);
 
 /* Define BTU storage area */
 uint8_t btu_trace_level = HCI_INITIAL_TRACE_LEVEL;
@@ -52,27 +51,9 @@ static MessageLoopThread main_thread("bt_main_thread", true);
 void btu_hci_msg_process(BT_HDR* p_msg) {
   /* Determine the input message type. */
   switch (p_msg->event & BT_EVT_MASK) {
-    case BT_EVT_TO_BTU_HCI_ACL:
-      /* All Acl Data goes to ACL */
-      acl_rcv_acl_data(p_msg);
-      break;
-
-    case BT_EVT_TO_BTU_L2C_SEG_XMIT:
-      /* L2CAP segment transmit complete */
-      acl_link_segments_xmitted(p_msg);
-      break;
-
-    case BT_EVT_TO_BTU_HCI_SCO:
-      btm_route_sco_data(p_msg);
-      break;
-
     case BT_EVT_TO_BTU_HCI_EVT:
       btu_hcif_process_event((uint8_t)(p_msg->event & BT_SUB_EVT_MASK), p_msg);
       osi_free(p_msg);
-      break;
-
-    case BT_EVT_TO_BTU_HCI_CMD:
-      btu_hcif_send_cmd((uint8_t)(p_msg->event & BT_SUB_EVT_MASK), p_msg);
       break;
 
     case BT_EVT_TO_BTU_HCI_ISO:
@@ -110,8 +91,8 @@ bt_status_t do_in_main_thread_delayed(const base::Location& from_here,
 static void do_post_on_bt_main(BtMainClosure closure) { closure(); }
 
 void post_on_bt_main(BtMainClosure closure) {
-  ASSERT(do_in_main_thread(
-             FROM_HERE, base::Bind(do_post_on_bt_main, std::move(closure))) ==
+  ASSERT(do_in_main_thread(FROM_HERE, base::BindOnce(do_post_on_bt_main,
+                                                     std::move(closure))) ==
          BT_STATUS_SUCCESS);
 }
 
@@ -121,7 +102,7 @@ void main_thread_start_up() {
     LOG(FATAL) << __func__ << ": unable to start btu message loop thread.";
   }
   if (!main_thread.EnableRealTimeScheduling()) {
-#if defined(OS_ANDROID)
+#if defined(__ANDROID__)
     LOG(FATAL) << __func__ << ": unable to enable real time scheduling";
 #else
     LOG(ERROR) << __func__ << ": unable to enable real time scheduling";
@@ -130,22 +111,3 @@ void main_thread_start_up() {
 }
 
 void main_thread_shut_down() { main_thread.ShutDown(); }
-
-bool is_on_main_thread() {
-  // Pthreads doesn't have the concept of a thread ID, so we have to reach down
-  // into the kernel.
-#if defined(OS_MACOSX)
-  return main_thread.GetThreadId() == pthread_mach_thread_np(pthread_self());
-#elif defined(OS_LINUX)
-#include <sys/syscall.h> /* For SYS_xxx definitions */
-#include <unistd.h>
-  return main_thread.GetThreadId() == syscall(__NR_gettid);
-#elif defined(OS_ANDROID)
-#include <sys/types.h>
-#include <unistd.h>
-  return main_thread.GetThreadId() == gettid();
-#else
-  LOG(ERROR) << __func__ << "Unable to determine if on main thread";
-  return true;
-#endif
-}

@@ -19,7 +19,6 @@
 #define LOG_TAG "bt_srvc"
 
 #include "bt_target.h"
-#include "bt_utils.h"
 #include "gatt_api.h"
 #include "gatt_int.h"
 #include "osi/include/allocator.h"
@@ -429,7 +428,7 @@ tDIS_STATUS DIS_SrUpdate(tDIS_ATTR_BIT dis_attr_bit, tDIS_ATTR* p_info) {
  *
  * Description      Read remote device DIS information.
  *
- * Returns          void
+ * Returns          true on success, false otherwise
  *
  ******************************************************************************/
 bool DIS_ReadDISInfo(const RawAddress& peer_bda, tDIS_READ_CBACK* p_cback,
@@ -450,19 +449,21 @@ bool DIS_ReadDISInfo(const RawAddress& peer_bda, tDIS_READ_CBACK* p_cback,
 
   dis_cb.request_mask = mask;
 
-  VLOG(1) << __func__ << " BDA: " << peer_bda
+  VLOG(1) << __func__ << " BDA: " << ADDRESS_TO_LOGGABLE_STR(peer_bda)
           << StringPrintf(" cl_read_uuid: 0x%04x",
                           dis_attr_uuid[dis_cb.dis_read_uuid_idx]);
 
-  GATT_GetConnIdIfConnected(srvc_eng_cb.gatt_if, peer_bda, &conn_id,
-                            BT_TRANSPORT_LE);
+  if (!GATT_GetConnIdIfConnected(srvc_eng_cb.gatt_if, peer_bda, &conn_id,
+                                 BT_TRANSPORT_LE)) {
+    conn_id = GATT_INVALID_CONN_ID;
+  }
 
   /* need to enhance it as multiple service is needed */
   srvc_eng_request_channel(peer_bda, SRVC_ID_DIS);
 
   if (conn_id == GATT_INVALID_CONN_ID) {
-    return GATT_Connect(srvc_eng_cb.gatt_if, peer_bda, true, BT_TRANSPORT_LE,
-                        false);
+    return GATT_Connect(srvc_eng_cb.gatt_if, peer_bda,
+                        BTM_BLE_DIRECT_CONNECTION, BT_TRANSPORT_LE, false);
   }
 
   return dis_gatt_c_read_dis_req(conn_id);

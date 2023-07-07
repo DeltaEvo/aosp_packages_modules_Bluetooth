@@ -24,9 +24,11 @@
 #include "mock_controller.h"
 #include "mock_hcic_layer.h"
 #include "osi/include/allocator.h"
+#include "stack/btm/btm_dev.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hcidefs.h"
+#include "test/mock/mock_main_shim_hci_layer.h"
 
 using bluetooth::hci::IsoManager;
 using testing::_;
@@ -39,31 +41,52 @@ using testing::SaveArg;
 using testing::StrictMock;
 using testing::Test;
 
-// Iso Manager currently works on top of the legacy HCI layer
-bool bluetooth::shim::is_gd_shim_enabled() { return false; }
+// for function pointer testing purpose
+bool IsIsoActive = false;
 
-namespace bte {
-class BteInterface {
+tBTM_SEC_DEV_REC* btm_find_dev_by_handle(uint16_t handle) { return nullptr; }
+void BTM_LogHistory(const std::string& tag, const RawAddress& bd_addr,
+                    const std::string& msg, const std::string& extra) {}
+
+namespace bluetooth::shim {
+class IsoInterface {
  public:
-  virtual void HciSend(BT_HDR* p_msg, uint16_t event) = 0;
-  virtual ~BteInterface() = default;
+  virtual void HciSend(BT_HDR* packet, uint16_t event) = 0;
+  virtual ~IsoInterface() = default;
 };
 
-class MockBteInterface : public BteInterface {
+class MockIsoInterface : public IsoInterface {
  public:
   MOCK_METHOD((void), HciSend, (BT_HDR * p_msg, uint16_t event), (override));
 };
 
-static MockBteInterface* bte_interface = nullptr;
-static void SetMockBteInterface(MockBteInterface* interface) {
-  bte_interface = interface;
+static MockIsoInterface* iso_interface = nullptr;
+static void SetMockIsoInterface(MockIsoInterface* interface) {
+  iso_interface = interface;
 }
-}  // namespace bte
 
-void bte_main_hci_send(BT_HDR* p_msg, uint16_t event) {
-  bte::bte_interface->HciSend(p_msg, event);
-  osi_free(p_msg);
+static void set_data_cb(
+    base::Callback<void(const base::Location&, BT_HDR*)> /* send_data_cb */) {
+  FAIL() << __func__ << " should never be called";
 }
+
+static void transmit_command(const BT_HDR* command,
+                             command_complete_cb complete_callback,
+                             command_status_cb status_cb, void* context) {
+  FAIL() << __func__ << " should never be called";
+}
+
+static void transmit_downward(uint16_t type, void* data) {
+  iso_interface->HciSend((BT_HDR*)data, type);
+  osi_free(data);
+}
+
+static hci_t interface = {.set_data_cb = set_data_cb,
+                          .transmit_command = transmit_command,
+                          .transmit_downward = transmit_downward};
+}  // namespace bluetooth::shim
+
+const hci_t* bluetooth::shim::hci_layer_get_interface() { return &interface; }
 
 namespace {
 class MockCigCallbacks : public bluetooth::hci::iso_manager::CigCallbacks {
@@ -113,12 +136,13 @@ class MockBigCallbacks : public bluetooth::hci::iso_manager::BigCallbacks {
 class IsoManagerTest : public Test {
  protected:
   void SetUp() override {
-    bte::SetMockBteInterface(&bte_interface_);
+    bluetooth::shim::SetMockIsoInterface(&iso_interface_);
     hcic::SetMockHcicInterface(&hcic_interface_);
     controller::SetMockControllerInterface(&controller_interface_);
 
     big_callbacks_.reset(new MockBigCallbacks());
     cig_callbacks_.reset(new MockCigCallbacks());
+    IsIsoActive = false;
 
     EXPECT_CALL(controller_interface_, GetIsoBufferCount())
         .Times(AtLeast(1))
@@ -136,7 +160,7 @@ class IsoManagerTest : public Test {
     big_callbacks_.reset();
     cig_callbacks_.reset();
 
-    bte::SetMockBteInterface(nullptr);
+    bluetooth::shim::SetMockIsoInterface(nullptr);
     hcic::SetMockHcicInterface(nullptr);
     controller::SetMockControllerInterface(nullptr);
   }
@@ -146,6 +170,7 @@ class IsoManagerTest : public Test {
     manager_instance_->Start();
     manager_instance_->RegisterCigCallbacks(cig_callbacks_.get());
     manager_instance_->RegisterBigCallbacks(big_callbacks_.get());
+    manager_instance_->RegisterOnIsoTrafficActiveCallback(iso_active_callback);
 
     // Default mock SetCigParams action
     volatile_test_cig_create_cmpl_evt_ = kDefaultCigParamsEvt;
@@ -309,12 +334,13 @@ class IsoManagerTest : public Test {
       volatile_test_big_params_evt_;
 
   IsoManager* manager_instance_;
-  bte::MockBteInterface bte_interface_;
+  bluetooth::shim::MockIsoInterface iso_interface_;
   hcic::MockHcicInterface hcic_interface_;
   controller::MockControllerInterface controller_interface_;
 
   std::unique_ptr<MockBigCallbacks> big_callbacks_;
   std::unique_ptr<MockCigCallbacks> cig_callbacks_;
+  void (*iso_active_callback)(bool) = [](bool active) { IsIsoActive = active; };
 };
 
 const bluetooth::hci::iso_manager::cig_create_cmpl_evt
@@ -500,6 +526,7 @@ TEST_F(IsoManagerTest, RegisterCallbacks) {
 
   iso_mgr->RegisterBigCallbacks(big_callbacks_.get());
   iso_mgr->RegisterCigCallbacks(cig_callbacks_.get());
+  iso_mgr->RegisterOnIsoTrafficActiveCallback(iso_active_callback);
 }
 
 TEST_F(IsoManagerDeathTestNoInit, RegisterNullBigCallbacks) {
@@ -770,6 +797,14 @@ TEST_F(IsoManagerDeathTest, RemoveCigWithNoSuchCig) {
               ::testing::KilledBySignal(SIGABRT), "No such cig");
 }
 
+TEST_F(IsoManagerDeathTest, RemoveCigForceNoSuchCig) {
+  EXPECT_CALL(hcic_interface_,
+              RemoveCig(volatile_test_cig_create_cmpl_evt_.cig_id, _))
+      .Times(1);
+  IsoManager::GetInstance()->RemoveCig(
+      volatile_test_cig_create_cmpl_evt_.cig_id, true);
+}
+
 TEST_F(IsoManagerDeathTest, RemoveSameCigTwice) {
   IsoManager::GetInstance()->CreateCig(
       volatile_test_cig_create_cmpl_evt_.cig_id, kDefaultCigParams);
@@ -846,8 +881,10 @@ TEST_F(IsoManagerTest, RemoveCigValid) {
   uint8_t hci_mock_rsp_buffer[] = {HCI_SUCCESS,
                                    volatile_test_cig_create_cmpl_evt_.cig_id};
 
+  ASSERT_EQ(IsIsoActive, false);
   IsoManager::GetInstance()->CreateCig(
       volatile_test_cig_create_cmpl_evt_.cig_id, kDefaultCigParams);
+  ASSERT_EQ(IsIsoActive, true);
 
   ON_CALL(hcic_interface_, RemoveCig)
       .WillByDefault(
@@ -871,6 +908,7 @@ TEST_F(IsoManagerTest, RemoveCigValid) {
       volatile_test_cig_create_cmpl_evt_.cig_id);
   ASSERT_EQ(evt.cig_id, volatile_test_cig_create_cmpl_evt_.cig_id);
   ASSERT_EQ(evt.status, HCI_SUCCESS);
+  ASSERT_EQ(IsIsoActive, false);
 }
 
 TEST_F(IsoManagerTest, EstablishCisHciCall) {
@@ -1485,8 +1523,10 @@ TEST_F(IsoManagerTest, TerminateBigValid) {
   const uint8_t big_id = 0x22;
   const uint8_t reason = 0x16;  // Terminated by local host
   bluetooth::hci::iso_manager::big_terminate_cmpl_evt evt;
+  ASSERT_EQ(IsIsoActive, false);
 
   IsoManager::GetInstance()->CreateBig(big_id, kDefaultBigParams);
+  ASSERT_EQ(IsIsoActive, true);
 
   EXPECT_CALL(
       *big_callbacks_,
@@ -1501,6 +1541,7 @@ TEST_F(IsoManagerTest, TerminateBigValid) {
   IsoManager::GetInstance()->TerminateBig(big_id, reason);
   ASSERT_EQ(evt.big_id, big_id);
   ASSERT_EQ(evt.reason, reason);
+  ASSERT_EQ(IsIsoActive, false);
 }
 
 TEST_F(IsoManagerTest, SetupIsoDataPathValid) {
@@ -1813,7 +1854,7 @@ TEST_F(IsoManagerTest, SendIsoDataWithNoCigConnected) {
   auto handle = volatile_test_cig_create_cmpl_evt_.conn_handles[0];
   IsoManager::GetInstance()->SendIsoData(handle, data_vec.data(),
                                          data_vec.size());
-  EXPECT_CALL(bte_interface_, HciSend).Times(0);
+  EXPECT_CALL(iso_interface_, HciSend).Times(0);
 }
 
 TEST_F(IsoManagerTest, SendIsoDataCigValid) {
@@ -1836,7 +1877,7 @@ TEST_F(IsoManagerTest, SendIsoDataCigValid) {
     for (uint8_t num_pkts = 2; num_pkts != 0; num_pkts--) {
       constexpr uint8_t data_len = 108;
 
-      EXPECT_CALL(bte_interface_, HciSend)
+      EXPECT_CALL(iso_interface_, HciSend)
           .WillOnce([handle, data_len](BT_HDR* p_msg, uint16_t event) {
             uint8_t* p = p_msg->data;
             uint16_t msg_handle;
@@ -1888,7 +1929,7 @@ TEST_F(IsoManagerTest, SendIsoDataBigValid) {
     for (uint8_t num_pkts = 2; num_pkts != 0; num_pkts--) {
       constexpr uint8_t data_len = 108;
 
-      EXPECT_CALL(bte_interface_, HciSend)
+      EXPECT_CALL(iso_interface_, HciSend)
           .WillOnce([handle, data_len](BT_HDR* p_msg, uint16_t event) {
             uint8_t* p = p_msg->data;
             uint16_t msg_handle;
@@ -1953,7 +1994,7 @@ TEST_F(IsoManagerTest, SendIsoDataNoCredits) {
    * expect the redundant packets to be ignored and not propagated down to the
    * HCI.
    */
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
   for (uint8_t i = 0; i < (2 * num_buffers); i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_cig_create_cmpl_evt_.conn_handles[0], data_vec.data(),
@@ -1978,7 +2019,7 @@ TEST_F(IsoManagerTest, SendIsoDataNoCredits) {
    * expect the redundant packets to be ignored and not propagated down to the
    * HCI.
    */
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers);
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers);
   for (uint8_t i = 0; i < (2 * num_buffers); i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_big_params_evt_.conn_handles[0], data_vec.data(),
@@ -2008,7 +2049,7 @@ TEST_F(IsoManagerTest, SendIsoDataCreditsReturned) {
    * expect the redundant packets to be ignored and not propagated down to the
    * HCI.
    */
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
   for (uint8_t i = 0; i < (2 * num_buffers); i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_cig_create_cmpl_evt_.conn_handles[0], data_vec.data(),
@@ -2024,7 +2065,7 @@ TEST_F(IsoManagerTest, SendIsoDataCreditsReturned) {
   IsoManager::GetInstance()->HandleNumComplDataPkts(mock_rsp, sizeof(mock_rsp));
 
   // Expect some more events go down the HCI
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
   for (uint8_t i = 0; i < (2 * num_buffers); i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_cig_create_cmpl_evt_.conn_handles[0], data_vec.data(),
@@ -2048,7 +2089,7 @@ TEST_F(IsoManagerTest, SendIsoDataCreditsReturned) {
    * expect the redundant packets to be ignored and not propagated down to the
    * HCI.
    */
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
   for (uint8_t i = 0; i < (2 * num_buffers); i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_big_params_evt_.conn_handles[0], data_vec.data(),
@@ -2063,7 +2104,7 @@ TEST_F(IsoManagerTest, SendIsoDataCreditsReturned) {
   IsoManager::GetInstance()->HandleNumComplDataPkts(mock_rsp, sizeof(mock_rsp));
 
   // Expect some more events go down the HCI
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
   for (uint8_t i = 0; i < (2 * num_buffers); i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_big_params_evt_.conn_handles[0], data_vec.data(),
@@ -2091,7 +2132,7 @@ TEST_F(IsoManagerTest, SendIsoDataCreditsReturnedByDisconnection) {
   }
 
   /* Sending lot of ISO data to first ISO and getting all the credits */
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
   for (uint8_t i = 0; i < num_buffers; i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_cig_create_cmpl_evt_.conn_handles[0], data_vec.data(),
@@ -2103,7 +2144,7 @@ TEST_F(IsoManagerTest, SendIsoDataCreditsReturnedByDisconnection) {
       volatile_test_cig_create_cmpl_evt_.conn_handles[0], 16);
 
   /* Try to send ISO data on the second ISO. Expect credits being available.*/
-  EXPECT_CALL(bte_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
+  EXPECT_CALL(iso_interface_, HciSend).Times(num_buffers).RetiresOnSaturation();
   for (uint8_t i = 0; i < num_buffers; i++) {
     IsoManager::GetInstance()->SendIsoData(
         volatile_test_cig_create_cmpl_evt_.conn_handles[1], data_vec.data(),
@@ -2124,7 +2165,7 @@ TEST_F(IsoManagerDeathTest, SendIsoDataWithNoDataPath) {
   }
   IsoManager::GetInstance()->EstablishCis(params);
 
-  EXPECT_CALL(bte_interface_, HciSend).Times(0);
+  EXPECT_CALL(iso_interface_, HciSend).Times(0);
   IsoManager::GetInstance()->SendIsoData(
       volatile_test_cig_create_cmpl_evt_.conn_handles[0], data_vec.data(),
       data_vec.size());
@@ -2133,7 +2174,7 @@ TEST_F(IsoManagerDeathTest, SendIsoDataWithNoDataPath) {
   IsoManager::GetInstance()->CreateBig(volatile_test_big_params_evt_.big_id,
                                        kDefaultBigParams);
 
-  EXPECT_CALL(bte_interface_, HciSend).Times(0);
+  EXPECT_CALL(iso_interface_, HciSend).Times(0);
   IsoManager::GetInstance()->SendIsoData(
       volatile_test_big_params_evt_.conn_handles[0], data_vec.data(),
       data_vec.size());
