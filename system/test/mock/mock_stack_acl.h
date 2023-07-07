@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -41,6 +39,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_client_interface.h"
+#include "test/common/mock_functions.h"
 #include "types/class_of_device.h"
 #include "types/raw_address.h"
 
@@ -195,10 +194,14 @@ extern struct acl_create_le_connection acl_create_le_connection;
 // Params: uint8_t id, const RawAddress& bd_addr
 // Returns: bool
 struct acl_create_le_connection_with_id {
-  std::function<bool(uint8_t id, const RawAddress& bd_addr)> body{
-      [](uint8_t id, const RawAddress& bd_addr) { return false; }};
-  bool operator()(uint8_t id, const RawAddress& bd_addr) {
-    return body(id, bd_addr);
+  std::function<bool(uint8_t id, const RawAddress& bd_addr,
+                     tBLE_ADDR_TYPE addr_type)>
+      body{[](uint8_t id, const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type) {
+        return false;
+      }};
+  bool operator()(uint8_t id, const RawAddress& bd_addr,
+                  tBLE_ADDR_TYPE addr_type) {
+    return body(id, bd_addr, addr_type);
   };
 };
 extern struct acl_create_le_connection_with_id acl_create_le_connection_with_id;
@@ -269,6 +272,26 @@ struct acl_peer_supports_sniff_subrating {
 };
 extern struct acl_peer_supports_sniff_subrating
     acl_peer_supports_sniff_subrating;
+// Name: acl_peer_supports_ble_connection_subrating
+// Params: const RawAddress& remote_bda
+// Returns: bool
+struct acl_peer_supports_ble_connection_subrating {
+  std::function<bool(const RawAddress& remote_bda)> body{
+      [](const RawAddress& remote_bda) { return false; }};
+  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
+};
+extern struct acl_peer_supports_ble_connection_subrating
+    acl_peer_supports_ble_connection_subrating;
+// Name: acl_peer_supports_ble_connection_subrating_host
+// Params: const RawAddress& remote_bda
+// Returns: bool
+struct acl_peer_supports_ble_connection_subrating_host {
+  std::function<bool(const RawAddress& remote_bda)> body{
+      [](const RawAddress& remote_bda) { return false; }};
+  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
+};
+extern struct acl_peer_supports_ble_connection_subrating_host
+    acl_peer_supports_ble_connection_subrating_host;
 // Name: acl_refresh_remote_address
 // Params: const RawAddress& identity_address, tBLE_ADDR_TYPE
 // identity_address_type, const RawAddress& bda, tBLE_ADDR_TYPE rra_type,
@@ -336,15 +359,6 @@ struct acl_create_classic_connection {
   };
 };
 extern struct acl_create_classic_connection acl_create_classic_connection;
-// Name: IsEprAvailable
-// Params: const tACL_CONN& p_acl
-// Returns: inline bool
-struct IsEprAvailable {
-  std::function<bool(const tACL_CONN& p_acl)> body{
-      [](const tACL_CONN& p_acl) { return 0; }};
-  inline bool operator()(const tACL_CONN& p_acl) { return body(p_acl); };
-};
-extern struct IsEprAvailable IsEprAvailable;
 // Name: acl_get_connection_from_address
 // Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
 // Returns: tACL_CONN*
@@ -484,6 +498,14 @@ struct btm_get_acl_disc_reason_code {
   tHCI_REASON operator()(void) { return body(); };
 };
 extern struct btm_get_acl_disc_reason_code btm_get_acl_disc_reason_code;
+// Name: btm_is_acl_locally_initiated
+// Params: void
+// Returns: bool
+struct btm_is_acl_locally_initiated {
+  std::function<bool(void)> body{[](void) { return true; }};
+  bool operator()(void) { return body(); };
+};
+extern struct btm_is_acl_locally_initiated btm_is_acl_locally_initiated;
 // Name: BTM_GetHCIConnHandle
 // Params: const RawAddress& remote_bda, tBT_TRANSPORT transport
 // Returns: uint16_t
@@ -721,14 +743,6 @@ struct acl_disconnect_from_handle {
   };
 };
 extern struct acl_disconnect_from_handle acl_disconnect_from_handle;
-// Name: acl_link_segments_xmitted
-// Params: BT_HDR* p_msg
-// Returns: void
-struct acl_link_segments_xmitted {
-  std::function<void(BT_HDR* p_msg)> body{[](BT_HDR* p_msg) { ; }};
-  void operator()(BT_HDR* p_msg) { body(p_msg); };
-};
-extern struct acl_link_segments_xmitted acl_link_segments_xmitted;
 // Name: acl_packets_completed
 // Params: uint16_t handle, uint16_t credits
 // Returns: void
@@ -843,16 +857,7 @@ struct btm_connection_request {
     body(bda, cod);
   };
 };
-extern struct btm_acl_connection_request btm_acl_connection_request;
-// Name: btm_acl_connection_request
-// Params: const RawAddress& bda, uint8_t* dc
-// Returns: void
-struct btm_acl_connection_request {
-  std::function<void(const RawAddress& bda, uint8_t* dc)> body{
-      [](const RawAddress& bda, uint8_t* dc) { ; }};
-  void operator()(const RawAddress& bda, uint8_t* dc) { body(bda, dc); };
-};
-extern struct btm_acl_connection_request btm_acl_connection_request;
+extern struct btm_connection_request btm_connection_request;
 // Name: btm_acl_created
 // Params: const RawAddress& bda, uint16_t hci_handle, tHCI_ROLE link_role,
 // tBT_TRANSPORT transport Returns: void
@@ -917,15 +922,6 @@ struct btm_acl_notif_conn_collision {
   void operator()(const RawAddress& bda) { body(bda); };
 };
 extern struct btm_acl_notif_conn_collision btm_acl_notif_conn_collision;
-// Name: btm_acl_paging
-// Params: BT_HDR* p, const RawAddress& bda
-// Returns: void
-struct btm_acl_paging {
-  std::function<void(BT_HDR* p, const RawAddress& bda)> body{
-      [](BT_HDR* p, const RawAddress& bda) { ; }};
-  void operator()(BT_HDR* p, const RawAddress& bda) { body(p, bda); };
-};
-extern struct btm_acl_paging btm_acl_paging;
 // Name: btm_acl_process_sca_cmpl_pkt
 // Params: uint8_t len, uint8_t* data
 // Returns: void
@@ -943,22 +939,6 @@ struct btm_acl_removed {
   void operator()(uint16_t handle) { body(handle); };
 };
 extern struct btm_acl_removed btm_acl_removed;
-// Name: btm_acl_reset_paging
-// Params: void
-// Returns: void
-struct btm_acl_reset_paging {
-  std::function<void(void)> body{[](void) { ; }};
-  void operator()(void) { body(); };
-};
-extern struct btm_acl_reset_paging btm_acl_reset_paging;
-// Name: btm_acl_resubmit_page
-// Params: void
-// Returns: void
-struct btm_acl_resubmit_page {
-  std::function<void(void)> body{[](void) { ; }};
-  void operator()(void) { body(); };
-};
-extern struct btm_acl_resubmit_page btm_acl_resubmit_page;
 // Name: btm_acl_role_changed
 // Params: tHCI_STATUS hci_status, const RawAddress& bd_addr, tHCI_ROLE
 // new_role Returns: void
@@ -973,14 +953,6 @@ struct btm_acl_role_changed {
   };
 };
 extern struct btm_acl_role_changed btm_acl_role_changed;
-// Name: btm_acl_set_paging
-// Params: bool value
-// Returns: void
-struct btm_acl_set_paging {
-  std::function<void(bool value)> body{[](bool value) { ; }};
-  void operator()(bool value) { body(value); };
-};
-extern struct btm_acl_set_paging btm_acl_set_paging;
 // Name: btm_acl_update_conn_addr
 // Params: uint16_t handle, const RawAddress& address
 // Returns: void
@@ -1273,27 +1245,42 @@ struct hci_btm_set_link_supervision_timeout {
 extern struct hci_btm_set_link_supervision_timeout
     hci_btm_set_link_supervision_timeout;
 // Name: on_acl_br_edr_connected
-// Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode
-// Returns: void
+// Params: const RawAddress& bda, uint16_t handle, uint8_t enc_mode, bool
+// locally_initiated Returns: void
 struct on_acl_br_edr_connected {
-  std::function<void(const RawAddress& bda, uint16_t handle, uint8_t enc_mode)>
-      body{[](const RawAddress& bda, uint16_t handle, uint8_t enc_mode) { ; }};
-  void operator()(const RawAddress& bda, uint16_t handle, uint8_t enc_mode) {
-    body(bda, handle, enc_mode);
+  std::function<void(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
+                     bool locally_initiated)>
+      body{[](const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
+              bool locally_initiated) { ; }};
+  void operator()(const RawAddress& bda, uint16_t handle, uint8_t enc_mode,
+                  bool locally_initiated) {
+    body(bda, handle, enc_mode, locally_initiated);
   };
 };
 extern struct on_acl_br_edr_connected on_acl_br_edr_connected;
 // Name: on_acl_br_edr_failed
-// Params: const RawAddress& bda, tHCI_STATUS status
+// Params: const RawAddress& bda, tHCI_STATUS status, bool locally_initiated
 // Returns: void
 struct on_acl_br_edr_failed {
-  std::function<void(const RawAddress& bda, tHCI_STATUS status)> body{
-      [](const RawAddress& bda, tHCI_STATUS status) { ; }};
-  void operator()(const RawAddress& bda, tHCI_STATUS status) {
-    body(bda, status);
+  std::function<void(const RawAddress& bda, tHCI_STATUS status,
+                     bool locally_initiated)>
+      body{[](const RawAddress& bda, tHCI_STATUS status,
+              bool locally_initiated) { ; }};
+  void operator()(const RawAddress& bda, tHCI_STATUS status,
+                  bool locally_initiated) {
+    body(bda, status, locally_initiated);
   };
 };
 extern struct on_acl_br_edr_failed on_acl_br_edr_failed;
+
+// Manually added
+struct BTM_unblock_role_switch_and_sniff_mode_for {
+  std::function<void(const RawAddress& peer_addr)> body{
+      [](const RawAddress& peer_addr) {}};
+  void operator()(const RawAddress& peer_addr) { body(peer_addr); };
+};
+extern struct BTM_unblock_role_switch_and_sniff_mode_for
+    BTM_unblock_role_switch_and_sniff_mode_for;
 
 }  // namespace stack_acl
 }  // namespace mock

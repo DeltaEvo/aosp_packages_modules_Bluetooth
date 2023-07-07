@@ -24,9 +24,10 @@ from mmi2grpc._proxy import ProfileProxy
 from pandora_experimental.a2dp_grpc import A2DP
 from pandora_experimental.a2dp_pb2 import Sink, Source
 from pandora_experimental.avrcp_grpc import AVRCP
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import Connection
+from pandora.host_grpc import Host
+from pandora.host_pb2 import Connection
 from pandora_experimental.mediaplayer_grpc import MediaPlayer
+from pandora_experimental.mediaplayer_pb2 import NONE, ALL, GROUP
 
 
 class AVRCPProxy(ProfileProxy):
@@ -61,8 +62,6 @@ class AVRCPProxy(ProfileProxy):
         the IUT connects to PTS to establish pairing.
 
         """
-        # Simulate CSR timeout: b/259102046
-        time.sleep(2)
         self.connection = self.host.WaitConnection(address=pts_addr).connection
         if ("TG" in test and "TG/VLH" not in test) or "CT/VLH" in test:
             try:
@@ -151,8 +150,7 @@ class AVRCPProxy(ProfileProxy):
         Take action to disconnect all A2DP and/or AVRCP connections.
 
         """
-        if self.connection is None:
-            self.connection = self.host.GetConnection(address=pts_addr).connection
+        assert self.connection is not None
         self.host.Disconnect(connection=self.connection)
 
         return "OK"
@@ -621,6 +619,75 @@ class AVRCPProxy(ProfileProxy):
         return "OK"
 
     @assert_description
+    def TSC_AVRCP_mmi_iut_reject_list_player_application_setting_values_invalid_attribute(self, **kwargs):
+        """
+        PTS has sent a List Player Application Setting Values command with an
+        invalid Attribute Id.  The IUT must respond with the error code: Invalid
+        Parameter (0x01).
+
+        Description: Verify that the IUT can properly reject
+        a List Player Application Setting Values command that contains an
+        invalid attribute id.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_reject_set_player_application_setting_value_invalid_pair(self, **kwargs):
+        """
+        PTS has sent a Set Player Application Setting Value command with an
+        invalid Attribute and Value.  The IUT must respond with the error code:
+        Invalid Parameter (0x01).
+
+        Description: Verify that the IUT can properly
+        reject a Set Player Application Setting Value command that contains an
+        invalid attribute and value.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_reject_get_current_player_application_setting_value_invalid_attribute(self, **kwargs):
+        """
+        PTS has sent a Get Current Player Application Setting Value command with
+        an invalid Attribute.  The IUT must respond with the error code: Invalid
+        Parameter (0x01).
+
+        Description: Verify that the IUT can properly reject
+        an Get Current Player Application Setting Value command that contains an
+        invalid attribute.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_accept_get_current_player_application_setting_value(self, **kwargs):
+        """
+        Take action to send a valid response to the [Get Current Player
+        Application Setting Value] command sent by the PTS.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_accept_list_player_application_setting_attributes(self, **kwargs):
+        """
+        Take action to send a valid response to the [List Player Application
+        Setting Attributes] command sent by the PTS.
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_accept_list_player_application_setting_values(self, **kwargs):
+        """
+        Take action to send a valid response to the [List Player Application
+        Setting Values] command sent by the PTS.
+        """
+
+        return "OK"
+
+    @assert_description
     def TSC_AVRCP_mmi_iut_reject_set_addressed_player_invalid_player_id(self, **kwargs):
         """
         PTS has sent a Set Addressed Player command with an invalid Player Id.
@@ -628,6 +695,33 @@ class AVRCPProxy(ProfileProxy):
         Description: Verify that the IUT can properly reject a Set Addressed
         Player command that contains an invalid player id.
         """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_iut_initiate_register_notification_changed_player_application_setting_changed(self, **kwargs):
+        """
+        Take action to trigger a [Register Notification, Changed] response for
+        <Player Application Setting Changed> to the PTS from the IUT.  This can
+        be accomplished by changing a Player Application Setting (Equalizer,
+        Repeat Mode, Shuffle, Scan) on the IUT.
+
+        Description: Verify that the
+        Implementation Under Test (IUT) can update database by sending a valid
+        Player Application Setting Changed Notification to the PTS.
+        """
+
+        nextShuffleMode = NONE
+        self.mediaplayer.StartTestPlayback()
+        currentShuffleMode = self.mediaplayer.GetShuffleMode().mode
+        if (currentShuffleMode == NONE):
+            nextShuffleMode = ALL
+        elif (currentShuffleMode == ALL):
+            nextShuffleMode = GROUP
+        elif (currentShuffleMode == GROUP):
+            nextShuffleMode = ALL
+        self.mediaplayer.SetShuffleMode(mode=nextShuffleMode)
+        self.mediaplayer.StopTestPlayback()
 
         return "OK"
 
@@ -672,6 +766,8 @@ class AVRCPProxy(ProfileProxy):
         Take action to send a valid response to the [Play Item] command sent by
         the PTS.
         """
+
+        self.mediaplayer.Forward()
 
         return "OK"
 
@@ -752,7 +848,35 @@ class AVRCPProxy(ProfileProxy):
         """
         Is the newly added media item listed below?
 
+        Media Element: Title1
+        Media
+        Element: Title2
+        Media Element: Title3
+        Media Element: Title4
+        Media
+        Element: Title5
+        Media Element: Title6
+        """
+
+        return "OK"
+
+    @assert_description
+    def TSC_AVRCP_mmi_user_confirm_now_playing_list(self, **kwargs):
+        """
+        Do the following items match the current now playing list?
+
+        Media
+        Element: Title1
         Media Element: Title2
+        Media Element: Title3
+        Media
+        Element: Title4
+        Media Element: Title5
+        Media Element: Title6
+
+
+        Note: Some
+        now playing items may not be listed above.
         """
 
         return "OK"
@@ -790,6 +914,7 @@ class AVRCPProxy(ProfileProxy):
         Description: Verify that the Implementation Under Test (IUT) can update
         database by sending a valid Now Playing Changed Notification to the PTS.
         """
+        self.mediaplayer.UpdateQueue()
         self.mediaplayer.Play()
 
         return "OK"
@@ -882,8 +1007,6 @@ class AVRCPProxy(ProfileProxy):
         """
         # Currently disconnect is required in TG role
         if "TG" in test:
-            if self.connection is None:
-                self.connection = self.host.GetConnection(address=pts_addr).connection
             time.sleep(3)
             self.host.Disconnect(connection=self.connection)
             self.connection = None

@@ -52,7 +52,6 @@ public class BrowsablePlayerConnector {
 
     private static BrowsablePlayerConnector sInjectConnector;
     private Handler mHandler;
-    private Context mContext;
     private PlayerListCallback mCallback;
 
     private List<BrowsedPlayerWrapper> mResults = new ArrayList<BrowsedPlayerWrapper>();
@@ -62,7 +61,11 @@ public class BrowsablePlayerConnector {
         void run(List<BrowsedPlayerWrapper> result);
     }
 
-    private static void setInstanceForTesting(BrowsablePlayerConnector connector) {
+    /**
+     * @hide
+     */
+    @VisibleForTesting
+    static void setInstanceForTesting(BrowsablePlayerConnector connector) {
         Utils.enforceInstrumentationTestMode();
         sInjectConnector = connector;
     }
@@ -80,7 +83,7 @@ public class BrowsablePlayerConnector {
             return null;
         }
 
-        BrowsablePlayerConnector newWrapper = new BrowsablePlayerConnector(context, looper, cb);
+        BrowsablePlayerConnector newWrapper = new BrowsablePlayerConnector(looper, cb);
 
         // Try to start connecting all the browsed player wrappers
         for (ResolveInfo info : players) {
@@ -109,24 +112,28 @@ public class BrowsablePlayerConnector {
         return newWrapper;
     }
 
-    private BrowsablePlayerConnector(Context context, Looper looper, PlayerListCallback cb) {
-        mContext = context;
+    private BrowsablePlayerConnector(Looper looper, PlayerListCallback cb) {
         mCallback = cb;
         mHandler = new Handler(looper) {
             public void handleMessage(Message msg) {
                 if (DEBUG) Log.d(TAG, "Received a message: msg.what=" + msg.what);
                 switch(msg.what) {
                     case MSG_GET_FOLDER_ITEMS_CB: {
+                        int status = msg.arg1;
+                        int results_size = msg.arg2;
                         BrowsedPlayerWrapper wrapper = (BrowsedPlayerWrapper) msg.obj;
+
                         // If we failed to remove the wrapper from the pending set, that
                         // means a timeout occurred and the callback was triggered afterwards
                         if (!mPendingPlayers.remove(wrapper)) {
                             return;
                         }
 
-                        Log.i(TAG, "Successfully added package to results: "
-                                + wrapper.getPackageName());
-                        mResults.add(wrapper);
+                        if (status == BrowsedPlayerWrapper.STATUS_SUCCESS && results_size != 0) {
+                            Log.i(TAG, "Successfully added package to results: "
+                                    + wrapper.getPackageName());
+                            mResults.add(wrapper);
+                        }
                     } break;
 
                     case MSG_CONNECT_CB: {
@@ -134,8 +141,12 @@ public class BrowsablePlayerConnector {
 
                         if (msg.arg1 != BrowsedPlayerWrapper.STATUS_SUCCESS) {
                             Log.i(TAG, wrapper.getPackageName() + " is not browsable");
-                            mPendingPlayers.remove(wrapper);
-                            return;
+                            // If we failed to remove the wrapper from the pending set, that
+                            // means a timeout occurred and the callback was triggered afterwards
+                            if (!mPendingPlayers.remove(wrapper)) {
+                                return;
+                            }
+                            break;
                         }
 
                         // Check to see if the root folder has any items
@@ -144,22 +155,14 @@ public class BrowsablePlayerConnector {
                         }
                         wrapper.getFolderItems(wrapper.getRootId(),
                                 (int status, String mediaId, List<ListItem> results) -> {
-                                    if (status != BrowsedPlayerWrapper.STATUS_SUCCESS) {
-                                        mPendingPlayers.remove(wrapper);
-                                        return;
-                                    }
-
-                                    if (results.size() == 0) {
-                                        mPendingPlayers.remove(wrapper);
-                                        return;
-                                    }
-
                                     // Send the response as a message so that it is properly
                                     // synchronized
-                                    Message success =
+                                    Message cb =
                                             mHandler.obtainMessage(MSG_GET_FOLDER_ITEMS_CB);
-                                    success.obj = wrapper;
-                                    mHandler.sendMessage(success);
+                                    cb.arg1 = status;
+                                    cb.arg2 = results.size();
+                                    cb.obj = wrapper;
+                                    mHandler.sendMessage(cb);
                                 });
                     } break;
 

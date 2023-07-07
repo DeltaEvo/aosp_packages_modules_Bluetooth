@@ -31,7 +31,7 @@ class PacketDef : public ParentDef {
 
   PacketField* GetNewField(const std::string& name, ParseLocation loc) const;
 
-  void GenParserDefinition(std::ostream& s) const;
+  void GenParserDefinition(std::ostream& s, bool generate_fuzzing, bool generate_tests) const;
 
   void GenTestingParserFromBytes(std::ostream& s) const;
 
@@ -45,12 +45,13 @@ class PacketDef : public ParentDef {
 
   TypeDef::Type GetDefinitionType() const;
 
-  void GenBuilderDefinition(std::ostream& s) const;
+  void GenBuilderDefinition(std::ostream& s, bool generate_fuzzing, bool generate_tests) const;
 
   void GenBuilderDefinitionPybind11(std::ostream& s) const;
 
   void GenTestDefine(std::ostream& s) const;
 
+  void GenReflectTestDefine(std::ostream& s) const;
   void GenFuzzTestDefine(std::ostream& s) const;
 
   FieldList GetParametersToValidate() const;
@@ -64,22 +65,4 @@ class PacketDef : public ParentDef {
   void GenBuilderConstructor(std::ostream& s) const;
 
   void GenTestingFromView(std::ostream& s) const;
-
-  void GenRustChildEnums(std::ostream& s) const;
-
-  void GenRustStructDeclarations(std::ostream& s) const;
-
-  bool GenRustStructFieldNameAndType(std::ostream& s) const;
-
-  void GenRustStructFieldNames(std::ostream& s) const;
-
-  void GenRustStructImpls(std::ostream& s) const;
-
-  void GenRustAccessStructImpls(std::ostream& s) const;
-
-  void GenRustBuilderStructImpls(std::ostream& s) const;
-
-  void GenRustBuilderTest(std::ostream& s) const;
-
-  void GenRustDef(std::ostream& s) const;
 };
