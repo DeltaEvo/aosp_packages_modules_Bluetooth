@@ -40,7 +40,6 @@ import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
-import com.android.bluetooth.btservice.ActiveDeviceManager;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 
@@ -77,7 +76,6 @@ public class A2dpServiceTest {
     private final BlockingQueue<Intent> mCodecConfigChangedQueue = new LinkedBlockingQueue<>();
 
     @Mock private AdapterService mAdapterService;
-    @Mock private ActiveDeviceManager mActiveDeviceManager;
     @Mock private A2dpNativeInterface mA2dpNativeInterface;
     @Mock private DatabaseManager mDatabaseManager;
 
@@ -99,7 +97,6 @@ public class A2dpServiceTest {
         doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
         doReturn(false).when(mAdapterService).isQuietModeEnabled();
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
-        doReturn(mActiveDeviceManager).when(mAdapterService).getActiveDeviceManager();
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
 
