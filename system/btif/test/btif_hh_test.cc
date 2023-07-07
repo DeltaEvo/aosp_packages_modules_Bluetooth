@@ -30,6 +30,7 @@
 #include "btif/include/btif_api.h"
 #include "btif/include/stack_manager.h"
 #include "include/hardware/bt_hh.h"
+#include "test/common/core_interface.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_osi_allocator.h"
 
@@ -43,14 +44,16 @@ uint8_t btu_trace_level = BT_TRACE_LEVEL_DEBUG;
 
 module_t bt_utils_module;
 module_t gd_controller_module;
-module_t gd_idle_module;
 module_t gd_shim_module;
 module_t osi_module;
+module_t rust_module;
 
 const tBTA_AG_RES_DATA tBTA_AG_RES_DATA::kEmpty = {};
 
-extern void bte_hh_evt(tBTA_HH_EVT event, tBTA_HH* p_data);
-extern const bthh_interface_t* btif_hh_get_interface();
+void bte_hh_evt(tBTA_HH_EVT event, tBTA_HH* p_data);
+const bthh_interface_t* btif_hh_get_interface();
+bt_status_t btif_hh_connect(const RawAddress* bd_addr);
+bt_status_t btif_hh_virtual_unplug(const RawAddress* bd_addr);
 
 namespace test {
 namespace mock {
@@ -92,6 +95,7 @@ std::array<uint8_t, 32> data32 = {
 };
 
 const RawAddress kDeviceAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
+const RawAddress kDeviceAddressConnecting({0x66, 0x55, 0x44, 0x33, 0x22, 0x11});
 const uint16_t kHhHandle = 123;
 
 // Callback parameters grouped into a structure
@@ -101,10 +105,16 @@ struct get_report_cb_t {
   std::vector<uint8_t> data;
 } get_report_cb_;
 
+struct connection_state_cb_t {
+  RawAddress raw_address;
+  bthh_connection_state_t state;
+};
+
 // Globals allow usage within function pointers
 std::promise<bt_cb_thread_evt> g_thread_evt_promise;
 std::promise<bt_status_t> g_status_promise;
 std::promise<get_report_cb_t> g_bthh_callbacks_get_report_promise;
+std::promise<connection_state_cb_t> g_bthh_connection_state_promise;
 
 }  // namespace
 
@@ -130,6 +140,7 @@ bt_callbacks_t bt_callbacks = {
     .generate_local_oob_data_cb = nullptr,  // generate_local_oob_data_callback
     .switch_buffer_size_cb = nullptr,       // switch_buffer_size_callback
     .switch_codec_cb = nullptr,             // switch_codec_callback
+    .le_rand_cb = nullptr,                  // le_rand_callback
 };
 
 bthh_callbacks_t bthh_callbacks = {
@@ -180,7 +191,7 @@ class BtifHhWithHalCallbacksTest : public BtifHhWithMockTest {
     };
     set_hal_cbacks(&bt_callbacks);
     // Start the jni callback thread
-    ASSERT_EQ(BT_STATUS_SUCCESS, btif_init_bluetooth());
+    InitializeCoreInterface();
     ASSERT_EQ(std::future_status::ready, future.wait_for(2s));
     ASSERT_EQ(ASSOCIATE_JVM, future.get());
 
@@ -193,8 +204,7 @@ class BtifHhWithHalCallbacksTest : public BtifHhWithMockTest {
     bt_callbacks.thread_evt_cb = [](bt_cb_thread_evt evt) {
       g_thread_evt_promise.set_value(evt);
     };
-    // Shutdown the jni callback thread
-    ASSERT_EQ(BT_STATUS_SUCCESS, btif_cleanup_bluetooth());
+    CleanCoreInterface();
     ASSERT_EQ(std::future_status::ready, future.wait_for(2s));
     ASSERT_EQ(DISASSOCIATE_JVM, future.get());
 
@@ -281,4 +291,52 @@ TEST_F(BtifHhWithDevice, BTA_HH_GET_RPT_EVT) {
   for (const auto& data : data32) {
     ASSERT_EQ(data, report.data[i++]);
   }
+}
+
+class BtifHHVirtualUnplugTest : public BtifHhAdapterReady {
+ protected:
+  void SetUp() override {
+    BtifHhAdapterReady::SetUp();
+    bthh_callbacks.connection_state_cb = [](RawAddress* bd_addr, bthh_connection_state_t state) {
+      connection_state_cb_t connection_state = {
+        .raw_address = *bd_addr,
+        .state = state,
+      };
+      g_bthh_connection_state_promise.set_value(connection_state);
+    };
+  }
+
+  void TearDown() override {
+    bthh_callbacks.connection_state_cb = [](RawAddress* bd_addr, bthh_connection_state_t state) {};
+    BtifHhAdapterReady::TearDown();
+  }
+};
+
+TEST_F(BtifHHVirtualUnplugTest, test_btif_hh_virtual_unplug_device_not_open) {
+  g_bthh_connection_state_promise = std::promise<connection_state_cb_t>();
+
+  auto future = g_bthh_connection_state_promise.get_future();
+
+  /* Make device in connecting state */
+  ASSERT_EQ(btif_hh_connect(&kDeviceAddressConnecting), BT_STATUS_SUCCESS);
+
+  ASSERT_EQ(std::future_status::ready, future.wait_for(2s));
+
+  auto res = future.get();
+  ASSERT_STREQ(kDeviceAddressConnecting.ToString().c_str(),
+               res.raw_address.ToString().c_str());
+  ASSERT_EQ(BTHH_CONN_STATE_CONNECTING, res.state);
+
+
+  g_bthh_connection_state_promise = std::promise<connection_state_cb_t>();
+  future = g_bthh_connection_state_promise.get_future();
+  btif_hh_virtual_unplug(&kDeviceAddressConnecting);
+
+  ASSERT_EQ(std::future_status::ready, future.wait_for(2s));
+
+  // Verify data was delivered
+  res = future.get();
+  ASSERT_STREQ(kDeviceAddressConnecting.ToString().c_str(),
+               res.raw_address.ToString().c_str());
+  ASSERT_EQ(BTHH_CONN_STATE_DISCONNECTED, res.state);
 }

@@ -351,7 +351,7 @@ class MockConnectionCallback : public ConnectionCallbacks {
     }
   }
   MOCK_METHOD(void, OnConnectRequest, (Address, ClassOfDevice), (override));
-  MOCK_METHOD(void, OnConnectFail, (Address, ErrorCode reason), (override));
+  MOCK_METHOD(void, OnConnectFail, (Address, ErrorCode reason, bool locally_initiated), (override));
 
   MOCK_METHOD(void, HACK_OnEscoConnectRequest, (Address, ClassOfDevice), (override));
   MOCK_METHOD(void, HACK_OnScoConnectRequest, (Address, ClassOfDevice), (override));
@@ -722,7 +722,14 @@ class AclManagerWithLeConnectionTest : public AclManagerWithCallbacksTest {
         void(hci::ErrorCode hci_status, uint8_t version, uint16_t manufacturer_name, uint16_t sub_version));
     MOCK_METHOD2(OnLeReadRemoteFeaturesComplete, void(hci::ErrorCode hci_status, uint64_t features));
     MOCK_METHOD3(OnPhyUpdate, void(hci::ErrorCode hci_status, uint8_t tx_phy, uint8_t rx_phy));
-    MOCK_METHOD1(OnLocalAddressUpdate, void(AddressWithType address_with_type));
+    MOCK_METHOD5(
+        OnLeSubrateChange,
+        void(
+            hci::ErrorCode hci_status,
+            uint16_t subrate_factor,
+            uint16_t peripheral_latency,
+            uint16_t continuation_number,
+            uint16_t supervision_timeout));
   } mock_le_connection_management_callbacks_;
 };
 

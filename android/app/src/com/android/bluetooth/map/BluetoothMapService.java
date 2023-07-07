@@ -391,7 +391,7 @@ public class BluetoothMapService extends ProfileService {
                         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
                         intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                                 BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
-                        sendBroadcast(intent, BLUETOOTH_CONNECT,
+                        Utils.sendBroadcast(BluetoothMapService.this, intent, BLUETOOTH_CONNECT,
                                 Utils.getTempAllowlistBroadcastOptions());
                         cancelUserTimeoutAlarm();
                         mIsWaitingAuthorization = false;
@@ -532,7 +532,8 @@ public class BluetoothMapService extends ProfileService {
             intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
             intent.putExtra(BluetoothProfile.EXTRA_STATE, mState);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
-            sendBroadcast(intent, BLUETOOTH_CONNECT, Utils.getTempAllowlistBroadcastOptions());
+            Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
+                    Utils.getTempAllowlistBroadcastOptions());
         }
     }
 
@@ -688,6 +689,7 @@ public class BluetoothMapService extends ProfileService {
         mSessionStatusHandler = new MapServiceMessageHandler(looper);
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_CONNECTION_ACCESS_REPLY);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         filter.addAction(BluetoothDevice.ACTION_SDP_RECORD);
@@ -695,6 +697,7 @@ public class BluetoothMapService extends ProfileService {
 
         // We need two filters, since Type only applies to the ACTION_MESSAGE_SENT
         IntentFilter filterMessageSent = new IntentFilter();
+        filterMessageSent.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filterMessageSent.addAction(BluetoothMapContentObserver.ACTION_MESSAGE_SENT);
         try {
             filterMessageSent.addDataType("message/*");
@@ -959,7 +962,7 @@ public class BluetoothMapService extends ProfileService {
             intent.putExtra(BluetoothDevice.EXTRA_ACCESS_REQUEST_TYPE,
                     BluetoothDevice.REQUEST_TYPE_MESSAGE_ACCESS);
             intent.putExtra(BluetoothDevice.EXTRA_DEVICE, sRemoteDevice);
-            sendOrderedBroadcast(intent, BLUETOOTH_CONNECT,
+            Utils.sendOrderedBroadcast(this, intent, BLUETOOTH_CONNECT,
                     Utils.getTempAllowlistBroadcastOptions(), null, null,
                     Activity.RESULT_OK, null, null);
 
@@ -1058,7 +1061,8 @@ public class BluetoothMapService extends ProfileService {
         // Pending messages are no longer valid. To speed up things, simply delete them.
         if (mRemoveTimeoutMsg) {
             Intent timeoutIntent = new Intent(USER_CONFIRM_TIMEOUT_ACTION);
-            sendBroadcast(timeoutIntent, null, Utils.getTempAllowlistBroadcastOptions());
+            Utils.sendBroadcast(this, timeoutIntent, null,
+                    Utils.getTempAllowlistBroadcastOptions());
             mIsWaitingAuthorization = false;
             cancelUserTimeoutAlarm();
         }
@@ -1333,9 +1337,9 @@ public class BluetoothMapService extends ProfileService {
             }
             try {
                 BluetoothMapService service = getService(source);
-                enforceBluetoothPrivilegedPermission(service);
                 List<BluetoothDevice> connectedDevices = new ArrayList<>(0);
                 if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
                     connectedDevices = service.getConnectedDevices();
                 }
                 receiver.send(connectedDevices);

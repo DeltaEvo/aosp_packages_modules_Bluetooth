@@ -89,12 +89,6 @@ class Btm {
   Btm(os::Handler* handler, neighbor::InquiryModule* inquiry);
   ~Btm() = default;
 
-  // Inquiry result callbacks
-  void OnInquiryResult(bluetooth::hci::InquiryResultView view);
-  void OnInquiryResultWithRssi(bluetooth::hci::InquiryResultWithRssiView view);
-  void OnExtendedInquiryResult(bluetooth::hci::ExtendedInquiryResultView view);
-  void OnInquiryComplete(bluetooth::hci::ErrorCode status);
-
   void SetStandardInquiryResultMode();
   void SetInquiryWithRssiResultMode();
   void SetExtendedInquiryResultMode();
@@ -147,9 +141,9 @@ class Btm {
 
   // Remote device name API
   BtmStatus ReadClassicRemoteDeviceName(const RawAddress& raw_address,
-                                        tBTM_CMPL_CB* callback);
+                                        tBTM_NAME_CMPL_CB* callback);
   BtmStatus ReadLeRemoteDeviceName(const RawAddress& raw_address,
-                                   tBTM_CMPL_CB* callback);
+                                   tBTM_NAME_CMPL_CB* callback);
   BtmStatus CancelAllReadRemoteDeviceName();
 
   // Le neighbor interaction API
@@ -245,6 +239,7 @@ class Btm {
     void OnPeriodicSyncLost(uint16_t sync_handle) override;
     void OnPeriodicSyncTransferred(int pa_source, uint8_t status,
                                    bluetooth::hci::Address address) override;
+    void OnBigInfoReport(uint16_t sync_handle, bool encrypted) override;
   };
   ScanningCallbacks scanning_callbacks_;
 

@@ -219,7 +219,7 @@ btif_hf_client_cb_t* btif_hf_client_get_cb_by_handle(uint16_t handle) {
  *
  ******************************************************************************/
 btif_hf_client_cb_t* btif_hf_client_get_cb_by_bda(const RawAddress& bd_addr) {
-  VLOG(1) << __func__ << " incoming addr " << bd_addr;
+  VLOG(1) << __func__ << " incoming addr " << ADDRESS_TO_LOGGABLE_CSTR(bd_addr);
 
   for (int i = 0; i < HF_CLIENT_MAX_DEVICES; i++) {
     // Block is valid only if it is allocated i.e. state is not DISCONNECTED
@@ -309,7 +309,7 @@ static bt_status_t connect_int(RawAddress* bd_addr, uint16_t uuid) {
   return BTA_HfClientOpen(cb->peer_bda, &cb->handle);
 }
 
-static bt_status_t connect(RawAddress* bd_addr) {
+static bt_status_t connect(const RawAddress* bd_addr) {
   BTIF_TRACE_EVENT("HFP Client version is  %s", btif_hf_client_version);
   CHECK_BTHF_CLIENT_INIT();
   return btif_queue_connect(UUID_SERVCLASS_HF_HANDSFREE, bd_addr, connect_int);
@@ -873,7 +873,7 @@ static void btif_hf_client_upstreams_evt(uint16_t event, char* p_param) {
             "%s: HF CLient open failed, but another device connected. "
             "status=%d state=%d connected device=%s",
             __func__, p_data->open.status, cb->state,
-            cb->peer_bda.ToString().c_str());
+            ADDRESS_TO_LOGGABLE_CSTR(cb->peer_bda));
         break;
       }
 
