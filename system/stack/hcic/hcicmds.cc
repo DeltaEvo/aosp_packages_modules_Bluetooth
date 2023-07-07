@@ -23,22 +23,24 @@
  *
  ******************************************************************************/
 
-#include <base/callback_forward.h>
+#include <base/functional/callback_forward.h>
 #include <stddef.h>
 #include <string.h>
 
 #include "bt_target.h"
-#include "btu.h"
+#include "device/include/device_iot_config.h"
 #include "device/include/esco_parameters.h"
+#include "gd/common/init_flags.h"
 #include "hcidefs.h"
 #include "hcimsgs.h"
+#include "main/shim/acl_api.h"
 #include "osi/include/allocator.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btu.h"
+#include "stack/include/btu_hcif.h"
 #include "types/raw_address.h"
-
-void bte_main_hci_send(BT_HDR* p_msg, uint16_t event);
 
 /* Message by message.... */
 
@@ -511,59 +513,6 @@ static void btsnd_hcic_inq_cancel(void) {
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }
 
-void btsnd_hcic_per_inq_mode(uint16_t max_period, uint16_t min_period,
-                             const LAP inq_lap, uint8_t duration,
-                             uint8_t response_cnt) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_PER_INQ_MODE;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_PERIODIC_INQUIRY_MODE);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_PER_INQ_MODE);
-
-  UINT16_TO_STREAM(pp, max_period);
-  UINT16_TO_STREAM(pp, min_period);
-  LAP_TO_STREAM(pp, inq_lap);
-  UINT8_TO_STREAM(pp, duration);
-  UINT8_TO_STREAM(pp, response_cnt);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_exit_per_inq(void) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_EXIT_PER_INQ;
-  p->offset = 0;
-  UINT16_TO_STREAM(pp, HCI_EXIT_PERIODIC_INQUIRY_MODE);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_EXIT_PER_INQ);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_create_conn(const RawAddress& dest, uint16_t packet_types,
-                            uint8_t page_scan_rep_mode, uint8_t page_scan_mode,
-                            uint16_t clock_offset, uint8_t allow_switch) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_CREATE_CONN;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_CREATE_CONNECTION);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CREATE_CONN);
-  BDADDR_TO_STREAM(pp, dest);
-  UINT16_TO_STREAM(pp, packet_types);
-  UINT8_TO_STREAM(pp, page_scan_rep_mode);
-  UINT8_TO_STREAM(pp, page_scan_mode);
-  UINT16_TO_STREAM(pp, clock_offset);
-  UINT8_TO_STREAM(pp, allow_switch);
-  btm_acl_paging(p, dest);
-}
-
 static void btsnd_hcic_disconnect(uint16_t handle, uint8_t reason) {
   BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
   uint8_t* pp = (uint8_t*)(p + 1);
@@ -760,51 +709,12 @@ void btsnd_hcic_set_conn_encrypt(uint16_t handle, bool enable) {
 void btsnd_hcic_rmt_name_req(const RawAddress& bd_addr,
                              uint8_t page_scan_rep_mode, uint8_t page_scan_mode,
                              uint16_t clock_offset) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_RMT_NAME_REQ;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_RMT_NAME_REQUEST);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_RMT_NAME_REQ);
-
-  BDADDR_TO_STREAM(pp, bd_addr);
-  UINT8_TO_STREAM(pp, page_scan_rep_mode);
-  UINT8_TO_STREAM(pp, page_scan_mode);
-  UINT16_TO_STREAM(pp, clock_offset);
-
-  btm_acl_paging(p, bd_addr);
+  bluetooth::shim::ACL_RemoteNameRequest(bd_addr, page_scan_rep_mode,
+                                         page_scan_mode, clock_offset);
 }
 
 void btsnd_hcic_rmt_name_req_cancel(const RawAddress& bd_addr) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_RMT_NAME_REQ_CANCEL;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_RMT_NAME_REQUEST_CANCEL);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_RMT_NAME_REQ_CANCEL);
-
-  BDADDR_TO_STREAM(pp, bd_addr);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_rmt_features_req(uint16_t handle) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_CMD_HANDLE;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_READ_RMT_FEATURES);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CMD_HANDLE);
-
-  UINT16_TO_STREAM(pp, handle);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
+  bluetooth::shim::ACL_CancelRemoteNameRequest(bd_addr);
 }
 
 void btsnd_hcic_rmt_ext_features(uint16_t handle, uint8_t page_num) {
@@ -846,21 +756,6 @@ void btsnd_hcic_read_rmt_clk_offset(uint16_t handle) {
   p->offset = 0;
 
   UINT16_TO_STREAM(pp, HCI_READ_RMT_CLOCK_OFFSET);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CMD_HANDLE);
-
-  UINT16_TO_STREAM(pp, handle);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_read_lmp_handle(uint16_t handle) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_CMD_HANDLE;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_READ_LMP_HANDLE);
   UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CMD_HANDLE);
 
   UINT16_TO_STREAM(pp, handle);
@@ -1017,29 +912,6 @@ void btsnd_hcic_exit_park_mode(uint16_t handle) {
   UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CMD_HANDLE);
 
   UINT16_TO_STREAM(pp, handle);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_qos_setup(uint16_t handle, uint8_t flags, uint8_t service_type,
-                          uint32_t token_rate, uint32_t peak, uint32_t latency,
-                          uint32_t delay_var) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_QOS_SETUP;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_QOS_SETUP);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_QOS_SETUP);
-
-  UINT16_TO_STREAM(pp, handle);
-  UINT8_TO_STREAM(pp, flags);
-  UINT8_TO_STREAM(pp, service_type);
-  UINT32_TO_STREAM(pp, token_rate);
-  UINT32_TO_STREAM(pp, peak);
-  UINT32_TO_STREAM(pp, latency);
-  UINT32_TO_STREAM(pp, delay_var);
 
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }
@@ -1330,27 +1202,6 @@ void btsnd_hcic_read_tx_power(uint16_t handle, uint8_t type) {
 
   UINT16_TO_STREAM(pp, handle);
   UINT8_TO_STREAM(pp, type);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_host_num_xmitted_pkts(uint8_t num_handles, uint16_t* handle,
-                                      uint16_t* num_pkts) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + 1 + (num_handles * 4);
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_HOST_NUM_PACKETS_DONE);
-  UINT8_TO_STREAM(pp, p->len - HCIC_PREAMBLE_SIZE);
-
-  UINT8_TO_STREAM(pp, num_handles);
-
-  for (int i = 0; i < num_handles; i++) {
-    UINT16_TO_STREAM(pp, handle[i]);
-    UINT16_TO_STREAM(pp, num_pkts[i]);
-  }
 
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }
@@ -1660,35 +1511,6 @@ void btsnd_hcic_rem_oob_neg_reply(const RawAddress& bd_addr) {
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }
 
-void btsnd_hcic_read_inq_tx_power(void) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_R_TX_POWER;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_READ_INQ_TX_POWER_LEVEL);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_R_TX_POWER);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_send_keypress_notif(const RawAddress& bd_addr, uint8_t notif) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_SEND_KEYPRESS_NOTIF;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_SEND_KEYPRESS_NOTIF);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_SEND_KEYPRESS_NOTIF);
-
-  BDADDR_TO_STREAM(pp, bd_addr);
-  UINT8_TO_STREAM(pp, notif);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
 /**** end of Simple Pairing Commands ****/
 
 void btsnd_hcic_enhanced_flush(uint16_t handle, uint8_t packet_type) {
@@ -1709,21 +1531,6 @@ void btsnd_hcic_enhanced_flush(uint16_t handle, uint8_t packet_type) {
 /*************************
  * End of Lisbon Commands
  *************************/
-
-void btsnd_hcic_get_link_quality(uint16_t handle) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_CMD_HANDLE;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_GET_LINK_QUALITY);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CMD_HANDLE);
-
-  UINT16_TO_STREAM(pp, handle);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
 
 void btsnd_hcic_read_rssi(uint16_t handle) {
   BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
@@ -1772,21 +1579,6 @@ void btsnd_hcic_read_failed_contact_counter(uint16_t handle) {
   p->offset = 0;
 
   UINT16_TO_STREAM(pp, HCI_READ_FAILED_CONTACT_COUNTER);
-  UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CMD_HANDLE);
-
-  UINT16_TO_STREAM(pp, handle);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
-}
-
-void btsnd_hcic_read_automatic_flush_timeout(uint16_t handle) {
-  BT_HDR* p = (BT_HDR*)osi_malloc(HCI_CMD_BUF_SIZE);
-  uint8_t* pp = (uint8_t*)(p + 1);
-
-  p->len = HCIC_PREAMBLE_SIZE + HCIC_PARAM_SIZE_CMD_HANDLE;
-  p->offset = 0;
-
-  UINT16_TO_STREAM(pp, HCI_READ_AUTOMATIC_FLUSH_TIMEOUT);
   UINT8_TO_STREAM(pp, HCIC_PARAM_SIZE_CMD_HANDLE);
 
   UINT16_TO_STREAM(pp, handle);
@@ -1852,28 +1644,28 @@ void btsnd_hcic_write_pagescan_type(uint8_t type) {
   btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
 }
 
-/* Must have room to store BT_HDR + max VSC length + callback pointer */
-#if (HCI_CMD_BUF_SIZE < 268)
-#error "HCI_CMD_BUF_SIZE must be larger than 268"
-#endif
+static void btsnd_hcic_vendor_spec_complete(tBTM_VSC_CMPL_CB* p_vsc_cplt_cback,
+                                            uint16_t opcode, uint8_t* data,
+                                            uint16_t len) {
+  /* If there was a callback address for vcs complete, call it */
+  if (p_vsc_cplt_cback) {
+    tBTM_VSC_CMPL vcs_cplt_params;
+    vcs_cplt_params.opcode = opcode;
+    vcs_cplt_params.param_len = len;
+    vcs_cplt_params.p_param_buf = data;
+    /* Call the VSC complete callback function */
+    (*p_vsc_cplt_cback)(&vcs_cplt_params);
+  }
+}
 
-void btsnd_hcic_vendor_spec_cmd(void* buffer, uint16_t opcode, uint8_t len,
-                                uint8_t* p_data, void* p_cmd_cplt_cback) {
-  BT_HDR* p = (BT_HDR*)buffer;
-  uint8_t* pp = (uint8_t*)(p + 1);
+void btsnd_hcic_vendor_spec_cmd(uint16_t opcode, uint8_t len, uint8_t* p_data,
+                                tBTM_VSC_CMPL_CB* p_cmd_cplt_cback) {
+  uint16_t v_opcode = HCI_GRP_VENDOR_SPECIFIC | opcode;
 
-  p->len = HCIC_PREAMBLE_SIZE + len;
-  p->offset = sizeof(void*);
-
-  *((void**)pp) =
-      p_cmd_cplt_cback; /* Store command complete callback in buffer */
-  pp += sizeof(void*);  /* Skip over callback pointer */
-
-  UINT16_TO_STREAM(pp, HCI_GRP_VENDOR_SPECIFIC | opcode);
-  UINT8_TO_STREAM(pp, len);
-  ARRAY_TO_STREAM(pp, p_data, len);
-
-  btu_hcif_send_cmd(LOCAL_BR_EDR_CONTROLLER_ID, p);
+  btu_hcif_send_cmd_with_cb(
+      FROM_HERE, v_opcode, p_data, len,
+      base::BindOnce(&btsnd_hcic_vendor_spec_complete,
+                     base::Unretained(p_cmd_cplt_cback), v_opcode));
 }
 
 void btsnd_hcic_configure_data_path(uint8_t data_path_direction,

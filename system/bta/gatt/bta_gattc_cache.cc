@@ -36,12 +36,16 @@
 #include "bt_target.h"  // Must be first to define build configuration
 #include "bta/gatt/bta_gattc_int.h"
 #include "bta/gatt/database.h"
+#include "device/include/interop.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/gatt_api.h"
+#include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth::legacy::stack::sdp;
 
 using base::StringPrintf;
 using bluetooth::Uuid;
@@ -120,6 +124,80 @@ const Service* bta_gattc_find_matching_service(
   }
 
   return nullptr;
+}
+
+/// Whether the peer device uses robust caching
+RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
+                                             const gatt::Database& db) {
+  LOG_DEBUG("GetRobustCachingSupport %s",
+            p_clcb->bda.ToRedactedStringForLogging().c_str());
+
+  // If the feature is disabled, then we never support it
+  if (!bta_gattc_is_robust_caching_enabled()) {
+    LOG_DEBUG("robust caching is disabled, so UNSUPPORTED");
+    return RobustCachingSupport::UNSUPPORTED;
+  }
+
+  // An empty database means that discovery hasn't taken place yet, so
+  // we can't infer anything from that
+  if (!db.IsEmpty()) {
+    // Here, we can simply check whether the database hash is present
+    for (const auto& service : db.Services()) {
+      if (service.uuid.As16Bit() != UUID_SERVCLASS_GATT_SERVER) {
+        continue;
+      }
+      for (const auto& characteristic : service.characteristics) {
+        if (characteristic.uuid.As16Bit() == GATT_UUID_DATABASE_HASH) {
+          // the hash was found, so we should read it
+          LOG_DEBUG("database hash characteristic found, so SUPPORTED");
+          return RobustCachingSupport::SUPPORTED;
+        }
+      }
+    }
+
+    // The database hash characteristic was not found, so there's no point
+    // searching for it. Even if the hash was previously not present but is now,
+    // we will still get the service changed indication, so there's no need to
+    // speculatively check for the hash every time.
+    LOG_DEBUG("database hash characteristic not found, so UNSUPPORTED");
+    return RobustCachingSupport::UNSUPPORTED;
+  }
+
+  // This is workaround for the embedded devices being already on the market
+  // and having a serious problem with handle Read By Type with
+  // GATT_UUID_DATABASE_HASH. With this workaround, Android will assume that
+  // embedded device having LMP version lower than 5.1 (0x0a), it does not
+  // support GATT Caching.
+  uint8_t lmp_version = 0;
+  if (!BTM_ReadRemoteVersion(p_clcb->bda, &lmp_version, nullptr, nullptr)) {
+    LOG_WARN("Could not read remote version for %s",
+             ADDRESS_TO_LOGGABLE_CSTR(p_clcb->bda));
+  }
+
+  if (lmp_version < 0x0a) {
+    LOG_WARN(
+        " Device LMP version 0x%02x < Bluetooth 5.1. Ignore database cache "
+        "read.",
+        lmp_version);
+    return RobustCachingSupport::UNSUPPORTED;
+  }
+
+  // Some LMP 5.2 devices also don't support robust caching. This workaround
+  // conditionally disables the feature based on a combination of LMP
+  // version and OUI prefix.
+  if (lmp_version < 0x0c &&
+      interop_match_addr(INTEROP_DISABLE_ROBUST_CACHING, &p_clcb->bda)) {
+    LOG_WARN(
+        "Device LMP version 0x%02x <= Bluetooth 5.2 and MAC addr on "
+        "interop list, skipping robust caching",
+        lmp_version);
+    return RobustCachingSupport::UNSUPPORTED;
+  }
+
+  // If we have no cached database and no interop considerations,
+  // it is unknown whether or not robust caching is supported
+  LOG_DEBUG("database hash support is UNKNOWN");
+  return RobustCachingSupport::UNKNOWN;
 }
 
 /** Start primary service discovery */
@@ -231,6 +309,9 @@ static void bta_gattc_explore_srvc_finished(uint16_t conn_id,
 
     // If the device is trusted, link the addr file to hash file
     if (success && btm_sec_is_a_bonded_dev(p_srvc_cb->server_bda)) {
+      LOG_DEBUG(
+          "Linking db hash to address %s",
+          p_clcb->p_srcb->server_bda.ToRedactedStringForLogging().c_str());
       bta_gattc_cache_link(p_clcb->p_srcb->server_bda, hash);
     }
 
@@ -290,14 +371,18 @@ void bta_gattc_sdp_callback(tSDP_STATUS sdp_status, const void* user_data) {
 
   bool no_pending_disc = !p_srvc_cb->pending_discovery.InProgress();
 
-  tSDP_DISC_REC* p_sdp_rec = SDP_FindServiceInDb(cb_data->p_sdp_db, 0, nullptr);
+  tSDP_DISC_REC* p_sdp_rec = get_legacy_stack_sdp_api()->db.SDP_FindServiceInDb(
+      cb_data->p_sdp_db, 0, nullptr);
   while (p_sdp_rec != nullptr) {
     /* find a service record, report it */
     Uuid service_uuid;
-    if (!SDP_FindServiceUUIDInRec(p_sdp_rec, &service_uuid)) continue;
+    if (!get_legacy_stack_sdp_api()->record.SDP_FindServiceUUIDInRec(
+            p_sdp_rec, &service_uuid))
+      continue;
 
     tSDP_PROTOCOL_ELEM pe;
-    if (!SDP_FindProtocolListElemInRec(p_sdp_rec, UUID_PROTOCOL_ATT, &pe))
+    if (!get_legacy_stack_sdp_api()->record.SDP_FindProtocolListElemInRec(
+            p_sdp_rec, UUID_PROTOCOL_ATT, &pe))
       continue;
 
     uint16_t start_handle = (uint16_t)pe.params[0];
@@ -313,7 +398,8 @@ void bta_gattc_sdp_callback(tSDP_STATUS sdp_status, const void* user_data) {
         !GATT_HANDLE_IS_VALID(end_handle)) {
       LOG(ERROR) << "invalid start_handle=" << loghex(start_handle)
                  << ", end_handle=" << loghex(end_handle);
-      p_sdp_rec = SDP_FindServiceInDb(cb_data->p_sdp_db, 0, p_sdp_rec);
+      p_sdp_rec = get_legacy_stack_sdp_api()->db.SDP_FindServiceInDb(
+          cb_data->p_sdp_db, 0, p_sdp_rec);
       continue;
     }
 
@@ -321,7 +407,8 @@ void bta_gattc_sdp_callback(tSDP_STATUS sdp_status, const void* user_data) {
     p_srvc_cb->pending_discovery.AddService(start_handle, end_handle,
                                             service_uuid, true);
 
-    p_sdp_rec = SDP_FindServiceInDb(cb_data->p_sdp_db, 0, p_sdp_rec);
+    p_sdp_rec = get_legacy_stack_sdp_api()->db.SDP_FindServiceInDb(
+        cb_data->p_sdp_db, 0, p_sdp_rec);
   }
 
   // If discovery is already pending, no need to call
@@ -353,10 +440,10 @@ static tGATT_STATUS bta_gattc_sdp_service_disc(uint16_t conn_id,
   attr_list[1] = ATTR_ID_PROTOCOL_DESC_LIST;
 
   Uuid uuid = Uuid::From16Bit(UUID_PROTOCOL_ATT);
-  SDP_InitDiscoveryDb(cb_data->p_sdp_db, BTA_GATT_SDP_DB_SIZE, 1, &uuid,
-                      num_attrs, attr_list);
+  get_legacy_stack_sdp_api()->service.SDP_InitDiscoveryDb(
+      cb_data->p_sdp_db, BTA_GATT_SDP_DB_SIZE, 1, &uuid, num_attrs, attr_list);
 
-  if (!SDP_ServiceSearchAttributeRequest2(
+  if (!get_legacy_stack_sdp_api()->service.SDP_ServiceSearchAttributeRequest2(
           p_server_cb->server_bda, cb_data->p_sdp_db, &bta_gattc_sdp_callback,
           const_cast<const void*>(static_cast<void*>(cb_data)))) {
     osi_free(cb_data);

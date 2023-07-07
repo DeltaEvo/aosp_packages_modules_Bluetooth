@@ -30,6 +30,7 @@
 #include "btif/include/btif_util.h"
 #include "include/hardware/bluetooth.h"
 #include "include/hardware/bt_av.h"
+#include "test/common/core_interface.h"
 #include "types/raw_address.h"
 
 void set_hal_cbacks(bt_callbacks_t* callbacks);
@@ -42,9 +43,9 @@ const tBTA_AG_RES_DATA tBTA_AG_RES_DATA::kEmpty = {};
 
 module_t bt_utils_module;
 module_t gd_controller_module;
-module_t gd_idle_module;
 module_t gd_shim_module;
 module_t osi_module;
+module_t rust_module;
 
 namespace {
 
@@ -76,7 +77,9 @@ void le_address_associate_callback(RawAddress* main_bd_addr,
                                    RawAddress* secondary_bd_addr) {}
 void acl_state_changed_callback(bt_status_t status, RawAddress* remote_bd_addr,
                                 bt_acl_state_t state, int transport_link_type,
-                                bt_hci_error_code_t hci_reason) {}
+                                bt_hci_error_code_t hci_reason,
+                                bt_conn_direction_t direction,
+                                uint16_t acl_handle) {}
 void link_quality_report_callback(uint64_t timestamp, int report_id, int rssi,
                                   int snr, int retransmission_count,
                                   int packets_not_receive_count,
@@ -122,13 +125,12 @@ class BtifCoreTest : public ::testing::Test {
   void SetUp() override {
     callback_map_.clear();
     set_hal_cbacks(&callbacks);
-
     auto promise = std::promise<void>();
     auto future = promise.get_future();
     callback_map_["callback_thread_event"] = [&promise]() {
       promise.set_value();
     };
-    btif_init_bluetooth();
+    InitializeCoreInterface();
     ASSERT_EQ(std::future_status::ready, future.wait_for(timeout_time));
     callback_map_.erase("callback_thread_event");
   }
@@ -139,7 +141,7 @@ class BtifCoreTest : public ::testing::Test {
     callback_map_["callback_thread_event"] = [&promise]() {
       promise.set_value();
     };
-    btif_cleanup_bluetooth();
+    CleanCoreInterface();
     ASSERT_EQ(std::future_status::ready, future.wait_for(timeout_time));
     callback_map_.erase("callback_thread_event");
   }
@@ -292,7 +294,6 @@ TEST_F(BtifCoreTest, dump_dm_event) {
       std::make_pair(BTA_DM_BLE_AUTH_CMPL_EVT, "BTA_DM_BLE_AUTH_CMPL_EVT"),
       std::make_pair(BTA_DM_DEV_UNPAIRED_EVT, "BTA_DM_DEV_UNPAIRED_EVT"),
       std::make_pair(BTA_DM_ENER_INFO_READ, "BTA_DM_ENER_INFO_READ"),
-      std::make_pair(BTA_DM_REPORT_BONDING_EVT, "BTA_DM_REPORT_BONDING_EVT"),
   };
   for (const auto& event : events) {
     ASSERT_STREQ(event.second.c_str(), dump_dm_event(event.first));
@@ -316,7 +317,7 @@ TEST_F(BtifCoreTest, dump_hf_event) {
       std::make_pair(BTA_AG_MIC_EVT, "BTA_AG_MIC_EVT"),
       std::make_pair(BTA_AG_AT_CKPD_EVT, "BTA_AG_AT_CKPD_EVT"),
       std::make_pair(BTA_AG_DISABLE_EVT, "BTA_AG_DISABLE_EVT"),
-      std::make_pair(BTA_AG_WBS_EVT, "BTA_AG_WBS_EVT"),
+      std::make_pair(BTA_AG_CODEC_EVT, "BTA_AG_CODEC_EVT"),
       std::make_pair(BTA_AG_AT_A_EVT, "BTA_AG_AT_A_EVT"),
       std::make_pair(BTA_AG_AT_D_EVT, "BTA_AG_AT_D_EVT"),
       std::make_pair(BTA_AG_AT_CHLD_EVT, "BTA_AG_AT_CHLD_EVT"),

@@ -27,15 +27,15 @@
  ***********************************************************************************/
 #define LOG_TAG "BTIF_HD"
 
+#include "btif/include/btif_hd.h"
+
 #include <cstdint>
 
 #include "bt_target.h"  // Must be first to define build configuration
-
 #include "bta/include/bta_hd_api.h"
 #include "bta/sys/bta_sys.h"
 #include "btif/include/btif_common.h"
-#include "btif/include/btif_hd.h"
-#include "btif/include/btif_storage.h"
+#include "btif/include/btif_profile_storage.h"
 #include "btif/include/btif_util.h"
 #include "gd/common/init_flags.h"
 #include "include/hardware/bt_hd.h"
@@ -53,10 +53,10 @@
 #define COD_HID_COMBO 0x05C0
 #define COD_HID_MAJOR 0x0500
 
-extern bool bta_dm_check_if_only_hd_connected(const RawAddress& peer_addr);
-extern bool check_cod_hid(const RawAddress* remote_bdaddr);
-extern bool check_cod_hid(const RawAddress& bd_addr);
-extern void btif_hh_service_registration(bool enable);
+bool bta_dm_check_if_only_hd_connected(const RawAddress& peer_addr);
+bool check_cod_hid(const RawAddress* remote_bdaddr);
+bool check_cod_hid(const RawAddress& bd_addr);
+void btif_hh_service_registration(bool enable);
 
 /* HD request events */
 typedef enum { BTIF_HD_DUMMY_REQ_EVT = 0 } btif_hd_req_evt_t;
@@ -68,7 +68,7 @@ static tBTA_HD_APP_INFO app_info;
 static tBTA_HD_QOS_INFO in_qos;
 static tBTA_HD_QOS_INFO out_qos;
 
-static void intr_data_copy_cb(uint16_t event, char* p_dst, char* p_src) {
+static void intr_data_copy_cb(uint16_t event, char* p_dst, const char* p_src) {
   tBTA_HD_INTR_DATA* p_dst_data = (tBTA_HD_INTR_DATA*)p_dst;
   tBTA_HD_INTR_DATA* p_src_data = (tBTA_HD_INTR_DATA*)p_src;
   uint8_t* p_data;
@@ -86,7 +86,7 @@ static void intr_data_copy_cb(uint16_t event, char* p_dst, char* p_src) {
   p_dst_data->p_data = p_data;
 }
 
-static void set_report_copy_cb(uint16_t event, char* p_dst, char* p_src) {
+static void set_report_copy_cb(uint16_t event, char* p_dst, const char* p_src) {
   tBTA_HD_SET_REPORT* p_dst_data = (tBTA_HD_SET_REPORT*)p_dst;
   tBTA_HD_SET_REPORT* p_src_data = (tBTA_HD_SET_REPORT*)p_src;
   uint8_t* p_data;
@@ -207,7 +207,7 @@ static void btif_hd_upstreams_evt(uint16_t event, char* p_param) {
     case BTA_HD_OPEN_EVT: {
       RawAddress* addr = (RawAddress*)&p_data->conn.bda;
       BTIF_TRACE_WARNING("BTA_HD_OPEN_EVT, address=%s",
-                         addr->ToString().c_str());
+                         ADDRESS_TO_LOGGABLE_CSTR(*addr));
       /* Check if the connection is from hid host and not hid device */
       if (check_cod_hid(addr)) {
         /* Incoming connection from hid device, reject it */
@@ -400,7 +400,7 @@ static bt_status_t register_app(bthd_app_param_t* p_app_param,
 
   if (btif_hd_cb.app_registered) {
     BTIF_TRACE_WARNING("%s: application already registered", __func__);
-    return BT_STATUS_BUSY;
+    return BT_STATUS_DONE;
   }
 
   app_info.p_name = (char*)osi_calloc(BTIF_HD_APP_NAME_LEN);

@@ -17,16 +17,14 @@
 package com.android.bluetooth.btservice;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothClass;
 import android.bluetooth.IBluetoothOobDataCallback;
 import android.content.AttributionSource;
-import android.content.pm.PackageManager;
 import android.os.ParcelUuid;
 
 import com.android.bluetooth.x.com.android.modules.utils.SynchronousResultReceiver;
@@ -43,7 +41,6 @@ import java.io.FileDescriptor;
 public class AdapterServiceBinderTest {
     @Mock private AdapterService mService;
     @Mock private AdapterProperties mAdapterProperties;
-    @Mock private PackageManager mPackageManager;
 
     private AdapterService.AdapterServiceBinder mBinder;
     private AttributionSource mAttributionSource;
@@ -53,9 +50,7 @@ public class AdapterServiceBinderTest {
         MockitoAnnotations.initMocks(this);
         mService.mAdapterProperties = mAdapterProperties;
         doReturn(true).when(mService).isAvailable();
-        doReturn(mPackageManager).when(mService).getPackageManager();
-        doReturn(new String[] { "com.android.bluetooth.btservice.test" })
-                .when(mPackageManager).getPackagesForUid(anyInt());
+        doNothing().when(mService).enforceCallingOrSelfPermission(any(), any());
         mBinder = new AdapterService.AdapterServiceBinder(mService);
         mAttributionSource = new AttributionSource.Builder(0).build();
     }
@@ -67,7 +62,7 @@ public class AdapterServiceBinderTest {
 
     @Test
     public void getAddress() {
-        mBinder.getAddress();
+        mBinder.getAddress(mAttributionSource, SynchronousResultReceiver.get());
         verify(mService.mAdapterProperties).getAddress();
     }
 
@@ -101,21 +96,9 @@ public class AdapterServiceBinderTest {
     }
 
     @Test
-    public void getBluetoothClass() {
-        mBinder.getBluetoothClass(mAttributionSource, SynchronousResultReceiver.get());
-        verify(mService.mAdapterProperties).getBluetoothClass();
-    }
-
-    @Test
     public void getIoCapability() {
         mBinder.getIoCapability(mAttributionSource, SynchronousResultReceiver.get());
         verify(mService.mAdapterProperties).getIoCapability();
-    }
-
-    @Test
-    public void getLeIoCapability() {
-        mBinder.getLeIoCapability(mAttributionSource, SynchronousResultReceiver.get());
-        verify(mService.mAdapterProperties).getLeIoCapability();
     }
 
     @Test
@@ -182,24 +165,10 @@ public class AdapterServiceBinderTest {
     }
 
     @Test
-    public void setBluetoothClass() {
-        BluetoothClass btClass = new BluetoothClass(0);
-        mBinder.setBluetoothClass(btClass, mAttributionSource, SynchronousResultReceiver.get());
-        verify(mService.mAdapterProperties).setBluetoothClass(btClass);
-    }
-
-    @Test
     public void setIoCapability() {
         int capability = BluetoothAdapter.IO_CAPABILITY_MAX - 1;
         mBinder.setIoCapability(capability, mAttributionSource, SynchronousResultReceiver.get());
         verify(mService.mAdapterProperties).setIoCapability(capability);
-    }
-
-    @Test
-    public void setLeIoCapability() {
-        int capability = BluetoothAdapter.IO_CAPABILITY_MAX - 1;
-        mBinder.setLeIoCapability(capability, mAttributionSource, SynchronousResultReceiver.get());
-        verify(mService.mAdapterProperties).setLeIoCapability(capability);
     }
 
     @Test

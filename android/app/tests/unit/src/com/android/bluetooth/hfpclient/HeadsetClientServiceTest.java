@@ -73,8 +73,6 @@ public class HeadsetClientServiceTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when HeadsetClientService is not enabled",
-                HeadsetClientService.isEnabled());
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
@@ -90,9 +88,6 @@ public class HeadsetClientServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        if (!HeadsetClientService.isEnabled()) {
-            return;
-        }
         TestUtils.stopService(mServiceRule, HeadsetClientService.class);
         mService = HeadsetClientService.getHeadsetClientService();
         Assert.assertNull(mService);
@@ -143,16 +138,6 @@ public class HeadsetClientServiceTest {
     }
 
     @Test
-    public void testDumpDoesNotCrash() {
-        // Put mock state machine
-        BluetoothDevice device =
-                BluetoothAdapter.getDefaultAdapter().getRemoteDevice("00:01:02:03:04:05");
-        mService.getStateMachineMap().put(device, mStateMachine);
-
-        mService.dump(new StringBuilder());
-    }
-
-    @Test
     public void testSetCallAudioPolicy() {
         // Put mock state machine
         BluetoothDevice device =
@@ -163,5 +148,15 @@ public class HeadsetClientServiceTest {
 
         verify(mStateMachine, timeout(STANDARD_WAIT_MILLIS).times(1))
                 .setAudioPolicy(any(BluetoothSinkAudioPolicy.class));
+    }
+
+    @Test
+    public void testDumpDoesNotCrash() {
+        // Put mock state machine
+        BluetoothDevice device =
+                BluetoothAdapter.getDefaultAdapter().getRemoteDevice("00:01:02:03:04:05");
+        mService.getStateMachineMap().put(device, mStateMachine);
+
+        mService.dump(new StringBuilder());
     }
 }
