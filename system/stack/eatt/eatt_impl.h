@@ -451,7 +451,7 @@ struct eatt_impl {
     if (is_local_cfg)
       channel->rx_mtu_ = p_cfg->mtu;
     else
-      channel->tx_mtu_ = p_cfg->mtu;
+      channel->EattChannelSetTxMTU(p_cfg->mtu);
 
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_reconfigure()) {
       /* Upper tester for L2CAP - schedule sending data */
@@ -708,6 +708,7 @@ struct eatt_impl {
 
       fixed_queue_free(channel->server_outstanding_cmd_.multi_rsp_q, NULL);
       channel->server_outstanding_cmd_.multi_rsp_q = NULL;
+      iter++;
     }
   }
 

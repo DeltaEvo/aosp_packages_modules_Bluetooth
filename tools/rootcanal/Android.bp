@@ -19,6 +19,7 @@ cc_defaults {
     tidy_checks: [
         "-*",
         "readability-*",
+
         "-readability-function-size",
         "-readability-identifier-length",
         "-readability-implicit-bool-conversion",
@@ -31,12 +32,22 @@ cc_defaults {
     tidy_flags: [
         "--header-filter=^.*tools\\/rootcanal\\/(model|include|net|desktop)\\/(.(?!\\.pb\\.h))*$",
     ],
-    defaults: [
-        "fluoride_common_options",
-        "gd_defaults",
-    ],
+    sanitize: {
+        address: true,
+        all_undefined: true,
+        misc_undefined: ["bounds"],
+    },
+    c_std: "c99",
+    cpp_std: "c++17",
     cflags: [
+        "-DGOOGLE_PROTOBUF_NO_RTTI",
+        "-Wall",
+        "-Werror",
+        "-Wextra",
         "-fvisibility=hidden",
+    ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system/gd",
     ],
     local_include_dirs: [
         "include",
@@ -58,6 +69,7 @@ filegroup {
         "lib/hci/address.cc",
         "lib/hci/class_of_device.cc",
         "lib/hci/pcap_filter.cc",
+        "lib/log.cc",
     ],
 }
 
@@ -76,7 +88,6 @@ cc_library_static {
         "model/controller/acl_connection_handler.cc",
         "model/controller/controller_properties.cc",
         "model/controller/dual_mode_controller.cc",
-        "model/controller/isochronous_connection_handler.cc",
         "model/controller/le_advertiser.cc",
         "model/controller/link_layer_controller.cc",
         "model/controller/sco_connection.cc",
@@ -89,9 +100,7 @@ cc_library_static {
         "model/devices/scripted_beacon.cc",
         "model/devices/sniffer.cc",
         "model/hci/h4_data_channel_packetizer.cc",
-        "model/hci/h4_packetizer.cc",
         "model/hci/h4_parser.cc",
-        "model/hci/hci_protocol.cc",
         "model/hci/hci_sniffer.cc",
         "model/hci/hci_socket_transport.cc",
         "model/setup/async_manager.cc",
@@ -117,8 +126,8 @@ cc_library_static {
         "librootcanal_config",
     ],
     whole_static_libs: [
-        "librootcanal_rs",
         "librootcanal_config",
+        "librootcanal_rs",
     ],
     shared_libs: [
         "libbase",
@@ -127,6 +136,7 @@ cc_library_static {
     static_libs: [
         "libscriptedbeaconpayload-protos-lite",
     ],
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // This library contains the generated headers for the
@@ -148,6 +158,9 @@ cc_library_host_shared {
     defaults: [
         "rootcanal_defaults",
     ],
+    sanitize: {
+        address: false,
+    },
     srcs: [
         ":BluetoothPacketSources",
         ":lib_sources",
@@ -156,7 +169,6 @@ cc_library_host_shared {
         "model/controller/controller_properties.cc",
         "model/controller/dual_mode_controller.cc",
         "model/controller/ffi.cc",
-        "model/controller/isochronous_connection_handler.cc",
         "model/controller/le_advertiser.cc",
         "model/controller/link_layer_controller.cc",
         "model/controller/sco_connection.cc",
@@ -170,17 +182,18 @@ cc_library_host_shared {
     stl: "libc++_static",
     static_libs: [
         "libcrypto",
-        "librootcanal_config",
         "libprotobuf-cpp-full",
+        "librootcanal_config",
     ],
     whole_static_libs: [
         "libbase",
-        "librootcanal_rs",
         "liblog",
+        "librootcanal_rs",
     ],
     cflags: [
         "-fexceptions",
     ],
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Generate the python parser+serializer backend for
@@ -188,7 +201,7 @@ cc_library_host_shared {
 genrule {
     name: "link_layer_packets_python3_gen",
     defaults: ["pdl_python_generator_defaults"],
-    cmd: "$(location :pdl) $(in) |" +
+    cmd: "$(location :pdlc) $(in) |" +
         " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location py.bluetooth",
     srcs: [
@@ -200,11 +213,27 @@ genrule {
 }
 
 // Generate the python parser+serializer backend for
+// rust/llcp_packets.pdl.
+genrule {
+    name: "llcp_packets_python3_gen",
+    defaults: ["pdl_python_generator_defaults"],
+    cmd: "$(location :pdlc) $(in) |" +
+        " $(location :pdl_python_generator)" +
+        " --output $(out) --custom-type-location py.bluetooth",
+    srcs: [
+        "rust/llcp_packets.pdl",
+    ],
+    out: [
+        "llcp_packets.py",
+    ],
+}
+
+// Generate the python parser+serializer backend for
 // hci_packets.pdl.
 genrule {
     name: "hci_packets_python3_gen",
     defaults: ["pdl_python_generator_defaults"],
-    cmd: "$(location :pdl) $(in) |" +
+    cmd: "$(location :pdlc) $(in) |" +
         " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location py.bluetooth",
     srcs: [
@@ -278,6 +307,7 @@ cc_test_host {
     static_libs: [
         "libbt-rootcanal",
     ],
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Implement the Bluetooth official LL test suite for root-canal.
@@ -287,10 +317,16 @@ python_test_host {
     srcs: [
         ":hci_packets_python3_gen",
         ":link_layer_packets_python3_gen",
+        ":llcp_packets_python3_gen",
         "py/bluetooth.py",
         "py/controller.py",
+        "test/LL/CIS/CEN/*.py",
+        "test/LL/CIS/PER/*.py",
+        "test/LL/CON_/CEN/*.py",
+        "test/LL/CON_/PER/*.py",
         "test/LL/DDI/ADV/*.py",
         "test/LL/DDI/SCN/*.py",
+        "test/LMP/LIH/*.py",
         "test/main.py",
     ],
     data: [
@@ -320,6 +356,7 @@ cc_test_host {
     srcs: [
         "test/async_manager_unittest.cc",
         "test/h4_parser_unittest.cc",
+        "test/pcap_filter_unittest.cc",
         "test/posix_socket_unittest.cc",
     ],
     header_libs: [
@@ -335,7 +372,6 @@ cc_test_host {
         "libbt-rootcanal",
     ],
     cflags: [
-        "-DLOG_NDEBUG=1",
         "-fvisibility=hidden",
     ],
     target: {
@@ -343,6 +379,7 @@ cc_test_host {
             enabled: false,
         },
     },
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Linux RootCanal Executable
@@ -371,10 +408,6 @@ cc_binary_host {
         "libprotobuf-cpp-full",
         "libscriptedbeaconpayload-protos-lite",
     ],
-    sanitize: {
-        address: true,
-        all_undefined: true,
-    },
     target: {
         // TODO(b/181290178) remove it when sanitize option is supported by linux_bionic as well
         linux_bionic: {
@@ -388,6 +421,7 @@ cc_binary_host {
             enabled: false,
         },
     },
+    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 genrule {
@@ -434,41 +468,7 @@ genrule {
 
 genrule {
     name: "rootcanal_hci_packets_rust_gen",
-    tools: [
-        "bluetooth_packetgen",
-    ],
-    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/tools/rootcanal/packets --out=$(genDir) $(in) --rust",
-    srcs: [
-        "packets/hci/hci_packets.pdl",
-    ],
-    out: [
-        "hci/hci_packets.rs",
-    ],
-}
-
-// bt_vhci_forwarder in cuttlefish depends on this H4Packetizer implementation.
-cc_library_static {
-    name: "h4_packetizer_lib",
-    vendor: true,
-    defaults: [
-        "gd_defaults",
-    ],
-    srcs: [
-        "model/hci/h4_packetizer.cc",
-        "model/hci/h4_parser.cc",
-        "model/hci/hci_protocol.cc",
-    ],
-    header_libs: [
-        "libbase_headers",
-    ],
-    local_include_dirs: [
-        "include",
-    ],
-    export_include_dirs: [
-        ".",
-        "include",
-    ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system/gd",
-    ],
+    defaults: ["pdl_rust_generator_defaults"],
+    srcs: ["packets/hci/hci_packets.pdl"],
+    out: ["hci_packets.rs"],
 }

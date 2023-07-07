@@ -13,9 +13,9 @@ use bt_topshim::btif::{BtConnectionState, BtDiscMode, BtStatus, BtTransport};
 use bt_topshim::profiles::hid_host::BthhReportType;
 use bt_topshim::profiles::sdp::{BtSdpMpsRecord, BtSdpRecord};
 use bt_topshim::profiles::{gatt::LePhy, ProfileConnectionState};
-use btstack::bluetooth::{BluetoothDevice, IBluetooth, IBluetoothQALegacy};
+use btstack::bluetooth::{BluetoothDevice, IBluetooth};
 use btstack::bluetooth_gatt::{GattWriteType, IBluetoothGatt, ScanSettings, ScanType};
-use btstack::bluetooth_media::IBluetoothTelephony;
+use btstack::bluetooth_media::{IBluetoothMedia, IBluetoothTelephony};
 use btstack::bluetooth_qa::IBluetoothQA;
 use btstack::socket_manager::{IBluetoothSocketManager, SocketResult};
 use btstack::uuid::{Profile, UuidHelper, UuidWrapper};
@@ -326,6 +326,14 @@ fn build_commands() -> HashMap<String, CommandOption> {
         },
     );
     command_options.insert(
+        String::from("media"),
+        CommandOption {
+            rules: vec![String::from("media log")],
+            description: String::from("Audio tools."),
+            function_pointer: CommandHandler::cmd_media,
+        },
+    );
+    command_options.insert(
         String::from("quit"),
         CommandOption {
             rules: vec![String::from("quit")],
@@ -481,15 +489,11 @@ impl CommandHandler {
                 };
                 let context = self.lock_context();
                 let adapter_dbus = context.adapter_dbus.as_ref().unwrap();
-                let qa_legacy_dbus = context.qa_legacy_dbus.as_ref().unwrap();
                 let qa_dbus = context.qa_dbus.as_ref().unwrap();
                 let name = adapter_dbus.get_name();
+                let modalias = qa_dbus.get_modalias();
                 let uuids = adapter_dbus.get_uuids();
                 let is_discoverable = adapter_dbus.get_discoverable();
-                let is_connectable = qa_legacy_dbus.get_connectable();
-                let alias = qa_legacy_dbus.get_alias();
-                let modalias = qa_legacy_dbus.get_modalias();
-                let discoverable_mode = qa_dbus.get_discoverable_mode();
                 let discoverable_timeout = adapter_dbus.get_discoverable_timeout();
                 let cod = adapter_dbus.get_bluetooth_class();
                 let multi_adv_supported = adapter_dbus.is_multi_advertisement_supported();
@@ -507,15 +511,15 @@ impl CommandHandler {
                     })
                     .filter(|(_prof, state)| state != &ProfileConnectionState::Disconnected)
                     .collect();
+                qa_dbus.fetch_connectable();
+                qa_dbus.fetch_alias();
+                qa_dbus.fetch_discoverable_mode();
                 print_info!("Address: {}", address);
                 print_info!("Name: {}", name);
-                print_info!("Alias: {}", alias);
                 print_info!("Modalias: {}", modalias);
                 print_info!("State: {}", if enabled { "enabled" } else { "disabled" });
                 print_info!("Discoverable: {}", is_discoverable);
-                print_info!("Discoverable mode: {:?}", discoverable_mode);
                 print_info!("DiscoverableTimeout: {}s", discoverable_timeout);
-                print_info!("Connectable: {}", is_connectable);
                 print_info!("Class: {:#06x}", cod);
                 print_info!("IsMultiAdvertisementSupported: {}", multi_adv_supported);
                 print_info!("IsLeExtendedAdvertisingSupported: {}", le_ext_adv_supported);
@@ -582,14 +586,10 @@ impl CommandHandler {
             },
             "connectable" => match &get_arg(args, 1)?[..] {
                 "on" => {
-                    let ret =
-                        self.lock_context().qa_legacy_dbus.as_mut().unwrap().set_connectable(true);
-                    print_info!("Set connectable on {}", if ret { "succeeded" } else { "failed" });
+                    self.lock_context().qa_dbus.as_mut().unwrap().set_connectable(true);
                 }
                 "off" => {
-                    let ret =
-                        self.lock_context().qa_legacy_dbus.as_mut().unwrap().set_connectable(false);
-                    print_info!("Set connectable off {}", if ret { "succeeded" } else { "failed" });
+                    self.lock_context().qa_dbus.as_mut().unwrap().set_connectable(false);
                 }
                 other => println!("Invalid argument for adapter connectable '{}'", other),
             },
@@ -1536,7 +1536,7 @@ impl CommandHandler {
                 let (addr, sock_type, psm_or_uuid) =
                     (&get_arg(args, 1)?, &get_arg(args, 2)?, &get_arg(args, 3)?);
                 let device = BluetoothDevice {
-                    address: addr.clone().into(),
+                    address: String::from(*addr),
                     name: String::from("Socket Connect Device"),
                 };
 
@@ -1558,7 +1558,7 @@ impl CommandHandler {
 
                     match &sock_type[0..] {
                         "l2cap" => {
-                            let psm = match psm_or_uuid.clone().parse::<i32>() {
+                            let psm = match psm_or_uuid.parse::<i32>() {
                                 Ok(v) => v,
                                 Err(e) => {
                                     return Err(CommandError::Failed(format!(
@@ -1583,7 +1583,7 @@ impl CommandHandler {
                             }
                         }
                         "rfcomm" => {
-                            let uuid = match UuidHelper::parse_string(psm_or_uuid.clone()) {
+                            let uuid = match UuidHelper::parse_string(*psm_or_uuid) {
                                 Some(uu) => uu,
                                 None => {
                                     return Err(CommandError::Failed(format!(
@@ -1652,7 +1652,7 @@ impl CommandHandler {
                     .parse::<u8>()
                     .or(Err("Failed parsing report_id"))?;
 
-                self.context.lock().unwrap().qa_legacy_dbus.as_mut().unwrap().get_hid_report(
+                self.context.lock().unwrap().qa_dbus.as_mut().unwrap().get_hid_report(
                     addr,
                     report_type,
                     report_id,
@@ -1670,7 +1670,7 @@ impl CommandHandler {
                 };
                 let report_value = String::from(get_arg(args, 3)?);
 
-                self.context.lock().unwrap().qa_legacy_dbus.as_mut().unwrap().set_hid_report(
+                self.context.lock().unwrap().qa_dbus.as_mut().unwrap().set_hid_report(
                     addr,
                     report_type,
                     report_value,
@@ -1680,13 +1680,7 @@ impl CommandHandler {
                 let addr = String::from(get_arg(args, 1)?);
                 let data = String::from(get_arg(args, 2)?);
 
-                self.context
-                    .lock()
-                    .unwrap()
-                    .qa_legacy_dbus
-                    .as_mut()
-                    .unwrap()
-                    .send_hid_data(addr, data);
+                self.context.lock().unwrap().qa_dbus.as_mut().unwrap().send_hid_data(addr, data);
             }
             _ => return Err(CommandError::InvalidArgs),
         };
@@ -1976,6 +1970,23 @@ impl CommandHandler {
             }
             _ => return Err(CommandError::InvalidArgs),
         };
+
+        Ok(())
+    }
+
+    fn cmd_media(&mut self, args: &Vec<String>) -> CommandResult {
+        if !self.context.lock().unwrap().adapter_ready {
+            return Err(self.adapter_not_ready());
+        }
+
+        match &get_arg(args, 0)?[..] {
+            "log" => {
+                self.context.lock().unwrap().media_dbus.as_mut().unwrap().trigger_debug_dump();
+            }
+            other => {
+                return Err(format!("Invalid argument '{}'", other).into());
+            }
+        }
 
         Ok(())
     }

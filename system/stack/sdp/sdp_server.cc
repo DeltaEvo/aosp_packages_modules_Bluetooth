@@ -828,7 +828,8 @@ static void process_service_search_attr_req(tCONN_CB* p_ccb, uint16_t trans_num,
           sdpu_set_avrc_target_version(p_attr, &(p_ccb->device_address));
           if (p_attr->id == ATTR_ID_SUPPORTED_FEATURES &&
               bluetooth::common::init_flags::
-                  dynamic_avrcp_version_enhancement_is_enabled()) {
+                  dynamic_avrcp_version_enhancement_is_enabled() &&
+                  p_attr_profile_desc_list_id != nullptr) {
             avrc_sdp_version = sdpu_is_avrcp_profile_description_list(
                 p_attr_profile_desc_list_id);
             SDP_TRACE_ERROR("avrc_sdp_version in SDP records %x",
@@ -1083,7 +1084,7 @@ static bool is_device_in_allowlist_for_pbap(RawAddress remote_address,
         return true;
       }
     } else {
-      char* p_name = BTM_SecReadDevName(remote_address);
+      const char* p_name = BTM_SecReadDevName(remote_address);
       if ((p_name != NULL) &&
           interop_match_name(INTEROP_ADV_PBAP_VER_1_2, p_name)) {
         SDP_TRACE_DEBUG(

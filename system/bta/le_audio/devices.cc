@@ -78,9 +78,6 @@ std::ostream& operator<<(std::ostream& os, const DeviceConnectState& state) {
     case DeviceConnectState::DISCONNECTING_AND_RECOVER:
       char_value_ = "DISCONNECTING_AND_RECOVER";
       break;
-    case DeviceConnectState::PENDING_REMOVAL:
-      char_value_ = "PENDING_REMOVAL";
-      break;
     case DeviceConnectState::CONNECTING_BY_USER:
       char_value_ = "CONNECTING_BY_USER";
       break;
@@ -1019,8 +1016,11 @@ void LeAudioDeviceGroup::CigGenerateCisIds(
   uint8_t cis_count_bidir = 0;
   uint8_t cis_count_unidir_sink = 0;
   uint8_t cis_count_unidir_source = 0;
-  int csis_group_size =
-      bluetooth::csis::CsisClient::Get()->GetDesiredSize(group_id_);
+  int csis_group_size = 0;
+
+  if (bluetooth::csis::CsisClient::IsCsisClientRunning()) {
+      csis_group_size = bluetooth::csis::CsisClient::Get()->GetDesiredSize(group_id_);
+  }
   /* If this is CSIS group, the csis_group_size will be > 0, otherwise -1.
    * If the last happen it means, group size is 1 */
   int group_size = csis_group_size > 0 ? csis_group_size : 1;
@@ -1818,12 +1818,102 @@ bool LeAudioDeviceGroup::IsMetadataChanged(
   return false;
 }
 
+bool LeAudioDeviceGroup::IsCisPartOfCurrentStream(uint16_t cis_conn_hdl) {
+  auto iter = std::find_if(
+      stream_conf.sink_streams.begin(), stream_conf.sink_streams.end(),
+      [cis_conn_hdl](auto& pair) { return cis_conn_hdl == pair.first; });
+
+  if (iter != stream_conf.sink_streams.end()) return true;
+
+  iter = std::find_if(
+      stream_conf.source_streams.begin(), stream_conf.source_streams.end(),
+      [cis_conn_hdl](auto& pair) { return cis_conn_hdl == pair.first; });
+
+  return (iter != stream_conf.source_streams.end());
+}
+
 void LeAudioDeviceGroup::StreamOffloaderUpdated(uint8_t direction) {
   if (direction == le_audio::types::kLeAudioDirectionSource) {
     stream_conf.source_is_initial = false;
   } else {
     stream_conf.sink_is_initial = false;
   }
+}
+
+void LeAudioDeviceGroup::RemoveCisFromStreamIfNeeded(
+    LeAudioDevice* leAudioDevice, uint16_t cis_conn_hdl) {
+  LOG_INFO(" CIS Connection Handle: %d", cis_conn_hdl);
+
+  if (!IsCisPartOfCurrentStream(cis_conn_hdl)) return;
+
+  auto sink_channels = stream_conf.sink_num_of_channels;
+  auto source_channels = stream_conf.source_num_of_channels;
+
+  if (!stream_conf.sink_streams.empty() ||
+      !stream_conf.source_streams.empty()) {
+    stream_conf.sink_streams.erase(
+        std::remove_if(
+            stream_conf.sink_streams.begin(), stream_conf.sink_streams.end(),
+            [leAudioDevice, &cis_conn_hdl, this](auto& pair) {
+              if (!cis_conn_hdl) {
+                cis_conn_hdl = pair.first;
+              }
+              auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(cis_conn_hdl);
+              if (ases_pair.sink && cis_conn_hdl == pair.first) {
+                stream_conf.sink_num_of_devices--;
+                stream_conf.sink_num_of_channels -=
+                    ases_pair.sink->codec_config.channel_count;
+                stream_conf.sink_audio_channel_allocation &= ~pair.second;
+              }
+              return (ases_pair.sink && cis_conn_hdl == pair.first);
+            }),
+        stream_conf.sink_streams.end());
+
+    stream_conf.source_streams.erase(
+        std::remove_if(
+            stream_conf.source_streams.begin(),
+            stream_conf.source_streams.end(),
+            [leAudioDevice, &cis_conn_hdl, this](auto& pair) {
+              if (!cis_conn_hdl) {
+                cis_conn_hdl = pair.first;
+              }
+              auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(cis_conn_hdl);
+              if (ases_pair.source && cis_conn_hdl == pair.first) {
+                stream_conf.source_num_of_devices--;
+                stream_conf.source_num_of_channels -=
+                    ases_pair.source->codec_config.channel_count;
+                stream_conf.source_audio_channel_allocation &= ~pair.second;
+              }
+              return (ases_pair.source && cis_conn_hdl == pair.first);
+            }),
+        stream_conf.source_streams.end());
+
+    LOG_INFO(
+        " Sink Number Of Devices: %d"
+        ", Sink Number Of Channels: %d"
+        ", Source Number Of Devices: %d"
+        ", Source Number Of Channels: %d",
+        stream_conf.sink_num_of_devices, stream_conf.sink_num_of_channels,
+        stream_conf.source_num_of_devices, stream_conf.source_num_of_channels);
+  }
+
+  if (stream_conf.sink_num_of_channels == 0) {
+    ClearSinksFromConfiguration();
+  }
+
+  if (stream_conf.source_num_of_channels == 0) {
+    ClearSourcesFromConfiguration();
+  }
+
+  /* Update offloader streams if needed */
+  if (sink_channels > stream_conf.sink_num_of_channels) {
+    CreateStreamVectorForOffloader(le_audio::types::kLeAudioDirectionSink);
+  }
+  if (source_channels > stream_conf.source_num_of_channels) {
+    CreateStreamVectorForOffloader(le_audio::types::kLeAudioDirectionSource);
+  }
+
+  CigUnassignCis(leAudioDevice);
 }
 
 void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
@@ -1873,9 +1963,7 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
 
   if (offloader_streams_target_allocation->size() == 0) {
     *is_initial = true;
-  } else if (*is_initial ||
-             CodecManager::GetInstance()->GetAidlVersionInUsed() >=
-                 AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
+  } else if (*is_initial || LeAudioHalVerifier::SupportsStreamActiveApi()) {
     // As multiple CISes phone call case, the target_allocation already have the
     // previous data, but the is_initial flag not be cleared. We need to clear
     // here to avoid make duplicated target allocation stream map.
@@ -1927,8 +2015,7 @@ void LeAudioDeviceGroup::CreateStreamVectorForOffloader(uint8_t direction) {
           tag.c_str(), cis_entry.conn_handle, target_allocation,
           current_allocation, is_active);
 
-      if (*is_initial || CodecManager::GetInstance()->GetAidlVersionInUsed() >=
-                             AIDL_VERSION_SUPPORT_STREAM_ACTIVE) {
+      if (*is_initial || LeAudioHalVerifier::SupportsStreamActiveApi()) {
         offloader_streams_target_allocation->emplace_back(stream_map_info(
             cis_entry.conn_handle, target_allocation, is_active));
       }
@@ -2026,6 +2113,17 @@ void LeAudioDeviceGroup::AddToAllowListNotConnectedGroupMembers(int gatt_if) {
     device_iter.lock()->SetConnectionState(
         DeviceConnectState::CONNECTING_AUTOCONNECT);
   }
+}
+
+bool LeAudioDeviceGroup::IsConfiguredForContext(
+    types::LeAudioContextType context_type) {
+  /* Check if all connected group members are configured */
+  if (GetConfigurationContextType() != context_type) {
+    return false;
+  }
+
+  /* Check if used configuration is same as the active one.*/
+  return (stream_conf.conf == GetActiveConfiguration());
 }
 
 bool LeAudioDeviceGroup::IsConfigurationSupported(
@@ -3114,7 +3212,8 @@ void LeAudioDevices::Dump(int fd, int group_id) {
 void LeAudioDevices::Cleanup(tGATT_IF client_if) {
   for (auto const& device : leAudioDevices_) {
     auto connection_state = device->GetConnectionState();
-    if (connection_state == DeviceConnectState::DISCONNECTED) {
+    if (connection_state == DeviceConnectState::DISCONNECTED ||
+        connection_state == DeviceConnectState::DISCONNECTING) {
       continue;
     }
 

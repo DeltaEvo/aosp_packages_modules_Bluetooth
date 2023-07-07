@@ -160,7 +160,6 @@ static int prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
         btif_config_set_str(bdstr, BTIF_STORAGE_PATH_REMOTE_NAME, value);
       } else {
         btif_config_set_str("Adapter", BTIF_STORAGE_KEY_ADAPTER_NAME, value);
-        btif_config_flush();
       }
       break;
     }
@@ -232,13 +231,6 @@ static int prop2cfg(const RawAddress* remote_bd_addr, bt_property_t* prop) {
     default:
       BTIF_TRACE_ERROR("Unknown prop type:%d", prop->type);
       return false;
-  }
-
-  /* No need to look for bonded device with address of NULL */
-  if (remote_bd_addr &&
-      btif_in_fetch_bonded_device(bdstr) == BT_STATUS_SUCCESS) {
-    /* save changes if the device was bonded */
-    btif_config_flush();
   }
 
   return true;
@@ -486,7 +478,8 @@ static bt_status_t btif_in_fetch_bonded_devices(
     }
     if (!btif_in_fetch_bonded_ble_device(name, add, p_bonded_devices) &&
         !bt_linkkey_file_found) {
-      LOG_VERBOSE("No link key or ble key found for device:%s", name.c_str());
+      LOG_VERBOSE("No link key or ble key found for device:%s",
+                  ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     }
   }
   return BT_STATUS_SUCCESS;
@@ -592,9 +585,9 @@ static uint8_t btif_storage_get_io_cap_property(bt_property_type_t type,
  *                  returns BTM_LOCAL_IO_CAPS.
  *
  ******************************************************************************/
-uint8_t btif_storage_get_local_io_caps() {
-  return btif_storage_get_io_cap_property(BT_PROPERTY_LOCAL_IO_CAPS,
-                                          BTM_LOCAL_IO_CAPS);
+tBTM_IO_CAP btif_storage_get_local_io_caps() {
+  return static_cast<tBTM_IO_CAP>(btif_storage_get_io_cap_property(
+      BT_PROPERTY_LOCAL_IO_CAPS, BTM_LOCAL_IO_CAPS));
 }
 
 /** Helper function for fetching a bt_property of the adapter. */
@@ -851,8 +844,6 @@ bt_status_t btif_storage_add_bonded_device(RawAddress* remote_bd_addr,
     btif_config_set_int(bdstr, "Restricted", 1);
   }
 
-  /* write bonded info immediately */
-  btif_config_flush();
   return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
 
@@ -893,9 +884,6 @@ bt_status_t btif_storage_remove_bonded_device(
   if (btif_config_exist(bdstr, BTIF_STORAGE_KEY_GATT_SERVER_SUPPORTED)) {
     ret &= btif_config_remove(bdstr, BTIF_STORAGE_KEY_GATT_SERVER_SUPPORTED);
   }
-
-  /* write bonded info immediately */
-  btif_config_flush();
 
   /* Check the length of the paired devices, and if 0 then reset IRK */
   auto paired_devices = btif_config_get_paired_devices();
@@ -1213,7 +1201,6 @@ bt_status_t btif_storage_add_ble_bonding_key(RawAddress* remote_bd_addr,
   }
   int ret =
       btif_config_set_bin(remote_bd_addr->ToString(), name, key, key_length);
-  btif_config_save();
   return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
 
@@ -1286,7 +1273,6 @@ bt_status_t btif_storage_remove_ble_bonding_keys(
     ret &= btif_config_remove(bdstr, "LE_KEY_LENC");
   if (btif_config_exist(bdstr, "LE_KEY_LCSRK"))
     ret &= btif_config_remove(bdstr, "LE_KEY_LCSRK");
-  btif_config_save();
   return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
 
@@ -1320,10 +1306,6 @@ bt_status_t btif_storage_add_ble_local_key(const Octet16& key,
       return BT_STATUS_FAIL;
   }
   int ret = btif_config_set_bin("Adapter", name, key.data(), key.size());
-  // Had to change this to flush to get it to work on test.
-  // Seems to work in the real world on a phone... but not sure why there's a
-  // race in test. Investigate b/239828132
-  btif_config_flush();
   return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
 
@@ -1375,7 +1357,6 @@ bt_status_t btif_storage_remove_ble_local_keys(void) {
     ret &= btif_config_remove("Adapter", "LE_LOCAL_KEY_DHK");
   if (btif_config_exist("Adapter", "LE_LOCAL_KEY_ER"))
     ret &= btif_config_remove("Adapter", "LE_LOCAL_KEY_ER");
-  btif_config_save();
   return ret ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
 }
 
@@ -1386,6 +1367,9 @@ bt_status_t btif_in_fetch_bonded_ble_device(
   tBLE_ADDR_TYPE addr_type;
   bool device_added = false;
   bool key_found = false;
+  RawAddress bd_addr;
+
+  RawAddress::FromString(remote_bd_addr, bd_addr);
 
   if (!btif_config_get_int(remote_bd_addr, "DevType", &device_type))
     return BT_STATUS_FAIL;
@@ -1393,10 +1377,7 @@ bt_status_t btif_in_fetch_bonded_ble_device(
   if ((device_type & BT_DEVICE_TYPE_BLE) == BT_DEVICE_TYPE_BLE ||
       btif_has_ble_keys(remote_bd_addr)) {
     BTIF_TRACE_DEBUG("%s Found a LE device: %s", __func__,
-                     remote_bd_addr.c_str());
-
-    RawAddress bd_addr;
-    RawAddress::FromString(remote_bd_addr, bd_addr);
+                     ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
     if (btif_storage_get_remote_addr_type(&bd_addr, &addr_type) !=
         BT_STATUS_SUCCESS) {
@@ -1510,7 +1491,6 @@ void btif_storage_set_gatt_sr_supp_feat(const RawAddress& addr, uint8_t feat) {
                                << " features: " << +feat;
                        btif_config_set_int(
                            bdstr, BTIF_STORAGE_KEY_GATT_SERVER_SUPPORTED, feat);
-                       btif_config_save();
                      },
                      addr, feat));
 }
@@ -1571,7 +1551,6 @@ void btif_storage_set_gatt_cl_supp_feat(const RawAddress& bd_addr,
                                << ADDRESS_TO_LOGGABLE_STR(bd_addr);
                        btif_config_set_int(
                            bdstr, BTIF_STORAGE_KEY_GATT_CLIENT_SUPPORTED, feat);
-                       btif_config_save();
                      },
                      bd_addr, feat));
 }
@@ -1598,7 +1577,6 @@ void btif_storage_remove_gatt_cl_supp_feat(const RawAddress& bd_addr) {
                                bdstr, BTIF_STORAGE_KEY_GATT_CLIENT_SUPPORTED)) {
                          btif_config_remove(
                              bdstr, BTIF_STORAGE_KEY_GATT_CLIENT_SUPPORTED);
-                         btif_config_save();
                        }
                      },
                      bd_addr));
@@ -1613,7 +1591,6 @@ void btif_storage_set_gatt_cl_db_hash(const RawAddress& bd_addr, Octet16 hash) {
                                         bdstr,
                                         BTIF_STORAGE_KEY_GATT_CLIENT_DB_HASH,
                                         hash.data(), hash.size());
-                                    btif_config_save();
                                   },
                                   bd_addr, hash));
 }
@@ -1640,7 +1617,6 @@ void btif_storage_remove_gatt_cl_db_hash(const RawAddress& bd_addr) {
                                  bdstr, BTIF_STORAGE_KEY_GATT_CLIENT_DB_HASH)) {
                            btif_config_remove(
                                bdstr, BTIF_STORAGE_KEY_GATT_CLIENT_DB_HASH);
-                           btif_config_save();
                          }
                        },
                        bd_addr));

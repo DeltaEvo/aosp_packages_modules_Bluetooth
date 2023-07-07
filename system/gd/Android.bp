@@ -38,9 +38,7 @@ cc_defaults {
         "-Wno-unused-result",
         "-fvisibility=hidden",
     ],
-    conlyflags: [
-        "-std=c99",
-    ],
+    c_std: "c99",
     header_libs: ["jni_headers"],
 }
 
@@ -98,7 +96,6 @@ cc_defaults {
     name: "libbluetooth_gd_defaults",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     target: {
@@ -194,6 +191,7 @@ cc_library {
         "com.android.btservices",
     ],
     min_sdk_version: "31",
+    static_libs: ["libchrome"],
 }
 
 cc_library {
@@ -208,6 +206,7 @@ cc_library {
         "-DFUZZ_TARGET",
         "-DUSE_FAKE_TIMERS",
     ],
+    static_libs: ["libchrome"],
 }
 
 cc_library {
@@ -221,13 +220,13 @@ cc_library {
     cflags: [
         "-DUSE_FAKE_TIMERS",
     ],
+    static_libs: ["libchrome"],
 }
 
 cc_binary {
     name: "bluetooth_stack_with_facade",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     srcs: [
@@ -263,6 +262,7 @@ cc_binary {
         "libbluetooth_rust_interop",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
+        "libchrome",
         "libflatbuffers-cpp",
     ],
     shared_libs: [
@@ -307,7 +307,6 @@ cc_test {
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "gd_defaults",
-        "libchrome_support_defaults",
         "mts_defaults",
     ],
     host_supported: true,
@@ -385,6 +384,7 @@ cc_test {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libc++fs",
+        "libchrome",
         "libflatbuffers-cpp",
         "libgmock",
     ],
@@ -403,7 +403,6 @@ cc_test {
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "gd_defaults",
-        "libchrome_support_defaults",
         "mts_defaults",
     ],
     include_dirs: ["packages/modules/Bluetooth/system/gd"],
@@ -534,7 +533,6 @@ cc_benchmark {
     name: "bluetooth_benchmark_gd",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     host_supported: true,
     srcs: [
@@ -544,6 +542,7 @@ cc_benchmark {
     static_libs: [
         "libbluetooth_gd",
         "libbt_shim_bridge",
+        "libchrome",
     ],
 }
 
@@ -576,16 +575,9 @@ genrule {
 
 genrule {
     name: "BluetoothGeneratedPackets_rust",
-    tools: [
-        "bluetooth_packetgen",
-    ],
-    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/system/gd --out=$(genDir) $(in) --rust",
-    srcs: [
-        "hci/hci_packets.pdl",
-    ],
-    out: [
-        "hci/hci_packets.rs",
-    ],
+    defaults: ["pdl_rust_generator_defaults"],
+    srcs: ["hci/hci_packets.pdl"],
+    out: ["hci/hci_packets.rs"],
 }
 
 rust_library {
@@ -623,43 +615,6 @@ rust_test_host {
         "rust/packets/lib.rs",
 
         ":BluetoothGeneratedPackets_rust",
-    ],
-    test_suites: ["general-tests"],
-    edition: "2018",
-    proc_macros: ["libnum_derive"],
-    rustlibs: [
-        "libbytes",
-        "liblog_rust",
-        "libnum_traits",
-        "libthiserror",
-    ],
-}
-
-// Generate and run tests of rust pdl parser for tests packets
-genrule {
-    name: "TestGeneratedPackets_rust",
-    tools: [
-        "bluetooth_packetgen",
-    ],
-    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/system/gd --out=$(genDir) $(in) --rust",
-    srcs: [
-        "packet/parser/test/rust_test_packets.pdl",
-    ],
-    out: [
-        "packet/parser/test/rust_test_packets.rs",
-    ],
-}
-
-rust_test_host {
-    name: "packets_test_rust",
-    defaults: [
-        "gd_rust_defaults",
-        "mts_defaults",
-    ],
-    srcs: [
-        "rust/packets/test_lib.rs",
-
-        ":TestGeneratedPackets_rust",
     ],
     test_suites: ["general-tests"],
     edition: "2018",
@@ -873,7 +828,7 @@ cc_library_host_shared {
 genrule {
     name: "gd_hci_packets_python3_gen",
     defaults: ["pdl_python_generator_defaults"],
-    cmd: "$(location :pdl) $(in) |" +
+    cmd: "$(location :pdlc) $(in) |" +
         " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location blueberry.utils.bluetooth",
     srcs: [

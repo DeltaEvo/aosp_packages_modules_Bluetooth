@@ -23,7 +23,7 @@
 #include <utility>      // for move
 #include <vector>       // for vector
 
-#include "log.h"  // for LOG_INFO, LOG_ERROR, LOG_WARN
+#include "log.h"
 #include "model/devices/baseband_sniffer.h"
 #include "model/devices/link_layer_socket_device.h"  // for LinkLayerSocketDevice
 #include "model/hci/hci_sniffer.h"                   // for HciSniffer
@@ -31,9 +31,7 @@
 #include "net/async_data_channel.h"                  // for AsyncDataChannel
 #include "net/async_data_channel_connector.h"  // for AsyncDataChannelConnector
 
-namespace android {
-namespace bluetooth {
-namespace root_canal {
+namespace rootcanal {
 
 using rootcanal::AsyncTaskId;
 using rootcanal::BaseBandSniffer;
@@ -67,19 +65,19 @@ TestEnvironment::TestEnvironment(
   rootcanal::configuration::Configuration* config =
       new rootcanal::configuration::Configuration();
   if (!google::protobuf::TextFormat::ParseFromString(config_str, config) ||
-      config->controllers_size() == 0) {
+      config->tcp_server_size() == 0) {
     // Default configuration with default hci port if the input
     // configuration cannot be used.
     SetUpHciServer(open_server, hci_port, rootcanal::ControllerProperties());
   } else {
     // Open an HCI server for all configurations requested by
     // the caller.
-    int num_controllers = config->controllers_size();
+    int num_controllers = config->tcp_server_size();
     for (int index = 0; index < num_controllers; index++) {
-      rootcanal::configuration::Controller const& controller =
-          config->controllers(index);
-      SetUpHciServer(open_server, controller.tcp_port(),
-                     rootcanal::ControllerProperties(controller));
+      rootcanal::configuration::TcpServer const& tcp_server =
+          config->tcp_server(index);
+      SetUpHciServer(open_server, tcp_server.tcp_port(),
+                     rootcanal::ControllerProperties(tcp_server.configuration()));
     }
   }
 }
@@ -90,7 +88,7 @@ void TestEnvironment::SetUpHciServer(
     std::function<std::shared_ptr<AsyncDataChannelServer>(AsyncManager*, int)>
         open_server,
     int tcp_port, rootcanal::ControllerProperties properties) {
-  LOG_INFO("Opening an HCI with port %d", tcp_port);
+  INFO("Opening an HCI with port {}", tcp_port);
 
   std::shared_ptr<AsyncDataChannelServer> server =
       open_server(&async_manager_, tcp_port);
@@ -135,7 +133,7 @@ void TestEnvironment::SetUpHciServer(
 }
 
 void TestEnvironment::initialize(std::promise<void> barrier) {
-  LOG_INFO("Initialized barrier");
+  INFO("Initialized barrier");
 
   barrier_ = std::move(barrier);
 
@@ -169,11 +167,11 @@ void TestEnvironment::initialize(std::promise<void> barrier) {
                                        Phy::Type::BR_EDR);
   }
 
-  LOG_INFO("%s: Finished", __func__);
+  INFO("{}: Finished", __func__);
 }
 
 void TestEnvironment::close() {
-  LOG_INFO("%s", __func__);
+  INFO("{}", __func__);
   test_model_.Reset();
 }
 
@@ -214,10 +212,10 @@ void TestEnvironment::SetUpTestChannel() {
   bool transport_configured = test_channel_transport_.SetUp(
       test_socket_server_, [this](std::shared_ptr<AsyncDataChannel> conn_fd,
                                   AsyncDataChannelServer* server) {
-        LOG_INFO("Test channel connection accepted.");
+        INFO("Test channel connection accepted.");
         server->StartListening();
         if (test_channel_open_) {
-          LOG_WARN("Only one connection at a time is supported");
+          WARNING("Only one connection at a time is supported");
           rootcanal::TestChannelTransport::SendResponse(
               conn_fd, "The connection is broken");
           return false;
@@ -245,13 +243,11 @@ void TestEnvironment::SetUpTestChannel() {
   test_channel_.StartTimer({});
 
   if (!transport_configured) {
-    LOG_ERROR("Test channel SetUp failed.");
+    ERROR("Test channel SetUp failed.");
     return;
   }
 
-  LOG_INFO("Test channel SetUp() successful");
+  INFO("Test channel SetUp() successful");
 }
 
-}  // namespace root_canal
-}  // namespace bluetooth
-}  // namespace android
+}  // namespace rootcanal

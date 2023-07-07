@@ -249,6 +249,7 @@ typedef enum : uint8_t {
   BTA_DM_REPORT_BONDING_EVT = 32,    /*handle for pin or key missing*/
   BTA_DM_LE_ADDR_ASSOC_EVT = 33,     /* identity address association event */
   BTA_DM_LINK_UP_FAILED_EVT = 34,    /* Create connection failed event */
+  BTA_DM_SIRK_VERIFICATION_REQ_EVT = 35,
 } tBTA_DM_SEC_EVT;
 
 /* Structure associated with BTA_DM_PIN_REQ_EVT */
@@ -380,7 +381,7 @@ typedef struct {
   tBTM_AUTH_REQ loc_auth_req; /* Authentication required for local device */
   tBTM_AUTH_REQ rmt_auth_req; /* Authentication required for peer device */
   tBTM_IO_CAP loc_io_caps;    /* IO Capabilities of local device */
-  tBTM_AUTH_REQ rmt_io_caps;  /* IO Capabilities of remote device */
+  tBTM_IO_CAP rmt_io_caps;    // IO Capabilities of remote device
 } tBTA_DM_SP_CFM_REQ;
 
 /* Structure associated with BTA_DM_SP_KEY_NOTIF_EVT */
@@ -511,6 +512,7 @@ typedef struct {
   bool include_rsi; /* true, if ADV contains RSI data */
   RawAddress original_bda; /* original address to pass up to
                               GattService#onScanResult */
+  uint16_t clock_offset;
 } tBTA_DM_INQ_RES;
 
 /* Structure associated with BTA_DM_INQ_CMPL_EVT */
@@ -740,6 +742,18 @@ enum {
  ****************************************************************************/
 
 void BTA_dm_init();
+
+/*******************************************************************************
+ *
+ * Function         BTA_EnableTestMode
+ *
+ * Description      Enables bluetooth device under test mode
+ *
+ *
+ * Returns          tBTA_STATUS
+ *
+ ******************************************************************************/
+extern void BTA_EnableTestMode(void);
 
 /*******************************************************************************
  *
@@ -1171,6 +1185,35 @@ void BTA_DmBleCsisObserve(bool observe, tBTA_DM_SEARCH_CBACK* p_results_cb);
 
 /*******************************************************************************
  *
+ * Function         BTA_DmSirkSecCbRegister
+ *
+ * Description      This procedure registeres in requested a callback for
+ *                  verification by CSIS potential set member.
+ *
+ * Parameters       p_cback     - callback to member verificator
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmSirkSecCbRegister(tBTA_DM_SEC_CBACK* p_cback);
+
+/*******************************************************************************
+ *
+ * Function         BTA_DmSirkConfirmDeviceReply
+ *
+ * Description      This procedure confirms requested to validate set device.
+ *
+ * Parameters       bd_addr     - BD address of the peer
+ *                  accept      - True if device is authorized by CSIS, false
+ *                                otherwise.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTA_DmSirkConfirmDeviceReply(const RawAddress& bd_addr, bool accept);
+
+/*******************************************************************************
+ *
  * Function         BTA_DmBleConfigLocalPrivacy
  *
  * Description      Enable/disable privacy on the local device
@@ -1412,4 +1455,7 @@ void BTA_DmBleSubrateRequest(const RawAddress& bd_addr, uint16_t subrate_min,
  *
  ******************************************************************************/
 bool BTA_DmCheckLeAudioCapable(const RawAddress& address);
+
+void DumpsysBtaDm(int fd);
+
 #endif /* BTA_API_H */

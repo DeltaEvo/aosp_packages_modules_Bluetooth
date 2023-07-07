@@ -1,3 +1,17 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import asyncio
 import hci_packets as hci
 import link_layer_packets as ll
@@ -114,10 +128,10 @@ class Test(ControllerTest):
                 operation = hci.Operation.INTERMEDIATE_FRAGMENT
 
             controller.send_cmd(
-                hci.LeSetPeriodicAdvertisingDataRaw(advertising_handle=0,
-                                                    operation=operation,
-                                                    advertising_data=advertising_data[fragment_offset:fragment_offset +
-                                                                                      fragment_length]))
+                hci.LeSetPeriodicAdvertisingData(advertising_handle=0,
+                                                 operation=operation,
+                                                 advertising_data=advertising_data[fragment_offset:fragment_offset +
+                                                                                   fragment_length]))
 
             await self.expect_evt(
                 hci.LeSetPeriodicAdvertisingDataComplete(status=ErrorCode.SUCCESS, num_hci_command_packets=1))
@@ -162,9 +176,10 @@ class Test(ControllerTest):
         # until an AUX_CHAIN_IND PDU is received with no AuxPtr field and all data has been received.
 
         # 12. Repeat steps 8–11 100 times.
-        received = [0, 0]
+        received_extended_advertising_pdus = 0
+        received_periodic_advertising_pdus = 0
         for n in range(15):
-            index = await self.expect_ll([
+            pdu = await self.expect_ll([
                 ll.LeExtendedAdvertisingPdu(source_address=controller.address,
                                             advertising_address_type=ll.AddressType.PUBLIC,
                                             target_address_type=ll.AddressType.PUBLIC,
@@ -184,13 +199,16 @@ class Test(ControllerTest):
                                             advertising_interval=0x100,
                                             advertising_data=advertising_data)
             ])
-            received[index] = received[index] + 1
+            if isinstance(pdu, ll.LeExtendedAdvertisingPdu):
+                received_extended_advertising_pdus += 1
+            if isinstance(pdu, ll.LePeriodicAdvertisingPdu):
+                received_periodic_advertising_pdus += 1
 
         # Note: the extended advertising interval is twice the periodic
         # advertising interval; the number of events received of each kind is
         # deterministic.
-        self.assertTrue(received[0] == 5)
-        self.assertTrue(received[1] == 10)
+        self.assertTrue(received_extended_advertising_pdus == 5)
+        self.assertTrue(received_periodic_advertising_pdus == 10)
 
         # 13. The Upper Tester disables extended advertising using the
         # HCI_LE_Set_Extended_Advertising_Enable command but maintains periodic advertising.

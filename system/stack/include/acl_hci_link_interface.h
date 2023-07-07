@@ -32,7 +32,6 @@
 //
 void btm_connection_request(const RawAddress& bda,
                             const bluetooth::types::ClassOfDevice& cod);
-void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc);
 void btm_acl_connected(const RawAddress& bda, uint16_t handle,
                        tHCI_STATUS status, uint8_t enc_mode);
 void on_acl_br_edr_connected(const RawAddress& bda, uint16_t handle,
@@ -44,8 +43,6 @@ void btm_acl_disconnected(tHCI_STATUS status, uint16_t handle,
 void btm_acl_iso_disconnected(uint16_t handle, tHCI_STATUS reason);
 void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
                             uint8_t encr_enable);
-void btm_acl_paging(BT_HDR* p, const RawAddress& dest);
-void btm_acl_resubmit_page(void);
 void btm_acl_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr,
                           tHCI_ROLE new_role);
 void btm_rejectlist_role_change_device(const RawAddress& bd_addr,
@@ -70,7 +67,6 @@ void btm_read_rssi_complete(uint8_t* p, uint16_t evt_len);
 void btm_read_tx_power_complete(uint8_t* p, uint16_t evt_len, bool is_ble);
 
 void acl_rcv_acl_data(BT_HDR* p_msg);
-void acl_link_segments_xmitted(BT_HDR* p_msg);
 void acl_packets_completed(uint16_t handle, uint16_t num_packets);
 void acl_process_supported_features(uint16_t handle, uint64_t features);
 void acl_process_extended_features(uint16_t handle, uint8_t current_page_number,

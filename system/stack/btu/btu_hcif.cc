@@ -27,6 +27,8 @@
 
 #define LOG_TAG "bt_btu_hcif"
 
+#include "stack/include/btu_hcif.h"
+
 #include <base/functional/bind.h>
 #include <base/location.h>
 #include <base/logging.h>
@@ -636,16 +638,8 @@ void btu_hcif_send_cmd(UNUSED_ATTR uint8_t controller_id, const BT_HDR* p_buf) {
 
   uint16_t opcode;
   const uint8_t* stream = p_buf->data + p_buf->offset;
-  void* vsc_callback = NULL;
 
   STREAM_TO_UINT16(opcode, stream);
-
-  // Eww...horrible hackery here
-  /* If command was a VSC, then extract command_complete callback */
-  if ((opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC ||
-      (opcode == HCI_BLE_RAND) || (opcode == HCI_BLE_ENCRYPT)) {
-    vsc_callback = *((void**)(p_buf + 1));
-  }
 
   // Skip parameter length before logging
   stream++;
@@ -653,8 +647,7 @@ void btu_hcif_send_cmd(UNUSED_ATTR uint8_t controller_id, const BT_HDR* p_buf) {
                                android::bluetooth::hci::STATUS_UNKNOWN, false);
 
   bluetooth::shim::hci_layer_get_interface()->transmit_command(
-      p_buf, btu_hcif_command_complete_evt, btu_hcif_command_status_evt,
-      vsc_callback);
+      p_buf, btu_hcif_command_complete_evt, btu_hcif_command_status_evt, NULL);
 }
 
 using hci_cmd_cb = base::OnceCallback<void(
@@ -751,9 +744,9 @@ static void btu_hcif_command_complete_evt_with_cb_on_task(BT_HDR* event,
 
 static void btu_hcif_command_complete_evt_with_cb(BT_HDR* response,
                                                   void* context) {
-  do_in_main_thread(FROM_HERE,
-                    base::Bind(btu_hcif_command_complete_evt_with_cb_on_task,
-                               response, context));
+  do_in_main_thread(
+      FROM_HERE, base::BindOnce(btu_hcif_command_complete_evt_with_cb_on_task,
+                                response, context));
 }
 
 static void btu_hcif_command_status_evt_with_cb_on_task(uint8_t status,
@@ -788,9 +781,9 @@ static void btu_hcif_command_status_evt_with_cb(uint8_t status, BT_HDR* command,
     return;
   }
 
-  do_in_main_thread(
-      FROM_HERE, base::Bind(btu_hcif_command_status_evt_with_cb_on_task, status,
-                            command, context));
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(btu_hcif_command_status_evt_with_cb_on_task,
+                                   status, command, context));
 }
 
 /* This function is called to send commands to the Host Controller. |cb| is
@@ -1139,6 +1132,12 @@ static void btu_hcif_hdl_command_complete(uint16_t opcode, uint8_t* p,
       LOG(ERROR) << "No command complete expected, but received!";
       break;
 
+    case HCI_BLE_TRANSMITTER_TEST:
+    case HCI_BLE_RECEIVER_TEST:
+    case HCI_BLE_TEST_END:
+      btm_ble_test_command_complete(p);
+      break;
+
     case HCI_BLE_ADD_DEV_RESOLVING_LIST:
       btm_ble_add_resolving_list_entry_complete(p, evt_len);
       break;
@@ -1160,16 +1159,23 @@ static void btu_hcif_hdl_command_complete(uint16_t opcode, uint8_t* p,
     case HCI_BLE_SET_RAND_PRIV_ADDR_TIMOUT:
       break;
 
-    case HCI_BLE_CREATE_CONN_CANCEL:
-      LOG_ERROR(
-          "Unexpectedly received command complete for opcode:0x%02x that "
-          "should not be "
-          "handled here",
-          opcode);
+    case HCI_CHANGE_LOCAL_NAME:
+    case HCI_WRITE_SCAN_ENABLE:
+    case HCI_WRITE_PAGESCAN_CFG:
+    case HCI_WRITE_INQUIRYSCAN_CFG:
+    case HCI_WRITE_PAGE_TOUT:
+    case HCI_WRITE_CLASS_OF_DEVICE:
+    case HCI_WRITE_VOICE_SETTINGS:
+    case HCI_WRITE_EXT_INQ_RESPONSE:
+    case HCI_WRITE_INQSCAN_TYPE:
+    case HCI_WRITE_INQUIRY_MODE:
+    case HCI_WRITE_PAGESCAN_TYPE:
+    case HCI_WRITE_DEF_POLICY_SETTINGS:
       break;
+
     default:
-      if ((opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC)
-        btm_vsc_complete(p, opcode, evt_len, (tBTM_VSC_CMPL_CB*)p_cplt_cback);
+      LOG_ERROR("Command complete for opcode:0x%02x should not be handled here",
+                opcode);
       break;
   }
 }
@@ -1201,8 +1207,9 @@ static void btu_hcif_command_complete_evt_on_task(BT_HDR* event,
 }
 
 static void btu_hcif_command_complete_evt(BT_HDR* response, void* context) {
-  do_in_main_thread(FROM_HERE, base::Bind(btu_hcif_command_complete_evt_on_task,
-                                          response, context));
+  do_in_main_thread(
+      FROM_HERE,
+      base::BindOnce(btu_hcif_command_complete_evt_on_task, response, context));
 }
 
 /*******************************************************************************
@@ -1320,10 +1327,8 @@ static void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
       break;
 
     default:
-      if ((opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC) {
-        btm_vsc_complete(&status, opcode, 1,
-                         (tBTM_VSC_CMPL_CB*)p_vsc_status_cback);
-      }
+      LOG_ERROR("Command status for opcode:0x%02x should not be handled here",
+                opcode);
   }
 }
 
@@ -1358,8 +1363,9 @@ static void btu_hcif_command_status_evt_on_task(uint8_t status, BT_HDR* event,
 
 static void btu_hcif_command_status_evt(uint8_t status, BT_HDR* command,
                                         void* context) {
-  do_in_main_thread(FROM_HERE, base::Bind(btu_hcif_command_status_evt_on_task,
-                                          status, command, context));
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(btu_hcif_command_status_evt_on_task, status,
+                                   command, context));
 }
 
 /*******************************************************************************

@@ -1,6 +1,6 @@
 use bt_topshim::btif::{
     BtBondState, BtConnectionState, BtDeviceType, BtDiscMode, BtPropertyType, BtSspVariant,
-    BtStatus, BtTransport, Uuid, Uuid128Bit,
+    BtStatus, BtTransport, BtVendorProductInfo, Uuid, Uuid128Bit,
 };
 use bt_topshim::profiles::socket::SocketType;
 use bt_topshim::profiles::ProfileConnectionState;
@@ -79,6 +79,14 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
     fn on_adapter_property_changed(&mut self, prop: BtPropertyType) {
         dbus_generated!()
     }
+    #[dbus_method("OnDevicePropertiesChanged")]
+    fn on_device_properties_changed(
+        &mut self,
+        remote_device: BluetoothDevice,
+        props: Vec<BtPropertyType>,
+    ) {
+        dbus_generated!()
+    }
     #[dbus_method("OnAddressChanged")]
     fn on_address_changed(&mut self, addr: String) {
         dbus_generated!()
@@ -115,6 +123,10 @@ impl IBluetoothCallback for BluetoothCallbackDBus {
     }
     #[dbus_method("OnPinRequest")]
     fn on_pin_request(&mut self, remote_device: BluetoothDevice, cod: u32, min_16_digit: bool) {
+        dbus_generated!()
+    }
+    #[dbus_method("OnPinDisplay")]
+    fn on_pin_display(&mut self, remote_device: BluetoothDevice, pincode: String) {
         dbus_generated!()
     }
     #[dbus_method("OnBondStateChanged")]
@@ -238,6 +250,14 @@ pub struct BtSdpMpsRecordDBus {
     supported_scenarios_mpsd: SupportedScenarios,
     supported_scenarios_mpmd: SupportedScenarios,
     supported_dependencies: SupportedDependencies,
+}
+
+#[dbus_propmap(BtVendorProductInfo)]
+pub struct BtVendorProductInfoDBus {
+    vendor_id_src: u8,
+    vendor_id: u16,
+    product_id: u16,
+    version: u16,
 }
 
 fn read_propmap_value<T: 'static + DirectDBus>(
@@ -398,7 +418,12 @@ struct IBluetoothDBus {}
 )]
 impl IBluetooth for IBluetoothDBus {
     #[dbus_method("RegisterCallback")]
-    fn register_callback(&mut self, callback: Box<dyn IBluetoothCallback + Send>) {
+    fn register_callback(&mut self, callback: Box<dyn IBluetoothCallback + Send>) -> u32 {
+        dbus_generated!()
+    }
+
+    #[dbus_method("UnregisterCallback")]
+    fn unregister_callback(&mut self, id: u32) -> bool {
         dbus_generated!()
     }
 
@@ -581,6 +606,11 @@ impl IBluetooth for IBluetoothDBus {
         dbus_generated!()
     }
 
+    #[dbus_method("GetRemoteVendorProductInfo")]
+    fn get_remote_vendor_product_info(&self, _device: BluetoothDevice) -> BtVendorProductInfo {
+        dbus_generated!()
+    }
+
     #[dbus_method("GetConnectedDevices")]
     fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
         dbus_generated!()
@@ -722,6 +752,11 @@ impl IBluetoothSocketManager for IBluetoothSocketManagerDBus {
         &mut self,
         callback: Box<dyn IBluetoothSocketManagerCallbacks + Send>,
     ) -> CallbackId {
+        dbus_generated!()
+    }
+
+    #[dbus_method("UnregisterCallback")]
+    fn unregister_callback(&mut self, callback: CallbackId) -> bool {
         dbus_generated!()
     }
 

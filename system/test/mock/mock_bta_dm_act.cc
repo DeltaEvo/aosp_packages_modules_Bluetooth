@@ -67,10 +67,9 @@ struct bta_dm_ci_rmt_oob_act bta_dm_ci_rmt_oob_act;
 struct bta_dm_close_acl bta_dm_close_acl;
 struct bta_dm_close_gatt_conn bta_dm_close_gatt_conn;
 struct bta_dm_confirm bta_dm_confirm;
-struct bta_dm_deinit_cb bta_dm_deinit_cb;
 struct bta_dm_disable bta_dm_disable;
 struct bta_dm_disc_result bta_dm_disc_result;
-struct bta_dm_disc_rmt_name bta_dm_disc_rmt_name;
+struct bta_dm_remote_name_cmpl bta_dm_remote_name_cmpl;
 struct bta_dm_discover bta_dm_discover;
 struct bta_dm_eir_update_cust_uuid bta_dm_eir_update_cust_uuid;
 struct bta_dm_eir_update_uuid bta_dm_eir_update_uuid;
@@ -78,7 +77,6 @@ struct bta_dm_enable bta_dm_enable;
 struct bta_dm_encrypt_cback bta_dm_encrypt_cback;
 struct bta_dm_execute_queued_request bta_dm_execute_queued_request;
 struct bta_dm_free_sdp_db bta_dm_free_sdp_db;
-struct bta_dm_init_cb bta_dm_init_cb;
 struct bta_dm_inq_cmpl bta_dm_inq_cmpl;
 struct bta_dm_is_search_request_queued bta_dm_is_search_request_queued;
 struct bta_dm_pin_reply bta_dm_pin_reply;
@@ -88,7 +86,6 @@ struct bta_dm_queue_disc bta_dm_queue_disc;
 struct bta_dm_queue_search bta_dm_queue_search;
 struct bta_dm_remove_device bta_dm_remove_device;
 struct bta_dm_rm_cback bta_dm_rm_cback;
-struct bta_dm_rmt_name bta_dm_rmt_name;
 struct bta_dm_sdp_result bta_dm_sdp_result;
 struct bta_dm_search_cancel bta_dm_search_cancel;
 struct bta_dm_search_cancel_notify bta_dm_search_cancel_notify;
@@ -244,10 +241,6 @@ void bta_dm_confirm(const RawAddress& bd_addr, bool accept) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_confirm(bd_addr, accept);
 }
-void bta_dm_deinit_cb(void) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_deinit_cb();
-}
 void bta_dm_disable() {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_disable();
@@ -256,9 +249,9 @@ void bta_dm_disc_result(tBTA_DM_MSG* p_data) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_disc_result(p_data);
 }
-void bta_dm_disc_rmt_name(tBTA_DM_MSG* p_data) {
+void bta_dm_remote_name_cmpl(const tBTA_DM_MSG* p_data) {
   inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_disc_rmt_name(p_data);
+  test::mock::bta_dm_act::bta_dm_remote_name_cmpl(p_data);
 }
 void bta_dm_discover(tBTA_DM_MSG* p_data) {
   inc_func_call_count(__func__);
@@ -289,10 +282,6 @@ void bta_dm_execute_queued_request() {
 void bta_dm_free_sdp_db() {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_free_sdp_db();
-}
-void bta_dm_init_cb(void) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_init_cb();
 }
 void bta_dm_inq_cmpl(uint8_t num) {
   inc_func_call_count(__func__);
@@ -330,10 +319,6 @@ void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id, uint8_t app_id,
                      const RawAddress& peer_addr) {
   inc_func_call_count(__func__);
   test::mock::bta_dm_act::bta_dm_rm_cback(status, id, app_id, peer_addr);
-}
-void bta_dm_rmt_name(tBTA_DM_MSG* p_data) {
-  inc_func_call_count(__func__);
-  test::mock::bta_dm_act::bta_dm_rmt_name(p_data);
 }
 void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
   inc_func_call_count(__func__);

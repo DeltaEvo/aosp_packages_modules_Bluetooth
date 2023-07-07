@@ -136,7 +136,7 @@ typedef struct {
 
 /* data type for BTA_AG_API_AUDIO_OPEN_EVT */
 typedef struct {
-  bool force_cvsd;
+  tBTA_AG_PEER_CODEC disabled_codecs;
 } tBTA_AG_API_AUDIO_OPEN;
 
 /* data type for BTA_AG_API_RESULT_EVT */
@@ -252,6 +252,8 @@ struct tBTA_AG_SCB {
   alarm_t* ring_timer;
   alarm_t* codec_negotiation_timer;
   bool received_at_bac; /* indicate AT+BAC is received at least once */
+  tBTA_AG_PEER_CODEC
+      disabled_codecs; /* set by app to block certain codecs from being used */
   tBTA_AG_PEER_CODEC peer_codecs; /* codecs for eSCO supported by the peer */
   tBTA_AG_PEER_CODEC sco_codec;   /* codec to be used for eSCO connection */
   tBTA_AG_PEER_CODEC
@@ -318,7 +320,7 @@ extern const tBTA_AG_HF_IND bta_ag_local_hf_ind_cfg[];
 /*****************************************************************************
  *  Function prototypes
  ****************************************************************************/
-bool bta_ag_hdl_event(BT_HDR_RIGID* p_msg);
+bool bta_ag_hdl_event(const BT_HDR_RIGID* p_msg);
 
 /* API functions */
 void bta_ag_api_enable(tBTA_AG_CBACK* p_cback);
@@ -367,6 +369,9 @@ bool bta_ag_sco_is_active_device(const RawAddress& bd_addr);
 bool bta_ag_sco_is_open(tBTA_AG_SCB* p_scb);
 bool bta_ag_sco_is_opening(tBTA_AG_SCB* p_scb);
 void bta_ag_sco_conn_rsp(tBTA_AG_SCB* p_scb, tBTM_ESCO_CONN_REQ_EVT_DATA* data);
+// Testonly
+void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig);
+void bta_ag_create_pending_sco(tBTA_AG_SCB* p_scb, bool is_local);
 
 /* AT command functions */
 void bta_ag_at_hsp_cback(tBTA_AG_SCB* p_scb, uint16_t cmd, uint8_t arg_type,

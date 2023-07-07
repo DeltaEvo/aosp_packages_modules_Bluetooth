@@ -221,6 +221,23 @@ void BTM_WritePageTimeout(uint16_t timeout);
 void BTM_WriteVoiceSettings(uint16_t settings);
 
 /*******************************************************************************
+ *
+ * Function         BTM_EnableTestMode
+ *
+ * Description      Send HCI the enable device under test command.
+ *
+ *                  Note: Controller can only be taken out of this mode by
+ *                      resetting the controller.
+ *
+ * Returns
+ *      BTM_SUCCESS         Command sent.
+ *      BTM_NO_RESOURCES    If out of resources to send the command.
+ *
+ *
+ ******************************************************************************/
+tBTM_STATUS BTM_EnableTestMode(void);
+
+/*******************************************************************************
  * DEVICE DISCOVERY FUNCTIONS - Inquiry, Remote Name, Discovery, Class of Device
  ******************************************************************************/
 
@@ -594,6 +611,18 @@ void BTM_EScoConnRsp(uint16_t sco_inx, uint8_t hci_status,
  ******************************************************************************/
 uint8_t BTM_GetNumScoLinks(void);
 
+/*******************************************************************************
+ *
+ * Function         BTM_GetScoDebugDump
+ *
+ * Description      Get the status of SCO. This function is only used for
+ *                  testing and debugging purposes.
+ *
+ * Returns          Data with SCO related debug dump.
+ *
+ ******************************************************************************/
+tBTM_SCO_DEBUG_DUMP BTM_GetScoDebugDump(void);
+
 /*****************************************************************************
  *  SECURITY MANAGEMENT FUNCTIONS
  ****************************************************************************/
@@ -818,23 +847,6 @@ bool BTM_HasEirService(const uint32_t* p_eir_uuid, uint16_t uuid16);
 
 /*******************************************************************************
  *
- * Function         BTM_HasInquiryEirService
- *
- * Description      Return if a UUID is in the bit map of a UUID list.
- *
- * Parameters       p_results - inquiry results
- *                  uuid16 - UUID 16-bit
- *
- * Returns          BTM_EIR_FOUND - if found
- *                  BTM_EIR_NOT_FOUND - if not found and it is a complete list
- *                  BTM_EIR_UNKNOWN - if not found and it is not complete list
- *
- ******************************************************************************/
-tBTM_EIR_SEARCH_RESULT BTM_HasInquiryEirService(tBTM_INQ_RESULTS* p_results,
-                                                uint16_t uuid16);
-
-/*******************************************************************************
- *
  * Function         BTM_AddEirService
  *
  * Description      This function is called to add a service in the bit map UUID
@@ -921,6 +933,20 @@ uint8_t BTM_GetEirUuidList(const uint8_t* p_eir, size_t eir_len,
  *
  ******************************************************************************/
 tBTM_CONTRL_STATE BTM_PM_ReadControllerState(void);
+
+/*******************************************************************************
+ *
+ * Function         BTM_BleSirkConfirmDeviceReply
+ *
+ * Description      This procedure confirms requested to validate set device.
+ *
+ * Parameter        bd_addr     - BD address of the peer
+ *                  res         - confirmation result BTM_SUCCESS if success
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res);
 
 /**
  * Send remote name request, either to legacy HCI, or to GD shim Name module

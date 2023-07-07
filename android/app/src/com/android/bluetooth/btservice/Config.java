@@ -18,12 +18,13 @@ package com.android.bluetooth.btservice;
 
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.os.SystemProperties;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.avrcp.AvrcpTargetService;
@@ -90,14 +91,15 @@ public class Config {
         }
     }
 
-    /**
-     * List of profile services related to LE audio
-     */
-    private static final HashSet<Class> mLeAudioUnicastProfiles = new HashSet<Class>(
-            Arrays.asList(LeAudioService.class,
-                        VolumeControlService.class,
-                        McpService.class,
-                        CsipSetCoordinatorService.class));
+    /** List of profile services related to LE audio */
+    private static final HashSet<Class> LE_AUDIO_UNICAST_PROFILES =
+            new HashSet<Class>(
+                    Arrays.asList(
+                            LeAudioService.class,
+                            VolumeControlService.class,
+                            McpService.class,
+                            CsipSetCoordinatorService.class,
+                            TbsService.class));
 
     /**
      * List of profile services with the profile-supported resource flag and bit mask.
@@ -194,8 +196,18 @@ public class Config {
             }
         }
 
-        // Disable ASHA if BLE is not supported on this platform
-        if (!ctx.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+        // Disable ASHA on Automotive, TV, and Watch devices if the system property is not set
+        // This means that the OS will not automatically enable ASHA on these platforms, but these
+        // platforms can choose to enable ASHA themselves
+        if (BluetoothProperties.isProfileAshaCentralEnabled().isEmpty()) {
+            if (Utils.isAutomotive(ctx) || Utils.isTv(ctx) || Utils.isWatch(ctx)) {
+                setProfileEnabled(HearingAidService.class, false);
+            }
+        }
+
+        // Disable ASHA if BLE is not supported on this platform even if the platform enabled ASHA
+        // accidentally
+        if (!Utils.isBleSupported(ctx)) {
             setProfileEnabled(HearingAidService.class, false);
         }
 
@@ -270,7 +282,7 @@ public class Config {
     }
 
     static HashSet<Class> getLeAudioUnicastProfiles() {
-        return mLeAudioUnicastProfiles;
+        return LE_AUDIO_UNICAST_PROFILES;
     }
 
     static Class[] getSupportedProfiles() {

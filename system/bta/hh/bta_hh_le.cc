@@ -1014,7 +1014,8 @@ void bta_hh_security_cmpl(tBTA_HH_DEV_CB* p_cb,
               btm_status_text(p_cb->btm_status).c_str());
     if (!(p_cb->status == BTA_HH_ERR_SEC &&
           (p_cb->btm_status == BTM_ERR_PROCESSING ||
-          p_cb->btm_status == BTM_FAILED_ON_SECURITY)))
+          p_cb->btm_status == BTM_FAILED_ON_SECURITY ||
+          p_cb->btm_status == BTM_WRONG_MODE)))
       bta_hh_le_api_disc_act(p_cb);
     }
 }
@@ -1679,8 +1680,7 @@ void bta_hh_gatt_close(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
 
   /* deregister all notification */
   bta_hh_le_deregister_input_notif(p_cb);
-  /* finaliza device driver */
-  bta_hh_co_close(p_cb->hid_handle, p_cb->app_id);
+
   /* update total conn number */
   bta_hh_cb.cnt_num--;
 

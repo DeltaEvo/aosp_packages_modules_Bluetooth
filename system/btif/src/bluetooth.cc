@@ -51,6 +51,7 @@
 
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "bta/hh/bta_hh_int.h"  // for HID HACK profile methods
+#include "bta/include/bta_api.h"
 #include "bta/include/bta_ar_api.h"
 #include "bta/include/bta_csis_api.h"
 #include "bta/include/bta_has_api.h"
@@ -105,6 +106,8 @@
 #include "stack/include/avdt_api.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btu.h"
+#include "stack/include/hfp_lc3_decoder.h"
+#include "stack/include/hfp_lc3_encoder.h"
 #include "stack/include/hfp_msbc_decoder.h"
 #include "stack/include/hfp_msbc_encoder.h"
 #include "stack/include/hidh_api.h"
@@ -230,6 +233,28 @@ struct MSBCCodec : bluetooth::core::CodecInterface {
   }
 };
 
+struct LC3Codec : bluetooth::core::CodecInterface {
+  LC3Codec() : bluetooth::core::CodecInterface(){};
+
+  void initialize() override {
+    hfp_lc3_decoder_init();
+    hfp_lc3_encoder_init();
+  }
+
+  void cleanup() override {
+    hfp_lc3_encoder_cleanup();
+    hfp_lc3_decoder_cleanup();
+  }
+
+  uint32_t encodePacket(int16_t* input, uint8_t* output) {
+    return hfp_lc3_encode_frames(input, output);
+  }
+
+  bool decodePacket(const uint8_t* i_buf, int16_t* o_buf, size_t out_len) {
+    return hfp_lc3_decoder_decode_packet(i_buf, o_buf, out_len);
+  }
+};
+
 struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
   using bluetooth::core::CoreInterface::CoreInterface;
 
@@ -325,10 +350,12 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .invoke_le_address_associate_cb = invoke_le_address_associate_cb,
       .invoke_acl_state_changed_cb = invoke_acl_state_changed_cb,
       .invoke_thread_evt_cb = invoke_thread_evt_cb,
+      .invoke_le_test_mode_cb = invoke_le_test_mode_cb,
       .invoke_energy_info_cb = invoke_energy_info_cb,
       .invoke_link_quality_report_cb = invoke_link_quality_report_cb};
   static auto configInterface = ConfigInterfaceImpl();
   static auto msbcCodecInterface = MSBCCodec();
+  static auto lc3CodecInterface = LC3Codec();
   static auto profileInterface = bluetooth::core::HACK_ProfileInterface{
       // HID
       .btif_hh_connect = btif_hh_connect,
@@ -350,7 +377,7 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
 
   static auto interfaceForCore =
       CoreInterfaceImpl(&eventCallbacks, &configInterface, &msbcCodecInterface,
-                        &profileInterface);
+                        &lc3CodecInterface, &profileInterface);
   return &interfaceForCore;
 }
 
@@ -795,6 +822,7 @@ static void dump(int fd, const char** arguments) {
   bluetooth::bqr::DebugDump(fd);
   PAN_Dumpsys(fd);
   DumpsysHid(fd);
+  DumpsysBtaDm(fd);
   bluetooth::shim::Dump(fd, arguments);
 }
 
@@ -903,6 +931,55 @@ static const void* get_profile_interface(const char* profile_id) {
   }
 
   return NULL;
+}
+
+int dut_mode_configure(uint8_t enable) {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  if (!stack_manager_get_interface()->get_stack_is_running())
+    return BT_STATUS_NOT_READY;
+
+  do_in_main_thread(FROM_HERE, base::BindOnce(btif_dut_mode_configure, enable));
+  return BT_STATUS_SUCCESS;
+}
+
+int dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+  if (!btif_is_dut_mode()) return BT_STATUS_FAIL;
+
+  uint8_t* copy = (uint8_t*)osi_calloc(len);
+  memcpy(copy, buf, len);
+
+  do_in_main_thread(FROM_HERE,
+                    base::BindOnce(
+                        [](uint16_t opcode, uint8_t* buf, uint8_t len) {
+                          btif_dut_mode_send(opcode, buf, len);
+                          osi_free(buf);
+                        },
+                        opcode, copy, len));
+  return BT_STATUS_SUCCESS;
+}
+
+int le_test_mode(uint16_t opcode, uint8_t* buf, uint8_t len) {
+  if (!interface_ready()) return BT_STATUS_NOT_READY;
+
+  switch (opcode) {
+    case HCI_BLE_TRANSMITTER_TEST:
+      if (len != 3) return BT_STATUS_PARM_INVALID;
+      do_in_main_thread(FROM_HERE, base::BindOnce(btif_ble_transmitter_test,
+                                                  buf[0], buf[1], buf[2]));
+      break;
+    case HCI_BLE_RECEIVER_TEST:
+      if (len != 1) return BT_STATUS_PARM_INVALID;
+      do_in_main_thread(FROM_HERE,
+                        base::BindOnce(btif_ble_receiver_test, buf[0]));
+      break;
+    case HCI_BLE_TEST_END:
+      do_in_main_thread(FROM_HERE, base::BindOnce(btif_ble_test_end));
+      break;
+    default:
+      return BT_STATUS_UNSUPPORTED;
+  }
+  return BT_STATUS_SUCCESS;
 }
 
 static bt_os_callouts_t* wakelock_os_callouts_saved = nullptr;
@@ -1096,6 +1173,9 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     .pin_reply = pin_reply,
     .ssp_reply = ssp_reply,
     .get_profile_interface = get_profile_interface,
+    .dut_mode_configure = dut_mode_configure,
+    .dut_mode_send = dut_mode_send,
+    .le_test_mode = le_test_mode,
     .set_os_callouts = set_os_callouts,
     .read_energy_info = read_energy_info,
     .dump = dump,
@@ -1366,6 +1446,15 @@ void invoke_thread_evt_cb(bt_cb_thread_evt event) {
                                     }
                                   },
                                   event));
+}
+
+void invoke_le_test_mode_cb(bt_status_t status, uint16_t count) {
+  do_in_jni_thread(FROM_HERE, base::BindOnce(
+                                  [](bt_status_t status, uint16_t count) {
+                                    HAL_CBACK(bt_hal_cbacks, le_test_mode_cb,
+                                              status, count);
+                                  },
+                                  status, count));
 }
 
 // takes ownership of |uid_data|
