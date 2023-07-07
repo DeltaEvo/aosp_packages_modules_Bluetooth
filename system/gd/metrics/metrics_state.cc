@@ -50,12 +50,6 @@ void LEConnectionMetricState::AddStateChangedEvent(
     LeConnectionType connection_type,
     LeConnectionState transaction_state,
     std::vector<std::pair<os::ArgumentType, int>> argument_list) {
-  LOG_INFO(
-      "LEConnectionMetricState:  Origin Type: %s, Connection Type: %s, Transaction State: "
-      "%s",
-      common::ToHexString(origin_type).c_str(),
-      common::ToHexString(connection_type).c_str(),
-      common::ToHexString(transaction_state).c_str());
 
   ClockTimePoint current_timestamp = std::chrono::high_resolution_clock::now();
   state = transaction_state;
@@ -156,6 +150,9 @@ void LEConnectionMetricsRemoteDevice::UploadLEConnectionSession(const hci::Addre
     session_options.acl_latency = session_options.latency;
     session_options.is_cancelled = it->second->is_cancelled;
     metrics_logger_module->LogMetricBluetoothLESession(session_options);
+    LOG_INFO(
+        "LEConnectionMetricsRemoteDevice: The session is uploaded for %s\n",
+        ADDRESS_TO_LOGGABLE_CSTR(address));
     opened_devices.erase(it);
   }
 }
@@ -172,6 +169,8 @@ void LEConnectionMetricsRemoteDevice::AddStateChangedEvent(
         common::ToHexString(transaction_state).c_str(),
         common::ToHexString(connection_type).c_str(),
         common::ToHexString(origin_type).c_str());
+
+  std::unique_lock<std::mutex> lock(le_connection_metrics_remote_device_guard);
   if (address.IsEmpty()) {
     LOG_INFO(
         "LEConnectionMetricsRemoteDevice: Empty Address Cancellation %s, %s, %s\n",
@@ -190,7 +189,6 @@ void LEConnectionMetricsRemoteDevice::AddStateChangedEvent(
 
       if (device_metric->IsCancelled() &&
           transaction_state == LeConnectionState::STATE_LE_ACL_END) {
-        LOG_INFO("LEConnectionMetricsRemoteDevice: Session is now complete after cancellation");
         // complete the connection
         device_metric->AddStateChangedEvent(
             origin_type, connection_type, transaction_state, argument_list);

@@ -46,15 +46,13 @@ void VolumeControlDevice::DeregisterNotifications(tGATT_IF gatt_if) {
 }
 
 void VolumeControlDevice::Disconnect(tGATT_IF gatt_if) {
-  LOG(INFO) << __func__ << ": " << this->ToString();
+  LOG(INFO) << __func__ << ": " << ADDRESS_TO_LOGGABLE_STR(address);
 
   if (IsConnected()) {
     DeregisterNotifications(gatt_if);
     BtaGattQueue::Clean(connection_id);
     BTA_GATTC_Close(connection_id);
     connection_id = GATT_INVALID_CONN_ID;
-  } else {
-    BTA_GATTC_CancelOpen(gatt_if, address, false);
   }
 
   device_ready = false;
@@ -178,6 +176,7 @@ bool VolumeControlDevice::UpdateHandles(void) {
       vcs_found = set_volume_control_service_handles(service);
       if (!vcs_found) break;
 
+      known_service_handles_ = true;
       for (auto const& included : service.included_services) {
         const gatt::Service* service =
             BTA_GATTC_GetOwningService(connection_id, included.start_handle);
@@ -198,6 +197,7 @@ bool VolumeControlDevice::UpdateHandles(void) {
 }
 
 void VolumeControlDevice::ResetHandles(void) {
+  known_service_handles_ = false;
   device_ready = false;
 
   // the handles are not valid, so discard pending GATT operations

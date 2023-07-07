@@ -20,9 +20,11 @@ import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.SystemProperties;
+import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.avrcp.AvrcpTargetService;
@@ -54,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 
 public class Config {
     private static final String TAG = "AdapterServiceConfig";
@@ -61,12 +64,20 @@ public class Config {
     private static final String FEATURE_HEARING_AID = "settings_bluetooth_hearing_aid";
     private static final String FEATURE_BATTERY = "settings_bluetooth_battery";
 
+    private static final String FFLAG_OVERRIDE_PREFIX = "sys.fflag.override.";
+    private static final String PERSIST_PREFIX = "persist." + FFLAG_OVERRIDE_PREFIX;
+
     private static final String LE_AUDIO_DYNAMIC_SWITCH_PROPERTY =
             "ro.bluetooth.leaudio_switcher.supported";
     private static final String LE_AUDIO_BROADCAST_DYNAMIC_SWITCH_PROPERTY =
             "ro.bluetooth.leaudio_broadcast_switcher.supported";
-    private static final String LE_AUDIO_DYNAMIC_ENABLED_PROPERTY =
-            "persist.bluetooth.leaudio_switcher.enabled";
+    private static final String LE_AUDIO_SWITCHER_DISABLED_PROPERTY =
+            "persist.bluetooth.leaudio_switcher.disabled";
+
+    private static final Set<String> PERSISTENT_FLAGS = Set.of(
+            FEATURE_HEARING_AID,
+            FEATURE_BATTERY
+    );
 
     private static class ProfileConfig {
         Class mClass;
@@ -80,14 +91,15 @@ public class Config {
         }
     }
 
-    /**
-     * List of profile services related to LE audio
-     */
-    private static final HashSet<Class> mLeAudioUnicastProfiles = new HashSet<Class>(
-            Arrays.asList(LeAudioService.class,
-                        VolumeControlService.class,
-                        McpService.class,
-                        CsipSetCoordinatorService.class));
+    /** List of profile services related to LE audio */
+    private static final HashSet<Class> LE_AUDIO_UNICAST_PROFILES =
+            new HashSet<Class>(
+                    Arrays.asList(
+                            LeAudioService.class,
+                            VolumeControlService.class,
+                            McpService.class,
+                            CsipSetCoordinatorService.class,
+                            TbsService.class));
 
     /**
      * List of profile services with the profile-supported resource flag and bit mask.
@@ -175,13 +187,28 @@ public class Config {
                 SystemProperties.getBoolean(LE_AUDIO_DYNAMIC_SWITCH_PROPERTY, false);
 
         if (leAudioDynamicSwitchSupported) {
-            final String leAudioDynamicEnabled = SystemProperties
-                    .get(LE_AUDIO_DYNAMIC_ENABLED_PROPERTY, "none");
-            if (leAudioDynamicEnabled.equals("true")) {
-                setLeAudioProfileStatus(true);
-            } else if (leAudioDynamicEnabled.equals("false")) {
+            final String leAudioSwitcherDisabled = SystemProperties
+                    .get(LE_AUDIO_SWITCHER_DISABLED_PROPERTY, "none");
+            if (leAudioSwitcherDisabled.equals("true")) {
                 setLeAudioProfileStatus(false);
+            } else if (leAudioSwitcherDisabled.equals("false")) {
+                setLeAudioProfileStatus(true);
             }
+        }
+
+        // Disable ASHA on Automotive, TV, and Watch devices if the system property is not set
+        // This means that the OS will not automatically enable ASHA on these platforms, but these
+        // platforms can choose to enable ASHA themselves
+        if (BluetoothProperties.isProfileAshaCentralEnabled().isEmpty()) {
+            if (Utils.isAutomotive(ctx) || Utils.isTv(ctx) || Utils.isWatch(ctx)) {
+                setProfileEnabled(HearingAidService.class, false);
+            }
+        }
+
+        // Disable ASHA if BLE is not supported on this platform even if the platform enabled ASHA
+        // accidentally
+        if (!Utils.isBleSupported(ctx)) {
+            setProfileEnabled(HearingAidService.class, false);
         }
 
         ArrayList<Class> profiles = new ArrayList<>(PROFILE_SERVICES_AND_FLAGS.length);
@@ -254,8 +281,8 @@ public class Config {
         }
     }
 
-    static HashSet<Class> geLeAudioUnicastProfiles() {
-        return mLeAudioUnicastProfiles;
+    static HashSet<Class> getLeAudioUnicastProfiles() {
+        return LE_AUDIO_UNICAST_PROFILES;
     }
 
     static Class[] getSupportedProfiles() {

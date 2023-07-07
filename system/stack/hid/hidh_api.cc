@@ -24,10 +24,12 @@
 
 #include "hidh_api.h"
 
+#include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "btif/include/btif_hh.h"
 #include "btm_api.h"
 #include "hiddefs.h"
 #include "hidh_int.h"
@@ -35,9 +37,11 @@
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/stack_metrics_logging.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
+using namespace bluetooth::legacy::stack::sdp;
 using bluetooth::Uuid;
 
 tHID_HOST_CTB hh_cb;
@@ -56,19 +60,28 @@ static void hidh_search_callback(tSDP_RESULT sdp_result);
 tHID_STATUS HID_HostGetSDPRecord(const RawAddress& addr,
                                  tSDP_DISCOVERY_DB* p_db, uint32_t db_len,
                                  tHID_HOST_SDP_CALLBACK* sdp_cback) {
-
-  if (hh_cb.sdp_busy) return HID_ERR_SDP_BUSY;
+  if (hh_cb.sdp_busy) {
+    log_counter_metrics(
+        android::bluetooth::CodePathCounterKeyEnum::HIDH_ERR_SDP_BUSY, 1);
+    return HID_ERR_SDP_BUSY;
+  }
 
   hh_cb.p_sdp_db = p_db;
   Uuid uuid_list = Uuid::From16Bit(UUID_SERVCLASS_HUMAN_INTERFACE);
-  SDP_InitDiscoveryDb(p_db, db_len, 1, &uuid_list, 0, NULL);
+  get_legacy_stack_sdp_api()->service.SDP_InitDiscoveryDb(p_db, db_len, 1,
+                                                          &uuid_list, 0, NULL);
 
-  if (SDP_ServiceSearchRequest(addr, p_db, hidh_search_callback)) {
+  if (get_legacy_stack_sdp_api()->service.SDP_ServiceSearchRequest(
+          addr, p_db, hidh_search_callback)) {
     hh_cb.sdp_cback = sdp_cback;
     hh_cb.sdp_busy = true;
     return HID_SUCCESS;
-  } else
+  } else {
+    log_counter_metrics(
+        android::bluetooth::CodePathCounterKeyEnum::HIDH_ERR_NO_RESOURCES_SDP,
+        1);
     return HID_ERR_NO_RESOURCES;
+  }
 }
 
 void hidh_get_str_attr(tSDP_DISC_REC* p_rec, uint16_t attr_id, uint16_t max_len,
@@ -76,7 +89,8 @@ void hidh_get_str_attr(tSDP_DISC_REC* p_rec, uint16_t attr_id, uint16_t max_len,
   tSDP_DISC_ATTR* p_attr;
   uint16_t name_len;
 
-  p_attr = SDP_FindAttributeInRec(p_rec, attr_id);
+  p_attr =
+      get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(p_rec, attr_id);
   if (p_attr != NULL) {
     name_len = SDP_DISC_ATTR_LEN(p_attr->attr_len_type);
     if (name_len < max_len) {
@@ -106,7 +120,8 @@ static void hidh_search_callback(tSDP_RESULT sdp_result) {
   }
 
   Uuid hid_uuid = Uuid::From16Bit(UUID_SERVCLASS_HUMAN_INTERFACE);
-  p_rec = SDP_FindServiceUUIDInDb(p_db, hid_uuid, NULL);
+  p_rec = get_legacy_stack_sdp_api()->db.SDP_FindServiceUUIDInDb(p_db, hid_uuid,
+                                                                 NULL);
   if (p_rec == NULL) {
     hh_cb.sdp_cback(HID_SDP_NO_SERV_UUID, 0, NULL);
     return;
@@ -115,8 +130,8 @@ static void hidh_search_callback(tSDP_RESULT sdp_result) {
   memset(&hh_cb.sdp_rec, 0, sizeof(tHID_DEV_SDP_INFO));
 
   /* First, verify the mandatory fields we care about */
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_DESCRIPTOR_LIST)) ==
-       NULL) ||
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_DESCRIPTOR_LIST)) == NULL) ||
       (SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != DATA_ELE_SEQ_DESC_TYPE) ||
       ((p_subattr1 = p_attr->attr_value.v.p_sub_attr) == NULL) ||
       (SDP_DISC_ATTR_TYPE(p_subattr1->attr_len_type) !=
@@ -132,38 +147,38 @@ static void hidh_search_callback(tSDP_RESULT sdp_result) {
   if (p_nvi->dscp_info.dl_len != 0)
     p_nvi->dscp_info.dsc_list = (uint8_t*)&p_repdesc->attr_value;
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_VIRTUAL_CABLE)) !=
-       NULL) &&
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_VIRTUAL_CABLE)) != NULL) &&
       (p_attr->attr_value.v.u8)) {
     attr_mask |= HID_VIRTUAL_CABLE;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_HID_RECONNECT_INITIATE)) != NULL) &&
       (p_attr->attr_value.v.u8)) {
     attr_mask |= HID_RECONN_INIT;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_HID_NORMALLY_CONNECTABLE)) != NULL) &&
       (p_attr->attr_value.v.u8)) {
     attr_mask |= HID_NORMALLY_CONNECTABLE;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_SDP_DISABLE)) !=
-       NULL) &&
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_SDP_DISABLE)) != NULL) &&
       (p_attr->attr_value.v.u8)) {
     attr_mask |= HID_SDP_DISABLE;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_BATTERY_POWER)) !=
-       NULL) &&
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_BATTERY_POWER)) != NULL) &&
       (p_attr->attr_value.v.u8)) {
     attr_mask |= HID_BATTERY_POWER;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_REMOTE_WAKE)) !=
-       NULL) &&
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_REMOTE_WAKE)) != NULL) &&
       (p_attr->attr_value.v.u8)) {
     attr_mask |= HID_REMOTE_WAKE;
   }
@@ -175,40 +190,40 @@ static void hidh_search_callback(tSDP_RESULT sdp_result) {
   hidh_get_str_attr(p_rec, ATTR_ID_PROVIDER_NAME, HID_MAX_PROV_NAME_LEN,
                     p_nvi->prov_name);
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_DEVICE_RELNUM)) !=
-       NULL)) {
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_DEVICE_RELNUM)) != NULL)) {
     p_nvi->rel_num = p_attr->attr_value.v.u16;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_COUNTRY_CODE)) !=
-       NULL)) {
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_COUNTRY_CODE)) != NULL)) {
     p_nvi->ctry_code = p_attr->attr_value.v.u8;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_DEVICE_SUBCLASS)) !=
-       NULL)) {
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_DEVICE_SUBCLASS)) != NULL)) {
     p_nvi->sub_class = p_attr->attr_value.v.u8;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_PARSER_VERSION)) !=
-       NULL)) {
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_PARSER_VERSION)) != NULL)) {
     p_nvi->hpars_ver = p_attr->attr_value.v.u16;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_HID_LINK_SUPERVISION_TO)) != NULL)) {
     attr_mask |= HID_SUP_TOUT_AVLBL;
     p_nvi->sup_timeout = p_attr->attr_value.v.u16;
   }
 
-  if (((p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_HID_SSR_HOST_MAX_LAT)) !=
-       NULL)) {
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
+            p_rec, ATTR_ID_HID_SSR_HOST_MAX_LAT)) != NULL)) {
     attr_mask |= HID_SSR_MAX_LATENCY;
     p_nvi->ssr_max_latency = p_attr->attr_value.v.u16;
   } else
     p_nvi->ssr_max_latency = HID_SSR_PARAM_INVALID;
 
-  if (((p_attr = SDP_FindAttributeInRec(
+  if (((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_HID_SSR_HOST_MIN_TOUT)) != NULL)) {
     attr_mask |= HID_SSR_MIN_TOUT;
     p_nvi->ssr_min_tout = p_attr->attr_value.v.u16;
@@ -263,9 +278,19 @@ uint8_t HID_HostSetTraceLevel(uint8_t new_level) {
 tHID_STATUS HID_HostRegister(tHID_HOST_DEV_CALLBACK* dev_cback) {
   tHID_STATUS st;
 
-  if (hh_cb.reg_flag) return HID_ERR_ALREADY_REGISTERED;
+  if (hh_cb.reg_flag) {
+    log_counter_metrics(
+        android::bluetooth::CodePathCounterKeyEnum::HIDH_ERR_ALREADY_REGISTERED,
+        1);
+    return HID_ERR_ALREADY_REGISTERED;
+  }
 
-  if (dev_cback == NULL) return HID_ERR_INVALID_PARAM;
+  if (dev_cback == NULL) {
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_INVALID_PARAM_AT_HOST_REGISTER,
+                        1);
+    return HID_ERR_INVALID_PARAM;
+  }
 
   /* Register with L2CAP */
   st = hidh_conn_reg();
@@ -333,7 +358,12 @@ tHID_STATUS HID_HostAddDev(const RawAddress& addr, uint16_t attr_mask,
     }
   }
 
-  if (i == HID_HOST_MAX_DEVICES) return HID_ERR_NO_RESOURCES;
+  if (i == HID_HOST_MAX_DEVICES) {
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_NO_RESOURCES_ADD_DEVICE,
+                        1);
+    return HID_ERR_NO_RESOURCES;
+  }
 
   if (!hh_cb.devices[i].in_use) {
     hh_cb.devices[i].in_use = true;
@@ -363,8 +393,12 @@ tHID_STATUS HID_HostRemoveDev(uint8_t dev_handle) {
   if (!hh_cb.reg_flag) return (HID_ERR_NOT_REGISTERED);
 
   if ((dev_handle >= HID_HOST_MAX_DEVICES) ||
-      (!hh_cb.devices[dev_handle].in_use))
+      (!hh_cb.devices[dev_handle].in_use)) {
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_INVALID_PARAM_AT_HOST_REMOVE_DEV,
+                        1);
     return HID_ERR_INVALID_PARAM;
+  }
 
   HID_HostCloseDev(dev_handle);
   hh_cb.devices[dev_handle].in_use = false;
@@ -389,11 +423,18 @@ tHID_STATUS HID_HostOpenDev(uint8_t dev_handle) {
   if (!hh_cb.reg_flag) return (HID_ERR_NOT_REGISTERED);
 
   if ((dev_handle >= HID_HOST_MAX_DEVICES) ||
-      (!hh_cb.devices[dev_handle].in_use))
+      (!hh_cb.devices[dev_handle].in_use)) {
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_INVALID_PARAM_AT_HOST_OPEN_DEV,
+                        1);
     return HID_ERR_INVALID_PARAM;
+  }
 
-  if (hh_cb.devices[dev_handle].state != HID_DEV_NO_CONN)
+  if (hh_cb.devices[dev_handle].state != HID_DEV_NO_CONN) {
+    log_counter_metrics(
+        android::bluetooth::CodePathCounterKeyEnum::HIDH_ERR_ALREADY_CONN, 1);
     return HID_ERR_ALREADY_CONN;
+  }
 
   hh_cb.devices[dev_handle].conn_tries = 1;
   return hidh_conn_initiate(dev_handle);
@@ -423,11 +464,17 @@ tHID_STATUS HID_HostWriteDev(uint8_t dev_handle, uint8_t t_type, uint8_t param,
   if ((dev_handle >= HID_HOST_MAX_DEVICES) ||
       (!hh_cb.devices[dev_handle].in_use)) {
     HIDH_TRACE_ERROR("HID_ERR_INVALID_PARAM");
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_INVALID_PARAM_AT_HOST_WRITE_DEV,
+                        1);
     status = HID_ERR_INVALID_PARAM;
   }
 
   else if (hh_cb.devices[dev_handle].state != HID_DEV_CONNECTED) {
     HIDH_TRACE_ERROR("HID_ERR_NO_CONNECTION dev_handle %d", dev_handle);
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_NO_CONNECTION_AT_HOST_WRITE_DEV,
+                        1);
     status = HID_ERR_NO_CONNECTION;
   }
 
@@ -453,11 +500,19 @@ tHID_STATUS HID_HostCloseDev(uint8_t dev_handle) {
   if (!hh_cb.reg_flag) return (HID_ERR_NOT_REGISTERED);
 
   if ((dev_handle >= HID_HOST_MAX_DEVICES) ||
-      (!hh_cb.devices[dev_handle].in_use))
+      (!hh_cb.devices[dev_handle].in_use)) {
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_INVALID_PARAM_AT_HOST_CLOSE_DEV,
+                        1);
     return HID_ERR_INVALID_PARAM;
+  }
 
-  if (hh_cb.devices[dev_handle].state != HID_DEV_CONNECTED)
+  if (hh_cb.devices[dev_handle].state != HID_DEV_CONNECTED) {
+    log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
+                            HIDH_ERR_NO_CONNECTION_AT_HOST_CLOSE_DEV,
+                        1);
     return HID_ERR_NO_CONNECTION;
+  }
 
   alarm_cancel(hh_cb.devices[dev_handle].conn.process_repage_timer);
   hh_cb.devices[dev_handle].conn_tries = HID_HOST_MAX_CONN_RETRY + 1;

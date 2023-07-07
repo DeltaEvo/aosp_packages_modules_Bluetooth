@@ -16,15 +16,12 @@
 
 package com.android.bluetooth.hfp;
 
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.content.AttributionSource;
-import android.content.pm.PackageManager;
 
 import com.android.bluetooth.x.com.android.modules.utils.SynchronousResultReceiver;
 
@@ -38,8 +35,6 @@ public class BluetoothHeadsetBinderTest {
 
     @Mock
     private HeadsetService mService;
-    @Mock
-    private PackageManager mPackageManager;
 
     private AttributionSource mAttributionSource;
     private BluetoothDevice mTestDevice;
@@ -50,49 +45,25 @@ public class BluetoothHeadsetBinderTest {
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mBinder = new HeadsetService.BluetoothHeadsetBinder(mService);
-        doReturn(mPackageManager).when(mService).getPackageManager();
-        doReturn(new String[] { "com.android.bluetooth.test" })
-                .when(mPackageManager).getPackagesForUid(anyInt());
         mAttributionSource = new AttributionSource.Builder(1).build();
         mTestDevice = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(TEST_DEVICE_ADDRESS);
     }
 
     @Test
     public void connect() {
-        mBinder.connect(mTestDevice);
-        verify(mService).connect(mTestDevice);
-    }
-
-    @Test
-    public void connectWithAttribution() {
-        mBinder.connectWithAttribution(mTestDevice, mAttributionSource,
-                SynchronousResultReceiver.get());
+        mBinder.connect(mTestDevice, mAttributionSource, SynchronousResultReceiver.get());
         verify(mService).connect(mTestDevice);
     }
 
     @Test
     public void disconnect() {
-        mBinder.disconnect(mTestDevice);
-        verify(mService).disconnect(mTestDevice);
-    }
-
-    @Test
-    public void disconnectWithAttribution() {
-        mBinder.disconnectWithAttribution(mTestDevice, mAttributionSource,
-                SynchronousResultReceiver.get());
+        mBinder.disconnect(mTestDevice, mAttributionSource, SynchronousResultReceiver.get());
         verify(mService).disconnect(mTestDevice);
     }
 
     @Test
     public void getConnectedDevices() {
-        mBinder.getConnectedDevices();
-        verify(mService).getConnectedDevices();
-    }
-
-    @Test
-    public void getConnectedDevicesWithAttribution() {
-        mBinder.getConnectedDevicesWithAttribution(mAttributionSource,
-                SynchronousResultReceiver.get());
+        mBinder.getConnectedDevices(mAttributionSource, SynchronousResultReceiver.get());
         verify(mService).getConnectedDevices();
     }
 
@@ -106,13 +77,7 @@ public class BluetoothHeadsetBinderTest {
 
     @Test
     public void getConnectionState() {
-        mBinder.getConnectionState(mTestDevice);
-        verify(mService).getConnectionState(mTestDevice);
-    }
-
-    @Test
-    public void getConnectionStateWithAttribution() {
-        mBinder.getConnectionStateWithAttribution(mTestDevice, mAttributionSource,
+        mBinder.getConnectionState(mTestDevice, mAttributionSource,
                 SynchronousResultReceiver.get());
         verify(mService).getConnectionState(mTestDevice);
     }
