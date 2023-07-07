@@ -19,12 +19,11 @@ import asyncio
 
 from mmi2grpc._helpers import assert_description, match_description
 from mmi2grpc._proxy import ProfileProxy
-from mmi2grpc._streaming import StreamWrapper
 
-from pandora_experimental.security_grpc import Security
-from pandora_experimental.security_pb2 import LESecurityLevel
-from pandora_experimental.host_grpc import Host
-from pandora_experimental.host_pb2 import ConnectabilityMode, OwnAddressType
+from pandora.security_grpc import Security
+from pandora.security_pb2 import LE_LEVEL3, PairingEventAnswer
+from pandora.host_grpc import Host
+from pandora.host_pb2 import PUBLIC, RANDOM
 
 
 def debug(*args, **kwargs):
@@ -47,7 +46,7 @@ class SMProxy(ProfileProxy):
         """
         Initiate an connection from the IUT to the PTS.
         """
-        self.connection = self.host.ConnectLE(public=pts_addr).connection
+        self.connection = self.host.ConnectLE(own_address_type=RANDOM, public=pts_addr).connection
         return "OK"
 
     @assert_description
@@ -55,9 +54,11 @@ class SMProxy(ProfileProxy):
         """
         Please start pairing process.
         """
+
         def secure():
             if self.connection:
-                self.security.Secure(connection=self.connection, le=LESecurityLevel.LE_LEVEL3)
+                self.security.Secure(connection=self.connection, le=LE_LEVEL3)
+
         Thread(target=secure).start()
         return "OK"
 
@@ -93,10 +94,11 @@ class SMProxy(ProfileProxy):
         """
         Action: Place the IUT in connectable mode
         """
-        self.host.StartAdvertising(
+        self.advertise = self.host.Advertise(
             connectable=True,
-            own_address_type=OwnAddressType.PUBLIC,
+            own_address_type=PUBLIC,
         )
+
         return "OK"
 
     @assert_description
@@ -166,17 +168,39 @@ class SMProxy(ProfileProxy):
         """
         return "OK"
 
+    @assert_description
+    def MMI_IUT_INITIATE_CONNECTION_BR_EDR_PAIRING(self, test: str, pts_addr: bytes, **kwargs):
+        """
+        Please initiate a connection over BR/EDR to the PTS, and initiate
+        pairing process.
+    
+        Description: Verify that the Implementation Under Test
+        (IUT) can initiate a connect request over BR/EDR to PTS, and initiate
+        pairing process.
+        """
+        self.connection = self.host.Connect(address=pts_addr).connection
+
+        return "OK"
+
+    @assert_description
+    def MMI_ASK_IUT_PERFORM_FEATURE_EXCHANGE_OVER_BR(self, **kwargs):
+        """
+        Please start pairing feature exchange over BR/EDR.
+        """
+
+        return "OK"
+
     def _handle_pairing_requests(self):
 
         def task():
             pairing_events = self.security.OnPairing()
             for event in pairing_events:
                 if event.just_works or event.numeric_comparison:
-                    pairing_events.send(event=event, confirm=True)
+                    pairing_events.send(PairingEventAnswer(event=event, confirm=True))
                 if event.passkey_entry_request:
                     try:
                         passkey = self.passkey_queue.get(timeout=15)
-                        pairing_events.send(event=event, passkey=int(passkey))
+                        pairing_events.send(PairingEventAnswer(event=event, passkey=int(passkey)))
                     except Empty:
                         debug("No passkey provided within 15 seconds")
 

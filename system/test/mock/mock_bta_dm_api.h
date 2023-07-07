@@ -26,7 +26,7 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
+#include "test/common/mock_functions.h"
 
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
@@ -34,7 +34,7 @@ extern std::map<std::string, int> mock_function_count_map;
 //       still applies, but crafting proper inclusion is out of scope
 //       for this effort.  This compilation unit may compile as-is, or
 //       may need attention to prune from (or add to ) the inclusion set.
-#include <base/bind.h>
+#include <base/functional/bind.h>
 
 #include <map>
 #include <string>
@@ -186,12 +186,14 @@ struct BTA_DmBleRequestMaxTxDataLength {
 extern struct BTA_DmBleRequestMaxTxDataLength BTA_DmBleRequestMaxTxDataLength;
 
 // Name: BTA_DmBleScan
-// Params: bool start, uint8_t duration
+// Params: bool start, uint8_t duration, bool low_latency_scan
 // Return: void
 struct BTA_DmBleScan {
-  std::function<void(bool start, uint8_t duration)> body{
-      [](bool start, uint8_t duration) {}};
-  void operator()(bool start, uint8_t duration) { body(start, duration); };
+  std::function<void(bool start, uint8_t duration, bool low_latency_scan)> body{
+      [](bool start, uint8_t duration, bool low_latency_scan) {}};
+  void operator()(bool start, uint8_t duration, bool low_latency_scan) {
+    body(start, duration, low_latency_scan);
+  };
 };
 extern struct BTA_DmBleScan BTA_DmBleScan;
 
