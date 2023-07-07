@@ -18,6 +18,7 @@ package com.android.bluetooth.gatt;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.verify;
 
@@ -31,7 +32,10 @@ import android.bluetooth.IBluetoothGattCallback;
 import android.bluetooth.IBluetoothGattServerCallback;
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertisingSetParameters;
+import android.bluetooth.le.DistanceMeasurementMethod;
+import android.bluetooth.le.DistanceMeasurementParams;
 import android.bluetooth.le.IAdvertisingSetCallback;
+import android.bluetooth.le.IDistanceMeasurementCallback;
 import android.bluetooth.le.IPeriodicAdvertisingCallback;
 import android.bluetooth.le.IScannerCallback;
 import android.bluetooth.le.PeriodicAdvertisingParameters;
@@ -60,7 +64,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -85,15 +88,18 @@ public class GattServiceTest {
     private static final String REMOTE_DEVICE_ADDRESS = "00:00:00:00:00:00";
 
     private static final int TIMES_UP_AND_DOWN = 3;
+    private static final int TIMEOUT_MS = 5_000;
     private Context mTargetContext;
     private GattService mService;
     @Mock private GattService.ClientMap mClientMap;
     @Mock private GattService.ScannerMap mScannerMap;
     @Mock private GattService.ScannerMap.App mApp;
     @Mock private GattService.PendingIntentInfo mPiInfo;
+    @Mock private PeriodicScanManager mPeriodicScanManager;
     @Mock private ScanManager mScanManager;
     @Mock private Set<String> mReliableQueue;
     @Mock private GattService.ServerMap mServerMap;
+    @Mock private DistanceMeasurementManager mDistanceMeasurementManager;
 
     @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
@@ -103,15 +109,21 @@ public class GattServiceTest {
 
     @Mock private Resources mResources;
     @Mock private AdapterService mAdapterService;
+    @Mock private GattObjectsFactory mFactory;
+    @Mock private GattNativeInterface mNativeInterface;
+    private BluetoothDevice mCurrentDevice;
     private CompanionManager mBtCompanionManager;
 
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        Assume.assumeTrue("Ignore test when GattService is not enabled", GattService.isEnabled());
+
         MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         doReturn(true).when(mAdapterService).isStartedProfile(anyString());
+
+        GattObjectsFactory.setInstanceForTesting(mFactory);
+        doReturn(mNativeInterface).when(mFactory).getNativeInterface();
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAttributionSource = mAdapter.getAttributionSource();
@@ -132,26 +144,27 @@ public class GattServiceTest {
 
         mService.mClientMap = mClientMap;
         mService.mScannerMap = mScannerMap;
+        mService.mPeriodicScanManager = mPeriodicScanManager;
         mService.mScanManager = mScanManager;
         mService.mReliableQueue = mReliableQueue;
         mService.mServerMap = mServerMap;
+        mService.mDistanceMeasurementManager = mDistanceMeasurementManager;
     }
 
     @After
     public void tearDown() throws Exception {
-        if (!GattService.isEnabled()) {
-            return;
-        }
         doReturn(false).when(mAdapterService).isStartedProfile(anyString());
         TestUtils.stopService(mServiceRule, GattService.class);
         mService = GattService.getGattService();
         Assert.assertNull(mService);
         TestUtils.clearAdapterService(mAdapterService);
+        GattObjectsFactory.setInstanceForTesting(null);
     }
 
     @Test
     public void testInitialize() {
         Assert.assertEquals(mService, GattService.getGattService());
+        verify(mNativeInterface).init(eq(mService));
     }
 
     @Test
@@ -181,10 +194,12 @@ public class GattServiceTest {
         Assert.assertEquals(99700000000L, timestampNanos);
     }
 
+    @Test
     public void emptyClearServices() {
         int serverIf = 1;
 
         mService.clearServices(serverIf, mAttributionSource);
+        verify(mNativeInterface, times(0)).gattServerDeleteService(eq(serverIf), anyInt());
     }
 
     @Test
@@ -196,6 +211,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.clientReadPhy(clientIf, address, mAttributionSource);
+        verify(mNativeInterface).gattClientReadPhy(clientIf, address);
     }
 
     @Test
@@ -211,6 +227,8 @@ public class GattServiceTest {
 
         mService.clientSetPreferredPhy(clientIf, address, txPhy, rxPhy, phyOptions,
                 mAttributionSource);
+        verify(mNativeInterface).gattClientSetPreferredPhy(clientIf, address, txPhy, rxPhy,
+                phyOptions);
     }
 
     @Test
@@ -229,6 +247,9 @@ public class GattServiceTest {
         connectionPriority = BluetoothGatt.CONNECTION_PRIORITY_BALANCED;;
         mService.connectionParameterUpdate(clientIf, address, connectionPriority,
                 mAttributionSource);
+
+        verify(mNativeInterface, times(3)).gattConnectionParameterUpdate(eq(clientIf),
+                eq(address), anyInt(), anyInt(), anyInt(), anyInt(), eq(0), eq(0));
     }
 
     @Test
@@ -286,6 +307,23 @@ public class GattServiceTest {
     }
 
     @Test
+    public void clientConnect() throws Exception {
+        int clientIf = 1;
+        String address = REMOTE_DEVICE_ADDRESS;
+        int addressType = BluetoothDevice.ADDRESS_TYPE_RANDOM;
+        boolean isDirect = false;
+        int transport = 2;
+        boolean opportunistic = true;
+        int phy = 3;
+
+        mService.clientConnect(clientIf, address, addressType, isDirect, transport,
+                opportunistic, phy, mAttributionSource);
+
+        verify(mNativeInterface).gattClientConnect(clientIf, address, addressType,
+                isDirect, transport, opportunistic, phy);
+    }
+
+    @Test
     public void disconnectAll() {
         Map<Integer, String> connMap = new HashMap<>();
         int clientIf = 1;
@@ -296,6 +334,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.disconnectAll(mAttributionSource);
+        verify(mNativeInterface).gattClientDisconnect(clientIf, address, connId);
     }
 
     @Test
@@ -399,6 +438,8 @@ public class GattServiceTest {
         boolean eattSupport = true;
 
         mService.registerClient(uuid, callback, eattSupport, mAttributionSource);
+        verify(mNativeInterface).gattClientRegisterApp(uuid.getLeastSignificantBits(),
+                uuid.getMostSignificantBits(), eattSupport);
     }
 
     @Test
@@ -407,6 +448,7 @@ public class GattServiceTest {
 
         mService.unregisterClient(clientIf, mAttributionSource);
         verify(mClientMap).remove(clientIf);
+        verify(mNativeInterface).gattClientUnregisterApp(clientIf);
     }
 
     @Test
@@ -441,6 +483,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.readCharacteristic(clientIf, address, handle, authReq, mAttributionSource);
+        verify(mNativeInterface).gattClientReadCharacteristic(connId, handle, authReq);
     }
 
     @Test
@@ -457,6 +500,9 @@ public class GattServiceTest {
 
         mService.readUsingCharacteristicUuid(clientIf, address, uuid, startHandle, endHandle,
                 authReq, mAttributionSource);
+        verify(mNativeInterface).gattClientReadUsingCharacteristicUuid(connId,
+                uuid.getLeastSignificantBits(), uuid.getMostSignificantBits(), startHandle,
+                endHandle, authReq);
     }
 
     @Test
@@ -488,6 +534,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.readDescriptor(clientIf, address, handle, authReq, mAttributionSource);
+        verify(mNativeInterface).gattClientReadDescriptor(connId, handle, authReq);
     }
 
     @Test
@@ -510,6 +557,7 @@ public class GattServiceTest {
 
         mService.endReliableWrite(clientIf, address, execute, mAttributionSource);
         verify(mReliableQueue).remove(address);
+        verify(mNativeInterface).gattClientExecuteWrite(connId, execute);
     }
 
     @Test
@@ -523,6 +571,9 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.registerForNotification(clientIf, address, handle, enable, mAttributionSource);
+
+        verify(mNativeInterface).gattClientRegisterForNotifications(clientIf, address, handle,
+                enable);
     }
 
     @Test
@@ -531,6 +582,7 @@ public class GattServiceTest {
         String address = REMOTE_DEVICE_ADDRESS;
 
         mService.readRemoteRssi(clientIf, address, mAttributionSource);
+        verify(mNativeInterface).gattClientReadRemoteRssi(clientIf, address);
     }
 
     @Test
@@ -543,6 +595,7 @@ public class GattServiceTest {
         doReturn(connId).when(mClientMap).connIdByAddress(clientIf, address);
 
         mService.configureMTU(clientIf, address, mtu, mAttributionSource);
+        verify(mNativeInterface).gattClientConfigureMTU(connId, mtu);
     }
 
     @Test
@@ -559,6 +612,10 @@ public class GattServiceTest {
         mService.leConnectionUpdate(clientIf, address, minInterval, maxInterval,
                 peripheralLatency, supervisionTimeout, minConnectionEventLen,
                 maxConnectionEventLen, mAttributionSource);
+
+        verify(mNativeInterface).gattConnectionParameterUpdate(clientIf, address, minInterval,
+                maxInterval, peripheralLatency, supervisionTimeout, minConnectionEventLen,
+                maxConnectionEventLen);
     }
 
     @Test
@@ -569,6 +626,7 @@ public class GattServiceTest {
         int transport = 2;
 
         mService.serverConnect(serverIf, address, isDirect, transport, mAttributionSource);
+        verify(mNativeInterface).gattServerConnect(serverIf, address, isDirect, transport);
     }
 
     @Test
@@ -580,6 +638,7 @@ public class GattServiceTest {
         doReturn(connId).when(mServerMap).connIdByAddress(serverIf, address);
 
         mService.serverDisconnect(serverIf, address, mAttributionSource);
+        verify(mNativeInterface).gattServerDisconnect(serverIf, address, connId);
     }
 
     @Test
@@ -592,6 +651,8 @@ public class GattServiceTest {
 
         mService.serverSetPreferredPhy(serverIf, address, txPhy, rxPhy, phyOptions,
                 mAttributionSource);
+        verify(mNativeInterface).gattServerSetPreferredPhy(serverIf, address, txPhy, rxPhy,
+                phyOptions);
     }
 
     @Test
@@ -600,6 +661,7 @@ public class GattServiceTest {
         String address = REMOTE_DEVICE_ADDRESS;
 
         mService.serverReadPhy(serverIf, address, mAttributionSource);
+        verify(mNativeInterface).gattServerReadPhy(serverIf, address);
     }
 
     @Test
@@ -614,10 +676,12 @@ public class GattServiceTest {
         doReturn(connId).when(mServerMap).connIdByAddress(serverIf, address);
 
         mService.sendNotification(serverIf, address, handle, confirm, value, mAttributionSource);
+        verify(mNativeInterface).gattServerSendIndication(serverIf, handle, connId, value);
 
         confirm = false;
 
         mService.sendNotification(serverIf, address, handle, confirm, value, mAttributionSource);
+        verify(mNativeInterface).gattServerSendNotification(serverIf, handle, connId, value);
     }
 
     @Test
@@ -638,7 +702,6 @@ public class GattServiceTest {
                 mAttributionSource);
     }
 
-    @Ignore("b/265327402")
     @Test
     public void registerSync() {
         ScanResult scanResult = new ScanResult(mDevice, 1, 2, 3, 4, 5, 6, 7, null, 8);
@@ -647,6 +710,7 @@ public class GattServiceTest {
         IPeriodicAdvertisingCallback callback = mock(IPeriodicAdvertisingCallback.class);
 
         mService.registerSync(scanResult, skip, timeout, callback, mAttributionSource);
+        verify(mPeriodicScanManager).startSync(scanResult, skip, timeout, callback);
     }
 
     @Test
@@ -655,9 +719,9 @@ public class GattServiceTest {
         int syncHandle = 2;
 
         mService.transferSync(mDevice, serviceData, syncHandle, mAttributionSource);
+        verify(mPeriodicScanManager).transferSync(mDevice, serviceData, syncHandle);
     }
 
-    @Ignore("b/265327402")
     @Test
     public void transferSetInfo() {
         int serviceData = 1;
@@ -666,14 +730,15 @@ public class GattServiceTest {
 
         mService.transferSetInfo(mDevice, serviceData, advHandle, callback,
                 mAttributionSource);
+        verify(mPeriodicScanManager).transferSetInfo(mDevice, serviceData, advHandle, callback);
     }
 
-    @Ignore("b/265327402")
     @Test
     public void unregisterSync() {
         IPeriodicAdvertisingCallback callback = mock(IPeriodicAdvertisingCallback.class);
 
         mService.unregisterSync(callback, mAttributionSource);
+        verify(mPeriodicScanManager).stopSync(callback);
     }
 
     @Test
@@ -685,6 +750,7 @@ public class GattServiceTest {
 
         mService.unregAll(mAttributionSource);
         verify(mClientMap).remove(appId);
+        verify(mNativeInterface).gattClientUnregisterApp(appId);
     }
 
     @Test
@@ -694,8 +760,35 @@ public class GattServiceTest {
     }
 
     @Test
+    public void getSupportedDistanceMeasurementMethods() {
+        mService.getSupportedDistanceMeasurementMethods();
+        verify(mDistanceMeasurementManager).getSupportedDistanceMeasurementMethods();
+    }
+
+    @Test
+    public void startDistanceMeasurement() {
+        UUID uuid = UUID.randomUUID();
+        BluetoothDevice device = mAdapter.getRemoteDevice("00:01:02:03:04:05");
+        DistanceMeasurementParams params = new DistanceMeasurementParams.Builder(device)
+                .setDurationSeconds(123)
+                .setFrequency(DistanceMeasurementParams.REPORT_FREQUENCY_LOW)
+                .build();
+        IDistanceMeasurementCallback callback = mock(IDistanceMeasurementCallback.class);
+        mService.startDistanceMeasurement(uuid, params, callback);
+        verify(mDistanceMeasurementManager).startDistanceMeasurement(uuid, params, callback);
+    }
+
+    @Test
+    public void stopDistanceMeasurement() {
+        UUID uuid = UUID.randomUUID();
+        BluetoothDevice device = mAdapter.getRemoteDevice("00:01:02:03:04:05");
+        int method = DistanceMeasurementMethod.DISTANCE_MEASUREMENT_METHOD_RSSI;
+        mService.stopDistanceMeasurement(uuid, device, method);
+        verify(mDistanceMeasurementManager).stopDistanceMeasurement(uuid, device, method, false);
+    }
+
+    @Test
     public void cleanUp_doesNotCrash() {
         mService.cleanup();
     }
 }
-

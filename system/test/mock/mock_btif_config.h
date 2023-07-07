@@ -24,7 +24,7 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
+#include "test/common/mock_functions.h"
 
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
@@ -37,15 +37,32 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 namespace test {
 namespace mock {
 namespace btif_config {
 
 // Shared state between mocked functions and tests
+// Name: btif_get_device_clockoffset
+// Params: const RawAddress& bda, int* p_clock_offset
+// Returns: bool
+struct btif_get_device_clockoffset {
+  std::function<bool(const RawAddress& bda, int* p_clock_offset)> body{
+      [](const RawAddress& bda, int* p_clock_offset) { return false; }};
+  bool operator()(const RawAddress& bda, int* p_clock_offset) {
+    return body(bda, p_clock_offset);
+  };
+};
+// Name: btif_set_device_clockoffset
+// Params: const RawAddress& bda, int* p_clock_offset
+// Returns: bool
+struct btif_set_device_clockoffset {
+  std::function<bool(const RawAddress& bda, int clock_offset)> body{
+      [](const RawAddress& bda, int clock_offset) { return false; }};
+  bool operator()(const RawAddress& bda, int clock_offset) {
+    return body(bda, clock_offset);
+  };
+};
 // Name: btif_config_exist
 // Params: const std::string& section, const std::string& key
 // Returns: bool
@@ -204,22 +221,6 @@ struct btif_config_remove {
   };
 };
 extern struct btif_config_remove btif_config_remove;
-// Name: btif_config_save
-// Params: void
-// Returns: void
-struct btif_config_save {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btif_config_save btif_config_save;
-// Name: btif_config_flush
-// Params: void
-// Returns: void
-struct btif_config_flush {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct btif_config_flush btif_config_flush;
 // Name: btif_config_clear
 // Params: void
 // Returns: bool

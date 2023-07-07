@@ -19,6 +19,7 @@ package android.bluetooth;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -55,6 +56,7 @@ import java.util.Objects;
  *
  * @hide
  */
+@SystemApi
 public final class BluetoothSinkAudioPolicy implements Parcelable {
 
     /**
@@ -78,6 +80,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
      * configured with a value yet and should not be used to make any decision.
      * @hide
      */
+    @SystemApi
     public static final int POLICY_UNCONFIGURED = 0;
 
     /**
@@ -89,6 +92,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
      * during making or picking up a call.
      * @hide
      */
+    @SystemApi
     public static final int POLICY_ALLOWED = 1;
 
     /**
@@ -100,7 +104,14 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
      * during making or picking up a call.
      * @hide
      */
+    @SystemApi
     public static final int POLICY_NOT_ALLOWED = 2;
+
+    /**
+     * The feature ID used in the HFP AT command.
+     * @hide
+     */
+    public static final String HFP_SET_SINK_AUDIO_POLICY_ID = "SINKAUDIOPOLICY";
 
     @AudioPolicyValues private final int mCallEstablishPolicy;
     @AudioPolicyValues private final int mConnectingTimePolicy;
@@ -126,6 +137,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
      *
      * @hide
      */
+    @SystemApi
     public @AudioPolicyValues int getCallEstablishPolicy() {
         return mCallEstablishPolicy;
     }
@@ -143,6 +155,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
      *
      * @hide
      */
+    @SystemApi
     public @AudioPolicyValues int getActiveDevicePolicyAfterConnection() {
         return mConnectingTimePolicy;
     }
@@ -157,6 +170,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
      *
      * @hide
      */
+    @SystemApi
     public @AudioPolicyValues int getInBandRingtonePolicy() {
         return mInBandRingtonePolicy;
     }
@@ -262,7 +276,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
          *
          * @hide
          */
-        public @NonNull Builder setCallEstablishPolicy(
+        @SystemApi public @NonNull Builder setCallEstablishPolicy(
                 @AudioPolicyValues int callEstablishPolicy) {
             mCallEstablishPolicy = callEstablishPolicy;
             return this;
@@ -285,7 +299,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
          *
          * @hide
          */
-        public @NonNull Builder setActiveDevicePolicyAfterConnection(
+        @SystemApi public @NonNull Builder setActiveDevicePolicyAfterConnection(
                 @AudioPolicyValues int connectingTimePolicy) {
             mConnectingTimePolicy = connectingTimePolicy;
             return this;
@@ -305,7 +319,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
          *
          * @hide
          */
-        public @NonNull Builder setInBandRingtonePolicy(
+        @SystemApi public @NonNull Builder setInBandRingtonePolicy(
                 @AudioPolicyValues int inBandRingtonePolicy) {
             mInBandRingtonePolicy = inBandRingtonePolicy;
             return this;
@@ -317,7 +331,7 @@ public final class BluetoothSinkAudioPolicy implements Parcelable {
          *
          * @hide
          */
-        public @NonNull BluetoothSinkAudioPolicy build() {
+        @SystemApi public @NonNull BluetoothSinkAudioPolicy build() {
             return new BluetoothSinkAudioPolicy(
                     mCallEstablishPolicy, mConnectingTimePolicy, mInBandRingtonePolicy);
         }

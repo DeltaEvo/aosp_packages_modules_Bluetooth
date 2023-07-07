@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/memory/weak_ptr.h>
 #include <map>
 #include <memory>
@@ -126,6 +126,8 @@ class ConnectionHandler {
    * determines its lifetime.
    */
   static void InitForTesting(ConnectionHandler* handler);
+
+  virtual void RegisterVolChanged(const RawAddress& bdaddr);
 
  private:
   AvrcpInterface* avrc_;

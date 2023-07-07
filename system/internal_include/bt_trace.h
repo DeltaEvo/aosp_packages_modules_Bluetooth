@@ -20,6 +20,12 @@
 
 #include <stdint.h>
 
+// move this function outof extern "C" block
+// as it is a C++ function.
+extern void LogMsg(uint32_t trace_set_mask,
+                   const char *filename, uint32_t linenum, const char *func,
+                   const char* fmt_str, ...);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -72,6 +78,7 @@ typedef enum {
 #define TRACE_TYPE_API 0x00000002
 #define TRACE_TYPE_EVENT 0x00000003
 #define TRACE_TYPE_DEBUG 0x00000004
+#define TRACE_TYPE_INFO 0x00000005
 
 static const char BTE_LOGMSG_MODULE[] = "bte_logmsg_module";
 
@@ -244,7 +251,7 @@ static const char BTE_LOGMSG_MODULE[] = "bte_logmsg_module";
 #endif
 
 #define BT_TRACE(l, t, ...) \
-  LogMsg((TRACE_CTRL_GENERAL | (l) | TRACE_ORG_STACK | (t)), ##__VA_ARGS__)
+  LogMsg((TRACE_CTRL_GENERAL | (l) | TRACE_ORG_STACK | (t)), __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 
 /* Define tracing for the HCI unit */
 #define HCI_TRACE_ERROR(...)                                      \
@@ -347,6 +354,11 @@ static const char BTE_LOGMSG_MODULE[] = "bte_logmsg_module";
   {                                                               \
     if (sdp_cb.trace_level >= BT_TRACE_LEVEL_DEBUG)               \
       BT_TRACE(TRACE_LAYER_SDP, TRACE_TYPE_DEBUG, ##__VA_ARGS__); \
+  }
+#define SDP_TRACE_INFO(...)                                      \
+  {                                                              \
+    if (sdp_cb.trace_level >= BT_TRACE_LEVEL_WARNING)            \
+      BT_TRACE(TRACE_LAYER_SDP, TRACE_TYPE_INFO, ##__VA_ARGS__); \
   }
 
 /* Define tracing for the RFCOMM unit */
@@ -630,88 +642,88 @@ extern uint8_t btif_trace_level;
 #define BTIF_TRACE_ERROR(...)                                         \
   {                                                                   \
     if (btif_trace_level >= BT_TRACE_LEVEL_ERROR)                     \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_ERROR,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_ERROR,                                      \
+               ##__VA_ARGS__);                                        \
   }
 #define BTIF_TRACE_WARNING(...)                                       \
   {                                                                   \
     if (btif_trace_level >= BT_TRACE_LEVEL_WARNING)                   \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_WARNING,                                  \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_WARNING,                                    \
+               ##__VA_ARGS__);                                        \
   }
 #define BTIF_TRACE_API(...)                                           \
   {                                                                   \
     if (btif_trace_level >= BT_TRACE_LEVEL_API)                       \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_API,                                      \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_API,                                        \
+               ##__VA_ARGS__);                                        \
   }
 #define BTIF_TRACE_EVENT(...)                                         \
   {                                                                   \
     if (btif_trace_level >= BT_TRACE_LEVEL_EVENT)                     \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_EVENT,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_EVENT,                                      \
+               ##__VA_ARGS__);                                        \
   }
 #define BTIF_TRACE_DEBUG(...)                                         \
   {                                                                   \
     if (btif_trace_level >= BT_TRACE_LEVEL_DEBUG)                     \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_DEBUG,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_DEBUG,                                      \
+               ##__VA_ARGS__);                                        \
   }
 #define BTIF_TRACE_VERBOSE(...)                                       \
   {                                                                   \
     if (btif_trace_level >= BT_TRACE_LEVEL_VERBOSE)                   \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_DEBUG,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_DEBUG,                                      \
+               ##__VA_ARGS__);                                        \
   }
 
 /* define traces for application */
 #define APPL_TRACE_ERROR(...)                                         \
   {                                                                   \
     if (appl_trace_level >= BT_TRACE_LEVEL_ERROR)                     \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_ERROR,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_ERROR,                                      \
+               ##__VA_ARGS__);                                        \
   }
 #define APPL_TRACE_WARNING(...)                                       \
   {                                                                   \
     if (appl_trace_level >= BT_TRACE_LEVEL_WARNING)                   \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_WARNING,                                  \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_WARNING,                                    \
+               ##__VA_ARGS__);                                        \
   }
 #define APPL_TRACE_API(...)                                           \
   {                                                                   \
     if (appl_trace_level >= BT_TRACE_LEVEL_API)                       \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_API,                                      \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_API,                                        \
+               ##__VA_ARGS__);                                        \
   }
 #define APPL_TRACE_EVENT(...)                                         \
   {                                                                   \
     if (appl_trace_level >= BT_TRACE_LEVEL_EVENT)                     \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_EVENT,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_EVENT,                                      \
+               ##__VA_ARGS__);                                        \
   }
 #define APPL_TRACE_DEBUG(...)                                         \
   {                                                                   \
     if (appl_trace_level >= BT_TRACE_LEVEL_DEBUG)                     \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_DEBUG,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_DEBUG,                                      \
+               ##__VA_ARGS__);                                        \
   }
 #define APPL_TRACE_VERBOSE(...)                                       \
   {                                                                   \
     if (appl_trace_level >= BT_TRACE_LEVEL_VERBOSE)                   \
-      LogMsg(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL | \
-                 TRACE_TYPE_DEBUG,                                    \
-             ##__VA_ARGS__);                                          \
+      BT_TRACE(TRACE_CTRL_GENERAL | TRACE_LAYER_NONE | TRACE_ORG_APPL,\
+               TRACE_TYPE_DEBUG,                                      \
+               ##__VA_ARGS__);                                        \
   }
 
 typedef uint8_t tBTTRC_LAYER_ID;
@@ -729,19 +741,19 @@ typedef struct {
  * declaration in all the files using APPL_TRACExxx macros */
 extern uint8_t appl_trace_level;
 
-void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...);
-
 #ifdef __cplusplus
 }
 #endif
 
 #ifdef __cplusplus
 
+#include <array>
 #include <iomanip>
 #include <sstream>
 #include <type_traits>
 
 #include "check.h"
+#include "os/logging/log_adapter.h"
 
 /* Prints integral parameter x as hex string, with '0' fill */
 template <typename T>

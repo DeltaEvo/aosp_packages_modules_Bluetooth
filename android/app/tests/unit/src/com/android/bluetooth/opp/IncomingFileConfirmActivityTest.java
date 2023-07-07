@@ -23,6 +23,9 @@ import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
+import static com.android.bluetooth.opp.BluetoothOppIncomingFileConfirmActivity.DISMISS_TIMEOUT_DIALOG;
+import static com.android.bluetooth.opp.BluetoothOppIncomingFileConfirmActivity.DISMISS_TIMEOUT_DIALOG_VALUE;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -30,12 +33,14 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.view.KeyEvent;
 
 import androidx.lifecycle.Lifecycle;
 import androidx.test.core.app.ActivityScenario;
@@ -44,6 +49,7 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 
 import com.google.common.base.Objects;
 
@@ -56,8 +62,10 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // Long class name cause problem with Junit4. It will raise java.lang.NoClassDefFoundError
 @RunWith(AndroidJUnit4.class)
@@ -72,10 +80,10 @@ public class IncomingFileConfirmActivityTest {
     Intent mIntent;
     Context mTargetContext;
 
-    boolean mDestroyed;
+    static final int TIMEOUT_MS = 3_000;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mBluetoothMethodProxy = Mockito.spy(BluetoothMethodProxy.getInstance());
         BluetoothMethodProxy.setInstanceForTesting(mBluetoothMethodProxy);
@@ -122,10 +130,13 @@ public class IncomingFileConfirmActivityTest {
         ));
 
         BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
+        TestUtils.setUpUiTest();
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
+        TestUtils.tearDownUiTest();
+
         BluetoothMethodProxy.setInstanceForTesting(null);
         BluetoothOppTestUtils.enableOppActivities(false, mTargetContext);
     }
@@ -137,12 +148,13 @@ public class IncomingFileConfirmActivityTest {
 
         ActivityScenario<BluetoothOppIncomingFileConfirmActivity> activityScenario
                 = ActivityScenario.launch(mIntent);
-        activityScenario.onActivity(activity -> {});
+        activityScenario.onActivity(activity -> {
+        });
 
         // To work around (possibly) ActivityScenario's bug.
         // The dialog button is clicked (no error throw) but onClick() is not triggered.
         // It works normally if sleep for a few seconds
-        Thread.sleep(3_000);
+        Thread.sleep(TIMEOUT_MS);
         onView(withText(mTargetContext.getText(R.string.incoming_file_confirm_cancel).toString()))
                 .inRoot(isDialog()).check(matches(isDisplayed())).perform(click());
 
@@ -163,7 +175,7 @@ public class IncomingFileConfirmActivityTest {
         // To work around (possibly) ActivityScenario's bug.
         // The dialog button is clicked (no error throw) but onClick() is not triggered.
         // It works normally if sleep for a few seconds
-        Thread.sleep(3_000);
+        Thread.sleep(TIMEOUT_MS);
         onView(withText(mTargetContext.getText(R.string.incoming_file_confirm_ok).toString()))
                 .inRoot(isDialog()).check(matches(isDisplayed())).perform(click());
 
@@ -175,7 +187,7 @@ public class IncomingFileConfirmActivityTest {
     }
 
     @Test
-    public void onTimeout_sendIntentWithUSER_CONFIRMATION_TIMEOUT_ACTION_finish() throws Exception {
+    public void onTimeout_broadcastUserConfirmationTimeoutAction_sendDismissTimeoutDialogMessage() {
         BluetoothOppTestUtils.setUpMockCursor(mCursor, mCursorMockDataList);
         ActivityScenario<BluetoothOppIncomingFileConfirmActivity> scenario =
                 ActivityScenario.launch(mIntent);
@@ -184,10 +196,30 @@ public class IncomingFileConfirmActivityTest {
         Intent in = new Intent(BluetoothShare.USER_CONFIRMATION_TIMEOUT_ACTION);
         mTargetContext.sendBroadcast(in);
 
-        // To work around (possibly) ActivityScenario's bug.
-        // The dialog button is clicked (no error throw) but onClick() is not triggered.
-        // It works normally if sleep for a few seconds
-        Thread.sleep(3_000);
-        assertThat(scenario.getState()).isEqualTo(Lifecycle.State.DESTROYED);
+        verify(mBluetoothMethodProxy, timeout(TIMEOUT_MS)).handlerSendMessageDelayed(any(),
+                eq(DISMISS_TIMEOUT_DIALOG), eq((long) DISMISS_TIMEOUT_DIALOG_VALUE));
+    }
+
+    @Test
+    public void onKeyDown() throws Exception {
+        BluetoothOppTestUtils.setUpMockCursor(mCursor, mCursorMockDataList);
+        ActivityScenario<BluetoothOppIncomingFileConfirmActivity> scenario =
+                ActivityScenario.launch(mIntent);
+        AtomicBoolean atomicBoolean = new AtomicBoolean();
+        scenario.onActivity(activity -> {
+            atomicBoolean.set(activity.onKeyDown(KeyEvent.KEYCODE_A,
+                    new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A)));
+        });
+
+        assertThat(atomicBoolean.get()).isFalse();
+        assertThat(scenario.getState()).isNotEqualTo(Lifecycle.State.DESTROYED);
+
+        scenario.onActivity(activity -> {
+            atomicBoolean.set(activity.onKeyDown(KeyEvent.KEYCODE_BACK,
+                    new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK))
+                    && activity.isFinishing());
+        });
+
+        assertThat(atomicBoolean.get()).isTrue();
     }
 }

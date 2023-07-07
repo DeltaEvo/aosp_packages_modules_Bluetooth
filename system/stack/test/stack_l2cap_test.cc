@@ -21,6 +21,7 @@
 #include "internal_include/bt_trace.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/l2cap_hci_link_interface.h"
+#include "stack/include/l2cdefs.h"
 #include "stack/l2cap/l2c_int.h"
 #include "types/raw_address.h"
 
@@ -32,8 +33,6 @@ void l2c_link_send_to_lower_ble(tL2C_LCB* p_lcb, BT_HDR* p_buf);
 
 // Global trace level referred in the code under test
 uint8_t appl_trace_level = BT_TRACE_LEVEL_VERBOSE;
-
-extern "C" void LogMsg(uint32_t trace_set_mask, const char* fmt_str, ...) {}
 
 namespace {
 constexpr uint16_t kAclBufferCountClassic = 123;
@@ -193,4 +192,60 @@ TEST_F(StackL2capChannelTest, l2c_lcc_proc_pdu__NextSegment) {
   p_buf->len = 32;
 
   l2c_lcc_proc_pdu(&ccb_, p_buf);
+}
+
+TEST_F(StackL2capChannelTest, l2c_link_init) {
+  l2cb.num_lm_acl_bufs = 0;
+  l2cb.controller_xmit_window = 0;
+
+  l2c_link_init(controller_.get_acl_buffer_count_classic());
+
+  ASSERT_EQ(controller_.get_acl_buffer_count_classic(), l2cb.num_lm_acl_bufs);
+  ASSERT_EQ(controller_.get_acl_buffer_count_classic(),
+            l2cb.controller_xmit_window);
+}
+
+TEST_F(StackL2capTest, l2cap_result_code_text) {
+  std::vector<std::pair<tL2CAP_CONN, std::string>> results = {
+      std::make_pair(L2CAP_CONN_OK, "L2CAP_CONN_OK"),
+      std::make_pair(L2CAP_CONN_PENDING, "L2CAP_CONN_PENDING"),
+      std::make_pair(L2CAP_CONN_NO_PSM, "L2CAP_CONN_NO_PSM"),
+      std::make_pair(L2CAP_CONN_SECURITY_BLOCK, "L2CAP_CONN_SECURITY_BLOCK"),
+      std::make_pair(L2CAP_CONN_NO_RESOURCES, "L2CAP_CONN_NO_RESOURCES"),
+      std::make_pair(L2CAP_CONN_TIMEOUT, "L2CAP_CONN_TIMEOUT"),
+      std::make_pair(L2CAP_CONN_OTHER_ERROR, "L2CAP_CONN_OTHER_ERROR"),
+      std::make_pair(L2CAP_CONN_ACL_CONNECTION_FAILED,
+                     "L2CAP_CONN_ACL_CONNECTION_FAILED"),
+      std::make_pair(L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED,
+                     "L2CAP_CONN_CLIENT_SECURITY_CLEARANCE_FAILED"),
+      std::make_pair(L2CAP_CONN_NO_LINK, "L2CAP_CONN_NO_LINK"),
+      std::make_pair(L2CAP_CONN_CANCEL, "L2CAP_CONN_CANCEL"),
+      std::make_pair(L2CAP_CONN_INSUFFICIENT_AUTHENTICATION,
+                     "L2CAP_CONN_INSUFFICIENT_AUTHENTICATION"),
+      std::make_pair(L2CAP_CONN_INSUFFICIENT_AUTHORIZATION,
+                     "L2CAP_CONN_INSUFFICIENT_AUTHORIZATION"),
+      std::make_pair(L2CAP_CONN_INSUFFICIENT_ENCRYP_KEY_SIZE,
+                     "L2CAP_CONN_INSUFFICIENT_ENCRYP_KEY_SIZE"),
+      std::make_pair(L2CAP_CONN_INSUFFICIENT_ENCRYP,
+                     "L2CAP_CONN_INSUFFICIENT_ENCRYP"),
+      std::make_pair(L2CAP_CONN_INVALID_SOURCE_CID,
+                     "L2CAP_CONN_INVALID_SOURCE_CID"),
+      std::make_pair(L2CAP_CONN_SOURCE_CID_ALREADY_ALLOCATED,
+                     "L2CAP_CONN_SOURCE_CID_ALREADY_ALLOCATED"),
+      std::make_pair(L2CAP_CONN_UNACCEPTABLE_PARAMETERS,
+                     "L2CAP_CONN_UNACCEPTABLE_PARAMETERS"),
+      std::make_pair(L2CAP_CONN_INVALID_PARAMETERS,
+                     "L2CAP_CONN_INVALID_PARAMETERS"),
+  };
+  for (const auto& result : results) {
+    ASSERT_STREQ(result.second.c_str(),
+                 l2cap_result_code_text(result.first).c_str());
+  }
+  std::ostringstream oss;
+  oss << "UNKNOWN[" << std::numeric_limits<std::uint16_t>::max() << "]";
+  ASSERT_STREQ(
+      oss.str().c_str(),
+      l2cap_result_code_text(
+          static_cast<tL2CAP_CONN>(std::numeric_limits<std::uint16_t>::max()))
+          .c_str());
 }
