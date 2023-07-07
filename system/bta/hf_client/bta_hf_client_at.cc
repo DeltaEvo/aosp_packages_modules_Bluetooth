@@ -40,6 +40,9 @@
 /* timeout (in milliseconds) for AT hold timer */
 #define BTA_HF_CLIENT_AT_HOLD_TIMEOUT 41
 
+static constexpr char kPropertyEnhancedDrivingIndicatorEnabled[] =
+    "bluetooth.headset_client.indicator.enhanced_driver_safety.enabled";
+
 /******************************************************************************
  *       SUPPORTED EVENT MESSAGES
  ******************************************************************************/
@@ -255,6 +258,7 @@ static void bta_hf_client_handle_ok(tBTA_HF_CLIENT_CB* client_cb) {
   switch (client_cb->at_cb.current_cmd) {
     case BTA_HF_CLIENT_AT_BIA:
     case BTA_HF_CLIENT_AT_BCC:
+    case BTA_HF_CLIENT_AT_BIEV:
       break;
     case BTA_HF_CLIENT_AT_BCS:
       bta_hf_client_start_at_hold_timer(client_cb);
@@ -1859,8 +1863,12 @@ void bta_hf_client_send_at_bind(tBTA_HF_CLIENT_CB* client_cb, int step) {
 
   switch (step) {
     case 0:  // List HF supported indicators
-      // TODO: Add flags to determine enabled HF features
-      buf = "AT+BIND=1,2\r";
+      if (osi_property_get_bool(kPropertyEnhancedDrivingIndicatorEnabled,
+                                false)) {
+        buf = "AT+BIND=1,2\r";
+      } else {
+        buf = "AT+BIND=2\r";
+      }
       cmd = BTA_HF_CLIENT_AT_BIND_SET_IND;
       break;
     case 1:  // Read AG supported indicators
