@@ -57,10 +57,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * @hide
  */
 public class PbapClientService extends ProfileService {
-    private static final boolean DBG = com.android.bluetooth.pbapclient.Utils.DBG;
-    private static final boolean VDBG = com.android.bluetooth.pbapclient.Utils.VDBG;
-
     private static final String TAG = "PbapClientService";
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final boolean VDBG = Log.isLoggable(TAG, Log.VERBOSE);
+
     private static final String SERVICE_NAME = "Phonebook Access PCE";
 
     /**
@@ -136,6 +136,7 @@ public class PbapClientService extends ProfileService {
         setComponentAvailable(AUTHENTICATOR_SERVICE, true);
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         // delay initial download until after the user is unlocked to add an account.
         filter.addAction(Intent.ACTION_USER_UNLOCKED);
@@ -292,6 +293,16 @@ public class PbapClientService extends ProfileService {
             if (DBG) Log.v(TAG, "onReceive" + action);
             if (action.equals(BluetoothDevice.ACTION_ACL_DISCONNECTED)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                int transport =
+                        intent.getIntExtra(BluetoothDevice.EXTRA_TRANSPORT, BluetoothDevice.ERROR);
+
+                Log.i(TAG, "Received ACL disconnection event, device=" + device.toString()
+                        + ", transport=" + transport);
+
+                if (transport != BluetoothDevice.TRANSPORT_BREDR) {
+                    return;
+                }
+
                 if (getConnectionState(device) == BluetoothProfile.STATE_CONNECTED) {
                     disconnect(device);
                 }

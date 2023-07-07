@@ -32,7 +32,6 @@
 
 #include "a2dp_sbc_decoder.h"
 #include "a2dp_sbc_encoder.h"
-#include "bt_utils.h"
 #include "embdrv/sbc/encoder/include/sbc_encoder.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
@@ -696,7 +695,7 @@ bool A2DP_BuildCodecHeaderSbc(UNUSED_ATTR const uint8_t* p_codec_info,
     return false;
   }
 
-  // there is an 4-byte timestamp right following p_buf
+  // there is a 4-byte timestamp right following p_buf
   if (p_buf->offset < 4 + A2DP_SBC_MPL_HDR_LEN) {
     return false;
   }

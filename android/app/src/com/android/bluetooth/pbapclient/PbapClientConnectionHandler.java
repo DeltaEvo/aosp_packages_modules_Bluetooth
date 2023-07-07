@@ -58,8 +58,8 @@ class PbapClientConnectionHandler extends Handler {
     private static final int UPPER_LIMIT = 65535;
 
     static final String TAG = "PbapClientConnHandler";
-    static final boolean DBG = Utils.DBG;
-    static final boolean VDBG = Utils.VDBG;
+    static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
+    static final boolean VDBG = Log.isLoggable(TAG, Log.VERBOSE);
     static final int MSG_CONNECT = 1;
     static final int MSG_DISCONNECT = 2;
     static final int MSG_DOWNLOAD = 3;
@@ -229,13 +229,13 @@ class PbapClientConnectionHandler extends Handler {
                         mObexSession.disconnect(null);
                         mObexSession.close();
                     }
-
+                } catch (IOException e) {
+                    Log.w(TAG, "DISCONNECT Failure ", e);
+                } finally {
                     if (DBG) {
                         Log.d(TAG, "Closing Socket");
                     }
                     closeSocket();
-                } catch (IOException e) {
-                    Log.w(TAG, "DISCONNECT Failure ", e);
                 }
                 if (DBG) {
                     Log.d(TAG, "Completing Disconnect");

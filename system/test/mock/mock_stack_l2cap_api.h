@@ -26,8 +26,6 @@
 #include <string>
 #include <vector>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -48,6 +46,7 @@ extern std::map<std::string, int> mock_function_count_map;
 #include "stack/include/bt_hdr.h"
 #include "stack/include/l2c_api.h"
 #include "stack/l2cap/l2c_int.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -485,6 +484,30 @@ struct L2CA_IsLinkEstablished {
   };
 };
 extern struct L2CA_IsLinkEstablished L2CA_IsLinkEstablished;
+// Name: L2CA_SetMediaStreamChannel
+// Params: uint16_t handle, uint16_t channel_id, bool is_local_cid
+// Returns: void
+struct L2CA_SetMediaStreamChannel {
+  std::function<void(uint16_t local_media_cid, bool status)> body{
+      [](uint16_t local_media_cid, bool status) {}};
+  void operator()(uint16_t local_media_cid, bool status) {
+    body(local_media_cid, status);
+  };
+};
+extern struct L2CA_SetMediaStreamChannel L2CA_SetMediaStreamChannel;
+// Name: L2CA_isMediaChannel
+// Params: uint16_t handle, uint16_t channel_id, bool is_local_cid
+// Returns: bool
+struct L2CA_isMediaChannel {
+  std::function<bool(uint16_t handle, uint16_t channel_id, bool is_local_cid)>
+      body{[](uint16_t handle, uint16_t channel_id, bool is_local_cid) {
+        return false;
+      }};
+  bool operator()(uint16_t handle, uint16_t channel_id, bool is_local_cid) {
+    return body(handle, channel_id, is_local_cid);
+  };
+};
+extern struct L2CA_isMediaChannel L2CA_isMediaChannel;
 // Name: L2CA_LeCreditDefault
 // Params:
 // Returns: uint16_t
