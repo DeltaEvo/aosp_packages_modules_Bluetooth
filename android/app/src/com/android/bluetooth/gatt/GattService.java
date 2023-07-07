@@ -85,6 +85,7 @@ import com.android.bluetooth.btservice.AbstractionLayer;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.BluetoothAdapterProxy;
 import com.android.bluetooth.btservice.CompanionManager;
+import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.util.NumberUtils;
 import com.android.internal.annotations.VisibleForTesting;
@@ -605,6 +606,34 @@ public class GattService extends ProfileService {
             }
             Log.e(TAG, "getService() - Service requested, but not available!");
             return null;
+        }
+
+        @Override
+        public void startService() {
+            GattService service = mService;
+            if (service == null) {
+                Log.e(TAG, "startService: Service is null");
+                return;
+            }
+            if (!Utils.checkConnectPermissionForDataDelivery(
+                    service, null, "GattService startService")) {
+                return;
+            }
+            service.doStart();
+        }
+
+        @Override
+        public void stopService() {
+            GattService service = mService;
+            if (service == null) {
+                Log.e(TAG, "stopService: Service is null");
+                return;
+            }
+            if (!Utils.checkConnectPermissionForDataDelivery(
+                    service, null, "GattService stopService")) {
+                return;
+            }
+            service.doStop();
         }
 
         @Override
@@ -1746,15 +1775,7 @@ public class GattService extends ProfileService {
         }
 
         @Override
-        public void unregAll(AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                unregAll(source);
-                receiver.send(null);
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-        private void unregAll(AttributionSource attributionSource) {
+        public void unregAll(AttributionSource attributionSource) {
             GattService service = getService();
             if (service == null) {
                 return;
@@ -3641,6 +3662,11 @@ public class GattService extends ProfileService {
                     + opportunistic + ", phy=" + phy);
         }
         statsLogAppPackage(address, attributionSource.getUid(), clientIf);
+        if (isDirect) {
+          MetricsLogger.getInstance().count(BluetoothProtoEnums.GATT_CLIENT_CONNECT_IS_DIRECT, 1);
+        } else {
+          MetricsLogger.getInstance().count(BluetoothProtoEnums.GATT_CLIENT_CONNECT_IS_AUTOCONNECT, 1);
+        }
         statsLogGattConnectionStateChange(
                 BluetoothProfile.GATT, address, clientIf,
                 BluetoothProtoEnums.CONNECTION_STATE_CONNECTING, -1);

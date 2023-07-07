@@ -35,9 +35,9 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
+import com.android.bluetooth.TestUtils;
 
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,8 +52,9 @@ public class BluetoothMapSettingsTest {
     ActivityScenario<BluetoothMapSettings> mActivityScenario;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         enableActivity(true);
+        TestUtils.setUpUiTest();
         mIntent = new Intent();
         mIntent.setClass(mTargetContext, BluetoothMapSettings.class);
         mActivityScenario = ActivityScenario.launch(mIntent);
@@ -61,6 +62,7 @@ public class BluetoothMapSettingsTest {
 
     @After
     public void tearDown() throws Exception {
+        TestUtils.tearDownUiTest();
         if (mActivityScenario != null) {
             // Workaround for b/159805732. Without this, test hangs for 45 seconds.
             Thread.sleep(1_000);

@@ -21,8 +21,9 @@
 namespace rootcanal {
 
 HciDevice::HciDevice(std::shared_ptr<HciTransport> transport,
-                     const std::string& properties_filename)
-    : DualModeController(properties_filename), transport_(transport) {
+                     ControllerProperties const& properties)
+    : DualModeController(ControllerProperties(properties)),
+      transport_(transport) {
   link_layer_controller_.SetLocalName(std::vector<uint8_t>({
       'g',
       'D',
@@ -79,7 +80,7 @@ HciDevice::HciDevice(std::shared_ptr<HciTransport> transport,
         HandleIso(iso);
       },
       [this]() {
-        LOG_INFO("HCI transport closed");
+        INFO("HCI transport closed");
         Close();
       });
 }

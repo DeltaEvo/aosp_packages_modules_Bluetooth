@@ -34,7 +34,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_tun.h>
 #include <net/if.h>
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
 #include <pan.sysprop.h>
 #endif
 #include <poll.h>
@@ -97,7 +97,7 @@ static btpan_interface_t pan_if = {
 const btpan_interface_t* btif_pan_get_interface() { return &pan_if; }
 
 static bool pan_nap_is_enabled() {
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
   // replace build time config PAN_NAP_DISABLED with runtime
   static const bool nap_is_enabled =
       android::sysprop::bluetooth::Pan::nap().value_or(true);
@@ -358,7 +358,7 @@ void btpan_set_flow_control(bool enable) {
   if (enable) {
     btsock_thread_add_fd(pan_pth, btpan_cb.tap_fd, 0, SOCK_THREAD_FD_RD, 0);
     do_in_main_thread(FROM_HERE,
-                      base::Bind(btu_exec_tap_fd_read, btpan_cb.tap_fd));
+                      base::BindOnce(btu_exec_tap_fd_read, btpan_cb.tap_fd));
   }
 }
 
@@ -759,6 +759,6 @@ static void btpan_tap_fd_signaled(int fd, int type, int flags,
     btpan_tap_close(fd);
     btif_pan_close_all_conns();
   } else if (flags & SOCK_THREAD_FD_RD) {
-    do_in_main_thread(FROM_HERE, base::Bind(btu_exec_tap_fd_read, fd));
+    do_in_main_thread(FROM_HERE, base::BindOnce(btu_exec_tap_fd_read, fd));
   }
 }

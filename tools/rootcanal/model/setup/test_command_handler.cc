@@ -50,6 +50,7 @@ TestCommandHandler::TestCommandHandler(TestModel& test_model)
   SET_HANDLER("stop_timer", StopTimer);
   SET_HANDLER("reset", Reset);
 #undef SET_HANDLER
+  send_response_ = [](std::string const&) {};
 }
 
 void TestCommandHandler::AddDefaults() {
@@ -88,30 +89,6 @@ void TestCommandHandler::HandleCommand(const std::string& name,
   active_commands_[name](args);
 }
 
-void TestCommandHandler::FromFile(const std::string& file_name) {
-  if (file_name.empty()) {
-    return;
-  }
-
-  std::ifstream file(file_name.c_str());
-
-  const std::regex re("\\s+");
-
-  std::string line;
-  while (std::getline(file, line)) {
-    auto begin = std::sregex_token_iterator(line.begin(), line.end(), re, -1);
-    auto end = std::sregex_token_iterator();
-    auto params = std::vector<std::string>(std::next(begin), end);
-
-    HandleCommand(*begin, params);
-  }
-
-  if (file.fail()) {
-    LOG_ERROR("Error reading commands from file.");
-    return;
-  }
-}
-
 void TestCommandHandler::RegisterSendResponse(
     const std::function<void(const std::string&)> callback) {
   send_response_ = callback;
@@ -129,11 +106,11 @@ void TestCommandHandler::AddDevice(const vector<std::string>& args) {
   if (new_dev == NULL) {
     response_string_ = "TestCommandHandler 'add' " + args[0] + " failed!";
     send_response_(response_string_);
-    LOG_WARN("%s", response_string_.c_str());
+    WARNING("{}", response_string_);
     return;
   }
 
-  LOG_INFO("Add %s", new_dev->ToString().c_str());
+  INFO("Add {}", new_dev->ToString());
   size_t dev_index = model_.AddDevice(new_dev);
   response_string_ =
       std::to_string(dev_index) + std::string(":") + new_dev->ToString();
@@ -236,7 +213,7 @@ void TestCommandHandler::RemoveDeviceFromPhy(const vector<std::string>& args) {
 
 void TestCommandHandler::List(const vector<std::string>& args) {
   if (!args.empty()) {
-    LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
+    INFO("Unused args: arg[0] = {}", args[0]);
     return;
   }
   send_response_(model_.List());
@@ -261,7 +238,7 @@ void TestCommandHandler::SetDeviceAddress(const vector<std::string>& args) {
 
 void TestCommandHandler::SetTimerPeriod(const vector<std::string>& args) {
   if (args.size() != 1) {
-    LOG_INFO("SetTimerPeriod takes 1 argument");
+    INFO("SetTimerPeriod takes 1 argument");
   }
   size_t period = std::stoi(args[0]);
   if (period != 0) {
@@ -277,7 +254,7 @@ void TestCommandHandler::SetTimerPeriod(const vector<std::string>& args) {
 
 void TestCommandHandler::StartTimer(const vector<std::string>& args) {
   if (!args.empty()) {
-    LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
+    INFO("Unused args: arg[0] = {}", args[0]);
   }
   model_.StartTimer();
   response_string_ = "timer started";
@@ -286,7 +263,7 @@ void TestCommandHandler::StartTimer(const vector<std::string>& args) {
 
 void TestCommandHandler::StopTimer(const vector<std::string>& args) {
   if (!args.empty()) {
-    LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
+    INFO("Unused args: arg[0] = {}", args[0]);
   }
   model_.StopTimer();
   response_string_ = "timer stopped";
@@ -295,7 +272,7 @@ void TestCommandHandler::StopTimer(const vector<std::string>& args) {
 
 void TestCommandHandler::Reset(const std::vector<std::string>& args) {
   if (!args.empty()) {
-    LOG_INFO("Unused args: arg[0] = %s", args[0].c_str());
+    INFO("Unused args: arg[0] = {}", args[0]);
   }
   model_.Reset();
   response_string_ = "model reset";

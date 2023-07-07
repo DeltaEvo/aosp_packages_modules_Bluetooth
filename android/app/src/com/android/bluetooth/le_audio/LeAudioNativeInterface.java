@@ -219,6 +219,32 @@ public class LeAudioNativeInterface {
         sendMessageToService(event);
     }
 
+    @VisibleForTesting
+    void onHealthBasedRecommendationAction(byte[] address, int action) {
+        LeAudioStackEvent event =
+                new LeAudioStackEvent(LeAudioStackEvent.EVENT_TYPE_HEALTH_BASED_DEV_RECOMMENDATION);
+        event.device = getDevice(address);
+        event.valueInt1 = action;
+
+        if (DBG) {
+            Log.d(TAG, "onHealthBasedRecommendationAction: " + event);
+        }
+        sendMessageToService(event);
+    }
+
+    @VisibleForTesting
+    void onHealthBasedGroupRecommendationAction(int groupId, int action) {
+        LeAudioStackEvent event =
+                new LeAudioStackEvent(
+                        LeAudioStackEvent.EVENT_TYPE_HEALTH_BASED_GROUP_RECOMMENDATION);
+        event.valueInt1 = groupId;
+        event.valueInt2 = action;
+
+        if (DBG) {
+            Log.d(TAG, "onHealthBasedGroupRecommendationAction: " + event);
+        }
+        sendMessageToService(event);
+    }
     /**
      * Initializes the native interface.
      *
@@ -253,6 +279,17 @@ public class LeAudioNativeInterface {
      */
     public boolean disconnectLeAudio(BluetoothDevice device) {
         return disconnectLeAudioNative(getByteAddress(device));
+    }
+
+    /**
+     * Enable/Disable LeAudio for the group.
+     *
+     * @param device the remote device
+     * @param enabled true if enabled, false to disabled
+     * @return true on success, otherwise false.
+     */
+    public boolean setEnableState(BluetoothDevice device, boolean enabled) {
+        return setEnableStateNative(getByteAddress(device), enabled);
     }
 
     /**
@@ -340,6 +377,7 @@ public class LeAudioNativeInterface {
     private native void cleanupNative();
     private native boolean connectLeAudioNative(byte[] address);
     private native boolean disconnectLeAudioNative(byte[] address);
+    private native boolean setEnableStateNative(byte[] address, boolean enabled);
     private native boolean groupAddNodeNative(int groupId, byte[] address);
     private native boolean groupRemoveNodeNative(int groupId, byte[] address);
     private native void groupSetActiveNative(int groupId);

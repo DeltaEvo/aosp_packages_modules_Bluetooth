@@ -185,6 +185,7 @@ public class LeAudioBroadcastServiceTest {
 
         // Set up the State Changed receiver
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
 
         mLeAudioIntentReceiver = new LeAudioIntentReceiver();
         mTargetContext.registerReceiver(mLeAudioIntentReceiver, filter);
@@ -467,7 +468,7 @@ public class LeAudioBroadcastServiceTest {
     @Test
     public void testGetAllBroadcastMetadata() {
         int broadcastId = 243;
-        byte[] code = {0x00, 0x01, 0x00};
+        byte[] code = {0x00, 0x01, 0x00, 0x02};
 
         BluetoothLeAudioContentMetadata.Builder meta_builder =
                 new BluetoothLeAudioContentMetadata.Builder();

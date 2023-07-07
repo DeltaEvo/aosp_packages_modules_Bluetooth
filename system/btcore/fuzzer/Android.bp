@@ -25,12 +25,6 @@ package {
 
 cc_defaults {
     name: "btcore_fuzz_defaults",
-    cflags: [
-        // http://b/264549607
-        "-Wno-deprecated-builtins",
-        // http://b/267867903
-        "-Wno-deprecated-declarations",
-    ],
     shared_libs: [
         "android.hardware.bluetooth@1.0",
         "android.hardware.bluetooth@1.1",
@@ -43,7 +37,6 @@ cc_defaults {
         "libbluetooth-types",
         "libbluetooth_rust_interop",
         "libbt-common",
-        "libbt_callbacks_cxx",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libbtcore",

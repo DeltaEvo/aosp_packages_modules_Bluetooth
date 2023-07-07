@@ -24,10 +24,9 @@ _VENV_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/avatar/venv"
 _BT_ROOT="${ANDROID_BUILD_TOP}/packages/modules/Bluetooth"
 _TEST_ROOT="${_BT_ROOT}/android/pandora/test"
 _PY_SOURCES=(
-  "${ANDROID_BUILD_TOP}/external/pandora/avatar/"{avatar,examples}
+  "${ANDROID_BUILD_TOP}/external/pandora/avatar/"{avatar,cases}
   "${_BT_ROOT}/pandora/server/bumble_experimental"
-  "${_TEST_ROOT}/"*_test.py
-  "${_TEST_ROOT}/main.py"
+  "${_TEST_ROOT}/"*.py
 )
 
 _PANDORA_PYTHON_PATHS=(
@@ -42,7 +41,8 @@ _PANDORA_PYTHON_PATHS=(
 
 if [[ "$1" =~ ^('format'|'lint'|'run')$ ]]; then
   [ ! -d "${_VENV_DIR}" ] && python3 -m venv "${_VENV_DIR}"
-  python3 -m pip install \
+  source "${_VENV_DIR}"/bin/activate
+  pip install \
     'grpcio==1.51.1' \
     'cryptography==35' \
     'protobuf==4.22.1' \
@@ -56,14 +56,14 @@ fi
 
 case "$1" in
   'format') shift
-    python3 -m black -S -l 119 "$@" "${_PY_SOURCES[@]}"
-    python3 -m isort --profile black -l 119 --ds --lbt 1 --ca "$@" "${_PY_SOURCES[@]}"
+    black -S -l 119 "$@" "${_PY_SOURCES[@]}"
+    isort --profile black -l 119 --ds --lbt 1 --ca "$@" "${_PY_SOURCES[@]}"
   ;;
   'lint') shift
-    python3 -m mypy \
+    mypy \
       --pretty --show-column-numbers --strict --no-warn-unused-ignores --ignore-missing-imports \
       "$@" "${_PY_SOURCES[@]}" || exit 1
-    python3 -m pyright \
+    pyright \
       -p "${_TEST_ROOT}" \
       "$@" "${_PY_SOURCES[@]}"
   ;;

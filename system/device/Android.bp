@@ -52,6 +52,7 @@ cc_test {
         "libbluetooth-types",
         "libbtcore",
         "libbtdevice",
+        "libchrome",
         "libosi",
         "libosi-AllocationTestHarness",
     ],
@@ -69,6 +70,7 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/device/src",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
@@ -84,6 +86,7 @@ cc_test {
         "libbluetooth-types",
         "libbtcore",
         "libbtdevice",
+        "libchrome",
         "libgmock",
         "libosi-AllocationTestHarness",
     ],

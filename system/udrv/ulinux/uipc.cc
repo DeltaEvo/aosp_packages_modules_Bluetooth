@@ -110,11 +110,11 @@ static inline int create_server_socket(const char* name) {
   LOG_DEBUG("create_server_socket %s", name);
 
   if (osi_socket_local_server_bind(s, name,
-#if defined(OS_GENERIC)
-                                   ANDROID_SOCKET_NAMESPACE_FILESYSTEM
-#else   // !defined(OS_GENERIC)
+#ifdef __ANDROID__
                                    ANDROID_SOCKET_NAMESPACE_ABSTRACT
-#endif  // defined(OS_GENERIC)
+#else   // !__ANDROID__
+                                   ANDROID_SOCKET_NAMESPACE_FILESYSTEM
+#endif  // __ANDROID__
                                    ) < 0) {
     LOG_DEBUG("socket failed to create (%s)", strerror(errno));
     close(s);
@@ -677,8 +677,8 @@ uint32_t UIPC_Read(tUIPC_STATE& uipc, tUIPC_CH_ID ch_id, uint8_t* p_buf,
  *
  ******************************************************************************/
 
-extern bool UIPC_Ioctl(tUIPC_STATE& uipc, tUIPC_CH_ID ch_id, uint32_t request,
-                       void* param) {
+bool UIPC_Ioctl(tUIPC_STATE& uipc, tUIPC_CH_ID ch_id, uint32_t request,
+                void* param) {
   LOG_DEBUG("#### UIPC_Ioctl : ch_id %d, request %d ####", ch_id, request);
   std::lock_guard<std::recursive_mutex> lock(uipc.mutex);
 

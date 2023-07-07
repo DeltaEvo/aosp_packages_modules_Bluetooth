@@ -193,8 +193,9 @@ public class TbsGeneric {
         }
 
         mReceiver = new Receiver();
-        mTbsGatt.getContext().registerReceiver(mReceiver,
-                new IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION));
+        IntentFilter filter = new IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION);
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+        mTbsGatt.getContext().registerReceiver(mReceiver, filter);
 
         mIsInitialized = true;
         return true;
@@ -214,6 +215,18 @@ public class TbsGeneric {
         }
 
         mIsInitialized = false;
+    }
+
+    /**
+     * Inform TBS GATT instance about authorization change for device.
+     *
+     * @param device device for which authorization is changed
+     */
+    public void onDeviceAuthorizationSet(BluetoothDevice device) {
+        // Notify TBS GATT service instance in case of pending operations
+        if (mTbsGatt != null) {
+            mTbsGatt.onDeviceAuthorizationSet(device);
+        }
     }
 
     /**

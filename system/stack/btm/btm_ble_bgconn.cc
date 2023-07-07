@@ -83,6 +83,18 @@ const tBLE_BD_ADDR convert_to_address_with_type(
         .bda = bd_addr,
     };
   } else {
+    // Floss doesn't support LL Privacy (yet). To expedite ARC testing, always
+    // connect to the latest LE random address (if available) rather than
+    // redesign.
+    // TODO(b/235218533): Remove when LL Privacy is implemented.
+#if TARGET_FLOSS
+    if (!p_dev_rec->ble.cur_rand_addr.IsEmpty()) {
+      return {
+          .type = BLE_ADDR_RANDOM,
+          .bda = p_dev_rec->ble.cur_rand_addr,
+      };
+    }
+#endif
     return p_dev_rec->ble.identity_address_with_type;
   }
 }
@@ -154,6 +166,9 @@ bool BTM_BackgroundConnectAddressKnown(const RawAddress& address) {
   if (p_dev_rec == NULL || (p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) == 0)
     return true;
 
+  LOG_WARN("%s, device type not BLE: 0x%02x", ADDRESS_TO_LOGGABLE_CSTR(address),
+           p_dev_rec->device_type);
+
   // bonded device with identity address known
   if (!p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
     return true;
@@ -164,6 +179,9 @@ bool BTM_BackgroundConnectAddressKnown(const RawAddress& address) {
       !BTM_BLE_IS_RESOLVE_BDA(address)) {
     return true;
   }
+
+  LOG_WARN("%s, the address type is 0x%02x", ADDRESS_TO_LOGGABLE_CSTR(address),
+           p_dev_rec->ble.AddressType());
 
   // Only Resolvable Private Address (RPA) is known, we don't allow it into
   // the background connection procedure.

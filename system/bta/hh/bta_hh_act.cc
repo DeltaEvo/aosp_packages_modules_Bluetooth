@@ -42,8 +42,11 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/hiddefs.h"
 #include "stack/include/hidh_api.h"
+#include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
+
+using namespace bluetooth::legacy::stack::sdp;
 
 /*****************************************************************************
  *  Constants
@@ -274,9 +277,11 @@ static void bta_hh_di_sdp_cback(tSDP_RESULT result) {
   if (((result == SDP_SUCCESS) || (result == SDP_NO_RECS_MATCH)) &&
       (p_cb != NULL)) {
     if (result == SDP_SUCCESS &&
-        SDP_GetNumDiRecords(bta_hh_cb.p_disc_db) != 0) {
+        get_legacy_stack_sdp_api()->device_id.SDP_GetNumDiRecords(
+            bta_hh_cb.p_disc_db) != 0) {
       /* always update information with primary DI record */
-      if (SDP_GetDiRecord(1, &di_rec, bta_hh_cb.p_disc_db) == SDP_SUCCESS) {
+      if (get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(
+              1, &di_rec, bta_hh_cb.p_disc_db) == SDP_SUCCESS) {
         bta_hh_update_di_info(p_cb, di_rec.rec.vendor, di_rec.rec.product,
                               di_rec.rec.version, 0, 0);
       }
@@ -324,9 +329,9 @@ static void bta_hh_start_sdp(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
         (tSDP_DISCOVERY_DB*)osi_malloc(p_bta_hh_cfg->sdp_db_size);
 
     /* Do DI discovery first */
-    if (SDP_DiDiscover(p_data->api_conn.bd_addr, bta_hh_cb.p_disc_db,
-                       p_bta_hh_cfg->sdp_db_size,
-                       bta_hh_di_sdp_cback) == SDP_SUCCESS) {
+    if (get_legacy_stack_sdp_api()->device_id.SDP_DiDiscover(
+            p_data->api_conn.bd_addr, bta_hh_cb.p_disc_db,
+            p_bta_hh_cfg->sdp_db_size, bta_hh_di_sdp_cback) == SDP_SUCCESS) {
       /* SDP search started successfully
        * Connection will be triggered at the end of successful SDP search
        */
@@ -564,7 +569,7 @@ void bta_hh_connect(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
  * Returns          void
  *
  ******************************************************************************/
-extern void btif_hh_remove_device(RawAddress bd_addr);
+void btif_hh_remove_device(RawAddress bd_addr);
 void bta_hh_api_disc_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   CHECK(p_cb != nullptr);
 
@@ -617,13 +622,12 @@ void bta_hh_open_cmpl_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   /* increase connection number */
   bta_hh_cb.cnt_num++;
 
-  /* initialize device driver */
-  bta_hh_co_open(p_cb->hid_handle, p_cb->sub_class, p_cb->attr_mask,
-                 p_cb->app_id);
-
   conn.status = p_cb->status;
   conn.le_hid = p_cb->is_le_device;
   conn.scps_supported = p_cb->scps_supported;
+  conn.sub_class = p_cb->sub_class;
+  conn.attr_mask = p_cb->attr_mask;
+  conn.app_id = p_cb->app_id;
 
   BTM_LogHistory(kBtmLogTag, p_cb->addr, "Opened",
                  base::StringPrintf(
@@ -634,26 +638,25 @@ void bta_hh_open_cmpl_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   {
     /* inform role manager */
     bta_sys_conn_open(BTA_ID_HH, p_cb->app_id, p_cb->addr);
-  }
-  /* set protocol mode when not default report mode */
-  if (p_cb->mode != BTA_HH_PROTO_RPT_MODE
-      && !p_cb->is_le_device
-      ) {
-    if ((HID_HostWriteDev(dev_handle, HID_TRANS_SET_PROTOCOL,
-                          HID_PAR_PROTOCOL_BOOT_MODE, 0, 0, NULL)) !=
-        HID_SUCCESS) {
-      /* HID connection is up, while SET_PROTO fail */
-      conn.status = BTA_HH_ERR_PROTO;
-      (*bta_hh_cb.p_cback)(BTA_HH_OPEN_EVT, (tBTA_HH*)&conn);
-    } else {
-      conn.status = BTA_HH_OK;
-      p_cb->w4_evt = BTA_HH_OPEN_EVT;
-    }
-  } else
-    (*bta_hh_cb.p_cback)(BTA_HH_OPEN_EVT, (tBTA_HH*)&conn);
 
+    /* set protocol mode when not default report mode */
+    if (p_cb->mode != BTA_HH_PROTO_RPT_MODE) {
+      tHID_STATUS status =
+          HID_HostWriteDev(dev_handle, HID_TRANS_SET_PROTOCOL,
+                           HID_PAR_PROTOCOL_BOOT_MODE, 0, 0, NULL);
+
+      if (status == HID_SUCCESS) {
+        p_cb->w4_evt = BTA_HH_SET_PROTO_EVT;
+      } else {
+        /* HID connection is up, while SET_PROTO fail */
+        conn.status = BTA_HH_ERR_PROTO;
+      }
+    }
+  }
   p_cb->incoming_conn = false;
   p_cb->incoming_hid_handle = BTA_HH_INVALID_HANDLE;
+
+  (*bta_hh_cb.p_cback)(BTA_HH_OPEN_EVT, (tBTA_HH*)&conn);
 }
 /*******************************************************************************
  *
@@ -944,8 +947,6 @@ void bta_hh_close_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   }
   /* otherwise report CLOSE/VC_UNPLUG event */
   else {
-    /* finaliza device driver */
-    bta_hh_co_close(p_cb->hid_handle, p_cb->app_id);
     /* inform role manager */
     bta_sys_conn_close(BTA_ID_HH, p_cb->app_id, p_cb->addr);
     /* update total conn number */
@@ -989,7 +990,7 @@ void bta_hh_close_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
 void bta_hh_get_dscp_act(tBTA_HH_DEV_CB* p_cb,
                          UNUSED_ATTR const tBTA_HH_DATA* p_data) {
   if (p_cb->is_le_device) {
-    if (p_cb->hid_srvc.in_use) {
+    if (p_cb->hid_srvc.state >= BTA_HH_SERVICE_DISCOVERED) {
       p_cb->dscp_info.hid_handle = p_cb->hid_handle;
     }
     bta_hh_le_get_dscp_act(p_cb);

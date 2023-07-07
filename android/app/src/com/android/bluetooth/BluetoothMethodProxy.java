@@ -34,6 +34,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Handler;
+import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.provider.Telephony;
 import android.util.Log;
@@ -195,6 +196,14 @@ public class BluetoothMethodProxy {
     }
 
     /**
+     * Proxies {@link Handler#sendMessageDelayed(Message, long)}.
+     */
+    public boolean handlerSendMessageDelayed(Handler handler, final int what,
+            final long delayMillis) {
+        return handler.sendMessageDelayed(handler.obtainMessage(what), delayMillis);
+    }
+
+    /**
      * Proxies {@link HeaderSet#getHeader}.
      */
     public Object getHeader(HeaderSet headerSet, int headerId) throws IOException {
@@ -248,5 +257,10 @@ public class BluetoothMethodProxy {
     public AppAdvertiseStats createAppAdvertiseStats(int appUid, int id, String name,
             ContextMap map, GattService service) {
         return new AppAdvertiseStats(appUid, id, name, map, service);
+    }
+
+    /** Proxies {@link Thread#start()}. */
+    public void threadStart(Thread thread) {
+        thread.start();
     }
 }

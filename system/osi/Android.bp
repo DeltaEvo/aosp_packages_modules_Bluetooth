@@ -104,7 +104,6 @@ cc_library_static {
     target: {
         host_linux: {
             cflags: [
-                "-DOS_GENERIC",
                 "-D_GNU_SOURCE",
             ],
         },
@@ -163,13 +162,17 @@ cc_test {
         "libbt-common",
         "libbt-protos-lite",
         "libc++fs",
+        "libchrome",
+        "libevent",
         "libgmock",
         "libosi",
         "libprotobuf-cpp-lite",
     ],
     target: {
-        host_linux: {
-            cflags: ["-DOS_GENERIC"],
+        android: {
+            shared_libs: [
+                "libstatssocket",
+            ],
         },
     },
     cflags: [

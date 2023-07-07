@@ -49,6 +49,8 @@ namespace mock {
 namespace btif_config {
 
 // Function state capture and return values, if needed
+struct btif_get_device_clockoffset btif_get_device_clockoffset;
+struct btif_set_device_clockoffset btif_set_device_clockoffset;
 struct btif_config_exist btif_config_exist;
 struct btif_config_get_int btif_config_get_int;
 struct btif_config_set_int btif_config_set_int;
@@ -61,8 +63,6 @@ struct btif_config_get_bin_length btif_config_get_bin_length;
 struct btif_config_set_bin btif_config_set_bin;
 struct btif_config_get_paired_devices btif_config_get_paired_devices;
 struct btif_config_remove btif_config_remove;
-struct btif_config_save btif_config_save;
-struct btif_config_flush btif_config_flush;
 struct btif_config_clear btif_config_clear;
 struct btif_debug_config_dump btif_debug_config_dump;
 
@@ -71,6 +71,14 @@ struct btif_debug_config_dump btif_debug_config_dump;
 }  // namespace test
 
 // Mocked functions, if any
+bool btif_get_device_clockoffset(const RawAddress& bda, int* p_clock_offset) {
+  inc_func_call_count(__func__);
+  return test::mock::btif_config::btif_get_device_clockoffset(bda, p_clock_offset);
+}
+bool btif_set_device_clockoffset(const RawAddress& bda, int clock_offset) {
+  inc_func_call_count(__func__);
+  return test::mock::btif_config::btif_set_device_clockoffset(bda, clock_offset);
+}
 bool btif_config_exist(const std::string& section, const std::string& key) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_exist(section, key);
@@ -130,14 +138,6 @@ std::vector<RawAddress> btif_config_get_paired_devices() {
 bool btif_config_remove(const std::string& section, const std::string& key) {
   inc_func_call_count(__func__);
   return test::mock::btif_config::btif_config_remove(section, key);
-}
-void btif_config_save(void) {
-  inc_func_call_count(__func__);
-  test::mock::btif_config::btif_config_save();
-}
-void btif_config_flush(void) {
-  inc_func_call_count(__func__);
-  test::mock::btif_config::btif_config_flush();
 }
 bool btif_config_clear(void) {
   inc_func_call_count(__func__);

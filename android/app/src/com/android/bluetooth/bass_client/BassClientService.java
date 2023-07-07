@@ -213,6 +213,11 @@ public class BassClientService extends ProfileService {
     }
 
     void setActiveSyncedSource(BluetoothDevice scanDelegator, BluetoothDevice sourceDevice) {
+        if (mActiveSourceMap == null) {
+            Log.e(TAG, "setActiveSyncedSource: mActiveSourceMap is null");
+            return;
+        }
+
         log("setActiveSyncedSource, scanDelegator: " + scanDelegator + ", sourceDevice: " +
             sourceDevice);
         if (sourceDevice == null) {
@@ -223,9 +228,17 @@ public class BassClientService extends ProfileService {
     }
 
     BluetoothDevice getActiveSyncedSource(BluetoothDevice scanDelegator) {
+        if (mActiveSourceMap == null) {
+            Log.e(TAG, "getActiveSyncedSource: mActiveSourceMap is null");
+            return null;
+        }
+
         BluetoothDevice currentSource = mActiveSourceMap.get(scanDelegator);
-        log("getActiveSyncedSource: scanDelegator" + scanDelegator
-                + "returning " + currentSource);
+        log(
+                "getActiveSyncedSource: scanDelegator: "
+                        + scanDelegator
+                        + ", returning: "
+                        + currentSource);
         return currentSource;
     }
 
@@ -259,6 +272,7 @@ public class BassClientService extends ProfileService {
         mCallbacks = new Callbacks(mCallbackHandlerThread.getLooper());
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         filter.addAction(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
         mIntentReceiver = new BroadcastReceiver() {
@@ -1487,7 +1501,7 @@ public class BassClientService extends ProfileService {
         void notifySourceAdded(BluetoothDevice sink, BluetoothLeBroadcastReceiveState recvState,
                 int reason) {
             ObjParams param = new ObjParams(sink, recvState);
-            obtainMessage(MSG_SOURCE_ADDED, reason, 0, param).sendToTarget();
+            obtainMessage(MSG_SOURCE_ADDED, reason, recvState.getSourceId(), param).sendToTarget();
         }
 
         void notifySourceAddFailed(BluetoothDevice sink, BluetoothLeBroadcastMetadata source,
@@ -1598,7 +1612,8 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return false;
                 }
-                mService.enforceCallingOrSelfPermission(BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
+                mService.enforceCallingOrSelfPermission(
+                        BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
                 return service.setConnectionPolicy(device, connectionPolicy);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1614,7 +1629,8 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return BluetoothProfile.CONNECTION_POLICY_FORBIDDEN;
                 }
-                mService.enforceCallingOrSelfPermission(BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
+                mService.enforceCallingOrSelfPermission(
+                        BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
                 return service.getConnectionPolicy(device);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);

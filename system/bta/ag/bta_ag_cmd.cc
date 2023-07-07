@@ -28,7 +28,7 @@
 #include "bta/include/bta_ag_api.h"
 #include "bta/include/utl.h"
 
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
 #include "bta/le_audio/devices.h"
 #endif
 
@@ -1260,10 +1260,12 @@ void bta_ag_at_hfp_cback(tBTA_AG_SCB* p_scb, uint16_t cmd, uint8_t arg_type,
 
         bool swb_supported = hfp_hal_interface::get_swb_supported();
 
-        if ((p_scb->peer_codecs & BTM_SCO_CODEC_LC3) && swb_supported) {
+        if (swb_supported && (p_scb->peer_codecs & BTM_SCO_CODEC_LC3) &&
+            !(p_scb->disabled_codecs & BTM_SCO_CODEC_LC3)) {
           p_scb->sco_codec = BTM_SCO_CODEC_LC3;
           APPL_TRACE_DEBUG("Received AT+BAC, updating sco codec to LC3");
-        } else if (p_scb->peer_codecs & BTM_SCO_CODEC_MSBC) {
+        } else if ((p_scb->peer_codecs & BTM_SCO_CODEC_MSBC) &&
+                   !(p_scb->disabled_codecs & BTM_SCO_CODEC_MSBC)) {
           p_scb->sco_codec = BTM_SCO_CODEC_MSBC;
           APPL_TRACE_DEBUG("Received AT+BAC, updating sco codec to MSBC");
         } else {
@@ -1860,7 +1862,7 @@ void bta_ag_send_bcs(tBTA_AG_SCB* p_scb) {
  *
  ******************************************************************************/
 bool bta_ag_is_sco_open_allowed(tBTA_AG_SCB* p_scb, const std::string event) {
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
   /* Do not open SCO if 1. the dual mode audio system property is enabled,
   2. LEA is active, and 3. LEA is preferred for DUPLEX */
   if (bluetooth::os::GetSystemPropertyBool(

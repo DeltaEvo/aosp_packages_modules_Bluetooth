@@ -44,6 +44,7 @@ java_defaults {
     platform_apis: true,
 
     test_suites: [
+        "automotive-tests",
         "device-tests",
         "mts-bluetooth",
     ],

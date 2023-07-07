@@ -42,6 +42,11 @@ static bool find_uuid_in_seq(uint8_t* p, uint32_t seq_len,
                              const uint8_t* p_his_uuid, uint16_t his_len,
                              int nest_level);
 
+bool SDP_AddAttribute(uint32_t handle, uint16_t attr_id, uint8_t attr_type,
+                      uint32_t attr_len, uint8_t* p_val);
+
+bool SDP_DeleteAttribute(uint32_t handle, uint16_t attr_id);
+
 /*******************************************************************************
  *
  * Function         sdp_db_service_search
@@ -470,6 +475,14 @@ bool SDP_AddAttributeToRecord(tSDP_RECORD* p_rec, uint16_t attr_id,
   p_attr->len = attr_len;
 
   if (p_rec->free_pad_ptr + attr_len >= SDP_MAX_PAD_LEN) {
+    if (p_rec->free_pad_ptr >= SDP_MAX_PAD_LEN) {
+      SDP_TRACE_ERROR(
+          "SDP_AddAttributeToRecord failed: free pad %d equals or exceeds max "
+          "padding length %d",
+          p_rec->free_pad_ptr, SDP_MAX_PAD_LEN);
+      return (false);
+    }
+
     /* do truncate only for text string type descriptor */
     if (attr_type == TEXT_STR_DESC_TYPE) {
       SDP_TRACE_WARNING(

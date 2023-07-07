@@ -18,38 +18,37 @@
 #include <gtest/gtest.h>
 #include <stdarg.h>
 
+#include <memory>
 #include <string>
 
 #include "bta/dm/bta_dm_int.h"
 #include "test/common/main_handler.h"
-#include "test/mock/mock_osi_alarm.h"
-#include "test/mock/mock_osi_allocator.h"
+#include "test/fake/fake_osi.h"
+#include "test/mock/mock_stack_btm.h"
 #include "test/mock/mock_stack_gatt_api.h"
 
 void BTA_dm_on_hw_on();
 void BTA_dm_on_hw_off();
 
-struct alarm_t {
-  alarm_t(const char* name){};
-  int any_value;
-};
-
 class BtaSdpTest : public testing::Test {
  protected:
   void SetUp() override {
-    test::mock::osi_allocator::osi_calloc.body = [](size_t size) -> void* {
-      return calloc(1, size);
-    };
-    test::mock::osi_allocator::osi_free.body = [](void* ptr) { free(ptr); };
-    test::mock::osi_alarm::alarm_new.body = [](const char* name) -> alarm_t* {
-      return new alarm_t(name);
-    };
-    test::mock::osi_alarm::alarm_free.body = [](alarm_t* alarm) {
-      delete alarm;
-    };
+    fake_osi_ = std::make_unique<test::fake::FakeOsi>();
     test::mock::stack_gatt_api::GATT_Register.body =
         [](const bluetooth::Uuid& p_app_uuid128, const std::string name,
            tGATT_CBACK* p_cb_info, bool eatt_support) { return 5; };
+    btm_client_interface = {};
+    btm_client_interface.eir.BTM_GetEirSupportedServices =
+        [](uint32_t* p_eir_uuid, uint8_t** p, uint8_t max_num_uuid16,
+           uint8_t* p_num_uuid16) -> uint8_t { return 0; };
+    btm_client_interface.eir.BTM_WriteEIR = [](BT_HDR* p_buf) -> tBTM_STATUS {
+      osi_free(p_buf);
+      return BTM_SUCCESS;
+    };
+    btm_client_interface.local.BTM_ReadLocalDeviceNameFromController =
+        [](tBTM_CMPL_CB* cb) -> tBTM_STATUS { return BTM_CMD_STARTED; };
+    btm_client_interface.security.BTM_SecRegister =
+        [](const tBTM_APPL_INFO* p_cb_info) -> bool { return true; };
 
     main_thread_start_up();
     sync_main_handler();
@@ -64,11 +63,9 @@ class BtaSdpTest : public testing::Test {
     main_thread_shut_down();
 
     test::mock::stack_gatt_api::GATT_Register = {};
-    test::mock::osi_allocator::osi_calloc = {};
-    test::mock::osi_allocator::osi_free = {};
-    test::mock::osi_alarm::alarm_new = {};
-    test::mock::osi_alarm::alarm_free = {};
+    btm_client_interface = {};
   }
+  std::unique_ptr<test::fake::FakeOsi> fake_osi_;
 };
 
 class BtaSdpRegisteredTest : public BtaSdpTest {
@@ -84,8 +81,8 @@ class BtaSdpRegisteredTest : public BtaSdpTest {
   }
 
   tBTA_SYS_REG bta_sys_reg = {
-      .evt_hdlr = [](BT_HDR_RIGID* p_msg) -> bool {
-        osi_free(p_msg);
+      .evt_hdlr = [](const BT_HDR_RIGID* p_msg) -> bool {
+        osi_free((void*)p_msg);
         return false;
       },
       .disable = []() {},

@@ -76,6 +76,21 @@ impl IBluetoothMediaCallback for BluetoothMediaCallbackDBus {
     fn on_hfp_audio_disconnected(&mut self, addr: String) {
         dbus_generated!()
     }
+
+    #[dbus_method("OnHfpDebugDump")]
+    fn on_hfp_debug_dump(
+        &mut self,
+        active: bool,
+        wbs: bool,
+        total_num_decoded_frames: i32,
+        pkt_loss_ratio: f64,
+        begin_ts: u64,
+        end_ts: u64,
+        pkt_status_in_hex: String,
+        pkt_status_in_binary: String,
+    ) {
+        dbus_generated!()
+    }
 }
 
 #[allow(dead_code)]
@@ -221,7 +236,12 @@ impl IBluetoothMedia for IBluetoothMediaDBus {
     }
 
     #[dbus_method("StartScoCall")]
-    fn start_sco_call(&mut self, address: String, sco_offload: bool, force_cvsd: bool) -> bool {
+    fn start_sco_call(
+        &mut self,
+        address: String,
+        sco_offload: bool,
+        disabled_codecs: HfpCodecCapability,
+    ) -> bool {
         dbus_generated!()
     }
 
@@ -255,6 +275,11 @@ impl IBluetoothMedia for IBluetoothMediaDBus {
 
     #[dbus_method("SetPlayerMetadata")]
     fn set_player_metadata(&mut self, metadata: PlayerMetadata) {
+        dbus_generated!()
+    }
+
+    #[dbus_method("TriggerDebugDump")]
+    fn trigger_debug_dump(&mut self) {
         dbus_generated!()
     }
 }

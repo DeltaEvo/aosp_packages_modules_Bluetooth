@@ -452,15 +452,6 @@ struct bta_dm_confirm {
 };
 extern struct bta_dm_confirm bta_dm_confirm;
 
-// Name: bta_dm_deinit_cb
-// Params: void
-// Return: void
-struct bta_dm_deinit_cb {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct bta_dm_deinit_cb bta_dm_deinit_cb;
-
 // Name: bta_dm_disable
 // Params:
 // Return: void
@@ -479,14 +470,15 @@ struct bta_dm_disc_result {
 };
 extern struct bta_dm_disc_result bta_dm_disc_result;
 
-// Name: bta_dm_disc_rmt_name
-// Params: tBTA_DM_MSG* p_data
+// Name: bta_dm_remote_name_cmpl
+// Params: const tBTA_DM_MSG* p_data
 // Return: void
-struct bta_dm_disc_rmt_name {
-  std::function<void(tBTA_DM_MSG* p_data)> body{[](tBTA_DM_MSG* p_data) {}};
-  void operator()(tBTA_DM_MSG* p_data) { body(p_data); };
+struct bta_dm_remote_name_cmpl {
+  std::function<void(const tBTA_DM_MSG* p_data)> body{
+      [](const tBTA_DM_MSG* p_data) {}};
+  void operator()(const tBTA_DM_MSG* p_data) { body(p_data); };
 };
-extern struct bta_dm_disc_rmt_name bta_dm_disc_rmt_name;
+extern struct bta_dm_remote_name_cmpl bta_dm_remote_name_cmpl;
 
 // Name: bta_dm_discover
 // Params: tBTA_DM_MSG* p_data
@@ -561,15 +553,6 @@ struct bta_dm_free_sdp_db {
   void operator()() { body(); };
 };
 extern struct bta_dm_free_sdp_db bta_dm_free_sdp_db;
-
-// Name: bta_dm_init_cb
-// Params: void
-// Return: void
-struct bta_dm_init_cb {
-  std::function<void(void)> body{[](void) {}};
-  void operator()(void) { body(); };
-};
-extern struct bta_dm_init_cb bta_dm_init_cb;
 
 // Name: bta_dm_inq_cmpl
 // Params: uint8_t num
@@ -664,15 +647,6 @@ struct bta_dm_rm_cback {
   };
 };
 extern struct bta_dm_rm_cback bta_dm_rm_cback;
-
-// Name: bta_dm_rmt_name
-// Params: tBTA_DM_MSG* p_data
-// Return: void
-struct bta_dm_rmt_name {
-  std::function<void(tBTA_DM_MSG* p_data)> body{[](tBTA_DM_MSG* p_data) {}};
-  void operator()(tBTA_DM_MSG* p_data) { body(p_data); };
-};
-extern struct bta_dm_rmt_name bta_dm_rmt_name;
 
 // Name: bta_dm_sdp_result
 // Params: tBTA_DM_MSG* p_data

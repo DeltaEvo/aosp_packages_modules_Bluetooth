@@ -222,6 +222,7 @@ public class SilenceDeviceManager {
         }
         mHandler = new SilenceDeviceManagerHandler(mLooper);
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED);
         filter.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
@@ -299,7 +300,8 @@ public class SilenceDeviceManager {
 
     void addConnectedDevice(BluetoothDevice device, int profile) {
         if (VERBOSE) {
-            Log.d(TAG, "addConnectedDevice: " + device + ", profile:" + profile);
+            Log.d(TAG, "addConnectedDevice: " + device + ", profile:"
+                    + BluetoothProfile.getProfileName(profile));
         }
         switch (profile) {
             case BluetoothProfile.A2DP:
@@ -317,7 +319,8 @@ public class SilenceDeviceManager {
 
     void removeConnectedDevice(BluetoothDevice device, int profile) {
         if (VERBOSE) {
-            Log.d(TAG, "removeConnectedDevice: " + device + ", profile:" + profile);
+            Log.d(TAG, "removeConnectedDevice: " + device + ", profile:"
+                    + BluetoothProfile.getProfileName(profile));
         }
         switch (profile) {
             case BluetoothProfile.A2DP:

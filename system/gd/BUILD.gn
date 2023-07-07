@@ -26,8 +26,6 @@ config("gd_defaults") {
   ]
 
   defines = [
-    "OS_LINUX_GENERIC",
-    "OS_GENERIC",
     "TARGET_FLOSS",
   ]
 
@@ -130,13 +128,6 @@ packetgen_headers("BluetoothGeneratedPackets_h") {
     "l2cap/l2cap_packets.pdl",
     "security/smp_packets.pdl",
   ]
-
-  include = "system/gd"
-  source_root = "../.."
-}
-
-packetgen_rust("BluetoothGeneratedPackets_rust") {
-  sources = [ "hci/hci_packets.pdl" ]
 
   include = "system/gd"
   source_root = "../.."

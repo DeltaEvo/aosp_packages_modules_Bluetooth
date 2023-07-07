@@ -24,12 +24,18 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
 
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_device_type.h"
+#include "stack/include/bt_octets.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/security_client_callbacks.h"
+#include "stack/include/smp_api_types.h"
+#include "types/ble_address_with_type.h"
+#include "types/bt_transport.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
@@ -39,8 +45,6 @@
  *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
  ******************************************************************************/
 tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
-
-tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state);
 
 /*******************************************************************************
  *
@@ -712,18 +716,6 @@ void btm_sec_update_clock_offset(uint16_t handle, uint16_t clock_offset);
 tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
 
 bool is_sec_state_equal(void* data, void* context);
-
-/*******************************************************************************
- *
- * Function         btm_sec_find_dev_by_sec_state
- *
- * Description      Look for the record in the device database for the device
- *                  which is being authenticated or encrypted
- *
- * Returns          Pointer to the record or NULL
- *
- ******************************************************************************/
-tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state);
 
 /*******************************************************************************
  *

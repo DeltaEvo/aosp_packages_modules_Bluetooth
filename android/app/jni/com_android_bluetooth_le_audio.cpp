@@ -46,6 +46,8 @@ static jmethodID method_onAudioConf;
 static jmethodID method_onSinkAudioLocationAvailable;
 static jmethodID method_onAudioLocalCodecCapabilities;
 static jmethodID method_onAudioGroupCodecConf;
+static jmethodID method_onHealthBasedRecommendationAction;
+static jmethodID method_onHealthBasedGroupRecommendationAction;
 
 static struct {
   jclass clazz;
@@ -270,6 +272,43 @@ class LeAudioClientCallbacksImpl : public LeAudioClientCallbacks {
         inputCodecConfigObj, outputCodecConfigObj,
         inputSelectableCodecConfigArray, outputSelectableCodecConfigArray);
   }
+
+  void OnHealthBasedRecommendationAction(
+      const RawAddress& bd_addr,
+      bluetooth::le_audio::LeAudioHealthBasedAction action) override {
+    LOG(INFO) << __func__;
+
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+
+    ScopedLocalRef<jbyteArray> addr(
+        sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+    if (!addr.get()) {
+      LOG(ERROR) << "Failed to new jbyteArray bd addr for group status";
+      return;
+    }
+
+    sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                     (jbyte*)&bd_addr);
+    sCallbackEnv->CallVoidMethod(mCallbacksObj,
+                                 method_onHealthBasedRecommendationAction,
+                                 addr.get(), (jint)action);
+  }
+
+  void OnHealthBasedGroupRecommendationAction(
+      int group_id,
+      bluetooth::le_audio::LeAudioHealthBasedAction action) override {
+    LOG(INFO) << __func__;
+
+    std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
+    CallbackEnv sCallbackEnv(__func__);
+    if (!sCallbackEnv.valid() || mCallbacksObj == nullptr) return;
+
+    sCallbackEnv->CallVoidMethod(mCallbacksObj,
+                                 method_onHealthBasedGroupRecommendationAction,
+                                 (jint)group_id, (jint)action);
+  }
 };
 
 static LeAudioClientCallbacksImpl sLeAudioClientCallbacks;
@@ -301,6 +340,10 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
                        "Landroid/bluetooth/BluetoothLeAudioCodecConfig;"
                        "[Landroid/bluetooth/BluetoothLeAudioCodecConfig;"
                        "[Landroid/bluetooth/BluetoothLeAudioCodecConfig;)V");
+  method_onHealthBasedRecommendationAction =
+      env->GetMethodID(clazz, "onHealthBasedRecommendationAction", "([BI)V");
+  method_onHealthBasedGroupRecommendationAction = env->GetMethodID(
+      clazz, "onHealthBasedGroupRecommendationAction", "(II)V");
 }
 
 std::vector<btle_audio_codec_config_t> prepareCodecPreferences(
@@ -435,6 +478,27 @@ static jboolean disconnectLeAudioNative(JNIEnv* env, jobject object,
   return JNI_TRUE;
 }
 
+static jboolean setEnableStateNative(JNIEnv* env, jobject object,
+                                     jbyteArray address, jboolean enabled) {
+  std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
+  jbyte* addr = env->GetByteArrayElements(address, nullptr);
+
+  if (!sLeAudioClientInterface) {
+    LOG(ERROR) << __func__ << ": Failed to get the Bluetooth LeAudio Interface";
+    return JNI_FALSE;
+  }
+
+  if (!addr) {
+    jniThrowIOException(env, EINVAL);
+    return JNI_FALSE;
+  }
+
+  RawAddress* tmpraw = (RawAddress*)addr;
+  sLeAudioClientInterface->SetEnableState(*tmpraw, enabled);
+  env->ReleaseByteArrayElements(address, addr, 0);
+  return JNI_TRUE;
+}
+
 static jboolean groupAddNodeNative(JNIEnv* env, jobject object, jint group_id,
                                    jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
@@ -562,6 +626,7 @@ static JNINativeMethod sMethods[] = {
     {"cleanupNative", "()V", (void*)cleanupNative},
     {"connectLeAudioNative", "([B)Z", (void*)connectLeAudioNative},
     {"disconnectLeAudioNative", "([B)Z", (void*)disconnectLeAudioNative},
+    {"setEnableStateNative", "([BZ)Z", (void*)setEnableStateNative},
     {"groupAddNodeNative", "(I[B)Z", (void*)groupAddNodeNative},
     {"groupRemoveNodeNative", "(I[B)Z", (void*)groupRemoveNodeNative},
     {"groupSetActiveNative", "(I)V", (void*)groupSetActiveNative},

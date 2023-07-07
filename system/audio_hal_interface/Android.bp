@@ -24,6 +24,7 @@ cc_library_static {
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
         "libhidlbase",
+        "libutils",
     ],
     static_libs: [
         "libbt-common",
@@ -99,6 +100,7 @@ cc_test {
     static_libs: [
         "libbt-audio-hal-interface",
         "libbt-common",
+        "libchrome",
     ],
     cflags: [
         "-DBUILDCFG",

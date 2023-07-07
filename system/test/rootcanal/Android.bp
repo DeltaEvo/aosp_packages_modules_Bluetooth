@@ -26,7 +26,6 @@ cc_binary {
     name: "android.hardware.bluetooth@1.1-service.sim",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     proprietary: true,
     relative_install_path: "hw",
@@ -47,7 +46,7 @@ cc_binary {
         "libhidlbase",
         "libjsoncpp",
         "liblog",
-        "libprotobuf-cpp-lite",
+        "libprotobuf-cpp-full",
         "libutils",
     ],
     cflags: [
@@ -66,6 +65,7 @@ cc_binary {
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
     ],
@@ -76,7 +76,6 @@ cc_library_shared {
     name: "android.hardware.bluetooth@1.1-impl-sim",
     defaults: [
         "gd_defaults",
-        "libchrome_support_defaults",
     ],
     proprietary: true,
     relative_install_path: "hw",
@@ -96,7 +95,7 @@ cc_library_shared {
         "libhidlbase",
         "libjsoncpp",
         "liblog",
-        "libprotobuf-cpp-lite",
+        "libprotobuf-cpp-full",
         "libutils",
     ],
     generated_headers: [
@@ -112,6 +111,7 @@ cc_library_shared {
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
     ],

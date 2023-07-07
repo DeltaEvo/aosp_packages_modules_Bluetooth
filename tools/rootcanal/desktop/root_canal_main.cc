@@ -24,6 +24,7 @@
 #include <gflags/gflags.h>
 #include <unwindstack/AndroidUnwinder.h>
 
+#include <fstream>
 #include <future>
 #include <optional>
 
@@ -32,15 +33,18 @@
 #include "net/posix/posix_async_socket_server.h"
 #include "test_environment.h"
 
-using ::android::bluetooth::root_canal::TestEnvironment;
 using ::android::net::PosixAsyncSocketConnector;
 using ::android::net::PosixAsyncSocketServer;
 using rootcanal::AsyncManager;
+using rootcanal::TestEnvironment;
+using namespace rootcanal;
 
-DEFINE_string(controller_properties_file, "",
-              "controller_properties.json file path");
-DEFINE_string(default_commands_file, "",
-              "commands file which root-canal runs it as default");
+DEFINE_string(controller_properties_file, "", "deprecated");
+DEFINE_string(configuration, "", "controller configuration (see config.proto)");
+DEFINE_string(configuration_file, "",
+              "controller configuration file path (see config.proto)");
+DEFINE_string(default_commands_file, "", "deprecated");
+DEFINE_bool(enable_log_color, false, "enable log colors");
 DEFINE_bool(enable_hci_sniffer, false, "enable hci sniffer");
 DEFINE_bool(enable_baseband_sniffer, false, "enable baseband sniffer");
 DEFINE_bool(enable_pcap_filter, false, "enable PCAP filter");
@@ -65,20 +69,20 @@ bool crash_callback(const void* crash_context, size_t crash_context_size,
             crash_context);
     tid = ctx->tid;
     int signal_number = ctx->siginfo.si_signo;
-    LOG_ERROR("Process crashed, signal: %s[%d], tid: %d",
-              strsignal(signal_number), signal_number, ctx->tid);
+    ERROR("Process crashed, signal: {}[{}], tid: {}", strsignal(signal_number),
+          signal_number, ctx->tid);
   } else {
-    LOG_ERROR("Process crashed, signal: unknown, tid: unknown");
+    ERROR("Process crashed, signal: unknown, tid: unknown");
   }
   unwindstack::AndroidLocalUnwinder unwinder;
   unwindstack::AndroidUnwinderData data;
   if (!unwinder.Unwind(tid, data)) {
-    LOG_ERROR("Unwind failed");
+    ERROR("Unwind failed");
     return false;
   }
-  LOG_ERROR("Backtrace:");
+  ERROR("Backtrace:");
   for (const auto& frame : data.frames) {
-    LOG_ERROR("%s", unwinder.FormatFrame(frame).c_str());
+    ERROR("{}", unwinder.FormatFrame(frame));
   }
   return true;
 }
@@ -91,44 +95,53 @@ int main(int argc, char** argv) {
   eh.set_crash_handler(crash_callback);
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  android::base::InitLogging(argv);
+  rootcanal::log::SetLogColorEnable(FLAGS_enable_log_color);
 
-  LOG_INFO("main");
+  INFO("starting rootcanal");
 
   if (FLAGS_test_port > UINT16_MAX) {
-    LOG_ERROR("test_port out of range: %" PRIu32, FLAGS_test_port);
+    ERROR("test_port out of range: {}", FLAGS_test_port);
     return -1;
   }
 
   if (FLAGS_hci_port > UINT16_MAX) {
-    LOG_ERROR("hci_port out of range: %" PRIu32, FLAGS_hci_port);
+    ERROR("hci_port out of range: {}", FLAGS_hci_port);
     return -1;
   }
 
   if (FLAGS_link_port > UINT16_MAX) {
-    LOG_ERROR("link_port out of range: %" PRIu32, FLAGS_link_port);
+    ERROR("link_port out of range: {}", FLAGS_link_port);
     return -1;
   }
 
   if (FLAGS_link_ble_port > UINT16_MAX) {
-    LOG_ERROR("link_ble_port out of range: %" PRIu32, FLAGS_link_ble_port);
+    ERROR("link_ble_port out of range: {}", FLAGS_link_ble_port);
     return -1;
   }
 
-  AsyncManager am;
+  std::string configuration_str;
+  if (!FLAGS_configuration.empty()) {
+    configuration_str = FLAGS_configuration;
+  } else if (!FLAGS_configuration_file.empty()) {
+    std::ifstream file(FLAGS_configuration_file);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    configuration_str.assign(buffer.str());
+  }
+
   TestEnvironment root_canal(
-      std::make_shared<PosixAsyncSocketServer>(
-          static_cast<int>(FLAGS_test_port), &am),
-      std::make_shared<PosixAsyncSocketServer>(static_cast<int>(FLAGS_hci_port),
-                                               &am),
-      std::make_shared<PosixAsyncSocketServer>(
-          static_cast<int>(FLAGS_link_port), &am),
-      std::make_shared<PosixAsyncSocketServer>(
-          static_cast<int>(FLAGS_link_ble_port), &am),
-      std::make_shared<PosixAsyncSocketConnector>(&am),
-      FLAGS_controller_properties_file, FLAGS_default_commands_file,
-      FLAGS_enable_hci_sniffer, FLAGS_enable_baseband_sniffer,
-      FLAGS_enable_pcap_filter, FLAGS_disable_address_reuse);
+      [](AsyncManager* am, int port) {
+        return std::make_shared<PosixAsyncSocketServer>(port, am);
+      },
+      [](AsyncManager* am) {
+        return std::make_shared<PosixAsyncSocketConnector>(am);
+      },
+      static_cast<int>(FLAGS_test_port), static_cast<int>(FLAGS_hci_port),
+      static_cast<int>(FLAGS_link_port), static_cast<int>(FLAGS_link_ble_port),
+      configuration_str, FLAGS_enable_hci_sniffer,
+      FLAGS_enable_baseband_sniffer, FLAGS_enable_pcap_filter,
+      FLAGS_disable_address_reuse);
+
   std::promise<void> barrier;
   std::future<void> barrier_future = barrier.get_future();
   root_canal.initialize(std::move(barrier));

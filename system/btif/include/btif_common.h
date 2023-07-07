@@ -152,11 +152,11 @@ typedef struct {
  *  Functions
  ******************************************************************************/
 
-extern bt_status_t do_in_jni_thread(base::OnceClosure task);
-extern bt_status_t do_in_jni_thread(const base::Location& from_here,
-                                    base::OnceClosure task);
-extern bool is_on_jni_thread();
-extern btbase::AbstractMessageLoop* get_jni_message_loop();
+bt_status_t do_in_jni_thread(base::OnceClosure task);
+bt_status_t do_in_jni_thread(const base::Location& from_here,
+                             base::OnceClosure task);
+bool is_on_jni_thread();
+btbase::AbstractMessageLoop* get_jni_message_loop();
 
 using BtJniClosure = std::function<void()>;
 void post_on_bt_jni(BtJniClosure closure);
@@ -192,7 +192,6 @@ void btif_remote_properties_evt(bt_status_t status, RawAddress* remote_addr,
                                 uint32_t num_props, bt_property_t* p_props);
 
 void bte_load_did_conf(const char* p_path);
-void bte_main_init(void);
 
 bt_status_t btif_transfer_context(tBTIF_CBACK* p_cback, uint16_t event,
                                   char* p_params, int param_len,
@@ -228,6 +227,7 @@ void invoke_acl_state_changed_cb(bt_status_t status, RawAddress bd_addr,
                                  bt_conn_direction_t direction,
                                  uint16_t acl_handle);
 void invoke_thread_evt_cb(bt_cb_thread_evt event);
+void invoke_le_test_mode_cb(bt_status_t status, uint16_t count);
 void invoke_energy_info_cb(bt_activity_energy_info energy_info,
                            bt_uid_traffic_t* uid_data);
 void invoke_link_quality_report_cb(

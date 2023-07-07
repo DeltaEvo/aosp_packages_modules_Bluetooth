@@ -175,6 +175,7 @@ public class A2dpService extends ProfileService {
 
         // Step 7: Setup broadcast receivers
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         mBondStateChangedReceiver = new BondStateChangedReceiver();
         registerReceiver(mBondStateChangedReceiver, filter);
@@ -1070,6 +1071,7 @@ public class A2dpService extends ProfileService {
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
                         | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        mAdapterService.getActiveDeviceManager().a2dpActiveStateChanged(device);
         Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
                 Utils.getTempAllowlistBroadcastOptions());
     }
@@ -1257,6 +1259,9 @@ public class A2dpService extends ProfileService {
                 removeStateMachine(device);
             }
         }
+        mAdapterService
+                .getActiveDeviceManager()
+                .a2dpConnectionStateChanged(device, fromState, toState);
     }
 
     /**

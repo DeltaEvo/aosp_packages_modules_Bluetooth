@@ -559,7 +559,7 @@ impl BluetoothProperty {
                 // Do an unsafe cast to binding:: type and assign the values
                 // The underlying memory location is provided by |data| which will
                 // have enough space because it uses get_len()
-                let mut record =
+                let record =
                     unsafe { &mut *(data.as_mut_ptr() as *mut bindings::bt_service_record_t) };
                 record.uuid = sr.uuid;
                 record.channel = sr.channel;
@@ -884,6 +884,8 @@ pub enum BaseCallbacks {
     ),
     // Unimplemented so far:
     // thread_evt_cb
+    // dut_mode_recv_cb
+    // le_test_mode_cb
     // energy_info_cb
     // link_quality_report_cb
     // switch_buffer_size_cb
@@ -1070,6 +1072,8 @@ impl BluetoothInterface {
             le_address_associate_cb: Some(le_address_associate_cb),
             acl_state_changed_cb: Some(acl_state_cb),
             thread_evt_cb: None,
+            dut_mode_recv_cb: None,
+            le_test_mode_cb: None,
             energy_info_cb: None,
             link_quality_report_cb: None,
             generate_local_oob_data_cb: Some(generate_local_oob_data_cb),

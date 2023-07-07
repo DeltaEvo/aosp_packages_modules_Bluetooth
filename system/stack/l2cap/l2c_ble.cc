@@ -28,7 +28,7 @@
 #include <base/strings/stringprintf.h>
 #include <log/log.h>
 
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
 #include <android/sysprop/BluetoothProperties.sysprop.h>
 #endif
 
@@ -70,9 +70,9 @@ using base::StringPrintf;
 
 static void l2cble_start_conn_update(tL2C_LCB* p_lcb);
 static void l2cble_start_subrate_change(tL2C_LCB* p_lcb);
-extern void gatt_notify_conn_update(const RawAddress& remote, uint16_t interval,
-                                    uint16_t latency, uint16_t timeout,
-                                    tHCI_STATUS status);
+void gatt_notify_conn_update(const RawAddress& remote, uint16_t interval,
+                             uint16_t latency, uint16_t timeout,
+                             tHCI_STATUS status);
 
 /*******************************************************************************
  *
@@ -111,9 +111,9 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
     return (false);
   }
 
-  VLOG(2) << __func__ << ": BD_ADDR=" << rem_bda << ", min_int=" << min_int
-          << ", max_int=" << max_int << ", min_ce_len=" << min_ce_len
-          << ", max_ce_len=" << max_ce_len;
+  VLOG(2) << __func__ << ": BD_ADDR=" << ADDRESS_TO_LOGGABLE_STR(rem_bda)
+          << ", min_int=" << min_int << ", max_int=" << max_int
+          << ", min_ce_len=" << min_ce_len << ", max_ce_len=" << max_ce_len;
 
   p_lcb->min_interval = min_int;
   p_lcb->max_interval = max_int;
@@ -157,13 +157,14 @@ bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable) {
     return false;
   }
 
-  VLOG(2) << __func__ << " - BD_ADDR " << rem_bda
+  VLOG(2) << __func__ << " - BD_ADDR " << ADDRESS_TO_LOGGABLE_STR(rem_bda)
           << StringPrintf(" enable %d current upd state 0x%02x", enable,
                           p_lcb->conn_update_mask);
 
   if (p_lcb->transport != BT_TRANSPORT_LE) {
-    LOG(WARNING) << __func__ << " - BD_ADDR " << rem_bda
-                 << " not LE, link role " << p_lcb->LinkRole();
+    LOG(WARNING) << __func__ << " - BD_ADDR "
+                 << ADDRESS_TO_LOGGABLE_STR(rem_bda) << " not LE, link role "
+                 << p_lcb->LinkRole();
     return false;
   }
 
@@ -1424,11 +1425,22 @@ void l2cble_process_data_length_change_event(uint16_t handle,
   }
 
   if (is_legal_tx_data_len(tx_data_len)) {
-    LOG_DEBUG("Received data length change event for device:%s tx_data_len:%hu",
-              ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr), tx_data_len);
-    p_lcb->tx_data_len = tx_data_len;
-    BTM_LogHistory(kBtmLogTag, p_lcb->remote_bd_addr, "LE Data length change",
-                   base::StringPrintf("tx_octets:%hu", tx_data_len));
+    if (p_lcb->tx_data_len != tx_data_len) {
+      LOG_DEBUG(
+          "Received data length change event for device:%s tx_data_len:%hu => "
+          "%hu",
+          ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr), p_lcb->tx_data_len,
+          tx_data_len);
+      BTM_LogHistory(kBtmLogTag, p_lcb->remote_bd_addr, "LE Data length change",
+                     base::StringPrintf("tx_octets:%hu => %hu",
+                                        p_lcb->tx_data_len, tx_data_len));
+      p_lcb->tx_data_len = tx_data_len;
+    } else {
+      LOG_DEBUG(
+          "Received duplicated data length change event for device:%s "
+          "tx_data_len:%hu",
+          ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr), tx_data_len);
+    }
   } else {
     LOG_WARN(
         "Received illegal data length change event for device:%s "
@@ -1669,14 +1681,14 @@ void L2CA_AdjustConnectionIntervals(uint16_t* min_interval,
                                     uint16_t floor_interval) {
   // Allow for customization by systemprops for mainline
   uint16_t phone_min_interval = floor_interval;
-  #ifdef OS_ANDROID
-    phone_min_interval =
-        android::sysprop::BluetoothProperties::getGapLeConnMinLimit().value_or(
-            floor_interval);
-  #else
-    phone_min_interval = (uint16_t)osi_property_get_int32(
+#ifdef __ANDROID__
+  phone_min_interval =
+      android::sysprop::BluetoothProperties::getGapLeConnMinLimit().value_or(
+          floor_interval);
+#else
+  phone_min_interval = (uint16_t)osi_property_get_int32(
       "bluetooth.core.gap.le.conn.min.limit", (int32_t)floor_interval);
-  #endif
+#endif
 
   if (GetInterfaceToProfiles()
           ->profileSpecific_HACK->GetHearingAidDeviceCount()) {

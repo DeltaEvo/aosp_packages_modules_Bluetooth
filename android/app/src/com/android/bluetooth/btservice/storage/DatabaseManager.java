@@ -262,7 +262,6 @@ public class DatabaseManager {
     /**
      * Get customized metadata from database with requested key
      */
-    @VisibleForTesting
     public byte[] getCustomMeta(BluetoothDevice device, int key) {
         synchronized (mMetadataCache) {
             if (device == null) {
@@ -392,6 +391,9 @@ public class DatabaseManager {
             logMetadataChange(data, profileStr + " connection policy changed: "
                                     + oldConnectionPolicy + " -> " + newConnectionPolicy);
 
+            Log.v(TAG, "setProfileConnectionPolicy: device " + device.getAnonymizedAddress()
+                    + " profile=" + profileStr + ", connectionPolicy=" + newConnectionPolicy);
+
             data.setProfileConnectionPolicy(profile, newConnectionPolicy);
             updateDatabase(data);
             return true;
@@ -416,7 +418,6 @@ public class DatabaseManager {
      * {@link BluetoothProfile.CONNECTION_POLICY_FORBIDDEN},
      * {@link BluetoothProfile.CONNECTION_POLICY_ALLOWED}
      */
-    @VisibleForTesting
     public int getProfileConnectionPolicy(BluetoothDevice device, int profile) {
         synchronized (mMetadataCache) {
             if (device == null) {
@@ -944,6 +945,7 @@ public class DatabaseManager {
         mHandler = new DatabaseHandler(mHandlerThread.getLooper());
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         mAdapterService.registerReceiver(mReceiver, filter);

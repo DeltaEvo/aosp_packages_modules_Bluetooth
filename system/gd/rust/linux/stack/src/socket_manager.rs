@@ -295,6 +295,9 @@ pub trait IBluetoothSocketManager {
         callback: Box<dyn IBluetoothSocketManagerCallbacks + Send>,
     ) -> CallbackId;
 
+    /// Unregister for socket callbacks.
+    fn unregister_callback(&mut self, callback: CallbackId) -> bool;
+
     /// Create an insecure listening L2CAP socket. PSM is dynamically assigned.
     fn listen_using_insecure_l2cap_channel(&mut self, callback: CallbackId) -> SocketResult;
 
@@ -1197,6 +1200,27 @@ impl BluetoothSocketManager {
         self.listening.remove(&callback);
         self.callbacks.remove_callback(callback);
     }
+
+    // Send MSC command to the peer. ONLY FOR QUALIFICATION USE.
+    // libbluetooth auto starts the control request only when it is the client.
+    // This function allows the host to start the control request while as a server.
+    pub fn rfcomm_send_msc(&mut self, dlci: u8, addr: String) {
+        match (|| -> Result<(), &str> {
+            let addr = RawAddress::from_string(addr)
+                .ok_or("Invalid address for starting control request")?;
+            let sock = self
+                .sock
+                .as_ref()
+                .ok_or("Socket Manager not initialized when starting control request")?;
+            if sock.send_msc(dlci, addr) != BtStatus::Success {
+                return Err("Failed to start control request");
+            }
+            Ok(())
+        })() {
+            Ok(_) => {}
+            Err(msg) => log::warn!("{}", msg),
+        };
+    }
 }
 
 impl IBluetoothSocketManager for BluetoothSocketManager {
@@ -1205,6 +1229,10 @@ impl IBluetoothSocketManager for BluetoothSocketManager {
         callback: Box<dyn IBluetoothSocketManagerCallbacks + Send>,
     ) -> CallbackId {
         self.callbacks.add_callback(callback)
+    }
+
+    fn unregister_callback(&mut self, callback: CallbackId) -> bool {
+        self.callbacks.remove_callback(callback)
     }
 
     fn listen_using_insecure_l2cap_channel(&mut self, callback: CallbackId) -> SocketResult {

@@ -230,7 +230,7 @@ void gatt_act_write(tGATT_CLCB* p_clcb, uint8_t sec_act) {
   CHECK(p_clcb->p_attr_buf);
   tGATT_VALUE& attr = *((tGATT_VALUE*)p_clcb->p_attr_buf);
 
-  uint16_t payload_size = gatt_tcb_get_payload_size_tx(tcb, p_clcb->cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(tcb, p_clcb->cid);
 
   switch (p_clcb->op_subtype) {
     case GATT_WRITE_NO_RSP: {
@@ -351,7 +351,7 @@ void gatt_send_prepare_write(tGATT_TCB& tcb, tGATT_CLCB* p_clcb) {
   VLOG(1) << __func__ << StringPrintf(" type=0x%x", type);
   uint16_t to_send = p_attr->len - p_attr->offset;
 
-  uint16_t payload_size = gatt_tcb_get_payload_size_tx(tcb, p_clcb->cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(tcb, p_clcb->cid);
   if (to_send > (payload_size -
                  GATT_WRITE_LONG_HDR_SIZE)) /* 2 = uint16_t offset bytes  */
     to_send = payload_size - GATT_WRITE_LONG_HDR_SIZE;
@@ -609,12 +609,17 @@ void gatt_process_prep_write_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
 
   memcpy(value.value, p, value.len);
 
+  bool subtype_is_write_prepare = (p_clcb->op_subtype == GATT_WRITE_PREPARE);
+
   if (!gatt_check_write_long_terminate(tcb, p_clcb, &value)) {
     gatt_send_prepare_write(tcb, p_clcb);
     return;
   }
 
-  if (p_clcb->op_subtype == GATT_WRITE_PREPARE) {
+  // We now know that we have not terminated, or else we would have returned
+  // early.  We free the buffer only if the subtype is not equal to
+  // GATT_WRITE_PREPARE, so checking here is adequate to prevent UAF.
+  if (subtype_is_write_prepare) {
     /* application should verify handle offset
        and value are matched or not */
     gatt_end_operation(p_clcb, p_clcb->status, &value);
@@ -757,6 +762,10 @@ void gatt_process_notification(tGATT_TCB& tcb, uint16_t cid, uint8_t op_code,
     // Make sure we don't read past the remaining data even if the length says
     // we can Also need to watch comparing the int16_t with the uint16_t
     value.len = std::min((uint16_t)rem_len, value.len);
+    if (value.len > sizeof(value.value)) {
+      LOG(ERROR) << "Unexpected value.len (>GATT_MAX_ATTR_LEN), stop";
+      return ;
+    }
     STREAM_TO_ARRAY(value.value, p, value.len);
     // Accounting
     rem_len -= value.len;
@@ -805,7 +814,7 @@ void gatt_process_read_by_type_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   }
 
   STREAM_TO_UINT8(value_len, p);
-  uint16_t payload_size = gatt_tcb_get_payload_size_rx(tcb, p_clcb->cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(tcb, p_clcb->cid);
   if ((value_len > (payload_size - 2)) || (value_len > (len - 1))) {
     /* this is an error case that server's response containing a value length
        which is larger than MTU-2
@@ -995,7 +1004,7 @@ void gatt_process_read_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   uint16_t offset = p_clcb->counter;
   uint8_t* p = p_data;
 
-  uint16_t payload_size = gatt_tcb_get_payload_size_rx(tcb, p_clcb->cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(tcb, p_clcb->cid);
 
   if (p_clcb->operation == GATTC_OPTYPE_READ) {
     if (p_clcb->op_subtype != GATT_READ_BY_HANDLE) {
@@ -1103,11 +1112,11 @@ void gatt_process_mtu_rsp(tGATT_TCB& tcb, tGATT_CLCB* p_clcb, uint16_t len,
              tcb.pending_user_mtu_exchange_value,
              tcb.peer_bda.ToString().c_str(), mtu);
 
-    /* Aim for MAX as we did in the request */
+    /* Aim for default as we did in the request */
     if (mtu < GATT_DEF_BLE_MTU_SIZE) {
       tcb.payload_size = GATT_DEF_BLE_MTU_SIZE;
     } else {
-      tcb.payload_size = std::min(mtu, (uint16_t)(GATT_MAX_MTU_SIZE));
+      tcb.payload_size = std::min(mtu, (uint16_t)(gatt_get_local_mtu()));
     }
 
     bluetooth::shim::arbiter::GetArbiter().OnIncomingMtuResp(tcb.tcb_idx,
@@ -1207,7 +1216,7 @@ void gatt_client_handle_server_rsp(tGATT_TCB& tcb, uint16_t cid,
                                    uint8_t* p_data) {
   VLOG(1) << __func__ << " opcode: " << loghex(op_code) << " cid" << +cid;
 
-  uint16_t payload_size = gatt_tcb_get_payload_size_rx(tcb, cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(tcb, cid);
 
   if (op_code == GATT_HANDLE_VALUE_IND || op_code == GATT_HANDLE_VALUE_NOTIF ||
       op_code == GATT_HANDLE_MULTI_VALUE_NOTIF) {

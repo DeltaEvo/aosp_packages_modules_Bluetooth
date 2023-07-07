@@ -11,7 +11,6 @@ filegroup {
     name: "BluetoothDumpsysSources",
     srcs: [
         "filter.cc",
-        "init_flags.cc",
         "internal/filter_internal.cc",
         "reflection_schema.cc",
     ],
@@ -136,7 +135,6 @@ cc_library {
     name: "libbluetooth-dumpsys",
     host_supported: true,
     defaults: [
-        "gd_clang_file_coverage",
         "gd_clang_tidy",
         "gd_defaults",
     ],
@@ -153,7 +151,6 @@ cc_library {
     name: "libbluetooth-dumpsys-test",
     host_supported: true,
     defaults: [
-        "gd_clang_file_coverage",
         "gd_clang_tidy",
         "gd_defaults",
     ],
@@ -166,7 +163,6 @@ cc_library {
     name: "libbluetooth-dumpsys-unittest",
     host_supported: true,
     defaults: [
-        "gd_clang_file_coverage",
         "gd_clang_tidy",
         "gd_defaults",
     ],

@@ -87,13 +87,16 @@ public class RemoteDevicesTest {
 
     @Test
     public void testSendUuidIntent() {
+        doNothing().when(mAdapterService).sendUuidsInternal(any(), any());
+
         // Verify that a handler message is sent by the method call
         mRemoteDevices.updateUuids(mDevice1);
         Message msg = mTestLooperManager.next();
         Assert.assertNotNull(msg);
 
-        // Verify that executing that message results in a broadcast intent
+        // Verify that executing that message results in a direct call and broadcast intent
         mTestLooperManager.execute(msg);
+        verify(mAdapterService).sendUuidsInternal(any(), any());
         verify(mAdapterService).sendBroadcast(any(), anyString(), any());
         verifyNoMoreInteractions(mAdapterService);
     }
@@ -630,6 +633,38 @@ public class RemoteDevicesTest {
         // Verify that the audio policy properties are set and get propperly
         Assert.assertEquals(policies, mRemoteDevices.getDeviceProperties(mDevice1)
                 .getHfAudioPolicyForRemoteAg());
+    }
+
+    @Test
+    public void testIsCoordinatedSetMemberAsLeAudioEnabled() {
+        doReturn((long) (1 << BluetoothProfile.CSIP_SET_COORDINATOR))
+                .when(mAdapterService)
+                .getSupportedProfilesBitMask();
+
+        // Verify that device property is null initially
+        Assert.assertNull(mRemoteDevices.getDeviceProperties(mDevice1));
+        mRemoteDevices.addDeviceProperties(Utils.getBytesFromAddress(TEST_BT_ADDR_1));
+
+        DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(mDevice1);
+        deviceProp.setIsCoordinatedSetMember(true);
+
+        Assert.assertTrue(deviceProp.isCoordinatedSetMember());
+    }
+
+    @Test
+    public void testIsCoordinatedSetMemberAsLeAudioDisabled() {
+        doReturn((long) (0 << BluetoothProfile.CSIP_SET_COORDINATOR))
+                .when(mAdapterService)
+                .getSupportedProfilesBitMask();
+
+        // Verify that device property is null initially
+        Assert.assertNull(mRemoteDevices.getDeviceProperties(mDevice1));
+        mRemoteDevices.addDeviceProperties(Utils.getBytesFromAddress(TEST_BT_ADDR_1));
+
+        DeviceProperties deviceProp = mRemoteDevices.getDeviceProperties(mDevice1);
+        deviceProp.setIsCoordinatedSetMember(true);
+
+        Assert.assertFalse(deviceProp.isCoordinatedSetMember());
     }
 
     private static void verifyBatteryLevelChangedIntent(BluetoothDevice device, int batteryLevel,

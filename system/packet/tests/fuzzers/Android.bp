@@ -14,6 +14,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -31,11 +32,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -45,6 +48,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -63,11 +67,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -77,6 +83,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -95,11 +102,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -109,6 +118,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -127,11 +137,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -141,6 +153,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -159,11 +172,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -173,6 +188,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -191,11 +207,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -205,6 +223,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -223,11 +242,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -237,6 +258,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -255,11 +277,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -269,6 +293,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -287,11 +312,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -301,6 +328,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -319,11 +347,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -333,6 +363,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -351,11 +382,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -365,6 +398,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -383,11 +417,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -397,6 +433,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -415,11 +452,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -429,6 +468,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -447,11 +487,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -461,6 +503,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -479,11 +522,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -493,6 +538,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -511,11 +557,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -525,6 +573,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -543,11 +592,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -557,6 +608,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -575,11 +627,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -589,6 +643,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -607,11 +662,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -621,6 +678,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -639,11 +697,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -653,6 +713,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -671,11 +732,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -685,6 +748,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -703,11 +767,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -717,6 +783,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -735,11 +802,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -749,6 +818,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -767,11 +837,13 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }
 
 cc_fuzz {
@@ -781,6 +853,7 @@ cc_fuzz {
 
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/packet/base",
         "packages/modules/Bluetooth/system/packet/include",
@@ -799,9 +872,11 @@ cc_fuzz {
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
+        "libchrome",
         "libgmock",
     ],
     cflags: [
         "-DBUILDCFG",
     ],
+    shared_libs: ["liblog"],
 }

@@ -23,7 +23,7 @@
 #include <tuple>
 #include <vector>
 
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
 #include <android/sysprop/BluetoothProperties.sysprop.h>
 #endif
 
@@ -58,10 +58,6 @@ enum class DeviceConnectState : uint8_t {
   /* Disconnecting for recover - after that we want direct connect to be
      initiated */
   DISCONNECTING_AND_RECOVER,
-  /* Device will be removed after scheduled action is finished: One of such
-   * action is taking Stream to IDLE
-   */
-  PENDING_REMOVAL,
   /* 2 states below are used when user creates connection. Connect API is
      called. */
   CONNECTING_BY_USER,
@@ -250,6 +246,7 @@ class LeAudioDevices {
 class LeAudioDeviceGroup {
  public:
   const int group_id_;
+  bool enabled_;
   types::CigState cig_state_;
 
   struct stream_configuration stream_conf;
@@ -265,6 +262,7 @@ class LeAudioDeviceGroup {
   std::vector<struct types::cis> cises_;
   explicit LeAudioDeviceGroup(const int group_id)
       : group_id_(group_id),
+        enabled_(true),
         cig_state_(types::CigState::NONE),
         stream_conf({}),
         audio_directions_(0),
@@ -280,7 +278,7 @@ class LeAudioDeviceGroup {
             types::LeAudioContextType::UNINITIALIZED),
         target_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
         current_state_(types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
     // 22 maps to BluetoothProfile#LE_AUDIO
     is_output_preference_le_audio = android::sysprop::BluetoothProperties::
                                         getDefaultOutputOnlyAudioProfile() ==
@@ -368,7 +366,9 @@ class LeAudioDeviceGroup {
   void SetPendingConfiguration(void);
   void ClearPendingConfiguration(void);
   void AddToAllowListNotConnectedGroupMembers(int gatt_if);
-  void RemoveFromAllowListNotConnectedGroupMembers(int gatt_if);
+  void Disable(int gatt_if);
+  void Enable(int gatt_if, tBTM_BLE_CONN_TYPE reconnection_mode);
+  bool IsEnabled(void);
   bool IsConfigurationSupported(
       LeAudioDevice* leAudioDevice,
       const set_configurations::AudioSetConfiguration* audio_set_conf);
@@ -380,6 +380,9 @@ class LeAudioDeviceGroup {
       const types::BidirectionalPair<std::vector<uint8_t>>& ccid_lists);
   void CreateStreamVectorForOffloader(uint8_t direction);
   void StreamOffloaderUpdated(uint8_t direction);
+  bool IsConfiguredForContext(types::LeAudioContextType context_type);
+  void RemoveCisFromStreamIfNeeded(LeAudioDevice* leAudioDevice,
+                                   uint16_t cis_conn_hdl);
 
   inline types::AseState GetState(void) const { return current_state_; }
   void SetState(types::AseState state) {
@@ -456,6 +459,7 @@ class LeAudioDeviceGroup {
       types::LeAudioContextType context_type,
       types::LeAudioConfigurationStrategy required_snk_strategy);
   uint32_t GetTransportLatencyUs(uint8_t direction);
+  bool IsCisPartOfCurrentStream(uint16_t cis_conn_hdl);
 
   /* Current configuration and metadata context types */
   types::LeAudioContextType configuration_context_type_;

@@ -510,11 +510,13 @@ public class BluetoothProxy {
         mExecutor = Executors.newSingleThreadExecutor();
 
         adapterIntentFilter = new IntentFilter();
+        adapterIntentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         adapterIntentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         application.registerReceiver(adapterIntentReceiver, adapterIntentFilter,
                 Context.RECEIVER_EXPORTED);
 
         bassIntentFilter = new IntentFilter();
+        bassIntentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         bassIntentFilter.addAction(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
         application.registerReceiver(bassIntentReceiver, bassIntentFilter,
                 Context.RECEIVER_EXPORTED);
@@ -743,6 +745,7 @@ public class BluetoothProxy {
         }
 
         intentFilter = new IntentFilter();
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         intentFilter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED);
         application.registerReceiver(leAudioIntentReceiver, intentFilter,
                 Context.RECEIVER_EXPORTED);
@@ -762,6 +765,7 @@ public class BluetoothProxy {
                 BluetoothProfile.VOLUME_CONTROL);
 
         intentFilter = new IntentFilter();
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         intentFilter.addAction(BluetoothVolumeControl.ACTION_CONNECTION_STATE_CHANGED);
         application.registerReceiver(volumeControlIntentReceiver, intentFilter,
                 Context.RECEIVER_EXPORTED);
@@ -782,6 +786,7 @@ public class BluetoothProxy {
                 BluetoothProfile.HAP_CLIENT);
 
         intentFilter = new IntentFilter();
+        intentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         intentFilter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         intentFilter.addAction("android.bluetooth.action.HAP_DEVICE_AVAILABLE");
         application.registerReceiver(hapClientIntentReceiver, intentFilter,
@@ -1070,7 +1075,11 @@ public class BluetoothProxy {
                 if (scanDelegator != null) {
                     mBroadcastScanDelegatorDevices.add(scanDelegator);
                 }
-                mBluetoothLeBroadcastAssistant.startSearchingForSources(new ArrayList<>());
+                try {
+                    mBluetoothLeBroadcastAssistant.startSearchingForSources(new ArrayList<>());
+                } catch (IllegalArgumentException e) {
+                    Log.e("BluetoothProxy", " Unexpected " + e);
+                }
                 if (mBassEventListener != null) {
                     mBassEventListener.onScanningStateChanged(true);
                 }
@@ -1079,9 +1088,13 @@ public class BluetoothProxy {
                     mBroadcastScanDelegatorDevices.remove(scanDelegator);
                 }
                 if (mBroadcastScanDelegatorDevices.isEmpty()) {
-                    mBluetoothLeBroadcastAssistant.stopSearchingForSources();
-                    if (mBassEventListener != null) {
-                        mBassEventListener.onScanningStateChanged(false);
+                    try {
+                        mBluetoothLeBroadcastAssistant.stopSearchingForSources();
+                        if (mBassEventListener != null) {
+                            mBassEventListener.onScanningStateChanged(false);
+                        }
+                    } catch (IllegalArgumentException e) {
+                        Log.e("BluetoothProxy", " Unexpected " + e);
                     }
                 }
             }
@@ -1093,7 +1106,12 @@ public class BluetoothProxy {
     public boolean stopBroadcastObserving() {
         if (mBluetoothLeBroadcastAssistant != null) {
             mBroadcastScanDelegatorDevices.clear();
-            mBluetoothLeBroadcastAssistant.stopSearchingForSources();
+            try {
+                mBluetoothLeBroadcastAssistant.stopSearchingForSources();
+            } catch (IllegalArgumentException e) {
+                Log.e("BluetoothProxy", " Unexpected " + e);
+            }
+
             if (mBassEventListener != null) {
                 mBassEventListener.onScanningStateChanged(false);
             }

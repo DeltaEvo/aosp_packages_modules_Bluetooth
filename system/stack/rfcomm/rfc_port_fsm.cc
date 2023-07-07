@@ -81,7 +81,8 @@ static void rfc_set_port_state(tPORT_STATE* port_pars, MX_FRAME* p_frame);
  ******************************************************************************/
 void rfc_port_sm_execute(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
   CHECK(p_port != nullptr) << __func__ << ": NULL port event " << event;
-  VLOG(1) << __func__ << ": BD_ADDR=" << p_port->bd_addr
+  VLOG(1) << __func__
+          << ": BD_ADDR=" << ADDRESS_TO_LOGGABLE_STR(p_port->bd_addr)
           << ", PORT=" << std::to_string(p_port->handle)
           << ", STATE=" << std::to_string(p_port->rfc.state)
           << ", EVENT=" << event;
@@ -150,7 +151,7 @@ void rfc_port_sm_state_closed(tPORT* p_port, tRFC_PORT_EVENT event,
 
       /* Open will be continued after security checks are passed */
       p_port->rfc.state = RFC_STATE_TERM_WAIT_SEC_CHECK;
-      btm_sec_mx_access_request(p_port->rfc.p_mcb->bd_addr, true,
+      btm_sec_mx_access_request(p_port->rfc.p_mcb->bd_addr, false,
                                 p_port->sec_mask, &rfc_sec_check_complete,
                                 p_port);
       return;

@@ -14,7 +14,7 @@
 
 #include "gatt_shim.h"
 
-#include <base/bind.h>
+#include <base/functional/bind.h>
 #include <base/location.h>
 
 #include <cstdint>
@@ -30,8 +30,8 @@
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-extern bt_status_t do_in_jni_thread(const base::Location& from_here,
-                                    base::OnceClosure task);
+bt_status_t do_in_jni_thread(const base::Location& from_here,
+                             base::OnceClosure task);
 
 namespace {
 std::optional<RawAddress> AddressOfConnection(uint16_t conn_id) {

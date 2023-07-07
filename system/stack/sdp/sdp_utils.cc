@@ -54,6 +54,16 @@
 #include "types/raw_address.h"
 
 using bluetooth::Uuid;
+
+bool SDP_FindProtocolListElemInRec(const tSDP_DISC_REC* p_rec,
+                                   uint16_t layer_uuid,
+                                   tSDP_PROTOCOL_ELEM* p_elem);
+tSDP_DISC_ATTR* SDP_FindAttributeInRec(const tSDP_DISC_REC* p_rec,
+                                       uint16_t attr_id);
+uint16_t SDP_GetDiRecord(uint8_t getRecordIndex,
+                         tSDP_DI_GET_RECORD* device_info,
+                         const tSDP_DISCOVERY_DB* p_db);
+
 static const uint8_t sdp_base_uuid[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                         0x10, 0x00, 0x80, 0x00, 0x00, 0x80,
                                         0x5F, 0x9B, 0x34, 0xFB};
@@ -106,13 +116,18 @@ static std::vector<std::pair<uint16_t, uint16_t>> sdpu_find_profile_version(
         uint16_t uuid = p_ssattr->attr_value.v.u16;
         // Next attribute should be the version attribute
         tSDP_DISC_ATTR* version_attr = p_ssattr->p_next_attr;
-        if (SDP_DISC_ATTR_TYPE(version_attr->attr_len_type) != UINT_DESC_TYPE ||
+        if (version_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(version_attr->attr_len_type) != UINT_DESC_TYPE ||
             SDP_DISC_ATTR_LEN(version_attr->attr_len_type) != 2) {
-          LOG(WARNING) << __func__ << ": Bad version type "
-                       << loghex(
-                              SDP_DISC_ATTR_TYPE(version_attr->attr_len_type))
-                       << ", or length "
-                       << SDP_DISC_ATTR_LEN(version_attr->attr_len_type);
+          if (version_attr == nullptr) {
+            LOG(WARNING) << __func__ << ": version attr not found";
+          } else {
+            LOG(WARNING) << __func__ << ": Bad version type "
+                         << loghex(
+                                SDP_DISC_ATTR_TYPE(version_attr->attr_len_type))
+                         << ", or length "
+                         << SDP_DISC_ATTR_LEN(version_attr->attr_len_type);
+          }
           return std::vector<std::pair<uint16_t, uint16_t>>();
         }
         // High order 8 bits is the major number, low order is the

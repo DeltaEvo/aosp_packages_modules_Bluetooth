@@ -1,5 +1,6 @@
 /*
  * Copyright 2015 The Android Open Source Project
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -15,8 +16,8 @@
 
 #include "controller_properties.h"
 
+#include <google/protobuf/text_format.h>
 #include <inttypes.h>
-#include <json/json.h>
 
 #include <fstream>
 #include <limits>
@@ -108,13 +109,13 @@ static constexpr uint64_t LlFeatures() {
       LLFeaturesBits::LE_PING,
       LLFeaturesBits::LL_PRIVACY,
       LLFeaturesBits::EXTENDED_SCANNER_FILTER_POLICIES,
-      LLFeaturesBits::LE_2M_PHY, LLFeaturesBits::LE_CODED_PHY,
+      LLFeaturesBits::LE_2M_PHY,
+      LLFeaturesBits::LE_CODED_PHY,
       LLFeaturesBits::LE_EXTENDED_ADVERTISING,
       LLFeaturesBits::LE_PERIODIC_ADVERTISING,
 
-      // TODO: breaks AVD boot tests with LE audio
-      // LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_CENTRAL,
-      // LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_PERIPHERAL,
+      LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_CENTRAL,
+      LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_PERIPHERAL,
   };
 
   uint64_t value = 0;
@@ -377,20 +378,17 @@ static std::array<uint8_t, 64> SupportedCommands() {
       // OpCodeIndex::LE_MODIFY_SLEEP_CLOCK_ACCURACY,
       OpCodeIndex::LE_READ_BUFFER_SIZE_V2,
       // OpCodeIndex::LE_READ_ISO_TX_SYNC,
-      // OpCodeIndex::LE_SET_CIG_PARAMETERS,
-      // OpCodeIndex::LE_SET_CIG_PARAMETERS_TEST,
-      // OpCodeIndex::LE_CREATE_CIS,
-      // OpCodeIndex::LE_REMOVE_CIG,
-      // OpCodeIndex::LE_ACCEPT_CIS_REQUEST,
-      // OpCodeIndex::LE_REJECT_CIS_REQUEST,
+      OpCodeIndex::LE_SET_CIG_PARAMETERS,
+      OpCodeIndex::LE_SET_CIG_PARAMETERS_TEST, OpCodeIndex::LE_CREATE_CIS,
+      OpCodeIndex::LE_REMOVE_CIG, OpCodeIndex::LE_ACCEPT_CIS_REQUEST,
+      OpCodeIndex::LE_REJECT_CIS_REQUEST,
       // OpCodeIndex::LE_CREATE_BIG,
       // OpCodeIndex::LE_CREATE_BIG_TEST,
       // OpCodeIndex::LE_TERMINATE_BIG,
       // OpCodeIndex::LE_BIG_CREATE_SYNC,
       // OpCodeIndex::LE_BIG_TERMINATE_SYNC,
-      // OpCodeIndex::LE_REQUEST_PEER_SCA,
-      // OpCodeIndex::LE_SETUP_ISO_DATA_PATH,
-      // OpCodeIndex::LE_REMOVE_ISO_DATA_PATH,
+      OpCodeIndex::LE_REQUEST_PEER_SCA, OpCodeIndex::LE_SETUP_ISO_DATA_PATH,
+      OpCodeIndex::LE_REMOVE_ISO_DATA_PATH,
       // OpCodeIndex::LE_ISO_TRANSMIT_TEST,
       // OpCodeIndex::LE_ISO_RECEIVE_TEST,
       // OpCodeIndex::LE_ISO_READ_TEST_COUNTERS,
@@ -415,243 +413,6 @@ static std::array<uint8_t, 64> SupportedCommands() {
   }
 
   return value;
-}
-
-template <typename T>
-static bool ParseUint(Json::Value root, std::string field_name,
-                      T& output_value) {
-  T max_value = std::numeric_limits<T>::max();
-  Json::Value value = root[field_name];
-
-  if (value.isString()) {
-    unsigned long long parsed_value = std::stoull(value.asString(), nullptr, 0);
-    if (parsed_value > max_value) {
-      LOG_INFO("invalid value for %s is discarded: %llu > %llu",
-               field_name.c_str(), parsed_value,
-               static_cast<unsigned long long>(max_value));
-      return false;
-    }
-    output_value = static_cast<T>(parsed_value);
-    return true;
-  }
-
-  return false;
-}
-
-template <typename T, std::size_t N>
-static bool ParseUintArray(Json::Value root, std::string field_name,
-                           std::array<T, N>& output_value) {
-  T max_value = std::numeric_limits<T>::max();
-  Json::Value value = root[field_name];
-
-  if (value.empty()) {
-    return false;
-  }
-
-  if (!value.isArray()) {
-    LOG_INFO("invalid value for %s is discarded: not an array",
-             field_name.c_str());
-    return false;
-  }
-
-  if (value.size() != N) {
-    LOG_INFO(
-        "invalid value for %s is discarded: incorrect size %u, expected %zu",
-        field_name.c_str(), value.size(), N);
-    return false;
-  }
-
-  for (size_t n = 0; n < N; n++) {
-    unsigned long long parsed_value =
-        std::stoull(value[static_cast<int>(n)].asString(), nullptr, 0);
-    if (parsed_value > max_value) {
-      LOG_INFO("invalid value for %s[%zu] is discarded: %llu > %llu",
-               field_name.c_str(), n, parsed_value,
-               static_cast<unsigned long long>(max_value));
-    } else {
-      output_value[n] = parsed_value;
-    }
-  }
-
-  return false;
-}
-
-template <typename T>
-static bool ParseUintVector(Json::Value root, std::string field_name,
-                            std::vector<T>& output_value) {
-  T max_value = std::numeric_limits<T>::max();
-  Json::Value value = root[field_name];
-
-  if (value.empty()) {
-    return false;
-  }
-
-  if (!value.isArray()) {
-    LOG_INFO("invalid value for %s is discarded: not an array",
-             field_name.c_str());
-    return false;
-  }
-
-  output_value.clear();
-  for (size_t n = 0; n < value.size(); n++) {
-    unsigned long long parsed_value =
-        std::stoull(value[static_cast<int>(n)].asString(), nullptr, 0);
-    if (parsed_value > max_value) {
-      LOG_INFO("invalid value for %s[%zu] is discarded: %llu > %llu",
-               field_name.c_str(), n, parsed_value,
-               static_cast<unsigned long long>(max_value));
-    } else {
-      output_value.push_back(parsed_value);
-    }
-  }
-
-  return false;
-}
-
-static void ParseHex64(Json::Value value, uint64_t* field) {
-  if (value.isString()) {
-    size_t end_char = 0;
-    uint64_t parsed = std::stoll(value.asString(), &end_char, 16);
-    if (end_char > 0) {
-      *field = parsed;
-    }
-  }
-}
-
-ControllerProperties::ControllerProperties(const std::string& file_name)
-    : supported_commands(std::move(SupportedCommands())),
-      lmp_features({Page0LmpFeatures(), 0, Page2LmpFeatures()}),
-      le_features(LlFeatures()) {
-  if (!CheckSupportedFeatures()) {
-    LOG_INFO(
-        "Warning: initial LMP and/or LE are not consistent. Please make sure"
-        " that the features are correct w.r.t. the rules described"
-        " in Vol 2, Part C 3.5 Feature requirements");
-  }
-
-  if (!CheckSupportedCommands()) {
-    LOG_INFO(
-        "Warning: initial supported commands are not consistent. Please make"
-        " sure that the supported commands are correct w.r.t. the rules"
-        " described in Vol 4, Part E § 3 Overview of commands and events");
-  }
-
-  if (file_name.empty()) {
-    return;
-  }
-
-  LOG_INFO("Reading controller properties from %s.", file_name.c_str());
-
-  std::ifstream file(file_name);
-
-  Json::Value root;
-  Json::CharReaderBuilder builder;
-
-  std::string errs;
-  if (!Json::parseFromStream(builder, file, &root, &errs)) {
-    LOG_ERROR("Error reading controller properties from file: %s error: %s",
-              file_name.c_str(), errs.c_str());
-    return;
-  }
-
-  // Legacy configuration options.
-
-  ParseUint(root, "AclDataPacketSize", acl_data_packet_length);
-  ParseUint(root, "ScoDataPacketSize", sco_data_packet_length);
-  ParseUint(root, "NumAclDataPackets", total_num_acl_data_packets);
-  ParseUint(root, "NumScoDataPackets", total_num_sco_data_packets);
-
-  uint8_t hci_version = static_cast<uint8_t>(this->hci_version);
-  uint8_t lmp_version = static_cast<uint8_t>(this->lmp_version);
-  ParseUint(root, "Version", hci_version);
-  ParseUint(root, "Revision", hci_subversion);
-  ParseUint(root, "LmpPalVersion", lmp_version);
-  ParseUint(root, "LmpPalSubversion", lmp_subversion);
-  ParseUint(root, "ManufacturerName", company_identifier);
-
-  ParseHex64(root["LeSupportedFeatures"], &le_features);
-
-  // Configuration options.
-
-  le_supported = root.get("le_supported", Json::Value(true)).asBool();
-  br_supported = root.get("br_supported", Json::Value(true)).asBool();
-
-  ParseUint(root, "hci_version", hci_version);
-  ParseUint(root, "lmp_version", lmp_version);
-  ParseUint(root, "hci_subversion", hci_subversion);
-  ParseUint(root, "lmp_subversion", lmp_subversion);
-  ParseUint(root, "company_identifier", company_identifier);
-
-  ParseUintArray(root, "supported_commands", supported_commands);
-  ParseUintArray(root, "lmp_features", lmp_features);
-  ParseUint(root, "le_features", le_features);
-
-  ParseUint(root, "acl_data_packet_length", acl_data_packet_length);
-  ParseUint(root, "sco_data_packet_length ", sco_data_packet_length);
-  ParseUint(root, "total_num_acl_data_packets ", total_num_acl_data_packets);
-  ParseUint(root, "total_num_sco_data_packets ", total_num_sco_data_packets);
-  ParseUint(root, "le_acl_data_packet_length ", le_acl_data_packet_length);
-  ParseUint(root, "iso_data_packet_length ", iso_data_packet_length);
-  ParseUint(root, "total_num_le_acl_data_packets ",
-            total_num_le_acl_data_packets);
-  ParseUint(root, "total_num_iso_data_packets ", total_num_iso_data_packets);
-  ParseUint(root, "num_supported_iac", num_supported_iac);
-  ParseUint(root, "le_advertising_physical_channel_tx_power",
-            le_advertising_physical_channel_tx_power);
-
-  ParseUintArray(root, "lmp_features", lmp_features);
-  ParseUintVector(root, "supported_standard_codecs", supported_standard_codecs);
-  ParseUintVector(root, "supported_vendor_specific_codecs",
-                  supported_vendor_specific_codecs);
-
-  ParseUint(root, "le_filter_accept_list_size", le_filter_accept_list_size);
-  ParseUint(root, "le_resolving_list_size", le_resolving_list_size);
-  ParseUint(root, "le_supported_states", le_supported_states);
-
-  ParseUint(root, "le_max_advertising_data_length",
-            le_max_advertising_data_length);
-  ParseUint(root, "le_num_supported_advertising_sets",
-            le_num_supported_advertising_sets);
-
-  ParseUintVector(root, "le_vendor_capabilities", le_vendor_capabilities);
-
-  this->hci_version = static_cast<HciVersion>(hci_version);
-  this->lmp_version = static_cast<LmpVersion>(lmp_version);
-
-  // Transport flag takes precedence over LMP features.
-  if (le_supported && br_supported) {
-    lmp_features[0] |= static_cast<int64_t>(
-        LMPFeaturesPage0Bits::SIMULTANEOUS_LE_AND_BR_CONTROLLER);
-    lmp_features[0] |=
-        static_cast<int64_t>(LMPFeaturesPage0Bits::LE_SUPPORTED_CONTROLLER);
-  } else if (le_supported) {
-    lmp_features[0] &= ~static_cast<int64_t>(
-        LMPFeaturesPage0Bits::SIMULTANEOUS_LE_AND_BR_CONTROLLER);
-    lmp_features[0] |=
-        static_cast<int64_t>(LMPFeaturesPage0Bits::LE_SUPPORTED_CONTROLLER);
-  } else if (br_supported) {
-    lmp_features[0] &= ~static_cast<int64_t>(
-        LMPFeaturesPage0Bits::SIMULTANEOUS_LE_AND_BR_CONTROLLER);
-    lmp_features[0] &=
-        ~static_cast<int64_t>(LMPFeaturesPage0Bits::LE_SUPPORTED_CONTROLLER);
-  } else {
-    LOG_ERROR("le_supported or br_supported must be set in the configuration");
-    br_supported = true;
-    le_supported = true;
-    lmp_features[0] |= static_cast<int64_t>(
-        LMPFeaturesPage0Bits::SIMULTANEOUS_LE_AND_BR_CONTROLLER);
-    lmp_features[0] |=
-        static_cast<int64_t>(LMPFeaturesPage0Bits::LE_SUPPORTED_CONTROLLER);
-  }
-
-  if (!CheckSupportedFeatures()) {
-    LOG_INFO(
-        "Warning: the LMP and/or LE are not consistent. Please make sure"
-        " that the features are correct w.r.t. the rules described"
-        " in Vol 2, Part C 3.5 Feature requirements");
-  } else {
-    LOG_INFO("LMP and LE features successfully validated");
-  }
 }
 
 bool ControllerProperties::CheckSupportedFeatures() const {
@@ -719,18 +480,20 @@ bool ControllerProperties::CheckSupportedFeatures() const {
   };
 
   if ((lmp_page_0_reserved_bits & lmp_features[0]) != 0) {
-    LOG_INFO("The page 0 feature bits 0x%016" PRIx64
-             " are reserved in the specification %s",
-             lmp_page_0_reserved_bits & lmp_features[0],
-             LmpVersionText(lmp_version).c_str());
+    INFO(
+        "The page 0 feature bits 0x{:016x}"
+        " are reserved in the specification {}",
+        lmp_page_0_reserved_bits & lmp_features[0],
+        LmpVersionText(lmp_version));
     return false;
   }
 
   if ((lmp_page_2_reserved_bits & lmp_features[2]) != 0) {
-    LOG_INFO("The page 2 feature bits 0x%016" PRIx64
-             " are reserved in the specification %s",
-             lmp_page_2_reserved_bits & lmp_features[2],
-             LmpVersionText(lmp_version).c_str());
+    INFO(
+        "The page 2 feature bits 0x{:016x}"
+        " are reserved in the specification {}",
+        lmp_page_2_reserved_bits & lmp_features[2],
+        LmpVersionText(lmp_version));
     return false;
   }
 
@@ -748,14 +511,14 @@ bool ControllerProperties::CheckSupportedFeatures() const {
       !SupportsLMPFeature(
           LMPFeaturesPage0Bits::SECURE_SIMPLE_PAIRING_CONTROLLER) ||
       !SupportsLMPFeature(LMPFeaturesPage0Bits::ENCAPSULATED_PDU)) {
-    LOG_INFO("Table 3.5 validation failed");
+    INFO("Table 3.5 validation failed");
     return false;
   }
 
   // The features listed in Table 3.6 are forbidden in this version of the
   // specification and these feature bits shall not be set.
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::BR_EDR_NOT_SUPPORTED)) {
-    LOG_INFO("Table 3.6 validation failed");
+    INFO("Table 3.6 validation failed");
     return false;
   }
 
@@ -763,7 +526,7 @@ bool ControllerProperties::CheckSupportedFeatures() const {
   // supported or none of the features named in that row shall be supported.
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::SNIFF_MODE) !=
       SupportsLMPFeature(LMPFeaturesPage0Bits::SNIFF_SUBRATING)) {
-    LOG_INFO("Table 3.7 validation failed");
+    INFO("Table 3.7 validation failed");
     return false;
   }
 
@@ -771,7 +534,7 @@ bool ControllerProperties::CheckSupportedFeatures() const {
   // supported.
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::BROADCAST_ENCRYPTION) &&
       SupportsLMPFeature(LMPFeaturesPage2Bits::COARSE_CLOCK_ADJUSTMENT)) {
-    LOG_INFO("Table 3.8 validation failed");
+    INFO("Table 3.8 validation failed");
     return false;
   }
 
@@ -779,76 +542,72 @@ bool ControllerProperties::CheckSupportedFeatures() const {
   // supported then the feature named in the second column shall be supported.
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::ROLE_SWITCH) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SLOT_OFFSET)) {
-    LOG_INFO("Table 3.9 validation failed; expected Slot Offset");
+    INFO("Table 3.9 validation failed; expected Slot Offset");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::HV2_PACKETS) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SCO_LINK)) {
-    LOG_INFO("Table 3.9 validation failed; expected Sco Link");
+    INFO("Table 3.9 validation failed; expected Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::HV3_PACKETS) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SCO_LINK)) {
-    LOG_INFO("Table 3.9 validation failed; expected Sco Link");
+    INFO("Table 3.9 validation failed; expected Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::M_LAW_LOG_SYNCHRONOUS_DATA) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SCO_LINK) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO(
-        "Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::A_LAW_LOG_SYNCHRONOUS_DATA) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SCO_LINK) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO(
-        "Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::CVSD_SYNCHRONOUS_DATA) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SCO_LINK) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO(
-        "Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::TRANSPARENT_SYNCHRONOUS_DATA) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SCO_LINK) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO(
-        "Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ACL_3_MB_S_MODE) &&
       !SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ACL_2_MB_S_MODE)) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected Enhanced Data Rate ACL 2Mb/s "
         "mode");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::EV4_PACKETS) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO("Table 3.9 validation failed; expected Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::EV5_PACKETS) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO("Table 3.9 validation failed; expected Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::AFH_CLASSIFICATION_PERIPHERAL) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::AFH_CAPABLE_PERIPHERAL)) {
-    LOG_INFO("Table 3.9 validation failed; expected AFH Capable Peripheral");
+    INFO("Table 3.9 validation failed; expected AFH Capable Peripheral");
     return false;
   }
   if (SupportsLMPFeature(
           LMPFeaturesPage0Bits::LMP_3_SLOT_ENHANCED_DATA_RATE_ACL_PACKETS) &&
       !SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ACL_2_MB_S_MODE)) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected Enhanced Data Rate ACL 2Mb/s "
         "mode");
     return false;
@@ -857,27 +616,27 @@ bool ControllerProperties::CheckSupportedFeatures() const {
           LMPFeaturesPage0Bits::LMP_5_SLOT_ENHANCED_DATA_RATE_ACL_PACKETS) &&
       !SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ACL_2_MB_S_MODE)) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected Enhanced Data Rate ACL 2Mb/s "
         "mode");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::AFH_CLASSIFICATION_CENTRAL) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::AFH_CAPABLE_CENTRAL)) {
-    LOG_INFO("Table 3.9 validation failed; expected AFH Capable Central");
+    INFO("Table 3.9 validation failed; expected AFH Capable Central");
     return false;
   }
   if (SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ESCO_2_MB_S_MODE) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO("Table 3.9 validation failed; expected Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ESCO_3_MB_S_MODE) &&
       !SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ESCO_2_MB_S_MODE)) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected Enhanced Data Rate eSCO 2Mb/s "
         "mode");
     return false;
@@ -886,33 +645,32 @@ bool ControllerProperties::CheckSupportedFeatures() const {
           LMPFeaturesPage0Bits::LMP_3_SLOT_ENHANCED_DATA_RATE_ESCO_PACKETS) &&
       !SupportsLMPFeature(
           LMPFeaturesPage0Bits::ENHANCED_DATA_RATE_ESCO_2_MB_S_MODE)) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected Enhanced Data Rate eSCO 2Mb/s "
         "mode");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_INQUIRY_RESPONSE) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::RSSI_WITH_INQUIRY_RESULTS)) {
-    LOG_INFO("Table 3.9 validation failed; expected RSSI with Inquiry Results");
+    INFO("Table 3.9 validation failed; expected RSSI with Inquiry Results");
     return false;
   }
   if (SupportsLMPFeature(
           LMPFeaturesPage0Bits::SIMULTANEOUS_LE_AND_BR_CONTROLLER) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::LE_SUPPORTED_CONTROLLER)) {
-    LOG_INFO("Table 3.9 validation failed; expected LE Supported (Controller)");
+    INFO("Table 3.9 validation failed; expected LE Supported (Controller)");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::ERRONEOUS_DATA_REPORTING) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::SCO_LINK) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::EXTENDED_SCO_LINK)) {
-    LOG_INFO(
-        "Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
+    INFO("Table 3.9 validation failed; expected Sco Link or Extended Sco Link");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage0Bits::ENHANCED_POWER_CONTROL) &&
       (!SupportsLMPFeature(LMPFeaturesPage0Bits::POWER_CONTROL_REQUESTS) ||
        !SupportsLMPFeature(LMPFeaturesPage0Bits::POWER_CONTROL))) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected Power Control Request and Power "
         "Control");
     return false;
@@ -921,20 +679,20 @@ bool ControllerProperties::CheckSupportedFeatures() const {
           LMPFeaturesPage2Bits::
               CONNECTIONLESS_PERIPHERAL_BROADCAST_TRANSMITTER_OPERATION) &&
       !SupportsLMPFeature(LMPFeaturesPage2Bits::SYNCHRONIZATION_TRAIN)) {
-    LOG_INFO("Table 3.9 validation failed; expected Synchronization Train");
+    INFO("Table 3.9 validation failed; expected Synchronization Train");
     return false;
   }
   if (SupportsLMPFeature(
           LMPFeaturesPage2Bits::
               CONNECTIONLESS_PERIPHERAL_BROADCAST_RECEIVER_OPERATION) &&
       !SupportsLMPFeature(LMPFeaturesPage2Bits::SYNCHRONIZATION_SCAN)) {
-    LOG_INFO("Table 3.9 validation failed; expected Synchronization Scan");
+    INFO("Table 3.9 validation failed; expected Synchronization Scan");
     return false;
   }
   if (SupportsLMPFeature(LMPFeaturesPage2Bits::GENERALIZED_INTERLACED_SCAN) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::INTERLACED_INQUIRY_SCAN) &&
       !SupportsLMPFeature(LMPFeaturesPage0Bits::INTERLACED_PAGE_SCAN)) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected Interlaced Inquiry Scan or "
         "Interlaced Page Scan");
     return false;
@@ -944,7 +702,7 @@ bool ControllerProperties::CheckSupportedFeatures() const {
        !SupportsLMPFeature(LMPFeaturesPage0Bits::AFH_CAPABLE_CENTRAL) ||
        !SupportsLMPFeature(LMPFeaturesPage2Bits::SYNCHRONIZATION_TRAIN) ||
        !SupportsLMPFeature(LMPFeaturesPage2Bits::SYNCHRONIZATION_SCAN))) {
-    LOG_INFO(
+    INFO(
         "Table 3.9 validation failed; expected AFH Capable Central/Peripheral "
         "and Synchronization Train/Scan");
     return false;
@@ -953,7 +711,7 @@ bool ControllerProperties::CheckSupportedFeatures() const {
           LMPFeaturesPage2Bits::SECURE_CONNECTIONS_CONTROLLER_SUPPORT) &&
       (!SupportsLMPFeature(LMPFeaturesPage0Bits::PAUSE_ENCRYPTION) ||
        !SupportsLMPFeature(LMPFeaturesPage2Bits::PING))) {
-    LOG_INFO("Table 3.9 validation failed; expected Pause Encryption and Ping");
+    INFO("Table 3.9 validation failed; expected Pause Encryption and Ping");
     return false;
   }
 
@@ -1200,7 +958,8 @@ bool ControllerProperties::CheckSupportedCommands() const {
   auto c36 = mandatory;
   // C37: Mandatory if the LE Controller can change its sleep clock accuracy,
   // otherwise excluded.
-  auto c37 = excluded;
+  auto c37 = mandatory_or_excluded(
+      SupportsLLFeature(LLFeaturesBits::SLEEP_CLOCK_ACCURACY_UPDATES));
   // C38: Mandatory if LE Feature (Connected Isochronous Stream - Central) or
   // LE Feature (Connected Isochronous Stream - Peripheral) is supported,
   // otherwise excluded.
@@ -1342,7 +1101,7 @@ bool ControllerProperties::CheckSupportedCommands() const {
   //
   // C96: Optional if the LE Controller supports Connection State,
   // otherwise excluded.
-  auto c96 = mandatory;
+  auto c96 = optional;
   // C97: Mandatory if Advertising State is supported, otherwise excluded.
   auto c97 = mandatory;
   // C98: Mandatory if Scanning State is supported, otherwise excluded.
@@ -1607,8 +1366,8 @@ bool ControllerProperties::CheckSupportedCommands() const {
         SupportsCommand(bluetooth::hci::OpCodeIndex::op_code);                 \
     if (!check_command_requirement(br_supported, br_requirement, le_supported, \
                                    le_requirement, command_supported)) {       \
-      LOG_INFO(#op_code " command validation failed (" #br_requirement         \
-                        "," #le_requirement ")");                              \
+      INFO(#op_code " command validation failed (" #br_requirement             \
+                    "," #le_requirement ")");                                  \
     }                                                                          \
   }
 
@@ -1965,6 +1724,261 @@ bool ControllerProperties::CheckSupportedCommands() const {
   check_command_(WRITE_SYNCHRONOUS_FLOW_CONTROL_ENABLE, c135, excluded);
   check_command_(WRITE_VOICE_SETTING, c134, excluded);
   return true;
+}
+
+ControllerProperties::ControllerProperties()
+    : supported_commands(std::move(SupportedCommands())),
+      lmp_features({Page0LmpFeatures(), 0, Page2LmpFeatures()}),
+      le_features(LlFeatures()) {
+  if (!CheckSupportedFeatures()) {
+    INFO(
+        "Warning: initial LMP and/or LE are not consistent. Please make sure"
+        " that the features are correct w.r.t. the rules described"
+        " in Vol 2, Part C 3.5 Feature requirements");
+  }
+
+  if (!CheckSupportedCommands()) {
+    INFO(
+        "Warning: initial supported commands are not consistent. Please make"
+        " sure that the supported commands are correct w.r.t. the rules"
+        " described in Vol 4, Part E § 3 Overview of commands and events");
+  }
+}
+
+// Commands enabled by the LE Extended Advertising feature bit.
+static std::vector<OpCodeIndex> le_extended_advertising_commands_ = {
+    OpCodeIndex::LE_CLEAR_ADVERTISING_SETS,
+    OpCodeIndex::LE_EXTENDED_CREATE_CONNECTION,
+    OpCodeIndex::LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH,
+    OpCodeIndex::LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS,
+    OpCodeIndex::LE_RECEIVER_TEST_V2,
+    OpCodeIndex::LE_REMOVE_ADVERTISING_SET,
+    OpCodeIndex::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS,
+    OpCodeIndex::LE_SET_DATA_RELATED_ADDRESS_CHANGES,
+    OpCodeIndex::LE_SET_EXTENDED_ADVERTISING_DATA,
+    OpCodeIndex::LE_SET_EXTENDED_ADVERTISING_ENABLE,
+    OpCodeIndex::LE_SET_EXTENDED_ADVERTISING_PARAMETERS,
+    OpCodeIndex::LE_SET_EXTENDED_SCAN_ENABLE,
+    OpCodeIndex::LE_SET_EXTENDED_SCAN_PARAMETERS,
+    OpCodeIndex::LE_SET_EXTENDED_SCAN_RESPONSE_DATA,
+};
+
+// Commands enabled by the LE Periodic Advertising feature bit.
+static std::vector<OpCodeIndex> le_periodic_advertising_commands_ = {
+    OpCodeIndex::LE_ADD_DEVICE_TO_PERIODIC_ADVERTISER_LIST,
+    OpCodeIndex::LE_CLEAR_PERIODIC_ADVERTISER_LIST,
+    OpCodeIndex::LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL,
+    OpCodeIndex::LE_PERIODIC_ADVERTISING_CREATE_SYNC,
+    OpCodeIndex::LE_PERIODIC_ADVERTISING_TERMINATE_SYNC,
+    OpCodeIndex::LE_READ_PERIODIC_ADVERTISER_LIST_SIZE,
+    OpCodeIndex::LE_RECEIVER_TEST_V2,
+    OpCodeIndex::LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISER_LIST,
+    OpCodeIndex::LE_SET_DATA_RELATED_ADDRESS_CHANGES,
+    OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_DATA,
+    OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_ENABLE,
+    OpCodeIndex::LE_SET_PERIODIC_ADVERTISING_PARAMETERS,
+};
+
+// Commands enabled by the LL Privacy feature bit.
+static std::vector<OpCodeIndex> ll_privacy_commands_ = {
+    OpCodeIndex::LE_ADD_DEVICE_TO_RESOLVING_LIST,
+    OpCodeIndex::LE_CLEAR_RESOLVING_LIST,
+    OpCodeIndex::LE_READ_LOCAL_RESOLVABLE_ADDRESS,
+    OpCodeIndex::LE_READ_PEER_RESOLVABLE_ADDRESS,
+    OpCodeIndex::LE_READ_RESOLVING_LIST_SIZE,
+    OpCodeIndex::LE_RECEIVER_TEST_V2,
+    OpCodeIndex::LE_REMOVE_DEVICE_FROM_RESOLVING_LIST,
+    OpCodeIndex::LE_SET_ADDRESS_RESOLUTION_ENABLE,
+    OpCodeIndex::LE_SET_PRIVACY_MODE,
+    OpCodeIndex::LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT,
+};
+
+// Commands enabled by the LL Connected Isochronous Stream feature bit.
+// Central and Peripheral support bits are enabled together.
+static std::vector<OpCodeIndex> ll_connected_isochronous_stream_commands_ = {
+    OpCodeIndex::LE_SET_CIG_PARAMETERS,
+    OpCodeIndex::LE_SET_CIG_PARAMETERS_TEST,
+    OpCodeIndex::LE_CREATE_CIS,
+    OpCodeIndex::LE_REMOVE_CIG,
+    OpCodeIndex::LE_ACCEPT_CIS_REQUEST,
+    OpCodeIndex::LE_REJECT_CIS_REQUEST,
+    OpCodeIndex::LE_SETUP_ISO_DATA_PATH,
+    OpCodeIndex::LE_REMOVE_ISO_DATA_PATH,
+    OpCodeIndex::LE_REQUEST_PEER_SCA,
+};
+
+static void SetLLFeatureBit(uint64_t& le_features, LLFeaturesBits bit,
+                            bool set) {
+  if (set) {
+    le_features |= static_cast<uint64_t>(bit);
+  } else {
+    le_features &= ~static_cast<uint64_t>(bit);
+  }
+}
+
+static void SetSupportedCommandBits(std::array<uint8_t, 64>& supported_commands,
+                                    std::vector<OpCodeIndex> const& commands,
+                                    bool set) {
+  for (auto command : commands) {
+    int index = static_cast<int>(command);
+    if (set) {
+      supported_commands[index / 10] |= 1U << (index % 10);
+    } else {
+      supported_commands[index / 10] &= ~(1U << (index % 10));
+    }
+  }
+}
+
+ControllerProperties::ControllerProperties(
+    rootcanal::configuration::Controller const& config)
+    : strict(!config.has_strict() || config.strict()),
+      supported_commands(std::move(SupportedCommands())),
+      lmp_features({Page0LmpFeatures(), 0, Page2LmpFeatures()}),
+      le_features(LlFeatures()) {
+  using namespace rootcanal::configuration;
+
+  // Set the base configuration.
+  if (config.has_preset()) {
+    switch (config.preset()) {
+      case ControllerPreset::DEFAULT:
+        break;
+
+      case ControllerPreset::LAIRD_BL654:
+        // Configuration extracted with the helper script controller_info.py
+        br_supported = false;
+        le_supported = true;
+        hci_version = bluetooth::hci::HciVersion::V_5_4;
+        hci_subversion = 0x5ad2;
+        lmp_version = bluetooth::hci::LmpVersion::V_5_4;
+        lmp_subversion = 0x5ad2;
+        company_identifier = 0x7e8;
+        supported_commands = std::array<uint8_t, 64>{
+            0x20, 0x00, 0x80, 0x00, 0x00, 0xc0, 0x00, 0x0c, 0x00, 0x00, 0x04,
+            0x00, 0x00, 0x00, 0x28, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x00, 0xf7, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x30,
+            0xf0, 0xff, 0xff, 0xff, 0xff, 0xff, 0x1f, 0xe0, 0xf7, 0xff, 0xff,
+            0xff, 0xc1, 0xe3, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        };
+        lmp_features = std::array<uint64_t, 3> { 0x6000000000, 0x0, 0x0 };
+        le_features = 0x19beff017fff;
+        le_acl_data_packet_length = 512;
+        total_num_le_acl_data_packets = 4;
+        iso_data_packet_length = 512;
+        total_num_iso_data_packets = 5;
+        le_filter_accept_list_size = 4;
+        le_resolving_list_size = 4;
+        le_supported_states = 0x3ffffffffff;
+        le_max_advertising_data_length = 256;
+        le_num_supported_advertising_sets = 4;
+        le_periodic_advertiser_list_size = 4;
+        break;
+
+      case ControllerPreset::CSR_RCK_PTS_DONGLE:
+        // Configuration extracted with the helper script controller_info.py
+        br_supported = true;
+        le_supported = true;
+        hci_version = bluetooth::hci::HciVersion::V_4_2;
+        hci_subversion = 0x30e8;
+        lmp_version = bluetooth::hci::LmpVersion::V_4_2;
+        lmp_subversion = 0x30e8;
+        company_identifier = 0xa;
+        supported_commands = std::array<uint8_t, 64> {
+            0xff, 0xff, 0xff, 0x03, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xf3, 0x0f, 0xe8, 0xfe, 0x3f, 0xf7, 0x83, 0xff, 0x1c, 0x00,
+            0x04, 0x00, 0x61, 0xf7, 0xff, 0xff, 0x7f, 0x00, 0xc0, 0xff, 0xff,
+            0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        };
+        lmp_features = std::array<uint64_t, 3> { 0x875b1fd87e8fffff, 0x0, 0x30f };
+        acl_data_packet_length = 310;
+        total_num_acl_data_packets = 10;
+        sco_data_packet_length = 64;
+        total_num_sco_data_packets = 8;
+        num_supported_iac = 2;
+        le_features = 0x1f;
+        le_acl_data_packet_length = 0;
+        total_num_le_acl_data_packets = 0;
+        le_filter_accept_list_size = 25;
+        le_supported_states = 0x3ffffffffff;
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // Apply selected features.
+  if (config.has_features()) {
+    ControllerFeatures const& features = config.features();
+    if (features.has_le_extended_advertising()) {
+      SetLLFeatureBit(le_features, LLFeaturesBits::LE_EXTENDED_ADVERTISING,
+                      features.le_extended_advertising());
+      SetSupportedCommandBits(supported_commands,
+                              le_extended_advertising_commands_,
+                              features.le_extended_advertising());
+    }
+    if (features.has_le_periodic_advertising()) {
+      SetLLFeatureBit(le_features, LLFeaturesBits::LE_PERIODIC_ADVERTISING,
+                      features.le_periodic_advertising());
+      SetSupportedCommandBits(supported_commands,
+                              le_periodic_advertising_commands_,
+                              features.le_periodic_advertising());
+    }
+    if (features.has_ll_privacy()) {
+      SetLLFeatureBit(le_features, LLFeaturesBits::LL_PRIVACY,
+                      features.ll_privacy());
+      SetSupportedCommandBits(supported_commands, ll_privacy_commands_,
+                              features.ll_privacy());
+    }
+    if (features.has_le_2m_phy()) {
+      SetLLFeatureBit(le_features, LLFeaturesBits::LE_2M_PHY,
+                      features.le_2m_phy());
+    }
+    if (features.has_le_coded_phy()) {
+      SetLLFeatureBit(le_features, LLFeaturesBits::LE_CODED_PHY,
+                      features.le_coded_phy());
+    }
+    if (features.has_le_connected_isochronous_stream()) {
+      SetLLFeatureBit(le_features,
+                      LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_CENTRAL,
+                      features.le_connected_isochronous_stream());
+      SetLLFeatureBit(le_features,
+                      LLFeaturesBits::CONNECTED_ISOCHRONOUS_STREAM_PERIPHERAL,
+                      features.le_connected_isochronous_stream());
+      SetSupportedCommandBits(supported_commands,
+                              ll_connected_isochronous_stream_commands_,
+                              features.le_connected_isochronous_stream());
+    }
+  }
+
+  // Apply selected quirks.
+  if (config.has_quirks()) {
+    if (config.quirks().has_has_default_random_address()) {
+      quirks.has_default_random_address =
+          config.quirks().has_default_random_address();
+    }
+    if (config.quirks().has_hardware_error_before_reset()) {
+      quirks.hardware_error_before_reset =
+          config.quirks().hardware_error_before_reset();
+    }
+    // TODO(b/270606199): support send_acl_data_before_connection_complete
+  }
+
+  if (!CheckSupportedFeatures()) {
+    INFO(
+        "Warning: LMP and/or LE features are not consistent. Please make sure"
+        " that the features are correct w.r.t. the rules described"
+        " in Vol 2, Part C 3.5 Feature requirements");
+  }
+
+  if (!CheckSupportedCommands()) {
+    INFO(
+        "Warning: supported commands are not consistent. Please make"
+        " sure that the supported commands are correct w.r.t. the rules"
+        " described in Vol 4, Part E § 3 Overview of commands and events");
+  }
 }
 
 }  // namespace rootcanal
