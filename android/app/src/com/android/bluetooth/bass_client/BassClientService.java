@@ -92,7 +92,6 @@ public class BassClientService extends ProfileService {
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
     private BluetoothAdapter mBluetoothAdapter = null;
-    private BassUtils mBassUtils = null;
     private Map<BluetoothDevice, BluetoothDevice> mActiveSourceMap;
     /* Caching the PeriodicAdvertisementResult from Broadcast source */
     /* This is stored at service so that each device state machine can access
@@ -121,13 +120,16 @@ public class BassClientService extends ProfileService {
             int syncHandle,
             int advSid,
             int advInterval,
-            int bId) {
+            int bId,
+            PublicBroadcastData pbData,
+            String broadcastName) {
         log("updatePeriodicAdvertisementResultMap: device: " + device);
         log("updatePeriodicAdvertisementResultMap: syncHandle: " + syncHandle);
         log("updatePeriodicAdvertisementResultMap: advSid: " + advSid);
         log("updatePeriodicAdvertisementResultMap: addressType: " + addressType);
         log("updatePeriodicAdvertisementResultMap: advInterval: " + advInterval);
         log("updatePeriodicAdvertisementResultMap: broadcastId: " + bId);
+        log("updatePeriodicAdvertisementResultMap: broadcastName: " + broadcastName);
         log("mDeviceToSyncHandleMap" + mDeviceToSyncHandleMap);
         log("mPeriodicAdvertisementResultMap" + mPeriodicAdvertisementResultMap);
         // Cache the SyncHandle
@@ -139,7 +141,7 @@ public class BassClientService extends ProfileService {
             if (paRes == null) {
                 log("PAResmap: add >>>");
                 paRes = new PeriodicAdvertisementResult(device,
-                        addressType, syncHandle, advSid, advInterval, bId);
+                        addressType, syncHandle, advSid, advInterval, bId, pbData, broadcastName);
                 if (paRes != null) {
                     paRes.print();
                     mPeriodicAdvertisementResultMap.put(device, paRes);
@@ -160,6 +162,12 @@ public class BassClientService extends ProfileService {
                 if (bId != BassConstants.INVALID_BROADCAST_ID) {
                     paRes.updateBroadcastId(bId);
                 }
+                if (pbData != null) {
+                    paRes.updatePublicBroadcastData(pbData);
+                }
+                if (broadcastName != null) {
+                    paRes.updateBroadcastName(broadcastName);
+                }
                 log("PAResmap: update >>>");
                 paRes.print();
                 mPeriodicAdvertisementResultMap.replace(device, paRes);
@@ -176,12 +184,13 @@ public class BassClientService extends ProfileService {
         return mPeriodicAdvertisementResultMap.get(device);
     }
 
-    PeriodicAdvertisementResult clearPeriodicAdvertisementResult(BluetoothDevice device) {
-        if (mPeriodicAdvertisementResultMap == null) {
-            Log.e(TAG, "getPeriodicAdvertisementResult: mPeriodicAdvertisementResultMap is null");
-            return null;
+    void clearNotifiedFlags() {
+        log("clearNotifiedFlags");
+        for (PeriodicAdvertisementResult result:
+                mPeriodicAdvertisementResultMap.values()) {
+            result.setNotified(false);
+            result.print();
         }
-        return mPeriodicAdvertisementResultMap.remove(device);
     }
 
     void updateBase(int syncHandlemap, BaseData base) {
@@ -204,6 +213,11 @@ public class BassClientService extends ProfileService {
     }
 
     void setActiveSyncedSource(BluetoothDevice scanDelegator, BluetoothDevice sourceDevice) {
+        if (mActiveSourceMap == null) {
+            Log.e(TAG, "setActiveSyncedSource: mActiveSourceMap is null");
+            return;
+        }
+
         log("setActiveSyncedSource, scanDelegator: " + scanDelegator + ", sourceDevice: " +
             sourceDevice);
         if (sourceDevice == null) {
@@ -214,9 +228,17 @@ public class BassClientService extends ProfileService {
     }
 
     BluetoothDevice getActiveSyncedSource(BluetoothDevice scanDelegator) {
+        if (mActiveSourceMap == null) {
+            Log.e(TAG, "getActiveSyncedSource: mActiveSourceMap is null");
+            return null;
+        }
+
         BluetoothDevice currentSource = mActiveSourceMap.get(scanDelegator);
-        log("getActiveSyncedSource: scanDelegator" + scanDelegator
-                + "returning " + currentSource);
+        log(
+                "getActiveSyncedSource: scanDelegator: "
+                        + scanDelegator
+                        + ", returning: "
+                        + currentSource);
         return currentSource;
     }
 
@@ -250,6 +272,7 @@ public class BassClientService extends ProfileService {
         mCallbacks = new Callbacks(mCallbackHandlerThread.getLooper());
 
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         filter.addAction(BluetoothLeBroadcastAssistant.ACTION_CONNECTION_STATE_CHANGED);
         mIntentReceiver = new BroadcastReceiver() {
@@ -279,7 +302,6 @@ public class BassClientService extends ProfileService {
         registerReceiver(mIntentReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
 
         setBassClientService(this);
-        mBassUtils = new BassUtils(this);
         // Saving PSync stuff for future addition
         mDeviceToSyncHandleMap = new HashMap<BluetoothDevice, Integer>();
         mPeriodicAdvertisementResultMap = new HashMap<BluetoothDevice,
@@ -320,13 +342,13 @@ public class BassClientService extends ProfileService {
             mDeviceToSyncHandleMap.clear();
             mDeviceToSyncHandleMap = null;
         }
+        if (mPeriodicAdvertisementResultMap != null) {
+            mPeriodicAdvertisementResultMap.clear();
+            mPeriodicAdvertisementResultMap = null;
+        }
         if (mActiveSourceMap != null) {
             mActiveSourceMap.clear();
             mActiveSourceMap = null;
-        }
-        if (mBassUtils != null) {
-            mBassUtils.cleanUp();
-            mBassUtils = null;
         }
         if (mPendingGroupOp != null) {
             mPendingGroupOp.clear();
@@ -338,13 +360,6 @@ public class BassClientService extends ProfileService {
     public boolean onUnbind(Intent intent) {
         Log.d(TAG, "Need to unregister app");
         return super.onUnbind(intent);
-    }
-
-    /**
-     * getBassUtils
-     */
-    public BassUtils getBassUtils() {
-        return mBassUtils;
     }
 
     BluetoothDevice getDeviceForSyncHandle(int syncHandle) {
@@ -539,9 +554,17 @@ public class BassClientService extends ProfileService {
     }
 
     private boolean hasRoomForBroadcastSourceAddition(BluetoothDevice device) {
+        BassClientStateMachine stateMachine = null;
+        synchronized (mStateMachines) {
+            stateMachine = getOrCreateStateMachine(device);
+        }
+        if (stateMachine == null) {
+            log("stateMachine is null");
+            return false;
+        }
         boolean isRoomAvailable = false;
         String emptyBluetoothDevice = "00:00:00:00:00:00";
-        for (BluetoothLeBroadcastReceiveState recvState: getAllSources(device)) {
+        for (BluetoothLeBroadcastReceiveState recvState: stateMachine.getAllSources()) {
             if (recvState.getSourceDevice().getAddress().equals(emptyBluetoothDevice)) {
                 isRoomAvailable = true;
                 break;
@@ -792,7 +815,7 @@ public class BassClientService extends ProfileService {
      * Get a list of all LE Audio Broadcast Sinks connected with the LE Audio Broadcast Assistant.
      * @return list of connected devices
      */
-    List<BluetoothDevice> getConnectedDevices() {
+    public List<BluetoothDevice> getConnectedDevices() {
         synchronized (mStateMachines) {
             List<BluetoothDevice> devices = new ArrayList<>();
             for (BassClientStateMachine sm : mStateMachines.values()) {
@@ -1092,6 +1115,12 @@ public class BassClientService extends ProfileService {
             Message message = stateMachine.obtainMessage(BassClientStateMachine.ADD_BCAST_SOURCE);
             message.obj = sourceMetadata;
             stateMachine.sendMessage(message);
+            if (code != null && code.length != 0) {
+                message = stateMachine.obtainMessage(BassClientStateMachine.SET_BCAST_CODE);
+                message.obj = sourceMetadata;
+                message.arg1 = BassClientStateMachine.ARGTYPE_METADATA;
+                stateMachine.sendMessage(message);
+            }
         }
     }
 
@@ -1160,6 +1189,12 @@ public class BassClientService extends ProfileService {
             message.arg2 = BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_INVALID;
             message.obj = updatedMetadata;
             stateMachine.sendMessage(message);
+            if (code != null && code.length != 0) {
+                message = stateMachine.obtainMessage(BassClientStateMachine.SET_BCAST_CODE);
+                message.obj = updatedMetadata;
+                message.arg1 = BassClientStateMachine.ARGTYPE_METADATA;
+                stateMachine.sendMessage(message);
+            }
         }
     }
 
@@ -1243,7 +1278,15 @@ public class BassClientService extends ProfileService {
                 log("stateMachine is null");
                 return Collections.emptyList();
             }
-            return stateMachine.getAllSources();
+            List<BluetoothLeBroadcastReceiveState> recvStates =
+                    new ArrayList<BluetoothLeBroadcastReceiveState>();
+            for (BluetoothLeBroadcastReceiveState rs: stateMachine.getAllSources()) {
+                String emptyBluetoothDevice = "00:00:00:00:00:00";
+                if (!rs.getSourceDevice().getAddress().equals(emptyBluetoothDevice)) {
+                    recvStates.add(rs);
+                }
+            }
+            return recvStates;
         }
     }
 
@@ -1458,7 +1501,7 @@ public class BassClientService extends ProfileService {
         void notifySourceAdded(BluetoothDevice sink, BluetoothLeBroadcastReceiveState recvState,
                 int reason) {
             ObjParams param = new ObjParams(sink, recvState);
-            obtainMessage(MSG_SOURCE_ADDED, reason, 0, param).sendToTarget();
+            obtainMessage(MSG_SOURCE_ADDED, reason, recvState.getSourceId(), param).sendToTarget();
         }
 
         void notifySourceAddFailed(BluetoothDevice sink, BluetoothLeBroadcastMetadata source,
@@ -1569,7 +1612,8 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return false;
                 }
-                mService.enforceCallingOrSelfPermission(BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
+                mService.enforceCallingOrSelfPermission(
+                        BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
                 return service.setConnectionPolicy(device, connectionPolicy);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);
@@ -1585,7 +1629,8 @@ public class BassClientService extends ProfileService {
                     Log.e(TAG, "Service is null");
                     return BluetoothProfile.CONNECTION_POLICY_FORBIDDEN;
                 }
-                mService.enforceCallingOrSelfPermission(BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
+                mService.enforceCallingOrSelfPermission(
+                        BLUETOOTH_CONNECT, "Need BLUETOOTH_CONNECT permission");
                 return service.getConnectionPolicy(device);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Exception happened", e);

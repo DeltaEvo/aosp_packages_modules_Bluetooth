@@ -26,8 +26,6 @@
 #include <map>
 #include <string>
 
-extern std::map<std::string, int> mock_function_count_map;
-
 // Original included files, if any
 // NOTE: Since this is a mock file with mock definitions some number of
 //       include files may not be required.  The include-what-you-use
@@ -36,6 +34,7 @@ extern std::map<std::string, int> mock_function_count_map;
 //       may need attention to prune the inclusion set.
 #include "btif/include/btif_api.h"
 #include "stack/smp/smp_int.h"
+#include "test/common/mock_functions.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -228,15 +227,7 @@ struct smp_proc_confirm {
   void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
 };
 extern struct smp_proc_confirm smp_proc_confirm;
-// Name: smp_proc_init
-// Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
-// Returns: void
-struct smp_proc_init {
-  std::function<void(tSMP_CB* p_cb, tSMP_INT_DATA* p_data)> body{
-      [](tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {}};
-  void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
-};
-extern struct smp_proc_init smp_proc_init;
+
 // Name: smp_proc_rand
 // Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
 // Returns: void
@@ -680,16 +671,6 @@ struct smp_br_process_link_key {
   void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
 };
 extern struct smp_br_process_link_key smp_br_process_link_key;
-// Name: smp_key_distribution_by_transport
-// Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
-// Returns: void
-struct smp_key_distribution_by_transport {
-  std::function<void(tSMP_CB* p_cb, tSMP_INT_DATA* p_data)> body{
-      [](tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {}};
-  void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
-};
-extern struct smp_key_distribution_by_transport
-    smp_key_distribution_by_transport;
 // Name: smp_br_pairing_complete
 // Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
 // Returns: void

@@ -23,29 +23,23 @@ import static org.mockito.AdditionalMatchers.*;
 import android.bluetooth.*;
 import android.bluetooth.IBluetoothLeCallControlCallback;
 import android.content.Context;
-import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
-import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
 import com.android.bluetooth.TestUtils;
-import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.le_audio.LeAudioService;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Arrays;
@@ -53,7 +47,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -94,8 +87,8 @@ public class TbsGenericTest {
         doReturn(true).when(mTbsGatt).setBearerUriSchemesSupportedList(any());
         doReturn(true).when(mTbsGatt).setCallState(any());
         doReturn(true).when(mTbsGatt).setBearerListCurrentCalls(any());
-        doReturn(true).when(mTbsGatt).setInbandRingtoneFlag();
-        doReturn(true).when(mTbsGatt).clearInbandRingtoneFlag();
+        doReturn(true).when(mTbsGatt).setInbandRingtoneFlag(any());
+        doReturn(true).when(mTbsGatt).clearInbandRingtoneFlag(any());
         doReturn(true).when(mTbsGatt).setSilentModeFlag();
         doReturn(true).when(mTbsGatt).clearSilentModeFlag();
         doReturn(true).when(mTbsGatt).setTerminationReason(anyInt(), anyInt());
@@ -134,6 +127,18 @@ public class TbsGenericTest {
         }
 
         return ccidCaptor.getValue();
+    }
+
+    @Test
+    public void testSetClearInbandRingtone() {
+        mCurrentDevice = TestUtils.getTestDevice(mAdapter, 0);
+        prepareTestBearer();
+
+        mTbsGeneric.setInbandRingtoneSupport(mCurrentDevice);
+        verify(mTbsGatt).setInbandRingtoneFlag(mCurrentDevice);
+
+        mTbsGeneric.clearInbandRingtoneSupport(mCurrentDevice);
+        verify(mTbsGatt).clearInbandRingtoneFlag(mCurrentDevice);
     }
 
     @Test

@@ -60,6 +60,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -179,20 +180,18 @@ public class HeadsetServiceAndStateMachineTest {
         // Mock methods in AdapterService
         doReturn(FAKE_HEADSET_UUID).when(mAdapterService)
                 .getRemoteUuids(any(BluetoothDevice.class));
-        doReturn(BluetoothDevice.BOND_BONDED).when(mAdapterService)
-                .getBondState(any(BluetoothDevice.class));
         doAnswer(invocation -> mBondedDevices.toArray(new BluetoothDevice[]{})).when(
                 mAdapterService).getBondedDevices();
         doReturn(new BluetoothSinkAudioPolicy.Builder().build()).when(mAdapterService)
                 .getRequestedAudioPolicyAsSink(any(BluetoothDevice.class));
         // Mock system interface
         doNothing().when(mSystemInterface).stop();
-        when(mSystemInterface.getHeadsetPhoneState()).thenReturn(mPhoneState);
-        when(mSystemInterface.getAudioManager()).thenReturn(mAudioManager);
-        when(mSystemInterface.activateVoiceRecognition()).thenReturn(true);
-        when(mSystemInterface.deactivateVoiceRecognition()).thenReturn(true);
-        when(mSystemInterface.getVoiceRecognitionWakeLock()).thenReturn(mVoiceRecognitionWakeLock);
-        when(mSystemInterface.isCallIdle()).thenReturn(true);
+        doReturn(mPhoneState).when(mSystemInterface).getHeadsetPhoneState();
+        doReturn(mAudioManager).when(mSystemInterface).getAudioManager();
+        doReturn(true).when(mSystemInterface).activateVoiceRecognition();
+        doReturn(true).when(mSystemInterface).deactivateVoiceRecognition();
+        doReturn(mVoiceRecognitionWakeLock).when(mSystemInterface).getVoiceRecognitionWakeLock();
+        doReturn(true).when(mSystemInterface).isCallIdle();
         // Mock methods in HeadsetNativeInterface
         mNativeInterface = spy(HeadsetNativeInterface.getInstance());
         doNothing().when(mNativeInterface).init(anyInt(), anyBoolean());
@@ -226,6 +225,7 @@ public class HeadsetServiceAndStateMachineTest {
 
         // Set up the Connection State Changed receiver
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothHeadset.ACTION_ACTIVE_DEVICE_CHANGED);
         filter.addAction(BluetoothHeadset.ACTION_AUDIO_STATE_CHANGED);
@@ -718,7 +718,7 @@ public class HeadsetServiceAndStateMachineTest {
      */
     @Test
     public void testVoiceRecognition_SingleHfInitiatedFailedToActivate() {
-        when(mSystemInterface.activateVoiceRecognition()).thenReturn(false);
+        doReturn(false).when(mSystemInterface).activateVoiceRecognition();
         // Connect HF
         BluetoothDevice device = TestUtils.getTestDevice(mAdapter, 0);
         connectTestDevice(device);
@@ -944,6 +944,7 @@ public class HeadsetServiceAndStateMachineTest {
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).atResponseCode(deviceA,
                 HeadsetHalConstants.AT_RESPONSE_OK, 0);
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setLeAudioSuspended(true);
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).connectAudio(deviceA);
         verifyNoMoreInteractions(mNativeInterface);
     }
@@ -999,6 +1000,7 @@ public class HeadsetServiceAndStateMachineTest {
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).atResponseCode(deviceA,
                 HeadsetHalConstants.AT_RESPONSE_OK, 0);
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setLeAudioSuspended(true);
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).connectAudio(deviceA);
         verifyNoMoreInteractions(mNativeInterface);
     }
@@ -1017,6 +1019,7 @@ public class HeadsetServiceAndStateMachineTest {
      * Reference: Section 4.25, Page 64/144 of HFP 1.7.1 specification
      */
     @Test
+    @Ignore("b/271351629")
     public void testVoiceRecognition_MultiAgInitiatedSuccess() {
         // Connect two devices
         BluetoothDevice deviceA = TestUtils.getTestDevice(mAdapter, 0);
@@ -1058,6 +1061,7 @@ public class HeadsetServiceAndStateMachineTest {
      * Reference: Section 4.25, Page 64/144 of HFP 1.7.1 specification
      */
     @Test
+    @Ignore("b/271351629")
     public void testVoiceRecognition_MultiAgInitiatedDeviceNotActive() {
         // Connect two devices
         BluetoothDevice deviceA = TestUtils.getTestDevice(mAdapter, 0);
@@ -1078,6 +1082,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertEquals(deviceA, mHeadsetService.getActiveDevice());
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).startVoiceRecognition(deviceA);
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setLeAudioSuspended(true);
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).connectAudio(deviceA);
         waitAndVerifyAudioStateIntent(ASYNC_CALL_TIMEOUT_MILLIS, deviceA,
                 BluetoothHeadset.STATE_AUDIO_CONNECTING, BluetoothHeadset.STATE_AUDIO_DISCONNECTED);
@@ -1126,6 +1131,7 @@ public class HeadsetServiceAndStateMachineTest {
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).atResponseCode(device,
                 HeadsetHalConstants.AT_RESPONSE_OK, 0);
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setLeAudioSuspended(true);
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).connectAudio(device);
         waitAndVerifyAudioStateIntent(ASYNC_CALL_TIMEOUT_MILLIS, device,
                 BluetoothHeadset.STATE_AUDIO_CONNECTING, BluetoothHeadset.STATE_AUDIO_DISCONNECTED);
@@ -1143,6 +1149,7 @@ public class HeadsetServiceAndStateMachineTest {
         Assert.assertTrue(mHeadsetService.startVoiceRecognition(device));
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).startVoiceRecognition(device);
         verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setA2dpSuspended(true);
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).setLeAudioSuspended(true);
         verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS)).connectAudio(device);
         waitAndVerifyAudioStateIntent(ASYNC_CALL_TIMEOUT_MILLIS, device,
                 BluetoothHeadset.STATE_AUDIO_CONNECTING, BluetoothHeadset.STATE_AUDIO_DISCONNECTED);
@@ -1157,6 +1164,8 @@ public class HeadsetServiceAndStateMachineTest {
     private void connectTestDevice(BluetoothDevice device) {
         when(mDatabaseManager.getProfileConnectionPolicy(device, BluetoothProfile.HEADSET))
                 .thenReturn(BluetoothProfile.CONNECTION_POLICY_UNKNOWN);
+        doReturn(BluetoothDevice.BOND_BONDED).when(mAdapterService)
+                .getBondState(eq(device));
         // Make device bonded
         mBondedDevices.add(device);
         // Use connecting event to indicate that device is connecting

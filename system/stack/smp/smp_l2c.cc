@@ -103,21 +103,21 @@ static void smp_connect_callback(UNUSED_ATTR uint16_t channel,
 
   if (transport == BT_TRANSPORT_BR_EDR) {
     LOG_WARN("Received unexpected callback on classic channel peer:%s",
-             PRIVATE_ADDRESS(bd_addr));
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     return;
   }
 
   if (connected) {
     LOG_DEBUG("SMP Received connect callback bd_addr:%s transport:%s",
-              PRIVATE_ADDRESS(bd_addr), bt_transport_text(transport).c_str());
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr), bt_transport_text(transport).c_str());
   } else {
     LOG_DEBUG("SMP Received disconnect callback bd_addr:%s transport:%s",
-              PRIVATE_ADDRESS(bd_addr), bt_transport_text(transport).c_str());
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr), bt_transport_text(transport).c_str());
   }
 
   if (bd_addr == p_cb->pairing_bda) {
     LOG_DEBUG("Received callback for device in pairing process:%s state:%s",
-              PRIVATE_ADDRESS(bd_addr),
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
               (connected) ? "connected" : "disconnected");
 
     if (connected) {
@@ -215,6 +215,8 @@ static void smp_data_received(uint16_t channel, const RawAddress& bd_addr,
     tSMP_INT_DATA smp_int_data;
     smp_int_data.p_data = p;
     smp_sm_event(p_cb, static_cast<tSMP_EVENT>(cmd), &smp_int_data);
+  } else {
+    L2CA_RemoveFixedChnl(channel, bd_addr);
   }
 
   osi_free(p_buf);
@@ -243,8 +245,9 @@ static void smp_br_connect_callback(uint16_t channel, const RawAddress& bd_addr,
     return;
   }
 
-  VLOG(1) << __func__ << " for pairing BDA: " << bd_addr
-          << ", pairing_bda:" << p_cb->pairing_bda
+  VLOG(1) << __func__ << " for pairing BDA: "
+          << ADDRESS_TO_LOGGABLE_STR(bd_addr)
+          << ", pairing_bda:" << ADDRESS_TO_LOGGABLE_STR(p_cb->pairing_bda)
           << " Event: " << ((connected) ? "connected" : "disconnected");
 
   if (bd_addr != p_cb->pairing_bda) return;

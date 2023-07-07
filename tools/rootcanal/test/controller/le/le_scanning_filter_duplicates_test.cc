@@ -116,7 +116,7 @@ class LeScanningFilterDuplicates : public ::testing::Test {
         Address::kEmpty, Address::kEmpty, model::packets::AddressType::PUBLIC,
         model::packets::AddressType::PUBLIC, 0, 1, 0, 0, 0,
         model::packets::PrimaryPhyType::LE_1M,
-        model::packets::SecondaryPhyType::LE_1M, data));
+        model::packets::SecondaryPhyType::LE_1M, 0, data));
   }
 
   enum Filtered {
@@ -125,7 +125,7 @@ class LeScanningFilterDuplicates : public ::testing::Test {
   };
 
   void SendPacket(model::packets::LinkLayerPacketView packet) {
-    controller_.IncomingPacket(packet);
+    controller_.IncomingPacket(packet, -90);
   }
 
   /// Helper for sending the provided packet to the controller then checking if
@@ -153,7 +153,7 @@ class LeScanningFilterDuplicates : public ::testing::Test {
 
   static void remote_listener_(
       std::shared_ptr<model::packets::LinkLayerPacketBuilder> /* packet */,
-      Phy::Type /* phy */) {}
+      Phy::Type /* phy */, int8_t /* tx_power */) {}
 
   /// Helper for building packet view from packet builder
   static model::packets::LinkLayerPacketView FromBuilder(
@@ -385,7 +385,7 @@ TEST_F(LeScanningFilterDuplicates, ResetHistoryAfterEachPeriod) {
   ASSERT_EQ(kFiltered, SendPacketAndCheck(LeScanResponse({0})));
 
   std::this_thread::sleep_for(std::chrono::milliseconds(1300));
-  controller_.TimerTick();
+  controller_.Tick();
 
   ASSERT_EQ(kReported, SendPacketAndCheck(LeExtendedAdvertisingPdu()));
   ASSERT_EQ(kReported, SendPacketAndCheck(LeScanResponse({0})));

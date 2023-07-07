@@ -21,6 +21,7 @@
 #include <cstddef>
 
 #include "stack/include/sdp_api.h"
+#include "stack/sdp/internal/sdp_api.h"
 #include "stack/sdp/sdpint.h"
 #include "test/mock/mock_osi_allocator.h"
 #include "test/mock/mock_stack_l2cap_api.h"
@@ -171,4 +172,93 @@ TEST_F(StackSdpMainTest, sdp_service_search_request_queuing_race_condition) {
   ASSERT_EQ(p_ccb2->con_state, SDP_STATE_CONN_SETUP);
 
   sdp_disconnect(p_ccb2, SDP_SUCCESS);
+}
+
+TEST_F(StackSdpMainTest, sdp_disc_wait_text) {
+  std::vector<std::pair<tSDP_DISC_WAIT, std::string>> states = {
+      std::make_pair(SDP_DISC_WAIT_CONN, "SDP_DISC_WAIT_CONN"),
+      std::make_pair(SDP_DISC_WAIT_HANDLES, "SDP_DISC_WAIT_HANDLES"),
+      std::make_pair(SDP_DISC_WAIT_ATTR, "SDP_DISC_WAIT_ATTR"),
+      std::make_pair(SDP_DISC_WAIT_SEARCH_ATTR, "SDP_DISC_WAIT_SEARCH_ATTR"),
+      std::make_pair(SDP_DISC_WAIT_CANCEL, "SDP_DISC_WAIT_CANCEL"),
+  };
+  for (const auto& state : states) {
+    ASSERT_STREQ(state.second.c_str(), sdp_disc_wait_text(state.first).c_str());
+  }
+  auto unknown =
+      base::StringPrintf("UNKNOWN[%d]", std::numeric_limits<uint8_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               sdp_disc_wait_text(static_cast<tSDP_DISC_WAIT>(
+                                      std::numeric_limits<uint8_t>::max()))
+                   .c_str());
+}
+
+TEST_F(StackSdpMainTest, sdp_state_text) {
+  std::vector<std::pair<tSDP_STATE, std::string>> states = {
+      std::make_pair(SDP_STATE_IDLE, "SDP_STATE_IDLE"),
+      std::make_pair(SDP_STATE_CONN_SETUP, "SDP_STATE_CONN_SETUP"),
+      std::make_pair(SDP_STATE_CFG_SETUP, "SDP_STATE_CFG_SETUP"),
+      std::make_pair(SDP_STATE_CONNECTED, "SDP_STATE_CONNECTED"),
+      std::make_pair(SDP_STATE_CONN_PEND, "SDP_STATE_CONN_PEND"),
+  };
+  for (const auto& state : states) {
+    ASSERT_STREQ(state.second.c_str(), sdp_state_text(state.first).c_str());
+  }
+  auto unknown = base::StringPrintf("UNKNOWN[%hhu]",
+                                    std::numeric_limits<std::uint8_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               sdp_state_text(static_cast<tSDP_STATE>(
+                                  std::numeric_limits<std::uint8_t>::max()))
+                   .c_str());
+}
+
+TEST_F(StackSdpMainTest, sdp_flags_text) {
+  std::vector<std::pair<tSDP_DISC_WAIT, std::string>> flags = {
+      std::make_pair(SDP_FLAGS_IS_ORIG, "SDP_FLAGS_IS_ORIG"),
+      std::make_pair(SDP_FLAGS_HIS_CFG_DONE, "SDP_FLAGS_HIS_CFG_DONE"),
+      std::make_pair(SDP_FLAGS_MY_CFG_DONE, "SDP_FLAGS_MY_CFG_DONE"),
+  };
+  for (const auto& flag : flags) {
+    ASSERT_STREQ(flag.second.c_str(), sdp_flags_text(flag.first).c_str());
+  }
+  auto unknown =
+      base::StringPrintf("UNKNOWN[%hhu]", std::numeric_limits<uint8_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               sdp_flags_text(static_cast<tSDP_DISC_WAIT>(
+                                  std::numeric_limits<uint8_t>::max()))
+                   .c_str());
+}
+
+TEST_F(StackSdpMainTest, sdp_status_text) {
+  std::vector<std::pair<tSDP_STATUS, std::string>> status = {
+      std::make_pair(SDP_SUCCESS, "SDP_SUCCESS"),
+      std::make_pair(SDP_INVALID_VERSION, "SDP_INVALID_VERSION"),
+      std::make_pair(SDP_INVALID_SERV_REC_HDL, "SDP_INVALID_SERV_REC_HDL"),
+      std::make_pair(SDP_INVALID_REQ_SYNTAX, "SDP_INVALID_REQ_SYNTAX"),
+      std::make_pair(SDP_INVALID_PDU_SIZE, "SDP_INVALID_PDU_SIZE"),
+      std::make_pair(SDP_INVALID_CONT_STATE, "SDP_INVALID_CONT_STATE"),
+      std::make_pair(SDP_NO_RESOURCES, "SDP_NO_RESOURCES"),
+      std::make_pair(SDP_DI_REG_FAILED, "SDP_DI_REG_FAILED"),
+      std::make_pair(SDP_DI_DISC_FAILED, "SDP_DI_DISC_FAILED"),
+      std::make_pair(SDP_NO_DI_RECORD_FOUND, "SDP_NO_DI_RECORD_FOUND"),
+      std::make_pair(SDP_ERR_ATTR_NOT_PRESENT, "SDP_ERR_ATTR_NOT_PRESENT"),
+      std::make_pair(SDP_ILLEGAL_PARAMETER, "SDP_ILLEGAL_PARAMETER"),
+      std::make_pair(HID_SDP_NO_SERV_UUID, "HID_SDP_NO_SERV_UUID"),
+      std::make_pair(HID_SDP_MANDATORY_MISSING, "HID_SDP_MANDATORY_MISSING"),
+      std::make_pair(SDP_NO_RECS_MATCH, "SDP_NO_RECS_MATCH"),
+      std::make_pair(SDP_CONN_FAILED, "SDP_CONN_FAILED"),
+      std::make_pair(SDP_CFG_FAILED, "SDP_CFG_FAILED"),
+      std::make_pair(SDP_GENERIC_ERROR, "SDP_GENERIC_ERROR"),
+      std::make_pair(SDP_DB_FULL, "SDP_DB_FULL"),
+      std::make_pair(SDP_CANCEL, "SDP_CANCEL"),
+  };
+  for (const auto& stat : status) {
+    ASSERT_STREQ(stat.second.c_str(), sdp_status_text(stat.first).c_str());
+  }
+  auto unknown =
+      base::StringPrintf("UNKNOWN[%hu]", std::numeric_limits<uint16_t>::max());
+  ASSERT_STREQ(unknown.c_str(),
+               sdp_status_text(static_cast<tSDP_STATUS>(
+                                   std::numeric_limits<uint16_t>::max()))
+                   .c_str());
 }

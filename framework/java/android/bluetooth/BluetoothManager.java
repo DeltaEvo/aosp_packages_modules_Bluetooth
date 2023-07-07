@@ -168,8 +168,7 @@ public final class BluetoothManager {
         List<BluetoothDevice> devices = new ArrayList<BluetoothDevice>();
 
         try {
-            IBluetoothManager managerService = mAdapter.getBluetoothManager();
-            IBluetoothGatt iGatt = managerService.getBluetoothGatt();
+            IBluetoothGatt iGatt = mAdapter.getBluetoothGatt();
             if (iGatt == null) return devices;
             final SynchronousResultReceiver<List<BluetoothDevice>> recv =
                     SynchronousResultReceiver.get();
@@ -212,15 +211,15 @@ public final class BluetoothManager {
      *
      * @param context App context
      * @param callback GATT server callback handler that will receive asynchronous callbacks.
-     * @param eatt_support idicates if server should use eatt channel for notifications.
+     * @param eattSupport idicates if server should use eatt channel for notifications.
      * @return BluetoothGattServer instance
      * @hide
      */
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public BluetoothGattServer openGattServer(Context context,
-            BluetoothGattServerCallback callback, boolean eatt_support) {
-        return (openGattServer(context, callback, BluetoothDevice.TRANSPORT_AUTO, eatt_support));
+            BluetoothGattServerCallback callback, boolean eattSupport) {
+        return (openGattServer(context, callback, BluetoothDevice.TRANSPORT_AUTO, eattSupport));
     }
 
     /**
@@ -257,14 +256,14 @@ public final class BluetoothManager {
      * @param transport preferred transport for GATT connections to remote dual-mode devices {@link
      * BluetoothDevice#TRANSPORT_AUTO} or {@link BluetoothDevice#TRANSPORT_BREDR} or {@link
      * BluetoothDevice#TRANSPORT_LE}
-     * @param eatt_support idicates if server should use eatt channel for notifications.
+     * @param eattSupport idicates if server should use eatt channel for notifications.
      * @return BluetoothGattServer instance
      * @hide
      */
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public BluetoothGattServer openGattServer(Context context,
-            BluetoothGattServerCallback callback, int transport, boolean eatt_support) {
+            BluetoothGattServerCallback callback, int transport, boolean eattSupport) {
         if (context == null || callback == null) {
             throw new IllegalArgumentException("null parameter: " + context + " " + callback);
         }
@@ -272,20 +271,13 @@ public final class BluetoothManager {
         // TODO(Bluetooth) check whether platform support BLE
         //     Do the check here or in GattServer?
 
-        try {
-            IBluetoothManager managerService = mAdapter.getBluetoothManager();
-            IBluetoothGatt iGatt = managerService.getBluetoothGatt();
-            if (iGatt == null) {
-                Log.e(TAG, "Fail to get GATT Server connection");
-                return null;
-            }
-            BluetoothGattServer mGattServer =
-                    new BluetoothGattServer(iGatt, transport, mAdapter);
-            Boolean regStatus = mGattServer.registerCallback(callback, eatt_support);
-            return regStatus ? mGattServer : null;
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
+        IBluetoothGatt iGatt = mAdapter.getBluetoothGatt();
+        if (iGatt == null) {
+            Log.e(TAG, "Fail to get GATT Server connection");
             return null;
         }
+        BluetoothGattServer mGattServer = new BluetoothGattServer(iGatt, transport, mAdapter);
+        Boolean regStatus = mGattServer.registerCallback(callback, eattSupport);
+        return regStatus ? mGattServer : null;
     }
 }
