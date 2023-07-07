@@ -146,6 +146,7 @@ public class HapClientTest {
 
         // Set up the State Changed receiver
         IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
         filter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         filter.addAction(BluetoothHapClient.ACTION_HAP_DEVICE_AVAILABLE);
 
@@ -153,7 +154,7 @@ public class HapClientTest {
         mService.mCallbacks.register(mCallback);
 
         mHasIntentReceiver = new HasIntentReceiver();
-        mTargetContext.registerReceiver(mHasIntentReceiver, filter);
+        mTargetContext.registerReceiver(mHasIntentReceiver, filter, Context.RECEIVER_EXPORTED);
 
         mDevice = TestUtils.getTestDevice(mAdapter, 0);
         when(mNativeInterface.getDevice(getByteAddress(mDevice))).thenReturn(mDevice);
