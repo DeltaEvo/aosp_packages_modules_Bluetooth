@@ -44,7 +44,7 @@ impl From<u32> for BthfAudioState {
 bitflags! {
     #[derive(Default)]
     pub struct HfpCodecCapability: i32 {
-        const UNSUPPORTED = 0b00;
+        const NONE = 0b00;
         const CVSD = 0b01;
         const MSBC = 0b10;
         const LC3 = 0b100;
@@ -128,7 +128,7 @@ pub mod ffi {
             self: Pin<&mut HfpIntf>,
             bt_addr: RawAddress,
             sco_offload: bool,
-            force_cvsd: bool,
+            disabled_codecs: i32,
         ) -> i32;
         fn set_active_device(self: Pin<&mut HfpIntf>, bt_addr: RawAddress) -> i32;
         fn set_volume(self: Pin<&mut HfpIntf>, volume: i8, bt_addr: RawAddress) -> i32;
@@ -157,6 +157,7 @@ pub mod ffi {
             addr: RawAddress,
         ) -> u32;
         fn simple_at_response(self: Pin<&mut HfpIntf>, ok: bool, addr: RawAddress) -> u32;
+        fn debug_dump(self: Pin<&mut HfpIntf>);
         fn cleanup(self: Pin<&mut HfpIntf>);
 
     }
@@ -173,6 +174,16 @@ pub mod ffi {
         fn hfp_hangup_call_callback(addr: RawAddress);
         fn hfp_dial_call_callback(number: String, addr: RawAddress);
         fn hfp_call_hold_callback(chld: CallHoldCommand, addr: RawAddress);
+        fn hfp_debug_dump_callback(
+            active: bool,
+            wbs: bool,
+            total_num_decoded_frames: i32,
+            pkt_loss_ratio: f64,
+            begin_ts: u64,
+            end_ts: u64,
+            pkt_status_in_hex: String,
+            pkt_status_in_binary: String,
+        );
     }
 }
 
@@ -208,6 +219,7 @@ pub enum HfpCallbacks {
     HangupCall(RawAddress),
     DialCall(String, RawAddress),
     CallHold(CallHoldCommand, RawAddress),
+    DebugDump(bool, bool, i32, f64, u64, u64, String, String),
 }
 
 pub struct HfpCallbacksDispatcher {
@@ -276,6 +288,11 @@ cb_variant!(
     hfp_call_hold_callback -> HfpCallbacks::CallHold,
     CallHoldCommand, RawAddress);
 
+cb_variant!(
+    HfpCb,
+    hfp_debug_dump_callback -> HfpCallbacks::DebugDump,
+    bool, bool, i32, f64, u64, u64, String, String);
+
 pub struct Hfp {
     internal: cxx::UniquePtr<ffi::HfpIntf>,
     _is_init: bool,
@@ -332,8 +349,13 @@ impl Hfp {
     }
 
     #[profile_enabled_or(BtStatus::NotReady.into())]
-    pub fn connect_audio(&mut self, addr: RawAddress, sco_offload: bool, force_cvsd: bool) -> i32 {
-        self.internal.pin_mut().connect_audio(addr, sco_offload, force_cvsd)
+    pub fn connect_audio(
+        &mut self,
+        addr: RawAddress,
+        sco_offload: bool,
+        disabled_codecs: i32,
+    ) -> i32 {
+        self.internal.pin_mut().connect_audio(addr, sco_offload, disabled_codecs)
     }
 
     #[profile_enabled_or(BtStatus::NotReady.into())]
@@ -401,6 +423,11 @@ impl Hfp {
     #[profile_enabled_or(BtStatus::NotReady)]
     pub fn simple_at_response(&mut self, ok: bool, addr: RawAddress) -> BtStatus {
         BtStatus::from(self.internal.pin_mut().simple_at_response(ok, addr))
+    }
+
+    #[profile_enabled_or]
+    pub fn debug_dump(&mut self) {
+        self.internal.pin_mut().debug_dump();
     }
 
     #[profile_enabled_or(false)]

@@ -259,7 +259,6 @@ static void init_stack_internal(bluetooth::core::CoreInterface* interface) {
 
   module_init(get_local_module(DEVICE_IOT_CONFIG_MODULE));
   module_init(get_local_module(OSI_MODULE));
-  bte_main_init();
   module_start_up(get_local_module(GD_SHIM_MODULE));
   module_init(get_local_module(BTIF_CONFIG_MODULE));
   btif_init_bluetooth();
@@ -369,14 +368,14 @@ static void event_shut_down_stack(ProfileStopCallback stopProfiles) {
 
   module_shut_down(get_local_module(RUST_MODULE));
 
-  do_in_main_thread(FROM_HERE, base::Bind(&btm_ble_multi_adv_cleanup));
+  do_in_main_thread(FROM_HERE, base::BindOnce(&btm_ble_multi_adv_cleanup));
 
-  do_in_main_thread(FROM_HERE, base::Bind(&btm_ble_scanner_cleanup));
+  do_in_main_thread(FROM_HERE, base::BindOnce(&btm_ble_scanner_cleanup));
 
   btif_dm_on_disable();
   stopProfiles();
 
-  do_in_main_thread(FROM_HERE, base::Bind(bta_dm_disable));
+  do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_disable));
 
   future_await(local_hack_future);
   local_hack_future = future_new();

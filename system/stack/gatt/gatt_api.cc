@@ -48,6 +48,8 @@
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
 
+using namespace bluetooth::legacy::stack::sdp;
+
 using bluetooth::Uuid;
 
 bool BTM_BackgroundConnectAddressKnown(const RawAddress& address);
@@ -418,7 +420,7 @@ void GATTS_StopService(uint16_t service_handle) {
   }
 
   if (it->sdp_handle) {
-    SDP_DeleteRecord(it->sdp_handle);
+    get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(it->sdp_handle);
   }
 
   gatt_cb.srv_list_info->erase(it);
@@ -475,7 +477,7 @@ tGATT_STATUS GATTS_HandleValueIndication(uint16_t conn_id, uint16_t attr_handle,
   tGATT_SR_MSG gatt_sr_msg;
   gatt_sr_msg.attr_value = indication;
 
-  uint16_t payload_size = gatt_tcb_get_payload_size_tx(*p_tcb, cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(*p_tcb, cid);
   BT_HDR* p_msg = attp_build_sr_msg(*p_tcb, GATT_HANDLE_VALUE_IND, &gatt_sr_msg,
                                     payload_size);
   if (!p_msg) return GATT_NO_RESOURCES;
@@ -494,7 +496,7 @@ static tGATT_STATUS GATTS_HandleMultileValueNotification(
   LOG_INFO("");
 
   uint16_t cid = gatt_tcb_get_att_cid(*p_tcb, true /* eatt support */);
-  uint16_t payload_size = gatt_tcb_get_payload_size_tx(*p_tcb, cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(*p_tcb, cid);
 
   /* TODO Handle too big packet size here. Not needed now for testing. */
   /* Just build the message. */
@@ -608,7 +610,7 @@ tGATT_STATUS GATTS_HandleValueNotification(uint16_t conn_id,
   gatt_sr_msg.attr_value = notif;
 
   uint16_t cid = gatt_tcb_get_att_cid(*p_tcb, p_reg->eatt_support);
-  uint16_t payload_size = gatt_tcb_get_payload_size_tx(*p_tcb, cid);
+  uint16_t payload_size = gatt_tcb_get_payload_size(*p_tcb, cid);
   BT_HDR* p_buf = attp_build_sr_msg(*p_tcb, GATT_HANDLE_VALUE_NOTIF,
                                     &gatt_sr_msg, payload_size);
 
@@ -721,8 +723,8 @@ tGATT_STATUS GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu) {
 
   /* Since GATT MTU Exchange can be done only once, and it is impossible to
    * predict what MTU will be requested by other applications, let's use
-   * max possible MTU in the request. */
-  gatt_cl_msg.mtu = GATT_MAX_MTU_SIZE;
+   * default MTU in the request. */
+  gatt_cl_msg.mtu = gatt_get_local_mtu();
 
   LOG_INFO("Configuring ATT mtu size conn_id:%hu mtu:%hu user mtu %hu", conn_id,
            gatt_cl_msg.mtu, mtu);
@@ -967,8 +969,7 @@ tGATT_STATUS GATTC_Read(uint16_t conn_id, tGATT_READ_TYPE type,
   p_clcb->op_subtype = type;
   p_clcb->auth_req = p_read->by_handle.auth_req;
   p_clcb->counter = 0;
-  p_clcb->read_req_current_mtu =
-      gatt_tcb_get_payload_size_tx(*p_tcb, p_clcb->cid);
+  p_clcb->read_req_current_mtu = gatt_tcb_get_payload_size(*p_tcb, p_clcb->cid);
 
   switch (type) {
     case GATT_READ_BY_TYPE:
@@ -1687,7 +1688,8 @@ void gatt_load_bonded(void) {
       gatt_bonded_check_add_address(p_dev_rec->bd_addr);
     }
     if (p_dev_rec->is_le_link_key_known()) {
-      VLOG(1) << " add bonded BLE " << p_dev_rec->ble.pseudo_addr;
+      VLOG(1) << " add bonded BLE "
+              << ADDRESS_TO_LOGGABLE_STR(p_dev_rec->ble.pseudo_addr);
       LOG_VERBOSE("Add bonded BLE %s",
                   ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->ble.pseudo_addr));
       gatt_bonded_check_add_address(p_dev_rec->ble.pseudo_addr);

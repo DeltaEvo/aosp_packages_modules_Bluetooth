@@ -639,6 +639,12 @@ final class RemoteDevices {
          * @param isCoordinatedSetMember the mIsCoordinatedSetMember to set
         */
         void setIsCoordinatedSetMember(boolean isCoordinatedSetMember) {
+            if ((mAdapterService.getSupportedProfilesBitMask()
+                            & (1 << BluetoothProfile.CSIP_SET_COORDINATOR))
+                    == 0) {
+                debugLog("CSIP is not supported");
+                return;
+            }
             synchronized (mObject) {
                 this.mIsCoordinatedSetMember = isCoordinatedSetMember;
             }
@@ -892,7 +898,9 @@ final class RemoteDevices {
                             break;
                         case AbstractionLayer.BT_PROPERTY_BDADDR:
                             deviceProperties.setAddress(val);
-                            debugLog("Remote Address is:" + Utils.getRedactedAddressStringFromByte(val));
+                            debugLog(
+                                    "Remote Address is:"
+                                            + Utils.getRedactedAddressStringFromByte(val));
                             break;
                         case AbstractionLayer.BT_PROPERTY_CLASS_OF_DEVICE:
                             final int newBluetoothClass = Utils.byteArrayToInt(val);
@@ -1103,7 +1111,7 @@ final class RemoteDevices {
                 intent = new Intent(BluetoothAdapter.ACTION_BLE_ACL_CONNECTED);
             }
             BatteryService batteryService = BatteryService.getBatteryService();
-            if (batteryService != null) {
+            if (batteryService != null && transportLinkType == BluetoothDevice.TRANSPORT_LE) {
                 batteryService.connectIfPossible(device);
             }
             SecurityLog.writeEvent(SecurityLog.TAG_BLUETOOTH_CONNECTION,
@@ -1139,11 +1147,13 @@ final class RemoteDevices {
                 BatteryService batteryService = BatteryService.getBatteryService();
                 if (batteryService != null
                         && batteryService.getConnectionState(device)
-                        != BluetoothProfile.STATE_DISCONNECTED) {
+                                != BluetoothProfile.STATE_DISCONNECTED
+                        && transportLinkType == BluetoothDevice.TRANSPORT_LE) {
                     batteryService.disconnect(device);
                 }
                 resetBatteryLevel(device);
             }
+
             if (mAdapterService.isAllProfilesUnknown(device)) {
                 DeviceProperties deviceProp = getDeviceProperties(device);
                 if (deviceProp != null) {

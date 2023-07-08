@@ -28,6 +28,7 @@
 #include "bta/dm/bta_dm_int.h"
 #include "gd/common/circular_buffer.h"
 #include "gd/common/strings.h"
+#include "stack/btm/btm_int_types.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 
@@ -89,7 +90,7 @@ void bta_dm_search_sm_disable() { bta_sys_deregister(BTA_ID_DM_SEARCH); }
  * Returns          void
  *
  ******************************************************************************/
-bool bta_dm_search_sm_execute(BT_HDR_RIGID* p_msg) {
+bool bta_dm_search_sm_execute(const BT_HDR_RIGID* p_msg) {
   const tBTA_DM_EVT event = static_cast<tBTA_DM_EVT>(p_msg->event);
   LOG_INFO("state:%s, event:%s[0x%x]",
            bta_dm_state_text(bta_dm_search_get_state()).c_str(),
@@ -129,7 +130,7 @@ bool bta_dm_search_sm_execute(BT_HDR_RIGID* p_msg) {
     case BTA_DM_SEARCH_ACTIVE:
       switch (p_msg->event) {
         case BTA_DM_REMT_NAME_EVT:
-          bta_dm_rmt_name(message);
+          bta_dm_remote_name_cmpl(message);
           break;
         case BTA_DM_SEARCH_CMPL_EVT:
           bta_dm_search_cmpl();
@@ -191,7 +192,7 @@ bool bta_dm_search_sm_execute(BT_HDR_RIGID* p_msg) {
     case BTA_DM_DISCOVER_ACTIVE:
       switch (p_msg->event) {
         case BTA_DM_REMT_NAME_EVT:
-          bta_dm_disc_rmt_name(message);
+          bta_dm_remote_name_cmpl(message);
           break;
         case BTA_DM_SDP_RESULT_EVT:
           bta_dm_sdp_result(message);
@@ -230,6 +231,7 @@ bool bta_dm_search_sm_execute(BT_HDR_RIGID* p_msg) {
   return true;
 }
 
+extern TimestampedStringCircularBuffer gatt_history_;
 #define DUMPSYS_TAG "shim::legacy::bta::dm"
 void DumpsysBtaDm(int fd) {
   LOG_DUMPSYS_TITLE(fd, DUMPSYS_TAG);
@@ -241,5 +243,11 @@ void DumpsysBtaDm(int fd) {
   }
   LOG_DUMPSYS(fd, " current bta_dm_search_state:%s",
               bta_dm_state_text(bta_dm_search_get_state()).c_str());
+  auto gatt_history = gatt_history_.Pull();
+  LOG_DUMPSYS(fd, " last %zu gatt history entries", gatt_history.size());
+  for (const auto& it : gatt_history) {
+    LOG_DUMPSYS(fd, "   %s %s", EpochMillisToString(it.timestamp).c_str(),
+                it.entry.c_str());
+  }
 }
 #undef DUMPSYS_TAG

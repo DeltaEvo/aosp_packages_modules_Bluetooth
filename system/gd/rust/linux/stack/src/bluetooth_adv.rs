@@ -194,6 +194,9 @@ const SOLICIT_AD_TYPES: [u8; 3] = [
     LIST_128_BIT_SERVICE_SOLICITATION_UUIDS,
 ];
 
+const LEGACY_ADV_DATA_LEN_MAX: usize = 31;
+const EXT_ADV_DATA_LEN_MAX: usize = 254;
+
 // Invalid advertising set id.
 const INVALID_ADV_ID: i32 = 0xff;
 
@@ -249,7 +252,7 @@ impl AdvertiseData {
         let mut uuid128_bytes = Vec::<u8>::new();
 
         // For better transmission efficiency, we generate a compact
-        // advertisement data byconverting UUIDs into shorter binary forms
+        // advertisement data by converting UUIDs into shorter binary forms
         // and then group them by their length in order.
         // The data generated for UUIDs looks like:
         // [16-bit_UUID_LIST, 32-bit_UUID_LIST, 128-bit_UUID_LIST].
@@ -341,6 +344,11 @@ impl AdvertiseData {
         AdvertiseData::append_transport_discovery_data(&mut bytes, &self.transport_discovery_data);
         bytes
     }
+
+    /// Validates the raw data as advertisement data.
+    pub fn validate_raw_data(is_legacy: bool, bytes: &Vec<u8>) -> bool {
+        bytes.len() <= if is_legacy { LEGACY_ADV_DATA_LEN_MAX } else { EXT_ADV_DATA_LEN_MAX }
+    }
 }
 
 impl Into<bt_topshim::profiles::gatt::PeriodicAdvertisingParameters>
@@ -388,16 +396,29 @@ pub(crate) struct AdvertisingSetInfo {
     /// Whether the advertising set has been paused.
     paused: bool,
 
+    /// Whether the stop of advertising set is held.
+    /// This happens when an advertising set is stopped when the system is suspending.
+    /// The advertising set will be stopped on system resumed.
+    stopped: bool,
+
     /// Advertising duration, in 10 ms unit.
     adv_timeout: u16,
 
     /// Maximum number of extended advertising events the controller
     /// shall attempt to send before terminating the extended advertising.
     adv_events: u8,
+
+    /// Whether the legacy advertisement will be used.
+    legacy: bool,
 }
 
 impl AdvertisingSetInfo {
-    pub(crate) fn new(callback_id: CallbackId, adv_timeout: u16, adv_events: u8) -> Self {
+    pub(crate) fn new(
+        callback_id: CallbackId,
+        adv_timeout: u16,
+        adv_events: u8,
+        legacy: bool,
+    ) -> Self {
         let mut reg_id = REG_ID_COUNTER.fetch_add(1, Ordering::SeqCst) as RegId;
         if reg_id == INVALID_REG_ID {
             reg_id = REG_ID_COUNTER.fetch_add(1, Ordering::SeqCst) as RegId;
@@ -408,8 +429,10 @@ impl AdvertisingSetInfo {
             reg_id,
             enabled: false,
             paused: false,
+            stopped: false,
             adv_timeout,
             adv_events,
+            legacy,
         }
     }
 
@@ -454,6 +477,16 @@ impl AdvertisingSetInfo {
         self.paused
     }
 
+    /// Marks the advertising set as stopped.
+    pub(crate) fn set_stopped(&mut self) {
+        self.stopped = true;
+    }
+
+    /// Returns true if the advertising set has been stopped, false otherwise.
+    pub(crate) fn is_stopped(&self) -> bool {
+        self.stopped
+    }
+
     /// Gets adv_timeout.
     pub(crate) fn adv_timeout(&self) -> u16 {
         self.adv_timeout
@@ -462,6 +495,11 @@ impl AdvertisingSetInfo {
     /// Gets adv_events.
     pub(crate) fn adv_events(&self) -> u8 {
         self.adv_events
+    }
+
+    /// Returns whether the legacy advertisement will be used.
+    pub(crate) fn is_legacy(&self) -> bool {
+        self.legacy
     }
 }
 
@@ -511,6 +549,11 @@ impl Advertisers {
     /// Returns a mutable iterator of paused advertising sets.
     pub(crate) fn paused_sets_mut(&mut self) -> impl Iterator<Item = &mut AdvertisingSetInfo> {
         self.valid_sets_mut().filter(|s| s.is_paused())
+    }
+
+    /// Returns an iterator of stopped advertising sets.
+    pub(crate) fn stopped_sets(&self) -> impl Iterator<Item = &AdvertisingSetInfo> {
+        self.valid_sets().filter(|s| s.is_stopped())
     }
 
     fn find_reg_id(&self, adv_id: AdvertiserId) -> Option<RegId> {
@@ -654,7 +697,7 @@ mod tests {
     fn test_new_advising_set_info() {
         let mut uniq = HashSet::new();
         for callback_id in 0..256 {
-            let s = AdvertisingSetInfo::new(callback_id, 0, 0);
+            let s = AdvertisingSetInfo::new(callback_id, 0, 0, false);
             assert_eq!(s.callback_id(), callback_id);
             assert_eq!(uniq.insert(s.reg_id()), true);
         }
@@ -669,7 +712,7 @@ mod tests {
         for i in 0..size {
             let callback_id: CallbackId = i as CallbackId;
             let adv_id: AdvertiserId = i as AdvertiserId;
-            let mut s = AdvertisingSetInfo::new(callback_id, 0, 0);
+            let mut s = AdvertisingSetInfo::new(callback_id, 0, 0, false);
             s.set_adv_id(Some(adv_id));
             advertisers.add(s);
         }

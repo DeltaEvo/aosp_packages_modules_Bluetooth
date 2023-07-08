@@ -162,6 +162,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ))));
     let bluetooth = Arc::new(Mutex::new(Box::new(Bluetooth::new(
         adapter_index,
+        hci_index,
         tx.clone(),
         sig_notifier.clone(),
         intf.clone(),
@@ -415,9 +416,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 signal::sigaction(signal::SIGTERM, &sig_action).unwrap();
             }
         }
-
-        // Initialize the bluetooth_qa
-        bluetooth.lock().unwrap().cache_discoverable_mode_into_qa();
 
         // Serve clients forever.
         future::pending::<()>().await;

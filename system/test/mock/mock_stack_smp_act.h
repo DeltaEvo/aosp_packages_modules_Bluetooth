@@ -227,15 +227,7 @@ struct smp_proc_confirm {
   void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
 };
 extern struct smp_proc_confirm smp_proc_confirm;
-// Name: smp_proc_init
-// Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
-// Returns: void
-struct smp_proc_init {
-  std::function<void(tSMP_CB* p_cb, tSMP_INT_DATA* p_data)> body{
-      [](tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {}};
-  void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
-};
-extern struct smp_proc_init smp_proc_init;
+
 // Name: smp_proc_rand
 // Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
 // Returns: void
@@ -679,16 +671,6 @@ struct smp_br_process_link_key {
   void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
 };
 extern struct smp_br_process_link_key smp_br_process_link_key;
-// Name: smp_key_distribution_by_transport
-// Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
-// Returns: void
-struct smp_key_distribution_by_transport {
-  std::function<void(tSMP_CB* p_cb, tSMP_INT_DATA* p_data)> body{
-      [](tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {}};
-  void operator()(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) { body(p_cb, p_data); };
-};
-extern struct smp_key_distribution_by_transport
-    smp_key_distribution_by_transport;
 // Name: smp_br_pairing_complete
 // Params: tSMP_CB* p_cb, tSMP_INT_DATA* p_data
 // Returns: void

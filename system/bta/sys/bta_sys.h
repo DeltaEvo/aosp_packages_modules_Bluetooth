@@ -44,7 +44,7 @@
 typedef bool(tBTA_SYS_VS_EVT_HDLR)(uint16_t evt, void* p);
 
 /* event handler function type */
-typedef bool(tBTA_SYS_EVT_HDLR)(BT_HDR_RIGID* p_msg);
+typedef bool(tBTA_SYS_EVT_HDLR)(const BT_HDR_RIGID* p_msg);
 static_assert(
     sizeof(BT_HDR) == sizeof(BT_HDR_RIGID),
     "Rigid replacement should be same size struct with flexible member");
@@ -81,6 +81,7 @@ inline const T* Specialize(U* u) {
 #define BTA_ID_ACC 16           /* Advanced Camera Client */
 #define BTA_ID_SC 17            /* SIM Card Access server */
 #define BTA_ID_AV 18            /* Advanced audio/video */
+#define BTA_ID_AVK 19           /* Audio/video sink */
 #define BTA_ID_HD 20            /* HID Device */
 #define BTA_ID_CG 21            /* Cordless Gateway */
 #define BTA_ID_BP 22            /* Basic Printing Client */

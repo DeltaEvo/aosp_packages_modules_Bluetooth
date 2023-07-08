@@ -358,6 +358,8 @@ pub const LOG_TAG_VERBOSE: i32 = 6;
 init_flags!(
     name: InitFlags
     flags: {
+        asha_packet_drop_frequency_threshold: i32 = 60,
+        asha_phy_update_retry_limit: i32 = 5,
         always_send_services_if_gatt_disc_done = true,
         always_use_private_gatt_for_debugging,
         asynchronously_start_l2cap_coc = true,
@@ -377,12 +379,12 @@ init_flags!(
         gd_hal_snoop_logger_filtering = true,
         gd_l2cap,
         gd_link_policy,
-        gd_remote_name_request,
         gd_rust,
         hci_adapter: i32,
         hfp_dynamic_version = true,
         irk_rotation,
         leaudio_targeted_announcement_reconnection_mode = true,
+        leaudio_enable_health_based_actions,
         pass_phy_update_callback = true,
         pbap_pse_dynamic_version_upgrade = false,
         periodic_advertising_adi = true,
@@ -391,6 +393,7 @@ init_flags!(
         read_encryption_key_size = true,
         redact_log = true,
         rust_event_loop = true,
+        sco_codec_select_lc3,
         sco_codec_timeout_clear,
         sdp_serialization = true,
         sdp_skip_rnr_if_known = true,
@@ -399,6 +402,9 @@ init_flags!(
         subrating = true,
         trigger_advertising_callbacks_on_first_resume_after_pause = true,
         use_unified_connection_manager,
+        sdp_return_classic_services_when_le_discovery_fails = true,
+        use_rsi_from_cached_inqiry_results = false,
+        att_mtu_default: i32 = 517,
     }
     // dynamic flags can be updated at runtime and should be accessed directly
     // to check.

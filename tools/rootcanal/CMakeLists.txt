@@ -1,24 +1,24 @@
 set(BT_ROOT ${AOSP_ROOT}/packages/modules/Bluetooth/system)
 set(ROOTCANAL_ROOT ${AOSP_ROOT}/packages/modules/Bluetooth/tools/rootcanal)
-set(PDL_ROOT ${AOSP_ROOT}/packages/modules/Bluetooth/tools/pdl)
+set(PDL_ROOT ${AOSP_ROOT}/external/rust/crates/pdl-compiler)
 
 corrosion_import_crate(
     MANIFEST_PATH ${PDL_ROOT}/Cargo.toml
     FLAGS --offline --verbose --verbose)
 
 corrosion_set_env_vars(generate-canonical-tests CARGO_HOME=${Rust_CARGO_HOME})
-corrosion_set_env_vars(pdl CARGO_HOME=${Rust_CARGO_HOME})
-corrosion_set_hostbuild(pdl)
+corrosion_set_env_vars(pdlc CARGO_HOME=${Rust_CARGO_HOME})
+corrosion_set_hostbuild(pdlc)
 
-get_property(pdl_EXECUTABLE TARGET pdl PROPERTY EXECUTABLE_PATH)
+get_property(pdlc_EXECUTABLE TARGET pdlc PROPERTY EXECUTABLE_PATH)
 
 # These tests depend on the tempfile crate which was not imported because
 # the crate remove_dir_all does not have a compatible version.
-set_tests_properties(cargo-test_pdl PROPERTIES DISABLED True)
+set_tests_properties(cargo-test_pdlc PROPERTIES DISABLED True)
 set_tests_properties(cargo-test_generate-canonical-tests PROPERTIES DISABLED True)
 
 android_license(
-    TARGET pdl
+    TARGET pdlc
     LIBNAME None
     SPDX None
     LICENSE None
@@ -58,13 +58,13 @@ function(pdl_gen)
     add_custom_command(
         OUTPUT "${pdl_OUTPUT_ABSOLUTE}"
         COMMAND
-        ${pdl_EXECUTABLE}
+        ${pdlc_EXECUTABLE}
                 --output-format rust
                 "${pdl_INPUT_ABSOLUTE}"
                     > "${pdl_OUTPUT_ABSOLUTE}"
         COMMENT "Generating rust module from ${pdl_INPUT}"
         VERBATIM
-        DEPENDS pdl ${pdl_INPUT_ABSOLUTE})
+        DEPENDS pdlc ${pdl_INPUT_ABSOLUTE})
   endif()
 endfunction()
 
@@ -208,6 +208,18 @@ android_license(TARGET "libbt-rootcanal.headers" LIBNAME None SPDX Apache-2.0
                 LICENSE Apache-2.0 LOCAL "${BT_ROOT}/../NOTICE")
 
 android_add_library(
+  TARGET librootcanal_log
+  LICENSE Apache-2.0
+  SOURCE_DIR ${ROOTCANAL_ROOT}
+  SRC lib/log.cc
+      ${AOSP_ROOT}/external/fmtlib/src/format.cc)
+
+target_include_directories(
+  librootcanal_log PUBLIC
+    ${ROOTCANAL_ROOT}/include
+    ${AOSP_ROOT}/external/fmtlib/include)
+
+android_add_library(
   TARGET BluetoothPacketSources
   LICENSE Apache-2.0
   SOURCE_DIR ${BT_ROOT}/gd/packet
@@ -219,12 +231,11 @@ android_add_library(
       packet_view.cc
       raw_builder.cc
       view.cc
-  DEPS android-emu-base android-emu-base-headers)
+  DEPS android-emu-base android-emu-base-headers librootcanal_log)
 
 target_include_directories(
   BluetoothPacketSources PUBLIC
-    ${ROOTCANAL_ROOT}/emulator
-    ${ROOTCANAL_ROOT}/emulator/include
+    ${ROOTCANAL_ROOT}
     ${ROOTCANAL_ROOT}/include
     ${BT_ROOT}/gd
     ${BT_ROOT})
@@ -238,16 +249,15 @@ android_add_library(
   SOURCE_DIR ${ROOTCANAL_ROOT}
   SRC ${BluetoothGeneratedPackets_h}
       ${RootCanalGeneratedPackets_h}
-      emulator/src/log.cc
       lib/crypto/crypto.cc
       lib/hci/address.cc
       lib/hci/class_of_device.cc
       lib/hci/pcap_filter.cc
+      lib/log.cc
       model/controller/acl_connection.cc
       model/controller/acl_connection_handler.cc
       model/controller/controller_properties.cc
       model/controller/dual_mode_controller.cc
-      model/controller/isochronous_connection_handler.cc
       model/controller/le_advertiser.cc
       model/controller/link_layer_controller.cc
       model/controller/sco_connection.cc
@@ -260,7 +270,6 @@ android_add_library(
       model/devices/sniffer.cc
       model/hci/h4_data_channel_packetizer.cc
       model/hci/h4_parser.cc
-      model/hci/hci_protocol.cc
       model/hci/hci_sniffer.cc
       model/hci/hci_socket_transport.cc
       model/setup/device_boutique.cc
@@ -283,11 +292,13 @@ android_add_library(
        librootcanal_config
        libscriptedbeaconpayload-protos-lite)
 
+target_link_libraries(
+  libbt-rootcanal
+  PUBLIC librootcanal_log)
+
 target_include_directories(
   libbt-rootcanal
-  PUBLIC ${ROOTCANAL_ROOT}/emulator
-         ${ROOTCANAL_ROOT}/emulator/include
-         ${ROOTCANAL_ROOT}/include
+  PUBLIC ${ROOTCANAL_ROOT}/include
          ${ROOTCANAL_ROOT}
          ${BT_ROOT}/gd
          ${BT_ROOT}

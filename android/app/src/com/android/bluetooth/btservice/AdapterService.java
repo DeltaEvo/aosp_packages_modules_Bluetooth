@@ -17,6 +17,7 @@
 
 package com.android.bluetooth.btservice;
 
+import static android.bluetooth.BluetoothDevice.BATTERY_LEVEL_UNKNOWN;
 import static android.bluetooth.BluetoothDevice.TRANSPORT_AUTO;
 import static android.bluetooth.IBluetoothLeAudio.LE_AUDIO_GROUP_ID_INVALID;
 import static android.text.format.DateUtils.MINUTE_IN_MILLIS;
@@ -66,6 +67,7 @@ import android.bluetooth.IBluetooth;
 import android.bluetooth.IBluetoothActivityEnergyInfoListener;
 import android.bluetooth.IBluetoothCallback;
 import android.bluetooth.IBluetoothConnectionCallback;
+import android.bluetooth.IBluetoothGatt;
 import android.bluetooth.IBluetoothMetadataListener;
 import android.bluetooth.IBluetoothOobDataCallback;
 import android.bluetooth.IBluetoothPreferredAudioProfilesCallback;
@@ -77,9 +79,11 @@ import android.bluetooth.UidTraffic;
 import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.AsyncTask;
@@ -360,6 +364,7 @@ public class AdapterService extends Service {
     private BassClientService mBassClientService;
     private BatteryService mBatteryService;
     private BluetoothQualityReportNativeInterface mBluetoothQualityReportNativeInterface;
+    private IBluetoothGatt mBluetoothGatt;
 
     private volatile boolean mTestModeEnabled = false;
 
@@ -413,6 +418,8 @@ public class AdapterService extends Service {
     private static final int MESSAGE_PROFILE_SERVICE_REGISTERED = 2;
     private static final int MESSAGE_PROFILE_SERVICE_UNREGISTERED = 3;
     private static final int MESSAGE_PREFERRED_AUDIO_PROFILES_AUDIO_FRAMEWORK_TIMEOUT = 4;
+    private static final int MESSAGE_ON_PROFILE_SERVICE_BIND = 5;
+    private static final int MESSAGE_ON_PROFILE_SERVICE_UNBIND = 6;
 
     class AdapterServiceHandler extends Handler {
         @Override
@@ -431,6 +438,14 @@ public class AdapterService extends Service {
                 case MESSAGE_PROFILE_SERVICE_UNREGISTERED:
                     verboseLog("handleMessage() - MESSAGE_PROFILE_SERVICE_UNREGISTERED");
                     unregisterProfileService((ProfileService) msg.obj);
+                    break;
+                case MESSAGE_ON_PROFILE_SERVICE_BIND:
+                    verboseLog("handleMessage() - MESSAGE_ON_PROFILE_SERVICE_BIND");
+                    onGattBind((IBinder) msg.obj);
+                    break;
+                case MESSAGE_ON_PROFILE_SERVICE_UNBIND:
+                    verboseLog("handleMessage() - MESSAGE_ON_PROFILE_SERVICE_UNBIND");
+                    onGattUnbind();
                     break;
                 case MESSAGE_PREFERRED_AUDIO_PROFILES_AUDIO_FRAMEWORK_TIMEOUT:
                     errorLog("handleMessage() - "
@@ -464,6 +479,22 @@ public class AdapterService extends Service {
                 return;
             }
             mRegisteredProfiles.remove(profile);
+        }
+
+        private void onGattBind(IBinder service) {
+            mBluetoothGatt = IBluetoothGatt.Stub.asInterface(service);
+            try {
+                mBluetoothGatt.startService();
+            } catch (RemoteException e) {
+                Log.e(TAG, "onGattBind: RemoteException", e);
+            }
+        }
+
+        private void onGattUnbind() {
+            mBluetoothGatt = null;
+            Log.e(
+                    TAG,
+                    "onGattUnbind: Gatt service has disconnected from AdapterService unexpectedly");
         }
 
         private void processProfileServiceStateChanged(ProfileService profile, int state) {
@@ -707,6 +738,10 @@ public class AdapterService extends Service {
         }
     }
 
+    public ActiveDeviceManager getActiveDeviceManager() {
+        return mActiveDeviceManager;
+    }
+
     private boolean initMetricsLogger() {
         if (mMetricsLogger != null) {
             return false;
@@ -843,7 +878,7 @@ public class AdapterService extends Service {
             Log.w(TAG,
                     "GATT is configured off but the stack assumes it to be enabled. Start anyway.");
         }
-        setProfileServiceState(GattService.class, BluetoothAdapter.STATE_ON);
+        startGattProfileService();
     }
 
     void bringDownBle() {
@@ -894,13 +929,66 @@ public class AdapterService extends Service {
         }
     }
 
+    class GattServiceConnection implements ServiceConnection {
+        public void onServiceConnected(ComponentName componentName, IBinder service) {
+            String name = componentName.getClassName();
+            if (DBG) {
+                Log.d(TAG, "GattServiceConnection.onServiceConnected: " + name);
+            }
+            if (!name.equals(GattService.class.getName())) {
+                Log.e(TAG, "Unknown service connected: " + name);
+                return;
+            }
+            mHandler.obtainMessage(MESSAGE_ON_PROFILE_SERVICE_BIND, service).sendToTarget();
+        }
+
+        public void onServiceDisconnected(ComponentName componentName) {
+            // Called if we unexpectedly disconnect. This should never happen.
+            String name = componentName.getClassName();
+            Log.e(TAG, "GattServiceConnection.onServiceDisconnected: " + name);
+            if (!name.equals(GattService.class.getName())) {
+                Log.e(TAG, "Unknown service disconnected: " + name);
+                return;
+            }
+            mHandler.sendEmptyMessage(MESSAGE_ON_PROFILE_SERVICE_UNBIND);
+        }
+    }
+
+    private GattServiceConnection mGattConnection = new GattServiceConnection();
+
+    private void startGattProfileService() {
+        mStartedProfiles.add(GattService.class.getSimpleName());
+
+        Intent intent = new Intent(this, GattService.class);
+        if (!bindServiceAsUser(
+                intent,
+                mGattConnection,
+                Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT,
+                UserHandle.CURRENT)) {
+            // This should never happen
+            // unbindService will be called during stopGattProfileService triggered by AdapterState
+            Log.e(TAG, "Error while binding to gatt. This Bluetooth session will timeout");
+            unbindService(mGattConnection);
+        }
+    }
+
     private void stopGattProfileService() {
         mAdapterProperties.onBleDisable();
         if (mRunningProfiles.size() == 0) {
             debugLog("stopGattProfileService() - No profiles services to stop.");
             mAdapterStateMachine.sendMessage(AdapterState.BLE_STOPPED);
         }
-        setProfileServiceState(GattService.class, BluetoothAdapter.STATE_OFF);
+
+        mStartedProfiles.remove(GattService.class.getSimpleName());
+
+        try {
+            if (mBluetoothGatt != null) {
+                mBluetoothGatt.stopService();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "stopGattProfileService: RemoteException", e);
+        }
+        unbindService(mGattConnection);
     }
 
     private void invalidateBluetoothGetStateCache() {
@@ -2020,13 +2108,14 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public boolean isLogRedactionEnabled() {
+        public void isLogRedactionEnabled(SynchronousResultReceiver receiver) {
             AdapterService service = getService();
             if (service == null) {
                 // by default return true
-                return true;
+                receiver.send(true);
+            } else {
+                receiver.send(service.isLogRedactionEnabled());
             }
-            return service.isLogRedactionEnabled();
         }
 
         @Override
@@ -4254,23 +4343,25 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public void onLeServiceUp(AttributionSource source, SynchronousResultReceiver receiver) {
+        public void startBrEdr(AttributionSource source, SynchronousResultReceiver receiver) {
             try {
-                onLeServiceUp(source);
+                startBrEdr(source);
                 receiver.send(null);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
         }
+
         @VisibleForTesting
-        @RequiresPermission(allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-        })
-        void onLeServiceUp(AttributionSource source) {
+        @RequiresPermission(
+                allOf = {
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                })
+        void startBrEdr(AttributionSource source) {
             AdapterService service = getService();
             if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "onLeServiceUp")
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "startBrEdr")
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return;
             }
@@ -4281,23 +4372,25 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public void onBrEdrDown(AttributionSource source, SynchronousResultReceiver receiver) {
+        public void stopBle(AttributionSource source, SynchronousResultReceiver receiver) {
             try {
-                onBrEdrDown(source);
+                stopBle(source);
                 receiver.send(null);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
         }
+
         @VisibleForTesting
-        @RequiresPermission(allOf = {
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-        })
-        void onBrEdrDown(AttributionSource source) {
+        @RequiresPermission(
+                allOf = {
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+                })
+        void stopBle(AttributionSource source) {
             AdapterService service = getService();
             if (service == null
-                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "onBrEdrDown")
+                    || !callerIsSystemOrActiveOrManagedUser(service, TAG, "stopBle")
                     || !Utils.checkConnectPermissionForDataDelivery(service, source, TAG)) {
                 return;
             }
@@ -4723,6 +4816,30 @@ public class AdapterService extends Service {
             enforceBluetoothPrivilegedPermission(service);
 
             return service.getOffloadedTransportDiscoveryDataScanSupported();
+        }
+
+        @Override
+        public IBluetoothGatt getBluetoothGatt() {
+            AdapterService service = getService();
+            if (service == null) {
+                return null;
+            }
+            return service.getBluetoothGatt();
+        }
+
+        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @Override
+        public void unregAllGattClient(
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                AdapterService service = getService();
+                if (service != null) {
+                    service.unregAllGattClient(source);
+                }
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
         }
     }
 
@@ -5185,7 +5302,6 @@ public class AdapterService extends Service {
      *
      * @return {@link DatabaseManager} or null on error
      */
-    @VisibleForTesting
     public DatabaseManager getDatabase() {
         return mDatabaseManager;
     }
@@ -6246,6 +6362,20 @@ public class AdapterService extends Service {
         return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
     }
 
+    IBluetoothGatt getBluetoothGatt() {
+        return mBluetoothGatt;
+    }
+
+    void unregAllGattClient(AttributionSource source) {
+        if (mBluetoothGatt != null) {
+            try {
+                mBluetoothGatt.unregAll(source);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Unable to disconnect all apps.", e);
+            }
+        }
+    }
+
     /**
      * Notify the UID and package name of the app, and the address of associated active device
      *
@@ -7011,7 +7141,11 @@ public class AdapterService extends Service {
      * Sets the battery level of the remote device
      */
     public void setBatteryLevel(BluetoothDevice device, int batteryLevel) {
-        mRemoteDevices.updateBatteryLevel(device, batteryLevel);
+        if (batteryLevel == BATTERY_LEVEL_UNKNOWN) {
+            mRemoteDevices.resetBatteryLevel(device);
+        } else {
+            mRemoteDevices.updateBatteryLevel(device, batteryLevel);
+        }
     }
 
     public boolean interopMatchAddr(InteropFeature feature, String address) {

@@ -9,7 +9,7 @@ package {
 
 cc_library_static {
     name: "lib-bt-packets",
-    defaults: ["libchrome_support_defaults"],
+    defaults: ["bluetooth_cflags"],
     host_supported: true,
     export_include_dirs: [
         "./",
@@ -40,6 +40,7 @@ cc_test {
     local_include_dirs: ["tests"],
     include_dirs: [
         "packages/modules/Bluetooth/system/",
+        "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
     ],
     srcs: [
@@ -73,6 +74,7 @@ cc_test {
         "libbase",
         "libbinder_ndk",
         "libcrypto",
+        "liblog",
     ],
     static_libs: [
         "lib-bt-packets",
