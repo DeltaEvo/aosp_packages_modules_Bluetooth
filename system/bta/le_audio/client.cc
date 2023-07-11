@@ -2177,7 +2177,7 @@ class LeAudioClientImpl : public LeAudioClient {
         FROM_HERE,
         base::BindOnce(
             &LeAudioClientImpl::checkGroupConnectionStateAfterMemberDisconnect,
-            weak_factory_.GetWeakPtr(), group_id),
+            base::Unretained(this), group_id),
 #if BASE_VER < 931007
         base::TimeDelta::FromMilliseconds(kGroupConnectedWatchDelayMs)
 #else
@@ -2201,8 +2201,8 @@ class LeAudioClientImpl : public LeAudioClient {
     LOG_INFO("Schedule auto connect %s ", ADDRESS_TO_LOGGABLE_CSTR(address));
     do_in_main_thread_delayed(
         FROM_HERE,
-        base::BindOnce(&LeAudioClientImpl::autoConnect,
-                       weak_factory_.GetWeakPtr(), address),
+        base::BindOnce(&LeAudioClientImpl::autoConnect, base::Unretained(this),
+                       address),
 #if BASE_VER < 931007
         base::TimeDelta::FromMilliseconds(kAutoConnectAfterOwnDisconnectDelayMs)
 #else
@@ -2241,7 +2241,7 @@ class LeAudioClientImpl : public LeAudioClient {
     do_in_main_thread_delayed(
         FROM_HERE,
         base::BindOnce(&LeAudioClientImpl::recoveryReconnect,
-                       weak_factory_.GetWeakPtr(), address),
+                       base::Unretained(this), address),
 #if BASE_VER < 931007
         base::TimeDelta::FromMilliseconds(kRecoveryReconnectDelayMs)
 #else
@@ -2282,7 +2282,7 @@ class LeAudioClientImpl : public LeAudioClient {
     do_in_main_thread_delayed(
         FROM_HERE,
         base::BindOnce(&LeAudioClientImpl::checkIfGroupMember,
-                       weak_factory_.GetWeakPtr(), address),
+                       base::Unretained(this), address),
 #if BASE_VER < 931007
         base::TimeDelta::FromMilliseconds(kCsisGroupMemberDelayMs)
 #else
@@ -3030,7 +3030,7 @@ class LeAudioClientImpl : public LeAudioClient {
     do_in_main_thread_delayed(
         FROM_HERE,
         base::BindOnce(&LeAudioClientImpl::restartAttachToTheStream,
-                       weak_factory_.GetWeakPtr(), addr),
+                       base::Unretained(this), addr),
 #if BASE_VER < 931007
         base::TimeDelta::FromMilliseconds(kDeviceAttachDelayMs)
 #else
@@ -5451,8 +5451,6 @@ class LeAudioClientImpl : public LeAudioClient {
   std::vector<int16_t> cached_channel_data_;
   uint32_t cached_channel_timestamp_ = 0;
   uint32_t cached_channel_is_left_;
-
-  base::WeakPtrFactory<LeAudioClientImpl> weak_factory_{this};
 
   void ClientAudioIntefraceRelease() {
     if (le_audio_source_hal_client_) {
