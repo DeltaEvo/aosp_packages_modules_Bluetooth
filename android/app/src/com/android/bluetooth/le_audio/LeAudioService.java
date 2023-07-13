@@ -1143,6 +1143,7 @@ public class LeAudioService extends ProfileService {
                     + ". Currently active device is " + mActiveAudioOutDevice);
         }
 
+        mAdapterService.getActiveDeviceManager();
         Intent intent = new Intent(BluetoothLeAudio.ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -3085,10 +3086,6 @@ public class LeAudioService extends ProfileService {
      * @return the lead device of the CSIP group or {@code null} if the group does not exist
      */
     public BluetoothDevice getLeadDevice(BluetoothDevice device) {
-        if (device == null) {
-            Log.w(TAG, "getLeadDevice called with null device.");
-            return null;
-        }
         int groupId = getGroupId(device);
         if (groupId == LE_AUDIO_GROUP_ID_INVALID) {
             return null;
