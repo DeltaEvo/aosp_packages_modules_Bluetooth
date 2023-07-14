@@ -1325,6 +1325,12 @@ public class LeAudioService extends ProfileService {
 
             final boolean suppressNoisyIntent = hasFallbackDevice || mActiveAudioOutDevice != null;
 
+            Log.d(
+                    TAG,
+                    "suppressNoisyIntent: "
+                            + suppressNoisyIntent
+                            + ", hasFallbackDevice"
+                            + hasFallbackDevice);
             final BluetoothProfileConnectionInfo connectionInfo;
             if (isAtLeastU()) {
                 connectionInfo =
@@ -1376,9 +1382,16 @@ public class LeAudioService extends ProfileService {
 
         int currentlyActiveGroupId = getActiveGroupId();
         if (DBG) {
-            Log.d(TAG, "setActiveGroupWithDevice = " + groupId
-                    + ", currentlyActiveGroupId = " + currentlyActiveGroupId
-                    + ", device: " + device);
+            Log.d(
+                    TAG,
+                    "setActiveGroupWithDevice = "
+                            + groupId
+                            + ", currentlyActiveGroupId = "
+                            + currentlyActiveGroupId
+                            + ", device: "
+                            + device
+                            + ", hasFallbackDevice: "
+                            + hasFallbackDevice);
         }
 
         if (groupId == currentlyActiveGroupId) {
@@ -1411,6 +1424,9 @@ public class LeAudioService extends ProfileService {
      */
     public boolean removeActiveDevice(boolean hasFallbackDevice) {
         /* Clear active group */
+        if (DBG) {
+            Log.d(TAG, "removeActiveDevice, hasFallbackDevice " + hasFallbackDevice);
+        }
         setActiveGroupWithDevice(null, hasFallbackDevice);
         return true;
     }
@@ -3085,10 +3101,6 @@ public class LeAudioService extends ProfileService {
      * @return the lead device of the CSIP group or {@code null} if the group does not exist
      */
     public BluetoothDevice getLeadDevice(BluetoothDevice device) {
-        if (device == null) {
-            Log.w(TAG, "getLeadDevice called with null device.");
-            return null;
-        }
         int groupId = getGroupId(device);
         if (groupId == LE_AUDIO_GROUP_ID_INVALID) {
             return null;
