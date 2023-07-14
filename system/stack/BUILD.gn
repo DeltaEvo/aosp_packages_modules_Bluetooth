@@ -30,16 +30,14 @@ source_set("nonstandard_codecs") {
   if (defined(use.bt_nonstandard_codecs) && use.bt_nonstandard_codecs) {
     sources = [
       "a2dp/a2dp_aac.cc",
-      "a2dp/a2dp_aac_decoder.cc",
-      "a2dp/a2dp_aac_encoder.cc",
+      "a2dp/a2dp_aac_decoder_linux.cc",
+      "a2dp/a2dp_aac_encoder_linux.cc",
       "a2dp/a2dp_vendor.cc",
-      "a2dp/a2dp_vendor_aptx.cc",
-      "a2dp/a2dp_vendor_aptx_encoder.cc",
-      "a2dp/a2dp_vendor_aptx_hd.cc",
-      "a2dp/a2dp_vendor_aptx_hd_encoder.cc",
-      "a2dp/a2dp_vendor_ldac.cc",
-      "a2dp/a2dp_vendor_ldac_decoder.cc",
-      "a2dp/a2dp_vendor_ldac_encoder.cc",
+      # Following are unimplemented
+      "a2dp/a2dp_vendor_aptx_linux.cc",
+      "a2dp/a2dp_vendor_aptx_hd_linux.cc",
+      "a2dp/a2dp_vendor_ldac_linux.cc",
+      "a2dp/a2dp_vendor_opus_linux.cc",
     ]
 
     include_dirs = [
@@ -48,14 +46,21 @@ source_set("nonstandard_codecs") {
       "//bt/system/btif/include",
       "//bt/system/internal_include",
       "//bt/system/stack/include",
+      "//bt/system/utils/include",
     ]
 
     deps = [ "//bt/system/gd/rust/shim:init_flags_bridge_header" ]
 
+    # b/289017207: external codec libs should not be directly linked
+    libs = [
+      # Following are for AAC using FFmpeg
+      "avcodec",
+      "avformat",
+      "avutil",
+    ]
+
     configs += [
       "//bt/system:target_defaults",
-      "//bt/system:external_libldac",
-      "//bt/system:external_aac",
     ]
   }
 }
