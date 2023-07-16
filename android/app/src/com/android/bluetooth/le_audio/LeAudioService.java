@@ -1143,7 +1143,6 @@ public class LeAudioService extends ProfileService {
                     + ". Currently active device is " + mActiveAudioOutDevice);
         }
 
-        mAdapterService.getActiveDeviceManager();
         Intent intent = new Intent(BluetoothLeAudio.ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -1326,6 +1325,12 @@ public class LeAudioService extends ProfileService {
 
             final boolean suppressNoisyIntent = hasFallbackDevice || mActiveAudioOutDevice != null;
 
+            Log.d(
+                    TAG,
+                    "suppressNoisyIntent: "
+                            + suppressNoisyIntent
+                            + ", hasFallbackDevice"
+                            + hasFallbackDevice);
             final BluetoothProfileConnectionInfo connectionInfo;
             if (isAtLeastU()) {
                 connectionInfo =
@@ -1377,9 +1382,16 @@ public class LeAudioService extends ProfileService {
 
         int currentlyActiveGroupId = getActiveGroupId();
         if (DBG) {
-            Log.d(TAG, "setActiveGroupWithDevice = " + groupId
-                    + ", currentlyActiveGroupId = " + currentlyActiveGroupId
-                    + ", device: " + device);
+            Log.d(
+                    TAG,
+                    "setActiveGroupWithDevice = "
+                            + groupId
+                            + ", currentlyActiveGroupId = "
+                            + currentlyActiveGroupId
+                            + ", device: "
+                            + device
+                            + ", hasFallbackDevice: "
+                            + hasFallbackDevice);
         }
 
         if (groupId == currentlyActiveGroupId) {
@@ -1412,6 +1424,9 @@ public class LeAudioService extends ProfileService {
      */
     public boolean removeActiveDevice(boolean hasFallbackDevice) {
         /* Clear active group */
+        if (DBG) {
+            Log.d(TAG, "removeActiveDevice, hasFallbackDevice " + hasFallbackDevice);
+        }
         setActiveGroupWithDevice(null, hasFallbackDevice);
         return true;
     }
