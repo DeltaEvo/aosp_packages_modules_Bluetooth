@@ -139,18 +139,6 @@ cc_library_static {
     include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
-// This library contains the generated headers for the
-// RootCanal configuration file / parameter.
-cc_library_static {
-    name: "librootcanal_config",
-    host_supported: true,
-    vendor_available: true,
-    proto: {
-        export_proto_headers: true,
-    },
-    srcs: ["config.proto"],
-}
-
 // This library implements a foreigh function interface over DualModeController
 // compatible with Python or Rust.
 cc_library_host_shared {
@@ -320,6 +308,7 @@ python_test_host {
         ":llcp_packets_python3_gen",
         "py/bluetooth.py",
         "py/controller.py",
+        "test/LL/*.py",
         "test/LL/CIS/CEN/*.py",
         "test/LL/CIS/PER/*.py",
         "test/LL/CON_/CEN/*.py",
@@ -349,7 +338,7 @@ python_test_host {
 cc_test_host {
     name: "rootcanal_test_host",
     defaults: [
-        "fluoride_common_options",
+        "bluetooth_cflags",
     ],
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
     isolated: false,

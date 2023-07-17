@@ -34,7 +34,6 @@ import androidx.test.filters.MediumTest;
 import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
@@ -50,7 +49,6 @@ import java.util.concurrent.TimeoutException;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -721,6 +719,11 @@ public class CsipSetCoordinatorServiceTest {
         @Override
         public void onReceive(Context context, Intent intent) {
             try {
+                /* Ignore intent when service is inactive */
+                if (mService == null) {
+                    return;
+                }
+
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 // Use first device's queue in case of no device in the intent
                 if (device == null) {

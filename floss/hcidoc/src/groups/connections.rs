@@ -6,12 +6,11 @@ use std::io::Write;
 
 use crate::engine::{Rule, RuleGroup, Signal};
 use crate::parser::{Packet, PacketChild};
-use bt_packets::custom_types::Address;
 use bt_packets::hci::{
-    AclCommandChild, AclPacket, CommandChild, CommandStatusPacket,
-    ConnectionManagementCommandChild, ErrorCode, EventChild, EventPacket,
-    LeConnectionManagementCommandChild, LeMetaEventChild, NumberOfCompletedPacketsPacket, OpCode,
-    ScoConnectionCommandChild, SecurityCommandChild, SubeventCode,
+    Acl, AclCommandChild, Address, CommandChild, CommandStatus, ConnectionManagementCommandChild,
+    DisconnectReason, ErrorCode, Event, EventChild, LeConnectionManagementCommandChild,
+    LeMetaEventChild, NumberOfCompletedPackets, OpCode, ScoConnectionCommandChild,
+    SecurityCommandChild, SubeventCode,
 };
 
 enum ConnectionSignal {
@@ -38,7 +37,7 @@ pub const INVALID_CONN_HANDLE: u16 = 0xfffeu16;
 
 /// When we attempt to create a sco connection on an unknown handle, use this address as
 /// a placeholder.
-pub const UNKNOWN_SCO_ADDRESS: Address = Address { bytes: [0xde, 0xad, 0xbe, 0xef, 0x00, 0x00] };
+pub const UNKNOWN_SCO_ADDRESS: [u8; 6] = [0xdeu8, 0xad, 0xbe, 0xef, 0x00, 0x00];
 
 /// Any outstanding NOCP or disconnection that is more than 5s away from the sent ACL packet should
 /// result in an NOCP signal being generated.
@@ -57,9 +56,6 @@ impl NocpData {
 
 /// Keeps track of connections and identifies odd disconnections.
 struct OddDisconnectionsRule {
-    /// Timestamp on first packet in current log.
-    start_of_log: Option<NaiveDateTime>,
-
     /// Handles that had successful complete connections. The value has the timestamp of the
     /// connection completion and the address of the device.
     active_handles: HashMap<ConnectionHandle, (NaiveDateTime, Address)>,
@@ -87,7 +83,6 @@ struct OddDisconnectionsRule {
 impl OddDisconnectionsRule {
     pub fn new() -> Self {
         OddDisconnectionsRule {
-            start_of_log: None,
             active_handles: HashMap::new(),
             connection_attempt: HashMap::new(),
             last_connection_attempt: None,
@@ -101,7 +96,7 @@ impl OddDisconnectionsRule {
         }
     }
 
-    pub fn process_classic_connection(
+    fn process_classic_connection(
         &mut self,
         conn: &ConnectionManagementCommandChild,
         packet: &Packet,
@@ -128,11 +123,7 @@ impl OddDisconnectionsRule {
         }
     }
 
-    pub fn process_sco_connection(
-        &mut self,
-        sco_conn: &ScoConnectionCommandChild,
-        packet: &Packet,
-    ) {
+    fn process_sco_connection(&mut self, sco_conn: &ScoConnectionCommandChild, packet: &Packet) {
         let handle = match sco_conn {
             ScoConnectionCommandChild::SetupSynchronousConnection(ssc) => {
                 ssc.get_connection_handle()
@@ -145,9 +136,10 @@ impl OddDisconnectionsRule {
             _ => INVALID_CONN_HANDLE,
         };
 
+        let unknown_address = Address::from(&UNKNOWN_SCO_ADDRESS);
         let address = match self.active_handles.get(&handle).as_ref() {
             Some((_ts, address)) => address,
-            None => &UNKNOWN_SCO_ADDRESS,
+            None => &unknown_address,
         };
 
         let has_existing = match sco_conn {
@@ -178,7 +170,7 @@ impl OddDisconnectionsRule {
         }
     }
 
-    pub fn process_le_conn_connection(
+    fn process_le_conn_connection(
         &mut self,
         le_conn: &LeConnectionManagementCommandChild,
         packet: &Packet,
@@ -206,7 +198,7 @@ impl OddDisconnectionsRule {
         }
     }
 
-    pub fn process_command_status(&mut self, cs: &CommandStatusPacket, packet: &Packet) {
+    fn process_command_status(&mut self, cs: &CommandStatus, packet: &Packet) {
         // Clear last connection attempt since it was successful.
         let last_address = match cs.get_command_op_code() {
             OpCode::CreateConnection | OpCode::AcceptConnectionRequest => {
@@ -264,7 +256,7 @@ impl OddDisconnectionsRule {
         }
     }
 
-    pub fn process_event(&mut self, ev: &EventPacket, packet: &Packet) {
+    fn process_event(&mut self, ev: &Event, packet: &Packet) {
         match ev.specialize() {
             EventChild::ConnectionComplete(cc) => {
                 match self.connection_attempt.remove(&cc.get_bd_addr()) {
@@ -322,16 +314,8 @@ impl OddDisconnectionsRule {
                         }
                     }
 
-                    None => {
-                        self.reportable.push((
-                            packet.ts,
-                            format!(
-                                "DisconnectionComplete for unknown handle {} with status={:?}",
-                                dsc.get_connection_handle(),
-                                dsc.get_status()
-                            ),
-                        ));
-                    }
+                    // No issue if none, probably device is connected before snoop started.
+                    None => (),
                 }
 
                 // Remove nocp information for handles that were removed.
@@ -413,7 +397,7 @@ impl OddDisconnectionsRule {
         }
     }
 
-    pub fn process_acl_tx(&mut self, acl_tx: &AclPacket, packet: &Packet) {
+    fn process_acl_tx(&mut self, acl_tx: &Acl, packet: &Packet) {
         let handle = acl_tx.get_handle();
 
         // Insert empty Nocp data for handle if it doesn't exist.
@@ -426,7 +410,7 @@ impl OddDisconnectionsRule {
         }
     }
 
-    pub fn process_nocp(&mut self, nocp: &NumberOfCompletedPacketsPacket, packet: &Packet) {
+    fn process_nocp(&mut self, nocp: &NumberOfCompletedPackets, packet: &Packet) {
         let ts = &packet.ts;
         for completed_packet in nocp.get_completed_packets() {
             let handle = completed_packet.connection_handle;
@@ -456,28 +440,52 @@ impl OddDisconnectionsRule {
             }
         }
     }
+
+    fn process_reset(&mut self) {
+        self.active_handles.clear();
+        self.connection_attempt.clear();
+        self.last_connection_attempt = None;
+        self.le_connection_attempt.clear();
+        self.last_le_connection_attempt = None;
+        self.sco_connection_attempt.clear();
+        self.last_sco_connection_attempt = None;
+        self.nocp_by_handle.clear();
+    }
 }
 
 impl Rule for OddDisconnectionsRule {
     fn process(&mut self, packet: &Packet) {
-        if self.start_of_log.is_none() {
-            self.start_of_log = Some(packet.ts.clone());
-        }
-
         match &packet.inner {
             PacketChild::HciCommand(cmd) => match cmd.specialize() {
                 CommandChild::AclCommand(aclpkt) => match aclpkt.specialize() {
                     AclCommandChild::ConnectionManagementCommand(conn) => {
-                        self.process_classic_connection(&conn.specialize(), packet)
+                        self.process_classic_connection(&conn.specialize(), packet);
                     }
                     AclCommandChild::ScoConnectionCommand(sco_conn) => {
-                        self.process_sco_connection(&sco_conn.specialize(), packet)
+                        self.process_sco_connection(&sco_conn.specialize(), packet);
                     }
                     AclCommandChild::LeConnectionManagementCommand(le_conn) => {
-                        self.process_le_conn_connection(&le_conn.specialize(), packet)
+                        self.process_le_conn_connection(&le_conn.specialize(), packet);
                     }
+                    AclCommandChild::Disconnect(dc_conn) => {
+                        // If reason is power off, the host might not wait for connection complete event
+                        if dc_conn.get_reason()
+                            == DisconnectReason::RemoteDeviceTerminatedConnectionPowerOff
+                        {
+                            let handle = dc_conn.get_connection_handle();
+                            self.active_handles.remove(&handle);
+                            self.nocp_by_handle.remove(&handle);
+                        }
+                    }
+
+                    // end acl pkt
                     _ => (),
                 },
+                CommandChild::Reset(_) => {
+                    self.process_reset();
+                }
+
+                // end hci command
                 _ => (),
             },
 
@@ -493,6 +501,8 @@ impl Rule for OddDisconnectionsRule {
                     | OpCode::LeExtendedCreateConnection => {
                         self.process_command_status(&cs, packet);
                     }
+
+                    // end command status
                     _ => (),
                 },
 
@@ -513,6 +523,7 @@ impl Rule for OddDisconnectionsRule {
                     self.process_nocp(&nocp, packet);
                 }
 
+                // end hci event
                 _ => (),
             },
 
@@ -639,6 +650,23 @@ impl Rule for LinkKeyMismatchRule {
             },
 
             PacketChild::HciCommand(cmd) => match cmd.specialize() {
+                CommandChild::AclCommand(cmd) => match cmd.specialize() {
+                    AclCommandChild::Disconnect(cmd) => {
+                        // If reason is power off, the host might not wait for connection complete event
+                        if cmd.get_reason()
+                            == DisconnectReason::RemoteDeviceTerminatedConnectionPowerOff
+                        {
+                            if let Some(address) = self.handles.remove(&cmd.get_connection_handle())
+                            {
+                                self.states.remove(&address);
+                            }
+                        }
+                    }
+
+                    // CommandChild::AclCommand(cmd).specialize()
+                    _ => {}
+                },
+
                 CommandChild::SecurityCommand(cmd) => match cmd.specialize() {
                     SecurityCommandChild::LinkKeyRequestReply(cmd) => {
                         let address = cmd.get_bd_addr();
@@ -654,6 +682,11 @@ impl Rule for LinkKeyMismatchRule {
                     // CommandChild::SecurityCommand(cmd).specialize()
                     _ => {}
                 },
+
+                CommandChild::Reset(_) => {
+                    self.states.clear();
+                    self.handles.clear();
+                }
 
                 // PacketChild::HciCommand(cmd).specialize()
                 _ => {}

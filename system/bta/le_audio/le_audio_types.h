@@ -350,6 +350,7 @@ enum class AudioStreamDataPathState {
   CIS_PENDING,
   CIS_ESTABLISHED,
   DATA_PATH_ESTABLISHED,
+  DATA_PATH_REMOVING,
 };
 
 enum class CisType {
@@ -524,6 +525,20 @@ constexpr AudioContexts kLeAudioContextAllTypes =
     LeAudioContextType::LIVE | LeAudioContextType::SOUNDEFFECTS |
     LeAudioContextType::NOTIFICATIONS | LeAudioContextType::RINGTONE |
     LeAudioContextType::ALERTS | LeAudioContextType::EMERGENCYALARM;
+
+constexpr AudioContexts kLeAudioContextAllBidir =
+    LeAudioContextType::GAME | LeAudioContextType::LIVE |
+    LeAudioContextType::CONVERSATIONAL | LeAudioContextType::VOICEASSISTANTS;
+
+constexpr AudioContexts kLeAudioContextAllRemoteSource =
+    LeAudioContextType::GAME | LeAudioContextType::LIVE |
+    LeAudioContextType::CONVERSATIONAL | LeAudioContextType::VOICEASSISTANTS;
+
+constexpr AudioContexts kLeAudioContextAllRemoteSinkOnly =
+    LeAudioContextType::MEDIA | LeAudioContextType::INSTRUCTIONAL |
+    LeAudioContextType::SOUNDEFFECTS | LeAudioContextType::NOTIFICATIONS |
+    LeAudioContextType::RINGTONE | LeAudioContextType::ALERTS |
+    LeAudioContextType::EMERGENCYALARM;
 
 /* Print formaters for LTV data */
 std::string CodecCapabilitiesLtvFormat(const uint8_t& type,

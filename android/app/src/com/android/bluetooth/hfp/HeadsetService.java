@@ -20,6 +20,7 @@ import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
 
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
+import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -1174,6 +1175,11 @@ public class HeadsetService extends ProfileService {
                 Log.w(TAG, "startVoiceRecognition: " + device + " is not connected or connecting");
                 return false;
             }
+            if (SystemProperties.getBoolean(REJECT_SCO_IF_HFPC_CONNECTED_PROPERTY, false)
+                    && isHeadsetClientConnected()) {
+                Log.w(TAG, "startVoiceRecognition: rejected SCO since HFPC is connected!");
+                return false;
+            }
             mVoiceRecognitionStarted = true;
             if (pendingRequestByHeadset) {
                 stateMachine.sendMessage(HeadsetStateMachine.VOICE_RECOGNITION_RESULT,
@@ -1586,6 +1592,11 @@ public class HeadsetService extends ProfileService {
                 Log.w(TAG, "startScoUsingVirtualVoiceCall: no active device");
                 return false;
             }
+            if (SystemProperties.getBoolean(REJECT_SCO_IF_HFPC_CONNECTED_PROPERTY, false)
+                    && isHeadsetClientConnected()) {
+                Log.w(TAG, "startScoUsingVirtualVoiceCall: rejected SCO since HFPC is connected!");
+                return false;
+            }
             mVirtualCallStarted = true;
             // Send virtual phone state changed to initialize SCO
             phoneStateChanged(0, 0, HeadsetHalConstants.CALL_STATE_DIALING, "", 0, "", true);
@@ -1759,6 +1770,11 @@ public class HeadsetService extends ProfileService {
                 Log.w(TAG, "startVoiceRecognitionByHeadset: failed request from " + fromDevice);
                 return false;
             }
+            if (SystemProperties.getBoolean(REJECT_SCO_IF_HFPC_CONNECTED_PROPERTY, false)
+                    && isHeadsetClientConnected()) {
+                Log.w(TAG, "startVoiceRecognitionByHeadset: rejected SCO since HFPC is connected!");
+                return false;
+            }
             mVoiceRecognitionTimeoutEvent = new VoiceRecognitionTimeoutEvent(fromDevice);
             getStateMachinesThreadHandler()
                     .postDelayed(mVoiceRecognitionTimeoutEvent, sStartVrTimeoutMs);
@@ -1852,7 +1868,9 @@ public class HeadsetService extends ProfileService {
             if (mActiveDevice != null && callState != HeadsetHalConstants.CALL_STATE_DISCONNECTED
                     && !mSystemInterface.isCallIdle() && isCallIdleBefore) {
                 mSystemInterface.getAudioManager().setA2dpSuspended(true);
-                mSystemInterface.getAudioManager().setLeAudioSuspended(true);
+                if (isAtLeastU()) {
+                    mSystemInterface.getAudioManager().setLeAudioSuspended(true);
+                }
             }
         });
         doForEachConnectedStateMachine(
@@ -1863,7 +1881,9 @@ public class HeadsetService extends ProfileService {
                     && mSystemInterface.isCallIdle() && !isAudioOn()) {
                 // Resume A2DP when call ended and SCO is not connected
                 mSystemInterface.getAudioManager().setA2dpSuspended(false);
-                mSystemInterface.getAudioManager().setLeAudioSuspended(false);
+                if (isAtLeastU()) {
+                    mSystemInterface.getAudioManager().setLeAudioSuspended(false);
+                }
             }
         });
         if (callState == HeadsetHalConstants.CALL_STATE_IDLE) {
@@ -1984,6 +2004,9 @@ public class HeadsetService extends ProfileService {
                 setActiveDevice(null);
             }
         }
+        mAdapterService
+                .getActiveDeviceManager()
+                .hfpConnectionStateChanged(device, fromState, toState);
     }
 
     /**
@@ -2099,7 +2122,9 @@ public class HeadsetService extends ProfileService {
                 // Unsuspend A2DP when SCO connection is gone and call state is idle
                 if (mSystemInterface.isCallIdle()) {
                     mSystemInterface.getAudioManager().setA2dpSuspended(false);
-                    mSystemInterface.getAudioManager().setLeAudioSuspended(false);
+                    if (isAtLeastU()) {
+                        mSystemInterface.getAudioManager().setLeAudioSuspended(false);
+                    }
                 }
             }
         }
@@ -2107,6 +2132,7 @@ public class HeadsetService extends ProfileService {
 
     private void broadcastActiveDevice(BluetoothDevice device) {
         logD("broadcastActiveDevice: " + device);
+        mAdapterService.getActiveDeviceManager().hfpActiveStateChanged(device);
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED,
                 BluetoothProfile.HEADSET, mAdapterService.obfuscateAddress(device),
                 mAdapterService.getMetricId(device));
