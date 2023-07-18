@@ -754,8 +754,6 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
       btm_cb.cmn_ble_vsc_cb.energy_support,
       btm_cb.cmn_ble_vsc_cb.extended_scan_support);
 
-  btm_ble_adv_init();
-
   if (btm_cb.cmn_ble_vsc_cb.max_filter > 0) btm_ble_adv_filter_init();
 
   /* VS capability included and non-4.2 device */
@@ -2833,7 +2831,7 @@ void btm_ble_process_adv_pkt_cont(uint16_t evt_type, tBLE_ADDR_TYPE addr_type,
   /* If existing entry, use that, else get  a new one (possibly reusing the
    * oldest) */
   if (p_i == NULL) {
-    p_i = btm_inq_db_new(bda);
+    p_i = btm_inq_db_new(bda, true);
     if (p_i != NULL) {
       p_inq->inq_cmpl_info.num_resp++;
       p_i->time_of_resp = bluetooth::common::time_get_os_boottime_ms();
@@ -2939,7 +2937,7 @@ void btm_ble_process_adv_pkt_cont_for_inquiry(
   /* If existing entry, use that, else get  a new one (possibly reusing the
    * oldest) */
   if (p_i == NULL) {
-    p_i = btm_inq_db_new(bda);
+    p_i = btm_inq_db_new(bda, true);
     if (p_i != NULL) {
       p_inq->inq_cmpl_info.num_resp++;
       p_i->time_of_resp = bluetooth::common::time_get_os_boottime_ms();
