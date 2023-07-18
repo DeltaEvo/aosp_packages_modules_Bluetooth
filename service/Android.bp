@@ -21,8 +21,10 @@ filegroup {
     srcs: [
         ":statslog-bluetooth-java-gen",
         "src/**/*.java",
+        "src/AdapterState.kt",
         "src/RadioModeListener.kt",
         "src/com/**/*.kt",
+        "src/satellite/ModeListener.kt",
     ],
     visibility: [":__subpackages__"],
 }
@@ -159,12 +161,18 @@ android_robolectric_test {
     instrumentation_for: "ServiceBluetoothFakeTestApp",
 
     srcs: [
+        "src/AdapterState.kt",
+        "src/AdapterStateTest.kt",
         "src/RadioModeListener.kt",
         "src/RadioModeListenerTest.kt",
+        "src/satellite/ModeListener.kt",
+        "src/satellite/ModeListenerTest.kt",
     ],
 
     static_libs: [
         "androidx.test.core",
+        "kotlinx_coroutines",
+        "kotlinx_coroutines_test",
         "mockito-robolectric-prebuilt",
         "platform-test-annotations",
         "testng",
