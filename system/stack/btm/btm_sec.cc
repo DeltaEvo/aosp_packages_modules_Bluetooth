@@ -54,7 +54,6 @@
 #include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2cap_security_interface.h"
 #include "stack/include/stack_metrics_logging.h"
-#include "stack/smp/smp_int.h"
 #include "types/raw_address.h"
 
 namespace {
@@ -1492,6 +1491,18 @@ tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures(const RawAddress& bd_addr) {
     }
   }
   return BT_DEVICE_TYPE_BREDR;
+}
+
+/*******************************************************************************
+ *
+ * Function         BTM_GetInitialSecurityMode
+ *
+ * Description      This function is called to retrieve the configured
+ *                  security mode.
+ *
+ ******************************************************************************/
+uint8_t BTM_GetSecurityMode() {
+  return btm_cb.security_mode;
 }
 
 /************************************************************************
