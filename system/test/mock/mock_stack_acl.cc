@@ -124,20 +124,15 @@ struct acl_send_data_packet_ble acl_send_data_packet_ble;
 struct acl_set_disconnect_reason acl_set_disconnect_reason;
 struct acl_write_automatic_flush_timeout acl_write_automatic_flush_timeout;
 struct btm_acl_connected btm_acl_connected;
-struct btm_acl_connection_request btm_acl_connection_request;
 struct btm_acl_created btm_acl_created;
 struct btm_acl_device_down btm_acl_device_down;
 struct btm_acl_disconnected btm_acl_disconnected;
 struct btm_acl_iso_disconnected btm_acl_iso_disconnected;
 struct btm_acl_encrypt_change btm_acl_encrypt_change;
 struct btm_acl_notif_conn_collision btm_acl_notif_conn_collision;
-struct btm_acl_paging btm_acl_paging;
 struct btm_acl_process_sca_cmpl_pkt btm_acl_process_sca_cmpl_pkt;
 struct btm_acl_removed btm_acl_removed;
-struct btm_acl_reset_paging btm_acl_reset_paging;
-struct btm_acl_resubmit_page btm_acl_resubmit_page;
 struct btm_acl_role_changed btm_acl_role_changed;
-struct btm_acl_set_paging btm_acl_set_paging;
 struct btm_acl_update_conn_addr btm_acl_update_conn_addr;
 struct btm_configure_data_path btm_configure_data_path;
 struct btm_acl_update_inquiry_status btm_acl_update_inquiry_status;
@@ -520,10 +515,6 @@ void btm_acl_connected(const RawAddress& bda, uint16_t handle,
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_acl_connected(bda, handle, status, enc_mode);
 }
-void btm_acl_connection_request(const RawAddress& bda, uint8_t* dc) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_acl_connection_request(bda, dc);
-}
 void btm_acl_created(const RawAddress& bda, uint16_t hci_handle,
                      tHCI_ROLE link_role, tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);
@@ -551,10 +542,6 @@ void btm_acl_notif_conn_collision(const RawAddress& bda) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_acl_notif_conn_collision(bda);
 }
-void btm_acl_paging(BT_HDR* p, const RawAddress& bda) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_acl_paging(p, bda);
-}
 void btm_acl_process_sca_cmpl_pkt(uint8_t len, uint8_t* data) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_acl_process_sca_cmpl_pkt(len, data);
@@ -563,22 +550,10 @@ void btm_acl_removed(uint16_t handle) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_acl_removed(handle);
 }
-void btm_acl_reset_paging(void) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_acl_reset_paging();
-}
-void btm_acl_resubmit_page(void) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_acl_resubmit_page();
-}
 void btm_acl_role_changed(tHCI_STATUS hci_status, const RawAddress& bd_addr,
                           tHCI_ROLE new_role) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_acl_role_changed(hci_status, bd_addr, new_role);
-}
-void btm_acl_set_paging(bool value) {
-  inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_acl_set_paging(value);
 }
 void btm_acl_update_conn_addr(uint16_t handle, const RawAddress& address) {
   inc_func_call_count(__func__);
@@ -635,9 +610,9 @@ void btm_read_failed_contact_counter_timeout(UNUSED_ATTR void* data) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_read_failed_contact_counter_timeout(data);
 }
-void btm_read_link_quality_complete(uint8_t* p) {
+void btm_read_link_quality_complete(uint8_t* p, uint16_t evt_len) {
   inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_read_link_quality_complete(p);
+  test::mock::stack_acl::btm_read_link_quality_complete(p, evt_len);
 }
 void btm_read_link_quality_timeout(UNUSED_ATTR void* data) {
   inc_func_call_count(__func__);
@@ -674,17 +649,17 @@ void btm_read_remote_version_complete(tHCI_STATUS status, uint16_t handle,
   test::mock::stack_acl::btm_read_remote_version_complete(
       status, handle, lmp_version, manufacturer, lmp_subversion);
 }
-void btm_read_rssi_complete(uint8_t* p) {
+void btm_read_rssi_complete(uint8_t* p, uint16_t evt_len) {
   inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_read_rssi_complete(p);
+  test::mock::stack_acl::btm_read_rssi_complete(p, evt_len);
 }
 void btm_read_rssi_timeout(UNUSED_ATTR void* data) {
   inc_func_call_count(__func__);
   test::mock::stack_acl::btm_read_rssi_timeout(data);
 }
-void btm_read_tx_power_complete(uint8_t* p, bool is_ble) {
+void btm_read_tx_power_complete(uint8_t* p, uint16_t evt_len, bool is_ble) {
   inc_func_call_count(__func__);
-  test::mock::stack_acl::btm_read_tx_power_complete(p, is_ble);
+  test::mock::stack_acl::btm_read_tx_power_complete(p, evt_len, is_ble);
 }
 void btm_read_tx_power_timeout(UNUSED_ATTR void* data) {
   inc_func_call_count(__func__);

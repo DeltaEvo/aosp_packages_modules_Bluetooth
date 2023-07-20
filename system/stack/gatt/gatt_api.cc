@@ -723,8 +723,8 @@ tGATT_STATUS GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu) {
 
   /* Since GATT MTU Exchange can be done only once, and it is impossible to
    * predict what MTU will be requested by other applications, let's use
-   * max possible MTU in the request. */
-  gatt_cl_msg.mtu = GATT_MAX_MTU_SIZE;
+   * default MTU in the request. */
+  gatt_cl_msg.mtu = gatt_get_local_mtu();
 
   LOG_INFO("Configuring ATT mtu size conn_id:%hu mtu:%hu user mtu %hu", conn_id,
            gatt_cl_msg.mtu, mtu);
@@ -1688,7 +1688,8 @@ void gatt_load_bonded(void) {
       gatt_bonded_check_add_address(p_dev_rec->bd_addr);
     }
     if (p_dev_rec->is_le_link_key_known()) {
-      VLOG(1) << " add bonded BLE " << p_dev_rec->ble.pseudo_addr;
+      VLOG(1) << " add bonded BLE "
+              << ADDRESS_TO_LOGGABLE_STR(p_dev_rec->ble.pseudo_addr);
       LOG_VERBOSE("Add bonded BLE %s",
                   ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->ble.pseudo_addr));
       gatt_bonded_check_add_address(p_dev_rec->ble.pseudo_addr);

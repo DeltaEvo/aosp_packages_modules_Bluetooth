@@ -108,6 +108,7 @@ cc_library_static {
         "le_audio/content_control_id_keeper.cc",
         "le_audio/devices.cc",
         "le_audio/hal_verifier.cc",
+        "le_audio/le_audio_health_status.cc",
         "le_audio/le_audio_log_history.cc",
         "le_audio/le_audio_set_configuration_provider.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
@@ -307,6 +308,7 @@ cc_test {
         "BluetoothGeneratedPackets_h",
     ],
     srcs: [
+        ":BtaDmSources",
         ":LegacyStackSdp",
         ":OsiCompatSources",
         ":TestCommonLogMsg",
@@ -332,18 +334,21 @@ cc_test {
         ":TestMockStackMetrics",
         ":TestMockStackPan",
         ":TestMockStackRfcomm",
+        "ag/bta_ag_act.cc",
+        "ag/bta_ag_api.cc",
+        "ag/bta_ag_at.cc",
+        "ag/bta_ag_cfg.cc",
+        "ag/bta_ag_cmd.cc",
+        "ag/bta_ag_main.cc",
+        "ag/bta_ag_rfc.cc",
+        "ag/bta_ag_sco.cc",
+        "ag/bta_ag_sdp.cc",
         "ar/bta_ar.cc",
         "av/bta_av_aact.cc",
         "av/bta_av_act.cc",
         "av/bta_av_cfg.cc",
         "av/bta_av_main.cc",
         "av/bta_av_ssm.cc",
-        "dm/bta_dm_act.cc",
-        "dm/bta_dm_api.cc",
-        "dm/bta_dm_cfg.cc",
-        "dm/bta_dm_ci.cc",
-        "dm/bta_dm_main.cc",
-        "dm/bta_dm_pm.cc",
         "gatt/bta_gattc_act.cc",
         "gatt/bta_gattc_api.cc",
         "gatt/bta_gattc_cache.cc",
@@ -374,6 +379,7 @@ cc_test {
         "sys/bta_sys_conn.cc",
         "sys/bta_sys_main.cc",
         "sys/utl.cc",
+        "test/bta_ag_sco_test.cc",
         "test/bta_api_test.cc",
         "test/bta_av_test.cc",
         "test/bta_dm_cust_uuid_test.cc",
@@ -386,6 +392,7 @@ cc_test {
     shared_libs: [
         "libbase",
         "libcrypto",
+        "libcutils",
         "liblog",
     ],
     static_libs: [
@@ -404,6 +411,13 @@ cc_test {
         address: true,
         cfi: true,
         misc_undefined: ["bounds"],
+    },
+    target: {
+        android: {
+            whole_static_libs: [
+                "libPlatformProperties",
+            ],
+        },
     },
 }
 
@@ -672,6 +686,7 @@ cc_test {
         "le_audio/content_control_id_keeper_test.cc",
         "le_audio/devices.cc",
         "le_audio/devices_test.cc",
+        "le_audio/le_audio_health_status.cc",
         "le_audio/le_audio_log_history.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
         "le_audio/le_audio_types.cc",
@@ -748,6 +763,7 @@ cc_test {
         "le_audio/content_control_id_keeper.cc",
         "le_audio/devices.cc",
         "le_audio/le_audio_client_test.cc",
+        "le_audio/le_audio_health_status.cc",
         "le_audio/le_audio_log_history.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
         "le_audio/le_audio_types.cc",
@@ -803,6 +819,50 @@ cc_test {
             ],
         },
     },
+    sanitize: {
+        cfi: true,
+        scs: true,
+        address: true,
+        all_undefined: true,
+        integer_overflow: true,
+        diag: {
+            undefined: true,
+        },
+    },
+}
+
+// health status unit tests for host
+cc_test {
+    name: "bluetooth_le_audio_health_status_test",
+    test_suites: ["device-tests"],
+    defaults: [
+        "bluetooth_gtest_x86_asan_workaround",
+        "fluoride_bta_defaults",
+        "mts_defaults",
+    ],
+    host_supported: true,
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/bta/include",
+    ],
+    srcs: [
+        ":TestCommonMockFunctions",
+        //":TestMockBtif",
+        "le_audio/le_audio_health_status.cc",
+        "le_audio/le_audio_health_status_test.cc",
+    ],
+    shared_libs: [
+        "libcrypto",
+        "liblog",
+    ],
+    static_libs: [
+        "crypto_toolbox_for_tests",
+        "libbt-common",
+        "libbt-protos-lite",
+        "libchrome",
+        "libgmock",
+        "libosi",
+    ],
     sanitize: {
         cfi: true,
         scs: true,
@@ -1010,6 +1070,7 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
+        ":BtaDmSources",
         ":TestCommonLogMsg",
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
@@ -1021,11 +1082,6 @@ cc_test {
         ":TestMockMainShim",
         ":TestMockOsi",
         ":TestMockStack",
-        "dm/bta_dm_act.cc",
-        "dm/bta_dm_cfg.cc",
-        "dm/bta_dm_ci.cc",
-        "dm/bta_dm_main.cc",
-        "dm/bta_dm_pm.cc",
         "gatt/bta_gattc_queue.cc",
         "hh/bta_hh_act.cc",
         "hh/bta_hh_api.cc",

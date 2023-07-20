@@ -32,6 +32,7 @@
 #include "bt_target.h"
 #include "btm_ble_api.h"
 #include "btu.h"
+#include "common/init_flags.h"
 #include "gatt_api.h"
 #include "osi/include/fixed_queue.h"
 #include "stack/include/bt_hdr.h"
@@ -530,6 +531,7 @@ tGATT_STATUS attp_send_msg_to_l2cap(tGATT_TCB& tcb, uint16_t cid,
                                     BT_HDR* p_toL2CAP);
 
 /* utility functions */
+uint16_t gatt_get_local_mtu(void);
 uint8_t* gatt_dbg_op_name(uint8_t op_code);
 uint32_t gatt_add_sdp_record(const bluetooth::Uuid& uuid, uint16_t start_hdl,
                              uint16_t end_hdl);
@@ -650,7 +652,7 @@ void gatt_act_discovery(tGATT_CLCB* p_clcb);
 void gatt_act_read(tGATT_CLCB* p_clcb, uint16_t offset);
 void gatt_act_write(tGATT_CLCB* p_clcb, uint8_t sec_act);
 tGATT_CLCB* gatt_cmd_dequeue(tGATT_TCB& tcb, uint16_t cid, uint8_t* p_opcode);
-void gatt_cmd_enq(tGATT_TCB& tcb, tGATT_CLCB* p_clcb, bool to_send,
+bool gatt_cmd_enq(tGATT_TCB& tcb, tGATT_CLCB* p_clcb, bool to_send,
                   uint8_t op_code, BT_HDR* p_buf);
 void gatt_client_handle_server_rsp(tGATT_TCB& tcb, uint16_t cid,
                                    uint8_t op_code, uint16_t len,

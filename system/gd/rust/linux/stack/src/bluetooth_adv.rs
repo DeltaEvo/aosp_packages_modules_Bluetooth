@@ -396,6 +396,11 @@ pub(crate) struct AdvertisingSetInfo {
     /// Whether the advertising set has been paused.
     paused: bool,
 
+    /// Whether the stop of advertising set is held.
+    /// This happens when an advertising set is stopped when the system is suspending.
+    /// The advertising set will be stopped on system resumed.
+    stopped: bool,
+
     /// Advertising duration, in 10 ms unit.
     adv_timeout: u16,
 
@@ -424,6 +429,7 @@ impl AdvertisingSetInfo {
             reg_id,
             enabled: false,
             paused: false,
+            stopped: false,
             adv_timeout,
             adv_events,
             legacy,
@@ -469,6 +475,16 @@ impl AdvertisingSetInfo {
     /// Returns true if the advertising set has been paused, false otherwise.
     pub(crate) fn is_paused(&self) -> bool {
         self.paused
+    }
+
+    /// Marks the advertising set as stopped.
+    pub(crate) fn set_stopped(&mut self) {
+        self.stopped = true;
+    }
+
+    /// Returns true if the advertising set has been stopped, false otherwise.
+    pub(crate) fn is_stopped(&self) -> bool {
+        self.stopped
     }
 
     /// Gets adv_timeout.
@@ -533,6 +549,11 @@ impl Advertisers {
     /// Returns a mutable iterator of paused advertising sets.
     pub(crate) fn paused_sets_mut(&mut self) -> impl Iterator<Item = &mut AdvertisingSetInfo> {
         self.valid_sets_mut().filter(|s| s.is_paused())
+    }
+
+    /// Returns an iterator of stopped advertising sets.
+    pub(crate) fn stopped_sets(&self) -> impl Iterator<Item = &AdvertisingSetInfo> {
+        self.valid_sets().filter(|s| s.is_stopped())
     }
 
     fn find_reg_id(&self, adv_id: AdvertiserId) -> Option<RegId> {
@@ -676,7 +697,7 @@ mod tests {
     fn test_new_advising_set_info() {
         let mut uniq = HashSet::new();
         for callback_id in 0..256 {
-            let s = AdvertisingSetInfo::new(callback_id, 0, 0);
+            let s = AdvertisingSetInfo::new(callback_id, 0, 0, false);
             assert_eq!(s.callback_id(), callback_id);
             assert_eq!(uniq.insert(s.reg_id()), true);
         }
@@ -691,7 +712,7 @@ mod tests {
         for i in 0..size {
             let callback_id: CallbackId = i as CallbackId;
             let adv_id: AdvertiserId = i as AdvertiserId;
-            let mut s = AdvertisingSetInfo::new(callback_id, 0, 0);
+            let mut s = AdvertisingSetInfo::new(callback_id, 0, 0, false);
             s.set_adv_id(Some(adv_id));
             advertisers.add(s);
         }

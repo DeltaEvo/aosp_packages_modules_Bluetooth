@@ -1,3 +1,17 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import hci_packets as hci
 import link_layer_packets as ll
 import llcp_packets as llcp
@@ -21,8 +35,8 @@ class Test(ControllerTest):
     Max_SDU_P_TO_C = 16
     PHY_C_TO_P = 0x1
     PHY_P_TO_C = 0x1
-    Max_Transport_Latency_C_TO_P = 60000  # 60ms
-    Max_Transport_Latency_P_TO_C = 60000  # 60ms
+    Max_Transport_Latency_C_TO_P = 60  # 60ms
+    Max_Transport_Latency_P_TO_C = 60  # 60ms
     RTN_C_TO_P = 3
     RTN_P_TO_C = 3
 

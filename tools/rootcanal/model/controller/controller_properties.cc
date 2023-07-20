@@ -1,5 +1,6 @@
 /*
  * Copyright 2015 The Android Open Source Project
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -386,8 +387,8 @@ static std::array<uint8_t, 64> SupportedCommands() {
       // OpCodeIndex::LE_TERMINATE_BIG,
       // OpCodeIndex::LE_BIG_CREATE_SYNC,
       // OpCodeIndex::LE_BIG_TERMINATE_SYNC,
-      // OpCodeIndex::LE_REQUEST_PEER_SCA,
-      OpCodeIndex::LE_SETUP_ISO_DATA_PATH, OpCodeIndex::LE_REMOVE_ISO_DATA_PATH,
+      OpCodeIndex::LE_REQUEST_PEER_SCA, OpCodeIndex::LE_SETUP_ISO_DATA_PATH,
+      OpCodeIndex::LE_REMOVE_ISO_DATA_PATH,
       // OpCodeIndex::LE_ISO_TRANSMIT_TEST,
       // OpCodeIndex::LE_ISO_RECEIVE_TEST,
       // OpCodeIndex::LE_ISO_READ_TEST_COUNTERS,
@@ -957,7 +958,8 @@ bool ControllerProperties::CheckSupportedCommands() const {
   auto c36 = mandatory;
   // C37: Mandatory if the LE Controller can change its sleep clock accuracy,
   // otherwise excluded.
-  auto c37 = excluded;
+  auto c37 = mandatory_or_excluded(
+      SupportsLLFeature(LLFeaturesBits::SLEEP_CLOCK_ACCURACY_UPDATES));
   // C38: Mandatory if LE Feature (Connected Isochronous Stream - Central) or
   // LE Feature (Connected Isochronous Stream - Peripheral) is supported,
   // otherwise excluded.
@@ -1099,7 +1101,7 @@ bool ControllerProperties::CheckSupportedCommands() const {
   //
   // C96: Optional if the LE Controller supports Connection State,
   // otherwise excluded.
-  auto c96 = mandatory;
+  auto c96 = optional;
   // C97: Mandatory if Advertising State is supported, otherwise excluded.
   auto c97 = mandatory;
   // C98: Mandatory if Scanning State is supported, otherwise excluded.
@@ -1802,6 +1804,7 @@ static std::vector<OpCodeIndex> ll_connected_isochronous_stream_commands_ = {
     OpCodeIndex::LE_REJECT_CIS_REQUEST,
     OpCodeIndex::LE_SETUP_ISO_DATA_PATH,
     OpCodeIndex::LE_REMOVE_ISO_DATA_PATH,
+    OpCodeIndex::LE_REQUEST_PEER_SCA,
 };
 
 static void SetLLFeatureBit(uint64_t& le_features, LLFeaturesBits bit,
@@ -1839,6 +1842,68 @@ ControllerProperties::ControllerProperties(
     switch (config.preset()) {
       case ControllerPreset::DEFAULT:
         break;
+
+      case ControllerPreset::LAIRD_BL654:
+        // Configuration extracted with the helper script controller_info.py
+        br_supported = false;
+        le_supported = true;
+        hci_version = bluetooth::hci::HciVersion::V_5_4;
+        hci_subversion = 0x5ad2;
+        lmp_version = bluetooth::hci::LmpVersion::V_5_4;
+        lmp_subversion = 0x5ad2;
+        company_identifier = 0x7e8;
+        supported_commands = std::array<uint8_t, 64>{
+            0x20, 0x00, 0x80, 0x00, 0x00, 0xc0, 0x00, 0x0c, 0x00, 0x00, 0x04,
+            0x00, 0x00, 0x00, 0x28, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x00, 0xf7, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x30,
+            0xf0, 0xff, 0xff, 0xff, 0xff, 0xff, 0x1f, 0xe0, 0xf7, 0xff, 0xff,
+            0xff, 0xc1, 0xe3, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        };
+        lmp_features = std::array<uint64_t, 3> { 0x6000000000, 0x0, 0x0 };
+        le_features = 0x19beff017fff;
+        le_acl_data_packet_length = 512;
+        total_num_le_acl_data_packets = 4;
+        iso_data_packet_length = 512;
+        total_num_iso_data_packets = 5;
+        le_filter_accept_list_size = 4;
+        le_resolving_list_size = 4;
+        le_supported_states = 0x3ffffffffff;
+        le_max_advertising_data_length = 256;
+        le_num_supported_advertising_sets = 4;
+        le_periodic_advertiser_list_size = 4;
+        break;
+
+      case ControllerPreset::CSR_RCK_PTS_DONGLE:
+        // Configuration extracted with the helper script controller_info.py
+        br_supported = true;
+        le_supported = true;
+        hci_version = bluetooth::hci::HciVersion::V_4_2;
+        hci_subversion = 0x30e8;
+        lmp_version = bluetooth::hci::LmpVersion::V_4_2;
+        lmp_subversion = 0x30e8;
+        company_identifier = 0xa;
+        supported_commands = std::array<uint8_t, 64> {
+            0xff, 0xff, 0xff, 0x03, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xf3, 0x0f, 0xe8, 0xfe, 0x3f, 0xf7, 0x83, 0xff, 0x1c, 0x00,
+            0x04, 0x00, 0x61, 0xf7, 0xff, 0xff, 0x7f, 0x00, 0xc0, 0xff, 0xff,
+            0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        };
+        lmp_features = std::array<uint64_t, 3> { 0x875b1fd87e8fffff, 0x0, 0x30f };
+        acl_data_packet_length = 310;
+        total_num_acl_data_packets = 10;
+        sco_data_packet_length = 64;
+        total_num_sco_data_packets = 8;
+        num_supported_iac = 2;
+        le_features = 0x1f;
+        le_acl_data_packet_length = 0;
+        total_num_le_acl_data_packets = 0;
+        le_filter_accept_list_size = 25;
+        le_supported_states = 0x3ffffffffff;
+        break;
+
       default:
         break;
     }
@@ -1899,7 +1964,6 @@ ControllerProperties::ControllerProperties(
           config.quirks().hardware_error_before_reset();
     }
     // TODO(b/270606199): support send_acl_data_before_connection_complete
-    // TODO(b/274476773): support send_role_change_before_connection_complete
   }
 
   if (!CheckSupportedFeatures()) {

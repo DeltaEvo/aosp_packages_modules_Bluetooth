@@ -24,12 +24,18 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
 
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_device_type.h"
+#include "stack/include/bt_octets.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/security_client_callbacks.h"
+#include "stack/include/smp_api_types.h"
+#include "types/ble_address_with_type.h"
+#include "types/bt_transport.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
@@ -453,7 +459,7 @@ void btm_sec_conn_req(const RawAddress& bda, uint8_t* dc);
  * Returns          void
  *
  ******************************************************************************/
-void btm_create_conn_cancel_complete(const uint8_t* p);
+void btm_create_conn_cancel_complete(const uint8_t* p, uint16_t evt_len);
 
 /*******************************************************************************
  *
@@ -581,7 +587,7 @@ void btm_rem_oob_req(const uint8_t* p);
  * Returns          void
  *
  ******************************************************************************/
-void btm_read_local_oob_complete(uint8_t* p);
+void btm_read_local_oob_complete(uint8_t* p, uint16_t evt_len);
 
 /*******************************************************************************
  *

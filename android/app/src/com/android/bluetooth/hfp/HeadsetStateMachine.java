@@ -18,6 +18,8 @@ package com.android.bluetooth.hfp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 
+import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
+
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAssignedNumbers;
@@ -81,7 +83,7 @@ import java.util.Scanner;
 @VisibleForTesting
 public class HeadsetStateMachine extends StateMachine {
     private static final String TAG = "HeadsetStateMachine";
-    private static final boolean DBG = false;
+    private static final boolean DBG = true;
 
     static final int CONNECT = 1;
     static final int DISCONNECT = 2;
@@ -483,7 +485,10 @@ public class HeadsetStateMachine extends StateMachine {
             mHasWbsEnabled = false;
             mHasSwbEnabled = false;
             mHasNrecEnabled = false;
+
             broadcastStateTransitions();
+            logFailureIfNeeded();
+
             // Remove the state machine for unbonded devices
             if (mPrevState != null
                     && mAdapterService.getBondState(mDevice) == BluetoothDevice.BOND_NONE) {
@@ -505,7 +510,9 @@ public class HeadsetStateMachine extends StateMachine {
                     if (!mNativeInterface.connectHfp(device)) {
                         stateLogE("CONNECT failed for connectHfp(" + device + ")");
                         // No state transition is involved, fire broadcast immediately
-                        broadcastConnectionState(device, BluetoothProfile.STATE_DISCONNECTED,
+                        broadcastConnectionState(
+                                device,
+                                BluetoothProfile.STATE_DISCONNECTED,
                                 BluetoothProfile.STATE_DISCONNECTED);
                         break;
                     }
@@ -576,6 +583,25 @@ public class HeadsetStateMachine extends StateMachine {
                 default:
                     stateLogE("Incorrect state: " + state);
                     break;
+            }
+        }
+
+        private void logFailureIfNeeded() {
+            if (mPrevState == mConnecting || mPrevState == mDisconnected) {
+                // Result for disconnected -> disconnected is unknown as it should
+                // not have occurred.
+                int result =
+                        (mPrevState == mConnecting)
+                                ? BluetoothProtoEnums.RESULT_FAILURE
+                                : BluetoothProtoEnums.RESULT_UNKNOWN;
+
+                BluetoothStatsLog.write(
+                        BluetoothStatsLog.BLUETOOTH_PROFILE_CONNECTION_ATTEMPTED,
+                        BluetoothProfile.A2DP,
+                        result,
+                        mPrevState.getConnectionStateInt(),
+                        BluetoothProfile.STATE_DISCONNECTED,
+                        BluetoothProtoEnums.REASON_UNEXPECTED_STATE);
             }
         }
     }
@@ -1090,7 +1116,9 @@ public class HeadsetStateMachine extends StateMachine {
                 // or the retry count reached MAX_RETRY_DISCONNECT_AUDIO.
                 mAudioDisconnectRetry = 0;
             }
+
             broadcastStateTransitions();
+            logSuccessIfNeeded();
         }
 
         @Override
@@ -1121,10 +1149,14 @@ public class HeadsetStateMachine extends StateMachine {
                 case CONNECT_AUDIO:
                     stateLogD("CONNECT_AUDIO, device=" + mDevice);
                     mSystemInterface.getAudioManager().setA2dpSuspended(true);
-                    mSystemInterface.getAudioManager().setLeAudioSuspended(true);
+                    if (isAtLeastU()) {
+                        mSystemInterface.getAudioManager().setLeAudioSuspended(true);
+                    }
                     if (!mNativeInterface.connectAudio(mDevice)) {
                         mSystemInterface.getAudioManager().setA2dpSuspended(false);
-                        mSystemInterface.getAudioManager().setLeAudioSuspended(false);
+                        if (isAtLeastU()) {
+                            mSystemInterface.getAudioManager().setLeAudioSuspended(false);
+                        }
                         stateLogE("Failed to connect SCO audio for " + mDevice);
                         // No state change involved, fire broadcast immediately
                         broadcastAudioState(mDevice, BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
@@ -1182,6 +1214,18 @@ public class HeadsetStateMachine extends StateMachine {
                 default:
                     stateLogE("processAudioEvent: bad state: " + state);
                     break;
+            }
+        }
+
+        private void logSuccessIfNeeded() {
+            if (mPrevState == mConnecting || mPrevState == mDisconnected) {
+                BluetoothStatsLog.write(
+                        BluetoothStatsLog.BLUETOOTH_PROFILE_CONNECTION_ATTEMPTED,
+                        BluetoothProfile.HEADSET,
+                        BluetoothProtoEnums.RESULT_SUCCESS,
+                        mPrevState.getConnectionStateInt(),
+                        BluetoothProfile.STATE_CONNECTED,
+                        BluetoothProtoEnums.REASON_SUCCESS);
             }
         }
     }
@@ -1911,7 +1955,7 @@ public class HeadsetStateMachine extends StateMachine {
 
             String arg = input.substring(i, j);
             try {
-                out.add(new Integer(arg));
+                out.add(Integer.valueOf(arg));
             } catch (NumberFormatException e) {
                 out.add(arg);
             }
