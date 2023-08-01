@@ -739,16 +739,18 @@ class UnicastTestNoInit : public Test {
               return true;
             });
 
-    ON_CALL(mock_state_machine_, AttachToStream(_, _))
+    ON_CALL(mock_state_machine_, AttachToStream(_, _, _))
         .WillByDefault([](LeAudioDeviceGroup* group,
-                          LeAudioDevice* leAudioDevice) {
+                          LeAudioDevice* leAudioDevice,
+                          types::BidirectionalPair<std::vector<uint8_t>>
+                              ccids) {
           if (group->GetState() !=
               types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
             return false;
           }
 
           group->Configure(group->GetConfigurationContextType(),
-                           group->GetMetadataContexts());
+                           group->GetMetadataContexts(), ccids);
           if (!group->CigAssignCisIds(leAudioDevice)) return false;
           group->CigAssignCisConnHandlesToAses(leAudioDevice);
 
@@ -1694,10 +1696,7 @@ class UnicastTestNoInit : public Test {
 
   void LocalAudioSourceSuspend(void) {
     ASSERT_NE(unicast_source_hal_cb_, nullptr);
-    std::promise<void> do_suspend_sink_promise;
-    auto do_suspend_sink_future = do_suspend_sink_promise.get_future();
-    unicast_source_hal_cb_->OnAudioSuspend(std::move(do_suspend_sink_promise));
-    do_suspend_sink_future.wait();
+    unicast_source_hal_cb_->OnAudioSuspend();
   }
 
   void LocalAudioSourceResume(bool expected_confirmation = true) {
@@ -1719,10 +1718,7 @@ class UnicastTestNoInit : public Test {
 
   void LocalAudioSinkSuspend(void) {
     ASSERT_NE(unicast_sink_hal_cb_, nullptr);
-    std::promise<void> do_suspend_source_promise;
-    auto do_suspend_source_future = do_suspend_source_promise.get_future();
-    unicast_sink_hal_cb_->OnAudioSuspend(std::move(do_suspend_source_promise));
-    do_suspend_source_future.wait();
+    unicast_sink_hal_cb_->OnAudioSuspend();
   }
 
   void LocalAudioSinkResume(void) {
@@ -1775,8 +1771,6 @@ class UnicastTestNoInit : public Test {
      * might have different state that it is in the le_audio code - as tearing
      * down CISes might take some time
      */
-    std::promise<void> do_suspend_sink_promise;
-    auto do_suspend_sink_future = do_suspend_sink_promise.get_future();
     /* It's enough to call only one resume even if it'll be bi-directional
      * streaming. First suspend will trigger GroupStop.
      *
@@ -1784,16 +1778,11 @@ class UnicastTestNoInit : public Test {
      * If there will be such test oriented scenario, such resume choose logic
      * should be applied.
      */
-    unicast_source_hal_cb_->OnAudioSuspend(std::move(do_suspend_sink_promise));
-    do_suspend_sink_future.wait();
+    unicast_source_hal_cb_->OnAudioSuspend();
 
     if (suspend_source) {
       ASSERT_NE(unicast_sink_hal_cb_, nullptr);
-      std::promise<void> do_suspend_source_promise;
-      auto do_suspend_source_future = do_suspend_source_promise.get_future();
-      unicast_sink_hal_cb_->OnAudioSuspend(
-          std::move(do_suspend_source_promise));
-      do_suspend_source_future.wait();
+      unicast_sink_hal_cb_->OnAudioSuspend();
     }
   }
 
@@ -4162,6 +4151,88 @@ TEST_F(UnicastTest, RemoveWhileStreaming) {
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
 
   ASSERT_EQ(group, nullptr);
+}
+
+TEST_F(UnicastTest, DisconnecteWhileAlmostStreaming) {
+  const RawAddress test_address0 = GetTestAddress(0);
+  int group_id = bluetooth::groups::kGroupUnknown;
+
+  SetSampleDatabaseEarbudsValid(
+      1, test_address0, codec_spec_conf::kLeAudioLocationStereo,
+      codec_spec_conf::kLeAudioLocationStereo, default_channel_cnt,
+      default_channel_cnt, 0x0004,
+      /* source sample freq 16khz */ false /*add_csis*/, true /*add_cas*/,
+      true /*add_pacs*/, default_ase_cnt /*add_ascs_cnt*/, 1 /*set_size*/,
+      0 /*rank*/);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnGroupNodeStatus(test_address0, _, GroupNodeStatus::ADDED))
+      .WillOnce(DoAll(SaveArg<1>(&group_id)));
+
+  ConnectLeAudio(test_address0);
+  ASSERT_NE(group_id, bluetooth::groups::kGroupUnknown);
+
+  constexpr int gmcs_ccid = 1;
+  constexpr int gtbs_ccid = 2;
+
+  // Audio sessions are started only when device gets active
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, Start(_, _)).Times(1);
+  EXPECT_CALL(*mock_le_audio_sink_hal_client_, Start(_, _)).Times(1);
+  LeAudioClient::Get()->SetCcidInformation(gmcs_ccid, 4 /* Media */);
+  LeAudioClient::Get()->SetCcidInformation(gtbs_ccid, 2 /* Phone */);
+  LeAudioClient::Get()->GroupSetActive(group_id);
+
+  types::BidirectionalPair<std::vector<uint8_t>> ccids = {.sink = {gmcs_ccid},
+                                                          .source = {}};
+  EXPECT_CALL(mock_state_machine_, StartStream(_, _, _, ccids)).Times(1);
+
+  /* We want here to CIS be established but device not being yet in streaming
+   * state
+   */
+  StartStreaming(AUDIO_USAGE_MEDIA, AUDIO_CONTENT_TYPE_MUSIC, group_id);
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(&mock_le_audio_source_hal_client_);
+  Mock::VerifyAndClearExpectations(&mock_state_machine_);
+  SyncOnMainLoop();
+
+  /* This is test code, which will change the group state to the one which
+   * is required by test
+   */
+  auto group_inject = streaming_groups.at(group_id);
+  group_inject->SetState(types::AseState::BTA_LE_AUDIO_ASE_STATE_ENABLING);
+
+  EXPECT_CALL(mock_state_machine_, StopStream(_)).Times(1);
+
+  LeAudioDeviceGroup* group = nullptr;
+  EXPECT_CALL(mock_state_machine_, ProcessHciNotifAclDisconnected(_, _))
+      .WillOnce(DoAll(SaveArg<0>(&group)));
+
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address0))
+      .Times(1);
+
+  /*
+   * StopStream will put calls on main_loop so to keep the correct order
+   * of operations and to avoid races we put the test command on main_loop as
+   * well.
+   */
+  do_in_main_thread(FROM_HERE, base::BindOnce(
+                                   [](LeAudioClient* client,
+                                      const RawAddress& test_address0) {
+                                     client->Disconnect(test_address0);
+                                   },
+                                   LeAudioClient::Get(), test_address0));
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_groups_module_);
+  Mock::VerifyAndClearExpectations(&mock_state_machine_);
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+
+  ASSERT_EQ(group->GetState(), types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE);
 }
 
 TEST_F(UnicastTest, EarbudsTwsStyleStreaming) {
