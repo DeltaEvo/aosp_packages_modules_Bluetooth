@@ -30,16 +30,14 @@ source_set("nonstandard_codecs") {
   if (defined(use.bt_nonstandard_codecs) && use.bt_nonstandard_codecs) {
     sources = [
       "a2dp/a2dp_aac.cc",
-      "a2dp/a2dp_aac_decoder.cc",
-      "a2dp/a2dp_aac_encoder.cc",
+      "a2dp/a2dp_aac_decoder_linux.cc",
+      "a2dp/a2dp_aac_encoder_linux.cc",
       "a2dp/a2dp_vendor.cc",
-      "a2dp/a2dp_vendor_aptx.cc",
-      "a2dp/a2dp_vendor_aptx_encoder.cc",
-      "a2dp/a2dp_vendor_aptx_hd.cc",
-      "a2dp/a2dp_vendor_aptx_hd_encoder.cc",
-      "a2dp/a2dp_vendor_ldac.cc",
-      "a2dp/a2dp_vendor_ldac_decoder.cc",
-      "a2dp/a2dp_vendor_ldac_encoder.cc",
+      # Following are unimplemented
+      "a2dp/a2dp_vendor_aptx_linux.cc",
+      "a2dp/a2dp_vendor_aptx_hd_linux.cc",
+      "a2dp/a2dp_vendor_ldac_linux.cc",
+      "a2dp/a2dp_vendor_opus_linux.cc",
     ]
 
     include_dirs = [
@@ -48,14 +46,21 @@ source_set("nonstandard_codecs") {
       "//bt/system/btif/include",
       "//bt/system/internal_include",
       "//bt/system/stack/include",
+      "//bt/system/utils/include",
     ]
 
     deps = [ "//bt/system/gd/rust/shim:init_flags_bridge_header" ]
 
+    # b/289017207: external codec libs should not be directly linked
+    libs = [
+      # Following are for AAC using FFmpeg
+      "avcodec",
+      "avformat",
+      "avutil",
+    ]
+
     configs += [
       "//bt/system:target_defaults",
-      "//bt/system:external_libldac",
-      "//bt/system:external_aac",
     ]
   }
 }
@@ -109,7 +114,6 @@ source_set("stack") {
     "btm/btm_ble_bgconn.cc",
     "btm/btm_ble_cont_energy.cc",
     "btm/btm_ble_gap.cc",
-    "btm/btm_ble_multi_adv.cc",
     "btm/btm_ble_privacy.cc",
     "btm/btm_ble_scanner.cc",
     "btm/btm_client_interface.cc",
@@ -374,35 +378,6 @@ if (defined(use.android) && use.android) {
 
     configs += [
       "//bt/system:external_tinyxml2",
-      "//bt/system:external_gmock_main",
-      "//bt/system:target_defaults",
-    ]
-  }
-
-  executable("net_test_stack_multi_adv") {
-    sources = [
-      "btm/btm_ble_multi_adv.cc",
-      "test/ble_advertiser_test.cc",
-    ]
-
-    include_dirs = [
-      "include",
-      "//bt/system/",
-      "//bt/system/internal_include",
-      "//bt/system/stack/btm",
-    ]
-
-    libs = [
-      "dl",
-      "pthread",
-      "resolv",
-      "rt",
-      "z",
-    ]
-
-    deps = [ "//bt/system/types" ]
-
-    configs += [
       "//bt/system:external_gmock_main",
       "//bt/system:target_defaults",
     ]

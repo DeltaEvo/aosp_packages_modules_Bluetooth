@@ -59,7 +59,7 @@ using le_audio::types::CodecLocation;
 using le_audio::types::kLeAudioCodingFormatLC3;
 using le_audio::types::LeAudioContextType;
 using le_audio::types::LeAudioLtvMap;
-using le_audio::utils::GetAllowedAudioContextsFromSourceMetadata;
+using le_audio::utils::GetAudioContextsFromSourceMetadata;
 
 namespace {
 class LeAudioBroadcasterImpl;
@@ -91,7 +91,8 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     LOG_INFO();
 
     /* Register State machine callbacks */
-    BroadcastStateMachine::Initialize(&state_machine_callbacks_);
+    BroadcastStateMachine::Initialize(&state_machine_callbacks_,
+                                      &state_machine_adv_callbacks_);
 
     GenerateBroadcastIds();
   }
@@ -851,6 +852,93 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     }
   } state_machine_callbacks_;
 
+  static class BroadcastAdvertisingCallbacks : public AdvertisingCallbacks {
+    void OnAdvertisingSetStarted(int reg_id, uint8_t advertiser_id,
+                                 int8_t tx_power, uint8_t status) {
+      if (!instance) return;
+
+      if (reg_id == BroadcastStateMachine::kLeAudioBroadcastRegId &&
+          !instance->pending_broadcasts_.empty()) {
+        instance->pending_broadcasts_.back()->OnCreateAnnouncement(
+            advertiser_id, tx_power, status);
+      } else {
+        LOG_WARN(
+            "Ignored OnAdvertisingSetStarted callback reg_id:%d "
+            "advertiser_id:%d",
+            reg_id, advertiser_id);
+      }
+    }
+
+    void OnAdvertisingEnabled(uint8_t advertiser_id, bool enable,
+                              uint8_t status) {
+      if (!instance) return;
+
+      auto const& iter = std::find_if(
+          instance->broadcasts_.cbegin(), instance->broadcasts_.cend(),
+          [advertiser_id](auto const& sm) {
+            return sm.second->GetAdvertisingSid() == advertiser_id;
+          });
+      if (iter != instance->broadcasts_.cend()) {
+        iter->second->OnEnableAnnouncement(enable, status);
+      } else {
+        LOG_WARN("Ignored OnAdvertisingEnabled callback advertiser_id:%d",
+                 advertiser_id);
+      }
+    }
+
+    void OnAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
+      LOG_WARN(
+          "Not being used, ignored OnAdvertisingDataSet callback "
+          "advertiser_id:%d",
+          advertiser_id);
+    }
+
+    void OnScanResponseDataSet(uint8_t advertiser_id, uint8_t status) {
+      LOG_WARN(
+          "Not being used, ignored OnScanResponseDataSet callback "
+          "advertiser_id:%d",
+          advertiser_id);
+    }
+
+    void OnAdvertisingParametersUpdated(uint8_t advertiser_id, int8_t tx_power,
+                                        uint8_t status) {
+      LOG_WARN(
+          "Not being used, ignored OnAdvertisingParametersUpdated callback "
+          "advertiser_id:%d",
+          advertiser_id);
+    }
+
+    void OnPeriodicAdvertisingParametersUpdated(uint8_t advertiser_id,
+                                                uint8_t status) {
+      LOG_WARN(
+          "Not being used, ignored OnPeriodicAdvertisingParametersUpdated "
+          "callback advertiser_id:%d",
+          advertiser_id);
+    }
+
+    void OnPeriodicAdvertisingDataSet(uint8_t advertiser_id, uint8_t status) {
+      LOG_WARN(
+          "Not being used, ignored OnPeriodicAdvertisingDataSet callback "
+          "advertiser_id:%d",
+          advertiser_id);
+    }
+
+    void OnPeriodicAdvertisingEnabled(uint8_t advertiser_id, bool enable,
+                                      uint8_t status) {
+      LOG_WARN(
+          "Not being used, ignored OnPeriodicAdvertisingEnabled callback "
+          "advertiser_id:%d",
+          advertiser_id);
+    }
+
+    void OnOwnAddressRead(uint8_t advertiser_id, uint8_t address_type,
+                          RawAddress address) {
+      LOG_WARN(
+          "Not being used, ignored OnOwnAddressRead callback advertiser_id:%d",
+          advertiser_id);
+    }
+  } state_machine_adv_callbacks_;
+
   static class LeAudioSourceCallbacksImpl
       : public LeAudioSourceAudioHalClient::Callbacks {
    public:
@@ -966,11 +1054,9 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
       LOG_VERBOSE("All data sent.");
     }
 
-    virtual void OnAudioSuspend(
-        std::promise<void> do_suspend_promise) override {
+    virtual void OnAudioSuspend(void) override {
       LOG_INFO();
       /* TODO: Should we suspend all broadcasts - remove BIGs? */
-      do_suspend_promise.set_value();
       if (instance)
         instance->audio_data_path_state_ = AudioDataPathState::SUSPENDED;
     }
@@ -996,9 +1082,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
       if (!instance) return;
 
       /* TODO: Should we take supported contexts from ASCS? */
-      auto supported_context_types = le_audio::types::kLeAudioContextAllTypes;
-      auto contexts = GetAllowedAudioContextsFromSourceMetadata(
-          source_metadata, supported_context_types);
+      auto contexts = GetAudioContextsFromSourceMetadata(source_metadata);
       if (contexts.any()) {
         /* NOTICE: We probably don't want to change the stream configuration
          * on each metadata change, so just update the context type metadata.
@@ -1033,7 +1117,8 @@ LeAudioBroadcasterImpl::BroadcastStateMachineCallbacks
     LeAudioBroadcasterImpl::state_machine_callbacks_;
 LeAudioBroadcasterImpl::LeAudioSourceCallbacksImpl
     LeAudioBroadcasterImpl::audio_receiver_;
-
+LeAudioBroadcasterImpl::BroadcastAdvertisingCallbacks
+    LeAudioBroadcasterImpl::state_machine_adv_callbacks_;
 } /* namespace */
 
 void LeAudioBroadcaster::Initialize(
