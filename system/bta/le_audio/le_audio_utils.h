@@ -27,22 +27,10 @@ namespace le_audio {
 namespace utils {
 types::LeAudioContextType AudioContentToLeAudioContext(
     audio_content_type_t content_type, audio_usage_t usage);
-types::AudioContexts GetAllowedAudioContextsFromSourceMetadata(
-    const std::vector<struct playback_track_metadata>& source_metadata,
-    types::AudioContexts allowed_contexts);
-types::AudioContexts GetAllowedAudioContextsFromSinkMetadata(
-    const std::vector<struct record_track_metadata>& source_metadata,
-    types::AudioContexts allowed_contexts);
-
-static inline bool IsContextForAudioSource(types::LeAudioContextType c) {
-  if (c == types::LeAudioContextType::CONVERSATIONAL ||
-      c == types::LeAudioContextType::VOICEASSISTANTS ||
-      c == types::LeAudioContextType::LIVE ||
-      c == types::LeAudioContextType::GAME) {
-    return true;
-  }
-  return false;
-}
+types::AudioContexts GetAudioContextsFromSourceMetadata(
+    const std::vector<struct playback_track_metadata>& source_metadata);
+types::AudioContexts GetAudioContextsFromSinkMetadata(
+    const std::vector<struct record_track_metadata>& sink_metadata);
 
 }  // namespace utils
 }  // namespace le_audio

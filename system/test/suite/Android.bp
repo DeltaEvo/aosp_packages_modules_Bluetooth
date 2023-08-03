@@ -77,7 +77,6 @@ cc_defaults {
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
-        "libbt-common",
         "libbt-hci",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
@@ -118,7 +117,7 @@ cc_test {
         "gatt/gatt_unittest.cc",
     ],
     static_libs: [
-        "android.hardware.audio.common-V1-ndk",
+        "android.hardware.audio.common-V2-ndk",
         "android.hardware.bluetooth.audio-V3-ndk",
         "android.hardware.bluetooth@1.0",
         "android.hardware.bluetooth@1.1",
