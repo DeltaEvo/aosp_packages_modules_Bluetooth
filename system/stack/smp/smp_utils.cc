@@ -37,6 +37,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/smp_status.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "types/raw_address.h"
 
@@ -326,6 +327,9 @@ void smp_log_metrics(const RawAddress& bd_addr, bool is_outgoing,
   uint8_t failure_reason = 0;
   if (raw_cmd == SMP_OPCODE_PAIRING_FAILED && buf_len >= 1) {
     STREAM_TO_UINT8(failure_reason, p_buf);
+  }
+  if (smp_cb.is_pair_cancel) {
+    failure_reason = SMP_USER_CANCELLED; // Tracking pairing cancellations
   }
   uint16_t metric_cmd =
       is_over_br ? SMP_METRIC_COMMAND_BR_FLAG : SMP_METRIC_COMMAND_LE_FLAG;
@@ -882,6 +886,7 @@ void smp_xor_128(Octet16* a, const Octet16& b) {
 void smp_cb_cleanup(tSMP_CB* p_cb) {
   tSMP_CALLBACK* p_callback = p_cb->p_callback;
   uint8_t trace_level = p_cb->trace_level;
+  uint8_t init_security_mode = p_cb->init_security_mode;
   alarm_t* smp_rsp_timer_ent = p_cb->smp_rsp_timer_ent;
   alarm_t* delayed_auth_timer_ent = p_cb->delayed_auth_timer_ent;
 
@@ -892,6 +897,7 @@ void smp_cb_cleanup(tSMP_CB* p_cb) {
   memset(p_cb, 0, sizeof(tSMP_CB));
   p_cb->p_callback = p_callback;
   p_cb->trace_level = trace_level;
+  p_cb->init_security_mode = init_security_mode;
   p_cb->smp_rsp_timer_ent = smp_rsp_timer_ent;
   p_cb->delayed_auth_timer_ent = delayed_auth_timer_ent;
 }

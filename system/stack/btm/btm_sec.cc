@@ -54,7 +54,6 @@
 #include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2cap_security_interface.h"
 #include "stack/include/stack_metrics_logging.h"
-#include "stack/smp/smp_int.h"
 #include "types/raw_address.h"
 
 namespace {
@@ -1492,6 +1491,18 @@ tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures(const RawAddress& bd_addr) {
     }
   }
   return BT_DEVICE_TYPE_BREDR;
+}
+
+/*******************************************************************************
+ *
+ * Function         BTM_GetInitialSecurityMode
+ *
+ * Description      This function is called to retrieve the configured
+ *                  security mode.
+ *
+ ******************************************************************************/
+uint8_t BTM_GetSecurityMode() {
+  return btm_cb.security_mode;
 }
 
 /************************************************************************
@@ -3379,13 +3390,6 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
   if (status == HCI_SUCCESS) {
     if (encr_enable) {
       if (p_dev_rec->hci_handle == handle) {  // classic
-        if ((p_dev_rec->sec_flags & BTM_SEC_AUTHENTICATED) &&
-            (p_dev_rec->sec_flags & BTM_SEC_ENCRYPTED)) {
-          LOG_INFO(
-              "Link is authenticated & encrypted, ignoring this enc change "
-              "event");
-          return;
-        }
         p_dev_rec->sec_flags |= (BTM_SEC_AUTHENTICATED | BTM_SEC_ENCRYPTED);
         if (p_dev_rec->pin_code_length >= 16 ||
             p_dev_rec->link_key_type == BTM_LKEY_TYPE_AUTH_COMB ||

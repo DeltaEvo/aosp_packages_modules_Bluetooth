@@ -19,7 +19,6 @@ cc_defaults {
         // struct BT_HDR is defined as a variable-size header in a struct.
         "-Wno-gnu-variable-sized-type-not-at-end",
     ],
-    c_std: "c99",
     product_variables: {
         debuggable: {
             cflags: [
@@ -57,7 +56,6 @@ cc_defaults {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
     ],
-    cpp_std: "c++17",
     min_sdk_version: "current",
 }
 
@@ -89,10 +87,6 @@ cc_defaults {
     name: "fluoride_basic_defaults",
     defaults: [
         "fluoride_defaults",
-    ],
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.btservices",
     ],
     static_libs: [
         "libbt-protos-lite",
