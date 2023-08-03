@@ -718,7 +718,6 @@ public class AdapterService extends Service {
         mBluetoothSocketManagerBinder = new BluetoothSocketManagerBinder(this);
 
         mActivityAttributionService = new ActivityAttributionService();
-        mActivityAttributionService.start();
 
         setAdapterService(this);
 
@@ -1360,10 +1359,6 @@ public class AdapterService extends Service {
         if (mSdpManager != null) {
             mSdpManager.cleanup();
             mSdpManager = null;
-        }
-
-        if (mActivityAttributionService != null) {
-            mActivityAttributionService.cleanup();
         }
 
         if (mNativeAvailable) {
@@ -5029,7 +5024,7 @@ public class AdapterService extends Service {
             if (service == null) {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
             }
-            if (!callerIsSystem(TAG, "setPreferredAudioProfiles")) {
+            if (!callerIsSystem(TAG, "notifyActiveDeviceChangeApplied")) {
                 return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED;
             }
             requireNonNull(device);
@@ -6092,7 +6087,10 @@ public class AdapterService extends Service {
         if (leAudioSupported) {
             Log.i(TAG, "setActiveDevice: Setting active Le Audio device " + device);
             if (device == null) {
-                mLeAudioService.removeActiveDevice(false);
+                /* If called by BluetoothAdapter it means Audio should not be stopped.
+                 * For this reason let's say that fallback device exists
+                 */
+                mLeAudioService.removeActiveDevice(true /* hasFallbackDevice */);
             } else {
                 mLeAudioService.setActiveDevice(device);
             }
