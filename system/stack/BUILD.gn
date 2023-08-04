@@ -46,14 +46,21 @@ source_set("nonstandard_codecs") {
       "//bt/system/btif/include",
       "//bt/system/internal_include",
       "//bt/system/stack/include",
+      "//bt/system/utils/include",
     ]
 
     deps = [ "//bt/system/gd/rust/shim:init_flags_bridge_header" ]
 
+    # b/289017207: external codec libs should not be directly linked
+    libs = [
+      # Following are for AAC using FFmpeg
+      "avcodec",
+      "avformat",
+      "avutil",
+    ]
+
     configs += [
       "//bt/system:target_defaults",
-      "//bt/system:external_libldac",
-      "//bt/system:external_aac",
     ]
   }
 }
@@ -107,7 +114,6 @@ source_set("stack") {
     "btm/btm_ble_bgconn.cc",
     "btm/btm_ble_cont_energy.cc",
     "btm/btm_ble_gap.cc",
-    "btm/btm_ble_multi_adv.cc",
     "btm/btm_ble_privacy.cc",
     "btm/btm_ble_scanner.cc",
     "btm/btm_client_interface.cc",
@@ -372,35 +378,6 @@ if (defined(use.android) && use.android) {
 
     configs += [
       "//bt/system:external_tinyxml2",
-      "//bt/system:external_gmock_main",
-      "//bt/system:target_defaults",
-    ]
-  }
-
-  executable("net_test_stack_multi_adv") {
-    sources = [
-      "btm/btm_ble_multi_adv.cc",
-      "test/ble_advertiser_test.cc",
-    ]
-
-    include_dirs = [
-      "include",
-      "//bt/system/",
-      "//bt/system/internal_include",
-      "//bt/system/stack/btm",
-    ]
-
-    libs = [
-      "dl",
-      "pthread",
-      "resolv",
-      "rt",
-      "z",
-    ]
-
-    deps = [ "//bt/system/types" ]
-
-    configs += [
       "//bt/system:external_gmock_main",
       "//bt/system:target_defaults",
     ]

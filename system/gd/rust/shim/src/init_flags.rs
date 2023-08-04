@@ -1,4 +1,5 @@
 #[cxx::bridge(namespace = bluetooth::common::init_flags)]
+#[allow(unsafe_op_in_unsafe_fn)]
 mod ffi {
     struct InitFlagWithValue {
         flag: &'static str,
@@ -17,8 +18,8 @@ mod ffi {
         fn btaa_hci_is_enabled() -> bool;
         fn bta_dm_clear_conn_id_on_client_close_is_enabled() -> bool;
         fn delay_hidh_cleanup_until_hidh_ready_start_is_enabled() -> bool;
-        fn gd_hal_snoop_logger_filtering_is_enabled() -> bool;
         fn btm_dm_flush_discovery_queue_on_search_cancel_is_enabled() -> bool;
+        fn bta_dm_stop_discovery_on_search_cancel_is_enabled() -> bool;
         fn classic_discovery_only_is_enabled() -> bool;
         fn clear_hidd_interrupt_cid_on_disconnect_is_enabled() -> bool;
         fn device_iot_config_logging_is_enabled() -> bool;
@@ -27,7 +28,6 @@ mod ffi {
         fn gatt_robust_caching_client_is_enabled() -> bool;
         fn gatt_robust_caching_server_is_enabled() -> bool;
         fn gd_core_is_enabled() -> bool;
-        fn gd_hal_snoop_logger_socket_is_enabled() -> bool;
         fn gd_l2cap_is_enabled() -> bool;
         fn gd_link_policy_is_enabled() -> bool;
         fn get_default_log_level() -> i32;
@@ -44,7 +44,6 @@ mod ffi {
         fn periodic_advertising_adi_is_enabled() -> bool;
         fn private_gatt_is_enabled() -> bool;
         fn queue_l2cap_coc_while_encrypting_is_enabled() -> bool;
-        fn read_encryption_key_size_is_enabled() -> bool;
         fn redact_log_is_enabled() -> bool;
         fn rust_event_loop_is_enabled() -> bool;
         fn sco_codec_select_lc3_is_enabled() -> bool;
