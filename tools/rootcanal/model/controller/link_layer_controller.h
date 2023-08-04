@@ -23,11 +23,11 @@
 #include <vector>
 
 #include "hci/address.h"
-#include "hci/hci_packets.h"
 #include "include/phy.h"
 #include "model/controller/acl_connection_handler.h"
 #include "model/controller/controller_properties.h"
 #include "model/controller/le_advertiser.h"
+#include "packets/hci_packets.h"
 #include "packets/link_layer_packets.h"
 #include "rootcanal_rs.h"
 
@@ -36,7 +36,6 @@ namespace rootcanal {
 using ::bluetooth::hci::Address;
 using ::bluetooth::hci::AddressType;
 using ::bluetooth::hci::AuthenticationEnable;
-using ::bluetooth::hci::ClassOfDevice;
 using ::bluetooth::hci::ErrorCode;
 using ::bluetooth::hci::FilterAcceptListAddressType;
 using ::bluetooth::hci::OpCode;
@@ -68,14 +67,14 @@ class LinkLayerController {
                       const ControllerProperties& properties, int id = 0);
   ~LinkLayerController();
 
-  ErrorCode SendCommandToRemoteByAddress(
-      OpCode opcode, bluetooth::packet::PacketView<true> args,
-      const Address& own_address, const Address& peer_address);
+  ErrorCode SendCommandToRemoteByAddress(OpCode opcode, pdl::packet::slice args,
+                                         const Address& own_address,
+                                         const Address& peer_address);
   ErrorCode SendLeCommandToRemoteByAddress(OpCode opcode,
                                            const Address& own_address,
                                            const Address& peer_address);
-  ErrorCode SendCommandToRemoteByHandle(
-      OpCode opcode, bluetooth::packet::PacketView<true> args, uint16_t handle);
+  ErrorCode SendCommandToRemoteByHandle(OpCode opcode, pdl::packet::slice args,
+                                        uint16_t handle);
   ErrorCode SendScoToRemote(bluetooth::hci::ScoView sco_packet);
   ErrorCode SendAclToRemote(bluetooth::hci::AclView acl_packet);
 
@@ -89,18 +88,22 @@ class LinkLayerController {
   void MakePeripheralConnection(const Address& addr, bool try_role_switch);
   ErrorCode RejectConnectionRequest(const Address& addr, uint8_t reason);
   void RejectPeripheralConnection(const Address& addr, uint8_t reason);
-  ErrorCode CreateConnection(const Address& addr, uint16_t packet_type,
+
+  // HCI command Create Connection (Vol 4, Part E § 7.1.5).
+  ErrorCode CreateConnection(const Address& bd_addr, uint16_t packet_type,
                              uint8_t page_scan_mode, uint16_t clock_offset,
                              uint8_t allow_role_switch);
-  ErrorCode CreateConnectionCancel(const Address& addr);
 
-  // Disconnect a link.
+  // HCI command Disconnect (Vol 4, Part E § 7.1.6).
   // \p host_reason is taken from the Disconnect command, and sent over
   // to the remote as disconnect error. \p controller_reason is the code
   // used in the DisconnectionComplete event.
   ErrorCode Disconnect(uint16_t handle, ErrorCode host_reason,
                        ErrorCode controller_reason =
                            ErrorCode::CONNECTION_TERMINATED_BY_LOCAL_HOST);
+
+  // HCI command Create Connection Cancel (Vol 4, Part E § 7.1.7).
+  ErrorCode CreateConnectionCancel(const Address& bd_addr);
 
   // Internal task scheduler.
   // This scheduler is driven by the tick function only,
@@ -165,6 +168,7 @@ class LinkLayerController {
 
   void Reset();
 
+  void Paging();
   void LeAdvertising();
   void LeScanning();
   void LeSynchronization();
@@ -476,7 +480,8 @@ class LinkLayerController {
       bluetooth::hci::OwnAddressType own_address_type,
       bluetooth::hci::LeScanningFilterPolicy scanning_filter_policy,
       uint8_t scanning_phys,
-      std::vector<bluetooth::hci::PhyScanParameters> scanning_phy_parameters);
+      std::vector<bluetooth::hci::ScanningPhyParameters>
+          scanning_phy_parameters);
 
   // HCI command LE_Set_Extended_Scan_Enable (Vol 4, Part E § 7.8.65).
   ErrorCode LeSetExtendedScanEnable(
@@ -505,7 +510,7 @@ class LinkLayerController {
       bluetooth::hci::InitiatorFilterPolicy initiator_filter_policy,
       bluetooth::hci::OwnAddressType own_address_type,
       AddressWithType peer_address, uint8_t initiating_phys,
-      std::vector<bluetooth::hci::LeCreateConnPhyScanParameters>
+      std::vector<bluetooth::hci::InitiatingPhyParameters>
           initiating_phy_parameters);
 
   // Periodic Advertising
@@ -714,7 +719,7 @@ class LinkLayerController {
   }
 
   uint16_t GetVoiceSetting() const { return voice_setting_; }
-  const ClassOfDevice& GetClassOfDevice() const { return class_of_device_; }
+  uint32_t GetClassOfDevice() const { return class_of_device_; }
 
   uint8_t GetMaxLmpFeaturesPageNumber() {
     return properties_.lmp_features.size() - 1;
@@ -733,14 +738,8 @@ class LinkLayerController {
   void SetExtendedInquiryResponse(
       std::vector<uint8_t> const& extended_inquiry_response);
 
-  void SetClassOfDevice(ClassOfDevice class_of_device) {
-    class_of_device_ = class_of_device;
-  }
-
   void SetClassOfDevice(uint32_t class_of_device) {
-    class_of_device_.cod[0] = class_of_device & UINT8_MAX;
-    class_of_device_.cod[1] = (class_of_device >> 8) & UINT8_MAX;
-    class_of_device_.cod[2] = (class_of_device >> 16) & UINT8_MAX;
+    class_of_device_ = class_of_device;
   }
 
   void SetAuthenticationEnable(AuthenticationEnable enable) {
@@ -869,7 +868,7 @@ class LinkLayerController {
       extended_inquiry_response_{};
 
   // Class of Device (Vol 4, Part E § 6.26).
-  ClassOfDevice class_of_device_{{0, 0, 0}};
+  uint32_t class_of_device_{0};
 
   // Other configuration parameters.
 
@@ -1000,20 +999,17 @@ class LinkLayerController {
     std::optional<std::chrono::steady_clock::time_point> periodical_timeout;
 
     // Packet History
-    std::vector<model::packets::LinkLayerPacketView> history;
+    std::vector<pdl::packet::slice> history;
 
     bool IsEnabled() const { return scan_enable; }
 
-    bool IsPacketInHistory(model::packets::LinkLayerPacketView packet) const {
+    bool IsPacketInHistory(pdl::packet::slice const& packet) const {
       return std::any_of(
           history.begin(), history.end(),
-          [packet](model::packets::LinkLayerPacketView const& a) {
-            return a.size() == packet.size() &&
-                   std::equal(a.begin(), a.end(), packet.begin());
-          });
+          [packet](pdl::packet::slice const& a) { return a == packet; });
     }
 
-    void AddPacketToHistory(model::packets::LinkLayerPacketView packet) {
+    void AddPacketToHistory(pdl::packet::slice packet) {
       history.push_back(packet);
     }
   };
@@ -1093,7 +1089,16 @@ class LinkLayerController {
   struct ControllerOps controller_ops_;
 
   // Classic state.
-  TaskId page_timeout_task_id_ = kInvalidTaskId;
+  struct Page {
+    Address bd_addr;
+    uint8_t allow_role_switch;
+    std::chrono::steady_clock::time_point next_page_event{};
+    std::chrono::steady_clock::time_point page_timeout{};
+  };
+
+  // Page substate.
+  // RootCanal will allow only one page request running at the same time.
+  std::optional<Page> page_;
 
   std::chrono::steady_clock::time_point last_inquiry_;
   model::packets::InquiryType inquiry_mode_{
