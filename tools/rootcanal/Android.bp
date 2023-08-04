@@ -47,13 +47,11 @@ cc_defaults {
         "-fvisibility=hidden",
     ],
     include_dirs: [
-        "packages/modules/Bluetooth/system/gd",
-    ],
-    local_include_dirs: [
-        "include",
+        "packages/modules/Bluetooth/tools/rootcanal/include",
     ],
     header_libs: [
         "libbase_headers",
+        "pdl_cxx_packet_runtime",
     ],
     generated_headers: [
         "rootcanal_bredr_bb_packets_cxx_gen",
@@ -67,7 +65,6 @@ filegroup {
     srcs: [
         "lib/crypto/crypto.cc",
         "lib/hci/address.cc",
-        "lib/hci/class_of_device.cc",
         "lib/hci/pcap_filter.cc",
         "lib/log.cc",
     ],
@@ -82,7 +79,6 @@ cc_library_static {
     host_supported: true,
     proprietary: true,
     srcs: [
-        ":BluetoothPacketSources",
         ":lib_sources",
         "model/controller/acl_connection.cc",
         "model/controller/acl_connection_handler.cc",
@@ -114,6 +110,9 @@ cc_library_static {
         "net/posix/posix_async_socket_connector.cc",
         "net/posix/posix_async_socket_server.cc",
     ],
+    export_header_lib_headers: [
+        "pdl_cxx_packet_runtime",
+    ],
     export_include_dirs: [
         ".",
         "include",
@@ -136,19 +135,6 @@ cc_library_static {
     static_libs: [
         "libscriptedbeaconpayload-protos-lite",
     ],
-    include_dirs: ["packages/modules/Bluetooth/system/gd"],
-}
-
-// This library contains the generated headers for the
-// RootCanal configuration file / parameter.
-cc_library_static {
-    name: "librootcanal_config",
-    host_supported: true,
-    vendor_available: true,
-    proto: {
-        export_proto_headers: true,
-    },
-    srcs: ["config.proto"],
 }
 
 // This library implements a foreigh function interface over DualModeController
@@ -162,7 +148,6 @@ cc_library_host_shared {
         address: false,
     },
     srcs: [
-        ":BluetoothPacketSources",
         ":lib_sources",
         "model/controller/acl_connection.cc",
         "model/controller/acl_connection_handler.cc",
@@ -193,7 +178,6 @@ cc_library_host_shared {
     cflags: [
         "-fexceptions",
     ],
-    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Generate the python parser+serializer backend for
@@ -237,7 +221,7 @@ genrule {
         " $(location :pdl_python_generator)" +
         " --output $(out) --custom-type-location py.bluetooth",
     srcs: [
-        "packets/hci/hci_packets.pdl",
+        "packets/hci_packets.pdl",
     ],
     out: [
         "hci_packets.py",
@@ -307,7 +291,6 @@ cc_test_host {
     static_libs: [
         "libbt-rootcanal",
     ],
-    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Implement the Bluetooth official LL test suite for root-canal.
@@ -320,12 +303,14 @@ python_test_host {
         ":llcp_packets_python3_gen",
         "py/bluetooth.py",
         "py/controller.py",
+        "test/LL/*.py",
         "test/LL/CIS/CEN/*.py",
         "test/LL/CIS/PER/*.py",
         "test/LL/CON_/CEN/*.py",
         "test/LL/CON_/PER/*.py",
         "test/LL/DDI/ADV/*.py",
         "test/LL/DDI/SCN/*.py",
+        "test/LMP/*.py",
         "test/LMP/LIH/*.py",
         "test/main.py",
     ],
@@ -349,7 +334,7 @@ python_test_host {
 cc_test_host {
     name: "rootcanal_test_host",
     defaults: [
-        "fluoride_common_options",
+        "bluetooth_cflags",
     ],
     // TODO(b/231993739): Reenable isolated:true by deleting the explicit disable below
     isolated: false,
@@ -379,7 +364,6 @@ cc_test_host {
             enabled: false,
         },
     },
-    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 // Linux RootCanal Executable
@@ -421,29 +405,41 @@ cc_binary_host {
             enabled: false,
         },
     },
-    include_dirs: ["packages/modules/Bluetooth/system/gd"],
 }
 
 genrule {
     name: "rootcanal_hci_packets_cxx_gen",
     tools: [
-        "bluetooth_packetgen",
+        ":pdl_cxx_generator",
+        ":pdlc",
     ],
-    cmd: "$(location bluetooth_packetgen) --include=packages/modules/Bluetooth/tools/rootcanal/packets --out=$(genDir) $(in)",
+    cmd: "set -o pipefail;" +
+        " $(location :pdlc) $(in) |" +
+        " $(location :pdl_cxx_generator)" +
+        " --namespace bluetooth::hci" +
+        " --include-header hci/address.h" +
+        " --output $(out)",
     srcs: [
-        "packets/hci/hci_packets.pdl",
+        "packets/hci_packets.pdl",
     ],
     out: [
-        "hci/hci_packets.h",
+        "packets/hci_packets.h",
     ],
 }
 
 genrule {
     name: "rootcanal_link_layer_packets_cxx_gen",
     tools: [
-        "bluetooth_packetgen",
+        ":pdl_cxx_generator",
+        ":pdlc",
     ],
-    cmd: "$(location bluetooth_packetgen) --root_namespace=model --include=packages/modules/Bluetooth/tools/rootcanal --out=$(genDir) $(in)",
+    cmd: "set -o pipefail;" +
+        " $(location :pdlc) $(in) |" +
+        " $(location :pdl_cxx_generator)" +
+        " --namespace model::packets" +
+        " --include-header hci/address.h" +
+        " --using-namespace bluetooth::hci" +
+        " --output $(out)",
     srcs: [
         "packets/link_layer_packets.pdl",
     ],
@@ -455,9 +451,16 @@ genrule {
 genrule {
     name: "rootcanal_bredr_bb_packets_cxx_gen",
     tools: [
-        "bluetooth_packetgen",
+        ":pdl_cxx_generator",
+        ":pdlc",
     ],
-    cmd: "$(location bluetooth_packetgen) --root_namespace=bredr_bb --include=packages/modules/Bluetooth/tools/rootcanal/packets --out=$(genDir) $(in)",
+    cmd: "set -o pipefail;" +
+        " $(location :pdlc) $(in) |" +
+        " $(location :pdl_cxx_generator)" +
+        " --namespace bredr_bb" +
+        " --include-header hci/address.h" +
+        " --using-namespace bluetooth::hci" +
+        " --output $(out)",
     srcs: [
         "packets/bredr_bb.pdl",
     ],
@@ -469,6 +472,6 @@ genrule {
 genrule {
     name: "rootcanal_hci_packets_rust_gen",
     defaults: ["pdl_rust_generator_defaults"],
-    srcs: ["packets/hci/hci_packets.pdl"],
+    srcs: ["packets/hci_packets.pdl"],
     out: ["hci_packets.rs"],
 }
