@@ -16,7 +16,6 @@
 
 package com.android.bluetooth.gatt;
 
-import static android.bluetooth.le.ScanSettings.CALLBACK_TYPE_ALL_MATCHES;
 import static android.bluetooth.le.ScanSettings.CALLBACK_TYPE_ALL_MATCHES_AUTO_BATCH;
 import static android.bluetooth.le.ScanSettings.SCAN_MODE_OPPORTUNISTIC;
 import static android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_POWER;
@@ -28,7 +27,6 @@ import static android.bluetooth.le.ScanSettings.SCAN_MODE_SCREEN_OFF_BALANCED;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.anyString;
@@ -42,13 +40,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
-import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProtoEnums;
 import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanRecord;
-import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
-import android.bluetooth.le.TransportDiscoveryData;
 import android.content.Context;
 import android.location.LocationManager;
 import android.os.Binder;
@@ -62,12 +56,10 @@ import androidx.test.filters.SmallTest;
 import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.BluetoothAdapterProxy;
 import com.android.bluetooth.btservice.MetricsLogger;
-import com.android.internal.util.ArrayUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,7 +67,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -85,6 +76,7 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
 
 /**
  * Test cases for {@link ScanManager}.
@@ -113,7 +105,7 @@ public class ScanManagerTest {
     @Mock private AdapterService mAdapterService;
     @Mock private BluetoothAdapterProxy mBluetoothAdapterProxy;
     @Mock private LocationManager mLocationManager;
-    @Mock private GattObjectsFactory mFactory;
+    @Spy private GattObjectsFactory mFactory = GattObjectsFactory.getInstance();
     @Mock private GattNativeInterface mNativeInterface;
     @Mock private ScanNativeInterface mScanNativeInterface;
     @Mock private MetricsLogger  mMetricsLogger;
@@ -198,9 +190,14 @@ public class ScanManagerTest {
         TestUtils.waitForLooperToBeIdle(mHandler.getLooper());
     }
 
-    private ScanClient createScanClient(int id, boolean isFiltered, int scanMode,
-            boolean isBatch, boolean isAutoBatch) {
-        List<ScanFilter> scanFilterList = createScanFilterList(isFiltered);
+    private ScanClient createScanClient(
+            int id,
+            boolean isFiltered,
+            boolean isEmptyFilter,
+            int scanMode,
+            boolean isBatch,
+            boolean isAutoBatch) {
+        List<ScanFilter> scanFilterList = createScanFilterList(isFiltered, isEmptyFilter);
         ScanSettings scanSettings = createScanSettings(scanMode, isBatch, isAutoBatch);
 
         ScanClient client = new ScanClient(id, scanSettings, scanFilterList);
@@ -210,14 +207,29 @@ public class ScanManagerTest {
     }
 
     private ScanClient createScanClient(int id, boolean isFiltered, int scanMode) {
-        return createScanClient(id, isFiltered, scanMode, false, false);
+        return createScanClient(id, isFiltered, false, scanMode, false, false);
     }
 
-    private List<ScanFilter> createScanFilterList(boolean isFiltered) {
+    private ScanClient createScanClient(
+            int id, boolean isFiltered, int scanMode,
+            boolean isBatch, boolean isAutoBatch) {
+        return createScanClient(id, isFiltered, false, scanMode, isBatch, isAutoBatch);
+    }
+
+    private ScanClient createScanClient(
+            int id, boolean isFiltered, boolean isEmptyFilter, int scanMode) {
+        return createScanClient(id, isFiltered, isEmptyFilter, scanMode, false, false);
+    }
+
+    private List<ScanFilter> createScanFilterList(boolean isFiltered, boolean isEmptyFilter) {
         List<ScanFilter> scanFilterList = null;
         if (isFiltered) {
             scanFilterList = new ArrayList<>();
-            scanFilterList.add(new ScanFilter.Builder().setDeviceName("TestName").build());
+            if (isEmptyFilter) {
+                scanFilterList.add(new ScanFilter.Builder().build());
+            } else {
+                scanFilterList.add(new ScanFilter.Builder().setDeviceName("TestName").build());
+            }
         }
         return scanFilterList;
     }
@@ -333,6 +345,36 @@ public class ScanManagerTest {
             sendMessageWaitForProcessed(createStartStopScanMessage(true, client));
             assertThat(mScanManager.getRegularScanQueue().contains(client)).isTrue();
             assertThat(mScanManager.getSuspendedScanQueue().contains(client)).isFalse();
+            assertThat(client.settings.getScanMode()).isEqualTo(expectedScanMode);
+        }
+    }
+
+    @Test
+    public void testScreenOffStartEmptyFilterScan() {
+        // Set filtered scan flag
+        final boolean isFiltered = true;
+        final boolean isEmptyFilter = true;
+        // Set scan mode map {original scan mode (ScanMode) : expected scan mode (expectedScanMode)}
+        SparseIntArray scanModeMap = new SparseIntArray();
+        scanModeMap.put(SCAN_MODE_LOW_POWER, SCAN_MODE_LOW_POWER);
+        scanModeMap.put(SCAN_MODE_BALANCED, SCAN_MODE_BALANCED);
+        scanModeMap.put(SCAN_MODE_LOW_LATENCY, SCAN_MODE_LOW_LATENCY);
+        scanModeMap.put(SCAN_MODE_AMBIENT_DISCOVERY, SCAN_MODE_AMBIENT_DISCOVERY);
+
+        for (int i = 0; i < scanModeMap.size(); i++) {
+            int ScanMode = scanModeMap.keyAt(i);
+            int expectedScanMode = scanModeMap.get(ScanMode);
+            Log.d(TAG, "ScanMode: " + String.valueOf(ScanMode)
+                    + " expectedScanMode: " + String.valueOf(expectedScanMode));
+
+            // Turn off screen
+            sendMessageWaitForProcessed(createScreenOnOffMessage(false));
+            // Create scan client
+            ScanClient client = createScanClient(i, isFiltered, isEmptyFilter, ScanMode);
+            // Start scan
+            sendMessageWaitForProcessed(createStartStopScanMessage(true, client));
+            assertThat(mScanManager.getRegularScanQueue().contains(client)).isFalse();
+            assertThat(mScanManager.getSuspendedScanQueue().contains(client)).isTrue();
             assertThat(client.settings.getScanMode()).isEqualTo(expectedScanMode);
         }
     }
@@ -1235,5 +1277,53 @@ public class ScanManagerTest {
         verify(mMetricsLogger, times(1)).cacheCount(
                 eq(BluetoothProtoEnums.SCREEN_OFF_EVENT), anyLong());
         Mockito.clearInvocations(mMetricsLogger);
+    }
+
+    @Test
+    public void testDowngradeWithNonNullClientAppScanStats() {
+        // Set filtered scan flag
+        final boolean isFiltered = true;
+        // Set scan downgrade duration through Mock
+        when(mAdapterService.getScanDowngradeDurationMillis())
+                .thenReturn((long) DELAY_SCAN_DOWNGRADE_DURATION_MS);
+
+        // Turn off screen
+        sendMessageWaitForProcessed(createScreenOnOffMessage(false));
+        // Create scan client
+        ScanClient client = createScanClient(0, isFiltered, SCAN_MODE_LOW_LATENCY);
+        // Start Scan
+        sendMessageWaitForProcessed(createStartStopScanMessage(true, client));
+        assertThat(mScanManager.getRegularScanQueue().contains(client)).isTrue();
+        assertThat(mScanManager.getSuspendedScanQueue().contains(client)).isFalse();
+        assertThat(client.settings.getScanMode()).isEqualTo(SCAN_MODE_LOW_LATENCY);
+        // Set connecting state
+        sendMessageWaitForProcessed(createConnectingMessage(true));
+        // SCAN_MODE_LOW_LATENCY is now downgraded to SCAN_MODE_BALANCED
+        assertThat(client.settings.getScanMode()).isEqualTo(SCAN_MODE_BALANCED);
+    }
+
+    @Test
+    public void testDowngradeWithNullClientAppScanStats() {
+        // Set filtered scan flag
+        final boolean isFiltered = true;
+        // Set scan downgrade duration through Mock
+        when(mAdapterService.getScanDowngradeDurationMillis())
+                .thenReturn((long) DELAY_SCAN_DOWNGRADE_DURATION_MS);
+
+        // Turn off screen
+        sendMessageWaitForProcessed(createScreenOnOffMessage(false));
+        // Create scan client
+        ScanClient client = createScanClient(0, isFiltered, SCAN_MODE_LOW_LATENCY);
+        // Start Scan
+        sendMessageWaitForProcessed(createStartStopScanMessage(true, client));
+        assertThat(mScanManager.getRegularScanQueue().contains(client)).isTrue();
+        assertThat(mScanManager.getSuspendedScanQueue().contains(client)).isFalse();
+        assertThat(client.settings.getScanMode()).isEqualTo(SCAN_MODE_LOW_LATENCY);
+        // Set AppScanStats to null
+        client.stats = null;
+        // Set connecting state
+        sendMessageWaitForProcessed(createConnectingMessage(true));
+        // Since AppScanStats is null, no downgrade takes place for scan mode
+        assertThat(client.settings.getScanMode()).isEqualTo(SCAN_MODE_LOW_LATENCY);
     }
 }

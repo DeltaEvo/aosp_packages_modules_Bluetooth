@@ -34,14 +34,11 @@ btifCommonIncludes = [
 
 cc_library {
     name: "libstatslog_bt",
-    defaults: ["fluoride_common_options"],
+    defaults: ["bluetooth_cflags"],
     host_supported: true,
     generated_sources: ["statslog_bt.cpp"],
     generated_headers: ["statslog_bt.h"],
     export_generated_headers: ["statslog_bt.h"],
-    shared_libs: [
-        "libcutils",
-    ],
     apex_available: [
         "com.android.btservices",
     ],
@@ -57,6 +54,7 @@ cc_library {
         },
         host: {
             static_libs: [
+                "libbase",
                 "libstatssocket",
             ],
             export_static_lib_headers: [
@@ -89,7 +87,7 @@ genrule {
 
 cc_library_static {
     name: "libbtif",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     include_dirs: btifCommonIncludes,
     srcs: [
         // AVRCP Target Service
@@ -162,13 +160,16 @@ cc_library_static {
     cflags: [
         "-DBUILDCFG",
     ],
+    apex_available: [
+        "com.android.btservices",
+    ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
 }
 
 cc_library_static {
     name: "libbtif-core",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     include_dirs: btifCommonIncludes,
     srcs: [
         // Callouts
@@ -176,7 +177,6 @@ cc_library_static {
         "co/bta_gatts_co.cc",
         // BTIF implementation
         "src/btif_activity_attribution.cc",
-        "src/btif_ble_advertiser.cc",
         "src/btif_ble_scanner.cc",
         "src/btif_bqr.cc",
         "src/btif_config.cc",
@@ -238,6 +238,9 @@ cc_library_static {
         "-DBUILDCFG",
         "-fvisibility=default",
     ],
+    apex_available: [
+        "com.android.btservices",
+    ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
 }
@@ -270,7 +273,7 @@ cc_test {
         "libutils",
     ],
     static_libs: [
-        "android.hardware.audio.common-V1-ndk",
+        "android.hardware.audio.common-V2-ndk",
         "android.hardware.bluetooth.a2dp@1.0",
         "android.hardware.bluetooth.audio-V3-ndk",
         "android.hardware.bluetooth@1.0",
@@ -287,7 +290,6 @@ cc_test {
         "libbt-bta-core",
         "libbt-common",
         "libbt-hci",
-        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
@@ -344,7 +346,6 @@ cc_test {
     static_libs: [
         "libbluetooth-types",
         "libchrome",
-        "libflatbuffers-cpp",
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
@@ -377,7 +378,6 @@ cc_test {
     static_libs: [
         "libbluetooth-types",
         "libchrome",
-        "libflatbuffers-cpp",
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
@@ -414,7 +414,6 @@ cc_test {
     static_libs: [
         "libbluetooth-types",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libosi-AllocationTestHarness",
@@ -608,14 +607,13 @@ cc_test {
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
     ],
     cflags: ["-DBUILDCFG"],
     target: {
         android: {
             static_libs: [
-                "android.hardware.audio.common-V1-ndk",
+                "android.hardware.audio.common-V2-ndk",
                 "android.hardware.bluetooth.audio-V3-ndk",
                 "android.hardware.common-V2-ndk",
                 "android.hardware.common.fmq-V1-ndk",
@@ -740,14 +738,13 @@ cc_test {
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
     ],
     cflags: ["-DBUILDCFG"],
     target: {
         android: {
             static_libs: [
-                "android.hardware.audio.common-V1-ndk",
+                "android.hardware.audio.common-V2-ndk",
                 "android.hardware.bluetooth.audio-V3-ndk",
                 "android.hardware.common-V2-ndk",
                 "android.hardware.common.fmq-V1-ndk",

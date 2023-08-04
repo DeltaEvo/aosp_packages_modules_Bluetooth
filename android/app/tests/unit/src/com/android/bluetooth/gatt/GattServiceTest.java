@@ -45,6 +45,7 @@ import android.bluetooth.le.ScanSettings;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.content.res.Resources;
+import android.location.LocationManager;
 import android.os.Binder;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
@@ -96,10 +97,12 @@ public class GattServiceTest {
     @Mock private GattService.ScannerMap mScannerMap;
     @Mock private GattService.ScannerMap.App mApp;
     @Mock private GattService.PendingIntentInfo mPiInfo;
+    @Mock private PeriodicScanManager mPeriodicScanManager;
     @Mock private ScanManager mScanManager;
     @Mock private Set<String> mReliableQueue;
     @Mock private GattService.ServerMap mServerMap;
     @Mock private DistanceMeasurementManager mDistanceMeasurementManager;
+    @Mock private LocationManager mLocationManager;
 
     @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
@@ -124,6 +127,10 @@ public class GattServiceTest {
 
         GattObjectsFactory.setInstanceForTesting(mFactory);
         doReturn(mNativeInterface).when(mFactory).getNativeInterface();
+        doReturn(mScanManager).when(mFactory).createScanManager(any(), any(), any());
+        doReturn(mPeriodicScanManager).when(mFactory).createPeriodicScanManager(any());
+        doReturn(mDistanceMeasurementManager).when(mFactory)
+                .createDistanceMeasurementManager(any());
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         mAttributionSource = mAdapter.getAttributionSource();
@@ -134,6 +141,10 @@ public class GattServiceTest {
         when(mAdapterService.getSharedPreferences(anyString(), anyInt()))
                 .thenReturn(InstrumentationRegistry.getTargetContext()
                         .getSharedPreferences("GattServiceTestPrefs", Context.MODE_PRIVATE));
+        when(mAdapterService.getSystemService(Context.LOCATION_SERVICE))
+                .thenReturn(mLocationManager);
+        when(mAdapterService.getSystemServiceName(LocationManager.class))
+                .thenReturn(Context.LOCATION_SERVICE);
 
         mBtCompanionManager = new CompanionManager(mAdapterService, null);
         doReturn(mBtCompanionManager).when(mAdapterService).getCompanionManager();
@@ -144,10 +155,8 @@ public class GattServiceTest {
 
         mService.mClientMap = mClientMap;
         mService.mScannerMap = mScannerMap;
-        mService.mScanManager = mScanManager;
         mService.mReliableQueue = mReliableQueue;
         mService.mServerMap = mServerMap;
-        mService.mDistanceMeasurementManager = mDistanceMeasurementManager;
     }
 
     @After
@@ -179,6 +188,10 @@ public class GattServiceTest {
             reset(mAdapterService);
             TestUtils.setAdapterService(mAdapterService);
             doReturn(true).when(mAdapterService).isStartedProfile(anyString());
+            when(mAdapterService.getSystemService(Context.LOCATION_SERVICE))
+                    .thenReturn(mLocationManager);
+            when(mAdapterService.getSystemServiceName(LocationManager.class))
+                    .thenReturn(Context.LOCATION_SERVICE);
             TestUtils.startService(mServiceRule, GattService.class);
             mService = GattService.getGattService();
             Assert.assertNotNull(mService);

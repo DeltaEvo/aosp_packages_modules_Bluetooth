@@ -32,7 +32,7 @@ cc_test_library {
 // Bluetooth stack static library for target
 cc_library_static {
     name: "libbt-stack",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     local_include_dirs: [
         "avct",
         "avdt",
@@ -125,10 +125,10 @@ cc_library_static {
         "bnep/bnep_api.cc",
         "bnep/bnep_main.cc",
         "bnep/bnep_utils.cc",
-        "btm/hfp_msbc_decoder.cc",
-        "btm/hfp_msbc_encoder.cc",
         "btm/hfp_lc3_decoder.cc",
         "btm/hfp_lc3_encoder.cc",
+        "btm/hfp_msbc_decoder.cc",
+        "btm/hfp_msbc_encoder.cc",
         "hid/hidd_api.cc",
         "hid/hidd_conn.cc",
         "hid/hidh_api.cc",
@@ -169,7 +169,7 @@ filegroup {
 
 cc_library_static {
     name: "libbt-stack-core",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     local_include_dirs: [
         "avct",
         "avdt",
@@ -220,7 +220,6 @@ cc_library_static {
         "btm/btm_ble_bgconn.cc",
         "btm/btm_ble_cont_energy.cc",
         "btm/btm_ble_gap.cc",
-        "btm/btm_ble_multi_adv.cc",
         "btm/btm_ble_privacy.cc",
         "btm/btm_ble_scanner.cc",
         "btm/btm_client_interface.cc",
@@ -471,7 +470,7 @@ cc_fuzz {
         ":TestMockStackL2cap",
         ":TestMockStackMetrics",
         "fuzzers/smp_fuzzer.cc",
-        "smp/smp_*.cc",
+        "smp/*.cc", // add other sources files  (p256 related) under smp into this test
     ],
     static_libs: [
         "libgmock",
@@ -644,7 +643,7 @@ cc_test {
         "libz",
     ],
     static_libs: [
-        "android.hardware.audio.common-V1-ndk",
+        "android.hardware.audio.common-V2-ndk",
         "android.hardware.bluetooth.a2dp@1.0",
         "android.hardware.bluetooth.audio-V3-ndk",
         "android.hardware.bluetooth@1.0",
@@ -661,7 +660,6 @@ cc_test {
         "libbt-bta-core",
         "libbt-common",
         "libbt-hci",
-        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
@@ -740,10 +738,8 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
         "liblog",
         "libosi",
@@ -819,52 +815,10 @@ cc_test {
     static_libs: [
         "libchrome",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
         "liblog",
         "libosi",
     ],
-}
-
-// Bluetooth stack multi-advertising unit tests for target
-cc_test {
-    name: "net_test_stack_multi_adv",
-    defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
-        "fluoride_defaults",
-        "mts_defaults",
-    ],
-    test_suites: ["device-tests"],
-    local_include_dirs: [
-        "btm",
-        "include",
-    ],
-    include_dirs: [
-        "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
-        "packages/modules/Bluetooth/system/internal_include",
-    ],
-    srcs: [
-        ":TestMockDevice",
-        "btm/btm_ble_multi_adv.cc",
-        "test/ble_advertiser_test.cc",
-    ],
-    shared_libs: [
-        "libbinder_ndk",
-        "libcrypto",
-        "libcutils",
-    ],
-    static_libs: [
-        "android.system.suspend.control-V1-ndk",
-        "libbluetooth-types",
-        "libchrome",
-        "libgmock",
-        "liblog",
-    ],
-    sanitize: {
-        cfi: false,
-    },
 }
 
 // Bluetooth stack advertise data parsing unit tests for target
@@ -974,7 +928,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libgmock",
@@ -1039,7 +992,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "liblog",
@@ -1146,7 +1098,6 @@ cc_test {
     static_libs: [
         "libFraunhoferAAC",
         "libbt-common",
-        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libchrome",
@@ -1198,7 +1149,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "liblog",
         "libosi",
@@ -1254,7 +1204,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libgmock",
@@ -1361,7 +1310,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libgmock",
@@ -1445,7 +1393,6 @@ cc_test {
         "btm/btm_ble_bgconn.cc",
         "btm/btm_ble_cont_energy.cc",
         "btm/btm_ble_gap.cc",
-        "btm/btm_ble_multi_adv.cc",
         "btm/btm_ble_privacy.cc",
         "btm/btm_ble_scanner.cc",
         "btm/btm_client_interface.cc",
@@ -1460,28 +1407,27 @@ cc_test {
         "btm/btm_sco_hci.cc",
         "btm/btm_sco_hfp_hal.cc",
         "btm/btm_sec.cc",
-        "btm/hfp_msbc_decoder.cc",
-        "btm/hfp_msbc_encoder.cc",
         "btm/hfp_lc3_decoder.cc",
         "btm/hfp_lc3_encoder.cc",
+        "btm/hfp_msbc_decoder.cc",
+        "btm/hfp_msbc_encoder.cc",
         "metrics/stack_metrics_logging.cc",
+        "test/btm/btm_scn_test.cc",
         "test/btm/peer_packet_types_test.cc",
         "test/btm/sco_hci_test.cc",
+        "test/btm/sco_pkt_status_test.cc",
         "test/btm/stack_btm_regression_tests.cc",
         "test/btm/stack_btm_test.cc",
-        "test/btm/sco_pkt_status_test.cc",
         "test/common/mock_eatt.cc",
         "test/stack_include_test.cc",
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbtdevice",
         "libchrome",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
         "liblc3",
         "liblog",
@@ -1529,7 +1475,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libbtdevice",
         "libbte",
         "libchrome",
@@ -1585,7 +1530,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libbtdevice",
         "libbte",
         "libchrome",
@@ -1657,11 +1601,9 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libbtdevice",
         "libchrome",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
         "liblog",
         "libosi",
@@ -1739,11 +1681,9 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libbtdevice",
         "libchrome",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
         "liblog",
         "libosi",
@@ -1821,11 +1761,9 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libbtdevice",
         "libchrome",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
         "liblog",
         "libosi",
@@ -1907,11 +1845,9 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libbtdevice",
         "libchrome",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
         "liblog",
         "libosi",
