@@ -20,7 +20,7 @@ filegroup {
 
 cc_library_static {
     name: "libbte",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     srcs: [
         ":LibBluetoothShimSources",
         ":LibBluetoothSources",
@@ -52,8 +52,12 @@ cc_library_static {
         "BluetoothGeneratedDumpsysDataSchema_h",
         "BluetoothGeneratedPackets_h",
     ],
+    apex_available: [
+        "com.android.btservices",
+    ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
+    static_libs: ["libbluetooth_gd"],
 }
 
 cc_library {
@@ -63,7 +67,7 @@ cc_library {
         "//packages/modules/Bluetooth:__subpackages__",
         "//vendor:__subpackages__",
     ],
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     header_libs: ["libbluetooth_headers"],
     export_header_lib_headers: ["libbluetooth_headers"],
     include_dirs: [
@@ -143,7 +147,6 @@ cc_library_static {
         "-DBUILDCFG",
     ],
     shared_libs: [
-        "libflatbuffers-cpp",
     ],
     whole_static_libs: [
         "libbluetooth_gd", // Gabeldorsche
@@ -202,8 +205,8 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-dumpsys",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libbtdevice",
         "libchrome",
         "libevent",

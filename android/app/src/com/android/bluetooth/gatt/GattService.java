@@ -56,6 +56,7 @@ import android.bluetooth.le.ScanSettings;
 import android.companion.AssociationInfo;
 import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManager.PackageInfoFlags;
@@ -290,6 +291,11 @@ public class GattService extends ProfileService {
     private Handler mTestModeHandler;
     private final Object mTestModeLock = new Object();
 
+    public GattService(Context ctx) {
+        attachBaseContext(ctx);
+        onCreate();
+    }
+
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileGattEnabled().orElse(true);
     }
@@ -341,7 +347,12 @@ public class GattService extends ProfileService {
         mBluetoothAdapterProxy = BluetoothAdapterProxy.getInstance();
         mCompanionManager = getSystemService(CompanionDeviceManager.class);
         mAppOps = getSystemService(AppOpsManager.class);
-        mAdvertiseManager = new AdvertiseManager(this, mAdapterService, mAdvertiserMap);
+        mAdvertiseManager =
+                new AdvertiseManager(
+                        this,
+                        new AdvertiseManagerNativeInterface(),
+                        mAdapterService,
+                        mAdvertiserMap);
         mAdvertiseManager.start();
 
         mScanManager = GattObjectsFactory.getInstance()
@@ -604,34 +615,6 @@ public class GattService extends ProfileService {
             }
             Log.e(TAG, "getService() - Service requested, but not available!");
             return null;
-        }
-
-        @Override
-        public void startService() {
-            GattService service = mService;
-            if (service == null) {
-                Log.e(TAG, "startService: Service is null");
-                return;
-            }
-            if (!Utils.checkConnectPermissionForDataDelivery(
-                    service, null, "GattService startService")) {
-                return;
-            }
-            service.doStart();
-        }
-
-        @Override
-        public void stopService() {
-            GattService service = mService;
-            if (service == null) {
-                Log.e(TAG, "stopService: Service is null");
-                return;
-            }
-            if (!Utils.checkConnectPermissionForDataDelivery(
-                    service, null, "GattService stopService")) {
-                return;
-            }
-            service.doStop();
         }
 
         @Override
@@ -1770,15 +1753,6 @@ public class GattService extends ProfileService {
                 return;
             }
             service.disconnectAll(attributionSource);
-        }
-
-        @Override
-        public void unregAll(AttributionSource attributionSource) {
-            GattService service = getService();
-            if (service == null) {
-                return;
-            }
-            service.unregAll(attributionSource);
         }
 
         @Override
@@ -3430,7 +3404,7 @@ public class GattService extends ProfileService {
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    void unregAll(AttributionSource attributionSource) {
+    public void unregAll(AttributionSource attributionSource) {
         for (Integer appId : mClientMap.getAllAppsIds()) {
             if (DBG) {
                 Log.d(TAG, "unreg:" + appId);
