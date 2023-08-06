@@ -39,9 +39,6 @@ cc_library {
     generated_sources: ["statslog_bt.cpp"],
     generated_headers: ["statslog_bt.h"],
     export_generated_headers: ["statslog_bt.h"],
-    shared_libs: [
-        "libcutils",
-    ],
     apex_available: [
         "com.android.btservices",
     ],
@@ -57,6 +54,7 @@ cc_library {
         },
         host: {
             static_libs: [
+                "libbase",
                 "libstatssocket",
             ],
             export_static_lib_headers: [
@@ -89,7 +87,7 @@ genrule {
 
 cc_library_static {
     name: "libbtif",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     include_dirs: btifCommonIncludes,
     srcs: [
         // AVRCP Target Service
@@ -168,7 +166,7 @@ cc_library_static {
 
 cc_library_static {
     name: "libbtif-core",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     include_dirs: btifCommonIncludes,
     srcs: [
         // Callouts
@@ -292,7 +290,6 @@ cc_test {
         "libbt-bta-core",
         "libbt-common",
         "libbt-hci",
-        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
@@ -348,8 +345,8 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libchrome",
-        "libflatbuffers-cpp",
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
@@ -382,7 +379,6 @@ cc_test {
     static_libs: [
         "libbluetooth-types",
         "libchrome",
-        "libflatbuffers-cpp",
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
@@ -418,8 +414,8 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libosi-AllocationTestHarness",
@@ -601,6 +597,7 @@ cc_test {
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
@@ -613,7 +610,6 @@ cc_test {
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
     ],
     cflags: ["-DBUILDCFG"],
@@ -735,6 +731,7 @@ cc_test {
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
@@ -745,7 +742,6 @@ cc_test {
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
     ],
     cflags: ["-DBUILDCFG"],

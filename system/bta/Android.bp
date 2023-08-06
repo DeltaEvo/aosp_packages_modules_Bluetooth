@@ -9,7 +9,7 @@ package {
 
 cc_defaults {
     name: "fluoride_bta_defaults",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     local_include_dirs: [
         "dm",
         "hd",
@@ -23,7 +23,6 @@ cc_defaults {
         "packages/modules/Bluetooth/system/btif/avrcp",
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/btm",
         "packages/modules/Bluetooth/system/stack/include",
@@ -131,6 +130,7 @@ cc_library_static {
     static_libs: [
         "avrcp-target-service",
         "lib-bt-packets",
+        "libbluetooth_gd",
         "libbt-bta-core",
         "libcom.android.sysprop.bluetooth",
     ],
@@ -239,11 +239,11 @@ cc_test {
     static_libs: [
         "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
         "libbt-common",
-        "libbt-protos-lite",
         "libbtcore",
         "libchrome",
         "libcom.android.sysprop.bluetooth",
@@ -285,11 +285,11 @@ cc_test {
     static_libs: [
         "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
         "libbt-common",
-        "libbt-protos-lite",
         "libbtcore",
         "libchrome",
         "libosi",
@@ -403,14 +403,13 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libbtcore",
         "libbtdevice",
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
     ],
     sanitize: {
@@ -465,8 +464,8 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libgmock",
         "libosi",
@@ -509,8 +508,8 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libgmock",
         "libosi",
@@ -564,8 +563,8 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libgmock",
         "libosi",
@@ -728,8 +727,8 @@ cc_test {
         "liblog", // __android_log_print
     ],
     static_libs: [
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libflatbuffers-cpp",
@@ -799,9 +798,9 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libflatbuffers-cpp",
@@ -863,8 +862,8 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libgmock",
         "libosi",
@@ -916,8 +915,8 @@ cc_test {
         "liblog",
     ],
     static_libs: [
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libgmock",
         "liblc3",
@@ -981,7 +980,6 @@ cc_test {
     static_libs: [
         "libbt-audio-hal-interface",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libgmock",
@@ -1041,8 +1039,8 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libgmock",
     ],
@@ -1103,8 +1101,8 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
