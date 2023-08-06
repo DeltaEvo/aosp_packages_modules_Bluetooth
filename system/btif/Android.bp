@@ -39,9 +39,6 @@ cc_library {
     generated_sources: ["statslog_bt.cpp"],
     generated_headers: ["statslog_bt.h"],
     export_generated_headers: ["statslog_bt.h"],
-    shared_libs: [
-        "libcutils",
-    ],
     apex_available: [
         "com.android.btservices",
     ],
@@ -57,6 +54,7 @@ cc_library {
         },
         host: {
             static_libs: [
+                "libbase",
                 "libstatssocket",
             ],
             export_static_lib_headers: [
@@ -89,7 +87,7 @@ genrule {
 
 cc_library_static {
     name: "libbtif",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     include_dirs: btifCommonIncludes,
     srcs: [
         // AVRCP Target Service
@@ -159,13 +157,16 @@ cc_library_static {
     cflags: [
         "-DBUILDCFG",
     ],
+    apex_available: [
+        "com.android.btservices",
+    ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
 }
 
 cc_library_static {
     name: "libbtif-core",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     include_dirs: btifCommonIncludes,
     srcs: [
         // Callouts
@@ -237,6 +238,9 @@ cc_library_static {
         "-DBUILDCFG",
         "-fvisibility=default",
     ],
+    apex_available: [
+        "com.android.btservices",
+    ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
 }
@@ -269,7 +273,7 @@ cc_test {
         "libutils",
     ],
     static_libs: [
-        "android.hardware.audio.common-V1-ndk",
+        "android.hardware.audio.common-V2-ndk",
         "android.hardware.bluetooth.a2dp@1.0",
         "android.hardware.bluetooth.audio-V3-ndk",
         "android.hardware.bluetooth@1.0",
@@ -286,7 +290,6 @@ cc_test {
         "libbt-bta-core",
         "libbt-common",
         "libbt-hci",
-        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
@@ -342,8 +345,8 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libchrome",
-        "libflatbuffers-cpp",
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
@@ -376,7 +379,6 @@ cc_test {
     static_libs: [
         "libbluetooth-types",
         "libchrome",
-        "libflatbuffers-cpp",
         "libosi",
     ],
     cflags: ["-DBUILDCFG"],
@@ -412,8 +414,8 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libosi-AllocationTestHarness",
@@ -595,6 +597,7 @@ cc_test {
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
@@ -607,14 +610,13 @@ cc_test {
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
     ],
     cflags: ["-DBUILDCFG"],
     target: {
         android: {
             static_libs: [
-                "android.hardware.audio.common-V1-ndk",
+                "android.hardware.audio.common-V2-ndk",
                 "android.hardware.bluetooth.audio-V3-ndk",
                 "android.hardware.common-V2-ndk",
                 "android.hardware.common.fmq-V1-ndk",
@@ -729,6 +731,7 @@ cc_test {
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
@@ -739,14 +742,13 @@ cc_test {
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
-        "libflatbuffers-cpp",
         "libgmock",
     ],
     cflags: ["-DBUILDCFG"],
     target: {
         android: {
             static_libs: [
-                "android.hardware.audio.common-V1-ndk",
+                "android.hardware.audio.common-V2-ndk",
                 "android.hardware.bluetooth.audio-V3-ndk",
                 "android.hardware.common-V2-ndk",
                 "android.hardware.common.fmq-V1-ndk",
