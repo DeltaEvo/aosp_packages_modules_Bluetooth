@@ -27,10 +27,10 @@
 
 #include "controller_properties.h"
 #include "hci/address.h"
-#include "hci/hci_packets.h"
 #include "link_layer_controller.h"
 #include "model/controller/vendor_commands/csr.h"
 #include "model/devices/device.h"
+#include "packets/hci_packets.h"
 
 namespace rootcanal {
 
@@ -50,9 +50,6 @@ using ::bluetooth::hci::CommandView;
 // "Hci" to distinguish it as a controller command.
 class DualModeController : public Device {
  public:
-  // Unique instance identifier.
-  const int id_;
-
   DualModeController(ControllerProperties properties = ControllerProperties());
   DualModeController(DualModeController&&) = delete;
   DualModeController(const DualModeController&) = delete;

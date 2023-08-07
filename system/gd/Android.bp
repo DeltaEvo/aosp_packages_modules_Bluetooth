@@ -30,7 +30,6 @@ cc_defaults {
             enabled: false,
         },
     },
-    cpp_std: "c++17",
     cflags: [
         "-DEXPORT_SYMBOL=__attribute__((visibility(\"default\")))",
         "-DGOOGLE_PROTOBUF_NO_RTTI",
@@ -38,7 +37,6 @@ cc_defaults {
         "-Wno-unused-result",
         "-fvisibility=hidden",
     ],
-    c_std: "c99",
     header_libs: ["jni_headers"],
 }
 
@@ -162,6 +160,9 @@ cc_defaults {
     ],
     shared_libs: [
         "libcrypto",
+        "libflatbuffers-cpp",
+    ],
+    export_shared_lib_headers: [
         "libflatbuffers-cpp",
     ],
     whole_static_libs: [
@@ -470,7 +471,6 @@ cc_defaults {
     ],
     shared_libs: [
         "libcrypto",
-        "libflatbuffers-cpp",
         "libgrpc++",
         "libgrpc_wrap",
     ],

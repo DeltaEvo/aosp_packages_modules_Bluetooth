@@ -59,7 +59,7 @@ using le_audio::types::CodecLocation;
 using le_audio::types::kLeAudioCodingFormatLC3;
 using le_audio::types::LeAudioContextType;
 using le_audio::types::LeAudioLtvMap;
-using le_audio::utils::GetAllowedAudioContextsFromSourceMetadata;
+using le_audio::utils::GetAudioContextsFromSourceMetadata;
 
 namespace {
 class LeAudioBroadcasterImpl;
@@ -1054,11 +1054,9 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
       LOG_VERBOSE("All data sent.");
     }
 
-    virtual void OnAudioSuspend(
-        std::promise<void> do_suspend_promise) override {
+    virtual void OnAudioSuspend(void) override {
       LOG_INFO();
       /* TODO: Should we suspend all broadcasts - remove BIGs? */
-      do_suspend_promise.set_value();
       if (instance)
         instance->audio_data_path_state_ = AudioDataPathState::SUSPENDED;
     }
@@ -1084,9 +1082,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
       if (!instance) return;
 
       /* TODO: Should we take supported contexts from ASCS? */
-      auto supported_context_types = le_audio::types::kLeAudioContextAllTypes;
-      auto contexts = GetAllowedAudioContextsFromSourceMetadata(
-          source_metadata, supported_context_types);
+      auto contexts = GetAudioContextsFromSourceMetadata(source_metadata);
       if (contexts.any()) {
         /* NOTICE: We probably don't want to change the stream configuration
          * on each metadata change, so just update the context type metadata.

@@ -1070,7 +1070,7 @@ void handle_rc_vendorunique_rsp(tBTA_AV_REMOTE_RSP* p_remote_rsp) {
       key_state = 0;
     }
 
-    if (p_remote_rsp->len > 0) {
+    if (p_remote_rsp->len > 0 && p_remote_rsp->p_data != NULL) {
       if (p_remote_rsp->len >= AVRC_PASS_THRU_GROUP_LEN)
         vendor_id = p_remote_rsp->p_data[AVRC_PASS_THRU_GROUP_LEN - 1];
       osi_free_and_reset((void**)&p_remote_rsp->p_data);
@@ -3957,6 +3957,9 @@ static void handle_get_metadata_attr_response(tBTA_AV_META_MSG* pmeta_msg,
         osi_free_and_reset((void**)&p_rsp->p_attrs[i].name.p_str);
       }
     }
+
+    osi_free_and_reset((void**)&p_rsp->p_attrs);
+
     do_in_jni_thread(FROM_HERE,
                      base::Bind(bt_rc_ctrl_callbacks->track_changed_cb,
                                 p_dev->rc_addr, p_rsp->num_attrs, p_attr));
