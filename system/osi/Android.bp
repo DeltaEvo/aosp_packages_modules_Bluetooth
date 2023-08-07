@@ -75,8 +75,6 @@ cc_library_static {
         "src/alarm.cc",
         "src/allocation_tracker.cc",
         "src/allocator.cc",
-        "src/array.cc",
-        "src/buffer.cc",
         "src/config.cc",
         "src/fixed_queue.cc",
         "src/future.cc",
@@ -133,7 +131,6 @@ cc_test {
         "test/alarm_test.cc",
         "test/allocation_tracker_test.cc",
         "test/allocator_test.cc",
-        "test/array_test.cc",
         "test/config_test.cc",
         "test/fixed_queue_test.cc",
         "test/future_test.cc",
@@ -167,6 +164,7 @@ cc_test {
         "libgmock",
         "libosi",
         "libprotobuf-cpp-lite",
+        "libstatslog_bt",
     ],
     target: {
         android: {
