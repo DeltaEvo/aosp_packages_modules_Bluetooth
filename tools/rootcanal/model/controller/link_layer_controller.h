@@ -57,14 +57,17 @@ class LinkLayerController {
   static constexpr size_t kExtendedInquiryResponseSize = 240;
 
   // Unique instance identifier.
-  const int id_;
+  const uint32_t id_;
 
   // Generate a resolvable private address using the specified IRK.
   static Address generate_rpa(
       std::array<uint8_t, LinkLayerController::kIrkSize> irk);
 
+  // Return true if the input IRK is all 0s.
+  static bool irk_is_zero(std::array<uint8_t, LinkLayerController::kIrkSize> irk);
+
   LinkLayerController(const Address& address,
-                      const ControllerProperties& properties, int id = 0);
+                      const ControllerProperties& properties, uint32_t id = 0);
   ~LinkLayerController();
 
   ErrorCode SendCommandToRemoteByAddress(OpCode opcode, pdl::packet::slice args,

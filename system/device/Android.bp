@@ -10,7 +10,7 @@ package {
 
 cc_library_static {
     name: "libbtdevice",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     host_supported: true,
     local_include_dirs: [
         "include",
@@ -53,6 +53,7 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbtcore",
         "libbtdevice",
         "libchrome",
