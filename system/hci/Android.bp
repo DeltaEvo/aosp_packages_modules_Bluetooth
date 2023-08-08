@@ -27,7 +27,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "system/libhwbinder/include",
@@ -46,16 +45,13 @@ cc_test {
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
-        "fluoride_test_defaults",
         "mts_defaults",
     ],
-    host_supported: false,
     local_include_dirs: [
         "include",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/osi/test",
         "packages/modules/Bluetooth/system/stack/include",
@@ -69,11 +65,19 @@ cc_test {
         "android.hardware.bluetooth.audio@2.1",
         "libbase",
         "libdl",
+        "liblog",
     ],
     static_libs: [
         "libbluetooth-for-tests",
         "libbt-hci",
         "libbtcore",
         "libchrome",
+        "libosi",
+        "libosi-AllocationTestHarness",
     ],
+    sanitize: {
+        address: true,
+        cfi: true,
+        misc_undefined: ["bounds"],
+    },
 }
