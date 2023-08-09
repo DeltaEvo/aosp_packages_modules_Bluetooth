@@ -1351,7 +1351,7 @@ void l2cu_change_pri_ccb(tL2C_CCB* p_ccb, tL2CAP_CHNL_PRIORITY priority) {
  * Returns          pointer to CCB, or NULL if none
  *
  ******************************************************************************/
-tL2C_CCB* l2cu_allocate_ccb(tL2C_LCB* p_lcb, uint16_t cid) {
+tL2C_CCB* l2cu_allocate_ccb(tL2C_LCB* p_lcb, uint16_t cid, bool is_eatt) {
   LOG_DEBUG("is_dynamic = %d, cid 0x%04x", p_lcb != nullptr, cid);
   if (!l2cb.p_free_ccb_first) {
     LOG_ERROR("First free ccb is null for cid 0x%04x", cid);
@@ -1471,7 +1471,12 @@ tL2C_CCB* l2cu_allocate_ccb(tL2C_LCB* p_lcb, uint16_t cid) {
 
   if (p_lcb != NULL) {
     // once a dynamic channel is opened, timeouts become active
-    p_lcb->with_active_local_clients = true;
+    // the exception for this is EATT, since that is managed by GATT clients,
+    // not by the L2CAP layer (GATT will keep the idle timeout at infinity while
+    // clients are active)
+    if (!is_eatt) {
+      p_lcb->with_active_local_clients = true;
+    }
   }
 
   return p_ccb;
@@ -2660,7 +2665,12 @@ bool l2cu_initialize_fixed_ccb(tL2C_LCB* p_lcb, uint16_t fixed_cid) {
   p_ccb = l2cu_allocate_ccb(NULL, 0);
   if (p_ccb == NULL) return (false);
 
-  alarm_cancel(p_lcb->l2c_lcb_timer);
+  if (p_lcb->link_state == LST_DISCONNECTED) {
+    alarm_cancel(p_lcb->l2c_lcb_timer);
+  } else {
+    LOG_WARN("Unable to cancel link control block for link connection to device %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr));
+  }
 
   /* Set CID for the connection */
   p_ccb->local_cid = fixed_cid;

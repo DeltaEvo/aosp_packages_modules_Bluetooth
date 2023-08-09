@@ -118,7 +118,7 @@ class Host(
     private val advertisers = mutableMapOf<UUID, AdvertiseCallback>()
 
     init {
-        scope = CoroutineScope(Dispatchers.Default)
+        scope = CoroutineScope(Dispatchers.Default.limitedParallelism(1))
 
         // Add all intent actions to be listened.
         val intentFilter = IntentFilter()
@@ -134,7 +134,7 @@ class Host(
         // This flow is started eagerly to make sure that the broadcast receiver is registered
         // before
         // any function call. This flow is only cancelled when the corresponding scope is cancelled.
-        flow = intentFlow(context, intentFilter).shareIn(scope, SharingStarted.Eagerly)
+        flow = intentFlow(context, intentFilter, scope).shareIn(scope, SharingStarted.Eagerly)
     }
 
     override fun close() {
@@ -614,8 +614,10 @@ class Host(
                         override fun onScanResult(callbackType: Int, result: ScanResult) {
                             val bluetoothDevice = result.device
                             val scanRecord = result.scanRecord
+                            checkNotNull(scanRecord)
                             val scanData = scanRecord.getAdvertisingDataMap()
-                            val serviceData = scanRecord?.serviceData!!
+                            val serviceData = scanRecord.serviceData
+                            checkNotNull(serviceData)
 
                             var dataTypesBuilder =
                                 DataTypes.newBuilder().setTxPowerLevel(scanRecord.getTxPowerLevel())
@@ -732,7 +734,7 @@ class Host(
 
                             // Flags DataTypes CSSv10 1.3 Flags
                             val mode: DiscoverabilityMode =
-                                when (result.scanRecord.advertiseFlags and 0b11) {
+                                when (scanRecord.advertiseFlags and 0b11) {
                                     0b01 -> DiscoverabilityMode.DISCOVERABLE_LIMITED
                                     0b10 -> DiscoverabilityMode.DISCOVERABLE_GENERAL
                                     else -> DiscoverabilityMode.NOT_DISCOVERABLE

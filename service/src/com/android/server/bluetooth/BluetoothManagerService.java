@@ -25,12 +25,7 @@ import static android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF;
 import static android.bluetooth.BluetoothAdapter.STATE_TURNING_ON;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 
-import static com.android.server.bluetooth.BluetoothAirplaneModeListener.APM_BT_ENABLED_NOTIFICATION;
 import static com.android.server.bluetooth.BluetoothAirplaneModeListener.APM_ENHANCEMENT;
-import static com.android.server.bluetooth.BluetoothAirplaneModeListener.APM_USER_TOGGLED_BLUETOOTH;
-import static com.android.server.bluetooth.BluetoothAirplaneModeListener.BLUETOOTH_APM_STATE;
-import static com.android.server.bluetooth.BluetoothAirplaneModeListener.NOTIFICATION_NOT_SHOWN;
-import static com.android.server.bluetooth.BluetoothAirplaneModeListener.USED;
 
 import static java.util.Objects.requireNonNull;
 
@@ -72,8 +67,10 @@ import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.sysprop.BluetoothProperties;
@@ -84,6 +81,9 @@ import com.android.bluetooth.BluetoothStatsLog;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.BluetoothManagerServiceDumpProto;
+import com.android.server.bluetooth.satellite.SatelliteModeListener;
+
+import kotlin.Unit;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -114,10 +114,13 @@ class BluetoothManagerService {
     private static final int CRASH_LOG_MAX_SIZE = 100;
 
     private static final int DEFAULT_REBIND_COUNT = 3;
-    private static final int TIMEOUT_BIND_MS = 3000; // Maximum msec to wait for a bind
+    // Maximum msec to wait for a bind
+    private static final int TIMEOUT_BIND_MS =
+        3000 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
 
     // Timeout value for synchronous binder call
-    private static final Duration SYNC_CALLS_TIMEOUT = Duration.ofSeconds(3);
+    private static final Duration SYNC_CALLS_TIMEOUT =
+        Duration.ofSeconds(3 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1));
 
     /**
      * @return timeout value for synchronous binder call
@@ -127,15 +130,20 @@ class BluetoothManagerService {
     }
 
     // Maximum msec to wait for service restart
-    private static final int SERVICE_RESTART_TIME_MS = 400;
+    private static final int SERVICE_RESTART_TIME_MS
+        = 400 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
     // Maximum msec to wait for restart due to error
-    private static final int ERROR_RESTART_TIME_MS = 3000;
+    private static final int ERROR_RESTART_TIME_MS
+        = 3000 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
     // Maximum msec to delay MESSAGE_USER_SWITCHED
-    private static final int USER_SWITCHED_TIME_MS = 200;
+    private static final int USER_SWITCHED_TIME_MS
+        = 200 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
     // Delay for the addProxy function in msec
-    private static final int ADD_PROXY_DELAY_MS = 100;
+    private static final int ADD_PROXY_DELAY_MS
+        = 100 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
     // Delay for retrying enable and disable in msec
-    private static final int ENABLE_DISABLE_DELAY_MS = 300;
+    private static final int ENABLE_DISABLE_DELAY_MS
+        = 300 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
 
     @VisibleForTesting static final int MESSAGE_ENABLE = 1;
     @VisibleForTesting static final int MESSAGE_DISABLE = 2;
@@ -172,9 +180,6 @@ class BluetoothManagerService {
     // and Airplane mode will have higher priority.
     @VisibleForTesting static final int BLUETOOTH_ON_AIRPLANE = 2;
 
-    private static final int BLUETOOTH_OFF_APM = 0;
-    private static final int BLUETOOTH_ON_APM = 1;
-
     private static final int FLAGS_SYSTEM_APP =
             ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
 
@@ -183,6 +188,7 @@ class BluetoothManagerService {
     private static final int DEFAULT_APM_ENHANCEMENT_STATE = 1;
 
     private final Context mContext;
+    private final Looper mLooper;
 
     private final UserManager mUserManager;
 
@@ -211,11 +217,19 @@ class BluetoothManagerService {
 
     private BluetoothModeChangeHelper mBluetoothModeChangeHelper;
 
-    private BluetoothAirplaneModeListener mBluetoothAirplaneModeListener;
+    private final BluetoothAirplaneModeListener mBluetoothAirplaneModeListener;
 
     private BluetoothNotificationManager mBluetoothNotificationManager;
 
+    // TODO(b/289584302): remove BluetoothSatelliteModeListener once use_new_satellite_mode ship
     private BluetoothSatelliteModeListener mBluetoothSatelliteModeListener;
+
+    // TODO(b/289584302): Use aconfig flag when available on AOSP
+    private static final boolean USE_NEW_SATELLITE_MODE =
+            DeviceConfig.getBoolean(
+                    DeviceConfig.NAMESPACE_BLUETOOTH,
+                    "com.android.bluetooth.use_new_satellite_mode",
+                    false);
 
     // used inside handler thread
     private boolean mQuietEnable = false;
@@ -411,8 +425,6 @@ class BluetoothManagerService {
                         + BluetoothAdapter.nameForState(state)
                         + ", isAirplaneModeOn()="
                         + isAirplaneModeOn()
-                        + ", isSatelliteModeSensitive()="
-                        + isSatelliteModeSensitive()
                         + ", isSatelliteModeOn()="
                         + isSatelliteModeOn()
                         + ", delayed="
@@ -434,27 +446,29 @@ class BluetoothManagerService {
     private static final Object ON_SWITCH_USER_TOKEN = new Object();
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    void onAirplaneModeChanged() {
+    void onAirplaneModeChanged(boolean isAirplaneModeOn) {
         mHandler.postDelayed(
                 () ->
                         delayModeChangedIfNeeded(
                                 ON_AIRPLANE_MODE_CHANGED_TOKEN,
-                                () -> handleAirplaneModeChanged(),
+                                () -> handleAirplaneModeChanged(isAirplaneModeOn),
                                 "onAirplaneModeChanged"),
                 ON_AIRPLANE_MODE_CHANGED_TOKEN,
                 0);
     }
 
+    // TODO(b/289584302): Update to private once use_new_satellite_mode is enabled
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    void onSatelliteModeChanged() {
+    Unit onSatelliteModeChanged(boolean isSatelliteModeOn) {
         mHandler.postDelayed(
                 () ->
                         delayModeChangedIfNeeded(
                                 ON_SATELLITE_MODE_CHANGED_TOKEN,
-                                () -> handleSatelliteModeChanged(),
+                                () -> handleSatelliteModeChanged(isSatelliteModeOn),
                                 "onSatelliteModeChanged"),
                 ON_SATELLITE_MODE_CHANGED_TOKEN,
                 0);
+        return Unit.INSTANCE;
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
@@ -470,10 +484,10 @@ class BluetoothManagerService {
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    private void handleAirplaneModeChanged() {
+    private void handleAirplaneModeChanged(boolean isAirplaneModeOn) {
         synchronized (this) {
             if (isBluetoothPersistedStateOn()) {
-                if (isAirplaneModeOn()) {
+                if (isAirplaneModeOn) {
                     persistBluetoothSetting(BLUETOOTH_ON_AIRPLANE);
                 } else {
                     persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
@@ -484,12 +498,12 @@ class BluetoothManagerService {
 
             Log.d(
                     TAG,
-                    "Airplane Mode change - current state:  "
-                            + BluetoothAdapter.nameForState(st)
-                            + ", isAirplaneModeOn()="
-                            + isAirplaneModeOn());
+                    "handleAirplaneModeChanged(isAirplaneModeOn="
+                            + isAirplaneModeOn
+                            + ") | current state="
+                            + BluetoothAdapter.nameForState(st));
 
-            if (isAirplaneModeOn()) {
+            if (isAirplaneModeOn) {
                 // Clear registered LE apps to force shut-off
                 clearBleApps();
 
@@ -525,26 +539,26 @@ class BluetoothManagerService {
         }
     }
 
-    private void handleSatelliteModeChanged() {
-        if (shouldBluetoothBeOn() && getState() != STATE_ON) {
+    private void handleSatelliteModeChanged(boolean isSatelliteModeOn) {
+        if (shouldBluetoothBeOn(isSatelliteModeOn) && getState() != STATE_ON) {
             sendEnableMsg(
                     mQuietEnableExternal,
                     BluetoothProtoEnums.ENABLE_DISABLE_REASON_SATELLITE_MODE,
                     mContext.getPackageName());
-        } else if (!shouldBluetoothBeOn() && getState() != STATE_OFF) {
+        } else if (!shouldBluetoothBeOn(isSatelliteModeOn) && getState() != STATE_OFF) {
             sendDisableMsg(
                     BluetoothProtoEnums.ENABLE_DISABLE_REASON_SATELLITE_MODE,
                     mContext.getPackageName());
         }
     }
 
-    private boolean shouldBluetoothBeOn() {
+    private boolean shouldBluetoothBeOn(boolean isSatelliteModeOn) {
         if (!isBluetoothPersistedStateOn()) {
             Log.d(TAG, "shouldBluetoothBeOn: User want BT off.");
             return false;
         }
 
-        if (isSatelliteModeOn()) {
+        if (isSatelliteModeOn) {
             Log.d(TAG, "shouldBluetoothBeOn: BT should be off as satellite mode is on.");
             return false;
         }
@@ -642,7 +656,7 @@ class BluetoothManagerService {
 
     BluetoothManagerService(@NonNull Context context, @NonNull Looper looper) {
         mContext = requireNonNull(context, "Context cannot be null");
-        requireNonNull(looper, "Looper cannot be null");
+        mLooper = requireNonNull(looper, "Looper cannot be null");
 
         mUserManager =
                 requireNonNull(
@@ -650,7 +664,7 @@ class BluetoothManagerService {
                         "UserManager system service cannot be null");
 
         mBinder = new BluetoothServiceBinder(this, mContext, mUserManager);
-        mHandler = new BluetoothHandler(looper);
+        mHandler = new BluetoothHandler(mLooper);
 
         mContentResolver = mContext.getContentResolver();
 
@@ -719,17 +733,14 @@ class BluetoothManagerService {
             mEnableExternal = true;
         }
 
-        String airplaneModeRadios =
-                Settings.Global.getString(mContentResolver, Settings.Global.AIRPLANE_MODE_RADIOS);
-        if (airplaneModeRadios == null
-                || airplaneModeRadios.contains(Settings.Global.RADIO_BLUETOOTH)) {
-            mBluetoothAirplaneModeListener =
-                    new BluetoothAirplaneModeListener(
-                            this, looper, mContext, mBluetoothNotificationManager);
-        }
+        mBluetoothAirplaneModeListener =
+                new BluetoothAirplaneModeListener(
+                        this, mLooper, mContext, mBluetoothNotificationManager);
 
-        mBluetoothSatelliteModeListener =
-                new BluetoothSatelliteModeListener(this, looper, mContext);
+        if (!USE_NEW_SATELLITE_MODE) {
+            mBluetoothSatelliteModeListener =
+                    new BluetoothSatelliteModeListener(this, mLooper, mContext);
+        }
     }
 
     IBluetoothManager.Stub getBinder() {
@@ -738,41 +749,15 @@ class BluetoothManagerService {
 
     /** Returns true if airplane mode is currently on */
     private boolean isAirplaneModeOn() {
-        return Settings.Global.getInt(
-                        mContext.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0)
-                == 1;
-    }
-
-    /**
-     * @hide constant copied from {@link Settings.Global} TODO(b/274636414): Migrate to official API
-     *     in Android V.
-     */
-    @VisibleForTesting static final String SETTINGS_SATELLITE_MODE_RADIOS = "satellite_mode_radios";
-    /**
-     * @hide constant copied from {@link Settings.Global} TODO(b/274636414): Migrate to official API
-     *     in Android V.
-     */
-    @VisibleForTesting
-    static final String SETTINGS_SATELLITE_MODE_ENABLED = "satellite_mode_enabled";
-
-    private boolean isSatelliteModeSensitive() {
-        final String satelliteRadios =
-                Settings.Global.getString(
-                        mContext.getContentResolver(), SETTINGS_SATELLITE_MODE_RADIOS);
-        return satelliteRadios != null && satelliteRadios.contains(Settings.Global.RADIO_BLUETOOTH);
+        return mBluetoothAirplaneModeListener.isAirplaneModeOn();
     }
 
     /** Returns true if satellite mode is turned on. */
     private boolean isSatelliteModeOn() {
-        if (!isSatelliteModeSensitive()) return false;
-        return Settings.Global.getInt(
-                        mContext.getContentResolver(), SETTINGS_SATELLITE_MODE_ENABLED, 0)
-                == 1;
-    }
-
-    /** Returns true if airplane mode enhancement feature is enabled */
-    private boolean isApmEnhancementOn() {
-        return Settings.Global.getInt(mContext.getContentResolver(), APM_ENHANCEMENT, 0) == 1;
+        if (USE_NEW_SATELLITE_MODE) {
+            return SatelliteModeListener.isOn();
+        }
+        return mBluetoothSatelliteModeListener.isSatelliteModeOn();
     }
 
     /** Returns true if the Bluetooth saved state is "on" */
@@ -820,43 +805,6 @@ class BluetoothManagerService {
         } finally {
             Binder.restoreCallingIdentity(callingIdentity);
         }
-    }
-
-    /** Set the Settings Secure Int value for foreground user */
-    private void setSettingsSecureInt(String name, int value) {
-        if (DBG) {
-            Log.d(TAG, "Persisting Settings Secure Int: " + name + "=" + value);
-        }
-
-        // waive WRITE_SECURE_SETTINGS permission check
-        final long callingIdentity = Binder.clearCallingIdentity();
-        try {
-            Context userContext =
-                    mContext.createContextAsUser(
-                            UserHandle.of(ActivityManager.getCurrentUser()), 0);
-            Settings.Secure.putInt(userContext.getContentResolver(), name, value);
-        } finally {
-            Binder.restoreCallingIdentity(callingIdentity);
-        }
-    }
-
-    /** Return whether APM notification has been shown */
-    private boolean isFirstTimeNotification(String name) {
-        boolean firstTime = false;
-        // waive WRITE_SECURE_SETTINGS permission check
-        final long callingIdentity = Binder.clearCallingIdentity();
-        try {
-            Context userContext =
-                    mContext.createContextAsUser(
-                            UserHandle.of(ActivityManager.getCurrentUser()), 0);
-            firstTime =
-                    Settings.Secure.getInt(
-                                    userContext.getContentResolver(), name, NOTIFICATION_NOT_SHOWN)
-                            == NOTIFICATION_NOT_SHOWN;
-        } finally {
-            Binder.restoreCallingIdentity(callingIdentity);
-        }
-        return firstTime;
     }
 
     /**
@@ -1318,27 +1266,7 @@ class BluetoothManagerService {
         synchronized (mReceiver) {
             mQuietEnableExternal = false;
             mEnableExternal = true;
-            if (isAirplaneModeOn()) {
-                mBluetoothAirplaneModeListener.updateBluetoothToggledTime();
-                if (isApmEnhancementOn()) {
-                    setSettingsSecureInt(BLUETOOTH_APM_STATE, BLUETOOTH_ON_APM);
-                    setSettingsSecureInt(APM_USER_TOGGLED_BLUETOOTH, USED);
-                    if (isFirstTimeNotification(APM_BT_ENABLED_NOTIFICATION)) {
-                        final long callingIdentity = Binder.clearCallingIdentity();
-                        try {
-                            mBluetoothAirplaneModeListener.sendApmNotification(
-                                    "bluetooth_enabled_apm_title",
-                                    "bluetooth_enabled_apm_message",
-                                    APM_BT_ENABLED_NOTIFICATION);
-                        } catch (Exception e) {
-                            Log.e(TAG, "APM enhancement BT enabled notification not shown");
-                        } finally {
-                            Binder.restoreCallingIdentity(callingIdentity);
-                        }
-                    }
-                }
-            }
-            // waive WRITE_SECURE_SETTINGS permission check
+            mBluetoothAirplaneModeListener.notifyUserToggledBluetooth(true);
             sendEnableMsg(
                     false,
                     BluetoothProtoEnums.ENABLE_DISABLE_REASON_APPLICATION_REQUEST,
@@ -1368,13 +1296,7 @@ class BluetoothManagerService {
         }
 
         synchronized (mReceiver) {
-            if (isAirplaneModeOn()) {
-                mBluetoothAirplaneModeListener.updateBluetoothToggledTime();
-                if (isApmEnhancementOn()) {
-                    setSettingsSecureInt(BLUETOOTH_APM_STATE, BLUETOOTH_OFF_APM);
-                    setSettingsSecureInt(APM_USER_TOGGLED_BLUETOOTH, USED);
-                }
-            }
+            mBluetoothAirplaneModeListener.notifyUserToggledBluetooth(false);
 
             if (persist) {
                 persistBluetoothSetting(BLUETOOTH_OFF);
@@ -1434,7 +1356,7 @@ class BluetoothManagerService {
                                 + ", not in supported profiles list");
                 return false;
             }
-            ProfileServiceConnections psc = mProfileServices.get(Integer.valueOf(bluetoothProfile));
+            ProfileServiceConnections psc = mProfileServices.get(bluetoothProfile);
             if (psc == null) {
                 if (DBG) {
                     Log.d(
@@ -1448,7 +1370,7 @@ class BluetoothManagerService {
                     return false;
                 }
 
-                mProfileServices.put(new Integer(bluetoothProfile), psc);
+                mProfileServices.put(bluetoothProfile, psc);
             }
         }
 
@@ -1463,8 +1385,7 @@ class BluetoothManagerService {
     void unbindBluetoothProfileService(
             int bluetoothProfile, IBluetoothProfileServiceConnection proxy) {
         synchronized (mProfileServices) {
-            Integer profile = new Integer(bluetoothProfile);
-            ProfileServiceConnections psc = mProfileServices.get(profile);
+            ProfileServiceConnections psc = mProfileServices.get(bluetoothProfile);
             if (psc == null) {
                 return;
             }
@@ -1477,7 +1398,7 @@ class BluetoothManagerService {
                     Log.e(TAG, "Unable to unbind service with intent: " + psc.mIntent, e);
                 }
                 if (!mUnbindingAll) {
-                    mProfileServices.remove(profile);
+                    mProfileServices.remove(bluetoothProfile);
                 }
             }
         }
@@ -1505,9 +1426,19 @@ class BluetoothManagerService {
      * PHASE_SYSTEM_SERVICES_READY.
      */
     void handleOnBootPhase() {
+        mHandler.post(() -> internalHandleOnBootPhase());
+    }
+
+    private void internalHandleOnBootPhase() {
         if (DBG) {
             Log.d(TAG, "Bluetooth boot completed");
         }
+
+        if (USE_NEW_SATELLITE_MODE) {
+            SatelliteModeListener.initialize(
+                    mLooper, mContentResolver, this::onSatelliteModeChanged);
+        }
+
         final boolean isBluetoothDisallowed = isBluetoothDisallowed();
         if (isBluetoothDisallowed) {
             return;
@@ -2669,7 +2600,7 @@ class BluetoothManagerService {
         mHandler.sendEmptyMessageDelayed(MESSAGE_RESTART_BLUETOOTH_SERVICE, ERROR_RESTART_TIME_MS);
 
         if (repeatAirplaneRunnable) {
-            onAirplaneModeChanged();
+            onAirplaneModeChanged(isAirplaneModeOn());
         }
     }
 

@@ -42,6 +42,7 @@
 #include "stack/include/l2c_api.h"
 #include "stack/include/sdp_api.h"
 #include "types/raw_address.h"
+#include "device/include/interop.h"
 
 using namespace bluetooth::legacy::stack::sdp;
 
@@ -70,6 +71,7 @@ extern bool btif_av_both_enable(void);
 extern bool btif_av_src_sink_coexist_enabled(void);
 extern bool btif_av_is_sink_enabled(void);
 extern bool btif_av_peer_is_connected_sink(const RawAddress& peer_address);
+extern const RawAddress& btif_av_find_by_handle(tBTA_AV_HNDL bta_handle);
 
 /*******************************************************************************
  *
@@ -1047,6 +1049,8 @@ void bta_av_rc_msg(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data) {
       av.remote_rsp.key_state = p_data->rc_msg.msg.pass.state;
       av.remote_rsp.rsp_code = p_data->rc_msg.msg.hdr.ctype;
       av.remote_rsp.label = p_data->rc_msg.label;
+      av.remote_rsp.len = p_data->rc_msg.msg.pass.pass_len;
+      av.remote_rsp.p_data = NULL;
 
       /* If this response is for vendor unique command  */
       if ((p_data->rc_msg.msg.pass.op_id == AVRC_ID_VENDOR) &&
@@ -1551,6 +1555,12 @@ static uint8_t bta_av_find_lcb_index_by_scb_and_address(
       continue;
     }
     if (!p_scb->IsAssigned()) {
+      const RawAddress& btif_addr = btif_av_find_by_handle(p_scb->hndl);
+      if (!btif_addr.IsEmpty() && btif_addr != peer_address) {
+        LOG_DEBUG("%s: btif_addr = %s, index=%d!",
+                         __func__, btif_addr.ToString().c_str(), index);
+        continue;
+      }
       return index;
     }
   }
@@ -1661,6 +1671,12 @@ void bta_av_sig_chg(tBTA_AV_DATA* p_data) {
       for (xx = 0; xx < BTA_AV_NUM_STRS; xx++) {
         if (p_cb->p_scb[xx] &&
             p_cb->p_scb[xx]->PeerAddress() == p_data->str_msg.bd_addr) {
+          if ((p_cb->p_scb[xx]->state == 1) &&
+              alarm_is_scheduled(p_cb->p_scb[xx]->accept_signalling_timer) &&
+              interop_match_addr(INTEROP_IGNORE_DISC_BEFORE_SIGNALLING_TIMEOUT,
+                &(p_data->str_msg.bd_addr))) {
+            continue;
+          }
           APPL_TRACE_DEBUG("%s: Closing timer for AVDTP service", __func__);
           bta_sys_conn_close(BTA_ID_AV, p_cb->p_scb[xx]->app_id,
                              p_cb->p_scb[xx]->PeerAddress());

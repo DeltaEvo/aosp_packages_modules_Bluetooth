@@ -35,6 +35,7 @@ cc_fuzz {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbtcore",
         "libbtdevice",
         "libchrome",
@@ -50,5 +51,13 @@ cc_fuzz {
     fuzz_config: {
         cc: ["android-bluetooth-security@google.com"],
         componentid: 27441,
+        hotlists: [
+            "4593311",
+        ],
+        description: "The fuzzer targets the APIs of libbtdevice library",
+        vector: "local_no_privileges_required",
+        service_privilege: "privileged",
+        users: "multi_user",
+        fuzzed_code_usage: "shipped",
     },
 }
