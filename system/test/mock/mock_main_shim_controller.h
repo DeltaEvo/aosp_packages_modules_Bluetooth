@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 The Android Open Source Project
+ * Copyright 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,13 @@
  * limitations under the License.
  */
 
-syntax = "proto2";
+#include "device/include/controller.h"
+#include "main/shim/controller.h"
 
-// C++ namespace: bluetooth::metrics::BluetoothMetricsProto
-package bluetooth.keystore.BluetoothKeystoreProto;
+namespace bluetooth {
+namespace testing {
 
-option java_package = "com.android.bluetooth";
-option java_outer_classname = "BluetoothKeystoreProto";
+extern const controller_t* controller;
 
-// Holds encrypted, authenticated data.
-message EncryptedData {
-  // The initialization vector used during encryption.
-  optional bytes init_vector = 1;
-  // MAC of (init_vector + encrypted_data).
-  optional bytes authentication_data = 2;
-  optional bytes encrypted_data = 3;
 }
+}  // namespace bluetooth
