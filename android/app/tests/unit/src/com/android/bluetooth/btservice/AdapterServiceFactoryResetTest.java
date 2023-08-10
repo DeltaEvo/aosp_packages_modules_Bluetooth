@@ -36,6 +36,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PermissionInfo;
 import android.content.res.Resources;
+import android.hardware.display.DisplayManager;
 import android.media.AudioManager;
 import android.os.BatteryStatsManager;
 import android.os.Binder;
@@ -91,16 +92,10 @@ public class AdapterServiceFactoryResetTest {
     private @Mock android.app.Application mApplication;
     private @Mock MetricsLogger mMockMetricsLogger;
 
-    // Mocked SystemService
-    private @Mock AlarmManager mMockAlarmManager;
-    private @Mock AppOpsManager mMockAppOpsManager;
-    private @Mock AudioManager mMockAudioManager;
-    private @Mock DevicePolicyManager mMockDevicePolicyManager;
-    private @Mock UserManager mMockUserManager;
-
     // SystemService that are not mocked
     private BluetoothManager mBluetoothManager;
     private CompanionDeviceManager mCompanionDeviceManager;
+    private DisplayManager mDisplayManager;
     private PowerManager mPowerManager;
     private PermissionCheckerManager mPermissionCheckerManager;
     private PermissionManager mPermissionManager;
@@ -131,6 +126,12 @@ public class AdapterServiceFactoryResetTest {
         when(mMockContext.getSystemServiceName(eq(serviceClass))).thenReturn(serviceName);
     }
 
+    <T> T mockGetSystemService(String serviceName, Class<T> serviceClass) {
+        T mockedService = mock(serviceClass);
+        mockGetSystemService(serviceName, serviceClass, mockedService);
+        return mockedService;
+    }
+
     @Before
     public void setUp() throws PackageManager.NameNotFoundException {
         Log.e(TAG, "setUp()");
@@ -148,7 +149,9 @@ public class AdapterServiceFactoryResetTest {
         when(mMockPackageManager.getPermissionInfo(any(), anyInt()))
                 .thenReturn(new PermissionInfo());
 
-        mMockContentResolver = new MockContentResolver(InstrumentationRegistry.getTargetContext());
+        Context targetContext = InstrumentationRegistry.getTargetContext();
+
+        mMockContentResolver = new MockContentResolver(targetContext);
         mMockContentResolver.addProvider(Settings.AUTHORITY, new MockContentProvider() {
             @Override
             public Bundle call(String method, String request, Bundle args) {
@@ -156,23 +159,16 @@ public class AdapterServiceFactoryResetTest {
             }
         });
 
-        mPowerManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PowerManager.class);
-        mPermissionCheckerManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PermissionCheckerManager.class);
+        mBluetoothManager = targetContext.getSystemService(BluetoothManager.class);
+        mCompanionDeviceManager = targetContext.getSystemService(CompanionDeviceManager.class);
+        mDisplayManager = targetContext.getSystemService(DisplayManager.class);
+        mPermissionCheckerManager = targetContext.getSystemService(PermissionCheckerManager.class);
+        mPermissionManager = targetContext.getSystemService(PermissionManager.class);
+        mPowerManager = targetContext.getSystemService(PowerManager.class);
 
-        mPermissionManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PermissionManager.class);
-
-        mBluetoothManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(BluetoothManager.class);
-
-        mCompanionDeviceManager =
-                InstrumentationRegistry.getTargetContext()
-                        .getSystemService(CompanionDeviceManager.class);
-
-        when(mMockContext.getCacheDir())
-                .thenReturn(InstrumentationRegistry.getTargetContext().getCacheDir());
+        when(mMockContext.getCacheDir()).thenReturn(targetContext.getCacheDir());
+        when(mMockContext.getUser()).thenReturn(targetContext.getUser());
+        when(mMockContext.getPackageName()).thenReturn(targetContext.getPackageName());
         when(mMockContext.getApplicationInfo()).thenReturn(mMockApplicationInfo);
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
         when(mMockContext.getApplicationContext()).thenReturn(mMockContext);
@@ -182,12 +178,13 @@ public class AdapterServiceFactoryResetTest {
         when(mMockContext.getUserId()).thenReturn(Process.BLUETOOTH_UID);
         when(mMockContext.getPackageManager()).thenReturn(mMockPackageManager);
 
-        mockGetSystemService(Context.ALARM_SERVICE, AlarmManager.class, mMockAlarmManager);
-        mockGetSystemService(Context.APP_OPS_SERVICE, AppOpsManager.class, mMockAppOpsManager);
-        mockGetSystemService(Context.AUDIO_SERVICE, AudioManager.class, mMockAudioManager);
-        mockGetSystemService(
-                Context.DEVICE_POLICY_SERVICE, DevicePolicyManager.class, mMockDevicePolicyManager);
-        mockGetSystemService(Context.USER_SERVICE, UserManager.class, mMockUserManager);
+        mockGetSystemService(Context.ALARM_SERVICE, AlarmManager.class);
+        mockGetSystemService(Context.APP_OPS_SERVICE, AppOpsManager.class);
+        mockGetSystemService(Context.AUDIO_SERVICE, AudioManager.class);
+        DevicePolicyManager dpm =
+                mockGetSystemService(Context.DEVICE_POLICY_SERVICE, DevicePolicyManager.class);
+        doReturn(false).when(dpm).isCommonCriteriaModeEnabled(any());
+        mockGetSystemService(Context.USER_SERVICE, UserManager.class);
 
         mockGetSystemService(
                 Context.BATTERY_STATS_SERVICE, BatteryStatsManager.class, mBatteryStatsManager);
@@ -196,6 +193,7 @@ public class AdapterServiceFactoryResetTest {
                 Context.COMPANION_DEVICE_SERVICE,
                 CompanionDeviceManager.class,
                 mCompanionDeviceManager);
+        mockGetSystemService(Context.DISPLAY_SERVICE, DisplayManager.class, mDisplayManager);
         mockGetSystemService(
                 Context.PERMISSION_CHECKER_SERVICE,
                 PermissionCheckerManager.class,
@@ -206,22 +204,22 @@ public class AdapterServiceFactoryResetTest {
 
         when(mMockContext.getSharedPreferences(anyString(), anyInt()))
                 .thenReturn(
-                        InstrumentationRegistry.getTargetContext()
-                                .getSharedPreferences(
-                                        "AdapterServiceTestPrefs", Context.MODE_PRIVATE));
+                        targetContext.getSharedPreferences(
+                                "AdapterServiceTestPrefs", Context.MODE_PRIVATE));
 
-        doAnswer(invocation -> {
-            Object[] args = invocation.getArguments();
-            return InstrumentationRegistry.getTargetContext().getDatabasePath((String) args[0]);
-        }).when(mMockContext).getDatabasePath(anyString());
+        doAnswer(
+                invocation -> {
+                    Object[] args = invocation.getArguments();
+                    return targetContext.getDatabasePath((String) args[0]);
+                })
+                .when(mMockContext)
+                .getDatabasePath(anyString());
 
         // Sets the foreground user id to match that of the tests (restored in tearDown)
         mForegroundUserId = Utils.getForegroundUserId();
         int callingUid = Binder.getCallingUid();
         UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
         Utils.setForegroundUserId(callingUser.getIdentifier());
-
-        when(mMockDevicePolicyManager.isCommonCriteriaModeEnabled(any())).thenReturn(false);
 
         when(mIBluetoothCallback.asBinder()).thenReturn(mBinder);
 

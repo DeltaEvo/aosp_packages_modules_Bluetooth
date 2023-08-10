@@ -39,6 +39,7 @@ import androidx.test.uiautomator.UiDevice;
 import com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.gatt.GattService;
 
 import org.junit.Assert;
 import org.junit.rules.TestRule;
@@ -51,8 +52,6 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -93,49 +92,45 @@ public class TestUtils {
     /**
      * Set the return value of {@link AdapterService#getAdapterService()} to a test specified value
      *
-     * @param adapterService the designated {@link AdapterService} in test, must not be null, can
-     *                       be mocked or spied
-     * @throws NoSuchMethodException     when setAdapterService method is not found
-     * @throws IllegalAccessException    when setAdapterService method cannot be accessed
-     * @throws InvocationTargetException when setAdapterService method cannot be invoked, which
-     *                                   should never happen since setAdapterService is a static
-     *                                   method
+     * @param adapterService the designated {@link AdapterService} in test, must not be null, can be
+     *     mocked or spied
      */
-    public static void setAdapterService(AdapterService adapterService)
-            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public static void setAdapterService(AdapterService adapterService) {
         Assert.assertNull("AdapterService.getAdapterService() must be null before setting another"
                 + " AdapterService", AdapterService.getAdapterService());
         Assert.assertNotNull("Adapter service should not be null", adapterService);
         // We cannot mock AdapterService.getAdapterService() with Mockito.
-        // Hence we need to use reflection to call a private method to
-        // initialize properly the AdapterService.sAdapterService field.
-        Method method =
-                AdapterService.class.getDeclaredMethod("setAdapterService", AdapterService.class);
-        method.setAccessible(true);
-        method.invoke(null, adapterService);
+        // Hence we need to set AdapterService.sAdapterService field.
+        AdapterService.setAdapterService(adapterService);
     }
 
     /**
      * Clear the return value of {@link AdapterService#getAdapterService()} to null
      *
-     * @param adapterService the {@link AdapterService} used when calling
-     *                       {@link TestUtils#setAdapterService(AdapterService)}
-     * @throws NoSuchMethodException     when clearAdapterService method is not found
-     * @throws IllegalAccessException    when clearAdapterService method cannot be accessed
-     * @throws InvocationTargetException when clearAdappterService method cannot be invoked,
-     *                                   which should never happen since clearAdapterService is a
-     *                                   static method
+     * @param adapterService the {@link AdapterService} used when calling {@link
+     *     TestUtils#setAdapterService(AdapterService)}
      */
-    public static void clearAdapterService(AdapterService adapterService)
-            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public static void clearAdapterService(AdapterService adapterService) {
         Assert.assertSame("AdapterService.getAdapterService() must return the same object as the"
                         + " supplied adapterService in this method", adapterService,
                 AdapterService.getAdapterService());
         Assert.assertNotNull("Adapter service should not be null", adapterService);
-        Method method =
-                AdapterService.class.getDeclaredMethod("clearAdapterService", AdapterService.class);
-        method.setAccessible(true);
-        method.invoke(null, adapterService);
+        AdapterService.clearAdapterService(adapterService);
+    }
+
+    /** Helper function to mock getSystemService calls */
+    public static <T> void mockGetSystemService(
+            Context ctx, String serviceName, Class<T> serviceClass, T mockService) {
+        when(ctx.getSystemService(eq(serviceName))).thenReturn(mockService);
+        when(ctx.getSystemServiceName(eq(serviceClass))).thenReturn(serviceName);
+    }
+
+    /** Helper function to mock getSystemService calls */
+    public static <T> T mockGetSystemService(
+            Context ctx, String serviceName, Class<T> serviceClass) {
+        T mockedService = mock(serviceClass);
+        mockGetSystemService(ctx, serviceName, serviceClass, mockedService);
+        return mockedService;
     }
 
     /**
@@ -156,6 +151,9 @@ public class TestUtils {
      */
     public static <T extends ProfileService> void startService(ServiceTestRule serviceTestRule,
             Class<T> profileServiceClass) throws TimeoutException {
+        if (profileServiceClass == GattService.class) {
+            Assert.assertFalse("GattService cannot be started as a service", true);
+        }
         AdapterService adapterService = AdapterService.getAdapterService();
         Assert.assertNotNull("Adapter service should not be null", adapterService);
         Assert.assertTrue("AdapterService.getAdapterService() must return a mocked or spied object"
