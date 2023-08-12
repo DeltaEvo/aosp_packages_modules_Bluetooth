@@ -19,13 +19,6 @@ cc_defaults {
         // struct BT_HDR is defined as a variable-size header in a struct.
         "-Wno-gnu-variable-sized-type-not-at-end",
     ],
-    product_variables: {
-        debuggable: {
-            cflags: [
-                "-DBLUEDROID_DEBUG",
-            ],
-        },
-    },
 }
 
 cc_defaults {
@@ -37,17 +30,9 @@ cc_defaults {
                 misc_undefined: ["bounds"],
             },
         },
-        host: {
-            static_libs: [
-                "libcutils",
-            ],
-        },
     },
     defaults: ["fluoride_types_defaults_fuzzable"],
     header_libs: ["libbluetooth_headers"],
-    generated_headers: [
-        "cxx-bridge-header",
-    ],
     static_libs: [
         "libbluetooth-types",
         "libbluetooth_rust_interop",
@@ -55,39 +40,12 @@ cc_defaults {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
     ],
-    min_sdk_version: "current",
-}
-
-cc_defaults {
-    name: "fluoride_test_defaults",
-    defaults: ["fluoride_defaults"],
-    host_supported: true,
-    shared_libs: [
-        "libcrypto",
-        "liblog",
-    ],
-    static_libs: [
-        "libbt-common",
-        "libcutils",
-        "libgmock",
-        "libosi",
-        "libosi-AlarmTestHarness",
-        "libosi-AllocationTestHarness",
-    ],
-    sanitize: {
-        address: true,
-        cfi: true,
-        misc_undefined: ["bounds"],
-    },
 }
 
 cc_defaults {
     name: "fluoride_defaults",
     defaults: [
         "fluoride_defaults_fuzzable",
-    ],
-    static_libs: [
-        "libstatslog_bt",
     ],
     target: {
         darwin: {
