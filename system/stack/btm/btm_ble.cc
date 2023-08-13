@@ -35,6 +35,7 @@
 #include "main/shim/btm_api.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
+#include "openssl/mem.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
@@ -585,9 +586,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
  *
  ******************************************************************************/
 void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleReceiverTest(rx_freq, p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
 
   btsnd_hcic_ble_receiver_test(rx_freq);
@@ -609,10 +607,6 @@ void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
 void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
                             uint8_t packet_payload,
                             tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTransmitterTest(
-        tx_freq, test_data_len, packet_payload, p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
   btsnd_hcic_ble_transmitter_test(tx_freq, test_data_len, packet_payload);
 }
@@ -628,9 +622,6 @@ void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
  *
  ******************************************************************************/
 void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTestEnd(p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
 
   btsnd_hcic_ble_test_end();
@@ -2017,7 +2008,7 @@ bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
 
     crypto_toolbox::aes_cmac(p_rec->ble.keys.pcsrk, p_orig, len,
                              BTM_CMAC_TLEN_SIZE, p_mac);
-    if (memcmp(p_mac, p_comp, BTM_CMAC_TLEN_SIZE) == 0) {
+    if (CRYPTO_memcmp(p_mac, p_comp, BTM_CMAC_TLEN_SIZE) == 0) {
       btm_ble_increment_sign_ctr(bd_addr, false);
       verified = true;
     }
