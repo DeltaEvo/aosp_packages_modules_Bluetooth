@@ -754,8 +754,6 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
       btm_cb.cmn_ble_vsc_cb.energy_support,
       btm_cb.cmn_ble_vsc_cb.extended_scan_support);
 
-  btm_ble_adv_init();
-
   if (btm_cb.cmn_ble_vsc_cb.max_filter > 0) btm_ble_adv_filter_init();
 
   /* VS capability included and non-4.2 device */
@@ -1482,6 +1480,16 @@ void btm_ble_biginfo_adv_report_rcvd(uint8_t* p, uint16_t param_len) {
   uint16_t sync_handle, iso_interval, max_pdu, max_sdu;
   uint8_t num_bises, nse, bn, pto, irc, phy, framing, encryption;
   uint32_t sdu_interval;
+
+  // 2 bytes for sync handle, 1 byte for num_bises, 1 byte for nse, 2 bytes for
+  // iso_interval, 1 byte each for bn, pto, irc, 2 bytes for max_pdu, 3 bytes
+  // for sdu_interval, 2 bytes for max_sdu, 1 byte each for phy, framing,
+  // encryption
+  if (param_len < 19) {
+    LOG_ERROR("Insufficient data");
+    return;
+  }
+
   STREAM_TO_UINT16(sync_handle, p);
   STREAM_TO_UINT8(num_bises, p);
   STREAM_TO_UINT8(nse, p);
@@ -2602,20 +2610,27 @@ void btm_ble_process_ext_adv_pkt(uint8_t data_len, const uint8_t* data) {
       advertising_sid;
   int8_t rssi, tx_power;
   uint16_t event_type, periodic_adv_int, direct_address_type;
+  size_t bytes_to_process;
 
   /* Only process the results if the inquiry is still active */
   if (!btm_cb.ble_ctr_cb.is_ble_scan_active()) return;
 
+  bytes_to_process = 1;
+
+  if (data_len < bytes_to_process) {
+    LOG(ERROR) << "Malformed LE extended advertising packet: not enough room "
+                  "for num reports";
+    return;
+  }
+
   /* Extract the number of reports in this event. */
   STREAM_TO_UINT8(num_reports, p);
 
-  constexpr int extended_report_header_size = 24;
   while (num_reports--) {
-    if (p + extended_report_header_size > data + data_len) {
-      // TODO(jpawlowski): we should crash the stack here
-      BTM_TRACE_ERROR(
-          "Malformed LE Extended Advertising Report Event from controller - "
-          "can't loop the data");
+    bytes_to_process += 24;
+    if (data_len < bytes_to_process) {
+      LOG(ERROR) << "Malformed LE extended advertising packet: not enough room "
+                    "for metadata";
       return;
     }
 
@@ -2635,8 +2650,11 @@ void btm_ble_process_ext_adv_pkt(uint8_t data_len, const uint8_t* data) {
 
     const uint8_t* pkt_data = p;
     p += pkt_data_len; /* Advance to the the next packet*/
-    if (p > data + data_len) {
-      LOG(ERROR) << "Invalid pkt_data_len: " << +pkt_data_len;
+
+    bytes_to_process += pkt_data_len;
+    if (data_len < bytes_to_process) {
+      LOG(ERROR) << "Malformed LE extended advertising packet: not enough room "
+                    "for packet data";
       return;
     }
 
@@ -2669,18 +2687,28 @@ void btm_ble_process_adv_pkt(uint8_t data_len, const uint8_t* data) {
   const uint8_t* p = data;
   uint8_t legacy_evt_type, addr_type, num_reports, pkt_data_len;
   int8_t rssi;
+  size_t bytes_to_process;
 
   /* Only process the results if the inquiry is still active */
   if (!btm_cb.ble_ctr_cb.is_ble_scan_active()) return;
 
+  bytes_to_process = 1;
+
+  if (data_len < bytes_to_process) {
+    LOG(ERROR)
+        << "Malformed LE advertising packet: not enough room for num reports";
+    return;
+  }
+
   /* Extract the number of reports in this event. */
   STREAM_TO_UINT8(num_reports, p);
 
-  constexpr int report_header_size = 10;
   while (num_reports--) {
-    if (p + report_header_size > data + data_len) {
-      // TODO(jpawlowski): we should crash the stack here
-      BTM_TRACE_ERROR("Malformed LE Advertising Report Event from controller");
+    bytes_to_process += 9;
+
+    if (data_len < bytes_to_process) {
+      LOG(ERROR)
+          << "Malformed LE advertising packet: not enough room for metadata";
       return;
     }
 
@@ -2692,8 +2720,12 @@ void btm_ble_process_adv_pkt(uint8_t data_len, const uint8_t* data) {
 
     const uint8_t* pkt_data = p;
     p += pkt_data_len; /* Advance to the the rssi byte */
-    if (p > data + data_len - sizeof(rssi)) {
-      LOG(ERROR) << "Invalid pkt_data_len: " << +pkt_data_len;
+
+    // include rssi for this check
+    bytes_to_process += pkt_data_len + 1;
+    if (data_len < bytes_to_process) {
+      LOG(ERROR) << "Malformed LE advertising packet: not enough room for "
+                    "packet data and/or RSSI";
       return;
     }
 
@@ -2833,7 +2865,7 @@ void btm_ble_process_adv_pkt_cont(uint16_t evt_type, tBLE_ADDR_TYPE addr_type,
   /* If existing entry, use that, else get  a new one (possibly reusing the
    * oldest) */
   if (p_i == NULL) {
-    p_i = btm_inq_db_new(bda);
+    p_i = btm_inq_db_new(bda, true);
     if (p_i != NULL) {
       p_inq->inq_cmpl_info.num_resp++;
       p_i->time_of_resp = bluetooth::common::time_get_os_boottime_ms();
@@ -2939,7 +2971,7 @@ void btm_ble_process_adv_pkt_cont_for_inquiry(
   /* If existing entry, use that, else get  a new one (possibly reusing the
    * oldest) */
   if (p_i == NULL) {
-    p_i = btm_inq_db_new(bda);
+    p_i = btm_inq_db_new(bda, true);
     if (p_i != NULL) {
       p_inq->inq_cmpl_info.num_resp++;
       p_i->time_of_resp = bluetooth::common::time_get_os_boottime_ms();

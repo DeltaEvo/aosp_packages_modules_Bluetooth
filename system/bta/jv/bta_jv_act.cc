@@ -34,6 +34,8 @@
 #include "bta/jv/bta_jv_int.h"
 #include "bta/sys/bta_sys.h"
 #include "osi/include/allocator.h"
+#include "osi/include/osi.h"  // UNUSED_ATTR
+#include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/avct_api.h"  // AVCT_PSM
 #include "stack/include/avdt_api.h"  // AVDT_PSM
@@ -795,7 +797,8 @@ void bta_jv_free_scn(int32_t type /* One of BTA_JV_CONN_TYPE_ */,
  * Returns      void
  *
  ******************************************************************************/
-static void bta_jv_start_discovery_cback(tSDP_RESULT result,
+static void bta_jv_start_discovery_cback(UNUSED_ATTR const RawAddress& bd_addr,
+                                         tSDP_RESULT result,
                                          const void* user_data) {
   tBTA_JV_STATUS status;
   uint32_t* p_rfcomm_slot_id =
@@ -1258,6 +1261,11 @@ static int bta_jv_port_data_co_cback(uint16_t port_handle, uint8_t* buf,
   if (p_pcb != NULL) {
     switch (type) {
       case DATA_CO_CALLBACK_TYPE_INCOMING:
+        // Exit sniff mode when receiving data by sysproxy
+        if (osi_property_get_bool("bluetooth.rfcomm.sysproxy.rx.exit_sniff",
+                                  false)) {
+          bta_jv_pm_conn_busy(p_pcb->p_pm_cb);
+        }
         return bta_co_rfc_data_incoming(p_pcb->rfcomm_slot_id, (BT_HDR*)buf);
       case DATA_CO_CALLBACK_TYPE_OUTGOING_SIZE:
         return bta_co_rfc_data_outgoing_size(p_pcb->rfcomm_slot_id, (int*)buf);
@@ -1809,9 +1817,9 @@ static void bta_jv_pm_conn_busy(tBTA_JV_PM_CB* p_cb) {
 
 /*******************************************************************************
  *
- * Function    bta_jv_pm_conn_busy
+ * Function    bta_jv_pm_conn_idle
  *
- * Description set pm connection busy state (input param safe)
+ * Description set pm connection idle state (input param safe)
  *
  * Params      p_cb: pm control block of jv connection
  *

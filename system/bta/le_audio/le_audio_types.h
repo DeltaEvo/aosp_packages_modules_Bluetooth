@@ -350,6 +350,7 @@ enum class AudioStreamDataPathState {
   CIS_PENDING,
   CIS_ESTABLISHED,
   DATA_PATH_ESTABLISHED,
+  DATA_PATH_REMOVING,
 };
 
 enum class CisType {
@@ -409,8 +410,10 @@ class AudioContexts {
   }
   bool any() const { return !none(); }
 
-  void set(LeAudioContextType const& v) { mValue |= static_cast<T>(v); }
+  void set(const LeAudioContextType& v) { mValue |= static_cast<T>(v); }
+  void set_all(const AudioContexts& v) { mValue |= v.value(); }
   void unset(const LeAudioContextType& v) { mValue &= ~static_cast<T>(v); }
+  void unset_all(const AudioContexts& v) { mValue &= ~v.value(); }
 
   bool test(const LeAudioContextType& v) const {
     return (mValue & static_cast<T>(v)) != 0;
@@ -524,6 +527,20 @@ constexpr AudioContexts kLeAudioContextAllTypes =
     LeAudioContextType::LIVE | LeAudioContextType::SOUNDEFFECTS |
     LeAudioContextType::NOTIFICATIONS | LeAudioContextType::RINGTONE |
     LeAudioContextType::ALERTS | LeAudioContextType::EMERGENCYALARM;
+
+constexpr AudioContexts kLeAudioContextAllBidir =
+    LeAudioContextType::GAME | LeAudioContextType::LIVE |
+    LeAudioContextType::CONVERSATIONAL | LeAudioContextType::VOICEASSISTANTS;
+
+constexpr AudioContexts kLeAudioContextAllRemoteSource =
+    LeAudioContextType::GAME | LeAudioContextType::LIVE |
+    LeAudioContextType::CONVERSATIONAL | LeAudioContextType::VOICEASSISTANTS;
+
+constexpr AudioContexts kLeAudioContextAllRemoteSinkOnly =
+    LeAudioContextType::MEDIA | LeAudioContextType::INSTRUCTIONAL |
+    LeAudioContextType::SOUNDEFFECTS | LeAudioContextType::NOTIFICATIONS |
+    LeAudioContextType::RINGTONE | LeAudioContextType::ALERTS |
+    LeAudioContextType::EMERGENCYALARM;
 
 /* Print formaters for LTV data */
 std::string CodecCapabilitiesLtvFormat(const uint8_t& type,
@@ -713,11 +730,6 @@ struct ase {
   std::vector<uint8_t> metadata;
 
   AseState state;
-};
-
-struct BidirectAsesPair {
-  struct ase* sink;
-  struct ase* source;
 };
 
 struct acs_ac_record {

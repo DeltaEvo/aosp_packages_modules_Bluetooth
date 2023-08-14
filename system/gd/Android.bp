@@ -11,7 +11,7 @@ package {
 cc_defaults {
     name: "gd_defaults",
     defaults: [
-        "fluoride_common_options",
+        "bluetooth_cflags",
     ],
     tidy_checks: [
         "-performance-unnecessary-value-param",
@@ -30,7 +30,6 @@ cc_defaults {
             enabled: false,
         },
     },
-    cpp_std: "c++17",
     cflags: [
         "-DEXPORT_SYMBOL=__attribute__((visibility(\"default\")))",
         "-DGOOGLE_PROTOBUF_NO_RTTI",
@@ -38,7 +37,6 @@ cc_defaults {
         "-Wno-unused-result",
         "-fvisibility=hidden",
     ],
-    c_std: "c99",
     header_libs: ["jni_headers"],
 }
 
@@ -162,6 +160,9 @@ cc_defaults {
     ],
     shared_libs: [
         "libcrypto",
+        "libflatbuffers-cpp",
+    ],
+    export_shared_lib_headers: [
         "libflatbuffers-cpp",
     ],
     whole_static_libs: [
@@ -369,6 +370,7 @@ cc_test {
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
         "BluetoothGeneratedDumpsysDataSchema_h",
+        "BluetoothGeneratedDumpsysInternalTestData_h",
         "BluetoothGeneratedDumpsysTestData_h",
         "BluetoothGeneratedPackets_h",
     ],
@@ -470,7 +472,6 @@ cc_defaults {
     ],
     shared_libs: [
         "libcrypto",
-        "libflatbuffers-cpp",
         "libgrpc++",
         "libgrpc_wrap",
     ],

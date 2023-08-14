@@ -488,13 +488,29 @@ public class ScanManager {
         }
 
         private boolean requiresScreenOn(ScanClient client) {
-            boolean isFiltered = (client.filters != null) && !client.filters.isEmpty();
+            boolean isFiltered = isFilteredScan(client);
             return !mScanNative.isOpportunisticScanClient(client) && !isFiltered;
         }
 
         private boolean requiresLocationOn(ScanClient client) {
-            boolean isFiltered = (client.filters != null) && !client.filters.isEmpty();
+            boolean isFiltered = isFilteredScan(client);
             return !client.hasDisavowedLocation && !isFiltered;
+        }
+
+        private boolean isFilteredScan(ScanClient client) {
+            if ((client.filters == null) || client.filters.isEmpty()) {
+                return false;
+            }
+
+            boolean atLeastOneValidFilter = false;
+            for (ScanFilter filter : client.filters) {
+                // A valid filter need at least one field not empty
+                if (!filter.isAllFieldsEmpty()) {
+                    atLeastOneValidFilter = true;
+                    break;
+                }
+            }
+            return atLeastOneValidFilter;
         }
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
@@ -829,7 +845,7 @@ public class ScanManager {
         }
 
         private boolean downgradeScanModeFromMaxDuty(ScanClient client) {
-            if (mAdapterService.getScanDowngradeDurationMillis() == 0) {
+            if ((client.stats == null) || mAdapterService.getScanDowngradeDurationMillis() == 0) {
                 return false;
             }
             if (ScanSettings.SCAN_MODE_LOW_LATENCY == client.settings.getScanMode()) {
@@ -1349,14 +1365,15 @@ public class ScanManager {
                                     + client.scannerId + ")");
                     setOpportunisticScanClient(client);
                     removeScanFilters(client.scannerId);
-                    client.stats.setScanTimeout(client.scannerId);
+
                 } else {
                     Log.w(TAG,
                             "Moving filtered scan client to downgraded scan (scannerId "
                                     + client.scannerId + ")");
                     client.updateScanMode(ScanSettings.SCAN_MODE_LOW_POWER);
-                    client.stats.setScanTimeout(client.scannerId);
                 }
+                client.stats.setScanTimeout(client.scannerId);
+                client.stats.recordScanTimeoutCountMetrics();
             }
 
             // The scan should continue for background scans

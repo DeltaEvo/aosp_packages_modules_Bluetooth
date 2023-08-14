@@ -45,8 +45,9 @@ class LeAudioGroupStateMachine {
   static void Cleanup(void);
   static LeAudioGroupStateMachine* Get(void);
 
-  virtual bool AttachToStream(LeAudioDeviceGroup* group,
-                              LeAudioDevice* leAudioDevice) = 0;
+  virtual bool AttachToStream(
+      LeAudioDeviceGroup* group, LeAudioDevice* leAudioDevice,
+      types::BidirectionalPair<std::vector<uint8_t>> ccids) = 0;
   virtual bool StartStream(
       LeAudioDeviceGroup* group, types::LeAudioContextType context_type,
       const types::BidirectionalPair<types::AudioContexts>&
@@ -61,6 +62,8 @@ class LeAudioGroupStateMachine {
       types::BidirectionalPair<std::vector<uint8_t>> ccid_lists = {
           .sink = {}, .source = {}}) = 0;
   virtual void StopStream(LeAudioDeviceGroup* group) = 0;
+  virtual void ProcessGattCtpNotification(LeAudioDeviceGroup* group,
+                                          uint8_t* value, uint16_t len) = 0;
   virtual void ProcessGattNotifEvent(uint8_t* value, uint16_t len,
                                      struct types::ase* ase,
                                      LeAudioDevice* leAudioDevice,

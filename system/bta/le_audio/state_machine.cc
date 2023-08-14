@@ -137,8 +137,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     log_history_ = nullptr;
   }
 
-  bool AttachToStream(LeAudioDeviceGroup* group,
-                      LeAudioDevice* leAudioDevice) override {
+  bool AttachToStream(LeAudioDeviceGroup* group, LeAudioDevice* leAudioDevice,
+                      BidirectionalPair<std::vector<uint8_t>> ccids) override {
     LOG(INFO) << __func__ << " group id: " << group->group_id_
               << " device: " << ADDRESS_TO_LOGGABLE_STR(leAudioDevice->address_);
 
@@ -155,11 +155,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       return false;
     }
 
-    BidirectionalPair<std::vector<uint8_t>> ccids = {
-        .sink = le_audio::ContentControlIdKeeper::GetInstance()->GetAllCcids(
-            group->GetMetadataContexts().sink),
-        .source = le_audio::ContentControlIdKeeper::GetInstance()->GetAllCcids(
-            group->GetMetadataContexts().source)};
     if (!group->Configure(group->GetConfigurationContextType(),
                           group->GetMetadataContexts(), ccids)) {
       LOG_ERROR(" failed to set ASE configuration");
@@ -305,6 +300,64 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     auto status = PrepareAndSendReleaseToTheGroup(group);
     state_machine_callbacks_->StatusReportCb(group->group_id_, status);
+  }
+
+  void ProcessGattCtpNotification(LeAudioDeviceGroup* group, uint8_t* value,
+                                  uint16_t len) {
+    auto ntf =
+        std::make_unique<struct le_audio::client_parser::ascs::ctp_ntf>();
+
+    bool valid_notification = ParseAseCtpNotification(*ntf, len, value);
+    if (group == nullptr) {
+      LOG_WARN("Notification received to invalid group");
+      return;
+    }
+
+    /* State machine looks on ASE state and base on it take decisions.
+     * If ASE state is not achieve on time, timeout is reported and upper
+     * layer mostlikely drops ACL considers that remote is in bad state.
+     * However, it might happen that remote device rejects ASE configuration for
+     * some reason and ASCS specification defines tones of different reasons.
+     * Maybe in the future we will be able to handle all of them but for now it
+     * seems to be important to allow remote device to reject ASE configuration
+     * when stream is creating. e.g. Allow remote to reject Enable on unwanted
+     * context type.
+     */
+
+    auto target_state = group->GetTargetState();
+    auto in_transition = group->IsInTransition();
+    if (!in_transition ||
+        target_state != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+      LOG_DEBUG(
+          "Not interested in ctp result for group %d inTransistion: %d , "
+          "targetState: %s",
+          group->group_id_, in_transition, ToString(target_state).c_str());
+      return;
+    }
+
+    if (!valid_notification) {
+      /* Do nothing, just allow guard timer to fire */
+      LOG_ERROR("Invalid CTP notification for group %d", group->group_id_);
+      return;
+    }
+
+    for (auto& entry : ntf->entries) {
+      if (entry.response_code !=
+          le_audio::client_parser::ascs::kCtpResponseCodeSuccess) {
+        /* Gracefully stop the stream */
+        LOG_ERROR(
+            "Stoping stream due to control point error for ase: %d, error: "
+            "0x%02x, reason: 0x%02x",
+            entry.ase_id, entry.response_code, entry.reason);
+        StopStream(group);
+        return;
+      }
+    }
+
+    LOG_DEBUG(
+        "Ctp result OK for group %d inTransistion: %d , "
+        "targetState: %s",
+        group->group_id_, in_transition, ToString(target_state).c_str());
   }
 
   void ProcessGattNotifEvent(uint8_t* value, uint16_t len, struct ase* ase,
@@ -568,15 +621,14 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
     auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(conn_hdl);
     if (ases_pair.sink && (ases_pair.sink->data_path_state ==
-                           AudioStreamDataPathState::DATA_PATH_ESTABLISHED)) {
+                           AudioStreamDataPathState::DATA_PATH_REMOVING)) {
       ases_pair.sink->data_path_state =
           AudioStreamDataPathState::CIS_DISCONNECTING;
       do_disconnect = true;
     }
 
-    if (ases_pair.source &&
-        ases_pair.source->data_path_state ==
-            AudioStreamDataPathState::DATA_PATH_ESTABLISHED) {
+    if (ases_pair.source && ases_pair.source->data_path_state ==
+                                AudioStreamDataPathState::DATA_PATH_REMOVING) {
       ases_pair.source->data_path_state =
           AudioStreamDataPathState::CIS_DISCONNECTING;
       do_disconnect = true;
@@ -672,7 +724,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     if ((group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) &&
         !group->IsInTransition()) {
       LOG_INFO("group: %d is in IDLE", group->group_id_);
-      group->UpdateAudioContextTypeAvailability();
+      group->ReloadAudioLocations();
+      group->ReloadAudioDirections();
+      group->UpdateAudioContextAvailability();
+      group->InvalidateCachedConfigurations();
 
       /* When OnLeAudioDeviceSetStateTimeout happens, group will transition
        * to IDLE, and after that an ACL disconnect will be triggered. We need
@@ -696,7 +751,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     /* Update the current group audio context availability which could change
      * due to disconnected group member.
      */
-    group->UpdateAudioContextTypeAvailability();
+    group->ReloadAudioLocations();
+    group->ReloadAudioDirections();
+    group->UpdateAudioContextAvailability();
+    group->InvalidateCachedConfigurations();
 
     if (group->IsAnyDeviceConnected()) {
       /*
@@ -862,12 +920,16 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     if (ases_pair.sink && ases_pair.sink->data_path_state ==
                               AudioStreamDataPathState::DATA_PATH_ESTABLISHED) {
       value |= bluetooth::hci::iso_manager::kRemoveIsoDataPathDirectionInput;
+      ases_pair.sink->data_path_state =
+          AudioStreamDataPathState::DATA_PATH_REMOVING;
     }
 
     if (ases_pair.source &&
         ases_pair.source->data_path_state ==
             AudioStreamDataPathState::DATA_PATH_ESTABLISHED) {
       value |= bluetooth::hci::iso_manager::kRemoveIsoDataPathDirectionOutput;
+      ases_pair.source->data_path_state =
+          AudioStreamDataPathState::DATA_PATH_REMOVING;
     }
 
     if (value == 0) {

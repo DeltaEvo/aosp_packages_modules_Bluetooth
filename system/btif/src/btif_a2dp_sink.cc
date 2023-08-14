@@ -631,7 +631,11 @@ static void btif_a2dp_sink_decoder_update_event(
   btif_a2dp_sink_cb.rx_flush = false;
   APPL_TRACE_DEBUG("%s: reset to Sink role", __func__);
 
-  btif_a2dp_sink_cb.decoder_interface = bta_av_co_get_decoder_interface();
+  bta_av_co_save_codec(p_buf->codec_info);
+
+  btif_a2dp_sink_cb.decoder_interface =
+      A2DP_GetDecoderInterface(p_buf->codec_info);
+
   if (btif_a2dp_sink_cb.decoder_interface == nullptr) {
     LOG_ERROR("%s: cannot stream audio: no source decoder interface", __func__);
     return;
@@ -680,8 +684,10 @@ uint8_t btif_a2dp_sink_enqueue_buf(BT_HDR* p_pkt) {
   p_msg->offset = 0;
   memcpy(p_msg->data, p_pkt->data + p_pkt->offset, p_pkt->len);
   fixed_queue_enqueue(btif_a2dp_sink_cb.rx_audio_queue, p_msg);
-  if (fixed_queue_length(btif_a2dp_sink_cb.rx_audio_queue) ==
-      MAX_A2DP_DELAYED_START_FRAME_COUNT) {
+  // Avoid other checks if alarm has already been initialized.
+  if (btif_a2dp_sink_cb.decode_alarm == nullptr &&
+      fixed_queue_length(btif_a2dp_sink_cb.rx_audio_queue) >=
+          MAX_A2DP_DELAYED_START_FRAME_COUNT) {
     BTIF_TRACE_DEBUG("%s: Initiate decoding. Current focus state:%d", __func__,
                      btif_a2dp_sink_cb.rx_focus_state);
     if (btif_a2dp_sink_cb.rx_focus_state == BTIF_A2DP_SINK_FOCUS_GRANTED) {
@@ -744,6 +750,11 @@ void btif_a2dp_sink_set_audio_track_gain(float gain) {
 #ifdef __ANDROID__
   BtifAvrcpSetAudioTrackGain(btif_a2dp_sink_cb.audio_track, gain);
 #endif
+}
+
+void * btif_a2dp_sink_get_audio_track(void)
+{
+  return btif_a2dp_sink_cb.audio_track;
 }
 
 static void btif_a2dp_sink_clear_track_event_req() {

@@ -35,6 +35,7 @@
 #include "main/shim/btm_api.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
+#include "openssl/mem.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
@@ -585,9 +586,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
  *
  ******************************************************************************/
 void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleReceiverTest(rx_freq, p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
 
   btsnd_hcic_ble_receiver_test(rx_freq);
@@ -609,10 +607,6 @@ void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
 void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
                             uint8_t packet_payload,
                             tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTransmitterTest(
-        tx_freq, test_data_len, packet_payload, p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
   btsnd_hcic_ble_transmitter_test(tx_freq, test_data_len, packet_payload);
 }
@@ -628,9 +622,6 @@ void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
  *
  ******************************************************************************/
 void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTestEnd(p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
 
   btsnd_hcic_ble_test_end();
@@ -1017,62 +1008,6 @@ tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
                     ble_sec_act);
 
   return L2CAP_LE_RESULT_CONN_OK;
-}
-
-/*******************************************************************************
- *
- * Function         btm_ble_rand_enc_complete
- *
- * Description      This function is the callback functions for HCI_Rand command
- *                  and HCI_Encrypt command is completed.
- *                  This message is received from the HCI.
- *
- * Returns          void
- *
- ******************************************************************************/
-void btm_ble_rand_enc_complete(uint8_t* p, uint16_t evt_len,
-                               uint16_t op_code,
-                               tBTM_RAND_ENC_CB* p_enc_cplt_cback) {
-  tBTM_RAND_ENC params;
-  uint8_t* p_dest = params.param_buf;
-
-  BTM_TRACE_DEBUG("btm_ble_rand_enc_complete");
-
-  memset(&params, 0, sizeof(tBTM_RAND_ENC));
-
-  /* If there was a callback address for vcs complete, call it */
-  if (p_enc_cplt_cback && p) {
-
-    if (evt_len < 1) {
-      goto err_out;
-    }
-
-    /* Pass paramters to the callback function */
-    STREAM_TO_UINT8(params.status, p); /* command status */
-
-    if (params.status == HCI_SUCCESS) {
-      params.opcode = op_code;
-
-      if (op_code == HCI_BLE_RAND)
-        params.param_len = BT_OCTET8_LEN;
-      else
-        params.param_len = OCTET16_LEN;
-
-      if (evt_len < 1 + params.param_len) {
-        goto err_out;
-      }
-
-      /* Fetch return info from HCI event message */
-      memcpy(p_dest, p, params.param_len);
-    }
-    if (p_enc_cplt_cback) /* Call the Encryption complete callback function */
-      (*p_enc_cplt_cback)(&params);
-  }
-
-  return;
-
-err_out:
-  BTM_TRACE_ERROR("%s malformatted event packet, too short", __func__);
 }
 
 /*******************************************************************************
@@ -1589,9 +1524,20 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
   }
 
   if (encr_enable) {
-    /* Link is encrypted, start EATT */
-    bluetooth::eatt::EattExtension::GetInstance()->Connect(
-        p_dev_rec->ble.pseudo_addr);
+    uint8_t remote_lmp_version = 0;
+    if (!BTM_ReadRemoteVersion(p_dev_rec->ble.pseudo_addr, &remote_lmp_version,
+                               nullptr, nullptr) ||
+        remote_lmp_version == 0) {
+      LOG_WARN("BLE Unable to determine remote version");
+    }
+
+    if (remote_lmp_version == 0 ||
+        remote_lmp_version >= HCI_PROTO_VERSION_5_2) {
+      /* Link is encrypted, start EATT if remote LMP version is unknown, or 5.2
+       * or greater */
+      bluetooth::eatt::EattExtension::GetInstance()->Connect(
+          p_dev_rec->ble.pseudo_addr);
+    }
   }
 
   /* to notify GATT to send data if any request is pending */
@@ -2062,7 +2008,7 @@ bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
 
     crypto_toolbox::aes_cmac(p_rec->ble.keys.pcsrk, p_orig, len,
                              BTM_CMAC_TLEN_SIZE, p_mac);
-    if (memcmp(p_mac, p_comp, BTM_CMAC_TLEN_SIZE) == 0) {
+    if (CRYPTO_memcmp(p_mac, p_comp, BTM_CMAC_TLEN_SIZE) == 0) {
       btm_ble_increment_sign_ctr(bd_addr, false);
       verified = true;
     }

@@ -44,7 +44,7 @@ class Pbap(val context: Context) : PBAPImplBase(), Closeable {
 
     init {
         // Init the CoroutineScope
-        scope = CoroutineScope(Dispatchers.Default)
+        scope = CoroutineScope(Dispatchers.Default.limitedParallelism(1))
         preparePBAPDatabase()
     }
 
@@ -58,6 +58,8 @@ class Pbap(val context: Context) : PBAPImplBase(), Closeable {
             context
                 .getContentResolver()
                 .query(ContactsContract.Contacts.CONTENT_URI, null, null, null, null)
+
+        if (cursor == null) return
 
         if (cursor.getCount() >= CONTACT_LIST_SIZE) return // return if contacts are present
 
