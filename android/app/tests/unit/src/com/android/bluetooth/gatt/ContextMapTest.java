@@ -18,15 +18,17 @@ package com.android.bluetooth.gatt;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertisingSetParameters;
 import android.bluetooth.le.PeriodicAdvertisingParameters;
+import android.content.Context;
+import android.location.LocationManager;
 import android.os.Binder;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
@@ -73,19 +75,20 @@ public class ContextMapTest {
         BluetoothMethodProxy.setInstanceForTesting(mMapMethodProxy);
 
         TestUtils.setAdapterService(mAdapterService);
-        doReturn(true).when(mAdapterService).isStartedProfile(anyString());
 
-        TestUtils.startService(mServiceRule, GattService.class);
-        mService = GattService.getGattService();
+        TestUtils.mockGetSystemService(
+                mAdapterService, Context.LOCATION_SERVICE, LocationManager.class);
+
+        mService = new GattService(InstrumentationRegistry.getTargetContext());
+        mService.start();
     }
 
     @After
     public void tearDown() throws Exception {
         BluetoothMethodProxy.setInstanceForTesting(null);
 
-        doReturn(false).when(mAdapterService).isStartedProfile(anyString());
-        TestUtils.stopService(mServiceRule, GattService.class);
-        mService = GattService.getGattService();
+        mService.stop();
+        mService = null;
 
         TestUtils.clearAdapterService(mAdapterService);
     }

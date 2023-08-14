@@ -729,6 +729,11 @@ bool L2CA_ConnectCreditBasedRsp(const RawAddress& p_bd_addr, uint8_t id,
    */
   tL2C_CCB* p_ccb = l2cu_find_ccb_by_cid(p_lcb, p_lcb->pending_lead_cid);
 
+  if (!p_ccb) {
+    L2CAP_TRACE_ERROR("%s No CCB for CID:0x%04x", __func__, p_lcb->pending_lead_cid);
+    return false;
+  }
+
   for (uint16_t cid : accepted_lcids) {
     tL2C_CCB* temp_p_ccb = l2cu_find_ccb_by_cid(p_lcb, cid);
     if (temp_p_ccb == NULL) {
@@ -838,7 +843,8 @@ std::vector<uint16_t> L2CA_ConnectCreditBasedReq(uint16_t psm,
 
   for (int i = 0; i < p_cfg->number_of_channels; i++) {
     /* Allocate a channel control block */
-    tL2C_CCB* p_ccb = l2cu_allocate_ccb(p_lcb, 0);
+    tL2C_CCB* p_ccb =
+        l2cu_allocate_ccb(p_lcb, 0, psm == BT_PSM_EATT /* is_eatt */);
     if (p_ccb == NULL) {
       if (i == 0) {
         L2CAP_TRACE_WARNING("%s no CCB, PSM: 0x%04x", __func__, psm);
