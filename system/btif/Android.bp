@@ -28,7 +28,6 @@ btifCommonIncludes = [
     "packages/modules/Bluetooth/system/stack/include",
     "packages/modules/Bluetooth/system/stack/l2cap",
     "packages/modules/Bluetooth/system/udrv/include",
-    "packages/modules/Bluetooth/system/vnd/include",
     "system/libhwbinder/include",
 ]
 
@@ -420,7 +419,6 @@ cc_test {
         "libbt-common",
         "libchrome",
         "libevent",
-        "libosi-AllocationTestHarness",
     ],
     target: {
         android: {
@@ -535,7 +533,6 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/include",
         "system/libfmq/include",
         "system/libhwbinder/include",
     ],
@@ -669,7 +666,6 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/include",
         "system/libfmq/include",
         "system/libhwbinder/include",
     ],
