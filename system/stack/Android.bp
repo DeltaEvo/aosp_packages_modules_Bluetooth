@@ -70,8 +70,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/gd/hal",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/ble",
-        "packages/modules/Bluetooth/system/vnd/include",
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
@@ -198,8 +196,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/ble",
-        "packages/modules/Bluetooth/system/vnd/include",
     ],
     srcs: crypto_toolbox_srcs + [
         ":LegacyStackSdp",
@@ -377,7 +373,7 @@ cc_fuzz {
     name: "sdp-fuzzer",
     defaults: [
         "btstack_fuzzer_default",
-        "fluoride_defaults_fuzzable",
+        "fluoride_defaults",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system/stack/btm",
@@ -401,7 +397,7 @@ cc_fuzz {
     name: "gatt-fuzzer",
     defaults: [
         "btstack_fuzzer_default",
-        "fluoride_defaults_fuzzable",
+        "fluoride_defaults",
     ],
     include_dirs: [
         "external/flatbuffers/include",
@@ -443,7 +439,7 @@ cc_fuzz {
     name: "smp-fuzzer",
     defaults: [
         "btstack_fuzzer_default",
-        "fluoride_defaults_fuzzable",
+        "fluoride_defaults",
     ],
     include_dirs: [
         "external/flatbuffers/include",
@@ -480,7 +476,7 @@ cc_fuzz {
     name: "bnep-fuzzer",
     defaults: [
         "btstack_fuzzer_default",
-        "fluoride_defaults_fuzzable",
+        "fluoride_defaults",
     ],
     include_dirs: [
         "external/flatbuffers/include",
@@ -517,7 +513,7 @@ cc_fuzz {
     name: "avrc-fuzzer",
     defaults: [
         "btstack_fuzzer_default",
-        "fluoride_defaults_fuzzable",
+        "fluoride_defaults",
     ],
     include_dirs: [
         "external/flatbuffers/include",
@@ -564,7 +560,7 @@ cc_fuzz {
     name: "l2cap-fuzzer",
     defaults: [
         "btstack_fuzzer_default",
-        "fluoride_defaults_fuzzable",
+        "fluoride_defaults",
     ],
     include_dirs: [
         "external/flatbuffers/include",
@@ -938,7 +934,6 @@ cc_test {
         "libgmock",
         "liblog",
         "libosi",
-        "libosi-AllocationTestHarness",
         "libstatslog_bt",
     ],
     target: {
@@ -1003,7 +998,6 @@ cc_test {
         "libevent",
         "liblog",
         "libosi",
-        "libosi-AllocationTestHarness",
         "libprotobuf-cpp-lite",
         "libstatslog_bt",
     ],
@@ -1116,7 +1110,6 @@ cc_test {
         "liblog",
         "libopus",
         "libosi",
-        "libosi-AllocationTestHarness",
     ],
     whole_static_libs: [
         "libaptx_enc",
@@ -1163,7 +1156,6 @@ cc_test {
         "libchrome",
         "liblog",
         "libosi",
-        "libosi-AllocationTestHarness",
     ],
     sanitize: {
         address: true,
@@ -1363,7 +1355,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/device/include",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/vnd/ble",
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
@@ -1483,7 +1474,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/vnd/ble",
     ],
     srcs: crypto_toolbox_srcs + [
         ":TestCommonMockFunctions",
