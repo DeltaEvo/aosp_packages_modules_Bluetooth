@@ -66,7 +66,6 @@ static jmethodID method_discoveryStateChangeCallback;
 static jmethodID method_linkQualityReportCallback;
 static jmethodID method_switchBufferSizeCallback;
 static jmethodID method_switchCodecCallback;
-static jmethodID method_setWakeAlarm;
 static jmethodID method_acquireWakeLock;
 static jmethodID method_releaseWakeLock;
 static jmethodID method_energyInfo;
@@ -806,7 +805,7 @@ static void energy_info_recv_callback(bt_activity_energy_info* p_energy_info,
   }
 
   sCallbackEnv->CallVoidMethod(
-      sJniAdapterServiceObj, method_energyInfo, p_energy_info->status,
+      sJniCallbacksObj, method_energyInfo, p_energy_info->status,
       p_energy_info->ctrl_state, p_energy_info->tx_time, p_energy_info->rx_time,
       p_energy_info->idle_time, p_energy_info->energy_used, array.get());
 }
@@ -832,12 +831,6 @@ static bt_callbacks_t sBluetoothCallbacks = {sizeof(sBluetoothCallbacks),
                                              switch_buffer_size_callback,
                                              switch_codec_callback,
                                              le_rand_callback};
-
-// The callback to call when the wake alarm fires.
-static alarm_cb sAlarmCallback;
-
-// The data to pass to the wake alarm callback.
-static void* sAlarmCallbackData;
 
 class JNIThreadAttacher {
  public:
@@ -885,37 +878,6 @@ class JNIThreadAttacher {
   jint status_;
 };
 
-static bool set_wake_alarm_callout(uint64_t delay_millis, bool should_wake,
-                                   alarm_cb cb, void* data) {
-  std::shared_lock<std::shared_timed_mutex> lock(jniObjMutex);
-  if (!sJniAdapterServiceObj) {
-    ALOGE("%s, JNI obj is null. Failed to call JNI callback", __func__);
-    return false;
-  }
-
-  JNIThreadAttacher attacher(vm);
-  JNIEnv* env = attacher.getEnv();
-
-  if (env == nullptr) {
-    ALOGE("%s: Unable to get JNI Env", __func__);
-    return false;
-  }
-
-  sAlarmCallback = cb;
-  sAlarmCallbackData = data;
-
-  jboolean jshould_wake = should_wake ? JNI_TRUE : JNI_FALSE;
-  jboolean ret =
-      env->CallBooleanMethod(sJniAdapterServiceObj, method_setWakeAlarm,
-                             (jlong)delay_millis, jshould_wake);
-  if (!ret) {
-    sAlarmCallback = NULL;
-    sAlarmCallbackData = NULL;
-  }
-
-  return (ret == JNI_TRUE);
-}
-
 static int acquire_wake_lock_callout(const char* lock_name) {
   std::shared_lock<std::shared_timed_mutex> lock(jniObjMutex);
   if (!sJniAdapterServiceObj) {
@@ -936,7 +898,7 @@ static int acquire_wake_lock_callout(const char* lock_name) {
     ScopedLocalRef<jstring> lock_name_jni(env, env->NewStringUTF(lock_name));
     if (lock_name_jni.get()) {
       bool acquired = env->CallBooleanMethod(
-          sJniAdapterServiceObj, method_acquireWakeLock, lock_name_jni.get());
+          sJniCallbacksObj, method_acquireWakeLock, lock_name_jni.get());
       if (!acquired) ret = BT_STATUS_WAKELOCK_ERROR;
     } else {
       ALOGE("%s unable to allocate string: %s", __func__, lock_name);
@@ -967,7 +929,7 @@ static int release_wake_lock_callout(const char* lock_name) {
     ScopedLocalRef<jstring> lock_name_jni(env, env->NewStringUTF(lock_name));
     if (lock_name_jni.get()) {
       bool released = env->CallBooleanMethod(
-          sJniAdapterServiceObj, method_releaseWakeLock, lock_name_jni.get());
+          sJniCallbacksObj, method_releaseWakeLock, lock_name_jni.get());
       if (!released) ret = BT_STATUS_WAKELOCK_ERROR;
     } else {
       ALOGE("%s unable to allocate string: %s", __func__, lock_name);
@@ -978,19 +940,10 @@ static int release_wake_lock_callout(const char* lock_name) {
   return ret;
 }
 
-// Called by Java code when alarm is fired. A wake lock is held by the caller
-// over the duration of this callback.
-static void alarmFiredNative(JNIEnv* env, jobject obj) {
-  if (sAlarmCallback) {
-    sAlarmCallback(sAlarmCallbackData);
-  } else {
-    ALOGE("%s() - Alarm fired with callback not set!", __func__);
-  }
-}
-
 static bt_os_callouts_t sBluetoothOsCallouts = {
-    sizeof(sBluetoothOsCallouts), set_wake_alarm_callout,
-    acquire_wake_lock_callout, release_wake_lock_callout,
+    sizeof(sBluetoothOsCallouts),
+    acquire_wake_lock_callout,
+    release_wake_lock_callout,
 };
 
 int hal_util_load_bt_library(const bt_interface_t** interface) {
@@ -1049,15 +1002,19 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
 
   method_adapterPropertyChangedCallback = env->GetMethodID(
       jniCallbackClass, "adapterPropertyChangedCallback", "([I[[B)V");
+
   method_discoveryStateChangeCallback = env->GetMethodID(
       jniCallbackClass, "discoveryStateChangeCallback", "(I)V");
 
   method_devicePropertyChangedCallback = env->GetMethodID(
       jniCallbackClass, "devicePropertyChangedCallback", "([B[I[[B)V");
+
   method_deviceFoundCallback =
       env->GetMethodID(jniCallbackClass, "deviceFoundCallback", "([B)V");
+
   method_pinRequestCallback =
       env->GetMethodID(jniCallbackClass, "pinRequestCallback", "([B[BIZ)V");
+
   method_sspRequestCallback =
       env->GetMethodID(jniCallbackClass, "sspRequestCallback", "([B[BIII)V");
 
@@ -1082,13 +1039,15 @@ static void classInitNative(JNIEnv* env, jclass clazz) {
   method_switchCodecCallback =
       env->GetMethodID(jniCallbackClass, "switchCodecCallback", "(Z)V");
 
-  method_setWakeAlarm = env->GetMethodID(clazz, "setWakeAlarm", "(JZ)Z");
-  method_acquireWakeLock =
-      env->GetMethodID(clazz, "acquireWakeLock", "(Ljava/lang/String;)Z");
-  method_releaseWakeLock =
-      env->GetMethodID(clazz, "releaseWakeLock", "(Ljava/lang/String;)Z");
-  method_energyInfo = env->GetMethodID(
-      clazz, "energyInfoCallback", "(IIJJJJ[Landroid/bluetooth/UidTraffic;)V");
+  method_acquireWakeLock = env->GetMethodID(jniCallbackClass, "acquireWakeLock",
+                                            "(Ljava/lang/String;)Z");
+
+  method_releaseWakeLock = env->GetMethodID(jniCallbackClass, "releaseWakeLock",
+                                            "(Ljava/lang/String;)Z");
+
+  method_energyInfo =
+      env->GetMethodID(jniCallbackClass, "energyInfoCallback",
+                       "(IIJJJJ[Landroid/bluetooth/UidTraffic;)V");
 
   if (env->GetJavaVM(&vm) != JNI_OK) {
     ALOGE("Could not get JavaVM");
@@ -1741,7 +1700,7 @@ static jboolean getRemoteServicesNative(JNIEnv* env, jobject obj,
   return (ret == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
 }
 
-static int readEnergyInfo() {
+static int readEnergyInfoNative() {
   ALOGV("%s", __func__);
 
   if (!sBluetoothInterface) return JNI_FALSE;
@@ -1970,7 +1929,7 @@ static void metadataChangedNative(JNIEnv* env, jobject obj, jbyteArray address,
   return;
 }
 
-static jboolean isLogRedactionEnabled(JNIEnv* env, jobject obj) {
+static jboolean isLogRedactionEnabledNative(JNIEnv* env, jobject obj) {
   ALOGV("%s", __func__);
   return bluetooth::os::should_log_be_redacted();
 }
@@ -2217,8 +2176,7 @@ static JNINativeMethod sMethods[] = {
     {"pinReplyNative", "([BZI[B)Z", (void*)pinReplyNative},
     {"sspReplyNative", "([BIZI)Z", (void*)sspReplyNative},
     {"getRemoteServicesNative", "([BI)Z", (void*)getRemoteServicesNative},
-    {"alarmFiredNative", "()V", (void*)alarmFiredNative},
-    {"readEnergyInfo", "()I", (void*)readEnergyInfo},
+    {"readEnergyInfoNative", "()I", (void*)readEnergyInfoNative},
     {"dumpNative", "(Ljava/io/FileDescriptor;[Ljava/lang/String;)V",
      (void*)dumpNative},
     {"dumpMetricsNative", "()[B", (void*)dumpMetricsNative},
@@ -2234,7 +2192,7 @@ static JNINativeMethod sMethods[] = {
      (void*)requestMaximumTxDataLengthNative},
     {"allowLowLatencyAudioNative", "(Z[B)Z", (void*)allowLowLatencyAudioNative},
     {"metadataChangedNative", "([BI[B)V", (void*)metadataChangedNative},
-    {"isLogRedactionEnabled", "()Z", (void*)isLogRedactionEnabled},
+    {"isLogRedactionEnabledNative", "()Z", (void*)isLogRedactionEnabledNative},
     {"interopMatchAddrNative", "(Ljava/lang/String;Ljava/lang/String;)Z",
      (void*)interopMatchAddrNative},
     {"interopMatchNameNative", "(Ljava/lang/String;Ljava/lang/String;)Z",
@@ -2255,7 +2213,7 @@ static JNINativeMethod sMethods[] = {
 
 int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {
   return jniRegisterNativeMethods(
-      env, "com/android/bluetooth/btservice/AdapterService", sMethods,
+      env, "com/android/bluetooth/btservice/AdapterNativeInterface", sMethods,
       NELEM(sMethods));
 }
 
