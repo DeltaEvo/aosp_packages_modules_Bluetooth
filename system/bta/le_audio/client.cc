@@ -239,7 +239,7 @@ class LeAudioClientImpl : public LeAudioClient {
         active_group_id_(bluetooth::groups::kGroupUnknown),
         configuration_context_type_(LeAudioContextType::UNINITIALIZED),
         local_metadata_context_types_(
-            {sink : AudioContexts(), source : AudioContexts()}),
+            {.sink = AudioContexts(), .source = AudioContexts()}),
         stream_setup_start_timestamp_(0),
         stream_setup_end_timestamp_(0),
         audio_receiver_state_(AudioState::IDLE),
@@ -3657,9 +3657,9 @@ class LeAudioClientImpl : public LeAudioClient {
             bluetooth::common::ToString(configuration_context_type_).c_str(),
             configuration_context_type_);
     dprintf(fd, "  local source metadata context type mask: %s\n",
-            local_metadata_context_types_.sink.to_string().c_str());
-    dprintf(fd, "  local sink metadata context type mask: %s\n",
             local_metadata_context_types_.source.to_string().c_str());
+    dprintf(fd, "  local sink metadata context type mask: %s\n",
+            local_metadata_context_types_.sink.to_string().c_str());
     dprintf(fd, "  TBS state: %s\n", in_call_ ? " In call" : "No calls");
     dprintf(fd, "  Start time: ");
     for (auto t : stream_start_history_queue_) {
