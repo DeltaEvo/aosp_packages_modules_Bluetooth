@@ -966,13 +966,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           ases_pair.sink->state == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
         ases_pair.sink->state =
             AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED;
-        ases_pair.sink->active = false;
       }
       if (ases_pair.source && ases_pair.source->state ==
                                   AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
         ases_pair.source->state =
             AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED;
-        ases_pair.source->active = false;
       }
     }
 
@@ -2444,14 +2442,23 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       auto directional_audio_context =
           context_types.get(ase->direction) &
           leAudioDevice->GetAvailableContexts(ase->direction);
+
+      std::vector<uint8_t> new_metadata;
       if (directional_audio_context.any()) {
-        ase->metadata = leAudioDevice->GetMetadata(
+        new_metadata = leAudioDevice->GetMetadata(
             directional_audio_context, ccid_lists.get(ase->direction));
       } else {
-        ase->metadata = leAudioDevice->GetMetadata(
+        new_metadata = leAudioDevice->GetMetadata(
             AudioContexts(LeAudioContextType::UNSPECIFIED),
             std::vector<uint8_t>());
       }
+
+      /* Do not update if metadata did not changed. */
+      if (ase->metadata == new_metadata) {
+        continue;
+      }
+
+      ase->metadata = new_metadata;
 
       struct le_audio::client_parser::ascs::ctp_update_metadata conf;
 
