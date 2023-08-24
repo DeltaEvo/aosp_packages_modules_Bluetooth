@@ -49,7 +49,9 @@ import android.media.BluetoothProfileConnectionInfo;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
@@ -87,6 +89,7 @@ public class A2dpService extends ProfileService {
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
     private HandlerThread mStateMachinesThread;
+    private Handler mHandler = null;
 
     private final A2dpNativeInterface mNativeInterface;
     @VisibleForTesting
@@ -167,6 +170,8 @@ public class A2dpService extends ProfileService {
         Log.i(TAG, "Max connected audio devices set to " + mMaxConnectedAudioDevices);
 
         // Step 3: Start handler thread for state machines
+        // Setup Handler.
+        mHandler = new Handler(Looper.getMainLooper());
         mStateMachines.clear();
         mStateMachinesThread = new HandlerThread("A2dpService.StateMachines");
         mStateMachinesThread.start();
@@ -1075,14 +1080,17 @@ public class A2dpService extends ProfileService {
             mActiveDevice = device;
         }
 
+        mAdapterService.getActiveDeviceManager().a2dpActiveStateChanged(device);
+        mAdapterService.getSilenceDeviceManager().a2dpActiveDeviceChanged(device);
+
         BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED,
                 BluetoothProfile.A2DP, mAdapterService.obfuscateAddress(device),
                 mAdapterService.getMetricId(device));
+
         Intent intent = new Intent(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
                         | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        mAdapterService.getActiveDeviceManager().a2dpActiveStateChanged(device);
         Utils.sendBroadcast(this, intent, BLUETOOTH_CONNECT,
                 Utils.getTempAllowlistBroadcastOptions());
     }
@@ -1248,6 +1256,10 @@ public class A2dpService extends ProfileService {
         }
     }
 
+    void handleConnectionStateChanged(BluetoothDevice device, int fromState, int toState) {
+        mHandler.post(() -> connectionStateChanged(device, fromState, toState));
+    }
+
     void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
         if ((device == null) || (fromState == toState)) {
             return;
@@ -1275,6 +1287,9 @@ public class A2dpService extends ProfileService {
         }
         mAdapterService
                 .getActiveDeviceManager()
+                .a2dpConnectionStateChanged(device, fromState, toState);
+        mAdapterService
+                .getSilenceDeviceManager()
                 .a2dpConnectionStateChanged(device, fromState, toState);
     }
 
