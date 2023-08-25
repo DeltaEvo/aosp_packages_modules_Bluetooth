@@ -811,18 +811,16 @@ void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index) {
   }
   status = BTM_SetPowerMode(bta_dm_cb.pm_id, p_peer_dev->peer_bdaddr, &pwr_md);
   if (status == BTM_CMD_STORED || status == BTM_CMD_STARTED) {
-    p_peer_dev->info &= ~(BTA_DM_DI_INT_SNIFF | BTA_DM_DI_ACP_SNIFF);
+    p_peer_dev->reset_sniff_flags();
     p_peer_dev->info |= BTA_DM_DI_SET_SNIFF;
   } else if (status == BTM_SUCCESS) {
     APPL_TRACE_DEBUG("bta_dm_pm_sniff BTM_SetPowerMode() returns BTM_SUCCESS");
-    p_peer_dev->info &=
-        ~(BTA_DM_DI_INT_SNIFF | BTA_DM_DI_ACP_SNIFF | BTA_DM_DI_SET_SNIFF);
+    p_peer_dev->reset_sniff_flags();
   } else {
     LOG_ERROR("Unable to set power mode peer:%s status:%s",
               ADDRESS_TO_LOGGABLE_CSTR(p_peer_dev->peer_bdaddr),
               btm_status_text(status).c_str());
-    p_peer_dev->info &=
-        ~(BTA_DM_DI_INT_SNIFF | BTA_DM_DI_ACP_SNIFF | BTA_DM_DI_SET_SNIFF);
+    p_peer_dev->reset_sniff_flags();
   }
 }
 /*******************************************************************************
@@ -1009,7 +1007,6 @@ void bta_dm_pm_btm_status(const RawAddress& bd_addr, tBTM_PM_STATUS status,
     return;
   }
 
-  tBTA_DM_DEV_INFO info = p_dev->Info();
   /* check new mode */
   switch (status) {
     case BTM_PM_STS_ACTIVE:
@@ -1017,8 +1014,7 @@ void bta_dm_pm_btm_status(const RawAddress& bd_addr, tBTM_PM_STATUS status,
       we should not try it again*/
       if (hci_status != 0) {
         APPL_TRACE_ERROR("%s hci_status=%d", __func__, hci_status);
-        p_dev->info &=
-            ~(BTA_DM_DI_INT_SNIFF | BTA_DM_DI_ACP_SNIFF | BTA_DM_DI_SET_SNIFF);
+        p_dev->reset_sniff_flags();
 
         if (p_dev->pm_mode_attempted & (BTA_DM_PM_PARK | BTA_DM_PM_SNIFF)) {
           p_dev->pm_mode_failed |=
@@ -1071,8 +1067,8 @@ void bta_dm_pm_btm_status(const RawAddress& bd_addr, tBTM_PM_STATUS status,
          */
         bta_dm_pm_stop_timer(bd_addr);
       } else {
-        p_dev->info &=
-            ~(BTA_DM_DI_SET_SNIFF | BTA_DM_DI_INT_SNIFF | BTA_DM_DI_ACP_SNIFF);
+        tBTA_DM_DEV_INFO info = p_dev->Info();
+        p_dev->reset_sniff_flags();
         if (info & BTA_DM_DI_SET_SNIFF)
           p_dev->info |= BTA_DM_DI_INT_SNIFF;
         else

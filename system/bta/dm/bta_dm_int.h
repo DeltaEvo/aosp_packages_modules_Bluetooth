@@ -259,10 +259,24 @@ struct tBTA_DM_PEER_DEVICE {
   friend void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
                               uint8_t app_id, const RawAddress& peer_addr);
   friend void handle_remote_features_complete(const RawAddress& bd_addr);
-  tBTA_DM_DEV_INFO info;
+
+  // Dynamic pieces of operational device information
+  tBTA_DM_DEV_INFO info{BTA_DM_DI_NONE};
 
  public:
   tBTA_DM_DEV_INFO Info() const { return info; }
+  void reset_device_info() { info = BTA_DM_DI_NONE; }
+
+  void set_av_active() { info |= BTA_DM_DI_AV_ACTIVE; }
+  void reset_av_active() { info &= ~BTA_DM_DI_AV_ACTIVE; }
+  bool is_av_active() const { return info & BTA_DM_DI_AV_ACTIVE; }
+
+  // NOTE: Why is this not used as a bitmask
+  void set_both_device_ssr_capable() { info = BTA_DM_DI_USE_SSR; }
+
+  void reset_sniff_flags() {
+    info &= ~(BTA_DM_DI_INT_SNIFF | BTA_DM_DI_ACP_SNIFF | BTA_DM_DI_SET_SNIFF);
+  }
 
   tBTA_DM_ENCRYPT_CBACK* p_encrypt_cback;
   tBTM_PM_STATUS prev_low; /* previous low power mode used */
