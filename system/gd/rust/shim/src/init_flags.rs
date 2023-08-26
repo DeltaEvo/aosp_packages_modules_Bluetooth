@@ -14,7 +14,6 @@ mod ffi {
 
         fn always_send_services_if_gatt_disc_done_is_enabled() -> bool;
         fn always_use_private_gatt_for_debugging_is_enabled() -> bool;
-        fn asynchronously_start_l2cap_coc_is_enabled() -> bool;
         fn btaa_hci_is_enabled() -> bool;
         fn bta_dm_clear_conn_id_on_client_close_is_enabled() -> bool;
         fn delay_hidh_cleanup_until_hidh_ready_start_is_enabled() -> bool;
@@ -29,7 +28,6 @@ mod ffi {
         fn gatt_robust_caching_server_is_enabled() -> bool;
         fn gd_core_is_enabled() -> bool;
         fn gd_l2cap_is_enabled() -> bool;
-        fn gd_link_policy_is_enabled() -> bool;
         fn get_default_log_level() -> i32;
         fn get_hci_adapter() -> i32;
         fn get_log_level_for_tag(tag: &str) -> i32;
@@ -43,7 +41,6 @@ mod ffi {
         fn pbap_pse_dynamic_version_upgrade_is_enabled() -> bool;
         fn periodic_advertising_adi_is_enabled() -> bool;
         fn private_gatt_is_enabled() -> bool;
-        fn queue_l2cap_coc_while_encrypting_is_enabled() -> bool;
         fn redact_log_is_enabled() -> bool;
         fn rust_event_loop_is_enabled() -> bool;
         fn sco_codec_select_lc3_is_enabled() -> bool;
