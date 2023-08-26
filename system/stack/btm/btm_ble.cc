@@ -992,17 +992,11 @@ tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
       break;
   }
 
-  if (ble_sec_act == BTM_BLE_SEC_NONE) {
-    if (bluetooth::common::init_flags::queue_l2cap_coc_while_encrypting_is_enabled()) {
-      if (sec_act != BTM_SEC_ENC_PENDING) {
-        return result;
-      }
-    } else {
-      return result;
-    }
-  } else {
-    l2cble_update_sec_act(bd_addr, sec_act);
+  if (ble_sec_act == BTM_BLE_SEC_NONE && sec_act != BTM_SEC_ENC_PENDING) {
+    return result;
   }
+
+  l2cble_update_sec_act(bd_addr, sec_act);
 
   BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, p_callback, p_ref_data,
                     ble_sec_act);
@@ -1698,11 +1692,11 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
   BTM_TRACE_DEBUG("%s", __func__);
   *p_data = tBTM_LE_IO_REQ{
       .io_cap = BTM_IO_CAP_UNKNOWN,
+      .oob_data = false,
       .auth_req = BTM_LE_AUTH_REQ_SC_MITM_BOND,
+      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
       .init_keys = SMP_BR_SEC_DEFAULT_KEY,
       .resp_keys = SMP_BR_SEC_DEFAULT_KEY,
-      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
-      .oob_data = false,
   };
 
   if (osi_property_get_bool(kPropertyCtkdDisableCsrkDistribution, false)) {
