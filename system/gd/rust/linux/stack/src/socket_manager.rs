@@ -481,8 +481,11 @@ pub enum SocketActions {
     OnIncomingSocketClosed(CallbackId, SocketId, BtStatus),
     OnHandleIncomingConnection(CallbackId, SocketId, BluetoothSocket),
 
-    // Last event is for connecting socket.
+    // This event is for connecting socket.
     OnOutgoingConnectionResult(CallbackId, SocketId, BtStatus, Option<BluetoothSocket>),
+
+    // Request to disconnect all sockets, e.g. when user disconnects the peer device.
+    DisconnectAll(RawAddress),
 }
 
 /// Implementation of the `IBluetoothSocketManager` api.
@@ -574,6 +577,14 @@ impl BluetoothSocketManager {
             if !self.admin.lock().unwrap().is_service_allowed(uuid.into()) {
                 log::debug!("service {} is blocked by admin policy", uuid);
                 return SocketResult::new(BtStatus::AuthRejected, INVALID_SOCKET_ID);
+            }
+            if self
+                .listening
+                .iter()
+                .any(|(_, v)| v.iter().any(|s| s.uuid.map_or(false, |u| u == uuid)))
+            {
+                log::warn!("Service {} already exists", uuid);
+                return SocketResult::new(BtStatus::Fail, INVALID_SOCKET_ID);
             }
         }
 
@@ -1176,6 +1187,10 @@ impl BluetoothSocketManager {
                         .entry(cbid)
                         .and_modify(|v| v.retain(|s| s.socket_id != socket_id));
                 }
+            }
+
+            SocketActions::DisconnectAll(addr) => {
+                self.sock.as_ref().expect("Socket Manager not initialized").disconnect_all(addr);
             }
         }
     }
