@@ -26,7 +26,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -54,6 +53,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.ActiveDeviceManager;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.SilenceDeviceManager;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 
 import org.hamcrest.Matchers;
@@ -87,7 +87,6 @@ public class HeadsetServiceTest {
     private Context mTargetContext;
     private HeadsetService mHeadsetService;
     private BluetoothAdapter mAdapter;
-    private HeadsetNativeInterface mNativeInterface;
     private BluetoothDevice mCurrentDevice;
     private final HashMap<BluetoothDevice, HeadsetStateMachine> mStateMachines = new HashMap<>();
 
@@ -96,8 +95,10 @@ public class HeadsetServiceTest {
     @Spy private HeadsetObjectsFactory mObjectsFactory = HeadsetObjectsFactory.getInstance();
     @Mock private AdapterService mAdapterService;
     @Mock private ActiveDeviceManager mActiveDeviceManager;
+    @Mock private SilenceDeviceManager mSilenceDeviceManager;
     @Mock private DatabaseManager mDatabaseManager;
     @Mock private HeadsetSystemInterface mSystemInterface;
+    @Mock private HeadsetNativeInterface mNativeInterface;
     @Mock private AudioManager mAudioManager;
     @Mock private HeadsetPhoneState mPhoneState;
 
@@ -124,6 +125,7 @@ public class HeadsetServiceTest {
         doReturn(BluetoothDevice.BOND_BONDED).when(mAdapterService)
                 .getBondState(any(BluetoothDevice.class));
         doReturn(mActiveDeviceManager).when(mAdapterService).getActiveDeviceManager();
+        doReturn(mSilenceDeviceManager).when(mAdapterService).getSilenceDeviceManager();
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
         doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
         doAnswer(invocation -> {
@@ -138,7 +140,6 @@ public class HeadsetServiceTest {
         when(mSystemInterface.getAudioManager()).thenReturn(mAudioManager);
         when(mSystemInterface.isCallIdle()).thenReturn(true, false, true, false);
         // Mock methods in HeadsetNativeInterface
-        mNativeInterface = spy(HeadsetNativeInterface.getInstance());
         doNothing().when(mNativeInterface).init(anyInt(), anyBoolean());
         doNothing().when(mNativeInterface).cleanup();
         doReturn(true).when(mNativeInterface).connectHfp(any(BluetoothDevice.class));
@@ -158,6 +159,7 @@ public class HeadsetServiceTest {
         }).when(mObjectsFactory).makeStateMachine(any(), any(), any(), any(), any(), any());
         doReturn(mSystemInterface).when(mObjectsFactory).makeSystemInterface(any());
         doReturn(mNativeInterface).when(mObjectsFactory).getNativeInterface();
+        HeadsetNativeInterface.setInstance(mNativeInterface);
         TestUtils.startService(mServiceRule, HeadsetService.class);
         mHeadsetService = HeadsetService.getHeadsetService();
         Assert.assertNotNull(mHeadsetService);
@@ -170,6 +172,7 @@ public class HeadsetServiceTest {
     @After
     public void tearDown() throws Exception {
         TestUtils.stopService(mServiceRule, HeadsetService.class);
+        HeadsetNativeInterface.setInstance(null);
         mHeadsetService = HeadsetService.getHeadsetService();
         Assert.assertNull(mHeadsetService);
         mStateMachines.clear();
@@ -1014,52 +1017,6 @@ public class HeadsetServiceTest {
         StringBuilder sb = new StringBuilder();
 
         mHeadsetService.dump(sb);
-    }
-
-    @Test
-    public void testGetFallbackCandidates() {
-        BluetoothDevice deviceA = TestUtils.getTestDevice(mAdapter, 0);
-        BluetoothDevice deviceB = TestUtils.getTestDevice(mAdapter, 1);
-        when(mDatabaseManager.getCustomMeta(any(BluetoothDevice.class),
-                any(Integer.class))).thenReturn(null);
-
-        // No connected device
-        Assert.assertTrue(mHeadsetService.getFallbackCandidates(mDatabaseManager).isEmpty());
-
-        // One connected device
-        addConnectedDeviceHelper(deviceA);
-        Assert.assertTrue(mHeadsetService.getFallbackCandidates(mDatabaseManager)
-                .contains(deviceA));
-
-        // Two connected devices
-        addConnectedDeviceHelper(deviceB);
-        Assert.assertTrue(mHeadsetService.getFallbackCandidates(mDatabaseManager)
-                .contains(deviceA));
-        Assert.assertTrue(mHeadsetService.getFallbackCandidates(mDatabaseManager)
-                .contains(deviceB));
-    }
-
-    @Test
-    public void testGetFallbackCandidates_HasWatchDevice() {
-        BluetoothDevice deviceWatch = TestUtils.getTestDevice(mAdapter, 0);
-        BluetoothDevice deviceRegular = TestUtils.getTestDevice(mAdapter, 1);
-
-        // Make deviceWatch a watch
-        when(mDatabaseManager.getCustomMeta(deviceWatch, BluetoothDevice.METADATA_DEVICE_TYPE))
-                .thenReturn(BluetoothDevice.DEVICE_TYPE_WATCH.getBytes());
-        when(mDatabaseManager.getCustomMeta(deviceRegular, BluetoothDevice.METADATA_DEVICE_TYPE))
-                .thenReturn(null);
-
-        // Has a connected watch device
-        addConnectedDeviceHelper(deviceWatch);
-        Assert.assertTrue(mHeadsetService.getFallbackCandidates(mDatabaseManager).isEmpty());
-
-        // Two connected devices with one watch
-        addConnectedDeviceHelper(deviceRegular);
-        Assert.assertFalse(mHeadsetService.getFallbackCandidates(mDatabaseManager)
-                .contains(deviceWatch));
-        Assert.assertTrue(mHeadsetService.getFallbackCandidates(mDatabaseManager)
-                .contains(deviceRegular));
     }
 
     @Test
