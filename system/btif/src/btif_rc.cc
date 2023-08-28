@@ -1070,7 +1070,7 @@ void handle_rc_vendorunique_rsp(tBTA_AV_REMOTE_RSP* p_remote_rsp) {
       key_state = 0;
     }
 
-    if (p_remote_rsp->len > 0) {
+    if (p_remote_rsp->len > 0 && p_remote_rsp->p_data != NULL) {
       if (p_remote_rsp->len >= AVRC_PASS_THRU_GROUP_LEN)
         vendor_id = p_remote_rsp->p_data[AVRC_PASS_THRU_GROUP_LEN - 1];
       osi_free_and_reset((void**)&p_remote_rsp->p_data);
@@ -5484,8 +5484,8 @@ static void initialize_transaction(btif_rc_device_cb_t* p_dev, uint8_t lbl) {
       clear_cmd_timeout(p_dev, lbl);
     }
     transaction_set->transaction[lbl] = {
-        .label = lbl,
         .in_use = false,
+        .label = lbl,
         .context =
             {
                 .label = MAX_LABEL,

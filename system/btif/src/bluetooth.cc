@@ -94,7 +94,6 @@
 #include "main/shim/dumpsys.h"
 #include "main/shim/shim.h"
 #include "osi/include/alarm.h"
-#include "osi/include/allocation_tracker.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
@@ -415,10 +414,6 @@ static int init(bt_callbacks_t* callbacks, bool start_restricted,
 
   if (interface_ready()) return BT_STATUS_DONE;
 
-#ifdef BLUEDROID_DEBUG
-  allocation_tracker_init();
-#endif
-
   set_hal_cbacks(callbacks);
 
   restricted_mode = start_restricted;
@@ -662,7 +657,9 @@ static int remove_bond(const RawAddress* bd_addr) {
 static int get_connection_state(const RawAddress* bd_addr) {
   if (!interface_ready()) return 0;
 
-  return btif_dm_get_connection_state(bd_addr);
+  if (bd_addr == nullptr) return 0;
+
+  return btif_dm_get_connection_state(*bd_addr);
 }
 
 static int pin_reply(const RawAddress* bd_addr, uint8_t accept, uint8_t pin_len,
@@ -809,7 +806,6 @@ static void dump(int fd, const char** arguments) {
   device_debug_iot_config_dump(fd);
   BTA_HfClientDumpStatistics(fd);
   wakelock_debug_dump(fd);
-  osi_allocator_debug_dump(fd);
   alarm_debug_dump(fd);
   bluetooth::csis::CsisClient::DebugDump(fd);
 #ifndef TARGET_FLOSS
@@ -1003,7 +999,6 @@ static int release_wake_lock_cb(const char* lock_name) {
 
 static bt_os_callouts_t wakelock_os_callouts_jni = {
     sizeof(wakelock_os_callouts_jni),
-    nullptr /* not used */,
     acquire_wake_lock_cb,
     release_wake_lock_cb,
 };

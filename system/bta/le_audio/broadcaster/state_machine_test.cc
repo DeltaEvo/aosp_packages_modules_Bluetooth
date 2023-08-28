@@ -319,8 +319,8 @@ class StateMachineTest : public Test {
     auto broadcast_id = broadcast_id_lsb++;
     pending_broadcasts_.push_back(BroadcastStateMachine::CreateInstance({
         .is_public = true,
-        .broadcast_name = test_broadcast_name,
         .broadcast_id = broadcast_id,
+        .broadcast_name = test_broadcast_name,
         // .streaming_phy = ,
         .codec_wrapper = codec_qos_pair.first,
         .qos_config = codec_qos_pair.second,
@@ -1003,7 +1003,8 @@ TEST_F(StateMachineTest, AnnouncementTest) {
   ASSERT_EQ(p_data[3], ((kBasicAudioAnnouncementServiceUuid >> 8) & 0x00FF));
 
   // Check advertising parameters
-  ASSERT_EQ(adv_params.own_address_type, BLE_ADDR_RANDOM);
+  ASSERT_EQ(adv_params.own_address_type,
+            BroadcastStateMachine::kBroadcastAdvertisingType);
 }
 
 }  // namespace

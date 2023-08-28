@@ -682,7 +682,7 @@ ErrorCode LinkLayerController::LeAddDeviceToResolvingList(
   for (auto const& entry : le_resolving_list_) {
     if ((entry.peer_identity_address_type == peer_identity_address_type &&
          entry.peer_identity_address == peer_identity_address) ||
-        entry.peer_irk == peer_irk) {
+        (entry.peer_irk == peer_irk && !irk_is_zero(peer_irk))) {
       INFO(id_, "device is already present in the resolving list");
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
     }
@@ -1980,7 +1980,7 @@ void LinkLayerController::SetExtendedInquiryResponse(
 
 LinkLayerController::LinkLayerController(const Address& address,
                                          const ControllerProperties& properties,
-                                         int id)
+                                         uint32_t id)
     : id_(id),
       address_(address),
       properties_(properties),
@@ -2134,7 +2134,7 @@ ErrorCode LinkLayerController::SendCommandToRemoteByAddress(
               own_address, peer_address));
       break;
     case (OpCode::READ_REMOTE_EXTENDED_FEATURES): {
-      pdl::packet::slice page_number_slice = args.subrange(5, 2);
+      pdl::packet::slice page_number_slice = args.subrange(5, 1);
       uint8_t page_number = page_number_slice.read_le<uint8_t>();
       SendLinkLayerPacket(
           model::packets::ReadRemoteExtendedFeaturesBuilder::Create(
@@ -2837,6 +2837,10 @@ Address LinkLayerController::generate_rpa(
   return rpa;
 }
 
+bool LinkLayerController::irk_is_zero(std::array<uint8_t, LinkLayerController::kIrkSize> irk) {
+    return std::all_of(irk.begin(), irk.end(), [](uint8_t b) { return b == 0; });
+}
+
 // Handle legacy advertising PDUs while in the Scanning state.
 void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
     model::packets::LeLegacyAdvertisingPduView& pdu, uint8_t rssi) {
@@ -3284,6 +3288,7 @@ void LinkLayerController::ConnectIncomingLeLegacyAdvertisingPdu(
   }
 
   initiator_.pending_connect_request = advertising_address;
+  initiator_.initiating_address = initiating_address.GetAddress();
 
   INFO(id_, "Sending LE Connect request to {} with initiating address {}",
        resolved_advertising_address, initiating_address);
@@ -3710,6 +3715,7 @@ void LinkLayerController::ConnectIncomingLeExtendedAdvertisingPdu(
   }
 
   initiator_.pending_connect_request = advertising_address;
+  initiator_.initiating_address = initiating_address.GetAddress();
 
   INFO(id_, "Sending LE Connect request to {} with initiating address {}",
        resolved_advertising_address, initiating_address);

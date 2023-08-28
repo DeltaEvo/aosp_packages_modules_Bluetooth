@@ -846,8 +846,11 @@ void bta_dm_close_acl(const RawAddress& bd_addr, bool remove_dev,
         break;
     }
     if (index != bta_dm_cb.device_list.count) {
-      if (remove_dev)
+      if (remove_dev) {
+        LOG_INFO("Setting remove_dev_pending for %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
         bta_dm_cb.device_list.peer_device[index].remove_dev_pending = true;
+      }
     } else {
       APPL_TRACE_ERROR("unknown device, remove ACL failed");
     }
@@ -1080,8 +1083,8 @@ static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr,
   bta_dm_search_cb.peer_bdaddr = bd_addr;
   bta_dm_search_cb.peer_name[0] = 0;
 
-  btm_status = BTM_ReadRemoteDeviceName(bta_dm_search_cb.peer_bdaddr,
-                                        bta_dm_remname_cback, transport);
+  btm_status = get_btm_client_interface().peer.BTM_ReadRemoteDeviceName(
+      bta_dm_search_cb.peer_bdaddr, bta_dm_remname_cback, transport);
 
   if (btm_status == BTM_CMD_STARTED) {
     APPL_TRACE_DEBUG("%s: BTM_ReadRemoteDeviceName is started", __func__);
@@ -1094,7 +1097,8 @@ static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr,
      * "bta_dm_remname_cback" */
     /* adding callback to get notified that current reading remote name done */
 
-    BTM_SecAddRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+    get_btm_client_interface().security.BTM_SecAddRmtNameNotifyCallback(
+        &bta_dm_service_search_remname_cback);
 
     return (true);
   } else {
@@ -1206,7 +1210,9 @@ static void store_avrcp_profile_feature(tSDP_DISC_REC* sdp_rec) {
   tSDP_DISC_ATTR* p_attr =
       get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
           sdp_rec, ATTR_ID_SUPPORTED_FEATURES);
-  if (p_attr == NULL) {
+  if (p_attr == NULL ||
+      SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+      SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 2) {
     return;
   }
 
@@ -1420,7 +1426,8 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
       /* callbacks */
       /* start next bd_addr if necessary */
 
-      BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+      get_btm_client_interface().security.BTM_SecDeleteRmtNameNotifyCallback(
+          &bta_dm_service_search_remname_cback);
 
       BTM_LogHistory(
           kBtmLogTag, bta_dm_search_cb.peer_bdaddr, "Discovery completed",
@@ -1490,7 +1497,8 @@ void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
     if (bta_dm_search_cb.p_sdp_db)
       osi_free_and_reset((void**)&bta_dm_search_cb.p_sdp_db);
 
-    BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+    get_btm_client_interface().security.BTM_SecDeleteRmtNameNotifyCallback(
+        &bta_dm_service_search_remname_cback);
 
     p_msg = (tBTA_DM_MSG*)osi_calloc(sizeof(tBTA_DM_MSG));
     p_msg->hdr.event = BTA_DM_DISCOVERY_RESULT_EVT;
@@ -2053,8 +2061,8 @@ static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
          if connection exists, we don't have to wait for ACL
          link to go down to start search on next device */
       if (transport == BT_TRANSPORT_BR_EDR) {
-        if (BTM_IsAclConnectionUp(bta_dm_search_cb.peer_bdaddr,
-                                  BT_TRANSPORT_BR_EDR))
+        if (get_btm_client_interface().peer.BTM_IsAclConnectionUp(
+                bta_dm_search_cb.peer_bdaddr, BT_TRANSPORT_BR_EDR))
           bta_dm_search_cb.wait_disc = false;
         else
           bta_dm_search_cb.wait_disc = true;
@@ -2269,13 +2277,15 @@ static void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p_remote_name) {
       p_remote_name->remote_bd_name[0], p_remote_name->length);
 
   if (bta_dm_search_cb.peer_bdaddr == p_remote_name->bd_addr) {
-    BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+    get_btm_client_interface().security.BTM_SecDeleteRmtNameNotifyCallback(
+        &bta_dm_service_search_remname_cback);
   } else {
     // if we got a different response, maybe ignore it
     // we will have made a request directly from BTM_ReadRemoteDeviceName so we
     // expect a dedicated response for us
     if (p_remote_name->hci_status == HCI_ERR_CONNECTION_EXISTS) {
-      BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+      get_btm_client_interface().security.BTM_SecDeleteRmtNameNotifyCallback(
+          &bta_dm_service_search_remname_cback);
       LOG_INFO(
           "Assume command failed due to disconnection hci_status:%s peer:%s",
           hci_error_code_text(p_remote_name->hci_status).c_str(),
@@ -2694,12 +2704,13 @@ static void handle_role_change(const RawAddress& bd_addr, tHCI_ROLE new_role,
   }
 
   LOG_INFO(
-      "Role change callback peer:%s info:0x%x new_role:%s dev count:%d "
+      "Role change callback peer:%s info:%s new_role:%s dev count:%d "
       "hci_status:%s",
-      ADDRESS_TO_LOGGABLE_CSTR(bd_addr), p_dev->Info(), RoleText(new_role).c_str(),
-      bta_dm_cb.device_list.count, hci_error_code_text(hci_status).c_str());
+      ADDRESS_TO_LOGGABLE_CSTR(bd_addr), p_dev->info_text().c_str(),
+      RoleText(new_role).c_str(), bta_dm_cb.device_list.count,
+      hci_error_code_text(hci_status).c_str());
 
-  if (p_dev->Info() & BTA_DM_DI_AV_ACTIVE) {
+  if (p_dev->is_av_active()) {
     bool need_policy_change = false;
 
     /* there's AV activity on this link */
@@ -2745,7 +2756,7 @@ void handle_remote_features_complete(const RawAddress& bd_addr) {
       acl_peer_supports_sniff_subrating(bd_addr)) {
     LOG_DEBUG("Device supports sniff subrating peer:%s",
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-    p_dev->info = BTA_DM_DI_USE_SSR;
+    p_dev->set_both_device_ssr_capable();
   } else {
     LOG_DEBUG("Device does NOT support sniff subrating peer:%s",
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
@@ -2786,9 +2797,12 @@ void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
     LOG_WARN("Unable to allocate device resources for new connection");
     return;
   }
+  LOG_INFO("Acl connected peer:%s transport:%s handle:%hu",
+           ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
+           bt_transport_text(transport).c_str(), acl_handle);
   device->conn_state = BTA_DM_CONNECTED;
   device->pref_role = BTA_ANY_ROLE;
-  device->info = BTA_DM_DI_NONE;
+  device->reset_device_info();
   device->transport = transport;
 
   if (controller_get_interface()->supports_sniff_subrating() &&
@@ -2799,7 +2813,7 @@ void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
     // data is when the BTA_dm_notify_remote_features_complete()
     // callback has completed.  The below assignment is kept for
     // transitional informational purposes only.
-    device->info = BTA_DM_DI_USE_SSR;
+    device->set_both_device_ssr_capable();
   }
 
   if (bta_dm_cb.p_sec_cback) {
@@ -2903,6 +2917,8 @@ static void bta_dm_acl_down(const RawAddress& bd_addr,
     }
   }
   if (remove_device) {
+    LOG_INFO("remove_dev_pending actually removing %s",
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     bta_dm_process_remove_device_no_callback(bd_addr);
   }
 
@@ -2940,10 +2956,9 @@ static void bta_dm_check_av() {
     LOG_INFO("av_count:%d", bta_dm_cb.cur_av_count);
     for (i = 0; i < bta_dm_cb.device_list.count; i++) {
       p_dev = &bta_dm_cb.device_list.peer_device[i];
-      APPL_TRACE_WARNING("[%d]: state:%d, info:x%x", i, p_dev->conn_state,
-                         p_dev->Info());
-      if ((p_dev->conn_state == BTA_DM_CONNECTED) &&
-          (p_dev->Info() & BTA_DM_DI_AV_ACTIVE)) {
+      APPL_TRACE_WARNING("[%d]: state:%d, info:%s", i, p_dev->conn_state,
+                         p_dev->info_text().c_str());
+      if ((p_dev->conn_state == BTA_DM_CONNECTED) && p_dev->is_av_active()) {
         /* make central and take away the role switch policy */
         BTM_SwitchRoleToCentral(p_dev->peer_bdaddr);
         /* else either already central or can not switch for some reasons */
@@ -3023,11 +3038,11 @@ void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id, uint8_t app_id,
 
   if (BTA_ID_AV == id) {
     if (status == BTA_SYS_CONN_BUSY) {
-      if (p_dev) p_dev->info |= BTA_DM_DI_AV_ACTIVE;
+      if (p_dev) p_dev->set_av_active();
       /* AV calls bta_sys_conn_open with the A2DP stream count as app_id */
       if (BTA_ID_AV == id) bta_dm_cb.cur_av_count = bta_dm_get_av_count();
     } else if (status == BTA_SYS_CONN_IDLE) {
-      if (p_dev) p_dev->info &= ~BTA_DM_DI_AV_ACTIVE;
+      if (p_dev) p_dev->reset_av_active();
 
       /* get cur_av_count from connected services */
       if (BTA_ID_AV == id) bta_dm_cb.cur_av_count = bta_dm_get_av_count();
@@ -3068,8 +3083,13 @@ static void bta_dm_delay_role_switch_cback(UNUSED_ATTR void* data) {
  ******************************************************************************/
 static void bta_dm_reset_sec_dev_pending(const RawAddress& remote_bd_addr) {
   for (size_t i = 0; i < bta_dm_cb.device_list.count; i++) {
-    if (bta_dm_cb.device_list.peer_device[i].peer_bdaddr == remote_bd_addr) {
-      bta_dm_cb.device_list.peer_device[i].remove_dev_pending = false;
+    auto& dev = bta_dm_cb.device_list.peer_device[i];
+    if (dev.peer_bdaddr == remote_bd_addr) {
+      if (dev.remove_dev_pending) {
+        LOG_INFO("Clearing remove_dev_pending for %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(dev.peer_bdaddr));
+        dev.remove_dev_pending = false;
+      }
       return;
     }
   }
@@ -3096,8 +3116,11 @@ static void bta_dm_remove_sec_dev_entry(const RawAddress& remote_bd_addr) {
         __func__);
     BTM_SecClearSecurityFlags(remote_bd_addr);
     for (int i = 0; i < bta_dm_cb.device_list.count; i++) {
-      if (bta_dm_cb.device_list.peer_device[i].peer_bdaddr == remote_bd_addr) {
-        bta_dm_cb.device_list.peer_device[i].remove_dev_pending = TRUE;
+      auto& dev = bta_dm_cb.device_list.peer_device[i];
+      if (dev.peer_bdaddr == remote_bd_addr) {
+        LOG_INFO("Setting remove_dev_pending for %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(dev.peer_bdaddr));
+        dev.remove_dev_pending = TRUE;
         break;
       }
     }
@@ -3169,7 +3192,8 @@ static const char* bta_dm_get_remname(void) {
 
   /* If the name isn't already stored, try retrieving from BTM */
   if (*p_name == '\0') {
-    const char* p_temp = BTM_SecReadDevName(bta_dm_search_cb.peer_bdaddr);
+    const char* p_temp = get_btm_client_interface().security.BTM_SecReadDevName(
+        bta_dm_search_cb.peer_bdaddr);
     if (p_temp != NULL) p_name = (const char*)p_temp;
   }
 
@@ -3970,6 +3994,12 @@ static uint8_t bta_dm_ble_smp_cback(tBTM_LE_EVT event, const RawAddress& bda,
       sec_event.ble_key.key_type = p_data->key.key_type;
       sec_event.ble_key.p_key_value = p_data->key.p_key_value;
       bta_dm_cb.p_sec_cback(BTA_DM_BLE_KEY_EVT, &sec_event);
+
+      // Setting remove_dev_pending flag to false, where it will avoid deleting
+      // the security device record when the ACL connection link goes down in
+      // case of reconnection.
+      if (bta_dm_cb.device_list.count) bta_dm_reset_sec_dev_pending(bda);
+
       break;
 
     case BTM_LE_COMPLT_EVT:
@@ -4450,7 +4480,7 @@ void btm_dm_start_gatt_discovery(const RawAddress& bd_addr) {
  * Parameters:
  *
  ******************************************************************************/
-void bta_dm_proc_open_evt(tBTA_GATTC_OPEN* p_data) {
+static void bta_dm_proc_open_evt(tBTA_GATTC_OPEN* p_data) {
   VLOG(1) << "DM Search state= " << bta_dm_search_get_state()
           << " search_cb.peer_dbaddr:" << bta_dm_search_cb.peer_bdaddr
           << " connected_bda=" << p_data->remote_bda.address;

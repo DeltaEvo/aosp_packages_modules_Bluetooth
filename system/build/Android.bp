@@ -19,17 +19,10 @@ cc_defaults {
         // struct BT_HDR is defined as a variable-size header in a struct.
         "-Wno-gnu-variable-sized-type-not-at-end",
     ],
-    product_variables: {
-        debuggable: {
-            cflags: [
-                "-DBLUEDROID_DEBUG",
-            ],
-        },
-    },
 }
 
 cc_defaults {
-    name: "fluoride_defaults_fuzzable",
+    name: "fluoride_defaults",
     target: {
         android: {
             test_config_template: ":BluetoothTestConfigTemplate",
@@ -37,18 +30,9 @@ cc_defaults {
                 misc_undefined: ["bounds"],
             },
         },
-        host: {
-            static_libs: [
-                "libcutils",
-            ],
-        },
     },
     defaults: ["fluoride_types_defaults_fuzzable"],
     header_libs: ["libbluetooth_headers"],
-    generated_headers: [
-        "cxx-bridge-header",
-    ],
-    include_dirs: ["packages/modules/Bluetooth/system/gd/rust/shim"],
     static_libs: [
         "libbluetooth-types",
         "libbluetooth_rust_interop",
@@ -56,63 +40,4 @@ cc_defaults {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
     ],
-    min_sdk_version: "current",
-}
-
-cc_defaults {
-    name: "fluoride_test_defaults",
-    defaults: ["fluoride_defaults"],
-    host_supported: true,
-    shared_libs: [
-        "libcrypto",
-        "liblog",
-    ],
-    static_libs: [
-        "libbt-common",
-        "libbt-protos-lite",
-        "libcutils",
-        "libgmock",
-        "libosi",
-        "libosi-AlarmTestHarness",
-        "libosi-AllocationTestHarness",
-    ],
-    sanitize: {
-        address: true,
-        cfi: true,
-        misc_undefined: ["bounds"],
-    },
-}
-
-cc_defaults {
-    name: "fluoride_basic_defaults",
-    defaults: [
-        "fluoride_defaults",
-    ],
-    static_libs: [
-        "libbt-protos-lite",
-        "libflatbuffers-cpp",
-        "libprotobuf-cpp-lite",
-    ],
-}
-
-cc_defaults {
-    name: "fluoride_defaults",
-    defaults: [
-        "fluoride_defaults_fuzzable",
-    ],
-    static_libs: [
-        "libbluetooth_gd",
-        "libstatslog_bt",
-    ],
-    target: {
-        darwin: {
-            // libstatslog_bt -> libbinder doesn't build on mac
-            enabled: false,
-        },
-        android: {
-            sanitize: {
-                misc_undefined: ["bounds"],
-            },
-        },
-    },
 }
