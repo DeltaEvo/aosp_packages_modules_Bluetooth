@@ -322,13 +322,12 @@ tSMP_STATUS smp_calculate_comfirm(tSMP_CB* p_cb, const Octet16& rand,
   tBLE_ADDR_TYPE remote_bd_addr_type = BLE_ADDR_PUBLIC;
   /* get remote connection specific bluetooth address */
   if (!BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, remote_bda,
-                                    &remote_bd_addr_type, true)) {
+                                    &remote_bd_addr_type)) {
     SMP_TRACE_ERROR("%s: cannot obtain remote device address", __func__);
     return SMP_PAIR_FAIL_UNKNOWN;
   }
   /* get local connection specific bluetooth address */
-  BTM_ReadConnectionAddr(p_cb->pairing_bda, p_cb->local_bda, &p_cb->addr_type,
-                         true);
+  BTM_ReadConnectionAddr(p_cb->pairing_bda, p_cb->local_bda, &p_cb->addr_type);
   /* generate p1 = pres || preq || rat' || iat' */
   Octet16 p1 = smp_gen_p1_4_confirm(p_cb, remote_bd_addr_type);
   /* p1' = rand XOR p1 */
@@ -960,7 +959,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
         "Use rcvd identity address as BD_ADDR of LK rcvd identity address");
     bda_for_lk = p_cb->id_addr;
   } else if ((BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, bda_for_lk,
-                                           &conn_addr_type, true)) &&
+                                           &conn_addr_type)) &&
              conn_addr_type == BLE_ADDR_PUBLIC) {
     SMP_TRACE_DEBUG("Use rcvd connection address as BD_ADDR of LK");
   } else {

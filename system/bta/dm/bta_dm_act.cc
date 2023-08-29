@@ -2707,7 +2707,7 @@ static void handle_role_change(const RawAddress& bd_addr, tHCI_ROLE new_role,
       ADDRESS_TO_LOGGABLE_CSTR(bd_addr), p_dev->Info(), RoleText(new_role).c_str(),
       bta_dm_cb.device_list.count, hci_error_code_text(hci_status).c_str());
 
-  if (p_dev->is_av_active()) {
+  if (p_dev->Info() & BTA_DM_DI_AV_ACTIVE) {
     bool need_policy_change = false;
 
     /* there's AV activity on this link */
@@ -2753,7 +2753,7 @@ void handle_remote_features_complete(const RawAddress& bd_addr) {
       acl_peer_supports_sniff_subrating(bd_addr)) {
     LOG_DEBUG("Device supports sniff subrating peer:%s",
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-    p_dev->set_both_device_ssr_capable();
+    p_dev->info = BTA_DM_DI_USE_SSR;
   } else {
     LOG_DEBUG("Device does NOT support sniff subrating peer:%s",
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
@@ -2799,7 +2799,7 @@ void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
            bt_transport_text(transport).c_str(), acl_handle);
   device->conn_state = BTA_DM_CONNECTED;
   device->pref_role = BTA_ANY_ROLE;
-  device->reset_device_info();
+  device->info = BTA_DM_DI_NONE;
   device->transport = transport;
 
   if (controller_get_interface()->supports_sniff_subrating() &&
@@ -2810,7 +2810,7 @@ void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
     // data is when the BTA_dm_notify_remote_features_complete()
     // callback has completed.  The below assignment is kept for
     // transitional informational purposes only.
-    device->set_both_device_ssr_capable();
+    device->info = BTA_DM_DI_USE_SSR;
   }
 
   if (bta_dm_cb.p_sec_cback) {
@@ -2955,7 +2955,8 @@ static void bta_dm_check_av() {
       p_dev = &bta_dm_cb.device_list.peer_device[i];
       APPL_TRACE_WARNING("[%d]: state:%d, info:x%x", i, p_dev->conn_state,
                          p_dev->Info());
-      if ((p_dev->conn_state == BTA_DM_CONNECTED) && p_dev->is_av_active()) {
+      if ((p_dev->conn_state == BTA_DM_CONNECTED) &&
+          (p_dev->Info() & BTA_DM_DI_AV_ACTIVE)) {
         /* make central and take away the role switch policy */
         BTM_SwitchRoleToCentral(p_dev->peer_bdaddr);
         /* else either already central or can not switch for some reasons */
@@ -3035,11 +3036,11 @@ void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id, uint8_t app_id,
 
   if (BTA_ID_AV == id) {
     if (status == BTA_SYS_CONN_BUSY) {
-      if (p_dev) p_dev->set_av_active();
+      if (p_dev) p_dev->info |= BTA_DM_DI_AV_ACTIVE;
       /* AV calls bta_sys_conn_open with the A2DP stream count as app_id */
       if (BTA_ID_AV == id) bta_dm_cb.cur_av_count = bta_dm_get_av_count();
     } else if (status == BTA_SYS_CONN_IDLE) {
-      if (p_dev) p_dev->reset_av_active();
+      if (p_dev) p_dev->info &= ~BTA_DM_DI_AV_ACTIVE;
 
       /* get cur_av_count from connected services */
       if (BTA_ID_AV == id) bta_dm_cb.cur_av_count = bta_dm_get_av_count();

@@ -40,12 +40,9 @@ void ACL_ConfigureLePrivacy(bool is_le_privacy_enabled);
 void ACL_Shutdown();
 void ACL_IgnoreAllLeConnections();
 
-void ACL_ReadConnectionAddress(uint16_t handle, RawAddress& conn_addr,
-                               tBLE_ADDR_TYPE* p_addr_type, bool ota_address);
-
-void ACL_ReadPeerConnectionAddress(uint16_t handle, RawAddress& conn_addr,
-                                   tBLE_ADDR_TYPE* p_addr_type,
-                                   bool ota_address);
+void ACL_ReadConnectionAddress(const RawAddress& pseudo_addr,
+                               RawAddress& conn_addr,
+                               tBLE_ADDR_TYPE* p_addr_type);
 
 std::optional<uint8_t> ACL_GetAdvertisingSetConnectedTo(const RawAddress& addr);
 

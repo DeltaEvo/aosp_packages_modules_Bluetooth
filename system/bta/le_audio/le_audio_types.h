@@ -31,6 +31,8 @@
 #include <variant>
 #include <vector>
 
+#include "bta_groups.h"
+#include "bta_le_audio_api.h"
 #include "bta_le_audio_uuids.h"
 #include "btm_iso_api_types.h"
 
@@ -310,8 +312,6 @@ constexpr uint8_t kDefaultCsisSetSize = 2;
 
 constexpr uint8_t kLeAudioDirectionSink = 0x01;
 constexpr uint8_t kLeAudioDirectionSource = 0x02;
-constexpr uint8_t kLeAudioDirectionBoth =
-    kLeAudioDirectionSink | kLeAudioDirectionSource;
 
 /* Audio stream config types */
 constexpr uint8_t kFramingUnframedPduSupported = 0x00;
@@ -477,20 +477,30 @@ struct BidirectionalPair {
   T sink;
   T source;
 
-  const T& get(uint8_t direction) const;
-  T& get(uint8_t direction);
+  T get(uint8_t direction) const {
+    if (direction ==
+        (types::kLeAudioDirectionSink | types::kLeAudioDirectionSource)) {
+      return get_bidirectional(*this);
+    } else if (direction == types::kLeAudioDirectionSink) {
+      return sink;
+    }
+    return source;
+  }
+  T& get_ref(uint8_t direction) {
+    return (direction == types::kLeAudioDirectionSink) ? sink : source;
+  }
 
   BidirectionalPair<T>& operator=(const BidirectionalPair<T>&) = default;
+  bool operator==(const BidirectionalPair<T>& other) const {
+    return (sink == other.sink) && (source == other.source);
+  };
+  bool operator!=(const BidirectionalPair<T>& other) const {
+    return (sink != other.sink) || (source != other.source);
+  };
 };
 
 template <typename T>
 T get_bidirectional(BidirectionalPair<T> p);
-
-template <typename T>
-bool operator==(const types::BidirectionalPair<T>& lhs,
-                const types::BidirectionalPair<T>& rhs) {
-  return (lhs.sink == rhs.sink) && (lhs.source == rhs.source);
-}
 
 /* Configuration strategy */
 enum class LeAudioConfigurationStrategy : uint8_t {
@@ -544,33 +554,8 @@ class LeAudioLtvMap {
       : values(std::move(values)) {}
 
   std::optional<std::vector<uint8_t>> Find(uint8_t type) const;
-  LeAudioLtvMap& Add(uint8_t type, std::vector<uint8_t> value) {
+  void Add(uint8_t type, std::vector<uint8_t> value) {
     values.insert_or_assign(type, std::move(value));
-    return *this;
-  }
-  LeAudioLtvMap& Add(uint8_t type, uint8_t value) {
-    std::vector<uint8_t> v(sizeof(value));
-    auto ptr = v.data();
-
-    UINT8_TO_STREAM(ptr, value);
-    values.insert_or_assign(type, v);
-    return *this;
-  }
-  LeAudioLtvMap& Add(uint8_t type, uint16_t value) {
-    std::vector<uint8_t> v(sizeof(value));
-    auto ptr = v.data();
-
-    UINT16_TO_STREAM(ptr, value);
-    values.insert_or_assign(type, std::move(v));
-    return *this;
-  }
-  LeAudioLtvMap& Add(uint8_t type, uint32_t value) {
-    std::vector<uint8_t> v(sizeof(value));
-    auto ptr = v.data();
-
-    UINT32_TO_STREAM(ptr, value);
-    values.insert_or_assign(type, std::move(v));
-    return *this;
   }
   void Remove(uint8_t type) { values.erase(type); }
   bool IsEmpty() const { return values.empty(); }
@@ -733,13 +718,6 @@ struct ase {
   uint8_t framing;
   uint8_t preferred_phy;
 
-  /* Set to true, if the codec is implemented in BT controller, false if it's
-   * implemented in host, or in separate DSP
-   */
-  bool is_codec_in_controller;
-  /* Datapath ID used to configure an ISO channel for these ASEs */
-  uint8_t data_path_id;
-
   /* Qos configuration */
   uint16_t max_sdu_size;
   uint8_t retrans_nb;
@@ -816,12 +794,6 @@ struct SetConfiguration {
   uint8_t direction;  /* Direction of set */
   uint8_t device_cnt; /* How many devices must be in set */
   uint8_t ase_cnt;    /* How many ASE we need in configuration */
-
-  /* Whether the codec location is transparent to the controller */
-  bool is_codec_in_controller = false;
-  /* Datapath ID used to configure an ISO channel for these ASEs */
-  uint8_t data_path_id = bluetooth::hci::iso_manager::kIsoDataPathHci;
-
   CodecCapabilitySetting codec;
   QosConfigSetting qos;
   types::LeAudioConfigurationStrategy strategy;
@@ -862,18 +834,15 @@ uint8_t get_num_of_devices_in_configuration(
     const AudioSetConfiguration* audio_set_configuration);
 }  // namespace set_configurations
 
-struct stream_parameters {
-  /* For now we have always same frequency for all the channels */
-  uint32_t sample_frequency_hz;
-  uint32_t frame_duration_us;
-  uint16_t octets_per_codec_frame;
+struct stream_map_info {
+  stream_map_info(uint16_t stream_handle, uint32_t audio_channel_allocation,
+                  bool is_stream_active)
+      : stream_handle(stream_handle),
+        audio_channel_allocation(audio_channel_allocation),
+        is_stream_active(is_stream_active) {}
+  uint16_t stream_handle;
   uint32_t audio_channel_allocation;
-  uint8_t codec_frames_blocks_per_sdu;
-  /* Number of channels is what we will request from audio framework */
-  uint8_t num_of_channels;
-  int num_of_devices;
-  /* cis_handle, audio location*/
-  std::vector<std::pair<uint16_t, uint32_t>> stream_locations;
+  bool is_stream_active;
 };
 
 struct stream_configuration {
@@ -884,9 +853,43 @@ struct stream_configuration {
   /* Pointer to chosen req */
   const le_audio::set_configurations::AudioSetConfiguration* conf;
 
-  /* Sink & Source configuration */
-  types::BidirectionalPair<stream_parameters> stream_params;
+  /* Sink configuration */
+  /* For now we have always same frequency for all the channels */
+  uint32_t sink_sample_frequency_hz;
+  uint32_t sink_frame_duration_us;
+  uint16_t sink_octets_per_codec_frame;
+  uint32_t sink_audio_channel_allocation;
+  uint8_t sink_codec_frames_blocks_per_sdu;
+  /* Number of channels is what we will request from audio framework */
+  uint8_t sink_num_of_channels;
+  int sink_num_of_devices;
+  /* cis_handle, audio location*/
+  std::vector<std::pair<uint16_t, uint32_t>> sink_streams;
+  /* cis_handle, target allocation, stream active state */
+  std::vector<stream_map_info> sink_offloader_streams_target_allocation;
+  /* cis_handle, current allocation, stream active state */
+  std::vector<stream_map_info> sink_offloader_streams_current_allocation;
+  bool sink_offloader_changed;
+  bool sink_is_initial;
 
+  /* Source configuration */
+  /* For now we have always same frequency for all the channels */
+  uint32_t source_sample_frequency_hz;
+  uint32_t source_frame_duration_us;
+  uint16_t source_octets_per_codec_frame;
+  uint32_t source_audio_channel_allocation;
+  uint8_t source_codec_frames_blocks_per_sdu;
+  /* Number of channels is what we will request from audio framework */
+  uint8_t source_num_of_channels;
+  int source_num_of_devices;
+  /* cis_handle, audio location*/
+  std::vector<std::pair<uint16_t, uint32_t>> source_streams;
+  /* cis_handle, target allocation, stream active state */
+  std::vector<stream_map_info> source_offloader_streams_target_allocation;
+  /* cis_handle, current allocation, stream active state */
+  std::vector<stream_map_info> source_offloader_streams_current_allocation;
+  bool source_offloader_changed;
+  bool source_is_initial;
   bool is_active;
 };
 
@@ -895,4 +898,5 @@ void AppendMetadataLtvEntryForCcidList(std::vector<uint8_t>& metadata,
 void AppendMetadataLtvEntryForStreamingContext(
     std::vector<uint8_t>& metadata, types::AudioContexts context_type);
 uint8_t GetMaxCodecFramesPerSduFromPac(const types::acs_ac_record* pac_record);
+uint32_t AdjustAllocationForOffloader(uint32_t allocation);
 }  // namespace le_audio

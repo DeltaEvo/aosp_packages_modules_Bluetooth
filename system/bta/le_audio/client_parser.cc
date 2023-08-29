@@ -321,14 +321,15 @@ bool PrepareAseCtpCodecConfig(const std::vector<struct ctp_codec_conf>& confs,
       confs.begin(), confs.end(),
       confs.size() * kCtpCodecConfMinLen + kAseNumSize + kCtpOpSize,
       [&conf_ents_str](size_t cur_len, auto const& conf) {
-        for (const auto& [type, value] : conf.codec_config.Values()) {
+        auto ltv_map = conf.codec_config.GetAsLtvMap();
+        for (const auto& [type, value] : ltv_map.Values()) {
           conf_ents_str +=
               "\ttype: " + std::to_string(type) +
               "\tlen: " + std::to_string(value.size()) +
               "\tdata: " + base::HexEncode(value.data(), value.size()) + "\n";
         };
 
-        return cur_len + conf.codec_config.RawPacketSize();
+        return cur_len + ltv_map.RawPacketSize();
       });
   value.resize(msg_len);
 
@@ -344,10 +345,11 @@ bool PrepareAseCtpCodecConfig(const std::vector<struct ctp_codec_conf>& confs,
     UINT16_TO_STREAM(msg, conf.codec_id.vendor_company_id);
     UINT16_TO_STREAM(msg, conf.codec_id.vendor_codec_id);
 
-    auto codec_spec_conf_len = conf.codec_config.RawPacketSize();
+    auto ltv_map = conf.codec_config.GetAsLtvMap();
+    auto codec_spec_conf_len = ltv_map.RawPacketSize();
 
     UINT8_TO_STREAM(msg, codec_spec_conf_len);
-    msg = conf.codec_config.RawPacket(msg);
+    msg = ltv_map.RawPacket(msg);
 
     LOG(INFO) << __func__ << ", Codec configuration"
               << "\n\tAse id: " << loghex(conf.ase_id)

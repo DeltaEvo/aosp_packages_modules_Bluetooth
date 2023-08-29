@@ -41,9 +41,9 @@ impl BluetoothManager {
 
     pub(crate) fn callback_hci_enabled_change(&mut self, hci_device: i32, enabled: bool) {
         if enabled {
-            warn!("Started {}", hci_device);
+            info!("Started {}", hci_device);
         } else {
-            warn!("Stopped {}", hci_device);
+            info!("Stopped {}", hci_device);
         }
 
         for (_, callback) in &mut self.callbacks {
@@ -60,19 +60,11 @@ impl BluetoothManager {
     pub(crate) fn callback_disconnected(&mut self, id: u32) {
         self.callbacks.remove(&id);
     }
-
-    pub(crate) fn restart_available_adapters(&mut self) {
-        self.get_available_adapters()
-            .into_iter()
-            .filter(|adapter| adapter.enabled)
-            .map(|adapter| VirtualHciIndex(adapter.hci_interface))
-            .for_each(|virt_hci| self.proxy.restart_bluetooth(virt_hci));
-    }
 }
 
 impl IBluetoothManager for BluetoothManager {
     fn start(&mut self, hci_interface: i32) {
-        warn!("Starting {}", hci_interface);
+        info!("Starting {}", hci_interface);
 
         if !config_util::modify_hci_n_enabled(hci_interface, true) {
             error!("Config is not successfully modified");
@@ -84,13 +76,7 @@ impl IBluetoothManager for BluetoothManager {
         self.proxy.modify_state(virt_hci, move |a: &mut AdapterState| a.config_enabled = true);
 
         // Ignore the request if adapter is already enabled or not present.
-        if self.is_adapter_enabled(virt_hci) {
-            warn!("Adapter {} is already enabled.", hci_interface);
-            return;
-        }
-
-        if !self.is_adapter_present(virt_hci) {
-            warn!("Adapter {} is not present.", hci_interface);
+        if self.is_adapter_enabled(virt_hci) || !self.is_adapter_present(virt_hci) {
             return;
         }
 
@@ -98,7 +84,7 @@ impl IBluetoothManager for BluetoothManager {
     }
 
     fn stop(&mut self, hci_interface: i32) {
-        warn!("Stopping {}", hci_interface);
+        info!("Stopping {}", hci_interface);
         if !config_util::modify_hci_n_enabled(hci_interface, false) {
             error!("Config is not successfully modified");
         }
@@ -110,7 +96,6 @@ impl IBluetoothManager for BluetoothManager {
 
         // Ignore the request if adapter is already disabled.
         if !self.is_adapter_enabled(virt_hci) {
-            warn!("Adapter {} is already stopped", hci_interface);
             return;
         }
 
@@ -187,25 +172,20 @@ impl IBluetoothManager for BluetoothManager {
 
 /// Implementation of IBluetoothExperimental
 impl IBluetoothExperimental for BluetoothManager {
-    fn set_ll_privacy(&mut self, enabled: bool) -> bool {
+    fn set_ll_privacy(&mut self, enabled: bool) {
         let current_status = match config_util::read_floss_ll_privacy_enabled() {
             Ok(true) => true,
             _ => false,
         };
 
         if current_status == enabled {
-            return true;
+            return;
         }
 
-        info!("Set floss ll privacy to {}", enabled);
         if let Err(e) = config_util::write_floss_ll_privacy_enabled(enabled) {
             error!("Failed to write ll privacy status: {}", e);
-            return false;
+            return;
         }
-
-        self.restart_available_adapters();
-
-        return true;
     }
 
     fn set_devcoredump(&mut self, enabled: bool) -> bool {

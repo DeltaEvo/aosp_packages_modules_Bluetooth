@@ -793,7 +793,6 @@ public class AvrcpControllerStateMachineTest {
                 AvrcpControllerStateMachine.MESSAGE_PROCESS_GET_FOLDER_ITEMS_OUT_OF_RANGE);
         TestUtils.waitForLooperToFinishScheduledTask(mAvrcpStateMachine.getHandler().getLooper());
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
 
         // Send an available players have changed event
         mAvrcpStateMachine.sendMessage(
@@ -830,11 +829,11 @@ public class AvrcpControllerStateMachineTest {
 
         // Verify we request metadata, playback state and now playing list
         assertNowPlayingList(new ArrayList<AvrcpItem>());
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(2))
                 .getNowPlayingList(eq(mTestAddress), eq(0), eq(19));
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(2))
                 .getCurrentMetadata(eq(mTestAddress));
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(2))
                 .getPlaybackState(eq(mTestAddress));
     }
 
@@ -927,7 +926,6 @@ public class AvrcpControllerStateMachineTest {
         nowPlayingList.add(makeNowPlayingItem(2, "Song 2"));
         setNowPlayingList(nowPlayingList);
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
 
         //Change players and verify that BT attempts to update the results
         mAvrcpStateMachine.sendMessage(
@@ -943,7 +941,7 @@ public class AvrcpControllerStateMachineTest {
         assertNowPlayingList(new ArrayList<AvrcpItem>());
 
         // Verify that a player change to a player with Now Playing support causes a refresh.
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(2))
                 .getNowPlayingList(eq(mTestAddress), eq(0), eq(19));
 
         // Verify we request metadata and playback state
@@ -1045,7 +1043,6 @@ public class AvrcpControllerStateMachineTest {
                 AvrcpControllerStateMachine.MESSAGE_PROCESS_GET_FOLDER_ITEMS_OUT_OF_RANGE);
         TestUtils.waitForLooperToFinishScheduledTask(mAvrcpStateMachine.getHandler().getLooper());
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
 
         // Send an addressed player changed to the same player ID
         mAvrcpStateMachine.sendMessage(
@@ -1054,11 +1051,11 @@ public class AvrcpControllerStateMachineTest {
 
         // Verify we make no assumptions about the player ID and still fetch metadata, play status
         // and now playing list (since player 1 supports it)
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(3))
                 .getNowPlayingList(eq(mTestAddress), eq(0), eq(19));
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(3))
                 .getCurrentMetadata(eq(mTestAddress));
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(3))
                 .getPlaybackState(eq(mTestAddress));
     }
 
@@ -1397,14 +1394,13 @@ public class AvrcpControllerStateMachineTest {
         TestUtils.waitForLooperToFinishScheduledTask(mAvrcpStateMachine.getHandler().getLooper());
         Assert.assertFalse(mAvrcpStateMachine.isActive());
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
 
         // Now that we're inactive, receive a playback status of playing
         setPlaybackState(PlaybackStateCompat.STATE_PLAYING);
 
         // Verify we send a pause, never request audio focus, and the playback state on
         // BluetoothMediaBrowserService never updates.
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(2))
                 .sendPassThroughCommand(
                         eq(mTestAddress),
                         eq(AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE),
@@ -1426,7 +1422,6 @@ public class AvrcpControllerStateMachineTest {
         TestUtils.waitForLooperToFinishScheduledTask(mAvrcpStateMachine.getHandler().getLooper());
         Assert.assertFalse(mAvrcpStateMachine.isActive());
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
 
         // Now that we're inactive, receive a play position change
         setPlaybackPosition(1, 10);
@@ -1600,7 +1595,6 @@ public class AvrcpControllerStateMachineTest {
     public void testOnAudioFocusGainFromTransientLossWhilePlaying_playSent() {
         testOnAudioFocusTransientLossWhilePlaying_pauseSent();
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
         sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_GAIN);
 
@@ -1624,7 +1618,6 @@ public class AvrcpControllerStateMachineTest {
     public void testOnAudioFocusGainFromTransientLossWhilePlayingWithPause_playNotSent() {
         testOnAudioFocusTransientLossWhilePlaying_pauseSent();
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
         TestUtils.waitForLooperToBeIdle(mAvrcpStateMachine.getHandler().getLooper());
 
@@ -1636,7 +1629,7 @@ public class AvrcpControllerStateMachineTest {
                         eq(mTestAddress),
                         eq(AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE),
                         eq(KEY_DOWN));
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(2))
                 .sendPassThroughCommand(
                         eq(mTestAddress),
                         eq(AvrcpControllerService.PASS_THRU_CMD_ID_PAUSE),
@@ -1665,7 +1658,6 @@ public class AvrcpControllerStateMachineTest {
     public void testOnAudioFocusGainFromTransientLossWithStop_playNotSent() {
         testOnAudioFocusTransientLossWhilePlaying_pauseSent();
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
         setPlaybackState(PlaybackStateCompat.STATE_PAUSED);
         TestUtils.waitForLooperToBeIdle(mAvrcpStateMachine.getHandler().getLooper());
 
@@ -1706,7 +1698,6 @@ public class AvrcpControllerStateMachineTest {
     public void testOnAudioFocusGainFromTransientLossWhilePaused_playNotSent() {
         testOnAudioFocusTransientLossWhilePaused_pauseNotSent();
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
         sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_GAIN);
 
         TestUtils.waitForLooperToBeIdle(mAvrcpStateMachine.getHandler().getLooper());
@@ -1982,7 +1973,6 @@ public class AvrcpControllerStateMachineTest {
         nowPlayingList.add(makeNowPlayingItem(1, "Song 1"));
         setNowPlayingList(nowPlayingList);
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
 
         // Invalidate the contents by doing a new fetch
         BrowseTree.BrowseNode nowPlaying = mAvrcpStateMachine.findNode("NOW_PLAYING");
@@ -1990,7 +1980,7 @@ public class AvrcpControllerStateMachineTest {
         TestUtils.waitForLooperToFinishScheduledTask(mAvrcpStateMachine.getHandler().getLooper());
 
         // Request for new contents should be sent
-        verify(mNativeInterface, times(1)).getNowPlayingList(eq(mTestAddress), eq(0), eq(19));
+        verify(mNativeInterface, times(2)).getNowPlayingList(eq(mTestAddress), eq(0), eq(19));
         Assert.assertFalse(nowPlaying.isCached());
 
         // Send timeout on our own instead of waiting 10 seconds
@@ -2019,11 +2009,9 @@ public class AvrcpControllerStateMachineTest {
         setUpConnectedState(true, true);
         sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_GAIN);
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
         mAvrcpStateMachine.requestContents(null);
         TestUtils.waitForLooperToFinishScheduledTask(mAvrcpStateMachine.getHandler().getLooper());
         verifyNoMoreInteractions(mAvrcpControllerService);
-        verifyNoMoreInteractions(mNativeInterface);
     }
 
     /**
@@ -2036,12 +2024,10 @@ public class AvrcpControllerStateMachineTest {
         setUpConnectedState(true, false);
         sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_GAIN);
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
         BrowseTree.BrowseNode deviceRoot = mAvrcpStateMachine.findNode(rootName);
         mAvrcpStateMachine.requestContents(deviceRoot);
         TestUtils.waitForLooperToFinishScheduledTask(mAvrcpStateMachine.getHandler().getLooper());
         verifyNoMoreInteractions(mAvrcpControllerService);
-        verifyNoMoreInteractions(mNativeInterface);
     }
 
     /**
@@ -2054,7 +2040,6 @@ public class AvrcpControllerStateMachineTest {
         setUpConnectedState(true, false);
         sendAudioFocusUpdate(AudioManager.AUDIOFOCUS_GAIN);
         clearInvocations(mAvrcpControllerService);
-        clearInvocations(mNativeInterface);
         BrowseTree.BrowseNode deviceRoot = mAvrcpStateMachine.findNode(rootName);
         mAvrcpStateMachine.requestContents(deviceRoot);
         // issues a player list fetch

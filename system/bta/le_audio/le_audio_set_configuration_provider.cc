@@ -15,27 +15,14 @@
  *
  */
 
-#pragma once
+#include "le_audio_set_configuration_provider.h"
 
-#include "le_audio_types.h"
+#include "bta_le_audio_api.h"
 
-namespace le_audio {
+void LeAudioClient::InitializeAudioSetConfigurationProvider(void) {
+  le_audio::AudioSetConfigurationProvider::Initialize();
+}
 
-/* Audio set configurations provider interface. */
-class AudioSetConfigurationProvider {
- public:
-  AudioSetConfigurationProvider();
-  virtual ~AudioSetConfigurationProvider() = default;
-  static AudioSetConfigurationProvider* Get();
-  static void Initialize();
-  static void DebugDump(int fd);
-  static void Cleanup();
-  virtual const set_configurations::AudioSetConfigurations* GetConfigurations(
-      ::le_audio::types::LeAudioContextType content_type) const;
-
- private:
-  struct impl;
-  std::unique_ptr<impl> pimpl_;
-};
-
-}  // namespace le_audio
+void LeAudioClient::CleanupAudioSetConfigurationProvider(void) {
+  le_audio::AudioSetConfigurationProvider::Cleanup();
+}

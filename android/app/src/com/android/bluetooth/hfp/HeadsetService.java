@@ -2007,8 +2007,7 @@ public class HeadsetService extends ProfileService {
                 setActiveDevice(null);
             }
         }
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.HEADSET, device, fromState, toState);
+        mActiveDeviceManager.hfpConnectionStateChanged(device, fromState, toState);
         mAdapterService
                 .getSilenceDeviceManager()
                 .hfpConnectionStateChanged(device, fromState, toState);
@@ -2138,9 +2137,7 @@ public class HeadsetService extends ProfileService {
     private void broadcastActiveDevice(BluetoothDevice device) {
         logD("broadcastActiveDevice: " + device);
 
-        mAdapterService
-                .getActiveDeviceManager()
-                .profileActiveDeviceChanged(BluetoothProfile.HEADSET, device);
+        mAdapterService.getActiveDeviceManager().hfpActiveStateChanged(device);
         mAdapterService.getSilenceDeviceManager().hfpActiveDeviceChanged(device);
 
         BluetoothStatsLog.write(

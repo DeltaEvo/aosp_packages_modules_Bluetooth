@@ -80,7 +80,10 @@ bool LeAudioClient::GetAsesForStorage(const RawAddress& addr,
   return false;
 }
 
-void LeAudioClient::Cleanup(void) { inc_func_call_count(__func__); }
+void LeAudioClient::Cleanup(base::Callback<void()> cleanupCb) {
+  std::move(cleanupCb).Run();
+  inc_func_call_count(__func__);
+}
 
 LeAudioClient* LeAudioClient::Get(void) {
   inc_func_call_count(__func__);
@@ -98,3 +101,9 @@ void LeAudioClient::Initialize(
   inc_func_call_count(__func__);
 }
 void LeAudioClient::DebugDump(int fd) { inc_func_call_count(__func__); }
+void LeAudioClient::InitializeAudioSetConfigurationProvider() {
+  inc_func_call_count(__func__);
+}
+void LeAudioClient::CleanupAudioSetConfigurationProvider() {
+  inc_func_call_count(__func__);
+}

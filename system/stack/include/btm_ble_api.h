@@ -361,8 +361,7 @@ bool BTM_IsBleConnection(uint16_t conn_handle);
  ******************************************************************************/
 bool BTM_ReadRemoteConnectionAddr(const RawAddress& pseudo_addr,
                                   RawAddress& conn_addr,
-                                  tBLE_ADDR_TYPE* p_addr_type,
-                                  bool ota_address);
+                                  tBLE_ADDR_TYPE* p_addr_type);
 
 /*******************************************************************************
  *

@@ -29,7 +29,7 @@
 #include "bta/include/utl.h"
 
 #ifdef __ANDROID__
-#include "bta_le_audio_api.h"
+#include "bta/le_audio/devices.h"
 #endif
 
 #include "device/include/interop.h"

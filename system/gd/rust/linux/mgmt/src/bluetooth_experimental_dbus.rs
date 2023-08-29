@@ -17,7 +17,7 @@ struct BluetoothExperimentalDBus {}
 )]
 impl IBluetoothExperimental for BluetoothExperimentalDBus {
     #[dbus_method("SetLLPrivacy")]
-    fn set_ll_privacy(&mut self, enabled: bool) -> bool {
+    fn set_ll_privacy(&mut self, enabled: bool) {
         dbus_generated!()
     }
 

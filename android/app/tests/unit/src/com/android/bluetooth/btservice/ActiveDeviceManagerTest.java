@@ -1174,11 +1174,8 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.A2DP,
-                device,
-                BluetoothProfile.STATE_DISCONNECTED,
-                BluetoothProfile.STATE_CONNECTED);
+        mActiveDeviceManager.a2dpConnectionStateChanged(
+                device, BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_CONNECTED);
     }
 
     /**
@@ -1189,11 +1186,8 @@ public class ActiveDeviceManagerTest {
         mMostRecentDevice = (mDeviceConnectionStack.size() > 0)
                 ? mDeviceConnectionStack.get(mDeviceConnectionStack.size() - 1) : null;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.A2DP,
-                device,
-                BluetoothProfile.STATE_CONNECTED,
-                BluetoothProfile.STATE_DISCONNECTED);
+        mActiveDeviceManager.a2dpConnectionStateChanged(
+                device, BluetoothProfile.STATE_CONNECTED, BluetoothProfile.STATE_DISCONNECTED);
     }
 
     /** Helper to indicate A2dp active device changed for a device. */
@@ -1202,7 +1196,7 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileActiveDeviceChanged(BluetoothProfile.A2DP, device);
+        mActiveDeviceManager.a2dpActiveStateChanged(device);
     }
 
     /** Helper to indicate Headset connected for a device. */
@@ -1217,11 +1211,8 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.HEADSET,
-                device,
-                BluetoothProfile.STATE_DISCONNECTED,
-                BluetoothProfile.STATE_CONNECTED);
+        mActiveDeviceManager.hfpConnectionStateChanged(
+                device, BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_CONNECTED);
     }
 
     /** Helper to indicate Headset disconnected for a device. */
@@ -1232,11 +1223,8 @@ public class ActiveDeviceManagerTest {
                         ? mDeviceConnectionStack.get(mDeviceConnectionStack.size() - 1)
                         : null;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.HEADSET,
-                device,
-                BluetoothProfile.STATE_CONNECTED,
-                BluetoothProfile.STATE_DISCONNECTED);
+        mActiveDeviceManager.hfpConnectionStateChanged(
+                device, BluetoothProfile.STATE_CONNECTED, BluetoothProfile.STATE_DISCONNECTED);
     }
 
     /** Helper to indicate Headset active device changed for a device. */
@@ -1245,7 +1233,7 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileActiveDeviceChanged(BluetoothProfile.HEADSET, device);
+        mActiveDeviceManager.hfpActiveStateChanged(device);
     }
 
     /**
@@ -1255,11 +1243,8 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.HEARING_AID,
-                device,
-                BluetoothProfile.STATE_DISCONNECTED,
-                BluetoothProfile.STATE_CONNECTED);
+        mActiveDeviceManager.hearingAidConnectionStateChanged(
+                device, BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_CONNECTED);
     }
 
     /**
@@ -1270,11 +1255,8 @@ public class ActiveDeviceManagerTest {
         mMostRecentDevice = (mDeviceConnectionStack.size() > 0)
                 ? mDeviceConnectionStack.get(mDeviceConnectionStack.size() - 1) : null;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.HEARING_AID,
-                device,
-                BluetoothProfile.STATE_CONNECTED,
-                BluetoothProfile.STATE_DISCONNECTED);
+        mActiveDeviceManager.hearingAidConnectionStateChanged(
+                device, BluetoothProfile.STATE_CONNECTED, BluetoothProfile.STATE_DISCONNECTED);
     }
 
     /**
@@ -1285,7 +1267,7 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileActiveDeviceChanged(BluetoothProfile.HEARING_AID, device);
+        mActiveDeviceManager.hearingAidActiveStateChanged(device);
     }
 
     /**
@@ -1294,11 +1276,8 @@ public class ActiveDeviceManagerTest {
     private void leAudioConnected(BluetoothDevice device) {
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.LE_AUDIO,
-                device,
-                BluetoothProfile.STATE_DISCONNECTED,
-                BluetoothProfile.STATE_CONNECTED);
+        mActiveDeviceManager.leAudioConnectionStateChanged(
+                device, BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_CONNECTED);
     }
 
     /**
@@ -1309,11 +1288,8 @@ public class ActiveDeviceManagerTest {
         mMostRecentDevice = (mDeviceConnectionStack.size() > 0)
                 ? mDeviceConnectionStack.get(mDeviceConnectionStack.size() - 1) : null;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.LE_AUDIO,
-                device,
-                BluetoothProfile.STATE_CONNECTED,
-                BluetoothProfile.STATE_DISCONNECTED);
+        mActiveDeviceManager.leAudioConnectionStateChanged(
+                device, BluetoothProfile.STATE_CONNECTED, BluetoothProfile.STATE_DISCONNECTED);
     }
 
     /**
@@ -1324,7 +1300,7 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileActiveDeviceChanged(BluetoothProfile.LE_AUDIO, device);
+        mActiveDeviceManager.leAudioActiveStateChanged(device);
     }
 
     /**
@@ -1334,11 +1310,8 @@ public class ActiveDeviceManagerTest {
         mDeviceConnectionStack.add(device);
         mMostRecentDevice = device;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.HAP_CLIENT,
-                device,
-                BluetoothProfile.STATE_DISCONNECTED,
-                BluetoothProfile.STATE_CONNECTED);
+        mActiveDeviceManager.hapConnectionStateChanged(
+                device, BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_CONNECTED);
     }
 
     /** Helper to indicate LE Hearing Aid disconnected for a device. */
@@ -1347,11 +1320,8 @@ public class ActiveDeviceManagerTest {
         mMostRecentDevice = (mDeviceConnectionStack.size() > 0)
                 ? mDeviceConnectionStack.get(mDeviceConnectionStack.size() - 1) : null;
 
-        mActiveDeviceManager.profileConnectionStateChanged(
-                BluetoothProfile.HAP_CLIENT,
-                device,
-                BluetoothProfile.STATE_CONNECTED,
-                BluetoothProfile.STATE_DISCONNECTED);
+        mActiveDeviceManager.hapConnectionStateChanged(
+                device, BluetoothProfile.STATE_CONNECTED, BluetoothProfile.STATE_DISCONNECTED);
     }
 
     private class TestDatabaseManager extends DatabaseManager {

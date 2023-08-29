@@ -431,8 +431,7 @@ class LeAudioAseConfigurationTest : public Test {
     group_ = new LeAudioDeviceGroup(group_id_);
     bluetooth::manager::SetMockBtmInterface(&btm_interface_);
     controller::SetMockControllerInterface(&controller_interface_);
-    ::le_audio::AudioSetConfigurationProvider::Initialize(
-        ::le_audio::types::CodecLocation::ADSP);
+    ::le_audio::AudioSetConfigurationProvider::Initialize();
     MockCsisClient::SetMockInstanceForTesting(&mock_csis_client_module_);
     ON_CALL(mock_csis_client_module_, Get())
         .WillByDefault(Return(&mock_csis_client_module_));
