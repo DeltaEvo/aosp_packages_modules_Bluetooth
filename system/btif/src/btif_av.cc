@@ -1537,6 +1537,17 @@ bool BtifAvSink::AllowedToConnect(const RawAddress& peer_address) const {
         }
         connected++;
         break;
+      case BtifAvStateMachine::kStateClosing:
+      case BtifAvStateMachine::kStateIdle:
+        if ((btif_a2dp_sink_get_audio_track() != nullptr) &&
+          (peer->PeerAddress() != peer_address)) {
+          LOG_INFO("%s: there is another peer with audio track(%p), another=%s, peer=%s",
+            __PRETTY_FUNCTION__, btif_a2dp_sink_get_audio_track(),
+            ADDRESS_TO_LOGGABLE_CSTR(peer->PeerAddress()),
+            ADDRESS_TO_LOGGABLE_CSTR(peer_address));
+          connected++;
+        }
+        break;
       default:
         break;
     }
@@ -4035,9 +4046,9 @@ uint8_t btif_av_get_peer_sep(void) {
   }
 
   uint8_t peer_sep = peer->PeerSep();
-  LOG_INFO("Peer %s SEP is %s (%d)",
-           ADDRESS_TO_LOGGABLE_CSTR(peer->PeerAddress()),
-           (peer_sep == AVDT_TSEP_SRC) ? "Source" : "Sink", peer_sep);
+  BTIF_TRACE_DEBUG("Peer %s SEP is %s (%d)",
+                   ADDRESS_TO_LOGGABLE_CSTR(peer->PeerAddress()),
+                   (peer_sep == AVDT_TSEP_SRC) ? "Source" : "Sink", peer_sep);
   return peer_sep;
 }
 

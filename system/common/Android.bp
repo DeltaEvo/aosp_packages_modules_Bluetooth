@@ -10,13 +10,12 @@ package {
 cc_library_static {
     name: "libbt-common",
     defaults: [
-        "fluoride_basic_defaults",
+        "fluoride_defaults",
     ],
     host_supported: true,
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
@@ -28,9 +27,18 @@ cc_library_static {
         "stop_watch_legacy.cc",
         "time_util.cc",
     ],
+    proto: {
+        type: "lite",
+        canonical_path_from_root: false,
+        export_proto_headers: true,
+    },
     target: {
         android: {
-            srcs: ["metrics.cc"],
+            srcs: [
+                ":bluetooth-metrics-proto",
+                "metrics.cc",
+            ],
+            static_libs: ["libstatslog_bt"],
         },
         host: {
             srcs: ["metrics_linux.cc"],
@@ -61,7 +69,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
@@ -88,7 +95,6 @@ cc_test {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libevent",
         "libgmock",
