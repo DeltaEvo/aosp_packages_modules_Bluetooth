@@ -10,13 +10,12 @@ package {
 cc_library_static {
     name: "libbt-common",
     defaults: [
-        "fluoride_basic_defaults",
+        "fluoride_defaults",
     ],
     host_supported: true,
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
@@ -39,6 +38,7 @@ cc_library_static {
                 ":bluetooth-metrics-proto",
                 "metrics.cc",
             ],
+            static_libs: ["libstatslog_bt"],
         },
         host: {
             srcs: ["metrics_linux.cc"],
@@ -69,7 +69,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [

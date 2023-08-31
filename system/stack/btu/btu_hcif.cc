@@ -171,9 +171,12 @@ void btu_hcif_log_event_metrics(uint8_t evt_code, const uint8_t* p_event) {
           android::bluetooth::hci::BLE_EVT_UNKNOWN, status, reason);
       break;
     }
-    case HCI_BLE_EVENT: {
+    // Ignore these events
+    case HCI_BLE_EVENT:
       break;
-    }
+    case HCI_VENDOR_SPECIFIC_EVT:
+      break;
+
     case HCI_CONNECTION_COMP_EVT:  // EventCode::CONNECTION_COMPLETE
     case HCI_CONNECTION_REQUEST_EVT:  // EventCode::CONNECTION_REQUEST
     case HCI_DISCONNECTION_COMP_EVT:  // EventCode::DISCONNECTION_COMPLETE
@@ -1577,6 +1580,12 @@ static void btu_ble_data_length_change_evt(uint8_t* p, uint16_t evt_len) {
 
   if (!controller_get_interface()->supports_ble_packet_extension()) {
     HCI_TRACE_WARNING("%s, request not supported", __func__);
+    return;
+  }
+
+  // 2 bytes each for handle, tx_data_len, TxTimer, rx_data_len
+  if (evt_len < 8) {
+    LOG_ERROR("Event packet too short");
     return;
   }
 
