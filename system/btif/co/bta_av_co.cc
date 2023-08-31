@@ -390,6 +390,13 @@ class BtaAvCo {
   bool SetActivePeer(const RawAddress& peer_address);
 
   /**
+   * Save the reconfig codec
+   *
+   * @param new_codec_config the new codec config
+   */
+   void SaveCodec(const uint8_t* new_codec_config);
+
+  /**
    * Get the encoder parameters for a peer.
    *
    * @param peer_address the peer address
@@ -785,7 +792,10 @@ bool BtaAvCo::IsSupportedCodec(btav_a2dp_codec_index_t codec_index) {
   // All peer state is initialized with the same local codec config,
   // hence we check only the first peer.
   A2dpCodecs* codecs = peers_[0].GetCodecs();
-  CHECK(codecs != nullptr);
+  if (codecs == nullptr) {
+    LOG_ERROR("Peer codecs is set to null");
+    return false;
+  }
   return codecs->isSupportedCodec(codec_index);
 }
 
@@ -1466,6 +1476,10 @@ bool BtaAvCo::SetActivePeer(const RawAddress& peer_address) {
   return true;
 }
 
+void BtaAvCo::SaveCodec(const uint8_t* new_codec_config) {
+  memcpy(codec_config_, new_codec_config, sizeof(codec_config_));
+}
+
 void BtaAvCo::GetPeerEncoderParameters(
     const RawAddress& peer_address,
     tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {
@@ -1690,7 +1704,10 @@ bool BtaAvCo::ReportSourceCodecState(BtaAvCoPeer* p_peer) {
   VLOG(1) << __func__ << ": peer_address="
           << ADDRESS_TO_LOGGABLE_STR(p_peer->addr);
   A2dpCodecs* codecs = p_peer->GetCodecs();
-  CHECK(codecs != nullptr);
+  if (codecs == nullptr) {
+    LOG_ERROR("Peer codecs is set to null");
+    return false;
+  }
   if (!codecs->getCodecConfigAndCapabilities(&codec_config,
                                              &codecs_local_capabilities,
                                              &codecs_selectable_capabilities)) {
@@ -2240,6 +2257,10 @@ void bta_av_co_audio_update_mtu(tBTA_AV_HNDL bta_av_handle,
 
 bool bta_av_co_set_active_peer(const RawAddress& peer_address) {
   return bta_av_co_cb.SetActivePeer(peer_address);
+}
+
+void bta_av_co_save_codec(const uint8_t* new_codec_config) {
+  return bta_av_co_cb.SaveCodec(new_codec_config);
 }
 
 void bta_av_co_get_peer_params(const RawAddress& peer_address,
