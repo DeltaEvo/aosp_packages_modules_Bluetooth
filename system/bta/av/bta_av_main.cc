@@ -233,6 +233,7 @@ tBTA_AV_SCB* bta_av_addr_to_scb(const RawAddress& bd_addr) {
   return p_scb;
 }
 
+extern const RawAddress& btif_av_find_by_handle(tBTA_AV_HNDL bta_handle);
 int BTA_AvObtainPeerChannelIndex(const RawAddress& peer_address) {
   // Find the entry for the peer (if exists)
   tBTA_AV_SCB* p_scb = bta_av_addr_to_scb(peer_address);
@@ -247,6 +248,12 @@ int BTA_AvObtainPeerChannelIndex(const RawAddress& peer_address) {
       continue;
     }
     if (p_scb->PeerAddress().IsEmpty()) {
+      const RawAddress& btif_addr = btif_av_find_by_handle(p_scb->hndl);
+      if (!btif_addr.IsEmpty() && btif_addr != peer_address)  {
+        APPL_TRACE_DEBUG("%s: btif_addr = %s, index=%d!",
+                         __func__, btif_addr.ToString().c_str(), index);
+        continue;
+      }
       return p_scb->hdi;
     }
   }
@@ -402,8 +409,8 @@ void bta_av_conn_cback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
       APPL_TRACE_DEBUG("%s: bta_handle x%x, role x%x", __func__, p_scb->hndl,
                        p_scb->role);
     }
-    LOG_INFO("%s: conn_cback bd_addr: %s", __func__,
-             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    LOG_INFO("%s: conn_cback bd_addr: %s, scb_index: %d", __func__,
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr), scb_index);
     bta_sys_sendmsg(p_msg);
   }
 }
@@ -559,7 +566,8 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
           if (btif_av_src_sink_coexist_enabled()) {
             bta_ar_reg_avrc_for_src_sink_coexist(
                 UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target",
-                NULL, p_bta_av_cfg->avrc_tg_cat, BTA_ID_AV + local_role,
+                NULL, p_bta_av_cfg->avrc_tg_cat,
+                static_cast<tBTA_SYS_ID>(BTA_ID_AV + local_role),
                 (bta_av_cb.features & BTA_AV_FEAT_BROWSE), profile_version);
           } else {
             bta_ar_reg_avrc(
