@@ -161,9 +161,6 @@ public class HearingAidService extends ProfileService {
 
         // Initialize native interface
         mHearingAidNativeInterface.init();
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
-
         return true;
     }
 
@@ -176,9 +173,6 @@ public class HearingAidService extends ProfileService {
             Log.w(TAG, "stop() called before start()");
             return true;
         }
-
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
         // Cleanup native interface
         mHearingAidNativeInterface.cleanup();
         mHearingAidNativeInterface = null;
@@ -730,7 +724,9 @@ public class HearingAidService extends ProfileService {
     }
 
     private void notifyActiveDeviceChanged() {
-        mAdapterService.getActiveDeviceManager().hearingAidActiveStateChanged(mActiveDevice);
+        mAdapterService
+                .getActiveDeviceManager()
+                .profileActiveDeviceChanged(BluetoothProfile.HEARING_AID, mActiveDevice);
         Intent intent = new Intent(BluetoothHearingAid.ACTION_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, mActiveDevice);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -964,7 +960,8 @@ public class HearingAidService extends ProfileService {
         }
         mAdapterService
                 .getActiveDeviceManager()
-                .hearingAidConnectionStateChanged(device, fromState, toState);
+                .profileConnectionStateChanged(
+                        BluetoothProfile.HEARING_AID, device, fromState, toState);
     }
 
     /**

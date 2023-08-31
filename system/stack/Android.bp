@@ -1359,7 +1359,6 @@ cc_test {
         "BluetoothGeneratedPackets_h",
     ],
     srcs: crypto_toolbox_srcs + [
-        ":BluetoothBtaaSources_host",
         ":BluetoothHalSources_hci_host",
         ":BluetoothOsSources_host",
         ":OsiCompatSources",
@@ -1421,6 +1420,7 @@ cc_test {
         "test/btm/peer_packet_types_test.cc",
         "test/btm/sco_hci_test.cc",
         "test/btm/sco_pkt_status_test.cc",
+        "test/btm/stack_btm_power_mode_test.cc",
         "test/btm/stack_btm_regression_tests.cc",
         "test/btm/stack_btm_test.cc",
         "test/common/mock_eatt.cc",

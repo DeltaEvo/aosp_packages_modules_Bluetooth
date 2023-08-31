@@ -1,5 +1,5 @@
 #
-#  Copyright 2021 Google, Inc.
+#  Copyright 2023 The Android Open Source Project
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -14,9 +14,21 @@
 #  limitations under the License.
 #
 
-source_set("BluetoothBtaaSources_linux") {
-  sources = [ "linux/activity_attribution.cc" ]
-
-  configs += [ "//bt/system/gd:gd_defaults" ]
-  deps = [ "//bt/system/gd:gd_default_deps" ]
+source_set("libcodec_server_hfp_lc3"){
+  configs += [ "//bt/system/stack/mmc:target_defaults" ]
+  include_dirs = [
+    "//bt/system",
+    "//bt/system/include",
+    "//bt/system/stack",
+    "//bt/system/stack/include",
+  ]
+  deps = [
+    "//bt/system/stack/mmc/proto:mmc_config_proto",
+    "//bt/system/embdrv/lc3:liblc3",
+    "//bt/system/osi",
+  ]
+  sources = [
+    "hfp_lc3_mmc_encoder.cc",
+    "hfp_lc3_mmc_decoder.cc",
+  ]
 }

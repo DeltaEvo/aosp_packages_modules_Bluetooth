@@ -1691,11 +1691,11 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
   BTM_TRACE_DEBUG("%s", __func__);
   *p_data = tBTM_LE_IO_REQ{
       .io_cap = BTM_IO_CAP_UNKNOWN,
+      .oob_data = false,
       .auth_req = BTM_LE_AUTH_REQ_SC_MITM_BOND,
+      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
       .init_keys = SMP_BR_SEC_DEFAULT_KEY,
       .resp_keys = SMP_BR_SEC_DEFAULT_KEY,
-      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
-      .oob_data = false,
   };
 
   if (osi_property_get_bool(kPropertyCtkdDisableCsrkDistribution, false)) {
@@ -2022,9 +2022,6 @@ bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
  *
  ******************************************************************************/
 void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_FAIL;
 
