@@ -71,6 +71,7 @@ extern bool btif_av_both_enable(void);
 extern bool btif_av_src_sink_coexist_enabled(void);
 extern bool btif_av_is_sink_enabled(void);
 extern bool btif_av_peer_is_connected_sink(const RawAddress& peer_address);
+extern const RawAddress& btif_av_find_by_handle(tBTA_AV_HNDL bta_handle);
 
 /*******************************************************************************
  *
@@ -1554,6 +1555,12 @@ static uint8_t bta_av_find_lcb_index_by_scb_and_address(
       continue;
     }
     if (!p_scb->IsAssigned()) {
+      const RawAddress& btif_addr = btif_av_find_by_handle(p_scb->hndl);
+      if (!btif_addr.IsEmpty() && btif_addr != peer_address) {
+        LOG_DEBUG("%s: btif_addr = %s, index=%d!",
+                         __func__, btif_addr.ToString().c_str(), index);
+        continue;
+      }
       return index;
     }
   }
@@ -1887,7 +1894,9 @@ tBTA_AV_FEAT bta_av_check_peer_features(uint16_t service_uuid) {
         /* get supported categories */
         p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_SUPPORTED_FEATURES);
-        if (p_attr != NULL) {
+        if (p_attr != NULL &&
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
           categories = p_attr->attr_value.v.u16;
           if (categories & AVRC_SUPF_CT_CAT2)
             peer_features |= (BTA_AV_FEAT_ADV_CTRL);
@@ -1953,7 +1962,9 @@ tBTA_AV_FEAT bta_avk_check_peer_features(uint16_t service_uuid) {
       tSDP_DISC_ATTR* p_attr =
           get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
               p_rec, ATTR_ID_SUPPORTED_FEATURES);
-      if (p_attr != NULL) {
+      if (p_attr != NULL &&
+          SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+          SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
         uint16_t categories = p_attr->attr_value.v.u16;
         /*
          * Though Absolute Volume came after in 1.4 and above, but there are
@@ -2219,9 +2230,9 @@ void bta_av_rc_disc_done_all(UNUSED_ATTR tBTA_AV_DATA* p_data) {
         tBTA_AV bta_av_data = {
             .rc_open =
                 {
-                    .peer_addr = p_scb->PeerAddress(),
                     .peer_ct_features = peer_ct_features,
                     .peer_tg_features = peer_tg_features,
+                    .peer_addr = p_scb->PeerAddress(),
                     .status = BTA_AV_FAIL_SDP,
                 },
         };
@@ -2249,9 +2260,9 @@ void bta_av_rc_disc_done_all(UNUSED_ATTR tBTA_AV_DATA* p_data) {
     }
 
     tBTA_AV bta_av_feat = {.rc_feat = {
+                               .rc_handle = rc_handle,
                                .peer_ct_features = peer_ct_features,
                                .peer_tg_features = peer_tg_features,
-                               .rc_handle = rc_handle,
                                .peer_addr = peer_addr,
                            }};
     (*p_cb->p_cback)(BTA_AV_RC_FEAT_EVT, &bta_av_feat);

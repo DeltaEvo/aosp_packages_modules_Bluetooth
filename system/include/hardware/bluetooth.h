@@ -54,7 +54,6 @@
 #define BT_PROFILE_HAP_CLIENT_ID "has_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_KEYSTORE_ID "bluetooth_keystore"
-#define BT_ACTIVITY_ATTRIBUTION_ID "activity_attribution"
 #define BT_PROFILE_VC_ID "volume_control"
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
@@ -616,9 +615,6 @@ typedef struct {
   le_rand_callback le_rand_cb;
 } bt_callbacks_t;
 
-typedef void (*alarm_cb)(void* data);
-typedef bool (*set_wake_alarm_callout)(uint64_t delay_millis, bool should_wake,
-                                       alarm_cb cb, void* data);
 typedef int (*acquire_wake_lock_callout)(const char* lock_name);
 typedef int (*release_wake_lock_callout)(const char* lock_name);
 
@@ -630,7 +626,6 @@ typedef struct {
   /* set to sizeof(bt_os_callouts_t) */
   size_t size;
 
-  set_wake_alarm_callout set_wake_alarm;
   acquire_wake_lock_callout acquire_wake_lock;
   release_wake_lock_callout release_wake_lock;
 } bt_os_callouts_t;
