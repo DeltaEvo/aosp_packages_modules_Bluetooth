@@ -36,6 +36,8 @@ cc_library_static {
     ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
+    header_libs: ["libbluetooth_headers"],
+    static_libs: ["libbt_shim_bridge"],
 }
 
 // HCI unit tests for target
@@ -69,11 +71,11 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-for-tests",
+        "libbluetooth-types",
         "libbt-hci",
         "libbtcore",
         "libchrome",
         "libosi",
-        "libosi-AllocationTestHarness",
     ],
     sanitize: {
         address: true,
