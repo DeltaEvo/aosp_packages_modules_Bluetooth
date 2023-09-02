@@ -14,29 +14,40 @@
  * limitations under the License.
  */
 
-#include "dual_mode_controller.h"
+#include "model/controller/dual_mode_controller.h"
+
+#include <packet_runtime.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "crypto/crypto.h"
+#include "hci/address_with_type.h"
 #include "log.h"
+#include "model/controller/acl_connection_handler.h"
+#include "model/controller/controller_properties.h"
+#include "model/controller/sco_connection.h"
+#include "model/controller/vendor_commands/csr.h"
+#include "model/devices/device.h"
+#include "packets/hci_packets.h"
+#include "packets/link_layer_packets.h"
+#include "phy.h"
 
 using bluetooth::hci::ErrorCode;
 using bluetooth::hci::LoopbackMode;
 using bluetooth::hci::OpCode;
-using std::vector;
 
 namespace rootcanal {
 constexpr uint16_t kNumCommandPackets = 0x01;
 constexpr uint16_t kLeMaximumDataLength = 64;
 constexpr uint16_t kLeMaximumDataTime = 0x148;
 constexpr uint8_t kTransmitPowerLevel = -20;
-
-static int next_instance_id() {
-  static int instance_counter = 0;
-  return instance_counter++;
-}
 
 // Device methods.
 std::string DualModeController::GetTypeString() const {
@@ -65,8 +76,7 @@ void DualModeController::SendCommandCompleteUnknownOpCodeEvent(
 }
 
 DualModeController::DualModeController(ControllerProperties properties)
-    : id_(next_instance_id()), properties_(std::move(properties)),
-      random_generator_(id_) {
+    : properties_(std::move(properties)), random_generator_(id_) {
   Address public_address{};
   ASSERT(Address::FromString("3C:5A:B4:04:05:06", public_address));
   SetAddress(public_address);
@@ -2778,8 +2788,8 @@ void DualModeController::LeRemoteConnectionParameterRequestNegativeReply(
 }
 
 void DualModeController::LeGetVendorCapabilities(CommandView command) {
-  auto command_view = bluetooth::hci::LeGetVendorCapabilitiesView::Create(
-      bluetooth::hci::VendorCommandView::Create(command));
+  auto command_view =
+      bluetooth::hci::LeGetVendorCapabilitiesView::Create(command);
   ASSERT(command_view.IsValid());
 
   if (!properties_.supports_le_get_vendor_capabilities_command) {
@@ -2802,29 +2812,56 @@ void DualModeController::LeGetVendorCapabilities(CommandView command) {
       std::move(return_parameters)));
 }
 
-void DualModeController::LeMultiAdv(CommandView command) {
-  auto command_view = bluetooth::hci::LeMultiAdvtView::Create(command);
+void DualModeController::LeBatchScan(CommandView command) {
+  auto command_view = bluetooth::hci::LeBatchScanView::Create(command);
   ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_MULTI_ADVT);
+  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_BATCH_SCAN);
 }
 
-void DualModeController::LeAdvertisingFilter(CommandView command) {
-  auto command_view = bluetooth::hci::LeAdvFilterView::Create(command);
+void DualModeController::LeApcf(CommandView command) {
+  auto command_view = bluetooth::hci::LeApcfView::Create(command);
   ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_ADV_FILTER);
+  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_APCF);
 }
 
-void DualModeController::LeEnergyInfo(CommandView command) {
-  auto command_view = bluetooth::hci::LeEnergyInfoView::Create(
-      bluetooth::hci::VendorCommandView::Create(command));
+void DualModeController::LeGetControllerActivityEnergyInfo(
+    CommandView command) {
+  auto command_view =
+      bluetooth::hci::LeGetControllerActivityEnergyInfoView::Create(command);
   ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_ENERGY_INFO);
+  SendCommandCompleteUnknownOpCodeEvent(
+      OpCode::LE_GET_CONTROLLER_ACTIVITY_ENERGY_INFO);
+}
+
+void DualModeController::LeExSetScanParameters(CommandView command) {
+  auto command_view =
+      bluetooth::hci::LeExSetScanParametersView::Create(command);
+  ASSERT(command_view.IsValid());
+  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_EX_SET_SCAN_PARAMETERS);
+}
+
+void DualModeController::GetControllerDebugInfo(CommandView command) {
+  auto command_view =
+      bluetooth::hci::GetControllerDebugInfoView::Create(command);
+  ASSERT(command_view.IsValid());
+
+  DEBUG(id_, "<< Get Controller Debug Info");
+
+  send_event_(bluetooth::hci::GetControllerDebugInfoCompleteBuilder::Create(
+      kNumCommandPackets, ErrorCode::SUCCESS));
 }
 
 // CSR vendor command.
 // Implement the command specific to the CSR controller
 // used specifically by the PTS tool to pass certification tests.
 void DualModeController::CsrVendorCommand(CommandView command) {
+  if (!properties_.vendor_csr) {
+    SendCommandCompleteUnknownOpCodeEvent(OpCode(CSR_VENDOR));
+    return;
+  }
+
+  DEBUG(id_, "<< CSR");
+
   // The byte order is little endian.
   // The command parameters are formatted as
   //
@@ -3139,12 +3176,6 @@ void DualModeController::LeClearAdvertisingSets(CommandView command) {
   auto status = link_layer_controller_.LeClearAdvertisingSets();
   send_event_(bluetooth::hci::LeClearAdvertisingSetsCompleteBuilder::Create(
       kNumCommandPackets, status));
-}
-
-void DualModeController::LeExtendedScanParams(CommandView command) {
-  auto command_view = bluetooth::hci::LeExtendedScanParamsView::Create(command);
-  ASSERT(command_view.IsValid());
-  SendCommandCompleteUnknownOpCodeEvent(OpCode::LE_EXTENDED_SCAN_PARAMS);
 }
 
 void DualModeController::LeStartEncryption(CommandView command) {
@@ -4288,12 +4319,15 @@ const std::unordered_map<OpCode, DualModeController::CommandHandler>
 
         // VENDOR
         {OpCode(CSR_VENDOR), &DualModeController::CsrVendorCommand},
-        {OpCode::LE_MULTI_ADVT, &DualModeController::LeMultiAdv},
-        {OpCode::LE_ADV_FILTER, &DualModeController::LeAdvertisingFilter},
-        {OpCode::LE_EXTENDED_SCAN_PARAMS,
-         &DualModeController::LeExtendedScanParams},
-        {OpCode::LE_ENERGY_INFO, &DualModeController::LeEnergyInfo},
         {OpCode::LE_GET_VENDOR_CAPABILITIES,
-         &DualModeController::LeGetVendorCapabilities}};
+         &DualModeController::LeGetVendorCapabilities},
+        {OpCode::LE_BATCH_SCAN, &DualModeController::LeBatchScan},
+        {OpCode::LE_APCF, &DualModeController::LeApcf},
+        {OpCode::LE_GET_CONTROLLER_ACTIVITY_ENERGY_INFO,
+         &DualModeController::LeGetControllerActivityEnergyInfo},
+        {OpCode::LE_EX_SET_SCAN_PARAMETERS,
+         &DualModeController::LeExSetScanParameters},
+        {OpCode::GET_CONTROLLER_DEBUG_INFO,
+         &DualModeController::GetControllerDebugInfo}};
 
 }  // namespace rootcanal

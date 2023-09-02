@@ -36,7 +36,7 @@ import com.android.internal.util.StateMachine;
 
 
 public class A2dpSinkStateMachine extends StateMachine {
-    static final String TAG = "A2DPSinkStateMachine";
+    static final String TAG = "A2dpSinkStateMachine";
     static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     //0->99 Events from Outside
@@ -217,6 +217,10 @@ public class A2dpSinkStateMachine extends StateMachine {
                     return true;
                 case CONNECT_TIMEOUT:
                     transitionTo(mDisconnected);
+                    return true;
+                case DISCONNECT:
+                    Log.d(TAG, "Received disconnect message while connecting. deferred");
+                    deferMessage(message);
                     return true;
             }
             return false;

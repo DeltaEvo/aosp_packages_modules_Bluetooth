@@ -10,13 +10,12 @@ package {
 cc_library_static {
     name: "libbt-common",
     defaults: [
-        "fluoride_basic_defaults",
+        "fluoride_defaults",
     ],
     host_supported: true,
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
@@ -39,6 +38,7 @@ cc_library_static {
                 ":bluetooth-metrics-proto",
                 "metrics.cc",
             ],
+            static_libs: ["libstatslog_bt"],
         },
         host: {
             srcs: ["metrics_linux.cc"],
@@ -52,6 +52,11 @@ cc_library_static {
         "com.android.btservices",
     ],
     min_sdk_version: "Tiramisu",
+    header_libs: ["libbluetooth_headers"],
+    static_libs: [
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+    ],
 }
 
 cc_test {
@@ -69,7 +74,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     srcs: [
@@ -95,7 +99,10 @@ cc_test {
         "liblog",
     ],
     static_libs: [
+        "libbluetooth-types",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
         "libchrome",
         "libevent",
         "libgmock",
@@ -104,6 +111,7 @@ cc_test {
     sanitize: {
         cfi: false,
     },
+    header_libs: ["libbluetooth_headers"],
 }
 
 cc_test {
@@ -129,6 +137,7 @@ cc_test {
         "libgmock",
         "libosi",
     ],
+    header_libs: ["libbluetooth_headers"],
 }
 
 cc_benchmark {
@@ -151,4 +160,5 @@ cc_benchmark {
         "libevent",
         "libosi",
     ],
+    header_libs: ["libbluetooth_headers"],
 }

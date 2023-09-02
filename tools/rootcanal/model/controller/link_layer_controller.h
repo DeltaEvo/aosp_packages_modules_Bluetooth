@@ -16,20 +16,31 @@
 
 #pragma once
 
+#include <packet_runtime.h>
+
 #include <algorithm>
+#include <array>
 #include <chrono>
-#include <map>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <set>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "hci/address.h"
-#include "include/phy.h"
+#include "hci/address_with_type.h"
 #include "model/controller/acl_connection_handler.h"
 #include "model/controller/controller_properties.h"
 #include "model/controller/le_advertiser.h"
+#include "model/controller/sco_connection.h"
 #include "packets/hci_packets.h"
 #include "packets/link_layer_packets.h"
-#include "rootcanal_rs.h"
+#include "phy.h"
+#include "rust/include/rootcanal_rs.h"
 
 namespace rootcanal {
 
@@ -57,14 +68,17 @@ class LinkLayerController {
   static constexpr size_t kExtendedInquiryResponseSize = 240;
 
   // Unique instance identifier.
-  const int id_;
+  const uint32_t id_;
 
   // Generate a resolvable private address using the specified IRK.
   static Address generate_rpa(
       std::array<uint8_t, LinkLayerController::kIrkSize> irk);
 
+  // Return true if the input IRK is all 0s.
+  static bool irk_is_zero(std::array<uint8_t, LinkLayerController::kIrkSize> irk);
+
   LinkLayerController(const Address& address,
-                      const ControllerProperties& properties, int id = 0);
+                      const ControllerProperties& properties, uint32_t id = 0);
   ~LinkLayerController();
 
   ErrorCode SendCommandToRemoteByAddress(OpCode opcode, pdl::packet::slice args,
