@@ -18,11 +18,8 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "hci/address.h"
 #include "packets/hci_packets.h"
 #include "rootcanal/configuration.pb.h"
 
@@ -157,6 +154,9 @@ struct ControllerProperties {
   // Vendor Information.
   // Provide parameters returned by vendor specific commands.
   std::vector<uint8_t> le_vendor_capabilities{};
+
+  // Enable the support for the CSR vendor command.
+  bool vendor_csr{true};
 
   bool SupportsLMPFeature(bluetooth::hci::LMPFeaturesPage0Bits bit) const {
     return (lmp_features[0] & static_cast<uint64_t>(bit)) != 0;

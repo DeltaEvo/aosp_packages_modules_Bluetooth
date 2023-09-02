@@ -14,26 +14,44 @@
  * limitations under the License.
  */
 
-#include "link_layer_controller.h"
+#include "model/controller/link_layer_controller.h"
+
+#include <packet_runtime.h>
 
 #include <algorithm>
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 #include "crypto/crypto.h"
+#include "hci/address.h"
+#include "hci/address_with_type.h"
 #include "log.h"
+#include "model/controller/acl_connection.h"
+#include "model/controller/acl_connection_handler.h"
+#include "model/controller/controller_properties.h"
+#include "model/controller/le_advertiser.h"
+#include "model/controller/sco_connection.h"
 #include "packets/hci_packets.h"
-#include "rootcanal_rs.h"
+#include "packets/link_layer_packets.h"
+#include "phy.h"
+#include "rust/include/rootcanal_rs.h"
 
 using namespace std::chrono;
 using bluetooth::hci::Address;
 using bluetooth::hci::AddressType;
 using bluetooth::hci::AddressWithType;
-using bluetooth::hci::DirectAdvertisingAddressType;
-using bluetooth::hci::EventCode;
 using bluetooth::hci::LLFeaturesBits;
 using bluetooth::hci::SubeventCode;
 
 using namespace model::packets;
-using model::packets::PacketType;
 using namespace std::literals;
 
 using TaskId = rootcanal::LinkLayerController::TaskId;
@@ -682,7 +700,7 @@ ErrorCode LinkLayerController::LeAddDeviceToResolvingList(
   for (auto const& entry : le_resolving_list_) {
     if ((entry.peer_identity_address_type == peer_identity_address_type &&
          entry.peer_identity_address == peer_identity_address) ||
-        entry.peer_irk == peer_irk) {
+        (entry.peer_irk == peer_irk && !irk_is_zero(peer_irk))) {
       INFO(id_, "device is already present in the resolving list");
       return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
     }
@@ -1980,7 +1998,7 @@ void LinkLayerController::SetExtendedInquiryResponse(
 
 LinkLayerController::LinkLayerController(const Address& address,
                                          const ControllerProperties& properties,
-                                         int id)
+                                         uint32_t id)
     : id_(id),
       address_(address),
       properties_(properties),
@@ -2134,7 +2152,7 @@ ErrorCode LinkLayerController::SendCommandToRemoteByAddress(
               own_address, peer_address));
       break;
     case (OpCode::READ_REMOTE_EXTENDED_FEATURES): {
-      pdl::packet::slice page_number_slice = args.subrange(5, 2);
+      pdl::packet::slice page_number_slice = args.subrange(5, 1);
       uint8_t page_number = page_number_slice.read_le<uint8_t>();
       SendLinkLayerPacket(
           model::packets::ReadRemoteExtendedFeaturesBuilder::Create(
@@ -2835,6 +2853,10 @@ Address LinkLayerController::generate_rpa(
   rpa.address[2] = p[2];
   INFO("RPA {}", rpa);
   return rpa;
+}
+
+bool LinkLayerController::irk_is_zero(std::array<uint8_t, LinkLayerController::kIrkSize> irk) {
+    return std::all_of(irk.begin(), irk.end(), [](uint8_t b) { return b == 0; });
 }
 
 // Handle legacy advertising PDUs while in the Scanning state.

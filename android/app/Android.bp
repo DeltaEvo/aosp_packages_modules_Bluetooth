@@ -55,7 +55,7 @@ java_library {
 
 cc_library_shared {
     name: "libbluetooth_jni",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     srcs: ["jni/**/*.cpp"],
     version_script: "libbluetooth_jni.map",
     header_libs: [
@@ -100,6 +100,7 @@ cc_library_shared {
         "libbluetooth-types",
         "libbluetooth_core_rs",
         "libbluetooth_core_rs_bridge",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
@@ -109,6 +110,7 @@ cc_library_shared {
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-stack-core",
+        "libbt_shim_bridge",
         "libbtcore",
         "libbtdevice",
         "libbte",
@@ -126,6 +128,8 @@ cc_library_shared {
         "libmodpb64",
         "libopus",
         "libosi",
+        "libprotobuf-cpp-lite",
+        "libstatslog_bt",
         "libudrv-uipc",
         "libutils",
     ],
@@ -149,7 +153,7 @@ cc_library_shared {
 
 cc_library {
     name: "libbluetooth-core",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     header_libs: [
         "jni_headers",
         "libbluetooth_headers",
