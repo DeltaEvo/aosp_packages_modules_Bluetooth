@@ -31,6 +31,9 @@ import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.util.Log;
 
+import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.pbapclient.PbapClientService;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -147,6 +150,16 @@ public class HfpClientConnectionService extends ConnectionService {
                 }
                 block.cleanup();
             }
+        }
+        AdapterService adapterService = AdapterService.getAdapterService();
+        if (adapterService != null && adapterService.getRemoteDevices() != null) {
+            adapterService
+                    .getRemoteDevices()
+                    .handleHeadsetClientConnectionStateChanged(device, oldState, newState);
+        }
+        if (PbapClientService.getPbapClientService() != null) {
+            PbapClientService.getPbapClientService()
+                    .handleHeadsetClientConnectionStateChanged(device, oldState, newState);
         }
     }
 

@@ -1854,12 +1854,10 @@ class LeAudioClientImpl : public LeAudioClient {
 
     LOG_INFO("%s, status 0x%02x", ADDRESS_TO_LOGGABLE_CSTR(address), status);
 
-    /* Remove device from the background connect (it might be either Allow list
-     * or TA) and it will be added back on disconnection
-     */
-    BTA_GATTC_CancelOpen(gatt_if_, address, false);
-
     if (status != GATT_SUCCESS) {
+      /* Clear current connection request and let it be set again if needed */
+      BTA_GATTC_CancelOpen(gatt_if_, address, false);
+
       /* autoconnect connection failed, that's ok */
       if (status != GATT_ILLEGAL_PARAMETER &&
           (leAudioDevice->GetConnectionState() ==
@@ -1885,6 +1883,8 @@ class LeAudioClientImpl : public LeAudioClient {
     if (leAudioDevice->group_id_ != bluetooth::groups::kGroupUnknown) {
       auto group = GetGroupIfEnabled(leAudioDevice->group_id_);
       if (group == nullptr) {
+        BTA_GATTC_CancelOpen(gatt_if_, address, false);
+
         LOG_WARN(
             "LeAudio profile is disabled for group_id: %d. %s is not connected",
             leAudioDevice->group_id_, ADDRESS_TO_LOGGABLE_CSTR(address));
@@ -2208,6 +2208,11 @@ class LeAudioClientImpl : public LeAudioClient {
                  << ADDRESS_TO_LOGGABLE_STR(address);
       return;
     }
+
+    /* Remove device from the background connect (it might be either Allow list
+     * or TA) and it will be added back depends on needs.
+     */
+    BTA_GATTC_CancelOpen(gatt_if_, address, false);
 
     BtaGattQueue::Clean(leAudioDevice->conn_id_);
     LeAudioDeviceGroup* group = aseGroups_.FindById(leAudioDevice->group_id_);
@@ -3406,8 +3411,9 @@ class LeAudioClientImpl : public LeAudioClient {
               group->GetRemoteDelay(le_audio::types::kLeAudioDirectionSource)};
       CodecManager::GetInstance()->UpdateActiveAudioConfig(
           group->stream_conf.stream_params, delays_pair,
-          std::bind(&LeAudioSourceAudioHalClient::UpdateAudioConfigToHal,
-                    le_audio_source_hal_client_.get(), std::placeholders::_1));
+          std::bind(&LeAudioClientImpl::UpdateAudioConfigToHal,
+                    weak_factory_.GetWeakPtr(), std::placeholders::_1,
+                    std::placeholders::_2));
     }
 
     return true;
@@ -3476,8 +3482,9 @@ class LeAudioClientImpl : public LeAudioClient {
               group->GetRemoteDelay(le_audio::types::kLeAudioDirectionSource)};
       CodecManager::GetInstance()->UpdateActiveAudioConfig(
           group->stream_conf.stream_params, delays_pair,
-          std::bind(&LeAudioSourceAudioHalClient::UpdateAudioConfigToHal,
-                    le_audio_source_hal_client_.get(), std::placeholders::_1));
+          std::bind(&LeAudioClientImpl::UpdateAudioConfigToHal,
+                    weak_factory_.GetWeakPtr(), std::placeholders::_1,
+                    std::placeholders::_2));
     }
   }
 
@@ -5026,6 +5033,18 @@ class LeAudioClientImpl : public LeAudioClient {
     }
   }
 
+  void UpdateAudioConfigToHal(const ::le_audio::offload_config& config,
+                              uint8_t remote_direction) {
+    if ((remote_direction & le_audio::types::kLeAudioDirectionSink) &&
+        le_audio_source_hal_client_) {
+      le_audio_source_hal_client_->UpdateAudioConfigToHal(config);
+    }
+    if ((remote_direction & le_audio::types::kLeAudioDirectionSource) &&
+        le_audio_sink_hal_client_) {
+      le_audio_sink_hal_client_->UpdateAudioConfigToHal(config);
+    }
+  }
+
   void NotifyUpperLayerGroupTurnedIdleDuringCall(int group_id) {
     if (!osi_property_get_bool(kNotifyUpperLayerAboutGroupBeingInIdleDuringCall,
                                false)) {
@@ -5098,9 +5117,9 @@ class LeAudioClientImpl : public LeAudioClient {
                   le_audio::types::kLeAudioDirectionSource)};
           CodecManager::GetInstance()->UpdateActiveAudioConfig(
               group->stream_conf.stream_params, delays_pair,
-              std::bind(&LeAudioSourceAudioHalClient::UpdateAudioConfigToHal,
-                        le_audio_source_hal_client_.get(),
-                        std::placeholders::_1));
+              std::bind(&LeAudioClientImpl::UpdateAudioConfigToHal,
+                        weak_factory_.GetWeakPtr(), std::placeholders::_1,
+                        std::placeholders::_2));
           if (reconnection_mode_ ==
               BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS) {
             group->AddToAllowListNotConnectedGroupMembers(gatt_if_);
