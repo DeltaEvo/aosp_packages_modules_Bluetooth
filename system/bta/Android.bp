@@ -132,6 +132,8 @@ cc_library_static {
         "lib-bt-packets",
         "libbluetooth_gd",
         "libbt-bta-core",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
         "libcom.android.sysprop.bluetooth",
     ],
     shared_libs: [
@@ -190,6 +192,8 @@ cc_library_static {
     ],
     static_libs: [
         "lib-bt-packets",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
         "libcom.android.sysprop.bluetooth",
     ],
     apex_available: [
@@ -244,6 +248,9 @@ cc_test {
         "libbt-bta",
         "libbt-bta-core",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtcore",
         "libchrome",
         "libcom.android.sysprop.bluetooth",
@@ -290,6 +297,9 @@ cc_test {
         "libbt-bta",
         "libbt-bta-core",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtcore",
         "libchrome",
         "libosi",
@@ -406,6 +416,9 @@ cc_test {
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtcore",
         "libbtdevice",
         "libchrome",
@@ -465,8 +478,11 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libgmock",
         "libosi",
@@ -509,8 +525,11 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libgmock",
         "libosi",
@@ -564,8 +583,12 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libgmock",
         "libosi",
@@ -707,8 +730,11 @@ cc_test {
         "liblog", // __android_log_print
     ],
     static_libs: [
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libevent",
         "libflatbuffers-cpp",
@@ -718,6 +744,7 @@ cc_test {
     sanitize: {
         cfi: false,
     },
+    header_libs: ["libbluetooth_headers"],
 }
 
 cc_test {
@@ -800,8 +827,11 @@ cc_test {
         "liblog", // __android_log_print
     ],
     static_libs: [
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libevent",
         "libflatbuffers-cpp",
@@ -811,6 +841,7 @@ cc_test {
     sanitize: {
         cfi: false,
     },
+    header_libs: ["libbluetooth_headers"],
 }
 
 cc_test {
@@ -872,9 +903,13 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libevent",
         "libflatbuffers-cpp",
@@ -935,8 +970,11 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libgmock",
         "libosi",
@@ -989,8 +1027,11 @@ cc_test {
         "liblog",
     ],
     static_libs: [
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libgmock",
     ],
@@ -1052,8 +1093,11 @@ cc_test {
         "liblog",
     ],
     static_libs: [
+        "libbluetooth-types",
         "libbt-audio-hal-interface",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libevent",
         "libgmock",
@@ -1112,8 +1156,11 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libgmock",
     ],
@@ -1174,8 +1221,12 @@ cc_test {
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libevent",
