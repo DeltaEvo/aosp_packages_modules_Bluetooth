@@ -598,14 +598,9 @@ uint16_t L2CA_ConnectLECocReq(uint16_t psm, const RawAddress& p_bd_addr,
       L2CAP_TRACE_DEBUG("%s LE Link is up", __func__);
       // post this asynchronously to avoid out-of-order callback invocation
       // should this operation fail
-      if (bluetooth::common::init_flags::
-              asynchronously_start_l2cap_coc_is_enabled()) {
-        do_in_main_thread(
-            FROM_HERE, base::BindOnce(&l2c_csm_execute, base::Unretained(p_ccb),
-                                      L2CEVT_L2CA_CONNECT_REQ, nullptr));
-      } else {
-        l2c_csm_execute(p_ccb, L2CEVT_L2CA_CONNECT_REQ, NULL);
-      }
+      do_in_main_thread(
+          FROM_HERE, base::BindOnce(&l2c_csm_execute, base::Unretained(p_ccb),
+                                    L2CEVT_L2CA_CONNECT_REQ, nullptr));
     }
   }
 
@@ -729,6 +724,11 @@ bool L2CA_ConnectCreditBasedRsp(const RawAddress& p_bd_addr, uint8_t id,
    */
   tL2C_CCB* p_ccb = l2cu_find_ccb_by_cid(p_lcb, p_lcb->pending_lead_cid);
 
+  if (!p_ccb) {
+    L2CAP_TRACE_ERROR("%s No CCB for CID:0x%04x", __func__, p_lcb->pending_lead_cid);
+    return false;
+  }
+
   for (uint16_t cid : accepted_lcids) {
     tL2C_CCB* temp_p_ccb = l2cu_find_ccb_by_cid(p_lcb, cid);
     if (temp_p_ccb == NULL) {
@@ -838,7 +838,8 @@ std::vector<uint16_t> L2CA_ConnectCreditBasedReq(uint16_t psm,
 
   for (int i = 0; i < p_cfg->number_of_channels; i++) {
     /* Allocate a channel control block */
-    tL2C_CCB* p_ccb = l2cu_allocate_ccb(p_lcb, 0);
+    tL2C_CCB* p_ccb =
+        l2cu_allocate_ccb(p_lcb, 0, psm == BT_PSM_EATT /* is_eatt */);
     if (p_ccb == NULL) {
       if (i == 0) {
         L2CAP_TRACE_WARNING("%s no CCB, PSM: 0x%04x", __func__, psm);
@@ -886,7 +887,7 @@ std::vector<uint16_t> L2CA_ConnectCreditBasedReq(uint16_t psm,
  *  Description      Start reconfigure procedure on Connection Oriented Channel.
  *
  *  Parameters:      Vector of channels for which configuration should be
- *changed New local channel configuration
+ *                   changed to new local channel configuration
  *
  *  Return value:    true if peer is connected
  *

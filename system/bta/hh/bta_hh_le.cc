@@ -1177,14 +1177,14 @@ static void bta_hh_le_close(const tBTA_GATTC_CLOSE& gattc_data) {
     const tBTA_HH_DATA data = {
         .le_close =
             {
-                .conn_id = gattc_data.conn_id,
-                .reason = gattc_data.reason,
                 .hdr =
                     {
                         .event = BTA_HH_GATT_CLOSE_EVT,
                         .layer_specific =
                             static_cast<uint16_t>(p_cb->hid_handle),
                     },
+                .conn_id = gattc_data.conn_id,
+                .reason = gattc_data.reason,
             },
     };
     bta_hh_sm_execute(p_cb, BTA_HH_GATT_CLOSE_EVT, &data);
@@ -1646,12 +1646,12 @@ void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   tBTA_HH data = {
       .conn =
           {
-              .handle = p_cb->hid_handle,
               .bda = p_cb->addr,
-              .le_hid = true,
-              .scps_supported = p_cb->scps_supported,
               .status = (le_close->reason != GATT_CONN_OK) ? BTA_HH_ERR
                                                            : p_cb->status,
+              .handle = p_cb->hid_handle,
+              .le_hid = true,
+              .scps_supported = p_cb->scps_supported,
           },
   };
 
@@ -1997,8 +1997,12 @@ void bta_hh_le_write_dev_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
  ******************************************************************************/
 void bta_hh_le_get_dscp_act(tBTA_HH_DEV_CB* p_cb) {
   if (p_cb->hid_srvc.state >= BTA_HH_SERVICE_DISCOVERED) {
-    p_cb->dscp_info.descriptor.dl_len = p_cb->hid_srvc.descriptor.dl_len;
-    p_cb->dscp_info.descriptor.dsc_list = p_cb->hid_srvc.descriptor.dsc_list;
+    if (p_cb->hid_srvc.descriptor.dl_len != 0) {
+      p_cb->dscp_info.descriptor.dl_len = p_cb->hid_srvc.descriptor.dl_len;
+      p_cb->dscp_info.descriptor.dsc_list = p_cb->hid_srvc.descriptor.dsc_list;
+    } else {
+      LOG_WARN("hid_srvc.descriptor.dl_len is 0");
+    }
 
     (*bta_hh_cb.p_cback)(BTA_HH_GET_DSCP_EVT, (tBTA_HH*)&p_cb->dscp_info);
   }
@@ -2100,13 +2104,13 @@ static void bta_hh_le_service_changed(RawAddress remote_bda) {
   const tBTA_HH_DATA data = {
       .le_close =
           {
-              .conn_id = p_cb->conn_id,
-              .reason = GATT_CONN_OK,
               .hdr =
                   {
                       .event = BTA_HH_GATT_CLOSE_EVT,
                       .layer_specific = static_cast<uint16_t>(p_cb->hid_handle),
                   },
+              .conn_id = p_cb->conn_id,
+              .reason = GATT_CONN_OK,
           },
   };
   bta_hh_sm_execute(p_cb, BTA_HH_GATT_CLOSE_EVT, &data);

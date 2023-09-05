@@ -4,7 +4,10 @@ use bt_topshim::btif::{
     BtBondState, BtConnectionState, BtDeviceType, BtDiscMode, BtPropertyType, BtSspVariant,
     BtStatus, BtTransport, BtVendorProductInfo, Uuid, Uuid128Bit,
 };
-use bt_topshim::profiles::a2dp::{A2dpCodecConfig, PresentationPosition};
+use bt_topshim::profiles::a2dp::{
+    A2dpCodecBitsPerSample, A2dpCodecChannelMode, A2dpCodecConfig, A2dpCodecIndex,
+    A2dpCodecSampleRate, PresentationPosition,
+};
 use bt_topshim::profiles::avrcp::PlayerMetadata;
 use bt_topshim::profiles::gatt::{AdvertisingStatus, GattStatus, LePhy};
 use bt_topshim::profiles::hfp::HfpCodecCapability;
@@ -415,6 +418,11 @@ pub struct A2dpCodecConfigDBus {
     codec_specific_4: i64,
 }
 
+impl_dbus_arg_enum!(A2dpCodecIndex);
+impl_dbus_arg_from_into!(A2dpCodecSampleRate, i32);
+impl_dbus_arg_from_into!(A2dpCodecBitsPerSample, i32);
+impl_dbus_arg_from_into!(A2dpCodecChannelMode, i32);
+
 impl_dbus_arg_from_into!(HfpCodecCapability, i32);
 #[dbus_propmap(BluetoothAudioDevice)]
 pub struct BluetoothAudioDeviceDBus {
@@ -723,6 +731,11 @@ impl IBluetooth for BluetoothDBus {
         dbus_generated!()
     }
 
+    fn init(&mut self, _init_flags: Vec<String>) -> bool {
+        // Not implemented by server
+        true
+    }
+
     fn enable(&mut self) -> bool {
         // Not implemented by server
         true
@@ -731,6 +744,10 @@ impl IBluetooth for BluetoothDBus {
     fn disable(&mut self) -> bool {
         // Not implemented by server
         true
+    }
+
+    fn cleanup(&mut self) {
+        // Not implemented by server
     }
 
     #[dbus_method("GetAddress")]
@@ -814,12 +831,12 @@ impl IBluetooth for BluetoothDBus {
     }
 
     #[dbus_method("CancelBondProcess")]
-    fn cancel_bond_process(&self, device: BluetoothDevice) -> bool {
+    fn cancel_bond_process(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 
     #[dbus_method("RemoveBond")]
-    fn remove_bond(&self, device: BluetoothDevice) -> bool {
+    fn remove_bond(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 
@@ -2515,9 +2532,11 @@ impl IBluetoothMedia for BluetoothMediaDBus {
     #[dbus_method("SetAudioConfig")]
     fn set_audio_config(
         &mut self,
-        sample_rate: i32,
-        bits_per_sample: i32,
-        channel_mode: i32,
+        address: String,
+        codec_type: A2dpCodecIndex,
+        sample_rate: A2dpCodecSampleRate,
+        bits_per_sample: A2dpCodecBitsPerSample,
+        channel_mode: A2dpCodecChannelMode,
     ) -> bool {
         dbus_generated!()
     }
@@ -2627,7 +2646,7 @@ impl IBluetoothMediaCallback for IBluetoothMediaCallbackDBus {
     fn on_hfp_debug_dump(
         &mut self,
         active: bool,
-        wbs: bool,
+        codec_id: u16,
         total_num_decoded_frames: i32,
         pkt_loss_ratio: f64,
         begin_ts: u64,

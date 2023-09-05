@@ -251,7 +251,7 @@ fn build_commands() -> HashMap<String, CommandOption> {
                 String::from(
                     "socket connect <address> <l2cap|rfcomm> <psm|uuid> <auth-required> <Bredr|LE>",
                 ),
-                String::from("socket disconnect <socket_id>"),
+                String::from("socket close <socket_id>"),
                 String::from("socket set-on-connect-schedule <send|resend|dump>"),
             ],
             description: String::from("Socket manager utilities."),
@@ -366,29 +366,32 @@ impl CommandHandler {
     }
 
     /// Entry point for command and arguments
-    pub fn process_cmd_line(&mut self, command: &str, args: &Vec<String>) {
+    pub fn process_cmd_line(&mut self, command: &str, args: &Vec<String>) -> bool {
         // Ignore empty line
         match command {
-            "" => {}
+            "" => false,
             _ => match self.command_options.get(command) {
                 Some(cmd) => {
                     let rules = cmd.rules.clone();
                     match (cmd.function_pointer)(self, &args) {
-                        Ok(()) => {}
+                        Ok(()) => true,
                         Err(CommandError::InvalidArgs) => {
                             print_error!("Invalid arguments. Usage:\n{}", rules.join("\n"));
+                            false
                         }
                         Err(CommandError::Failed(msg)) => {
                             print_error!("Command failed: {}", msg);
+                            false
                         }
                     }
                 }
                 None => {
                     println!("'{}' is an invalid command!", command);
                     self.cmd_help(&args).ok();
+                    false
                 }
             },
-        };
+        }
     }
 
     fn lock_context(&self) -> std::sync::MutexGuard<ClientContext> {
@@ -678,7 +681,7 @@ impl CommandHandler {
                     name: String::from("Classic Device"),
                 };
 
-                self.lock_context().adapter_dbus.as_ref().unwrap().remove_bond(device);
+                self.lock_context().adapter_dbus.as_mut().unwrap().remove_bond(device);
             }
             "cancel" => {
                 let device = BluetoothDevice {
@@ -686,7 +689,7 @@ impl CommandHandler {
                     name: String::from("Classic Device"),
                 };
 
-                self.lock_context().adapter_dbus.as_ref().unwrap().cancel_bond_process(device);
+                self.lock_context().adapter_dbus.as_mut().unwrap().cancel_bond_process(device);
             }
             other => {
                 println!("Invalid argument '{}'", other);
@@ -1621,6 +1624,26 @@ impl CommandHandler {
                 } else {
                     print_info!("Called create socket with result ({:?}, {}) against {}, type {}, with psm/uuid {}",
                     status, id, addr, sock_type, psm_or_uuid);
+                }
+            }
+            "close" => {
+                let sockid = String::from(get_arg(args, 1)?)
+                    .parse::<u64>()
+                    .or(Err("Failed parsing socket ID"))?;
+                let status = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .socket_manager_dbus
+                    .as_mut()
+                    .unwrap()
+                    .close(callback_id, sockid);
+                if status != BtStatus::Success {
+                    return Err(format!(
+                        "Failed to close the listening socket, status = {:?}",
+                        status,
+                    )
+                    .into());
                 }
             }
 

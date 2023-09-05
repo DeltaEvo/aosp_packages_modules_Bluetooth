@@ -262,6 +262,7 @@ bool l2cble_conn_comp(uint16_t handle, uint8_t role, const RawAddress& bda,
         return false;
       }
     }
+    p_lcb->link_state = LST_CONNECTING;
   } else if (role == HCI_ROLE_CENTRAL && p_lcb->link_state != LST_CONNECTING) {
     LOG_ERROR(
         "Received le acl connection as role central but not in connecting "
@@ -664,7 +665,8 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
               L2CAP_LE_RESULT_SOURCE_CID_ALREADY_ALLOCATED;
         } else {
           /* Allocate a ccb for this.*/
-          temp_p_ccb = l2cu_allocate_ccb(p_lcb, 0);
+          temp_p_ccb = l2cu_allocate_ccb(
+              p_lcb, 0, con_info.psm == BT_PSM_EATT /* is_eatt */);
           if (temp_p_ccb == NULL) {
             LOG_ERROR("L2CAP - unable to allocate CCB");
             p_lcb->pending_ecoc_connection_cids[i] = 0;
@@ -1011,7 +1013,8 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       }
 
       /* Allocate a ccb for this.*/
-      p_ccb = l2cu_allocate_ccb(p_lcb, 0);
+      p_ccb = l2cu_allocate_ccb(p_lcb, 0,
+                                con_info.psm == BT_PSM_EATT /* is_eatt */);
       if (p_ccb == NULL) {
         L2CAP_TRACE_ERROR("L2CAP - unable to allocate CCB");
         l2cu_reject_ble_connection(p_ccb, id, L2CAP_CONN_NO_RESOURCES);
@@ -1797,8 +1800,7 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb) {
     return;
   }
 
-  if (!controller_get_interface()->supports_ble_connection_subrating_host() ||
-      !controller_get_interface()->supports_ble_connection_subrating() ||
+  if (!controller_get_interface()->supports_ble_connection_subrating() ||
       !acl_peer_supports_ble_connection_subrating(p_lcb->remote_bd_addr) ||
       !acl_peer_supports_ble_connection_subrating_host(p_lcb->remote_bd_addr)) {
     L2CAP_TRACE_DEBUG(

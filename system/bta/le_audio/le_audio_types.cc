@@ -769,27 +769,16 @@ uint8_t GetMaxCodecFramesPerSduFromPac(const acs_ac_record* pac) {
   return 1;
 }
 
-uint32_t AdjustAllocationForOffloader(uint32_t allocation) {
-  if ((allocation & codec_spec_conf::kLeAudioLocationAnyLeft) &&
-      (allocation & codec_spec_conf::kLeAudioLocationAnyRight)) {
-    return codec_spec_conf::kLeAudioLocationStereo;
-  }
-  if (allocation & codec_spec_conf::kLeAudioLocationAnyLeft) {
-    return codec_spec_conf::kLeAudioLocationFrontLeft;
-  }
-
-  if (allocation & codec_spec_conf::kLeAudioLocationAnyRight) {
-    return codec_spec_conf::kLeAudioLocationFrontRight;
-  }
-  return 0;
-}
-
 namespace types {
 std::ostream& operator<<(std::ostream& os,
                          const AudioStreamDataPathState& state) {
-  static const char* char_value_[6] = {
-      "IDLE",        "CIS_DISCONNECTING", "CIS_ASSIGNED",
-      "CIS_PENDING", "CIS_ESTABLISHED",   "DATA_PATH_ESTABLISHED"};
+  static const char* char_value_[7] = {"IDLE",
+                                       "CIS_DISCONNECTING",
+                                       "CIS_ASSIGNED",
+                                       "CIS_PENDING",
+                                       "CIS_ESTABLISHED",
+                                       "DATA_PATH_ESTABLISHED",
+                                       "DATA_PATH_REMOVING"};
 
   os << char_value_[static_cast<uint8_t>(state)] << " ("
      << "0x" << std::setfill('0') << std::setw(2) << static_cast<int>(state)
@@ -903,6 +892,23 @@ std::ostream& operator<<(std::ostream& os, const AudioContexts& contexts) {
   return os;
 }
 
+template <typename T>
+const T& BidirectionalPair<T>::get(uint8_t direction) const {
+  ASSERT_LOG(
+      direction < types::kLeAudioDirectionBoth,
+      "Unsupported complex direction. Consider using get_bidirectional<>() "
+      "instead.");
+  return (direction == types::kLeAudioDirectionSink) ? sink : source;
+}
+
+template <typename T>
+T& BidirectionalPair<T>::get(uint8_t direction) {
+  ASSERT_LOG(direction < types::kLeAudioDirectionBoth,
+             "Unsupported complex direction. Reference to a single complex"
+             " direction value is not supported.");
+  return (direction == types::kLeAudioDirectionSink) ? sink : source;
+}
+
 /* Bidirectional getter trait for AudioContexts bidirectional pair */
 template <>
 AudioContexts get_bidirectional(BidirectionalPair<AudioContexts> p) {
@@ -924,7 +930,13 @@ AudioLocations get_bidirectional(BidirectionalPair<AudioLocations> bidir) {
 
 template struct BidirectionalPair<AudioContexts>;
 template struct BidirectionalPair<AudioLocations>;
+template struct BidirectionalPair<CisType>;
+template struct BidirectionalPair<ase*>;
+template struct BidirectionalPair<std::string>;
 template struct BidirectionalPair<std::vector<uint8_t>>;
+template struct BidirectionalPair<stream_configuration>;
+template struct BidirectionalPair<stream_parameters>;
+template struct BidirectionalPair<uint16_t>;
 
 }  // namespace types
 }  // namespace le_audio

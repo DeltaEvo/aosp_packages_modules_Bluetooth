@@ -35,8 +35,8 @@
 #include "stack/include/btm_log_history.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/smp_api_types.h"
-#include "stack/smp/p_256_ecc_pp.h"
-#include "stack/smp/smp_int.h"
+#include "p_256_ecc_pp.h"
+#include "smp_int.h"
 #include "types/raw_address.h"
 
 namespace {
@@ -431,9 +431,9 @@ void smp_send_csrk_info(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     tBTM_LE_KEY_VALUE key = {
         .lcsrk_key =
             {
+                .counter = 0, /* initialize the local counter */
                 .div = p_cb->div,
                 .sec_level = p_cb->sec_level,
-                .counter = 0, /* initialize the local counter */
                 .csrk = p_cb->csrk,
             },
     };

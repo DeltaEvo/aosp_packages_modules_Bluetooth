@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
-#include "link_layer_socket_device.h"
+#include "model/devices/link_layer_socket_device.h"
 
-#include <type_traits>  // for remove_extent_t
+#include <packet_runtime.h>
+
+#include <cerrno>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "log.h"
-#include "packet/bit_inserter.h"  // for BitInserter
-#include "packet/iterator.h"      // for Iterator
-#include "packet/packet_view.h"   // for PacketView, kLittleEndian
-#include "packet/raw_builder.h"   // for RawBuilder
-#include "packet/view.h"          // for View
-#include "phy.h"                  // for Phy, Phy::Type
+#include "model/devices/device.h"
+#include "packets/link_layer_packets.h"
+#include "phy.h"
 
 using std::vector;
 
@@ -55,9 +59,8 @@ void LinkLayerSocketDevice::Tick() {
       offset_ += bytes_received;
       return;
     }
-    bluetooth::packet::PacketView<bluetooth::packet::kLittleEndian> size(
-        {bluetooth::packet::View(size_bytes_, 0, kSizeBytes)});
-    bytes_left_ = size.begin().extract<uint32_t>();
+    pdl::packet::slice size(std::move(size_bytes_));
+    bytes_left_ = size.read_le<uint32_t>();
     received_ = std::make_shared<std::vector<uint8_t>>(bytes_left_);
     offset_ = 0;
     receiving_size_ = false;
@@ -95,15 +98,12 @@ void LinkLayerSocketDevice::Close() {
 void LinkLayerSocketDevice::ReceiveLinkLayerPacket(
     model::packets::LinkLayerPacketView packet, Phy::Type /*type*/,
     int8_t /*rssi*/) {
-  auto size_packet = bluetooth::packet::RawBuilder();
-  size_packet.AddOctets4(packet.size());
+  std::vector<uint8_t> packet_bytes = packet.bytes().bytes();
   std::vector<uint8_t> size_bytes;
-  bluetooth::packet::BitInserter bit_inserter(size_bytes);
-  size_packet.Serialize(bit_inserter);
+  pdl::packet::Builder::write_le<uint32_t>(size_bytes, packet_bytes.size());
 
   if (socket_->Send(size_bytes.data(), size_bytes.size()) == kSizeBytes) {
-    std::vector<uint8_t> payload_bytes{packet.begin(), packet.end()};
-    socket_->Send(payload_bytes.data(), payload_bytes.size());
+    socket_->Send(packet_bytes.data(), packet_bytes.size());
   }
 }
 

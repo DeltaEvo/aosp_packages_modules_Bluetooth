@@ -4,8 +4,8 @@ use bt_topshim::btif::{
     BaseCallbacks, BaseCallbacksDispatcher, BluetoothInterface, BluetoothProperty, BtAclState,
     BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
     BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType, BtScanMode, BtSspVariant, BtState,
-    BtStatus, BtTransport, BtVendorProductInfo, DisplayAddress, RawAddress, ToggleableProfile,
-    Uuid, Uuid128Bit,
+    BtStatus, BtThreadEvent, BtTransport, BtVendorProductInfo, DisplayAddress, RawAddress,
+    ToggleableProfile, Uuid, Uuid128Bit,
 };
 use bt_topshim::{
     metrics,
@@ -26,7 +26,7 @@ use btif_macros::{btif_callback, btif_callbacks_dispatcher};
 use log::{debug, warn};
 use num_traits::cast::ToPrimitive;
 use num_traits::pow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::hash::Hash;
@@ -44,6 +44,7 @@ use crate::bluetooth_admin::{BluetoothAdmin, IBluetoothAdmin};
 use crate::bluetooth_gatt::{BluetoothGatt, IBluetoothGatt, IScannerCallback, ScanResult};
 use crate::bluetooth_media::{BluetoothMedia, IBluetoothMedia, MediaActions};
 use crate::callbacks::Callbacks;
+use crate::socket_manager::SocketActions;
 use crate::uuid::{Profile, UuidHelper, HOGP};
 use crate::{Message, RPCProxy, SuspendMode};
 
@@ -79,6 +80,9 @@ pub trait IBluetooth {
     /// Removes registered callback.
     fn unregister_connection_callback(&mut self, callback_id: u32) -> bool;
 
+    /// Inits the bluetooth interface. Should always be called before enable.
+    fn init(&mut self, init_flags: Vec<String>) -> bool;
+
     /// Enables the adapter.
     ///
     /// Returns true if the request is accepted.
@@ -88,6 +92,9 @@ pub trait IBluetooth {
     ///
     /// Returns true if the request is accepted.
     fn disable(&mut self) -> bool;
+
+    /// Cleans up the bluetooth interface. Should always be called after disable.
+    fn cleanup(&mut self);
 
     /// Returns the Bluetooth address of the local adapter.
     fn get_address(&self) -> String;
@@ -139,10 +146,10 @@ pub trait IBluetooth {
     fn create_bond(&mut self, device: BluetoothDevice, transport: BtTransport) -> bool;
 
     /// Cancels any pending bond attempt on given device.
-    fn cancel_bond_process(&self, device: BluetoothDevice) -> bool;
+    fn cancel_bond_process(&mut self, device: BluetoothDevice) -> bool;
 
     /// Removes pairing for given device.
-    fn remove_bond(&self, device: BluetoothDevice) -> bool;
+    fn remove_bond(&mut self, device: BluetoothDevice) -> bool;
 
     /// Returns a list of known bonded devices.
     fn get_bonded_devices(&self) -> Vec<BluetoothDevice>;
@@ -376,6 +383,15 @@ impl BluetoothDeviceContext {
     }
 }
 
+/// Structure to track all the signals for SIGTERM.
+pub struct SigData {
+    pub enabled: Mutex<bool>,
+    pub enabled_notify: Condvar,
+
+    pub thread_attached: Mutex<bool>,
+    pub thread_notify: Condvar,
+}
+
 /// The interface for adapter callbacks registered through `IBluetooth::register_callback`.
 pub trait IBluetoothCallback: RPCProxy {
     /// When any adapter property changes.
@@ -492,9 +508,10 @@ pub struct Bluetooth {
     tx: Sender<Message>,
     // Internal API members
     discoverable_timeout: Option<JoinHandle<()>>,
+    cancelling_devices: HashSet<RawAddress>,
 
     /// Used to notify signal handler that we have turned off the stack.
-    sig_notifier: Arc<(Mutex<bool>, Condvar)>,
+    sig_notifier: Arc<SigData>,
 }
 
 impl Bluetooth {
@@ -503,7 +520,7 @@ impl Bluetooth {
         adapter_index: i32,
         hci_index: i32,
         tx: Sender<Message>,
-        sig_notifier: Arc<(Mutex<bool>, Condvar)>,
+        sig_notifier: Arc<SigData>,
         intf: Arc<Mutex<BluetoothInterface>>,
         bluetooth_admin: Arc<Mutex<Box<BluetoothAdmin>>>,
         bluetooth_gatt: Arc<Mutex<Box<BluetoothGatt>>>,
@@ -542,6 +559,7 @@ impl Bluetooth {
             tx,
             // Internal API members
             discoverable_timeout: None,
+            cancelling_devices: HashSet::new(),
             sig_notifier,
         }
     }
@@ -1167,6 +1185,9 @@ pub(crate) trait BtifBluetoothCallbacks {
         min_16_digit: bool,
     ) {
     }
+
+    #[btif_callback(ThreadEvent)]
+    fn thread_event(&mut self, event: BtThreadEvent) {}
 }
 
 #[btif_callbacks_dispatcher(dispatch_hid_host_callbacks, HHCallbacks)]
@@ -1234,8 +1255,8 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 }
 
                 // Let the signal notifier know we are turned off.
-                *self.sig_notifier.0.lock().unwrap() = false;
-                self.sig_notifier.1.notify_all();
+                *self.sig_notifier.enabled.lock().unwrap() = false;
+                self.sig_notifier.enabled_notify.notify_all();
             }
 
             BtState::On => {
@@ -1259,8 +1280,8 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 self.set_connectable(true);
 
                 // Notify the signal notifier that we are turned on.
-                *self.sig_notifier.0.lock().unwrap() = true;
-                self.sig_notifier.1.notify_all();
+                *self.sig_notifier.enabled.lock().unwrap() = true;
+                self.sig_notifier.enabled_notify.notify_all();
 
                 // Signal that the stack is up and running.
                 match self.create_pid_file() {
@@ -1537,7 +1558,13 @@ impl BtifBluetoothCallbacks for Bluetooth {
             );
         });
 
-        metrics::bond_state_changed(addr, device_type, status, bond_state, fail_reason);
+        // Don't emit the metrics event if we were cancelling the bond.
+        // It is ok to not send the pairing complete event as the server should ignore the dangling
+        // pairing attempt event.
+        // This behavior aligns with BlueZ.
+        if !self.cancelling_devices.remove(&addr) {
+            metrics::bond_state_changed(addr, device_type, status, bond_state, fail_reason);
+        }
     }
 
     fn remote_device_properties_changed(
@@ -1720,6 +1747,21 @@ impl BtifBluetoothCallbacks for Bluetooth {
             None => (),
         };
     }
+
+    fn thread_event(&mut self, event: BtThreadEvent) {
+        match event {
+            BtThreadEvent::Associate => {
+                // Let the signal notifier know stack is initialized.
+                *self.sig_notifier.thread_attached.lock().unwrap() = true;
+                self.sig_notifier.thread_notify.notify_all();
+            }
+            BtThreadEvent::Disassociate => {
+                // Let the signal notifier know stack is done.
+                *self.sig_notifier.thread_attached.lock().unwrap() = false;
+                self.sig_notifier.thread_notify.notify_all();
+            }
+        }
+    }
 }
 
 struct BleDiscoveryCallbacks {
@@ -1788,12 +1830,20 @@ impl IBluetooth for Bluetooth {
         self.connection_callbacks.remove_callback(callback_id)
     }
 
+    fn init(&mut self, init_flags: Vec<String>) -> bool {
+        self.intf.lock().unwrap().initialize(get_bt_dispatcher(self.tx.clone()), init_flags)
+    }
+
     fn enable(&mut self) -> bool {
         self.intf.lock().unwrap().enable() == 0
     }
 
     fn disable(&mut self) -> bool {
         self.intf.lock().unwrap().disable() == 0
+    }
+
+    fn cleanup(&mut self) {
+        self.intf.lock().unwrap().cleanup();
     }
 
     fn get_address(&self) -> String {
@@ -2021,6 +2071,12 @@ impl IBluetooth for Bluetooth {
             _ => self.get_remote_type(device.clone()),
         };
 
+        // There could be a race between bond complete and bond cancel, which makes
+        // |cancelling_devices| in a wrong state. Remove the device just in case.
+        if self.cancelling_devices.remove(&address) {
+            warn!("Device {} is also cancelling the bond.", DisplayAddress(&address));
+        }
+
         // We explicitly log the attempt to start the bonding separate from logging the bond state.
         // The start of the attempt is critical to help identify a bonding/pairing session.
         metrics::bond_create_attempt(address, device_type.clone());
@@ -2052,7 +2108,7 @@ impl IBluetooth for Bluetooth {
         return true;
     }
 
-    fn cancel_bond_process(&self, device: BluetoothDevice) -> bool {
+    fn cancel_bond_process(&mut self, device: BluetoothDevice) -> bool {
         let addr = RawAddress::from_string(device.address.clone());
 
         if addr.is_none() {
@@ -2061,10 +2117,14 @@ impl IBluetooth for Bluetooth {
         }
 
         let address = addr.unwrap();
+        if !self.cancelling_devices.insert(address.clone()) {
+            warn!("Device {} has been added to cancelling_device.", DisplayAddress(&address));
+        }
+
         self.intf.lock().unwrap().cancel_bond(&address) == 0
     }
 
-    fn remove_bond(&self, device: BluetoothDevice) -> bool {
+    fn remove_bond(&mut self, device: BluetoothDevice) -> bool {
         let addr = RawAddress::from_string(device.address.clone());
 
         if addr.is_none() {
@@ -2074,6 +2134,13 @@ impl IBluetooth for Bluetooth {
 
         let address = addr.unwrap();
         debug!("Removing bond for {}", DisplayAddress(&address));
+
+        // There could be a race between bond complete and bond cancel, which makes
+        // |cancelling_devices| in a wrong state. Remove the device just in case.
+        if self.cancelling_devices.remove(&address) {
+            warn!("Device {} is also cancelling the bond.", DisplayAddress(&address));
+        }
+
         let status = self.intf.lock().unwrap().remove_bond(&address);
 
         if status != 0 {
@@ -2559,6 +2626,16 @@ impl IBluetooth for Bluetooth {
                 }
                 _ => {}
             }
+        }
+
+        // Disconnect all socket connections
+        if let Some(raw_addr) = RawAddress::from_string(device.address.clone()) {
+            let txl = self.tx.clone();
+            topstack::get_runtime().spawn(async move {
+                let _ = txl
+                    .send(Message::SocketManagerActions(SocketActions::DisconnectAll(raw_addr)))
+                    .await;
+            });
         }
 
         return true;

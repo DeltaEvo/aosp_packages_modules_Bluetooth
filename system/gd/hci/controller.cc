@@ -205,9 +205,6 @@ struct Controller::impl {
   }
 
   void Stop() {
-    if (bluetooth::common::init_flags::gd_core_is_enabled()) {
-      hci_->UnregisterEventHandler(EventCode::NUMBER_OF_COMPLETED_PACKETS);
-    }
     hci_ = nullptr;
   }
 
@@ -1346,6 +1343,25 @@ uint8_t Controller::GetLePeriodicAdvertiserListSize() const {
 
 bool Controller::IsSupported(bluetooth::hci::OpCode op_code) const {
   return impl_->is_supported(op_code);
+}
+
+uint64_t Controller::MaskLeEventMask(HciVersion version, uint64_t mask) {
+  if (!common::init_flags::subrating_is_enabled()) {
+    mask = mask & ~(static_cast<uint64_t>(LLFeaturesBits::CONNECTION_SUBRATING_HOST_SUPPORT));
+  }
+  if (version >= HciVersion::V_5_3) {
+    return mask;
+  } else if (version >= HciVersion::V_5_2) {
+    return mask & kLeEventMask52;
+  } else if (version >= HciVersion::V_5_1) {
+    return mask & kLeEventMask51;
+  } else if (version >= HciVersion::V_5_0) {
+    return mask & kLeEventMask50;
+  } else if (version >= HciVersion::V_4_2) {
+    return mask & kLeEventMask42;
+  } else {
+    return mask & kLeEventMask41;
+  }
 }
 
 const ModuleFactory Controller::Factory = ModuleFactory([]() { return new Controller(); });

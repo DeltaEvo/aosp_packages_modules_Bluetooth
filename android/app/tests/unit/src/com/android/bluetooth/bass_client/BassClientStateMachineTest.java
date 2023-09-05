@@ -275,6 +275,9 @@ public class BassClientStateMachineTest {
         allowConnection(true);
         allowConnectGatt(true);
 
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
+
         assertThat(mBassClientStateMachine.getCurrentState())
                 .isInstanceOf(BassClientStateMachine.Disconnected.class);
 
@@ -438,7 +441,7 @@ public class BassClientStateMachineTest {
     }
 
     @Test
-    public void parseScanRecord_withoutBaseData_makesNoStopScanOffloadFalse() {
+    public void parseScanRecord_withoutBaseData_callCancelActiveSync() {
         byte[] scanRecord = new byte[]{
                 0x02, 0x01, 0x1a, // advertising flags
                 0x05, 0x02, 0x0b, 0x11, 0x0a, 0x11, // 16 bit service uuids
@@ -448,37 +451,76 @@ public class BassClientStateMachineTest {
                 0x05, (byte) 0xff, (byte) 0xe0, 0x00, 0x02, 0x15, // manufacturer specific data
                 0x03, 0x50, 0x01, 0x02, // an unknown data type won't cause trouble
         };
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
+
         ScanRecord data = ScanRecord.parseFromBytes(scanRecord);
-        mBassClientStateMachine.mNoStopScanOffload = true;
         mBassClientStateMachine.parseScanRecord(0, data);
-        assertThat(mBassClientStateMachine.mNoStopScanOffload).isFalse();
+        // verify getActiveSyncedSource got called in CancelActiveSync
+        verify(mBassClientService).getActiveSyncedSources(any());
     }
 
     @Test
     public void parseScanRecord_withBaseData_callsUpdateBase() {
-        byte[] scanRecordWithBaseData = new byte[] {
-                0x02, 0x01, 0x1a, // advertising flags
-                0x05, 0x02, 0x51, 0x18, 0x0a, 0x11, // 16 bit service uuids
-                0x04, 0x09, 0x50, 0x65, 0x64, // name
-                0x02, 0x0A, (byte) 0xec, // tx power level
-                0x15, 0x16, 0x51, 0x18, // service data (base data with 18 bytes)
+        byte[] scanRecordWithBaseData =
+                new byte[] {
+                    (byte) 0x02,
+                    (byte) 0x01,
+                    (byte) 0x1a, // advertising flags
+                    (byte) 0x05,
+                    (byte) 0x02,
+                    (byte) 0x51,
+                    (byte) 0x18,
+                    (byte) 0x0a,
+                    (byte) 0x11, // 16 bit service uuids
+                    (byte) 0x04,
+                    (byte) 0x09,
+                    (byte) 0x50,
+                    (byte) 0x65,
+                    (byte) 0x64, // name
+                    (byte) 0x02,
+                    (byte) 0x0A,
+                    (byte) 0xec, // tx power level
+                    (byte) 0x19,
+                    (byte) 0x16,
+                    (byte) 0x51,
+                    (byte) 0x18, // service data (base data with 18 bytes)
                     // LEVEL 1
-                    (byte) 0x01, (byte) 0x02, (byte) 0x03, // presentationDelay
-                    (byte) 0x01,  // numSubGroups
+                    (byte) 0x01,
+                    (byte) 0x02,
+                    (byte) 0x03, // presentationDelay
+                    (byte) 0x01, // numSubGroups
                     // LEVEL 2
-                    (byte) 0x01,  // numSubGroups
-                    (byte) 0xFE,  // UNKNOWN_CODEC
-                    (byte) 0x02,  // codecConfigLength
-                    (byte) 0x01, (byte) 'A', // codecConfigInfo
-                    (byte) 0x03,  // metaDataLength
-                    (byte) 0x06, (byte) 0x07, (byte) 0x08,  // metaData
+                    (byte) 0x01, // numSubGroups
+                    (byte) 0x00,
+                    (byte) 0x00,
+                    (byte) 0x00,
+                    (byte) 0x00,
+                    (byte) 0x00, // UNKNOWN_CODEC
+                    (byte) 0x02, // codecConfigLength
+                    (byte) 0x01,
+                    (byte) 'A', // codecConfigInfo
+                    (byte) 0x03, // metaDataLength
+                    (byte) 0x06,
+                    (byte) 0x07,
+                    (byte) 0x08, // metaData
                     // LEVEL 3
-                    (byte) 0x04,  // index
-                    (byte) 0x03,  // codecConfigLength
-                    (byte) 0x02, (byte) 'B', (byte) 'C', // codecConfigInfo
-                0x05, (byte) 0xff, (byte) 0xe0, 0x00, 0x02, 0x15, // manufacturer specific data
-                0x03, 0x50, 0x01, 0x02, // an unknown data type won't cause trouble
-        };
+                    (byte) 0x04, // index
+                    (byte) 0x03, // codecConfigLength
+                    (byte) 0x02,
+                    (byte) 'B',
+                    (byte) 'C', // codecConfigInfo
+                    (byte) 0x05,
+                    (byte) 0xff,
+                    (byte) 0xe0,
+                    (byte) 0x00,
+                    (byte) 0x02,
+                    (byte) 0x15, // manufacturer specific data
+                    (byte) 0x03,
+                    (byte) 0x50,
+                    (byte) 0x01,
+                    (byte) 0x02, // an unknown data type won't cause trouble
+                };
         ScanRecord data = ScanRecord.parseFromBytes(scanRecordWithBaseData);
         assertThat(data.getServiceUuids()).contains(BassConstants.BASIC_AUDIO_UUID);
         assertThat(data.getServiceData(BassConstants.BASIC_AUDIO_UUID)).isNotNull();
@@ -831,6 +873,9 @@ public class BassClientStateMachineTest {
     public void sendOtherMessages_inDisconnectedState_doesNotChangeState() {
         initToDisconnectedState();
 
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
+
         mBassClientStateMachine.sendMessage(PSYNC_ACTIVE_TIMEOUT);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
         verify(mBassClientService, never()).sendBroadcast(any(Intent.class), anyString(), any());
@@ -883,7 +928,12 @@ public class BassClientStateMachineTest {
 
         Message msg = mBassClientStateMachine.obtainMessage(CONNECTION_STATE_CHANGED);
         msg.obj = BluetoothProfile.STATE_CONNECTING;
+        BassClientStateMachine.BluetoothGattTestableWrapper btGatt =
+                Mockito.mock(BassClientStateMachine.BluetoothGattTestableWrapper.class);
+        mBassClientStateMachine.mBluetoothGatt = btGatt;
         sendMessageAndVerifyTransition(msg, BassClientStateMachine.Disconnected.class);
+        verify(btGatt).close();
+        assertNull(mBassClientStateMachine.mBluetoothGatt);
     }
 
     @Test
@@ -905,8 +955,13 @@ public class BassClientStateMachineTest {
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
         verify(mBassClientService, never()).sendBroadcast(any(Intent.class), anyString(), any());
 
+        BassClientStateMachine.BluetoothGattTestableWrapper btGatt =
+                Mockito.mock(BassClientStateMachine.BluetoothGattTestableWrapper.class);
+        mBassClientStateMachine.mBluetoothGatt = btGatt;
         Message msg = mBassClientStateMachine.obtainMessage(CONNECT_TIMEOUT, mTestDevice);
         sendMessageAndVerifyTransition(msg, BassClientStateMachine.Disconnected.class);
+        verify(btGatt).close();
+        assertNull(mBassClientStateMachine.mBluetoothGatt);
     }
 
     @Test
@@ -931,6 +986,9 @@ public class BassClientStateMachineTest {
         initToConnectedState();
 
         mBassClientStateMachine.mBluetoothGatt = null;
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
+
         mBassClientStateMachine.sendMessage(DISCONNECT);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
         verify(mBassClientService, never()).sendBroadcast(any(Intent.class), anyString(), any());
@@ -951,13 +1009,22 @@ public class BassClientStateMachineTest {
 
         Message connectedMsg = mBassClientStateMachine.obtainMessage(CONNECTION_STATE_CHANGED);
         connectedMsg.obj = BluetoothProfile.STATE_CONNECTED;
+
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
+
         mBassClientStateMachine.sendMessage(connectedMsg);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
         verify(mBassClientService, never()).sendBroadcast(any(Intent.class), anyString(), any());
 
+        BassClientStateMachine.BluetoothGattTestableWrapper btGatt =
+                Mockito.mock(BassClientStateMachine.BluetoothGattTestableWrapper.class);
+        mBassClientStateMachine.mBluetoothGatt = btGatt;
         Message noneConnectedMsg = mBassClientStateMachine.obtainMessage(CONNECTION_STATE_CHANGED);
         noneConnectedMsg.obj = BluetoothProfile.STATE_DISCONNECTING;
         sendMessageAndVerifyTransition(noneConnectedMsg, BassClientStateMachine.Disconnected.class);
+        verify(btGatt).close();
+        assertNull(mBassClientStateMachine.mBluetoothGatt);
     }
 
     @Test
@@ -1025,11 +1092,13 @@ public class BassClientStateMachineTest {
     @Test
     public void sendPsyncActiveMessage_inConnectedState() {
         initToConnectedState();
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
 
-        mBassClientStateMachine.mNoStopScanOffload = true;
         mBassClientStateMachine.sendMessage(PSYNC_ACTIVE_TIMEOUT);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
-        assertThat(mBassClientStateMachine.mNoStopScanOffload).isFalse();
+        // verify getActiveSyncedSource got called in CancelActiveSync
+        verify(mBassClientService).getActiveSyncedSources(any());
     }
 
     @Test
@@ -1079,6 +1148,8 @@ public class BassClientStateMachineTest {
         when(mBassClientService.getCallbacks()).thenReturn(callbacks);
 
         BluetoothLeBroadcastMetadata metadata = createBroadcastMetadata();
+        // verify local broadcast doesn't require active synced source
+        when(mBassClientService.isLocalBroadcast(any())).thenReturn(true);
         mBassClientStateMachine.sendMessage(ADD_BCAST_SOURCE, metadata);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
 
@@ -1141,7 +1212,6 @@ public class BassClientStateMachineTest {
 
         mBassClientStateMachine.sendMessage(UPDATE_BCAST_SOURCE, sourceId, paSync, metadata);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
-        verify(callbacks).notifySourceRemoveFailed(any(), anyInt(), anyInt());
 
         PeriodicAdvertisementResult paResult = Mockito.mock(PeriodicAdvertisementResult.class);
         when(mBassClientService.getPeriodicAdvertisementResult(any())).thenReturn(paResult);
@@ -1150,7 +1220,6 @@ public class BassClientStateMachineTest {
 
         mBassClientStateMachine.sendMessage(UPDATE_BCAST_SOURCE, sourceId, paSync, metadata);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
-        verify(callbacks).notifySourceRemoveFailed(any(), anyInt(), anyInt());
 
         BaseData data = Mockito.mock(BaseData.class);
         when(mBassClientService.getBase(anyInt())).thenReturn(data);
@@ -1320,6 +1389,9 @@ public class BassClientStateMachineTest {
         // Mock instance of btGatt was created in initToConnectedProcessingState().
         BassClientStateMachine.BluetoothGattTestableWrapper btGatt =
                 mBassClientStateMachine.mBluetoothGatt;
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
+
         mBassClientStateMachine.mBluetoothGatt = null;
         mBassClientStateMachine.sendMessage(DISCONNECT);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
@@ -1341,15 +1413,23 @@ public class BassClientStateMachineTest {
                 mBassClientStateMachine.obtainMessage(CONNECTION_STATE_CHANGED);
         msgToConnectedState.obj = BluetoothProfile.STATE_CONNECTED;
 
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
+
         mBassClientStateMachine.sendMessage(msgToConnectedState);
         TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
         verify(mBassClientService, never()).sendBroadcast(any(Intent.class), anyString(), any());
 
+        BassClientStateMachine.BluetoothGattTestableWrapper btGatt =
+                Mockito.mock(BassClientStateMachine.BluetoothGattTestableWrapper.class);
+        mBassClientStateMachine.mBluetoothGatt = btGatt;
         Message msgToNoneConnectedState =
                 mBassClientStateMachine.obtainMessage(CONNECTION_STATE_CHANGED);
         msgToNoneConnectedState.obj = BluetoothProfile.STATE_DISCONNECTING;
         sendMessageAndVerifyTransition(
                 msgToNoneConnectedState, BassClientStateMachine.Disconnected.class);
+        verify(btGatt).close();
+        assertNull(mBassClientStateMachine.mBluetoothGatt);
     }
 
     /**
@@ -1360,15 +1440,17 @@ public class BassClientStateMachineTest {
         initToConnectedProcessingState();
         BassClientService.Callbacks callbacks = Mockito.mock(BassClientService.Callbacks.class);
         when(mBassClientService.getCallbacks()).thenReturn(callbacks);
+        // need this to ensure expected mock behavior for getActiveSyncedSource
+        when(mBassClientService.getActiveSyncedSources(any())).thenReturn(null);
 
         // Test sendPendingCallbacks(START_SCAN_OFFLOAD, ERROR_UNKNOWN)
         mBassClientStateMachine.mPendingOperation = START_SCAN_OFFLOAD;
-        mBassClientStateMachine.mNoStopScanOffload = true;
         mBassClientStateMachine.mAutoTriggered = false;
         sendMessageAndVerifyTransition(
                 mBassClientStateMachine.obtainMessage(GATT_TXN_PROCESSED, GATT_FAILURE),
                 BassClientStateMachine.Connected.class);
-        assertThat(mBassClientStateMachine.mNoStopScanOffload).isFalse();
+        // verify getActiveSyncedSource got called in CancelActiveSync
+        verify(mBassClientService).getActiveSyncedSources(any());
 
         // Test sendPendingCallbacks(START_SCAN_OFFLOAD, ERROR_UNKNOWN)
         moveConnectedStateToConnectedProcessingState();
