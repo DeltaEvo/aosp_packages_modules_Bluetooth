@@ -384,6 +384,7 @@ init_flags!(
         hfp_dynamic_version = true,
         irk_rotation,
         leaudio_targeted_announcement_reconnection_mode = true,
+        leaudio_enable_health_based_actions,
         pass_phy_update_callback = true,
         pbap_pse_dynamic_version_upgrade = false,
         periodic_advertising_adi = true,
@@ -403,6 +404,7 @@ init_flags!(
         use_unified_connection_manager,
         sdp_return_classic_services_when_le_discovery_fails = true,
         use_rsi_from_cached_inqiry_results = false,
+        att_mtu_default: i32 = 517,
     }
     // dynamic flags can be updated at runtime and should be accessed directly
     // to check.
