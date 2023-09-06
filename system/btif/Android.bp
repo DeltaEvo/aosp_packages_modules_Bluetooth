@@ -28,7 +28,6 @@ btifCommonIncludes = [
     "packages/modules/Bluetooth/system/stack/include",
     "packages/modules/Bluetooth/system/stack/l2cap",
     "packages/modules/Bluetooth/system/udrv/include",
-    "packages/modules/Bluetooth/system/vnd/include",
     "system/libhwbinder/include",
 ]
 
@@ -130,6 +129,9 @@ cc_library_static {
     ],
     target: {
         android: {
+            whole_static_libs: [
+                "libPlatformProperties",
+            ],
             srcs: ["src/btif_avrcp_audio_track.cc"],
             shared_libs: ["libaaudio"],
         },
@@ -146,9 +148,12 @@ cc_library_static {
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
+        "libbluetooth-types",
         "libbt-audio-hal-interface",
+        "libbt-platform-protos-lite",
         "libbt-stack",
         "libbt-stack-core",
+        "libbt_shim_bridge",
         "libbtif-core",
     ],
     shared_libs: [
@@ -173,7 +178,6 @@ cc_library_static {
         "co/bta_dm_co.cc",
         "co/bta_gatts_co.cc",
         // BTIF implementation
-        "src/btif_activity_attribution.cc",
         "src/btif_ble_scanner.cc",
         "src/btif_bqr.cc",
         "src/btif_config.cc",
@@ -210,9 +214,6 @@ cc_library_static {
     ],
     target: {
         android: {
-            whole_static_libs: [
-                "libPlatformProperties",
-            ],
             srcs: ["src/btif_avrcp_audio_track.cc"],
             shared_libs: ["libaaudio"],
         },
@@ -228,7 +229,9 @@ cc_library_static {
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
         "libbt-audio-hal-interface",
+        "libbt-platform-protos-lite",
         "libbt-stack-core",
+        "libbt_shim_bridge",
         "libstatslog_bt",
     ],
     shared_libs: [
@@ -244,6 +247,7 @@ cc_library_static {
     ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
+    header_libs: ["libbluetooth_headers"],
 }
 
 // btif unit tests for target
@@ -295,6 +299,7 @@ cc_test {
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-stack-core",
+        "libbt_shim_bridge",
         "libbtcore",
         "libbtdevice",
         "libbtif",
@@ -348,6 +353,8 @@ cc_test {
     static_libs: [
         "libbluetooth-types",
         "libbluetooth_gd",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libosi",
     ],
@@ -380,6 +387,8 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libosi",
     ],
@@ -418,6 +427,9 @@ cc_test {
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libevent",
     ],
@@ -461,6 +473,7 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbt_shim_bridge",
         "libc++fs",
         "libchrome",
         "libgmock",
@@ -497,6 +510,7 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbt_shim_bridge",
         "libchrome",
         "libcom.android.sysprop.bluetooth",
         "libosi",
@@ -534,7 +548,6 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/include",
         "system/libfmq/include",
         "system/libhwbinder/include",
     ],
@@ -600,10 +613,13 @@ cc_test {
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-audio-hal-interface",
+        "libbt-platform-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-stack-core",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtdevice",
         "libbtif",
         "libbtif-core",
@@ -668,7 +684,6 @@ cc_test {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/include",
         "system/libfmq/include",
         "system/libhwbinder/include",
     ],
@@ -735,8 +750,11 @@ cc_test {
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-audio-hal-interface",
+        "libbt-platform-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtdevice",
         "libbtif",
         "libbtif-core",

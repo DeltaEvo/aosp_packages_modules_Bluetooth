@@ -43,7 +43,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/include",
         "system/security/keystore/include",
     ],
     generated_headers: [
@@ -56,7 +55,12 @@ cc_library_static {
     ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
-    static_libs: ["libbluetooth_gd"],
+    static_libs: [
+        "libbluetooth_gd",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+    ],
+    header_libs: ["libbluetooth_headers"],
 }
 
 cc_library {
@@ -86,7 +90,6 @@ cc_library {
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/stack/l2cap",
         "packages/modules/Bluetooth/system/udrv/include",
-        "packages/modules/Bluetooth/system/vnd/include",
         "system/security/keystore/include",
     ],
     shared_libs: [
@@ -149,6 +152,11 @@ cc_library_static {
     whole_static_libs: [
         "libbluetooth_gd", // Gabeldorsche
     ],
+    header_libs: ["libbluetooth_headers"],
+    static_libs: [
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+    ],
 }
 
 cc_test {
@@ -197,14 +205,19 @@ cc_test {
         "shim/metrics_api.cc",
         "shim/shim.cc",
         "shim/stack.cc",
+        "shim/utils.cc",
         "test/common_stack_test.cc",
         "test/main_shim_dumpsys_test.cc",
         "test/main_shim_test.cc",
     ],
     static_libs: [
         "libbluetooth-dumpsys",
+        "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtdevice",
         "libchrome",
         "libevent",
@@ -232,4 +245,5 @@ cc_test {
         "BluetoothGeneratedPackets_h",
     ],
     min_sdk_version: "Tiramisu",
+    header_libs: ["libbluetooth_headers"],
 }

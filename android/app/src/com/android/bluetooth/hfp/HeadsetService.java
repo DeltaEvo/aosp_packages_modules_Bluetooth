@@ -24,7 +24,6 @@ import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
@@ -54,12 +53,14 @@ import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
+import com.android.bluetooth.btservice.ActiveDeviceManager;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.hfpclient.HeadsetClientService;
+import com.android.bluetooth.hfpclient.HeadsetClientStateMachine;
 import com.android.bluetooth.le_audio.LeAudioService;
 import com.android.bluetooth.telephony.BluetoothInCallService;
 import com.android.internal.annotations.VisibleForTesting;
@@ -125,6 +126,7 @@ public class HeadsetService extends ProfileService {
     private int mMaxHeadsetConnections = 1;
     private BluetoothDevice mActiveDevice;
     private AdapterService mAdapterService;
+    private ActiveDeviceManager mActiveDeviceManager;
     private DatabaseManager mDatabaseManager;
     private HandlerThread mStateMachinesThread;
     private Handler mStateMachinesThreadHandler;
@@ -183,6 +185,7 @@ public class HeadsetService extends ProfileService {
                 "AdapterService cannot be null when HeadsetService starts");
         mDatabaseManager = Objects.requireNonNull(mAdapterService.getDatabase(),
                 "DatabaseManager cannot be null when HeadsetService starts");
+        mActiveDeviceManager = Objects.requireNonNull(mAdapterService.getActiveDeviceManager());
         // Step 2: Start handler thread for state machines
         mStateMachinesThread = new HandlerThread("HeadsetService.StateMachines");
         mStateMachinesThread.start();
@@ -210,11 +213,6 @@ public class HeadsetService extends ProfileService {
         registerReceiver(mHeadsetReceiver, filter);
         // Step 7: Mark service as started
         mStarted = true;
-        BluetoothDevice activeDevice = getActiveDevice();
-        String deviceAddress = activeDevice != null ?
-                activeDevice.getAddress() :
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS;
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(), deviceAddress);
         return true;
     }
 
@@ -228,11 +226,6 @@ public class HeadsetService extends ProfileService {
             return true;
         }
         // Step 7: Mark service as stopped
-        BluetoothDevice activeDevice = getActiveDevice();
-        String deviceAddress = activeDevice != null ?
-                activeDevice.getAddress() :
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS;
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(), deviceAddress);
         mStarted = false;
         // Step 6: Tear down broadcast receivers
         unregisterReceiver(mHeadsetReceiver);
@@ -1346,12 +1339,12 @@ public class HeadsetService extends ProfileService {
      * Remove the active device
      */
     private void removeActiveDevice() {
+        BluetoothDevice fallbackDevice = mActiveDeviceManager.getHfpFallbackDevice();
         synchronized (mStateMachines) {
             // As per b/202602952, if we remove the active device due to a disconnection,
             // we need to check if another device is connected and set it active instead.
             // Calling this before any other active related calls has the same effect as
             // a classic active device switch.
-            BluetoothDevice fallbackDevice = getFallbackDevice();
             if (fallbackDevice != null && mActiveDevice != null
                     && getConnectionState(mActiveDevice) != BluetoothProfile.STATE_CONNECTED) {
                 setActiveDevice(fallbackDevice);
@@ -2005,9 +1998,14 @@ public class HeadsetService extends ProfileService {
                 setActiveDevice(null);
             }
         }
+        mActiveDeviceManager.profileConnectionStateChanged(
+                BluetoothProfile.HEADSET, device, fromState, toState);
         mAdapterService
-                .getActiveDeviceManager()
+                .getSilenceDeviceManager()
                 .hfpConnectionStateChanged(device, fromState, toState);
+        mAdapterService
+                .getRemoteDevices()
+                .handleHeadsetConnectionStateChanged(device, fromState, toState);
     }
 
     /**
@@ -2133,10 +2131,18 @@ public class HeadsetService extends ProfileService {
 
     private void broadcastActiveDevice(BluetoothDevice device) {
         logD("broadcastActiveDevice: " + device);
-        mAdapterService.getActiveDeviceManager().hfpActiveStateChanged(device);
-        BluetoothStatsLog.write(BluetoothStatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED,
-                BluetoothProfile.HEADSET, mAdapterService.obfuscateAddress(device),
+
+        mAdapterService
+                .getActiveDeviceManager()
+                .profileActiveDeviceChanged(BluetoothProfile.HEADSET, device);
+        mAdapterService.getSilenceDeviceManager().hfpActiveDeviceChanged(device);
+
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED,
+                BluetoothProfile.HEADSET,
+                mAdapterService.obfuscateAddress(device),
                 mAdapterService.getMetricId(device));
+
         Intent intent = new Intent(BluetoothHeadset.ACTION_ACTIVE_DEVICE_CHANGED);
         intent.putExtra(BluetoothDevice.EXTRA_DEVICE, device);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT
@@ -2253,38 +2259,6 @@ public class HeadsetService extends ProfileService {
         final Looper myLooper = Looper.myLooper();
         return myLooper != null && (mStateMachinesThread != null) && (myLooper.getThread().getId()
                 == mStateMachinesThread.getId());
-    }
-
-    /**
-     * Retrieves the most recently connected device in the A2DP connected devices list.
-     */
-    public BluetoothDevice getFallbackDevice() {
-        DatabaseManager dbManager = mAdapterService.getDatabase();
-        return dbManager != null ? dbManager
-            .getMostRecentlyConnectedDevicesInList(getFallbackCandidates(dbManager))
-            : null;
-    }
-
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    List<BluetoothDevice> getFallbackCandidates(DatabaseManager dbManager) {
-        List<BluetoothDevice> fallbackCandidates = getConnectedDevices();
-        List<BluetoothDevice> uninterestedCandidates = new ArrayList<>();
-        for (BluetoothDevice device : fallbackCandidates) {
-            byte[] deviceType = dbManager.getCustomMeta(device,
-                    BluetoothDevice.METADATA_DEVICE_TYPE);
-            BluetoothClass deviceClass = device.getBluetoothClass();
-            if ((deviceClass != null
-                    && deviceClass.getMajorDeviceClass()
-                    == BluetoothClass.Device.WEARABLE_WRIST_WATCH)
-                    || (deviceType != null
-                    && BluetoothDevice.DEVICE_TYPE_WATCH.equals(new String(deviceType)))) {
-                uninterestedCandidates.add(device);
-            }
-        }
-        for (BluetoothDevice device : uninterestedCandidates) {
-            fallbackCandidates.remove(device);
-        }
-        return fallbackCandidates;
     }
 
     @Override

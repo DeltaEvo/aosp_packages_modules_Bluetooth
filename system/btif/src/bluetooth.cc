@@ -65,7 +65,6 @@
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
-#include "btif_activity_attribution.h"
 #include "btif_api.h"
 #include "btif_av.h"
 #include "btif_bqr.h"
@@ -904,10 +903,6 @@ static const void* get_profile_interface(const char* profile_id) {
   if (is_profile(profile_id, BT_KEYSTORE_ID))
     return bluetooth::bluetooth_keystore::getBluetoothKeystoreInterface();
 
-  if (is_profile(profile_id, BT_ACTIVITY_ATTRIBUTION_ID)) {
-    return bluetooth::activity_attribution::get_activity_attribution_instance();
-  }
-
 #ifndef TARGET_FLOSS
   if (is_profile(profile_id, BT_PROFILE_LE_AUDIO_ID))
     return btif_le_audio_get_interface();
@@ -999,7 +994,6 @@ static int release_wake_lock_cb(const char* lock_name) {
 
 static bt_os_callouts_t wakelock_os_callouts_jni = {
     sizeof(wakelock_os_callouts_jni),
-    nullptr /* not used */,
     acquire_wake_lock_cb,
     release_wake_lock_cb,
 };

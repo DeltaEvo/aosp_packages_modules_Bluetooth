@@ -247,6 +247,25 @@ static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
 
 /*******************************************************************************
  *
+ * Function         access_secure_service_from_temp_bond
+ *
+ * Description      a utility function to test whether an access to
+ *                  secure service from temp bonding is happening
+ *
+ * Returns          true if the aforementioned condition holds,
+ *                  false otherwise
+ *
+ ******************************************************************************/
+static bool access_secure_service_from_temp_bond(const tBTM_SEC_DEV_REC* p_dev_rec,
+                                                 bool locally_initiated,
+                                                 uint16_t security_req) {
+  return !locally_initiated && (security_req & BTM_SEC_IN_AUTHENTICATE) &&
+    p_dev_rec->is_device_authenticated() &&
+    p_dev_rec->is_bond_type_temporary();
+}
+
+/*******************************************************************************
+ *
  * Function         BTM_SecRegister
  *
  * Description      Application manager calls this function to register for
@@ -1667,9 +1686,14 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(
       }
 
       if (rc == BTM_SUCCESS) {
+        if (access_secure_service_from_temp_bond(p_dev_rec, is_originator, security_required)) {
+          LOG_ERROR("Trying to access a secure service from a temp bonding, rejecting");
+          rc = BTM_FAILED_ON_SECURITY;
+        }
+
         if (p_callback)
-          (*p_callback)(&bd_addr, transport, (void*)p_ref_data, BTM_SUCCESS);
-        return (BTM_SUCCESS);
+          (*p_callback)(&bd_addr, transport, (void*)p_ref_data, rc);
+        return rc;
       }
     }
 
@@ -1927,6 +1951,11 @@ tBTM_STATUS btm_sec_mx_access_request(const RawAddress& bd_addr,
                                security_required, p_callback, p_ref_data);
     } else /* rc == BTM_SUCCESS */
     {
+      if (access_secure_service_from_temp_bond(p_dev_rec,
+          is_originator, security_required)) {
+        LOG_ERROR("Trying to access a secure rfcomm service from a temp bonding, rejecting");
+        rc = BTM_FAILED_ON_SECURITY;
+      }
       if (p_callback) {
         LOG_DEBUG("Notifying client that security access has been granted");
         (*p_callback)(&bd_addr, transport, p_ref_data, rc);
@@ -2193,18 +2222,16 @@ void btm_sec_check_pending_reqs(void) {
  *
  ******************************************************************************/
 void btm_sec_dev_reset(void) {
-  if (controller_get_interface()->supports_simple_pairing()) {
-    /* set the default IO capabilities */
-    btm_cb.devcb.loc_io_caps = btif_storage_get_local_io_caps();
-    /* add mx service to use no security */
-    BTM_SetSecurityLevel(false, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX,
-                         BTM_SEC_NONE, BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
-    BTM_SetSecurityLevel(true, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX, BTM_SEC_NONE,
-                         BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
-  } else {
-    btm_cb.security_mode = BTM_SEC_MODE_SERVICE;
-  }
+  ASSERT_LOG(controller_get_interface()->supports_simple_pairing(),
+             "only controllers with SSP is supported");
 
+  /* set the default IO capabilities */
+  btm_cb.devcb.loc_io_caps = btif_storage_get_local_io_caps();
+  /* add mx service to use no security */
+  BTM_SetSecurityLevel(false, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX,
+                       BTM_SEC_NONE, BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
+  BTM_SetSecurityLevel(true, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX, BTM_SEC_NONE,
+                       BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
   BTM_TRACE_DEBUG("btm_sec_dev_reset sec mode: %d", btm_cb.security_mode);
 }
 
@@ -4546,6 +4573,13 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
     BTM_TRACE_EVENT(
         "%s: Security Manager: SC only service, but link key type is 0x%02x -",
         "security failure", __func__, p_dev_rec->link_key_type);
+    return (BTM_FAILED_ON_SECURITY);
+  }
+
+  if (access_secure_service_from_temp_bond(p_dev_rec,
+                                           p_dev_rec->IsLocallyInitiated(),
+                                           p_dev_rec->security_required)) {
+    LOG_ERROR("Trying to access a secure service from a temp bonding, rejecting");
     return (BTM_FAILED_ON_SECURITY);
   }
 
