@@ -1,4 +1,4 @@
-set(BT_ROOT ${AOSP_ROOT}/packages/modules/Bluetooth/system)
+set(BT_ROOT ${AOSP_ROOT}/packages/modules/Bluetooth)
 set(ROOTCANAL_ROOT ${AOSP_ROOT}/packages/modules/Bluetooth/tools/rootcanal)
 set(PDL_ROOT ${AOSP_ROOT}/external/rust/crates/pdl-compiler)
 
@@ -51,7 +51,7 @@ function(pdl_gen)
   get_filename_component(pdl_INPUT_ABSOLUTE ${pdl_INPUT} ABSOLUTE)
   get_filename_component(pdl_OUTPUT_ABSOLUTE ${pdl_OUTPUT} ABSOLUTE)
   get_filename_component(pdl_OUTPUT_DIR ${pdl_OUTPUT_ABSOLUTE} DIRECTORY)
-  set(${pdl_NAME} "${pdl_OUTPUT_ABSOLUTE}" PARENT_SCOPE)
+  set(${pdl_NAME} "${pdl_OUTPUT_ABSOLUTE}" CACHE STRING "PDL output filepath for ${pdl_NAME}" FORCE)
 
   file(MAKE_DIRECTORY ${pdl_OUTPUT_DIR})
 
@@ -105,11 +105,13 @@ function(pdl_gen)
         VERBATIM
         DEPENDS pdlc ${pdl_OUTPUT_ABSOLUTE}.json)
   endif()
+
+  add_custom_target("pdl_gen-${pdl_NAME}" DEPENDS ${pdl_OUTPUT_ABSOLUTE})
 endfunction()
 
 pdl_gen(
   NAME BluetoothGeneratedPackets_h
-  INPUT ${ROOTCANAL_ROOT}/packets/hci/hci_packets.pdl
+  INPUT ${ROOTCANAL_ROOT}/packets/hci_packets.pdl
   OUTPUT packets/hci_packets.h
   LANG c++
   NAMESPACE "bluetooth::hci"
@@ -123,6 +125,12 @@ pdl_gen(
   NAMESPACE model::packets
   INCLUDE "hci/address.h"
   USING "bluetooth::hci")
+
+pdl_gen(
+  NAME RootCanalGeneratedPackets_rs
+  INPUT ${ROOTCANAL_ROOT}/packets/link_layer_packets.pdl
+  OUTPUT link_layer_packets.rs
+  LANG rust)
 
 android_add_library(
   TARGET libscriptedbeaconpayload-protos-lite LICENSE Apache-2.0
@@ -166,7 +174,7 @@ target_include_directories(libbt-rootcanal.headers INTERFACE ${ROOTCANAL_ROOT})
 target_link_libraries(libbt-rootcanal.headers
                       INTERFACE android-emu-base-headers)
 android_license(TARGET "libbt-rootcanal.headers" LIBNAME None SPDX Apache-2.0
-                LICENSE Apache-2.0 LOCAL "${BT_ROOT}/../NOTICE")
+                LICENSE Apache-2.0 LOCAL "${BT_ROOT}/NOTICE")
 
 android_add_library(
   TARGET librootcanal_log

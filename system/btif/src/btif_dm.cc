@@ -602,11 +602,6 @@ static void bond_state_changed(bt_status_t status, const RawAddress& bd_addr,
   GetInterfaceToProfiles()->events->invoke_bond_state_changed_cb(
       status, bd_addr, state, pairing_cb.fail_reason);
 
-  int dev_type;
-  if (!btif_get_device_type(bd_addr, &dev_type)) {
-    dev_type = BT_DEVICE_TYPE_BREDR;
-  }
-
   if ((state == BT_BOND_STATE_NONE) && (pairing_cb.bd_addr != bd_addr)
       && is_bonding_or_sdp()) {
     LOG_WARN("Ignoring bond state changed for unexpected device: %s pairing: %s",
@@ -878,18 +873,27 @@ static void btif_dm_cb_create_bond_le(const RawAddress bd_addr,
  *                  encrypted
  *
  ******************************************************************************/
-uint16_t btif_dm_get_connection_state(const RawAddress* bd_addr) {
-  uint16_t rc = BTA_DmGetConnectionState(*bd_addr);
-
-  if (rc != 0) {
-    if (BTM_IsEncrypted(*bd_addr, BT_TRANSPORT_BR_EDR)) {
+uint16_t btif_dm_get_connection_state(const RawAddress& bd_addr) {
+  uint16_t rc = 0;
+  if (BTA_DmGetConnectionState(bd_addr)) {
+    rc = (uint16_t) true;
+    if (BTM_IsEncrypted(bd_addr, BT_TRANSPORT_BR_EDR)) {
       rc |= ENCRYPTED_BREDR;
     }
-    if (BTM_IsEncrypted(*bd_addr, BT_TRANSPORT_LE)) {
+    if (BTM_IsEncrypted(bd_addr, BT_TRANSPORT_LE)) {
       rc |= ENCRYPTED_LE;
     }
+  } else {
+    LOG_INFO("Acl is not connected to peer:%s",
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
   }
 
+  BTM_LogHistory(
+      kBtmLogTag, bd_addr, "Get connection state",
+      base::StringPrintf("connected:%c classic_encrypted:%c le_encrypted:%c",
+                         (rc & (int)true) ? 'T' : 'F',
+                         (rc & ENCRYPTED_BREDR) ? 'T' : 'F',
+                         (rc & ENCRYPTED_LE) ? 'T' : 'F'));
   return rc;
 }
 

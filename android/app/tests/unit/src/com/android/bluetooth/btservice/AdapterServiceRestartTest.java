@@ -59,11 +59,13 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.bluetoothkeystore.BluetoothKeystoreNativeInterface;
+import com.android.bluetooth.sdp.SdpManagerNativeInterface;
 import com.android.internal.app.IBatteryStats;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -85,6 +87,10 @@ public class AdapterServiceRestartTest {
     private @Mock Binder mBinder;
     private @Mock android.app.Application mApplication;
     private @Mock MetricsLogger mMockMetricsLogger;
+    private @Mock AdapterNativeInterface mNativeInterface;
+    private @Mock BluetoothKeystoreNativeInterface mKeystoreNativeInterface;
+    private @Mock BluetoothQualityReportNativeInterface mQualityNativeInterface;
+    private @Mock SdpManagerNativeInterface mSdpNativeInterface;
 
     // Mocked SystemService
     private @Mock AlarmManager mMockAlarmManager;
@@ -110,11 +116,6 @@ public class AdapterServiceRestartTest {
     private int mForegroundUserId;
     private TestLooper mLooper;
 
-    @BeforeClass
-    public static void setupClass() {
-        AdapterServiceTest.setupClass();
-    }
-
     <T> void mockGetSystemService(String serviceName, Class<T> serviceClass, T mockService) {
         when(mMockContext.getSystemService(eq(serviceName))).thenReturn(mockService);
         when(mMockContext.getSystemServiceName(eq(serviceClass))).thenReturn(serviceName);
@@ -127,6 +128,10 @@ public class AdapterServiceRestartTest {
 
         mLooper = new TestLooper();
         Handler handler = new Handler(mLooper.getLooper());
+        AdapterNativeInterface.setInstance(mNativeInterface);
+        BluetoothKeystoreNativeInterface.setInstance(mKeystoreNativeInterface);
+        BluetoothQualityReportNativeInterface.setInstance(mQualityNativeInterface);
+        SdpManagerNativeInterface.setInstance(mSdpNativeInterface);
 
         // Post the creation of AdapterService since it rely on Looper.myLooper()
         handler.post(() -> mAdapterService = new AdapterService(mLooper.getLooper()));
@@ -137,7 +142,9 @@ public class AdapterServiceRestartTest {
         when(mMockPackageManager.getPermissionInfo(any(), anyInt()))
                 .thenReturn(new PermissionInfo());
 
-        mMockContentResolver = new MockContentResolver(InstrumentationRegistry.getTargetContext());
+        Context targetContext = InstrumentationRegistry.getTargetContext();
+
+        mMockContentResolver = new MockContentResolver(targetContext);
         mMockContentResolver.addProvider(Settings.AUTHORITY, new MockContentProvider() {
             @Override
             public Bundle call(String method, String request, Bundle args) {
@@ -145,23 +152,18 @@ public class AdapterServiceRestartTest {
             }
         });
 
-        mPowerManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PowerManager.class);
-        mPermissionCheckerManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PermissionCheckerManager.class);
+        mPowerManager = targetContext.getSystemService(PowerManager.class);
+        mPermissionCheckerManager = targetContext.getSystemService(PermissionCheckerManager.class);
 
-        mPermissionManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PermissionManager.class);
+        mPermissionManager = targetContext.getSystemService(PermissionManager.class);
 
-        mBluetoothManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(BluetoothManager.class);
+        mBluetoothManager = targetContext.getSystemService(BluetoothManager.class);
 
-        mCompanionDeviceManager =
-                InstrumentationRegistry.getTargetContext()
-                        .getSystemService(CompanionDeviceManager.class);
+        mCompanionDeviceManager = targetContext.getSystemService(CompanionDeviceManager.class);
 
-        when(mMockContext.getCacheDir()).thenReturn(InstrumentationRegistry.getTargetContext()
-                .getCacheDir());
+        when(mMockContext.getCacheDir()).thenReturn(targetContext.getCacheDir());
+        when(mMockContext.getUser()).thenReturn(targetContext.getUser());
+        when(mMockContext.getPackageName()).thenReturn(targetContext.getPackageName());
         when(mMockContext.getApplicationInfo()).thenReturn(mMockApplicationInfo);
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
         when(mMockContext.getApplicationContext()).thenReturn(mMockContext);
@@ -194,13 +196,17 @@ public class AdapterServiceRestartTest {
         mockGetSystemService(Context.POWER_SERVICE, PowerManager.class, mPowerManager);
 
         when(mMockContext.getSharedPreferences(anyString(), anyInt()))
-                .thenReturn(InstrumentationRegistry.getTargetContext()
-                        .getSharedPreferences("AdapterServiceTestPrefs", Context.MODE_PRIVATE));
+                .thenReturn(
+                        targetContext.getSharedPreferences(
+                                "AdapterServiceTestPrefs", Context.MODE_PRIVATE));
 
-        doAnswer(invocation -> {
-            Object[] args = invocation.getArguments();
-            return InstrumentationRegistry.getTargetContext().getDatabasePath((String) args[0]);
-        }).when(mMockContext).getDatabasePath(anyString());
+        doAnswer(
+                invocation -> {
+                    Object[] args = invocation.getArguments();
+                    return targetContext.getDatabasePath((String) args[0]);
+                })
+                .when(mMockContext)
+                .getDatabasePath(anyString());
 
         // Sets the foreground user id to match that of the tests (restored in tearDown)
         mForegroundUserId = Utils.getForegroundUserId();
@@ -229,7 +235,7 @@ public class AdapterServiceRestartTest {
 
         mLooper.dispatchAll();
 
-        mAdapterService.registerCallback(mIBluetoothCallback);
+        mAdapterService.registerRemoteCallback(mIBluetoothCallback);
 
         mAdapterConfig = TestUtils.readAdapterConfig();
         assertThat(mAdapterConfig).isNotNull();
@@ -242,17 +248,22 @@ public class AdapterServiceRestartTest {
         // Restores the foregroundUserId to the ID prior to the test setup
         Utils.setForegroundUserId(mForegroundUserId);
 
-        mAdapterService.unregisterCallback(mIBluetoothCallback);
         mAdapterService.cleanup();
+        mAdapterService.unregisterRemoteCallback(mIBluetoothCallback);
+        AdapterNativeInterface.setInstance(null);
+        BluetoothKeystoreNativeInterface.setInstance(null);
+        BluetoothQualityReportNativeInterface.setInstance(null);
+        SdpManagerNativeInterface.setInstance(null);
     }
 
     /**
-     * Test: Check if obfuscated Bluetooth address stays the same after re-initializing
-     *       {@link AdapterService}
+     * Test: Check if obfuscated Bluetooth address stays the same after re-initializing {@link
+     * AdapterService}
      */
     @Test
-    public void testObfuscateBluetoothAddress_PersistentBetweenAdapterServiceInitialization() throws
-            PackageManager.NameNotFoundException {
+    @Ignore("b/296127545: This is a native test")
+    public void testObfuscateBluetoothAddress_PersistentBetweenAdapterServiceInitialization()
+            throws PackageManager.NameNotFoundException {
         // Sleep needed to ensure the metrics are valid in both native and java (b/267528843)
         try {
             Thread.sleep(1_000);
@@ -282,13 +293,11 @@ public class AdapterServiceRestartTest {
         assertThat(obfuscatedAddress2).isEqualTo(obfuscatedAddress1);
     }
 
-    /**
-     * Test: Check if id gotten stays the same after re-initializing
-     *       {@link AdapterService}
-     */
+    /** Test: Check if id gotten stays the same after re-initializing {@link AdapterService} */
     @Test
-    public void testgetMetricId_PersistentBetweenAdapterServiceInitialization() throws
-            PackageManager.NameNotFoundException {
+    @Ignore("b/296127545: This is a native test")
+    public void testgetMetricId_PersistentBetweenAdapterServiceInitialization()
+            throws PackageManager.NameNotFoundException {
         assertThat(mAdapterService.getState()).isEqualTo(STATE_OFF);
         BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
         int initialMetricId = mAdapterService.getMetricId(device);

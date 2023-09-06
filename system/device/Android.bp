@@ -10,7 +10,7 @@ package {
 
 cc_library_static {
     name: "libbtdevice",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     host_supported: true,
     local_include_dirs: [
         "include",
@@ -27,6 +27,9 @@ cc_library_static {
         "src/device_iot_config_int.cc",
         "src/esco_parameters.cc",
         "src/interop.cc",
+    ],
+    apex_available: [
+        "com.android.btservices",
     ],
     min_sdk_version: "Tiramisu",
 }
@@ -50,11 +53,11 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
         "libbtcore",
         "libbtdevice",
         "libchrome",
         "libosi",
-        "libosi-AllocationTestHarness",
     ],
 }
 
@@ -88,6 +91,5 @@ cc_test {
         "libbtdevice",
         "libchrome",
         "libgmock",
-        "libosi-AllocationTestHarness",
     ],
 }

@@ -441,7 +441,7 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     // Not exposed over D-Bus. The stack is automatically initialized when the daemon starts.
-    fn init(&mut self, init_flags: Vec<String>) -> bool {
+    fn init(&mut self, _init_flags: Vec<String>) -> bool {
         dbus_generated!()
     }
 
@@ -541,12 +541,12 @@ impl IBluetooth for IBluetoothDBus {
     }
 
     #[dbus_method("CancelBondProcess")]
-    fn cancel_bond_process(&self, device: BluetoothDevice) -> bool {
+    fn cancel_bond_process(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 
     #[dbus_method("RemoveBond")]
-    fn remove_bond(&self, device: BluetoothDevice) -> bool {
+    fn remove_bond(&mut self, device: BluetoothDevice) -> bool {
         dbus_generated!()
     }
 

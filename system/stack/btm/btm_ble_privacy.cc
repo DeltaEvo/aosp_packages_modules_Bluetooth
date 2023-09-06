@@ -31,11 +31,12 @@
 #include "stack/btm/btm_dev.h"
 #include "stack/include/bt_octets.h"
 #include "types/raw_address.h"
-#include "vendor_hcidefs.h"
 
 extern tBTM_CB btm_cb;
 
 /* RPA offload VSC specifics */
+#define HCI_VENDOR_BLE_RPA_VSC (0x0155 | HCI_GRP_VENDOR_SPECIFIC)
+
 #define BTM_BLE_META_IRK_ENABLE 0x01
 #define BTM_BLE_META_ADD_IRK_ENTRY 0x02
 #define BTM_BLE_META_REMOVE_IRK_ENTRY 0x03
@@ -566,8 +567,8 @@ void btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC& dev_rec) {
 
   if (dev_rec.ble.identity_address_with_type.bda.IsEmpty()) {
     dev_rec.ble.identity_address_with_type = {
-        .bda = dev_rec.bd_addr,
         .type = dev_rec.ble.AddressType(),
+        .bda = dev_rec.bd_addr,
     };
   }
 

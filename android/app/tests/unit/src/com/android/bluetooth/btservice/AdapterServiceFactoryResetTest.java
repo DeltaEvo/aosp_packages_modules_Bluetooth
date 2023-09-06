@@ -36,6 +36,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PermissionInfo;
 import android.content.res.Resources;
+import android.hardware.display.DisplayManager;
 import android.media.AudioManager;
 import android.os.BatteryStatsManager;
 import android.os.Binder;
@@ -59,11 +60,16 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.bluetoothkeystore.BluetoothKeystoreNativeInterface;
+import com.android.bluetooth.gatt.AdvertiseManagerNativeInterface;
+import com.android.bluetooth.gatt.DistanceMeasurementNativeInterface;
+import com.android.bluetooth.gatt.GattNativeInterface;
+import com.android.bluetooth.gatt.PeriodicScanNativeInterface;
+import com.android.bluetooth.sdp.SdpManagerNativeInterface;
 import com.android.internal.app.IBatteryStats;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -90,17 +96,19 @@ public class AdapterServiceFactoryResetTest {
     private @Mock Binder mBinder;
     private @Mock android.app.Application mApplication;
     private @Mock MetricsLogger mMockMetricsLogger;
-
-    // Mocked SystemService
-    private @Mock AlarmManager mMockAlarmManager;
-    private @Mock AppOpsManager mMockAppOpsManager;
-    private @Mock AudioManager mMockAudioManager;
-    private @Mock DevicePolicyManager mMockDevicePolicyManager;
-    private @Mock UserManager mMockUserManager;
+    private @Mock AdapterNativeInterface mNativeInterface;
+    private @Mock BluetoothKeystoreNativeInterface mKeystoreNativeInterface;
+    private @Mock BluetoothQualityReportNativeInterface mQualityNativeInterface;
+    private @Mock SdpManagerNativeInterface mSdpNativeInterface;
+    private @Mock AdvertiseManagerNativeInterface mAdvertiseNativeInterface;
+    private @Mock DistanceMeasurementNativeInterface mDistanceNativeInterface;
+    private @Mock GattNativeInterface mGattNativeInterface;
+    private @Mock PeriodicScanNativeInterface mPeriodicNativeInterface;
 
     // SystemService that are not mocked
     private BluetoothManager mBluetoothManager;
     private CompanionDeviceManager mCompanionDeviceManager;
+    private DisplayManager mDisplayManager;
     private PowerManager mPowerManager;
     private PermissionCheckerManager mPermissionCheckerManager;
     private PermissionManager mPermissionManager;
@@ -121,14 +129,15 @@ public class AdapterServiceFactoryResetTest {
     private int mForegroundUserId;
     private TestLooper mLooper;
 
-    @BeforeClass
-    public static void setupClass() {
-        AdapterServiceTest.setupClass();
-    }
-
     <T> void mockGetSystemService(String serviceName, Class<T> serviceClass, T mockService) {
         when(mMockContext.getSystemService(eq(serviceName))).thenReturn(mockService);
         when(mMockContext.getSystemServiceName(eq(serviceClass))).thenReturn(serviceName);
+    }
+
+    <T> T mockGetSystemService(String serviceName, Class<T> serviceClass) {
+        T mockedService = mock(serviceClass);
+        mockGetSystemService(serviceName, serviceClass, mockedService);
+        return mockedService;
     }
 
     @Before
@@ -138,6 +147,14 @@ public class AdapterServiceFactoryResetTest {
 
         mLooper = new TestLooper();
         Handler handler = new Handler(mLooper.getLooper());
+        AdapterNativeInterface.setInstance(mNativeInterface);
+        BluetoothKeystoreNativeInterface.setInstance(mKeystoreNativeInterface);
+        BluetoothQualityReportNativeInterface.setInstance(mQualityNativeInterface);
+        SdpManagerNativeInterface.setInstance(mSdpNativeInterface);
+        AdvertiseManagerNativeInterface.setInstance(mAdvertiseNativeInterface);
+        DistanceMeasurementNativeInterface.setInstance(mDistanceNativeInterface);
+        GattNativeInterface.setInstance(mGattNativeInterface);
+        PeriodicScanNativeInterface.setInstance(mPeriodicNativeInterface);
 
         // Post the creation of AdapterService since it rely on Looper.myLooper()
         handler.post(() -> mAdapterService = new AdapterService(mLooper.getLooper()));
@@ -148,7 +165,9 @@ public class AdapterServiceFactoryResetTest {
         when(mMockPackageManager.getPermissionInfo(any(), anyInt()))
                 .thenReturn(new PermissionInfo());
 
-        mMockContentResolver = new MockContentResolver(InstrumentationRegistry.getTargetContext());
+        Context targetContext = InstrumentationRegistry.getTargetContext();
+
+        mMockContentResolver = new MockContentResolver(targetContext);
         mMockContentResolver.addProvider(Settings.AUTHORITY, new MockContentProvider() {
             @Override
             public Bundle call(String method, String request, Bundle args) {
@@ -156,23 +175,16 @@ public class AdapterServiceFactoryResetTest {
             }
         });
 
-        mPowerManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PowerManager.class);
-        mPermissionCheckerManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PermissionCheckerManager.class);
+        mBluetoothManager = targetContext.getSystemService(BluetoothManager.class);
+        mCompanionDeviceManager = targetContext.getSystemService(CompanionDeviceManager.class);
+        mDisplayManager = targetContext.getSystemService(DisplayManager.class);
+        mPermissionCheckerManager = targetContext.getSystemService(PermissionCheckerManager.class);
+        mPermissionManager = targetContext.getSystemService(PermissionManager.class);
+        mPowerManager = targetContext.getSystemService(PowerManager.class);
 
-        mPermissionManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(PermissionManager.class);
-
-        mBluetoothManager = InstrumentationRegistry.getTargetContext()
-                .getSystemService(BluetoothManager.class);
-
-        mCompanionDeviceManager =
-                InstrumentationRegistry.getTargetContext()
-                        .getSystemService(CompanionDeviceManager.class);
-
-        when(mMockContext.getCacheDir())
-                .thenReturn(InstrumentationRegistry.getTargetContext().getCacheDir());
+        when(mMockContext.getCacheDir()).thenReturn(targetContext.getCacheDir());
+        when(mMockContext.getUser()).thenReturn(targetContext.getUser());
+        when(mMockContext.getPackageName()).thenReturn(targetContext.getPackageName());
         when(mMockContext.getApplicationInfo()).thenReturn(mMockApplicationInfo);
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
         when(mMockContext.getApplicationContext()).thenReturn(mMockContext);
@@ -182,12 +194,13 @@ public class AdapterServiceFactoryResetTest {
         when(mMockContext.getUserId()).thenReturn(Process.BLUETOOTH_UID);
         when(mMockContext.getPackageManager()).thenReturn(mMockPackageManager);
 
-        mockGetSystemService(Context.ALARM_SERVICE, AlarmManager.class, mMockAlarmManager);
-        mockGetSystemService(Context.APP_OPS_SERVICE, AppOpsManager.class, mMockAppOpsManager);
-        mockGetSystemService(Context.AUDIO_SERVICE, AudioManager.class, mMockAudioManager);
-        mockGetSystemService(
-                Context.DEVICE_POLICY_SERVICE, DevicePolicyManager.class, mMockDevicePolicyManager);
-        mockGetSystemService(Context.USER_SERVICE, UserManager.class, mMockUserManager);
+        mockGetSystemService(Context.ALARM_SERVICE, AlarmManager.class);
+        mockGetSystemService(Context.APP_OPS_SERVICE, AppOpsManager.class);
+        mockGetSystemService(Context.AUDIO_SERVICE, AudioManager.class);
+        DevicePolicyManager dpm =
+                mockGetSystemService(Context.DEVICE_POLICY_SERVICE, DevicePolicyManager.class);
+        doReturn(false).when(dpm).isCommonCriteriaModeEnabled(any());
+        mockGetSystemService(Context.USER_SERVICE, UserManager.class);
 
         mockGetSystemService(
                 Context.BATTERY_STATS_SERVICE, BatteryStatsManager.class, mBatteryStatsManager);
@@ -196,6 +209,7 @@ public class AdapterServiceFactoryResetTest {
                 Context.COMPANION_DEVICE_SERVICE,
                 CompanionDeviceManager.class,
                 mCompanionDeviceManager);
+        mockGetSystemService(Context.DISPLAY_SERVICE, DisplayManager.class, mDisplayManager);
         mockGetSystemService(
                 Context.PERMISSION_CHECKER_SERVICE,
                 PermissionCheckerManager.class,
@@ -206,22 +220,22 @@ public class AdapterServiceFactoryResetTest {
 
         when(mMockContext.getSharedPreferences(anyString(), anyInt()))
                 .thenReturn(
-                        InstrumentationRegistry.getTargetContext()
-                                .getSharedPreferences(
-                                        "AdapterServiceTestPrefs", Context.MODE_PRIVATE));
+                        targetContext.getSharedPreferences(
+                                "AdapterServiceTestPrefs", Context.MODE_PRIVATE));
 
-        doAnswer(invocation -> {
-            Object[] args = invocation.getArguments();
-            return InstrumentationRegistry.getTargetContext().getDatabasePath((String) args[0]);
-        }).when(mMockContext).getDatabasePath(anyString());
+        doAnswer(
+                invocation -> {
+                    Object[] args = invocation.getArguments();
+                    return targetContext.getDatabasePath((String) args[0]);
+                })
+                .when(mMockContext)
+                .getDatabasePath(anyString());
 
         // Sets the foreground user id to match that of the tests (restored in tearDown)
         mForegroundUserId = Utils.getForegroundUserId();
         int callingUid = Binder.getCallingUid();
         UserHandle callingUser = UserHandle.getUserHandleForUid(callingUid);
         Utils.setForegroundUserId(callingUser.getIdentifier());
-
-        when(mMockDevicePolicyManager.isCommonCriteriaModeEnabled(any())).thenReturn(false);
 
         when(mIBluetoothCallback.asBinder()).thenReturn(mBinder);
 
@@ -261,6 +275,14 @@ public class AdapterServiceFactoryResetTest {
         Utils.setForegroundUserId(mForegroundUserId);
 
         mAdapterService.cleanup();
+        AdapterNativeInterface.setInstance(null);
+        BluetoothKeystoreNativeInterface.setInstance(null);
+        BluetoothQualityReportNativeInterface.setInstance(null);
+        SdpManagerNativeInterface.setInstance(null);
+        AdvertiseManagerNativeInterface.setInstance(null);
+        DistanceMeasurementNativeInterface.setInstance(null);
+        GattNativeInterface.setInstance(null);
+        PeriodicScanNativeInterface.setInstance(null);
     }
 
     void doEnable() {
@@ -270,7 +292,8 @@ public class AdapterServiceFactoryResetTest {
                 mAdapterService,
                 mMockContext,
                 false,
-                List.of(mMockService, mMockService2));
+                List.of(mMockService, mMockService2),
+                mNativeInterface);
     }
 
     /**
@@ -319,6 +342,7 @@ public class AdapterServiceFactoryResetTest {
      * native layer
      */
     @Test
+    @Ignore("b/296127545: BluetoothInstrumentationTests should not call native")
     public void testObfuscateBluetoothAddress_FactoryResetAndReloadNativeLayer()
             throws PackageManager.NameNotFoundException {
         byte[] metricsSalt1 = AdapterServiceTest.getMetricsSalt(mAdapterConfig);

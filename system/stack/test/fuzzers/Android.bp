@@ -29,7 +29,6 @@ cc_defaults {
         "libbt-bta-core",
         "libbt-common",
         "libbt-hci",
-        "libbt-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
@@ -43,6 +42,7 @@ cc_defaults {
         "liblc3",
         "libopus",
         "libosi",
+        "libstatslog_bt",
         "libudrv-uipc",
     ],
     shared_libs: [

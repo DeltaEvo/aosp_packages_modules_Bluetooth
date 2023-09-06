@@ -631,7 +631,11 @@ static void btif_a2dp_sink_decoder_update_event(
   btif_a2dp_sink_cb.rx_flush = false;
   APPL_TRACE_DEBUG("%s: reset to Sink role", __func__);
 
-  btif_a2dp_sink_cb.decoder_interface = bta_av_co_get_decoder_interface();
+  bta_av_co_save_codec(p_buf->codec_info);
+
+  btif_a2dp_sink_cb.decoder_interface =
+      A2DP_GetDecoderInterface(p_buf->codec_info);
+
   if (btif_a2dp_sink_cb.decoder_interface == nullptr) {
     LOG_ERROR("%s: cannot stream audio: no source decoder interface", __func__);
     return;
@@ -746,6 +750,11 @@ void btif_a2dp_sink_set_audio_track_gain(float gain) {
 #ifdef __ANDROID__
   BtifAvrcpSetAudioTrackGain(btif_a2dp_sink_cb.audio_track, gain);
 #endif
+}
+
+void * btif_a2dp_sink_get_audio_track(void)
+{
+  return btif_a2dp_sink_cb.audio_track;
 }
 
 static void btif_a2dp_sink_clear_track_event_req() {
