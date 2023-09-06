@@ -30,9 +30,15 @@
 #define UNUSED_ATTR
 #endif
 
+namespace bluetooth {
+namespace testing {
+const controller_t* controller{nullptr};
+}
+}  // namespace bluetooth
+
 const controller_t* bluetooth::shim::controller_get_interface() {
   inc_func_call_count(__func__);
-  return nullptr;
+  return bluetooth::testing::controller;
 }
 
 void bluetooth::shim::controller_clear_event_mask() {
