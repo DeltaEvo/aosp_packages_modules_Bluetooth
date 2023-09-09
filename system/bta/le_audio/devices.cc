@@ -1413,6 +1413,18 @@ bool LeAudioDeviceGroup::IsAudioSetConfigurationSupported(
     }
   }
 
+  // when disabling 32k dual mic, for later join case, we need to
+  // make sure the device is always choosing the config that its
+  // sampling rate matches with the sampling rate which is used
+  // when all devices in the group are connected.
+  bool dual_bidirection_swb_supported_ = osi_property_get_bool(
+      "bluetooth.leaudio.dual_bidirection_swb.supported", true);
+  if (Size() > 1 && !dual_bidirection_swb_supported_ &&
+      AudioSetConfigurationProvider::Get()->CheckConfigurationIsBiDirSwb(
+          *audio_set_conf)) {
+    return false;
+  }
+
   LOG_DEBUG("Chosen ASE Configuration for group: %d, configuration: %s",
             this->group_id_, audio_set_conf->name.c_str());
   return true;
@@ -2063,6 +2075,20 @@ void LeAudioDeviceGroup::AddToAllowListNotConnectedGroupMembers(int gatt_if) {
 
     BTA_GATTC_CancelOpen(gatt_if, address, false);
     BTA_GATTC_Open(gatt_if, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
+    device_iter.lock()->SetConnectionState(
+        DeviceConnectState::CONNECTING_AUTOCONNECT);
+  }
+}
+
+void LeAudioDeviceGroup::ApplyReconnectionMode(
+    int gatt_if, tBTM_BLE_CONN_TYPE reconnection_mode) {
+  for (const auto& device_iter : leAudioDevices_) {
+    BTA_GATTC_CancelOpen(gatt_if, device_iter.lock()->address_, false);
+    BTA_GATTC_Open(gatt_if, device_iter.lock()->address_, reconnection_mode,
+                   false);
+    LOG_INFO("Group %d in state %s. Adding %s to default reconnection mode ",
+             group_id_, bluetooth::common::ToString(GetState()).c_str(),
+             ADDRESS_TO_LOGGABLE_CSTR(device_iter.lock()->address_));
     device_iter.lock()->SetConnectionState(
         DeviceConnectState::CONNECTING_AUTOCONNECT);
   }
