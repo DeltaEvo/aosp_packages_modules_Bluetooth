@@ -18,7 +18,6 @@ package com.android.bluetooth.hfp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
-
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
@@ -2006,6 +2005,12 @@ public class HeadsetService extends ProfileService {
         mAdapterService
                 .getRemoteDevices()
                 .handleHeadsetConnectionStateChanged(device, fromState, toState);
+        mAdapterService.notifyProfileConnectionStateChangeToGatt(
+                BluetoothProfile.HEADSET, fromState, toState);
+        mAdapterService.handleProfileConnectionStateChange(
+                BluetoothProfile.HEADSET, device, fromState, toState);
+        mAdapterService.updateProfileConnectionAdapterProperties(
+                device, BluetoothProfile.HEADSET, toState, fromState);
     }
 
     /**
@@ -2132,10 +2137,7 @@ public class HeadsetService extends ProfileService {
     private void broadcastActiveDevice(BluetoothDevice device) {
         logD("broadcastActiveDevice: " + device);
 
-        mAdapterService
-                .getActiveDeviceManager()
-                .profileActiveDeviceChanged(BluetoothProfile.HEADSET, device);
-        mAdapterService.getSilenceDeviceManager().hfpActiveDeviceChanged(device);
+        mAdapterService.handleActiveDeviceChange(BluetoothProfile.HEADSET, device);
 
         BluetoothStatsLog.write(
                 BluetoothStatsLog.BLUETOOTH_ACTIVE_DEVICE_CHANGED,
