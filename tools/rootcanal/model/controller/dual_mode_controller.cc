@@ -14,24 +14,45 @@
  * limitations under the License.
  */
 
-#include "dual_mode_controller.h"
+#include "model/controller/dual_mode_controller.h"
+
+#include <packet_runtime.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "crypto/crypto.h"
+#include "hci/address_with_type.h"
 #include "log.h"
+#include "model/controller/acl_connection_handler.h"
+#include "model/controller/controller_properties.h"
+#include "model/controller/sco_connection.h"
+#include "model/controller/vendor_commands/csr.h"
+#include "model/devices/device.h"
+#include "packets/hci_packets.h"
+#include "packets/link_layer_packets.h"
+#include "phy.h"
 
 using bluetooth::hci::ErrorCode;
 using bluetooth::hci::LoopbackMode;
 using bluetooth::hci::OpCode;
-using std::vector;
 
 namespace rootcanal {
 constexpr uint16_t kNumCommandPackets = 0x01;
 constexpr uint16_t kLeMaximumDataLength = 64;
 constexpr uint16_t kLeMaximumDataTime = 0x148;
 constexpr uint8_t kTransmitPowerLevel = -20;
+
+void DualModeController::SetProperties(ControllerProperties properties) {
+  WARNING(id_, "updating the device properties!");
+  properties_ = std::move(properties);
+}
 
 // Device methods.
 std::string DualModeController::GetTypeString() const {

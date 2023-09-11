@@ -18,11 +18,8 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "hci/address.h"
 #include "packets/hci_packets.h"
 #include "rootcanal/configuration.pb.h"
 
@@ -66,6 +63,8 @@ struct ControllerProperties {
   ControllerProperties(ControllerProperties const&) = default;
   ControllerProperties(ControllerProperties&&) = default;
   ~ControllerProperties() = default;
+
+  ControllerProperties& operator=(ControllerProperties const&) = default;
 
   // Perform a bitwise and operation on the supported commands mask;
   // the default bit setting is either loaded from the configuration
