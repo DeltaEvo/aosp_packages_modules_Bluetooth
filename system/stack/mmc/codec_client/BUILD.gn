@@ -1,5 +1,5 @@
 #
-#  Copyright 2017 Google, Inc.
+#  Copyright 2023 The Android Open Source Project
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -14,35 +14,14 @@
 #  limitations under the License.
 #
 
-config("libldacBT_enc_config") {
-  include_dirs = [ "inc" ]
-}
-
-config("libldacBT_abr_config") {
-  include_dirs = [ "abr/inc", "inc" ]
-}
-
-shared_library("libldacBT_enc") {
+source_set("libcodec_client"){
+  configs += [ "//bt/system/stack/mmc:target_defaults" ]
   sources = [
-    "src/ldaclib.c",
-    "src/ldacBT.c",
+    "codec_client.cc",
   ]
 
-  public_configs = [ ":libldacBT_enc_config" ]
-
-  cflags = [ "-O2" ]
-
-  defines = [ "EXPORT_SYMBOL=" ]
-}
-
-shared_library("libldacBT_abr") {
-  sources = [
-    "abr/src/ldacBT_abr.c",
+  deps = [
+    "//bt/system/stack/mmc/proto:mmc_service_proto",
+    "//bt/system/stack/mmc/proto:mmc_config_proto",
   ]
-
-  public_configs = [ ":libldacBT_abr_config" ]
-
-  cflags = [ "-O2" ]
-
-  defines = [ "EXPORT_SYMBOL=" ]
 }
