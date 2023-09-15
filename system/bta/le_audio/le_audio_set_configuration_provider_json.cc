@@ -15,6 +15,8 @@
  *
  */
 
+#include <base/logging.h>
+
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -55,6 +57,17 @@ static const std::vector<
                              "le_audio/audio_set_scenarios.bfbs",
                              "/apex/com.android.btservices/etc/bluetooth/"
                              "le_audio/audio_set_scenarios.json"}};
+#elif defined(TARGET_FLOSS)
+static const std::vector<
+    std::pair<const char* /*schema*/, const char* /*content*/>>
+    kLeAudioSetConfigs = {
+        {"/etc/bluetooth/le_audio/audio_set_configurations.bfbs",
+         "/etc/bluetooth/le_audio/audio_set_configurations.json"}};
+static const std::vector<
+    std::pair<const char* /*schema*/, const char* /*content*/>>
+    kLeAudioSetScenarios = {
+        {"/etc/bluetooth/le_audio/audio_set_scenarios.bfbs",
+         "/etc/bluetooth/le_audio/audio_set_scenarios.json"}};
 #else
 static const std::vector<
     std::pair<const char* /*schema*/, const char* /*content*/>>
@@ -71,10 +84,8 @@ struct AudioSetConfigurationProviderJson {
   static constexpr auto kDefaultScenario = "Media";
 
   AudioSetConfigurationProviderJson(types::CodecLocation location) {
-    dual_swb_bidirection_supported_ = osi_property_get_bool(
-        "persist.bluetooth.leaudio_dual_bidirection_swb."
-        "supported",
-        true);
+    dual_bidirection_swb_supported_ = osi_property_get_bool(
+        "bluetooth.leaudio.dual_bidirection_swb.supported", true);
     ASSERT_LOG(LoadContent(kLeAudioSetConfigs, kLeAudioSetScenarios, location),
                ": Unable to load le audio set configuration files.");
   }
@@ -166,7 +177,7 @@ struct AudioSetConfigurationProviderJson {
 
   /* property to check if bidirectional sampling frequency >= 32k dual mic is
    * supported or not */
-  bool dual_swb_bidirection_supported_;
+  bool dual_bidirection_swb_supported_;
 
   static const bluetooth::le_audio::CodecSpecificConfiguration*
   LookupCodecSpecificParam(
@@ -435,7 +446,7 @@ struct AudioSetConfigurationProviderJson {
       }
     }
 
-    if (!dual_swb_bidirection_supported_) {
+    if (!dual_bidirection_swb_supported_) {
       if ((dual_dev_one_chan_stereo_sink_swb &&
            dual_dev_one_chan_stereo_source_swb) ||
           (single_dev_one_chan_stereo_sink_swb &&
@@ -525,9 +536,11 @@ struct AudioSetConfigurationProviderJson {
 
     LOG_DEBUG(": Updating %d config entries.", flat_configs->size());
     for (auto const& flat_cfg : *flat_configs) {
-      configurations_.insert({flat_cfg->name()->str(),
-                              AudioSetConfigurationFromFlat(
-                                  flat_cfg, &codec_cfgs, &qos_cfgs, location)});
+      auto configuration = AudioSetConfigurationFromFlat(flat_cfg, &codec_cfgs,
+                                                         &qos_cfgs, location);
+      if (!configuration.confs.empty()) {
+        configurations_.insert({flat_cfg->name()->str(), configuration});
+      }
     }
 
     return true;
@@ -738,6 +751,19 @@ AudioSetConfigurationProvider::GetConfigurations(
         content_type);
 
   return nullptr;
+}
+
+bool AudioSetConfigurationProvider::CheckConfigurationIsBiDirSwb(
+    const set_configurations::AudioSetConfiguration& set_configuration) const {
+  uint8_t dir = 0;
+
+  for (const auto& conf : set_configuration.confs) {
+    if (conf.codec.GetConfigSamplingFrequency() >=
+        le_audio::LeAudioCodecConfiguration::kSampleRate32000) {
+      dir |= conf.direction;
+    }
+  }
+  return dir == le_audio::types::kLeAudioDirectionBoth;
 }
 
 }  // namespace le_audio

@@ -122,7 +122,6 @@ cc_library_static {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     local_include_dirs: [
         "include",
@@ -161,6 +160,7 @@ cc_library_static {
     ],
     cflags: [
         "-DBUILDCFG",
+        "-Wno-unused-parameter",
     ],
     apex_available: [
         "com.android.btservices",
@@ -210,7 +210,6 @@ cc_library_static {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     target: {
         android: {
@@ -238,8 +237,9 @@ cc_library_static {
         "libcrypto",
     ],
     cflags: [
-        /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
         "-DBUILDCFG",
+        "-Wno-unused-parameter",
+        /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
         "-fvisibility=default",
     ],
     apex_available: [
@@ -348,7 +348,6 @@ cc_test {
     header_libs: ["libbluetooth_headers"],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -358,7 +357,10 @@ cc_test {
         "libchrome",
         "libosi",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     shared_libs: ["liblog"],
 }
 
@@ -383,7 +385,6 @@ cc_test {
     header_libs: ["libbluetooth_headers"],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -392,7 +393,10 @@ cc_test {
         "libchrome",
         "libosi",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     shared_libs: ["liblog"],
 }
 
@@ -438,7 +442,10 @@ cc_test {
             shared_libs: ["libstatssocket"],
         },
     },
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     sanitize: {
         address: true,
         cfi: true,
@@ -515,7 +522,10 @@ cc_test {
         "libcom.android.sysprop.bluetooth",
         "libosi",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
 }
 
 cc_test {
@@ -591,7 +601,6 @@ cc_test {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
@@ -630,7 +639,10 @@ cc_test {
         "libgmock",
         "libstatslog_bt",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     target: {
         android: {
             static_libs: [
@@ -728,7 +740,6 @@ cc_test {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
@@ -765,7 +776,10 @@ cc_test {
         "libgmock",
         "libstatslog_bt",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     target: {
         android: {
             static_libs: [

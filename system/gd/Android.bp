@@ -192,6 +192,7 @@ cc_library {
     ],
     min_sdk_version: "31",
     static_libs: ["libchrome"],
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_library {
@@ -205,6 +206,7 @@ cc_library {
     cflags: [
         "-DFUZZ_TARGET",
         "-DUSE_FAKE_TIMERS",
+        "-Wno-unused-parameter",
     ],
     static_libs: ["libchrome"],
 }
@@ -219,6 +221,7 @@ cc_library {
     ],
     cflags: [
         "-DUSE_FAKE_TIMERS",
+        "-Wno-unused-parameter",
     ],
     static_libs: [
         "libchrome",
@@ -252,7 +255,6 @@ cc_binary {
         "BlueberryFacadeGeneratedStub_h",
         "BluetoothGeneratedBundlerSchema_h_bfbs",
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
         // Needed here to guarantee that generated zip file is created before
         // bluetooth_cert_tests.zip is packaged
         "BlueberryFacadeAndCertGeneratedStub_py",
@@ -265,7 +267,10 @@ cc_binary {
         "libbluetooth-dumpsys",
         "libbluetooth-protos",
         "libbluetooth_gd",
+        "libbluetooth_hci_pdl",
+        "libbluetooth_l2cap_pdl",
         "libbluetooth_rust_interop",
+        "libbluetooth_smp_pdl",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
@@ -305,6 +310,7 @@ cc_binary {
         address: true,
         cfi: true,
     },
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_test {
@@ -380,7 +386,6 @@ cc_test {
         "BluetoothGeneratedDumpsysDataSchema_h",
         "BluetoothGeneratedDumpsysInternalTestData_h",
         "BluetoothGeneratedDumpsysTestData_h",
-        "BluetoothGeneratedPackets_h",
     ],
     static_libs: [
         "libbluetooth-dumpsys",
@@ -388,7 +393,10 @@ cc_test {
         "libbluetooth-dumpsys-unittest",
         "libbluetooth-protos",
         "libbluetooth_gd_unit_tests",
+        "libbluetooth_hci_pdl",
+        "libbluetooth_l2cap_pdl",
         "libbluetooth_rust_interop",
+        "libbluetooth_smp_pdl",
         "libbt-platform-protos-lite",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
@@ -405,6 +413,7 @@ cc_test {
         address: true,
     },
     min_sdk_version: "Tiramisu",
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_test {
@@ -423,7 +432,6 @@ cc_test {
     srcs: [
         ":BluetoothPacketParserTestPacketTestSources",
         ":BluetoothPacketSources",
-        "hci/address.cc",
     ],
     generated_headers: [
         "BluetoothPacketParserTestPacketPdlGen_h",
@@ -454,6 +462,7 @@ cc_test {
         },
     },
     min_sdk_version: "30",
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_defaults {
@@ -476,7 +485,6 @@ cc_defaults {
     host_supported: true,
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     shared_libs: [
         "libcrypto",
@@ -515,6 +523,7 @@ cc_fuzz {
         cc: ["android-bluetooth-security@google.com"],
         componentid: 27441,
     },
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_fuzz {
@@ -524,6 +533,7 @@ cc_fuzz {
         ":BluetoothHalFuzzSources",
         "hci/fuzz/hci_layer_fuzz_test.cc",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_fuzz {
@@ -536,6 +546,7 @@ cc_fuzz {
         cc: ["android-bluetooth-security@google.com"],
         componentid: 27441,
     },
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_benchmark {
@@ -552,14 +563,6 @@ cc_benchmark {
         "libbluetooth_gd",
         "libbt_shim_bridge",
         "libchrome",
-    ],
-}
-
-filegroup {
-    name: "BluetoothHciClassSources",
-    srcs: [
-        "hci/address.cc",
-        "hci/class_of_device.cc",
     ],
 }
 
@@ -745,20 +748,18 @@ cc_library_host_shared {
     srcs: [
         ":BluetoothPacketSources",
         "common/strings.cc",
-        "hci/address.cc",
-        "hci/class_of_device.cc",
         "l2cap/fcs.cc",
         "packet/python3_module.cc",
 
-    ],
-    generated_headers: [
-        "BluetoothGeneratedPackets_h",
     ],
     generated_sources: [
         "BluetoothGeneratedPackets_python3_cc",
     ],
     header_libs: [
         "pybind11_headers",
+    ],
+    static_libs: [
+        "libbluetooth_l2cap_pdl",
     ],
     cflags: [
         "-fexceptions",
