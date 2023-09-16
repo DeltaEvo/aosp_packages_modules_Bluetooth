@@ -259,6 +259,11 @@ public class A2dpService extends ProfileService {
                 // Do not rethrow as we are shutting down anyway
             }
         }
+        if (mHandler != null) {
+            mHandler.removeCallbacksAndMessages(null);
+            mHandler = null;
+        }
+
         // Step 2: Reset maximum number of connected audio devices
         mMaxConnectedAudioDevices = 1;
 
@@ -1374,6 +1379,16 @@ public class A2dpService extends ProfileService {
                 .a2dpConnectionStateChanged(device, fromState, toState);
         mAdapterService.updateProfileConnectionAdapterProperties(
                 device, BluetoothProfile.A2DP, toState, fromState);
+    }
+
+    /**
+     * Retrieves the most recently connected device in the A2DP connected devices list.
+     */
+    public BluetoothDevice getFallbackDevice() {
+        DatabaseManager dbManager = mAdapterService.getDatabase();
+        return dbManager != null ? dbManager
+            .getMostRecentlyConnectedDevicesInList(getConnectedDevices())
+            : null;
     }
 
     /**

@@ -1,5 +1,5 @@
 #
-#  Copyright 2015 Google, Inc.
+#  Copyright 2023 The Android Open Source Project
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -14,10 +14,15 @@
 #  limitations under the License.
 #
 
-static_library("tinyxml2") {
+source_set("libcodec_client"){
+  configs += [ "//bt/system/stack/mmc:target_defaults" ]
   sources = [
-    "tinyxml2.cpp"
+    "codec_client.cc",
   ]
 
-  include_dirs = [ "." ]
+  deps = [
+    "//bt/system/stack/mmc/proto:mmc_service_proto",
+    "//bt/system/stack/mmc/proto:mmc_config_proto",
+    "//bt/system/stack/mmc/metrics:libmmc_metrics",
+  ]
 }
