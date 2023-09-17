@@ -68,7 +68,6 @@ import android.bluetooth.IBluetooth;
 import android.bluetooth.IBluetoothActivityEnergyInfoListener;
 import android.bluetooth.IBluetoothCallback;
 import android.bluetooth.IBluetoothConnectionCallback;
-import android.bluetooth.IBluetoothGatt;
 import android.bluetooth.IBluetoothMetadataListener;
 import android.bluetooth.IBluetoothOobDataCallback;
 import android.bluetooth.IBluetoothPreferredAudioProfilesCallback;
@@ -231,6 +230,14 @@ public class AdapterService extends Service {
     static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
+
+    /**
+     * Connection state bitmask as returned by getConnectionState.
+     */
+    public static final int CONNECTION_STATE_DISCONNECTED = 0;
+    public static final int CONNECTION_STATE_CONNECTED = 1;
+    public static final int CONNECTION_STATE_ENCRYPTED_BREDR = 2;
+    public static final int CONNECTION_STATE_ENCRYPTED_LE = 4;
 
     // Report ID definition
     public enum BqrQualityReportId {
@@ -2915,7 +2922,7 @@ public class AdapterService extends Service {
             if (service == null
                     || !Utils.checkConnectPermissionForDataDelivery(
                             service, attributionSource, "AdapterService getConnectionState")) {
-                return BluetoothProfile.STATE_DISCONNECTED;
+                return CONNECTION_STATE_DISCONNECTED;
             }
 
             return service.getConnectionState(device);
@@ -5194,7 +5201,15 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public IBluetoothGatt getBluetoothGatt() {
+        public void getBluetoothGatt(SynchronousResultReceiver receiver) {
+            try {
+                receiver.send(getBluetoothGatt());
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        private IBinder getBluetoothGatt() {
             AdapterService service = getService();
             if (service == null) {
                 return null;
@@ -6856,11 +6871,11 @@ public class AdapterService extends Service {
         return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
     }
 
-    IBluetoothGatt getBluetoothGatt() {
+    IBinder getBluetoothGatt() {
         if (mGattService == null) {
             return null;
         }
-        return IBluetoothGatt.Stub.asInterface(((ProfileService) mGattService).getBinder());
+        return ((ProfileService) mGattService).getBinder();
     }
 
     void unregAllGattClient(AttributionSource source) {
