@@ -182,7 +182,6 @@ public class ScanManagerTest {
         doReturn(mTargetContext.getPackageName()).when(mMockGattService).getPackageName();
 
         mScanManager = new ScanManager(mMockGattService, mAdapterService, mBluetoothAdapterProxy);
-        mScanManager.start();
 
         mHandler = mScanManager.getClientHandler();
         assertThat(mHandler).isNotNull();
@@ -1361,10 +1360,18 @@ public class ScanManagerTest {
 
     @Test
     public void profileConnectionStateChanged_sendStartConnectionMessage() {
+        // Set scan downgrade duration through Mock
+        when(mAdapterService.getScanDowngradeDurationMillis())
+                .thenReturn((long) DELAY_SCAN_DOWNGRADE_DURATION_MS);
+        assertThat(mScanManager.mIsConnecting).isFalse();
+
         mScanManager.handleBluetoothProfileConnectionStateChanged(
                 BluetoothProfile.A2DP,
                 BluetoothProfile.STATE_DISCONNECTED,
                 BluetoothProfile.STATE_CONNECTING);
-        assertThat(mHandler.hasMessages(ScanManager.MSG_START_CONNECTING)).isTrue();
+
+        // Wait for handleConnectingState to happen
+        TestUtils.waitForLooperToBeIdle(mHandler.getLooper());
+        assertThat(mScanManager.mIsConnecting).isTrue();
     }
 }
