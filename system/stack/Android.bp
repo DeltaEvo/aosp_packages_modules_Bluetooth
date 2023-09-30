@@ -30,6 +30,31 @@ cc_test_library {
     header_libs: ["libbluetooth_headers"],
 }
 
+cc_library_static {
+    name: "libbt-btu-main-thread",
+    defaults: ["fluoride_defaults"],
+    srcs: ["btu/btu_task.cc"],
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/internal_include",
+        "packages/modules/Bluetooth/system/stack/include",
+        "packages/modules/Bluetooth/system/types",
+    ],
+    static_libs: [
+        "libbt_shim_bridge",
+    ],
+    shared_libs: [
+        "libchrome",
+    ],
+    apex_available: [
+        "com.android.btservices",
+    ],
+    host_supported: true,
+    min_sdk_version: "Tiramisu",
+}
+
 // Bluetooth stack static library for target
 cc_library_static {
     name: "libbt-stack",
@@ -136,6 +161,7 @@ cc_library_static {
     ],
     static_libs: [
         "libbluetooth_hci_pdl",
+        "libbt-btu-main-thread",
         "libbt-hci",
         "libbt-platform-protos-lite",
         "libbt-stack-core",
@@ -233,8 +259,8 @@ cc_library_static {
         "btm/btm_sco_hci.cc",
         "btm/btm_sco_hfp_hal.cc",
         "btm/btm_sec.cc",
+        "btu/btu_event.cc",
         "btu/btu_hcif.cc",
-        "btu/btu_task.cc",
         "eatt/eatt.cc",
         "gap/gap_ble.cc",
         "gap/gap_conn.cc",
@@ -698,6 +724,7 @@ cc_test {
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
+        "libbt-btu-main-thread",
         "libbt-common",
         "libbt-hci",
         "libbt-sbc-decoder",
@@ -784,6 +811,7 @@ cc_test {
         "libbluetooth_hci_pdl",
         "libbluetooth_l2cap_pdl",
         "libbluetooth_smp_pdl",
+        "libbt-btu-main-thread",
         "libbt-common",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
@@ -870,6 +898,7 @@ cc_test {
         "libbluetooth_hci_pdl",
         "libbluetooth_l2cap_pdl",
         "libbluetooth_smp_pdl",
+        "libbt-btu-main-thread",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
@@ -1713,6 +1742,7 @@ cc_test {
         ":TestMockStackL2cap",
         ":TestMockStackMetrics",
         ":TestMockStackSmp",
+        "btu/btu_event.cc",
         "btu/btu_hcif.cc",
         "btu/btu_task.cc",
         "test/stack_btu_test.cc",
