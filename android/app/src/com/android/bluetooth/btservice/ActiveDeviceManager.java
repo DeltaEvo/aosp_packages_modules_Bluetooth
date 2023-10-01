@@ -973,6 +973,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
      *
      * @return true when the fallback device is activated, false otherwise
      */
+    @GuardedBy("mLock")
     private boolean setFallbackDeviceActiveLocked() {
         if (DBG) {
             Log.d(TAG, "setFallbackDeviceActive");
@@ -1149,7 +1150,8 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         return mLeAudioActiveDevice;
     }
 
-    long getHearingAidActiveHiSyncIdLocked() {
+    @GuardedBy("mLock")
+    private long getHearingAidActiveHiSyncIdLocked() {
         final HearingAidService hearingAidService = mFactory.getHearingAidService();
         if (hearingAidService != null && !mHearingAidActiveDevices.isEmpty()) {
             return hearingAidService.getHiSyncId(mHearingAidActiveDevices.iterator().next());
