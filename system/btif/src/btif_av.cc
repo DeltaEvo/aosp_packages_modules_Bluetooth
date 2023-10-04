@@ -1537,6 +1537,17 @@ bool BtifAvSink::AllowedToConnect(const RawAddress& peer_address) const {
         }
         connected++;
         break;
+      case BtifAvStateMachine::kStateClosing:
+      case BtifAvStateMachine::kStateIdle:
+        if ((btif_a2dp_sink_get_audio_track() != nullptr) &&
+          (peer->PeerAddress() != peer_address)) {
+          LOG_INFO("%s: there is another peer with audio track(%p), another=%s, peer=%s",
+            __PRETTY_FUNCTION__, btif_a2dp_sink_get_audio_track(),
+            ADDRESS_TO_LOGGABLE_CSTR(peer->PeerAddress()),
+            ADDRESS_TO_LOGGABLE_CSTR(peer_address));
+          connected++;
+        }
+        break;
       default:
         break;
     }
@@ -2919,12 +2930,14 @@ static void btif_report_connection_state(const RawAddress& peer_address,
 
     if (peer->IsSink()) {
       do_in_jni_thread(
-          FROM_HERE, base::Bind(btif_av_source.Callbacks()->connection_state_cb,
-                                peer_address, state, btav_error_t{}));
+          FROM_HERE,
+          base::BindOnce(btif_av_source.Callbacks()->connection_state_cb,
+                         peer_address, state, btav_error_t{}));
     } else if (peer->IsSource()) {
-      do_in_jni_thread(FROM_HERE,
-                       base::Bind(btif_av_sink.Callbacks()->connection_state_cb,
-                                  peer_address, state, btav_error_t{}));
+      do_in_jni_thread(
+          FROM_HERE,
+          base::BindOnce(btif_av_sink.Callbacks()->connection_state_cb,
+                         peer_address, state, btav_error_t{}));
     }
     return;
   }
@@ -2932,15 +2945,15 @@ static void btif_report_connection_state(const RawAddress& peer_address,
   if (btif_av_source.Enabled()) {
     do_in_jni_thread(
         FROM_HERE,
-        base::Bind(btif_av_source.Callbacks()->connection_state_cb,
-                   peer_address, state,
-                   btav_error_t{.status = status, .error_code = error_code}));
+        base::BindOnce(
+            btif_av_source.Callbacks()->connection_state_cb, peer_address,
+            state, btav_error_t{.status = status, .error_code = error_code}));
   } else if (btif_av_sink.Enabled()) {
     do_in_jni_thread(
         FROM_HERE,
-        base::Bind(btif_av_sink.Callbacks()->connection_state_cb, peer_address,
-                   state,
-                   btav_error_t{.status = status, .error_code = error_code}));
+        base::BindOnce(
+            btif_av_sink.Callbacks()->connection_state_cb, peer_address, state,
+            btav_error_t{.status = status, .error_code = error_code}));
   }
 }
 
@@ -2961,24 +2974,24 @@ static void btif_report_audio_state(const RawAddress& peer_address,
   if (btif_av_both_enable()) {
     BtifAvPeer* peer = btif_av_find_peer(peer_address);
     if (peer->IsSink()) {
-      do_in_jni_thread(FROM_HERE,
-                       base::Bind(btif_av_source.Callbacks()->audio_state_cb,
-                                  peer_address, state));
+      do_in_jni_thread(
+          FROM_HERE, base::BindOnce(btif_av_source.Callbacks()->audio_state_cb,
+                                    peer_address, state));
     } else if (peer->IsSource()) {
       do_in_jni_thread(FROM_HERE,
-                       base::Bind(btif_av_sink.Callbacks()->audio_state_cb,
-                                  peer_address, state));
+                       base::BindOnce(btif_av_sink.Callbacks()->audio_state_cb,
+                                      peer_address, state));
     }
     return;
   }
   if (btif_av_source.Enabled()) {
     do_in_jni_thread(FROM_HERE,
-                     base::Bind(btif_av_source.Callbacks()->audio_state_cb,
-                                peer_address, state));
+                     base::BindOnce(btif_av_source.Callbacks()->audio_state_cb,
+                                    peer_address, state));
   } else if (btif_av_sink.Enabled()) {
     do_in_jni_thread(FROM_HERE,
-                     base::Bind(btif_av_sink.Callbacks()->audio_state_cb,
-                                peer_address, state));
+                     base::BindOnce(btif_av_sink.Callbacks()->audio_state_cb,
+                                    peer_address, state));
   }
 
   using android::bluetooth::a2dp::AudioCodingModeEnum;
@@ -3013,9 +3026,9 @@ void btif_av_report_source_codec_state(
   if (btif_av_source.Enabled()) {
     do_in_jni_thread(
         FROM_HERE,
-        base::Bind(btif_av_source.Callbacks()->audio_config_cb, peer_address,
-                   codec_config, codecs_local_capabilities,
-                   codecs_selectable_capabilities));
+        base::BindOnce(btif_av_source.Callbacks()->audio_config_cb,
+                       peer_address, codec_config, codecs_local_capabilities,
+                       codecs_selectable_capabilities));
   }
 }
 
@@ -3032,8 +3045,8 @@ static void btif_av_report_sink_audio_config_state(
            ADDRESS_TO_LOGGABLE_CSTR(peer_address), sample_rate, channel_count);
   if (btif_av_sink.Enabled()) {
     do_in_jni_thread(FROM_HERE,
-                     base::Bind(btif_av_sink.Callbacks()->audio_config_cb,
-                                peer_address, sample_rate, channel_count));
+                     base::BindOnce(btif_av_sink.Callbacks()->audio_config_cb,
+                                    peer_address, sample_rate, channel_count));
   }
 }
 
@@ -3408,8 +3421,9 @@ static void bta_av_event_callback(tBTA_AV_EVT event, tBTA_AV* p_data) {
   if (btif_av_both_enable()) {
     BtifAvEvent btif_av_event(event, p_data, sizeof(tBTA_AV));
     do_in_main_thread(
-        FROM_HERE, base::Bind(&btif_av_handle_bta_av_event,
-                              AVDT_TSEP_INVALID /* peer_sep */, btif_av_event));
+        FROM_HERE,
+        base::BindOnce(&btif_av_handle_bta_av_event,
+                       AVDT_TSEP_INVALID /* peer_sep */, btif_av_event));
     return;
   }
 
@@ -4035,9 +4049,9 @@ uint8_t btif_av_get_peer_sep(void) {
   }
 
   uint8_t peer_sep = peer->PeerSep();
-  LOG_INFO("Peer %s SEP is %s (%d)",
-           ADDRESS_TO_LOGGABLE_CSTR(peer->PeerAddress()),
-           (peer_sep == AVDT_TSEP_SRC) ? "Source" : "Sink", peer_sep);
+  BTIF_TRACE_DEBUG("Peer %s SEP is %s (%d)",
+                   ADDRESS_TO_LOGGABLE_CSTR(peer->PeerAddress()),
+                   (peer_sep == AVDT_TSEP_SRC) ? "Source" : "Sink", peer_sep);
   return peer_sep;
 }
 

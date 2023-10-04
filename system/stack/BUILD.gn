@@ -26,36 +26,39 @@ static_library("crypto_toolbox") {
   configs += [ "//bt/system:target_defaults" ]
 }
 
+# Nonstandard codecs are associated with 3P libs and must be contained in MMC
 source_set("nonstandard_codecs") {
   if (defined(use.bt_nonstandard_codecs) && use.bt_nonstandard_codecs) {
     sources = [
       "a2dp/a2dp_aac.cc",
-      "a2dp/a2dp_aac_decoder.cc",
-      "a2dp/a2dp_aac_encoder.cc",
+      "a2dp/a2dp_aac_decoder_linux.cc",
+      "a2dp/a2dp_aac_encoder_linux.cc",
       "a2dp/a2dp_vendor.cc",
-      "a2dp/a2dp_vendor_aptx.cc",
-      "a2dp/a2dp_vendor_aptx_encoder.cc",
-      "a2dp/a2dp_vendor_aptx_hd.cc",
-      "a2dp/a2dp_vendor_aptx_hd_encoder.cc",
-      "a2dp/a2dp_vendor_ldac.cc",
-      "a2dp/a2dp_vendor_ldac_decoder.cc",
-      "a2dp/a2dp_vendor_ldac_encoder.cc",
+      # Following are unimplemented
+      "a2dp/a2dp_vendor_aptx_linux.cc",
+      "a2dp/a2dp_vendor_aptx_hd_linux.cc",
+      "a2dp/a2dp_vendor_ldac_linux.cc",
+      "a2dp/a2dp_vendor_opus_linux.cc",
     ]
 
     include_dirs = [
       "//bt/system",
       "//bt/system/bta/include",
       "//bt/system/btif/include",
+      "//bt/system/include",
       "//bt/system/internal_include",
+      "//bt/system/stack",
       "//bt/system/stack/include",
+      "//bt/system/utils/include",
     ]
 
-    deps = [ "//bt/system/gd/rust/shim:init_flags_bridge_header" ]
+    deps = [
+      "//bt/system/gd/rust/shim:init_flags_bridge_header",
+      "//bt/system/stack/mmc",
+    ]
 
     configs += [
       "//bt/system:target_defaults",
-      "//bt/system:external_libldac",
-      "//bt/system:external_aac",
     ]
   }
 }
@@ -109,7 +112,6 @@ source_set("stack") {
     "btm/btm_ble_bgconn.cc",
     "btm/btm_ble_cont_energy.cc",
     "btm/btm_ble_gap.cc",
-    "btm/btm_ble_multi_adv.cc",
     "btm/btm_ble_privacy.cc",
     "btm/btm_ble_scanner.cc",
     "btm/btm_client_interface.cc",
@@ -126,8 +128,7 @@ source_set("stack") {
     "btm/btm_sec.cc",
     "btm/hfp_msbc_encoder.cc",
     "btm/hfp_msbc_decoder.cc",
-    "btm/hfp_lc3_encoder.cc",
-    "btm/hfp_lc3_decoder.cc",
+    "btu/btu_event.cc",
     "btu/btu_hcif.cc",
     "btu/btu_task.cc",
     "eatt/eatt.cc",
@@ -222,7 +223,6 @@ source_set("stack") {
     "//bt/system/udrv/include",
     "//bt/system/vnd/ble",
     "//bt/system/vnd/include",
-    "//bt/system/embdrv/lc3/include",
   ]
 
   deps = [
@@ -232,10 +232,25 @@ source_set("stack") {
     "//bt/system/gd/rust/shim:init_flags_bridge_header",
     "//bt/system/types",
     "//bt/system/types",
-    "//bt/system/embdrv/lc3:liblc3",
   ]
 
-  configs += [ "//bt/system:target_defaults" ]
+  configs += [
+    "//bt/system:target_defaults",
+  ]
+
+  if (defined(use.floss_mmc) && use.floss_mmc) {
+    sources += [
+      "btm/hfp_lc3_encoder_linux.cc",
+      "btm/hfp_lc3_decoder_linux.cc",
+    ]
+    deps += [ "//bt/system/stack/mmc" ]
+  } else {
+    sources += [
+      "btm/hfp_lc3_encoder.cc",
+      "btm/hfp_lc3_decoder.cc",
+    ]
+    libs = [ "lc3" ]
+  }
 }
 
 if (use.test) {
@@ -374,35 +389,6 @@ if (defined(use.android) && use.android) {
 
     configs += [
       "//bt/system:external_tinyxml2",
-      "//bt/system:external_gmock_main",
-      "//bt/system:target_defaults",
-    ]
-  }
-
-  executable("net_test_stack_multi_adv") {
-    sources = [
-      "btm/btm_ble_multi_adv.cc",
-      "test/ble_advertiser_test.cc",
-    ]
-
-    include_dirs = [
-      "include",
-      "//bt/system/",
-      "//bt/system/internal_include",
-      "//bt/system/stack/btm",
-    ]
-
-    libs = [
-      "dl",
-      "pthread",
-      "resolv",
-      "rt",
-      "z",
-    ]
-
-    deps = [ "//bt/system/types" ]
-
-    configs += [
       "//bt/system:external_gmock_main",
       "//bt/system:target_defaults",
     ]

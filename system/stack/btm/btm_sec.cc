@@ -32,6 +32,8 @@
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
 #include <string.h>
 
+#include <type_traits>
+
 #include "btif/include/btif_storage.h"
 #include "common/metrics.h"
 #include "common/time_util.h"
@@ -54,7 +56,6 @@
 #include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2cap_security_interface.h"
 #include "stack/include/stack_metrics_logging.h"
-#include "stack/smp/smp_int.h"
 #include "types/raw_address.h"
 
 namespace {
@@ -1149,13 +1150,52 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
       break;
   }
 
-  /* enqueue security request if security is active */
-  if (p_dev_rec->p_callback || (p_dev_rec->sec_state != BTM_SEC_STATE_IDLE)) {
-    LOG_WARN("Security Manager: BTM_SetEncryption busy, enqueue request");
-    btm_sec_queue_encrypt_request(bd_addr, transport, p_callback, p_ref_data,
-                                  sec_act);
-    LOG_INFO("Queued start encryption");
-    return BTM_CMD_STARTED;
+  /* Enqueue security request if security is active */
+  if (bluetooth::common::init_flags::encryption_in_busy_state_is_enabled()) {
+    bool enqueue = false;
+    switch (p_dev_rec->sec_state) {
+      case BTM_SEC_STATE_AUTHENTICATING:
+      case BTM_SEC_STATE_DISCONNECTING_BOTH:
+        /* Applicable for both transports */
+        enqueue = true;
+        break;
+
+      case BTM_SEC_STATE_ENCRYPTING:
+      case BTM_SEC_STATE_DISCONNECTING:
+        if (transport == BT_TRANSPORT_BR_EDR) {
+          enqueue = true;
+        }
+        break;
+
+      case BTM_SEC_STATE_LE_ENCRYPTING:
+      case BTM_SEC_STATE_DISCONNECTING_BLE:
+        if (transport == BT_TRANSPORT_LE) {
+          enqueue = true;
+        }
+        break;
+
+      default:
+        if (p_dev_rec->p_callback != nullptr) {
+          enqueue = true;
+        }
+        break;
+    }
+
+    if (enqueue) {
+      LOG_WARN("Security Manager: Enqueue request in state:%s",
+               security_state_text(p_dev_rec->sec_state).c_str());
+      btm_sec_queue_encrypt_request(bd_addr, transport, p_callback, p_ref_data,
+                                    sec_act);
+      return BTM_CMD_STARTED;
+    }
+  } else {
+    if (p_dev_rec->p_callback || (p_dev_rec->sec_state != BTM_SEC_STATE_IDLE)) {
+      LOG_WARN("Security Manager: BTM_SetEncryption busy, enqueue request");
+      btm_sec_queue_encrypt_request(bd_addr, transport, p_callback, p_ref_data,
+                                    sec_act);
+      LOG_INFO("Queued start encryption");
+      return BTM_CMD_STARTED;
+    }
   }
 
   p_dev_rec->p_callback = p_callback;
@@ -1492,6 +1532,18 @@ tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures(const RawAddress& bd_addr) {
     }
   }
   return BT_DEVICE_TYPE_BREDR;
+}
+
+/*******************************************************************************
+ *
+ * Function         BTM_GetInitialSecurityMode
+ *
+ * Description      This function is called to retrieve the configured
+ *                  security mode.
+ *
+ ******************************************************************************/
+uint8_t BTM_GetSecurityMode() {
+  return btm_cb.security_mode;
 }
 
 /************************************************************************
@@ -2182,18 +2234,16 @@ void btm_sec_check_pending_reqs(void) {
  *
  ******************************************************************************/
 void btm_sec_dev_reset(void) {
-  if (controller_get_interface()->supports_simple_pairing()) {
-    /* set the default IO capabilities */
-    btm_cb.devcb.loc_io_caps = btif_storage_get_local_io_caps();
-    /* add mx service to use no security */
-    BTM_SetSecurityLevel(false, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX,
-                         BTM_SEC_NONE, BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
-    BTM_SetSecurityLevel(true, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX, BTM_SEC_NONE,
-                         BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
-  } else {
-    btm_cb.security_mode = BTM_SEC_MODE_SERVICE;
-  }
+  ASSERT_LOG(controller_get_interface()->supports_simple_pairing(),
+             "only controllers with SSP is supported");
 
+  /* set the default IO capabilities */
+  btm_cb.devcb.loc_io_caps = btif_storage_get_local_io_caps();
+  /* add mx service to use no security */
+  BTM_SetSecurityLevel(false, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX,
+                       BTM_SEC_NONE, BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
+  BTM_SetSecurityLevel(true, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX, BTM_SEC_NONE,
+                       BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
   BTM_TRACE_DEBUG("btm_sec_dev_reset sec mode: %d", btm_cb.security_mode);
 }
 
@@ -3379,13 +3429,6 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
   if (status == HCI_SUCCESS) {
     if (encr_enable) {
       if (p_dev_rec->hci_handle == handle) {  // classic
-        if ((p_dev_rec->sec_flags & BTM_SEC_AUTHENTICATED) &&
-            (p_dev_rec->sec_flags & BTM_SEC_ENCRYPTED)) {
-          LOG_INFO(
-              "Link is authenticated & encrypted, ignoring this enc change "
-              "event");
-          return;
-        }
         p_dev_rec->sec_flags |= (BTM_SEC_AUTHENTICATED | BTM_SEC_ENCRYPTED);
         if (p_dev_rec->pin_code_length >= 16 ||
             p_dev_rec->link_key_type == BTM_LKEY_TYPE_AUTH_COMB ||
@@ -3393,7 +3436,10 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
           p_dev_rec->sec_flags |= BTM_SEC_16_DIGIT_PIN_AUTHED;
         }
       } else if (p_dev_rec->ble_hci_handle == handle) {  // BLE
-        p_dev_rec->sec_flags |= BTM_SEC_LE_ENCRYPTED;
+        p_dev_rec->set_le_device_encrypted();
+        if (p_dev_rec->is_le_link_key_authenticated()) {
+            p_dev_rec->set_le_device_authenticated();
+        }
       } else {
         LOG_ERROR(
             "Received encryption change for unknown device handle:0x%04x "
@@ -3509,7 +3555,8 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
   tBTM_STATUS btm_status = btm_sec_execute_procedure(p_dev_rec);
   /* If there is no next procedure, or procedure failed to start, notify the
    * caller */
-  if (status != BTM_CMD_STARTED)
+  if (static_cast<std::underlying_type_t<tHCI_STATUS>>(status) !=
+      BTM_CMD_STARTED)
     btm_sec_dev_rec_cback_event(p_dev_rec, btm_status, false);
 }
 

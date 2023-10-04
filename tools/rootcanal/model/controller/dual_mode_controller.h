@@ -19,18 +19,21 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "controller_properties.h"
 #include "hci/address.h"
-#include "hci/hci_packets.h"
-#include "link_layer_controller.h"
+#include "model/controller/controller_properties.h"
+#include "model/controller/link_layer_controller.h"
 #include "model/controller/vendor_commands/csr.h"
 #include "model/devices/device.h"
+#include "packets/hci_packets.h"
+#include "packets/link_layer_packets.h"
+#include "phy.h"
 
 namespace rootcanal {
 
@@ -50,15 +53,15 @@ using ::bluetooth::hci::CommandView;
 // "Hci" to distinguish it as a controller command.
 class DualModeController : public Device {
  public:
-  // Unique instance identifier.
-  const int id_;
-
   DualModeController(ControllerProperties properties = ControllerProperties());
   DualModeController(DualModeController&&) = delete;
   DualModeController(const DualModeController&) = delete;
   ~DualModeController() = default;
 
   DualModeController& operator=(const DualModeController&) = delete;
+
+  // Overwrite the configuration.
+  void SetProperties(ControllerProperties properties);
 
   // Device methods.
   std::string GetTypeString() const override;
@@ -504,10 +507,11 @@ class DualModeController : public Device {
 
   // Vendor-specific Commands
   void LeGetVendorCapabilities(CommandView command);
-  void LeEnergyInfo(CommandView command);
-  void LeMultiAdv(CommandView command);
-  void LeAdvertisingFilter(CommandView command);
-  void LeExtendedScanParams(CommandView command);
+  void LeBatchScan(CommandView command);
+  void LeApcf(CommandView command);
+  void LeGetControllerActivityEnergyInfo(CommandView command);
+  void LeExSetScanParameters(CommandView command);
+  void GetControllerDebugInfo(CommandView command);
 
   // CSR vendor command.
   // Implement the command specific to the CSR controller

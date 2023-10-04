@@ -41,8 +41,6 @@
 #include "stack/include/bt_octets.h"
 #include "types/raw_address.h"
 
-extern tBTM_CB btm_cb;  // TODO Remove
-
 using base::Bind;
 using crypto_toolbox::aes_128;
 
@@ -324,12 +322,13 @@ tSMP_STATUS smp_calculate_comfirm(tSMP_CB* p_cb, const Octet16& rand,
   tBLE_ADDR_TYPE remote_bd_addr_type = BLE_ADDR_PUBLIC;
   /* get remote connection specific bluetooth address */
   if (!BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, remote_bda,
-                                    &remote_bd_addr_type)) {
+                                    &remote_bd_addr_type, true)) {
     SMP_TRACE_ERROR("%s: cannot obtain remote device address", __func__);
     return SMP_PAIR_FAIL_UNKNOWN;
   }
   /* get local connection specific bluetooth address */
-  BTM_ReadConnectionAddr(p_cb->pairing_bda, p_cb->local_bda, &p_cb->addr_type);
+  BTM_ReadConnectionAddr(p_cb->pairing_bda, p_cb->local_bda, &p_cb->addr_type,
+                         true);
   /* generate p1 = pres || preq || rat' || iat' */
   Octet16 p1 = smp_gen_p1_4_confirm(p_cb, remote_bd_addr_type);
   /* p1' = rand XOR p1 */
@@ -961,7 +960,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
         "Use rcvd identity address as BD_ADDR of LK rcvd identity address");
     bda_for_lk = p_cb->id_addr;
   } else if ((BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, bda_for_lk,
-                                           &conn_addr_type)) &&
+                                           &conn_addr_type, true)) &&
              conn_addr_type == BLE_ADDR_PUBLIC) {
     SMP_TRACE_DEBUG("Use rcvd connection address as BD_ADDR of LK");
   } else {
@@ -979,7 +978,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
       crypto_toolbox::ltk_to_link_key(p_cb->ltk, p_cb->key_derivation_h7_used);
 
   uint8_t link_key_type;
-  if (btm_cb.security_mode == BTM_SEC_MODE_SC) {
+  if (p_cb->init_security_mode == BTM_SEC_MODE_SC) {
     /* Secure Connections Only Mode */
     link_key_type = BTM_LKEY_TYPE_AUTH_COMB_P_256;
   } else if (controller_get_interface()->supports_secure_connections()) {
@@ -988,7 +987,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
       link_key_type = BTM_LKEY_TYPE_AUTH_COMB_P_256;
     else
       link_key_type = BTM_LKEY_TYPE_UNAUTH_COMB_P_256;
-  } else if (btm_cb.security_mode == BTM_SEC_MODE_SP) {
+  } else if (p_cb->init_security_mode == BTM_SEC_MODE_SP) {
     /* BR/EDR transport is SSP capable */
     if (p_cb->sec_level == SMP_SEC_AUTHENTICATED)
       link_key_type = BTM_LKEY_TYPE_AUTH_COMB;
@@ -996,7 +995,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
       link_key_type = BTM_LKEY_TYPE_UNAUTH_COMB;
   } else {
     SMP_TRACE_ERROR("%s failed to update link_key. Sec Mode = %d, sm4 = 0x%02x",
-                    __func__, btm_cb.security_mode, p_dev_rec->sm4);
+                    __func__, p_cb->init_security_mode, p_dev_rec->sm4);
     return false;
   }
 

@@ -36,6 +36,7 @@
 #include "device/include/interop_config.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
+#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btu.h"  // do_in_main_thread
@@ -58,12 +59,12 @@ using bluetooth::Uuid;
 #endif
 
 /* declare sdp callback functions */
-void bta_ag_sdp_cback_1(tSDP_RESULT);
-void bta_ag_sdp_cback_2(tSDP_RESULT);
-void bta_ag_sdp_cback_3(tSDP_RESULT);
-void bta_ag_sdp_cback_4(tSDP_RESULT);
-void bta_ag_sdp_cback_5(tSDP_RESULT);
-void bta_ag_sdp_cback_6(tSDP_RESULT);
+void bta_ag_sdp_cback_1(const RawAddress& bd_addr, tSDP_RESULT);
+void bta_ag_sdp_cback_2(const RawAddress& bd_addr, tSDP_RESULT);
+void bta_ag_sdp_cback_3(const RawAddress& bd_addr, tSDP_RESULT);
+void bta_ag_sdp_cback_4(const RawAddress& bd_addr, tSDP_RESULT);
+void bta_ag_sdp_cback_5(const RawAddress& bd_addr, tSDP_RESULT);
+void bta_ag_sdp_cback_6(const RawAddress& bd_addr, tSDP_RESULT);
 
 /* SDP callback function table */
 typedef tSDP_DISC_CMPL_CB* tBTA_AG_SDP_CBACK;
@@ -110,12 +111,30 @@ static void bta_ag_sdp_cback(uint16_t status, uint8_t idx) {
  * Returns          void
  *
  ******************************************************************************/
-void bta_ag_sdp_cback_1(tSDP_STATUS status) { bta_ag_sdp_cback(status, 1); }
-void bta_ag_sdp_cback_2(tSDP_STATUS status) { bta_ag_sdp_cback(status, 2); }
-void bta_ag_sdp_cback_3(tSDP_STATUS status) { bta_ag_sdp_cback(status, 3); }
-void bta_ag_sdp_cback_4(tSDP_STATUS status) { bta_ag_sdp_cback(status, 4); }
-void bta_ag_sdp_cback_5(tSDP_STATUS status) { bta_ag_sdp_cback(status, 5); }
-void bta_ag_sdp_cback_6(tSDP_STATUS status) { bta_ag_sdp_cback(status, 6); }
+void bta_ag_sdp_cback_1(UNUSED_ATTR const RawAddress& bd_addr,
+                        tSDP_STATUS status) {
+  bta_ag_sdp_cback(status, 1);
+}
+void bta_ag_sdp_cback_2(UNUSED_ATTR const RawAddress& bd_addr,
+                        tSDP_STATUS status) {
+  bta_ag_sdp_cback(status, 2);
+}
+void bta_ag_sdp_cback_3(UNUSED_ATTR const RawAddress& bd_addr,
+                        tSDP_STATUS status) {
+  bta_ag_sdp_cback(status, 3);
+}
+void bta_ag_sdp_cback_4(UNUSED_ATTR const RawAddress& bd_addr,
+                        tSDP_STATUS status) {
+  bta_ag_sdp_cback(status, 4);
+}
+void bta_ag_sdp_cback_5(UNUSED_ATTR const RawAddress& bd_addr,
+                        tSDP_STATUS status) {
+  bta_ag_sdp_cback(status, 5);
+}
+void bta_ag_sdp_cback_6(UNUSED_ATTR const RawAddress& bd_addr,
+                        tSDP_STATUS status) {
+  bta_ag_sdp_cback(status, 6);
+}
 
 /******************************************************************************
  *
@@ -141,7 +160,6 @@ bool bta_ag_add_record(uint16_t service_uuid, const char* p_service_name,
   uint8_t network;
   bool result = true;
   bool codec_supported = false;
-  bool swb_supported = false;
   uint8_t buf[2];
 
   APPL_TRACE_DEBUG("%s uuid: %x", __func__, service_uuid);
@@ -195,19 +213,16 @@ bool bta_ag_add_record(uint16_t service_uuid, const char* p_service_name,
         sdp_handle, ATTR_ID_DATA_STORES_OR_NETWORK, UINT_DESC_TYPE, 1,
         &network);
 
-    // check property for SWB support
-    if (hfp_hal_interface::get_swb_supported()) {
-      features |= BTA_AG_FEAT_SWB;
-    }
-
     if (features & BTA_AG_FEAT_CODEC) codec_supported = true;
-    if (features & BTA_AG_FEAT_SWB) swb_supported = true;
 
     features &= BTA_AG_SDP_FEAT_SPEC;
 
     /* Codec bit position is different in SDP and in BRSF */
     if (codec_supported) features |= BTA_AG_FEAT_WBS_SUPPORT;
-    if (swb_supported) features |= BTA_AG_FEAT_SWB_SUPPORT;
+    // check property for SWB support
+    if (hfp_hal_interface::get_swb_supported()) {
+      features |= BTA_AG_FEAT_SWB_SUPPORT;
+    }
 
     UINT16_TO_BE_FIELD(buf, features);
     result &= get_legacy_stack_sdp_api()->handle.SDP_AddAttribute(
@@ -416,7 +431,10 @@ bool bta_ag_sdp_find_attr(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK service) {
         }
         /* Remote supports 1.7, store it in HFP 1.7 BL file */
         if (bluetooth::common::init_flags::hfp_dynamic_version_is_enabled()) {
-          if (p_scb->peer_version == HFP_VERSION_1_7) {
+          if (p_scb->peer_version >= HFP_VERSION_1_9) {
+            interop_database_add_addr(INTEROP_HFP_1_9_ALLOWLIST,
+                                      &p_scb->peer_addr, 3);
+          } else if (p_scb->peer_version >= HFP_VERSION_1_7) {
             interop_database_add_addr(INTEROP_HFP_1_7_ALLOWLIST,
                                       &p_scb->peer_addr, 3);
           }

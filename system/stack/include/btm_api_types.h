@@ -32,6 +32,7 @@
 #include "stack/include/btm_status.h"
 #include "stack/include/hci_mode.h"
 #include "stack/include/hcidefs.h"
+#include "stack/include/sdpdefs.h"
 #include "stack/include/smp_api_types.h"
 #include "types/ble_address_with_type.h"
 #include "types/bt_transport.h"
@@ -220,22 +221,48 @@ typedef void(tBTM_ESCO_CBACK)(tBTM_ESCO_EVT event, tBTM_ESCO_EVT_DATA* p_data);
  * SCO Types for Debugging and Testing
  **************************/
 
-/* Define the structure for the WBS packet status dump.  */
+/* Define the structure for the WBS/SWB packet status dump.  */
 typedef struct {
   uint64_t begin_ts_raw_us;
   uint64_t end_ts_raw_us;
   std::string status_in_hex;
   std::string status_in_binary;
-} tBTM_SCO_MSBC_PKT_STATUS_DATA;
+} tBTM_SCO_PKT_STATUS_DATA;
 
 /* Returned by BTM_GetScoDebugDump */
 typedef struct {
   bool is_active;
-  bool is_wbs;
+  uint16_t codec_id;
   int total_num_decoded_frames;
   double pkt_loss_ratio;
-  tBTM_SCO_MSBC_PKT_STATUS_DATA latest_msbc_data;
+  tBTM_SCO_PKT_STATUS_DATA latest_data;
 } tBTM_SCO_DEBUG_DUMP;
+
+inline std::string sco_codec_type_text(tBTM_SCO_CODEC_TYPE codec_type) {
+  switch (codec_type) {
+    case BTM_SCO_CODEC_CVSD:
+      return "CVSD";
+    case BTM_SCO_CODEC_MSBC:
+      return "MSBC";
+    case BTM_SCO_CODEC_LC3:
+      return "LC3";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+inline uint16_t sco_codec_type_to_id(tBTM_SCO_CODEC_TYPE codec_type) {
+  switch (codec_type) {
+    case BTM_SCO_CODEC_CVSD:
+      return UUID_CODEC_CVSD;
+    case BTM_SCO_CODEC_MSBC:
+      return UUID_CODEC_MSBC;
+    case BTM_SCO_CODEC_LC3:
+      return UUID_CODEC_LC3;
+    default:
+      return 0;
+  }
+}
 
 /*****************************************************************************
  *  SECURITY MANAGEMENT
@@ -672,9 +699,12 @@ enum : uint8_t {
   BTM_PM_STS_HOLD = HCI_MODE_HOLD,      // 0x01
   BTM_PM_STS_SNIFF = HCI_MODE_SNIFF,    // 0x02
   BTM_PM_STS_PARK = HCI_MODE_PARK,      // 0x03
-  BTM_PM_STS_SSR,     /* report the SSR parameters in HCI_SNIFF_SUB_RATE_EVT */
-  BTM_PM_STS_PENDING, /* when waiting for status from controller */
-  BTM_PM_STS_ERROR    /* when HCI command status returns error */
+  BTM_PM_STS_SSR,      // Hci sniff subrating event reported the SSR parameters
+  BTM_PM_STS_PENDING,  // Successful hci mode change command status received and
+                       // now waiting for mode change event to indicate
+                       // change to desired mode target.
+  BTM_PM_STS_ERROR  // Failed hci mode change command status which will result
+                    // in no mode change event.
 };
 typedef uint8_t tBTM_PM_STATUS;
 
@@ -724,7 +754,7 @@ inline bool is_legal_power_mode(tBTM_PM_MODE mode) {
 }
 
 inline std::string power_mode_text(tBTM_PM_MODE mode) {
-  std::string s = base::StringPrintf((mode & BTM_PM_MD_FORCE) ? "" : "forced:");
+  std::string s = base::StringPrintf((mode & BTM_PM_MD_FORCE) ? "forced:" : "");
   switch (mode & ~BTM_PM_MD_FORCE) {
     case BTM_PM_MD_ACTIVE:
       return s + std::string("active");
@@ -752,13 +782,19 @@ typedef enum : uint8_t {
 /************************
  *  Power Manager Types
  ************************/
-typedef struct {
+struct tBTM_PM_PWR_MD {
   uint16_t max = 0;
   uint16_t min = 0;
   uint16_t attempt = 0;
   uint16_t timeout = 0;
   tBTM_PM_MODE mode = BTM_PM_MD_ACTIVE;  // 0
-} tBTM_PM_PWR_MD;
+
+  std::string ToString() const {
+    return base::StringPrintf(
+        "mode:%s[max:%hu min:%hu attempt:%hu timeout:%hu]",
+        power_mode_text(mode).c_str(), max, min, attempt, timeout);
+  }
+};
 
 /*************************************
  *  Power Manager Callback Functions

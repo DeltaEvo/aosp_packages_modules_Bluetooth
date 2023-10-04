@@ -185,7 +185,8 @@ class PeriodicSyncManager {
             connection_handle));
   }
 
-  void SyncTxParameters(const Address& address, uint8_t mode, uint16_t skip, uint16_t timeout, int reg_id) {
+  void SyncTxParameters(
+      const Address& /* address */, uint8_t mode, uint16_t skip, uint16_t timeout, int reg_id) {
     LOG_DEBUG("[PAST]: mode=%u, skip=%u, timeout=%u", mode, skip, timeout);
     auto sync_cte_type = static_cast<CteType>(
         static_cast<uint8_t>(PeriodicSyncCteType::AVOID_AOA_CONSTANT_TONE_EXTENSION) |
@@ -347,6 +348,10 @@ class PeriodicSyncManager {
     LOG_DEBUG("[PSync]: sync_handle = %d", sync_handle);
     callbacks_->OnPeriodicSyncLost(sync_handle);
     auto periodic_sync = GetEstablishedSyncFromHandle(sync_handle);
+    if (periodic_sync == periodic_syncs_.end()) {
+      LOG_ERROR("[PSync]: index not found for handle %u", sync_handle);
+      return;
+    }
     periodic_syncs_.erase(periodic_sync);
   }
 

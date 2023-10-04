@@ -317,7 +317,7 @@ static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
   l2c_init();
   sdp_init();
   gatt_init();
-  SMP_Init();
+  SMP_Init(get_btm_client_interface().security.BTM_GetSecurityMode());
   get_btm_client_interface().lifecycle.btm_ble_init();
 
   RFCOMM_Init();
@@ -351,7 +351,7 @@ static void event_start_up_stack(bluetooth::core::CoreInterface* interface,
 
   stack_is_running = true;
   LOG_INFO("%s finished", __func__);
-  do_in_jni_thread(FROM_HERE, base::Bind(event_signal_stack_up, nullptr));
+  do_in_jni_thread(FROM_HERE, base::BindOnce(event_signal_stack_up, nullptr));
 }
 
 // Synchronous function to shut down the stack
@@ -367,8 +367,6 @@ static void event_shut_down_stack(ProfileStopCallback stopProfiles) {
   stack_is_running = false;
 
   module_shut_down(get_local_module(RUST_MODULE));
-
-  do_in_main_thread(FROM_HERE, base::BindOnce(&btm_ble_multi_adv_cleanup));
 
   do_in_main_thread(FROM_HERE, base::BindOnce(&btm_ble_scanner_cleanup));
 
@@ -400,7 +398,7 @@ static void event_shut_down_stack(ProfileStopCallback stopProfiles) {
   get_btm_client_interface().lifecycle.btm_free();
 
   hack_future = future_new();
-  do_in_jni_thread(FROM_HERE, base::Bind(event_signal_stack_down, nullptr));
+  do_in_jni_thread(FROM_HERE, base::BindOnce(event_signal_stack_down, nullptr));
   future_await(hack_future);
   LOG_INFO("%s finished", __func__);
 }

@@ -391,6 +391,8 @@ static const char* interop_feature_string_(const interop_feature_t feature) {
     CASE_RETURN_STR(INTEROP_AVRCP_1_3_ONLY)
     CASE_RETURN_STR(INTEROP_DISABLE_ROBUST_CACHING);
     CASE_RETURN_STR(INTEROP_HFP_1_7_ALLOWLIST);
+    CASE_RETURN_STR(INTEROP_HFP_1_9_ALLOWLIST);
+    CASE_RETURN_STR(INTEROP_IGNORE_DISC_BEFORE_SIGNALLING_TIMEOUT);
   }
   return UNKNOWN_INTEROP_FEATURE;
 }
@@ -903,8 +905,8 @@ static bool get_addr_lmp_ver(char* str, char* bdaddrstr, uint8_t* lmp_ver,
   return false;
 }
 
-bool load_to_database(int feature, const char* key, const char* value,
-                      interop_entry_type entry_type) {
+static bool load_to_database(int feature, const char* key, const char* value,
+                             interop_entry_type entry_type) {
   if (!strncasecmp(value, ADDR_BASED, strlen(ADDR_BASED))) {
     RawAddress addr;
     int len = 0;

@@ -128,7 +128,7 @@ bool SinkImpl::OnResumeReq(bool start_media_task) {
   bt_status_t status = do_in_main_thread(
       FROM_HERE,
       base::BindOnce(&LeAudioSinkAudioHalClient::Callbacks::OnAudioResume,
-                     base::Unretained(audioSinkCallbacks_)));
+                     audioSinkCallbacks_->weak_factory_.GetWeakPtr()));
   if (status == BT_STATUS_SUCCESS) {
     return true;
   }
@@ -143,16 +143,11 @@ bool SinkImpl::OnSuspendReq() {
     return false;
   }
 
-  std::promise<void> do_suspend_promise;
-  std::future<void> do_suspend_future = do_suspend_promise.get_future();
-
   bt_status_t status = do_in_main_thread(
       FROM_HERE,
       base::BindOnce(&LeAudioSinkAudioHalClient::Callbacks::OnAudioSuspend,
-                     base::Unretained(audioSinkCallbacks_),
-                     std::move(do_suspend_promise)));
+                     audioSinkCallbacks_->weak_factory_.GetWeakPtr()));
   if (status == BT_STATUS_SUCCESS) {
-    do_suspend_future.wait();
     return true;
   }
 
@@ -175,7 +170,7 @@ bool SinkImpl::OnMetadataUpdateReq(const sink_metadata_t& sink_metadata) {
       FROM_HERE,
       base::BindOnce(
           &LeAudioSinkAudioHalClient::Callbacks::OnAudioMetadataUpdate,
-          base::Unretained(audioSinkCallbacks_), metadata));
+          audioSinkCallbacks_->weak_factory_.GetWeakPtr(), metadata));
   if (status == BT_STATUS_SUCCESS) {
     return true;
   }

@@ -18,6 +18,8 @@
 #ifndef BTM_INT_TYPES_H
 #define BTM_INT_TYPES_H
 
+#include <gtest/gtest_prod.h>
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -33,10 +35,9 @@
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_ble_api_types.h"
+#include "stack/include/rfcdefs.h"
 #include "stack/include/security_client_callbacks.h"
 #include "types/raw_address.h"
-
-#define BTM_MAX_SCN_ 31  // PORT_MAX_RFC_PORTS packages/modules/Bluetooth/system/stack/include/rfcdefs.h
 
 constexpr size_t kMaxLogSize = 255;
 constexpr size_t kBtmLogHistoryBufferSize = 200;
@@ -394,8 +395,16 @@ typedef struct tBTM_CB {
   friend uint8_t BTM_AllocateSCN(void);
   friend bool BTM_TryAllocateSCN(uint8_t scn);
   friend bool BTM_FreeSCN(uint8_t scn);
-  uint8_t btm_scn[BTM_MAX_SCN_];
+  uint8_t btm_scn[RFCOMM_MAX_SCN];
   uint8_t btm_available_index;
+
+  // give access to private method for test:
+  friend class BtmAllocateSCNTest;
+  FRIEND_TEST(BtmAllocateSCNTest, can_allocate_all_scns);
+  FRIEND_TEST(BtmAllocateSCNTest, only_last_scn_available);
+  FRIEND_TEST(BtmAllocateSCNTest, scn_available_after_available_index);
+  FRIEND_TEST(BtmAllocateSCNTest, scn_available_before_available_index);
+  FRIEND_TEST(BtmAllocateSCNTest, no_scn_available);
 } tBTM_CB;
 
 /* security action for L2CAP COC channels */
