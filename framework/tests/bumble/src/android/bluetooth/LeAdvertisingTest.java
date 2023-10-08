@@ -27,18 +27,17 @@ import android.util.Log;
 
 import androidx.core.util.Pair;
 import androidx.test.core.app.ApplicationProvider;
-import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
-import io.grpc.Context.CancellableContext;
-import io.grpc.Deadline;
-import io.grpc.stub.StreamObserver;
+import com.android.compatibility.common.util.AdoptShellPermissionsRule;
 
-import org.junit.BeforeClass;
+import io.grpc.Deadline;
+
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Iterator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -52,24 +51,43 @@ public class LeAdvertisingTest {
 
     private static final int TIMEOUT_ADVERTISING_MS = 1000;
 
-    @Rule public final PandoraDevice mBumble = new PandoraDevice();
+    @Rule public final AdoptShellPermissionsRule mPermissionRule = new AdoptShellPermissionsRule();
 
-    @BeforeClass
-    public static void setUpClass() throws Exception {
-        InstrumentationRegistry.getInstrumentation()
-                .getUiAutomation()
-                .adoptShellPermissionIdentity();
-    }
+    @Rule public final PandoraDevice mBumble = new PandoraDevice();
 
     @Test
     public void advertisingSet() throws Exception {
-        ScanningResponse response =
-                startAdvertising()
-                        .thenCompose(advAddressPair -> scanWithBumble(advAddressPair))
-                        .join();
+        Pair<String, Integer> addressPair = startAdvertising().join();
+        ScanningResponse response = scanWithBumble(addressPair);
 
         Log.i(TAG, "scan response: " + response);
         assertThat(response).isNotNull();
+    }
+
+    private ScanningResponse scanWithBumble(Pair<String, Integer> addressPair) {
+        Log.d(TAG, "scanWithBumble");
+        String address = addressPair.first;
+        int addressType = addressPair.second;
+
+        StreamObserverSpliterator<ScanningResponse> responseObserver =
+                new StreamObserverSpliterator<>();
+        Deadline deadline = Deadline.after(TIMEOUT_ADVERTISING_MS, TimeUnit.MILLISECONDS);
+        mBumble.host()
+                .withDeadline(deadline)
+                .scan(ScanRequest.newBuilder().build(), responseObserver);
+        Iterator<ScanningResponse> responseObserverIterator = responseObserver.iterator();
+        while (true) {
+            ScanningResponse scanningResponse = responseObserverIterator.next();
+            String addr =
+                    Utils.addressStringFromByteString(
+                            addressType == AdvertisingSetParameters.ADDRESS_TYPE_PUBLIC
+                                    ? scanningResponse.getPublic()
+                                    : scanningResponse.getRandom());
+
+            if (addr.equals(address)) {
+                return scanningResponse;
+            }
+        }
     }
 
     private CompletableFuture<Pair<String, Integer>> startAdvertising() {
@@ -133,53 +151,5 @@ public class LeAdvertisingTest {
                 parameters, advertiseData, scanResponse, null, null, 0, 0, advertisingSetCallback);
 
         return future;
-    }
-
-    private CompletableFuture<ScanningResponse> scanWithBumble(Pair<String, Integer> addressPair) {
-        final CompletableFuture<ScanningResponse> future =
-                new CompletableFuture<ScanningResponse>();
-        CancellableContext withCancellation = io.grpc.Context.current().withCancellation();
-
-        String address = addressPair.first;
-        int addressType = addressPair.second;
-
-        ScanRequest request = ScanRequest.newBuilder().build();
-        StreamObserver<ScanningResponse> responseObserver =
-                new StreamObserver<ScanningResponse>() {
-                    public void onNext(ScanningResponse response) {
-                        String addr = "";
-                        if (addressType == AdvertisingSetParameters.ADDRESS_TYPE_PUBLIC) {
-                            addr = Utils.addressStringFromByteString(response.getPublic());
-                        } else {
-                            addr = Utils.addressStringFromByteString(response.getRandom());
-                        }
-                        Log.i(TAG, "scan observer: scan response address: " + addr);
-
-                        if (addr.equals(address)) {
-                            future.complete(response);
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable e) {
-                        Log.e(TAG, "scan observer: on error " + e);
-                        future.completeExceptionally(e);
-                    }
-
-                    @Override
-                    public void onCompleted() {
-                        Log.i(TAG, "scan observer: on completed");
-                        future.complete(null);
-                    }
-                };
-
-        Deadline initialDeadline = Deadline.after(TIMEOUT_ADVERTISING_MS, TimeUnit.MILLISECONDS);
-        withCancellation.run(
-                () -> mBumble.host().withDeadline(initialDeadline).scan(request, responseObserver));
-
-        return future.whenComplete(
-                (input, exception) -> {
-                    withCancellation.cancel(null);
-                });
     }
 }
