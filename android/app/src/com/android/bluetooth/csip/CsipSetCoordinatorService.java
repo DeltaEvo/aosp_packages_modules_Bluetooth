@@ -214,6 +214,12 @@ public class CsipSetCoordinatorService extends ProfileService {
             }
         }
 
+        // Unregister Handler and stop all queued messages.
+        if (mHandler != null) {
+            mHandler.removeCallbacksAndMessages(null);
+            mHandler = null;
+        }
+
         mDeviceGroupIdRankMap.clear();
         mCallbacks.clear();
         mFoundSetMemberToGroupId.clear();
@@ -1056,6 +1062,8 @@ public class CsipSetCoordinatorService extends ProfileService {
             mGroupIdToConnectedDevices.get(groupId).add(device);
             disableCsipIfNeeded(groupId);
         }
+        mAdapterService.handleProfileConnectionStateChange(
+                BluetoothProfile.CSIP_SET_COORDINATOR, device, fromState, toState);
     }
 
     /**

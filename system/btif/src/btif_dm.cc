@@ -86,6 +86,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_octets.h"
@@ -1933,23 +1934,39 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
       }
 
       Uuid existing_uuids[BT_MAX_NUM_UUIDS] = {};
+
+      // Look up UUIDs using pseudo address (either RPA or static address)
       bt_status_t existing_lookup_result =
           btif_get_existing_uuids(&bd_addr, existing_uuids);
-      if (existing_lookup_result == BT_STATUS_FAIL &&
-          bd_addr != static_addr_copy) {
+
+      if (existing_lookup_result != BT_STATUS_FAIL) {
+        LOG_INFO("Got some existing UUIDs by address %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+
+        for (int i = 0; i < BT_MAX_NUM_UUIDS; i++) {
+          Uuid uuid = existing_uuids[i];
+          if (uuid.IsEmpty()) {
+            continue;
+          }
+          uuids.insert(uuid);
+        }
+      }
+
+      if (bd_addr != static_addr_copy) {
+        // Look up UUID using static address, if different than sudo address
         existing_lookup_result =
             btif_get_existing_uuids(&static_addr_copy, existing_uuids);
         if (existing_lookup_result != BT_STATUS_FAIL) {
           LOG_INFO("Got some existing UUIDs by static address %s",
                    ADDRESS_TO_LOGGABLE_CSTR(static_addr_copy));
+          for (int i = 0; i < BT_MAX_NUM_UUIDS; i++) {
+            Uuid uuid = existing_uuids[i];
+            if (uuid.IsEmpty()) {
+              continue;
+            }
+            uuids.insert(uuid);
+          }
         }
-      }
-      for (int i = 0; i < BT_MAX_NUM_UUIDS; i++) {
-        Uuid uuid = existing_uuids[i];
-        if (uuid.IsEmpty()) {
-          continue;
-        }
-        uuids.insert(uuid);
       }
 
       for (auto& uuid : uuids) {
@@ -2478,6 +2495,7 @@ void btif_dm_start_discovery(void) {
   btif_dm_inquiry_in_progress = false;
   /* find nearby devices */
   BTA_DmSearch(btif_dm_search_devices_evt);
+  power_telemetry::GetInstance().LogScanStarted();
 }
 
 /*******************************************************************************
@@ -4060,7 +4078,7 @@ void btif_dm_disconnect_all_acls() {
 
 void btif_dm_le_rand(LeRandCallback callback) {
   LOG_VERBOSE("%s: called", __func__);
-  BTA_DmLeRand(callback);
+  BTA_DmLeRand(std::move(callback));
 }
 
 void btif_dm_set_event_filter_connection_setup_all_devices() {
