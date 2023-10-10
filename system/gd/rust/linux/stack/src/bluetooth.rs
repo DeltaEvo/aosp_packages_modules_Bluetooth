@@ -1347,10 +1347,6 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     let _ = api_txl.send(APIMessage::IsReady(BluetoothAPI::Adapter)).await;
                     // TODO(b:300202052) make sure media interface is exposed after initialized
                     let _ = api_txl.send(APIMessage::IsReady(BluetoothAPI::Media)).await;
-                    // TODO(b:300202055) make sure GATT interface is exposed after initialized
-                    let _ = api_txl.send(APIMessage::IsReady(BluetoothAPI::Gatt)).await;
-                    // TODO(b:300202503) make sure battery interface is exposed after initialized
-                    let _ = api_txl.send(APIMessage::IsReady(BluetoothAPI::Battery)).await;
                 });
             }
         }
@@ -2822,20 +2818,13 @@ impl BtifHHCallbacks for Bluetooth {
         );
     }
 
-    fn get_report(
-        &mut self,
-        mut address: RawAddress,
-        status: BthhStatus,
-        mut data: Vec<u8>,
-        size: i32,
-    ) {
+    fn get_report(&mut self, address: RawAddress, status: BthhStatus, _data: Vec<u8>, size: i32) {
         debug!(
             "Hid host got report: Address({}) Status({:?}) Report Size({:?})",
             DisplayAddress(&address),
             status,
             size
         );
-        self.hh.as_ref().unwrap().get_report_reply(&mut address, status, &mut data, size as u16);
     }
 
     fn handshake(&mut self, address: RawAddress, status: BthhStatus) {

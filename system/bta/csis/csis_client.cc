@@ -1277,7 +1277,12 @@ class CsisClientImpl : public CsisClient {
                     service_data_len,
                 BTM_BLE_AD_TYPE_RSI, &service_data_len))) {
       RawAddress bda;
-      STREAM_TO_BDADDR(bda, p_service_data);
+      const uint8_t *p_bda = p_service_data;
+      if (service_data_len < RawAddress::kLength) {
+          continue;
+      }
+
+      STREAM_TO_BDADDR(bda, p_bda);
       devices.push_back(std::move(bda));
     }
 
@@ -1306,6 +1311,18 @@ class CsisClientImpl : public CsisClient {
     if (csis_device) {
       DLOG(INFO) << __func__ << " Drop same device .."
                  << ADDRESS_TO_LOGGABLE_STR(result->bd_addr);
+      return;
+    }
+
+    /* Make sure device is not already bonded which could
+     * be a case for dual mode devices where
+     */
+    tBTM_SEC_DEV_REC* p_dev = btm_find_dev(result->bd_addr);
+    if (p_dev && p_dev->is_le_link_key_known()) {
+      LOG_VERBOSE(
+          "Device %s already bonded. Identity address: %s",
+          ADDRESS_TO_LOGGABLE_CSTR(result->bd_addr),
+          ADDRESS_TO_LOGGABLE_CSTR(p_dev->ble.identity_address_with_type));
       return;
     }
 
@@ -1446,6 +1463,18 @@ class CsisClientImpl : public CsisClient {
     if (csis_device) {
       LOG_DEBUG("Drop known device %s",
                 ADDRESS_TO_LOGGABLE_CSTR(result->bd_addr));
+      return;
+    }
+
+    /* Make sure device is not already bonded which could
+     * be a case for dual mode devices where
+     */
+    tBTM_SEC_DEV_REC* p_dev = btm_find_dev(result->bd_addr);
+    if (p_dev && p_dev->is_le_link_key_known()) {
+      LOG_VERBOSE(
+          "Device %s already bonded. Identity address: %s",
+          ADDRESS_TO_LOGGABLE_CSTR(result->bd_addr),
+          ADDRESS_TO_LOGGABLE_CSTR(p_dev->ble.identity_address_with_type));
       return;
     }
 
