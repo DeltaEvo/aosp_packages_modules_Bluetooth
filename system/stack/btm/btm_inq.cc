@@ -36,6 +36,7 @@
 #include <mutex>
 
 #include "advertise_data_parser.h"
+#include "btif/include/btif_config.h"
 #include "common/time_util.h"
 #include "device/include/controller.h"
 #include "main/shim/btm_api.h"
@@ -44,6 +45,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
@@ -54,7 +56,6 @@
 #include "stack/include/inq_hci_link_interface.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-#include "btif/include/btif_config.h"
 
 namespace {
 constexpr char kBtmLogTag[] = "SCAN";
@@ -265,6 +266,9 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
   /* If the window and/or interval is '0', set to default values */
   BTM_TRACE_API("BTM_SetDiscoverability: mode %d [NonDisc-0, Lim-1, Gen-2]",
                 inq_mode);
+  (inq_mode != BTM_NON_DISCOVERABLE)
+      ? power_telemetry::GetInstance().LogInqScanStarted()
+      : power_telemetry::GetInstance().LogInqScanStopped();
 
   /* Set the IAC if needed */
   if (inq_mode != BTM_NON_DISCOVERABLE) {
@@ -1161,16 +1165,19 @@ tINQ_DB_ENT* btm_inq_db_find(const RawAddress& p_bda) {
  * Returns          pointer to entry
  *
  ******************************************************************************/
-tINQ_DB_ENT* btm_inq_db_new(const RawAddress& p_bda) {
-  uint16_t xx;
-  uint64_t ot = UINT64_MAX;
+tINQ_DB_ENT* btm_inq_db_new(const RawAddress& p_bda, bool is_ble) {
+  uint16_t xx = 0, yy = 0;
+  uint32_t ot = 0xFFFFFFFF;
   int8_t i_rssi = 0;
 
-  std::lock_guard<std::mutex> lock(inq_db_lock_);
-  tINQ_DB_ENT* p_ent = inq_db_;
-  tINQ_DB_ENT* p_old = inq_db_;
+  if (is_ble) yy = BTM_INQ_DB_SIZE / 2;
+  else yy = 0;
 
-  for (xx = 0; xx < BTM_INQ_DB_SIZE; xx++, p_ent++) {
+  std::lock_guard<std::mutex> lock(inq_db_lock_);
+  tINQ_DB_ENT* p_ent = &inq_db_[yy];
+  tINQ_DB_ENT* p_old = &inq_db_[yy];
+
+  for (xx = 0; xx < BTM_INQ_DB_SIZE / 2; xx++, p_ent++) {
     if (!p_ent->in_use) {
       memset(p_ent, 0, sizeof(tINQ_DB_ENT));
       p_ent->inq_info.results.remote_bd_addr = p_bda;
@@ -1324,7 +1331,7 @@ void btm_process_inq_results(const uint8_t* p, uint8_t hci_evt_len,
     /* If existing entry, use that, else get a new one (possibly reusing the
      * oldest) */
     if (p_i == NULL) {
-      p_i = btm_inq_db_new(bda);
+      p_i = btm_inq_db_new(bda, false);
       is_new = true;
     }
 

@@ -121,11 +121,6 @@ void l2cu_set_lcb_handle(struct t_l2c_linkcb& p_lcb, uint16_t handle) {
  *
  ******************************************************************************/
 void l2cu_update_lcb_4_bonding(const RawAddress& p_bd_addr, bool is_bonding) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    bluetooth::shim::L2CA_SetBondingState(p_bd_addr, is_bonding);
-    return;
-  }
-
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(p_bd_addr, BT_TRANSPORT_BR_EDR);
 
   if (p_lcb) {
@@ -1351,7 +1346,7 @@ void l2cu_change_pri_ccb(tL2C_CCB* p_ccb, tL2CAP_CHNL_PRIORITY priority) {
  * Returns          pointer to CCB, or NULL if none
  *
  ******************************************************************************/
-tL2C_CCB* l2cu_allocate_ccb(tL2C_LCB* p_lcb, uint16_t cid) {
+tL2C_CCB* l2cu_allocate_ccb(tL2C_LCB* p_lcb, uint16_t cid, bool is_eatt) {
   LOG_DEBUG("is_dynamic = %d, cid 0x%04x", p_lcb != nullptr, cid);
   if (!l2cb.p_free_ccb_first) {
     LOG_ERROR("First free ccb is null for cid 0x%04x", cid);
@@ -1471,7 +1466,12 @@ tL2C_CCB* l2cu_allocate_ccb(tL2C_LCB* p_lcb, uint16_t cid) {
 
   if (p_lcb != NULL) {
     // once a dynamic channel is opened, timeouts become active
-    p_lcb->with_active_local_clients = true;
+    // the exception for this is EATT, since that is managed by GATT clients,
+    // not by the L2CAP layer (GATT will keep the idle timeout at infinity while
+    // clients are active)
+    if (!is_eatt) {
+      p_lcb->with_active_local_clients = true;
+    }
   }
 
   return p_ccb;
@@ -1491,10 +1491,6 @@ tL2C_CCB* l2cu_allocate_ccb(tL2C_LCB* p_lcb, uint16_t cid) {
  *
  ******************************************************************************/
 bool l2cu_start_post_bond_timer(uint16_t handle) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return true;
-  }
-
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
   if (p_lcb == nullptr) {
     LOG_WARN("Unable to find link control block for handle:0x%04x", handle);
@@ -2055,10 +2051,6 @@ void l2cu_process_our_cfg_rsp(tL2C_CCB* p_ccb, tL2CAP_CFG_INFO* p_cfg) {
  *
  ******************************************************************************/
 void l2cu_device_reset(void) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return;
-  }
-
   int xx;
   tL2C_LCB* p_lcb = &l2cb.lcb_pool[0];
 
@@ -2509,10 +2501,6 @@ bool l2cu_set_acl_latency(const RawAddress& bd_addr, tL2CAP_LATENCY latency) {
  *
  ******************************************************************************/
 void l2cu_set_non_flushable_pbf(bool is_supported) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return;
-  }
-
   if (is_supported)
     l2cb.non_flushable_pbf =
         (L2CAP_PKT_START_NON_FLUSHABLE << L2CAP_PKT_TYPE_SHIFT);
@@ -2531,11 +2519,6 @@ void l2cu_set_non_flushable_pbf(bool is_supported) {
  *
  ******************************************************************************/
 void l2cu_resubmit_pending_sec_req(const RawAddress* p_bda) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    // GD L2cap will enforce security when condition changed
-    return;
-  }
-
   tL2C_LCB* p_lcb;
   tL2C_CCB* p_ccb;
   tL2C_CCB* p_next_ccb;
@@ -2660,7 +2643,12 @@ bool l2cu_initialize_fixed_ccb(tL2C_LCB* p_lcb, uint16_t fixed_cid) {
   p_ccb = l2cu_allocate_ccb(NULL, 0);
   if (p_ccb == NULL) return (false);
 
-  alarm_cancel(p_lcb->l2c_lcb_timer);
+  if (p_lcb->link_state == LST_DISCONNECTED) {
+    alarm_cancel(p_lcb->l2c_lcb_timer);
+  } else {
+    LOG_WARN("Unable to cancel link control block for link connection to device %s",
+                 ADDRESS_TO_LOGGABLE_CSTR(p_lcb->remote_bd_addr));
+  }
 
   /* Set CID for the connection */
   p_ccb->local_cid = fixed_cid;
@@ -2722,8 +2710,7 @@ void l2cu_no_dynamic_ccbs(tL2C_LCB* p_lcb) {
   // be in use even without a GATT client. We only timeout if either a dynamic
   // channel or a GATT client was used, since then we expect the client to
   // manage the lifecycle of the connection.
-  if (bluetooth::common::init_flags::finite_att_timeout_is_enabled() &&
-      !p_lcb->with_active_local_clients) {
+  if (!p_lcb->with_active_local_clients) {
     return;
   }
 

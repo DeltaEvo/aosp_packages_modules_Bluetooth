@@ -53,8 +53,8 @@ import java.util.Objects;
  * A profile service that connects to the Battery service (BAS) of BLE devices
  */
 public class BatteryService extends ProfileService {
-    private static final boolean DBG = false;
     private static final String TAG = "BatteryService";
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     // Timeout for state machine thread join, to prevent potential ANR.
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1_000;
@@ -442,7 +442,7 @@ public class BatteryService extends ProfileService {
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public void handleBatteryChanged(BluetoothDevice device, int batteryLevel) {
-        mAdapterService.setBatteryLevel(device, batteryLevel);
+        mAdapterService.setBatteryLevel(device, batteryLevel, /*isBas=*/ true);
     }
 
     private BatteryStateMachine getOrCreateStateMachine(BluetoothDevice device) {

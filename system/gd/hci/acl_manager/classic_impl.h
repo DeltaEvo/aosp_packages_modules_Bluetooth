@@ -406,8 +406,10 @@ struct classic_impl : public security::ISecurityManagerListener {
 
     // HACK: Some failed SCO connections are reporting failures via
     //       ConnectComplete instead of ScoConnectionComplete.
-    //       Drop such packets.
-    if (handle == 0xffff && link_type == LinkType::SCO) {
+    //       The pattern of it is that the handle is always 0xffff.
+    //       We check it with 0x0fff since PDL only extracts 12 bits for handle.
+    //       Drop such packets when the pattern is matched.
+    if (handle == 0x0fff && link_type == LinkType::SCO) {
       LOG_ERROR(
           "ConnectionComplete with invalid handle(%u), link type(%u) and status(%d). Dropping packet.",
           handle,
@@ -503,7 +505,7 @@ struct classic_impl : public security::ISecurityManagerListener {
       return;
     }
     uint16_t handle = packet_type_changed.GetConnectionHandle();
-    connections.execute(handle, [=](ConnectionManagementCallbacks* callbacks) {
+    connections.execute(handle, [=](ConnectionManagementCallbacks* /* callbacks */) {
       // We don't handle this event; we didn't do this in legacy stack either.
     });
   }
@@ -780,9 +782,11 @@ struct classic_impl : public security::ISecurityManagerListener {
         std::move(builder), handler_->BindOnce(&check_command_status<RejectConnectionRequestStatusView>));
   }
 
-  void OnDeviceBonded(bluetooth::hci::AddressWithType device) override {}
-  void OnDeviceUnbonded(bluetooth::hci::AddressWithType device) override {}
-  void OnDeviceBondFailed(bluetooth::hci::AddressWithType device, security::PairingFailure status) override {}
+  void OnDeviceBonded(bluetooth::hci::AddressWithType /* device */) override {}
+  void OnDeviceUnbonded(bluetooth::hci::AddressWithType /* device */) override {}
+  void OnDeviceBondFailed(
+      bluetooth::hci::AddressWithType /* device */,
+      security::PairingFailure /* status */) override {}
 
   void set_security_module(security::SecurityModule* security_module) {
     security_manager_ = security_module->GetSecurityManager();

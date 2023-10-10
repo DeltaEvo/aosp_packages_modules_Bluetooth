@@ -46,6 +46,7 @@ using bluetooth::packet::kLittleEndian;
 using bluetooth::packet::PacketView;
 using bluetooth::packet::RawBuilder;
 using testing::_;
+using testing::ElementsAreArray;
 
 namespace {
 
@@ -83,7 +84,7 @@ class TestController : public testing::MockController {
     return total_acl_buffers_;
   }
 
-  bool IsSupported(bluetooth::hci::OpCode op_code) const override {
+  bool IsSupported(bluetooth::hci::OpCode /* op_code */) const override {
     return false;
   }
 
@@ -105,7 +106,7 @@ class TestController : public testing::MockController {
  protected:
   void Start() override {}
   void Stop() override {}
-  void ListDependencies(ModuleList* list) const {}
+  void ListDependencies(ModuleList* /* list */) const {}
 };
 
 class AclManagerNoCallbacksTest : public ::testing::Test {
@@ -378,7 +379,7 @@ class AclManagerWithLeConnectionTest : public AclManagerTest {
     auto first_connection = GetLeConnectionFuture();
     EXPECT_CALL(mock_le_connection_callbacks_, OnLeConnectSuccess(remote_with_type_, _))
         .WillRepeatedly([this](
-                            hci::AddressWithType address_with_type,
+                            hci::AddressWithType /* address_with_type */,
                             std::unique_ptr<LeAclConnection> connection) {
           le_connections_.push_back(std::move(connection));
           if (le_connection_promise_ != nullptr) {
@@ -539,15 +540,15 @@ TEST_F(AclManagerTest, create_connection_with_fast_mode) {
 
   auto first_connection = GetLeConnectionFuture();
   EXPECT_CALL(mock_le_connection_callbacks_, OnLeConnectSuccess(remote_with_type, _))
-      .WillRepeatedly(
-          [this](
-              hci::AddressWithType address_with_type, std::unique_ptr<LeAclConnection> connection) {
-            le_connections_.push_back(std::move(connection));
-            if (le_connection_promise_ != nullptr) {
-              le_connection_promise_->set_value();
-              le_connection_promise_.reset();
-            }
-          });
+      .WillRepeatedly([this](
+                          hci::AddressWithType /* address_with_type */,
+                          std::unique_ptr<LeAclConnection> connection) {
+        le_connections_.push_back(std::move(connection));
+        if (le_connection_promise_ != nullptr) {
+          le_connection_promise_->set_value();
+          le_connection_promise_.reset();
+        }
+      });
 
   test_hci_layer_->IncomingLeMetaEvent(LeConnectionCompleteBuilder::Create(
       ErrorCode::SUCCESS,
@@ -580,15 +581,15 @@ TEST_F(AclManagerTest, create_connection_with_slow_mode) {
   test_hci_layer_->IncomingEvent(LeCreateConnectionStatusBuilder::Create(ErrorCode::SUCCESS, 0x01));
   auto first_connection = GetLeConnectionFuture();
   EXPECT_CALL(mock_le_connection_callbacks_, OnLeConnectSuccess(remote_with_type, _))
-      .WillRepeatedly(
-          [this](
-              hci::AddressWithType address_with_type, std::unique_ptr<LeAclConnection> connection) {
-            le_connections_.push_back(std::move(connection));
-            if (le_connection_promise_ != nullptr) {
-              le_connection_promise_->set_value();
-              le_connection_promise_.reset();
-            }
-          });
+      .WillRepeatedly([this](
+                          hci::AddressWithType /* address_with_type */,
+                          std::unique_ptr<LeAclConnection> connection) {
+        le_connections_.push_back(std::move(connection));
+        if (le_connection_promise_ != nullptr) {
+          le_connection_promise_->set_value();
+          le_connection_promise_.reset();
+        }
+      });
 
   test_hci_layer_->IncomingLeMetaEvent(LeConnectionCompleteBuilder::Create(
       ErrorCode::SUCCESS,
@@ -1385,6 +1386,179 @@ TEST_F(AclManagerWithConnectionTest, remote_esco_connect_request) {
   fake_registry_.SynchronizeModuleHandler(&HciLayer::Factory, std::chrono::milliseconds(20));
   fake_registry_.SynchronizeModuleHandler(&AclManager::Factory, std::chrono::milliseconds(20));
   fake_registry_.SynchronizeModuleHandler(&HciLayer::Factory, std::chrono::milliseconds(20));
+}
+
+class AclManagerWithConnectionAssemblerTest : public AclManagerWithConnectionTest {
+ protected:
+  void SetUp() override {
+    AclManagerWithConnectionTest::SetUp();
+    connection_queue_end_ = connection_->GetAclQueueEnd();
+  }
+
+  std::vector<uint8_t> MakeAclPayload(size_t length, uint16_t cid, uint8_t offset) {
+    std::vector<uint8_t> acl_payload;
+    acl_payload.push_back(length & 0xff);
+    acl_payload.push_back((length >> 8u) & 0xff);
+    acl_payload.push_back(cid & 0xff);
+    acl_payload.push_back((cid >> 8u) & 0xff);
+    for (uint8_t i = 0; i < length; i++) {
+      acl_payload.push_back(i + offset);
+    }
+    return acl_payload;
+  }
+
+  void SendSinglePacket(const std::vector<uint8_t>& acl_payload) {
+    auto payload_builder = std::make_unique<RawBuilder>(acl_payload);
+
+    test_hci_layer_->IncomingAclData(
+        handle_,
+        AclBuilder::Create(
+            handle_,
+            PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE,
+            BroadcastFlag::POINT_TO_POINT,
+            std::move(payload_builder)));
+  }
+
+  void ReceiveAndCheckSinglePacket(const std::vector<uint8_t>& acl_payload) {
+    std::unique_ptr<PacketView<kLittleEndian>> received;
+    do {
+      received = connection_queue_end_->TryDequeue();
+    } while (received == nullptr);
+
+    std::vector<uint8_t> received_vector;
+    for (uint8_t byte : *received) {
+      received_vector.push_back(byte);
+    }
+
+    EXPECT_THAT(received_vector, ElementsAreArray(acl_payload));
+  }
+
+  void SendAndReceiveSinglePacket(const std::vector<uint8_t>& acl_payload) {
+    SendSinglePacket(acl_payload);
+    ReceiveAndCheckSinglePacket(acl_payload);
+  }
+
+  void TearDown() override {
+    // Make sure that all previous packets were received and the assembler is in a good state.
+    SendAndReceiveSinglePacket(MakeAclPayload(0x60, 0xACC, 3));
+    AclManagerWithConnectionTest::TearDown();
+  }
+  AclConnection::QueueUpEnd* connection_queue_end_{};
+};
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_single_packet) {}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_short_packet_discarded) {
+  std::vector<uint8_t> invalid_payload{1, 2};
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE,
+          BroadcastFlag::POINT_TO_POINT,
+          std::make_unique<RawBuilder>(invalid_payload)));
+}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_two_short_packets_discarded) {
+  std::vector<uint8_t> invalid_payload{1, 2};
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE,
+          BroadcastFlag::POINT_TO_POINT,
+          std::make_unique<RawBuilder>(invalid_payload)));
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE,
+          BroadcastFlag::POINT_TO_POINT,
+          std::make_unique<RawBuilder>(invalid_payload)));
+}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_single_valid_packet) {
+  SendAndReceiveSinglePacket(MakeAclPayload(20, 0x41, 2));
+}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_one_byte_packets) {
+  size_t payload_size = 0x30;
+  std::vector<uint8_t> payload = MakeAclPayload(payload_size, 0xABB /* cid */, 4 /* offset */);
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE,
+          BroadcastFlag::POINT_TO_POINT,
+          std::make_unique<RawBuilder>(
+              std::vector<uint8_t>{payload.cbegin(), payload.cbegin() + 1})));
+  for (size_t i = 1; i < payload.size(); i++) {
+    test_hci_layer_->IncomingAclData(
+        handle_,
+        AclBuilder::Create(
+            handle_,
+            PacketBoundaryFlag::CONTINUING_FRAGMENT,
+            BroadcastFlag::POINT_TO_POINT,
+            std::make_unique<RawBuilder>(
+                std::vector<uint8_t>{payload.cbegin() + i, payload.cbegin() + i + 1})));
+  }
+  ReceiveAndCheckSinglePacket(payload);
+}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_two_byte_packets) {
+  size_t payload_size = 0x30;  // must be even
+  std::vector<uint8_t> payload = MakeAclPayload(payload_size, 0xABB /* cid */, 4 /* offset */);
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE,
+          BroadcastFlag::POINT_TO_POINT,
+          std::make_unique<RawBuilder>(
+              std::vector<uint8_t>{payload.cbegin(), payload.cbegin() + 2})));
+  for (size_t i = 1; i < payload.size() / 2; i++) {
+    test_hci_layer_->IncomingAclData(
+        handle_,
+        AclBuilder::Create(
+            handle_,
+            PacketBoundaryFlag::CONTINUING_FRAGMENT,
+            BroadcastFlag::POINT_TO_POINT,
+            std::make_unique<RawBuilder>(
+                std::vector<uint8_t>{payload.cbegin() + 2 * i, payload.cbegin() + 2 * (i + 1)})));
+  }
+  ReceiveAndCheckSinglePacket(payload);
+}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_continuation_without_begin) {
+  size_t payload_size = 0x30;
+  std::vector<uint8_t> payload = MakeAclPayload(payload_size, 0xABB /* cid */, 4 /* offset */);
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::CONTINUING_FRAGMENT,
+          BroadcastFlag::POINT_TO_POINT,
+          std::make_unique<RawBuilder>(std::vector<uint8_t>{payload.cbegin(), payload.cend()})));
+}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_drop_broadcasts) {
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::FIRST_AUTOMATICALLY_FLUSHABLE,
+          BroadcastFlag::ACTIVE_PERIPHERAL_BROADCAST,
+          std::make_unique<RawBuilder>(MakeAclPayload(20, 0xBBB /* cid */, 5 /* offset */))));
+}
+
+TEST_F(AclManagerWithConnectionAssemblerTest, assembler_test_drop_non_flushable) {
+  test_hci_layer_->IncomingAclData(
+      handle_,
+      AclBuilder::Create(
+          handle_,
+          PacketBoundaryFlag::FIRST_NON_AUTOMATICALLY_FLUSHABLE,
+          BroadcastFlag::POINT_TO_POINT,
+          std::make_unique<RawBuilder>(MakeAclPayload(20, 0xAAA /* cid */, 6 /* offset */))));
 }
 
 }  // namespace acl_manager

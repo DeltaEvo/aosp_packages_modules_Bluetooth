@@ -16,6 +16,7 @@ pub mod hci {
     #![allow(clippy::all)]
     #![allow(unused)]
     #![allow(missing_docs)]
+    #![allow(non_camel_case_types)]
 
     include!(concat!(env!("OUT_DIR"), "/hci_packets.rs"));
 
@@ -51,18 +52,6 @@ pub mod hci {
     impl Address {
         pub fn is_empty(&self) -> bool {
             *self == EMPTY_ADDRESS
-        }
-    }
-
-    impl fmt::Display for ClassOfDevice {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                f,
-                "{:03X}-{:01X}-{:02X}",
-                (self.0 >> 12) & 0xfff,
-                (self.0 >> 8) & 0xf,
-                self.0 & 0xff,
-            )
         }
     }
 

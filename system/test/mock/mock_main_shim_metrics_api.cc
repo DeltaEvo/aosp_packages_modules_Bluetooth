@@ -56,6 +56,7 @@ struct LogMetricA2dpAudioUnderrunEvent LogMetricA2dpAudioUnderrunEvent;
 struct LogMetricA2dpAudioOverrunEvent LogMetricA2dpAudioOverrunEvent;
 struct LogMetricA2dpPlaybackEvent LogMetricA2dpPlaybackEvent;
 struct LogMetricHfpPacketLossStats LogMetricHfpPacketLossStats;
+struct LogMetricMmcTranscodeRttStats LogMetricMmcTranscodeRttStats;
 struct LogMetricReadRssiResult LogMetricReadRssiResult;
 struct LogMetricReadFailedContactCounterResult
     LogMetricReadFailedContactCounterResult;
@@ -106,10 +107,19 @@ void bluetooth::shim::LogMetricA2dpPlaybackEvent(const RawAddress& raw_address,
 }
 void bluetooth::shim::LogMetricHfpPacketLossStats(const RawAddress& raw_address,
                                                   int num_decoded_frames,
-                                                  double packet_loss_ratio) {
+                                                  double packet_loss_ratio,
+                                                  uint16_t codec_type) {
   inc_func_call_count(__func__);
   test::mock::main_shim_metrics_api::LogMetricHfpPacketLossStats(
-      raw_address, num_decoded_frames, packet_loss_ratio);
+      raw_address, num_decoded_frames, packet_loss_ratio, codec_type);
+}
+void bluetooth::shim::LogMetricMmcTranscodeRttStats(int maximum_rtt,
+                                                    double mean_rtt,
+                                                    int num_requests,
+                                                    int codec_type) {
+  inc_func_call_count(__func__);
+  test::mock::main_shim_metrics_api::LogMetricMmcTranscodeRttStats(
+      maximum_rtt, mean_rtt, num_requests, codec_type);
 }
 void bluetooth::shim::LogMetricReadRssiResult(const RawAddress& raw_address,
                                               uint16_t handle,
@@ -195,5 +205,4 @@ void bluetooth::shim::LogMetricBluetoothLEConnectionMetricEvent(
   inc_func_call_count(__func__);
   // test::mock::main_shim_metrics_api::LogMetricBluetoothLEConnectionMetricEvent(raw_address, origin_type, connection_type, transaction_state, argument_list);
 }
-
 // END mockcify generation

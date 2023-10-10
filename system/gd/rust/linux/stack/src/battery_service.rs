@@ -7,10 +7,10 @@ use crate::bluetooth_gatt::{
     BluetoothGatt, BluetoothGattService, IBluetoothGatt, IBluetoothGattCallback,
 };
 use crate::callbacks::Callbacks;
-use crate::uuid;
 use crate::uuid::UuidHelper;
 use crate::Message;
 use crate::RPCProxy;
+use crate::{uuid, APIMessage, BluetoothAPI};
 use bt_topshim::btif::BtTransport;
 use bt_topshim::profiles::gatt::{GattStatus, LePhy};
 use log::debug;
@@ -31,6 +31,8 @@ pub struct BatteryService {
     battery_provider_id: u32,
     /// Sender for callback communication with the main thread.
     tx: Sender<Message>,
+    /// Sender for callback communication with the api message thread.
+    api_tx: Sender<APIMessage>,
     callbacks: Callbacks<dyn IBatteryServiceCallback + Send>,
     /// The GATT client ID needed for GATT calls.
     client_id: Option<i32>,
@@ -98,6 +100,7 @@ impl BatteryService {
         gatt: Arc<Mutex<Box<BluetoothGatt>>>,
         battery_provider_manager: Arc<Mutex<Box<BatteryProviderManager>>>,
         tx: Sender<Message>,
+        api_tx: Sender<APIMessage>,
     ) -> BatteryService {
         let tx = tx.clone();
         let callbacks = Callbacks::new(tx.clone(), Message::BatteryServiceCallbackDisconnected);
@@ -113,6 +116,7 @@ impl BatteryService {
             battery_provider_manager,
             battery_provider_id,
             tx,
+            api_tx,
             callbacks,
             client_id,
             battery_sets,
@@ -129,6 +133,12 @@ impl BatteryService {
             Box::new(GattCallback::new(self.tx.clone())),
             false,
         );
+
+        // TODO(b:300202503) make sure battery interface is exposed after initialized
+        let api_tx = self.api_tx.clone();
+        tokio::spawn(async move {
+            let _ = api_tx.send(APIMessage::IsReady(BluetoothAPI::Battery)).await;
+        });
     }
 
     /// Handles all callback messages in a central location to avoid deadlocks.
@@ -243,7 +253,7 @@ impl BatteryService {
     fn set_battery_info(&mut self, remote_address: &String, value: &Vec<u8>) -> BatterySet {
         let level: Vec<_> = value.iter().cloned().chain(iter::repeat(0 as u8)).take(4).collect();
         let level = u32::from_le_bytes(level.try_into().unwrap());
-        debug!("Received battery level for {}: {}", remote_address.clone(), level);
+        debug!("BAS received battery level for {}: {}", remote_address.clone(), level);
         let battery_set = self.battery_sets.entry(remote_address.clone()).or_insert_with(|| {
             BatterySet::new(
                 remote_address.clone(),
@@ -284,14 +294,10 @@ impl BatteryService {
             None => return,
         }
         // Let BatteryProviderManager know that BAS no longer has a battery for this device.
-        self.battery_provider_manager.lock().unwrap().set_battery_info(
+        self.battery_provider_manager.lock().unwrap().remove_battery_info(
             self.battery_provider_id,
-            BatterySet::new(
-                remote_address.clone(),
-                uuid::BAS.to_string(),
-                "BAS".to_string(),
-                vec![],
-            ),
+            remote_address.clone(),
+            uuid::BAS.to_string(),
         );
         self.battery_sets.remove(&remote_address);
     }

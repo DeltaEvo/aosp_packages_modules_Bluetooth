@@ -39,6 +39,7 @@
 #include "device/include/interop.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
+#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/btm/btm_sec.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/sdp_api.h"
@@ -163,6 +164,12 @@ RobustCachingSupport GetRobustCachingSupport(const tBTA_GATTC_CLCB* p_clcb,
     return RobustCachingSupport::UNSUPPORTED;
   }
 
+  if (p_clcb->transport == BT_TRANSPORT_LE &&
+      !BTM_IsRemoteVersionReceived(p_clcb->bda)) {
+    LOG_INFO("version info is not ready yet");
+    return RobustCachingSupport::W4_REMOTE_VERSION;
+  }
+
   // This is workaround for the embedded devices being already on the market
   // and having a serious problem with handle Read By Type with
   // GATT_UUID_DATABASE_HASH. With this workaround, Android will assume that
@@ -246,9 +253,8 @@ static void bta_gattc_explore_next_service(uint16_t conn_id,
         BTA_GATTC_DISCOVER_REQ_READ_EXT_PROP_DESC;
 
     if (p_srvc_cb->read_multiple_not_supported || descriptors.size() == 1) {
-      tGATT_READ_PARAM read_param{
-          .by_handle = {.handle = descriptors.front(),
-                        .auth_req = GATT_AUTH_REQ_NONE}};
+      tGATT_READ_PARAM read_param{.by_handle = {.auth_req = GATT_AUTH_REQ_NONE,
+                                                .handle = descriptors.front()}};
       GATTC_Read(conn_id, GATT_READ_BY_HANDLE, &read_param);
       // asynchronous continuation in bta_gattc_op_cmpl_during_discovery
       return;
@@ -350,7 +356,8 @@ descriptor_discovery_done:
 }
 
 /* Process the discovery result from sdp */
-void bta_gattc_sdp_callback(tSDP_STATUS sdp_status, const void* user_data) {
+void bta_gattc_sdp_callback(UNUSED_ATTR const RawAddress& bd_addr,
+                            tSDP_STATUS sdp_status, const void* user_data) {
   tBTA_GATTC_CB_DATA* cb_data = (tBTA_GATTC_CB_DATA*)user_data;
   tBTA_GATTC_SERV* p_srvc_cb = bta_gattc_find_scb_by_cid(cb_data->sdp_conn_id);
 

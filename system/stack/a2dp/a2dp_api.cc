@@ -34,6 +34,7 @@
 #include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
+#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "sdpdefs.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/sdp_api.h"
@@ -69,7 +70,8 @@ static uint16_t a2dp_attr_list[] = {
  * Returns          Nothing.
  *
  *****************************************************************************/
-static void a2dp_sdp_cback(tSDP_STATUS status) {
+static void a2dp_sdp_cback(UNUSED_ATTR const RawAddress& bd_addr,
+                           tSDP_STATUS status) {
   tSDP_DISC_REC* p_rec = NULL;
   tSDP_DISC_ATTR* p_attr;
   bool found = false;
@@ -93,21 +95,40 @@ static void a2dp_sdp_cback(tSDP_STATUS status) {
       /* get service name */
       if ((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
                p_rec, ATTR_ID_SERVICE_NAME)) != NULL) {
-        a2dp_svc.p_service_name = (char*)p_attr->attr_value.v.array;
-        a2dp_svc.service_len = SDP_DISC_ATTR_LEN(p_attr->attr_len_type);
+        if (SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == TEXT_STR_DESC_TYPE) {
+          a2dp_svc.p_service_name = (char*)p_attr->attr_value.v.array;
+          a2dp_svc.service_len = SDP_DISC_ATTR_LEN(p_attr->attr_len_type);
+        } else {
+          LOG_ERROR("ATTR_ID_SERVICE_NAME attr type not STR!!");
+        }
+      } else {
+        LOG_ERROR("ATTR_ID_SERVICE_NAME attr not found!!");
       }
 
       /* get provider name */
       if ((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
                p_rec, ATTR_ID_PROVIDER_NAME)) != NULL) {
-        a2dp_svc.p_provider_name = (char*)p_attr->attr_value.v.array;
-        a2dp_svc.provider_len = SDP_DISC_ATTR_LEN(p_attr->attr_len_type);
+        if (SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == TEXT_STR_DESC_TYPE) {
+          a2dp_svc.p_provider_name = (char*)p_attr->attr_value.v.array;
+          a2dp_svc.provider_len = SDP_DISC_ATTR_LEN(p_attr->attr_len_type);
+        } else {
+          LOG_ERROR("ATTR_ID_PROVIDER_NAME attr type not STR!!");
+        }
+      } else {
+        LOG_ERROR("ATTR_ID_PROVIDER_NAME attr not found!!");
       }
 
       /* get supported features */
       if ((p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
                p_rec, ATTR_ID_SUPPORTED_FEATURES)) != NULL) {
-        a2dp_svc.features = p_attr->attr_value.v.u16;
+        if (SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
+          a2dp_svc.features = p_attr->attr_value.v.u16;
+        } else {
+          LOG_ERROR("ATTR_ID_SUPPORTED_FEATURES attr type not STR!!");
+        }
+      } else {
+        LOG_ERROR("ATTR_ID_SUPPORTED_FEATURES attr not found!!");
       }
 
       /* get AVDTP version */

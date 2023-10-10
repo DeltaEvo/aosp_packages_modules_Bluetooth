@@ -65,7 +65,6 @@
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager.h"
 #include "btif_a2dp.h"
-#include "btif_activity_attribution.h"
 #include "btif_api.h"
 #include "btif_av.h"
 #include "btif_bqr.h"
@@ -94,10 +93,10 @@
 #include "main/shim/dumpsys.h"
 #include "main/shim/shim.h"
 #include "osi/include/alarm.h"
-#include "osi/include/allocation_tracker.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "osi/include/wakelock.h"
 #include "profile_log_levels.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
@@ -118,10 +117,8 @@
 using bluetooth::csis::CsisClientInterface;
 using bluetooth::has::HasClientInterface;
 using bluetooth::hearing_aid::HearingAidInterface;
-#ifndef TARGET_FLOSS
 using bluetooth::le_audio::LeAudioBroadcasterInterface;
 using bluetooth::le_audio::LeAudioClientInterface;
-#endif
 using bluetooth::vc::VolumeControlInterface;
 
 /*******************************************************************************
@@ -164,14 +161,12 @@ extern const btrc_ctrl_interface_t* btif_rc_ctrl_get_interface();
 extern const btsdp_interface_t* btif_sdp_get_interface();
 /*Hearing Aid client*/
 extern HearingAidInterface* btif_hearing_aid_get_interface();
-#ifndef TARGET_FLOSS
 /* Hearing Access client */
 extern HasClientInterface* btif_has_client_get_interface();
 /* LeAudio testi client */
 extern LeAudioClientInterface* btif_le_audio_get_interface();
 /* LeAudio Broadcaster */
 extern LeAudioBroadcasterInterface* btif_le_audio_broadcaster_get_interface();
-#endif
 /* Coordinated Set Service Client */
 extern CsisClientInterface* btif_csis_client_get_interface();
 /* Volume Control client */
@@ -317,7 +312,6 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
 #endif
     btif_hearing_aid_get_interface()->RemoveDevice(bd_addr);
 
-#ifndef TARGET_FLOSS
     if (bluetooth::csis::CsisClient::IsCsisClientRunning())
       btif_csis_client_get_interface()->RemoveDevice(bd_addr);
 
@@ -327,7 +321,6 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
     if (VolumeControl::IsVolumeControlRunning()) {
       btif_volume_control_get_interface()->RemoveDevice(bd_addr);
     }
-#endif
   }
 
   void onLinkDown(const RawAddress& bd_addr) override {
@@ -336,44 +329,61 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
 };
 
 static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
-  static auto eventCallbacks = bluetooth::core::EventCallbacks{
-      .invoke_adapter_state_changed_cb = invoke_adapter_state_changed_cb,
-      .invoke_adapter_properties_cb = invoke_adapter_properties_cb,
-      .invoke_remote_device_properties_cb = invoke_remote_device_properties_cb,
-      .invoke_device_found_cb = invoke_device_found_cb,
-      .invoke_discovery_state_changed_cb = invoke_discovery_state_changed_cb,
-      .invoke_pin_request_cb = invoke_pin_request_cb,
-      .invoke_ssp_request_cb = invoke_ssp_request_cb,
-      .invoke_oob_data_request_cb = invoke_oob_data_request_cb,
-      .invoke_bond_state_changed_cb = invoke_bond_state_changed_cb,
-      .invoke_address_consolidate_cb = invoke_address_consolidate_cb,
-      .invoke_le_address_associate_cb = invoke_le_address_associate_cb,
-      .invoke_acl_state_changed_cb = invoke_acl_state_changed_cb,
-      .invoke_thread_evt_cb = invoke_thread_evt_cb,
-      .invoke_le_test_mode_cb = invoke_le_test_mode_cb,
-      .invoke_energy_info_cb = invoke_energy_info_cb,
-      .invoke_link_quality_report_cb = invoke_link_quality_report_cb};
+  static auto eventCallbacks = bluetooth::core::EventCallbacks();
+  static bool eventCallbacks_initialized;
+  if (!eventCallbacks_initialized) {
+    eventCallbacks.invoke_adapter_state_changed_cb =
+        invoke_adapter_state_changed_cb;
+    eventCallbacks.invoke_adapter_properties_cb = invoke_adapter_properties_cb;
+    eventCallbacks.invoke_remote_device_properties_cb =
+        invoke_remote_device_properties_cb;
+    eventCallbacks.invoke_device_found_cb = invoke_device_found_cb;
+    eventCallbacks.invoke_discovery_state_changed_cb =
+        invoke_discovery_state_changed_cb;
+    eventCallbacks.invoke_pin_request_cb = invoke_pin_request_cb;
+    eventCallbacks.invoke_ssp_request_cb = invoke_ssp_request_cb;
+    eventCallbacks.invoke_oob_data_request_cb = invoke_oob_data_request_cb;
+    eventCallbacks.invoke_bond_state_changed_cb = invoke_bond_state_changed_cb;
+    eventCallbacks.invoke_address_consolidate_cb =
+        invoke_address_consolidate_cb;
+    eventCallbacks.invoke_le_address_associate_cb =
+        invoke_le_address_associate_cb;
+    eventCallbacks.invoke_acl_state_changed_cb = invoke_acl_state_changed_cb;
+    eventCallbacks.invoke_thread_evt_cb = invoke_thread_evt_cb;
+    eventCallbacks.invoke_le_test_mode_cb = invoke_le_test_mode_cb;
+    eventCallbacks.invoke_energy_info_cb = invoke_energy_info_cb;
+    eventCallbacks.invoke_link_quality_report_cb =
+        invoke_link_quality_report_cb;
+
+    eventCallbacks_initialized = true;
+  }
   static auto configInterface = ConfigInterfaceImpl();
   static auto msbcCodecInterface = MSBCCodec();
   static auto lc3CodecInterface = LC3Codec();
-  static auto profileInterface = bluetooth::core::HACK_ProfileInterface{
-      // HID
-      .btif_hh_connect = btif_hh_connect,
-      .btif_hh_virtual_unplug = btif_hh_virtual_unplug,
-      .bta_hh_read_ssr_param = bta_hh_read_ssr_param,
+  static auto profileInterface = bluetooth::core::HACK_ProfileInterface();
+  static bool profileInterface_initialized;
+  if (!profileInterface_initialized) {
+    // HID
+    profileInterface.btif_hh_connect = btif_hh_connect;
+    profileInterface.btif_hh_virtual_unplug = btif_hh_virtual_unplug;
+    profileInterface.bta_hh_read_ssr_param = bta_hh_read_ssr_param;
 
-      // AVDTP
-      .btif_av_set_dynamic_audio_buffer_size =
-          btif_av_set_dynamic_audio_buffer_size,
+    // AVDTP
+    profileInterface.btif_av_set_dynamic_audio_buffer_size =
+        btif_av_set_dynamic_audio_buffer_size;
 
-      // ASHA
-      .GetHearingAidDeviceCount = HearingAid::GetDeviceCount,
+    // ASHA
+    profileInterface.GetHearingAidDeviceCount = HearingAid::GetDeviceCount;
 
-      // LE Audio
-      .IsLeAudioClientRunning = LeAudioClient::IsLeAudioClientRunning,
+    // LE Audio
+    profileInterface.IsLeAudioClientRunning =
+        LeAudioClient::IsLeAudioClientRunning;
 
-      // AVRCP
-      .AVRC_GetProfileVersion = AVRC_GetProfileVersion};
+    // AVRCP
+    profileInterface.AVRC_GetProfileVersion = AVRC_GetProfileVersion;
+
+    profileInterface_initialized = true;
+  }
 
   static auto interfaceForCore =
       CoreInterfaceImpl(&eventCallbacks, &configInterface, &msbcCodecInterface,
@@ -414,10 +424,6 @@ static int init(bt_callbacks_t* callbacks, bool start_restricted,
   bluetooth::common::InitFlags::Load(init_flags);
 
   if (interface_ready()) return BT_STATUS_DONE;
-
-#ifdef BLUEDROID_DEBUG
-  allocation_tracker_init();
-#endif
 
   set_hal_cbacks(callbacks);
 
@@ -647,8 +653,11 @@ static int cancel_bond(const RawAddress* bd_addr) {
 }
 
 static int remove_bond(const RawAddress* bd_addr) {
-  if (is_restricted_mode() && !btif_storage_is_restricted_device(bd_addr))
+  if (is_restricted_mode() && !btif_storage_is_restricted_device(bd_addr)) {
+    LOG_INFO("%s cannot be removed in restricted mode",
+             ADDRESS_TO_LOGGABLE_CSTR(*bd_addr));
     return BT_STATUS_SUCCESS;
+  }
 
   if (!interface_ready()) return BT_STATUS_NOT_READY;
 
@@ -659,7 +668,9 @@ static int remove_bond(const RawAddress* bd_addr) {
 static int get_connection_state(const RawAddress* bd_addr) {
   if (!interface_ready()) return 0;
 
-  return btif_dm_get_connection_state(bd_addr);
+  if (bd_addr == nullptr) return 0;
+
+  return btif_dm_get_connection_state(*bd_addr);
 }
 
 static int pin_reply(const RawAddress* bd_addr, uint8_t accept, uint8_t pin_len,
@@ -739,7 +750,8 @@ static int le_rand() {
   if (!interface_ready()) return BT_STATUS_NOT_READY;
 
   do_in_main_thread(
-      FROM_HERE, base::BindOnce(btif_dm_le_rand, base::Bind(&le_rand_btif_cb)));
+      FROM_HERE,
+      base::BindOnce(btif_dm_le_rand, base::BindOnce(&le_rand_btif_cb)));
   return BT_STATUS_SUCCESS;
 }
 
@@ -806,24 +818,20 @@ static void dump(int fd, const char** arguments) {
   device_debug_iot_config_dump(fd);
   BTA_HfClientDumpStatistics(fd);
   wakelock_debug_dump(fd);
-  osi_allocator_debug_dump(fd);
   alarm_debug_dump(fd);
   bluetooth::csis::CsisClient::DebugDump(fd);
-#ifndef TARGET_FLOSS
   le_audio::has::HasClient::DebugDump(fd);
-#endif
   HearingAid::DebugDump(fd);
-#ifndef TARGET_FLOSS
   LeAudioClient::DebugDump(fd);
   LeAudioBroadcaster::DebugDump(fd);
   VolumeControl::DebugDump(fd);
-#endif
   connection_manager::dump(fd);
   bluetooth::bqr::DebugDump(fd);
   PAN_Dumpsys(fd);
   DumpsysHid(fd);
   DumpsysBtaDm(fd);
   bluetooth::shim::Dump(fd, arguments);
+  power_telemetry::GetInstance().Dumpsys(fd);
 }
 
 static void dumpMetrics(std::string* output) {
@@ -897,25 +905,17 @@ static const void* get_profile_interface(const char* profile_id) {
   if (is_profile(profile_id, BT_PROFILE_HEARING_AID_ID))
     return btif_hearing_aid_get_interface();
 
-#ifndef TARGET_FLOSS
   if (is_profile(profile_id, BT_PROFILE_HAP_CLIENT_ID))
     return btif_has_client_get_interface();
-#endif
 
   if (is_profile(profile_id, BT_KEYSTORE_ID))
     return bluetooth::bluetooth_keystore::getBluetoothKeystoreInterface();
 
-  if (is_profile(profile_id, BT_ACTIVITY_ATTRIBUTION_ID)) {
-    return bluetooth::activity_attribution::get_activity_attribution_instance();
-  }
-
-#ifndef TARGET_FLOSS
   if (is_profile(profile_id, BT_PROFILE_LE_AUDIO_ID))
     return btif_le_audio_get_interface();
 
   if (is_profile(profile_id, BT_PROFILE_LE_AUDIO_BROADCASTER_ID))
     return btif_le_audio_broadcaster_get_interface();
-#endif
 
   if (is_profile(profile_id, BT_PROFILE_VC_ID))
     return btif_volume_control_get_interface();
@@ -986,21 +986,22 @@ static bt_os_callouts_t* wakelock_os_callouts_saved = nullptr;
 
 static int acquire_wake_lock_cb(const char* lock_name) {
   return do_in_jni_thread(
-      FROM_HERE, base::Bind(base::IgnoreResult(
-                                wakelock_os_callouts_saved->acquire_wake_lock),
-                            lock_name));
+      FROM_HERE,
+      base::BindOnce(
+          base::IgnoreResult(wakelock_os_callouts_saved->acquire_wake_lock),
+          lock_name));
 }
 
 static int release_wake_lock_cb(const char* lock_name) {
   return do_in_jni_thread(
-      FROM_HERE, base::Bind(base::IgnoreResult(
-                                wakelock_os_callouts_saved->release_wake_lock),
-                            lock_name));
+      FROM_HERE,
+      base::BindOnce(
+          base::IgnoreResult(wakelock_os_callouts_saved->release_wake_lock),
+          lock_name));
 }
 
 static bt_os_callouts_t wakelock_os_callouts_jni = {
     sizeof(wakelock_os_callouts_jni),
-    nullptr /* not used */,
     acquire_wake_lock_cb,
     release_wake_lock_cb,
 };

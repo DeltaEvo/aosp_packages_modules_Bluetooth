@@ -1829,7 +1829,9 @@ void bta_av_getcap_results(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
  *
  ******************************************************************************/
 void bta_av_setconfig_rej(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
-  bta_av_adjust_seps_idx(p_scb, p_scb->avdt_handle);
+  uint8_t avdt_handle = p_data->ci_setconfig.avdt_handle;
+
+  bta_av_adjust_seps_idx(p_scb, avdt_handle);
   LOG_INFO("%s: sep_idx=%d avdt_handle=%d bta_handle=0x%x", __func__,
            p_scb->sep_idx, p_scb->avdt_handle, p_scb->hndl);
   AVDT_ConfigRsp(p_scb->avdt_handle, p_scb->avdt_label, AVDT_ERR_UNSUP_CFG, 0);
@@ -1837,7 +1839,7 @@ void bta_av_setconfig_rej(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
   tBTA_AV bta_av_data = {
       .reject =
           {
-              .bd_addr = p_scb->PeerAddress(),
+              .bd_addr = p_data->str_msg.bd_addr,
               .hndl = p_scb->hndl,
           },
   };
@@ -1977,10 +1979,9 @@ void bta_av_str_stopped(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
   bool sus_evt = true;
   BT_HDR* p_buf;
 
-  APPL_TRACE_ERROR(
-      "%s: peer %s bta_handle:0x%x audio_open_cnt:%d, p_data %p start:%d",
-      __func__, ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), p_scb->hndl,
-      bta_av_cb.audio_open_cnt, p_data, start);
+  LOG_INFO("peer %s bta_handle:0x%x audio_open_cnt:%d, p_data %p start:%d",
+           ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), p_scb->hndl,
+           bta_av_cb.audio_open_cnt, p_data, start);
 
   bta_sys_idle(BTA_ID_AV, bta_av_cb.audio_open_cnt, p_scb->PeerAddress());
   BTM_unblock_role_switch_and_sniff_mode_for(p_scb->PeerAddress());

@@ -89,12 +89,6 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
                               uint16_t max_int, uint16_t latency,
                               uint16_t timeout, uint16_t min_ce_len,
                               uint16_t max_ce_len) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    bluetooth::shim::L2CA_LeConnectionUpdate(rem_bda, min_int, max_int, latency,
-                                             timeout, min_ce_len, max_ce_len);
-    return true;
-  }
-
   tL2C_LCB* p_lcb;
 
   /* See if we have a link control block for the remote device */
@@ -140,10 +134,6 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
  *
  ******************************************************************************/
 bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_EnableUpdateBleConnParams(rem_bda, enable);
-  }
-
   if (stack_config_get_interface()->get_pts_conn_updates_disabled())
     return false;
 
@@ -194,10 +184,6 @@ void L2CA_Consolidate(const RawAddress& identity_addr, const RawAddress& rpa) {
 }
 
 hci_role_t L2CA_GetBleConnRole(const RawAddress& bd_addr) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_GetBleConnRole(bd_addr);
-  }
-
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, BT_TRANSPORT_LE);
   if (p_lcb == nullptr) {
     return HCI_ROLE_UNKNOWN;
@@ -262,6 +248,7 @@ bool l2cble_conn_comp(uint16_t handle, uint8_t role, const RawAddress& bda,
         return false;
       }
     }
+    p_lcb->link_state = LST_CONNECTING;
   } else if (role == HCI_ROLE_CENTRAL && p_lcb->link_state != LST_CONNECTING) {
     LOG_ERROR(
         "Received le acl connection as role central but not in connecting "
@@ -664,7 +651,8 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
               L2CAP_LE_RESULT_SOURCE_CID_ALREADY_ALLOCATED;
         } else {
           /* Allocate a ccb for this.*/
-          temp_p_ccb = l2cu_allocate_ccb(p_lcb, 0);
+          temp_p_ccb = l2cu_allocate_ccb(
+              p_lcb, 0, con_info.psm == BT_PSM_EATT /* is_eatt */);
           if (temp_p_ccb == NULL) {
             LOG_ERROR("L2CAP - unable to allocate CCB");
             p_lcb->pending_ecoc_connection_cids[i] = 0;
@@ -1011,7 +999,8 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       }
 
       /* Allocate a ccb for this.*/
-      p_ccb = l2cu_allocate_ccb(p_lcb, 0);
+      p_ccb = l2cu_allocate_ccb(p_lcb, 0,
+                                con_info.psm == BT_PSM_EATT /* is_eatt */);
       if (p_ccb == NULL) {
         L2CAP_TRACE_ERROR("L2CAP - unable to allocate CCB");
         l2cu_reject_ble_connection(p_ccb, id, L2CAP_CONN_NO_RESOURCES);
@@ -1199,10 +1188,6 @@ bool l2cble_create_conn(tL2C_LCB* p_lcb) {
  *
  ******************************************************************************/
 void l2c_link_processs_ble_num_bufs(uint16_t num_lm_ble_bufs) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return;
-  }
-
   if (num_lm_ble_bufs == 0) {
     num_lm_ble_bufs = L2C_DEF_NUM_BLE_BUF_SHARED;
     l2cb.num_lm_acl_bufs -= L2C_DEF_NUM_BLE_BUF_SHARED;
@@ -1797,8 +1782,7 @@ static void l2cble_start_subrate_change(tL2C_LCB* p_lcb) {
     return;
   }
 
-  if (!controller_get_interface()->supports_ble_connection_subrating_host() ||
-      !controller_get_interface()->supports_ble_connection_subrating() ||
+  if (!controller_get_interface()->supports_ble_connection_subrating() ||
       !acl_peer_supports_ble_connection_subrating(p_lcb->remote_bd_addr) ||
       !acl_peer_supports_ble_connection_subrating_host(p_lcb->remote_bd_addr)) {
     L2CAP_TRACE_DEBUG(

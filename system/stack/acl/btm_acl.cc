@@ -44,21 +44,18 @@
 #include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
 #include "device/include/interop.h"
-#include "gd/metrics/metrics_state.h"
 #include "include/l2cap_hci_link_interface.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "main/shim/controller.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/l2c_api.h"
-#include "main/shim/metrics_api.h"
 #include "main/shim/shim.h"
-#include "os/metrics.h"
 #include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "rust/src/core/ffi/types.h"
 #include "stack/acl/acl.h"
@@ -67,14 +64,12 @@
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/security_device_record.h"
-#include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_iso_api.h"
 #include "stack/include/btu.h"
-#include "stack/include/btu_hcif.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/sco_hci_link_interface.h"
@@ -214,8 +209,8 @@ static void hci_btsnd_hcic_disconnect(tACL_CONN& p_acl, tHCI_STATUS reason,
       // link stays up due to the presence of other clients.
       bluetooth::connection::GetConnectionManager()
           .stop_all_connections_to_device(bluetooth::core::ToRustAddress(
-              tBLE_BD_ADDR{.bda = p_acl.active_remote_addr,
-                           .type = p_acl.active_remote_addr_type}));
+              tBLE_BD_ADDR{.type = p_acl.active_remote_addr_type,
+                           .bda = p_acl.active_remote_addr}));
     }
   }
 
@@ -591,10 +586,6 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    bluetooth::shim::L2CA_SwitchRoleToCentral(remote_bd_addr);
-    return BTM_SUCCESS;
-  }
   if (!controller_get_interface()->supports_central_peripheral_role_switch()) {
     LOG_INFO("Local controller does not support role switching");
     return BTM_MODE_UNSUPPORTED;
@@ -839,6 +830,9 @@ void BTM_default_block_role_switch() {
                                         ~HCI_ENABLE_CENTRAL_PERIPHERAL_SWITCH);
 }
 
+extern void bta_gattc_continue_discovery_if_needed(const RawAddress& bd_addr,
+                                                   uint16_t acl_handle);
+
 /*******************************************************************************
  *
  * Function         btm_read_remote_version_complete
@@ -861,6 +855,8 @@ static void maybe_chain_more_commands_after_read_remote_version_complete(
     case BT_TRANSPORT_LE:
       l2cble_notify_le_connection(p_acl_cb->remote_addr);
       l2cble_use_preferred_conn_params(p_acl_cb->remote_addr);
+      bta_gattc_continue_discovery_if_needed(p_acl_cb->remote_addr,
+                                             p_acl_cb->Handle());
       break;
     case BT_TRANSPORT_BR_EDR:
       /**
@@ -888,6 +884,7 @@ void btm_process_remote_version_complete(uint8_t status, uint16_t handle,
     LOG_WARN("Received remote version complete for unknown acl");
     return;
   }
+  p_acl_cb->remote_version_received = true;
 
   if (status == HCI_SUCCESS) {
     p_acl_cb->remote_version_info.lmp_version = lmp_version;
@@ -959,49 +956,7 @@ void btm_process_remote_ext_features(tACL_CONN* p_acl_cb,
  *
  ******************************************************************************/
 void btm_read_remote_ext_features(uint16_t handle, uint8_t page_number) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    // GD L2cap reads this automatically
-    return;
-  }
   btsnd_hcic_rmt_ext_features(handle, page_number);
-}
-
-void btm_read_remote_features_complete(uint16_t handle, uint8_t* features) {
-  tACL_CONN* p_acl_cb = internal_.acl_get_connection_from_handle(handle);
-  if (p_acl_cb == nullptr) {
-    LOG_WARN("Unable to find active acl");
-    return;
-  }
-
-  /* Copy the received features page */
-  STREAM_TO_ARRAY(p_acl_cb->peer_lmp_feature_pages[0], features,
-                  HCI_FEATURE_BYTES_PER_PAGE);
-  p_acl_cb->peer_lmp_feature_valid[0] = true;
-
-  /* save remote supported features to iot conf file */
-  std::string key = IOT_CONF_KEY_RT_SUPP_FEATURES "_" + std::to_string(0);
-
-  DEVICE_IOT_CONFIG_ADDR_SET_BIN(p_acl_cb->remote_addr, key,
-                                 p_acl_cb->peer_lmp_feature_pages[0],
-                                 BD_FEATURES_LEN);
-
-  if ((HCI_LMP_EXTENDED_SUPPORTED(p_acl_cb->peer_lmp_feature_pages[0])) &&
-      (controller_get_interface()
-           ->supports_reading_remote_extended_features())) {
-    /* if the remote controller has extended features and local controller
-       supports HCI_Read_Remote_Extended_Features command then start reading
-       these feature starting with extended features page 1 */
-    LOG_DEBUG("Start reading remote extended features");
-    btm_read_remote_ext_features(handle, 1);
-    return;
-  }
-
-  /* Remote controller has no extended features. Process remote controller
-     supported features (features page 0). */
-  btm_process_remote_ext_features(p_acl_cb, 0);
-
-  /* Continue with HCI connection establishment */
-  internal_.btm_establish_continue(p_acl_cb);
 }
 
 /*******************************************************************************
@@ -1219,19 +1174,11 @@ tBTM_STATUS BTM_SetLinkSuperTout(const RawAddress& remote_bda,
 
 bool BTM_IsAclConnectionUp(const RawAddress& remote_bda,
                            tBT_TRANSPORT transport) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_IsLinkEstablished(remote_bda, transport);
-  }
-
   return internal_.btm_bda_to_acl(remote_bda, transport) != nullptr;
 }
 
 bool BTM_IsAclConnectionUpAndHandleValid(const RawAddress& remote_bda,
                                          tBT_TRANSPORT transport) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_IsLinkEstablished(remote_bda, transport);
-  }
-
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, transport);
   if (p_acl == nullptr) {
     LOG_WARN("Unable to find active acl");
@@ -1255,9 +1202,6 @@ bool BTM_IsAclConnectionUpFromHandle(uint16_t hci_handle) {
  *
  ******************************************************************************/
 uint16_t BTM_GetNumAclLinks(void) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_GetNumLinks();
-  }
   return static_cast<uint16_t>(btm_cb.acl_cb_.NumberOfActiveLinks());
 }
 
@@ -1301,10 +1245,6 @@ bool btm_is_acl_locally_initiated(void) {
  ******************************************************************************/
 uint16_t BTM_GetHCIConnHandle(const RawAddress& remote_bda,
                               tBT_TRANSPORT transport) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::BTM_GetHCIConnHandle(remote_bda, transport);
-  }
-
   tACL_CONN* p;
   p = internal_.btm_bda_to_acl(remote_bda, transport);
   if (p != (tACL_CONN*)NULL) {
@@ -1663,6 +1603,23 @@ uint16_t BTM_GetMaxPacketSize(const RawAddress& addr) {
 
 /*******************************************************************************
  *
+ * Function         BTM_IsRemoteVersionReceived
+ *
+ * Returns          Returns true if "LE Read remote version info" was already
+ *                  received on LE transport for this device.
+ *
+ ******************************************************************************/
+bool BTM_IsRemoteVersionReceived(const RawAddress& addr) {
+  const tACL_CONN* p_acl = internal_.btm_bda_to_acl(addr, BT_TRANSPORT_LE);
+  if (p_acl == nullptr) {
+    return false;
+  }
+
+  return p_acl->remote_version_received;
+}
+
+/*******************************************************************************
+ *
  * Function         BTM_ReadRemoteVersion
  *
  * Returns          If connected report peer device info
@@ -1670,11 +1627,6 @@ uint16_t BTM_GetMaxPacketSize(const RawAddress& addr) {
  ******************************************************************************/
 bool BTM_ReadRemoteVersion(const RawAddress& addr, uint8_t* lmp_version,
                            uint16_t* manufacturer, uint16_t* lmp_sub_version) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_ReadRemoteVersion(
-        addr, lmp_version, manufacturer, lmp_sub_version);
-  }
-
   const tACL_CONN* p_acl = internal_.btm_bda_to_acl(addr, BT_TRANSPORT_BR_EDR);
   if (p_acl == nullptr) {
     p_acl = internal_.btm_bda_to_acl(addr, BT_TRANSPORT_LE);
@@ -1707,9 +1659,6 @@ bool BTM_ReadRemoteVersion(const RawAddress& addr, uint8_t* lmp_version,
  *
  ******************************************************************************/
 uint8_t* BTM_ReadRemoteFeatures(const RawAddress& addr) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_ReadRemoteFeatures(addr);
-  }
   tACL_CONN* p = internal_.btm_bda_to_acl(addr, BT_TRANSPORT_BR_EDR);
   if (p == NULL) {
     LOG_WARN("Unable to find active acl");
@@ -2193,14 +2142,6 @@ err_out:
  *
  ******************************************************************************/
 tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    if (transport == BT_TRANSPORT_LE) {
-      LOG(ERROR) << __func__ << ": Unsupported";
-    }
-    bluetooth::shim::L2CA_DisconnectLink(bd_addr);
-    return BTM_SUCCESS;
-  }
-
   tACL_CONN* p_acl = internal_.btm_bda_to_acl(bd_addr, transport);
   if (p_acl == nullptr) {
     LOG_WARN("Unable to find active acl");
@@ -2346,7 +2287,7 @@ bool acl_peer_supports_sniff_subrating(const RawAddress& remote_bda) {
 }
 
 bool acl_peer_supports_ble_connection_subrating(const RawAddress& remote_bda) {
-  tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_BR_EDR);
+  tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_LE);
   if (p_acl == nullptr) {
     LOG_WARN("Unable to find active acl");
     return false;
@@ -2361,7 +2302,7 @@ bool acl_peer_supports_ble_connection_subrating(const RawAddress& remote_bda) {
 
 bool acl_peer_supports_ble_connection_subrating_host(
     const RawAddress& remote_bda) {
-  tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_BR_EDR);
+  tACL_CONN* p_acl = internal_.btm_bda_to_acl(remote_bda, BT_TRANSPORT_LE);
   if (p_acl == nullptr) {
     LOG_WARN("Unable to find active acl");
     return false;
@@ -2378,7 +2319,7 @@ bool acl_peer_supports_ble_connection_subrating_host(
  *
  * Function         BTM_ReadConnectionAddr
  *
- * Description      This function is called to get the local device address
+ * Description      This function is called to get the local LE device address
  *                  information.
  *
  * Returns          void
@@ -2386,21 +2327,16 @@ bool acl_peer_supports_ble_connection_subrating_host(
  ******************************************************************************/
 void BTM_ReadConnectionAddr(const RawAddress& remote_bda,
                             RawAddress& local_conn_addr,
-                            tBLE_ADDR_TYPE* p_addr_type) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_ReadConnectionAddr(remote_bda, local_conn_addr,
-                                                   p_addr_type);
+                            tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
+  tBTM_SEC_DEV_REC* p_sec_rec = btm_find_dev(remote_bda);
+  if (p_sec_rec == nullptr) {
+    LOG_WARN("No matching known device %s in record",
+             ADDRESS_TO_LOGGABLE_CSTR(remote_bda));
+    return;
   }
 
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    bluetooth::shim::L2CA_ReadConnectionAddr(remote_bda, local_conn_addr,
-                                             p_addr_type);
-    return;
-  } else {
-    bluetooth::shim::ACL_ReadConnectionAddress(remote_bda, local_conn_addr,
-                                               p_addr_type);
-    return;
-  }
+  bluetooth::shim::ACL_ReadConnectionAddress(
+      p_sec_rec->ble_hci_handle, local_conn_addr, p_addr_type, ota_address);
 }
 
 /*******************************************************************************
@@ -2414,14 +2350,6 @@ void BTM_ReadConnectionAddr(const RawAddress& remote_bda,
  *
  ******************************************************************************/
 bool BTM_IsBleConnection(uint16_t hci_handle) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
-
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_IsLeLink(hci_handle);
-  }
-
   const tACL_CONN* p_acl = internal_.acl_get_connection_from_handle(hci_handle);
   if (p_acl == nullptr) return false;
   return p_acl->is_transport_ble();
@@ -2482,40 +2410,33 @@ bool acl_is_switch_role_idle(const RawAddress& bd_addr,
  *
  * Function       BTM_ReadRemoteConnectionAddr
  *
- * Description    This function is read the remote device address currently used
+ * Description    This function is read the LE remote device address used in
+ *                connection establishment
  *
  * Parameters     pseudo_addr: pseudo random address available
  *                conn_addr:connection address used
  *                p_addr_type : BD Address type, Public or Random of the address
  *                              used
+ *                ota_address: When use if remote used RPA in OTA it will be
+ *returned.
  *
  * Returns        bool, true if connection to remote device exists, else false
  *
  ******************************************************************************/
 bool BTM_ReadRemoteConnectionAddr(const RawAddress& pseudo_addr,
                                   RawAddress& conn_addr,
-                                  tBLE_ADDR_TYPE* p_addr_type) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_ReadRemoteConnectionAddr(pseudo_addr, conn_addr,
-                                                         p_addr_type);
-  }
-
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    return bluetooth::shim::L2CA_ReadRemoteConnectionAddr(
-        pseudo_addr, conn_addr, p_addr_type);
-  }
-
-  bool st = true;
-  tACL_CONN* p_acl = internal_.btm_bda_to_acl(pseudo_addr, BT_TRANSPORT_LE);
-
-  if (p_acl == NULL) {
-    LOG_WARN("Unable to find active acl");
+                                  tBLE_ADDR_TYPE* p_addr_type,
+                                  bool ota_address) {
+  tBTM_SEC_DEV_REC* p_sec_rec = btm_find_dev(pseudo_addr);
+  if (p_sec_rec == nullptr) {
+    LOG_WARN("No matching known device %s in record",
+             ADDRESS_TO_LOGGABLE_CSTR(pseudo_addr));
     return false;
   }
 
-  conn_addr = p_acl->active_remote_addr;
-  *p_addr_type = p_acl->active_remote_addr_type;
-  return st;
+  bluetooth::shim::ACL_ReadPeerConnectionAddress(
+      p_sec_rec->ble_hci_handle, conn_addr, p_addr_type, ota_address);
+  return true;
 }
 
 uint8_t acl_link_role_from_handle(uint16_t handle) {
@@ -2603,6 +2524,7 @@ bool acl_set_peer_le_features_from_handle(uint16_t hci_handle,
 
 void on_acl_br_edr_connected(const RawAddress& bda, uint16_t handle,
                              uint8_t enc_mode, bool locally_initiated) {
+  power_telemetry::GetInstance().LogLinkDetails(handle, bda, true, true);
   if (delayed_role_change_ != nullptr && delayed_role_change_->bd_addr == bda) {
     btm_sec_connected(bda, handle, HCI_SUCCESS, enc_mode,
                       delayed_role_change_->new_role);
@@ -2653,6 +2575,7 @@ void btm_acl_connected(const RawAddress& bda, uint16_t handle,
                        tHCI_STATUS status, uint8_t enc_mode) {
   switch (status) {
     case HCI_SUCCESS:
+      power_telemetry::GetInstance().LogLinkDetails(handle, bda, true, true);
       return on_acl_br_edr_connected(bda, handle, enc_mode,
                                      true /* locally_initiated */);
     default:
@@ -2672,7 +2595,8 @@ void btm_acl_disconnected(tHCI_STATUS status, uint16_t handle,
     LOG_WARN("Received disconnect with error:%s",
              hci_error_code_text(status).c_str());
   }
-
+  power_telemetry::GetInstance().LogLinkDetails(handle, RawAddress::kEmpty,
+                                                false, true);
   /* There can be a case when we rejected PIN code authentication */
   /* otherwise save a new reason */
   if (btm_get_acl_disc_reason_code() != HCI_ERR_HOST_REJECT_SECURITY) {
@@ -2718,8 +2642,37 @@ void acl_disconnect_from_handle(uint16_t handle, tHCI_STATUS reason,
   acl_disconnect_after_role_switch(handle, reason, comment);
 }
 
+// BLUETOOTH CORE SPECIFICATION Version 5.4 | Vol 4, Part E
+// 7.1.6 Disconnect command
+// Only a subset of reasons are valid and will be accepted
+// by the controller
+bool is_disconnect_reason_valid(const tHCI_REASON& reason) {
+  switch (reason) {
+    case HCI_ERR_AUTH_FAILURE:
+    case HCI_ERR_PEER_USER:
+    case HCI_ERR_REMOTE_LOW_RESOURCE:
+    case HCI_ERR_REMOTE_POWER_OFF:
+    case HCI_ERR_UNSUPPORTED_REM_FEATURE:
+    case HCI_ERR_PAIRING_WITH_UNIT_KEY_NOT_SUPPORTED:
+    case HCI_ERR_UNACCEPT_CONN_INTERVAL:
+      return true;
+    default:
+      break;
+  }
+  return false;
+}
+
 void acl_disconnect_after_role_switch(uint16_t conn_handle, tHCI_STATUS reason,
                                       std::string comment) {
+  if (!is_disconnect_reason_valid(reason)) {
+    LOG_WARN(
+        "Controller will not accept invalid reason parameter:%s"
+        " instead sending:%s",
+        hci_error_code_text(reason).c_str(),
+        hci_error_code_text(HCI_ERR_PEER_USER).c_str());
+    reason = HCI_ERR_PEER_USER;
+  }
+
   tACL_CONN* p_acl = internal_.acl_get_connection_from_handle(conn_handle);
   if (p_acl == nullptr) {
     LOG_ERROR("Sending disconnect for unknown acl:%hu PLEASE FIX", conn_handle);
@@ -2750,6 +2703,7 @@ void acl_send_data_packet_br_edr(const RawAddress& bd_addr, BT_HDR* p_buf) {
       osi_free(p_buf);
       return;
     }
+    power_telemetry::GetInstance().LogTxAclPktData(p_buf->len);
     return bluetooth::shim::ACL_WriteData(p_acl->hci_handle, p_buf);
 }
 
@@ -2761,6 +2715,7 @@ void acl_send_data_packet_ble(const RawAddress& bd_addr, BT_HDR* p_buf) {
       osi_free(p_buf);
       return;
     }
+    power_telemetry::GetInstance().LogTxAclPktData(p_buf->len);
     return bluetooth::shim::ACL_WriteData(p_acl->hci_handle, p_buf);
 }
 
@@ -2785,8 +2740,8 @@ void acl_write_automatic_flush_timeout(const RawAddress& bd_addr,
 bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
                                       tBLE_ADDR_TYPE addr_type) {
   tBLE_BD_ADDR address_with_type{
-      .bda = bd_addr,
       .type = addr_type,
+      .bda = bd_addr,
   };
 
   gatt_find_in_device_record(bd_addr, &address_with_type);
@@ -2803,15 +2758,6 @@ bool acl_create_le_connection_with_id(uint8_t id, const RawAddress& bd_addr,
         ADDRESS_TO_LOGGABLE_CSTR(address_with_type));
     return false;
   }
-
-  // argument list
-  auto argument_list = std::vector<std::pair<bluetooth::os::ArgumentType, int>>();
-
-  bluetooth::shim::LogMetricBluetoothLEConnectionMetricEvent(
-      bd_addr, android::bluetooth::le::LeConnectionOriginType::ORIGIN_NATIVE,
-      android::bluetooth::le::LeConnectionType::CONNECTION_TYPE_LE_ACL,
-      android::bluetooth::le::LeConnectionState::STATE_LE_ACL_START,
-      argument_list);
 
   if (bluetooth::common::init_flags::
           use_unified_connection_manager_is_enabled()) {
@@ -2842,6 +2788,7 @@ void acl_rcv_acl_data(BT_HDR* p_msg) {
   STREAM_TO_UINT16(acl_header.handle, p);
   acl_header.handle = HCID_GET_HANDLE(acl_header.handle);
 
+  power_telemetry::GetInstance().LogRxAclPktData(p_msg->len);
   STREAM_TO_UINT16(acl_header.hci_len, p);
   if (acl_header.hci_len < L2CAP_PKT_OVERHEAD ||
       acl_header.hci_len != p_msg->len - sizeof(acl_header)) {

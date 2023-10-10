@@ -10,14 +10,13 @@ package {
 // HCI static library for target
 cc_library_static {
     name: "libbt-hci",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     srcs: [
         "src/buffer_allocator.cc",
         "src/packet_fragmenter.cc",
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     local_include_dirs: [
         "include",
@@ -27,13 +26,17 @@ cc_library_static {
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "system/libhwbinder/include",
     ],
+    apex_available: [
+        "com.android.btservices",
+    ],
     host_supported: true,
     min_sdk_version: "Tiramisu",
+    header_libs: ["libbluetooth_headers"],
+    static_libs: ["libbt_shim_bridge"],
 }
 
 // HCI unit tests for target
@@ -42,17 +45,14 @@ cc_test {
     test_suites: ["device-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
-        "fluoride_basic_defaults",
-        "fluoride_test_defaults",
+        "fluoride_defaults",
         "mts_defaults",
     ],
-    host_supported: false,
     local_include_dirs: [
         "include",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/osi/test",
         "packages/modules/Bluetooth/system/stack/include",
@@ -66,11 +66,20 @@ cc_test {
         "android.hardware.bluetooth.audio@2.1",
         "libbase",
         "libdl",
+        "liblog",
     ],
     static_libs: [
         "libbluetooth-for-tests",
+        "libbluetooth-types",
         "libbt-hci",
         "libbtcore",
         "libchrome",
+        "libosi",
     ],
+    sanitize: {
+        address: true,
+        cfi: true,
+        misc_undefined: ["bounds"],
+    },
+    cflags: ["-Wno-unused-parameter"],
 }

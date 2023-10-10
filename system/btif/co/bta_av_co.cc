@@ -390,6 +390,13 @@ class BtaAvCo {
   bool SetActivePeer(const RawAddress& peer_address);
 
   /**
+   * Save the reconfig codec
+   *
+   * @param new_codec_config the new codec config
+   */
+   void SaveCodec(const uint8_t* new_codec_config);
+
+  /**
    * Get the encoder parameters for a peer.
    *
    * @param peer_address the peer address
@@ -404,13 +411,6 @@ class BtaAvCo {
    * @return the Source encoder interface for the current codec
    */
   const tA2DP_ENCODER_INTERFACE* GetSourceEncoderInterface();
-
-  /**
-   * Get the Sink decoder interface for the current codec.
-   *
-   * @return the Sink decoder interface for the current codec
-   */
-  const tA2DP_DECODER_INTERFACE* GetSinkDecoderInterface();
 
   /**
    * Set the codec user configuration.
@@ -792,7 +792,10 @@ bool BtaAvCo::IsSupportedCodec(btav_a2dp_codec_index_t codec_index) {
   // All peer state is initialized with the same local codec config,
   // hence we check only the first peer.
   A2dpCodecs* codecs = peers_[0].GetCodecs();
-  CHECK(codecs != nullptr);
+  if (codecs == nullptr) {
+    LOG_ERROR("Peer codecs is set to null");
+    return false;
+  }
   return codecs->isSupportedCodec(codec_index);
 }
 
@@ -1447,8 +1450,8 @@ void BtaAvCo::UpdateMtu(tBTA_AV_HNDL bta_av_handle,
 }
 
 bool BtaAvCo::SetActivePeer(const RawAddress& peer_address) {
-  VLOG(1) << __func__ << ": peer_address="
-          << ADDRESS_TO_LOGGABLE_STR(peer_address);
+  LOG(INFO) << __func__
+            << ": peer_address=" << ADDRESS_TO_LOGGABLE_STR(peer_address);
 
   std::lock_guard<std::recursive_mutex> lock(codec_lock_);
 
@@ -1471,6 +1474,10 @@ bool BtaAvCo::SetActivePeer(const RawAddress& peer_address) {
   // report the selected codec configuration of this new active peer.
   ReportSourceCodecState(active_peer_);
   return true;
+}
+
+void BtaAvCo::SaveCodec(const uint8_t* new_codec_config) {
+  memcpy(codec_config_, new_codec_config, sizeof(codec_config_));
 }
 
 void BtaAvCo::GetPeerEncoderParameters(
@@ -1504,12 +1511,6 @@ const tA2DP_ENCODER_INTERFACE* BtaAvCo::GetSourceEncoderInterface() {
   std::lock_guard<std::recursive_mutex> lock(codec_lock_);
 
   return A2DP_GetEncoderInterface(codec_config_);
-}
-
-const tA2DP_DECODER_INTERFACE* BtaAvCo::GetSinkDecoderInterface() {
-  std::lock_guard<std::recursive_mutex> lock(codec_lock_);
-
-  return A2DP_GetDecoderInterface(codec_config_);
 }
 
 bool BtaAvCo::SetCodecUserConfig(
@@ -1703,7 +1704,10 @@ bool BtaAvCo::ReportSourceCodecState(BtaAvCoPeer* p_peer) {
   VLOG(1) << __func__ << ": peer_address="
           << ADDRESS_TO_LOGGABLE_STR(p_peer->addr);
   A2dpCodecs* codecs = p_peer->GetCodecs();
-  CHECK(codecs != nullptr);
+  if (codecs == nullptr) {
+    LOG_ERROR("Peer codecs is set to null");
+    return false;
+  }
   if (!codecs->getCodecConfigAndCapabilities(&codec_config,
                                              &codecs_local_capabilities,
                                              &codecs_selectable_capabilities)) {
@@ -2255,6 +2259,10 @@ bool bta_av_co_set_active_peer(const RawAddress& peer_address) {
   return bta_av_co_cb.SetActivePeer(peer_address);
 }
 
+void bta_av_co_save_codec(const uint8_t* new_codec_config) {
+  return bta_av_co_cb.SaveCodec(new_codec_config);
+}
+
 void bta_av_co_get_peer_params(const RawAddress& peer_address,
                                tA2DP_ENCODER_INIT_PEER_PARAMS* p_peer_params) {
   bta_av_co_cb.GetPeerEncoderParameters(peer_address, p_peer_params);
@@ -2262,10 +2270,6 @@ void bta_av_co_get_peer_params(const RawAddress& peer_address,
 
 const tA2DP_ENCODER_INTERFACE* bta_av_co_get_encoder_interface(void) {
   return bta_av_co_cb.GetSourceEncoderInterface();
-}
-
-const tA2DP_DECODER_INTERFACE* bta_av_co_get_decoder_interface(void) {
-  return bta_av_co_cb.GetSinkDecoderInterface();
 }
 
 bool bta_av_co_set_codec_user_config(

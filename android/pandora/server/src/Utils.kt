@@ -57,8 +57,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import pandora.AndroidProto.InternalConnectionRef
 import pandora.HostProto.Connection
+import pandora.OsProto.InternalConnectionRef
 
 private const val TAG = "PandoraUtils"
 private val alphanumeric = ('A'..'Z') + ('a'..'z') + ('0'..'9')
@@ -82,7 +82,7 @@ fun shell(cmd: String): String {
  * @return cold flow.
  */
 @kotlinx.coroutines.ExperimentalCoroutinesApi
-fun intentFlow(context: Context, intentFilter: IntentFilter) = callbackFlow {
+fun intentFlow(context: Context, intentFilter: IntentFilter, scope: CoroutineScope) = callbackFlow {
     val broadcastReceiver: BroadcastReceiver =
         object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -94,7 +94,7 @@ fun intentFlow(context: Context, intentFilter: IntentFilter) = callbackFlow {
                     waitedAclConnection.remove(intent.getBluetoothDeviceExtra())
                     waitedAclDisconnection.add(intent.getBluetoothDeviceExtra())
                 }
-                trySendBlocking(intent)
+                scope.launch { trySendBlocking(intent) }
             }
         }
     context.registerReceiver(broadcastReceiver, intentFilter)

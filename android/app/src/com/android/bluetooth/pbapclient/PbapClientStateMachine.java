@@ -62,6 +62,7 @@ import android.util.Log;
 
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.internal.annotations.VisibleForTesting;
@@ -164,10 +165,10 @@ class PbapClientStateMachine extends StateMachine {
 
             // Create a separate handler instance and thread for performing
             // connect/download/disconnect operations as they may be time consuming and error prone.
-            mHandlerThread =
+            HandlerThread handlerThread =
                     new HandlerThread("PBAP PCE handler", Process.THREAD_PRIORITY_BACKGROUND);
-            mHandlerThread.start();
-            Looper looper = mHandlerThread.getLooper();
+            handlerThread.start();
+            Looper looper = handlerThread.getLooper();
 
             // Keeps mock handler from being overwritten in tests
             if (mConnectionHandler == null && looper != null) {
@@ -179,6 +180,7 @@ class PbapClientStateMachine extends StateMachine {
                                 .setRemoteDevice(mCurrentDevice)
                                 .build();
             }
+            mHandlerThread = handlerThread;
             sendMessageDelayed(MSG_CONNECT_TIMEOUT, CONNECT_TIMEOUT);
         }
 
@@ -225,8 +227,11 @@ class PbapClientStateMachine extends StateMachine {
 
         @Override
         public void exit() {
-            mSdpReceiver.unregister();
-            mSdpReceiver = null;
+            SDPBroadcastReceiver sdpReceiver = mSdpReceiver;
+            if (sdpReceiver != null) {
+                sdpReceiver.unregister();
+                mSdpReceiver = null;
+            }
         }
 
         private class SDPBroadcastReceiver extends BroadcastReceiver {
@@ -289,10 +294,15 @@ class PbapClientStateMachine extends StateMachine {
             if (DBG) {
                 Log.d(TAG, "Processing MSG " + message.what + " from " + this.getName());
             }
+            PbapClientConnectionHandler connectionHandler = mConnectionHandler;
+            HandlerThread handlerThread = mHandlerThread;
+
             switch (message.what) {
                 case MSG_CONNECTION_CLOSED:
                     removeMessages(MSG_DISCONNECT_TIMEOUT);
-                    mHandlerThread.quitSafely();
+                    if (handlerThread != null) {
+                        handlerThread.quitSafely();
+                    }
                     transitionTo(mDisconnected);
                     break;
 
@@ -302,11 +312,12 @@ class PbapClientStateMachine extends StateMachine {
 
                 case MSG_DISCONNECT_TIMEOUT:
                     Log.w(TAG, "Disconnect Timeout, Forcing");
-                    PbapClientConnectionHandler connectionHandler = mConnectionHandler;
                     if (connectionHandler != null) {
                         connectionHandler.abort();
                     }
-                    mHandlerThread.quitSafely();
+                    if (handlerThread != null) {
+                        handlerThread.quitSafely();
+                    }
                     transitionTo(mDisconnected);
                     break;
 
@@ -385,6 +396,11 @@ class PbapClientStateMachine extends StateMachine {
             MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.PBAP_CLIENT);
         }
         Log.d(TAG, "Connection state " + device + ": " + prevState + "->" + state);
+        AdapterService adapterService = AdapterService.getAdapterService();
+        if (adapterService != null) {
+            adapterService.updateProfileConnectionAdapterProperties(
+                    device, BluetoothProfile.PBAP_CLIENT, state, prevState);
+        }
         Intent intent = new Intent(BluetoothPbapClient.ACTION_CONNECTION_STATE_CHANGED);
         intent.putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, prevState);
         intent.putExtra(BluetoothProfile.EXTRA_STATE, state);
@@ -411,8 +427,9 @@ class PbapClientStateMachine extends StateMachine {
             mConnectionHandler = null;
         }
 
-        if (mHandlerThread != null) {
-            mHandlerThread.quitSafely();
+        HandlerThread handlerThread = mHandlerThread;
+        if (handlerThread != null) {
+            handlerThread.quitSafely();
             mHandlerThread = null;
         }
         quitNow();

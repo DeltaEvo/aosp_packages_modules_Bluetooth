@@ -496,11 +496,6 @@ SnoopLogger::SnoopLogger(
       snoop_log_persists(snoop_log_persists) {
   btsnoop_mode_ = btsnoop_mode;
 
-  if (btsnoop_mode_ == kBtSnoopLogModeFiltered &&
-      !bluetooth::common::InitFlags::IsSnoopLoggerFilteringEnabled()) {
-    btsnoop_mode_ = kBtSnoopLogModeDisabled;
-  }
-
   if (btsnoop_mode_ == kBtSnoopLogModeFiltered) {
     LOG_INFO("Snoop Logs filtered mode enabled");
     EnableFilters();
@@ -648,7 +643,8 @@ bool SnoopLogger::ShouldFilterLog(bool is_received, uint8_t* packet) {
   return false;
 }
 
-void SnoopLogger::CalculateAclPacketLength(uint32_t& length, uint8_t* packet, bool is_received) {
+void SnoopLogger::CalculateAclPacketLength(
+    uint32_t& length, uint8_t* packet, bool /* is_received */) {
   uint32_t def_len =
       ((((uint16_t)packet[ACL_LENGTH_OFFSET + 1]) << 8) + packet[ACL_LENGTH_OFFSET]) +
       ACL_HEADER_LENGTH + PACKET_TYPE_LENGTH;
@@ -1259,7 +1255,7 @@ void SnoopLogger::Capture(HciPacket& packet, Direction direction, PacketType typ
 
     if (socket_ != nullptr) {
       socket_->Write(&header, sizeof(PacketHeaderType));
-      socket_->Write(packet.data(), packet.size());
+      socket_->Write(packet.data(), (size_t)(length - 1));
     }
 
     // std::ofstream::flush() pushes user data into kernel memory. The data will be written even if this process
@@ -1314,7 +1310,7 @@ void SnoopLogger::DumpSnoozLogToFile(const std::vector<std::string>& data) const
   }
 }
 
-void SnoopLogger::ListDependencies(ModuleList* list) const {
+void SnoopLogger::ListDependencies(ModuleList* /* list */) const {
   // We have no dependencies
 }
 
@@ -1327,18 +1323,17 @@ void SnoopLogger::Start() {
       EnableFilters();
     }
 
-    if (bluetooth::common::InitFlags::IsSnoopLoggerSocketEnabled()) {
-      auto snoop_logger_socket = std::make_unique<SnoopLoggerSocket>(&syscall_if);
-      snoop_logger_socket_thread_ = std::make_unique<SnoopLoggerSocketThread>(std::move(snoop_logger_socket));
-      auto thread_started_future = snoop_logger_socket_thread_->Start();
-      thread_started_future.wait();
-      if (thread_started_future.get()) {
-        RegisterSocket(snoop_logger_socket_thread_.get());
-      } else {
-        snoop_logger_socket_thread_->Stop();
-        snoop_logger_socket_thread_.reset();
-        snoop_logger_socket_thread_ = nullptr;
-      }
+    auto snoop_logger_socket = std::make_unique<SnoopLoggerSocket>(&syscall_if);
+    snoop_logger_socket_thread_ =
+        std::make_unique<SnoopLoggerSocketThread>(std::move(snoop_logger_socket));
+    auto thread_started_future = snoop_logger_socket_thread_->Start();
+    thread_started_future.wait();
+    if (thread_started_future.get()) {
+      RegisterSocket(snoop_logger_socket_thread_.get());
+    } else {
+      snoop_logger_socket_thread_->Stop();
+      snoop_logger_socket_thread_.reset();
+      snoop_logger_socket_thread_ = nullptr;
     }
   }
   alarm_ = std::make_unique<os::RepeatingAlarm>(GetHandler());

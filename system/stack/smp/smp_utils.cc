@@ -886,6 +886,7 @@ void smp_xor_128(Octet16* a, const Octet16& b) {
 void smp_cb_cleanup(tSMP_CB* p_cb) {
   tSMP_CALLBACK* p_callback = p_cb->p_callback;
   uint8_t trace_level = p_cb->trace_level;
+  uint8_t init_security_mode = p_cb->init_security_mode;
   alarm_t* smp_rsp_timer_ent = p_cb->smp_rsp_timer_ent;
   alarm_t* delayed_auth_timer_ent = p_cb->delayed_auth_timer_ent;
 
@@ -896,6 +897,7 @@ void smp_cb_cleanup(tSMP_CB* p_cb) {
   memset(p_cb, 0, sizeof(tSMP_CB));
   p_cb->p_callback = p_callback;
   p_cb->trace_level = trace_level;
+  p_cb->init_security_mode = init_security_mode;
   p_cb->smp_rsp_timer_ent = smp_rsp_timer_ent;
   p_cb->delayed_auth_timer_ent = delayed_auth_timer_ent;
 }
@@ -1442,7 +1444,7 @@ void smp_collect_local_ble_address(uint8_t* le_addr, tSMP_CB* p_cb) {
 
   SMP_TRACE_DEBUG("%s", __func__);
 
-  BTM_ReadConnectionAddr(p_cb->pairing_bda, bda, &addr_type);
+  BTM_ReadConnectionAddr(p_cb->pairing_bda, bda, &addr_type, true);
   BDADDR_TO_STREAM(p, bda);
   UINT8_TO_STREAM(p, addr_type);
 }
@@ -1464,7 +1466,7 @@ void smp_collect_peer_ble_address(uint8_t* le_addr, tSMP_CB* p_cb) {
 
   SMP_TRACE_DEBUG("%s", __func__);
 
-  if (!BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, bda, &addr_type)) {
+  if (!BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, bda, &addr_type, true)) {
     SMP_TRACE_ERROR(
         "can not collect peer le addr information for unknown device");
     return;
@@ -1531,9 +1533,9 @@ void smp_save_secure_connections_long_term_key(tSMP_CB* p_cb) {
       .penc_key =
           {
               .ltk = p_cb->ltk,
+              .ediv = 0,
               .sec_level = p_cb->sec_level,
               .key_size = p_cb->loc_enc_size,
-              .ediv = 0,
           },
   };
   memset(ple_key.penc_key.rand, 0, BT_OCTET8_LEN);
