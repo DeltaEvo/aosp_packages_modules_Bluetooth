@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <list>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "bta/include/bta_api.h"
@@ -42,6 +43,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_ble_int_types.h"
@@ -1620,8 +1622,10 @@ static uint8_t btm_set_conn_mode_adv_init_addr(
 
     evt_type = p_cb->directed_conn;
 
-    if (p_cb->directed_conn == BTM_BLE_CONNECT_DIR_EVT ||
-        p_cb->directed_conn == BTM_BLE_CONNECT_LO_DUTY_DIR_EVT) {
+    if (static_cast<std::underlying_type_t<tBTM_BLE_EVT>>(
+            p_cb->directed_conn) == BTM_BLE_CONNECT_DIR_EVT ||
+        static_cast<std::underlying_type_t<tBTM_BLE_EVT>>(
+            p_cb->directed_conn) == BTM_BLE_CONNECT_LO_DUTY_DIR_EVT) {
       /* for privacy 1.2, convert peer address as static, own address set as ID
        * addr */
       if (btm_cb.ble_ctr_cb.privacy_mode == BTM_PRIVACY_1_2 ||
@@ -3234,6 +3238,8 @@ static tBTM_STATUS btm_ble_start_adv(void) {
   btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_ENABLE);
   p_cb->adv_mode = BTM_BLE_ADV_ENABLE;
   btm_ble_adv_states_operation(btm_ble_set_topology_mask, p_cb->evt_type);
+  power_telemetry::GetInstance().LogBleAdvStarted();
+
   return BTM_SUCCESS;
 }
 
@@ -3254,9 +3260,9 @@ static tBTM_STATUS btm_ble_stop_adv(void) {
 
     p_cb->fast_adv_on = false;
     p_cb->adv_mode = BTM_BLE_ADV_DISABLE;
-
     /* clear all adv states */
     btm_ble_clear_topology_mask(BTM_BLE_STATE_ALL_ADV_MASK);
+    power_telemetry::GetInstance().LogBleAdvStopped();
   }
   return BTM_SUCCESS;
 }
