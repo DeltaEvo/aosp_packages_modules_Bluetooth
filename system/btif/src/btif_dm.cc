@@ -95,6 +95,10 @@
 #include "stack_config.h"
 #include "types/raw_address.h"
 
+#ifdef OS_ANDROID
+#include <android/sysprop/BluetoothProperties.sysprop.h>
+#endif
+
 bool btif_get_device_type(const RawAddress& bda, int* p_device_type);
 
 using bluetooth::Uuid;
@@ -2934,8 +2938,31 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
     LOG_ERROR("%s: COD malformed, fewer than three numbers", __func__);
   }
 
-  LOG_DEBUG("%s: Using class of device '0x%x, 0x%x, 0x%x'", __func__,
+  LOG_DEBUG("Using class of device '0x%x, 0x%x, 0x%x' from CoD system property",
             device_class[0], device_class[1], device_class[2]);
+
+#ifdef OS_ANDROID
+  // Per BAP 1.0.1, 8.2.3. Device discovery, the stack needs to set Class of
+  // Device (CoD) field Major Service Class bit 14 to 0b1 when Unicast Server,
+  // Unicast Client, Broadcast Source, Broadcast Sink, Scan Delegator, or
+  // Broadcast Assistant is supported on this device
+  if (android::sysprop::BluetoothProperties::isProfileBapUnicastClientEnabled()
+          .value_or(false) ||
+      android::sysprop::BluetoothProperties::
+          isProfileBapBroadcastAssistEnabled()
+              .value_or(false) ||
+      android::sysprop::BluetoothProperties::
+          isProfileBapBroadcastSourceEnabled()
+              .value_or(false)) {
+    device_class[1] |= 0x01 << 6;
+  } else {
+    device_class[1] &= ~(0x01 << 6);
+  }
+  LOG_DEBUG(
+      "Check LE audio enabled status, update class of device to '0x%x, 0x%x, "
+      "0x%x'",
+      device_class[0], device_class[1], device_class[2]);
+#endif
 }
 
 /*******************************************************************************
@@ -3498,9 +3525,11 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
       }
     }
   } else {
-    /*Map the HCI fail reason  to  bt status  */
+    /* Map the HCI fail reason  to  bt status  */
     // TODO This is not a proper use of the type
     uint8_t fail_reason = static_cast<uint8_t>(p_auth_cmpl->fail_reason);
+    LOG_ERROR("LE authentication for %s failed with reason %d",
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr), p_auth_cmpl->fail_reason);
     switch (fail_reason) {
       case BTA_DM_AUTH_SMP_PAIR_AUTH_FAIL:
       case BTA_DM_AUTH_SMP_CONFIRM_VALUE_FAIL:

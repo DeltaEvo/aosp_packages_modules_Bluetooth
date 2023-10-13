@@ -34,7 +34,6 @@ import static com.android.bluetooth.Utils.getBytesFromAddress;
 import static com.android.bluetooth.Utils.hasBluetoothPrivilegedPermission;
 import static com.android.bluetooth.Utils.isDualModeAudioEnabled;
 import static com.android.bluetooth.Utils.isPackageNameAccurate;
-
 import static java.util.Objects.requireNonNull;
 
 import android.annotation.NonNull;
@@ -243,14 +242,6 @@ public class AdapterService extends Service {
     static final String SIM_ACCESS_PERMISSION_PREFERENCE_FILE = "sim_access_permission";
 
     private static final int CONTROLLER_ENERGY_UPDATE_TIMEOUT_MILLIS = 30;
-
-    /**
-     * Connection state bitmask as returned by getConnectionState.
-     */
-    public static final int CONNECTION_STATE_DISCONNECTED = 0;
-    public static final int CONNECTION_STATE_CONNECTED = 1;
-    public static final int CONNECTION_STATE_ENCRYPTED_BREDR = 2;
-    public static final int CONNECTION_STATE_ENCRYPTED_LE = 4;
 
     // Report ID definition
     public enum BqrQualityReportId {
@@ -2801,6 +2792,13 @@ public class AdapterService extends Service {
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp == null || deviceProp.getBondState() != BluetoothDevice.BOND_BONDED) {
+                Log.w(
+                        TAG,
+                        device.getAddressForLogging()
+                                + " cannot be removed since "
+                                + ((deviceProp == null)
+                                        ? "properties are empty"
+                                        : "bond state is " + deviceProp.getBondState()));
                 return false;
             }
             service.mBondAttemptCallerInfo.remove(device.getAddress());
@@ -2942,7 +2940,7 @@ public class AdapterService extends Service {
             if (service == null
                     || !Utils.checkConnectPermissionForDataDelivery(
                             service, attributionSource, "AdapterService getConnectionState")) {
-                return CONNECTION_STATE_DISCONNECTED;
+                return BluetoothDevice.CONNECTION_STATE_DISCONNECTED;
             }
 
             return service.getConnectionState(device);
