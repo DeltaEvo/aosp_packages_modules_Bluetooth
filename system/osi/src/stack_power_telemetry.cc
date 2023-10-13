@@ -27,7 +27,7 @@
 
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
-#include "stack/include/bt_types.h"
+#include "stack/include/bt_psm_types.h"
 #include "types/raw_address.h"
 
 time_t get_current_time() { return time(0); }
@@ -514,10 +514,10 @@ void power_telemetry::PowerTelemetry::LogChannelConnected(
   ChannelDetails channel_details = {
       .bd_addr = bd_addr,
       .psm = psm,
-      .channel_type = channel_type,
       .src.cid = static_cast<uint16_t>(src_id),
       .dst.cid = static_cast<uint16_t>(dst_id),
       .state = State::kConnected,
+      .channel_type = channel_type,
       .data_transfer = {},
       .duration.begin = get_current_time(),
       .rx = {},
