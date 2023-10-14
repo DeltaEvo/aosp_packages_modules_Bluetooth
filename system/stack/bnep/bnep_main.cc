@@ -24,23 +24,22 @@
 
 #define LOG_TAG "bluetooth"
 
+#include <base/logging.h>
 #include <string.h>
 
 #include "bnep_api.h"
 #include "bnep_int.h"
 #include "bt_target.h"
 #include "bta/include/bta_api.h"
-#include "btm_api.h"
 #include "device/include/controller.h"
 #include "l2c_api.h"
 #include "l2cdefs.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_psm_types.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 /******************************************************************************/
 /*                     G L O B A L    B N E P       D A T A                   */
