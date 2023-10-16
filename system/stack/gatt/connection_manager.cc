@@ -37,8 +37,8 @@
 #include "stack/btm/btm_ble_bgconn.h"
 #include "stack/include/advertise_data_parser.h"
 #include "stack/include/btm_ble_api.h"
-#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2c_api.h"
+#include "stack/include/main_thread.h"
 #include "types/raw_address.h"
 
 #define DIRECT_CONNECT_TIMEOUT (30 * 1000) /* 30 seconds */
@@ -132,7 +132,7 @@ bool IsTargetedAnnouncement(const uint8_t* p_eir, uint16_t eir_len) {
     uint8_t announcement_type;
     const uint8_t* p_tmp = p_service_data;
 
-    if (service_data_len < 1) {
+    if (service_data_len < 3) {
       continue;
     }
 

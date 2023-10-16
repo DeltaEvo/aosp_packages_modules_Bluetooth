@@ -16,11 +16,14 @@
 
 package com.android.bluetooth.hfpclient;
 
+import static android.content.pm.PackageManager.FEATURE_WATCH;
+
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -29,6 +32,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.BatteryManager;
 
 import androidx.test.InstrumentationRegistry;
@@ -49,6 +53,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 @MediumTest
@@ -57,6 +62,8 @@ public class HeadsetClientServiceTest {
     private HeadsetClientService mService = null;
     private BluetoothAdapter mAdapter = null;
     private Context mTargetContext;
+    private boolean mIsAdapterServiceSet;
+    private boolean mIsHeadsetClientServiceStarted;
 
     private static final int STANDARD_WAIT_MILLIS = 1000;
 
@@ -74,36 +81,33 @@ public class HeadsetClientServiceTest {
         MockitoAnnotations.initMocks(this);
 
         TestUtils.setAdapterService(mAdapterService);
+        mIsAdapterServiceSet = true;
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
         doReturn(mRemoteDevices).when(mAdapterService).getRemoteDevices();
         doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
         NativeInterface.setInstance(mNativeInterface);
-        TestUtils.startService(mServiceRule, HeadsetClientService.class);
-        // At this point the service should have started so check NOT null
-        mService = HeadsetClientService.getHeadsetClientService();
-        Assert.assertNotNull(mService);
-        // Try getting the Bluetooth adapter
-        mAdapter = BluetoothAdapter.getDefaultAdapter();
-        Assert.assertNotNull(mAdapter);
     }
 
     @After
     public void tearDown() throws Exception {
-        TestUtils.stopService(mServiceRule, HeadsetClientService.class);
         NativeInterface.setInstance(null);
-        mService = HeadsetClientService.getHeadsetClientService();
-        Assert.assertNull(mService);
-        TestUtils.clearAdapterService(mAdapterService);
+        stopServiceIfStarted();
+        if (mIsAdapterServiceSet) {
+            TestUtils.clearAdapterService(mAdapterService);
+        }
     }
 
     @Test
-    public void testInitialize() {
+    public void testInitialize() throws Exception {
+        startService();
         Assert.assertNotNull(HeadsetClientService.getHeadsetClientService());
     }
 
     @Ignore("b/260202548")
     @Test
-    public void testSendBIEVtoStateMachineWhenBatteryChanged() {
+    public void testSendBIEVtoStateMachineWhenBatteryChanged() throws Exception {
+        startService();
+
         // Put mock state machine
         BluetoothDevice device =
                 BluetoothAdapter.getDefaultAdapter().getRemoteDevice("00:01:02:03:04:05");
@@ -123,7 +127,9 @@ public class HeadsetClientServiceTest {
     }
 
     @Test
-    public void testUpdateBatteryLevel() {
+    public void testUpdateBatteryLevel() throws Exception {
+        startService();
+
         // Put mock state machine
         BluetoothDevice device =
                 BluetoothAdapter.getDefaultAdapter().getRemoteDevice("00:01:02:03:04:05");
@@ -140,7 +146,9 @@ public class HeadsetClientServiceTest {
     }
 
     @Test
-    public void testSetCallAudioPolicy() {
+    public void testSetCallAudioPolicy() throws Exception {
+        startService();
+
         // Put mock state machine
         BluetoothDevice device =
                 BluetoothAdapter.getDefaultAdapter().getRemoteDevice("00:01:02:03:04:05");
@@ -153,12 +161,65 @@ public class HeadsetClientServiceTest {
     }
 
     @Test
-    public void testDumpDoesNotCrash() {
+    public void testDumpDoesNotCrash() throws Exception {
+        startService();
+
         // Put mock state machine
         BluetoothDevice device =
                 BluetoothAdapter.getDefaultAdapter().getRemoteDevice("00:01:02:03:04:05");
         mService.getStateMachineMap().put(device, mStateMachine);
 
         mService.dump(new StringBuilder());
+    }
+
+    @Test
+    public void testHfpClientConnectionServiceStarted() throws Exception {
+        Context context = Mockito.mock(Context.class);
+        PackageManager packageManager = Mockito.mock(PackageManager.class);
+
+        doReturn(false).when(packageManager).hasSystemFeature(FEATURE_WATCH);
+        doReturn(packageManager).when(context).getPackageManager();
+
+        HeadsetClientService service = new HeadsetClientService(context);
+        service.doStart();
+
+        verify(context).startService(any(Intent.class));
+
+        service.doStop();
+    }
+
+    @Test
+    public void testHfpClientConnectionServiceNotStarted_wearable() throws Exception {
+        Context context = Mockito.mock(Context.class);
+        PackageManager packageManager = Mockito.mock(PackageManager.class);
+
+        doReturn(true).when(packageManager).hasSystemFeature(FEATURE_WATCH);
+        doReturn(packageManager).when(context).getPackageManager();
+
+        HeadsetClientService service = new HeadsetClientService(context);
+        service.doStart();
+
+        verify(context, never()).startService(any(Intent.class));
+
+        service.doStop();
+    }
+
+    private void startService() throws Exception {
+        TestUtils.startService(mServiceRule, HeadsetClientService.class);
+        // At this point the service should have started so check NOT null
+        mService = HeadsetClientService.getHeadsetClientService();
+        Assert.assertNotNull(mService);
+        // Try getting the Bluetooth adapter
+        mAdapter = BluetoothAdapter.getDefaultAdapter();
+        Assert.assertNotNull(mAdapter);
+        mIsHeadsetClientServiceStarted = true;
+    }
+
+    private void stopServiceIfStarted() throws Exception {
+        if (mIsHeadsetClientServiceStarted) {
+            TestUtils.stopService(mServiceRule, HeadsetClientService.class);
+            mService = HeadsetClientService.getHeadsetClientService();
+            Assert.assertNull(mService);
+        }
     }
 }

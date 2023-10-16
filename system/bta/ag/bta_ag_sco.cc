@@ -40,7 +40,7 @@
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/btm_api.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;
@@ -1451,7 +1451,8 @@ void bta_ag_set_sco_offload_enabled(bool value) {
 
 void bta_ag_set_sco_allowed(bool value) {
   sco_allowed = value;
-  APPL_TRACE_DEBUG(sco_allowed ? "sco now allowed" : "sco now not allowed");
+  APPL_TRACE_DEBUG("%s",
+                   sco_allowed ? "sco now allowed" : "sco now not allowed");
 }
 
 const RawAddress& bta_ag_get_active_device() { return active_device_addr; }

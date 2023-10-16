@@ -2,7 +2,7 @@
 
 use bt_topshim::btif::{
     BaseCallbacks, BaseCallbacksDispatcher, BluetoothInterface, BluetoothProperty, BtAclState,
-    BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
+    BtAddrType, BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
     BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType, BtScanMode, BtSspVariant, BtState,
     BtStatus, BtThreadEvent, BtTransport, BtVendorProductInfo, DisplayAddress, RawAddress,
     ToggleableProfile, Uuid, Uuid128Bit,
@@ -193,6 +193,9 @@ pub trait IBluetooth {
 
     /// Gets the vendor and product information of the remote device.
     fn get_remote_vendor_product_info(&self, device: BluetoothDevice) -> BtVendorProductInfo;
+
+    /// Get the address type of the remote device.
+    fn get_remote_address_type(&self, device: BluetoothDevice) -> BtAddrType;
 
     /// Returns a list of connected devices.
     fn get_connected_devices(&self) -> Vec<BluetoothDevice>;
@@ -2371,6 +2374,13 @@ impl IBluetooth for Bluetooth {
         }
     }
 
+    fn get_remote_address_type(&self, device: BluetoothDevice) -> BtAddrType {
+        match self.get_remote_device_property(&device, &BtPropertyType::RemoteAddrType) {
+            Some(BluetoothProperty::RemoteAddrType(addr_type)) => addr_type,
+            _ => BtAddrType::Unknown,
+        }
+    }
+
     fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
         let bonded_connected: HashMap<String, BluetoothDevice> = self
             .bonded_devices
@@ -2818,20 +2828,13 @@ impl BtifHHCallbacks for Bluetooth {
         );
     }
 
-    fn get_report(
-        &mut self,
-        mut address: RawAddress,
-        status: BthhStatus,
-        mut data: Vec<u8>,
-        size: i32,
-    ) {
+    fn get_report(&mut self, address: RawAddress, status: BthhStatus, _data: Vec<u8>, size: i32) {
         debug!(
             "Hid host got report: Address({}) Status({:?}) Report Size({:?})",
             DisplayAddress(&address),
             status,
             size
         );
-        self.hh.as_ref().unwrap().get_report_reply(&mut address, status, &mut data, size as u16);
     }
 
     fn handshake(&mut self, address: RawAddress, status: BthhStatus) {

@@ -51,6 +51,7 @@
 #include <optional>
 
 #include "advertise_data_parser.h"
+#include "bta/dm/bta_dm_disc.h"
 #include "bta/include/bta_api.h"
 #include "bta_csis_api.h"
 #include "bta_dm_int.h"
@@ -94,6 +95,10 @@
 #include "stack/sdp/sdpint.h"
 #include "stack_config.h"
 #include "types/raw_address.h"
+
+#ifdef __ANDROID__
+#include <android/sysprop/BluetoothProperties.sysprop.h>
+#endif
 
 bool btif_get_device_type(const RawAddress& bda, int* p_device_type);
 
@@ -434,7 +439,7 @@ static bool check_eir_appearance(tBTA_DM_SEARCH* p_search_data,
         p_search_data->inq_res.p_eir, p_search_data->inq_res.eir_len,
         HCI_EIR_APPEARANCE_TYPE, &appearance_len);
 
-    if (p_eir_appearance) {
+    if (p_eir_appearance && appearance_len >= 2) {
       if (p_appearance) {
         *p_appearance = *((uint16_t*)p_eir_appearance);
       }
@@ -664,7 +669,7 @@ static void btif_update_remote_properties(const RawAddress& bdaddr,
   bt_property_t properties[3];
   bt_status_t status = BT_STATUS_UNHANDLED;
   uint32_t cod;
-  bt_device_type_t dev_type;
+  uint32_t dev_type;
 
   memset(properties, 0, sizeof(properties));
 
@@ -708,14 +713,14 @@ static void btif_update_remote_properties(const RawAddress& bdaddr,
 
   /* device type */
   bt_property_t prop_name;
-  uint8_t remote_dev_type;
+  uint32_t remote_dev_type;
   BTIF_STORAGE_FILL_PROPERTY(&prop_name, BT_PROPERTY_TYPE_OF_DEVICE,
-                             sizeof(uint8_t), &remote_dev_type);
+                             sizeof(uint32_t), &remote_dev_type);
   if (btif_storage_get_remote_device_property(&bdaddr, &prop_name) ==
       BT_STATUS_SUCCESS) {
-    dev_type = (bt_device_type_t)(remote_dev_type | device_type);
+    dev_type = remote_dev_type | device_type;
   } else {
-    dev_type = (bt_device_type_t)device_type;
+    dev_type = device_type;
   }
 
   BTIF_STORAGE_FILL_PROPERTY(&properties[num_properties],
@@ -1452,7 +1457,7 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
 
       {
         bt_property_t properties[10];  // increase when properties are added
-        bt_device_type_t dev_type;
+        uint32_t dev_type;
         uint32_t num_properties = 0;
         bt_status_t status;
         tBLE_ADDR_TYPE addr_type = BLE_ADDR_PUBLIC;
@@ -2447,8 +2452,8 @@ static void bta_energy_info_cb(tBTM_BLE_TX_TIME_MS tx_time,
                                tBTM_CONTRL_STATE ctrl_state,
                                tBTA_STATUS status) {
   BTIF_TRACE_DEBUG(
-      "energy_info_cb-Status:%d,state=%d,tx_t=%ld, rx_t=%ld, "
-      "idle_time=%ld,used=%ld",
+      "energy_info_cb-Status:%d,state=%d,tx_t=%u, rx_t=%u, "
+      "idle_time=%u,used=%u",
       status, ctrl_state, tx_time, rx_time, idle_time, energy_used);
 
   bt_activity_energy_info energy_info;
@@ -2547,7 +2552,7 @@ void btif_dm_create_bond(const RawAddress bd_addr, int transport) {
  ******************************************************************************/
 void btif_dm_create_bond_le(const RawAddress bd_addr,
                             tBLE_ADDR_TYPE addr_type) {
-  BTIF_TRACE_EVENT("%s: bd_addr=%s, addr_type=%d, transport=%d", __func__,
+  BTIF_TRACE_EVENT("%s: bd_addr=%s, addr_type=%d", __func__,
                    ADDRESS_TO_LOGGABLE_CSTR(bd_addr), addr_type);
   const tBLE_BD_ADDR ble_bd_addr{
       .type = addr_type,
@@ -2934,8 +2939,31 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
     LOG_ERROR("%s: COD malformed, fewer than three numbers", __func__);
   }
 
-  LOG_DEBUG("%s: Using class of device '0x%x, 0x%x, 0x%x'", __func__,
+  LOG_DEBUG("Using class of device '0x%x, 0x%x, 0x%x' from CoD system property",
             device_class[0], device_class[1], device_class[2]);
+
+#ifdef __ANDROID__
+  // Per BAP 1.0.1, 8.2.3. Device discovery, the stack needs to set Class of
+  // Device (CoD) field Major Service Class bit 14 to 0b1 when Unicast Server,
+  // Unicast Client, Broadcast Source, Broadcast Sink, Scan Delegator, or
+  // Broadcast Assistant is supported on this device
+  if (android::sysprop::BluetoothProperties::isProfileBapUnicastClientEnabled()
+          .value_or(false) ||
+      android::sysprop::BluetoothProperties::
+          isProfileBapBroadcastAssistEnabled()
+              .value_or(false) ||
+      android::sysprop::BluetoothProperties::
+          isProfileBapBroadcastSourceEnabled()
+              .value_or(false)) {
+    device_class[1] |= 0x01 << 6;
+  } else {
+    device_class[1] &= ~(0x01 << 6);
+  }
+  LOG_DEBUG(
+      "Check LE audio enabled status, update class of device to '0x%x, 0x%x, "
+      "0x%x'",
+      device_class[0], device_class[1], device_class[2]);
+#endif
 }
 
 /*******************************************************************************
@@ -3498,9 +3526,11 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
       }
     }
   } else {
-    /*Map the HCI fail reason  to  bt status  */
+    /* Map the HCI fail reason  to  bt status  */
     // TODO This is not a proper use of the type
     uint8_t fail_reason = static_cast<uint8_t>(p_auth_cmpl->fail_reason);
+    LOG_ERROR("LE authentication for %s failed with reason %d",
+              ADDRESS_TO_LOGGABLE_CSTR(bd_addr), p_auth_cmpl->fail_reason);
     switch (fail_reason) {
       case BTA_DM_AUTH_SMP_PAIR_AUTH_FAIL:
       case BTA_DM_AUTH_SMP_CONFIRM_VALUE_FAIL:

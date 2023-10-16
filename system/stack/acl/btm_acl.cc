@@ -46,11 +46,8 @@
 #include "device/include/interop.h"
 #include "include/l2cap_hci_link_interface.h"
 #include "main/shim/acl_api.h"
-#include "main/shim/btm_api.h"
 #include "main/shim/controller.h"
 #include "main/shim/dumpsys.h"
-#include "main/shim/l2c_api.h"
-#include "main/shim/shim.h"
 #include "os/parameter_provider.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -65,13 +62,15 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/acl_api.h"
+#include "stack/include/acl_api_types.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_iso_api.h"
-#include "stack/include/btu.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/l2cap_acl_interface.h"
+#include "stack/include/l2cdefs.h"
+#include "stack/include/main_thread.h"
 #include "stack/include/sco_hci_link_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
@@ -830,6 +829,9 @@ void BTM_default_block_role_switch() {
                                         ~HCI_ENABLE_CENTRAL_PERIPHERAL_SWITCH);
 }
 
+extern void bta_gattc_continue_discovery_if_needed(const RawAddress& bd_addr,
+                                                   uint16_t acl_handle);
+
 /*******************************************************************************
  *
  * Function         btm_read_remote_version_complete
@@ -852,6 +854,8 @@ static void maybe_chain_more_commands_after_read_remote_version_complete(
     case BT_TRANSPORT_LE:
       l2cble_notify_le_connection(p_acl_cb->remote_addr);
       l2cble_use_preferred_conn_params(p_acl_cb->remote_addr);
+      bta_gattc_continue_discovery_if_needed(p_acl_cb->remote_addr,
+                                             p_acl_cb->Handle());
       break;
     case BT_TRANSPORT_BR_EDR:
       /**
@@ -879,6 +883,7 @@ void btm_process_remote_version_complete(uint8_t status, uint16_t handle,
     LOG_WARN("Received remote version complete for unknown acl");
     return;
   }
+  p_acl_cb->remote_version_received = true;
 
   if (status == HCI_SUCCESS) {
     p_acl_cb->remote_version_info.lmp_version = lmp_version;
@@ -1597,6 +1602,23 @@ uint16_t BTM_GetMaxPacketSize(const RawAddress& addr) {
 
 /*******************************************************************************
  *
+ * Function         BTM_IsRemoteVersionReceived
+ *
+ * Returns          Returns true if "LE Read remote version info" was already
+ *                  received on LE transport for this device.
+ *
+ ******************************************************************************/
+bool BTM_IsRemoteVersionReceived(const RawAddress& addr) {
+  const tACL_CONN* p_acl = internal_.btm_bda_to_acl(addr, BT_TRANSPORT_LE);
+  if (p_acl == nullptr) {
+    return false;
+  }
+
+  return p_acl->remote_version_received;
+}
+
+/*******************************************************************************
+ *
  * Function         BTM_ReadRemoteVersion
  *
  * Returns          If connected report peer device info
@@ -1924,7 +1946,7 @@ void btm_read_rssi_complete(uint8_t* p, uint16_t evt_len) {
 
   return;
 
-err_out:
+ err_out:
   LOG_ERROR("Bogus event packet, too short");
 }
 

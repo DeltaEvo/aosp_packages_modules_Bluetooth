@@ -26,8 +26,8 @@
 #include "btm_ble_api.h"
 #include "device/include/controller.h"
 #include "stack/btm/btm_int_types.h"
-#include "stack/include/btu.h"
 #include "stack/include/btu_hcif.h"
+#include "stack/include/main_thread.h"
 
 extern tBTM_CB btm_cb;
 
@@ -457,8 +457,8 @@ void BTM_BleEnableBatchScan(tBTM_BLE_BATCH_SCAN_MODE scan_mode,
                             tBLE_ADDR_TYPE addr_type,
                             tBTM_BLE_DISCARD_RULE discard_rule,
                             Callback<void(uint8_t /* status */)> cb) {
-  BTM_TRACE_EVENT("%s: %d, %d, %d, %d, %d, %d", __func__, scan_mode,
-                  scan_interval, scan_window, addr_type, discard_rule);
+  BTM_TRACE_EVENT("%s: %d, %d, %d, %d, %d", __func__, scan_mode, scan_interval,
+                  scan_window, addr_type, discard_rule);
 
   if (!can_do_batch_scan()) {
     cb.Run(BTM_ERR_PROCESSING);

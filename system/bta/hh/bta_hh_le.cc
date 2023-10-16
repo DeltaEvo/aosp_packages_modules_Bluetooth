@@ -36,8 +36,8 @@
 #include "stack/btm/btm_sec.h"  // BTM_
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
-#include "stack/include/btu.h"       // post_on_bt_main
-#include "stack/include/l2c_api.h"   // L2CA_
+#include "stack/include/l2c_api.h"  // L2CA_
+#include "stack/include/main_thread.h"
 #include "stack/include/srvc_api.h"  // tDIS_VALUE
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -978,16 +978,18 @@ void bta_hh_security_cmpl(tBTA_HH_DEV_CB* p_cb,
   APPL_TRACE_DEBUG("%s", __func__);
   if (p_cb->status == BTA_HH_OK) {
     if (p_cb->hid_srvc.state < BTA_HH_SERVICE_DISCOVERED) {
-      APPL_TRACE_DEBUG("bta_hh_security_cmpl no reports loaded, try to load");
+      LOG_DEBUG("No reports loaded, try to load");
 
       /* start loading the cache if not in stack */
       tBTA_HH_RPT_CACHE_ENTRY* p_rpt_cache;
       uint8_t num_rpt = 0;
       if ((p_rpt_cache = bta_hh_le_co_cache_load(p_cb->addr, &num_rpt,
                                                  p_cb->app_id)) != NULL) {
+        LOG_DEBUG("Cache found, no need to perform service discovery");
         bta_hh_process_cache_rpt(p_cb, p_rpt_cache, num_rpt);
       }
     }
+
     /*  discovery has been done for HID service */
     if (p_cb->app_id != 0 &&
         p_cb->hid_srvc.state >= BTA_HH_SERVICE_DISCOVERED) {
@@ -2221,7 +2223,7 @@ static void bta_hh_process_cache_rpt(tBTA_HH_DEV_CB* p_cb,
 
   if (num_rpt != 0) /* no cache is found */
   {
-    p_cb->hid_srvc.state = BTA_HH_SERVICE_UNKNOWN;
+    p_cb->hid_srvc.state = BTA_HH_SERVICE_DISCOVERED;
 
     /* set the descriptor info */
     p_cb->hid_srvc.descriptor.dl_len = p_cb->dscp_info.descriptor.dl_len;

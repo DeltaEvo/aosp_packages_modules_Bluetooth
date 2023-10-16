@@ -79,6 +79,7 @@ java_defaults {
         "bluetooth-manager-service-proto-java-gen",
         "bluetooth-nano-protos",
         "bluetooth-proto-enums-java-gen",
+        "bluetooth_flags_java_lib",
         "modules-utils-shell-command-handler",
     ],
 
@@ -171,7 +172,7 @@ android_robolectric_test {
         "mockito-robolectric-prebuilt",
         "platform-test-annotations",
         "testng",
-        "truth-prebuilt",
+        "truth",
     ],
 
     upstream: true,

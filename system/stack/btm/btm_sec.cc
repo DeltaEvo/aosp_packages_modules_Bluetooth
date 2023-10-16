@@ -26,6 +26,8 @@
 
 #include "stack/btm/btm_sec.h"
 
+#include <base/functional/bind.h>
+#include <base/location.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
@@ -40,21 +42,17 @@
 #include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
 #include "l2c_api.h"
-#include "main/shim/btm_api.h"
-#include "main/shim/dumpsys.h"
-#include "main/shim/shim.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/acl_api.h"
-#include "stack/include/acl_hci_link_interface.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/btm_status.h"
-#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2cap_security_interface.h"
+#include "stack/include/main_thread.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "types/raw_address.h"
 
@@ -2626,8 +2624,10 @@ void btm_io_capabilities_req(const RawAddress& p) {
 
   if ((btm_cb.security_mode == BTM_SEC_MODE_SC) &&
       (!p_dev_rec->remote_feature_received)) {
-    BTM_TRACE_EVENT("%s: Device security mode is SC only.",
-                    "To continue need to know remote features.", __func__);
+    BTM_TRACE_EVENT(
+        "%s: Device security mode is SC only."
+        "To continue need to know remote features.",
+        __func__);
 
     // ACL calls back to btm_sec_set_peer_sec_caps after it gets data
     p_dev_rec->remote_features_needed = true;
@@ -3124,7 +3124,7 @@ void btm_read_local_oob_complete(uint8_t* p, uint16_t evt_len) {
   if (status == HCI_SUCCESS) {
     evt_data.status = BTM_SUCCESS;
 
-    if (evt_len < 1 + 32) {
+    if (evt_len < 32 + 1) {
       goto err_out;
     }
 
@@ -3142,7 +3142,7 @@ void btm_read_local_oob_complete(uint8_t* p, uint16_t evt_len) {
   return;
 
 err_out:
-  BTM_TRACE_ERROR("%s malformatted event packet, too short", __func__);
+  BTM_TRACE_ERROR("%s: bogus event packet, too short", __func__);
 }
 
 /*******************************************************************************
@@ -4178,7 +4178,7 @@ void btm_sec_link_key_request(const uint8_t* p_event) {
       (btm_cb.p_collided_dev_rec->bd_addr == bda)) {
     BTM_TRACE_EVENT(
         "btm_sec_link_key_request() rejecting link key req "
-        "State: %d START_TIMEOUT : %d",
+        "State: %d START_TIMEOUT : %" PRIu64,
         btm_cb.pairing_state, btm_cb.collision_start_time);
     btsnd_hcic_link_key_neg_reply(bda);
     return;
@@ -4403,8 +4403,8 @@ void btm_sec_pin_code_request(const uint8_t* p_event) {
                 BTM_COD_MAJOR_PERIPHERAL) &&
                (p_dev_rec->dev_class[2] & BTM_COD_MINOR_KEYBOARD))) {
     BTM_TRACE_WARNING(
-        "btm_sec_pin_code_request(): Pairing disabled:%d; PIN callback:%x, Dev "
-        "Rec:%x!",
+        "btm_sec_pin_code_request(): Pairing disabled:%d; PIN callback:%p, Dev "
+        "Rec:%p!",
         p_cb->pairing_disabled, p_cb->api.p_pin_callback, p_dev_rec);
 
     btsnd_hcic_pin_code_neg_reply(p_bda);
@@ -4586,8 +4586,9 @@ tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
   if ((p_dev_rec->security_required & BTM_SEC_MODE4_LEVEL4) &&
       (p_dev_rec->link_key_type != BTM_LKEY_TYPE_AUTH_COMB_P_256)) {
     BTM_TRACE_EVENT(
-        "%s: Security Manager: SC only service, but link key type is 0x%02x -",
-        "security failure", __func__, p_dev_rec->link_key_type);
+        "%s: Security Manager: SC only service, but link key type is 0x%02x -"
+        "security failure",
+        __func__, p_dev_rec->link_key_type);
     return (BTM_FAILED_ON_SECURITY);
   }
 
@@ -4664,6 +4665,10 @@ static void btm_sec_auth_timer_timeout(void* data) {
     LOG_INFO("%s: invalid device or not found", __func__);
   } else if (btm_dev_authenticated(p_dev_rec)) {
     LOG_INFO("%s: device is already authenticated", __func__);
+    if (p_dev_rec->p_callback) {
+      (*p_dev_rec->p_callback)(&p_dev_rec->bd_addr, BT_TRANSPORT_BR_EDR,
+                               p_dev_rec->p_ref_data, BTM_SUCCESS);
+    }
   } else if (p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
     LOG_INFO("%s: device is in the process of authenticating", __func__);
   } else {

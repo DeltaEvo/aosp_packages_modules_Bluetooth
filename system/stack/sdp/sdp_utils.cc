@@ -37,16 +37,15 @@
 
 #include "btif/include/btif_config.h"
 #include "btif/include/stack_manager.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/properties.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/avrc_defs.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/btm_api_types.h"
-#include "stack/include/sdp_api.h"
 #include "stack/include/sdpdefs.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "stack/sdp/sdpint.h"
@@ -116,13 +115,18 @@ static std::vector<std::pair<uint16_t, uint16_t>> sdpu_find_profile_version(
         uint16_t uuid = p_ssattr->attr_value.v.u16;
         // Next attribute should be the version attribute
         tSDP_DISC_ATTR* version_attr = p_ssattr->p_next_attr;
-        if (SDP_DISC_ATTR_TYPE(version_attr->attr_len_type) != UINT_DESC_TYPE ||
+        if (version_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(version_attr->attr_len_type) != UINT_DESC_TYPE ||
             SDP_DISC_ATTR_LEN(version_attr->attr_len_type) != 2) {
-          LOG(WARNING) << __func__ << ": Bad version type "
-                       << loghex(
-                              SDP_DISC_ATTR_TYPE(version_attr->attr_len_type))
-                       << ", or length "
-                       << SDP_DISC_ATTR_LEN(version_attr->attr_len_type);
+          if (version_attr == nullptr) {
+            LOG(WARNING) << __func__ << ": version attr not found";
+          } else {
+            LOG(WARNING) << __func__ << ": Bad version type "
+                         << loghex(
+                                SDP_DISC_ATTR_TYPE(version_attr->attr_len_type))
+                         << ", or length "
+                         << SDP_DISC_ATTR_LEN(version_attr->attr_len_type);
+          }
           return std::vector<std::pair<uint16_t, uint16_t>>();
         }
         // High order 8 bits is the major number, low order is the

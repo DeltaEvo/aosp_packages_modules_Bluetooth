@@ -33,20 +33,17 @@
 #endif
 
 #include "bt_target.h"
-#include "bta/include/bta_hearing_aid_api.h"
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager.h"
 #include "device/include/controller.h"
 #include "main/shim/acl_api.h"
-#include "main/shim/l2c_api.h"
-#include "main/shim/shim.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/l2cap/l2c_int.h"
@@ -501,6 +498,13 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
   switch (cmd_code) {
     case L2CAP_CMD_REJECT: {
       uint16_t reason;
+
+      if (p + 2 > p_pkt_end) {
+        LOG(ERROR) << "invalid L2CAP_CMD_REJECT packet,"
+                   << " not containing enough data for `reason` field";
+        return;
+      }
+
       STREAM_TO_UINT16(reason, p);
 
       if (reason == L2CAP_CMD_REJ_NOT_UNDERSTOOD &&
@@ -753,9 +757,9 @@ void l2cble_process_sig_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
       if (num_of_channels != p_lcb->pending_ecoc_conn_cnt) {
         L2CAP_TRACE_ERROR(
             "Incorrect response."
-            "expected num of channels = %d",
-            "received num of channels = %d", num_of_channels,
-            p_lcb->pending_ecoc_conn_cnt);
+            "expected num of channels = %d"
+            "received num of channels = %d",
+            num_of_channels, p_lcb->pending_ecoc_conn_cnt);
         return;
       }
 

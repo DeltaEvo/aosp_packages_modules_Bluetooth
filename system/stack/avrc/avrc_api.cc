@@ -195,7 +195,7 @@ void avrc_send_next_vendor_cmd(uint8_t handle) {
     p_next_cmd->layer_specific &= 0xFF; /* AVCT_DATA_CTRL or AVCT_DATA_BROWSE */
 
     AVRC_TRACE_DEBUG(
-        "AVRC: Dequeuing command 0x%08x (handle=0x%02x, label=0x%02x)",
+        "AVRC: Dequeuing command 0x%p (handle=0x%02x, label=0x%02x)",
         p_next_cmd, handle, next_label);
 
     /* Send the message */
@@ -1198,7 +1198,7 @@ uint16_t AVRC_MsgReq(uint8_t handle, uint8_t label, uint8_t ctype,
   AVRC_TRACE_DEBUG("%s handle = %u label = %u ctype = %u len = %d", __func__,
                    handle, label, ctype, p_pkt->len);
   /* Handle for AVRCP fragment */
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
   if (!android::sysprop::bluetooth::A2dp::src_sink_coexist().value_or(false))
 #endif
     is_new_avrcp =
@@ -1322,7 +1322,7 @@ uint16_t AVRC_MsgReq(uint8_t handle, uint8_t label, uint8_t ctype,
      * is received (exception is continuation request command
      * must sent that to get additional response frags) */
     AVRC_TRACE_DEBUG(
-        "AVRC: Enqueuing command 0x%08x (handle=0x%02x, label=0x%02x)", p_pkt,
+        "AVRC: Enqueuing command 0x%p (handle=0x%02x, label=0x%02x)", p_pkt,
         handle, label);
 
     /* label in BT_HDR (will need this later when the command is dequeued) */

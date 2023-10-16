@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include "btm_api_mock.h"
+#include "device_groups.h"
 #include "le_audio_set_configuration_provider.h"
 #include "le_audio_types.h"
 #include "mock_controller.h"
@@ -1590,7 +1591,8 @@ TEST_F(LeAudioAseConfigurationTest, test_reactivation_conversational) {
    * the same CIS ID can be used. This would lead to only activating group
    * without reconfiguring CIG.
    */
-  group_->Activate(LeAudioContextType::CONVERSATIONAL);
+  group_->Activate(LeAudioContextType::CONVERSATIONAL, audio_contexts,
+                   ccid_lists);
 
   TestActiveAses();
 

@@ -53,7 +53,7 @@
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "state_machine.h"
 #include "storage_helper.h"
 
@@ -522,9 +522,9 @@ class LeAudioClientImpl : public LeAudioClient {
     bool group_conf_changed = group->ReloadAudioLocations();
     group_conf_changed |= group->ReloadAudioDirections();
     group_conf_changed |= group->UpdateAudioContextAvailability();
-    /* All the configurations should be recalculated for the new conditions */
-    group->InvalidateCachedConfigurations();
     if (group_conf_changed) {
+      /* All the configurations should be recalculated for the new conditions */
+      group->InvalidateCachedConfigurations();
       callbacks_->OnAudioConf(group->audio_directions_, group->group_id_,
                               group->snk_audio_locations_.to_ulong(),
                               group->src_audio_locations_.to_ulong(),
@@ -3842,7 +3842,7 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    /* Check if the device resume is expected */
+    /* Check if the device resume is allowed */
     if (!group->GetCodecConfigurationByDirection(
             configuration_context_type_,
             le_audio::types::kLeAudioDirectionSink)) {
@@ -4098,8 +4098,8 @@ class LeAudioClientImpl : public LeAudioClient {
                                 le_audio::types::kLeAudioDirectionSource);
     }
 
-    /* Check if the device resume is expected */
-    if (!group->GetCachedCodecConfigurationByDirection(
+    /* Check if the device resume is allowed */
+    if (!group->GetCodecConfigurationByDirection(
             configuration_context_type_,
             le_audio::types::kLeAudioDirectionSource)) {
       LOG(ERROR) << __func__ << ", invalid resume request for context type: "
