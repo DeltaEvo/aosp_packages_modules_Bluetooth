@@ -249,20 +249,37 @@ struct tBTA_DM_PEER_DEVICE {
   bool in_use;
 
  private:
-  friend void bta_dm_acl_up(const RawAddress& bd_addr, tBT_TRANSPORT transport,
-                            uint16_t acl_handle);
-  friend void bta_dm_pm_btm_status(const RawAddress& bd_addr,
-                                   tBTM_PM_STATUS status, uint16_t value,
-                                   tHCI_STATUS hci_status);
-  friend void bta_dm_pm_sniff(struct tBTA_DM_PEER_DEVICE* p_peer_dev,
-                              uint8_t index);
-  friend void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
-                              uint8_t app_id, const RawAddress& peer_addr);
-  friend void handle_remote_features_complete(const RawAddress& bd_addr);
-  tBTA_DM_DEV_INFO info;
+  // Dynamic pieces of operational device information
+  tBTA_DM_DEV_INFO info{BTA_DM_DI_NONE};
 
  public:
-  tBTA_DM_DEV_INFO Info() const { return info; }
+  std::string info_text() const { return device_info_text(info); }
+
+  void reset_device_info() { info = BTA_DM_DI_NONE; }
+
+  void set_av_active() { info |= BTA_DM_DI_AV_ACTIVE; }
+  void reset_av_active() { info &= ~BTA_DM_DI_AV_ACTIVE; }
+  bool is_av_active() const { return info & BTA_DM_DI_AV_ACTIVE; }
+
+  void set_local_init_sniff() { info |= BTA_DM_DI_INT_SNIFF; }
+  bool is_local_init_sniff() const { return info & BTA_DM_DI_INT_SNIFF; }
+  void set_remote_init_sniff() { info |= BTA_DM_DI_ACP_SNIFF; }
+  bool is_remote_init_sniff() const { return info & BTA_DM_DI_ACP_SNIFF; }
+
+  void set_sniff_command_sent() { info |= BTA_DM_DI_SET_SNIFF; }
+  void reset_sniff_command_sent() { info &= ~BTA_DM_DI_SET_SNIFF; }
+  bool is_sniff_command_sent() const { return info & BTA_DM_DI_SET_SNIFF; }
+
+  // NOTE: Why is this not used as a bitmask
+  void set_both_device_ssr_capable() { info = BTA_DM_DI_USE_SSR; }
+
+  void reset_sniff_flags() {
+    info &= ~(BTA_DM_DI_INT_SNIFF | BTA_DM_DI_ACP_SNIFF | BTA_DM_DI_SET_SNIFF);
+  }
+
+  void set_ssr_active() { info |= BTA_DM_DI_USE_SSR; }
+  void reset_ssr_active() { info &= ~BTA_DM_DI_USE_SSR; }
+  bool is_ssr_active() const { return info & BTA_DM_DI_USE_SSR; }
 
   tBTA_DM_ENCRYPT_CBACK* p_encrypt_cback;
   tBTM_PM_STATUS prev_low; /* previous low power mode used */
@@ -361,7 +378,6 @@ typedef struct {
 
 #endif
 
-  tBTA_DM_ENCRYPT_CBACK* p_encrypt_cback;
   alarm_t* switch_delay_timer;
 } tBTA_DM_CB;
 
@@ -515,9 +531,6 @@ void bta_dm_ble_sirk_sec_cb_register(tBTA_DM_SEC_CBACK*);
 void bta_dm_ble_sirk_confirm_device_reply(const RawAddress& bd_addr,
                                           bool accept);
 void bta_dm_set_dev_name(const std::vector<uint8_t>&);
-void bta_dm_set_visibility(tBTA_DM_DISC, tBTA_DM_CONN);
-void bta_dm_set_scan_config(tBTA_DM_MSG* p_data);
-void bta_dm_vendor_spec_command(tBTA_DM_MSG* p_data);
 void bta_dm_bond(const RawAddress&, tBLE_ADDR_TYPE, tBT_TRANSPORT,
                  tBT_DEVICE_TYPE);
 void bta_dm_bond_cancel(const RawAddress&);
@@ -529,7 +542,6 @@ void bta_dm_close_acl(const RawAddress&, bool, tBT_TRANSPORT);
 void bta_dm_pm_btm_status(const RawAddress&, tBTM_PM_STATUS, uint16_t,
                           tHCI_STATUS);
 void bta_dm_pm_timer(const RawAddress&, tBTA_DM_PM_ACTION);
-void bta_dm_add_ampkey(tBTA_DM_MSG* p_data);
 
 void bta_dm_add_blekey(const RawAddress& bd_addr, tBTA_LE_KEY_VALUE blekey,
                        tBTM_LE_KEY_TYPE key_type);
@@ -540,7 +552,6 @@ void bta_dm_ble_passkey_reply(const RawAddress& bd_addr, bool accept,
 void bta_dm_ble_confirm_reply(const RawAddress&, bool);
 void bta_dm_ble_set_conn_params(const RawAddress&, uint16_t, uint16_t, uint16_t,
                                 uint16_t);
-void bta_dm_close_gatt_conn(tBTA_DM_MSG* p_data);
 void bta_dm_ble_observe(bool, uint8_t, tBTA_DM_SEARCH_CBACK*);
 void bta_dm_ble_scan(bool, uint8_t, bool);
 void bta_dm_ble_csis_observe(bool, tBTA_DM_SEARCH_CBACK*);
@@ -562,23 +573,7 @@ void bta_dm_init_pm(void);
 void bta_dm_disable_pm(void);
 
 uint8_t bta_dm_get_av_count(void);
-void bta_dm_search_start(tBTA_DM_MSG* p_data);
-void bta_dm_search_cancel();
-void bta_dm_discover(tBTA_DM_MSG* p_data);
-void bta_dm_inq_cmpl(uint8_t num);
-void bta_dm_remote_name_cmpl(const tBTA_DM_MSG* p_data);
-void bta_dm_sdp_result(tBTA_DM_MSG* p_data);
-void bta_dm_search_cmpl();
-void bta_dm_free_sdp_db();
-void bta_dm_disc_result(tBTA_DM_MSG* p_data);
-void bta_dm_search_result(tBTA_DM_MSG* p_data);
-void bta_dm_discovery_cmpl(tBTA_DM_MSG* p_data);
-void bta_dm_queue_search(tBTA_DM_MSG* p_data);
-void bta_dm_queue_disc(tBTA_DM_MSG* p_data);
-void bta_dm_execute_queued_request();
 bool bta_dm_is_search_request_queued();
-void bta_dm_search_clear_queue();
-void bta_dm_search_cancel_notify();
 tBTA_DM_PEER_DEVICE* bta_dm_find_peer_device(const RawAddress& peer_addr);
 
 void bta_dm_clear_event_filter(void);
@@ -596,9 +591,6 @@ void bta_dm_set_default_event_mask_except(uint64_t mask, uint64_t le_mask);
 void bta_dm_set_event_filter_inquiry_result_all_devices();
 
 void bta_dm_ble_reset_id(void);
-
-tBTA_DM_STATE bta_dm_search_get_state();
-void bta_dm_search_set_state(tBTA_DM_STATE state);
 
 void bta_dm_eir_update_uuid(uint16_t uuid16, bool adding);
 void bta_dm_eir_update_cust_uuid(const tBTA_CUSTOM_UUID &curr, bool adding);

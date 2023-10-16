@@ -24,7 +24,7 @@
 #include "bta_le_audio_api.h"
 #include "btif_common.h"
 #include "btif_profile_storage.h"
-#include "stack/include/btu.h"
+#include "stack/include/main_thread.h"
 
 using base::Bind;
 using base::Unretained;
@@ -133,7 +133,6 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
       LOG_INFO("supported codec: %s", codec.ToString().c_str());
     }
 
-    LeAudioClient::InitializeAudioSetConfigurationProvider();
     do_in_main_thread(
         FROM_HERE, Bind(&LeAudioClient::Initialize, this,
                         jni_thread_wrapper(
@@ -160,12 +159,7 @@ class LeAudioClientInterfaceImpl : public LeAudioClientInterface,
 
     initialized = false;
 
-    do_in_main_thread(
-        FROM_HERE,
-        Bind(&LeAudioClient::Cleanup,
-             jni_thread_wrapper(
-                 FROM_HERE,
-                 Bind(&LeAudioClient::CleanupAudioSetConfigurationProvider))));
+    do_in_main_thread(FROM_HERE, Bind(&LeAudioClient::Cleanup));
   }
 
   void RemoveDevice(const RawAddress& address) override {

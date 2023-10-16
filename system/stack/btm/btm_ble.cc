@@ -47,7 +47,6 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_log_history.h"
-#include "stack/include/btu.h"
 #include "stack/include/btu_hcif.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/l2cap_security_interface.h"
@@ -60,7 +59,7 @@ extern tBTM_CB btm_cb;
 
 bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                               const RawAddress& new_pseudo_addr);
-void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
+void gatt_notify_phy_updated(tHCI_STATUS status, uint16_t handle,
                              uint8_t tx_phy, uint8_t rx_phy);
 
 #ifndef PROPERTY_BLE_PRIVACY_ENABLED
@@ -700,13 +699,6 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
     return BTM_WRONG_MODE;
   }
 
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    uint16_t handle = bluetooth::shim::L2CA_GetLeHandle(bd_addr);
-    btsnd_hcic_ble_set_data_length(handle, tx_pdu_length, tx_time);
-    p_dev_rec->set_suggested_tx_octect(tx_pdu_length);
-    return BTM_SUCCESS;
-  }
-
   uint16_t hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   if (!acl_peer_supports_ble_packet_extension(hci_handle)) {
@@ -810,14 +802,16 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
   if (!controller_get_interface()->supports_ble_2m_phy() &&
       !controller_get_interface()->supports_ble_coded_phy()) {
     LOG_INFO("Local controller unable to support setting of le phy parameters");
-    gatt_notify_phy_updated(GATT_REQ_NOT_SUPPORTED, handle, tx_phys, rx_phys);
+    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
+                            handle, tx_phys, rx_phys);
     return;
   }
 
   if (!acl_peer_supports_ble_2m_phy(handle) &&
       !acl_peer_supports_ble_coded_phy(handle)) {
     LOG_INFO("Remote device unable to support setting of le phy parameter");
-    gatt_notify_phy_updated(GATT_REQ_NOT_SUPPORTED, handle, tx_phys, rx_phys);
+    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
+                            handle, tx_phys, rx_phys);
     return;
   }
 
@@ -991,17 +985,11 @@ tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
       break;
   }
 
-  if (ble_sec_act == BTM_BLE_SEC_NONE) {
-    if (bluetooth::common::init_flags::queue_l2cap_coc_while_encrypting_is_enabled()) {
-      if (sec_act != BTM_SEC_ENC_PENDING) {
-        return result;
-      }
-    } else {
-      return result;
-    }
-  } else {
-    l2cble_update_sec_act(bd_addr, sec_act);
+  if (ble_sec_act == BTM_BLE_SEC_NONE && sec_act != BTM_SEC_ENC_PENDING) {
+    return result;
   }
+
+  l2cble_update_sec_act(bd_addr, sec_act);
 
   BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, p_callback, p_ref_data,
                     ble_sec_act);
@@ -1511,28 +1499,27 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
   if (p_dev_rec->p_callback && enc_cback) {
     if (encr_enable)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_SUCCESS, true);
-    else if (p_dev_rec->sec_flags & ~BTM_SEC_LE_LINK_KEY_KNOWN) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
-    }
     /* LTK missing on peripheral */
     else if (p_dev_rec->role_central && (p_dev_rec->sec_status == HCI_ERR_KEY_MISSING)) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_KEY_MISSING, true);
+    }
+    else if (!(p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN)) {
+      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
     }
     else if (p_dev_rec->role_central)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
   }
 
   if (encr_enable) {
-    uint8_t remote_lmp_version = 0;
-    if (!BTM_ReadRemoteVersion(p_dev_rec->ble.pseudo_addr, &remote_lmp_version,
+    uint8_t remote_ll_version = 0;
+    if (!BTM_ReadRemoteVersion(p_dev_rec->ble.pseudo_addr, &remote_ll_version,
                                nullptr, nullptr) ||
-        remote_lmp_version == 0) {
+        remote_ll_version == 0) {
       LOG_WARN("BLE Unable to determine remote version");
     }
 
-    if (remote_lmp_version == 0 ||
-        remote_lmp_version >= HCI_PROTO_VERSION_5_2) {
-      /* Link is encrypted, start EATT if remote LMP version is unknown, or 5.2
+    if (remote_ll_version == 0 || remote_ll_version >= HCI_PROTO_VERSION_5_0) {
+      /* Link is encrypted, start EATT if remote LMP version is unknown, or 5.0
        * or greater */
       bluetooth::eatt::EattExtension::GetInstance()->Connect(
           p_dev_rec->ble.pseudo_addr);
@@ -1697,11 +1684,11 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
   BTM_TRACE_DEBUG("%s", __func__);
   *p_data = tBTM_LE_IO_REQ{
       .io_cap = BTM_IO_CAP_UNKNOWN,
+      .oob_data = false,
       .auth_req = BTM_LE_AUTH_REQ_SC_MITM_BOND,
+      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
       .init_keys = SMP_BR_SEC_DEFAULT_KEY,
       .resp_keys = SMP_BR_SEC_DEFAULT_KEY,
-      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
-      .oob_data = false,
   };
 
   if (osi_property_get_bool(kPropertyCtkdDisableCsrkDistribution, false)) {
@@ -1877,8 +1864,20 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
 
           if (res == BTM_SUCCESS) {
             p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
-            /* add all bonded device into resolving list if IRK is available*/
-            btm_ble_resolving_list_load_dev(*p_dev_rec);
+
+            if (p_dev_rec->bond_type != tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY) {
+              // Add all bonded device into resolving list if IRK is available.
+              btm_ble_resolving_list_load_dev(*p_dev_rec);
+            } else if (p_dev_rec->ble_hci_handle == HCI_INVALID_HANDLE) {
+              // At this point LTK should have been dropped by btif.
+              // Reset the flags here if LE is not connected (over BR),
+              // otherwise they would be reset on disconnected.
+              LOG_DEBUG(
+                  "SMP over BR triggered by temporary bond has completed,"
+                  " resetting the LK flags");
+              p_dev_rec->sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
+              p_dev_rec->ble.key_type = BTM_LE_KEY_NONE;
+            }
           }
 
           btm_sec_dev_rec_cback_event(p_dev_rec, res, true);
@@ -2028,9 +2027,6 @@ bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
  *
  ******************************************************************************/
 void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_FAIL;
 

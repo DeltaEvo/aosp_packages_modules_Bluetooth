@@ -54,7 +54,6 @@
 #define BT_PROFILE_HAP_CLIENT_ID "has_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_KEYSTORE_ID "bluetooth_keystore"
-#define BT_ACTIVITY_ATTRIBUTION_ID "activity_attribution"
 #define BT_PROFILE_VC_ID "volume_control"
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
@@ -395,6 +394,13 @@ typedef enum {
    */
   BT_PROPERTY_REMOTE_MODEL_NUM,
 
+  /**
+   * Description - Address type of the remote device - PUBLIC or REMOTE
+   * Access mode - GET.
+   * Data Type - uint8_t.
+   */
+  BT_PROPERTY_REMOTE_ADDR_TYPE,
+
   BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP = 0xFF,
 } bt_property_type_t;
 
@@ -405,25 +411,38 @@ typedef struct {
   void* val;
 } bt_property_t;
 
+// OOB_ADDRESS_SIZE is 6 bytes address + 1 byte address type
+#define OOB_ADDRESS_SIZE 7
+#define OOB_C_SIZE 16
+#define OOB_R_SIZE 16
+#define OOB_NAME_MAX_SIZE 256
+// Classic
+#define OOB_DATA_LEN_SIZE 2
+#define OOB_COD_SIZE 3
+// LE
+#define OOB_TK_SIZE 16
+#define OOB_LE_FLAG_SIZE 1
+#define OOB_LE_ROLE_SIZE 1
+#define OOB_LE_APPEARANCE_SIZE 2
 /** Represents the actual Out of Band data itself */
 typedef struct bt_oob_data_s {
   // Both
   bool is_valid = false; /* Default to invalid data; force caller to verify */
-  uint8_t address[7]; /* Bluetooth Device Address (6) plus Address Type (1) */
-  uint8_t c[16];      /* Simple Pairing Hash C-192/256 (Classic or LE) */
-  uint8_t r[16];      /* Simple Pairing Randomizer R-192/256 (Classic or LE) */
-  uint8_t device_name[256]; /* Name of the device */
+  uint8_t address[OOB_ADDRESS_SIZE];
+  uint8_t c[OOB_C_SIZE];      /* Simple Pairing Hash C-192/256 (Classic or LE) */
+  uint8_t r[OOB_R_SIZE];      /* Simple Pairing Randomizer R-192/256 (Classic or LE) */
+  uint8_t device_name[OOB_NAME_MAX_SIZE]; /* Name of the device */
 
   // Classic
-  uint8_t oob_data_length[2]; /* Classic only data Length. Value includes this
-                                 in length */
-  uint8_t class_of_device[2]; /* Class of Device (Classic or LE) */
+  uint8_t oob_data_length[OOB_DATA_LEN_SIZE]; /* Classic only data Length. Value includes this
+                                                 in length */
+  uint8_t class_of_device[OOB_COD_SIZE]; /* Class of Device (Classic or LE) */
 
   // LE
   uint8_t le_device_role;   /* Supported and preferred role of device */
-  uint8_t sm_tk[16];        /* Security Manager TK Value (LE Only) */
+  uint8_t sm_tk[OOB_TK_SIZE];        /* Security Manager TK Value (LE Only) */
   uint8_t le_flags;         /* LE Flags for discoverability and features */
-  uint8_t le_appearance[2]; /* For the appearance of the device */
+  uint8_t le_appearance[OOB_LE_APPEARANCE_SIZE]; /* For the appearance of the device */
 } bt_oob_data_t;
 
 /** Bluetooth Device Type */
@@ -603,9 +622,6 @@ typedef struct {
   le_rand_callback le_rand_cb;
 } bt_callbacks_t;
 
-typedef void (*alarm_cb)(void* data);
-typedef bool (*set_wake_alarm_callout)(uint64_t delay_millis, bool should_wake,
-                                       alarm_cb cb, void* data);
 typedef int (*acquire_wake_lock_callout)(const char* lock_name);
 typedef int (*release_wake_lock_callout)(const char* lock_name);
 
@@ -617,7 +633,6 @@ typedef struct {
   /* set to sizeof(bt_os_callouts_t) */
   size_t size;
 
-  set_wake_alarm_callout set_wake_alarm;
   acquire_wake_lock_callout acquire_wake_lock;
   release_wake_lock_callout release_wake_lock;
 } bt_os_callouts_t;

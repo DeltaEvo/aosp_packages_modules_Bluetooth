@@ -39,7 +39,6 @@
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
-#include "stack/include/btu.h"
 #include "stack/include/pan_api.h"
 #include "types/raw_address.h"
 
@@ -336,9 +335,9 @@ void bta_pan_set_role(tBTA_PAN_DATA* p_data) {
   tBTA_PAN bta_pan = {
       .set_role =
           {
-              .role = p_data->api_set_role.role,
               .status =
                   (status == PAN_SUCCESS) ? BTA_PAN_SUCCESS : BTA_PAN_FAIL,
+              .role = p_data->api_set_role.role,
           },
   };
 

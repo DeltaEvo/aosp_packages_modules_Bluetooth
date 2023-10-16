@@ -59,7 +59,7 @@ static int release_wake_lock_cb(const char* lock_name) {
 }
 
 static bt_os_callouts_t bt_wakelock_callouts = {
-    sizeof(bt_os_callouts_t), NULL, acquire_wake_lock_cb, release_wake_lock_cb};
+    sizeof(bt_os_callouts_t), acquire_wake_lock_cb, release_wake_lock_cb};
 
 class AlarmTest : public ::testing::Test {
  protected:
@@ -204,7 +204,7 @@ TEST_F(AlarmTest, test_set_short_short) {
                        alarm_new("alarm_test.test_set_short_short_1")};
 
   alarm_set(alarm[0], 10, cb, NULL);
-  alarm_set(alarm[1], 20, cb, NULL);
+  alarm_set(alarm[1], 200, cb, NULL);
 
   EXPECT_EQ(cb_counter, 0);
   EXPECT_TRUE(is_wake_lock_acquired);

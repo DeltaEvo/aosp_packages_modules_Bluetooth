@@ -19,10 +19,12 @@ import static com.android.bluetooth.opp.BluetoothOppService.WHERE_INVISIBLE_UNCO
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -47,6 +49,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 @MediumTest
@@ -54,6 +57,8 @@ import org.mockito.MockitoAnnotations;
 public class BluetoothOppServiceTest {
     private BluetoothOppService mService = null;
     private BluetoothAdapter mAdapter = null;
+    private boolean mIsAdapterServiceSet;
+    private boolean mIsBluetoothOppServiceStarted;
 
     @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
@@ -74,14 +79,28 @@ public class BluetoothOppServiceTest {
         doNothing().when(mBluetoothMethodProxy).threadStart(any());
 
         TestUtils.setAdapterService(mAdapterService);
+        mIsAdapterServiceSet = true;
         doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
         TestUtils.startService(mServiceRule, BluetoothOppService.class);
+        mIsBluetoothOppServiceStarted = true;
         mService = BluetoothOppService.getBluetoothOppService();
 
         Assert.assertNotNull(mService);
         // Try getting the Bluetooth adapter
         mAdapter = BluetoothAdapter.getDefaultAdapter();
         Assert.assertNotNull(mAdapter);
+
+        // Wait until the initial trimDatabase operation is done.
+        verify(mBluetoothMethodProxy, timeout(3_000))
+                .contentResolverQuery(
+                        any(),
+                        eq(BluetoothShare.CONTENT_URI),
+                        eq(new String[] {BluetoothShare._ID}),
+                        any(),
+                        isNull(),
+                        eq(BluetoothShare._ID));
+
+        Mockito.clearInvocations(mBluetoothMethodProxy);
     }
 
     @After
@@ -95,8 +114,12 @@ public class BluetoothOppServiceTest {
         }
 
         BluetoothMethodProxy.setInstanceForTesting(null);
-        TestUtils.stopService(mServiceRule, BluetoothOppService.class);
-        TestUtils.clearAdapterService(mAdapterService);
+        if (mIsBluetoothOppServiceStarted) {
+            TestUtils.stopService(mServiceRule, BluetoothOppService.class);
+        }
+        if (mIsAdapterServiceSet) {
+            TestUtils.clearAdapterService(mAdapterService);
+        }
     }
 
     @Test

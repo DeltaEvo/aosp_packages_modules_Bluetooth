@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include <base/bind_helpers.h>
 #include <base/functional/bind.h>
 #include <base/location.h>
 #include <base/logging.h>
@@ -29,7 +28,7 @@
 #include "bta_has_api.h"
 #include "btif_common.h"
 #include "btif_profile_storage.h"
-#include "stack/include/btu.h"
+#include "stack/include/main_thread.h"
 
 using base::Bind;
 using base::Owned;

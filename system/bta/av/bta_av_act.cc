@@ -883,6 +883,13 @@ tBTA_AV_EVT bta_av_proc_meta_cmd(tAVRC_RESPONSE* p_rc_rsp,
   uint16_t u16;
   tAVRC_MSG_VENDOR* p_vendor = &p_msg->msg.vendor;
 
+  if (p_vendor->vendor_len == 0) {
+    p_rc_rsp->rsp.status = AVRC_STS_BAD_PARAM;
+    APPL_TRACE_DEBUG("%s: p_vendor->vendor_len == 0", __func__);
+    // the caller of this function assume 0 to be an invalid event
+    return 0;
+  }
+
   pdu = *(p_vendor->p_vendor_data);
   p_rc_rsp->pdu = pdu;
   *p_ctype = AVRC_RSP_REJ;
@@ -1133,7 +1140,10 @@ void bta_av_rc_msg(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data) {
     av.remote_cmd.rc_handle = p_data->rc_msg.handle;
     (*p_cb->p_cback)(evt, &av);
     /* If browsing message, then free the browse message buffer */
-    bta_av_rc_free_browse_msg(p_cb, p_data);
+    if (p_data->rc_msg.opcode == AVRC_OP_BROWSE &&
+        p_data->rc_msg.msg.browse.p_browse_pkt != NULL) {
+      bta_av_rc_free_browse_msg(p_cb, p_data);
+    }
   }
 }
 
@@ -2216,9 +2226,9 @@ void bta_av_rc_disc_done_all(UNUSED_ATTR tBTA_AV_DATA* p_data) {
         tBTA_AV bta_av_data = {
             .rc_open =
                 {
-                    .peer_addr = p_scb->PeerAddress(),
                     .peer_ct_features = peer_ct_features,
                     .peer_tg_features = peer_tg_features,
+                    .peer_addr = p_scb->PeerAddress(),
                     .status = BTA_AV_FAIL_SDP,
                 },
         };
@@ -2246,9 +2256,9 @@ void bta_av_rc_disc_done_all(UNUSED_ATTR tBTA_AV_DATA* p_data) {
     }
 
     tBTA_AV bta_av_feat = {.rc_feat = {
+                               .rc_handle = rc_handle,
                                .peer_ct_features = peer_ct_features,
                                .peer_tg_features = peer_tg_features,
-                               .rc_handle = rc_handle,
                                .peer_addr = peer_addr,
                            }};
     (*p_cb->p_cback)(BTA_AV_RC_FEAT_EVT, &bta_av_feat);

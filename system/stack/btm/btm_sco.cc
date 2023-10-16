@@ -46,6 +46,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/security_device_record.h"
@@ -53,8 +54,8 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_api_types.h"
-#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/hci_error_code.h"
+#include "stack/include/main_thread.h"
 #include "stack/include/sdpdefs.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "types/class_of_device.h"
@@ -972,6 +973,8 @@ void btm_sco_connected(const RawAddress& bda, uint16_t hci_handle,
       BTM_LogHistory(
           kBtmLogTag, bda, "Connection created",
           base::StringPrintf("sco_idx:%hu handle:0x%04x ", xx, hci_handle));
+      power_telemetry::GetInstance().LogLinkDetails(hci_handle, bda, true,
+                                                    false);
 
       if (p->state == SCO_ST_LISTENING) spt = true;
 
@@ -981,6 +984,8 @@ void btm_sco_connected(const RawAddress& bda, uint16_t hci_handle,
       BTM_LogHistory(kBtmLogTag, bda, "Connection success",
                      base::StringPrintf("handle:0x%04x %s", hci_handle,
                                         (spt) ? "listener" : "initiator"));
+      LOG_DEBUG("Connected SCO link handle:0x%04x peer:%s", hci_handle,
+                ADDRESS_TO_LOGGABLE_CSTR(bda));
 
       if (!btm_cb.sco_cb.esco_supported) {
         p->esco.data.link_type = BTM_LINK_TYPE_SCO;
@@ -1175,6 +1180,8 @@ bool btm_sco_removed(uint16_t hci_handle, tHCI_REASON reason) {
   for (xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
     if ((p->state != SCO_ST_UNUSED) && (p->state != SCO_ST_LISTENING) &&
         (p->hci_handle == hci_handle)) {
+      power_telemetry::GetInstance().LogLinkDetails(
+          hci_handle, RawAddress::kEmpty, false, false);
       RawAddress bda(p->esco.data.bd_addr);
       p->state = SCO_ST_UNUSED;
       p->hci_handle = HCI_INVALID_HANDLE;

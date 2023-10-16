@@ -251,7 +251,7 @@ fn build_commands() -> HashMap<String, CommandOption> {
                 String::from(
                     "socket connect <address> <l2cap|rfcomm> <psm|uuid> <auth-required> <Bredr|LE>",
                 ),
-                String::from("socket disconnect <socket_id>"),
+                String::from("socket close <socket_id>"),
                 String::from("socket set-on-connect-schedule <send|resend|dump>"),
             ],
             description: String::from("Socket manager utilities."),
@@ -681,7 +681,7 @@ impl CommandHandler {
                     name: String::from("Classic Device"),
                 };
 
-                self.lock_context().adapter_dbus.as_ref().unwrap().remove_bond(device);
+                self.lock_context().adapter_dbus.as_mut().unwrap().remove_bond(device);
             }
             "cancel" => {
                 let device = BluetoothDevice {
@@ -689,7 +689,7 @@ impl CommandHandler {
                     name: String::from("Classic Device"),
                 };
 
-                self.lock_context().adapter_dbus.as_ref().unwrap().cancel_bond_process(device);
+                self.lock_context().adapter_dbus.as_mut().unwrap().cancel_bond_process(device);
             }
             other => {
                 println!("Invalid argument '{}'", other);
@@ -755,6 +755,7 @@ impl CommandHandler {
                     name,
                     alias,
                     device_type,
+                    addr_type,
                     class,
                     appearance,
                     bonded,
@@ -767,6 +768,7 @@ impl CommandHandler {
 
                     let name = adapter.get_remote_name(device.clone());
                     let device_type = adapter.get_remote_type(device.clone());
+                    let addr_type = adapter.get_remote_address_type(device.clone());
                     let alias = adapter.get_remote_alias(device.clone());
                     let class = adapter.get_remote_class(device.clone());
                     let appearance = adapter.get_remote_appearance(device.clone());
@@ -783,6 +785,7 @@ impl CommandHandler {
                         name,
                         alias,
                         device_type,
+                        addr_type,
                         class,
                         appearance,
                         bonded,
@@ -795,7 +798,8 @@ impl CommandHandler {
                 print_info!("Address: {}", &device.address);
                 print_info!("Name: {}", name);
                 print_info!("Alias: {}", alias);
-                print_info!("Type: {:?}", device_type);
+                print_info!("Device Type: {:?}", device_type);
+                print_info!("Address Type: {:?}", addr_type);
                 print_info!("Class: {}", class);
                 print_info!("Appearance: {}", appearance);
                 print_info!("Wake Allowed: {}", wake_allowed);
@@ -911,6 +915,8 @@ impl CommandHandler {
                 self.lock_context().manager_dbus.set_floss_enabled(false);
             }
             "show" => {
+                let (major, minor) = self.lock_context().get_floss_api_version();
+                print_info!("Floss API version: {}.{}", major, minor);
                 print_info!(
                     "Floss enabled: {}",
                     self.lock_context().manager_dbus.get_floss_enabled()
@@ -1624,6 +1630,26 @@ impl CommandHandler {
                 } else {
                     print_info!("Called create socket with result ({:?}, {}) against {}, type {}, with psm/uuid {}",
                     status, id, addr, sock_type, psm_or_uuid);
+                }
+            }
+            "close" => {
+                let sockid = String::from(get_arg(args, 1)?)
+                    .parse::<u64>()
+                    .or(Err("Failed parsing socket ID"))?;
+                let status = self
+                    .context
+                    .lock()
+                    .unwrap()
+                    .socket_manager_dbus
+                    .as_mut()
+                    .unwrap()
+                    .close(callback_id, sockid);
+                if status != BtStatus::Success {
+                    return Err(format!(
+                        "Failed to close the listening socket, status = {:?}",
+                        status,
+                    )
+                    .into());
                 }
             }
 

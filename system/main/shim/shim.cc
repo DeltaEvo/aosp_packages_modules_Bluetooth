@@ -18,12 +18,12 @@
 
 #include "main/shim/shim.h"
 
-#include "btu.h"
 #include "gd/common/init_flags.h"
 #include "gd/os/log.h"
 #include "main/shim/entry.h"
 #include "main/shim/hci_layer.h"
 #include "main/shim/stack.h"
+#include "stack/include/main_thread.h"
 
 static const hci_t* hci;
 
@@ -61,28 +61,12 @@ EXPORT_SYMBOL extern const module_t gd_shim_module = {
     .clean_up = kUnusedModuleApi,
     .dependencies = {kUnusedModuleDependencies}};
 
-bool bluetooth::shim::is_gd_link_policy_enabled() {
-  return bluetooth::common::init_flags::gd_link_policy_is_enabled();
-}
-
-bool bluetooth::shim::is_gd_l2cap_enabled() {
-  return bluetooth::common::init_flags::gd_l2cap_is_enabled();
-}
-
-bool bluetooth::shim::is_gd_shim_enabled() {
-  return bluetooth::common::init_flags::gd_core_is_enabled();
-}
-
 bool bluetooth::shim::is_gd_stack_started_up() {
   return bluetooth::shim::Stack::GetInstance()->IsRunning();
 }
 
 bool bluetooth::shim::is_gd_dumpsys_module_started() {
   return bluetooth::shim::Stack::GetInstance()->IsDumpsysModuleStarted();
-}
-
-bool bluetooth::shim::is_gd_btaa_enabled() {
-  return bluetooth::common::init_flags::btaa_hci_is_enabled();
 }
 
 bool bluetooth::shim::is_classic_discovery_only_enabled() {

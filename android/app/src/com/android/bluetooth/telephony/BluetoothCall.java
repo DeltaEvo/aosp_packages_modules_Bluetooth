@@ -16,7 +16,6 @@
 
 package com.android.bluetooth.telephony;
 
-import android.bluetooth.BluetoothLeCallControl;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -26,6 +25,7 @@ import android.telecom.GatewayInfo;
 import android.telecom.InCallService;
 import android.telecom.PhoneAccountHandle;
 
+import com.android.bluetooth.apishim.BluetoothCallShimImpl;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
@@ -47,6 +47,9 @@ public class BluetoothCall {
 
     private Call mCall;
     private UUID mCallId;
+
+    // An index used to identify calls for CLCC (C* List Current Calls).
+    int mClccIndex = -1;
 
     public Call getCall() {
         return mCall;
@@ -278,8 +281,8 @@ public class BluetoothCall {
 
     // helper functions
     public boolean isSilentRingingRequested() {
-        return getDetails().getExtras() != null
-                && getDetails().getExtras().getBoolean(Call.EXTRA_SILENT_RINGING_REQUESTED);
+        return BluetoothCallShimImpl.newInstance().isSilentRingingRequested(
+                getDetails().getExtras());
     }
 
     public boolean isConference() {

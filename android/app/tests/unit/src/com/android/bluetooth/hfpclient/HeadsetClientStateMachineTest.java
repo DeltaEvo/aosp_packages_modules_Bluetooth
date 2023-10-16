@@ -16,6 +16,8 @@
 
 package com.android.bluetooth.hfpclient;
 
+import static android.content.pm.PackageManager.FEATURE_WATCH;
+
 import static android.bluetooth.BluetoothProfile.STATE_DISCONNECTED;
 
 import static com.android.bluetooth.hfpclient.HeadsetClientStateMachine.AT_OK;
@@ -32,11 +34,13 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothAssignedNumbers;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadsetClient;
+import android.bluetooth.BluetoothHeadsetClientCall;
 import android.bluetooth.BluetoothSinkAudioPolicy;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.media.AudioManager;
 import android.os.Bundle;
@@ -56,6 +60,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.RemoteDevices;
 import com.android.bluetooth.hfp.HeadsetService;
 
 import org.hamcrest.core.AllOf;
@@ -86,18 +91,14 @@ public class HeadsetClientStateMachineTest {
     private BluetoothDevice mTestDevice;
     private Context mTargetContext;
 
-    @Mock
-    private AdapterService mAdapterService;
-    @Mock
-    private Resources mMockHfpResources;
-    @Mock
-    private HeadsetService mHeadsetService;
-    @Mock
-    private HeadsetClientService mHeadsetClientService;
-    @Mock
-    private AudioManager mAudioManager;
-
-    private NativeInterface mNativeInterface;
+    @Mock private AdapterService mAdapterService;
+    @Mock private Resources mMockHfpResources;
+    @Mock private HeadsetService mHeadsetService;
+    @Mock private HeadsetClientService mHeadsetClientService;
+    @Mock private AudioManager mAudioManager;
+    @Mock private RemoteDevices mRemoteDevices;
+    @Mock private PackageManager mPackageManager;
+    @Mock private NativeInterface mNativeInterface;
 
     private static final int STANDARD_WAIT_MILLIS = 1000;
     private static final int QUERY_CURRENT_CALLS_WAIT_MILLIS = 2000;
@@ -117,12 +118,14 @@ public class HeadsetClientStateMachineTest {
         when(mHeadsetClientService.getAudioManager()).thenReturn(
                 mAudioManager);
         when(mHeadsetClientService.getResources()).thenReturn(mMockHfpResources);
+        when(mHeadsetClientService.getPackageManager()).thenReturn(mPackageManager);
+        when(mPackageManager.hasSystemFeature(FEATURE_WATCH)).thenReturn(false);
         when(mMockHfpResources.getBoolean(R.bool.hfp_clcc_poll_during_call)).thenReturn(true);
         when(mMockHfpResources.getInteger(R.integer.hfp_clcc_poll_interval_during_call))
                 .thenReturn(2000);
 
         TestUtils.setAdapterService(mAdapterService);
-        mNativeInterface = spy(NativeInterface.getInstance());
+        doReturn(mRemoteDevices).when(mAdapterService).getRemoteDevices();
         doReturn(true).when(mNativeInterface).sendAndroidAt(anyObject(), anyString());
 
         // This line must be called to make sure relevant objects are initialized properly
@@ -465,7 +468,63 @@ public class HeadsetClientStateMachineTest {
                 intentArgument.getValue().getIntExtra(BluetoothHeadsetClient.EXTRA_IN_BAND_RING,
                         -1));
         Assert.assertEquals(false, mHeadsetClientStateMachine.getInBandRing());
+    }
 
+    /** Test that wearables use {@code BluetoothHeadsetClientCall} in intent. */
+    @Test
+    public void testWearablesUseBluetoothHeadsetClientCallInIntent() {
+        // Specify the watch form factor when package manager is asked
+        when(mPackageManager.hasSystemFeature(FEATURE_WATCH)).thenReturn(true);
+
+        // Skip over the Android AT commands to test this code path
+        doReturn(false).when(mNativeInterface).sendAndroidAt(anyObject(), anyString());
+
+        // Return true for connection policy to allow connections
+        when(mHeadsetClientService.getConnectionPolicy(any(BluetoothDevice.class)))
+                .thenReturn(BluetoothProfile.CONNECTION_POLICY_ALLOWED);
+
+        // Send an incoming connection event
+        StackEvent event = new StackEvent(StackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED);
+        event.device = mTestDevice;
+        event.valueInt = HeadsetClientHalConstants.CONNECTION_STATE_CONNECTED;
+        mHeadsetClientStateMachine.sendMessage(StackEvent.STACK_EVENT, event);
+
+        // Send a message to trigger service level connection using the required ECS feature
+        event = new StackEvent(StackEvent.EVENT_TYPE_CONNECTION_STATE_CHANGED);
+        event.device = mTestDevice;
+        event.valueInt = HeadsetClientHalConstants.CONNECTION_STATE_SLC_CONNECTED;
+        event.valueInt2 = HeadsetClientHalConstants.PEER_FEAT_ECS;
+        mHeadsetClientStateMachine.sendMessage(StackEvent.STACK_EVENT, event);
+
+        // Dial a phone call, which will fail as @{code dial} method is not specified in @{code
+        // mNativeInterface} mock and trigger a call state changed broadcast
+        mHeadsetClientStateMachine.sendMessage(
+                HeadsetClientStateMachine.DIAL_NUMBER,
+                new HfpClientCall(
+                        mTestDevice,
+                        0,
+                        HfpClientCall.CALL_STATE_WAITING,
+                        "1",
+                        false,
+                        false,
+                        false));
+
+        // Wait for processing
+        TestUtils.waitForLooperToFinishScheduledTask(mHandlerThread.getLooper());
+
+        // Verify the broadcast
+        ArgumentCaptor<Intent> intentArgument = ArgumentCaptor.forClass(Intent.class);
+        verify(mHeadsetClientService, times(1))
+                .sendBroadcast(intentArgument.capture(), anyString(), any(Bundle.class));
+
+        // Verify that the parcelable extra has a legacy {@code BluetoothHeadsetClientCall} type for
+        // wearables.
+        Assert.assertThat(
+                intentArgument.getValue().getParcelableExtra(BluetoothHeadsetClient.EXTRA_CALL),
+                IsInstanceOf.instanceOf(BluetoothHeadsetClientCall.class));
+
+        // To satisfy the @After verification
+        verify(mHeadsetService).updateInbandRinging(eq(mTestDevice), eq(true));
     }
 
     /* Utility function to simulate HfpClient is connected. */

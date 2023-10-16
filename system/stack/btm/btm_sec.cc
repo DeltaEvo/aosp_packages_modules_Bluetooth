@@ -26,11 +26,15 @@
 
 #include "stack/btm/btm_sec.h"
 
+#include <base/functional/bind.h>
+#include <base/location.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/hci/enums.pb.h>
 #include <string.h>
+
+#include <type_traits>
 
 #include "btif/include/btif_storage.h"
 #include "common/metrics.h"
@@ -38,21 +42,17 @@
 #include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
 #include "l2c_api.h"
-#include "main/shim/btm_api.h"
-#include "main/shim/dumpsys.h"
-#include "main/shim/shim.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/acl_api.h"
-#include "stack/include/acl_hci_link_interface.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/btm_status.h"
-#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2cap_security_interface.h"
+#include "stack/include/main_thread.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "types/raw_address.h"
 
@@ -1148,13 +1148,52 @@ tBTM_STATUS BTM_SetEncryption(const RawAddress& bd_addr,
       break;
   }
 
-  /* enqueue security request if security is active */
-  if (p_dev_rec->p_callback || (p_dev_rec->sec_state != BTM_SEC_STATE_IDLE)) {
-    LOG_WARN("Security Manager: BTM_SetEncryption busy, enqueue request");
-    btm_sec_queue_encrypt_request(bd_addr, transport, p_callback, p_ref_data,
-                                  sec_act);
-    LOG_INFO("Queued start encryption");
-    return BTM_CMD_STARTED;
+  /* Enqueue security request if security is active */
+  if (bluetooth::common::init_flags::encryption_in_busy_state_is_enabled()) {
+    bool enqueue = false;
+    switch (p_dev_rec->sec_state) {
+      case BTM_SEC_STATE_AUTHENTICATING:
+      case BTM_SEC_STATE_DISCONNECTING_BOTH:
+        /* Applicable for both transports */
+        enqueue = true;
+        break;
+
+      case BTM_SEC_STATE_ENCRYPTING:
+      case BTM_SEC_STATE_DISCONNECTING:
+        if (transport == BT_TRANSPORT_BR_EDR) {
+          enqueue = true;
+        }
+        break;
+
+      case BTM_SEC_STATE_LE_ENCRYPTING:
+      case BTM_SEC_STATE_DISCONNECTING_BLE:
+        if (transport == BT_TRANSPORT_LE) {
+          enqueue = true;
+        }
+        break;
+
+      default:
+        if (p_dev_rec->p_callback != nullptr) {
+          enqueue = true;
+        }
+        break;
+    }
+
+    if (enqueue) {
+      LOG_WARN("Security Manager: Enqueue request in state:%s",
+               security_state_text(p_dev_rec->sec_state).c_str());
+      btm_sec_queue_encrypt_request(bd_addr, transport, p_callback, p_ref_data,
+                                    sec_act);
+      return BTM_CMD_STARTED;
+    }
+  } else {
+    if (p_dev_rec->p_callback || (p_dev_rec->sec_state != BTM_SEC_STATE_IDLE)) {
+      LOG_WARN("Security Manager: BTM_SetEncryption busy, enqueue request");
+      btm_sec_queue_encrypt_request(bd_addr, transport, p_callback, p_ref_data,
+                                    sec_act);
+      LOG_INFO("Queued start encryption");
+      return BTM_CMD_STARTED;
+    }
   }
 
   p_dev_rec->p_callback = p_callback;
@@ -1288,8 +1327,10 @@ void BTM_ConfirmReqReply(tBTM_STATUS res, const RawAddress& bd_addr) {
   if ((btm_cb.pairing_state != BTM_PAIR_STATE_WAIT_NUMERIC_CONFIRM) ||
       (btm_cb.pairing_bda != bd_addr)) {
     LOG_WARN(
-        "Ignore confirm request reply as bonding has been canceled or timer "
-        "expired");
+        "Unexpected pairing confirm for %s, pairing_state: %s, pairing_bda: %s",
+        ADDRESS_TO_LOGGABLE_CSTR(bd_addr),
+        btm_pair_state_descr(btm_cb.pairing_state),
+        ADDRESS_TO_LOGGABLE_CSTR(btm_cb.pairing_bda));
     return;
   }
 
@@ -2193,18 +2234,16 @@ void btm_sec_check_pending_reqs(void) {
  *
  ******************************************************************************/
 void btm_sec_dev_reset(void) {
-  if (controller_get_interface()->supports_simple_pairing()) {
-    /* set the default IO capabilities */
-    btm_cb.devcb.loc_io_caps = btif_storage_get_local_io_caps();
-    /* add mx service to use no security */
-    BTM_SetSecurityLevel(false, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX,
-                         BTM_SEC_NONE, BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
-    BTM_SetSecurityLevel(true, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX, BTM_SEC_NONE,
-                         BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
-  } else {
-    btm_cb.security_mode = BTM_SEC_MODE_SERVICE;
-  }
+  ASSERT_LOG(controller_get_interface()->supports_simple_pairing(),
+             "only controllers with SSP is supported");
 
+  /* set the default IO capabilities */
+  btm_cb.devcb.loc_io_caps = btif_storage_get_local_io_caps();
+  /* add mx service to use no security */
+  BTM_SetSecurityLevel(false, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX,
+                       BTM_SEC_NONE, BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
+  BTM_SetSecurityLevel(true, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX, BTM_SEC_NONE,
+                       BT_PSM_RFCOMM, BTM_SEC_PROTO_RFCOMM, 0);
   BTM_TRACE_DEBUG("btm_sec_dev_reset sec mode: %d", btm_cb.security_mode);
 }
 
@@ -3083,7 +3122,7 @@ void btm_read_local_oob_complete(uint8_t* p, uint16_t evt_len) {
   if (status == HCI_SUCCESS) {
     evt_data.status = BTM_SUCCESS;
 
-    if (evt_len < 1 + 32) {
+    if (evt_len < 32 + 1) {
       goto err_out;
     }
 
@@ -3101,7 +3140,7 @@ void btm_read_local_oob_complete(uint8_t* p, uint16_t evt_len) {
   return;
 
 err_out:
-  BTM_TRACE_ERROR("%s malformatted event packet, too short", __func__);
+  BTM_TRACE_ERROR("%s: bogus event packet, too short", __func__);
 }
 
 /*******************************************************************************
@@ -3516,7 +3555,8 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
   tBTM_STATUS btm_status = btm_sec_execute_procedure(p_dev_rec);
   /* If there is no next procedure, or procedure failed to start, notify the
    * caller */
-  if (status != BTM_CMD_STARTED)
+  if (static_cast<std::underlying_type_t<tHCI_STATUS>>(status) !=
+      BTM_CMD_STARTED)
     btm_sec_dev_rec_cback_event(p_dev_rec, btm_status, false);
 }
 
@@ -4622,6 +4662,10 @@ static void btm_sec_auth_timer_timeout(void* data) {
     LOG_INFO("%s: invalid device or not found", __func__);
   } else if (btm_dev_authenticated(p_dev_rec)) {
     LOG_INFO("%s: device is already authenticated", __func__);
+    if (p_dev_rec->p_callback) {
+      (*p_dev_rec->p_callback)(&p_dev_rec->bd_addr, BT_TRANSPORT_BR_EDR,
+                               p_dev_rec->p_ref_data, BTM_SUCCESS);
+    }
   } else if (p_dev_rec->sec_state == BTM_SEC_STATE_AUTHENTICATING) {
     LOG_INFO("%s: device is in the process of authenticating", __func__);
   } else {

@@ -16,14 +16,14 @@
 
 #include "main/shim/acl_api.h"
 
-#include <cstddef>
+#include <base/location.h>
+
 #include <cstdint>
 #include <future>
 #include <optional>
 
 #include "gd/hci/acl_manager.h"
 #include "gd/hci/remote_name_request.h"
-#include "main/shim/dumpsys.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
 #include "main/shim/stack.h"
@@ -31,8 +31,8 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/inq_hci_link_interface.h"
+#include "stack/include/main_thread.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
@@ -107,13 +107,29 @@ void bluetooth::shim::ACL_IgnoreAllLeConnections() {
   return Stack::GetInstance()->GetAcl()->ClearFilterAcceptList();
 }
 
-void bluetooth::shim::ACL_ReadConnectionAddress(const RawAddress& pseudo_addr,
+void bluetooth::shim::ACL_ReadConnectionAddress(uint16_t handle,
                                                 RawAddress& conn_addr,
-                                                tBLE_ADDR_TYPE* p_addr_type) {
+                                                tBLE_ADDR_TYPE* p_addr_type,
+                                                bool ota_address) {
   auto local_address =
-      Stack::GetInstance()->GetAcl()->GetConnectionLocalAddress(pseudo_addr);
+      Stack::GetInstance()->GetAcl()->GetConnectionLocalAddress(handle,
+                                                                ota_address);
+
   conn_addr = ToRawAddress(local_address.GetAddress());
   *p_addr_type = static_cast<tBLE_ADDR_TYPE>(local_address.GetAddressType());
+}
+
+void bluetooth::shim::ACL_ReadPeerConnectionAddress(uint16_t handle,
+                                                    RawAddress& conn_addr,
+                                                    tBLE_ADDR_TYPE* p_addr_type,
+                                                    bool ota_address) {
+  auto remote_ota_address =
+      Stack::GetInstance()->GetAcl()->GetConnectionPeerAddress(handle,
+                                                               ota_address);
+
+  conn_addr = ToRawAddress(remote_ota_address.GetAddress());
+  *p_addr_type =
+      static_cast<tBLE_ADDR_TYPE>(remote_ota_address.GetAddressType());
 }
 
 std::optional<uint8_t> bluetooth::shim::ACL_GetAdvertisingSetConnectedTo(

@@ -34,7 +34,7 @@
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -710,7 +710,7 @@ void BTA_DmClearFilterAcceptList(void) {
  ******************************************************************************/
 void BTA_DmLeRand(LeRandCallback cb) {
   APPL_TRACE_API("BTA_DmLeRand");
-  do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_le_rand, cb));
+  do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_le_rand, std::move(cb)));
 }
 
 /*******************************************************************************

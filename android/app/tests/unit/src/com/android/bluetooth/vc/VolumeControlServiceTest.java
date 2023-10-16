@@ -44,13 +44,11 @@ import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
-import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.x.com.android.modules.utils.SynchronousResultReceiver;
 
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -121,8 +119,8 @@ public class VolumeControlServiceTest {
         doReturn(CALL_MAX_VOL).when(mAudioManager)
                 .getStreamMaxVolume(eq(AudioManager.STREAM_VOICE_CALL));
 
+        VolumeControlNativeInterface.setInstance(mNativeInterface);
         startService();
-        mService.mVolumeControlNativeInterface = mNativeInterface;
         mService.mAudioManager = mAudioManager;
         mService.mFactory = mServiceFactory;
         mServiceBinder = (VolumeControlService.BluetoothVolumeControlBinder) mService.initBinder();
@@ -160,6 +158,7 @@ public class VolumeControlServiceTest {
         }
 
         stopService();
+        VolumeControlNativeInterface.setInstance(null);
         mTargetContext.unregisterReceiver(mVolumeControlIntentReceiver);
         mDeviceQueueMap.clear();
         TestUtils.clearAdapterService(mAdapterService);
@@ -676,6 +675,43 @@ public class VolumeControlServiceTest {
         mService.messageFromNative(stackEvent);
 
         Assert.assertEquals(volume, mService.getGroupVolume(groupId));
+    }
+
+    /** Test Active Group change */
+    @Test
+    public void testActiveGroupChange() throws Exception {
+        int groupId_1 = 1;
+        int volume_groupId_1 = 6;
+
+        int groupId_2 = 2;
+        int volume_groupId_2 = 20;
+
+        Assert.assertEquals(-1, mService.getGroupVolume(groupId_1));
+        Assert.assertEquals(-1, mService.getGroupVolume(groupId_2));
+        SynchronousResultReceiver<Void> voidRecv = SynchronousResultReceiver.get();
+        mServiceBinder.setGroupVolume(groupId_1, volume_groupId_1, mAttributionSource, voidRecv);
+        voidRecv.awaitResultNoInterrupt(Duration.ofMillis(TIMEOUT_MS));
+
+        voidRecv = SynchronousResultReceiver.get();
+        mServiceBinder.setGroupVolume(groupId_2, volume_groupId_2, mAttributionSource, voidRecv);
+        voidRecv.awaitResultNoInterrupt(Duration.ofMillis(TIMEOUT_MS));
+
+        voidRecv = SynchronousResultReceiver.get();
+        mServiceBinder.setGroupActive(groupId_1, true, mAttributionSource, voidRecv);
+        voidRecv.awaitResultNoInterrupt(Duration.ofMillis(TIMEOUT_MS));
+
+        // Expected index for STREAM_MUSIC
+        int expectedVol =
+                (int) Math.round((double) (volume_groupId_1 * MEDIA_MAX_VOL) / BT_LE_AUDIO_MAX_VOL);
+        verify(mAudioManager, times(1)).setStreamVolume(anyInt(), eq(expectedVol), anyInt());
+
+        voidRecv = SynchronousResultReceiver.get();
+        mServiceBinder.setGroupActive(groupId_2, true, mAttributionSource, voidRecv);
+
+        expectedVol =
+                (int) Math.round((double) (volume_groupId_2 * MEDIA_MAX_VOL) / BT_LE_AUDIO_MAX_VOL);
+        verify(mAudioManager, times(1)).setStreamVolume(anyInt(), eq(expectedVol), anyInt());
+        voidRecv.awaitResultNoInterrupt(Duration.ofMillis(TIMEOUT_MS));
     }
 
     /**

@@ -20,11 +20,10 @@
 #include <hardware/bluetooth.h>
 #include <hardware/bt_le_audio.h>
 
-#include "audio_hal_interface/hal_version_manager.h"
 #include "bta_le_audio_api.h"
 #include "bta_le_audio_broadcaster_api.h"
 #include "btif_common.h"
-#include "stack/include/btu.h"
+#include "stack/include/main_thread.h"
 
 using base::Bind;
 using base::Unretained;

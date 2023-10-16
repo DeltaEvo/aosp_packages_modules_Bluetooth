@@ -38,7 +38,7 @@
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
@@ -152,12 +152,12 @@ void BTA_GATTC_Open(tGATT_IF client_if, const RawAddress& remote_bda,
                       .event = BTA_GATTC_API_OPEN_EVT,
                   },
               .remote_bda = remote_bda,
-              .remote_addr_type = addr_type,
               .client_if = client_if,
               .connection_type = connection_type,
               .transport = transport,
               .initiating_phys = initiating_phys,
               .opportunistic = opportunistic,
+              .remote_addr_type = addr_type,
           },
   };
 

@@ -97,8 +97,8 @@ interface IBluetooth
 
     @JavaPassthrough(annotation="@android.annotation.RequiresNoPermission")
     oneway void getAdapterConnectionState(in SynchronousResultReceiver receiver);
-    @JavaPassthrough(annotation="@android.annotation.RequiresNoPermission")
-    oneway void getProfileConnectionState(int profile, in SynchronousResultReceiver receiver);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)")
+    oneway void getProfileConnectionState(int profile, in AttributionSource source, in SynchronousResultReceiver receiver);
 
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)")
     oneway void getBondedDevices(in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
@@ -301,8 +301,11 @@ interface IBluetooth
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_SCAN,android.Manifest.permission.BLUETOOTH_PRIVILEGED})")
     oneway void getOffloadedTransportDiscoveryDataScanSupported(in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
 
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT,android.Manifest.permission.BLUETOOTH_PRIVILEGED})")
+    oneway void isMediaProfileConnected(in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
+
     @JavaPassthrough(annotation="@android.annotation.RequiresNoPermission")
-    IBluetoothGatt getBluetoothGatt();
+    oneway void getBluetoothGatt(in SynchronousResultReceiver receiver);
 
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)")
     oneway void unregAllGattClient(in AttributionSource attributionSource, in SynchronousResultReceiver receiver);
