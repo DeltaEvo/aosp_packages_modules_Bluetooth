@@ -1248,6 +1248,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                                                         ase->direction);
   }
 
+  static bool isIntervalAndLatencyProperlySet(uint32_t sdu_interval_us,
+                                              uint16_t max_latency_ms) {
+    LOG_VERBOSE("sdu_interval_us: %d, max_latency_ms: %d", sdu_interval_us,
+                max_latency_ms);
+
+    if (sdu_interval_us == 0) {
+      return max_latency_ms == le_audio::types::kMaxTransportLatencyMin;
+    }
+    return ((1000 * max_latency_ms) >= sdu_interval_us);
+  }
+
   bool CigCreate(LeAudioDeviceGroup* group) {
     uint32_t sdu_interval_mtos, sdu_interval_stom;
     uint16_t max_trans_lat_mtos, max_trans_lat_stom;
@@ -1279,6 +1290,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         group->GetPhyBitmask(le_audio::types::kLeAudioDirectionSink);
     uint8_t phy_stom =
         group->GetPhyBitmask(le_audio::types::kLeAudioDirectionSource);
+
+    if (!isIntervalAndLatencyProperlySet(sdu_interval_mtos,
+                                         max_trans_lat_mtos) ||
+        !isIntervalAndLatencyProperlySet(sdu_interval_stom,
+                                         max_trans_lat_stom)) {
+      LOG_ERROR("Latency and interval not properly set");
+      group->PrintDebugState();
+      return false;
+    }
 
     // Use 1M Phy for the ACK packet from remote device to phone for better
     // sensitivity
@@ -1923,7 +1943,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         /* TODO: Config Codec */
         break;
       case AseState::BTA_LE_AUDIO_ASE_STATE_RELEASING:
-        LeAudioDevice* leAudioDeviceNext;
         SetAseState(leAudioDevice, ase,
                     AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
         ase->active = false;
@@ -1946,35 +1965,27 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           return;
         }
 
-        leAudioDeviceNext = group->GetNextActiveDevice(leAudioDevice);
+        /* Last node is in releasing state*/
+        group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
+        /* Remote device has cache and keep staying in configured state after
+         * release. Therefore, we assume this is a target state requested by
+         * remote device.
+         */
+        group->SetTargetState(group->GetState());
 
-        /* Configure ASEs for next device in group */
-        if (leAudioDeviceNext) {
-          PrepareAndSendRelease(leAudioDeviceNext);
-        } else {
-          /* Last node is in releasing state*/
-
-          group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_CODEC_CONFIGURED);
-          /* Remote device has cache and keep staying in configured state after
-           * release. Therefore, we assume this is a target state requested by
-           * remote device.
-           */
-          group->SetTargetState(group->GetState());
-
-          if (!group->HaveAllCisesDisconnected()) {
-            LOG_WARN(
-                "Not all CISes removed before going to IDLE for group %d, "
-                "waiting...",
-                group->group_id_);
-            group->PrintDebugState();
-            return;
-          }
-
-          cancel_watchdog_if_needed(group->group_id_);
-
-          state_machine_callbacks_->StatusReportCb(
-              group->group_id_, GroupStreamStatus::CONFIGURED_AUTONOMOUS);
+        if (!group->HaveAllCisesDisconnected()) {
+          LOG_WARN(
+              "Not all CISes removed before going to IDLE for group %d, "
+              "waiting...",
+              group->group_id_);
+          group->PrintDebugState();
+          return;
         }
+
+        cancel_watchdog_if_needed(group->group_id_);
+
+        state_machine_callbacks_->StatusReportCb(
+            group->group_id_, GroupStreamStatus::CONFIGURED_AUTONOMOUS);
         break;
       default:
         LOG(ERROR) << __func__ << ", invalid state transition, from: "

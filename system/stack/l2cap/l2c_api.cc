@@ -24,8 +24,9 @@
 
 #define LOG_TAG "bt_l2cap"
 
-#include "main/shim/l2c_api.h"
+#include "stack/include/l2c_api.h"
 
+#include <base/location.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 
@@ -35,18 +36,15 @@
 #include "device/include/controller.h"  // TODO Remove
 #include "gd/common/init_flags.h"
 #include "gd/hal/snoop_logger.h"
-#include "gd/os/metrics.h"
 #include "gd/os/system_properties.h"
-#include "hci/include/btsnoop.h"
-#include "main/shim/metrics_api.h"
-#include "main/shim/shim.h"
+#include "main/shim/entry.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
-#include "stack/include/btu.h"  // do_in_main_thread
 #include "stack/include/l2c_api.h"
+#include "stack/include/main_thread.h"
 #include "stack/l2cap/l2c_int.h"
 #include "types/raw_address.h"
 
@@ -535,7 +533,7 @@ uint16_t L2CA_ConnectLECocReq(uint16_t psm, const RawAddress& p_bd_addr,
     if ((p_lcb == NULL)
         /* currently use BR/EDR for ERTM mode l2cap connection */
         || (!l2cu_create_conn_le(p_lcb))) {
-      L2CAP_TRACE_WARNING("%s conn not started for PSM: 0x%04x  p_lcb: 0x%08x",
+      L2CAP_TRACE_WARNING("%s conn not started for PSM: 0x%04x  p_lcb: 0x%p",
                           __func__, psm, p_lcb);
       return 0;
     }
@@ -1580,8 +1578,8 @@ uint16_t L2CA_FlushChannel(uint16_t lcid, uint16_t num_to_flush) {
 
   if (num_to_flush != L2CAP_FLUSH_CHANS_GET) {
     L2CAP_TRACE_API(
-        "L2CA_FlushChannel (FLUSH)  CID: 0x%04x  NumToFlush: %d  QC: %u  "
-        "pFirst: 0x%08x",
+        "L2CA_FlushChannel (FLUSH)  CID: 0x%04x  NumToFlush: %d  QC: %zu  "
+        "pFirst: 0x%p",
         lcid, num_to_flush, fixed_queue_length(p_ccb->xmit_hold_q),
         fixed_queue_try_peek_first(p_ccb->xmit_hold_q));
   } else {

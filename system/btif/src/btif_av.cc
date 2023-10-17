@@ -58,11 +58,11 @@
 #include "stack/include/avrc_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
 #include <a2dp.sysprop.h>
 #endif
 
@@ -725,6 +725,8 @@ class BtifAvSink {
       // cannot set promise but need to be handled within restart_session
       return false;
     }
+    LOG(INFO) << "Setting the active peer to peer address %s"
+              << ADDRESS_TO_LOGGABLE_STR(peer_address);
     active_peer_ = peer_address;
     return true;
   }
@@ -1159,6 +1161,7 @@ bt_status_t BtifAvSource::Init(
 void BtifAvSource::Cleanup() {
   LOG_INFO("%s", __PRETTY_FUNCTION__);
   if (!enabled_) return;
+  enabled_ = false;
 
   btif_queue_cleanup(UUID_SERVCLASS_AUDIO_SOURCE);
 
@@ -1174,7 +1177,6 @@ void BtifAvSource::Cleanup() {
   CleanupAllPeers();
 
   callbacks_ = nullptr;
-  enabled_ = false;
 }
 
 BtifAvPeer* BtifAvSource::FindPeer(const RawAddress& peer_address) {
@@ -1416,6 +1418,7 @@ bt_status_t BtifAvSink::Init(btav_sink_callbacks_t* callbacks,
 void BtifAvSink::Cleanup() {
   LOG_INFO("%s", __PRETTY_FUNCTION__);
   if (!enabled_) return;
+  enabled_ = false;
 
   btif_queue_cleanup(UUID_SERVCLASS_AUDIO_SINK);
 
@@ -1431,7 +1434,6 @@ void BtifAvSink::Cleanup() {
   CleanupAllPeers();
 
   callbacks_ = nullptr;
-  enabled_ = false;
 }
 
 BtifAvPeer* BtifAvSink::FindPeer(const RawAddress& peer_address) {
@@ -1508,9 +1510,6 @@ BtifAvPeer* BtifAvSink::FindOrCreatePeer(const RawAddress& peer_address,
   peer = new BtifAvPeer(peer_address, AVDT_TSEP_SRC, bta_handle, peer_id);
   peers_.insert(std::make_pair(peer_address, peer));
   peer->Init();
-  if (active_peer_.IsEmpty()) {
-    active_peer_ = peer_address;
-  }
   return peer;
 }
 
@@ -3400,7 +3399,7 @@ bool btif_av_both_enable(void) {
 }
 
 bool btif_av_src_sink_coexist_enabled(void) {
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
   return android::sysprop::bluetooth::A2dp::src_sink_coexist().value_or(false);
 #else
   return false;
@@ -3591,10 +3590,11 @@ static void set_active_peer_int(uint8_t peer_sep,
   if (peer_sep == AVDT_TSEP_SRC) {
     if (!btif_av_src_sink_coexist_enabled() || (btif_av_src_sink_coexist_enabled() &&
       btif_av_both_enable() && (btif_av_source.FindPeer(peer_address) == nullptr))) {
-      btif_av_sink.SetActivePeer(peer_address,
-                                    std::move(peer_ready_promise));
-      BTIF_TRACE_ERROR("%s: Error setting %s as active Source peer", __func__,
-                       ADDRESS_TO_LOGGABLE_CSTR(peer_address));
+      if (!btif_av_sink.SetActivePeer(peer_address,
+                                      std::move(peer_ready_promise))) {
+        BTIF_TRACE_ERROR("%s: Error setting %s as active Source peer", __func__,
+                         ADDRESS_TO_LOGGABLE_CSTR(peer_address));
+      }
     }
     return;
   }

@@ -53,7 +53,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "stack/include/pan_api.h"
 #include "types/raw_address.h"
 
@@ -416,7 +416,7 @@ int btpan_tap_send(int tap_fd, const RawAddress& src, const RawAddress& dst,
     /* Send data to network interface */
     ssize_t ret;
     OSI_NO_INTR(ret = write(tap_fd, packet, len + sizeof(tETH_HDR)));
-    BTIF_TRACE_DEBUG("ret:%d", ret);
+    BTIF_TRACE_DEBUG("ret:%zd", ret);
     return (int)ret;
   }
   return -1;

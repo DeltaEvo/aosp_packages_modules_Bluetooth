@@ -27,14 +27,16 @@
 #include <vector>
 
 #include "bt_target.h"  // Must be first to define build configuration
+#include "bta/dm/bta_dm_disc.h"
 #include "bta/dm/bta_dm_int.h"
+#include "bta/dm/bta_dm_sec.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_client_interface.h"
-#include "stack/include/btu.h"  // do_in_main_thread
+#include "stack/include/main_thread.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"

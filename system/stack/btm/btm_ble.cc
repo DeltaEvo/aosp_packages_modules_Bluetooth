@@ -47,7 +47,6 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_log_history.h"
-#include "stack/include/btu.h"
 #include "stack/include/btu_hcif.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/l2cap_security_interface.h"
@@ -60,7 +59,7 @@ extern tBTM_CB btm_cb;
 
 bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                               const RawAddress& new_pseudo_addr);
-void gatt_notify_phy_updated(tGATT_STATUS status, uint16_t handle,
+void gatt_notify_phy_updated(tHCI_STATUS status, uint16_t handle,
                              uint8_t tx_phy, uint8_t rx_phy);
 
 #ifndef PROPERTY_BLE_PRIVACY_ENABLED
@@ -803,14 +802,16 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
   if (!controller_get_interface()->supports_ble_2m_phy() &&
       !controller_get_interface()->supports_ble_coded_phy()) {
     LOG_INFO("Local controller unable to support setting of le phy parameters");
-    gatt_notify_phy_updated(GATT_REQ_NOT_SUPPORTED, handle, tx_phys, rx_phys);
+    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
+                            handle, tx_phys, rx_phys);
     return;
   }
 
   if (!acl_peer_supports_ble_2m_phy(handle) &&
       !acl_peer_supports_ble_coded_phy(handle)) {
     LOG_INFO("Remote device unable to support setting of le phy parameter");
-    gatt_notify_phy_updated(GATT_REQ_NOT_SUPPORTED, handle, tx_phys, rx_phys);
+    gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
+                            handle, tx_phys, rx_phys);
     return;
   }
 
@@ -1802,7 +1803,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
         if (btm_cb.api.p_le_callback) {
           /* the callback function implementation may change the IO
            * capability... */
-          BTM_TRACE_DEBUG("btm_cb.api.p_le_callback=0x%x",
+          BTM_TRACE_DEBUG("btm_cb.api.p_le_callback=0x%p",
                           btm_cb.api.p_le_callback);
           (*btm_cb.api.p_le_callback)(event, bd_addr,
                                       (tBTM_LE_EVT_DATA*)p_data);
@@ -1885,7 +1886,7 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
 
       case SMP_LE_ADDR_ASSOC_EVT:
         if (btm_cb.api.p_le_callback) {
-          BTM_TRACE_DEBUG("btm_cb.api.p_le_callback=0x%x",
+          BTM_TRACE_DEBUG("btm_cb.api.p_le_callback=0x%p",
                           btm_cb.api.p_le_callback);
           (*btm_cb.api.p_le_callback)(event, bd_addr,
                                       (tBTM_LE_EVT_DATA*)p_data);
@@ -1959,7 +1960,7 @@ bool BTM_BleDataSignature(const RawAddress& bd_addr, uint8_t* p_text,
                            BTM_CMAC_TLEN_SIZE, p_mac);
   btm_ble_increment_sign_ctr(bd_addr, true);
 
-  BTM_TRACE_DEBUG("%s p_mac = %d", __func__, p_mac);
+  BTM_TRACE_DEBUG("%s p_mac = %p", __func__, p_mac);
   BTM_TRACE_DEBUG(
       "p_mac[0] = 0x%02x p_mac[1] = 0x%02x p_mac[2] = 0x%02x p_mac[3] = "
       "0x%02x",

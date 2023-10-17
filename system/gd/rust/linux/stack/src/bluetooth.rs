@@ -2,10 +2,10 @@
 
 use bt_topshim::btif::{
     BaseCallbacks, BaseCallbacksDispatcher, BluetoothInterface, BluetoothProperty, BtAclState,
-    BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
+    BtAddrType, BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
     BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType, BtScanMode, BtSspVariant, BtState,
     BtStatus, BtThreadEvent, BtTransport, BtVendorProductInfo, DisplayAddress, RawAddress,
-    ToggleableProfile, Uuid, Uuid128Bit,
+    ToggleableProfile, Uuid, Uuid128Bit, INVALID_RSSI,
 };
 use bt_topshim::{
     metrics,
@@ -193,6 +193,12 @@ pub trait IBluetooth {
 
     /// Gets the vendor and product information of the remote device.
     fn get_remote_vendor_product_info(&self, device: BluetoothDevice) -> BtVendorProductInfo;
+
+    /// Get the address type of the remote device.
+    fn get_remote_address_type(&self, device: BluetoothDevice) -> BtAddrType;
+
+    /// Get the RSSI of the remote device.
+    fn get_remote_rssi(&self, device: BluetoothDevice) -> i8;
 
     /// Returns a list of connected devices.
     fn get_connected_devices(&self) -> Vec<BluetoothDevice>;
@@ -2368,6 +2374,20 @@ impl IBluetooth for Bluetooth {
         match self.get_remote_device_property(&device, &BtPropertyType::VendorProductInfo) {
             Some(BluetoothProperty::VendorProductInfo(p)) => p.clone(),
             _ => BtVendorProductInfo { vendor_id_src: 0, vendor_id: 0, product_id: 0, version: 0 },
+        }
+    }
+
+    fn get_remote_address_type(&self, device: BluetoothDevice) -> BtAddrType {
+        match self.get_remote_device_property(&device, &BtPropertyType::RemoteAddrType) {
+            Some(BluetoothProperty::RemoteAddrType(addr_type)) => addr_type,
+            _ => BtAddrType::Unknown,
+        }
+    }
+
+    fn get_remote_rssi(&self, device: BluetoothDevice) -> i8 {
+        match self.get_remote_device_property(&device, &BtPropertyType::RemoteRssi) {
+            Some(BluetoothProperty::RemoteRssi(rssi)) => rssi,
+            _ => INVALID_RSSI,
         }
     }
 

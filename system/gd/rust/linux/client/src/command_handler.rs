@@ -9,7 +9,7 @@ use crate::bt_gatt::AuthReq;
 use crate::callbacks::{BtGattCallback, BtGattServerCallback};
 use crate::ClientContext;
 use crate::{console_red, console_yellow, print_error, print_info};
-use bt_topshim::btif::{BtConnectionState, BtDiscMode, BtStatus, BtTransport};
+use bt_topshim::btif::{BtConnectionState, BtDiscMode, BtStatus, BtTransport, INVALID_RSSI};
 use bt_topshim::profiles::hid_host::BthhReportType;
 use bt_topshim::profiles::sdp::{BtSdpMpsRecord, BtSdpRecord};
 use bt_topshim::profiles::{gatt::LePhy, ProfileConnectionState};
@@ -155,6 +155,7 @@ fn build_commands() -> HashMap<String, CommandOption> {
                 String::from("device set-pairing-pin <address> <pin|reject>"),
                 String::from("device set-pairing-passkey <address> <passkey|reject>"),
                 String::from("device set-alias <address> <new-alias>"),
+                String::from("device get-rssi <address>"),
             ],
             description: String::from("Take action on a remote device. (i.e. info)"),
             function_pointer: CommandHandler::cmd_device,
@@ -755,6 +756,7 @@ impl CommandHandler {
                     name,
                     alias,
                     device_type,
+                    addr_type,
                     class,
                     appearance,
                     bonded,
@@ -767,6 +769,7 @@ impl CommandHandler {
 
                     let name = adapter.get_remote_name(device.clone());
                     let device_type = adapter.get_remote_type(device.clone());
+                    let addr_type = adapter.get_remote_address_type(device.clone());
                     let alias = adapter.get_remote_alias(device.clone());
                     let class = adapter.get_remote_class(device.clone());
                     let appearance = adapter.get_remote_appearance(device.clone());
@@ -783,6 +786,7 @@ impl CommandHandler {
                         name,
                         alias,
                         device_type,
+                        addr_type,
                         class,
                         appearance,
                         bonded,
@@ -795,7 +799,8 @@ impl CommandHandler {
                 print_info!("Address: {}", &device.address);
                 print_info!("Name: {}", name);
                 print_info!("Alias: {}", alias);
-                print_info!("Type: {:?}", device_type);
+                print_info!("Device Type: {:?}", device_type);
+                print_info!("Address Type: {:?}", addr_type);
                 print_info!("Class: {}", class);
                 print_info!("Appearance: {}", appearance);
                 print_info!("Wake Allowed: {}", wake_allowed);
@@ -891,6 +896,27 @@ impl CommandHandler {
                     accept,
                     passkey,
                 );
+            }
+            "get-rssi" => {
+                let device = BluetoothDevice {
+                    address: String::from(get_arg(args, 1)?),
+                    name: String::from(""),
+                };
+
+                match self
+                    .lock_context()
+                    .adapter_dbus
+                    .as_mut()
+                    .unwrap()
+                    .get_remote_rssi(device.clone())
+                {
+                    INVALID_RSSI => {
+                        println!("Invalid RSSI");
+                    }
+                    rssi => {
+                        println!("RSSI: {}", rssi);
+                    }
+                };
             }
             other => {
                 println!("Invalid argument '{}'", other);
@@ -1822,7 +1848,7 @@ impl CommandHandler {
             }
             "enable" => {
                 let mut context = self.lock_context();
-                context.telephony_dbus.as_mut().unwrap().set_phone_ops_enabled(true);
+                context.telephony_dbus.as_mut().unwrap().set_mps_qualification_enabled(true);
                 if context.mps_sdp_handle.is_none() {
                     let success = context
                         .adapter_dbus
@@ -1836,7 +1862,7 @@ impl CommandHandler {
             }
             "disable" => {
                 let mut context = self.lock_context();
-                context.telephony_dbus.as_mut().unwrap().set_phone_ops_enabled(false);
+                context.telephony_dbus.as_mut().unwrap().set_mps_qualification_enabled(false);
                 if let Some(handle) = context.mps_sdp_handle.take() {
                     let success = context.adapter_dbus.as_mut().unwrap().remove_sdp_record(handle);
                     if !success {

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <base/functional/bind.h>
 #include <fuzzer/FuzzedDataProvider.h>
 
 #include <cstdint>
@@ -102,7 +103,7 @@ class Fakes {
 
 }  // namespace
 
-#ifdef OS_ANDROID
+#ifdef __ANDROID__
 namespace android {
 namespace sysprop {
 namespace bluetooth {

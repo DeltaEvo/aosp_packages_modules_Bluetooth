@@ -30,6 +30,7 @@
 #include "btif/include/btif_api.h"
 #include "btif/include/stack_manager.h"
 #include "include/hardware/bt_hh.h"
+#include "osi/include/allocator.h"
 #include "test/common/core_interface.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_osi_allocator.h"
@@ -40,7 +41,6 @@ void set_hal_cbacks(bt_callbacks_t* callbacks);
 
 uint8_t appl_trace_level = BT_TRACE_LEVEL_DEBUG;
 uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
-uint8_t btu_trace_level = BT_TRACE_LEVEL_DEBUG;
 
 module_t bt_utils_module;
 module_t gd_controller_module;
