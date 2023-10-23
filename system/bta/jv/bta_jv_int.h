@@ -28,6 +28,7 @@
 #include <unordered_set>
 
 #include "bta/include/bta_jv_api.h"
+#include "bta/include/bta_sec_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/rfcdefs.h"
 #include "types/bluetooth/uuid.h"
@@ -120,7 +121,6 @@ typedef struct {
   tBTA_JV_PCB port_cb[MAX_RFC_PORTS];          /* index of this array is
                                                   the port_handle, */
   uint8_t sec_id[BTA_JV_NUM_SERVICE_ID];       /* service ID */
-  bool scn[RFCOMM_MAX_SCN];                    /* SCN allocated by java */
   uint16_t free_psm_list[BTA_JV_MAX_L2C_CONN]; /* PSMs freed by java
                                                 (can be reused) */
   uint8_t sdp_active;                          /* see BTA_JV_SDP_ACT_* */

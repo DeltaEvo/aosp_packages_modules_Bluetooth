@@ -20,20 +20,9 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 
-#include <map>
-#include <string>
-
-#include "bt_target.h"
-#include "stack/include/sdp_api.h"
 #include "stack/sdp/sdpint.h"
 #include "test/common/mock_functions.h"
-#include "types/bluetooth/uuid.h"
-
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 bool SDP_AddAdditionProtoLists(uint32_t handle, uint16_t num_elem,
                                tSDP_PROTO_LIST_ELEM* p_proto_list) {
@@ -72,10 +61,6 @@ bool SDP_AddServiceClassIdList(uint32_t handle, uint16_t num_services,
 }
 bool SDP_AddUuidSequence(uint32_t handle, uint16_t attr_id, uint16_t num_uuids,
                          uint16_t* p_uuids) {
-  inc_func_call_count(__func__);
-  return false;
-}
-bool SDP_DeleteAttribute(uint32_t handle, uint16_t attr_id) {
   inc_func_call_count(__func__);
   return false;
 }
