@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <unordered_map>
 
+#include "btm_sec_int_types.h"
 #include "device/include/controller.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/shim.h"
@@ -89,7 +90,7 @@ const tBLE_BD_ADDR convert_to_address_with_type(
     // TODO(b/235218533): Remove when LL Privacy is implemented.
 #if TARGET_FLOSS
     if (!p_dev_rec->ble.cur_rand_addr.IsEmpty() &&
-        btm_cb.ble_ctr_cb.privacy_mode < BTM_PRIVACY_1_2) {
+        btm_sec_cb.ble_ctr_cb.privacy_mode < BTM_PRIVACY_1_2) {
       return {
           .type = BLE_ADDR_RANDOM,
           .bda = p_dev_rec->ble.cur_rand_addr,
@@ -107,14 +108,14 @@ const tBLE_BD_ADDR convert_to_address_with_type(
  * Description      This function updates the filter policy of scanner
  ******************************************************************************/
 void btm_update_scanner_filter_policy(tBTM_BLE_SFP scan_policy) {
-  tBTM_BLE_INQ_CB* p_inq = &btm_cb.ble_ctr_cb.inq_var;
+  tBTM_BLE_INQ_CB* p_inq = &btm_sec_cb.ble_ctr_cb.inq_var;
 
   uint32_t scan_interval =
       !p_inq->scan_interval ? BTM_BLE_GAP_DISC_SCAN_INT : p_inq->scan_interval;
   uint32_t scan_window =
       !p_inq->scan_window ? BTM_BLE_GAP_DISC_SCAN_WIN : p_inq->scan_window;
 
-  BTM_TRACE_EVENT("%s", __func__);
+  LOG_VERBOSE("%s", __func__);
 
   p_inq->sfp = scan_policy;
   p_inq->scan_type = p_inq->scan_type == BTM_BLE_SCAN_MODE_NONE
@@ -123,7 +124,7 @@ void btm_update_scanner_filter_policy(tBTM_BLE_SFP scan_policy) {
 
   btm_send_hci_set_scan_params(
       p_inq->scan_type, (uint16_t)scan_interval, (uint16_t)scan_window,
-      btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, scan_policy);
+      btm_sec_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type, scan_policy);
 }
 
 /*******************************************************************************

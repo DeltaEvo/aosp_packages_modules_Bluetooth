@@ -671,7 +671,9 @@ public class AdapterService extends Service {
 
         mSdpManager = SdpManager.init(this);
 
-        mDatabaseManager = new DatabaseManager(this);
+        FeatureFlagsImpl featureFlags = new FeatureFlagsImpl();
+
+        mDatabaseManager = new DatabaseManager(this, featureFlags);
         mDatabaseManager.start(MetadataDatabase.createDatabase(this));
 
         boolean isAutomotiveDevice =
@@ -687,7 +689,7 @@ public class AdapterService extends Service {
          */
         if (!isAutomotiveDevice && getResources().getBoolean(R.bool.enable_phone_policy)) {
             Log.i(TAG, "Phone policy enabled");
-            mPhonePolicy = new PhonePolicy(this, new ServiceFactory(), new FeatureFlagsImpl());
+            mPhonePolicy = new PhonePolicy(this, new ServiceFactory(), featureFlags);
             mPhonePolicy.start();
         } else {
             Log.i(TAG, "Phone policy disabled");
@@ -7769,7 +7771,7 @@ public class AdapterService extends Service {
         Log.i(TAG, "sendUuidsInternal: Received service discovery UUIDs for device " + device);
         if (DBG) {
             for (int i = 0; i < uuids.length; i++) {
-                Log.d(TAG, "index=" + i + "uuid=" + uuids[i]);
+                Log.d(TAG, "sendUuidsInternal: index=" + i + " uuid=" + uuids[i]);
             }
         }
         if (mPhonePolicy != null) {
