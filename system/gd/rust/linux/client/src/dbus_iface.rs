@@ -1150,6 +1150,11 @@ impl IBluetoothManager for BluetoothManagerDBus {
     fn get_floss_api_version(&mut self) -> u32 {
         dbus_generated!()
     }
+
+    #[dbus_method("SetTabletMode")]
+    fn set_tablet_mode(&mut self, tablet_mode: bool) {
+        dbus_generated!()
+    }
 }
 
 struct IBluetoothManagerCallbackDBus {}
@@ -1433,7 +1438,7 @@ impl IBluetoothGatt for BluetoothGattDBus {
     fn start_scan(
         &mut self,
         _scanner_id: u8,
-        _settings: ScanSettings,
+        _settings: Option<ScanSettings>,
         _filter: Option<ScanFilter>,
     ) -> BtStatus {
         dbus_generated!()

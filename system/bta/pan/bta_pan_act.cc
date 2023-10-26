@@ -32,13 +32,11 @@
 
 #include "bta/include/bta_pan_co.h"
 #include "bta/pan/bta_pan_int.h"
-#include "main/shim/dumpsys.h"
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_types.h"
+#include "stack/include/bt_uuid16.h"
 #include "stack/include/pan_api.h"
 #include "types/raw_address.h"
 
@@ -181,8 +179,7 @@ static void bta_pan_data_buf_ind_cback(uint16_t handle, const RawAddress& src,
 
   if (sizeof(BT_HDR) + sizeof(tBTA_PAN_DATA_PARAMS) + p_buf->len >
       PAN_BUF_SIZE) {
-    APPL_TRACE_ERROR("%s: received buffer length too large: %d", __func__,
-                     p_buf->len);
+    LOG_ERROR("%s: received buffer length too large: %d", __func__, p_buf->len);
     return;
   }
 
@@ -415,7 +412,7 @@ void bta_pan_open(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
 
   status = PAN_Connect(p_data->api_open.bd_addr, p_data->api_open.local_role,
                        p_data->api_open.peer_role, &p_scb->handle);
-  APPL_TRACE_DEBUG("%s pan connect status: %d", __func__, status);
+  LOG_VERBOSE("%s pan connect status: %d", __func__, status);
 
   if (status == PAN_SUCCESS) {
     p_scb->bd_addr = p_data->api_open.bd_addr;
@@ -473,8 +470,7 @@ void bta_pan_api_close(tBTA_PAN_SCB* p_scb, UNUSED_ATTR tBTA_PAN_DATA* p_data) {
 void bta_pan_conn_open(tBTA_PAN_SCB* p_scb, tBTA_PAN_DATA* p_data) {
   tBTA_PAN bta_pan;
 
-  APPL_TRACE_DEBUG("%s pan connection result: %d", __func__,
-                   p_data->conn.result);
+  LOG_VERBOSE("%s pan connection result: %d", __func__, p_data->conn.result);
 
   bta_pan.open.bd_addr = p_scb->bd_addr;
   bta_pan.open.handle = p_scb->handle;

@@ -34,17 +34,15 @@
 #include "bta/include/bta_gatt_queue.h"
 #include "bta/include/bta_hearing_aid_api.h"
 #include "btm_iso_api.h"
-#include "common/init_flags.h"
 #include "device/include/controller.h"
 #include "embdrv/g722/g722_enc_dec.h"
-#include "osi/include/compat.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"        // BTM_ReadRSSI
 #include "stack/include/acl_api_types.h"  // tBTM_RSSI_RESULT
 #include "stack/include/bt_hdr.h"
-#include "stack/include/bt_octets.h"
+#include "stack/include/bt_uuid16.h"
 #include "stack/include/l2c_api.h"  // L2CAP_MIN_OFFSET
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
@@ -907,8 +905,10 @@ class HearingAidImpl : public HearingAid {
     hearingDevice->capabilities = capabilities;
     bool side = capabilities & CAPABILITY_SIDE;
     bool standalone = capabilities & CAPABILITY_BINAURAL;
-    LOG_DEBUG("capabilities: %s, %s", (side ? "right" : "left"),
-              (standalone ? "binaural" : "monaural"));
+    bool csis_capable = capabilities & CAPABILITY_CSIS;
+    LOG_DEBUG("capabilities: %s, %s, CSIS %s", (side ? "right" : "left"),
+              (standalone ? "binaural" : "monaural"),
+              (csis_capable ? "capable" : "not capable"));
 
     if (capabilities & CAPABILITY_RESERVED) {
       LOG_WARN("reserved capabilities are set");
