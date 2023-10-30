@@ -118,7 +118,6 @@ cc_library_static {
         "src/btif_profile_storage.cc",
         "src/btif_rc.cc",
         "src/btif_vc.cc",
-        "src/profile_log_levels.cc",
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
@@ -280,6 +279,7 @@ cc_test {
         "liblog",
         "libstatssocket",
         "libutils",
+        "server_configurable_flags",
     ],
     static_libs: [
         "android.hardware.audio.common-V2-ndk",
@@ -420,7 +420,6 @@ cc_test {
     },
     include_dirs: btifCommonIncludes,
     srcs: [
-        ":TestCommonLogMsg",
         ":TestCommonMockFunctions",
         ":TestMockCommon",
         ":TestMockOsi",
@@ -512,7 +511,9 @@ cc_test {
     test_suites: ["device-tests"],
     include_dirs: btifCommonIncludes,
     srcs: [
-        ":TestCommonLogMsg",
+        ":TestCommonMockFunctions",
+        ":TestFakeOsi",
+        ":TestMockStack",
         "test/btif_hf_client_service_test.cc",
     ],
     header_libs: ["libbluetooth_headers"],
@@ -522,10 +523,11 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbt-platform-protos-lite",
         "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libchrome",
         "libcom.android.sysprop.bluetooth",
-        "libosi",
     ],
     cflags: [
         "-DBUILDCFG",
@@ -589,6 +591,7 @@ cc_test {
         ":TestMockBtaLeAudio",
         ":TestMockBtaLeAudioHalVerifier",
         ":TestMockBtaPan",
+        ":TestMockBtaScn",
         ":TestMockBtaSdp",
         ":TestMockBtaSys",
         ":TestMockBtaVc",
@@ -728,6 +731,7 @@ cc_test {
         ":TestMockBtaLeAudio",
         ":TestMockBtaLeAudioHalVerifier",
         ":TestMockBtaPan",
+        ":TestMockBtaScn",
         ":TestMockBtaSdp",
         ":TestMockBtaSys",
         ":TestMockBtaVc",

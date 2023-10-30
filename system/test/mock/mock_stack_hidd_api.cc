@@ -21,22 +21,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-#include <map>
-#include <string>
-
-#include "btm_api.h"
-#include "hidd_api.h"
-#include "hiddefs.h"
-#include "stack/btm/btm_sec.h"
-#include "stack/hid/hidd_int.h"
+#include "stack/include/hidd_api.h"
+#include "stack/include/hiddefs.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
-
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 tHID_STATUS HID_DevAddRecord(uint32_t handle, char* p_name, char* p_description,
                              char* p_provider, uint16_t subclass,
@@ -102,9 +91,5 @@ tHID_STATUS HID_DevUnplugDevice(const RawAddress& addr) {
 tHID_STATUS HID_DevVirtualCableUnplug(void) {
   inc_func_call_count(__func__);
   return HID_SUCCESS;
-}
-uint8_t HID_DevSetTraceLevel(uint8_t new_level) {
-  inc_func_call_count(__func__);
-  return 0;
 }
 void HID_DevInit(void) { inc_func_call_count(__func__); }

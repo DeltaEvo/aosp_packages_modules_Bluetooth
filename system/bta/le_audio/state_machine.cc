@@ -20,6 +20,9 @@
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
 #include <base/strings/string_number_conversions.h>
+#ifdef __ANDROID__
+#include <com_android_bluetooth_flags.h>
+#endif
 
 #include <map>
 
@@ -113,6 +116,7 @@ using le_audio::types::LeAudioContextType;
 namespace {
 
 constexpr int linkQualityCheckInterval = 4000;
+constexpr int kAutonomousTransitionTimeoutMs = 5000;
 
 static void link_quality_cb(void* data) {
   // very ugly, but we need to pass just two bytes
@@ -306,16 +310,19 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     state_machine_callbacks_->StatusReportCb(group->group_id_, status);
   }
 
-  void notifyLeAudioHealth(int group_id,
+  void notifyLeAudioHealth(LeAudioDeviceGroup* group,
                            le_audio::LeAudioHealthGroupStatType stat) {
-    if (!bluetooth::common::InitFlags::IsLeAudioHealthBasedActionsEnabled()) {
+#ifdef __ANDROID__
+    if (!com::android::bluetooth::flags::
+            leaudio_enable_health_based_actions()) {
       return;
     }
 
     auto leAudioHealthStatus = le_audio::LeAudioHealthStatus::Get();
     if (leAudioHealthStatus) {
-      leAudioHealthStatus->AddStatisticForGroup(group_id, stat);
+      leAudioHealthStatus->AddStatisticForGroup(group, stat);
     }
+#endif
   }
 
   void ProcessGattCtpNotification(LeAudioDeviceGroup* group, uint8_t* value,
@@ -366,9 +373,8 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
             "0x%02x, reason: 0x%02x",
             entry.ase_id, entry.response_code, entry.reason);
 
-        notifyLeAudioHealth(group->group_id_,
-                            le_audio::LeAudioHealthGroupStatType::
-                                STREAM_CREATE_SIGNALING_FAILED);
+        notifyLeAudioHealth(group, le_audio::LeAudioHealthGroupStatType::
+                                       STREAM_CREATE_SIGNALING_FAILED);
         StopStream(group);
         return;
       }
@@ -1250,10 +1256,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
   static bool isIntervalAndLatencyProperlySet(uint32_t sdu_interval_us,
                                               uint16_t max_latency_ms) {
+    LOG_VERBOSE("sdu_interval_us: %d, max_latency_ms: %d", sdu_interval_us,
+                max_latency_ms);
+
     if (sdu_interval_us == 0) {
       return max_latency_ms == le_audio::types::kMaxTransportLatencyMin;
     }
-    return ((1000 * max_latency_ms) > sdu_interval_us);
+    return ((1000 * max_latency_ms) >= sdu_interval_us);
   }
 
   bool CigCreate(LeAudioDeviceGroup* group) {
@@ -1794,7 +1803,19 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
         if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
           /* We are here because of the reconnection of the single device. */
-          PrepareAndSendConfigQos(group, leAudioDevice);
+          /* Make sure that device is ready to be configured as we could also
+           * get here triggered by the remote device. If device is not connected
+           * yet, we should wait for the stack to trigger adding device to the
+           * stream */
+          if (leAudioDevice->GetConnectionState() ==
+              le_audio::DeviceConnectState::CONNECTED) {
+            PrepareAndSendConfigQos(group, leAudioDevice);
+          } else {
+            LOG_DEBUG(
+                "Device %s initiated configured state but it is not yet ready "
+                "to be configured",
+                ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
+          }
           return;
         }
 
@@ -1893,7 +1914,19 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
         if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
           /* We are here because of the reconnection of the single device. */
-          PrepareAndSendConfigQos(group, leAudioDevice);
+          /* Make sure that device is ready to be configured as we could also
+           * get here triggered by the remote device. If device is not connected
+           * yet, we should wait for the stack to trigger adding device to the
+           * stream */
+          if (leAudioDevice->GetConnectionState() ==
+              le_audio::DeviceConnectState::CONNECTED) {
+            PrepareAndSendConfigQos(group, leAudioDevice);
+          } else {
+            LOG_DEBUG(
+                "Device %s initiated configured state but it is not yet ready "
+                "to be configured",
+                ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
+          }
           return;
         }
 
@@ -2047,6 +2080,12 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
 
         SetAseState(leAudioDevice, ase,
                     AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED);
+
+        /* Remote may autonomously bring ASEs to QoS configured state */
+        if (group->GetTargetState() !=
+            AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED) {
+          ProcessAutonomousDisable(leAudioDevice, ase);
+        }
 
         /* Process the Disable Transition of the rest of group members if no
          * more ASE notifications has to come from this device. */
@@ -2643,6 +2682,22 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     }
   }
 
+  void ScheduleAutonomousOperationTimer(AseState target_state,
+                                        LeAudioDevice* leAudioDevice,
+                                        struct ase* ase) {
+    ase->autonomous_target_state_ = target_state;
+    ase->autonomous_operation_timer_ =
+        alarm_new("LeAudioAutonomousOperationTimeout");
+    alarm_set_on_mloop(
+        ase->autonomous_operation_timer_, kAutonomousTransitionTimeoutMs,
+        [](void* data) {
+          LeAudioDevice* leAudioDevice = static_cast<LeAudioDevice*>(data);
+          instance->state_machine_callbacks_
+              ->OnDeviceAutonomousStateTransitionTimeout(leAudioDevice);
+        },
+        leAudioDevice);
+  }
+
   void AseStateMachineProcessDisabling(
       struct le_audio::client_parser::ascs::ase_rsp_hdr& arh, struct ase* ase,
       LeAudioDeviceGroup* group, LeAudioDevice* leAudioDevice) {
@@ -2669,10 +2724,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         SetAseState(leAudioDevice, ase,
                     AseState::BTA_LE_AUDIO_ASE_STATE_DISABLING);
 
+        /* Remote may autonomously bring ASEs to QoS configured state */
+        if (group->GetTargetState() !=
+            AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED) {
+          ProcessAutonomousDisable(leAudioDevice, ase);
+        }
+
         /* Process the Disable Transition of the rest of group members if no
          * more ASE notifications has to come from this device. */
-        if (leAudioDevice->IsReadyToSuspendStream())
-          ProcessGroupDisable(group);
+        if (leAudioDevice->IsReadyToSuspendStream()) ProcessGroupDisable(group);
 
         break;
 
@@ -2866,6 +2926,34 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
                 ToString(group->GetState()).c_str(),
                 ToString(group->GetTargetState()).c_str());
       StopStream(group);
+    }
+  }
+
+  void ProcessAutonomousDisable(LeAudioDevice* leAudioDevice, struct ase* ase) {
+    auto bidirection_ase = leAudioDevice->GetAseToMatchBidirectionCis(ase);
+
+    /* ASE is not a part of bi-directional CIS */
+    if (!bidirection_ase) return;
+
+    /* ASE is already disabled */
+    if (bidirection_ase->state ==
+        AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED) {
+      /* Bi-direction ASEs are now disabled */
+      if ((ase->autonomous_target_state_ ==
+           AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED) &&
+          alarm_is_scheduled(ase->autonomous_operation_timer_)) {
+        alarm_free(ase->autonomous_operation_timer_);
+        ase->autonomous_operation_timer_ = NULL;
+        ase->autonomous_target_state_ = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
+      }
+      return;
+    }
+
+    /* Schedule alarm if first ASE is autonomously disabling */
+    if (!alarm_is_scheduled(bidirection_ase->autonomous_operation_timer_)) {
+      ScheduleAutonomousOperationTimer(
+          AseState::BTA_LE_AUDIO_ASE_STATE_QOS_CONFIGURED, leAudioDevice,
+          bidirection_ase);
     }
   }
 };

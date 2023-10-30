@@ -18,6 +18,10 @@ use File::Basename;
 
 ## mockcify version
 ##
+## 0.7.0 Comment out unused mock variables
+##
+## 0.6.3 Streamline inclusion for headers and source
+##
 ## 0.6.2 Add tBTA_STATUS default value, Cpp type failure log
 ##
 ## 0.6.1 Add tBTA_SDP_STATUS default value
@@ -40,10 +44,14 @@ use File::Basename;
 ##
 ## 0.2.0 First version
 ##
-my $VERSION = "0.6.2";
+my $VERSION = "0.7.0";
 
+use diagnostics;
 use strict;
 use warnings;
+
+use lib "$ENV{ANDROID_BUILD_TOP}/packages/modules/Bluetooth/system/test/tool";
+require 'mockcify_util.pl';
 
 my $YEAR = "2023";
 my $TOKEN = "MOCKCIFY_TOKEN";
@@ -271,9 +279,9 @@ sub print_source {
   my $FH = shift @_;
   print_copyright($FH);
   print_generated_note($FH);
-  print_mock_decl_src($FH);
 
   print_mock_header_include($FH);
+  print_mock_decl_src($FH);
   print_usings($FH);
   print_internal_structs($FH);
   print_source_namespace_structs($FH);
@@ -693,6 +701,7 @@ namespace $namespace {
 EOF
   foreach my $name (sort @function_names) {
       my $input_params = $function_params{$name};
+      my $vars_commented_out_input_params = comment_out_input_vars($input_params);
       my $return_type = $function_return_types{$name};
       my @param_names = $function_param_names{$name};
       assert($return_type ne '');
@@ -712,7 +721,7 @@ EOF
            print $FH "$return_definition\n";
        }
 print $FH <<EOF;
-    std::function<$return_type($input_params)> body{[]($input_params){$return_statement}};
+    std::function<$return_type($input_params)> body{[]($vars_commented_out_input_params){$return_statement}};
     $return_type operator()($input_params) { ${return_keyword} body($function_param_names);};
 };
 extern struct $name $name;
@@ -790,10 +799,6 @@ sub print_mock_decl_hdr {
 print $FH <<EOF;
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <string>
-
-#include "test/common/mock_functions.h"
 
 EOF
 }
@@ -802,9 +807,8 @@ sub print_mock_decl_src {
   my $FH = shift @_;
 print $FH <<EOF;
 #include <cstdint>
-#include <functional>
-#include <map>
-#include <string>
+
+#include "test/common/mock_functions.h"
 
 EOF
 }

@@ -32,6 +32,8 @@
 #include "bta/sys/bta_sys.h"
 #include "btcore/include/module.h"
 #include "btif/include/btif_bqr.h"
+#include "btm_ble_int.h"
+#include "btm_sec_int_types.h"
 #include "common/message_loop_thread.h"
 #include "hci/include/hci_layer.h"
 #include "main/shim/btm_api.h"
@@ -41,7 +43,6 @@
 #include "main/shim/shim.h"
 #include "osi/include/compat.h"
 #include "osi/include/osi.h"
-#include "stack/btm/btm_ble_int.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
@@ -86,7 +87,7 @@ static void BTM_BT_Quality_Report_VSE_CBack(uint8_t length,
  ******************************************************************************/
 void btm_dev_init() {
   /* Initialize nonzero defaults */
-  memset(btm_cb.cfg.bd_name, 0, sizeof(tBTM_LOC_BD_NAME));
+  memset(btm_sec_cb.cfg.bd_name, 0, sizeof(tBTM_LOC_BD_NAME));
 
   btm_cb.devcb.read_local_name_timer = alarm_new("btm.read_local_name_timer");
   btm_cb.devcb.read_rssi_timer = alarm_new("btm.read_rssi_timer");
@@ -174,7 +175,7 @@ void BTM_reset_complete() {
   l2cu_device_reset();
 
   /* Clear current security state */
-  list_foreach(btm_cb.sec_dev_rec, set_sec_state_idle, NULL);
+  list_foreach(btm_sec_cb.sec_dev_rec, set_sec_state_idle, NULL);
 
   /* After the reset controller should restore all parameters to defaults. */
   btm_cb.btm_inq_vars.inq_counter = 1;
@@ -186,7 +187,7 @@ void BTM_reset_complete() {
   btm_cb.btm_inq_vars.page_scan_period = HCI_DEF_PAGESCAN_INTERVAL;
   btm_cb.btm_inq_vars.page_scan_type = HCI_DEF_SCAN_TYPE;
 
-  btm_cb.ble_ctr_cb.set_connection_state_idle();
+  btm_sec_cb.ble_ctr_cb.set_connection_state_idle();
   connection_manager::reset(true);
 
   btm_pm_reset();
@@ -212,8 +213,8 @@ void BTM_reset_complete() {
     l2c_link_processs_ble_num_bufs(controller->get_acl_buffer_count_ble());
   }
 
-  BTM_SetPinType(btm_cb.cfg.pin_type, btm_cb.cfg.pin_code,
-                 btm_cb.cfg.pin_code_len);
+  BTM_SetPinType(btm_sec_cb.cfg.pin_type, btm_sec_cb.cfg.pin_code,
+                 btm_sec_cb.cfg.pin_code_len);
 
   decode_controller_support();
 }
@@ -290,8 +291,8 @@ static void decode_controller_support() {
     }
   }
 
-  BTM_TRACE_DEBUG("Local supported SCO packet types: 0x%04x",
-                  btm_cb.btm_sco_pkt_types_supported);
+  LOG_VERBOSE("Local supported SCO packet types: 0x%04x",
+              btm_cb.btm_sco_pkt_types_supported);
 
   BTM_acl_after_controller_started(controller_get_interface());
   btm_sec_dev_reset();
@@ -325,9 +326,9 @@ tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
 
   if (!controller_get_interface()->get_is_ready()) return (BTM_DEV_RESET);
   /* Save the device name if local storage is enabled */
-  p = (uint8_t*)btm_cb.cfg.bd_name;
+  p = (uint8_t*)btm_sec_cb.cfg.bd_name;
   if (p != (uint8_t*)p_name)
-    strlcpy((char*)btm_cb.cfg.bd_name, p_name, BTM_MAX_LOC_BD_NAME_LEN + 1);
+    strlcpy((char*)btm_sec_cb.cfg.bd_name, p_name, BTM_MAX_LOC_BD_NAME_LEN + 1);
 
   btsnd_hcic_change_name(p);
   return (BTM_CMD_STARTED);
@@ -347,7 +348,7 @@ tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
  *
  ******************************************************************************/
 tBTM_STATUS BTM_ReadLocalDeviceName(const char** p_name) {
-  *p_name = (const char*)btm_cb.cfg.bd_name;
+  *p_name = (const char*)btm_sec_cb.cfg.bd_name;
   return (BTM_SUCCESS);
 }
 
@@ -453,8 +454,8 @@ uint8_t* BTM_ReadDeviceClass(void) {
  ******************************************************************************/
 void BTM_VendorSpecificCommand(uint16_t opcode, uint8_t param_len,
                                uint8_t* p_param_buf, tBTM_VSC_CMPL_CB* p_cb) {
-  BTM_TRACE_EVENT("BTM: %s: Opcode: 0x%04X, ParamLen: %i.", __func__, opcode,
-                  param_len);
+  LOG_VERBOSE("BTM: %s: Opcode: 0x%04X, ParamLen: %i.", __func__, opcode,
+              param_len);
 
   /* Send the HCI command (opcode will be OR'd with HCI_GRP_VENDOR_SPECIFIC) */
   btsnd_hcic_vendor_spec_cmd(opcode, param_len, p_param_buf, p_cb);
@@ -488,7 +489,7 @@ tBTM_STATUS BTM_RegisterForVSEvents(tBTM_VS_EVT_CB* p_cb, bool is_register) {
       /* Found callback in lookup table. If deregistering, clear the entry. */
       if (!is_register) {
         btm_cb.devcb.p_vend_spec_cb[i] = NULL;
-        BTM_TRACE_EVENT("BTM Deregister For VSEvents is successfully");
+        LOG_VERBOSE("BTM Deregister For VSEvents is successfully");
       }
       return (BTM_SUCCESS);
     }
@@ -498,10 +499,10 @@ tBTM_STATUS BTM_RegisterForVSEvents(tBTM_VS_EVT_CB* p_cb, bool is_register) {
   if (is_register) {
     if (free_idx < BTM_MAX_VSE_CALLBACKS) {
       btm_cb.devcb.p_vend_spec_cb[free_idx] = p_cb;
-      BTM_TRACE_EVENT("BTM Register For VSEvents is successfully");
+      LOG_VERBOSE("BTM Register For VSEvents is successfully");
     } else {
       /* No free entries available */
-      BTM_TRACE_ERROR("BTM_RegisterForVSEvents: too many callbacks registered");
+      LOG_ERROR("BTM_RegisterForVSEvents: too many callbacks registered");
 
       retval = BTM_NO_RESOURCES;
     }
@@ -522,7 +523,7 @@ tBTM_STATUS BTM_RegisterForVSEvents(tBTM_VS_EVT_CB* p_cb, bool is_register) {
 void btm_vendor_specific_evt(const uint8_t* p, uint8_t evt_len) {
   uint8_t i;
 
-  BTM_TRACE_DEBUG("BTM Event: Vendor Specific event from controller");
+  LOG_VERBOSE("BTM Event: Vendor Specific event from controller");
 
   // Handle BQR events
   const uint8_t* bqr_ptr = p;
@@ -581,7 +582,7 @@ void btm_vendor_specific_evt(const uint8_t* p, uint8_t evt_len) {
  *
  ******************************************************************************/
 void BTM_WritePageTimeout(uint16_t timeout) {
-  BTM_TRACE_EVENT("BTM: BTM_WritePageTimeout: Timeout: %d.", timeout);
+  LOG_VERBOSE("BTM: BTM_WritePageTimeout: Timeout: %d.", timeout);
 
   /* Send the HCI command */
   btsnd_hcic_write_page_tout(timeout);
@@ -596,7 +597,7 @@ void BTM_WritePageTimeout(uint16_t timeout) {
  *
  ******************************************************************************/
 void BTM_WriteVoiceSettings(uint16_t settings) {
-  BTM_TRACE_EVENT("BTM: BTM_WriteVoiceSettings: Settings: 0x%04x.", settings);
+  LOG_VERBOSE("BTM: BTM_WriteVoiceSettings: Settings: 0x%04x.", settings);
 
   /* Send the HCI command */
   btsnd_hcic_write_voice_settings((uint16_t)(settings & 0x03ff));
@@ -620,7 +621,7 @@ void BTM_WriteVoiceSettings(uint16_t settings) {
 tBTM_STATUS BTM_EnableTestMode(void) {
   uint8_t cond;
 
-  BTM_TRACE_EVENT("BTM: BTM_EnableTestMode");
+  LOG_VERBOSE("BTM: BTM_EnableTestMode");
 
   /* set auto accept connection as this is needed during test mode */
   /* Allocate a buffer to hold HCI command */
@@ -667,14 +668,14 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
    */
 #if !defined(TARGET_FLOSS)
   /* Check if the previous command is completed */
-  if (btm_cb.devcb.p_stored_link_key_cmpl_cb) return (BTM_BUSY);
+  if (btm_sec_cb.devcb.p_stored_link_key_cmpl_cb) return (BTM_BUSY);
 
   bool delete_all_flag = !bd_addr;
 
-  BTM_TRACE_EVENT("BTM: BTM_DeleteStoredLinkKey: delete_all_flag: %s",
-                  delete_all_flag ? "true" : "false");
+  LOG_VERBOSE("BTM: BTM_DeleteStoredLinkKey: delete_all_flag: %s",
+              delete_all_flag ? "true" : "false");
 
-  btm_cb.devcb.p_stored_link_key_cmpl_cb = p_cb;
+  btm_sec_cb.devcb.p_stored_link_key_cmpl_cb = p_cb;
   if (!bd_addr) {
     /* This is to delete all link keys */
     /* We don't care the BD address. Just pass a non zero pointer */
@@ -700,11 +701,11 @@ tBTM_STATUS BTM_DeleteStoredLinkKey(const RawAddress* bd_addr,
  *
  ******************************************************************************/
 void btm_delete_stored_link_key_complete(uint8_t* p, uint16_t evt_len) {
-  tBTM_CMPL_CB* p_cb = btm_cb.devcb.p_stored_link_key_cmpl_cb;
+  tBTM_CMPL_CB* p_cb = btm_sec_cb.devcb.p_stored_link_key_cmpl_cb;
   tBTM_DELETE_STORED_LINK_KEY_COMPLETE result;
 
   /* If there was a callback registered for read stored link key, call it */
-  btm_cb.devcb.p_stored_link_key_cmpl_cb = NULL;
+  btm_sec_cb.devcb.p_stored_link_key_cmpl_cb = NULL;
 
   if (p_cb) {
     /* Set the call back event to indicate command complete */

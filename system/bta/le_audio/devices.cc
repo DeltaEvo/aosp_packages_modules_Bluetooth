@@ -335,6 +335,9 @@ void LeAudioDevice::ClearPACs(void) {
 
 LeAudioDevice::~LeAudioDevice(void) {
   alarm_free(link_quality_timer);
+  for (auto& ase : ases_) {
+    alarm_free(ase.autonomous_operation_timer_);
+  }
   this->ClearPACs();
 }
 
@@ -946,6 +949,11 @@ void LeAudioDevice::DeactivateAllAses(void) {
           ase.cis_conn_hdl, bluetooth::common::ToString(ase.cis_state).c_str(),
           bluetooth::common::ToString(ase.data_path_state).c_str());
     }
+    if (alarm_is_scheduled(ase.autonomous_operation_timer_)) {
+      alarm_free(ase.autonomous_operation_timer_);
+      ase.autonomous_operation_timer_ = NULL;
+      ase.autonomous_target_state_ = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
+    }
     ase.state = AseState::BTA_LE_AUDIO_ASE_STATE_IDLE;
     ase.cis_state = CisState::IDLE;
     ase.data_path_state = DataPathState::IDLE;
@@ -976,6 +984,38 @@ bool LeAudioDevice::IsMetadataChanged(
   }
 
   return false;
+}
+
+void LeAudioDevice::GetDeviceModelName(void) {
+  bt_property_t prop_name;
+  bt_bdname_t prop_value = {0};
+  // Retrieve model name from storage
+  BTIF_STORAGE_FILL_PROPERTY(&prop_name, BT_PROPERTY_REMOTE_MODEL_NUM,
+                             sizeof(bt_bdname_t), &prop_value);
+  if (btif_storage_get_remote_device_property(&address_, &prop_name) ==
+      BT_STATUS_SUCCESS) {
+    model_name_.assign((char*)prop_value.name);
+  }
+}
+
+void LeAudioDevice::UpdateDeviceAllowlistFlag(void) {
+  char allow_list[PROPERTY_VALUE_MAX] = {0};
+  GetDeviceModelName();
+  osi_property_get(kLeAudioDeviceAllowListProp, allow_list, "");
+  if (allow_list[0] == '\0' || model_name_ == "") {
+    // if device allow list is empty or no remote model name available
+    // return allowlist_flag_ as default false
+    return;
+  }
+
+  std::istringstream stream(allow_list);
+  std::string token;
+  while (std::getline(stream, token, ',')) {
+    if (token.compare(model_name_) == 0) {
+      allowlist_flag_ = true;
+      return;
+    }
+  }
 }
 
 /* LeAudioDevices Class methods implementation */

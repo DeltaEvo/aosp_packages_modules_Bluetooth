@@ -5,7 +5,7 @@ use bt_topshim::btif::{
     BtAddrType, BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
     BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType, BtScanMode, BtSspVariant, BtState,
     BtStatus, BtThreadEvent, BtTransport, BtVendorProductInfo, DisplayAddress, RawAddress,
-    ToggleableProfile, Uuid, Uuid128Bit,
+    ToggleableProfile, Uuid, Uuid128Bit, INVALID_RSSI,
 };
 use bt_topshim::{
     metrics,
@@ -196,6 +196,9 @@ pub trait IBluetooth {
 
     /// Get the address type of the remote device.
     fn get_remote_address_type(&self, device: BluetoothDevice) -> BtAddrType;
+
+    /// Get the RSSI of the remote device.
+    fn get_remote_rssi(&self, device: BluetoothDevice) -> i8;
 
     /// Returns a list of connected devices.
     fn get_connected_devices(&self) -> Vec<BluetoothDevice>;
@@ -484,7 +487,7 @@ pub trait IBluetoothConnectionCallback: RPCProxy {
 pub struct Bluetooth {
     intf: Arc<Mutex<BluetoothInterface>>,
 
-    adapter_index: i32,
+    virt_index: i32,
     hci_index: i32,
     bonded_devices: HashMap<String, BluetoothDeviceContext>,
     ble_scanner_id: Option<u8>,
@@ -525,7 +528,7 @@ pub struct Bluetooth {
 impl Bluetooth {
     /// Constructs the IBluetooth implementation.
     pub fn new(
-        adapter_index: i32,
+        virt_index: i32,
         hci_index: i32,
         tx: Sender<Message>,
         api_tx: Sender<APIMessage>,
@@ -536,7 +539,7 @@ impl Bluetooth {
         bluetooth_media: Arc<Mutex<Box<BluetoothMedia>>>,
     ) -> Bluetooth {
         Bluetooth {
-            adapter_index,
+            virt_index,
             hci_index,
             bonded_devices: HashMap::new(),
             callbacks: Callbacks::new(tx.clone(), Message::AdapterCallbackDisconnected),
@@ -1044,7 +1047,7 @@ impl Bluetooth {
 
     /// Creates a file to notify btmanagerd the adapter is enabled.
     fn create_pid_file(&self) -> std::io::Result<()> {
-        let file_name = format!("{}/bluetooth{}.pid", PID_DIR, self.adapter_index);
+        let file_name = format!("{}/bluetooth{}.pid", PID_DIR, self.virt_index);
         let mut f = File::create(&file_name)?;
         f.write_all(process::id().to_string().as_bytes())?;
         Ok(())
@@ -1052,7 +1055,7 @@ impl Bluetooth {
 
     /// Removes the file to notify btmanagerd the adapter is disabled.
     fn remove_pid_file(&self) -> std::io::Result<()> {
-        let file_name = format!("{}/bluetooth{}.pid", PID_DIR, self.adapter_index);
+        let file_name = format!("{}/bluetooth{}.pid", PID_DIR, self.virt_index);
         std::fs::remove_file(&file_name)?;
         Ok(())
     }
@@ -1136,7 +1139,7 @@ impl Bluetooth {
         }
         let adapter_addr = self.get_address().to_lowercase();
         match self.uhid_wakeup_source.create(
-            "suspend uhid".to_string(),
+            "VIRTUAL_SUSPEND_UHID".to_string(),
             adapter_addr,
             String::from(BD_ADDR_DEFAULT),
         ) {
@@ -2378,6 +2381,13 @@ impl IBluetooth for Bluetooth {
         match self.get_remote_device_property(&device, &BtPropertyType::RemoteAddrType) {
             Some(BluetoothProperty::RemoteAddrType(addr_type)) => addr_type,
             _ => BtAddrType::Unknown,
+        }
+    }
+
+    fn get_remote_rssi(&self, device: BluetoothDevice) -> i8 {
+        match self.get_remote_device_property(&device, &BtPropertyType::RemoteRssi) {
+            Some(BluetoothProperty::RemoteRssi(rssi)) => rssi,
+            _ => INVALID_RSSI,
         }
     }
 

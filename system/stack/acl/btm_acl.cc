@@ -1265,10 +1265,10 @@ uint16_t BTM_GetHCIConnHandle(const RawAddress& remote_bda,
  ******************************************************************************/
 bool BTM_IsPhy2mSupported(const RawAddress& remote_bda, tBT_TRANSPORT transport) {
   tACL_CONN* p;
-  BTM_TRACE_DEBUG("BTM_IsPhy2mSupported");
+  LOG_VERBOSE("BTM_IsPhy2mSupported");
   p = internal_.btm_bda_to_acl(remote_bda, transport);
   if (p == (tACL_CONN*)NULL) {
-    BTM_TRACE_DEBUG("BTM_IsPhy2mSupported: no connection");
+    LOG_VERBOSE("BTM_IsPhy2mSupported: no connection");
     return false;
   }
 
@@ -2165,22 +2165,6 @@ tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
   hci_btsnd_hcic_disconnect(*p_acl, HCI_ERR_PEER_USER,
                             "stack::acl::btm_acl::btm_remove_acl");
   return BTM_SUCCESS;
-}
-
-/*******************************************************************************
- *
- * Function         BTM_SetTraceLevel
- *
- * Description      This function sets the trace level for BTM.  If called with
- *                  a value of 0xFF, it simply returns the current trace level.
- *
- * Returns          The new or current trace level
- *
- ******************************************************************************/
-uint8_t BTM_SetTraceLevel(uint8_t new_level) {
-  if (new_level != 0xFF) btm_cb.trace_level = new_level;
-
-  return (btm_cb.trace_level);
 }
 
 void btm_cont_rswitch_from_handle(uint16_t hci_handle) {

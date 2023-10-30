@@ -19,23 +19,11 @@
  *   Functions generated:11
  */
 
-#include <string.h>
-
-#include <map>
-#include <string>
-
-#include "bta/include/bta_api.h"
-#include "stack/bnep/bnep_int.h"
-#include "stack/btm/btm_sec.h"
 #include "stack/include/bnep_api.h"
 #include "stack/include/bt_hdr.h"
 #include "test/common/mock_functions.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 using namespace bluetooth;
 
@@ -78,10 +66,6 @@ tBNEP_RESULT BNEP_Write(uint16_t handle, const RawAddress& p_dest_addr,
 tBNEP_RESULT BNEP_WriteBuf(uint16_t handle, const RawAddress& p_dest_addr,
                            BT_HDR* p_buf, uint16_t protocol,
                            const RawAddress* p_src_addr, bool fw_ext_present) {
-  inc_func_call_count(__func__);
-  return 0;
-}
-uint8_t BNEP_SetTraceLevel(uint8_t new_level) {
   inc_func_call_count(__func__);
   return 0;
 }

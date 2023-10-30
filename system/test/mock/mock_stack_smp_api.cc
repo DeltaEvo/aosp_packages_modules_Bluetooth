@@ -19,25 +19,10 @@
  *   Functions generated:11
  */
 
-#include <string.h>
-
-#include <map>
-#include <string>
-
-#include "bt_target.h"
-#include "main/shim/shim.h"
 #include "stack/btm/btm_dev.h"
-#include "stack/include/l2c_api.h"
-#include "stack/include/l2cdefs.h"
 #include "stack/include/smp_api.h"
-#include "stack/smp/smp_int.h"
-#include "stack_config.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
-
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 bool SMP_PairCancel(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
@@ -58,10 +43,6 @@ tSMP_STATUS SMP_Pair(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type) {
 tSMP_STATUS SMP_Pair(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
   return SMP_SUCCESS;
-}
-uint8_t SMP_SetTraceLevel(uint8_t new_level) {
-  inc_func_call_count(__func__);
-  return 0;
 }
 void SMP_ConfirmReply(const RawAddress& bd_addr, uint8_t res) {
   inc_func_call_count(__func__);

@@ -31,6 +31,7 @@
 #include "bnep_int.h"
 #include "bt_target.h"
 #include "bta/include/bta_api.h"
+#include "bta/include/bta_sec_api.h"
 #include "device/include/controller.h"
 #include "l2c_api.h"
 #include "l2cdefs.h"
@@ -89,7 +90,7 @@ tBNEP_RESULT bnep_register_with_l2cap(void) {
   if (!L2CA_Register2(BT_PSM_BNEP, bnep_cb.reg_info, false /* enable_snoop */,
                       nullptr, BNEP_MTU_SIZE, BNEP_MTU_SIZE,
                       BTA_SEC_AUTHENTICATE | BTA_SEC_ENCRYPT)) {
-    BNEP_TRACE_ERROR("BNEP - Registration failed");
+    LOG_ERROR("BNEP - Registration failed");
     return BNEP_SECURITY_FAIL;
   }
 

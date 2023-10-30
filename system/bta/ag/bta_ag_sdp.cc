@@ -30,17 +30,17 @@
 #include "bt_target.h"  // Legacy stack config
 #include "bt_trace.h"   // Legacy trace logging
 #include "bta/ag/bta_ag_int.h"
+#include "bta/include/bta_rfcomm_scn.h"
 #include "btif/include/btif_config.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/btm/btm_sco_hfp_hal.h"
+#include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/main_thread.h"
-#include "stack/include/port_api.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 
@@ -83,7 +83,7 @@ const tBTA_AG_SDP_CBACK bta_ag_sdp_cback_tbl[] = {
  *
  ******************************************************************************/
 static void bta_ag_sdp_cback(uint16_t status, uint8_t idx) {
-  APPL_TRACE_DEBUG("%s status:0x%x", __func__, status);
+  LOG_VERBOSE("%s status:0x%x", __func__, status);
   tBTA_AG_SCB* p_scb = bta_ag_scb_by_idx(idx);
   if (p_scb) {
     uint16_t event;
@@ -162,7 +162,7 @@ bool bta_ag_add_record(uint16_t service_uuid, const char* p_service_name,
   bool codec_supported = false;
   uint8_t buf[2];
 
-  APPL_TRACE_DEBUG("%s uuid: %x", __func__, service_uuid);
+  LOG_VERBOSE("%s uuid: %x", __func__, service_uuid);
   LOG_INFO("features: %d", features);
 
   for (auto& proto_element : proto_elem_list) {
@@ -258,7 +258,7 @@ void bta_ag_create_records(tBTA_AG_SCB* p_scb, const tBTA_AG_DATA& data) {
       if (bta_ag_cb.profile[i].sdp_handle == 0) {
         bta_ag_cb.profile[i].sdp_handle =
             get_legacy_stack_sdp_api()->handle.SDP_CreateRecord();
-        bta_ag_cb.profile[i].scn = BTM_AllocateSCN();
+        bta_ag_cb.profile[i].scn = BTA_AllocateSCN();
         bta_ag_add_record(bta_ag_uuid[i], data.api_register.p_name[i],
                           bta_ag_cb.profile[i].scn, data.api_register.features,
                           bta_ag_cb.profile[i].sdp_handle);
@@ -302,13 +302,13 @@ void bta_ag_del_records(tBTA_AG_SCB* p_scb) {
     /* if service registered for this scb and not registered for any other scb
      */
     if (((services & 1) == 1) && ((others & 1) == 0)) {
-      APPL_TRACE_DEBUG("bta_ag_del_records %d", i);
+      LOG_VERBOSE("bta_ag_del_records %d", i);
       if (bta_ag_cb.profile[i].sdp_handle != 0) {
         get_legacy_stack_sdp_api()->handle.SDP_DeleteRecord(
             bta_ag_cb.profile[i].sdp_handle);
         bta_ag_cb.profile[i].sdp_handle = 0;
       }
-      BTM_FreeSCN(bta_ag_cb.profile[i].scn);
+      BTA_FreeSCN(bta_ag_cb.profile[i].scn);
       bta_sys_remove_uuid(bta_ag_uuid[i]);
     }
   }
@@ -379,8 +379,8 @@ bool bta_ag_sdp_find_attr(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK service) {
     uint16_t peer_version = HFP_HSP_VERSION_UNKNOWN;
     if (!get_legacy_stack_sdp_api()->record.SDP_FindProfileVersionInRec(
             p_rec, uuid, &peer_version)) {
-      APPL_TRACE_WARNING("%s: Get peer_version failed, using default 0x%04x",
-                         __func__, p_scb->peer_version);
+      LOG_WARN("%s: Get peer_version failed, using default 0x%04x", __func__,
+               p_scb->peer_version);
       peer_version = p_scb->peer_version;
     }
 
@@ -392,9 +392,8 @@ bool bta_ag_sdp_find_attr(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK service) {
                 p_scb->peer_addr.ToString(), HFP_VERSION_CONFIG_KEY,
                 (const uint8_t*)&peer_version, sizeof(peer_version))) {
         } else {
-          APPL_TRACE_WARNING("%s: Failed to store peer HFP version for %s",
-                             __func__,
-                             ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
+          LOG_WARN("%s: Failed to store peer HFP version for %s", __func__,
+                   ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
         }
       }
       /* get features if HFP */
@@ -421,9 +420,8 @@ bool bta_ag_sdp_find_attr(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK service) {
                   p_scb->peer_addr.ToString(), HFP_SDP_FEATURES_CONFIG_KEY,
                   (const uint8_t*)&sdp_features, sizeof(sdp_features))) {
           } else {
-            APPL_TRACE_WARNING(
-                "%s: Failed to store peer HFP SDP Features for %s", __func__,
-                ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
+            LOG_WARN("%s: Failed to store peer HFP SDP Features for %s",
+                     __func__, ADDRESS_TO_LOGGABLE_CSTR(p_scb->peer_addr));
           }
         }
         if (p_scb->peer_features == 0) {

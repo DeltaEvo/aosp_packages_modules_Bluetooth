@@ -37,9 +37,6 @@
 
 void set_hal_cbacks(bt_callbacks_t* callbacks);
 
-uint8_t appl_trace_level = BT_TRACE_LEVEL_DEBUG;
-uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
-
 const tBTA_AG_RES_DATA tBTA_AG_RES_DATA::kEmpty = {};
 
 module_t bt_utils_module;
@@ -384,6 +381,8 @@ TEST_F(BtifCoreTest, dump_hf_client_event) {
                      "BTA_HF_CLIENT_AUDIO_OPEN_EVT"),
       std::make_pair(BTA_HF_CLIENT_AUDIO_MSBC_OPEN_EVT,
                      "BTA_HF_CLIENT_AUDIO_MSBC_OPEN_EVT"),
+      std::make_pair(BTA_HF_CLIENT_AUDIO_LC3_OPEN_EVT,
+                     "BTA_HF_CLIENT_AUDIO_LC3_OPEN_EVT"),
       std::make_pair(BTA_HF_CLIENT_AUDIO_CLOSE_EVT,
                      "BTA_HF_CLIENT_AUDIO_CLOSE_EVT"),
       std::make_pair(BTA_HF_CLIENT_SPK_EVT, "BTA_HF_CLIENT_SPK_EVT"),

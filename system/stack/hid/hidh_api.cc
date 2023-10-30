@@ -29,15 +29,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "btif/include/btif_hh.h"
-#include "btm_api.h"
 #include "hiddefs.h"
 #include "hidh_int.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/btm/btm_dev.h"
-#include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_uuid16.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -248,25 +246,7 @@ static void hidh_search_callback(UNUSED_ATTR const RawAddress& bd_addr,
  *
  ******************************************************************************/
 void HID_HostInit(void) {
-  uint8_t log_level = hh_cb.trace_level;
   memset(&hh_cb, 0, sizeof(tHID_HOST_CTB));
-  hh_cb.trace_level = log_level;
-}
-
-/*******************************************************************************
- *
- * Function         HID_HostSetTraceLevel
- *
- * Description      This function sets the trace level for HID Host. If called
- *                  with 0xFF, it simply reads the current trace level.
- *
- * Returns          the new (current) trace level
- *
- ******************************************************************************/
-uint8_t HID_HostSetTraceLevel(uint8_t new_level) {
-  if (new_level != 0xFF) hh_cb.trace_level = new_level;
-
-  return (hh_cb.trace_level);
 }
 
 /*******************************************************************************
@@ -460,13 +440,13 @@ tHID_STATUS HID_HostWriteDev(uint8_t dev_handle, uint8_t t_type, uint8_t param,
   tHID_STATUS status = HID_SUCCESS;
 
   if (!hh_cb.reg_flag) {
-    HIDH_TRACE_ERROR("HID_ERR_NOT_REGISTERED");
+    LOG_ERROR("HID_ERR_NOT_REGISTERED");
     status = HID_ERR_NOT_REGISTERED;
   }
 
   if ((dev_handle >= HID_HOST_MAX_DEVICES) ||
       (!hh_cb.devices[dev_handle].in_use)) {
-    HIDH_TRACE_ERROR("HID_ERR_INVALID_PARAM");
+    LOG_ERROR("HID_ERR_INVALID_PARAM");
     log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
                             HIDH_ERR_INVALID_PARAM_AT_HOST_WRITE_DEV,
                         1);
@@ -474,7 +454,7 @@ tHID_STATUS HID_HostWriteDev(uint8_t dev_handle, uint8_t t_type, uint8_t param,
   }
 
   else if (hh_cb.devices[dev_handle].state != HID_DEV_CONNECTED) {
-    HIDH_TRACE_ERROR("HID_ERR_NO_CONNECTION dev_handle %d", dev_handle);
+    LOG_ERROR("HID_ERR_NO_CONNECTION dev_handle %d", dev_handle);
     log_counter_metrics(android::bluetooth::CodePathCounterKeyEnum::
                             HIDH_ERR_NO_CONNECTION_AT_HOST_WRITE_DEV,
                         1);

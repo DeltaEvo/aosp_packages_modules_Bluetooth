@@ -1,13 +1,13 @@
+#include <base/location.h>
 #include <fuzzer/FuzzedDataProvider.h>
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include "osi/include/allocator.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_uuid16.h"
 #include "stack/include/gatt_api.h"
-#include "stack/include/sdpdefs.h"
 #include "test/fake/fake_osi.h"
 #include "test/mock/mock_btif_config.h"
 #include "test/mock/mock_stack_acl.h"

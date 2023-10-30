@@ -20,26 +20,10 @@
  */
 
 #include <base/logging.h>
-#include <string.h>
 
-#include <map>
-#include <string>
-
-#include "l2c_api.h"
-#include "osi/include/log.h"
-#include "osi/include/mutex.h"
 #include "port_api.h"
-#include "rfcdefs.h"
-#include "sdp_api.h"
-#include "stack/include/btm_api_types.h"
-#include "stack/rfcomm/port_int.h"
-#include "stack/rfcomm/rfc_int.h"
 #include "test/common/mock_functions.h"
 #include "types/raw_address.h"
-
-#ifndef UNUSED_ATTR
-#define UNUSED_ATTR
-#endif
 
 bool PORT_IsOpening(RawAddress* bd_addr) {
   inc_func_call_count(__func__);
@@ -118,10 +102,6 @@ int RFCOMM_RemoveConnection(uint16_t handle) {
   return 0;
 }
 int RFCOMM_RemoveServer(uint16_t handle) {
-  inc_func_call_count(__func__);
-  return 0;
-}
-uint8_t PORT_SetTraceLevel(uint8_t new_level) {
   inc_func_call_count(__func__);
   return 0;
 }

@@ -98,7 +98,6 @@
 #include "osi/include/osi.h"
 #include "osi/include/stack_power_telemetry.h"
 #include "osi/include/wakelock.h"
-#include "profile_log_levels.h"
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/a2dp_api.h"
@@ -197,7 +196,7 @@ struct ConfigInterfaceImpl : bluetooth::core::ConfigInterface {
                      "false");
     auto a2dp_offload_enabled =
         (strcmp(value_sup, "true") == 0) && (strcmp(value_dis, "false") == 0);
-    BTIF_TRACE_DEBUG("a2dp_offload.enable = %d", a2dp_offload_enabled);
+    LOG_VERBOSE("a2dp_offload.enable = %d", a2dp_offload_enabled);
 
     return a2dp_offload_enabled;
   }
@@ -295,8 +294,8 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
          */
       } break;
       default:
-        BTIF_TRACE_ERROR("%s: Unknown service %d being %s", __func__,
-                         service_id, (enable) ? "enabled" : "disabled");
+        LOG_ERROR("%s: Unknown service %d being %s", __func__, service_id,
+                  (enable) ? "enabled" : "disabled");
         return BT_STATUS_FAIL;
     }
     return BT_STATUS_SUCCESS;
@@ -460,12 +459,6 @@ static void start_profiles() {
   HID_HostInit();
 #endif
   bta_ar_init();
-
-  // initialize profile-specific logging levels
-  const auto stack_config = stack_config_get_interface();
-  if (stack_config->get_trace_config_enabled()) {
-    load_levels_from_config(stack_config->get_all());
-  }
 }
 
 static void stop_profiles() {
@@ -1071,7 +1064,7 @@ static bool interop_match_addr(const char* feature_name,
 
   int feature = interop_feature_name_to_feature_id(feature_name);
   if (feature == -1) {
-    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    LOG_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
     return false;
   }
 
@@ -1085,7 +1078,7 @@ static bool interop_match_name(const char* feature_name, const char* name) {
 
   int feature = interop_feature_name_to_feature_id(feature_name);
   if (feature == -1) {
-    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    LOG_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
     return false;
   }
 
@@ -1100,7 +1093,7 @@ static bool interop_match_addr_or_name(const char* feature_name,
 
   int feature = interop_feature_name_to_feature_id(feature_name);
   if (feature == -1) {
-    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    LOG_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
     return false;
   }
 
@@ -1118,7 +1111,7 @@ static void interop_database_add_remove_addr(bool do_add,
 
   int feature = interop_feature_name_to_feature_id(feature_name);
   if (feature == -1) {
-    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    LOG_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
     return;
   }
 
@@ -1138,7 +1131,7 @@ static void interop_database_add_remove_name(bool do_add,
 
   int feature = interop_feature_name_to_feature_id(feature_name);
   if (feature == -1) {
-    BTIF_TRACE_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
+    LOG_ERROR("%s: feature doesn't exist: %s", __func__, feature_name);
     return;
   }
 

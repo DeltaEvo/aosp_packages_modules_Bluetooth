@@ -31,6 +31,7 @@
 
 #include "bt_target.h"  // Must be first to define build configuration
 #include "bta/include/bta_jv_co.h"
+#include "bta/include/bta_rfcomm_scn.h"
 #include "bta/jv/bta_jv_int.h"
 #include "bta/sys/bta_sys.h"
 #include "osi/include/allocator.h"
@@ -41,6 +42,7 @@
 #include "stack/include/avdt_api.h"  // AVDT_PSM
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
+#include "stack/include/bt_uuid16.h"
 #include "stack/include/gap_api.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/port_api.h"
@@ -637,6 +639,8 @@ void bta_jv_enable(tBTA_JV_DM_CBACK* p_cback) {
   bta_jv.status = status;
   bta_jv_cb.p_dm_cback(BTA_JV_ENABLE_EVT, &bta_jv, 0);
   memset(bta_jv_cb.free_psm_list, 0, sizeof(bta_jv_cb.free_psm_list));
+  memset(bta_jv_cb.scn_in_use, 0, sizeof(bta_jv_cb.scn_in_use));
+  bta_jv_cb.scn_search_index = 1;
 }
 
 /** Disables the BT device manager free the resources used by java */
@@ -718,21 +722,16 @@ void bta_jv_get_channel_id(
     case BTA_JV_CONN_TYPE_RFCOMM: {
       uint8_t scn = 0;
       if (channel > 0) {
-        if (!BTM_TryAllocateSCN(channel)) {
-          LOG(ERROR) << "rfc channel=" << channel
-                     << " already in use or invalid";
-          channel = 0;
+        if (BTA_TryAllocateSCN(channel)) {
+          scn = static_cast<uint8_t>(channel);
+        } else {
+          LOG_ERROR("rfc channel %u already in use or invalid", channel);
         }
       } else {
-        channel = BTM_AllocateSCN();
-        if (channel == 0) {
-          LOG(ERROR) << "run out of rfc channels";
-          channel = 0;
+        scn = BTA_AllocateSCN();
+        if (scn == 0) {
+          LOG_ERROR("out of rfc channels");
         }
-      }
-      if (channel != 0) {
-        bta_jv_cb.scn[channel - 1] = true;
-        scn = (uint8_t)channel;
       }
       if (bta_jv_cb.p_dm_cback) {
         tBTA_JV bta_jv;
@@ -769,14 +768,9 @@ void bta_jv_get_channel_id(
 void bta_jv_free_scn(int32_t type /* One of BTA_JV_CONN_TYPE_ */,
                      uint16_t scn) {
   switch (type) {
-    case BTA_JV_CONN_TYPE_RFCOMM: {
-      if (scn > 0 && scn <= RFCOMM_MAX_SCN && bta_jv_cb.scn[scn - 1]) {
-        /* this scn is used by JV */
-        bta_jv_cb.scn[scn - 1] = false;
-        BTM_FreeSCN(scn);
-      }
+    case BTA_JV_CONN_TYPE_RFCOMM:
+      BTA_FreeSCN(scn);
       break;
-    }
     case BTA_JV_CONN_TYPE_L2CAP:
       bta_jv_set_free_psm(scn);
       break;

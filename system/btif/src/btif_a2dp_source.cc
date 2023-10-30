@@ -809,9 +809,8 @@ static void btif_a2dp_source_audio_tx_start_event(void) {
   CHECK(btif_a2dp_source_cb.encoder_interface != nullptr);
   btif_a2dp_source_cb.encoder_interface->feeding_reset();
 
-  APPL_TRACE_EVENT(
-      "%s: starting timer %" PRIu64 " ms", __func__,
-      btif_a2dp_source_cb.encoder_interface->get_encoder_interval_ms());
+  LOG_VERBOSE("%s: starting timer %" PRIu64 " ms", __func__,
+              btif_a2dp_source_cb.encoder_interface->get_encoder_interval_ms());
 
   /* audio engine starting, reset tx suspended flag */
   btif_a2dp_source_cb.tx_flush = false;
@@ -1018,13 +1017,6 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
         btif_av_source_active_peer(), btif_a2dp_source_cb.encoder_interval_ms,
         drop_n, num_dropped_encoded_frames, num_dropped_encoded_bytes);
 
-    // Intel controllers don't handle ReadRSSI, ReadFailedContactCounter, and
-    // ReadTxPower very well, it sends back Hardware Error event which will
-    // crash the daemon. So temporarily disable this for Floss.
-    // TODO(b/249876976): Intel controllers to handle this command correctly.
-    // And if the need for disabling metrics-related HCI call grows, consider
-    // creating a framework to avoid ifdefs.
-#ifndef TARGET_FLOSS
     // Request additional debug info if we had to flush buffers
     RawAddress peer_bda = btif_av_source_active_peer();
     tBTM_STATUS status = BTM_ReadRSSI(peer_bda, btm_read_rssi_cb);
@@ -1032,19 +1024,26 @@ static bool btif_a2dp_source_enqueue_callback(BT_HDR* p_buf, size_t frames_n,
       LOG_WARN("%s: Cannot read RSSI: status %d", __func__, status);
     }
 
+    // Intel controllers don't handle ReadFailedContactCounter very well, it
+    // sends back Hardware Error event which will crash the daemon. So
+    // temporarily disable this for Floss.
+    // TODO(b/249876976): Intel controllers to handle this command correctly.
+    // And if the need for disabling metrics-related HCI call grows, consider
+    // creating a framework to avoid ifdefs.
+#ifndef TARGET_FLOSS
     status = BTM_ReadFailedContactCounter(peer_bda,
                                           btm_read_failed_contact_counter_cb);
     if (status != BTM_CMD_STARTED) {
       LOG_WARN("%s: Cannot read Failed Contact Counter: status %d", __func__,
                status);
     }
+#endif
 
     status =
         BTM_ReadTxPower(peer_bda, BT_TRANSPORT_BR_EDR, btm_read_tx_power_cb);
     if (status != BTM_CMD_STARTED) {
       LOG_WARN("%s: Cannot read Tx Power: status %d", __func__, status);
     }
-#endif
   }
 
   /* Update the statistics */
@@ -1104,10 +1103,9 @@ BT_HDR* btif_a2dp_source_audio_readbuf(void) {
 
 static void log_tstamps_us(const char* comment, uint64_t timestamp_us) {
   static uint64_t prev_us = 0;
-  APPL_TRACE_DEBUG("%s: [%s] ts %08" PRIu64 ", diff : %08" PRIu64
-                   ", queue sz %zu",
-                   __func__, comment, timestamp_us, timestamp_us - prev_us,
-                   fixed_queue_length(btif_a2dp_source_cb.tx_audio_queue));
+  LOG_VERBOSE("%s: [%s] ts %08" PRIu64 ", diff : %08" PRIu64 ", queue sz %zu",
+              __func__, comment, timestamp_us, timestamp_us - prev_us,
+              fixed_queue_length(btif_a2dp_source_cb.tx_audio_queue));
   prev_us = timestamp_us;
 }
 

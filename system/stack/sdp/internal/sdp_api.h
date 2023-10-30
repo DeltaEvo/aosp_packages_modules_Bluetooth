@@ -21,6 +21,7 @@
 #include <cstdint>
 
 #include "stack/include/sdp_callback.h"
+#include "stack/include/sdp_device_id.h"
 #include "stack/sdp/sdp_discovery_db.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -382,18 +383,6 @@ bool SDP_AddLanguageBaseAttrIDList(uint32_t handle, uint16_t lang,
  ******************************************************************************/
 bool SDP_AddServiceClassIdList(uint32_t handle, uint16_t num_services,
                                uint16_t* p_service_uuids);
-
-/*******************************************************************************
- *
- * Function         SDP_DeleteAttribute
- *
- * Description      Delete an attribute from a record.
- *                  This would be through the SDP database maintenance API.
- *
- * Returns          true if deleted OK, else false if not found
- *
- ******************************************************************************/
-bool SDP_DeleteAttribute(uint32_t handle, uint16_t attr_id);
 
 /* Device Identification APIs */
 

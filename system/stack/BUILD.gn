@@ -121,11 +121,12 @@ source_set("stack") {
     "btm/btm_iot_config.cc",
     "btm/btm_iso.cc",
     "btm/btm_main.cc",
-    "btm/btm_scn.cc",
     "btm/btm_sco.cc",
     "btm/btm_sco_hci.cc",
     "btm/btm_sco_hfp_hal_linux.cc",
     "btm/btm_sec.cc",
+    "btm/hfp_lc3_encoder_linux.cc",
+    "btm/hfp_lc3_decoder_linux.cc",
     "btm/hfp_msbc_encoder.cc",
     "btm/hfp_msbc_decoder.cc",
     "btu/btu_event.cc",
@@ -230,6 +231,7 @@ source_set("stack") {
     ":nonstandard_codecs",
     "//bt/system:libbt-platform-protos-lite",
     "//bt/system/gd/rust/shim:init_flags_bridge_header",
+    "//bt/system/stack/mmc",
     "//bt/system/types",
     "//bt/system/types",
   ]
@@ -237,20 +239,6 @@ source_set("stack") {
   configs += [
     "//bt/system:target_defaults",
   ]
-
-  if (defined(use.floss_mmc) && use.floss_mmc) {
-    sources += [
-      "btm/hfp_lc3_encoder_linux.cc",
-      "btm/hfp_lc3_decoder_linux.cc",
-    ]
-    deps += [ "//bt/system/stack/mmc" ]
-  } else {
-    sources += [
-      "btm/hfp_lc3_encoder.cc",
-      "btm/hfp_lc3_decoder.cc",
-    ]
-    libs = [ "lc3" ]
-  }
 }
 
 if (use.test) {

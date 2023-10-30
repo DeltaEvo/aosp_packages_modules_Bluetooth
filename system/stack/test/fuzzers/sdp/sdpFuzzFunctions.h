@@ -284,13 +284,6 @@ static const std::vector<std::function<void(FuzzedDataProvider*)>>
           delete[] service_uuids;
         },
 
-        // ::SDP_DeleteAttribute
-        [](FuzzedDataProvider* fdp) -> void {
-          get_legacy_stack_sdp_api()->handle.SDP_DeleteAttribute(
-              getArbitraryVectorElement(fdp, sdp_record_handles, true),
-              fdp->ConsumeIntegral<uint16_t>());
-        },
-
         // ::SDP_SetLocalDiRecord
         [](FuzzedDataProvider* fdp) -> void {
           uint32_t handle;  // Output var
@@ -326,11 +319,6 @@ static const std::vector<std::function<void(FuzzedDataProvider*)>>
           get_legacy_stack_sdp_api()->device_id.SDP_GetDiRecord(
               fdp->ConsumeIntegral<uint8_t>(), &device_info,
               getArbitraryVectorElement(fdp, sdp_db_vect, true).get());
-        },
-
-        // ::SDP_SetTraceLevel
-        [](FuzzedDataProvider* fdp) -> void {
-          SDP_SetTraceLevel(fdp->ConsumeIntegral<uint8_t>());
         },
 
         // ::SDP_FindServiceUUIDInRec

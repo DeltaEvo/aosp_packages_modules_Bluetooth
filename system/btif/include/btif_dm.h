@@ -20,6 +20,7 @@
 #define BTIF_DM_H
 
 #include "bta/include/bta_api.h"
+#include "bta/include/bta_sec_api.h"
 #include "bte_appl.h"
 #include "btif_uid.h"
 #include "types/raw_address.h"
@@ -51,9 +52,14 @@ void btif_dm_init(uid_set_t* set);
 void btif_dm_cleanup(void);
 
 /**
- * BTIF callback to switch context from bte to btif
+ * BTIF callback for security events
  */
-void bte_dm_evt(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data);
+void btif_dm_sec_evt(tBTA_DM_SEC_EVT event, tBTA_DM_SEC* p_data);
+
+/**
+ * BTIF callback for ACL up/down and address consolidation events
+ */
+void btif_dm_acl_evt(tBTA_DM_ACL_EVT event, tBTA_DM_ACL* p_data);
 
 /**
  * Notify BT disable being initiated. DM may chose to abort
