@@ -90,8 +90,8 @@ using le_audio::types::ase;
 using le_audio::types::AseState;
 using le_audio::types::AudioContexts;
 using le_audio::types::AudioLocations;
-using le_audio::types::AudioStreamDataPathState;
 using le_audio::types::BidirectionalPair;
+using le_audio::types::DataPathState;
 using le_audio::types::hdl_pair;
 using le_audio::types::kDefaultScanDurationS;
 using le_audio::types::kLeAudioContextAllBidir;
@@ -522,9 +522,9 @@ class LeAudioClientImpl : public LeAudioClient {
     bool group_conf_changed = group->ReloadAudioLocations();
     group_conf_changed |= group->ReloadAudioDirections();
     group_conf_changed |= group->UpdateAudioContextAvailability();
-    /* All the configurations should be recalculated for the new conditions */
-    group->InvalidateCachedConfigurations();
     if (group_conf_changed) {
+      /* All the configurations should be recalculated for the new conditions */
+      group->InvalidateCachedConfigurations();
       callbacks_->OnAudioConf(group->audio_directions_, group->group_id_,
                               group->snk_audio_locations_.to_ulong(),
                               group->src_audio_locations_.to_ulong(),
@@ -3035,8 +3035,7 @@ class LeAudioClientImpl : public LeAudioClient {
   bool IsAseAcceptingAudioData(struct ase* ase) {
     if (ase == nullptr) return false;
     if (ase->state != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) return false;
-    if (ase->data_path_state != AudioStreamDataPathState::DATA_PATH_ESTABLISHED)
-      return false;
+    if (ase->data_path_state != DataPathState::CONFIGURED) return false;
 
     return true;
   }
@@ -3843,7 +3842,7 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
-    /* Check if the device resume is expected */
+    /* Check if the device resume is allowed */
     if (!group->GetCodecConfigurationByDirection(
             configuration_context_type_,
             le_audio::types::kLeAudioDirectionSink)) {
@@ -3972,7 +3971,8 @@ class LeAudioClientImpl : public LeAudioClient {
         break;
       case AudioState::READY_TO_START:
         LOG_ERROR(
-            " called in wrong state. \n audio_receiver_state: %s \n"
+            "called in wrong state, ignoring double start request. \n "
+            "audio_receiver_state: %s \n"
             "audio_sender_state: %s \n isPendingConfiguration: %s \n "
             "Reconfiguring to %s",
             ToString(audio_receiver_state_).c_str(),
@@ -3980,7 +3980,6 @@ class LeAudioClientImpl : public LeAudioClient {
             (group->IsPendingConfiguration() ? "true" : "false"),
             ToString(configuration_context_type_).c_str());
         group->PrintDebugState();
-        CancelStreamingRequest();
         break;
       case AudioState::READY_TO_RELEASE:
         switch (audio_receiver_state_) {
@@ -4099,8 +4098,8 @@ class LeAudioClientImpl : public LeAudioClient {
                                 le_audio::types::kLeAudioDirectionSource);
     }
 
-    /* Check if the device resume is expected */
-    if (!group->GetCachedCodecConfigurationByDirection(
+    /* Check if the device resume is allowed */
+    if (!group->GetCodecConfigurationByDirection(
             configuration_context_type_,
             le_audio::types::kLeAudioDirectionSource)) {
       LOG(ERROR) << __func__ << ", invalid resume request for context type: "
@@ -4226,7 +4225,8 @@ class LeAudioClientImpl : public LeAudioClient {
         break;
       case AudioState::READY_TO_START:
         LOG_ERROR(
-            " called in wrong state. \n audio_receiver_state: %s \n"
+            " Double resume request, just ignore it.. \n audio_receiver_state: "
+            "%s \n"
             "audio_sender_state: %s \n isPendingConfiguration: %s \n "
             "Reconfiguring to %s",
             ToString(audio_receiver_state_).c_str(),
@@ -4234,7 +4234,6 @@ class LeAudioClientImpl : public LeAudioClient {
             (group->IsPendingConfiguration() ? "true" : "false"),
             ToString(configuration_context_type_).c_str());
         group->PrintDebugState();
-        CancelStreamingRequest();
         break;
       case AudioState::READY_TO_RELEASE:
         switch (audio_sender_state_) {
@@ -5121,16 +5120,43 @@ class LeAudioClientImpl : public LeAudioClient {
         bluetooth::common::ToString(audio_receiver_state_).c_str());
     LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
     switch (status) {
-      case GroupStreamStatus::STREAMING:
+      case GroupStreamStatus::STREAMING: {
         ASSERT_LOG(group_id == active_group_id_, "invalid group id %d!=%d",
                    group_id, active_group_id_);
+
+        take_stream_time();
+
+        le_audio::MetricsCollector::Get()->OnStreamStarted(
+            active_group_id_, configuration_context_type_);
+
+        if (leAudioHealthStatus_) {
+          leAudioHealthStatus_->AddStatisticForGroup(
+              group_id, LeAudioHealthGroupStatType::STREAM_CREATE_SUCCESS);
+        }
+
+        if (!group) {
+          LOG_ERROR("Group %d does not exist anymore. This shall not happen ",
+                    group_id);
+          return;
+        }
+
+        if ((audio_sender_state_ == AudioState::IDLE) &&
+            (audio_receiver_state_ == AudioState::IDLE)) {
+          /* Audio Framework is not interested in the stream anymore.
+           * Just stop streaming
+           */
+          LOG_WARN("Stopping stream for group %d as AF not interested.",
+                   group_id);
+          groupStateMachine_->StopStream(group);
+          return;
+        }
 
         /* It might happen that the configuration has already changed, while
          * the group was in the ongoing reconfiguration. We should stop the
          * stream and reconfigure once again.
          */
-        if (group && group->GetConfigurationContextType() !=
-                         configuration_context_type_) {
+        if (group->GetConfigurationContextType() !=
+            configuration_context_type_) {
           LOG_DEBUG(
               "The configuration %s is no longer valid. Stopping the stream to"
               " reconfigure to %s",
@@ -5143,35 +5169,24 @@ class LeAudioClientImpl : public LeAudioClient {
           return;
         }
 
-        if (group) {
-          BidirectionalPair<uint16_t> delays_pair = {
-              .sink =
-                  group->GetRemoteDelay(le_audio::types::kLeAudioDirectionSink),
-              .source = group->GetRemoteDelay(
-                  le_audio::types::kLeAudioDirectionSource)};
-          CodecManager::GetInstance()->UpdateActiveAudioConfig(
-              group->stream_conf.stream_params, delays_pair,
-              std::bind(&LeAudioClientImpl::UpdateAudioConfigToHal,
-                        weak_factory_.GetWeakPtr(), std::placeholders::_1,
-                        std::placeholders::_2));
-        }
+        BidirectionalPair<uint16_t> delays_pair = {
+            .sink =
+                group->GetRemoteDelay(le_audio::types::kLeAudioDirectionSink),
+            .source = group->GetRemoteDelay(
+                le_audio::types::kLeAudioDirectionSource)};
+        CodecManager::GetInstance()->UpdateActiveAudioConfig(
+            group->stream_conf.stream_params, delays_pair,
+            std::bind(&LeAudioClientImpl::UpdateAudioConfigToHal,
+                      weak_factory_.GetWeakPtr(), std::placeholders::_1,
+                      std::placeholders::_2));
 
         if (audio_sender_state_ == AudioState::READY_TO_START)
           StartSendingAudio(group_id);
         if (audio_receiver_state_ == AudioState::READY_TO_START)
           StartReceivingAudio(group_id);
 
-        take_stream_time();
-
-        le_audio::MetricsCollector::Get()->OnStreamStarted(
-            active_group_id_, configuration_context_type_);
-
-        if (leAudioHealthStatus_) {
-          leAudioHealthStatus_->AddStatisticForGroup(
-              group_id, LeAudioHealthGroupStatType::STREAM_CREATE_SUCCESS);
-        }
-
         break;
+      }
       case GroupStreamStatus::SUSPENDED:
         stream_setup_end_timestamp_ = 0;
         stream_setup_start_timestamp_ = 0;
@@ -5203,7 +5218,6 @@ class LeAudioClientImpl : public LeAudioClient {
          * STREAMING. Peer device uses cache. For the moment
          * it is handled same as IDLE
          */
-        FALLTHROUGH;
       case GroupStreamStatus::IDLE: {
         if (sw_enc_left) sw_enc_left.reset();
         if (sw_enc_right) sw_enc_right.reset();

@@ -27,13 +27,14 @@
 #include <string.h>
 
 #include "bt_target.h"
+#include "gd/common/init_flags.h"
 #include "gd/hal/snoop_logger.h"
 #include "hcimsgs.h"  // HCID_GET_
-#include "main/shim/shim.h"
+#include "main/shim/entry.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/l2c_api.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/l2cap/l2c_int.h"
@@ -834,11 +835,6 @@ static void process_l2cap_cmd(tL2C_LCB* p_lcb, uint8_t* p, uint16_t pkt_len) {
  *
  ******************************************************************************/
 void l2c_init(void) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    // L2CAP init should be handled by GD stack manager
-    return;
-  }
-
   int16_t xx;
 
   memset(&l2cb, 0, sizeof(tL2C_CB));
@@ -878,12 +874,7 @@ void l2c_init(void) {
                                   L2CAP_FIXED_CHNL_SMP_BIT;
 }
 
-void l2c_free(void) {
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    // L2CAP cleanup should be handled by GD stack manager
-    return;
-  }
-}
+void l2c_free(void) {}
 
 void l2c_ccb_timer_timeout(void* data) {
   tL2C_CCB* p_ccb = (tL2C_CCB*)data;
