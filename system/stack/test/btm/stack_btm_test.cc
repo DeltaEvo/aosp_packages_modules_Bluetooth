@@ -28,7 +28,7 @@
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sco.h"
 #include "stack/btm/btm_sec.h"
-#include "stack/btm/btm_sec_int_types.h"
+#include "stack/btm/btm_sec_cb.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_hci_link_interface.h"
 #include "stack/include/btm_client_interface.h"
@@ -45,8 +45,6 @@ namespace mock = test::mock::stack_hcic_hcicmds;
 
 extern tBTM_CB btm_cb;
 
-uint8_t btif_trace_level = BT_TRACE_LEVEL_DEBUG;
-uint8_t appl_trace_level = BT_TRACE_LEVEL_VERBOSE;
 tL2C_CB l2cb;
 
 const hci_t* hci_layer_get_interface() { return nullptr; }

@@ -219,10 +219,9 @@ cc_test {
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     srcs: [
         ":LegacyStackSdp",
-        ":TestCommonLogMsg",
         ":TestCommonMockFunctions",
         ":TestFakeOsi",
         ":TestMockBtif",
@@ -280,9 +279,8 @@ cc_test {
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     srcs: [
-        ":TestCommonLogMsg",
         ":TestCommonMockFunctions",
         ":TestMockBtif",
         ":TestMockDevice",
@@ -324,7 +322,7 @@ cc_test {
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     host_supported: true,
     include_dirs: [
         "packages/modules/Bluetooth/system",
@@ -337,7 +335,6 @@ cc_test {
         ":BtaDmSources",
         ":LegacyStackSdp",
         ":OsiCompatSources",
-        ":TestCommonLogMsg",
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
         ":TestFakeOsi",
@@ -461,7 +458,7 @@ cc_test {
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     host_supported: true,
     include_dirs: [
         "packages/modules/Bluetooth/system",
@@ -521,7 +518,7 @@ cc_test {
 // csis unit tests for host
 cc_test {
     name: "bluetooth_csis_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
@@ -582,7 +579,7 @@ cc_test {
 // groups unit tests for host
 cc_test {
     name: "bluetooth_groups_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
@@ -630,7 +627,7 @@ cc_test {
 // bta unit tests for host
 cc_test {
     name: "bluetooth_vc_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
@@ -756,7 +753,7 @@ prebuilt_etc {
 // ========================================================
 cc_test {
     name: "bluetooth_le_audio_codec_manager_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
@@ -832,7 +829,7 @@ cc_test {
 
 cc_test {
     name: "bluetooth_le_audio_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
@@ -863,6 +860,7 @@ cc_test {
     srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtaLeAudioHalVerifier",
+        ":TestMockMainShim",
         ":TestStubOsi",
         "le_audio/audio_hal_client/audio_hal_client_test.cc",
         "le_audio/audio_hal_client/audio_sink_hal_client.cc",
@@ -901,6 +899,7 @@ cc_test {
         ":audio_set_scenarios_json",
     ],
     generated_headers: [
+        "BluetoothGeneratedDumpsysDataSchema_h",
         "LeAudioSetConfigSchemas_h",
     ],
     shared_libs: [
@@ -909,11 +908,13 @@ cc_test {
         "libcrypto",
         "libhidlbase",
         "liblog", // __android_log_print
+        "server_configurable_flags",
     ],
     static_libs: [
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbt-common",
+        "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
@@ -931,9 +932,8 @@ cc_test {
 
 cc_test {
     name: "bluetooth_le_audio_client_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -949,6 +949,7 @@ cc_test {
     srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtaLeAudioHalVerifier",
+        ":TestMockMainShim",
         ":TestStubOsi",
         "gatt/database.cc",
         "gatt/database_builder.cc",
@@ -959,6 +960,7 @@ cc_test {
         "le_audio/devices.cc",
         "le_audio/le_audio_client_test.cc",
         "le_audio/le_audio_health_status.cc",
+        "le_audio/le_audio_health_status_test.cc",
         "le_audio/le_audio_log_history.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
         "le_audio/le_audio_types.cc",
@@ -981,11 +983,13 @@ cc_test {
     shared_libs: [
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
+        "libbase",
         "libbinder_ndk",
         "libcrypto",
         "libfmq",
         "libhidlbase",
         "liblog",
+        "server_configurable_flags",
     ],
     static_libs: [
         "crypto_toolbox_for_tests",
@@ -998,6 +1002,7 @@ cc_test {
         "libbt_shim_ffi",
         "libchrome",
         "libevent",
+        "libflagtest",
         "libflatbuffers-cpp",
         "libgmock",
         "liblc3",
@@ -1032,56 +1037,9 @@ cc_test {
     cflags: ["-Wno-unused-parameter"],
 }
 
-// health status unit tests for host
-cc_test {
-    name: "bluetooth_le_audio_health_status_test",
-    test_suites: ["device-tests"],
-    defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
-        "fluoride_bta_defaults",
-        "mts_defaults",
-    ],
-    host_supported: true,
-    include_dirs: [
-        "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/bta/include",
-    ],
-    srcs: [
-        ":TestCommonMockFunctions",
-        //":TestMockBtif",
-        "le_audio/le_audio_health_status.cc",
-        "le_audio/le_audio_health_status_test.cc",
-    ],
-    shared_libs: [
-        "libcrypto",
-        "liblog",
-    ],
-    static_libs: [
-        "crypto_toolbox_for_tests",
-        "libbluetooth-types",
-        "libbluetooth_gd",
-        "libbt-common",
-        "libbt_shim_bridge",
-        "libbt_shim_ffi",
-        "libchrome",
-        "libgmock",
-        "libosi",
-    ],
-    sanitize: {
-        cfi: true,
-        scs: true,
-        address: true,
-        all_undefined: true,
-        integer_overflow: true,
-        diag: {
-            undefined: true,
-        },
-    },
-}
-
 cc_test {
     name: "bluetooth_test_broadcaster_state_machine",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
@@ -1139,7 +1097,7 @@ cc_test {
 
 cc_test {
     name: "bluetooth_test_broadcaster",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
@@ -1209,7 +1167,7 @@ cc_test {
 
 cc_test {
     name: "bluetooth_has_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
@@ -1271,7 +1229,7 @@ cc_test {
 
 cc_test {
     name: "bluetooth_hh_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
@@ -1288,7 +1246,6 @@ cc_test {
     ],
     srcs: [
         ":BtaDmSources",
-        ":TestCommonLogMsg",
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
         ":TestMockBtaGatt",

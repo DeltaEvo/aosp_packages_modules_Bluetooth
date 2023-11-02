@@ -118,7 +118,6 @@ cc_library_static {
         "src/btif_profile_storage.cc",
         "src/btif_rc.cc",
         "src/btif_vc.cc",
-        "src/profile_log_levels.cc",
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
@@ -262,7 +261,7 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     include_dirs: btifCommonIncludes,
     srcs: [
         "test/btif_storage_test.cc",
@@ -280,6 +279,7 @@ cc_test {
         "liblog",
         "libstatssocket",
         "libutils",
+        "server_configurable_flags",
     ],
     static_libs: [
         "android.hardware.audio.common-V2-ndk",
@@ -344,7 +344,7 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     include_dirs: btifCommonIncludes,
     srcs: [
         "src/btif_profile_queue.cc",
@@ -377,7 +377,7 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     include_dirs: btifCommonIncludes + [
         "frameworks/av/media/libaaudio/include",
     ],
@@ -413,14 +413,13 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     host_supported: true,
     test_options: {
         unit_test: true,
     },
     include_dirs: btifCommonIncludes,
     srcs: [
-        ":TestCommonLogMsg",
         ":TestCommonMockFunctions",
         ":TestMockCommon",
         ":TestMockOsi",
@@ -466,7 +465,7 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     host_supported: true,
     test_options: {
         unit_test: true,
@@ -509,10 +508,9 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     include_dirs: btifCommonIncludes,
     srcs: [
-        ":TestCommonLogMsg",
         ":TestCommonMockFunctions",
         ":TestFakeOsi",
         ":TestMockStack",
@@ -545,7 +543,7 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     include_dirs: [
         "frameworks/av/media/libaaudio/include",
         "packages/modules/Bluetooth/system",
@@ -684,7 +682,7 @@ cc_test {
         "fluoride_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     include_dirs: [
         "frameworks/av/media/libaaudio/include",
         "packages/modules/Bluetooth/system",

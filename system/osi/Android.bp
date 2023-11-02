@@ -43,6 +43,9 @@ cc_library_static {
         "fluoride_defaults",
         "fluoride_osi_defaults",
     ],
+    whole_static_libs: [
+        "bluetooth_flags_c_lib",
+    ],
     // TODO(mcchou): Remove socket_utils sources after platform specific
     // dependencies are abstracted.
     srcs: [
@@ -98,7 +101,7 @@ cc_library_static {
 // libosi unit tests for target and host
 cc_test {
     name: "net_test_osi",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "fluoride_osi_defaults",

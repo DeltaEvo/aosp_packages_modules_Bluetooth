@@ -38,15 +38,15 @@
 #include "bt_target.h"
 #include "device/include/controller.h"
 #include "device/include/interop.h"
-#include "gd/common/init_flags.h"
 #include "main/shim/dumpsys.h"
 #include "os/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_int_types.h"
-#include "stack/btm/btm_sec_int_types.h"
+#include "stack/btm/btm_sec_cb.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/btm_log_history.h"
 #include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 

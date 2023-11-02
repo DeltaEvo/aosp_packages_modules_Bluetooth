@@ -28,14 +28,8 @@
 
 #include "device/include/esco_parameters.h"
 #include "stack/btm/neighbor_inquiry.h"
-#include "stack/include/bt_hdr.h"
-#include "stack/include/bt_octets.h"
 #include "stack/include/btm_api_types.h"
-#include "stack/include/btm_log_history.h"
 #include "stack/include/btm_status.h"
-#include "stack/include/sco_client_callbacks.h"
-#include "stack/include/sdp_api.h"
-#include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
 
@@ -154,18 +148,6 @@ tBTM_STATUS BTM_RegisterForVSEvents(tBTM_VS_EVT_CB* p_cb, bool is_register);
  ******************************************************************************/
 void BTM_VendorSpecificCommand(uint16_t opcode, uint8_t param_len,
                                uint8_t* p_param_buf, tBTM_VSC_CMPL_CB* p_cb);
-
-/*******************************************************************************
- *
- * Function         BTM_SetTraceLevel
- *
- * Description      This function sets the trace level for BTM.  If called with
- *                  a value of 0xFF, it simply returns the current trace level.
- *
- * Returns          The new or current trace level
- *
- ******************************************************************************/
-uint8_t BTM_SetTraceLevel(uint8_t new_level);
 
 /*******************************************************************************
  *

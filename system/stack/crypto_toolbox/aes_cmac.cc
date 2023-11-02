@@ -23,9 +23,9 @@
  ******************************************************************************/
 
 #include <base/logging.h>
-#include <base/strings/string_number_conversions.h>
 
-#include "check.h"
+#include <algorithm>
+
 #include "aes.h"
 #include "crypto_toolbox.h"
 #include "stack/include/bt_octets.h"
@@ -50,7 +50,6 @@ Octet16 const_Rb{0x87, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
  * length of OCTET16_LEN. Result is stored in first argument.
  */
 static void xor_128(Octet16* a, const Octet16& b) {
-  CHECK(a);
   uint8_t i, *aa = a->data();
   const uint8_t* bb = b.data();
 
@@ -90,7 +89,6 @@ static void padding(Octet16* dest, uint8_t length) {
 /** utility function to left shift one bit for a 128 bits value. */
 static void leftshift_onebit(uint8_t* input, uint8_t* output) {
   uint8_t i, overflow = 0, next_overflow = 0;
-  DVLOG(2) << __func__;
   /* input[0] is LSB */
   for (i = 0; i < OCTET16_LEN; i++) {
     next_overflow = (input[i] & 0x80) ? 1 : 0;
@@ -105,15 +103,13 @@ static Octet16 cmac_aes_k_calculate(const Octet16& key) {
   Octet16 output;
   Octet16 x{0};  // zero initialized
 
-  DVLOG(2) << __func__;
-
   uint16_t i = 1;
   while (i <= cmac_cb.round) {
     /* Mi' := Mi (+) X  */
     xor_128((Octet16*)&cmac_cb.text[(cmac_cb.round - i) * OCTET16_LEN], x);
 
-    output = aes_128(key, &cmac_cb.text[(cmac_cb.round - i) * OCTET16_LEN],
-                     OCTET16_LEN);
+    output = aes_128(
+        key, *(Octet16*)&cmac_cb.text[(cmac_cb.round - i) * OCTET16_LEN]);
     x = output;
     i++;
   }
@@ -128,11 +124,8 @@ static void cmac_prepare_last_block(const Octet16& k1, const Octet16& k2) {
   //    uint8_t     x[16] = {0};
   bool flag;
 
-  DVLOG(2) << __func__;
   /* last block is a complete block set flag to 1 */
   flag = ((cmac_cb.len % OCTET16_LEN) == 0 && cmac_cb.len != 0) ? true : false;
-
-  DVLOG(2) << "flag=" << flag << " round=" << cmac_cb.round;
 
   if (flag) { /* last block is complete block */
     xor_128((Octet16*)&cmac_cb.text[0], k1);
@@ -148,10 +141,8 @@ static void cmac_prepare_last_block(const Octet16& k1, const Octet16& k2) {
  * |key| is CMAC key, expect SRK when used by SMP.
  */
 static void cmac_generate_subkey(const Octet16& key) {
-  DVLOG(2) << __func__;
-
   Octet16 zero{};
-  Octet16 p = aes_128(key, zero.data(), OCTET16_LEN);
+  Octet16 p = aes_128(key, zero);
 
   Octet16 k1, k2;
   uint8_t* pp = p.data();
@@ -187,12 +178,11 @@ Octet16 aes_cmac(const Octet16& key, const uint8_t* input, uint16_t length) {
   /* n is number of rounds */
   uint16_t n = (length + OCTET16_LEN - 1) / OCTET16_LEN;
 
-  DVLOG(2) << __func__;
-
   if (n == 0) n = 1;
   len = n * OCTET16_LEN;
 
-  DVLOG(2) << "AES128_CMAC started, allocate buffer size=" << len;
+  // VLOG(1) << "AES128_CMAC started, allocate buffer size=" << len;
+
   /* allocate a memory space of multiple of 16 bytes to hold text  */
   cmac_cb.text = (uint8_t*)alloca(len);
   cmac_cb.round = n;

@@ -104,7 +104,7 @@ cc_defaults {
 
 cc_test {
     name: "net_test_bluetooth",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "bluetooth_gtest_x86_asan_workaround",
         "mts_defaults",
@@ -129,6 +129,9 @@ cc_test {
         "libbt_shim_bridge",
         "libchrome",
         "libevent",
+    ],
+    shared_libs: [
+        "server_configurable_flags",
     ],
     cflags: ["-Wno-unused-parameter"],
 }

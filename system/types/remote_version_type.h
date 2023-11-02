@@ -1,6 +1,6 @@
-/******************************************************************************
+/*
  *
- *  Copyright 1999-2012 Broadcom Corporation
+ * Copyright 2023 The Android Open Source Project
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,21 +14,25 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- ******************************************************************************/
+ */
 
-/******************************************************************************
- *
- *  Data type declarations.
- *
- ******************************************************************************/
+#pragma once
 
-#ifndef SBC_TYPES_H
-#define SBC_TYPES_H
+#include <base/strings/stringprintf.h>
 
-#include <stdint.h>
+#include <cstdint>
+#include <string>
 
-#include "bt_target.h"
+struct tREMOTE_VERSION_INFO {
+  uint8_t lmp_version{0};
+  uint16_t lmp_subversion{0};
+  uint16_t manufacturer{0};
+  bool valid{false};
+  std::string ToString() const {
+    return (valid) ? base::StringPrintf("%02hhu-%05hu-%05hu", lmp_version,
+                                        lmp_subversion, manufacturer)
+                   : std::string("UNKNOWN");
+  }
+};
 
-#define abs32(x) (((x) >= 0) ? (x) : (-(x)))
-
-#endif
+using remote_version_info = tREMOTE_VERSION_INFO;

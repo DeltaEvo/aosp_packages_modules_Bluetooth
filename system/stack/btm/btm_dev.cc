@@ -33,7 +33,7 @@
 #include "btm_ble_int.h"
 #include "btm_ble_sec_api.h"
 #include "btm_sec_api.h"
-#include "btm_sec_int_types.h"
+#include "btm_sec_cb.h"
 #include "device/include/controller.h"
 #include "l2c_api.h"
 #include "main/shim/btm_api.h"
@@ -44,6 +44,7 @@
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btm_log_history.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;

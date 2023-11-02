@@ -26,9 +26,8 @@
 
 #include <cstdint>
 
-#include "bt_target.h"
 #include "smp_api_types.h"
-#include "types/bt_transport.h"
+#include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
 /*****************************************************************************
@@ -46,18 +45,6 @@
  *
  ******************************************************************************/
 void SMP_Init(uint8_t init_security_mode);
-
-/*******************************************************************************
- *
- * Function         SMP_SetTraceLevel
- *
- * Description      This function sets the trace level for SMP.  If called with
- *                  a value of 0xFF, it simply returns the current trace level.
- *
- * Returns          The new or current trace level
- *
- ******************************************************************************/
-uint8_t SMP_SetTraceLevel(uint8_t new_level);
 
 /*******************************************************************************
  *
