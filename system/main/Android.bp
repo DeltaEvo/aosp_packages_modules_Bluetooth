@@ -48,7 +48,6 @@ cc_library_static {
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     apex_available: [
         "com.android.btservices",
@@ -61,6 +60,7 @@ cc_library_static {
         "libbt_shim_bridge",
     ],
     header_libs: ["libbluetooth_headers"],
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_library {
@@ -142,10 +142,10 @@ cc_library_static {
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     cflags: [
         "-DBUILDCFG",
+        "-Wno-unused-parameter",
     ],
     shared_libs: [
     ],
@@ -214,6 +214,7 @@ cc_test {
         "libbluetooth-dumpsys",
         "libbluetooth-types",
         "libbluetooth_gd",
+        "libbluetooth_hci_pdl",
         "libbt-common",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
@@ -242,8 +243,8 @@ cc_test {
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     min_sdk_version: "Tiramisu",
     header_libs: ["libbluetooth_headers"],
+    cflags: ["-Wno-unused-parameter"],
 }
