@@ -1,6 +1,22 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package android.bluetooth;
 
-import static android.bluetooth.Utils.factoryResetAndCreateNewChannel;
+import static com.google.common.truth.Truth.assertThat;
 
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertisingSet;
@@ -11,82 +27,72 @@ import android.util.Log;
 
 import androidx.core.util.Pair;
 import androidx.test.core.app.ApplicationProvider;
-import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
-import static com.google.common.truth.Truth.assertThat;
-import com.google.protobuf.Empty;
+import com.android.compatibility.common.util.AdoptShellPermissionsRule;
 
-import io.grpc.Context.CancellableContext;
 import io.grpc.Deadline;
-import io.grpc.ManagedChannel;
-import io.grpc.stub.StreamObserver;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import pandora.HostGrpc;
+import java.util.Iterator;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
 import pandora.HostProto.ScanRequest;
 import pandora.HostProto.ScanningResponse;
 
-
-/**
- * Test cases for {@link AdvertiseManager}.
- */
+/** Test cases for {@link AdvertiseManager}. */
 @RunWith(AndroidJUnit4.class)
 public class LeAdvertisingTest {
-
     private static final String TAG = "LeAdvertisingTest";
 
     private static final int TIMEOUT_ADVERTISING_MS = 1000;
 
-    private static ManagedChannel mChannel;
+    @Rule public final AdoptShellPermissionsRule mPermissionRule = new AdoptShellPermissionsRule();
 
-    private static HostGrpc.HostBlockingStub mHostBlockingStub;
-
-    private static HostGrpc.HostStub mHostStub;
-
-    @BeforeClass
-    public static void setUpClass() throws Exception {
-        InstrumentationRegistry.getInstrumentation().getUiAutomation()
-                .adoptShellPermissionIdentity();
-    }
-
-    @Before
-    public void setUp() throws Exception {
-        // Cleanup previous channels and create a new channel for all successive grpc calls
-        mChannel = factoryResetAndCreateNewChannel();
-
-        mHostBlockingStub = HostGrpc.newBlockingStub(mChannel);
-        mHostStub = HostGrpc.newStub(mChannel);
-        mHostBlockingStub.withWaitForReady().readLocalAddress(Empty.getDefaultInstance());
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        // terminate the channel
-        mChannel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-    }
+    @Rule public final PandoraDevice mBumble = new PandoraDevice();
 
     @Test
     public void advertisingSet() throws Exception {
-        ScanningResponse response = startAdvertising()
-                                      .thenCompose(advAddressPair -> scanWithBumble(advAddressPair))
-                                      .join();
+        Pair<String, Integer> addressPair = startAdvertising().join();
+        ScanningResponse response = scanWithBumble(addressPair);
 
         Log.i(TAG, "scan response: " + response);
         assertThat(response).isNotNull();
     }
 
+    private ScanningResponse scanWithBumble(Pair<String, Integer> addressPair) {
+        Log.d(TAG, "scanWithBumble");
+        String address = addressPair.first;
+        int addressType = addressPair.second;
+
+        StreamObserverSpliterator<ScanningResponse> responseObserver =
+                new StreamObserverSpliterator<>();
+        Deadline deadline = Deadline.after(TIMEOUT_ADVERTISING_MS, TimeUnit.MILLISECONDS);
+        mBumble.host()
+                .withDeadline(deadline)
+                .scan(ScanRequest.newBuilder().build(), responseObserver);
+        Iterator<ScanningResponse> responseObserverIterator = responseObserver.iterator();
+        while (true) {
+            ScanningResponse scanningResponse = responseObserverIterator.next();
+            String addr =
+                    Utils.addressStringFromByteString(
+                            addressType == AdvertisingSetParameters.ADDRESS_TYPE_PUBLIC
+                                    ? scanningResponse.getPublic()
+                                    : scanningResponse.getRandom());
+
+            if (addr.equals(address)) {
+                return scanningResponse;
+            }
+        }
+    }
+
     private CompletableFuture<Pair<String, Integer>> startAdvertising() {
         CompletableFuture<Pair<String, Integer>> future =
-            new CompletableFuture<Pair<String, Integer>>();
+                new CompletableFuture<Pair<String, Integer>>();
 
         android.content.Context context = ApplicationProvider.getApplicationContext();
         BluetoothManager bluetoothManager = context.getSystemService(BluetoothManager.class);
@@ -94,8 +100,10 @@ public class LeAdvertisingTest {
 
         // Start advertising
         BluetoothLeAdvertiser leAdvertiser = bluetoothAdapter.getBluetoothLeAdvertiser();
-        AdvertisingSetParameters parameters = new AdvertisingSetParameters.Builder().
-             setOwnAddressType(AdvertisingSetParameters.ADDRESS_TYPE_RANDOM).build();
+        AdvertisingSetParameters parameters =
+                new AdvertisingSetParameters.Builder()
+                        .setOwnAddressType(AdvertisingSetParameters.ADDRESS_TYPE_RANDOM)
+                        .build();
         AdvertiseData advertiseData = new AdvertiseData.Builder().build();
         AdvertiseData scanResponse = new AdvertiseData.Builder().build();
         AdvertisingSetCallback advertisingSetCallback =
@@ -139,56 +147,9 @@ public class LeAdvertisingTest {
                         advertisingSet.getOwnAddress();
                     }
                 };
-        leAdvertiser.startAdvertisingSet(parameters, advertiseData, scanResponse,
-          null, null, 0, 0, advertisingSetCallback);
+        leAdvertiser.startAdvertisingSet(
+                parameters, advertiseData, scanResponse, null, null, 0, 0, advertisingSetCallback);
 
         return future;
-    }
-
-    private CompletableFuture<ScanningResponse> scanWithBumble(Pair<String, Integer> addressPair) {
-        final CompletableFuture<ScanningResponse> future =
-            new CompletableFuture<ScanningResponse>();
-        CancellableContext withCancellation = io.grpc.Context.current().withCancellation();
-
-        String address = addressPair.first;
-        int addressType = addressPair.second;
-
-        ScanRequest request = ScanRequest.newBuilder().build();
-        StreamObserver<ScanningResponse> responseObserver =
-                new StreamObserver<ScanningResponse>() {
-                    public void onNext(ScanningResponse response) {
-                        String addr = "";
-                        if (addressType == AdvertisingSetParameters.ADDRESS_TYPE_PUBLIC) {
-                            addr = Utils.addressStringFromByteString(response.getPublic());
-                        } else {
-                            addr = Utils.addressStringFromByteString(response.getRandom());
-                        }
-                        Log.i(TAG, "scan observer: scan response address: " + addr);
-
-                        if (addr.equals(address)) {
-                            future.complete(response);
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable e) {
-                        Log.e(TAG, "scan observer: on error " + e);
-                        future.completeExceptionally(e);
-                    }
-
-                    @Override
-                    public void onCompleted() {
-                        Log.i(TAG, "scan observer: on completed");
-                        future.complete(null);
-                    }
-                };
-
-        Deadline initialDeadline = Deadline.after(TIMEOUT_ADVERTISING_MS, TimeUnit.MILLISECONDS);
-        withCancellation.run(() -> mHostStub.withDeadline(initialDeadline)
-            .scan(request, responseObserver));
-
-        return future.whenComplete((input, exception) -> {
-            withCancellation.cancel(null);
-        });
     }
 }

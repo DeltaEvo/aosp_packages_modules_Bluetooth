@@ -41,6 +41,7 @@ import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
 import android.app.AlarmManager;
+import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanSettings;
@@ -93,7 +94,7 @@ import org.mockito.Spy;
 @RunWith(AndroidJUnit4.class)
 public class ScanManagerTest {
     private static final String TAG = ScanManagerTest.class.getSimpleName();
-    private static final int DELAY_ASYNC_MS = 10;
+    private static final int DELAY_ASYNC_MS = 40;
     private static final int DELAY_DEFAULT_SCAN_TIMEOUT_MS = 1500000;
     private static final int DELAY_SCAN_TIMEOUT_MS = 100;
     private static final int DEFAULT_SCAN_REPORT_DELAY_MS = 100;
@@ -181,7 +182,6 @@ public class ScanManagerTest {
         doReturn(mTargetContext.getPackageName()).when(mMockGattService).getPackageName();
 
         mScanManager = new ScanManager(mMockGattService, mAdapterService, mBluetoothAdapterProxy);
-        mScanManager.start();
 
         mHandler = mScanManager.getClientHandler();
         assertThat(mHandler).isNotNull();
@@ -612,7 +612,7 @@ public class ScanManagerTest {
             // Turn off screen
             sendMessageWaitForProcessed(createScreenOnOffMessage(false));
             assertThat(client.settings.getScanMode()).isEqualTo(SCAN_MODE_SCREEN_OFF);
-            // Set as backgournd app
+            // Set as background app
             sendMessageWaitForProcessed(createImportanceMessage(false));
             assertThat(client.settings.getScanMode()).isEqualTo(SCAN_MODE_SCREEN_OFF);
             // Turn on screen
@@ -1356,5 +1356,22 @@ public class ScanManagerTest {
         sendMessageWaitForProcessed(createConnectingMessage(true));
         // Since AppScanStats is null, no downgrade takes place for scan mode
         assertThat(client.settings.getScanMode()).isEqualTo(SCAN_MODE_LOW_LATENCY);
+    }
+
+    @Test
+    public void profileConnectionStateChanged_sendStartConnectionMessage() {
+        // Set scan downgrade duration through Mock
+        when(mAdapterService.getScanDowngradeDurationMillis())
+                .thenReturn((long) DELAY_SCAN_DOWNGRADE_DURATION_MS);
+        assertThat(mScanManager.mIsConnecting).isFalse();
+
+        mScanManager.handleBluetoothProfileConnectionStateChanged(
+                BluetoothProfile.A2DP,
+                BluetoothProfile.STATE_DISCONNECTED,
+                BluetoothProfile.STATE_CONNECTING);
+
+        // Wait for handleConnectingState to happen
+        TestUtils.waitForLooperToBeIdle(mHandler.getLooper());
+        assertThat(mScanManager.mIsConnecting).isTrue();
     }
 }

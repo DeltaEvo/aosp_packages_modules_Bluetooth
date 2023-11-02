@@ -214,6 +214,12 @@ public class CsipSetCoordinatorService extends ProfileService {
             }
         }
 
+        // Unregister Handler and stop all queued messages.
+        if (mHandler != null) {
+            mHandler.removeCallbacksAndMessages(null);
+            mHandler = null;
+        }
+
         mDeviceGroupIdRankMap.clear();
         mCallbacks.clear();
         mFoundSetMemberToGroupId.clear();
@@ -1022,6 +1028,11 @@ public class CsipSetCoordinatorService extends ProfileService {
 
     @VisibleForTesting
     synchronized void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
+        if (!isAvailable()) {
+            Log.w(TAG, "connectionStateChanged: service is not available");
+            return;
+        }
+
         if ((device == null) || (fromState == toState)) {
             Log.e(TAG,
                     "connectionStateChanged: unexpected invocation. device=" + device
@@ -1051,6 +1062,8 @@ public class CsipSetCoordinatorService extends ProfileService {
             mGroupIdToConnectedDevices.get(groupId).add(device);
             disableCsipIfNeeded(groupId);
         }
+        mAdapterService.handleProfileConnectionStateChange(
+                BluetoothProfile.CSIP_SET_COORDINATOR, device, fromState, toState);
     }
 
     /**

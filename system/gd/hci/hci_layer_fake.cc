@@ -104,6 +104,10 @@ CommandView TestHciLayer::GetCommand() {
   return command_packet_view;
 }
 
+void TestHciLayer::AssertNoQueuedCommand() {
+  EXPECT_TRUE(command_queue_.empty());
+}
+
 void TestHciLayer::RegisterEventHandler(
     EventCode event_code, common::ContextualCallback<void(EventView)> event_handler) {
   registered_events_[event_code] = event_handler;
@@ -179,7 +183,7 @@ void TestHciLayer::IncomingAclData(uint16_t handle, std::unique_ptr<AclBuilder> 
       hci_handler,
       common::Bind(
           [](decltype(queue_end) queue_end,
-             uint16_t handle,
+             uint16_t /* handle */,
              AclView acl2,
              std::promise<void> promise) {
             queue_end->UnregisterEnqueue();
@@ -226,7 +230,7 @@ void TestHciLayer::do_disconnect(uint16_t handle, ErrorCode reason) {
   HciLayer::Disconnect(handle, reason);
 }
 
-void TestHciLayer::ListDependencies(ModuleList* list) const {}
+void TestHciLayer::ListDependencies(ModuleList* /* list */) const {}
 void TestHciLayer::Start() {
   std::lock_guard<std::mutex> lock(mutex_);
   InitEmptyCommand();
