@@ -37,11 +37,6 @@
 
 #include <cstring>
 
-#include "embdrv/lc3/include/lc3.h"
-#include "hfp_lc3_decoder.h"
-#include "osi/include/log.h"
-#include "test/common/mock_functions.h"
-
 // Original usings
 
 // Mocked compile conditionals, if any
