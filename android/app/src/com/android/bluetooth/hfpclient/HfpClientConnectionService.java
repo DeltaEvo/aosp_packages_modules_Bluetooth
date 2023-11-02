@@ -32,6 +32,7 @@ import android.telecom.TelecomManager;
 import android.util.Log;
 
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.pbapclient.PbapClientService;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -155,6 +156,16 @@ public class HfpClientConnectionService extends ConnectionService {
             adapterService
                     .getRemoteDevices()
                     .handleHeadsetClientConnectionStateChanged(device, oldState, newState);
+        }
+        adapterService.notifyProfileConnectionStateChangeToGatt(
+                BluetoothProfile.HEADSET_CLIENT, oldState, newState);
+        if (PbapClientService.getPbapClientService() != null) {
+            PbapClientService.getPbapClientService()
+                    .handleHeadsetClientConnectionStateChanged(device, oldState, newState);
+        }
+        if (adapterService != null) {
+            adapterService.updateProfileConnectionAdapterProperties(
+                    device, BluetoothProfile.HEADSET_CLIENT, newState, oldState);
         }
     }
 

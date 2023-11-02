@@ -127,10 +127,15 @@ struct codec_manager_impl {
   }
   CodecLocation GetCodecLocation(void) const { return codec_location_; }
 
+  bool IsOffloadDualBiDirSwbSupported(void) const {
+    return offload_dual_bidirection_swb_supported_;
+  }
+
   void UpdateActiveAudioConfig(
       const types::BidirectionalPair<stream_parameters>& stream_params,
       types::BidirectionalPair<uint16_t> delays_ms,
-      std::function<void(const offload_config& config)> update_receiver) {
+      std::function<void(const offload_config& config, uint8_t direction)>
+          update_receiver) {
     if (GetCodecLocation() != le_audio::types::CodecLocation::ADSP) {
       return;
     }
@@ -161,7 +166,7 @@ struct codec_manager_impl {
               stream_params.get(direction).codec_frames_blocks_per_sdu,
           .peer_delay_ms = delays_ms.get(direction),
       };
-      update_receiver(unicast_cfg);
+      update_receiver(unicast_cfg, direction);
       stream_map.is_initial = false;
     }
   }
@@ -504,6 +509,11 @@ struct codec_manager_impl {
                                            adsp_capabilities)) {
           LOG(INFO) << "Offload supported conf, context type: " << (int)ctx_type
                     << ", settings -> " << software_audio_set_conf->name;
+          if (AudioSetConfigurationProvider::Get()
+                  ->CheckConfigurationIsDualBiDirSwb(
+                      *software_audio_set_conf)) {
+            offload_dual_bidirection_swb_supported_ = true;
+          }
           context_type_offload_config_map_[ctx_type].push_back(
               software_audio_set_conf);
         }
@@ -515,6 +525,7 @@ struct codec_manager_impl {
 
   CodecLocation codec_location_ = CodecLocation::HOST;
   bool offload_enable_ = false;
+  bool offload_dual_bidirection_swb_supported_ = false;
   types::BidirectionalPair<offloader_stream_maps_t> offloader_stream_maps;
   std::vector<le_audio::broadcast_offload_config> supported_broadcast_config;
   std::unordered_map<types::LeAudioContextType, AudioSetConfigurations>
@@ -565,10 +576,19 @@ types::CodecLocation CodecManager::GetCodecLocation(void) const {
   return pimpl_->codec_manager_impl_->GetCodecLocation();
 }
 
+bool CodecManager::IsOffloadDualBiDirSwbSupported(void) const {
+  if (!pimpl_->IsRunning()) {
+    return false;
+  }
+
+  return pimpl_->codec_manager_impl_->IsOffloadDualBiDirSwbSupported();
+}
+
 void CodecManager::UpdateActiveAudioConfig(
     const types::BidirectionalPair<stream_parameters>& stream_params,
     types::BidirectionalPair<uint16_t> delays_ms,
-    std::function<void(const offload_config& config)> update_receiver) {
+    std::function<void(const offload_config& config, uint8_t direction)>
+        update_receiver) {
   if (pimpl_->IsRunning())
     pimpl_->codec_manager_impl_->UpdateActiveAudioConfig(
         stream_params, delays_ms, update_receiver);

@@ -2,7 +2,7 @@
 
 use bt_topshim::btif::{
     BaseCallbacks, BaseCallbacksDispatcher, BluetoothInterface, BluetoothProperty, BtAclState,
-    BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
+    BtAddrType, BtBondState, BtConnectionDirection, BtConnectionState, BtDeviceType, BtDiscMode,
     BtDiscoveryState, BtHciErrorCode, BtPinCode, BtPropertyType, BtScanMode, BtSspVariant, BtState,
     BtStatus, BtThreadEvent, BtTransport, BtVendorProductInfo, DisplayAddress, RawAddress,
     ToggleableProfile, Uuid, Uuid128Bit,
@@ -21,6 +21,7 @@ use bt_topshim::{
 
 use bt_utils::array_utils;
 use bt_utils::cod::{is_cod_hid_combo, is_cod_hid_keyboard};
+use bt_utils::uhid::{UHid, BD_ADDR_DEFAULT};
 use btif_macros::{btif_callback, btif_callbacks_dispatcher};
 
 use log::{debug, warn};
@@ -46,7 +47,7 @@ use crate::bluetooth_media::{BluetoothMedia, IBluetoothMedia, MediaActions};
 use crate::callbacks::Callbacks;
 use crate::socket_manager::SocketActions;
 use crate::uuid::{Profile, UuidHelper, HOGP};
-use crate::{Message, RPCProxy, SuspendMode};
+use crate::{APIMessage, BluetoothAPI, Message, RPCProxy, SuspendMode};
 
 pub(crate) const FLOSS_VER: u16 = 0x0001;
 const DEFAULT_DISCOVERY_TIMEOUT_MS: u64 = 12800;
@@ -192,6 +193,9 @@ pub trait IBluetooth {
 
     /// Gets the vendor and product information of the remote device.
     fn get_remote_vendor_product_info(&self, device: BluetoothDevice) -> BtVendorProductInfo;
+
+    /// Get the address type of the remote device.
+    fn get_remote_address_type(&self, device: BluetoothDevice) -> BtAddrType;
 
     /// Returns a list of connected devices.
     fn get_connected_devices(&self) -> Vec<BluetoothDevice>;
@@ -506,12 +510,16 @@ pub struct Bluetooth {
     sdp: Option<Sdp>,
     state: BtState,
     tx: Sender<Message>,
+    api_tx: Sender<APIMessage>,
     // Internal API members
     discoverable_timeout: Option<JoinHandle<()>>,
     cancelling_devices: HashSet<RawAddress>,
 
     /// Used to notify signal handler that we have turned off the stack.
     sig_notifier: Arc<SigData>,
+
+    /// Virtual uhid device created to keep bluetooth as a wakeup source.
+    uhid_wakeup_source: UHid,
 }
 
 impl Bluetooth {
@@ -520,6 +528,7 @@ impl Bluetooth {
         adapter_index: i32,
         hci_index: i32,
         tx: Sender<Message>,
+        api_tx: Sender<APIMessage>,
         sig_notifier: Arc<SigData>,
         intf: Arc<Mutex<BluetoothInterface>>,
         bluetooth_admin: Arc<Mutex<Box<BluetoothAdmin>>>,
@@ -557,10 +566,12 @@ impl Bluetooth {
             sdp: None,
             state: BtState::Off,
             tx,
+            api_tx,
             // Internal API members
             discoverable_timeout: None,
             cancelling_devices: HashSet::new(),
             sig_notifier,
+            uhid_wakeup_source: UHid::new(),
         }
     }
 
@@ -1106,6 +1117,38 @@ impl Bluetooth {
             self.start_discovery();
         }
     }
+
+    /// Return if there are wake-allowed device in bonded status.
+    fn get_wake_allowed_device_bonded(&self) -> bool {
+        self.get_bonded_devices().into_iter().any(|d| self.get_remote_wake_allowed(d))
+    }
+
+    /// Powerd recognizes bluetooth activities as valid wakeup sources if powerd keeps bluetooth in
+    /// the monitored path. This only happens if there is at least one valid wake-allowed BT device
+    /// connected during the suspending process. If there is no BT devices connected at any time
+    /// during the suspending process, the wakeup count will be lost, and system goes to dark
+    /// resume instead of full resume.
+    /// Bluetooth stack disconnects all physical bluetooth HID devices for suspend, so a virtual
+    /// uhid device is necessary to keep bluetooth as a valid wakeup source.
+    fn create_uhid_for_suspend_wakesource(&mut self) {
+        if !self.uhid_wakeup_source.is_empty() {
+            return;
+        }
+        let adapter_addr = self.get_address().to_lowercase();
+        match self.uhid_wakeup_source.create(
+            "suspend uhid".to_string(),
+            adapter_addr,
+            String::from(BD_ADDR_DEFAULT),
+        ) {
+            Err(e) => log::error!("Fail to create uhid {}", e),
+            Ok(_) => (),
+        }
+    }
+
+    /// Clear the UHID device.
+    fn clear_uhid(&mut self) {
+        self.uhid_wakeup_source.clear();
+    }
 }
 
 #[btif_callbacks_dispatcher(dispatch_base_callbacks, BaseCallbacks)]
@@ -1254,6 +1297,8 @@ impl BtifBluetoothCallbacks for Bluetooth {
                     _ => (),
                 }
 
+                self.clear_uhid();
+
                 // Let the signal notifier know we are turned off.
                 *self.sig_notifier.enabled.lock().unwrap() = false;
                 self.sig_notifier.enabled_notify.notify_all();
@@ -1262,6 +1307,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
             BtState::On => {
                 // Initialize media
                 self.bluetooth_media.lock().unwrap().initialize();
+
+                // Initialize core profiles
+                self.init_profiles();
 
                 // Trigger properties update
                 self.intf.lock().unwrap().get_adapter_properties();
@@ -1279,6 +1327,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 // Ensure device is connectable so that disconnected device can reconnect
                 self.set_connectable(true);
 
+                if self.get_wake_allowed_device_bonded() {
+                    self.create_uhid_for_suspend_wakesource();
+                }
                 // Notify the signal notifier that we are turned on.
                 *self.sig_notifier.enabled.lock().unwrap() = true;
                 self.sig_notifier.enabled_notify.notify_all();
@@ -1291,8 +1342,14 @@ impl BtifBluetoothCallbacks for Bluetooth {
 
                 // Inform the rest of the stack we're ready.
                 let txl = self.tx.clone();
+                let api_txl = self.api_tx.clone();
                 tokio::spawn(async move {
                     let _ = txl.send(Message::AdapterReady).await;
+                });
+                tokio::spawn(async move {
+                    let _ = api_txl.send(APIMessage::IsReady(BluetoothAPI::Adapter)).await;
+                    // TODO(b:300202052) make sure media interface is exposed after initialized
+                    let _ = api_txl.send(APIMessage::IsReady(BluetoothAPI::Media)).await;
                 });
             }
         }
@@ -1510,6 +1567,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
             self.found_devices
                 .entry(address.clone())
                 .and_modify(|d| d.bond_state = bond_state.clone());
+            if !self.get_wake_allowed_device_bonded() {
+                self.clear_uhid();
+            }
         }
         // We will only insert into the bonded list after bonding is complete
         else if &bond_state == &BtBondState::Bonded && !self.bonded_devices.contains_key(&address)
@@ -1536,6 +1596,9 @@ impl BtifBluetoothCallbacks for Bluetooth {
             device.services_resolved = false;
             self.bonded_devices.insert(address.clone(), device);
             self.fetch_remote_uuids(device_info);
+            if self.get_wake_allowed_device_bonded() {
+                self.create_uhid_for_suspend_wakesource();
+            }
         } else {
             // If we're bonding, we need to update the found devices list
             self.found_devices
@@ -2311,6 +2374,13 @@ impl IBluetooth for Bluetooth {
         }
     }
 
+    fn get_remote_address_type(&self, device: BluetoothDevice) -> BtAddrType {
+        match self.get_remote_device_property(&device, &BtPropertyType::RemoteAddrType) {
+            Some(BluetoothProperty::RemoteAddrType(addr_type)) => addr_type,
+            _ => BtAddrType::Unknown,
+        }
+    }
+
     fn get_connected_devices(&self) -> Vec<BluetoothDevice> {
         let bonded_connected: HashMap<String, BluetoothDevice> = self
             .bonded_devices
@@ -2758,20 +2828,13 @@ impl BtifHHCallbacks for Bluetooth {
         );
     }
 
-    fn get_report(
-        &mut self,
-        mut address: RawAddress,
-        status: BthhStatus,
-        mut data: Vec<u8>,
-        size: i32,
-    ) {
+    fn get_report(&mut self, address: RawAddress, status: BthhStatus, _data: Vec<u8>, size: i32) {
         debug!(
             "Hid host got report: Address({}) Status({:?}) Report Size({:?})",
             DisplayAddress(&address),
             status,
             size
         );
-        self.hh.as_ref().unwrap().get_report_reply(&mut address, status, &mut data, size as u16);
     }
 
     fn handshake(&mut self, address: RawAddress, status: BthhStatus) {

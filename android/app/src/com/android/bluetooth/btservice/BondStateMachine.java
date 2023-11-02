@@ -273,9 +273,10 @@ final class BondStateMachine extends StateMachine {
                     }
 
                     BluetoothClass btClass = dev.getBluetoothClass();
-                    int btDeviceClass = btClass.getDeviceClass();
-                    if (btDeviceClass == BluetoothClass.Device.PERIPHERAL_KEYBOARD || btDeviceClass
-                            == BluetoothClass.Device.PERIPHERAL_KEYBOARD_POINTING) {
+                    int btDeviceClass = btClass == null ? 0 : btClass.getDeviceClass();
+                    if (btDeviceClass == BluetoothClass.Device.PERIPHERAL_KEYBOARD
+                            || btDeviceClass
+                                    == BluetoothClass.Device.PERIPHERAL_KEYBOARD_POINTING) {
                         // Its a keyboard. Follow the HID spec recommendation of creating the
                         // passkey and displaying it to the user. If the keyboard doesn't follow
                         // the spec recommendation, check if the keyboard has a fixed PIN zero
@@ -342,6 +343,14 @@ final class BondStateMachine extends StateMachine {
                 return true;
             }
         }
+
+        Log.w(
+                TAG,
+                dev.getAddressForLogging()
+                        + " cannot be removed since "
+                        + ((devProp == null)
+                                ? "properties are empty"
+                                : "bond state is " + devProp.getBondState()));
         return false;
     }
 

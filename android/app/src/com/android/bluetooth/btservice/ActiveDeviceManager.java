@@ -198,7 +198,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
      * Called when active state of audio profiles changed
      *
      * @param profile The Bluetooth profile of which active state changed
-     * @param device The device currently activated. {@code null} if no A2DP device activated
+     * @param device The device currently activated. {@code null} if no device is active
      */
     public void profileActiveDeviceChanged(int profile, BluetoothDevice device) {
         switch (profile) {
@@ -884,12 +884,13 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
             Log.d(TAG, "setHearingAidActiveDevice(" + device + ")"
                     + (device == null ? " hasFallbackDevice=" + hasFallbackDevice : ""));
         }
-        synchronized (mLock) {
-            final HearingAidService hearingAidService = mFactory.getHearingAidService();
-            if (hearingAidService == null) {
-                return false;
-            }
 
+        final HearingAidService hearingAidService = mFactory.getHearingAidService();
+        if (hearingAidService == null) {
+            return false;
+        }
+
+        synchronized (mLock) {
             if (device == null) {
                 if (!hearingAidService.removeActiveDevice(!hasFallbackDevice)) {
                     return false;
@@ -972,6 +973,7 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
      *
      * @return true when the fallback device is activated, false otherwise
      */
+    @GuardedBy("mLock")
     private boolean setFallbackDeviceActiveLocked() {
         if (DBG) {
             Log.d(TAG, "setFallbackDeviceActive");
@@ -1012,13 +1014,13 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         A2dpService a2dpService = mFactory.getA2dpService();
         BluetoothDevice a2dpFallbackDevice = null;
         if (a2dpService != null) {
-            a2dpFallbackDevice = getA2dpFallbackDevice();
+            a2dpFallbackDevice = a2dpService.getFallbackDevice();
         }
 
         HeadsetService headsetService = mFactory.getHeadsetService();
         BluetoothDevice headsetFallbackDevice = null;
         if (headsetService != null) {
-            headsetFallbackDevice = getHfpFallbackDevice();
+            headsetFallbackDevice = headsetService.getFallbackDevice();
         }
 
         List<BluetoothDevice> connectedDevices = new ArrayList<>();
@@ -1128,50 +1130,6 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         }
     }
 
-    /** Retrieves the most recently connected device in the A2DP connected devices list. */
-    public BluetoothDevice getA2dpFallbackDevice() {
-        DatabaseManager dbManager = mAdapterService.getDatabase();
-        synchronized (mLock) {
-            return dbManager != null
-                    ? dbManager.getMostRecentlyConnectedDevicesInList(mA2dpConnectedDevices)
-                    : null;
-        }
-    }
-
-    /** Retrieves the most recently connected device in the A2DP connected devices list. */
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    public BluetoothDevice getHfpFallbackDevice() {
-        DatabaseManager dbManager = mAdapterService.getDatabase();
-        return dbManager != null
-                ? dbManager.getMostRecentlyConnectedDevicesInList(getHfpFallbackCandidates())
-                : null;
-    }
-
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-    List<BluetoothDevice> getHfpFallbackCandidates() {
-        List<BluetoothDevice> fallbackCandidates;
-        synchronized (mLock) {
-            fallbackCandidates = new ArrayList<>(mHfpConnectedDevices);
-        }
-        List<BluetoothDevice> uninterestedCandidates = new ArrayList<>();
-        for (BluetoothDevice device : fallbackCandidates) {
-            byte[] deviceType =
-                    mDbManager.getCustomMeta(device, BluetoothDevice.METADATA_DEVICE_TYPE);
-            BluetoothClass deviceClass = device.getBluetoothClass();
-            if ((deviceClass != null
-                            && deviceClass.getMajorDeviceClass()
-                                    == BluetoothClass.Device.WEARABLE_WRIST_WATCH)
-                    || (deviceType != null
-                            && BluetoothDevice.DEVICE_TYPE_WATCH.equals(new String(deviceType)))) {
-                uninterestedCandidates.add(device);
-            }
-        }
-        for (BluetoothDevice device : uninterestedCandidates) {
-            fallbackCandidates.remove(device);
-        }
-        return fallbackCandidates;
-    }
-
     @VisibleForTesting
     BluetoothDevice getA2dpActiveDevice() {
         return mA2dpActiveDevice;
@@ -1192,7 +1150,8 @@ public class ActiveDeviceManager implements AdapterService.BluetoothStateCallbac
         return mLeAudioActiveDevice;
     }
 
-    long getHearingAidActiveHiSyncIdLocked() {
+    @GuardedBy("mLock")
+    private long getHearingAidActiveHiSyncIdLocked() {
         final HearingAidService hearingAidService = mFactory.getHearingAidService();
         if (hearingAidService != null && !mHearingAidActiveDevices.isEmpty()) {
             return hearingAidService.getHiSyncId(mHearingAidActiveDevices.iterator().next());

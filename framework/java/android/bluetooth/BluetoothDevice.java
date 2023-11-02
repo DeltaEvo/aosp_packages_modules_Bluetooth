@@ -99,12 +99,29 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     private static final boolean DBG = false;
 
     /**
-     * Connection state bitmask as returned by getConnectionState.
+     * Connection state bitmask disconnected bit as returned by getConnectionState.
+     *
+     * @hide
      */
-    private static final int CONNECTION_STATE_DISCONNECTED = 0;
-    private static final int CONNECTION_STATE_CONNECTED = 1;
-    private static final int CONNECTION_STATE_ENCRYPTED_BREDR = 2;
-    private static final int CONNECTION_STATE_ENCRYPTED_LE = 4;
+    public static final int CONNECTION_STATE_DISCONNECTED = 0;
+    /**
+     * Connection state bitmask connected bit as returned by getConnectionState.
+     *
+     * @hide
+     */
+    public static final int CONNECTION_STATE_CONNECTED = 1;
+    /**
+     * Connection state bitmask encrypted BREDR bit as returned by getConnectionState.
+     *
+     * @hide
+     */
+    public static final int CONNECTION_STATE_ENCRYPTED_BREDR = 2;
+    /**
+     * Connection state bitmask encrypted LE bit as returned by getConnectionState.
+     *
+     * @hide
+     */
+    public static final int CONNECTION_STATE_ENCRYPTED_LE = 4;
 
     /**
      * Sentinel error value for this class. Guaranteed to not equal any other
@@ -1765,7 +1782,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             } catch (RemoteException e) {
                 Log.e(TAG, "", e);
-                throw e.rethrowFromSystemServer();
+                throw e.rethrowAsRuntimeException();
             }
         }
         return defaultValue;
@@ -2202,7 +2219,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             } catch (RemoteException e) {
                 Log.e(TAG, "", e);
-                throw e.rethrowFromSystemServer();
+                throw e.rethrowAsRuntimeException();
             }
         }
         return defaultValue;
@@ -2249,7 +2266,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             } catch (RemoteException e) {
                 Log.e(TAG, "", e);
-                throw e.rethrowFromSystemServer();
+                throw e.rethrowAsRuntimeException();
             }
         }
         return defaultValue;
@@ -3497,7 +3514,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 Log.e(TAG, e.toString() + "\n" + Log.getStackTraceString(new Throwable()));
             } catch (RemoteException e) {
                 Log.e(TAG, "", e);
-                throw e.rethrowFromSystemServer();
+                throw e.rethrowAsRuntimeException();
             }
         }
         return defaultValue;
