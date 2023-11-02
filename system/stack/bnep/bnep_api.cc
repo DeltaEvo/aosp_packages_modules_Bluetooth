@@ -24,17 +24,16 @@
 
 #include "bnep_api.h"
 
+#include <base/logging.h>
 #include <string.h>
 
 #include "bnep_int.h"
 #include "bta/include/bta_api.h"
 #include "osi/include/allocator.h"
-#include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_psm_types.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 using bluetooth::Uuid;
 
@@ -388,7 +387,10 @@ tBNEP_RESULT BNEP_WriteBuf(uint16_t handle, const RawAddress& p_dest_addr,
         protocol = 0;
       else {
         new_len += 4;
-        if (new_len > org_len) return BNEP_IGNORE_CMD;
+        if (new_len > org_len) {
+          osi_free(p_buf);
+          return BNEP_IGNORE_CMD;
+        }
         p_data[2] = 0;
         p_data[3] = 0;
       }
