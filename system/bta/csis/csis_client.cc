@@ -42,6 +42,7 @@
 #include "main/shim/shim.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/crypto_toolbox/crypto_toolbox.h"
@@ -904,8 +905,6 @@ class CsisClientImpl : public CsisClient {
 
   void OnGattWriteCcc(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
                       void* user_data) {
-    LOG(INFO) << __func__ << " handle=" << loghex(handle);
-
     auto device = FindDeviceByConnId(conn_id);
     if (device == nullptr) {
       LOG(INFO) << __func__ << " unknown conn_id=" << loghex(conn_id);
@@ -917,6 +916,29 @@ class CsisClientImpl : public CsisClient {
       LOG_INFO("Database out of sync for %s",
                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
       ClearDeviceInformationAndStartSearch(device);
+      return;
+    }
+
+    if (status == GATT_SUCCESS) {
+      LOG_INFO("Successfully registered on ccc: 0x%04x, device: %s", handle,
+               ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      return;
+    }
+
+    LOG_ERROR(
+        "Failed to register for indications: 0x%04x, device: %s, status: "
+        "0x%02x",
+        handle, ADDRESS_TO_LOGGABLE_CSTR(device->addr), status);
+
+    auto val_handle = device->FindValueHandleByCccHandle(handle);
+    if (!val_handle) {
+      LOG_ERROR("Unknown ccc handle: 0x%04x, device: %s", handle,
+                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      return;
+    }
+
+    if (val_handle != GAP_INVALID_HANDLE) {
+      BTA_GATTC_DeregisterForNotifications(gatt_if_, device->addr, val_handle);
     }
   }
 
@@ -1292,6 +1314,18 @@ class CsisClientImpl : public CsisClient {
       return;
     }
 
+    /* Make sure device is not already bonded which could
+     * be a case for dual mode devices where
+     */
+    tBTM_SEC_DEV_REC* p_dev = btm_find_dev(result->bd_addr);
+    if (p_dev && p_dev->is_le_link_key_known()) {
+      LOG_VERBOSE(
+          "Device %s already bonded. Identity address: %s",
+          ADDRESS_TO_LOGGABLE_CSTR(result->bd_addr),
+          ADDRESS_TO_LOGGABLE_CSTR(p_dev->ble.identity_address_with_type));
+      return;
+    }
+
     auto all_rsi = GetAllRsiFromAdvertising(result);
     if (all_rsi.empty()) return;
 
@@ -1354,6 +1388,8 @@ class CsisClientImpl : public CsisClient {
           if (instance == nullptr) return;
 
           if (event == BTA_DM_INQ_CMPL_EVT) {
+            power_telemetry::GetInstance().LogBleScan(
+                static_cast<int>(p_data->inq_cmpl.num_resps));
             LOG(INFO) << "BLE observe complete. Num Resp: "
                       << static_cast<int>(p_data->inq_cmpl.num_resps);
             csis_ad_type_filter_set(false);
@@ -1430,6 +1466,18 @@ class CsisClientImpl : public CsisClient {
       return;
     }
 
+    /* Make sure device is not already bonded which could
+     * be a case for dual mode devices where
+     */
+    tBTM_SEC_DEV_REC* p_dev = btm_find_dev(result->bd_addr);
+    if (p_dev && p_dev->is_le_link_key_known()) {
+      LOG_VERBOSE(
+          "Device %s already bonded. Identity address: %s",
+          ADDRESS_TO_LOGGABLE_CSTR(result->bd_addr),
+          ADDRESS_TO_LOGGABLE_CSTR(p_dev->ble.identity_address_with_type));
+      return;
+    }
+
     auto all_rsi = GetAllRsiFromAdvertising(result);
     if (all_rsi.empty()) return;
 
@@ -1466,6 +1514,8 @@ class CsisClientImpl : public CsisClient {
           if (instance == nullptr) return;
 
           if (event == BTA_DM_INQ_CMPL_EVT) {
+            power_telemetry::GetInstance().LogBleScan(
+                static_cast<int>(p_data->inq_cmpl.num_resps));
             DLOG(INFO) << "BLE observe complete. Num Resp: "
                        << static_cast<int>(p_data->inq_cmpl.num_resps);
             return;
@@ -1642,9 +1692,9 @@ class CsisClientImpl : public CsisClient {
                           const gatt::Service* service,
                           const bluetooth::Uuid& context_uuid,
                           bool is_last_instance) {
-    DLOG(INFO) << __func__ << " service handle: " << loghex(service->handle)
-               << " end handle: " << loghex(service->end_handle)
-               << " uuid: " << context_uuid;
+    LOG_DEBUG("service handle: 0x%04x, end handle: 0x%04x, uuid: %s",
+              service->handle, service->end_handle,
+              context_uuid.ToString().c_str());
 
     auto csis_inst = std::make_shared<CsisInstance>(
         (uint16_t)service->handle, (uint16_t)service->end_handle, context_uuid);
@@ -1654,6 +1704,8 @@ class CsisClientImpl : public CsisClient {
     if (group_id != bluetooth::groups::kGroupUnknown)
       csis_inst->SetGroupId(group_id);
 
+    device->SetCsisInstance(csis_inst->svc_data.start_handle, csis_inst);
+
     /* Initially validate and store GATT service discovery data */
     for (const gatt::Characteristic& charac : service->characteristics) {
       if (charac.uuid == kCsisLockUuid) {
@@ -1661,8 +1713,8 @@ class CsisClientImpl : public CsisClient {
         uint16_t ccc_handle =
             FindCccHandle(device->conn_id, charac.value_handle);
         if (ccc_handle == GAP_INVALID_HANDLE) {
-          DLOG(ERROR) << __func__
-                      << ": no HAS Active Preset CCC descriptor found!";
+          LOG_ERROR("no HAS Active Preset CCC descriptor found!");
+          device->RemoveCsisInstance(group_id);
           return false;
         }
         csis_inst->svc_data.lock_handle.val_hdl = charac.value_handle;
@@ -1671,15 +1723,17 @@ class CsisClientImpl : public CsisClient {
         SubscribeForNotifications(device->conn_id, device->addr,
                                   charac.value_handle, ccc_handle);
 
-        DLOG(INFO) << __func__ << " Lock UUID found handle: "
-                   << loghex(csis_inst->svc_data.lock_handle.val_hdl)
-                   << " ccc handle: "
-                   << loghex(csis_inst->svc_data.lock_handle.ccc_hdl);
+        LOG_DEBUG(
+            "Lock UUID found handle: 0x%04x, ccc handle: 0x%04x, device: %s",
+            csis_inst->svc_data.lock_handle.val_hdl,
+            csis_inst->svc_data.lock_handle.ccc_hdl,
+            ADDRESS_TO_LOGGABLE_CSTR(device->addr));
       } else if (charac.uuid == kCsisRankUuid) {
         csis_inst->svc_data.rank_handle = charac.value_handle;
 
-        DLOG(INFO) << __func__ << " Rank UUID found handle: "
-                   << loghex(csis_inst->svc_data.rank_handle);
+        LOG_DEBUG("Rank UUID found handle: 0x%04x, device: %s",
+                  csis_inst->svc_data.rank_handle,
+                  ADDRESS_TO_LOGGABLE_CSTR(device->addr));
       } else if (charac.uuid == kCsisSirkUuid) {
         /* Find the optional CCC descriptor */
         uint16_t ccc_handle =
@@ -1691,10 +1745,11 @@ class CsisClientImpl : public CsisClient {
           SubscribeForNotifications(device->conn_id, device->addr,
                                     charac.value_handle, ccc_handle);
 
-        DLOG(INFO) << __func__ << " SIRK UUID found handle: "
-                   << loghex(csis_inst->svc_data.sirk_handle.val_hdl)
-                   << " ccc handle: "
-                   << loghex(csis_inst->svc_data.sirk_handle.ccc_hdl);
+        LOG_DEBUG(
+            "SIRK UUID found handle: 0x%04x, ccc handle: 0x%04x, device: %s",
+            csis_inst->svc_data.sirk_handle.val_hdl,
+            csis_inst->svc_data.sirk_handle.ccc_hdl,
+            ADDRESS_TO_LOGGABLE_CSTR(device->addr));
       } else if (charac.uuid == kCsisSizeUuid) {
         /* Find the optional CCC descriptor */
         uint16_t ccc_handle =
@@ -1706,10 +1761,11 @@ class CsisClientImpl : public CsisClient {
           SubscribeForNotifications(device->conn_id, device->addr,
                                     charac.value_handle, ccc_handle);
 
-        DLOG(INFO) << __func__ << " Size UUID found handle: "
-                   << loghex(csis_inst->svc_data.size_handle.val_hdl)
-                   << " ccc handle: "
-                   << loghex(csis_inst->svc_data.size_handle.ccc_hdl);
+        LOG_DEBUG(
+            "Size UUID found handle: 0x%04x, ccc handle: 0x%04x, device: %s",
+            csis_inst->svc_data.size_handle.val_hdl,
+            csis_inst->svc_data.size_handle.ccc_hdl,
+            ADDRESS_TO_LOGGABLE_CSTR(device->addr));
       }
     }
 
@@ -1719,9 +1775,9 @@ class CsisClientImpl : public CsisClient {
     if (csis_inst->svc_data.sirk_handle.val_hdl == GAP_INVALID_HANDLE) {
       /* We have some characteristics but all dependencies are not satisfied */
       LOG(ERROR) << __func__ << " Service has a broken structure.";
+      device->RemoveCsisInstance(group_id);
       return false;
     }
-    device->SetCsisInstance(csis_inst->svc_data.start_handle, csis_inst);
 
     bool notify_after_sirk_read = false;
     bool notify_after_lock_read = false;
@@ -2123,10 +2179,10 @@ class CsisClientImpl : public CsisClient {
     UINT16_TO_STREAM(value_ptr, GATT_CHAR_CLIENT_CONFIG_NOTIFICATION);
     BtaGattQueue::WriteDescriptor(
         conn_id, ccc_handle, std::move(value), GATT_WRITE,
-        [](uint16_t conn_id, tGATT_STATUS status, uint16_t value_handle,
-           uint16_t len, const uint8_t* value, void* user_data) {
+        [](uint16_t conn_id, tGATT_STATUS status, uint16_t handle, uint16_t len,
+           const uint8_t* value, void* user_data) {
           if (instance)
-            instance->OnGattWriteCcc(conn_id, status, value_handle, user_data);
+            instance->OnGattWriteCcc(conn_id, status, handle, user_data);
         },
         nullptr);
   }
