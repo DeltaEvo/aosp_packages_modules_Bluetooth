@@ -5,7 +5,8 @@
       "name": "CtsBluetoothTestCases"
     },
     {
-      "name": "BluetoothInstrumentationTests"
+      "name": "BluetoothInstrumentationTests",
+      "keywords": ["internal"]
     },
     //{
     //  "name": "GoogleBluetoothInstrumentationTests"
@@ -22,428 +23,248 @@
     //  "name": "bluetooth-test-audio-hal-interface"
     //},
     {
-      "name": "net_test_audio_a2dp_hw"
-    },
-    {
-      "name": "net_test_audio_hearing_aid_hw"
-    },
-    {
-      "name": "net_test_bluetooth"
-    },
-    {
-      "name": "net_test_bta"
-    },
-    {
-      "name": "net_test_bta_security"
-    },
-    {
-      "name": "net_test_btif"
-    },
-    {
-      "name": "net_test_btif_hf_client_service"
-    },
-    {
-      "name": "net_test_btif_profile_queue"
-    },
-    {
-      "name": "net_test_btif_avrcp_audio_track"
-    },
-    {
-      "name": "net_test_device"
-    },
-    {
-      "name": "net_test_device_iot_config"
-    },
-    {
-      "name": "net_test_gatt_conn_multiplexing"
-    },
-    {
-      "name": "net_test_hci"
-    },
-    {
-      "name": "net_test_stack"
-    },
-    {
-      "name": "net_test_stack_a2dp_codecs_native"
-    },
-    {
-      "name": "net_test_stack_ad_parser"
-    },
-    {
       "name": "net_test_audio_a2dp_hw",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_audio_hearing_aid_hw",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_bluetooth",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_bta",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_bta_security",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif_hf_client_service",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif_profile_queue",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif_avrcp_audio_track",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_device",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_device_iot_config",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_gatt_conn_multiplexing",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_hci",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_a2dp_codecs_native",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_ad_parser",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     // go/a-unit-tests tests (unit_test: true)
     // Thoses test run on the host in the CI automatically.
     // Run the one that are available on the device on the
     // device as well
     {
-      "name": "bluetooth_csis_test"
-    },
-    {
-      "name": "bluetooth_flatbuffer_tests"
-    },
-    {
-      "name": "bluetooth_groups_test"
-    },
-    {
-      "name": "bluetooth_has_test"
-    },
-    {
-      "name": "bluetooth_hh_test"
-    },
-    {
-      "name": "bluetooth_le_audio_client_test"
-    },
-    {
-      "name": "bluetooth_le_audio_test"
-    },
-    {
-      "name": "bluetooth_packet_parser_test"
-    },
-    {
-      "name": "bluetooth_test_broadcaster"
-    },
-    {
-      "name": "bluetooth_test_broadcaster_state_machine"
-    },
-    {
-      "name": "bluetooth_test_common"
-    },
-    {
-      "name": "bluetooth_test_gd_unit"
-    },
-    {
-      "name": "bluetooth_test_sdp"
-    },
-    {
-      "name": "bluetooth_vc_test"
-    },
-    {
-      "name": "bt_host_test_bta"
-    },
-    {
-      "name": "libaptx_enc_tests"
-    },
-    {
-      "name": "libaptxhd_enc_tests"
-    },
-    {
-      "name": "net_test_avrcp"
-    },
-    {
-      "name": "net_test_btcore"
-    },
-    {
-      "name": "net_test_btif_config_cache"
-    },
-    {
-      "name": "net_test_btif_hh"
-    },
-    {
-      "name": "net_test_btif_rc"
-    },
-    {
-      "name": "net_test_btif_stack"
-    },
-    {
-      "name": "net_test_btm_iso"
-    },
-    {
-      "name": "net_test_btpackets"
-    },
-    {
-      "name": "net_test_eatt"
-    },
-    {
-      "name": "net_test_main_shim"
-    },
-    {
-      "name": "net_test_osi"
-    },
-    {
-      "name": "net_test_performance"
-    },
-    {
-      "name": "net_test_stack_a2dp_native"
-    },
-    {
-      "name": "net_test_stack_acl"
-    },
-    {
-      "name": "net_test_stack_avdtp"
-    },
-    {
-      "name": "net_test_stack_btm"
-    },
-    {
-      "name": "net_test_stack_btu"
-    },
-    {
-      "name": "net_test_stack_gatt"
-    },
-    {
-      "name": "net_test_stack_gatt_native"
-    },
-    {
-      "name": "net_test_stack_gatt_sr_hash_native"
-    },
-    {
-      "name": "net_test_stack_hci"
-    },
-    {
-      "name": "net_test_stack_hid"
-    },
-    {
-      "name": "net_test_stack_l2cap"
-    },
-    {
-      "name": "net_test_stack_rfcomm"
-    },
-    {
-      "name": "net_test_stack_sdp"
-    },
-    {
-      "name": "net_test_stack_smp"
-    },
-    {
-      "name": "net_test_types"
-    },
-    {
       "name": "bluetooth_csis_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_flatbuffer_tests",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_groups_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_has_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_hh_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_le_audio_client_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_le_audio_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_packet_parser_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_test_broadcaster",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_test_broadcaster_state_machine",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_test_common",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_test_gd_unit",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_test_sdp",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bluetooth_vc_test",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "bt_host_test_bta",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "libaptx_enc_tests",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "libaptxhd_enc_tests",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_avrcp",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btcore",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif_config_cache",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif_hh",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif_rc",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btif_stack",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btm_iso",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_btpackets",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_eatt",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_main_shim",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_osi",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_performance",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_a2dp_native",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_acl",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_avdtp",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_btm",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_btu",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_gatt",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_gatt_native",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_gatt_sr_hash_native",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_hci",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_hid",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_l2cap",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_rfcomm",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_sdp",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_stack_smp",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     },
     {
       "name": "net_test_types",
-      "keywords": ["cf"]
+      "keywords": ["internal"]
     }
   ],
   "hwasan-presubmit": [
