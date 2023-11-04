@@ -122,7 +122,6 @@ cc_library_static {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     local_include_dirs: [
         "include",
@@ -161,6 +160,7 @@ cc_library_static {
     ],
     cflags: [
         "-DBUILDCFG",
+        "-Wno-unused-parameter",
     ],
     apex_available: [
         "com.android.btservices",
@@ -191,6 +191,7 @@ cc_library_static {
         "src/btif_gatt_test.cc",
         "src/btif_gatt_util.cc",
         "src/btif_iot_config.cc",
+        "src/btif_jni_task.cc",
         "src/btif_keystore.cc",
         "src/btif_metrics_logging.cc",
         "src/btif_profile_queue.cc",
@@ -210,10 +211,12 @@ cc_library_static {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     target: {
         android: {
+            whole_static_libs: [
+                "libPlatformProperties",
+            ],
             srcs: ["src/btif_avrcp_audio_track.cc"],
             shared_libs: ["libaaudio"],
         },
@@ -238,8 +241,9 @@ cc_library_static {
         "libcrypto",
     ],
     cflags: [
-        /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
         "-DBUILDCFG",
+        "-Wno-unused-parameter",
+        /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
         "-fvisibility=default",
     ],
     apex_available: [
@@ -293,6 +297,7 @@ cc_test {
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
+        "libbt-btu-main-thread",
         "libbt-common",
         "libbt-hci",
         "libbt-sbc-decoder",
@@ -348,7 +353,6 @@ cc_test {
     header_libs: ["libbluetooth_headers"],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -358,7 +362,10 @@ cc_test {
         "libchrome",
         "libosi",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     shared_libs: ["liblog"],
 }
 
@@ -383,7 +390,6 @@ cc_test {
     header_libs: ["libbluetooth_headers"],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -392,7 +398,10 @@ cc_test {
         "libchrome",
         "libosi",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     shared_libs: ["liblog"],
 }
 
@@ -438,7 +447,10 @@ cc_test {
             shared_libs: ["libstatssocket"],
         },
     },
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     sanitize: {
         address: true,
         cfi: true,
@@ -515,7 +527,10 @@ cc_test {
         "libcom.android.sysprop.bluetooth",
         "libosi",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
 }
 
 cc_test {
@@ -557,6 +572,7 @@ cc_test {
         ":TestCommonCoreInterface",
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
+        ":TestFakeOsi",
         ":TestMockAndroidHardware",
         ":TestMockBtaAg",
         ":TestMockBtaAr",
@@ -582,7 +598,6 @@ cc_test {
         ":TestMockFrameworks",
         ":TestMockHci",
         ":TestMockMainShim",
-        ":TestMockOsi",
         ":TestMockStack",
         ":TestMockSystemLibfmq",
         ":TestMockUdrv",
@@ -591,7 +606,6 @@ cc_test {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
@@ -630,7 +644,10 @@ cc_test {
         "libgmock",
         "libstatslog_bt",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     target: {
         android: {
             static_libs: [
@@ -694,6 +711,7 @@ cc_test {
         ":TestCommonCoreInterface",
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
+        ":TestFakeOsi",
         ":TestMockAndroidHardware",
         ":TestMockBtaAg",
         ":TestMockBtaAr",
@@ -719,7 +737,6 @@ cc_test {
         ":TestMockFrameworks",
         ":TestMockHci",
         ":TestMockMainShim",
-        ":TestMockOsi",
         ":TestMockStack",
         ":TestMockSystemLibfmq",
         ":TestMockUdrv",
@@ -728,7 +745,6 @@ cc_test {
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
@@ -765,7 +781,10 @@ cc_test {
         "libgmock",
         "libstatslog_bt",
     ],
-    cflags: ["-DBUILDCFG"],
+    cflags: [
+        "-DBUILDCFG",
+        "-Wno-unused-parameter",
+    ],
     target: {
         android: {
             static_libs: [

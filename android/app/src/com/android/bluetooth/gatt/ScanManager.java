@@ -141,7 +141,7 @@ public class ScanManager {
     private static final int SCAN_MODE_MAX_IN_CONCURRENCY = ScanSettings.SCAN_MODE_BALANCED;
     private final SparseBooleanArray mIsUidForegroundMap = new SparseBooleanArray();
     private boolean mScreenOn = false;
-    private boolean mIsConnecting;
+    @VisibleForTesting boolean mIsConnecting;
     private int mProfilesConnecting, mProfilesConnected, mProfilesDisconnecting;
 
     @VisibleForTesting
@@ -179,9 +179,7 @@ public class ScanManager {
         mPriorityMap.put(ScanSettings.SCAN_MODE_BALANCED, 4);
         mPriorityMap.put(ScanSettings.SCAN_MODE_AMBIENT_DISCOVERY, 4);
         mPriorityMap.put(ScanSettings.SCAN_MODE_LOW_LATENCY, 5);
-    }
 
-    void start() {
         HandlerThread thread = new HandlerThread("BluetoothScanManager");
         thread.start();
         mHandler = new ClientHandler(thread.getLooper());
@@ -386,6 +384,7 @@ public class ScanManager {
             if (DBG) {
                 Log.d(TAG, "handling starting scan");
             }
+            fetchAppForegroundState(client);
 
             if (!isScanSupported(client)) {
                 Log.e(TAG, "Scan settings not supported");
@@ -730,6 +729,19 @@ public class ScanManager {
          */
         private boolean isAppForeground(ScanClient client) {
             return mIsUidForegroundMap.get(client.appUid, DEFAULT_UID_IS_FOREGROUND);
+        }
+
+        private void fetchAppForegroundState(ScanClient client) {
+            if (mActivityManager == null || mAdapterService.getPackageManager() == null) {
+                return;
+            }
+            String packageName =
+                    mAdapterService.getPackageManager().getPackagesForUid(client.appUid)[0];
+            int importance = mActivityManager.getPackageImportance(packageName);
+            boolean isForeground =
+                    importance
+                            <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE;
+            mIsUidForegroundMap.put(client.appUid, isForeground);
         }
 
         private boolean updateScanModeBeforeStart(ScanClient client) {

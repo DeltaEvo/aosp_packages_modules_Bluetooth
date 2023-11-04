@@ -34,7 +34,6 @@ import static com.android.bluetooth.Utils.getBytesFromAddress;
 import static com.android.bluetooth.Utils.hasBluetoothPrivilegedPermission;
 import static com.android.bluetooth.Utils.isDualModeAudioEnabled;
 import static com.android.bluetooth.Utils.isPackageNameAccurate;
-
 import static java.util.Objects.requireNonNull;
 
 import android.annotation.NonNull;
@@ -68,7 +67,6 @@ import android.bluetooth.IBluetooth;
 import android.bluetooth.IBluetoothActivityEnergyInfoListener;
 import android.bluetooth.IBluetoothCallback;
 import android.bluetooth.IBluetoothConnectionCallback;
-import android.bluetooth.IBluetoothGatt;
 import android.bluetooth.IBluetoothMetadataListener;
 import android.bluetooth.IBluetoothOobDataCallback;
 import android.bluetooth.IBluetoothPreferredAudioProfilesCallback;
@@ -110,6 +108,7 @@ import android.util.SparseArray;
 
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.BluetoothStatsLog;
+import com.android.bluetooth.Flags;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
@@ -176,6 +175,18 @@ public class AdapterService extends Service {
     private static final String TAG = "BluetoothAdapterService";
     private static final boolean DBG = true;
     private static final boolean VERBOSE = false;
+
+    static {
+        if (DBG) {
+            Log.d(TAG, "Loading JNI Library");
+        }
+        if (Utils.isInstrumentationTestMode()) {
+            Log.w(TAG, "App is instrumented. Skip loading the native");
+        } else {
+            System.loadLibrary("bluetooth_jni");
+        }
+    }
+
     private static final int MIN_ADVT_INSTANCES_FOR_MA = 5;
     private static final int MIN_OFFLOADED_FILTERS = 10;
     private static final int MIN_OFFLOADED_SCAN_STORAGE_BYTES = 1024;
@@ -341,7 +352,9 @@ public class AdapterService extends Service {
     private UserManager mUserManager;
     private CompanionDeviceManager mCompanionDeviceManager;
 
-    private PhonePolicy mPhonePolicy;
+    // Phone Policy is not used on all devices. Ensure you null check before using it
+    @Nullable private PhonePolicy mPhonePolicy;
+
     private ActiveDeviceManager mActiveDeviceManager;
     private DatabaseManager mDatabaseManager;
     private SilenceDeviceManager mSilenceDeviceManager;
@@ -593,6 +606,7 @@ public class AdapterService extends Service {
             })
     public void onCreate() {
         super.onCreate();
+        Config.init(this);
         if (mLooper == null) {
             mLooper = Looper.getMainLooper();
         }
@@ -681,7 +695,11 @@ public class AdapterService extends Service {
             Log.i(TAG, "Phone policy disabled");
         }
 
-        mActiveDeviceManager = new ActiveDeviceManager(this, new ServiceFactory());
+        if (Flags.audioRoutingCentralization()) {
+            mActiveDeviceManager = new AudioRoutingManager(this, new ServiceFactory());
+        } else {
+            mActiveDeviceManager = new ActiveDeviceManager(this, new ServiceFactory());
+        }
         mActiveDeviceManager.start();
 
         mSilenceDeviceManager = new SilenceDeviceManager(this, new ServiceFactory(), mLooper);
@@ -2045,6 +2063,12 @@ public class AdapterService extends Service {
         return mDatabaseManager.getCustomMeta(device, key);
     }
 
+    /** Update Adapter Properties when BT profiles connection state changes. */
+    public void updateProfileConnectionAdapterProperties(
+            BluetoothDevice device, int profile, int state, int prevState) {
+        mAdapterProperties.updateOnProfileConnectionChanged(device, profile, state, prevState);
+    }
+
     /** Handlers for incoming service calls */
     private AdapterServiceBinder mBinder;
 
@@ -2768,6 +2792,13 @@ public class AdapterService extends Service {
 
             DeviceProperties deviceProp = service.mRemoteDevices.getDeviceProperties(device);
             if (deviceProp == null || deviceProp.getBondState() != BluetoothDevice.BOND_BONDED) {
+                Log.w(
+                        TAG,
+                        device.getAddressForLogging()
+                                + " cannot be removed since "
+                                + ((deviceProp == null)
+                                        ? "properties are empty"
+                                        : "bond state is " + deviceProp.getBondState()));
                 return false;
             }
             service.mBondAttemptCallerInfo.remove(device.getAddress());
@@ -2909,7 +2940,7 @@ public class AdapterService extends Service {
             if (service == null
                     || !Utils.checkConnectPermissionForDataDelivery(
                             service, attributionSource, "AdapterService getConnectionState")) {
-                return BluetoothProfile.STATE_DISCONNECTED;
+                return BluetoothDevice.CONNECTION_STATE_DISCONNECTED;
             }
 
             return service.getConnectionState(device);
@@ -3954,30 +3985,6 @@ public class AdapterService extends Service {
             }
 
             return service.getMaxConnectedAudioDevices();
-        }
-
-        // @Override
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-        public void isA2dpOffloadEnabled(
-                AttributionSource source, SynchronousResultReceiver receiver) {
-            try {
-                receiver.send(isA2dpOffloadEnabled(source));
-            } catch (RuntimeException e) {
-                receiver.propagateException(e);
-            }
-        }
-
-        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-        private boolean isA2dpOffloadEnabled(AttributionSource attributionSource) {
-            // don't check caller, may be called from system UI
-            AdapterService service = getService();
-            if (service == null
-                    || !Utils.checkConnectPermissionForDataDelivery(
-                            service, attributionSource, "AdapterService isA2dpOffloadEnabled")) {
-                return false;
-            }
-
-            return service.isA2dpOffloadEnabled();
         }
 
         @Override
@@ -5212,7 +5219,15 @@ public class AdapterService extends Service {
         }
 
         @Override
-        public IBluetoothGatt getBluetoothGatt() {
+        public void getBluetoothGatt(SynchronousResultReceiver receiver) {
+            try {
+                receiver.send(getBluetoothGatt());
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        private IBinder getBluetoothGatt() {
             AdapterService service = getService();
             if (service == null) {
                 return null;
@@ -6874,11 +6889,11 @@ public class AdapterService extends Service {
         return BluetoothStatusCodes.FEATURE_NOT_SUPPORTED;
     }
 
-    IBluetoothGatt getBluetoothGatt() {
+    IBinder getBluetoothGatt() {
         if (mGattService == null) {
             return null;
         }
-        return IBluetoothGatt.Stub.asInterface(((ProfileService) mGattService).getBinder());
+        return ((ProfileService) mGattService).getBinder();
     }
 
     void unregAllGattClient(AttributionSource source) {
@@ -6908,6 +6923,13 @@ public class AdapterService extends Service {
         }
     }
 
+    /** Update PhonePolicy when new {@link BluetoothDevice} creates an ACL connection. */
+    public void updatePhonePolicyOnAclConnect(BluetoothDevice device) {
+        if (mPhonePolicy != null) {
+            mPhonePolicy.handleAclConnected(device);
+        }
+    }
+
     /**
      * Notify GATT of a Bluetooth profile's connection state change for a given {@link
      * BluetoothProfile}.
@@ -6918,6 +6940,28 @@ public class AdapterService extends Service {
             return;
         }
         mGattService.notifyProfileConnectionStateChange(profile, fromState, toState);
+    }
+
+    /**
+     * Handle Bluetooth app state when connection state changes for a given {@code profile}.
+     *
+     * <p>Currently this function is limited to handling Phone policy but the eventual goal is to
+     * move all connection logic here.
+     */
+    public void handleProfileConnectionStateChange(
+            int profile, BluetoothDevice device, int fromState, int toState) {
+        if (mPhonePolicy != null) {
+            mPhonePolicy.profileConnectionStateChanged(profile, device, fromState, toState);
+        }
+    }
+
+    /** Handle Bluetooth app state when active device changes for a given {@code profile}. */
+    public void handleActiveDeviceChange(int profile, BluetoothDevice device) {
+        mActiveDeviceManager.profileActiveDeviceChanged(profile, device);
+        mSilenceDeviceManager.profileActiveDeviceChanged(profile, device);
+        if (mPhonePolicy != null) {
+            mPhonePolicy.profileActiveDeviceChanged(profile, device);
+        }
     }
 
     static int convertScanModeToHal(int mode) {
