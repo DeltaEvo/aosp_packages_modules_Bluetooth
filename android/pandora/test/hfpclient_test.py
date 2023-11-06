@@ -14,17 +14,19 @@
 
 import asyncio
 import avatar
+import collections
 import logging
 
 from avatar import BumblePandoraDevice, PandoraDevice, PandoraDevices
 from avatar.pandora_server import AndroidPandoraServer
+from bumble import rfcomm
+from bumble.colors import color
 from bumble.core import (
     BT_GENERIC_AUDIO_SERVICE,
     BT_HANDSFREE_AUDIO_GATEWAY_SERVICE,
     BT_L2CAP_PROTOCOL_ID,
     BT_RFCOMM_PROTOCOL_ID,
 )
-from bumble.hfp import HfpProtocol
 from bumble.rfcomm import DLC, Server as RfcommServer
 from bumble.sdp import (
     SDP_BLUETOOTH_PROFILE_DESCRIPTOR_LIST_ATTRIBUTE_ID,
@@ -41,7 +43,7 @@ from mobly.asserts import assert_not_equal  # type: ignore
 from mobly.asserts import assert_not_in  # type: ignore
 from pandora.host_pb2 import Connection as PandoraConnection
 from pandora.security_pb2 import LEVEL2
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 SDP_PROFILE_SUPPORTED_FEATURES_ID = 0x0311
 
@@ -56,6 +58,61 @@ PROPERTY_HF_FEATURES = 'bluetooth.hfp.hf_client_features.config'
 PROPERTY_HF_INDICATOR_ENHANCED_DRIVER_SAFETY = 'bluetooth.headset_client.indicator.enhanced_driver_safety.enabled'
 
 HFP_VERSION_1_7 = 0x0107
+
+
+# Stub for Audio Gateway implementation
+# TODO: b/296471045
+logger = logging.getLogger(__name__)
+
+
+class HfpProtocol:
+    dlc: rfcomm.DLC
+    buffer: str
+    lines: collections.deque[str]
+    lines_available: asyncio.Event
+
+    def __init__(self, dlc: rfcomm.DLC) -> None:
+        self.dlc = dlc
+        self.buffer = ''
+        self.lines = collections.deque()
+        self.lines_available = asyncio.Event()
+
+        dlc.sink = self.feed
+
+    def feed(self, data: Union[bytes, str]) -> None:
+        # Convert the data to a string if needed
+        if isinstance(data, bytes):
+            data = data.decode('utf-8')
+
+        logger.debug(f'<<< Data received: {data}')
+
+        # Add to the buffer and look for lines
+        self.buffer += data
+        while (separator := self.buffer.find('\r')) >= 0:
+            line = self.buffer[:separator].strip()
+            self.buffer = self.buffer[separator + 1 :]
+            if len(line) > 0:
+                self.on_line(line)
+
+    def on_line(self, line: str) -> None:
+        self.lines.append(line)
+        self.lines_available.set()
+
+    def send_command_line(self, line: str) -> None:
+        logger.debug(color(f'>>> {line}', 'yellow'))
+        self.dlc.write(line + '\r')
+
+    def send_response_line(self, line: str) -> None:
+        logger.debug(color(f'>>> {line}', 'yellow'))
+        self.dlc.write('\r\n' + line + '\r\n')
+
+    async def next_line(self) -> str:
+        await self.lines_available.wait()
+        line = self.lines.popleft()
+        if not self.lines:
+            self.lines_available.clear()
+        logger.debug(color(f'<<< {line}', 'green'))
+        return line
 
 
 class HfpClientTest(base_test.BaseTestClass):  # type: ignore[misc]
@@ -85,11 +142,11 @@ class HfpClientTest(base_test.BaseTestClass):  # type: ignore[misc]
             if isinstance(server, AndroidPandoraServer):
                 self.dut_adb = server.device.adb
                 # Enable HFP Client
-                self.dut_adb.shell(['setprop', PROPERTY_HF_ENABLED, 'true'])
+                self.dut_adb.shell(['setprop', PROPERTY_HF_ENABLED, 'true'])  # type: ignore
                 # Set HF features if not set yet
-                hf_feature_text = self.dut_adb.getprop(PROPERTY_HF_FEATURES)
+                hf_feature_text = self.dut_adb.getprop(PROPERTY_HF_FEATURES)  # type: ignore
                 if len(hf_feature_text) == 0:
-                    self.dut_adb.shell(['setprop', PROPERTY_HF_FEATURES, HFP_HF_FEATURE_DEFAULT])
+                    self.dut_adb.shell(['setprop', PROPERTY_HF_FEATURES, HFP_HF_FEATURE_DEFAULT])  # type: ignore
                 break
 
     def teardown_class(self) -> None:
@@ -98,6 +155,7 @@ class HfpClientTest(base_test.BaseTestClass):  # type: ignore[misc]
 
     @avatar.asynchronous
     async def setup_test(self) -> None:
+        self.ref._bumble.config.update({'server': {'identity_address_type': 'public'}})
         await asyncio.gather(self.dut.reset(), self.ref.reset())
 
     # TODO(b/286338264): Moving connecting and bonding methods to a shared util scripts
@@ -148,9 +206,9 @@ class HfpClientTest(base_test.BaseTestClass):  # type: ignore[misc]
     @avatar.asynchronous
     async def test_hf_indicator_setup(self, enhanced_driver_safety_enabled: bool) -> None:
         if enhanced_driver_safety_enabled:
-            self.dut_adb.shell(['setprop', PROPERTY_HF_INDICATOR_ENHANCED_DRIVER_SAFETY, 'true'])
+            self.dut_adb.shell(['setprop', PROPERTY_HF_INDICATOR_ENHANCED_DRIVER_SAFETY, 'true'])  # type: ignore
         else:
-            self.dut_adb.shell(['setprop', PROPERTY_HF_INDICATOR_ENHANCED_DRIVER_SAFETY, 'false'])
+            self.dut_adb.shell(['setprop', PROPERTY_HF_INDICATOR_ENHANCED_DRIVER_SAFETY, 'false'])  # type: ignore
 
         ref_dut_hfp_protocol = await self.make_hfp_connection()
 

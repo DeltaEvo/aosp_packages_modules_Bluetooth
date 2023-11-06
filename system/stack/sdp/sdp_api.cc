@@ -22,13 +22,15 @@
  *
  ******************************************************************************/
 
+#define LOG_TAG "sdp_api"
+
 #include "stack/include/sdp_api.h"
 
 #include <string.h>
 
 #include <cstdint>
-
 #include "bt_target.h"
+#include "osi/include/log.h"
 #include "osi/include/osi.h"  // PTR_TO_UINT
 #include "stack/include/bt_types.h"
 #include "stack/include/sdp_api.h"
@@ -786,18 +788,28 @@ uint8_t SDP_GetNumDiRecords(const tSDP_DISCOVERY_DB* p_db) {
  ******************************************************************************/
 static void SDP_AttrStringCopy(char* dst, const tSDP_DISC_ATTR* p_attr,
                                uint16_t dst_size,
-                               uint8_t expected_desc_type) {
-  if (dst == NULL || SDP_DISC_ATTR_LEN(p_attr->attr_len_type) != expected_desc_type)
+                               uint8_t expected_type) {
+  if (dst == NULL)
     return;
+
+  dst[0] = '\0';
+
   if (p_attr) {
-    uint16_t len = SDP_DISC_ATTR_LEN(p_attr->attr_len_type);
-    if (len > dst_size - 1) {
-      len = dst_size - 1;
+    uint8_t type = SDP_DISC_ATTR_TYPE(p_attr->attr_len_type);
+
+    if (type == expected_type) {
+      uint16_t len = SDP_DISC_ATTR_LEN(p_attr->attr_len_type);
+      if (len > dst_size - 1) {
+        len = dst_size - 1;
+      }
+      memcpy(dst, (const void*)p_attr->attr_value.v.array, len);
+      dst[len] = '\0';
+    } else {
+      LOG_ERROR("unexpected attr type=%d, expected=%d",
+                type, expected_type);
     }
-    memcpy(dst, (const void*)p_attr->attr_value.v.array, len);
-    dst[len] = '\0';
   } else {
-    dst[0] = '\0';
+    LOG_ERROR("p_attr is NULL");
   }
 }
 
@@ -841,6 +853,7 @@ uint16_t SDP_GetDiRecord(uint8_t get_record_index,
                        SDP_MAX_ATTR_LEN, URL_DESC_TYPE);
 
     /* Service Description is optional */
+    /* 5.1.16 ServiceDescription attribute */
     p_curr_attr =
         SDP_FindAttributeInRec(p_curr_record, ATTR_ID_SERVICE_DESCRIPTION);
     SDP_AttrStringCopy(p_device_info->rec.service_description, p_curr_attr,

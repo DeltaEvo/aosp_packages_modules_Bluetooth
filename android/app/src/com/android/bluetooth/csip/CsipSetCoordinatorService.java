@@ -171,9 +171,6 @@ public class CsipSetCoordinatorService extends ProfileService {
 
         // Initialize native interface
         mCsipSetCoordinatorNativeInterface.init();
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
-
         return true;
     }
 
@@ -187,8 +184,6 @@ public class CsipSetCoordinatorService extends ProfileService {
             return true;
         }
 
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
         // Cleanup native interface
         mCsipSetCoordinatorNativeInterface.cleanup();
         mCsipSetCoordinatorNativeInterface = null;
@@ -217,6 +212,12 @@ public class CsipSetCoordinatorService extends ProfileService {
             } catch (InterruptedException e) {
                 // Do not rethrow as we are shutting down anyway
             }
+        }
+
+        // Unregister Handler and stop all queued messages.
+        if (mHandler != null) {
+            mHandler.removeCallbacksAndMessages(null);
+            mHandler = null;
         }
 
         mDeviceGroupIdRankMap.clear();
@@ -1027,6 +1028,11 @@ public class CsipSetCoordinatorService extends ProfileService {
 
     @VisibleForTesting
     synchronized void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
+        if (!isAvailable()) {
+            Log.w(TAG, "connectionStateChanged: service is not available");
+            return;
+        }
+
         if ((device == null) || (fromState == toState)) {
             Log.e(TAG,
                     "connectionStateChanged: unexpected invocation. device=" + device
@@ -1056,6 +1062,8 @@ public class CsipSetCoordinatorService extends ProfileService {
             mGroupIdToConnectedDevices.get(groupId).add(device);
             disableCsipIfNeeded(groupId);
         }
+        mAdapterService.handleProfileConnectionStateChange(
+                BluetoothProfile.CSIP_SET_COORDINATOR, device, fromState, toState);
     }
 
     /**

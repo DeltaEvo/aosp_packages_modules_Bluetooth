@@ -31,6 +31,7 @@ import android.os.UserManager;
 import android.sysprop.BluetoothProperties;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.KeyEvent;
 
 import com.android.bluetooth.BluetoothEventLogger;
 import com.android.bluetooth.BluetoothMetricsProto;
@@ -44,7 +45,6 @@ import com.android.bluetooth.audio_util.Metadata;
 import com.android.bluetooth.audio_util.PlayStatus;
 import com.android.bluetooth.audio_util.PlayerInfo;
 import com.android.bluetooth.audio_util.PlayerSettingsManager;
-import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
@@ -238,13 +238,6 @@ public class AvrcpTargetService extends ProfileService {
 
         // Only allow the service to be used once it is initialized
         sInstance = this;
-        BluetoothDevice activeDevice = getA2dpActiveDevice();
-        String deviceAddress = activeDevice != null ?
-                activeDevice.getAddress() :
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS;
-        AdapterService.getAdapterService().notifyActivityAttributionInfo(
-                getAttributionSource(), deviceAddress);
-
         return true;
     }
 
@@ -261,12 +254,6 @@ public class AvrcpTargetService extends ProfileService {
             mAvrcpCoverArtService.stop();
         }
         mAvrcpCoverArtService = null;
-        BluetoothDevice activeDevice = getA2dpActiveDevice();
-        String deviceAddress = activeDevice != null ?
-                activeDevice.getAddress() :
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS;
-        AdapterService.getAdapterService().notifyActivityAttributionInfo(
-                getAttributionSource(), deviceAddress);
 
         sInstance = null;
         unregisterReceiver(mReceiver);
@@ -465,15 +452,24 @@ public class AvrcpTargetService extends ProfileService {
         mMediaPlayerList.playItem(playerId, nowPlaying, mediaId);
     }
 
-    // TODO (apanicke): Handle key events here in the service. Currently it was more convenient to
-    // handle them there but logically they make more sense handled here.
-    void sendMediaKeyEvent(int event, boolean pushed) {
+    void sendMediaKeyEvent(int key, boolean pushed) {
         BluetoothDevice activeDevice = getA2dpActiveDevice();
         MediaPlayerWrapper player = mMediaPlayerList.getActivePlayer();
-        mMediaKeyEventLogger.logd(DEBUG, TAG, "getMediaKeyEvent:" + " device=" + activeDevice
-                + " event=" + event + " pushed=" + pushed
-                + " to " + (player == null ? null : player.getPackageName()));
-        mMediaPlayerList.sendMediaKeyEvent(event, pushed);
+        mMediaKeyEventLogger.logd(
+                DEBUG,
+                TAG,
+                "sendMediaKeyEvent:"
+                        + " device="
+                        + activeDevice
+                        + " key="
+                        + key
+                        + " pushed="
+                        + pushed
+                        + " to "
+                        + (player == null ? null : player.getPackageName()));
+        int action = pushed ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
+        KeyEvent event = new KeyEvent(action, AvrcpPassthrough.toKeyCode(key));
+        mAudioManager.dispatchMediaKeyEvent(event);
     }
 
     void setActiveDevice(BluetoothDevice device) {

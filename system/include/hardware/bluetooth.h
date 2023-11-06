@@ -54,7 +54,6 @@
 #define BT_PROFILE_HAP_CLIENT_ID "has_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_KEYSTORE_ID "bluetooth_keystore"
-#define BT_ACTIVITY_ATTRIBUTION_ID "activity_attribution"
 #define BT_PROFILE_VC_ID "volume_control"
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
@@ -394,6 +393,13 @@ typedef enum {
    * Data Type - char array.
    */
   BT_PROPERTY_REMOTE_MODEL_NUM,
+
+  /**
+   * Description - Address type of the remote device - PUBLIC or REMOTE
+   * Access mode - GET.
+   * Data Type - uint8_t.
+   */
+  BT_PROPERTY_REMOTE_ADDR_TYPE,
 
   BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP = 0xFF,
 } bt_property_type_t;

@@ -24,19 +24,10 @@
  ******************************************************************************/
 #define LOG_TAG "sdp_server"
 
-#include <base/location.h>
-#include <base/logging.h>
-#include <log/log.h>
 #include <string.h>  // memcpy
 
 #include <cstdint>
 
-// include before bta_hfp_api for pre-defined variable
-#include "btif/include/btif_storage.h"
-
-// remaining includes
-#include "bta/include/bta_hfp_api.h"
-#include "btif/include/btif_config.h"
 #include "btif/include/btif_profile_storage.h"
 #include "btif/include/btif_storage.h"
 #include "common/init_flags.h"
@@ -45,11 +36,9 @@
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
-#include "stack/include/avrc_api.h"
-#include "stack/include/avrc_defs.h"
+#include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api.h"
-#include "stack/include/sdp_api.h"
 #include "stack/sdp/sdpint.h"
 
 /* Maximum number of bytes to reserve out of SDP MTU for response data */
@@ -60,6 +49,7 @@
 #define SDP_PROFILE_DESC_LENGTH 8
 #define HFP_PROFILE_MINOR_VERSION_6 0x06
 #define HFP_PROFILE_MINOR_VERSION_7 0x07
+#define HFP_PROFILE_MINOR_VERSION_9 0x09
 #define PBAP_GOEP_L2CAP_PSM_LEN 0x06
 #define PBAP_SUPP_FEA_LEN 0x08
 
@@ -171,12 +161,19 @@ bool sdp_dynamic_change_hfp_version(const tSDP_ATTRIBUTE* p_attr,
   bool is_allowlisted_1_7 =
       interop_match_addr_or_name(INTEROP_HFP_1_7_ALLOWLIST, &remote_address,
                                  &btif_storage_get_remote_device_property);
+  bool is_allowlisted_1_9 =
+      interop_match_addr_or_name(INTEROP_HFP_1_9_ALLOWLIST, &remote_address,
+                                 &btif_storage_get_remote_device_property);
   /* For PTS we should update AG's HFP version as 1.7 */
-  if (!(is_allowlisted_1_7) &&
+  if (!(is_allowlisted_1_7) && !(is_allowlisted_1_9) &&
       !(osi_property_get_bool("vendor.bt.pts.certification", false))) {
     return false;
   }
-  p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_7;
+  if (hfp_hal_interface::get_swb_supported() && is_allowlisted_1_9) {
+    p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_9;
+  } else {
+    p_attr->value_ptr[PROFILE_VERSION_POSITION] = HFP_PROFILE_MINOR_VERSION_7;
+  }
   SDP_TRACE_INFO("%s SDP Change HFP Version = %d for %s", __func__,
                  p_attr->value_ptr[PROFILE_VERSION_POSITION],
                  ADDRESS_TO_LOGGABLE_CSTR(remote_address));

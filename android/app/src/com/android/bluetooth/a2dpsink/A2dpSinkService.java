@@ -26,6 +26,7 @@ import android.bluetooth.IBluetoothA2dpSink;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.media.AudioManager;
+import android.os.Looper;
 import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
@@ -54,6 +55,7 @@ public class A2dpSinkService extends ProfileService {
             new ConcurrentHashMap<>(1);
 
     private final A2dpSinkNativeInterface mNativeInterface;
+    private final Looper mLooper;
 
     private final Object mActiveDeviceLock = new Object();
 
@@ -74,12 +76,14 @@ public class A2dpSinkService extends ProfileService {
 
     A2dpSinkService() {
         mNativeInterface = requireNonNull(A2dpSinkNativeInterface.getInstance());
+        mLooper = Looper.getMainLooper();
     }
 
     @VisibleForTesting
-    A2dpSinkService(Context ctx, A2dpSinkNativeInterface nativeInterface) {
+    A2dpSinkService(Context ctx, A2dpSinkNativeInterface nativeInterface, Looper looper) {
         attachBaseContext(ctx);
         mNativeInterface = requireNonNull(nativeInterface);
+        mLooper = looper;
         onCreate();
     }
 
@@ -106,21 +110,11 @@ public class A2dpSinkService extends ProfileService {
         }
 
         setA2dpSinkService(this);
-        BluetoothDevice activeDevice = getActiveDevice();
-        String deviceAddress = activeDevice != null ?
-                activeDevice.getAddress() :
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS;
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(), deviceAddress);
         return true;
     }
 
     @Override
     protected boolean stop() {
-        BluetoothDevice activeDevice = getActiveDevice();
-        String deviceAddress = activeDevice != null ?
-                activeDevice.getAddress() :
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS;
-        mAdapterService.notifyActivityAttributionInfo(getAttributionSource(), deviceAddress);
         setA2dpSinkService(null);
         mNativeInterface.cleanup();
         for (A2dpSinkStateMachine stateMachine : mDeviceStateMap.values()) {
@@ -142,7 +136,6 @@ public class A2dpSinkService extends ProfileService {
 
     /**
      * Testing API to inject a mockA2dpSinkService.
-     * @hide
      */
     @VisibleForTesting
     public static synchronized void setA2dpSinkService(A2dpSinkService service) {
@@ -447,12 +440,11 @@ public class A2dpSinkService extends ProfileService {
     /**
      * Remove a device's state machine.
      *
-     * Called by the state machines when they disconnect.
+     * <p>Called by the state machines when they disconnect.
      *
-     * Visible for testing so it can be mocked and verified on.
+     * <p>Visible for testing so it can be mocked and verified on.
      */
-    @VisibleForTesting
-    public void removeStateMachine(A2dpSinkStateMachine stateMachine) {
+    void removeStateMachine(A2dpSinkStateMachine stateMachine) {
         if (stateMachine == null) {
             return;
         }
@@ -466,7 +458,7 @@ public class A2dpSinkService extends ProfileService {
 
     protected A2dpSinkStateMachine getOrCreateStateMachine(BluetoothDevice device) {
         A2dpSinkStateMachine newStateMachine =
-                new A2dpSinkStateMachine(device, this, mNativeInterface);
+                new A2dpSinkStateMachine(mLooper, device, this, mNativeInterface);
         A2dpSinkStateMachine existingStateMachine =
                 mDeviceStateMap.putIfAbsent(device, newStateMachine);
         // Given null is not a valid value in our map, ConcurrentHashMap will return null if the
@@ -475,11 +467,6 @@ public class A2dpSinkService extends ProfileService {
         if (existingStateMachine == null) {
             newStateMachine.start();
             return newStateMachine;
-        } else {
-            // If you try to quit a StateMachine that hasn't been constructed yet, the StateMachine
-            // spits out an NPE trying to read a state stack array that only gets made on start().
-            // We can just quit the thread made explicitly
-            newStateMachine.getHandler().getLooper().quit();
         }
         return existingStateMachine;
     }
@@ -623,7 +610,7 @@ public class A2dpSinkService extends ProfileService {
             return;
         }
         A2dpSinkStateMachine stateMachine = getOrCreateStateMachine(device);
-        stateMachine.sendMessage(A2dpSinkStateMachine.STACK_EVENT, event);
+        stateMachine.onStackEvent(event);
     }
 
     private void onAudioStateChanged(StackEvent event) {
@@ -651,6 +638,13 @@ public class A2dpSinkService extends ProfileService {
             return;
         }
         A2dpSinkStateMachine stateMachine = getStateMachineForDevice(device);
-        stateMachine.sendMessage(A2dpSinkStateMachine.STACK_EVENT, event);
+        stateMachine.onStackEvent(event);
+    }
+
+    void connectionStateChanged(BluetoothDevice device, int fromState, int toState) {
+        mAdapterService.notifyProfileConnectionStateChangeToGatt(
+                BluetoothProfile.A2DP_SINK, fromState, toState);
+        mAdapterService.updateProfileConnectionAdapterProperties(
+                device, BluetoothProfile.A2DP_SINK, toState, fromState);
     }
 }
