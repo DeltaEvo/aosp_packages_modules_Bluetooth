@@ -94,7 +94,16 @@ typedef struct {
 
   uint32_t counter;       /* peer sign counter for verifying rcv signed cmd */
   uint32_t local_counter; /* local sign counter for sending signed write cmd*/
+
+  tBTM_LE_KEY_TYPE key_type; /* bit mask of valid key types in record */
 } tBTM_SEC_BLE_KEYS;
+
+// TODO: move it to btm_ble_addr.h
+enum tBLE_RAND_ADDR_TYPE : uint8_t {
+  BTM_BLE_ADDR_PSEUDO = 0,
+  BTM_BLE_ADDR_RRA = 1,
+  BTM_BLE_ADDR_STATIC = 2,
+};
 
 struct tBTM_SEC_BLE {
   RawAddress pseudo_addr; /* LE pseudo address of the device if different from
@@ -120,15 +129,7 @@ struct tBTM_SEC_BLE {
   uint8_t resolving_list_index;
   RawAddress cur_rand_addr; /* current random address */
 
-  typedef enum : uint8_t {
-    BTM_BLE_ADDR_PSEUDO = 0,
-    BTM_BLE_ADDR_RRA = 1,
-    BTM_BLE_ADDR_STATIC = 2,
-  } tADDRESS_TYPE;
-  tADDRESS_TYPE active_addr_type;
-
-  tBTM_LE_KEY_TYPE key_type; /* bit mask of valid key types in record */
-  tBTM_SEC_BLE_KEYS keys;    /* LE device security info in peripheral rode */
+  tBLE_RAND_ADDR_TYPE active_addr_type;
 };
 typedef struct tBTM_SEC_BLE tBTM_SEC_BLE;
 
@@ -208,22 +209,12 @@ typedef enum : uint8_t {
                              be cleared on \ btm_acl_created */
 } tBTM_SM4_BIT;
 
-inline std::string class_of_device_text(const DEV_CLASS& cod) {
-  return base::StringPrintf("0x%02x%02x%02x", cod[2], cod[1], cod[0]);
-}
-
 /*
  * Define structure for Security Device Record.
  * A record exists for each device authenticated with this device
  */
 struct tBTM_SEC_DEV_REC {
   /* Peering bond type */
-  typedef enum : uint8_t {
-    BOND_TYPE_UNKNOWN = 0,
-    BOND_TYPE_PERSISTENT = 1,
-    BOND_TYPE_TEMPORARY = 2
-  } tBTM_BOND_TYPE;
-
   uint32_t required_security_flags_for_pairing;
   tBTM_SEC_CALLBACK* p_callback;
   void* p_ref_data;
@@ -236,6 +227,8 @@ struct tBTM_SEC_DEV_REC {
   DEV_CLASS dev_class;     /* DEV_CLASS of the device            */
   LinkKey link_key;        /* Device link key                    */
   tHCI_STATUS sec_status;  /* Status in encryption change event  */
+
+  tBTM_SEC_BLE_KEYS ble_keys; /* LE device security info in peripheral rode */
 
  public:
   RawAddress RemoteAddress() const { return bd_addr; }
@@ -473,20 +466,9 @@ struct tBTM_SEC_DEV_REC {
     return base::StringPrintf(
         "%s %6s cod:%s remote_info:%-14s sm4:0x%02x SecureConn:%c name:\"%s\"",
         ADDRESS_TO_LOGGABLE_CSTR(bd_addr), DeviceTypeText(device_type).c_str(),
-        class_of_device_text(dev_class).c_str(),
+        dev_class_text(dev_class).c_str(),
         remote_version_info.ToString().c_str(), sm4,
         (remote_supports_secure_connections) ? 'T' : 'F',
         PRIVATE_NAME(sec_bd_name));
   }
 };
-
-inline std::string bond_type_text(
-    const tBTM_SEC_DEV_REC::tBTM_BOND_TYPE& bond_type) {
-  switch (bond_type) {
-    CASE_RETURN_TEXT(tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN);
-    CASE_RETURN_TEXT(tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT);
-    CASE_RETURN_TEXT(tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY);
-    default:
-      return base::StringPrintf("UNKNOWN[%hhu]", bond_type);
-  }
-}

@@ -31,7 +31,6 @@
 #endif
 
 #include "audio_hal_client/audio_hal_client.h"
-#include "bt_types.h"
 #include "bta_groups.h"
 #include "btm_iso_api_types.h"
 #include "gatt_api.h"
@@ -168,16 +167,19 @@ class LeAudioDevice {
   types::BidirectionalPair<struct types::ase*> GetAsesByCisId(uint8_t cis_id);
   bool HaveActiveAse(void);
   bool HaveAllActiveAsesSameState(types::AseState state);
+  bool HaveAllActiveAsesSameDataPathState(types::DataPathState state) const;
   bool HaveAnyUnconfiguredAses(void);
   bool IsReadyToCreateStream(void);
+  bool IsReadyToStream(void) const {
+    return HaveAllActiveAsesCisEst() &&
+           HaveAllActiveAsesSameDataPathState(types::DataPathState::CONFIGURED);
+  }
   bool IsReadyToSuspendStream(void);
-  bool HaveAllActiveAsesCisEst(void);
+  bool HaveAllActiveAsesCisEst(void) const;
   bool HaveAnyCisConnected(void);
-  bool HasCisId(uint8_t id);
-  uint8_t GetMatchingBidirectionCisId(const struct types::ase* base_ase);
   const struct types::acs_ac_record* GetCodecConfigurationSupportedPac(
-      uint8_t direction, const set_configurations::CodecCapabilitySetting&
-                             codec_capability_setting);
+      uint8_t direction,
+      const set_configurations::CodecConfigSetting& codec_capability_setting);
   uint8_t GetLc3SupportedChannelCount(uint8_t direction);
   uint8_t GetPhyBitmask(void);
   bool ConfigureAses(

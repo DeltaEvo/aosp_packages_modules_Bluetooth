@@ -50,6 +50,7 @@
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/hci_error_code.h"
+#include "stack/include/hcimsgs.h"
 #include "stack/include/main_thread.h"
 #include "stack/include/sdpdefs.h"
 #include "stack/include/stack_metrics_logging.h"
@@ -78,11 +79,9 @@ typedef struct {
 
 constexpr char kBtmLogTag[] = "SCO";
 
-const bluetooth::legacy::hci::Interface& GetLegacyHciInterface() {
-  return bluetooth::legacy::hci::GetInterface();
-}
-
 };  // namespace
+
+using bluetooth::legacy::hci::GetInterface;
 
 // forward declaration for dequeueing packets
 void btm_route_sco_data(bluetooth::hci::ScoView valid_packet);
@@ -328,10 +327,7 @@ void btm_route_sco_data(bluetooth::hci::ScoView valid_packet) {
                         ? &bluetooth::audio::sco::swb::decode
                         : &bluetooth::audio::sco::wbs::decode;
       rc = decode(&decoded);
-      if (rc == 0) {
-        LOG_DEBUG("Failed to decode %s frames", codec.c_str());
-        break;
-      }
+      if (rc == 0) break;
 
       written += bluetooth::audio::sco::write(decoded, rc);
     }
@@ -504,17 +500,17 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle,
     /* UPF25:  Only SCO was brought up in this case */
     const RawAddress bd_addr = acl_address_from_handle(acl_handle);
     if (bd_addr != RawAddress::kEmpty) {
-      if (!sco_peer_supports_esco_2m_phy(bd_addr)) {
+      if (!btm_peer_supports_esco_2m_phy(bd_addr)) {
         LOG_VERBOSE("BTM Remote does not support 2-EDR eSCO");
         temp_packet_types |=
             (ESCO_PKT_TYPES_MASK_NO_2_EV3 | ESCO_PKT_TYPES_MASK_NO_2_EV5);
       }
-      if (!sco_peer_supports_esco_3m_phy(bd_addr)) {
+      if (!btm_peer_supports_esco_3m_phy(bd_addr)) {
         LOG_VERBOSE("BTM Remote does not support 3-EDR eSCO");
         temp_packet_types |=
             (ESCO_PKT_TYPES_MASK_NO_3_EV3 | ESCO_PKT_TYPES_MASK_NO_3_EV5);
       }
-      if (!sco_peer_supports_esco_ev3(bd_addr)) {
+      if (!btm_peer_supports_esco_ev3(bd_addr)) {
         LOG_VERBOSE("BTM Remote does not support EV3 eSCO");
         // If EV3 is not supported, EV4 and EV% are not supported, either.
         temp_packet_types &= ~BTM_ESCO_LINK_ONLY_MASK;
@@ -1134,7 +1130,7 @@ tBTM_STATUS BTM_RemoveSco(uint16_t sco_inx) {
   tSCO_STATE old_state = p->state;
   p->state = SCO_ST_DISCONNECTING;
 
-  GetLegacyHciInterface().Disconnect(p->Handle(), HCI_ERR_PEER_USER);
+  GetInterface().Disconnect(p->Handle(), HCI_ERR_PEER_USER);
 
   LOG_DEBUG("Disconnecting link sco_handle:0x%04x peer:%s", p->Handle(),
             ADDRESS_TO_LOGGABLE_CSTR(p->esco.data.bd_addr));
@@ -1258,8 +1254,13 @@ void btm_sco_on_disconnected(uint16_t hci_handle, tHCI_REASON reason) {
       double packet_loss_ratio;
       if (fill_plc_stats(&num_decoded_frames, &packet_loss_ratio)) {
         const int16_t codec_id = sco_codec_type_to_id(codec_type);
+        const std::string codec = sco_codec_type_text(codec_type);
         log_hfp_audio_packet_loss_stats(bd_addr, num_decoded_frames,
                                         packet_loss_ratio, codec_id);
+        LOG_DEBUG(
+            "Stopped SCO codec:%s, num_decoded_frames:%d, "
+            "packet_loss_ratio:%lf",
+            codec.c_str(), num_decoded_frames, packet_loss_ratio);
       } else {
         LOG_WARN("Failed to get the packet loss stats");
       }
@@ -1447,8 +1448,8 @@ static tBTM_STATUS BTM_ChangeEScoLinkParms(uint16_t sco_inx,
     LOG_VERBOSE("%s: SCO Link for handle 0x%04x, pkt 0x%04x", __func__,
                 p_sco->hci_handle, p_setup->packet_types);
 
-    btsnd_hcic_change_conn_type(p_sco->hci_handle,
-                                BTM_ESCO_2_SCO(p_setup->packet_types));
+    GetInterface().ChangeConnectionPacketType(
+        p_sco->hci_handle, BTM_ESCO_2_SCO(p_setup->packet_types));
   } else /* eSCO is supported and the link type is eSCO */
   {
     uint16_t temp_packet_types =
@@ -1748,4 +1749,37 @@ tBTM_SCO_DEBUG_DUMP BTM_GetScoDebugDump() {
   data->status_in_hex = pkt_status->data_to_hex_string();
   data->status_in_binary = pkt_status->data_to_binary_string();
   return debug_dump;
+}
+
+bool btm_peer_supports_esco_2m_phy(RawAddress remote_bda) {
+  uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
+  if (features == nullptr) {
+    LOG_WARN(
+        "Checking remote features but remote feature read is "
+        "incomplete");
+    return false;
+  }
+  return HCI_EDR_ESCO_2MPS_SUPPORTED(features);
+}
+
+bool btm_peer_supports_esco_3m_phy(RawAddress remote_bda) {
+  uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
+  if (features == nullptr) {
+    LOG_WARN(
+        "Checking remote features but remote feature read is "
+        "incomplete");
+    return false;
+  }
+  return HCI_EDR_ESCO_3MPS_SUPPORTED(features);
+}
+
+bool btm_peer_supports_esco_ev3(RawAddress remote_bda) {
+  uint8_t* features = BTM_ReadRemoteFeatures(remote_bda);
+  if (features == nullptr) {
+    LOG_WARN(
+        "Checking remote features but remote feature read is "
+        "incomplete");
+    return false;
+  }
+  return HCI_ESCO_EV3_SUPPORTED(features);
 }
