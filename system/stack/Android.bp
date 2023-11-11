@@ -247,6 +247,7 @@ cc_library_static {
         "btm/btm_ble_gap.cc",
         "btm/btm_ble_privacy.cc",
         "btm/btm_ble_scanner.cc",
+        "btm/btm_ble_sec.cc",
         "btm/btm_client_interface.cc",
         "btm/btm_dev.cc",
         "btm/btm_devctl.cc",
@@ -259,6 +260,7 @@ cc_library_static {
         "btm/btm_sco_hfp_hal.cc",
         "btm/btm_sec.cc",
         "btm/btm_sec_cb.cc",
+        "btm/btm_security_client_interface.cc",
         "btu/btu_event.cc",
         "btu/btu_hcif.cc",
         "eatt/eatt.cc",
@@ -668,8 +670,10 @@ cc_fuzz {
 cc_test {
     name: "net_test_stack",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
+        "latest_android_hardware_audio_common_ndk_static",
+        "latest_android_hardware_bluetooth_audio_ndk_shared",
+        "latest_android_media_audio_common_types_ndk_static",
         "mts_defaults",
     ],
     test_suites: ["general-tests"],
@@ -704,14 +708,11 @@ cc_test {
         "server_configurable_flags",
     ],
     static_libs: [
-        "android.hardware.audio.common-V2-ndk",
         "android.hardware.bluetooth.a2dp@1.0",
-        "android.hardware.bluetooth.audio-V3-ndk",
         "android.hardware.bluetooth@1.0",
         "android.hardware.bluetooth@1.1",
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
-        "android.media.audio.common.types-V2-ndk",
         "android.system.suspend.control-V1-ndk",
         "libFraunhoferAAC",
         "libbluetooth-dumpsys",
@@ -750,7 +751,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_rfcomm",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -837,7 +837,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_smp",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -910,7 +909,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_ad_parser",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -937,7 +935,6 @@ cc_test {
 cc_test {
     name: "net_test_gatt_conn_multiplexing",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -983,7 +980,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_gatt_native",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1048,7 +1044,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_avdtp",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1115,7 +1110,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_a2dp_codecs_native",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1231,7 +1225,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_a2dp_native",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1275,7 +1268,6 @@ cc_test {
 cc_test {
     name: "net_test_stack_gatt_sr_hash_native",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1343,7 +1335,6 @@ cc_test {
         unit_test: true,
     },
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1396,7 +1387,6 @@ cc_test {
         unit_test: true,
     },
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1463,7 +1453,6 @@ cc_test {
         unit_test: true,
     },
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1519,6 +1508,7 @@ cc_test {
         "btm/btm_ble_gap.cc",
         "btm/btm_ble_privacy.cc",
         "btm/btm_ble_scanner.cc",
+        "btm/btm_ble_sec.cc",
         "btm/btm_client_interface.cc",
         "btm/btm_dev.cc",
         "btm/btm_devctl.cc",
@@ -1531,6 +1521,7 @@ cc_test {
         "btm/btm_sco_hfp_hal.cc",
         "btm/btm_sec.cc",
         "btm/btm_sec_cb.cc",
+        "btm/btm_security_client_interface.cc",
         "btm/hfp_lc3_decoder.cc",
         "btm/hfp_lc3_encoder.cc",
         "btm/hfp_msbc_decoder.cc",
@@ -1588,7 +1579,6 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: true,
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1636,7 +1626,6 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: true,
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1703,7 +1692,6 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: true,
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1774,7 +1762,6 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: true,
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1868,7 +1855,6 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: true,
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -1957,7 +1943,6 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: true,
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -2044,7 +2029,6 @@ cc_test {
     test_suites: ["general-tests"],
     host_supported: true,
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],

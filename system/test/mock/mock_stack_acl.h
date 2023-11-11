@@ -292,17 +292,17 @@ extern struct acl_peer_supports_ble_connection_subrating_host
 // identity_address_type, const RawAddress& bda, tBLE_ADDR_TYPE rra_type,
 // const RawAddress& rpa Returns: bool
 struct acl_refresh_remote_address {
-  std::function<bool(
-      const RawAddress& identity_address, tBLE_ADDR_TYPE identity_address_type,
-      const RawAddress& bda, tBTM_SEC_BLE::tADDRESS_TYPE rra_type,
-      const RawAddress& rpa)>
+  std::function<bool(const RawAddress& identity_address,
+                     tBLE_ADDR_TYPE identity_address_type,
+                     const RawAddress& bda, tBLE_RAND_ADDR_TYPE rra_type,
+                     const RawAddress& rpa)>
       body{[](const RawAddress& identity_address,
               tBLE_ADDR_TYPE identity_address_type, const RawAddress& bda,
-              tBTM_SEC_BLE::tADDRESS_TYPE rra_type,
+              tBLE_RAND_ADDR_TYPE rra_type,
               const RawAddress& rpa) { return false; }};
   bool operator()(const RawAddress& identity_address,
                   tBLE_ADDR_TYPE identity_address_type, const RawAddress& bda,
-                  tBTM_SEC_BLE::tADDRESS_TYPE rra_type, const RawAddress& rpa) {
+                  tBLE_RAND_ADDR_TYPE rra_type, const RawAddress& rpa) {
     return body(identity_address, identity_address_type, bda, rra_type, rpa);
   };
 };
@@ -319,24 +319,6 @@ struct acl_set_peer_le_features_from_handle {
 };
 extern struct acl_set_peer_le_features_from_handle
     acl_set_peer_le_features_from_handle;
-// Name: sco_peer_supports_esco_2m_phy
-// Params: const RawAddress& remote_bda
-// Returns: bool
-struct sco_peer_supports_esco_2m_phy {
-  std::function<bool(const RawAddress& remote_bda)> body{
-      [](const RawAddress& remote_bda) { return false; }};
-  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
-};
-extern struct sco_peer_supports_esco_2m_phy sco_peer_supports_esco_2m_phy;
-// Name: sco_peer_supports_esco_3m_phy
-// Params: const RawAddress& remote_bda
-// Returns: bool
-struct sco_peer_supports_esco_3m_phy {
-  std::function<bool(const RawAddress& remote_bda)> body{
-      [](const RawAddress& remote_bda) { return false; }};
-  bool operator()(const RawAddress& remote_bda) { return body(remote_bda); };
-};
-extern struct sco_peer_supports_esco_3m_phy sco_peer_supports_esco_3m_phy;
 // Name: acl_create_classic_connection
 // Params: const RawAddress& bd_addr, bool there_are_high_priority_channels,
 // bool is_bonding Returns: constexpr uint16_t kDefaultPacketTypes =
@@ -692,17 +674,6 @@ struct HACK_acl_check_sm4 {
   void operator()(tBTM_SEC_DEV_REC& record) { body(record); };
 };
 extern struct HACK_acl_check_sm4 HACK_acl_check_sm4;
-// Name: acl_accept_connection_request
-// Params: const RawAddress& bd_addr, uint8_t role
-// Returns: void
-struct acl_accept_connection_request {
-  std::function<void(const RawAddress& bd_addr, uint8_t role)> body{
-      [](const RawAddress& bd_addr, uint8_t role) { ; }};
-  void operator()(const RawAddress& bd_addr, uint8_t role) {
-    body(bd_addr, role);
-  };
-};
-extern struct acl_accept_connection_request acl_accept_connection_request;
 // Name: acl_disconnect_after_role_switch
 // Params: uint16_t conn_handle, tHCI_STATUS reason
 // Returns: void
@@ -771,17 +742,6 @@ struct acl_rcv_acl_data {
   void operator()(BT_HDR* p_msg) { body(p_msg); };
 };
 extern struct acl_rcv_acl_data acl_rcv_acl_data;
-// Name: acl_reject_connection_request
-// Params: const RawAddress& bd_addr, uint8_t reason
-// Returns: void
-struct acl_reject_connection_request {
-  std::function<void(const RawAddress& bd_addr, uint8_t reason)> body{
-      [](const RawAddress& bd_addr, uint8_t reason) { ; }};
-  void operator()(const RawAddress& bd_addr, uint8_t reason) {
-    body(bd_addr, reason);
-  };
-};
-extern struct acl_reject_connection_request acl_reject_connection_request;
 // Name: acl_send_data_packet_ble
 // Params: const RawAddress& bd_addr, BT_HDR* p_buf
 // Returns: void
@@ -950,20 +910,6 @@ struct btm_acl_update_conn_addr {
   };
 };
 extern struct btm_acl_update_conn_addr btm_acl_update_conn_addr;
-// Name: btm_configure_data_path
-// Params: uint8_t direction, uint8_t path_id, std::vector<uint8_t>
-// vendor_config Returns: void
-struct btm_configure_data_path {
-  std::function<void(uint8_t direction, uint8_t path_id,
-                     std::vector<uint8_t> vendor_config)>
-      body{[](uint8_t direction, uint8_t path_id,
-              std::vector<uint8_t> vendor_config) { ; }};
-  void operator()(uint8_t direction, uint8_t path_id,
-                  std::vector<uint8_t> vendor_config) {
-    body(direction, path_id, vendor_config);
-  };
-};
-extern struct btm_configure_data_path btm_configure_data_path;
 // Name: btm_acl_update_inquiry_status
 // Params: uint8_t status
 // Returns: void

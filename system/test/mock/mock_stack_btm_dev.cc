@@ -38,7 +38,9 @@ namespace mock {
 namespace stack_btm_dev {
 
 struct btm_find_dev btm_find_dev;
+struct BTM_Sec_AddressKnown BTM_Sec_AddressKnown;
 
+struct maybe_resolve_address maybe_resolve_address;
 }
 }  // namespace mock
 }  // namespace test
@@ -59,7 +61,7 @@ bool btm_dev_support_role_switch(const RawAddress& bd_addr) {
   return false;
 }
 bool btm_set_bond_type_dev(const RawAddress& bd_addr,
-                           tBTM_SEC_DEV_REC::tBTM_BOND_TYPE bond_type) {
+                           tBTM_BOND_TYPE bond_type) {
   inc_func_call_count(__func__);
   return false;
 }
@@ -95,10 +97,9 @@ tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void) {
   inc_func_call_count(__func__);
   return nullptr;
 }
-tBTM_SEC_DEV_REC::tBTM_BOND_TYPE btm_get_bond_type_dev(
-    const RawAddress& bd_addr) {
+tBTM_BOND_TYPE btm_get_bond_type_dev(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
-  return tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN;
+  return BOND_TYPE_UNKNOWN;
 }
 void BTM_SecClearSecurityFlags(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
@@ -123,4 +124,14 @@ std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
 
 void BTM_SetConsolidationCallback(BTM_CONSOLIDATION_CB* cb) {
   inc_func_call_count(__func__);
+}
+
+bool BTM_Sec_AddressKnown(const RawAddress& address) {
+  inc_func_call_count(__func__);
+  return test::mock::stack_btm_dev::BTM_Sec_AddressKnown(address);
+}
+
+bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
+  inc_func_call_count(__func__);
+  return test::mock::stack_btm_dev::maybe_resolve_address(bda, bda_type);
 }

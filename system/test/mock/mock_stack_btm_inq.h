@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "stack/btm/btm_dev.h"
+#include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/bt_hdr.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -197,21 +197,6 @@ struct BTM_IsInquiryActive {
   uint16_t operator()(void) { return body(); };
 };
 extern struct BTM_IsInquiryActive BTM_IsInquiryActive;
-
-// Name: BTM_IsRemoteNameKnown
-// Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
-// Return: bool
-struct BTM_IsRemoteNameKnown {
-  static bool return_value;
-  std::function<bool(const RawAddress& bd_addr, tBT_TRANSPORT transport)> body{
-      [](const RawAddress& bd_addr, tBT_TRANSPORT transport) {
-        return return_value;
-      }};
-  bool operator()(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
-    return body(bd_addr, transport);
-  };
-};
-extern struct BTM_IsRemoteNameKnown BTM_IsRemoteNameKnown;
 
 // Name: BTM_ReadRemoteDeviceName
 // Params: const RawAddress& remote_bda, tBTM_NAME_CMPL_CB* p_cb, tBT_TRANSPORT

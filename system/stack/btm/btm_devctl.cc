@@ -23,6 +23,7 @@
  *
  ******************************************************************************/
 
+#include "acl_api_types.h"
 #define LOG_TAG "devctl"
 
 #include <base/logging.h>
@@ -39,6 +40,8 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
+#include "stack/include/acl_api_types.h"
+#include "stack/include/btm_ble_privacy.h"
 #include "stack/include/l2cap_controller_interface.h"
 #include "types/raw_address.h"
 
@@ -180,7 +183,7 @@ void BTM_reset_complete() {
   btm_cb.btm_inq_vars.page_scan_period = HCI_DEF_PAGESCAN_INTERVAL;
   btm_cb.btm_inq_vars.page_scan_type = HCI_DEF_SCAN_TYPE;
 
-  btm_sec_cb.ble_ctr_cb.set_connection_state_idle();
+  btm_cb.ble_ctr_cb.set_connection_state_idle();
   connection_manager::reset(true);
 
   btm_pm_reset();

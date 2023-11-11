@@ -22,6 +22,7 @@
 #include <cstdint>
 
 #include "device/include/esco_parameters.h"
+#include "stack/btm/btm_sco.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_status.h"
@@ -78,7 +79,6 @@ void BTM_EScoConnRsp(uint16_t sco_inx, uint8_t hci_status,
   inc_func_call_count(__func__);
 }
 void BTM_RemoveSco(const RawAddress& bda) { inc_func_call_count(__func__); }
-void btm_route_sco_data(BT_HDR* p_msg) { inc_func_call_count(__func__); }
 void btm_sco_acl_removed(const RawAddress* bda) {
   inc_func_call_count(__func__);
 }
@@ -114,4 +114,16 @@ void btm_sco_on_sco_connect_request(
 }
 void btm_sco_on_disconnected(uint16_t hci_handle, tHCI_REASON reason) {
   inc_func_call_count(__func__);
+}
+bool btm_peer_supports_esco_2m_phy(RawAddress /* bd_addr */) {
+  inc_func_call_count(__func__);
+  return true;
+}
+bool btm_peer_supports_esco_3m_phy(RawAddress /* bd_addr */) {
+  inc_func_call_count(__func__);
+  return true;
+}
+bool btm_peer_supports_esco_ev3(RawAddress /* bd_addr */) {
+  inc_func_call_count(__func__);
+  return true;
 }

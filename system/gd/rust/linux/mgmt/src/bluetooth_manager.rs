@@ -11,7 +11,7 @@ use crate::iface_bluetooth_manager::{
     AdapterWithEnabled, IBluetoothManager, IBluetoothManagerCallback,
 };
 use crate::state_machine::{
-    state_to_enabled, AdapterState, Message, StateMachineProxy, VirtualHciIndex,
+    state_to_enabled, AdapterState, Message, ProcessState, StateMachineProxy, VirtualHciIndex,
 };
 use crate::{config_util, migrate};
 
@@ -43,6 +43,11 @@ impl BluetoothManager {
     }
 
     pub(crate) fn callback_hci_device_change(&mut self, hci: VirtualHciIndex, present: bool) {
+        if present {
+            warn!("Presence added: {}", hci);
+        } else {
+            warn!("Presence removed: {}", hci);
+        }
         for (_, callback) in &mut self.callbacks {
             callback.on_hci_device_changed(hci.to_i32(), present);
         }
@@ -70,12 +75,13 @@ impl BluetoothManager {
         self.callbacks.remove(&id);
     }
 
-    pub(crate) fn restart_available_adapters(&mut self) {
-        self.get_available_adapters()
-            .into_iter()
-            .filter(|adapter| adapter.enabled)
-            .map(|adapter| VirtualHciIndex(adapter.hci_interface))
-            .for_each(|virt_hci| self.proxy.restart_bluetooth(virt_hci));
+    /// Restarts all TurningOn/On adapters to make sure the configuration is reloaded.
+    pub(crate) fn restart_adapters(&mut self) {
+        self.proxy
+            .get_adapters()
+            .iter()
+            .filter(|a| a.state == ProcessState::TurningOn || a.state == ProcessState::On)
+            .for_each(|a| self.proxy.restart_bluetooth(a.virt_hci));
     }
 }
 
@@ -178,6 +184,8 @@ impl IBluetoothManager for BluetoothManager {
         self.proxy
             .get_valid_adapters()
             .iter()
+            // Don't present the queued device to the user.
+            .filter(|a| !a.has_queued_present)
             .map(|a| AdapterWithEnabled {
                 hci_interface: a.virt_hci.to_i32(),
                 enabled: state_to_enabled(a.state),
@@ -225,7 +233,7 @@ impl IBluetoothExperimental for BluetoothManager {
             return false;
         }
 
-        self.restart_available_adapters();
+        self.restart_adapters();
 
         return true;
     }
