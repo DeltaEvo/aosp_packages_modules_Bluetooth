@@ -20,15 +20,12 @@
 #include <future>
 #include <memory>
 
-#include "common/bidi_queue.h"
-#include "common/callback.h"
 #include "hci/acl_manager/connection_callbacks.h"
 #include "hci/acl_manager/le_acceptlist_callbacks.h"
 #include "hci/acl_manager/le_connection_callbacks.h"
 #include "hci/address.h"
 #include "hci/address_with_type.h"
 #include "hci/distance_measurement_manager.h"
-#include "hci/hci_layer.h"
 #include "hci/hci_packets.h"
 #include "hci/le_address_manager.h"
 #include "hci/le_scanning_manager.h"
@@ -46,7 +43,6 @@ class Acl;
 }
 
 class Btm;
-void L2CA_UseLegacySecurityModule();
 bool L2CA_SetAclPriority(uint16_t, bool);
 }
 
@@ -55,7 +51,6 @@ namespace hci {
 class AclManager : public Module {
  friend class bluetooth::shim::Btm;
  friend class bluetooth::shim::legacy::Acl;
- friend void bluetooth::shim::L2CA_UseLegacySecurityModule();
  friend bool bluetooth::shim::L2CA_SetAclPriority(uint16_t, bool);
  friend class bluetooth::hci::LeScanningManager;
  friend class bluetooth::hci::DistanceMeasurementManager;
@@ -105,7 +100,7 @@ public:
  virtual void SetPrivacyPolicyForInitiatorAddressForTest(
      LeAddressManager::AddressPolicy address_policy,
      AddressWithType fixed_address,
-     crypto_toolbox::Octet16 rotation_irk,
+     Octet16 rotation_irk,
      std::chrono::milliseconds minimum_rotation_time,
      std::chrono::milliseconds maximum_rotation_time);
 

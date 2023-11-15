@@ -340,23 +340,16 @@ public final class BluetoothHeadset implements BluetoothProfile {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothHeadset> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.HEADSET, "BluetoothHeadset",
-                    IBluetoothHeadset.class.getName()) {
-                @Override
-                public IBluetoothHeadset getServiceInterface(IBinder service) {
-                    return IBluetoothHeadset.Stub.asInterface(service);
-                }
-    };
+
+    private IBluetoothHeadset mService;
 
     /**
      * Create a BluetoothHeadset proxy object.
      */
-    /* package */ BluetoothHeadset(Context context, ServiceListener listener,
-            BluetoothAdapter adapter) {
+    /* package */ BluetoothHeadset(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
     }
 
     /**
@@ -368,11 +361,29 @@ public final class BluetoothHeadset implements BluetoothProfile {
      */
     @UnsupportedAppUsage
     public void close() {
-        mProfileConnector.disconnect();
+        mAdapter.closeProfileProxy(this);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothHeadset.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothHeadset getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /** {@hide} */

@@ -28,6 +28,7 @@
 #include "codec_manager.h"
 #include "devices.h"
 #include "gd/common/strings.h"
+#include "hci/hci_packets.h"
 #include "hcimsgs.h"
 #include "le_audio_health_status.h"
 #include "le_audio_log_history.h"
@@ -96,6 +97,8 @@ using le_audio::LeAudioDevice;
 using le_audio::LeAudioDeviceGroup;
 using le_audio::LeAudioGroupStateMachine;
 
+using bluetooth::hci::ErrorCode;
+using bluetooth::hci::ErrorCodeText;
 using le_audio::types::ase;
 using le_audio::types::AseState;
 using le_audio::types::AudioContexts;
@@ -827,8 +830,9 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         RemoveCigForGroup(group);
       }
 
-      LOG(ERROR) << __func__
-                 << ", failed to create CIS, status: " << loghex(event->status);
+      LOG(ERROR) << __func__ << ", failed to create CIS, status: "
+                 << ErrorCodeText((ErrorCode)event->status) << "("
+                 << loghex(event->status) << ")";
 
       StopStream(group);
       return;
@@ -961,9 +965,10 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       ases_pair.source->cis_state = CisState::ASSIGNED;
     }
 
+    RemoveDataPathByCisHandle(leAudioDevice, event->cis_conn_hdl);
+
     /* If this is peer disconnecting CIS, make sure to clear data path */
     if (event->reason != HCI_ERR_CONN_CAUSE_LOCAL_HOST) {
-      RemoveDataPathByCisHandle(leAudioDevice, event->cis_conn_hdl);
       // Make sure we won't stay in STREAMING state
       if (ases_pair.sink &&
           ases_pair.sink->state == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
@@ -1282,13 +1287,6 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       LOG_ERROR("Latency and interval not properly set");
       group->PrintDebugState();
       return false;
-    }
-
-    // Use 1M Phy for the ACK packet from remote device to phone for better
-    // sensitivity
-    if (max_sdu_size_stom == 0 &&
-        (phy_stom & bluetooth::hci::kIsoCigPhy1M) != 0) {
-      phy_stom = bluetooth::hci::kIsoCigPhy1M;
     }
 
     uint8_t rtn_mtos = 0;

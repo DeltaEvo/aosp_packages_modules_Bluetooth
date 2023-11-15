@@ -237,15 +237,8 @@ public final class BluetoothPan implements BluetoothProfile {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothPan> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.PAN,
-                    "BluetoothPan", IBluetoothPan.class.getName()) {
-                @Override
-                public IBluetoothPan getServiceInterface(IBinder service) {
-                    return IBluetoothPan.Stub.asInterface(service);
-                }
-    };
 
+    private IBluetoothPan mService;
 
     /**
      * Create a BluetoothPan proxy object for interacting with the local
@@ -254,12 +247,11 @@ public final class BluetoothPan implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage
-    /* package */ BluetoothPan(Context context, ServiceListener listener,
-            BluetoothAdapter adapter) {
+    /* package */ BluetoothPan(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
         mContext = context;
-        mProfileConnector.connect(context, listener);
+        mService = null;
     }
 
     /**
@@ -268,14 +260,31 @@ public final class BluetoothPan implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage
-    @Override
     public void close() {
         if (VDBG) log("close()");
-        mProfileConnector.disconnect();
+        mAdapter.closeProfileProxy(this);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothPan.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothPan getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /** @hide */

@@ -271,37 +271,47 @@ public final class BluetoothA2dp implements BluetoothProfile {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothA2dp> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.A2DP, "BluetoothA2dp",
-                    IBluetoothA2dp.class.getName()) {
-                @Override
-                public IBluetoothA2dp getServiceInterface(IBinder service) {
-                    return IBluetoothA2dp.Stub.asInterface(service);
-                }
-    };
+
+    private IBluetoothA2dp mService;
 
     /**
      * Create a BluetoothA2dp proxy object for interacting with the local
      * Bluetooth A2DP service.
      */
-    /* package */ BluetoothA2dp(Context context, ServiceListener listener,
-            BluetoothAdapter adapter) {
+    /* package */ BluetoothA2dp(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
     }
 
     /**
      * @hide
      */
     @UnsupportedAppUsage
-    @Override
     public void close() {
-        mProfileConnector.disconnect();
+        mAdapter.closeProfileProxy(this);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothA2dp.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothA2dp getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     @Override
