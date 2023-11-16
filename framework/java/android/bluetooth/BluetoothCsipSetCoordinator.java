@@ -207,24 +207,17 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothCsipSetCoordinator> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.CSIP_SET_COORDINATOR, TAG,
-                    IBluetoothCsipSetCoordinator.class.getName()) {
-                @Override
-                public IBluetoothCsipSetCoordinator getServiceInterface(IBinder service) {
-                    return IBluetoothCsipSetCoordinator.Stub.asInterface(service);
-                }
-            };
+
+    private IBluetoothCsipSetCoordinator mService;
 
     /**
      * Create a BluetoothCsipSetCoordinator proxy object for interacting with the local
      * Bluetooth CSIS service.
      */
-    /*package*/ BluetoothCsipSetCoordinator(Context context, ServiceListener listener,
-            BluetoothAdapter adapter) {
+    /*package*/ BluetoothCsipSetCoordinator(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
         mCloseGuard = new CloseGuard();
         mCloseGuard.open("close");
     }
@@ -242,11 +235,29 @@ public final class BluetoothCsipSetCoordinator implements BluetoothProfile, Auto
     /** @hide */
     @Override
     public void close() {
-        mProfileConnector.disconnect();
+        mAdapter.closeProfileProxy(this);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothCsipSetCoordinator.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothCsipSetCoordinator getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /**

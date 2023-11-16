@@ -521,7 +521,7 @@ cc_test {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
     ],
     cflags: [
         "-DBUILDCFG",
@@ -610,6 +610,7 @@ cc_test {
     shared_libs: [
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
+        "libbase",
         "libcrypto",
         "libcutils",
         "libhidlbase",
@@ -638,7 +639,7 @@ cc_test {
         "libbtif-core",
         "libc++fs",
         "libchrome",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libevent",
         "libgmock",
         "libstatslog_bt",
@@ -749,6 +750,7 @@ cc_test {
     shared_libs: [
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
+        "libbase",
         "libcrypto",
         "libcutils",
         "libhidlbase",
@@ -775,7 +777,7 @@ cc_test {
         "libbtif-core",
         "libc++fs",
         "libchrome",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libevent",
         "libgmock",
         "libstatslog_bt",

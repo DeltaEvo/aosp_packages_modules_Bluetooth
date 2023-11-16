@@ -25,11 +25,9 @@
 
 #define LOG_TAG "bt_bta_dm"
 
+#include <android_bluetooth_sysprop.h>
 #include <base/location.h>
 #include <base/logging.h>
-#ifdef __ANDROID__
-#include <bta.sysprop.h>
-#endif
 
 #include <cstdint>
 
@@ -119,18 +117,6 @@ static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result);
 #ifndef PROPERTY_PAGE_TIMEOUT
 #define PROPERTY_PAGE_TIMEOUT "bluetooth.core.classic.page_timeout"
 #endif
-
-// Time to wait after receiving shutdown request to delay the actual shutdown
-// process. This time may be zero which invokes immediate shutdown.
-static uint64_t get_DisableDelayTimerInMs() {
-#ifndef __ANDROID__
-  return 200;
-#else
-  static const uint64_t kDisableDelayTimerInMs =
-      android::sysprop::bluetooth::Bta::disable_delay().value_or(200);
-  return kDisableDelayTimerInMs;
-#endif
-}
 
 void bta_dm_disc_disable_search_and_disc();
 void bta_dm_disc_discover_next_device();
@@ -275,7 +261,6 @@ void BTA_dm_on_hw_on() {
     get_btm_client_interface().ble.BTM_BleLoadLocalKeys(
         BTA_BLE_LOCAL_KEY_TYPE_ID, (tBTM_BLE_LOCAL_KEYS*)&id_key);
   }
-  bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
 
   btm_dm_sec_init();
   btm_sec_on_hw_on();
@@ -335,17 +320,20 @@ void bta_dm_disable() {
 
   connection_manager::reset(false);
 
+  // We can shut down faster if there are no ACL links
   if (BTM_GetNumAclLinks() == 0) {
-    // We can shut down faster if there are no ACL links
-    switch (get_DisableDelayTimerInMs()) {
+    // Time to wait after receiving shutdown request to delay the actual
+    // shutdown process. This time may be zero which invokes immediate shutdown.
+    const uint64_t disable_delay_ms = GET_SYSPROP(Bta, disable_delay, 200);
+    switch (disable_delay_ms) {
       case 0:
         LOG_DEBUG("Immediately disabling device manager");
         bta_dm_disable_conn_down_timer_cback(nullptr);
         break;
       default:
         LOG_DEBUG("Set timer to delay disable initiation:%lu ms",
-                  static_cast<unsigned long>(get_DisableDelayTimerInMs()));
-        alarm_set_on_mloop(bta_dm_cb.disable_timer, get_DisableDelayTimerInMs(),
+                  static_cast<unsigned long>(disable_delay_ms));
+        alarm_set_on_mloop(bta_dm_cb.disable_timer, disable_delay_ms,
                            bta_dm_disable_conn_down_timer_cback, nullptr);
     }
   } else {
@@ -816,16 +804,7 @@ static void bta_dm_acl_down(const RawAddress& bd_addr,
     bta_dm_cb.device_list.le_count--;
   }
 
-  if ((transport == BT_TRANSPORT_BR_EDR) &&
-      (bta_dm_search_cb.wait_disc && bta_dm_search_cb.peer_bdaddr == bd_addr)) {
-    bta_dm_search_cb.wait_disc = false;
-
-    if (bta_dm_search_cb.sdp_results) {
-      LOG_VERBOSE(" timer stopped  ");
-      alarm_cancel(bta_dm_search_cb.search_timer);
-      bta_dm_disc_discover_next_device();
-    }
-  }
+  bta_dm_disc_acl_down(bd_addr, transport);
 
   if (bta_dm_cb.disabling) {
     if (!BTM_GetNumAclLinks()) {

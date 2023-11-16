@@ -242,35 +242,39 @@ public final class BluetoothHidHost implements BluetoothProfile {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothHidHost> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.HID_HOST,
-                    "BluetoothHidHost", IBluetoothHidHost.class.getName()) {
-                @Override
-                public IBluetoothHidHost getServiceInterface(IBinder service) {
-                    return IBluetoothHidHost.Stub.asInterface(service);
-                }
-    };
+
+    private IBluetoothHidHost mService;
 
     /**
      * Create a BluetoothHidHost proxy object for interacting with the local
      * Bluetooth Service which handles the InputDevice profile
      */
-    /* package */ BluetoothHidHost(Context context, ServiceListener listener,
-            BluetoothAdapter adapter) {
+    /* package */ BluetoothHidHost(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
     }
 
     /** @hide */
     @Override
-    public void close() {
-        if (VDBG) log("close()");
-        mProfileConnector.disconnect();
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothHidHost.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothHidHost getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /**

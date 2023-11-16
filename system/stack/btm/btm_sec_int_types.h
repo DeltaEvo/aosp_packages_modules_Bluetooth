@@ -36,7 +36,7 @@ typedef struct {
 } tBTM_CFG;
 
 /* Pairing State */
-enum {
+enum tBTM_PAIRING_STATE : uint8_t {
   BTM_PAIR_STATE_IDLE, /* Idle                                         */
   BTM_PAIR_STATE_GET_REM_NAME, /* Getting the remote name (to check for SM4) */
   BTM_PAIR_STATE_WAIT_PIN_REQ, /* Started authentication, waiting for PIN req
@@ -51,10 +51,9 @@ enum {
                                        data */
   BTM_PAIR_STATE_INCOMING_SSP, /* Incoming SSP (got peer IO caps when idle) */
   BTM_PAIR_STATE_WAIT_AUTH_COMPLETE, /* All done, waiting authentication
-                                        cpmplete    */
+                                        complete    */
   BTM_PAIR_STATE_WAIT_DISCONNECT     /* Waiting to disconnect the ACL */
 };
-typedef uint8_t tBTM_PAIRING_STATE;
 
 #define BTM_PAIR_FLAGS_WE_STARTED_DD \
   0x01 /* We want to do dedicated bonding              */
@@ -93,14 +92,6 @@ typedef struct tBTM_SEC_DEVCB {
 
   tBTM_BLE_LOCAL_ID_KEYS id_keys;   /* local BLE ID keys */
   Octet16 ble_encryption_key_value; /* BLE encryption key */
-
-#ifdef BTM_BLE_CONFORMANCE_TESTING
-  bool no_disc_if_pair_fail;
-  bool enable_test_mac_val;
-  BT_OCTET8 test_mac;
-  bool enable_test_local_sign_cntr;
-  uint32_t test_local_sign_cntr;
-#endif
 
   tBTM_IO_CAP loc_io_caps;    /* IO capability of the local device */
   tBTM_AUTH_REQ loc_auth_req; /* the auth_req flag  */

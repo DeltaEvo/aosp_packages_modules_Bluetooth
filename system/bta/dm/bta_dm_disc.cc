@@ -16,17 +16,14 @@
 
 #define LOG_TAG "bt_bta_dm"
 
-#include <base/logging.h>
-#ifdef __ANDROID__
-#include <bta.sysprop.h>
-#endif
+#include "bta/dm/bta_dm_disc.h"
 
+#include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <stddef.h>
 
 #include <cstdint>
 
-#include "bta/dm/bta_dm_disc.h"
 #include "bta/dm/bta_dm_int.h"
 #include "bta/include/bta_api.h"
 #include "bta/include/bta_gatt_api.h"
@@ -263,8 +260,6 @@ static tBTA_DM_STATE bta_dm_search_get_state() {
  ******************************************************************************/
 static void bta_dm_search_start(tBTA_DM_MSG* p_data) {
   bta_dm_gattc_register();
-
-  LOG_VERBOSE("%s avoid_scatter=%d", __func__, p_bta_dm_cfg->avoid_scatter);
 
   get_btm_client_interface().db.BTM_ClearInqDb(nullptr);
   /* save search params */
@@ -2380,12 +2375,19 @@ bool bta_dm_search_sm_execute(const BT_HDR_RIGID* p_msg) {
   return true;
 }
 
+static void bta_dm_disc_init_search_cb(tBTA_DM_SEARCH_CB& bta_dm_search_cb) {
+  bta_dm_search_cb = {};
+  bta_dm_search_cb.state = BTA_DM_SEARCH_IDLE;
+  bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
+  bta_dm_search_cb.transport = BT_TRANSPORT_AUTO;
+}
+
 static void bta_dm_disc_reset() {
   alarm_free(bta_dm_search_cb.search_timer);
   alarm_free(bta_dm_search_cb.gatt_close_timer);
   osi_free_and_reset((void**)&bta_dm_search_cb.p_pending_search);
   fixed_queue_free(bta_dm_search_cb.pending_discovery_queue, osi_free);
-  bta_dm_search_cb = {};
+  bta_dm_disc_init_search_cb(::bta_dm_search_cb);
 }
 
 void bta_dm_disc_start(bool delay_close_gatt) {
@@ -2396,7 +2398,66 @@ void bta_dm_disc_start(bool delay_close_gatt) {
   bta_dm_search_cb.pending_discovery_queue = fixed_queue_new(SIZE_MAX);
 }
 
+void bta_dm_disc_acl_down(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+  switch (transport) {
+    case BT_TRANSPORT_BR_EDR:
+      if (bta_dm_search_cb.wait_disc &&
+          bta_dm_search_cb.peer_bdaddr == bd_addr) {
+        bta_dm_search_cb.wait_disc = false;
+
+        if (bta_dm_search_cb.sdp_results) {
+          LOG_VERBOSE(" timer stopped  ");
+          alarm_cancel(bta_dm_search_cb.search_timer);
+          bta_dm_disc_discover_next_device();
+        }
+      }
+      break;
+
+    case BT_TRANSPORT_LE:
+    default:
+      break;
+  }
+}
+
 void bta_dm_disc_stop() { bta_dm_disc_reset(); }
+
+void bta_dm_disc_start_device_discovery(tBTA_DM_SEARCH_CBACK* p_cback) {
+  tBTA_DM_API_SEARCH* p_msg =
+      (tBTA_DM_API_SEARCH*)osi_calloc(sizeof(tBTA_DM_API_SEARCH));
+
+  p_msg->hdr.event = BTA_DM_API_SEARCH_EVT;
+  p_msg->p_cback = p_cback;
+
+  bta_sys_sendmsg(p_msg);
+}
+
+void bta_dm_disc_stop_device_discovery() {
+  tBTA_DM_API_DISCOVERY_CANCEL* p_msg =
+      (tBTA_DM_API_DISCOVERY_CANCEL*)osi_calloc(
+          sizeof(tBTA_DM_API_DISCOVERY_CANCEL));
+
+  p_msg->hdr.event = BTA_DM_API_SEARCH_CANCEL_EVT;
+  bta_sys_sendmsg(p_msg);
+}
+
+void bta_dm_disc_start_service_discovery(tBTA_DM_SEARCH_CBACK* p_cback,
+                                         const RawAddress& bd_addr,
+                                         tBT_TRANSPORT transport) {
+  tBTA_DM_API_DISCOVER* p_msg =
+      (tBTA_DM_API_DISCOVER*)osi_calloc(sizeof(tBTA_DM_API_DISCOVER));
+
+  p_msg->hdr.event = BTA_DM_API_DISCOVER_EVT;
+  p_msg->bd_addr = bd_addr;
+  p_msg->transport = transport;
+  p_msg->p_cback = p_cback;
+
+  bta_sys_sendmsg(p_msg);
+}
+
+void bta_dm_disc_stop_service_discovery(const RawAddress& bd_addr,
+                                        tBT_TRANSPORT transport) {
+  LOG_WARN("Stop service discovery not yet implemented for legacy module");
+}
 
 #define DUMPSYS_TAG "shim::legacy::bta::dm"
 void DumpsysBtaDmDisc(int fd) {
@@ -2415,6 +2476,15 @@ namespace bluetooth {
 namespace legacy {
 namespace testing {
 
+tBTA_DM_SEARCH_CB bta_dm_disc_get_search_cb() {
+  tBTA_DM_SEARCH_CB search_cb = {};
+  ::bta_dm_disc_init_search_cb(search_cb);
+  return search_cb;
+}
+void bta_dm_disc_search_cb(const tBTA_DM_SEARCH_CB& search_cb) {
+  ::bta_dm_search_cb = search_cb;
+}
+const tBTA_DM_SEARCH_CB& bta_dm_disc_search_cb() { return ::bta_dm_search_cb; }
 bool bta_dm_read_remote_device_name(const RawAddress& bd_addr,
                                     tBT_TRANSPORT transport) {
   return ::bta_dm_read_remote_device_name(bd_addr, transport);

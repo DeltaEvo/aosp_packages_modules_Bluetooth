@@ -42,10 +42,6 @@
 
 using namespace std::chrono_literals;
 
-namespace base {
-class MessageLoop;
-}  // namespace base
-
 namespace {
 constexpr uint8_t kUnusedTimer = BTA_ID_MAX;
 const RawAddress kRawAddress({0x11, 0x22, 0x33, 0x44, 0x55, 0x66});
@@ -421,7 +417,6 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__wrong_address) {
   sync_main_handler();
 
   ASSERT_EQ(0, get_func_call_count("BTM_SecDeleteRmtNameNotifyCallback"));
-  ASSERT_FALSE(bta_dm_search_cb.name_discover_done);
 }
 
 TEST_F(BtaDmTest, bta_dm_remname_cback__HCI_ERR_CONNECTION_EXISTS) {

@@ -379,38 +379,46 @@ public final class BluetoothLeCallControl implements BluetoothProfile {
     private int mCcid = 0;
     private String mToken;
     private Callback mCallback = null;
-    private final BluetoothProfileConnector<IBluetoothLeCallControl> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.LE_CALL_CONTROL,
-                    "BluetoothLeCallControl", IBluetoothLeCallControl.class.getName()) {
-                @Override
-                public IBluetoothLeCallControl getServiceInterface(IBinder service) {
-                    return IBluetoothLeCallControl.Stub.asInterface(service);
-                }
-    };
 
+    private IBluetoothLeCallControl mService;
 
     /**
      * Create a BluetoothLeCallControl proxy object for interacting with the local Bluetooth
      * telephone bearer service.
      */
-    /* package */ BluetoothLeCallControl(Context context, ServiceListener listener) {
-        mAdapter = BluetoothAdapter.getDefaultAdapter();
+    /* package */ BluetoothLeCallControl(Context context, BluetoothAdapter adapter) {
+        mAdapter = adapter;
         mAttributionSource = mAdapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
+    }
+
+    /** @hide */
+    public void close() {
+        if (VDBG) log("close()");
+
+        mAdapter.closeProfileProxy(this);
     }
 
     /** @hide */
     @Override
-    public void close() {
-        if (VDBG) log("close()");
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothLeCallControl.Stub.asInterface(service);
+    }
 
-        unregisterBearer();
-
-        mProfileConnector.disconnect();
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothLeCallControl getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /**

@@ -19,6 +19,8 @@
 #include <gtest/gtest.h>
 #include <sys/socket.h>
 
+#include <memory>
+
 #include "bta/dm/bta_dm_disc.h"
 #include "bta/dm/bta_dm_int.h"
 #include "osi/include/allocator.h"
@@ -167,7 +169,7 @@ TEST_F(BtaDiscTest, bta_dm_queue_search) {
   bluetooth::legacy::testing::bta_dm_queue_search(&msg);
 
   // Release the queued search
-  osi_free_and_reset((void**)&bta_dm_search_cb.p_pending_search);
+  bta_dm_disc_stop();
 }
 
 TEST_F(BtaDiscTest, bta_dm_read_remote_device_name) {
@@ -219,4 +221,43 @@ TEST_F(BtaDiscTest, bta_dm_start_scan) {
 TEST_F(BtaDiscTest, store_avrcp_profile_feature) {
   tSDP_DISC_REC sdp_rec = {};
   bluetooth::legacy::testing::store_avrcp_profile_feature(&sdp_rec);
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_start_device_discovery) {
+  bta_dm_disc_start_device_discovery(
+      [](tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH* p_data) {});
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_stop_device_discovery) {
+  bta_dm_disc_stop_device_discovery();
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_start_service_discovery__BT_TRANSPORT_AUTO) {
+  bta_dm_disc_start_service_discovery(
+      [](tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH* p_data) {}, kRawAddress,
+      BT_TRANSPORT_AUTO);
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_start_service_discovery__BT_TRANSPORT_BR_EDR) {
+  bta_dm_disc_start_service_discovery(
+      [](tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH* p_data) {}, kRawAddress,
+      BT_TRANSPORT_BR_EDR);
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_start_service_discovery__BT_TRANSPORT_LE) {
+  bta_dm_disc_start_service_discovery(
+      [](tBTA_DM_SEARCH_EVT event, tBTA_DM_SEARCH* p_data) {}, kRawAddress,
+      BT_TRANSPORT_LE);
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_stop_service_discovery__BT_TRANSPORT_AUTO) {
+  bta_dm_disc_stop_service_discovery(kRawAddress, BT_TRANSPORT_AUTO);
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_stop_service_discovery__BT_TRANSPORT_BR_EDR) {
+  bta_dm_disc_stop_service_discovery(kRawAddress, BT_TRANSPORT_BR_EDR);
+}
+
+TEST_F(BtaDiscTest, bta_dm_disc_stop_service_discovery__BT_TRANSPORT_LE) {
+  bta_dm_disc_stop_service_discovery(kRawAddress, BT_TRANSPORT_LE);
 }
