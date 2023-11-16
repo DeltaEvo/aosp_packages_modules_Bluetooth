@@ -15,3 +15,6 @@ per-file TEST_MAPPING,*.bp,*.xml=licorne@google.com
 # - *.gn is for GN build rules
 # - Cargo.toml is for Rust build rules
 per-file build.py,*.gn,Cargo.toml=file:/OWNERS_chromeos
+
+# Automotive Owner - Car Branch Only
+salsavage@google.com
