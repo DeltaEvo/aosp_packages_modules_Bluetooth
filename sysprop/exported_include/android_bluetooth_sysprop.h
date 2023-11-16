@@ -14,10 +14,22 @@
  * limitations under the License.
  */
 
-#include "bta_hfp_api.h"
+#pragma once
 
-#include <android_bluetooth_sysprop.h>
+#ifndef TARGET_FLOSS
 
-int get_default_hfp_version() {
-  return GET_SYSPROP(Hfp, version, HFP_VERSION_1_7);
-}
+#include <a2dp.sysprop.h>
+#include <avrcp.sysprop.h>
+#include <ble.sysprop.h>
+#include <bta.sysprop.h>
+#include <hfp.sysprop.h>
+#include <pan.sysprop.h>
+
+#define GET_SYSPROP(namespace, prop, default) \
+  android::sysprop::bluetooth::namespace ::prop().value_or(default)
+
+#else
+
+#define GET_SYSPROP(namespace, prop, default) default
+
+#endif
