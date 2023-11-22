@@ -35,6 +35,7 @@
 #include "bta_groups.h"
 #include "bta_sec_api.h"
 #include "btif_storage.h"
+#include "crypto_toolbox/crypto_toolbox.h"
 #include "csis_types.h"
 #include "gap_api.h"
 #include "gatt_api.h"
@@ -44,7 +45,6 @@
 #include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
-#include "stack/crypto_toolbox/crypto_toolbox.h"
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/btm_ble_sec_api.h"
 
@@ -1901,8 +1901,17 @@ class CsisClientImpl : public CsisClient {
   }
 
   void OnGattConnected(const tBTA_GATTC_OPEN& evt) {
-    LOG_DEBUG("address= %s, conn_id= 0x%04x",
-              ADDRESS_TO_LOGGABLE_CSTR(evt.remote_bda), evt.conn_id);
+    LOG_INFO("%s, conn_id=0x%04x, transport=%s, status=%s(0x%02x)",
+             ADDRESS_TO_LOGGABLE_CSTR(evt.remote_bda), evt.conn_id,
+             bt_transport_text(evt.transport).c_str(),
+             gatt_status_text(evt.status).c_str(), evt.status);
+
+    if (evt.transport != BT_TRANSPORT_LE) {
+      LOG_WARN("Only LE connection is allowed (transport %s)",
+               bt_transport_text(evt.transport).c_str());
+      BTA_GATTC_Close(evt.conn_id);
+      return;
+    }
 
     auto device = FindDeviceByAddress(evt.remote_bda);
     if (device == nullptr) {

@@ -24,20 +24,22 @@
 
 #include <cstdint>
 
-#include "bta/dm/bta_dm_int.h"
-#include "bta/include/bta_api.h"
+#include "bta/dm/bta_dm_disc.h"
+#include "bta/dm/bta_dm_disc_int.h"
 #include "bta/include/bta_gatt_api.h"
 #include "bta/include/bta_sdp_api.h"
 #include "btif/include/btif_config.h"
+#include "common/circular_buffer.h"
 #include "common/init_flags.h"
+#include "common/strings.h"
 #include "device/include/interop.h"
-#include "gd/common/circular_buffer.h"
-#include "gd/common/strings.h"
 #include "include/bind_helpers.h"
 #include "main/shim/dumpsys.h"
 #include "os/log.h"
+#include "osi/include/allocator.h"
+#include "osi/include/fixed_queue.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
-#include "stack/btm/btm_int_types.h"
+#include "stack/btm/btm_int_types.h"  // TimestampedStringCircularBuffer
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/bt_dev_class.h"
@@ -46,11 +48,11 @@
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/btm_log_history.h"
-#include "stack/include/btm_sec_api.h"
-#include "stack/include/gap_api.h"
-#include "stack/include/gatt_api.h"
+#include "stack/include/btm_sec_api.h"  // BTM_IsRemoteNameKnown
+#include "stack/include/gap_api.h"      // GAP_BleReadPeerPrefConnParams
+#include "stack/include/hidh_api.h"
 #include "stack/include/sdp_status.h"
-#include "stack/sdp/sdpint.h"
+#include "stack/sdp/sdpint.h"  // is_sdp_pbap_pce_disabled
 #include "types/raw_address.h"
 
 #ifdef TARGET_FLOSS
@@ -64,7 +66,9 @@ tBTM_CONTRL_STATE bta_dm_pm_obtain_controller_state(void);
 
 namespace {
 constexpr char kBtmLogTag[] = "SDP";
-}
+
+tBTA_DM_SEARCH_CB bta_dm_search_cb;
+}  // namespace
 
 static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status);
 static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
@@ -1358,8 +1362,17 @@ static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
   /* Reset transport state for next discovery */
   bta_dm_search_cb.transport = BT_TRANSPORT_AUTO;
 
-  /* if application wants to discover service */
-  if (bta_dm_search_cb.services) {
+  bool sdp_disable = HID_HostSDPDisable(remote_bd_addr);
+  if (sdp_disable)
+    LOG_DEBUG("peer:%s with HIDSDPDisable attribute.",
+              ADDRESS_TO_LOGGABLE_CSTR(remote_bd_addr));
+
+  /* if application wants to discover service and HIDSDPDisable attribute is
+     false.
+     Classic mouses with this attribute should not start SDP here, because the
+     SDP has been done during bonding. SDP request here will interleave with
+     connections to the Control or Interrupt channels */
+  if (bta_dm_search_cb.services && !sdp_disable) {
     BTM_LogHistory(kBtmLogTag, remote_bd_addr, "Discovery started ",
                    base::StringPrintf("Transport:%s",
                                       bt_transport_text(transport).c_str()));
@@ -2195,9 +2208,8 @@ std::string EpochMillisToString(long long time_ms) {
       "%s.%03u", s.c_str(),
       static_cast<unsigned int>(time_ms % MillisPerSecond));
 }
-}  // namespace
 
-tBTA_DM_SEARCH_CB bta_dm_search_cb;
+}  // namespace
 
 struct tSEARCH_STATE_HISTORY {
   const tBTA_DM_STATE state;
@@ -2476,6 +2488,9 @@ namespace bluetooth {
 namespace legacy {
 namespace testing {
 
+void bta_dm_disc_init_search_cb(tBTA_DM_SEARCH_CB& bta_dm_search_cb) {
+  ::bta_dm_disc_init_search_cb(bta_dm_search_cb);
+}
 tBTA_DM_SEARCH_CB bta_dm_disc_get_search_cb() {
   tBTA_DM_SEARCH_CB search_cb = {};
   ::bta_dm_disc_init_search_cb(search_cb);

@@ -42,14 +42,13 @@
 #include "btif/include/btif_dm.h"
 #include "btif/include/stack_manager.h"
 #include "device/include/controller.h"
+#include "gap_api.h"
 #include "include/bind_helpers.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "osi/include/allocator.h"
-#include "osi/include/fixed_queue.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
-#include "stack/btm/btm_dev.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
@@ -59,10 +58,6 @@
 #include "stack/include/main_thread.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#if (GAP_INCLUDED == TRUE)
-#include "gap_api.h"
-#endif
 
 using namespace bluetooth::legacy::stack::sdp;
 using bluetooth::Uuid;
