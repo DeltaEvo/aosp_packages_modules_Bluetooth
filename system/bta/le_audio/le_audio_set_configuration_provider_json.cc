@@ -34,7 +34,7 @@
 
 using le_audio::set_configurations::AudioSetConfiguration;
 using le_audio::set_configurations::AudioSetConfigurations;
-using le_audio::set_configurations::CodecCapabilitySetting;
+using le_audio::set_configurations::CodecConfigSetting;
 using le_audio::set_configurations::LeAudioCodecIdLc3;
 using le_audio::set_configurations::QosConfigSetting;
 using le_audio::set_configurations::SetConfiguration;
@@ -197,12 +197,12 @@ struct AudioSetConfigurationProviderJson {
     return (it != flat_codec_specific_params->cend()) ? *it : nullptr;
   }
 
-  static CodecCapabilitySetting CodecCapabilitySettingFromFlat(
+  static CodecConfigSetting CodecConfigSettingFromFlat(
       const bluetooth::le_audio::CodecId* flat_codec_id,
       const flatbuffers::Vector<
           flatbuffers::Offset<bluetooth::le_audio::CodecSpecificConfiguration>>*
           flat_codec_specific_params) {
-    CodecCapabilitySetting codec;
+    CodecConfigSetting codec;
 
     /* Cache the le_audio::types::CodecId type value */
     codec.id = types::LeAudioCodecId({
@@ -211,82 +211,31 @@ struct AudioSetConfigurationProviderJson {
         .vendor_codec_id = flat_codec_id->vendor_codec_id(),
     });
 
-    /* Cache the types::LeAudioLc3Config type value */
-    uint8_t sampling_frequency = 0;
-    uint8_t frame_duration = 0;
-    uint32_t audio_channel_allocation = 0;
-    uint16_t octets_per_codec_frame = 0;
-    uint8_t codec_frames_blocks_per_sdu = 0;
-
-    auto param = LookupCodecSpecificParam(
-        flat_codec_specific_params,
-        bluetooth::le_audio::
-            CodecSpecificLtvGenericTypes_SUPPORTED_SAMPLING_FREQUENCY);
-    if (param) {
-      ASSERT_LOG((param->compound_value()->value()->size() == 1),
-                 " Invalid compound value length: %d",
-                 param->compound_value()->value()->size());
-      auto ptr = param->compound_value()->value()->data();
-      STREAM_TO_UINT8(sampling_frequency, ptr);
+    /* Cache all the codec specific parameters */
+    for (auto const& param : *flat_codec_specific_params) {
+      auto const value = param->compound_value()->value();
+      codec.params.Add(
+          param->type(),
+          std::vector<uint8_t>(value->data(), value->data() + value->size()));
     }
 
-    param = LookupCodecSpecificParam(
-        flat_codec_specific_params,
-        bluetooth::le_audio::
-            CodecSpecificLtvGenericTypes_SUPPORTED_FRAME_DURATION);
-    if (param) {
-      LOG_ASSERT(param->compound_value()->value()->size() == 1)
-          << " Invalid compound value length: "
-          << param->compound_value()->value()->size();
-      auto ptr = param->compound_value()->value()->data();
-      STREAM_TO_UINT8(frame_duration, ptr);
-    }
-
-    param = LookupCodecSpecificParam(
-        flat_codec_specific_params,
+    auto param = codec.params.Find(
         bluetooth::le_audio::
             CodecSpecificLtvGenericTypes_SUPPORTED_AUDIO_CHANNEL_ALLOCATION);
     if (param) {
-      ASSERT_LOG((param->compound_value()->value()->size() == 4),
-                 " Invalid compound value length %d",
-                 param->compound_value()->value()->size());
-      auto ptr = param->compound_value()->value()->data();
+      auto ptr = param->data();
+      uint32_t audio_channel_allocation;
+
+      ASSERT_LOG((param->size() == sizeof(audio_channel_allocation)),
+                 "invalid channel allocation value %d", (int)param->size());
       STREAM_TO_UINT32(audio_channel_allocation, ptr);
+      codec.channel_count_per_iso_stream =
+          std::bitset<32>(audio_channel_allocation).count();
+    } else {
+      // TODO: Add support for channel count in the json configurations file,
+      //       keeping support for the allocations for compatibility.
     }
 
-    param = LookupCodecSpecificParam(
-        flat_codec_specific_params,
-        bluetooth::le_audio::
-            CodecSpecificLtvGenericTypes_SUPPORTED_OCTETS_PER_CODEC_FRAME);
-    if (param) {
-      ASSERT_LOG((param->compound_value()->value()->size() == 2),
-                 " Invalid compound value length %d",
-                 param->compound_value()->value()->size());
-      auto ptr = param->compound_value()->value()->data();
-      STREAM_TO_UINT16(octets_per_codec_frame, ptr);
-    }
-
-    param = LookupCodecSpecificParam(
-        flat_codec_specific_params,
-        bluetooth::le_audio::
-            CodecSpecificLtvGenericTypes_SUPPORTED_CODEC_FRAME_BLOCKS_PER_SDU);
-    if (param) {
-      ASSERT_LOG((param->compound_value()->value()->size() == 1),
-                 " Invalid compound value length %d",
-                 param->compound_value()->value()->size());
-      auto ptr = param->compound_value()->value()->data();
-      STREAM_TO_UINT8(codec_frames_blocks_per_sdu, ptr);
-    }
-
-    codec.config = types::LeAudioLc3Config({
-        .sampling_frequency = sampling_frequency,
-        .frame_duration = frame_duration,
-        .audio_channel_allocation = audio_channel_allocation,
-        .octets_per_codec_frame = octets_per_codec_frame,
-        .codec_frames_blocks_per_sdu = codec_frames_blocks_per_sdu,
-        .channel_count =
-            (uint8_t)std::bitset<32>(audio_channel_allocation).count(),
-    });
     return codec;
   }
 
@@ -309,8 +258,8 @@ struct AudioSetConfigurationProviderJson {
     auto config = SetConfiguration(
         flat_subconfig->direction(), flat_subconfig->device_cnt(),
         flat_subconfig->ase_cnt(),
-        CodecCapabilitySettingFromFlat(flat_subconfig->codec_id(),
-                                       flat_subconfig->codec_configuration()),
+        CodecConfigSettingFromFlat(flat_subconfig->codec_id(),
+                                   flat_subconfig->codec_configuration()),
         qos, strategy);
 
     // Note that these parameters are set here since for now, we are using the
@@ -472,7 +421,7 @@ struct AudioSetConfigurationProviderJson {
     subconfigs.push_back(
         SetConfigurationFromFlatSubconfig(&subconfig, qos_setting, location));
 
-    if (subconfigs.back().codec.GetConfigSamplingFrequency() <
+    if (subconfigs.back().codec.GetSamplingFrequencyHz() <
         le_audio::LeAudioCodecConfiguration::kSampleRate32000) {
       return;
     }
@@ -675,8 +624,8 @@ struct AudioSetConfigurationProvider::impl {
                    << +ent.qos.retransmission_number << " \n"
                    << "     qos->max_transport_latency: "
                    << +ent.qos.max_transport_latency << " \n"
-                   << "     channel count: "
-                   << +ent.codec.GetConfigChannelCount() << "\n";
+                   << "     channel count per ISO stream: "
+                   << +ent.codec.GetChannelCountPerIsoStream() << "\n";
           }
         }
       }
@@ -763,7 +712,7 @@ bool AudioSetConfigurationProvider::CheckConfigurationIsBiDirSwb(
   uint8_t dir = 0;
 
   for (const auto& conf : set_configuration.confs) {
-    if (conf.codec.GetConfigSamplingFrequency() >=
+    if (conf.codec.GetSamplingFrequencyHz() >=
         le_audio::LeAudioCodecConfiguration::kSampleRate32000) {
       dir |= conf.direction;
     }
@@ -777,7 +726,7 @@ bool AudioSetConfigurationProvider::CheckConfigurationIsDualBiDirSwb(
   uint8_t dual_dev_dual_bidir_swb = 0;
 
   for (const auto& conf : set_configuration.confs) {
-    if (conf.codec.GetConfigSamplingFrequency() <
+    if (conf.codec.GetSamplingFrequencyHz() <
         le_audio::LeAudioCodecConfiguration::kSampleRate32000) {
       return false;
     }

@@ -31,10 +31,10 @@ import static java.util.Objects.requireNonNull;
 
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
-import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.BroadcastOptions;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothProtoEnums;
 import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.IBluetooth;
@@ -73,7 +73,6 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.sysprop.BluetoothProperties;
-import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.bluetooth.BluetoothStatsLog;
@@ -81,9 +80,11 @@ import com.android.bluetooth.flags.FeatureFlags;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.BluetoothManagerServiceDumpProto;
+import com.android.server.bluetooth.airplane.AirplaneModeListener;
 import com.android.server.bluetooth.satellite.SatelliteModeListener;
 
 import kotlin.Unit;
+import kotlin.time.TimeSource;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -104,7 +105,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 class BluetoothManagerService {
-    private static final String TAG = "BluetoothManagerService";
+    private static final String TAG = BluetoothManagerService.class.getSimpleName();
     private static final boolean DBG = true;
 
     private static final String BLUETOOTH_PRIVILEGED =
@@ -187,6 +188,46 @@ class BluetoothManagerService {
     // Set this value to 0 to disable the feature
     private static final int DEFAULT_APM_ENHANCEMENT_STATE = 1;
 
+    private static final Map<Integer, String> PROFILE_TO_SERVICE_NAME =
+            Map.ofEntries(
+                    Map.entry(BluetoothProfile.HEADSET, "android.bluetooth.IBluetoothHeadset"),
+                    Map.entry(BluetoothProfile.A2DP, "android.bluetooth.IBluetoothA2dp"),
+                    Map.entry(BluetoothProfile.HID_HOST, "android.bluetooth.IBluetoothHidHost"),
+                    Map.entry(BluetoothProfile.PAN, "android.bluetooth.IBluetoothPan"),
+                    Map.entry(BluetoothProfile.PBAP, "android.bluetooth.IBluetoothPbap"),
+                    Map.entry(BluetoothProfile.MAP, "android.bluetooth.IBluetoothMap"),
+                    Map.entry(BluetoothProfile.SAP, "android.bluetooth.IBluetoothSap"),
+                    Map.entry(BluetoothProfile.A2DP_SINK, "android.bluetooth.IBluetoothA2dpSink"),
+                    Map.entry(
+                            BluetoothProfile.AVRCP_CONTROLLER,
+                            "android.bluetooth.IBluetoothAvrcpController"),
+                    Map.entry(
+                            BluetoothProfile.HEADSET_CLIENT,
+                            "android.bluetooth.IBluetoothHeadsetClient"),
+                    Map.entry(
+                            BluetoothProfile.PBAP_CLIENT, "android.bluetooth.IBluetoothPbapClient"),
+                    Map.entry(BluetoothProfile.MAP_CLIENT, "android.bluetooth.IBluetoothMapClient"),
+                    Map.entry(BluetoothProfile.HID_DEVICE, "android.bluetooth.IBluetoothHidDevice"),
+                    Map.entry(
+                            BluetoothProfile.HEARING_AID, "android.bluetooth.IBluetoothHearingAid"),
+                    Map.entry(BluetoothProfile.LE_AUDIO, "android.bluetooth.IBluetoothLeAudio"),
+                    Map.entry(
+                            BluetoothProfile.VOLUME_CONTROL,
+                            "android.bluetooth.IBluetoothVolumeControl"),
+                    Map.entry(
+                            BluetoothProfile.CSIP_SET_COORDINATOR,
+                            "android.bluetooth.IBluetoothCsipSetCoordinator"),
+                    Map.entry(
+                            BluetoothProfile.LE_AUDIO_BROADCAST,
+                            "android.bluetooth.IBluetoothLeAudio"),
+                    Map.entry(
+                            BluetoothProfile.LE_CALL_CONTROL,
+                            "android.bluetooth.IBluetoothLeCallControl"),
+                    Map.entry(BluetoothProfile.HAP_CLIENT, "android.bluetooth.IBluetoothHapClient"),
+                    Map.entry(
+                            BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT,
+                            "android.bluetooth.IBluetoothLeBroadcastAssistant"));
+
     private final Context mContext;
     private final Looper mLooper;
 
@@ -217,18 +258,24 @@ class BluetoothManagerService {
 
     private List<Integer> mSupportedProfileList = new ArrayList<>();
 
+    // TODO(b/309033118): remove BluetoothAirplaneModeListener once use_new_airplane_mode ship
     private final BluetoothAirplaneModeListener mBluetoothAirplaneModeListener;
 
+    // TODO(b/303552318): remove BluetoothNotificationManager once airplane_ressources_in_app ship
     private BluetoothNotificationManager mBluetoothNotificationManager;
 
     // TODO(b/289584302): remove BluetoothSatelliteModeListener once use_new_satellite_mode ship
     private BluetoothSatelliteModeListener mBluetoothSatelliteModeListener;
 
     private final boolean mUseNewSatelliteMode;
+    private final boolean mUseNewAirplaneMode;
+
     // used inside handler thread
     private boolean mQuietEnable = false;
     private boolean mEnable = false;
     private boolean mShutdownInProgress = false;
+
+    private Context mCurrentUserContext = null;
 
     static String timeToLog(long timestamp) {
         return DateTimeFormatter.ofPattern("MM-dd HH:mm:ss.SSS")
@@ -435,12 +482,21 @@ class BluetoothManagerService {
         }
     }
 
+    /** Send Intent to the Notification Service in the Bluetooth app */
+    Unit sendAirplaneModeNotification(String notificationState) {
+        Intent intent = new Intent("android.bluetooth.airplane.action.SEND_NOTIFICATION");
+        intent.setComponent(resolveSystemService(intent));
+        intent.putExtra("android.bluetooth.airplane.extra.NOTIFICATION_STATE", notificationState);
+        mContext.startService(intent);
+        return Unit.INSTANCE;
+    }
+
     private static final Object ON_AIRPLANE_MODE_CHANGED_TOKEN = new Object();
     private static final Object ON_SATELLITE_MODE_CHANGED_TOKEN = new Object();
     private static final Object ON_SWITCH_USER_TOKEN = new Object();
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    void onAirplaneModeChanged(boolean isAirplaneModeOn) {
+    Unit onAirplaneModeChanged(boolean isAirplaneModeOn) {
         mHandler.postDelayed(
                 () ->
                         delayModeChangedIfNeeded(
@@ -449,6 +505,7 @@ class BluetoothManagerService {
                                 "onAirplaneModeChanged"),
                 ON_AIRPLANE_MODE_CHANGED_TOKEN,
                 0);
+        return Unit.INSTANCE;
     }
 
     // TODO(b/289584302): Update to private once use_new_satellite_mode is enabled
@@ -573,29 +630,18 @@ class BluetoothManagerService {
                     String action = intent.getAction();
                     if (BluetoothAdapter.ACTION_LOCAL_NAME_CHANGED.equals(action)) {
                         String newName = intent.getStringExtra(BluetoothAdapter.EXTRA_LOCAL_NAME);
-                        if (DBG) {
-                            Log.d(
-                                    TAG,
-                                    "Bluetooth Adapter name changed to "
-                                            + newName
-                                            + " by "
-                                            + mContext.getPackageName());
-                        }
                         if (newName != null) {
+                            Log.d(TAG, "Bluetooth Adapter name changed to " + newName);
                             storeNameAndAddress(newName, null);
                         }
                     } else if (BluetoothAdapter.ACTION_BLUETOOTH_ADDRESS_CHANGED.equals(action)) {
                         String newAddress =
                                 intent.getStringExtra(BluetoothAdapter.EXTRA_BLUETOOTH_ADDRESS);
                         if (newAddress != null) {
-                            if (DBG) {
-                                Log.d(TAG, "Bluetooth Adapter address changed to " + newAddress);
-                            }
+                            Log.d(TAG, "Bluetooth Adapter address changed to " + newAddress);
                             storeNameAndAddress(null, newAddress);
                         } else {
-                            if (DBG) {
-                                Log.e(TAG, "No Bluetooth Adapter address parameter found");
-                            }
+                            Log.e(TAG, "No Bluetooth Adapter address parameter found");
                         }
                     } else if (Intent.ACTION_SETTING_RESTORED.equals(action)) {
                         final String name = intent.getStringExtra(Intent.EXTRA_SETTING_NAME);
@@ -606,14 +652,11 @@ class BluetoothManagerService {
                             final String newValue =
                                     intent.getStringExtra(Intent.EXTRA_SETTING_NEW_VALUE);
 
-                            if (DBG) {
-                                Log.d(
-                                        TAG,
-                                        "ACTION_SETTING_RESTORED with BLUETOOTH_ON, prevValue="
-                                                + prevValue
-                                                + ", newValue="
-                                                + newValue);
-                            }
+                            Log.d(
+                                    TAG,
+                                    "ACTION_SETTING_RESTORED with BLUETOOTH_ON"
+                                            + (" prevValue=" + prevValue)
+                                            + (" newValue=" + newValue));
 
                             if ((newValue != null)
                                     && (prevValue != null)
@@ -651,6 +694,7 @@ class BluetoothManagerService {
     BluetoothManagerService(
             @NonNull Context context, @NonNull Looper looper, @NonNull FeatureFlags featureFlags) {
         mContext = requireNonNull(context, "Context cannot be null");
+        mContentResolver = requireNonNull(mContext.getContentResolver(), "Resolver cannot be null");
         mLooper = requireNonNull(looper, "Looper cannot be null");
         mFeatureFlags = requireNonNull(featureFlags, "Feature Flags cannot be null");
 
@@ -662,12 +706,13 @@ class BluetoothManagerService {
         mBinder = new BluetoothServiceBinder(this, mContext, mUserManager);
         mHandler = new BluetoothHandler(mLooper);
 
-        mContentResolver = mContext.getContentResolver();
 
         // Observe BLE scan only mode settings change.
         registerForBleScanModeChange();
 
-        mBluetoothNotificationManager = new BluetoothNotificationManager(mContext);
+        if (!mFeatureFlags.airplaneRessourcesInApp() && !mFeatureFlags.useNewAirplaneMode()) {
+            mBluetoothNotificationManager = new BluetoothNotificationManager(mContext);
+        }
 
         // Disable ASHA if BLE is not supported, overriding any system property
         if (!isBleSupported(mContext)) {
@@ -729,9 +774,15 @@ class BluetoothManagerService {
             mEnableExternal = true;
         }
 
-        mBluetoothAirplaneModeListener =
-                new BluetoothAirplaneModeListener(
-                        this, mLooper, mContext, mBluetoothNotificationManager);
+        // Caching is necessary to prevent caller requiring the READ_DEVICE_CONFIG permission
+        mUseNewAirplaneMode = mFeatureFlags.useNewAirplaneMode();
+        if (mUseNewAirplaneMode) {
+            mBluetoothAirplaneModeListener = null;
+        } else {
+            mBluetoothAirplaneModeListener =
+                    new BluetoothAirplaneModeListener(
+                            this, mLooper, mContext, mBluetoothNotificationManager, mFeatureFlags);
+        }
 
         // Caching is necessary to prevent caller requiring the READ_DEVICE_CONFIG permission
         mUseNewSatelliteMode = mFeatureFlags.useNewSatelliteMode();
@@ -749,6 +800,9 @@ class BluetoothManagerService {
 
     /** Returns true if airplane mode is currently on */
     private boolean isAirplaneModeOn() {
+        if (mUseNewAirplaneMode) {
+            return AirplaneModeListener.isOn();
+        }
         return mBluetoothAirplaneModeListener.isAirplaneModeOn();
     }
 
@@ -818,16 +872,11 @@ class BluetoothManagerService {
 
     /** Retrieve the Bluetooth Adapter's name and address and save it in the local cache */
     private void loadStoredNameAndAddress() {
-        if (DBG) {
-            Log.d(TAG, "Loading stored name and address");
-        }
         if (BluetoothProperties.isAdapterAddressValidationEnabled().orElse(false)
                 && Settings.Secure.getInt(mContentResolver, Settings.Secure.BLUETOOTH_ADDR_VALID, 0)
                         == 0) {
             // if the valid flag is not set, don't load the address and name
-            if (DBG) {
-                Log.d(TAG, "invalid bluetooth name and address stored");
-            }
+            Log.w(TAG, "There is no valid bluetooth name and address stored");
             return;
         }
         mName =
@@ -838,9 +887,7 @@ class BluetoothManagerService {
                         .settingsSecureGetString(
                                 mContentResolver, Settings.Secure.BLUETOOTH_ADDRESS);
 
-        if (DBG) {
-            Log.d(TAG, "Stored bluetooth Name=" + mName + ",Address=" + mAddress);
-        }
+        Log.d(TAG, "loadStoredNameAndAddress: Name=" + mName + ", Address=" + mAddress);
     }
 
     /**
@@ -852,32 +899,26 @@ class BluetoothManagerService {
      */
     private void storeNameAndAddress(String name, String address) {
         if (name != null) {
-            Settings.Secure.putString(mContentResolver, Settings.Secure.BLUETOOTH_NAME, name);
-            mName = name;
-            if (DBG) {
-                Log.d(
-                        TAG,
-                        "Stored Bluetooth name: "
-                                + Settings.Secure.getString(
-                                        mContentResolver, Settings.Secure.BLUETOOTH_NAME));
+            if (Settings.Secure.putString(mContentResolver, Settings.Secure.BLUETOOTH_NAME, name)) {
+                mName = name;
+            } else {
+                Log.e(TAG, "Failed to store name=" + name + ". Name is still " + mName);
             }
         }
 
         if (address != null) {
-            Settings.Secure.putString(mContentResolver, Settings.Secure.BLUETOOTH_ADDRESS, address);
-            mAddress = address;
-            if (DBG) {
-                Log.d(
-                        TAG,
-                        "Stored Bluetoothaddress: "
-                                + Settings.Secure.getString(
-                                        mContentResolver, Settings.Secure.BLUETOOTH_ADDRESS));
+            if (Settings.Secure.putString(
+                    mContentResolver, Settings.Secure.BLUETOOTH_ADDRESS, address)) {
+                mAddress = address;
+            } else {
+                Log.e(TAG, "Failed to store address=" + address + ". Address is still " + mAddress);
             }
         }
 
-        if ((name != null) && (address != null)) {
+        if ((mName != null) && (mAddress != null)) {
             Settings.Secure.putInt(mContentResolver, Settings.Secure.BLUETOOTH_ADDR_VALID, 1);
         }
+        Log.d(TAG, "storeNameAndAddress: Name=" + mName + ", Address=" + mAddress);
     }
 
     IBluetooth registerAdapter(IBluetoothManagerCallback callback) {
@@ -970,6 +1011,10 @@ class BluetoothManagerService {
 
     boolean isHearingAidProfileSupported() {
         return mIsHearingAidProfileSupported;
+    }
+
+    Context getCurrentUserContext() {
+        return mCurrentUserContext;
     }
 
     boolean isMediaProfileConnected() {
@@ -1273,7 +1318,18 @@ class BluetoothManagerService {
         synchronized (mReceiver) {
             mQuietEnableExternal = false;
             mEnableExternal = true;
-            mBluetoothAirplaneModeListener.notifyUserToggledBluetooth(true);
+            if (!mUseNewAirplaneMode) {
+                mBluetoothAirplaneModeListener.notifyUserToggledBluetooth(true);
+            } else {
+                // TODO(b/288450479): Remove clearCallingIdentity when threading is fixed
+                final long callingIdentity = Binder.clearCallingIdentity();
+                try {
+                    AirplaneModeListener.notifyUserToggledBluetooth(
+                            mContentResolver, mCurrentUserContext, true);
+                } finally {
+                    Binder.restoreCallingIdentity(callingIdentity);
+                }
+            }
             sendEnableMsg(
                     false,
                     BluetoothProtoEnums.ENABLE_DISABLE_REASON_APPLICATION_REQUEST,
@@ -1296,7 +1352,18 @@ class BluetoothManagerService {
         }
 
         synchronized (mReceiver) {
-            mBluetoothAirplaneModeListener.notifyUserToggledBluetooth(false);
+            if (!mUseNewAirplaneMode) {
+                mBluetoothAirplaneModeListener.notifyUserToggledBluetooth(false);
+            } else {
+                // TODO(b/288450479): Remove clearCallingIdentity when threading is fixed
+                final long callingIdentity = Binder.clearCallingIdentity();
+                try {
+                    AirplaneModeListener.notifyUserToggledBluetooth(
+                            mContentResolver, mCurrentUserContext, false);
+                } finally {
+                    Binder.restoreCallingIdentity(callingIdentity);
+                }
+            }
 
             if (persist) {
                 persistBluetoothSetting(BLUETOOTH_OFF);
@@ -1336,7 +1403,7 @@ class BluetoothManagerService {
     }
 
     boolean bindBluetoothProfileService(
-            int bluetoothProfile, String serviceName, IBluetoothProfileServiceConnection proxy) {
+            int bluetoothProfile, IBluetoothProfileServiceConnection proxy) {
         if (!mState.oneOf(BluetoothAdapter.STATE_ON)) {
             if (DBG) {
                 Log.d(
@@ -1365,7 +1432,9 @@ class BluetoothManagerService {
                                     + " profile: "
                                     + bluetoothProfile);
                 }
-                psc = new ProfileServiceConnections(new Intent(serviceName));
+                psc =
+                        new ProfileServiceConnections(
+                                new Intent(PROFILE_TO_SERVICE_NAME.get(bluetoothProfile)));
                 if (!psc.bindService(DEFAULT_REBIND_COUNT)) {
                     return false;
                 }
@@ -1426,19 +1495,40 @@ class BluetoothManagerService {
      * Send enable message and set adapter name and address. Called when the boot phase becomes
      * PHASE_SYSTEM_SERVICES_READY.
      */
-    void handleOnBootPhase() {
-        mHandler.post(() -> internalHandleOnBootPhase());
+    void handleOnBootPhase(UserHandle userHandle) {
+        mHandler.post(() -> internalHandleOnBootPhase(userHandle));
     }
 
-    private void internalHandleOnBootPhase() {
-        if (DBG) {
-            Log.d(TAG, "Bluetooth boot completed");
+    @VisibleForTesting
+    void initialize(UserHandle userHandle) {
+        if (mUseNewAirplaneMode) {
+            mCurrentUserContext =
+                    requireNonNull(
+                            mContext.createContextAsUser(userHandle, 0),
+                            "Current User Context cannot be null");
+            AirplaneModeListener.initialize(
+                    mLooper,
+                    mContentResolver,
+                    mState,
+                    this::onAirplaneModeChanged,
+                    this::sendAirplaneModeNotification,
+                    this::isMediaProfileConnected,
+                    this::getCurrentUserContext,
+                    TimeSource.Monotonic.INSTANCE);
         }
 
         if (mUseNewSatelliteMode) {
             SatelliteModeListener.initialize(
                     mLooper, mContentResolver, this::onSatelliteModeChanged);
         }
+    }
+
+    private void internalHandleOnBootPhase(UserHandle userHandle) {
+        if (DBG) {
+            Log.d(TAG, "Bluetooth boot completed");
+        }
+
+        initialize(userHandle);
 
         final boolean isBluetoothDisallowed = isBluetoothDisallowed();
         if (isBluetoothDisallowed) {
@@ -1460,8 +1550,10 @@ class BluetoothManagerService {
             mHandler.sendEmptyMessage(MESSAGE_GET_NAME_AND_ADDRESS);
         }
 
-        mBluetoothAirplaneModeListener.start(new BluetoothModeChangeHelper(mContext));
-        setApmEnhancementState();
+        if (!mUseNewAirplaneMode) {
+            mBluetoothAirplaneModeListener.start(new BluetoothModeChangeHelper(mContext));
+            setApmEnhancementState();
+        }
     }
 
     /** set APM enhancement feature state */
@@ -2262,8 +2354,14 @@ class BluetoothManagerService {
                         Log.d(TAG, "MESSAGE_USER_SWITCHED");
                     }
                     mHandler.removeMessages(MESSAGE_USER_SWITCHED);
-                    mBluetoothNotificationManager.createNotificationChannels();
+                    if (!mFeatureFlags.airplaneRessourcesInApp() && !mUseNewAirplaneMode) {
+                        mBluetoothNotificationManager.createNotificationChannels();
+                    }
                     UserHandle userTo = (UserHandle) msg.obj;
+
+                    if (mUseNewAirplaneMode) {
+                        mCurrentUserContext = mContext.createContextAsUser(userTo, 0);
+                    }
 
                     /* disable and enable BT when detect a user switch */
                     if (mAdapter != null && mState.oneOf(STATE_ON)) {
@@ -2859,8 +2957,6 @@ class BluetoothManagerService {
         }
     }
 
-    // TODO(b/193460475): Remove when tooling supports SystemApi to public API.
-    @SuppressLint("NewApi")
     static @NonNull Bundle getTempAllowlistBroadcastOptions() {
         final long duration = 10_000;
         final BroadcastOptions bOptions = BroadcastOptions.makeBasic();

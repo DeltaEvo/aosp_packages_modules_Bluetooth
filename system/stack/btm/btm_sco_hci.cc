@@ -509,7 +509,6 @@ struct tBTM_MSBC_INFO {
 
   const uint8_t* find_msbc_pkt_head() {
     if (read_corrupted) {
-      LOG_DEBUG("Skip corrupted mSBC packets");
       read_corrupted = false;
       return nullptr;
     }
@@ -556,11 +555,6 @@ struct tBTM_MSBC_INFO {
   }
 
   size_t mark_pkt_dequeued() {
-    LOG_DEBUG(
-        "Try to mark an encoded packet dequeued: ro:%lu wo:%lu pkt_size:%lu",
-        (unsigned long)encode_buf_ro, (unsigned long)encode_buf_wo,
-        (unsigned long)packet_size);
-
     if (encode_buf_wo - encode_buf_ro < packet_size) return 0;
 
     encode_buf_ro += packet_size;
@@ -574,7 +568,8 @@ struct tBTM_MSBC_INFO {
 
   const uint8_t* sco_pkt_read_ptr() {
     if (encode_buf_wo - encode_buf_ro < packet_size) {
-      LOG_DEBUG("Insufficient data as a SCO packet to read.");
+      LOG_DEBUG("Insufficient data to dequeue. buf_wo:%zu, buf_ro:%zu",
+                encode_buf_wo, encode_buf_ro);
       return nullptr;
     }
 
@@ -637,8 +632,6 @@ bool enqueue_packet(const std::vector<uint8_t>& data, bool corrupted) {
 
   msbc_info->read_corrupted |= corrupted;
   if (msbc_info->write(data) != data.size()) {
-    LOG_DEBUG("Fail to write packet with size %lu to buffer",
-              (unsigned long)data.size());
     return false;
   }
 
@@ -659,15 +652,11 @@ size_t decode(const uint8_t** out_data) {
   }
 
   if (msbc_info->decodable() < BTM_MSBC_PKT_LEN) {
-    LOG_DEBUG("No complete mSBC packet to decode");
     return 0;
   }
 
   frame_head = msbc_info->find_msbc_pkt_head();
   if (frame_head == nullptr) {
-    LOG_DEBUG("No valid mSBC packet to decode %lu, %lu",
-              (unsigned long)msbc_info->decode_buf_ro,
-              (unsigned long)msbc_info->decode_buf_wo);
     /* Done with parsing the raw bytes just read. If we couldn't find a valid
      * mSBC frame head, we shall treat the existing BTM_MSBC_PKT_LEN length
      * of mSBC data as a corrupted packet and conduct the PLC. */
@@ -677,7 +666,6 @@ size_t decode(const uint8_t** out_data) {
   if (!GetInterfaceToProfiles()->msbcCodec->decodePacket(
           frame_head, msbc_info->decoded_pcm_buf,
           sizeof(msbc_info->decoded_pcm_buf))) {
-    LOG_DEBUG("Decoding mSBC packet failed");
     goto packet_loss;
   }
 
@@ -708,16 +696,11 @@ size_t encode(int16_t* data, size_t len) {
   }
 
   if (len < BTM_MSBC_CODE_SIZE) {
-    LOG_DEBUG(
-        "PCM frames with size %lu is insufficient to be encoded into a mSBC "
-        "packet",
-        (unsigned long)len);
     return 0;
   }
 
   pkt_body = msbc_info->fill_msbc_pkt_template();
   if (pkt_body == nullptr) {
-    LOG_DEBUG("Failed to fill the template to fill the mSBC packet");
     return 0;
   }
 
@@ -745,7 +728,6 @@ size_t dequeue_packet(const uint8_t** output) {
 
   *output = msbc_info->sco_pkt_read_ptr();
   if (*output == nullptr) {
-    LOG_DEBUG("Insufficient data to dequeue.");
     return 0;
   }
 
@@ -899,7 +881,6 @@ struct tBTM_LC3_INFO {
 
   const uint8_t* find_lc3_pkt_head() {
     if (read_corrupted) {
-      LOG_DEBUG("Skip corrupted LC3 packets");
       read_corrupted = false;
       return nullptr;
     }
@@ -925,11 +906,6 @@ struct tBTM_LC3_INFO {
   }
 
   size_t mark_pkt_dequeued() {
-    LOG_DEBUG(
-        "Try to mark an encoded packet dequeued: ro:%lu wo:%lu pkt_size:%lu",
-        (unsigned long)encode_buf_ro, (unsigned long)encode_buf_wo,
-        (unsigned long)packet_size);
-
     if (encode_buf_wo - encode_buf_ro < packet_size) return 0;
 
     encode_buf_ro += packet_size;
@@ -943,7 +919,8 @@ struct tBTM_LC3_INFO {
 
   const uint8_t* sco_pkt_read_ptr() {
     if (encode_buf_wo - encode_buf_ro < packet_size) {
-      LOG_DEBUG("Insufficient data as a SCO packet to read.");
+      LOG_DEBUG("Insufficient data to dequeue. buf_wo:%zu, buf_ro:%zu",
+                encode_buf_wo, encode_buf_ro);
       return nullptr;
     }
 
@@ -1012,8 +989,6 @@ bool enqueue_packet(const std::vector<uint8_t>& data, bool corrupted) {
 
   lc3_info->read_corrupted |= corrupted;
   if (lc3_info->write(data) != data.size()) {
-    LOG_DEBUG("Fail to write packet with size %lu to buffer",
-              (unsigned long)data.size());
     return false;
   }
 
@@ -1034,16 +1009,10 @@ size_t decode(const uint8_t** out_data) {
   }
 
   if (lc3_info->decodable() < BTM_LC3_PKT_LEN) {
-    LOG_DEBUG("No complete LC3 packet to decode");
     return 0;
   }
 
   frame_head = lc3_info->find_lc3_pkt_head();
-  if (frame_head == nullptr) {
-    LOG_DEBUG("No valid LC3 packet to decode %lu, %lu",
-              (unsigned long)lc3_info->decode_buf_ro,
-              (unsigned long)lc3_info->decode_buf_wo);
-  }
 
   bool plc_conducted = !GetInterfaceToProfiles()->lc3Codec->decodePacket(
       frame_head, lc3_info->decoded_pcm_buf, sizeof(lc3_info->decoded_pcm_buf));
@@ -1072,16 +1041,11 @@ size_t encode(int16_t* data, size_t len) {
   }
 
   if (len < BTM_LC3_CODE_SIZE) {
-    LOG_DEBUG(
-        "PCM frames with size %lu is insufficient to be encoded into a LC3 "
-        "packet",
-        (unsigned long)len);
     return 0;
   }
 
   pkt_body = lc3_info->fill_lc3_pkt_template();
   if (pkt_body == nullptr) {
-    LOG_DEBUG("Failed to fill the template to fill the LC3 packet");
     return 0;
   }
 
@@ -1101,7 +1065,6 @@ size_t dequeue_packet(const uint8_t** output) {
 
   *output = lc3_info->sco_pkt_read_ptr();
   if (*output == nullptr) {
-    LOG_DEBUG("Insufficient data to dequeue.");
     return 0;
   }
 

@@ -49,7 +49,6 @@ struct broadcast_offload_config {
   uint32_t frame_duration;
   uint16_t octets_per_frame;
   uint8_t blocks_per_sdu;
-  uint32_t codec_bitrate;
   uint8_t retransmission_number;
   uint16_t max_transport_latency;
 };
@@ -83,6 +82,10 @@ class CodecManager {
       const std::vector<uint16_t>& conn_handle,
       std::function<void(const ::le_audio::broadcast_offload_config& config)>
           update_receiver);
+  virtual std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+  GetLocalAudioOutputCodecCapa();
+  virtual std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+  GetLocalAudioInputCodecCapa();
 
  private:
   CodecManager();

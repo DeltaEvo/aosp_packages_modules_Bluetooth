@@ -32,6 +32,7 @@
 #include <base/threading/thread.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_gatt.h>
+#include <hardware/bt_gatt_types.h>
 
 #include <string>
 
@@ -44,6 +45,7 @@
 #include "btif_gatt_util.h"
 #include "device/include/controller.h"
 #include "os/log.h"
+#include "osi/include/allocator.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_api_types.h"
 #include "stack/include/main_thread.h"
@@ -417,7 +419,7 @@ void read_char_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
   params->status = status;
   params->handle = handle;
   params->value.len = len;
-  CHECK(len <= BTGATT_MAX_ATTR_LEN);
+  CHECK(len <= GATT_MAX_ATTR_LEN);
   if (len > 0) memcpy(params->value.value, value, len);
 
   // clang-tidy analyzer complains about |params| is leaked.  It doesn't know
@@ -441,7 +443,7 @@ void read_using_char_uuid_cb(uint16_t conn_id, tGATT_STATUS status,
   params->status = status;
   params->handle = handle;
   params->value.len = len;
-  CHECK(len <= BTGATT_MAX_ATTR_LEN);
+  CHECK(len <= GATT_MAX_ATTR_LEN);
   if (len > 0) memcpy(params->value.value, value, len);
 
   // clang-tidy analyzer complains about |params| is leaked.  It doesn't know
@@ -468,7 +470,7 @@ void read_desc_cb(uint16_t conn_id, tGATT_STATUS status, uint16_t handle,
   params.status = status;
   params.handle = handle;
   params.value.len = len;
-  CHECK(len <= BTGATT_MAX_ATTR_LEN);
+  CHECK(len <= GATT_MAX_ATTR_LEN);
   if (len > 0) memcpy(params.value.value, value, len);
 
   CLI_CBACK_IN_JNI(read_descriptor_cb, conn_id, status, params);
@@ -503,7 +505,7 @@ static bt_status_t btif_gattc_write_char(int conn_id, uint16_t handle,
 
   std::vector<uint8_t> value(val, val + len);
 
-  if (value.size() > BTGATT_MAX_ATTR_LEN) value.resize(BTGATT_MAX_ATTR_LEN);
+  if (value.size() > GATT_MAX_ATTR_LEN) value.resize(GATT_MAX_ATTR_LEN);
 
   return do_in_jni_thread(Bind(&BTA_GATTC_WriteCharValue, conn_id, handle,
                                write_type, std::move(value), auth_req,
@@ -533,7 +535,7 @@ static bt_status_t btif_gattc_write_char_descr(int conn_id, uint16_t handle,
 
   std::vector<uint8_t> value(val, val + len);
 
-  if (value.size() > BTGATT_MAX_ATTR_LEN) value.resize(BTGATT_MAX_ATTR_LEN);
+  if (value.size() > GATT_MAX_ATTR_LEN) value.resize(GATT_MAX_ATTR_LEN);
 
   return do_in_jni_thread(Bind(&BTA_GATTC_WriteCharDescr, conn_id, handle,
                                std::move(value), auth_req, write_descr_cb,

@@ -21,6 +21,8 @@
  *  This file contains security manager protocol utility functions
  *
  ******************************************************************************/
+#define LOG_TAG "smp"
+
 #include <base/functional/bind.h>
 #include <base/functional/callback.h>
 
@@ -28,15 +30,16 @@
 #include <cstring>
 
 #include "bt_target.h"
-#include "btm_ble_sec_api.h"
 #include "btm_ble_int.h"
+#include "btm_ble_sec_api.h"
+#include "crypto_toolbox/crypto_toolbox.h"
 #include "device/include/controller.h"
+#include "os/log.h"
 #include "osi/include/osi.h"
 #include "p_256_ecc_pp.h"
 #include "smp_int.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
-#include "stack/crypto_toolbox/crypto_toolbox.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
 #include "types/raw_address.h"
@@ -168,9 +171,9 @@ void smp_generate_stk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
  * This function is called to calculate CSRK
  */
 void smp_compute_csrk(uint16_t div, tSMP_CB* p_cb) {
-  uint8_t buffer[4]; /* for (r || DIV)  r=1*/
+  Octet16 buffer{}; /* for (r || DIV)  r=1*/
   uint16_t r = 1;
-  uint8_t* p = buffer;
+  uint8_t* p = buffer.data();
 
   p_cb->div = div;
 
@@ -180,7 +183,7 @@ void smp_compute_csrk(uint16_t div, tSMP_CB* p_cb) {
   UINT16_TO_STREAM(p, p_cb->div);
   UINT16_TO_STREAM(p, r);
 
-  p_cb->csrk = aes_128(er, buffer, 4);
+  p_cb->csrk = aes_128(er, buffer);
   smp_send_csrk_info(p_cb, NULL);
 }
 
@@ -490,7 +493,9 @@ static void smp_generate_y(tSMP_CB* p_cb, BT_OCTET8 rand) {
   const Octet16& dhk = BTM_GetDeviceDHK();
 
   memcpy(p_cb->enc_rand, rand, BT_OCTET8_LEN);
-  Octet16 output = aes_128(dhk, rand, BT_OCTET8_LEN);
+  Octet16 rand16{};
+  memcpy(rand16.data(), rand, BT_OCTET8_LEN);
+  Octet16 output = aes_128(dhk, rand16);
   smp_process_ediv(p_cb, output);
 }
 
@@ -504,7 +509,10 @@ static void smp_generate_ltk_cont(uint16_t div, tSMP_CB* p_cb) {
   const Octet16& er = BTM_GetDeviceEncRoot();
 
   /* LTK = d1(ER, DIV, 0)= e(ER, DIV)*/
-  Octet16 ltk = aes_128(er, (uint8_t*)&p_cb->div, sizeof(uint16_t));
+  Octet16 div16{};
+  div16.data()[0] = div & 0xff;
+  div16.data()[1] = div >> 8u;
+  Octet16 ltk = aes_128(er, div16);
   /* mask the LTK */
   smp_mask_enc_key(p_cb->loc_enc_size, &ltk);
   p_cb->ltk = ltk;
@@ -561,7 +569,7 @@ void smp_generate_ltk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
 Octet16 smp_calculate_legacy_short_term_key(tSMP_CB* p_cb) {
   LOG_VERBOSE("%s", __func__);
 
-  Octet16 text{0};
+  Octet16 text{};
   if (p_cb->role == HCI_ROLE_CENTRAL) {
     memcpy(text.data(), p_cb->rand.data(), BT_OCTET8_LEN);
     memcpy(text.data() + BT_OCTET8_LEN, p_cb->rrand.data(), BT_OCTET8_LEN);

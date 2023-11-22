@@ -26,8 +26,7 @@
 // Original included files, if any
 #include <base/functional/bind.h>
 
-#include "stack/btm/btm_dev.h"
-#include "stack/btm/security_device_record.h"
+#include "stack/include/btm_ble_api_types.h"
 #include "types/raw_address.h"
 
 // Mocked compile conditionals, if any
@@ -35,28 +34,12 @@ namespace test {
 namespace mock {
 namespace stack_btm_ble_bgconn {
 
-// Shared state between mocked functions and tests
-// Name: convert_to_address_with_type
-// Params:  const RawAddress& bd_addr, const tBTM_SEC_DEV_REC* p_dev_rec
-// Returns: const tBLE_BD_ADDR
-struct convert_to_address_with_type {
-  tBLE_BD_ADDR ble_bd_addr;
-  std::function<const tBLE_BD_ADDR(const RawAddress& bd_addr,
-                                   const tBTM_SEC_DEV_REC* p_dev_rec)>
-      body{[this](const RawAddress& bd_addr,
-                  const tBTM_SEC_DEV_REC* p_dev_rec) { return ble_bd_addr; }};
-  const tBLE_BD_ADDR operator()(const RawAddress& bd_addr,
-                                const tBTM_SEC_DEV_REC* p_dev_rec) {
-    return body(bd_addr, p_dev_rec);
-  };
-};
-extern struct convert_to_address_with_type convert_to_address_with_type;
 // Name: btm_update_scanner_filter_policy
 // Params: tBTM_BLE_SFP scan_policy
 // Returns: void
 struct btm_update_scanner_filter_policy {
   std::function<void(tBTM_BLE_SFP scan_policy)> body{
-      [](tBTM_BLE_SFP scan_policy) {}};
+      [](tBTM_BLE_SFP /* scan_policy */) {}};
   void operator()(tBTM_BLE_SFP scan_policy) { body(scan_policy); };
 };
 extern struct btm_update_scanner_filter_policy btm_update_scanner_filter_policy;
@@ -76,16 +59,7 @@ struct btm_ble_resume_bg_conn {
   bool operator()(void) { return body(); };
 };
 extern struct btm_ble_resume_bg_conn btm_ble_resume_bg_conn;
-// Name: BTM_BackgroundConnectAddressKnown
-// Params: const RawAddress& address
-// Returns: bool
-struct BTM_BackgroundConnectAddressKnown {
-  std::function<bool(const RawAddress& address)> body{
-      [](const RawAddress& address) { return false; }};
-  bool operator()(const RawAddress& address) { return body(address); };
-};
-extern struct BTM_BackgroundConnectAddressKnown
-    BTM_BackgroundConnectAddressKnown;
+
 // Name: BTM_SetLeConnectionModeToFast
 // Params:
 // Returns: bool
@@ -107,7 +81,7 @@ extern struct BTM_SetLeConnectionModeToSlow BTM_SetLeConnectionModeToSlow;
 // Returns: bool
 struct BTM_AcceptlistAdd {
   std::function<bool(const RawAddress& address)> body{
-      [](const RawAddress& address) { return false; }};
+      [](const RawAddress& /* address */) { return false; }};
   bool operator()(const RawAddress& address) { return body(address); };
 };
 extern struct BTM_AcceptlistAdd BTM_AcceptlistAdd;
@@ -116,7 +90,9 @@ extern struct BTM_AcceptlistAdd BTM_AcceptlistAdd;
 // Returns: bool
 struct BTM_AcceptlistAddDirect {
   std::function<bool(const RawAddress& address, bool is_direct)> body{
-      [](const RawAddress& address, bool is_direct) { return false; }};
+      [](const RawAddress& /* address */, bool /* is_direct */) {
+        return false;
+      }};
   bool operator()(const RawAddress& address, bool is_direct) {
     return body(address, is_direct);
   };
@@ -127,7 +103,7 @@ extern struct BTM_AcceptlistAddDirect BTM_AcceptlistAddDirect;
 // Returns: void
 struct BTM_AcceptlistRemove {
   std::function<void(const RawAddress& address)> body{
-      [](const RawAddress& address) {}};
+      [](const RawAddress& /* address */) {}};
   void operator()(const RawAddress& address) { body(address); };
 };
 extern struct BTM_AcceptlistRemove BTM_AcceptlistRemove;

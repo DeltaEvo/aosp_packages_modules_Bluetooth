@@ -271,6 +271,35 @@ public final class BluetoothHeadset implements BluetoothProfile {
     public static final String VENDOR_SPECIFIC_HEADSET_EVENT_XEVENT_BATTERY_LEVEL = "BATTERY";
 
     /**
+     * A vendor-specific AT command that asks for the information about device manufacturer.
+     *
+     * @hide
+     */
+    public static final String VENDOR_SPECIFIC_HEADSET_EVENT_CGMI = "+CGMI";
+
+    /**
+     * A vendor-specific AT command that asks for the information about the model of the device.
+     *
+     * @hide
+     */
+    public static final String VENDOR_SPECIFIC_HEADSET_EVENT_CGMM = "+CGMM";
+
+    /**
+     * A vendor-specific AT command that asks for the revision information, for Android we will
+     * return the OS version and build number.
+     *
+     * @hide
+     */
+    public static final String VENDOR_SPECIFIC_HEADSET_EVENT_CGMR = "+CGMR";
+
+    /**
+     * A vendor-specific AT command that asks for the device's serial number.
+     *
+     * @hide
+     */
+    public static final String VENDOR_SPECIFIC_HEADSET_EVENT_CGSN = "+CGSN";
+
+    /**
      * Headset state when SCO audio is not connected.
      * This state can be one of
      * {@link #EXTRA_STATE} or {@link #EXTRA_PREVIOUS_STATE} of
@@ -340,23 +369,16 @@ public final class BluetoothHeadset implements BluetoothProfile {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothHeadset> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.HEADSET, "BluetoothHeadset",
-                    IBluetoothHeadset.class.getName()) {
-                @Override
-                public IBluetoothHeadset getServiceInterface(IBinder service) {
-                    return IBluetoothHeadset.Stub.asInterface(service);
-                }
-    };
+
+    private IBluetoothHeadset mService;
 
     /**
      * Create a BluetoothHeadset proxy object.
      */
-    /* package */ BluetoothHeadset(Context context, ServiceListener listener,
-            BluetoothAdapter adapter) {
+    /* package */ BluetoothHeadset(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
     }
 
     /**
@@ -368,11 +390,29 @@ public final class BluetoothHeadset implements BluetoothProfile {
      */
     @UnsupportedAppUsage
     public void close() {
-        mProfileConnector.disconnect();
+        mAdapter.closeProfileProxy(this);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothHeadset.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothHeadset getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /** {@hide} */

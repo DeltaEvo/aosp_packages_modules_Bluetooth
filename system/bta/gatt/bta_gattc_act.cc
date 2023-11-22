@@ -33,6 +33,7 @@
 #include "bta/include/bta_api.h"
 #include "btif/include/btif_debug_conn.h"
 #include "device/include/controller.h"
+#include "hardware/bt_gatt_types.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -767,7 +768,11 @@ void bta_gattc_cfg_mtu(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
     case MTU_EXCHANGE_IN_PROGRESS:
       LOG_INFO("Enqueue MTU Request  - waiting for response on p_clcb %p",
                p_clcb);
-      bta_gattc_enqueue(p_clcb, p_data);
+      /* MTU request is in progress and this one will not be sent to remote
+       * device. Just push back on the queue and response will be sent up to
+       * the upper layer when MTU Exchange will be completed.
+       */
+      p_clcb->p_q_cmd_queue.push_back(p_data);
       return;
 
     case MTU_EXCHANGE_NOT_DONE_YET:
@@ -866,7 +871,7 @@ void bta_gattc_start_discover(tBTA_GATTC_CLCB* p_clcb,
 }
 
 void bta_gattc_continue_discovery_if_needed(const RawAddress& bd_addr,
-                                            uint16_t acl_handle) {
+                                            uint16_t /* acl_handle */) {
   tBTA_GATTC_SERV* p_srcb = bta_gattc_find_srvr_cache(bd_addr);
   if (!p_srcb || !p_srcb->disc_blocked_waiting_on_version) {
     return;

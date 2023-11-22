@@ -32,6 +32,7 @@ import android.content.ServiceConnection;
 import android.database.Cursor;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.HandlerThread;
@@ -1374,7 +1375,7 @@ public class HeadsetStateMachineTest {
     }
 
     @Test
-    public void testProcessVendorSpecificAt_withNoEqualSignCommand() {
+    public void testProcessVendorSpecificAt_withNonExceptedNoEqualSignCommand() {
         String atString = "invalid_command";
 
         mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
@@ -1410,6 +1411,49 @@ public class HeadsetStateMachineTest {
         mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
 
         verify(mNativeInterface).atResponseString(mTestDevice, "+XAPL=iPhone," + "2");
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withExceptedNoEqualSignCommandCGMI() {
+        String atString = BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMI;
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface).atResponseString(mTestDevice, Build.MANUFACTURER);
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withExceptedNoEqualSignCommandCGMM() {
+        String atString = BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMM;
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface).atResponseString(mTestDevice, Build.MODEL);
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withExceptedNoEqualSignCommandCGMR() {
+        String atString = BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMR;
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface)
+                .atResponseString(
+                        mTestDevice,
+                        String.format("%s (%s)", Build.VERSION.RELEASE, Build.VERSION.INCREMENTAL));
+        verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+    }
+
+    @Test
+    public void testProcessVendorSpecificAt_withExceptedNoEqualSignCommandCGSN() {
+        String atString = BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGSN;
+
+        mHeadsetStateMachine.processVendorSpecificAt(atString, mTestDevice);
+
+        verify(mNativeInterface).atResponseString(mTestDevice, Build.getSerial());
         verify(mNativeInterface).atResponseCode(mTestDevice, HeadsetHalConstants.AT_RESPONSE_OK, 0);
     }
 
@@ -1565,6 +1609,82 @@ public class HeadsetStateMachineTest {
         // wrong device
         BluetoothDevice device = mAdapter.getRemoteDevice("01:01:01:01:01:01");
         Assert.assertFalse(setSinkAudioPolicyArgs("SINKAUDIOPOLICY,0,0,0", device));
+    }
+
+    /** Test setting audio parameters according to received SWB event. SWB AptX is enabled. */
+    @Test
+    public void testSetAudioParameters_SwbAptxEnabled() {
+        setUpConnectedState();
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_SWB,
+                        HeadsetHalConstants.BTHF_SWB_CODEC_VENDOR_APTX,
+                        HeadsetHalConstants.BTHF_SWB_YES,
+                        mTestDevice));
+
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED,
+                        HeadsetHalConstants.AUDIO_STATE_CONNECTED,
+                        mTestDevice));
+        verifyAudioSystemSetParametersInvocation(false, true);
+    }
+
+    /** Test setting audio parameters according to received SWB event. SWB LC3 is enabled. */
+    @Test
+    public void testSetAudioParameters_SwbLc3Enabled() {
+        setUpConnectedState();
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_SWB,
+                        HeadsetHalConstants.BTHF_SWB_CODEC_LC3,
+                        HeadsetHalConstants.BTHF_SWB_YES,
+                        mTestDevice));
+
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED,
+                        HeadsetHalConstants.AUDIO_STATE_CONNECTED,
+                        mTestDevice));
+        verifyAudioSystemSetParametersInvocation(true, false);
+    }
+
+    /** Test setting audio parameters according to received SWB event. All SWB disabled. */
+    @Test
+    public void testSetAudioParameters_SwbDisabled() {
+        setUpConnectedState();
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_SWB,
+                        HeadsetHalConstants.BTHF_SWB_CODEC_LC3,
+                        HeadsetHalConstants.BTHF_SWB_NO,
+                        mTestDevice));
+
+        mHeadsetStateMachine.sendMessage(
+                HeadsetStateMachine.STACK_EVENT,
+                new HeadsetStackEvent(
+                        HeadsetStackEvent.EVENT_TYPE_AUDIO_STATE_CHANGED,
+                        HeadsetHalConstants.AUDIO_STATE_CONNECTED,
+                        mTestDevice));
+        verifyAudioSystemSetParametersInvocation(false, false);
+    }
+
+    /**
+     * verify parameters given to audio system
+     *
+     * @param lc3Enabled if true check if SWB LC3 was enabled
+     * @param aptxEnabled if true check if SWB AptX was enabled
+     */
+    private void verifyAudioSystemSetParametersInvocation(boolean lc3Enabled, boolean aptxEnabled) {
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS))
+                .setParameters(lc3Enabled ? "bt_lc3_swb=on" : "bt_lc3_swb=off");
+        verify(mAudioManager, timeout(ASYNC_CALL_TIMEOUT_MILLIS))
+                .setParameters(aptxEnabled ? "bt_swb=0" : "bt_swb=65535");
     }
 
     /**

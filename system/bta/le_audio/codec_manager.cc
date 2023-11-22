@@ -20,15 +20,16 @@
 #include "broadcaster/broadcaster_types.h"
 #include "device/include/controller.h"
 #include "le_audio_set_configuration_provider.h"
+#include "le_audio_utils.h"
 #include "osi/include/log.h"
 #include "osi/include/properties.h"
-#include "stack/acl/acl.h"
-#include "stack/include/acl_api.h"
+#include "stack/include/hcimsgs.h"
 
 namespace {
 
 using bluetooth::hci::iso_manager::kIsoDataPathHci;
 using bluetooth::hci::iso_manager::kIsoDataPathPlatformDefault;
+using bluetooth::legacy::hci::GetInterface;
 using le_audio::CodecManager;
 using le_audio::types::CodecLocation;
 
@@ -105,10 +106,10 @@ struct codec_manager_impl {
     }
 
     LOG_INFO("LeAudioCodecManagerImpl: configure_data_path for encode");
-    btm_configure_data_path(btm_data_direction::HOST_TO_CONTROLLER,
-                            kIsoDataPathPlatformDefault, {});
-    btm_configure_data_path(btm_data_direction::CONTROLLER_TO_HOST,
-                            kIsoDataPathPlatformDefault, {});
+    GetInterface().ConfigureDataPath(hci_data_direction_t::HOST_TO_CONTROLLER,
+                                     kIsoDataPathPlatformDefault, {});
+    GetInterface().ConfigureDataPath(hci_data_direction_t::CONTROLLER_TO_HOST,
+                                     kIsoDataPathPlatformDefault, {});
     SetCodecLocation(CodecLocation::ADSP);
   }
   void start(
@@ -118,10 +119,10 @@ struct codec_manager_impl {
   }
   ~codec_manager_impl() {
     if (GetCodecLocation() != CodecLocation::HOST) {
-      btm_configure_data_path(btm_data_direction::HOST_TO_CONTROLLER,
-                              kIsoDataPathHci, {});
-      btm_configure_data_path(btm_data_direction::CONTROLLER_TO_HOST,
-                              kIsoDataPathHci, {});
+      GetInterface().ConfigureDataPath(hci_data_direction_t::HOST_TO_CONTROLLER,
+                                       kIsoDataPathHci, {});
+      GetInterface().ConfigureDataPath(hci_data_direction_t::CONTROLLER_TO_HOST,
+                                       kIsoDataPathHci, {});
     }
     le_audio::AudioSetConfigurationProvider::Cleanup();
   }
@@ -129,6 +130,16 @@ struct codec_manager_impl {
 
   bool IsOffloadDualBiDirSwbSupported(void) const {
     return offload_dual_bidirection_swb_supported_;
+  }
+
+  std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+  GetLocalAudioOutputCodecCapa() {
+    return codec_output_capa;
+  }
+
+  std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+  GetLocalAudioInputCodecCapa() {
+    return codec_input_capa;
   }
 
   void UpdateActiveAudioConfig(
@@ -173,7 +184,9 @@ struct codec_manager_impl {
 
   const AudioSetConfigurations* GetOffloadCodecConfig(
       types::LeAudioContextType ctx_type) {
-    return &context_type_offload_config_map_[ctx_type];
+    return context_type_offload_config_map_.count(ctx_type)
+               ? &context_type_offload_config_map_[ctx_type]
+               : nullptr;
   }
 
   void UpdateSupportedBroadcastConfig(
@@ -186,21 +199,18 @@ struct codec_manager_impl {
         continue;
       }
       auto& adsp_config = adsp_audio_set_conf.confs[0];
-      const types::LeAudioLc3Config lc3_config =
-          std::get<types::LeAudioLc3Config>(adsp_config.codec.config);
+
+      const types::LeAudioCoreCodecConfig core_config =
+          adsp_config.codec.params.GetAsCoreCodecConfig();
       le_audio::broadcast_offload_config broadcast_config;
-      broadcast_config.stream_map.resize(lc3_config.channel_count);
+      broadcast_config.stream_map.resize(
+          core_config.GetChannelCountPerIsoStream());
       broadcast_config.bits_per_sample =
           LeAudioCodecConfiguration::kBitsPerSample16;
-      broadcast_config.sampling_rate = lc3_config.GetSamplingFrequencyHz();
-      broadcast_config.frame_duration = lc3_config.GetFrameDurationUs();
-      broadcast_config.octets_per_frame = *(lc3_config.octets_per_codec_frame);
+      broadcast_config.sampling_rate = core_config.GetSamplingFrequencyHz();
+      broadcast_config.frame_duration = core_config.GetFrameDurationUs();
+      broadcast_config.octets_per_frame = *(core_config.octets_per_codec_frame);
       broadcast_config.blocks_per_sdu = 1;
-      // Per LC3 spec, bitrate = (8000 * nbytes) / (frame duration in
-      // milliseconds)
-      broadcast_config.codec_bitrate =
-          (8000 * broadcast_config.octets_per_frame) /
-          (broadcast_config.frame_duration / 1000);
 
       int sample_rate = broadcast_config.sampling_rate;
       int frame_duration = broadcast_config.frame_duration;
@@ -233,14 +243,13 @@ struct codec_manager_impl {
 
     LOG_INFO(
         "stream_map.size(): %zu, sampling_rate: %d, frame_duration(us): %d, "
-        "octets_per_frame: %d, blocks_per_sdu %d, codec_bitrate: %d, "
+        "octets_per_frame: %d, blocks_per_sdu %d, "
         "retransmission_number: %d, max_transport_latency: %d",
         supported_broadcast_config[0].stream_map.size(),
         supported_broadcast_config[0].sampling_rate,
         supported_broadcast_config[0].frame_duration,
         supported_broadcast_config[0].octets_per_frame,
         (int)supported_broadcast_config[0].blocks_per_sdu,
-        (int)supported_broadcast_config[0].codec_bitrate,
         (int)supported_broadcast_config[0].retransmission_number,
         supported_broadcast_config[0].max_transport_latency);
 
@@ -389,22 +398,23 @@ struct codec_manager_impl {
   }
 
   bool IsLc3ConfigMatched(
-      const set_configurations::CodecCapabilitySetting& adsp_config,
-      const set_configurations::CodecCapabilitySetting& target_config) {
+      const set_configurations::CodecConfigSetting& target_config,
+      const set_configurations::CodecConfigSetting& adsp_config) {
     if (adsp_config.id.coding_format != types::kLeAudioCodingFormatLC3 ||
         target_config.id.coding_format != types::kLeAudioCodingFormatLC3) {
       return false;
     }
 
-    const types::LeAudioLc3Config adsp_lc3_config =
-        std::get<types::LeAudioLc3Config>(adsp_config.config);
-    const types::LeAudioLc3Config target_lc3_config =
-        std::get<types::LeAudioLc3Config>(target_config.config);
+    const types::LeAudioCoreCodecConfig adsp_lc3_config =
+        adsp_config.params.GetAsCoreCodecConfig();
+    const types::LeAudioCoreCodecConfig target_lc3_config =
+        target_config.params.GetAsCoreCodecConfig();
 
     if (adsp_lc3_config.sampling_frequency !=
             target_lc3_config.sampling_frequency ||
         adsp_lc3_config.frame_duration != target_lc3_config.frame_duration ||
-        adsp_lc3_config.channel_count != target_lc3_config.channel_count ||
+        adsp_config.GetChannelCountPerIsoStream() !=
+            target_config.GetChannelCountPerIsoStream() ||
         adsp_lc3_config.octets_per_codec_frame !=
             target_lc3_config.octets_per_codec_frame) {
       return false;
@@ -473,6 +483,96 @@ struct codec_manager_impl {
     return false;
   }
 
+  std::string getStrategyString(types::LeAudioConfigurationStrategy strategy) {
+    switch (strategy) {
+      case types::LeAudioConfigurationStrategy::MONO_ONE_CIS_PER_DEVICE:
+        return "MONO_ONE_CIS_PER_DEVICE";
+      case types::LeAudioConfigurationStrategy::STEREO_TWO_CISES_PER_DEVICE:
+        return "STEREO_TWO_CISES_PER_DEVICE";
+      case types::LeAudioConfigurationStrategy::STEREO_ONE_CIS_PER_DEVICE:
+        return "STEREO_ONE_CIS_PER_DEVICE";
+      default:
+        return "RFU";
+    }
+  }
+
+  uint8_t sampleFreqToBluetoothSigBitMask(int sample_freq) {
+    switch (sample_freq) {
+      case 8000:
+        return le_audio::codec_spec_caps::kLeAudioSamplingFreq8000Hz;
+      case 16000:
+        return le_audio::codec_spec_caps::kLeAudioSamplingFreq16000Hz;
+      case 24000:
+        return le_audio::codec_spec_caps::kLeAudioSamplingFreq24000Hz;
+      case 32000:
+        return le_audio::codec_spec_caps::kLeAudioSamplingFreq32000Hz;
+      case 44100:
+        return le_audio::codec_spec_caps::kLeAudioSamplingFreq44100Hz;
+      case 48000:
+        return le_audio::codec_spec_caps::kLeAudioSamplingFreq48000Hz;
+    }
+    return le_audio::codec_spec_caps::kLeAudioSamplingFreq8000Hz;
+  }
+
+  void storeLocalCapa(
+      std::vector<::le_audio::set_configurations::AudioSetConfiguration>&
+          adsp_capabilities,
+      const std::vector<btle_audio_codec_config_t>& offload_preference_set) {
+    LOG_DEBUG(" Print adsp_capabilities:");
+
+    for (auto adsp : adsp_capabilities) {
+      LOG_DEBUG("%s, number of confs %d", adsp.name.c_str(),
+                (int)(adsp.confs.size()));
+      for (auto conf : adsp.confs) {
+        LOG_DEBUG(
+            "codecId: %d dir: %s, dev_cnt: %d ase_cnt: %d, strategy: %s, "
+            "sample_freq: %d, interval %d, channel_cnt: %d",
+            conf.codec.id.coding_format,
+            (conf.direction == types::kLeAudioDirectionSink ? "sink"
+                                                            : "source"),
+            conf.device_cnt, conf.ase_cnt,
+            getStrategyString(conf.strategy).c_str(),
+            conf.codec.GetSamplingFrequencyHz(), conf.codec.GetDataIntervalUs(),
+            conf.codec.GetChannelCountPerIsoStream());
+
+        /* TODO: How to get bits_per_sample ? */
+        btle_audio_codec_config_t capa_to_add = {
+            .sample_rate = utils::translateToBtLeAudioCodecConfigSampleRate(
+                conf.codec.GetSamplingFrequencyHz()),
+            .bits_per_sample =
+                utils::translateToBtLeAudioCodecConfigBitPerSample(16),
+            .channel_count = utils::translateToBtLeAudioCodecConfigChannelCount(
+                conf.codec.GetChannelCountPerIsoStream()),
+            .frame_duration =
+                utils::translateToBtLeAudioCodecConfigFrameDuration(
+                    conf.codec.GetDataIntervalUs()),
+        };
+
+        if (conf.direction == types::kLeAudioDirectionSink) {
+          LOG_DEBUG("Adding output capa %d",
+                    static_cast<int>(codec_output_capa.size()));
+          codec_output_capa.push_back(capa_to_add);
+        } else {
+          LOG_DEBUG("Adding input capa %d",
+                    static_cast<int>(codec_input_capa.size()));
+          codec_input_capa.push_back(capa_to_add);
+        }
+      }
+    }
+
+    LOG_DEBUG("Output capa: %d, Input capa: %d",
+              static_cast<int>(codec_output_capa.size()),
+              static_cast<int>(codec_input_capa.size()));
+
+    LOG_DEBUG(" Print offload_preference_set: %d ",
+              (int)(offload_preference_set.size()));
+
+    int i = 0;
+    for (auto set : offload_preference_set) {
+      LOG_DEBUG("set %d, %s ", i++, set.ToString().c_str());
+    }
+  }
+
   void UpdateOffloadCapability(
       const std::vector<btle_audio_codec_config_t>& offloading_preference) {
     LOG(INFO) << __func__;
@@ -487,6 +587,8 @@ struct codec_manager_impl {
     std::vector<::le_audio::set_configurations::AudioSetConfiguration>
         adsp_capabilities =
             ::bluetooth::audio::le_audio::get_offload_capabilities();
+
+    storeLocalCapa(adsp_capabilities, offloading_preference);
 
     for (auto codec : offloading_preference) {
       auto it = btle_audio_codec_type_map_.find(codec.codec_type);
@@ -534,7 +636,10 @@ struct codec_manager_impl {
       btle_audio_codec_type_map_ = {
           {::bluetooth::le_audio::LE_AUDIO_CODEC_INDEX_SOURCE_LC3,
            types::kLeAudioCodingFormatLC3}};
-};
+
+  std::vector<btle_audio_codec_config_t> codec_input_capa = {};
+  std::vector<btle_audio_codec_config_t> codec_output_capa = {};
+};  // namespace le_audio
 
 struct CodecManager::impl {
   impl(const CodecManager& codec_manager) : codec_manager_(codec_manager) {}
@@ -582,6 +687,25 @@ bool CodecManager::IsOffloadDualBiDirSwbSupported(void) const {
   }
 
   return pimpl_->codec_manager_impl_->IsOffloadDualBiDirSwbSupported();
+}
+
+std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+CodecManager::GetLocalAudioOutputCodecCapa() {
+  if (pimpl_->IsRunning()) {
+    return pimpl_->codec_manager_impl_->GetLocalAudioOutputCodecCapa();
+  }
+
+  std::vector<bluetooth::le_audio::btle_audio_codec_config_t> empty{};
+  return empty;
+}
+
+std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+CodecManager::GetLocalAudioInputCodecCapa() {
+  if (pimpl_->IsRunning()) {
+    return pimpl_->codec_manager_impl_->GetLocalAudioOutputCodecCapa();
+  }
+  std::vector<bluetooth::le_audio::btle_audio_codec_config_t> empty{};
+  return empty;
 }
 
 void CodecManager::UpdateActiveAudioConfig(

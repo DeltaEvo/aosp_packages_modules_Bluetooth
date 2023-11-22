@@ -18,16 +18,14 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <iomanip>
-#include <iostream>
-#include <map>
-#include <sstream>
 #include <vector>
 
+#include "gd/common/init_flags.h"
 #include "hci/hci_layer_mock.h"
+#include "stack/btm/btm_ble_int_types.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
-#include "stack/btm/btm_sec_int_types.h"
+#include "stack/btm/btm_sec_cb.h"
 #include "stack/btm/security_device_record.h"
 #include "test/common/mock_functions.h"
 #include "test/mock/mock_main_shim_entry.h"
@@ -35,8 +33,6 @@
 
 using testing::Return;
 using testing::Test;
-
-extern tBTM_SEC_CB btm_sec_cb;
 
 constexpr size_t kBtmSecMaxDeviceRecords =
     static_cast<size_t>(BTM_SEC_MAX_DEVICE_RECORDS + 1);
@@ -225,22 +221,18 @@ TEST_F(StackBtmSecTest, btm_oob_data_text) {
 }
 
 TEST_F(StackBtmSecTest, bond_type_text) {
-  std::vector<std::pair<tBTM_SEC_DEV_REC::tBTM_BOND_TYPE, std::string>> datas =
-      {
-          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN,
-                         "tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN"),
-          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT,
-                         "tBTM_SEC_DEV_REC::BOND_TYPE_PERSISTENT"),
-          std::make_pair(tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY,
-                         "tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY"),
-      };
+  std::vector<std::pair<tBTM_BOND_TYPE, std::string>> datas = {
+      std::make_pair(BOND_TYPE_UNKNOWN, "BOND_TYPE_UNKNOWN"),
+      std::make_pair(BOND_TYPE_PERSISTENT, "BOND_TYPE_PERSISTENT"),
+      std::make_pair(BOND_TYPE_TEMPORARY, "BOND_TYPE_TEMPORARY"),
+  };
   for (const auto& data : datas) {
     ASSERT_STREQ(data.second.c_str(), bond_type_text(data.first).c_str());
   }
   auto unknown = base::StringPrintf("UNKNOWN[%hhu]",
                                     std::numeric_limits<std::uint8_t>::max());
   ASSERT_STREQ(unknown.c_str(),
-               bond_type_text(static_cast<tBTM_SEC_DEV_REC::tBTM_BOND_TYPE>(
+               bond_type_text(static_cast<tBTM_BOND_TYPE>(
                                   std::numeric_limits<std::uint8_t>::max()))
                    .c_str());
 }

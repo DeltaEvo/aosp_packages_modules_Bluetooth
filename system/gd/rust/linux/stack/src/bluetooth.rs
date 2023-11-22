@@ -42,7 +42,9 @@ use tokio::time;
 
 use crate::battery_service::BatteryServiceActions;
 use crate::bluetooth_admin::{BluetoothAdmin, IBluetoothAdmin};
-use crate::bluetooth_gatt::{BluetoothGatt, IBluetoothGatt, IScannerCallback, ScanResult};
+use crate::bluetooth_gatt::{
+    BluetoothGatt, GattActions, IBluetoothGatt, IScannerCallback, ScanResult,
+};
 use crate::bluetooth_media::{BluetoothMedia, IBluetoothMedia, MediaActions};
 use crate::callbacks::Callbacks;
 use crate::socket_manager::SocketActions;
@@ -228,6 +230,8 @@ pub trait IBluetooth {
     fn connect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool;
 
     /// Disconnect all profiles supported by device and enabled on adapter.
+    /// Note that it includes all custom profiles enabled by the users e.g. through SocketManager or
+    /// BluetoothGatt interfaces; The device shall be disconnected on baseband eventually.
     fn disconnect_all_enabled_profiles(&mut self, device: BluetoothDevice) -> bool;
 
     /// Returns whether WBS is supported.
@@ -890,12 +894,6 @@ impl Bluetooth {
     /// Check whether found devices are still fresh. If they're outside the
     /// freshness window, send a notification to clear the device from clients.
     fn trigger_freshness_check(&mut self) {
-        if let Some(ref handle) = self.freshness_check {
-            // Abort and drop the previous JoinHandle.
-            handle.abort();
-            self.freshness_check = None;
-        }
-
         // A found device is considered fresh if:
         // * It was last seen less than |FOUND_DEVICE_FRESHNESS| ago.
         // * It is currently connected.
@@ -921,18 +919,6 @@ impl Bluetooth {
             });
 
             self.bluetooth_admin.lock().unwrap().on_device_cleared(&d);
-        }
-
-        // If we have any fresh devices remaining, re-queue a freshness check.
-        if self.found_devices.len() > 0 {
-            let txl = self.tx.clone();
-
-            self.freshness_check = Some(tokio::spawn(async move {
-                time::sleep(FOUND_DEVICE_FRESHNESS).await;
-                let _ = txl
-                    .send(Message::DelayedAdapterActions(DelayedActions::DeviceFreshnessCheck))
-                    .await;
-            }));
         }
     }
 
@@ -1330,6 +1316,20 @@ impl BtifBluetoothCallbacks for Bluetooth {
                 // Ensure device is connectable so that disconnected device can reconnect
                 self.set_connectable(true);
 
+                // Spawn a freshness check job in the background.
+                self.freshness_check.take().map(|h| h.abort());
+                let txl = self.tx.clone();
+                self.freshness_check = Some(tokio::spawn(async move {
+                    loop {
+                        time::sleep(FOUND_DEVICE_FRESHNESS).await;
+                        let _ = txl
+                            .send(Message::DelayedAdapterActions(
+                                DelayedActions::DeviceFreshnessCheck,
+                            ))
+                            .await;
+                    }
+                }));
+
                 if self.get_wake_allowed_device_bonded() {
                     self.create_uhid_for_suspend_wakesource();
                 }
@@ -1469,13 +1469,6 @@ impl BtifBluetoothCallbacks for Bluetooth {
         self.callbacks.for_all_callbacks(|callback| {
             callback.on_discovering_changed(state == BtDiscoveryState::Started);
         });
-
-        // Stopped discovering and no freshness check is active. Immediately do
-        // freshness check which will schedule a recurring future until all
-        // entries are cleared.
-        if !is_discovering && self.freshness_check.is_none() {
-            self.trigger_freshness_check();
-        }
 
         // Start or stop BLE scanning based on discovering state
         if let Some(scanner_id) = self.ble_scanner_id {
@@ -2717,6 +2710,12 @@ impl IBluetooth for Bluetooth {
                     .await;
             });
         }
+
+        // Disconnect all GATT connections
+        let txl = self.tx.clone();
+        topstack::get_runtime().spawn(async move {
+            let _ = txl.send(Message::GattActions(GattActions::Disconnect(device.clone()))).await;
+        });
 
         return true;
     }

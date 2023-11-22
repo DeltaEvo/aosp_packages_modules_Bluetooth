@@ -88,24 +88,17 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothMap> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.MAP,
-                    "BluetoothMap", IBluetoothMap.class.getName()) {
-                @Override
-                public IBluetoothMap getServiceInterface(IBinder service) {
-                    return IBluetoothMap.Stub.asInterface(service);
-                }
-    };
+
+    private IBluetoothMap mService;
 
     /**
      * Create a BluetoothMap proxy object.
      */
-    /* package */ BluetoothMap(Context context, ServiceListener listener,
-            BluetoothAdapter adapter) {
+    /* package */ BluetoothMap(Context context, BluetoothAdapter adapter) {
         if (DBG) Log.d(TAG, "Create BluetoothMap proxy object");
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
         mCloseGuard = new CloseGuard();
         mCloseGuard.open("close");
     }
@@ -128,11 +121,29 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
     @Override
     public void close() {
         if (VDBG) log("close()");
-        mProfileConnector.disconnect();
+        mAdapter.closeProfileProxy(this);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothMap.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothMap getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /**
@@ -383,37 +394,42 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         IpcDataCache.invalidateCache(IpcDataCache.MODULE_BLUETOOTH, api);
     }
 
-    private static final IpcDataCache
-            .QueryHandler<Pair<IBluetoothMap, Pair<AttributionSource, BluetoothDevice>>, Integer>
-            sBluetoothConnectionQuery = new IpcDataCache.QueryHandler<>() {
-                @RequiresBluetoothConnectPermission
-                @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-                @Override
-                public Integer apply(Pair<IBluetoothMap,
-                        Pair<AttributionSource, BluetoothDevice>> pairQuery) {
-                    IBluetoothMap service = pairQuery.first;
-                    AttributionSource source = pairQuery.second.first;
-                    BluetoothDevice device = pairQuery.second.second;
-                    if (DBG) {
-                        log("getConnectionState(" + device.getAnonymizedAddress() + ") uncached");
-                    }
-                    final SynchronousResultReceiver<Integer> recv = SynchronousResultReceiver.get();
-                    try {
-                        service.getConnectionState(device, source, recv);
-                        return recv.awaitResultNoInterrupt(getSyncTimeout())
-                            .getValue(BluetoothProfile.STATE_DISCONNECTED);
-                    } catch (RemoteException | TimeoutException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            };
+    private static final IpcDataCache.QueryHandler<
+                    Pair<IBinder, Pair<AttributionSource, BluetoothDevice>>, Integer>
+            sBluetoothConnectionQuery =
+                    new IpcDataCache.QueryHandler<>() {
+                        @RequiresBluetoothConnectPermission
+                        @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+                        @Override
+                        public Integer apply(
+                                Pair<IBinder, Pair<AttributionSource, BluetoothDevice>> pairQuery) {
+                            IBluetoothMap service = IBluetoothMap.Stub.asInterface(pairQuery.first);
+                            AttributionSource source = pairQuery.second.first;
+                            BluetoothDevice device = pairQuery.second.second;
+                            if (DBG) {
+                                log(
+                                        "getConnectionState("
+                                                + device.getAnonymizedAddress()
+                                                + ") uncached");
+                            }
+                            final SynchronousResultReceiver<Integer> recv =
+                                    SynchronousResultReceiver.get();
+                            try {
+                                service.getConnectionState(device, source, recv);
+                                return recv.awaitResultNoInterrupt(getSyncTimeout())
+                                        .getValue(BluetoothProfile.STATE_DISCONNECTED);
+                            } catch (RemoteException | TimeoutException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    };
 
     private static final String GET_CONNECTION_STATE_API = "BluetoothMap_getConnectionState";
 
-    private static final
-            BluetoothCache<Pair<IBluetoothMap, Pair<AttributionSource, BluetoothDevice>>, Integer>
-            sBluetoothConnectionCache = new BluetoothCache<>(GET_CONNECTION_STATE_API,
-                sBluetoothConnectionQuery);
+    private static final BluetoothCache<
+                    Pair<IBinder, Pair<AttributionSource, BluetoothDevice>>, Integer>
+            sBluetoothConnectionCache =
+                    new BluetoothCache<>(GET_CONNECTION_STATE_API, sBluetoothConnectionQuery);
 
     /**
      * Get connection state of device
@@ -432,7 +448,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         } else if (isEnabled() && isValidDevice(device)) {
             try {
                 return sBluetoothConnectionCache.query(
-                        new Pair<>(service, new Pair<>(mAttributionSource, device)));
+                        new Pair<>(service.asBinder(), new Pair<>(mAttributionSource, device)));
             } catch (RuntimeException e) {
                 if (!(e.getCause() instanceof TimeoutException)
                         && !(e.getCause() instanceof RemoteException)) {

@@ -31,7 +31,7 @@ cc_library_static {
         "libosi",
     ],
     whole_static_libs: [
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
     ],
     shared_libs: [
         "liblog",
@@ -48,7 +48,6 @@ cc_test {
     name: "net_test_avrcp",
     test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],

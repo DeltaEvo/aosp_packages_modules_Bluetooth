@@ -19,7 +19,6 @@
 #include "hci/address.h"
 #include "hci/hci_packets.h"
 #include "hci/le_rand_callback.h"
-#include "hci_controller_generated.h"
 #include "module.h"
 #include "os/handler.h"
 
@@ -183,6 +182,9 @@ class Controller : public Module {
   virtual uint8_t GetLeNumberOfSupportedAdverisingSets() const;
 
   virtual uint8_t GetLePeriodicAdvertiserListSize() const;
+
+  // 7.4.8 Read Local Supported Codecs command v1 only returns codecs on the BR/EDR transport
+  virtual std::vector<uint8_t> GetLocalSupportedBrEdrCodecIds() const;
 
   struct VendorCapabilities {
     uint8_t is_supported_;

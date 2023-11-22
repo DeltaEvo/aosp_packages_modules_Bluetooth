@@ -36,7 +36,9 @@
 #include "btm_iso_api.h"
 #include "device/include/controller.h"
 #include "embdrv/g722/g722_enc_dec.h"
+#include "hardware/bt_gatt_types.h"
 #include "os/log.h"
+#include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"        // BTM_ReadRSSI
@@ -422,7 +424,7 @@ class HearingAidImpl : public HearingAid {
     BTA_GATTC_Open(gatt_if, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
   }
 
-  void AddFromStorage(const HearingDevice& dev_info, uint16_t is_acceptlisted) {
+  void AddFromStorage(const HearingDevice& dev_info, bool is_acceptlisted) {
     LOG_DEBUG("%s, hiSyncId=%s, isAcceptlisted=%u",
               ADDRESS_TO_LOGGABLE_CSTR(dev_info.address),
               loghex(dev_info.hi_sync_id).c_str(), is_acceptlisted);
@@ -2094,7 +2096,7 @@ void HearingAid::SetVolume(int8_t volume) {
 }
 
 void HearingAid::AddFromStorage(const HearingDevice& dev_info,
-                                uint16_t is_acceptlisted) {
+                                bool is_acceptlisted) {
   if (!instance) {
     LOG_ERROR("Not initialized yet");
   }

@@ -24,15 +24,12 @@
 
 #include <vector>
 
-#include "bt_target.h"
 #include "btm_ble_api.h"
-#include "btm_sec_int_types.h"
 #include "device/include/controller.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 #include "stack/btm/btm_int_types.h"
-#include "stack/include/btm_ble_sec_api.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/btu_hcif.h"
-#include "stack/include/main_thread.h"
 
 extern tBTM_CB btm_cb;
 
@@ -156,8 +153,9 @@ void btm_ble_batchscan_filter_track_adv_vse_cback(uint8_t len,
                 adv_data.addr_type, adv_data.advertiser_state);
 
     // Make sure the device is known
-    BTM_SecAddBleDevice(adv_data.bd_addr, BT_DEVICE_TYPE_BLE,
-                        to_ble_addr_type(adv_data.addr_type));
+    get_btm_client_interface().security.BTM_SecAddBleDevice(
+        adv_data.bd_addr, BT_DEVICE_TYPE_BLE,
+        to_ble_addr_type(adv_data.addr_type));
 
     ble_advtrack_cb.p_track_cback(&adv_data);
   }
@@ -369,7 +367,7 @@ void btm_ble_set_batchscan_param(tBTM_BLE_BATCH_SCAN_MODE scan_mode,
                                  hci_cmd_cb cb) {
   // Override param and decide addr_type based on own addr type
   // TODO: Remove upper layer parameter?
-  addr_type = btm_sec_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type;
+  addr_type = btm_cb.ble_ctr_cb.addr_mgnt_cb.own_addr_type;
 
   uint8_t len = BTM_BLE_BATCH_SCAN_PARAM_CONFIG_LEN;
   uint8_t param[len];

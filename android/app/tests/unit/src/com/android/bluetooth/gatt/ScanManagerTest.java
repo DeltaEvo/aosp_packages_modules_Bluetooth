@@ -29,7 +29,6 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
@@ -53,6 +52,7 @@ import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.test.TestLooper;
 import android.provider.Settings;
 import android.test.mock.MockContentProvider;
 import android.test.mock.MockContentResolver;
@@ -68,8 +68,6 @@ import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.BluetoothAdapterProxy;
 import com.android.bluetooth.btservice.MetricsLogger;
-import com.android.bluetooth.flags.FakeFeatureFlagsImpl;
-import com.android.bluetooth.flags.Flags;
 import com.android.internal.app.IBatteryStats;
 
 import java.util.ArrayList;
@@ -109,6 +107,7 @@ public class ScanManagerTest {
     private Context mTargetContext;
     private ScanManager mScanManager;
     private Handler mHandler;
+    private TestLooper mTestLooper;
     private CountDownLatch mLatch;
     private long mScanReportDelay;
 
@@ -127,7 +126,6 @@ public class ScanManagerTest {
     @Mock private ScanNativeInterface mScanNativeInterface;
     @Mock private MetricsLogger  mMetricsLogger;
 
-    private FakeFeatureFlagsImpl mFakeFlagsImpl;
     private MockContentResolver mMockContentResolver;
     @Captor ArgumentCaptor<Long> mScanDurationCaptor;
 
@@ -185,10 +183,14 @@ public class ScanManagerTest {
         doReturn(mTargetContext.getUser()).when(mMockGattService).getUser();
         doReturn(mTargetContext.getPackageName()).when(mMockGattService).getPackageName();
 
-        mFakeFlagsImpl = new FakeFeatureFlagsImpl();
+        mTestLooper = new TestLooper();
+        mTestLooper.startAutoDispatch();
         mScanManager =
                 new ScanManager(
-                        mMockGattService, mAdapterService, mBluetoothAdapterProxy, mFakeFlagsImpl);
+                        mMockGattService,
+                        mAdapterService,
+                        mBluetoothAdapterProxy,
+                        mTestLooper.getLooper());
 
         mHandler = mScanManager.getClientHandler();
         assertThat(mHandler).isNotNull();
@@ -201,6 +203,7 @@ public class ScanManagerTest {
 
     @After
     public void tearDown() throws Exception {
+        mTestLooper.stopAutoDispatchAndIgnoreExceptions();
         TestUtils.clearAdapterService(mAdapterService);
         BluetoothAdapterProxy.setInstanceForTesting(null);
         GattObjectsFactory.setInstanceForTesting(null);
@@ -223,7 +226,7 @@ public class ScanManagerTest {
         }
         mHandler.sendMessage(msg);
         // Wait for async work from handler thread
-        TestUtils.waitForLooperToBeIdle(mHandler.getLooper());
+        TestUtils.waitForLooperToFinishScheduledTask(mHandler.getLooper());
     }
 
     private ScanClient createScanClient(
@@ -1138,20 +1141,24 @@ public class ScanManagerTest {
         ScanClient client = createScanClient(0, isFiltered, SCAN_MODE_LOW_POWER);
         // Start scan
         sendMessageWaitForProcessed(createStartStopScanMessage(true, client));
-        verify(mMetricsLogger, atMost(1)).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atMost(1)).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
         verify(mMetricsLogger, never()).cacheCount(
                 eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
         Mockito.clearInvocations(mMetricsLogger);
         testSleep(50);
         // Stop scan
         sendMessageWaitForProcessed(createStartStopScanMessage(false, client));
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
         verify(mMetricsLogger, never()).cacheCount(
                 eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
         Mockito.clearInvocations(mMetricsLogger);
@@ -1168,42 +1175,54 @@ public class ScanManagerTest {
         ScanClient client = createScanClient(0, isFiltered, SCAN_MODE_LOW_POWER);
         // Start scan
         sendMessageWaitForProcessed(createStartStopScanMessage(true, client));
-        verify(mMetricsLogger, atMost(1)).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atMost(1)).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
-        verify(mMetricsLogger, never()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF),
+                        anyLong());
         Mockito.clearInvocations(mMetricsLogger);
         testSleep(50);
         // Turn off screen
         sendMessageWaitForProcessed(createScreenOnOffMessage(false));
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
-        verify(mMetricsLogger, never()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF),
+                        anyLong());
         Mockito.clearInvocations(mMetricsLogger);
         testSleep(50);
         // Turn on screen
         sendMessageWaitForProcessed(createScreenOnOffMessage(true));
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atMost(1))
+        verify(mMetricsLogger, atMost(3))
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, atMost(2))
                 .cacheCount(
                         eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
                         anyLong());
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
+        verify(mMetricsLogger, atMost(2))
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF),
+                        anyLong());
         Mockito.clearInvocations(mMetricsLogger);
         testSleep(50);
         // Stop scan
         sendMessageWaitForProcessed(createStartStopScanMessage(false, client));
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
         verify(mMetricsLogger, never()).cacheCount(
                 eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
         Mockito.clearInvocations(mMetricsLogger);
@@ -1221,20 +1240,24 @@ public class ScanManagerTest {
         ScanClient client2 = createScanClient(1, isFiltered, SCAN_MODE_BALANCED);
         // Start scan with lower duty cycle
         sendMessageWaitForProcessed(createStartStopScanMessage(true, client));
-        verify(mMetricsLogger, atMost(1)).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atMost(1)).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, never())
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
         verify(mMetricsLogger, never()).cacheCount(
                 eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
         Mockito.clearInvocations(mMetricsLogger);
         testSleep(50);
         // Start scan with higher duty cycle
         sendMessageWaitForProcessed(createStartStopScanMessage(true, client2));
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
         verify(mMetricsLogger, never()).cacheCount(
                 eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
         Mockito.clearInvocations(mMetricsLogger);
@@ -1245,10 +1268,12 @@ public class ScanManagerTest {
         Mockito.clearInvocations(mMetricsLogger);
         // Stop scan with higher duty cycle
         sendMessageWaitForProcessed(createStartStopScanMessage(false, client2));
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
-        verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR), anyLong());
+        verify(mMetricsLogger, times(1))
+                .cacheCount(
+                        eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_ON),
+                        anyLong());
         verify(mMetricsLogger, never()).cacheCount(
                 eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR_SCREEN_OFF), anyLong());
         Mockito.clearInvocations(mMetricsLogger);
@@ -1285,9 +1310,10 @@ public class ScanManagerTest {
             testSleep(scanTestDuration);
             // Stop scan
             sendMessageWaitForProcessed(createStartStopScanMessage(false, client));
-            verify(mMetricsLogger, atLeastOnce()).cacheCount(
-                    eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR),
-                    mScanDurationCaptor.capture());
+            verify(mMetricsLogger, times(1))
+                    .cacheCount(
+                            eq(BluetoothProtoEnums.LE_SCAN_RADIO_DURATION_REGULAR),
+                            mScanDurationCaptor.capture());
             long capturedDuration = mScanDurationCaptor.getValue();
             Log.d(TAG, "capturedDuration: " + String.valueOf(capturedDuration));
             assertThat(weightedScanDuration <= capturedDuration
@@ -1367,10 +1393,6 @@ public class ScanManagerTest {
 
     @Test
     public void profileConnectionStateChanged_sendStartConnectionMessage() {
-        // This test shouldn't be impacted by this flag. Setting it to false to ensure it passes
-        // with the older behavior. Tested flag set to true locally to make sure it doesn't fail
-        // when flag is removed.
-        mFakeFlagsImpl.setFlag(Flags.FLAG_ENABLE_QUEUING_PROFILE_CONNECTION_CHANGE, false);
         // Set scan downgrade duration through Mock
         when(mAdapterService.getScanDowngradeDurationMillis())
                 .thenReturn((long) DELAY_SCAN_DOWNGRADE_DURATION_MS);
@@ -1382,14 +1404,13 @@ public class ScanManagerTest {
                 BluetoothProfile.STATE_CONNECTING);
 
         // Wait for handleConnectingState to happen
-        TestUtils.waitForLooperToBeIdle(mHandler.getLooper());
+        TestUtils.waitForLooperToFinishScheduledTask(mHandler.getLooper());
         assertThat(mScanManager.mIsConnecting).isTrue();
     }
 
     @Test
     public void multipleProfileConnectionStateChanged_updateCountersCorrectly()
             throws ExecutionException, InterruptedException {
-        mFakeFlagsImpl.setFlag(Flags.FLAG_ENABLE_QUEUING_PROFILE_CONNECTION_CHANGE, true);
         when(mAdapterService.getScanDowngradeDurationMillis())
                 .thenReturn((long) DELAY_SCAN_DOWNGRADE_DURATION_MS);
         assertThat(mScanManager.mIsConnecting).isFalse();
@@ -1419,7 +1440,7 @@ public class ScanManagerTest {
 
         t1.join();
         t2.join();
-        TestUtils.waitForLooperToBeIdle(mHandler.getLooper());
+        TestUtils.waitForLooperToFinishScheduledTask(mHandler.getLooper());
         assertThat(mScanManager.mProfilesConnecting).isEqualTo(3);
     }
 }

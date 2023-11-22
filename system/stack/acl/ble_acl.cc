@@ -14,14 +14,19 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "acl"
+
 #include <cstdint>
 
+#include "gd/common/init_flags.h"
+#include "os/log.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
-#include "stack/btm/btm_sec_int_types.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
+#include "stack/include/btm_ble_addr.h"
+#include "stack/include/btm_ble_privacy.h"
 #include "stack/include/l2cap_hci_link_interface.h"
 #include "types/raw_address.h"
 
@@ -31,14 +36,12 @@ void btm_ble_advertiser_notify_terminated_legacy(uint8_t status,
                                                  uint16_t connection_handle);
 void btm_ble_increment_link_topology_mask(uint8_t link_role);
 
-bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type);
-
 static bool acl_ble_common_connection(
     const tBLE_BD_ADDR& address_with_type, uint16_t handle, tHCI_ROLE role,
     bool is_in_security_db, uint16_t conn_interval, uint16_t conn_latency,
     uint16_t conn_timeout, bool can_read_discoverable_characteristics) {
   if (role == HCI_ROLE_CENTRAL) {
-    btm_sec_cb.ble_ctr_cb.set_connection_state_idle();
+    btm_cb.ble_ctr_cb.set_connection_state_idle();
     btm_ble_clear_topology_mask(BTM_BLE_STATE_INIT_BIT);
   }
 
@@ -85,8 +88,8 @@ void acl_ble_enhanced_connection_complete(
   }
 
   if (peer_addr_type & BLE_ADDR_TYPE_ID_BIT)
-    btm_ble_refresh_peer_resolvable_private_addr(
-        address_with_type.bda, peer_rpa, tBTM_SEC_BLE::BTM_BLE_ADDR_RRA);
+    btm_ble_refresh_peer_resolvable_private_addr(address_with_type.bda,
+                                                 peer_rpa, BTM_BLE_ADDR_RRA);
   btm_ble_update_mode_operation(role, &address_with_type.bda, HCI_SUCCESS);
 
   if (role == HCI_ROLE_PERIPHERAL)
@@ -136,7 +139,7 @@ void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
   btm_acl_create_failed(address_with_type.bda, BT_TRANSPORT_LE, status);
 
   if (status != HCI_ERR_ADVERTISING_TIMEOUT) {
-    btm_sec_cb.ble_ctr_cb.set_connection_state_idle();
+    btm_cb.ble_ctr_cb.set_connection_state_idle();
     btm_ble_clear_topology_mask(BTM_BLE_STATE_INIT_BIT);
     tBLE_BD_ADDR resolved_address_with_type;
     maybe_resolve_received_address(address_with_type,
@@ -151,7 +154,7 @@ void acl_ble_connection_fail(const tBLE_BD_ADDR& address_with_type,
              ADDRESS_TO_LOGGABLE_CSTR(resolved_address_with_type.bda),
              hci_status_code_text(status).c_str());
   } else {
-    btm_sec_cb.ble_ctr_cb.inq_var.adv_mode = BTM_BLE_ADV_DISABLE;
+    btm_cb.ble_ctr_cb.inq_var.adv_mode = BTM_BLE_ADV_DISABLE;
   }
   btm_ble_update_mode_operation(HCI_ROLE_UNKNOWN, &address_with_type.bda,
                                 status);
@@ -182,4 +185,12 @@ void acl_ble_data_length_change_event(uint16_t handle, uint16_t max_tx_octets,
       "max_tx_time:%hu max_rx_octets:%hu max_rx_time:%hu",
       handle, max_tx_octets, max_tx_time, max_rx_octets, max_rx_time);
   l2cble_process_data_length_change_event(handle, max_tx_octets, max_rx_octets);
+}
+
+uint64_t btm_get_next_private_addrress_interval_ms() {
+  /* 7 minutes minimum, 15 minutes maximum for random address refreshing */
+  const uint64_t interval_min_ms = (7 * 60 * 1000);
+  const uint64_t interval_random_part_max_ms = (8 * 60 * 1000);
+
+  return interval_min_ms + std::rand() % interval_random_part_max_ms;
 }

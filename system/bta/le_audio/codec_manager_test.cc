@@ -19,11 +19,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "btm_api_mock.h"
 #include "gd/common/init_flags.h"
+#include "le_audio_set_configuration_provider.h"
 #include "mock_controller.h"
-#include "osi/include/properties.h"
-#include "stack/acl/acl.h"
+#include "test/mock/mock_legacy_hci_interface.h"
 
 using ::testing::_;
 using ::testing::Mock;
@@ -45,7 +44,10 @@ T& le_audio::types::BidirectionalPair<T>::get(uint8_t direction) {
   return (direction == le_audio::types::kLeAudioDirectionSink) ? sink : source;
 }
 
-std::vector<AudioSetConfiguration> offload_capabilities(0);
+static const std::vector<AudioSetConfiguration> offload_capabilities_none(0);
+
+const std::vector<AudioSetConfiguration>* offload_capabilities =
+    &offload_capabilities_none;
 
 const char* test_flags[] = {
     "INIT_default_log_level_str=LOG_VERBOSE",
@@ -55,7 +57,7 @@ namespace bluetooth {
 namespace audio {
 namespace le_audio {
 std::vector<AudioSetConfiguration> get_offload_capabilities() {
-  return offload_capabilities;
+  return *offload_capabilities;
 }
 }  // namespace le_audio
 }  // namespace audio
@@ -63,6 +65,11 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
 
 namespace le_audio {
 namespace {
+
+void set_mock_offload_capabilities(
+    const std::vector<AudioSetConfiguration>& caps) {
+  offload_capabilities = &caps;
+}
 
 static constexpr char kPropLeAudioOffloadSupported[] =
     "ro.bluetooth.leaudio_offload.supported";
@@ -73,8 +80,7 @@ class CodecManagerTestBase : public Test {
  public:
   virtual void SetUp() override {
     bluetooth::common::InitFlags::Load(test_flags);
-
-    offload_capabilities.clear();
+    set_mock_offload_capabilities(offload_capabilities_none);
 
     ON_CALL(controller_interface, SupportsBleIsochronousBroadcaster)
         .WillByDefault(Return(true));
@@ -82,7 +88,7 @@ class CodecManagerTestBase : public Test {
         .WillByDefault(Return(true));
 
     controller::SetMockControllerInterface(&controller_interface);
-    bluetooth::manager::SetMockBtmInterface(&btm_interface);
+    Mock::VerifyAndClearExpectations(&bluetooth::legacy::hci::testing::GetMock());
 
     codec_manager = CodecManager::GetInstance();
   }
@@ -90,11 +96,10 @@ class CodecManagerTestBase : public Test {
   virtual void TearDown() override {
     codec_manager->Stop();
 
-    bluetooth::manager::SetMockBtmInterface(nullptr);
+    Mock::VerifyAndClearExpectations(&bluetooth::legacy::hci::testing::GetMock());
     controller::SetMockControllerInterface(nullptr);
   }
 
-  NiceMock<bluetooth::manager::MockBtmInterface> btm_interface;
   NiceMock<controller::MockControllerInterface> controller_interface;
   CodecManager* codec_manager;
 };
@@ -116,31 +121,30 @@ TEST_F(CodecManagerTestAdsp, test_init) {
 }
 
 TEST_F(CodecManagerTestAdsp, test_start) {
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::HOST_TO_CONTROLLER,
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::HOST_TO_CONTROLLER,
                                 kIsoDataPathPlatformDefault, _))
       .Times(1);
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::CONTROLLER_TO_HOST,
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::CONTROLLER_TO_HOST,
                                 kIsoDataPathPlatformDefault, _))
+      .Times(1);
+
+  // Verify data path is reset on Stop()
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::HOST_TO_CONTROLLER,
+                                kIsoDataPathHci, _))
+      .Times(1);
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::CONTROLLER_TO_HOST,
+                                kIsoDataPathHci, _))
       .Times(1);
 
   const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
       offloading_preference(0);
   codec_manager->Start(offloading_preference);
-  Mock::VerifyAndClearExpectations(&btm_interface);
 
   ASSERT_EQ(codec_manager->GetCodecLocation(), CodecLocation::ADSP);
-
-  // Verify data path is reset on Stop()
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::HOST_TO_CONTROLLER,
-                                kIsoDataPathHci, _))
-      .Times(1);
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::CONTROLLER_TO_HOST,
-                                kIsoDataPathHci, _))
-      .Times(1);
 }
 
 TEST_F(CodecManagerTestAdsp, testStreamConfigurationAdspDownMix) {
@@ -275,8 +279,50 @@ TEST_F(CodecManagerTestAdsp, testStreamConfigurationAdspDownMix) {
   }
 }
 
+TEST_F(CodecManagerTestAdsp, test_capabilities_none) {
+  const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+      offloading_preference(0);
+  codec_manager->Start(offloading_preference);
+
+  // Verify every context
+  for (::le_audio::types::LeAudioContextType ctx_type :
+       ::le_audio::types::kLeAudioContextAllTypesArray) {
+    ASSERT_EQ(nullptr, codec_manager->GetOffloadCodecConfig(ctx_type));
+  }
+}
+
+TEST_F(CodecManagerTestAdsp, test_capabilities) {
+  for (auto test_context : ::le_audio::types::kLeAudioContextAllTypesArray) {
+    // Build the offloader capabilities vector using the configuration provider
+    // in HOST mode to get all the .json filce configuration entries.
+    std::vector<AudioSetConfiguration> offload_capabilities;
+    AudioSetConfigurationProvider::Initialize(
+        le_audio::types::CodecLocation::HOST);
+    for (auto& cap : *AudioSetConfigurationProvider::Get()->GetConfigurations(
+             test_context)) {
+      offload_capabilities.push_back(*cap);
+    }
+    ASSERT_NE(0u, offload_capabilities.size());
+    set_mock_offload_capabilities(offload_capabilities);
+    // Clean up before the codec manager starts it in ADSP mode.
+    AudioSetConfigurationProvider::Cleanup();
+
+    const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
+        offloading_preference = {
+            {.codec_type =
+                 bluetooth::le_audio::LE_AUDIO_CODEC_INDEX_SOURCE_LC3}};
+    codec_manager->Start(offloading_preference);
+
+    auto cfg = codec_manager->GetOffloadCodecConfig(test_context);
+    ASSERT_NE(nullptr, cfg);
+    ASSERT_EQ(offload_capabilities.size(), cfg->size());
+
+    // Clean up the before testing any other offload capabilities.
+    codec_manager->Stop();
+  }
+}
+
 // TODO: Add the unit tests for:
-// GetOffloadCodecConfig
 // GetBroadcastOffloadConfig
 // UpdateBroadcastConnHandle
 
@@ -297,31 +343,30 @@ TEST_F(CodecManagerTestHost, test_init) {
 }
 
 TEST_F(CodecManagerTestHost, test_start) {
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::HOST_TO_CONTROLLER,
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::HOST_TO_CONTROLLER,
                                 kIsoDataPathPlatformDefault, _))
       .Times(0);
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::CONTROLLER_TO_HOST,
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::CONTROLLER_TO_HOST,
                                 kIsoDataPathPlatformDefault, _))
+      .Times(0);
+
+  // Verify data path is NOT reset on Stop() for the Host encoding session
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::HOST_TO_CONTROLLER,
+                                kIsoDataPathHci, _))
+      .Times(0);
+  EXPECT_CALL(bluetooth::legacy::hci::testing::GetMock(),
+              ConfigureDataPath(hci_data_direction_t::CONTROLLER_TO_HOST,
+                                kIsoDataPathHci, _))
       .Times(0);
 
   const std::vector<bluetooth::le_audio::btle_audio_codec_config_t>
       offloading_preference(0);
   codec_manager->Start(offloading_preference);
-  Mock::VerifyAndClearExpectations(&btm_interface);
 
   ASSERT_EQ(codec_manager->GetCodecLocation(), CodecLocation::HOST);
-
-  // Verify data path is NOT reset on Stop() for the Host encoding session
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::HOST_TO_CONTROLLER,
-                                kIsoDataPathHci, _))
-      .Times(0);
-  EXPECT_CALL(btm_interface,
-              ConfigureDataPath(btm_data_direction::CONTROLLER_TO_HOST,
-                                kIsoDataPathHci, _))
-      .Times(0);
 }
 
 }  // namespace

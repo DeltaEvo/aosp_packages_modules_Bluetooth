@@ -21,11 +21,11 @@
  *  this file contains GATT interface functions
  *
  ******************************************************************************/
+#define LOG_TAG "gatt_api"
+
 #include "stack/include/gatt_api.h"
 
-#include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
-#include <stdio.h>
 
 #include <string>
 
@@ -34,6 +34,7 @@
 #include "gd/os/system_properties.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/arbiter/acl_arbiter.h"
@@ -42,6 +43,7 @@
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
@@ -50,7 +52,6 @@ using namespace bluetooth::legacy::stack::sdp;
 
 using bluetooth::Uuid;
 
-bool BTM_BackgroundConnectAddressKnown(const RawAddress& address);
 /**
  * Add an service handle range to the list in decending order of the start
  * handle. Return reference to the newly added element.
@@ -1438,7 +1439,7 @@ bool GATT_Connect(tGATT_IF gatt_if, const RawAddress& bd_addr,
   } else {
     LOG_DEBUG("Starting background connect gatt_if=%u address=%s", gatt_if,
               ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
-    if (!BTM_BackgroundConnectAddressKnown(bd_addr)) {
+    if (!BTM_Sec_AddressKnown(bd_addr)) {
       //  RPA can rotate, causing address to "expire" in the background
       //  connection list. RPA is allowed for direct connect, as such request
       //  times out after 30 seconds
@@ -1686,8 +1687,6 @@ void gatt_load_bonded(void) {
       gatt_bonded_check_add_address(p_dev_rec->bd_addr);
     }
     if (p_dev_rec->is_le_link_key_known()) {
-      VLOG(1) << " add bonded BLE "
-              << ADDRESS_TO_LOGGABLE_STR(p_dev_rec->ble.pseudo_addr);
       LOG_VERBOSE("Add bonded BLE %s",
                   ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->ble.pseudo_addr));
       gatt_bonded_check_add_address(p_dev_rec->ble.pseudo_addr);

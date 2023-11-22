@@ -26,6 +26,7 @@
 #include "common/init_flags.h"
 #include "gap_api.h"
 #include "gatt_api.h"
+#include "hardware/bt_gatt_types.h"
 #include "os/log.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
@@ -399,8 +400,6 @@ bool accept_client_operation(const RawAddress& peer_bda, uint16_t uuid,
  *
  ******************************************************************************/
 void gap_attr_db_init(void) {
-  uint16_t service_handle;
-
   /* Fill our internal UUID with a fixed pattern 0x82 */
   std::array<uint8_t, Uuid::kNumBytes128> tmp;
   tmp.fill(0x82);
@@ -445,7 +444,6 @@ void gap_attr_db_init(void) {
   /* Add a GAP service */
   GATTS_AddService(gatt_if, service,
                    sizeof(service) / sizeof(btgatt_db_element_t));
-  service_handle = service[0].attribute_handle;
 
   gatt_attr[0].uuid = GATT_UUID_GAP_DEVICE_NAME;
   gatt_attr[0].handle = service[1].attribute_handle;

@@ -22,6 +22,8 @@
  *
  ******************************************************************************/
 
+#define LOG_TAG "hidh"
+
 #include "hidh_api.h"
 
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
@@ -31,9 +33,9 @@
 
 #include "hiddefs.h"
 #include "hidh_int.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
-#include "stack/btm/btm_dev.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/stack_metrics_logging.h"
@@ -308,12 +310,32 @@ tHID_STATUS HID_HostDeregister(void) {
   for (i = 0; i < HID_HOST_MAX_DEVICES; i++) {
     HID_HostRemoveDev(i);
     alarm_free(hh_cb.devices[i].conn.process_repage_timer);
+    hh_cb.devices[i].conn.process_repage_timer = NULL;
   }
 
   hidh_conn_dereg();
   hh_cb.reg_flag = false;
 
   return (HID_SUCCESS);
+}
+
+/*******************************************************************************
+ *
+ * Function         HID_HostSDPDisable
+ *
+ * Description      This is called to check if the device has the HIDSDPDisable
+ *                  attribute.
+ *
+ * Returns          bool
+ *
+ ******************************************************************************/
+bool HID_HostSDPDisable(const RawAddress& addr) {
+  for (int i = 0; i < HID_HOST_MAX_DEVICES; i++) {
+    if (hh_cb.devices[i].in_use && (hh_cb.devices[i].addr == addr)) {
+      return (hh_cb.devices[i].attr_mask & HID_SDP_DISABLE);
+    }
+  }
+  return false;
 }
 
 /*******************************************************************************
@@ -355,7 +377,7 @@ tHID_STATUS HID_HostAddDev(const RawAddress& addr, uint16_t attr_mask,
     hh_cb.devices[i].conn_tries = 0;
   }
 
-  if (attr_mask != HID_ATTR_MASK_IGNORE) hh_cb.devices[i].attr_mask = attr_mask;
+  hh_cb.devices[i].attr_mask = attr_mask;
 
   *handle = i;
 

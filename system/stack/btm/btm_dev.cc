@@ -22,28 +22,28 @@
  *
  ******************************************************************************/
 
+#define LOG_TAG "btm_dev"
+
 #include "stack/btm/btm_dev.h"
 
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <string>
 
 #include "btm_api.h"
 #include "btm_ble_int.h"
-#include "btm_ble_sec_api.h"
 #include "btm_sec_api.h"
-#include "btm_sec_int_types.h"
+#include "btm_sec_cb.h"
 #include "device/include/controller.h"
+#include "gd/common/init_flags.h"
 #include "l2c_api.h"
-#include "main/shim/btm_api.h"
-#include "main/shim/dumpsys.h"
-#include "main/shim/shim.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
 #include "rust/src/connection/ffi/connection_shim.h"
+#include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/btm_ble_privacy.h"
+#include "stack/include/btm_log_history.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;
@@ -105,7 +105,7 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
      * bond state for an existing device here? This logic should be verified
      * as part of a larger refactor.
      */
-    p_dev_rec->bond_type = tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN;
+    p_dev_rec->bond_type = BOND_TYPE_UNKNOWN;
   }
 
   if (dev_class) memcpy(p_dev_rec->dev_class, dev_class, DEV_CLASS_LEN);
@@ -144,7 +144,7 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
 
 void wipe_secrets_and_remove(tBTM_SEC_DEV_REC* p_dev_rec) {
   p_dev_rec->link_key.fill(0);
-  memset(&p_dev_rec->ble.keys, 0, sizeof(tBTM_SEC_BLE_KEYS));
+  memset(&p_dev_rec->ble_keys, 0, sizeof(tBTM_SEC_BLE_KEYS));
   list_remove(btm_sec_cb.sec_dev_rec, p_dev_rec);
 }
 
@@ -251,8 +251,9 @@ const char* BTM_SecReadDevName(const RawAddress& bd_addr) {
  *
  * Function         btm_sec_alloc_dev
  *
- * Description      Look for the record in the device database for the record
- *                  with specified address
+ * Description      Allocate a security device record with specified address,
+ *                  fill device type and device class from inquiry database or
+ *                  btm_sec_cb (if the address is the connecting device)
  *
  * Returns          Pointer to the record or NULL
  *
@@ -399,7 +400,7 @@ tBTM_SEC_DEV_REC* btm_find_dev(const RawAddress& bd_addr) {
 
 static bool has_lenc_and_address_is_equal(void* data, void* context) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
-  if (!(p_dev_rec->ble.key_type & BTM_LE_KEY_LENC)) return true;
+  if (!(p_dev_rec->ble_keys.key_type & BTM_LE_KEY_LENC)) return true;
 
   return is_address_equal(data, context);
 }
@@ -640,7 +641,7 @@ tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void) {
 
   // Initialize defaults
   p_dev_rec->sec_flags = BTM_SEC_IN_USE;
-  p_dev_rec->bond_type = tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN;
+  p_dev_rec->bond_type = BOND_TYPE_UNKNOWN;
   p_dev_rec->timestamp = btm_sec_cb.dev_rec_count++;
   p_dev_rec->rmt_io_caps = BTM_IO_CAP_UNKNOWN;
   p_dev_rec->suggested_tx_octets = 0;
@@ -658,11 +659,10 @@ tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void) {
  * Returns          The device bond type if known, otherwise BOND_TYPE_UNKNOWN
  *
  ******************************************************************************/
-tBTM_SEC_DEV_REC::tBTM_BOND_TYPE btm_get_bond_type_dev(
-    const RawAddress& bd_addr) {
+tBTM_BOND_TYPE btm_get_bond_type_dev(const RawAddress& bd_addr) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
 
-  if (p_dev_rec == NULL) return tBTM_SEC_DEV_REC::BOND_TYPE_UNKNOWN;
+  if (p_dev_rec == NULL) return BOND_TYPE_UNKNOWN;
 
   return p_dev_rec->bond_type;
 }
@@ -678,7 +678,7 @@ tBTM_SEC_DEV_REC::tBTM_BOND_TYPE btm_get_bond_type_dev(
  *
  ******************************************************************************/
 bool btm_set_bond_type_dev(const RawAddress& bd_addr,
-                           tBTM_SEC_DEV_REC::tBTM_BOND_TYPE bond_type) {
+                           tBTM_BOND_TYPE bond_type) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
 
   if (p_dev_rec == NULL) return false;
@@ -707,4 +707,86 @@ std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
     result.push_back(p_dev_rec);
   }
   return result;
+}
+
+/*******************************************************************************
+ *
+ * Function         BTM_Sec_AddressKnown
+ *
+ * Description      Query the secure device database and check
+ *                  whether the device associated with address has
+ *                  its address resolved
+ *
+ * Returns          True if
+ *                     - the device is unknown, or
+ *                     - the device is classic, or
+ *                     - the device is ble and has a public address
+ *                     - the device is ble with a resolved identity address
+ *                  False, otherwise
+ *
+ ******************************************************************************/
+bool BTM_Sec_AddressKnown(const RawAddress& address) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(address);
+
+  //  not a known device, or a classic device, we assume public address
+  if (p_dev_rec == NULL || (p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) == 0)
+    return true;
+
+  LOG_WARN("%s, device type not BLE: 0x%02x", ADDRESS_TO_LOGGABLE_CSTR(address),
+           p_dev_rec->device_type);
+
+  // bonded device with identity address known
+  if (!p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
+    return true;
+  }
+
+  // Public address, Random Static, or Random Non-Resolvable Address known
+  if (p_dev_rec->ble.AddressType() == BLE_ADDR_PUBLIC ||
+      !BTM_BLE_IS_RESOLVE_BDA(address)) {
+    return true;
+  }
+
+  LOG_WARN("%s, the address type is 0x%02x", ADDRESS_TO_LOGGABLE_CSTR(address),
+           p_dev_rec->ble.AddressType());
+
+  // Only Resolvable Private Address (RPA) is known, we don't allow it into
+  // the background connection procedure.
+  return false;
+}
+
+const tBLE_BD_ADDR BTM_Sec_GetAddressWithType(const RawAddress& bd_addr) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
+  if (p_dev_rec == nullptr || !p_dev_rec->is_device_type_has_ble()) {
+    return {
+        .type = BLE_ADDR_PUBLIC,
+        .bda = bd_addr,
+    };
+  }
+
+  if (p_dev_rec->ble.identity_address_with_type.bda.IsEmpty()) {
+    return {
+        .type = p_dev_rec->ble.AddressType(),
+        .bda = bd_addr,
+    };
+  } else {
+    // Floss doesn't support LL Privacy (yet). To expedite ARC testing, always
+    // connect to the latest LE random address (if available and LL Privacy is
+    // not enabled) rather than redesign.
+    // TODO(b/235218533): Remove when LL Privacy is implemented.
+#if TARGET_FLOSS
+    if (!p_dev_rec->ble.cur_rand_addr.IsEmpty() &&
+        btm_cb.ble_ctr_cb.privacy_mode < BTM_PRIVACY_1_2) {
+      return {
+          .type = BLE_ADDR_RANDOM,
+          .bda = p_dev_rec->ble.cur_rand_addr,
+      };
+    }
+#endif
+    return p_dev_rec->ble.identity_address_with_type;
+  }
+}
+
+bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
+  tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
+  return (p_dev_rec == nullptr) ? false : p_dev_rec->is_name_known();
 }

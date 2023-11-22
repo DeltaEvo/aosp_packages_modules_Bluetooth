@@ -78,14 +78,6 @@
 
 // Validate or respond to various conditional compilation flags
 
-#if SDP_RAW_DATA_INCLUDED != TRUE
-// Once SDP_RAW_DATA_INCLUDED is no longer exposed via bt_target.h
-// this check and error statement may be removed.
-#warning \
-    "#define SDP_RAW_DATA_INCLUDED preprocessor compilation flag is unsupported"
-#error "*** Conditional Compilation Directive error"
-#endif
-
 // Once BTA_PAN_INCLUDED is no longer exposed via bt_target.h
 // this check and error statement may be removed.
 static_assert(
@@ -375,6 +367,8 @@ static void event_shut_down_stack(ProfileStopCallback stopProfiles) {
 
   do_in_main_thread(FROM_HERE, base::BindOnce(bta_dm_disable));
 
+  btif_dm_cleanup();
+
   future_await(local_hack_future);
   local_hack_future = future_new();
   hack_future = local_hack_future;
@@ -479,3 +473,16 @@ const stack_manager_t* stack_manager_get_interface() {
 }
 
 future_t* stack_manager_get_hack_future() { return hack_future; }
+
+namespace bluetooth {
+namespace legacy {
+namespace testing {
+
+void set_interface_to_profiles(
+    bluetooth::core::CoreInterface* interfaceToProfiles) {
+  ::interfaceToProfiles = interfaceToProfiles;
+}
+
+}  // namespace testing
+}  // namespace legacy
+}  // namespace bluetooth

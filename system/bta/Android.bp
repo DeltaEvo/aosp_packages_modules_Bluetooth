@@ -65,6 +65,7 @@ cc_library_static {
         "ag/bta_ag_rfc.cc",
         "ag/bta_ag_sco.cc",
         "ag/bta_ag_sdp.cc",
+        "ag/bta_ag_swb_aptx.cc",
         "ar/bta_ar.cc",
         "av/bta_av_aact.cc",
         "av/bta_av_act.cc",
@@ -135,11 +136,12 @@ cc_library_static {
     static_libs: [
         "avrcp-target-service",
         "lib-bt-packets",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-bta-core",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "liblc3",
     ],
     shared_libs: [
@@ -202,7 +204,7 @@ cc_library_static {
         "lib-bt-packets",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
     ],
     apex_available: [
         "com.android.btservices",
@@ -211,31 +213,50 @@ cc_library_static {
     min_sdk_version: "Tiramisu",
 }
 
-// bta unit tests for target
 cc_test {
     name: "net_test_bta",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
+    host_supported: true,
     srcs: [
         ":LegacyStackSdp",
+        ":OsiCompatSources",
         ":TestCommonMockFunctions",
+        ":TestCommonSyncMainHandler",
         ":TestFakeOsi",
         ":TestMockBtif",
+        ":TestMockDevice",
         ":TestMockMainShim",
+        ":TestMockStackA2dp",
+        ":TestMockStackAcl",
+        ":TestMockStackAvct",
+        ":TestMockStackAvdt",
+        ":TestMockStackAvrc",
         ":TestMockStackBtm",
+        ":TestMockStackGap",
+        ":TestMockStackGatt",
+        ":TestMockStackHid",
         ":TestMockStackL2cap",
         ":TestMockStackMetrics",
+        ":TestMockStackPan",
+        ":TestMockStackRfcomm",
+        "test/bta_ag_sco_test.cc",
+        "test/bta_ag_test.cc",
+        "test/bta_api_test.cc",
+        "test/bta_av_test.cc",
         "test/bta_dip_test.cc",
+        "test/bta_disc_test.cc",
         "test/bta_dm_cust_uuid_test.cc",
+        "test/bta_dm_test.cc",
+        "test/bta_gatt_test.cc",
         "test/bta_hf_client_add_record_test.cc",
         "test/bta_hf_client_test.cc",
-        "test/gatt/database_builder_sample_device_test.cc",
-        "test/gatt/database_builder_test.cc",
-        "test/gatt/database_test.cc",
+        "test/bta_pan_test.cc",
+        "test/bta_sdp_test.cc",
+        "test/bta_sec_test.cc",
     ],
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
@@ -244,11 +265,75 @@ cc_test {
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
         "libcrypto",
+        "libcutils",
+        "liblog",
+        "server_configurable_flags",
+    ],
+    static_libs: [
+        "bluetooth_flags_c_lib",
+        "libbase",
+        "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
+        "libbluetooth_gd",
+        "libbluetooth_hci_pdl",
+        "libbt-audio-hal-interface",
+        "libbt-bta",
+        "libbt-bta-core",
+        "libbt-btu-main-thread",
+        "libbt-common",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
+        "libbtcore",
+        "libbtdevice",
+        "libchrome",
+        "libcom.android.sysprop.bluetooth.wrapped",
+        "libevent",
+        "libflagtest",
+        "libgmock",
+        "server_configurable_flags",
+    ],
+    data: [
+        ":audio_set_configurations_bfbs",
+        ":audio_set_configurations_json",
+        ":audio_set_scenarios_bfbs",
+        ":audio_set_scenarios_json",
+    ],
+    cflags: ["-Wno-unused-parameter"],
+}
+
+// bta GATT unit tests
+cc_test {
+    name: "net_test_bta_gatt",
+    defaults: [
+        "fluoride_bta_defaults",
+        "mts_defaults",
+    ],
+    test_suites: ["general-tests"],
+    srcs: [
+        ":LegacyStackSdp",
+        ":TestCommonMockFunctions",
+        ":TestFakeOsi",
+        ":TestMockBtif",
+        ":TestMockDevice",
+        ":TestMockMainShim",
+        ":TestMockStackBtm",
+        ":TestMockStackL2cap",
+        ":TestMockStackMetrics",
+        "test/gatt/database_builder_sample_device_test.cc",
+        "test/gatt/database_builder_test.cc",
+        "test/gatt/database_test.cc",
+    ],
+    generated_headers: [
+        "BluetoothGeneratedDumpsysDataSchema_h",
+    ],
+    shared_libs: [
+        "libcrypto",
         "liblog",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbluetooth_hci_pdl",
         "libbt-audio-hal-interface",
@@ -260,14 +345,8 @@ cc_test {
         "libbt_shim_ffi",
         "libbtcore",
         "libchrome",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libgmock",
-    ],
-    data: [
-        ":audio_set_configurations_bfbs",
-        ":audio_set_configurations_json",
-        ":audio_set_scenarios_bfbs",
-        ":audio_set_scenarios_json",
     ],
     cflags: ["-Wno-unused-parameter"],
 }
@@ -279,7 +358,7 @@ cc_test {
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtif",
@@ -297,8 +376,8 @@ cc_test {
         "libstatssocket",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-bta",
@@ -316,149 +395,12 @@ cc_test {
 }
 
 cc_test {
-    name: "bt_host_test_bta",
-    defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
-        "fluoride_bta_defaults",
-        "mts_defaults",
-    ],
-    test_suites: ["device-tests"],
-    host_supported: true,
-    include_dirs: [
-        "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/gd",
-    ],
-    generated_headers: [
-        "BluetoothGeneratedDumpsysDataSchema_h",
-    ],
-    srcs: [
-        ":BtaDmSources",
-        ":LegacyStackSdp",
-        ":OsiCompatSources",
-        ":TestCommonMainHandler",
-        ":TestCommonMockFunctions",
-        ":TestFakeOsi",
-        ":TestMockBtaScn",
-        ":TestMockBtaSdp",
-        ":TestMockBtif",
-        ":TestMockDevice",
-        ":TestMockMainShim",
-        ":TestMockSrvcDis",
-        ":TestMockStackA2dp",
-        ":TestMockStackAcl",
-        ":TestMockStackAvct",
-        ":TestMockStackAvdt",
-        ":TestMockStackAvrc",
-        ":TestMockStackBtm",
-        ":TestMockStackCryptotoolbox",
-        ":TestMockStackGap",
-        ":TestMockStackGatt",
-        ":TestMockStackHid",
-        ":TestMockStackL2cap",
-        ":TestMockStackMetrics",
-        ":TestMockStackPan",
-        ":TestMockStackRfcomm",
-        "ag/bta_ag_act.cc",
-        "ag/bta_ag_api.cc",
-        "ag/bta_ag_at.cc",
-        "ag/bta_ag_cfg.cc",
-        "ag/bta_ag_cmd.cc",
-        "ag/bta_ag_main.cc",
-        "ag/bta_ag_rfc.cc",
-        "ag/bta_ag_sco.cc",
-        "ag/bta_ag_sdp.cc",
-        "ar/bta_ar.cc",
-        "av/bta_av_aact.cc",
-        "av/bta_av_act.cc",
-        "av/bta_av_cfg.cc",
-        "av/bta_av_main.cc",
-        "av/bta_av_ssm.cc",
-        "gatt/bta_gattc_act.cc",
-        "gatt/bta_gattc_api.cc",
-        "gatt/bta_gattc_cache.cc",
-        "gatt/bta_gattc_db_storage.cc",
-        "gatt/bta_gattc_main.cc",
-        "gatt/bta_gattc_queue.cc",
-        "gatt/bta_gattc_utils.cc",
-        "gatt/database.cc",
-        "gatt/database_builder.cc",
-        "hf_client/bta_hf_client_act.cc",
-        "hf_client/bta_hf_client_api.cc",
-        "hf_client/bta_hf_client_at.cc",
-        "hf_client/bta_hf_client_main.cc",
-        "hf_client/bta_hf_client_rfc.cc",
-        "hf_client/bta_hf_client_sco.cc",
-        "hf_client/bta_hf_client_sdp.cc",
-        "hfp/bta_hfp_api.cc",
-        "hh/bta_hh_act.cc",
-        "hh/bta_hh_api.cc",
-        "hh/bta_hh_cfg.cc",
-        "hh/bta_hh_le.cc",
-        "hh/bta_hh_main.cc",
-        "hh/bta_hh_utils.cc",
-        "pan/bta_pan_act.cc",
-        "pan/bta_pan_api.cc",
-        "pan/bta_pan_main.cc",
-        "sdp/bta_sdp_cfg.cc",
-        "sys/bta_sys_conn.cc",
-        "sys/bta_sys_main.cc",
-        "sys/utl.cc",
-        "test/bta_ag_sco_test.cc",
-        "test/bta_api_test.cc",
-        "test/bta_av_test.cc",
-        "test/bta_disc_test.cc",
-        "test/bta_dm_cust_uuid_test.cc",
-        "test/bta_dm_test.cc",
-        "test/bta_gatt_test.cc",
-        "test/bta_hf_client_add_record_test.cc",
-        "test/bta_pan_test.cc",
-        "test/bta_sdp_test.cc",
-        "test/bta_sec_test.cc",
-    ],
-    shared_libs: [
-        "libbase",
-        "libcrypto",
-        "libcutils",
-        "liblog",
-    ],
-    static_libs: [
-        "libbluetooth-types",
-        "libbluetooth_gd",
-        "libbluetooth_hci_pdl",
-        "libbt-common",
-        "libbt-platform-protos-lite",
-        "libbt_shim_bridge",
-        "libbt_shim_ffi",
-        "libbtcore",
-        "libbtdevice",
-        "libchrome",
-        "libcom.android.sysprop.bluetooth",
-        "libevent",
-        "libgmock",
-    ],
-    sanitize: {
-        address: true,
-        cfi: true,
-        misc_undefined: ["bounds"],
-    },
-    target: {
-        android: {
-            whole_static_libs: [
-                "libPlatformProperties",
-            ],
-        },
-    },
-    cflags: ["-Wno-unused-parameter"],
-}
-
-cc_test {
     name: "bt_host_test_bta_scn",
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     host_supported: true,
     include_dirs: [
         "packages/modules/Bluetooth/system",
@@ -496,7 +438,7 @@ cc_test {
         "libbtcore",
         "libbtdevice",
         "libchrome",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libevent",
         "libgmock",
     ],
@@ -518,9 +460,8 @@ cc_test {
 // csis unit tests for host
 cc_test {
     name: "bluetooth_csis_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -552,8 +493,8 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-common",
         "libbt_shim_bridge",
@@ -579,9 +520,8 @@ cc_test {
 // groups unit tests for host
 cc_test {
     name: "bluetooth_groups_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -601,8 +541,8 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-common",
         "libbt_shim_bridge",
@@ -627,9 +567,8 @@ cc_test {
 // bta unit tests for host
 cc_test {
     name: "bluetooth_vc_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -660,8 +599,8 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-common",
         "libbt-platform-protos-lite",
@@ -753,9 +692,8 @@ prebuilt_etc {
 // ========================================================
 cc_test {
     name: "bluetooth_le_audio_codec_manager_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -784,12 +722,13 @@ cc_test {
     srcs: [
         ":TestCommonMockFunctions",
         ":TestMockBtaLeAudioHalVerifier",
+        ":TestMockLegacyHciInterface",
         ":TestStubOsi",
         "le_audio/codec_manager.cc",
         "le_audio/codec_manager_test.cc",
         "le_audio/le_audio_set_configuration_provider_json.cc",
         "le_audio/le_audio_types.cc",
-        "test/common/btm_api_mock.cc",
+        "le_audio/le_audio_utils.cc",
         "test/common/mock_controller.cc",
     ],
     data: [
@@ -810,6 +749,7 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-common",
         "libbt_shim_bridge",
@@ -829,9 +769,8 @@ cc_test {
 
 cc_test {
     name: "bluetooth_le_audio_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -912,6 +851,7 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-common",
         "libbt-platform-protos-lite",
@@ -932,7 +872,7 @@ cc_test {
 
 cc_test {
     name: "bluetooth_le_audio_client_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
         "fluoride_bta_defaults",
         "mts_defaults",
@@ -992,8 +932,8 @@ cc_test {
         "server_configurable_flags",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-common",
@@ -1039,9 +979,8 @@ cc_test {
 
 cc_test {
     name: "bluetooth_test_broadcaster_state_machine",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -1074,6 +1013,7 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-common",
         "libbt_shim_bridge",
@@ -1097,9 +1037,8 @@ cc_test {
 
 cc_test {
     name: "bluetooth_test_broadcaster",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -1167,9 +1106,8 @@ cc_test {
 
 cc_test {
     name: "bluetooth_has_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -1205,8 +1143,8 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbt-common",
         "libbt_shim_bridge",
@@ -1229,9 +1167,8 @@ cc_test {
 
 cc_test {
     name: "bluetooth_hh_test",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_bta_defaults",
         "mts_defaults",
     ],
@@ -1270,8 +1207,9 @@ cc_test {
         "liblog",
     ],
     static_libs: [
-        "crypto_toolbox_for_tests",
+        "libbase",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbluetooth_hci_pdl",
         "libbt-common",
@@ -1279,7 +1217,7 @@ cc_test {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
-        "libcom.android.sysprop.bluetooth",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libevent",
         "libgmock",
         "libosi",

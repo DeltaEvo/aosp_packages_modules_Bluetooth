@@ -190,13 +190,6 @@ filegroup {
 }
 
 filegroup {
-    name: "TestMockCommon",
-    srcs: [
-        "mock/mock_common_*.cc",
-    ],
-}
-
-filegroup {
     name: "TestMockStackA2dp",
     srcs: [
         "mock/mock_stack_a2dp_*.cc",
@@ -239,6 +232,13 @@ filegroup {
 }
 
 filegroup {
+    name: "TestMockStackBnep",
+    srcs: [
+        "mock/mock_stack_bnep_*.cc",
+    ],
+}
+
+filegroup {
     name: "TestMockStackL2cap",
     srcs: [
         "mock/mock_stack_l2cap_*.cc",
@@ -277,13 +277,6 @@ filegroup {
     name: "TestMockBtcore",
     srcs: [
         "mock/mock_btcore_*.cc",
-    ],
-}
-
-filegroup {
-    name: "TestMockSystemLibfmq",
-    srcs: [
-        "mock/mock_system_libfmq_*.cc",
     ],
 }
 
@@ -453,13 +446,6 @@ filegroup {
 }
 
 filegroup {
-    name: "TestMockStackCryptotoolbox",
-    srcs: [
-        "mock/mock_stack_crypto_toolbox*.cc",
-    ],
-}
-
-filegroup {
     name: "TestMockBtu",
     srcs: [
         "mock/mock_btu_*cc",
@@ -490,8 +476,14 @@ filegroup {
 filegroup {
     name: "TestCommonMainHandler",
     srcs: [
+        ":TestCommonSyncMainHandler",
         "common/main_handler.cc",
     ],
+}
+
+filegroup {
+    name: "TestCommonSyncMainHandler",
+    srcs: ["common/sync_main_handler.cc"],
 }
 
 filegroup {
@@ -532,7 +524,7 @@ filegroup {
 filegroup {
     name: "TestMockLegacyHciInterface",
     srcs: [
-        "mock/mock_legacy_hci_iterface.cc",
+        "mock/mock_legacy_hci_interface.cc",
     ],
 }
 

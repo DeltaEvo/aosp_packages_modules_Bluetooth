@@ -39,32 +39,10 @@ namespace stack_acl_btm_ble_connection_establishment {
 // Params: tHCI_STATUS status
 // Returns: void
 struct btm_ble_create_ll_conn_complete {
-  std::function<void(tHCI_STATUS status)> body{[](tHCI_STATUS status) {}};
+  std::function<void(tHCI_STATUS status)> body{[](tHCI_STATUS /* status */) {}};
   void operator()(tHCI_STATUS status) { body(status); };
 };
 extern struct btm_ble_create_ll_conn_complete btm_ble_create_ll_conn_complete;
-// Name: maybe_resolve_address
-// Params: RawAddress* bda, tBLE_ADDR_TYPE* bda_type
-// Returns: bool
-struct maybe_resolve_address {
-  std::function<bool(RawAddress* bda, tBLE_ADDR_TYPE* bda_type)> body{
-      [](RawAddress* bda, tBLE_ADDR_TYPE* bda_type) { return false; }};
-  bool operator()(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
-    return body(bda, bda_type);
-  };
-};
-extern struct maybe_resolve_address maybe_resolve_address;
-// Name: btm_ble_conn_complete
-// Params: uint8_t* p, uint16_t evt_len, bool enhanced
-// Returns: void
-struct btm_ble_conn_complete {
-  std::function<void(uint8_t* p, uint16_t evt_len, bool enhanced)> body{
-      [](uint8_t* p, uint16_t evt_len, bool enhanced) {}};
-  void operator()(uint8_t* p, uint16_t evt_len, bool enhanced) {
-    body(p, evt_len, enhanced);
-  };
-};
-extern struct btm_ble_conn_complete btm_ble_conn_complete;
 
 }  // namespace stack_acl_btm_ble_connection_establishment
 }  // namespace mock

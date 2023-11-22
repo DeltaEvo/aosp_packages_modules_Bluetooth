@@ -430,29 +430,35 @@ public final class BluetoothHidDevice implements BluetoothProfile {
 
     private final BluetoothAdapter mAdapter;
     private final AttributionSource mAttributionSource;
-    private final BluetoothProfileConnector<IBluetoothHidDevice> mProfileConnector =
-            new BluetoothProfileConnector(this, BluetoothProfile.HID_DEVICE,
-                    "BluetoothHidDevice", IBluetoothHidDevice.class.getName()) {
-                @Override
-                public IBluetoothHidDevice getServiceInterface(IBinder service) {
-                    return IBluetoothHidDevice.Stub.asInterface(service);
-                }
-    };
 
-    BluetoothHidDevice(Context context, ServiceListener listener, BluetoothAdapter adapter) {
+    private IBluetoothHidDevice mService;
+
+    BluetoothHidDevice(Context context, BluetoothAdapter adapter) {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
-        mProfileConnector.connect(context, listener);
+        mService = null;
     }
 
     /** @hide */
     @Override
-    public void close() {
-        mProfileConnector.disconnect();
+    public void onServiceConnected(IBinder service) {
+        mService = IBluetoothHidDevice.Stub.asInterface(service);
+    }
+
+    /** @hide */
+    @Override
+    public void onServiceDisconnected() {
+        mService = null;
     }
 
     private IBluetoothHidDevice getService() {
-        return mProfileConnector.getService();
+        return mService;
+    }
+
+    /** @hide */
+    @Override
+    public BluetoothAdapter getAdapter() {
+        return mAdapter;
     }
 
     /** {@inheritDoc} */

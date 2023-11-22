@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <set>
-#include <unordered_map>
 #include <vector>
 
 #include "stack/include/bt_hdr.h"
@@ -456,9 +454,6 @@ void L2CA_ConnectForSecurity(const RawAddress& bd_addr);
 
 // Set bonding state to acquire/release link refcount
 void L2CA_SetBondingState(const RawAddress& p_bd_addr, bool is_bonding);
-
-// Indicated by shim stack manager that GD L2cap is enabled but Security is not
-void L2CA_UseLegacySecurityModule();
 
 void L2CA_SwitchRoleToCentral(const RawAddress& addr);
 

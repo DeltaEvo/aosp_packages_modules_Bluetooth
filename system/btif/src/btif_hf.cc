@@ -26,19 +26,19 @@
  ******************************************************************************/
 
 #define LOG_TAG "bt_btif_hf"
+
+#include <android_bluetooth_flags.h>
+#include <android_bluetooth_sysprop.h>
 #include <base/functional/callback.h>
 #include <base/logging.h>
 #include <frameworks/proto_logging/stats/enums/bluetooth/enums.pb.h>
-
-#ifdef __ANDROID__
-#include <hfp.sysprop.h>
-#endif
 
 #include <cstdint>
 #include <string>
 
 #include "bta/include/bta_ag_api.h"
 #include "bta/include/utl.h"
+#include "bta_ag_swb_aptx.h"
 #include "btif/include/btif_common.h"
 #include "btif/include/btif_metrics_logging.h"
 #include "btif/include/btif_profile_queue.h"
@@ -52,6 +52,7 @@
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_api.h"
+#include "stack/include/btm_log_history.h"
 #include "types/raw_address.h"
 
 namespace {
@@ -143,34 +144,25 @@ static bool is_active_device(const RawAddress& bd_addr) {
 }
 
 static tBTA_SERVICE_MASK get_BTIF_HF_SERVICES() {
-#ifdef __ANDROID__
-  static const tBTA_SERVICE_MASK hf_services =
-      android::sysprop::bluetooth::Hfp::hf_services().value_or(
-          BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK);
-  return hf_services;
-#else
-  return BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK;
-#endif
+  return GET_SYSPROP(Hfp, hf_services,
+                     BTA_HSP_SERVICE_MASK | BTA_HFP_SERVICE_MASK);
 }
 
 /* HF features supported at runtime */
 static uint32_t get_hf_features() {
+#if TARGET_FLOSS
+#define DEFAULT_BTIF_HF_FEATURES                                               \
+  (BTA_AG_FEAT_3WAY | BTA_AG_FEAT_ECS | BTA_AG_FEAT_CODEC | BTA_AG_FEAT_UNAT | \
+   BTA_AG_FEAT_HF_IND)
+#else
 #define DEFAULT_BTIF_HF_FEATURES                                  \
   (BTA_AG_FEAT_3WAY | BTA_AG_FEAT_ECNR | BTA_AG_FEAT_REJECT |     \
    BTA_AG_FEAT_ECS | BTA_AG_FEAT_EXTERR | BTA_AG_FEAT_VREC |      \
    BTA_AG_FEAT_CODEC | BTA_AG_FEAT_HF_IND | BTA_AG_FEAT_ESCO_S4 | \
    BTA_AG_FEAT_UNAT)
-#ifdef __ANDROID__
-  static const uint32_t hf_features =
-      android::sysprop::bluetooth::Hfp::hf_features().value_or(
-          DEFAULT_BTIF_HF_FEATURES);
-  return hf_features;
-#elif TARGET_FLOSS
-  return BTA_AG_FEAT_3WAY | BTA_AG_FEAT_ECS | BTA_AG_FEAT_CODEC |
-         BTA_AG_FEAT_UNAT | BTA_AG_FEAT_HF_IND;
-#else
-  return DEFAULT_BTIF_HF_FEATURES;
 #endif
+
+  return GET_SYSPROP(Hfp, hf_features, DEFAULT_BTIF_HF_FEATURES);
 }
 
 /*******************************************************************************
@@ -583,22 +575,41 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
       if (p_data->val.num == BTM_SCO_CODEC_CVSD) {
         bt_hf_callbacks->WbsCallback(BTHF_WBS_NO,
                                      &btif_hf_cb[idx].connected_bda);
-        bt_hf_callbacks->SwbCallback(BTHF_SWB_NO,
+        bt_hf_callbacks->SwbCallback(BTHF_SWB_CODEC_LC3, BTHF_SWB_NO,
                                      &btif_hf_cb[idx].connected_bda);
       } else if (p_data->val.num == BTM_SCO_CODEC_MSBC) {
         bt_hf_callbacks->WbsCallback(BTHF_WBS_YES,
                                      &btif_hf_cb[idx].connected_bda);
-        bt_hf_callbacks->SwbCallback(BTHF_SWB_NO,
+        bt_hf_callbacks->SwbCallback(BTHF_SWB_CODEC_LC3, BTHF_SWB_NO,
                                      &btif_hf_cb[idx].connected_bda);
       } else if (p_data->val.num == BTM_SCO_CODEC_LC3) {
         bt_hf_callbacks->WbsCallback(BTHF_WBS_NO,
                                      &btif_hf_cb[idx].connected_bda);
-        bt_hf_callbacks->SwbCallback(BTHF_SWB_YES,
+        bt_hf_callbacks->SwbCallback(BTHF_SWB_CODEC_LC3, BTHF_SWB_YES,
                                      &btif_hf_cb[idx].connected_bda);
       } else {
         bt_hf_callbacks->WbsCallback(BTHF_WBS_NONE,
                                      &btif_hf_cb[idx].connected_bda);
-        bt_hf_callbacks->SwbCallback(BTHF_SWB_NONE,
+
+        bthf_swb_codec_t codec = BTHF_SWB_CODEC_LC3;
+        bthf_swb_config_t config = BTHF_SWB_NONE;
+
+        if (is_hfp_aptx_voice_enabled()) {
+          codec = BTHF_SWB_CODEC_VENDOR_APTX;
+
+          LOG_VERBOSE(
+              "AG final selected SWB codec is 0x%02x 0=Q0 4=Q1 6=Q2 7=Q3",
+              p_data->val.num);
+          if (p_data->val.num == BTA_AG_SCO_APTX_SWB_SETTINGS_Q0 ||
+              p_data->val.num == BTA_AG_SCO_APTX_SWB_SETTINGS_Q1 ||
+              p_data->val.num == BTA_AG_SCO_APTX_SWB_SETTINGS_Q2 ||
+              p_data->val.num == BTA_AG_SCO_APTX_SWB_SETTINGS_Q3) {
+            config = BTHF_SWB_YES;
+          } else {
+            config = BTHF_SWB_NO;
+          }
+        }
+        bt_hf_callbacks->SwbCallback(codec, config,
                                      &btif_hf_cb[idx].connected_bda);
       }
       break;
@@ -652,14 +663,15 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
       break;
 
     case BTA_AG_AT_BCS_EVT:
-      LOG_VERBOSE("%s: AG final selected codec is 0x%02x 1=CVSD 2=MSBC",
-                  __func__, p_data->val.num);
+      LOG_VERBOSE("AG final selected codec is 0x%02x 1=CVSD 2=MSBC",
+                  p_data->val.num);
       /* No BTHF_WBS_NONE case, because HF1.6 supported device can send BCS */
       /* Only CVSD is considered narrow band speech */
       bt_hf_callbacks->WbsCallback(
           (p_data->val.num == BTM_SCO_CODEC_MSBC) ? BTHF_WBS_YES : BTHF_WBS_NO,
           &btif_hf_cb[idx].connected_bda);
       bt_hf_callbacks->SwbCallback(
+          BTHF_SWB_CODEC_LC3,
           (p_data->val.num == BTM_SCO_CODEC_LC3) ? BTHF_SWB_YES : BTHF_SWB_NO,
           &btif_hf_cb[idx].connected_bda);
       break;
@@ -689,6 +701,23 @@ static void btif_hf_upstreams_evt(uint16_t event, char* p_param) {
                                        &btif_hf_cb[idx].connected_bda);
       }
       break;
+
+    case BTA_AG_AT_QCS_EVT:
+      if (!is_hfp_aptx_voice_enabled()) {
+        LOG(WARNING) << __func__ << ": unhandled event " << event
+                     << ". Aptx codec is not enabled";
+        break;
+      }
+
+      LOG_INFO("AG final selected SWB codec is %#02x 0=Q0 4=Q1 6=Q2 7=Q3",
+               p_data->val.num);
+      bt_hf_callbacks->SwbCallback(
+          BTHF_SWB_CODEC_VENDOR_APTX,
+          p_data->val.num <= BTA_AG_SCO_APTX_SWB_SETTINGS_Q3 ? BTHF_SWB_YES
+                                                             : BTHF_SWB_NO,
+          &btif_hf_cb[idx].connected_bda);
+      break;
+
     default:
       LOG(WARNING) << __func__ << ": unhandled event " << event;
       break;

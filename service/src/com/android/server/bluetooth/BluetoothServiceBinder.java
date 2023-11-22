@@ -44,15 +44,13 @@ import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.UserManager;
 import android.permission.PermissionManager;
-import android.util.Log;
+
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
 class BluetoothServiceBinder extends IBluetoothManager.Stub {
     private static final String TAG = BluetoothServiceBinder.class.getSimpleName();
-    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
-    private static final boolean VDBG = Log.isLoggable(TAG, Log.VERBOSE);
 
     private final BluetoothManagerService mBluetoothManagerService;
     private final Context mContext;
@@ -185,13 +183,12 @@ class BluetoothServiceBinder extends IBluetoothManager.Stub {
 
     @Override
     public boolean bindBluetoothProfileService(
-            int bluetoothProfile, String serviceName, IBluetoothProfileServiceConnection proxy) {
+            int bluetoothProfile, IBluetoothProfileServiceConnection proxy) {
         requireNonNull(
                 proxy,
                 "IBluetoothProfileServiceConnection cannot be null in bindBluetoothProfileService");
 
-        return mBluetoothManagerService.bindBluetoothProfileService(
-                bluetoothProfile, serviceName, proxy);
+        return mBluetoothManagerService.bindBluetoothProfileService(bluetoothProfile, proxy);
     }
 
     @Override

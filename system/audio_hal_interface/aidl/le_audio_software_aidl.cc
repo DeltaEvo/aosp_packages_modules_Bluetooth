@@ -45,7 +45,7 @@ using ::bluetooth::audio::le_audio::LeAudioClientInterface;
 using ::bluetooth::audio::le_audio::StartRequestState;
 using ::bluetooth::audio::le_audio::StreamCallbacks;
 using ::le_audio::set_configurations::SetConfiguration;
-using ::le_audio::types::LeAudioLc3Config;
+using ::le_audio::types::LeAudioCoreCodecConfig;
 
 static ChannelMode le_audio_channel_mode2audio_hal(uint8_t channels_count) {
   switch (channels_count) {
@@ -465,7 +465,7 @@ std::unordered_map<AudioLocation, uint32_t> audio_location_map{
 
 bool hal_ucast_capability_to_stack_format(
     const UnicastCapability& hal_capability,
-    CodecCapabilitySetting& stack_capability) {
+    CodecConfigSetting& stack_capability) {
   if (hal_capability.codecType != CodecType::LC3) {
     LOG(WARNING) << "Unsupported codecType: "
                  << toString(hal_capability.codecType);
@@ -492,28 +492,37 @@ bool hal_ucast_capability_to_stack_format(
           octets_per_frame_map.end() ||
       audio_location_map.find(supported_channel) == audio_location_map.end()) {
     LOG(ERROR) << __func__ << ": Failed to convert HAL format to stack format"
-               << "\nsample rate = " << sample_rate_hz
-               << "\nframe duration = " << frame_duration_us
+               << "\nsample rate hz = " << sample_rate_hz
+               << "\nframe duration us = " << frame_duration_us
                << "\noctets per frame= " << octets_per_frame
-               << "\naudio location = " << toString(supported_channel);
+               << "\nsupported channel = " << toString(supported_channel)
+               << "\nchannel count per device = " << channel_count
+               << "\ndevice count = " << hal_capability.deviceCount;
 
     return false;
   }
 
-  stack_capability = {
-      .id = ::le_audio::set_configurations::LeAudioCodecIdLc3,
-      .config = LeAudioLc3Config(
-          {.sampling_frequency = sampling_freq_map[sample_rate_hz],
-           .frame_duration = frame_duration_map[frame_duration_us],
-           .audio_channel_allocation = audio_location_map[supported_channel],
-           .octets_per_codec_frame = octets_per_frame_map[octets_per_frame],
-           .channel_count = static_cast<uint8_t>(channel_count)})};
+  stack_capability.id = ::le_audio::set_configurations::LeAudioCodecIdLc3;
+  stack_capability.channel_count_per_iso_stream = channel_count;
+
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
+      sampling_freq_map[sample_rate_hz]);
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
+      frame_duration_map[frame_duration_us]);
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
+      audio_location_map[supported_channel]);
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
+      octets_per_frame_map[octets_per_frame]);
   return true;
 }
 
 bool hal_bcast_capability_to_stack_format(
     const BroadcastCapability& hal_bcast_capability,
-    CodecCapabilitySetting& stack_capability) {
+    CodecConfigSetting& stack_capability) {
   if (hal_bcast_capability.codecType != CodecType::LC3) {
     LOG(WARNING) << "Unsupported codecType: "
                  << toString(hal_bcast_capability.codecType);
@@ -546,22 +555,30 @@ bool hal_bcast_capability_to_stack_format(
       audio_location_map.find(supported_channel) == audio_location_map.end()) {
     LOG(WARNING) << __func__
                  << " : Failed to convert HAL format to stack format"
-                 << "\nsample rate = " << sample_rate_hz
-                 << "\nframe duration = " << frame_duration_us
+                 << "\nsample rate hz = " << sample_rate_hz
+                 << "\nframe duration us = " << frame_duration_us
                  << "\noctets per frame= " << octets_per_frame
-                 << "\naudio location = " << toString(supported_channel);
+                 << "\nsupported channel = " << toString(supported_channel)
+                 << "\nchannel count per stream = " << channel_count;
 
     return false;
   }
 
-  stack_capability = {
-      .id = ::le_audio::set_configurations::LeAudioCodecIdLc3,
-      .config = LeAudioLc3Config(
-          {.sampling_frequency = sampling_freq_map[sample_rate_hz],
-           .frame_duration = frame_duration_map[frame_duration_us],
-           .audio_channel_allocation = audio_location_map[supported_channel],
-           .octets_per_codec_frame = octets_per_frame_map[octets_per_frame],
-           .channel_count = static_cast<uint8_t>(channel_count)})};
+  stack_capability.id = ::le_audio::set_configurations::LeAudioCodecIdLc3;
+  stack_capability.channel_count_per_iso_stream = channel_count;
+
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
+      sampling_freq_map[sample_rate_hz]);
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
+      frame_duration_map[frame_duration_us]);
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
+      audio_location_map[supported_channel]);
+  stack_capability.params.Add(
+      ::le_audio::codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
+      octets_per_frame_map[octets_per_frame]);
   return true;
 }
 
@@ -574,7 +591,7 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
   std::string str_capability_log;
 
   for (auto hal_cap : le_audio_hal_capabilities) {
-    CodecCapabilitySetting encode_cap, decode_cap, bcast_cap;
+    CodecConfigSetting encode_cap, decode_cap, bcast_cap;
     UnicastCapability hal_encode_cap =
         hal_cap.get<AudioCapabilities::leAudioCapabilities>()
             .unicastEncodeCapability;

@@ -166,7 +166,7 @@ bt_status_t btif_storage_load_bonded_hid_info(void) {
     dscp_info.product_id = (uint16_t)value;
 
     btif_config_get_int(name, "HidVersion", &value);
-    dscp_info.version = (uint8_t)value;
+    dscp_info.version = (uint16_t)value;
 
     btif_config_get_int(name, "HidCountryCode", &value);
     dscp_info.ctry_code = (uint8_t)value;
@@ -440,7 +440,7 @@ void btif_storage_load_bonded_hearing_aids() {
     if (btif_config_get_int(name, HEARING_AID_PREPARATION_DELAY, &value))
       preparation_delay = value;
 
-    uint16_t is_acceptlisted = 0;
+    bool is_acceptlisted = false;
     if (btif_config_get_int(name, HEARING_AID_IS_ACCEPTLISTED, &value))
       is_acceptlisted = value;
 

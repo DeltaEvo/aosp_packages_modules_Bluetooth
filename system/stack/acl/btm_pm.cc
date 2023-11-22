@@ -38,15 +38,14 @@
 #include "bt_target.h"
 #include "device/include/controller.h"
 #include "device/include/interop.h"
-#include "gd/common/init_flags.h"
 #include "main/shim/dumpsys.h"
 #include "os/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/stack_power_telemetry.h"
 #include "stack/btm/btm_int_types.h"
-#include "stack/btm/btm_sec_int_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_api_types.h"
+#include "stack/include/btm_log_history.h"
 #include "stack/include/btm_status.h"
 #include "types/raw_address.h"
 
@@ -843,7 +842,7 @@ static bool btm_pm_device_in_active_or_sniff_mode(void) {
   }
 
   /* Check BLE states */
-  if (!btm_sec_cb.ble_ctr_cb.is_connection_state_idle()) {
+  if (!btm_cb.ble_ctr_cb.is_connection_state_idle()) {
     LOG_VERBOSE("%s - BLE state is not idle", __func__);
     return true;
   }

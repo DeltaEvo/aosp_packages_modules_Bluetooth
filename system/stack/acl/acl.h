@@ -18,17 +18,16 @@
 
 #include <cstdint>
 #include <string>
-#include <unordered_set>
-#include <vector>
 
+#include "bt_target.h"
 #include "stack/acl/peer_packet_types.h"
-#include "stack/include/acl_api_types.h"
-#include "stack/include/bt_types.h"
-#include "stack/include/btm_api_types.h"
+#include "stack/btm/power_mode.h"
+#include "stack/include/btm_status.h"
 #include "stack/include/hcimsgs.h"
 #include "types/bt_transport.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
+#include "types/remote_version_type.h"
 
 enum btm_acl_encrypt_state_t {
   BTM_ACL_ENCRYPT_STATE_IDLE = 0,
@@ -44,11 +43,6 @@ enum btm_acl_swkey_state_t {
   BTM_ACL_SWKEY_STATE_SWITCHING = 3,
   BTM_ACL_SWKEY_STATE_ENCRYPTION_ON = 4,
   BTM_ACL_SWKEY_STATE_IN_PROGRESS = 5,
-};
-
-enum btm_data_direction {
-  HOST_TO_CONTROLLER = 0,
-  CONTROLLER_TO_HOST = 1,
 };
 
 /* Policy settings status */
@@ -315,8 +309,6 @@ struct tACL_CONN {
 
   void Reset();
 };
-
-struct controller_t;
 
 /****************************************************
  **      ACL Management API

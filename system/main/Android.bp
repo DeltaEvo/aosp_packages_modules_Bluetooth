@@ -161,13 +161,12 @@ cc_library_static {
 
 cc_test {
     name: "net_test_main_shim",
-    test_suites: ["device-tests"],
+    test_suites: ["general-tests"],
     host_supported: true,
     test_options: {
         unit_test: true,
     },
     defaults: [
-        "bluetooth_gtest_x86_asan_workaround",
         "fluoride_defaults",
         "mts_defaults",
     ],
@@ -213,6 +212,7 @@ cc_test {
     static_libs: [
         "libbluetooth-dumpsys",
         "libbluetooth-types",
+        "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbluetooth_hci_pdl",
         "libbt-common",
@@ -229,6 +229,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "server_configurable_flags",
     ],
     sanitize: {
         address: true,

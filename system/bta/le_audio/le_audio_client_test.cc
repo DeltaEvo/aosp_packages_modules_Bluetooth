@@ -267,10 +267,13 @@ class MockAudioHalClientCallbacks
       (std::vector<btle_audio_codec_config_t> local_input_capa_codec_conf,
        std::vector<btle_audio_codec_config_t> local_output_capa_codec_conf),
       (override));
+  MOCK_METHOD((void), OnAudioGroupCurrentCodecConf,
+              (int group_id, btle_audio_codec_config_t input_codec_conf,
+               btle_audio_codec_config_t output_codec_conf),
+              (override));
   MOCK_METHOD(
-      (void), OnAudioGroupCodecConf,
-      (int group_id, btle_audio_codec_config_t input_codec_conf,
-       btle_audio_codec_config_t output_codec_conf,
+      (void), OnAudioGroupSelectableCodecConf,
+      (int group_id,
        std::vector<btle_audio_codec_config_t> input_selectable_codec_conf,
        std::vector<btle_audio_codec_config_t> output_selectable_codec_conf),
       (override));
@@ -600,10 +603,29 @@ class UnicastTestNoInit : public Test {
 
     // default action for WriteDescriptor function call
     ON_CALL(mock_gatt_queue_, WriteDescriptor(_, _, _, _, _, _))
-        .WillByDefault(Invoke([](uint16_t conn_id, uint16_t handle,
-                                 std::vector<uint8_t> value,
-                                 tGATT_WRITE_TYPE write_type,
-                                 GATT_WRITE_OP_CB cb, void* cb_data) -> void {
+        .WillByDefault(Invoke([this](uint16_t conn_id, uint16_t handle,
+                                     std::vector<uint8_t> value,
+                                     tGATT_WRITE_TYPE write_type,
+                                     GATT_WRITE_OP_CB cb,
+                                     void* cb_data) -> void {
+          auto& ascs = peer_devices.at(conn_id)->ascs;
+          uint8_t idx;
+
+          if (handle == ascs->ctp_ccc) {
+            value = UINT16_TO_VEC_UINT8(ascs->ctp_ccc_val);
+          } else {
+            for (idx = 0; idx < max_num_of_ases; idx++) {
+              if (handle == ascs->sink_ase_ccc[idx] + 1) {
+                value = UINT16_TO_VEC_UINT8(ascs->sink_ase_ccc_val[idx]);
+                break;
+              }
+              if (handle == ascs->source_ase_char[idx] + 1) {
+                value = UINT16_TO_VEC_UINT8(ascs->source_ase_ccc_val[idx]);
+                break;
+              }
+            }
+          }
+
           if (cb)
             do_in_main_thread(
                 FROM_HERE,
@@ -749,7 +771,7 @@ class UnicastTestNoInit : public Test {
                 }
                 leAudioDevice = group->GetNextDevice(leAudioDevice);
               }
-              group->CigClearCis();
+              group->ClearAllCises();
               /* end */
 
               if (!group->Configure(context_type, metadata_context_types,
@@ -761,7 +783,7 @@ class UnicastTestNoInit : public Test {
                 return false;
               }
 
-              group->CigGenerateCisIds(context_type);
+              group->cig.GenerateCisIds(context_type);
 
               for (LeAudioDevice* device = group->GetFirstDevice();
                    device != nullptr; device = group->GetNextDevice(device)) {
@@ -805,8 +827,8 @@ class UnicastTestNoInit : public Test {
 
           group->Configure(group->GetConfigurationContextType(),
                            group->GetMetadataContexts(), ccids);
-          if (!group->CigAssignCisIds(leAudioDevice)) return false;
-          group->CigAssignCisConnHandlesToAses(leAudioDevice);
+          if (!group->cig.AssignCisIds(leAudioDevice)) return false;
+          group->AssignCisConnHandlesToAses(leAudioDevice);
 
           auto* stream_conf = &group->stream_conf;
 
@@ -820,6 +842,7 @@ class UnicastTestNoInit : public Test {
             ase.state = types::AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING;
 
             uint16_t cis_conn_hdl = ase.cis_conn_hdl;
+            auto core_config = ase.codec_config.GetAsCoreCodecConfig();
 
             /* Copied from state_machine.cc ProcessHciNotifSetupIsoDataPath */
             if (ase.direction == le_audio::types::kLeAudioDirectionSource) {
@@ -834,11 +857,11 @@ class UnicastTestNoInit : public Test {
                   stream_conf->stream_params.source.stream_locations.end()) {
                 stream_conf->stream_params.source.stream_locations.emplace_back(
                     std::make_pair(ase.cis_conn_hdl,
-                                   *ase.codec_config.audio_channel_allocation));
+                                   *core_config.audio_channel_allocation));
 
                 stream_conf->stream_params.source.num_of_devices++;
                 stream_conf->stream_params.source.num_of_channels +=
-                    ase.codec_config.channel_count;
+                    core_config.GetChannelCountPerIsoStream();
 
                 LOG_INFO(
                     " Added Source Stream Configuration. CIS Connection "
@@ -846,8 +869,7 @@ class UnicastTestNoInit : public Test {
                     ", Audio Channel Allocation: %d"
                     ", Source Number Of Devices: %d"
                     ", Source Number Of Channels: %d",
-                    +ase.cis_conn_hdl,
-                    +(*ase.codec_config.audio_channel_allocation),
+                    +ase.cis_conn_hdl, +(*core_config.audio_channel_allocation),
                     +stream_conf->stream_params.source.num_of_devices,
                     +stream_conf->stream_params.source.num_of_channels);
               }
@@ -863,11 +885,11 @@ class UnicastTestNoInit : public Test {
                   stream_conf->stream_params.sink.stream_locations.end()) {
                 stream_conf->stream_params.sink.stream_locations.emplace_back(
                     std::make_pair(ase.cis_conn_hdl,
-                                   *ase.codec_config.audio_channel_allocation));
+                                   *core_config.audio_channel_allocation));
 
                 stream_conf->stream_params.sink.num_of_devices++;
                 stream_conf->stream_params.sink.num_of_channels +=
-                    ase.codec_config.channel_count;
+                    core_config.GetChannelCountPerIsoStream();
 
                 LOG_INFO(
                     " Added Sink Stream Configuration. CIS Connection Handle: "
@@ -875,8 +897,7 @@ class UnicastTestNoInit : public Test {
                     ", Audio Channel Allocation: %d"
                     ", Sink Number Of Devices: %d"
                     ", Sink Number Of Channels: %d",
-                    +ase.cis_conn_hdl,
-                    +(*ase.codec_config.audio_channel_allocation),
+                    +ase.cis_conn_hdl, +(*core_config.audio_channel_allocation),
                     +stream_conf->stream_params.sink.num_of_devices,
                     +stream_conf->stream_params.sink.num_of_channels);
               }
@@ -909,7 +930,7 @@ class UnicastTestNoInit : public Test {
             }
             leAudioDevice = group->GetNextDevice(leAudioDevice);
           }
-          group->CigClearCis();
+          group->ClearAllCises();
           /* end */
 
           if (!group->Configure(context_type, metadata_context_types,
@@ -920,18 +941,18 @@ class UnicastTestNoInit : public Test {
 
           if (group->GetState() ==
               types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {
-            group->CigGenerateCisIds(context_type);
+            group->cig.GenerateCisIds(context_type);
 
             std::vector<uint16_t> conn_handles;
-            for (uint8_t i = 0; i < (uint8_t)(group->cises_.size()); i++) {
+            for (uint8_t i = 0; i < (uint8_t)(group->cig.cises.size()); i++) {
               conn_handles.push_back(iso_con_counter_++);
             }
-            group->CigAssignCisConnHandles(conn_handles);
+            group->cig.AssignCisConnHandles(conn_handles);
             for (LeAudioDevice* device = group->GetFirstActiveDevice();
                  device != nullptr;
                  device = group->GetNextActiveDevice(device)) {
-              if (!group->CigAssignCisIds(device)) return false;
-              group->CigAssignCisConnHandlesToAses(device);
+              if (!group->cig.AssignCisIds(device)) return false;
+              group->AssignCisConnHandlesToAses(device);
             }
           }
 
@@ -952,6 +973,7 @@ class UnicastTestNoInit : public Test {
               ase.pres_delay_max = 2500;
               ase.preferred_pres_delay_min = 2500;
               ase.preferred_pres_delay_max = 2500;
+              auto core_config = ase.codec_config.GetAsCoreCodecConfig();
 
               uint16_t cis_conn_hdl = ase.cis_conn_hdl;
 
@@ -969,55 +991,54 @@ class UnicastTestNoInit : public Test {
                   stream_conf->stream_params.source.stream_locations
                       .emplace_back(std::make_pair(
                           ase.cis_conn_hdl,
-                          *ase.codec_config.audio_channel_allocation));
+                          *core_config.audio_channel_allocation));
 
                   stream_conf->stream_params.source.num_of_devices++;
                   stream_conf->stream_params.source.num_of_channels +=
-                      ase.codec_config.channel_count;
+                      core_config.GetChannelCountPerIsoStream();
                   stream_conf->stream_params.source.audio_channel_allocation |=
-                      *ase.codec_config.audio_channel_allocation;
+                      *core_config.audio_channel_allocation;
 
                   if (stream_conf->stream_params.source.sample_frequency_hz ==
                       0) {
                     stream_conf->stream_params.source.sample_frequency_hz =
-                        ase.codec_config.GetSamplingFrequencyHz();
+                        core_config.GetSamplingFrequencyHz();
                   } else {
                     ASSERT_LOG(
                         stream_conf->stream_params.source.sample_frequency_hz ==
-                            ase.codec_config.GetSamplingFrequencyHz(),
+                            core_config.GetSamplingFrequencyHz(),
                         "sample freq mismatch: %d!=%d",
                         stream_conf->stream_params.source.sample_frequency_hz,
-                        ase.codec_config.GetSamplingFrequencyHz());
+                        core_config.GetSamplingFrequencyHz());
                   }
 
                   if (stream_conf->stream_params.source
                           .octets_per_codec_frame == 0) {
                     stream_conf->stream_params.source.octets_per_codec_frame =
-                        *ase.codec_config.octets_per_codec_frame;
+                        *core_config.octets_per_codec_frame;
                   } else {
                     ASSERT_LOG(stream_conf->stream_params.source
                                        .octets_per_codec_frame ==
-                                   *ase.codec_config.octets_per_codec_frame,
+                                   *core_config.octets_per_codec_frame,
                                "octets per frame mismatch: %d!=%d",
                                stream_conf->stream_params.source
                                    .octets_per_codec_frame,
-                               *ase.codec_config.octets_per_codec_frame);
+                               *core_config.octets_per_codec_frame);
                   }
 
                   if (stream_conf->stream_params.source
                           .codec_frames_blocks_per_sdu == 0) {
                     stream_conf->stream_params.source
                         .codec_frames_blocks_per_sdu =
-                        *ase.codec_config.codec_frames_blocks_per_sdu;
+                        *core_config.codec_frames_blocks_per_sdu;
                   } else {
-                    ASSERT_LOG(
-                        stream_conf->stream_params.source
-                                .codec_frames_blocks_per_sdu ==
-                            *ase.codec_config.codec_frames_blocks_per_sdu,
-                        "codec_frames_blocks_per_sdu: %d!=%d",
-                        stream_conf->stream_params.source
-                            .codec_frames_blocks_per_sdu,
-                        *ase.codec_config.codec_frames_blocks_per_sdu);
+                    ASSERT_LOG(stream_conf->stream_params.source
+                                       .codec_frames_blocks_per_sdu ==
+                                   *core_config.codec_frames_blocks_per_sdu,
+                               "codec_frames_blocks_per_sdu: %d!=%d",
+                               stream_conf->stream_params.source
+                                   .codec_frames_blocks_per_sdu,
+                               *core_config.codec_frames_blocks_per_sdu);
                   }
 
                   LOG_INFO(
@@ -1027,7 +1048,7 @@ class UnicastTestNoInit : public Test {
                       ", Source Number Of Devices: %d"
                       ", Source Number Of Channels: %d",
                       +ase.cis_conn_hdl,
-                      +(*ase.codec_config.audio_channel_allocation),
+                      +(*core_config.audio_channel_allocation),
                       +stream_conf->stream_params.source.num_of_devices,
                       +stream_conf->stream_params.source.num_of_channels);
                 }
@@ -1042,58 +1063,56 @@ class UnicastTestNoInit : public Test {
                 if (iter ==
                     stream_conf->stream_params.sink.stream_locations.end()) {
                   stream_conf->stream_params.sink.stream_locations.emplace_back(
-                      std::make_pair(
-                          ase.cis_conn_hdl,
-                          *ase.codec_config.audio_channel_allocation));
+                      std::make_pair(ase.cis_conn_hdl,
+                                     *core_config.audio_channel_allocation));
 
                   stream_conf->stream_params.sink.num_of_devices++;
                   stream_conf->stream_params.sink.num_of_channels +=
-                      ase.codec_config.channel_count;
+                      core_config.GetChannelCountPerIsoStream();
 
                   stream_conf->stream_params.sink.audio_channel_allocation |=
-                      *ase.codec_config.audio_channel_allocation;
+                      *core_config.audio_channel_allocation;
 
                   if (stream_conf->stream_params.sink.sample_frequency_hz ==
                       0) {
                     stream_conf->stream_params.sink.sample_frequency_hz =
-                        ase.codec_config.GetSamplingFrequencyHz();
+                        core_config.GetSamplingFrequencyHz();
                   } else {
                     ASSERT_LOG(
                         stream_conf->stream_params.sink.sample_frequency_hz ==
-                            ase.codec_config.GetSamplingFrequencyHz(),
+                            core_config.GetSamplingFrequencyHz(),
                         "sample freq mismatch: %d!=%d",
                         stream_conf->stream_params.sink.sample_frequency_hz,
-                        ase.codec_config.GetSamplingFrequencyHz());
+                        core_config.GetSamplingFrequencyHz());
                   }
 
                   if (stream_conf->stream_params.sink.octets_per_codec_frame ==
                       0) {
                     stream_conf->stream_params.sink.octets_per_codec_frame =
-                        *ase.codec_config.octets_per_codec_frame;
+                        *core_config.octets_per_codec_frame;
                   } else {
                     ASSERT_LOG(
                         stream_conf->stream_params.sink
                                 .octets_per_codec_frame ==
-                            *ase.codec_config.octets_per_codec_frame,
+                            *core_config.octets_per_codec_frame,
                         "octets per frame mismatch: %d!=%d",
                         stream_conf->stream_params.sink.octets_per_codec_frame,
-                        *ase.codec_config.octets_per_codec_frame);
+                        *core_config.octets_per_codec_frame);
                   }
 
                   if (stream_conf->stream_params.sink
                           .codec_frames_blocks_per_sdu == 0) {
                     stream_conf->stream_params.sink
                         .codec_frames_blocks_per_sdu =
-                        *ase.codec_config.codec_frames_blocks_per_sdu;
+                        *core_config.codec_frames_blocks_per_sdu;
                   } else {
-                    ASSERT_LOG(
-                        stream_conf->stream_params.sink
-                                .codec_frames_blocks_per_sdu ==
-                            *ase.codec_config.codec_frames_blocks_per_sdu,
-                        "codec_frames_blocks_per_sdu: %d!=%d",
-                        stream_conf->stream_params.sink
-                            .codec_frames_blocks_per_sdu,
-                        *ase.codec_config.codec_frames_blocks_per_sdu);
+                    ASSERT_LOG(stream_conf->stream_params.sink
+                                       .codec_frames_blocks_per_sdu ==
+                                   *core_config.codec_frames_blocks_per_sdu,
+                               "codec_frames_blocks_per_sdu: %d!=%d",
+                               stream_conf->stream_params.sink
+                                   .codec_frames_blocks_per_sdu,
+                               *core_config.codec_frames_blocks_per_sdu);
                   }
 
                   LOG_INFO(
@@ -1103,7 +1122,7 @@ class UnicastTestNoInit : public Test {
                       ", Sink Number Of Devices: %d"
                       ", Sink Number Of Channels: %d",
                       +ase.cis_conn_hdl,
-                      +(*ase.codec_config.audio_channel_allocation),
+                      +(*core_config.audio_channel_allocation),
                       +stream_conf->stream_params.sink.num_of_devices,
                       +stream_conf->stream_params.sink.num_of_channels);
                 }
@@ -1118,7 +1137,7 @@ class UnicastTestNoInit : public Test {
           streaming_groups[group->group_id_] = group;
 
           /* Assume CIG is created */
-          group->cig_state_ = le_audio::types::CigState::CREATED;
+          group->cig.SetState(le_audio::types::CigState::CREATED);
 
           if (block_streaming_state_callback) return true;
 
@@ -1173,7 +1192,8 @@ class UnicastTestNoInit : public Test {
                       if (ases.sink) {
                         stream_conf->stream_params.sink.num_of_devices--;
                         stream_conf->stream_params.sink.num_of_channels -=
-                            ases.sink->codec_config.channel_count;
+                            ases.sink->codec_config.GetAsCoreCodecConfig()
+                                .GetChannelCountPerIsoStream();
 
                         LOG_INFO(
                             ", Source Number Of Devices: %d"
@@ -1195,7 +1215,8 @@ class UnicastTestNoInit : public Test {
                       if (ases.source) {
                         stream_conf->stream_params.source.num_of_devices--;
                         stream_conf->stream_params.source.num_of_channels -=
-                            ases.source->codec_config.channel_count;
+                            ases.source->codec_config.GetAsCoreCodecConfig()
+                                .GetChannelCountPerIsoStream();
 
                         LOG_INFO(
                             ", Source Number Of Devices: %d"
@@ -1208,10 +1229,10 @@ class UnicastTestNoInit : public Test {
                 stream_conf->stream_params.source.stream_locations.end());
           }
 
-          group->CigUnassignCis(leAudioDevice);
+          group->cig.UnassignCis(leAudioDevice);
 
           if (group->IsEmpty()) {
-            group->cig_state_ = le_audio::types::CigState::NONE;
+            group->cig.SetState(le_audio::types::CigState::NONE);
             InjectCigRemoved(group->group_id_);
           }
         });
@@ -1251,7 +1272,8 @@ class UnicastTestNoInit : public Test {
                           if (ases.sink) {
                             stream_conf->stream_params.sink.num_of_devices--;
                             stream_conf->stream_params.sink.num_of_channels -=
-                                ases.sink->codec_config.channel_count;
+                                ases.sink->codec_config.GetAsCoreCodecConfig()
+                                    .GetChannelCountPerIsoStream();
 
                             LOG_INFO(
                                 " Sink Number Of Devices: %d"
@@ -1281,7 +1303,8 @@ class UnicastTestNoInit : public Test {
                           if (ases.source) {
                             stream_conf->stream_params.source.num_of_devices--;
                             stream_conf->stream_params.source.num_of_channels -=
-                                ases.source->codec_config.channel_count;
+                                ases.source->codec_config.GetAsCoreCodecConfig()
+                                    .GetChannelCountPerIsoStream();
 
                             LOG_INFO(
                                 ", Source Number Of Devices: %d"
@@ -1296,7 +1319,7 @@ class UnicastTestNoInit : public Test {
                     stream_conf->stream_params.source.stream_locations.end());
               }
 
-              group->CigUnassignCis(leAudioDevice);
+              group->cig.UnassignCis(leAudioDevice);
             });
 
     ON_CALL(mock_state_machine_, StopStream(_))
@@ -1321,7 +1344,8 @@ class UnicastTestNoInit : public Test {
                         if (ases.sink) {
                           stream_conf->stream_params.sink.num_of_devices--;
                           stream_conf->stream_params.sink.num_of_channels -=
-                              ases.sink->codec_config.channel_count;
+                              ases.sink->codec_config.GetAsCoreCodecConfig()
+                                  .GetChannelCountPerIsoStream();
 
                           LOG_INFO(
                               " Sink Number Of Devices: %d"
@@ -1348,7 +1372,8 @@ class UnicastTestNoInit : public Test {
                         if (ases.source) {
                           stream_conf->stream_params.source.num_of_devices--;
                           stream_conf->stream_params.source.num_of_channels -=
-                              ases.source->codec_config.channel_count;
+                              ases.source->codec_config.GetAsCoreCodecConfig()
+                                  .GetChannelCountPerIsoStream();
 
                           LOG_INFO(
                               ", Source Number Of Devices: %d"
@@ -1362,7 +1387,7 @@ class UnicastTestNoInit : public Test {
                   stream_conf->stream_params.source.stream_locations.end());
             }
 
-            group->CigUnassignCis(device);
+            group->cig.UnassignCis(device);
 
             for (auto& ase : device->ases_) {
               ase.cis_state = types::CisState::IDLE;
@@ -1569,10 +1594,13 @@ class UnicastTestNoInit : public Test {
       uint16_t start = 0;
       uint16_t sink_ase_char[max_num_of_ases] = {0};
       uint16_t sink_ase_ccc[max_num_of_ases] = {0};
+      uint16_t sink_ase_ccc_val[max_num_of_ases] = {0};
       uint16_t source_ase_char[max_num_of_ases] = {0};
       uint16_t source_ase_ccc[max_num_of_ases] = {0};
+      uint16_t source_ase_ccc_val[max_num_of_ases] = {0};
       uint16_t ctp_char = 0;
       uint16_t ctp_ccc = 0;
+      uint16_t ctp_ccc_val = 0;
       uint16_t end = 0;
 
       MOCK_METHOD((void), OnReadCharacteristic,
@@ -1781,6 +1809,10 @@ class UnicastTestNoInit : public Test {
                   .gain = track.gain,
               },
       };
+      if (test_tags_ptr_) {
+        memcpy(desc_track.tags, test_tags_ptr_, strlen(test_tags_ptr_));
+      }
+
       tracks_vec.push_back(desc_track);
     }
 
@@ -2147,7 +2179,8 @@ class UnicastTestNoInit : public Test {
       uint32_t source_audio_allocation, uint8_t sink_channel_cnt = 0x03,
       uint8_t source_channel_cnt = 0x03, uint16_t sample_freq_mask = 0x0004,
       bool add_csis = true, bool add_cas = true, bool add_pacs = true,
-      int add_ascs_cnt = 1, uint8_t set_size = 2, uint8_t rank = 1) {
+      int add_ascs_cnt = 1, uint8_t set_size = 2, uint8_t rank = 1,
+      GattStatus gatt_status = GATT_SUCCESS) {
     auto csis = std::make_unique<NiceMock<MockDeviceWrapper::csis_mock>>();
     if (add_csis) {
       // attribute handles
@@ -2245,207 +2278,235 @@ class UnicastTestNoInit : public Test {
 
       // Set pacs default read values
       ON_CALL(*peer_devices.at(conn_id)->pacs, OnReadCharacteristic(_, _, _))
-          .WillByDefault(
-              [this, conn_id, snk_allocation, src_allocation, sample_freq,
-               sink_channel_cnt, source_channel_cnt](
-                  uint16_t handle, GATT_READ_OP_CB cb, void* cb_data) {
-                auto& pacs = peer_devices.at(conn_id)->pacs;
-                std::vector<uint8_t> value;
-                if (handle == pacs->sink_pac_char + 1) {
-                  value = {
-                      // Num records
-                      0x02,
-                      // Codec_ID
-                      0x06,
-                      0x00,
-                      0x00,
-                      0x00,
-                      0x00,
-                      // Codec Spec. Caps. Len
-                      0x10,
-                      0x03, /* sample freq */
-                      0x01,
-                      sample_freq[0],
-                      sample_freq[1],
-                      0x02,
-                      0x02, /* frame duration */
-                      0x03,
-                      0x02, /* channel count */
-                      0x03,
-                      sink_channel_cnt,
-                      0x05,
-                      0x04,
-                      0x1E,
-                      0x00,
-                      0x78,
-                      0x00,
-                      // Metadata Length
-                      0x00,
-                      // Codec_ID
-                      0x06,
-                      0x00,
-                      0x00,
-                      0x00,
-                      0x00,
-                      // Codec Spec. Caps. Len
-                      0x10,
-                      0x03, /* sample freq */
-                      0x01,
-                      0x80, /* 48kHz */
-                      0x00,
-                      0x02, /* frame duration */
-                      0x02,
-                      0x03,
-                      0x02, /* channel count */
-                      0x03,
-                      sink_channel_cnt,
-                      0x05, /* octects per frame */
-                      0x04,
-                      0x78,
-                      0x00,
-                      0x78,
-                      0x00,
-                      // Metadata Length
-                      0x00,
-                  };
-                } else if (handle == pacs->sink_audio_loc_char + 1) {
-                  value = {
-                      // Audio Locations
-                      snk_allocation[0],
-                      snk_allocation[1],
-                      snk_allocation[2],
-                      snk_allocation[3],
-                  };
-                } else if (handle == pacs->source_pac_char + 1) {
-                  value = {
-                      // Num records
-                      0x02,
-                      // Codec_ID
-                      0x06,
-                      0x00,
-                      0x00,
-                      0x00,
-                      0x00,
-                      // Codec Spec. Caps. Len
-                      0x10,
-                      0x03,
-                      0x01,
-                      sample_freq[0],
-                      sample_freq[1],
-                      0x02,
-                      0x02,
-                      0x03,
-                      0x02,
-                      0x03,
-                      source_channel_cnt,
-                      0x05,
-                      0x04,
-                      0x1E,
-                      0x00,
-                      0x78,
-                      0x00,
-                      // Metadata Length
-                      0x00,
-                      // Codec_ID
-                      0x06,
-                      0x00,
-                      0x00,
-                      0x00,
-                      0x00,
-                      // Codec Spec. Caps. Len
-                      0x10,
-                      0x03,
-                      0x01,
-                      0x24,
-                      0x00,
-                      0x02,
-                      0x02,
-                      0x03,
-                      0x02,
-                      0x03,
-                      source_channel_cnt,
-                      0x05,
-                      0x04,
-                      0x1E,
-                      0x00,
-                      0x50,
-                      0x00,
-                      // Metadata Length
-                      0x00,
-                  };
-                } else if (handle == pacs->source_audio_loc_char + 1) {
-                  value = {
-                      // Audio Locations
-                      src_allocation[0],
-                      src_allocation[1],
-                      src_allocation[2],
-                      src_allocation[3],
-                  };
-                } else if (handle == pacs->avail_contexts_char + 1) {
-                  value = {
-                      // Sink Avail Contexts
-                      (uint8_t)(available_snk_context_types_),
-                      (uint8_t)(available_snk_context_types_ >> 8),
-                      // Source Avail Contexts
-                      (uint8_t)(available_src_context_types_),
-                      (uint8_t)(available_src_context_types_ >> 8),
-                  };
-                } else if (handle == pacs->supp_contexts_char + 1) {
-                  value = {
-                      // Sink Supp Contexts
-                      (uint8_t)(supported_snk_context_types_),
-                      (uint8_t)(supported_snk_context_types_ >> 8),
-                      // Source Supp Contexts
-                      (uint8_t)(supported_src_context_types_),
-                      (uint8_t)(supported_src_context_types_ >> 8),
-                  };
-                }
-                cb(conn_id, GATT_SUCCESS, handle, value.size(), value.data(),
-                   cb_data);
-              });
+          .WillByDefault([this, conn_id, snk_allocation, src_allocation,
+                          sample_freq, sink_channel_cnt, source_channel_cnt,
+                          gatt_status](uint16_t handle, GATT_READ_OP_CB cb,
+                                       void* cb_data) {
+            auto& pacs = peer_devices.at(conn_id)->pacs;
+            std::vector<uint8_t> value;
+            if (gatt_status == GATT_SUCCESS) {
+              if (handle == pacs->sink_pac_char + 1) {
+                value = {
+                    // Num records
+                    0x02,
+                    // Codec_ID
+                    0x06,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    // Codec Spec. Caps. Len
+                    0x10,
+                    0x03, /* sample freq */
+                    0x01,
+                    sample_freq[0],
+                    sample_freq[1],
+                    0x02,
+                    0x02, /* frame duration */
+                    0x03,
+                    0x02, /* channel count */
+                    0x03,
+                    sink_channel_cnt,
+                    0x05,
+                    0x04,
+                    0x1E,
+                    0x00,
+                    0x78,
+                    0x00,
+                    // Metadata Length
+                    0x00,
+                    // Codec_ID
+                    0x06,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    // Codec Spec. Caps. Len
+                    0x10,
+                    0x03, /* sample freq */
+                    0x01,
+                    0x80, /* 48kHz */
+                    0x00,
+                    0x02, /* frame duration */
+                    0x02,
+                    0x03,
+                    0x02, /* channel count */
+                    0x03,
+                    sink_channel_cnt,
+                    0x05, /* octects per frame */
+                    0x04,
+                    0x78,
+                    0x00,
+                    0x78,
+                    0x00,
+                    // Metadata Length
+                    0x00,
+                };
+              } else if (handle == pacs->sink_audio_loc_char + 1) {
+                value = {
+                    // Audio Locations
+                    snk_allocation[0],
+                    snk_allocation[1],
+                    snk_allocation[2],
+                    snk_allocation[3],
+                };
+              } else if (handle == pacs->source_pac_char + 1) {
+                value = {
+                    // Num records
+                    0x02,
+                    // Codec_ID
+                    0x06,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    // Codec Spec. Caps. Len
+                    0x10,
+                    0x03,
+                    0x01,
+                    sample_freq[0],
+                    sample_freq[1],
+                    0x02,
+                    0x02,
+                    0x03,
+                    0x02,
+                    0x03,
+                    source_channel_cnt,
+                    0x05,
+                    0x04,
+                    0x1E,
+                    0x00,
+                    0x78,
+                    0x00,
+                    // Metadata Length
+                    0x00,
+                    // Codec_ID
+                    0x06,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    // Codec Spec. Caps. Len
+                    0x10,
+                    0x03,
+                    0x01,
+                    0x24,
+                    0x00,
+                    0x02,
+                    0x02,
+                    0x03,
+                    0x02,
+                    0x03,
+                    source_channel_cnt,
+                    0x05,
+                    0x04,
+                    0x1E,
+                    0x00,
+                    0x50,
+                    0x00,
+                    // Metadata Length
+                    0x00,
+                };
+              } else if (handle == pacs->source_audio_loc_char + 1) {
+                value = {
+                    // Audio Locations
+                    src_allocation[0],
+                    src_allocation[1],
+                    src_allocation[2],
+                    src_allocation[3],
+                };
+              } else if (handle == pacs->avail_contexts_char + 1) {
+                value = {
+                    // Sink Avail Contexts
+                    (uint8_t)(available_snk_context_types_),
+                    (uint8_t)(available_snk_context_types_ >> 8),
+                    // Source Avail Contexts
+                    (uint8_t)(available_src_context_types_),
+                    (uint8_t)(available_src_context_types_ >> 8),
+                };
+              } else if (handle == pacs->supp_contexts_char + 1) {
+                value = {
+                    // Sink Supp Contexts
+                    (uint8_t)(supported_snk_context_types_),
+                    (uint8_t)(supported_snk_context_types_ >> 8),
+                    // Source Supp Contexts
+                    (uint8_t)(supported_src_context_types_),
+                    (uint8_t)(supported_src_context_types_ >> 8),
+                };
+              }
+            }
+            cb(conn_id, gatt_status, handle, value.size(), value.data(),
+               cb_data);
+          });
     }
 
     if (add_ascs_cnt > 0) {
       // Set ascs default read values
       ON_CALL(*peer_devices.at(conn_id)->ascs, OnReadCharacteristic(_, _, _))
-          .WillByDefault([this, conn_id](uint16_t handle, GATT_READ_OP_CB cb,
-                                         void* cb_data) {
+          .WillByDefault([this, conn_id, gatt_status](uint16_t handle,
+                                                      GATT_READ_OP_CB cb,
+                                                      void* cb_data) {
             auto& ascs = peer_devices.at(conn_id)->ascs;
             std::vector<uint8_t> value;
             bool is_ase_sink_request = false;
             bool is_ase_src_request = false;
             uint8_t idx;
-            for (idx = 0; idx < max_num_of_ases; idx++) {
-              if (handle == ascs->sink_ase_char[idx] + 1) {
-                is_ase_sink_request = true;
-                break;
-              }
-              if (handle == ascs->source_ase_char[idx] + 1) {
-                is_ase_src_request = true;
-                break;
-              }
+
+            if (handle == ascs->ctp_ccc && ccc_stored_byte_val_.has_value()) {
+              value = {*ccc_stored_byte_val_, 00};
+              cb(conn_id, gatt_read_ctp_ccc_status_, handle, value.size(),
+                 value.data(), cb_data);
+              return;
             }
 
-            if (is_ase_sink_request) {
-              value = {
-                  // ASE ID
-                  static_cast<uint8_t>(idx + 1),
-                  // State
-                  static_cast<uint8_t>(
-                      le_audio::types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
-                  // No Additional ASE params for IDLE state
-              };
-            } else if (is_ase_src_request) {
-              value = {
-                  // ASE ID
-                  static_cast<uint8_t>(idx + 6),
-                  // State
-                  static_cast<uint8_t>(
-                      le_audio::types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
-                  // No Additional ASE params for IDLE state
-              };
+            if (gatt_status == GATT_SUCCESS) {
+              if (handle == ascs->ctp_ccc) {
+                value = UINT16_TO_VEC_UINT8(ascs->ctp_ccc_val);
+              } else {
+                for (idx = 0; idx < max_num_of_ases; idx++) {
+                  if (handle == ascs->sink_ase_ccc[idx] + 1) {
+                    value = UINT16_TO_VEC_UINT8(ascs->sink_ase_ccc_val[idx]);
+                    break;
+                  }
+                  if (handle == ascs->source_ase_char[idx] + 1) {
+                    value = UINT16_TO_VEC_UINT8(ascs->source_ase_ccc_val[idx]);
+                    break;
+                  }
+                }
+              }
+
+              for (idx = 0; idx < max_num_of_ases; idx++) {
+                if (handle == ascs->sink_ase_char[idx] + 1) {
+                  is_ase_sink_request = true;
+                  break;
+                }
+                if (handle == ascs->source_ase_char[idx] + 1) {
+                  is_ase_src_request = true;
+                  break;
+                }
+              }
+
+              if (is_ase_sink_request) {
+                value = {
+                    // ASE ID
+                    static_cast<uint8_t>(idx + 1),
+                    // State
+                    static_cast<uint8_t>(
+                        le_audio::types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
+                    // No Additional ASE params for IDLE state
+                };
+              } else if (is_ase_src_request) {
+                value = {
+                    // ASE ID
+                    static_cast<uint8_t>(idx + 6),
+                    // State
+                    static_cast<uint8_t>(
+                        le_audio::types::AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
+                    // No Additional ASE params for IDLE state
+                };
+              }
             }
-            cb(conn_id, GATT_SUCCESS, handle, value.size(), value.data(),
+            cb(conn_id, gatt_status, handle, value.size(), value.data(),
                cb_data);
           });
     }
@@ -2590,6 +2651,13 @@ class UnicastTestNoInit : public Test {
   std::map<uint16_t, std::unique_ptr<NiceMock<MockDeviceWrapper>>> peer_devices;
   std::list<int> group_locks;
   std::map<RawAddress, int> groups;
+
+  /* CCC descriptor data */
+  tGATT_STATUS gatt_read_ctp_ccc_status_ = GATT_SUCCESS;
+  std::optional<uint8_t> ccc_stored_byte_val_ = std::nullopt;
+
+  /* Audio track metadata */
+  char* test_tags_ptr_ = nullptr;
 };
 
 class UnicastTest : public UnicastTestNoInit {
@@ -3428,6 +3496,154 @@ TEST_F(UnicastTestNoInit, ConnectFailedDueToInvalidParameters) {
 
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
+}
+
+TEST_F(UnicastTestNoInit, LoadStoredEarbudsBroakenStorage) {
+  // Prepare two devices
+  uint8_t group_size = 2;
+  uint8_t group_id = 2;
+  /* If the storage has been broken, make sure device will be rediscovered after
+   * reconnection
+   */
+
+  /* Prepare  mock to not inject connect event so the device can stay in
+   * CONNECTING state*/
+  ON_CALL(mock_gatt_interface_, Open(_, _, BTM_BLE_DIRECT_CONNECTION, false))
+      .WillByDefault(DoAll(Return()));
+
+  const RawAddress test_address0 = GetTestAddress(0);
+  SetSampleDatabaseEarbudsValid(
+      1, test_address0, codec_spec_conf::kLeAudioLocationFrontLeft,
+      codec_spec_conf::kLeAudioLocationFrontLeft, default_channel_cnt,
+      default_channel_cnt, 0x0004,
+      /* source sample freq 16khz */ true, /*add_csis*/
+      true,                                /*add_cas*/
+      true,                                /*add_pacs*/
+      default_ase_cnt,                     /*add_ascs_cnt*/
+      group_size, 1);
+
+  const RawAddress test_address1 = GetTestAddress(1);
+  SetSampleDatabaseEarbudsValid(
+      2, test_address1, codec_spec_conf::kLeAudioLocationFrontRight,
+      codec_spec_conf::kLeAudioLocationFrontRight, default_channel_cnt,
+      default_channel_cnt, 0x0004,
+      /* source sample freq 16khz */ true, /*add_csis*/
+      true,                                /*add_cas*/
+      true,                                /*add_pacs*/
+      default_ase_cnt,                     /*add_ascs_cnt*/
+      group_size, 2);
+
+  // Load devices from the storage when storage API is called
+  bool autoconnect = true;
+  std::vector<uint8_t> empty_buf;
+
+  EXPECT_CALL(mock_storage_load, Call()).WillOnce([&]() {
+    do_in_main_thread(
+        FROM_HERE,
+        base::BindOnce(&LeAudioClient::AddFromStorage, test_address0,
+                       autoconnect, codec_spec_conf::kLeAudioLocationFrontLeft,
+                       codec_spec_conf::kLeAudioLocationFrontLeft, 0xff, 0xff,
+                       std::move(empty_buf), std::move(empty_buf),
+                       std::move(empty_buf), std::move(empty_buf)));
+    do_in_main_thread(
+        FROM_HERE,
+        base::BindOnce(&LeAudioClient::AddFromStorage, test_address1,
+                       autoconnect, codec_spec_conf::kLeAudioLocationFrontRight,
+                       codec_spec_conf::kLeAudioLocationFrontRight, 0xff, 0xff,
+                       std::move(empty_buf), std::move(empty_buf),
+                       std::move(empty_buf), std::move(empty_buf)));
+    SyncOnMainLoop();
+  });
+
+  // Expect stored device0 to connect automatically (first directed connection )
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address0, BTM_BLE_DIRECT_CONNECTION, _))
+      .Times(1);
+
+  // Expect stored device1 to connect automatically (first direct connection)
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address1, BTM_BLE_DIRECT_CONNECTION, _))
+      .Times(1);
+
+  ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address1, _))
+      .WillByDefault(DoAll(Return(true)));
+  ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address0, _))
+      .WillByDefault(DoAll(Return(true)));
+
+  ON_CALL(mock_groups_module_, GetGroupId(_, _))
+      .WillByDefault(DoAll(Return(group_id)));
+
+  ON_CALL(mock_btm_interface_,
+          GetSecurityFlagsByTransport(test_address0, NotNull(), _))
+      .WillByDefault(
+          DoAll(SetArgPointee<1>(BTM_SEC_FLAG_ENCRYPTED), Return(true)));
+
+  std::vector<::bluetooth::le_audio::btle_audio_codec_config_t>
+      framework_encode_preference;
+
+  // Initialize
+  BtaAppRegisterCallback app_register_callback;
+  ON_CALL(mock_gatt_interface_, AppRegister(_, _, _))
+      .WillByDefault(DoAll(SaveArg<0>(&gatt_callback),
+                           SaveArg<1>(&app_register_callback)));
+  LeAudioClient::Initialize(
+      &mock_audio_hal_client_callbacks_,
+      base::Bind([](MockFunction<void()>* foo) { foo->Call(); },
+                 &mock_storage_load),
+      base::Bind([](MockFunction<bool()>* foo) { return foo->Call(); },
+                 &mock_hal_2_1_verifier),
+      framework_encode_preference);
+  if (app_register_callback) app_register_callback.Run(gatt_if, GATT_SUCCESS);
+
+  // We need to wait for the storage callback before verifying stuff
+  SyncOnMainLoop();
+  ASSERT_TRUE(LeAudioClient::IsLeAudioClientRunning());
+  Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
+
+  // Simulate devices are not there and phone fallbacks to targeted
+  // announcements
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address0,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
+      .Times(1);
+
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address1,
+                   BTM_BLE_BKG_CONNECT_TARGETED_ANNOUNCEMENTS, _))
+      .Times(1);
+
+  // Devices not found
+  InjectConnectedEvent(test_address0, 0, GATT_ERROR);
+  InjectConnectedEvent(test_address1, 0, GATT_ERROR);
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
+
+  /* Stack should rediscover services as storage is broken */
+  EXPECT_CALL(mock_gatt_interface_, ServiceSearchRequest(2, _)).Times(1);
+  EXPECT_CALL(mock_gatt_interface_, ServiceSearchRequest(1, _)).Times(1);
+
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address1))
+      .Times(1);
+
+  /* For background connect, test needs to Inject Connected Event */
+  InjectConnectedEvent(test_address0, 1);
+  InjectConnectedEvent(test_address1, 2);
+  SyncOnMainLoop();
+
+  // Verify if all went well and we got the proper group
+  std::vector<RawAddress> devs =
+      LeAudioClient::Get()->GetGroupDevices(group_id);
+  ASSERT_NE(std::find(devs.begin(), devs.end(), test_address0), devs.end());
+  ASSERT_NE(std::find(devs.begin(), devs.end(), test_address1), devs.end());
+
+  DisconnectLeAudioWithAclClose(test_address0, 1);
+  DisconnectLeAudioWithAclClose(test_address1, 2);
 }
 
 TEST_F(UnicastTestNoInit, LoadStoredEarbudsCsisGrouped) {
@@ -5098,6 +5314,70 @@ TEST_F(UnicastTest, TwoEarbudsStreaming) {
                       types::LeAudioContextType::CONVERSATIONAL,
                       le_audio::types::kLeAudioDirectionSource)
                   .has_value());
+}
+
+TEST_F(UnicastTest, StreamingVxAospSampleSound) {
+  uint8_t group_size = 2;
+  int group_id = 2;
+
+  /* Test to verify that tag VX_AOSP_SAMPLESOUND is always mapped to
+   * LeAudioContextType::SOUNDEFFECTS
+   */
+
+  // Report working CSIS
+  ON_CALL(mock_csis_client_module_, IsCsisClientRunning())
+      .WillByDefault(Return(true));
+
+  // First earbud
+  const RawAddress test_address0 = GetTestAddress(0);
+  EXPECT_CALL(mock_btif_storage_, AddLeaudioAutoconnect(test_address0, true))
+      .Times(1);
+  ConnectCsisDevice(test_address0, 1 /*conn_id*/,
+                    codec_spec_conf::kLeAudioLocationFrontLeft,
+                    codec_spec_conf::kLeAudioLocationFrontLeft, group_size,
+                    group_id, 1 /* rank*/);
+
+  // Second earbud
+  const RawAddress test_address1 = GetTestAddress(1);
+  EXPECT_CALL(mock_btif_storage_, AddLeaudioAutoconnect(test_address1, true))
+      .Times(1);
+  ConnectCsisDevice(test_address1, 2 /*conn_id*/,
+                    codec_spec_conf::kLeAudioLocationFrontRight,
+                    codec_spec_conf::kLeAudioLocationFrontRight, group_size,
+                    group_id, 2 /* rank*/, true /*connect_through_csis*/);
+
+  ON_CALL(mock_csis_client_module_, GetDesiredSize(group_id))
+      .WillByDefault(Invoke([&](int group_id) { return 2; }));
+
+  // Start streaming
+  EXPECT_CALL(*mock_le_audio_source_hal_client_, Start(_, _)).Times(1);
+  EXPECT_CALL(*mock_le_audio_sink_hal_client_, Start(_, _)).Times(1);
+  LeAudioClient::Get()->GroupSetActive(group_id);
+  SyncOnMainLoop();
+
+  Mock::VerifyAndClearExpectations(&mock_le_audio_source_hal_client_);
+
+  // Set a test TAG
+  char test_tag[] = "TEST_TAG2;VX_AOSP_SAMPLESOUND;TEST_TAG1";
+
+  test_tags_ptr_ = test_tag;
+
+  auto initial_context = types::LeAudioContextType::SOUNDEFFECTS;
+  types::BidirectionalPair<std::vector<uint8_t>> ccids = {.sink = {},
+                                                          .source = {}};
+  EXPECT_CALL(mock_state_machine_, StartStream(_, initial_context, _, ccids))
+      .Times(1);
+  StartStreaming(AUDIO_USAGE_VOICE_COMMUNICATION, AUDIO_CONTENT_TYPE_SPEECH,
+                 group_id);
+
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(&mock_le_audio_source_hal_client_);
+  SyncOnMainLoop();
+
+  // Verify Data transfer on two peer sinks and one source
+  uint8_t cis_count_out = 2;
+  uint8_t cis_count_in = 0;
+  TestAudioDataTransfer(group_id, cis_count_out, cis_count_in, 1920, 0);
 }
 
 TEST_F(UnicastTest, UpdateActiveAudioConfigForLocalSinkSource) {
@@ -7490,25 +7770,13 @@ TEST_F(UnicastTest, HandleDatabaseOutOfSync) {
   InjectDisconnectedEvent(1, GATT_CONN_TERMINATE_PEER_USER);
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
 
-  // default action for WriteDescriptor function call
-  ON_CALL(mock_gatt_queue_, WriteDescriptor(_, _, _, _, _, _))
-      .WillByDefault(Invoke([](uint16_t conn_id, uint16_t handle,
-                               std::vector<uint8_t> value,
-                               tGATT_WRITE_TYPE write_type, GATT_WRITE_OP_CB cb,
-                               void* cb_data) -> void {
-        if (cb)
-          do_in_main_thread(
-              FROM_HERE,
-              base::BindOnce(
-                  [](GATT_WRITE_OP_CB cb, uint16_t conn_id, uint16_t handle,
-                     uint16_t len, uint8_t* value, void* cb_data) {
-                    cb(conn_id, GATT_DATABASE_OUT_OF_SYNC, handle, len, value,
-                       cb_data);
-                  },
-                  cb, conn_id, handle, value.size(), value.data(), cb_data));
-      }));
+  /* Simulate DATABASE OUT OF SYNC */
+  ccc_stored_byte_val_ = 0x01;
+  gatt_read_ctp_ccc_status_ = GATT_DATABASE_OUT_OF_SYNC;
 
+  EXPECT_CALL(mock_gatt_queue_, WriteDescriptor(_, _, _, _, _, _)).Times(0);
   ON_CALL(mock_gatt_interface_, ServiceSearchRequest(_, _))
       .WillByDefault(Return());
   EXPECT_CALL(mock_gatt_interface_, ServiceSearchRequest(_, _));
@@ -7516,6 +7784,97 @@ TEST_F(UnicastTest, HandleDatabaseOutOfSync) {
   InjectConnectedEvent(test_address0, 1);
   SyncOnMainLoop();
   Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
+  Mock::VerifyAndClearExpectations(&mock_gatt_queue_);
+}
+
+TEST_F(UnicastTest, TestRemoteDeviceKeepCccValues) {
+  const RawAddress test_address0 = GetTestAddress(0);
+  int group_id = bluetooth::groups::kGroupUnknown;
+
+  SetSampleDatabaseEarbudsValid(
+      1, test_address0, codec_spec_conf::kLeAudioLocationStereo,
+      codec_spec_conf::kLeAudioLocationStereo, default_channel_cnt,
+      default_channel_cnt, 0x0004, false /*add_csis*/, true /*add_cas*/,
+      true /*add_pacs*/, default_ase_cnt /*add_ascs_cnt*/, 1 /*set_size*/,
+      0 /*rank*/);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnGroupNodeStatus(test_address0, _, GroupNodeStatus::ADDED))
+      .WillOnce(DoAll(SaveArg<1>(&group_id)));
+
+  ConnectLeAudio(test_address0);
+  ASSERT_NE(group_id, bluetooth::groups::kGroupUnknown);
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address0))
+      .Times(1);
+  InjectDisconnectedEvent(1, GATT_CONN_TERMINATE_PEER_USER);
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(&mock_gatt_queue_);
+
+  /* Simulate remote cache is good */
+  ccc_stored_byte_val_ = 0x01;
+
+  EXPECT_CALL(mock_gatt_queue_, WriteDescriptor(_, _, _, _, _, _)).Times(0);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+
+  InjectConnectedEvent(test_address0, 1);
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_gatt_queue_);
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+}
+
+TEST_F(UnicastTest, TestRemoteDeviceForgetsCccValues) {
+  const RawAddress test_address0 = GetTestAddress(0);
+  int group_id = bluetooth::groups::kGroupUnknown;
+
+  SetSampleDatabaseEarbudsValid(
+      1, test_address0, codec_spec_conf::kLeAudioLocationStereo,
+      codec_spec_conf::kLeAudioLocationStereo, default_channel_cnt,
+      default_channel_cnt, 0x0004, false /*add_csis*/, true /*add_cas*/,
+      true /*add_pacs*/, default_ase_cnt /*add_ascs_cnt*/, 1 /*set_size*/,
+      0 /*rank*/);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnGroupNodeStatus(test_address0, _, GroupNodeStatus::ADDED))
+      .WillOnce(DoAll(SaveArg<1>(&group_id)));
+
+  ConnectLeAudio(test_address0);
+  ASSERT_NE(group_id, bluetooth::groups::kGroupUnknown);
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::DISCONNECTED, test_address0))
+      .Times(1);
+  InjectDisconnectedEvent(1, GATT_CONN_TERMINATE_PEER_USER);
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  Mock::VerifyAndClearExpectations(&mock_gatt_queue_);
+
+  /* Simulate remote cache is broken */
+  ccc_stored_byte_val_ = 0;
+  EXPECT_CALL(mock_gatt_queue_, WriteDescriptor(_, _, _, _, _, _))
+      .Times(AtLeast(1));
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+
+  InjectConnectedEvent(test_address0, 1);
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_gatt_queue_);
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
 }
 
 TEST_F(UnicastTest, SpeakerStreamingTimeout) {
@@ -7567,7 +7926,7 @@ TEST_F(UnicastTest, SpeakerStreamingTimeout) {
 
   /* No assigned cises should remain when transition remains in IDLE state */
   auto group = streaming_groups.at(group_id);
-  ASSERT_EQ(0, static_cast<int>(group->cises_.size()));
+  ASSERT_EQ(0, static_cast<int>(group->cig.cises.size()));
 }
 
 TEST_F(UnicastTest, AddMemberToAllowListWhenOneDeviceConnected) {
@@ -7709,6 +8068,126 @@ TEST_F(UnicastTest, ResetToDefaultReconnectionMode) {
   SyncOnMainLoop();
 
   Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
+}
+
+TEST_F(UnicastTest, DisconnectAclBeforeGettingReadResponses) {
+  uint8_t group_size = 2;
+  int group_id = 2;
+
+  // Report working CSIS
+  ON_CALL(mock_csis_client_module_, IsCsisClientRunning())
+      .WillByDefault(Return(true));
+
+  const RawAddress test_address0 = GetTestAddress(0);
+  const RawAddress test_address1 = GetTestAddress(1);
+
+  /* Due to imitated problems with GATT read operations (status != GATT_SUCCESS)
+   * a CONNECTED state should not be propagated together with audio location
+   */
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(0);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnSinkAudioLocationAvailable(
+                  test_address0, codec_spec_conf::kLeAudioLocationFrontLeft))
+      .Times(0);
+
+  // First earbud initial connection
+  SetSampleDatabaseEarbudsValid(1 /* conn_id */, test_address0,
+                                codec_spec_conf::kLeAudioLocationFrontLeft,
+                                codec_spec_conf::kLeAudioLocationFrontLeft,
+                                default_channel_cnt, default_channel_cnt,
+                                0x0004, /* source sample freq 16khz */
+                                true,   /*add_csis*/
+                                true,   /*add_cas*/
+                                true,   /*add_pacs*/
+                                true,   /*add_ascs*/
+                                group_size, 1 /* rank */, GATT_INTERNAL_ERROR);
+  groups[test_address0] = group_id;
+  // by default indicate link as encrypted
+  ON_CALL(mock_btm_interface_, BTM_IsEncrypted(test_address0, _))
+      .WillByDefault(DoAll(Return(true)));
+
+  EXPECT_CALL(mock_gatt_interface_,
+              Open(gatt_if, test_address0, BTM_BLE_DIRECT_CONNECTION, _))
+      .Times(1);
+
+  do_in_main_thread(
+      FROM_HERE,
+      base::BindOnce(&LeAudioClient::Connect,
+                     base::Unretained(LeAudioClient::Get()), test_address0));
+
+  SyncOnMainLoop();
+  Mock::VerifyAndClearExpectations(&mock_btm_interface_);
+  Mock::VerifyAndClearExpectations(&mock_gatt_interface_);
+  Mock::VerifyAndClearExpectations(&mock_audio_hal_client_callbacks_);
+  InjectGroupDeviceAdded(test_address0, group_id);
+
+  // Second earbud initial connection
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnSinkAudioLocationAvailable(
+                  test_address1, codec_spec_conf::kLeAudioLocationFrontRight))
+      .Times(1);
+
+  EXPECT_CALL(mock_btif_storage_, AddLeaudioAutoconnect(test_address1, true))
+      .Times(1);
+  ConnectCsisDevice(test_address1, 2 /*conn_id*/,
+                    codec_spec_conf::kLeAudioLocationFrontRight,
+                    codec_spec_conf::kLeAudioLocationFrontRight, group_size,
+                    group_id, 2 /* rank*/, true /*connect_through_csis*/);
+
+  Mock::VerifyAndClearExpectations(&mock_btif_storage_);
+
+  /* for Target announcements AutoConnect is always there, until
+   * device is removed
+   */
+  EXPECT_CALL(mock_btif_storage_, AddLeaudioAutoconnect(test_address1, false))
+      .Times(0);
+  EXPECT_CALL(mock_btif_storage_, AddLeaudioAutoconnect(test_address0, false))
+      .Times(0);
+
+  // Verify grouping information
+  std::vector<RawAddress> devs =
+      LeAudioClient::Get()->GetGroupDevices(group_id);
+  ASSERT_NE(std::find(devs.begin(), devs.end(), test_address0), devs.end());
+  ASSERT_NE(std::find(devs.begin(), devs.end(), test_address1), devs.end());
+
+  /* Remove default action on the direct connect */
+  ON_CALL(mock_gatt_interface_, Open(_, _, BTM_BLE_DIRECT_CONNECTION, _))
+      .WillByDefault(Return());
+
+  /* Initiate disconnection with timeout reason, the possible reason why GATT
+   * read attribute operation may be not handled
+   */
+  InjectDisconnectedEvent(1, GATT_CONN_TIMEOUT);
+  SyncOnMainLoop();
+
+  /* After reconnection a sink audio location callback with connection state
+   * should be propagated.
+   */
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnConnectionState(ConnectionState::CONNECTED, test_address0))
+      .Times(1);
+  EXPECT_CALL(mock_audio_hal_client_callbacks_,
+              OnSinkAudioLocationAvailable(
+                  test_address0, codec_spec_conf::kLeAudioLocationFrontLeft))
+      .Times(1);
+
+  /* Prepare valid GATT status responsing attributes */
+  SetSampleDatabaseEarbudsValid(1 /* conn_id */, test_address0,
+                                codec_spec_conf::kLeAudioLocationFrontLeft,
+                                codec_spec_conf::kLeAudioLocationFrontLeft,
+                                default_channel_cnt, default_channel_cnt,
+                                0x0004, /* source sample freq 16khz */
+                                true,   /*add_csis*/
+                                true,   /*add_cas*/
+                                true,   /*add_pacs*/
+                                true,   /*add_ascs*/
+                                group_size, 1 /* rank */);
+
+  /* For background connect, test needs to Inject Connected Event */
+  InjectConnectedEvent(test_address0, 1);
+  SyncOnMainLoop();
 }
 
 }  // namespace le_audio
