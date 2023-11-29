@@ -36,8 +36,8 @@
 
 #include <mutex>
 
-#include "bta_sdp_api.h"
-#include "bta_sys.h"
+#include "bta/include/bta_sdp_api.h"
+#include "bta/sys/bta_sys.h"
 #include "btif_common.h"
 #include "btif_sock_sdp.h"
 #include "osi/include/allocator.h"

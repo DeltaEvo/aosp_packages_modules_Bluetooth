@@ -114,6 +114,7 @@ namespace {
 
 constexpr int linkQualityCheckInterval = 4000;
 constexpr int kAutonomousTransitionTimeoutMs = 5000;
+constexpr int kNumberOfCisRetries = 2;
 
 static void link_quality_cb(void* data) {
   // very ugly, but we need to pass just two bytes
@@ -155,6 +156,16 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           " group %d no in correct streaming state: %s or target state: %s",
           group->group_id_, ToString(group->GetState()).c_str(),
           ToString(group->GetTargetState()).c_str());
+      return false;
+    }
+
+    /* This is cautious - mostly needed for unit test only */
+    auto group_metadata_contexts =
+        get_bidirectional(group->GetMetadataContexts());
+    auto device_available_contexts = leAudioDevice->GetAvailableContexts();
+    if (!group_metadata_contexts.test_any(device_available_contexts)) {
+      LOG_INFO("%s does is not have required context type",
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
       return false;
     }
 
@@ -819,9 +830,28 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         kLogCisEstablishedOp + "cis_h:" + loghex(event->cis_conn_hdl) +
             " STATUS=" + loghex(event->status));
 
-    if (event->status) {
+    if (event->status != HCI_SUCCESS) {
       if (ases_pair.sink) ases_pair.sink->cis_state = CisState::ASSIGNED;
       if (ases_pair.source) ases_pair.source->cis_state = CisState::ASSIGNED;
+
+      LOG_WARN("%s: failed to create CIS 0x%04x, status: %s (0x%02x)",
+               ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_),
+               event->cis_conn_hdl,
+               ErrorCodeText((ErrorCode)event->status).c_str(), event->status);
+
+      if (event->status == HCI_ERR_CONN_FAILED_ESTABLISHMENT &&
+          ((leAudioDevice->cis_failed_to_be_established_retry_cnt_++) <
+           kNumberOfCisRetries) &&
+          (CisCreateForDevice(group, leAudioDevice))) {
+        LOG_INFO("Retrying (%d) to create CIS for %s ",
+                 leAudioDevice->cis_failed_to_be_established_retry_cnt_,
+                 ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_));
+        return;
+      }
+
+      LOG_ERROR("CIS creation failed %d times, stopping the stream",
+                leAudioDevice->cis_failed_to_be_established_retry_cnt_);
+      leAudioDevice->cis_failed_to_be_established_retry_cnt_ = 0;
 
       /* CIS establishment failed. Remove CIG if no other CIS is already created
        * or pending. If CIS is established, this will be handled in disconnected
@@ -831,18 +861,18 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         RemoveCigForGroup(group);
       }
 
-      LOG(ERROR) << __func__ << ", failed to create CIS, status: "
-                 << ErrorCodeText((ErrorCode)event->status) << "("
-                 << loghex(event->status) << ")";
-
       StopStream(group);
       return;
     }
 
+    if (leAudioDevice->cis_failed_to_be_established_retry_cnt_ > 0) {
+      /* Reset retry counter */
+      leAudioDevice->cis_failed_to_be_established_retry_cnt_ = 0;
+    }
+
     if (group->GetTargetState() != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
-      LOG(ERROR) << __func__
-                 << ", Unintended CIS establishement event came for group id:"
-                 << group->group_id_;
+      LOG_ERROR("Unintended CIS establishement event came for group id: %d",
+                group->group_id_);
       StopStream(group);
       return;
     }
@@ -1396,8 +1426,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       /* First in ase pair is Sink, second Source */
       auto ases_pair = leAudioDevice->GetAsesByCisConnHdl(ase->cis_conn_hdl);
 
-      /* Already in pending state - bi-directional CIS */
-      if (ase->cis_state == CisState::CONNECTING) continue;
+      /* Already in pending state - bi-directional CIS or seconde CIS to same
+       * device */
+      if (ase->cis_state == CisState::CONNECTING ||
+          ase->cis_state == CisState::CONNECTED)
+        continue;
 
       if (ases_pair.sink) ases_pair.sink->cis_state = CisState::CONNECTING;
       if (ases_pair.source) ases_pair.source->cis_state = CisState::CONNECTING;
@@ -1957,6 +1990,17 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
           LOG_DEBUG("Autonomus change of stated for device %s, ase id: %d",
                     ADDRESS_TO_LOGGABLE_CSTR(leAudioDevice->address_), ase->id);
           return;
+        }
+
+        {
+          auto activeDevice = group->GetFirstActiveDevice();
+          if (activeDevice) {
+            LOG_DEBUG(
+                "There is at least one active device %s, wait to become "
+                "inactive",
+                ADDRESS_TO_LOGGABLE_CSTR(activeDevice->address_));
+            return;
+          }
         }
 
         /* Last node is in releasing state*/

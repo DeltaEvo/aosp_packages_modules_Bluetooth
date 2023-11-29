@@ -27,7 +27,6 @@
 #include "btif_rc.h"
 
 #include <base/logging.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bt_rc.h>
@@ -46,10 +45,10 @@
 #include "btif_common.h"
 #include "btif_util.h"
 #include "device/include/interop.h"
+#include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
 #include "osi/include/list.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
 #include "stack/include/avrc_api.h"
@@ -813,9 +812,14 @@ void handle_rc_browse_connect(tBTA_AV_RC_BROWSE_OPEN* p_rc_br_open) {
         LOG_VERBOSE("%s: pending rc browse connection event", __func__);
       }
     } else {
-      do_in_jni_thread(FROM_HERE,
-                       base::BindOnce(bt_rc_ctrl_callbacks->connection_state_cb,
-                                      true, true, p_dev->rc_addr));
+        if (bt_rc_ctrl_callbacks != NULL) {
+          do_in_jni_thread(
+              FROM_HERE,
+              base::BindOnce(bt_rc_ctrl_callbacks->connection_state_cb, true,
+                             true, p_dev->rc_addr));
+        } else {
+            LOG_WARN("%s: bt_rc_ctrl_callbacks is null.", __func__);
+        }
     }
   }
 }
