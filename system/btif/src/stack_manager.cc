@@ -32,7 +32,7 @@
 #include "common/message_loop_thread.h"
 #include "core_callbacks.h"
 #include "main/shim/shim.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/btm_client_interface.h"
@@ -55,21 +55,15 @@
 #if (PAN_INCLUDED == TRUE)
 #include "stack/include/pan_api.h"
 #endif
-#include "stack/include/a2dp_api.h"
-#include "stack/include/avrc_api.h"
 #if (HID_HOST_INCLUDED == TRUE)
 #include "stack/include/hidh_api.h"
 #endif
-#include "bta/sys/bta_sys_int.h"
-#include "bta_ar_api.h"
-#include "bta_dm_int.h"
-#include "btif/include/btif_pan.h"
-#include "btif/include/btif_sock.h"
-#include "btm_ble_int.h"
+#include "bta/dm/bta_dm_int.h"
 #include "device/include/interop.h"
 #include "internal_include/stack_config.h"
 #include "main/shim/controller.h"
 #include "rust/src/core/ffi/module.h"
+#include "stack/btm/btm_ble_int.h"
 #include "stack/include/smp_api.h"
 
 #ifndef BT_STACK_CLEANUP_WAIT_MS
@@ -77,14 +71,6 @@
 #endif
 
 // Validate or respond to various conditional compilation flags
-
-#if SDP_RAW_DATA_INCLUDED != TRUE
-// Once SDP_RAW_DATA_INCLUDED is no longer exposed via bt_target.h
-// this check and error statement may be removed.
-#warning \
-    "#define SDP_RAW_DATA_INCLUDED preprocessor compilation flag is unsupported"
-#error "*** Conditional Compilation Directive error"
-#endif
 
 // Once BTA_PAN_INCLUDED is no longer exposed via bt_target.h
 // this check and error statement may be removed.
@@ -481,3 +467,16 @@ const stack_manager_t* stack_manager_get_interface() {
 }
 
 future_t* stack_manager_get_hack_future() { return hack_future; }
+
+namespace bluetooth {
+namespace legacy {
+namespace testing {
+
+void set_interface_to_profiles(
+    bluetooth::core::CoreInterface* interfaceToProfiles) {
+  ::interfaceToProfiles = interfaceToProfiles;
+}
+
+}  // namespace testing
+}  // namespace legacy
+}  // namespace bluetooth

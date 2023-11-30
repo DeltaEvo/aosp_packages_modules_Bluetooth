@@ -18,12 +18,10 @@ package com.android.bluetooth.btservice;
 
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
-import android.content.res.Resources;
 import android.os.SystemProperties;
 import android.sysprop.BluetoothProperties;
 import android.util.Log;
 
-import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
@@ -55,18 +53,10 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 
 public class Config {
     private static final String TAG = "AdapterServiceConfig";
-
-    private static final String FEATURE_HEARING_AID = "settings_bluetooth_hearing_aid";
-    private static final String FEATURE_BATTERY = "settings_bluetooth_battery";
-
-    private static final String FFLAG_OVERRIDE_PREFIX = "sys.fflag.override.";
-    private static final String PERSIST_PREFIX = "persist." + FFLAG_OVERRIDE_PREFIX;
 
     private static final String LE_AUDIO_DYNAMIC_SWITCH_PROPERTY =
             "ro.bluetooth.leaudio_switcher.supported";
@@ -74,11 +64,6 @@ public class Config {
             "ro.bluetooth.leaudio_broadcast_switcher.supported";
     private static final String LE_AUDIO_SWITCHER_DISABLED_PROPERTY =
             "persist.bluetooth.leaudio_switcher.disabled";
-
-    private static final Set<String> PERSISTENT_FLAGS = Set.of(
-            FEATURE_HEARING_AID,
-            FEATURE_BATTERY
-    );
 
     private static class ProfileConfig {
         Class mClass;
@@ -181,7 +166,6 @@ public class Config {
 
     private static List<Class> sSupportedProfiles = new ArrayList<>();
 
-    private static boolean sIsGdEnabledUptoScanningLayer = false;
 
     static void init(Context ctx) {
         if (LeAudioService.isBroadcastEnabled()) {
@@ -231,15 +215,6 @@ public class Config {
                 }
             }
         }
-
-        if (ctx == null) {
-            return;
-        }
-        Resources resources = ctx.getResources();
-        if (resources == null) {
-            return;
-        }
-        sIsGdEnabledUptoScanningLayer = resources.getBoolean(R.bool.enable_gd_up_to_scanning_layer);
     }
 
     static void setLeAudioProfileStatus(Boolean enable) {
@@ -257,23 +232,6 @@ public class Config {
             setProfileEnabled(BassClientService.class, enable);
             updateSupportedProfileMask(
                     enable, LeAudioService.class, BluetoothProfile.LE_AUDIO_BROADCAST);
-        }
-    }
-
-    /**
-     * Remove the input profiles from the supported list.
-     */
-    static void removeProfileFromSupportedList(HashSet<Class> nonSupportedProfiles) {
-        synchronized (sSupportedProfiles) {
-            Iterator<Class> iter = sSupportedProfiles.iterator();
-            while (iter.hasNext()) {
-                Class profileClass = iter.next();
-
-                if (nonSupportedProfiles.contains(profileClass)) {
-                    iter.remove();
-                    Log.v(TAG, "Remove " + profileClass.getSimpleName() + " from supported list.");
-                }
-            }
         }
     }
 
@@ -298,10 +256,6 @@ public class Config {
         synchronized (sSupportedProfiles) {
             return sSupportedProfiles.toArray(new Class[0]);
         }
-    }
-
-    static boolean isGdEnabledUpToScanningLayer() {
-        return sIsGdEnabledUptoScanningLayer;
     }
 
     private static long getProfileMask(Class profile) {

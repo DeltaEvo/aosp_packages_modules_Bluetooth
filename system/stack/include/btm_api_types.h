@@ -82,22 +82,6 @@ typedef void(tBTM_VSC_CMPL_CB)(tBTM_VSC_CMPL* p1);
   (((uint32_t)BTM_EIR_MAX_SERVICES / BTM_EIR_ARRAY_BITS) + \
    (((uint32_t)BTM_EIR_MAX_SERVICES % BTM_EIR_ARRAY_BITS) ? 1 : 0))
 
-/* MACRO to set the service bit mask in a bit stream */
-#define BTM_EIR_SET_SERVICE(p, service)                              \
-  (((uint32_t*)(p))[(((uint32_t)(service)) / BTM_EIR_ARRAY_BITS)] |= \
-   ((uint32_t)1 << (((uint32_t)(service)) % BTM_EIR_ARRAY_BITS)))
-
-/* MACRO to clear the service bit mask in a bit stream */
-#define BTM_EIR_CLR_SERVICE(p, service)                              \
-  (((uint32_t*)(p))[(((uint32_t)(service)) / BTM_EIR_ARRAY_BITS)] &= \
-   ~((uint32_t)1 << (((uint32_t)(service)) % BTM_EIR_ARRAY_BITS)))
-
-/* MACRO to check the service bit mask in a bit stream */
-#define BTM_EIR_HAS_SERVICE(p, service)                               \
-  ((((uint32_t*)(p))[(((uint32_t)(service)) / BTM_EIR_ARRAY_BITS)] &  \
-    ((uint32_t)1 << (((uint32_t)(service)) % BTM_EIR_ARRAY_BITS))) >> \
-   (((uint32_t)(service)) % BTM_EIR_ARRAY_BITS))
-
 /* start of EIR in HCI buffer, 4 bytes = HCI Command(2) + Length(1) + FEC_Req(1)
  */
 #define BTM_HCI_EIR_OFFSET (BT_HDR_SIZE + 4)
@@ -157,6 +141,10 @@ typedef uint8_t tBTM_SCO_TYPE;
 #define BTM_SCO_CODEC_CVSD 0x0001
 #define BTM_SCO_CODEC_MSBC 0x0002
 #define BTM_SCO_CODEC_LC3 0x0004
+#define BTA_AG_SCO_APTX_SWB_SETTINGS_Q0_MASK 0x0008
+#define BTA_AG_SCO_APTX_SWB_SETTINGS_Q1_MASK 0x0016
+#define BTA_AG_SCO_APTX_SWB_SETTINGS_Q2_MASK 0x0032
+#define BTA_AG_SCO_APTX_SWB_SETTINGS_Q3_MASK 0x0064
 typedef uint16_t tBTM_SCO_CODEC_TYPE;
 
 /*******************

@@ -768,7 +768,11 @@ void bta_gattc_cfg_mtu(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
     case MTU_EXCHANGE_IN_PROGRESS:
       LOG_INFO("Enqueue MTU Request  - waiting for response on p_clcb %p",
                p_clcb);
-      bta_gattc_enqueue(p_clcb, p_data);
+      /* MTU request is in progress and this one will not be sent to remote
+       * device. Just push back on the queue and response will be sent up to
+       * the upper layer when MTU Exchange will be completed.
+       */
+      p_clcb->p_q_cmd_queue.push_back(p_data);
       return;
 
     case MTU_EXCHANGE_NOT_DONE_YET:
@@ -1010,16 +1014,26 @@ void bta_gattc_read_multi(tBTA_GATTC_CLCB* p_clcb,
                           const tBTA_GATTC_DATA* p_data) {
   if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
+  if (p_data->api_read_multi.handles.num_attr > GATT_MAX_READ_MULTI_HANDLES) {
+    LOG(ERROR) << "api_read_multi.num_attr > GATT_MAX_READ_MULTI_HANDLES";
+    return;
+  }
+
   tGATT_READ_PARAM read_param;
   memset(&read_param, 0, sizeof(tGATT_READ_PARAM));
 
-  read_param.read_multiple.num_handles = p_data->api_read_multi.num_attr;
+  read_param.read_multiple.num_handles =
+      p_data->api_read_multi.handles.num_attr;
   read_param.read_multiple.auth_req = p_data->api_read_multi.auth_req;
-  memcpy(&read_param.read_multiple.handles, p_data->api_read_multi.handles,
-         sizeof(uint16_t) * p_data->api_read_multi.num_attr);
+  read_param.read_multiple.variable_len = p_data->api_read_multi.variable_len;
+  memcpy(&read_param.read_multiple.handles,
+         p_data->api_read_multi.handles.handles,
+         sizeof(uint16_t) * p_data->api_read_multi.handles.num_attr);
 
-  tGATT_STATUS status =
-      GATTC_Read(p_clcb->bta_conn_id, GATT_READ_MULTIPLE, &read_param);
+  tGATT_READ_TYPE read_type = (read_param.read_multiple.variable_len)
+                                  ? GATT_READ_MULTIPLE_VAR_LEN
+                                  : GATT_READ_MULTIPLE;
+  tGATT_STATUS status = GATTC_Read(p_clcb->bta_conn_id, read_type, &read_param);
   /* read fail */
   if (status != GATT_SUCCESS) {
     /* Dequeue the data, if it was enqueued */
@@ -1101,21 +1115,37 @@ void bta_gattc_confirm(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 /** read complete */
 static void bta_gattc_read_cmpl(tBTA_GATTC_CLCB* p_clcb,
                                 const tBTA_GATTC_OP_CMPL* p_data) {
-  GATT_READ_OP_CB cb = p_clcb->p_q_cmd->api_read.read_cb;
-  void* my_cb_data = p_clcb->p_q_cmd->api_read.read_cb_data;
+  void* my_cb_data;
 
-  /* if it was read by handle, return the handle requested, if read by UUID, use
-   * handle returned from remote
-   */
-  uint16_t handle = p_clcb->p_q_cmd->api_read.handle;
-  if (handle == 0) handle = p_data->p_cmpl->att_value.handle;
+  if (!p_clcb->p_q_cmd->api_read.is_multi_read) {
+    GATT_READ_OP_CB cb = p_clcb->p_q_cmd->api_read.read_cb;
+    my_cb_data = p_clcb->p_q_cmd->api_read.read_cb_data;
 
-  osi_free_and_reset((void**)&p_clcb->p_q_cmd);
+    /* if it was read by handle, return the handle requested, if read by UUID,
+     * use handle returned from remote
+     */
+    uint16_t handle = p_clcb->p_q_cmd->api_read.handle;
+    if (handle == 0) handle = p_data->p_cmpl->att_value.handle;
 
-  if (cb) {
-    cb(p_clcb->bta_conn_id, p_data->status, handle,
-       p_data->p_cmpl->att_value.len, p_data->p_cmpl->att_value.value,
-       my_cb_data);
+    osi_free_and_reset((void**)&p_clcb->p_q_cmd);
+
+    if (cb) {
+      cb(p_clcb->bta_conn_id, p_data->status, handle,
+         p_data->p_cmpl->att_value.len, p_data->p_cmpl->att_value.value,
+         my_cb_data);
+    }
+  } else {
+    GATT_READ_MULTI_OP_CB cb = p_clcb->p_q_cmd->api_read_multi.read_cb;
+    my_cb_data = p_clcb->p_q_cmd->api_read_multi.read_cb_data;
+    tBTA_GATTC_MULTI handles = p_clcb->p_q_cmd->api_read_multi.handles;
+
+    osi_free_and_reset((void**)&p_clcb->p_q_cmd);
+
+    if (cb) {
+      cb(p_clcb->bta_conn_id, p_data->status, handles,
+         p_data->p_cmpl->att_value.len, p_data->p_cmpl->att_value.value,
+         my_cb_data);
+    }
   }
 }
 
@@ -1214,9 +1244,12 @@ void bta_gattc_op_cmpl(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
   }
 
   if (p_clcb->p_q_cmd->hdr.event !=
-      bta_gattc_opcode_to_int_evt[op - GATTC_OPTYPE_READ]) {
+          bta_gattc_opcode_to_int_evt[op - GATTC_OPTYPE_READ] &&
+      (p_clcb->p_q_cmd->hdr.event != BTA_GATTC_API_READ_MULTI_EVT ||
+       op != GATTC_OPTYPE_READ)) {
     uint8_t mapped_op =
         p_clcb->p_q_cmd->hdr.event - BTA_GATTC_API_READ_EVT + GATTC_OPTYPE_READ;
+
     if (mapped_op > GATTC_OPTYPE_INDICATION) mapped_op = 0;
 
     LOG(ERROR) << StringPrintf(

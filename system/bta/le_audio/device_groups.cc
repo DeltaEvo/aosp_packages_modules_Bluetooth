@@ -852,7 +852,10 @@ bool LeAudioDeviceGroup::IsGroupStreamReady(void) const {
     auto dev = weak.lock();
     if (!dev) return false;
 
-    if (dev->GetConnectionState() == DeviceConnectState::CONNECTED) {
+    /* We are interested here in devices which are connected on profile level
+     * and devices which are configured (meaning, have actived ASE(s))*/
+    if (dev->GetConnectionState() == DeviceConnectState::CONNECTED &&
+        dev->HaveActiveAse()) {
       if (!dev->IsReadyToStream()) {
         return false;
       }
@@ -1759,8 +1762,14 @@ void LeAudioDeviceGroup::AddToAllowListNotConnectedGroupMembers(int gatt_if) {
              bluetooth::common::ToString(GetState()).c_str(),
              ADDRESS_TO_LOGGABLE_CSTR(address));
 
+    /* When adding set members to allow list, let use direct connect first.
+     * When it fails (i.e. device is not advertising), it will go to background
+     * connect. We are doing that because for background connect, stack is using
+     * slow scan parameters for connection which might delay connecting
+     * available members.
+     */
     BTA_GATTC_CancelOpen(gatt_if, address, false);
-    BTA_GATTC_Open(gatt_if, address, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
+    BTA_GATTC_Open(gatt_if, address, BTM_BLE_DIRECT_CONNECTION, false);
     device_iter.lock()->SetConnectionState(
         DeviceConnectState::CONNECTING_AUTOCONNECT);
   }

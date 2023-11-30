@@ -29,7 +29,6 @@
 #include "bta/dm/bta_dm_disc.h"
 #include "bta/dm/bta_dm_int.h"
 #include "bta/dm/bta_dm_sec_int.h"
-#include "osi/include/allocator.h"
 #include "osi/include/compat.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_api.h"
@@ -545,8 +544,12 @@ bool BTA_DmCheckLeAudioCapable(const RawAddress& address) {
        inq_ent = get_btm_client_interface().db.BTM_InqDbNext(inq_ent)) {
     if (inq_ent->results.remote_bd_addr != address) continue;
 
-    LOG_INFO("Device is LE Audio capable based on AD content");
-    return inq_ent->results.ble_ad_is_le_audio_capable;
+    if (inq_ent->results.ble_ad_is_le_audio_capable) {
+      LOG_INFO("Device is LE Audio capable based on AD content");
+      return true;
+    }
+
+    return false;
   }
   return false;
 }

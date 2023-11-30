@@ -17,6 +17,7 @@
 package com.android.bluetooth.hfp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
+
 import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
 import android.annotation.RequiresPermission;
@@ -31,6 +32,7 @@ import android.bluetooth.BluetoothStatusCodes;
 import android.bluetooth.hfp.BluetoothHfpProtoEnums;
 import android.content.Intent;
 import android.media.AudioManager;
+import android.os.Build;
 import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
@@ -49,6 +51,7 @@ import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
+import com.android.modules.expresslog.Counter;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -151,7 +154,8 @@ public class HeadsetStateMachine extends StateMachine {
     // Audio Parameters
     private boolean mHasNrecEnabled = false;
     private boolean mHasWbsEnabled = false;
-    private boolean mHasSwbEnabled = false;
+    private boolean mHasSwbLc3Enabled = false;
+    private boolean mHasSwbAptXEnabled = false;
     // AT Phone book keeps a group of states used by AT+CPBR commands
     @VisibleForTesting
     final AtPhonebook mPhonebook;
@@ -179,6 +183,18 @@ public class HeadsetStateMachine extends StateMachine {
         VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID.put(
                 BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_IPHONEACCEV,
                 BluetoothAssignedNumbers.APPLE);
+        VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID.put(
+                BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMI,
+                BluetoothAssignedNumbers.GOOGLE);
+        VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID.put(
+                BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMR,
+                BluetoothAssignedNumbers.GOOGLE);
+        VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID.put(
+                BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMM,
+                BluetoothAssignedNumbers.GOOGLE);
+        VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID.put(
+                BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGSN,
+                BluetoothAssignedNumbers.GOOGLE);
     }
 
     private HeadsetStateMachine(BluetoothDevice device, Looper looper,
@@ -250,7 +266,8 @@ public class HeadsetStateMachine extends StateMachine {
         }
         mHasWbsEnabled = false;
         mHasNrecEnabled = false;
-        mHasSwbEnabled = false;
+        mHasSwbLc3Enabled = false;
+        mHasSwbAptXEnabled = false;
     }
 
     public void dump(StringBuilder sb) {
@@ -482,8 +499,9 @@ public class HeadsetStateMachine extends StateMachine {
             updateAgIndicatorEnableState(null);
             mNeedDialingOutReply = false;
             mHasWbsEnabled = false;
-            mHasSwbEnabled = false;
+            mHasSwbLc3Enabled = false;
             mHasNrecEnabled = false;
+            mHasSwbAptXEnabled = false;
 
             broadcastStateTransitions();
             logFailureIfNeeded();
@@ -686,7 +704,7 @@ public class HeadsetStateMachine extends StateMachine {
                             processWBSEvent(event.valueInt);
                             break;
                         case HeadsetStackEvent.EVENT_TYPE_SWB:
-                            processSWBEvent(event.valueInt);
+                            processSWBEvent(event.valueInt, event.valueInt2);
                             break;
                         case HeadsetStackEvent.EVENT_TYPE_BIND:
                             processAtBind(event.valueString, event.device);
@@ -1027,7 +1045,7 @@ public class HeadsetStateMachine extends StateMachine {
                             processWBSEvent(event.valueInt);
                             break;
                         case HeadsetStackEvent.EVENT_TYPE_SWB:
-                            processSWBEvent(event.valueInt);
+                            processSWBEvent(event.valueInt, event.valueInt2);
                             break;
                         case HeadsetStackEvent.EVENT_TYPE_AT_CHLD:
                             processAtChld(event.valueInt, event.device);
@@ -1343,6 +1361,20 @@ public class HeadsetStateMachine extends StateMachine {
                     && !hasDeferredMessages(DISCONNECT_AUDIO)) {
                 mHeadsetService.setActiveDevice(mDevice);
             }
+
+            // TODO (b/276463350): Remove check when Express metrics no longer need jni
+            if (!Utils.isInstrumentationTestMode()) {
+                if (mHasSwbLc3Enabled) {
+                    Counter.logIncrement("bluetooth.value_lc3_codec_usage_over_hfp");
+                } else if (mHasSwbAptXEnabled) {
+                    Counter.logIncrement("bluetooth.value_aptx_codec_usage_over_hfp");
+                } else if (mHasWbsEnabled) {
+                    Counter.logIncrement("bluetooth.value_msbc_codec_usage_over_hfp");
+                } else {
+                    Counter.logIncrement("bluetooth.value_cvsd_codec_usage_over_hfp");
+                }
+            }
+
             setAudioParameters();
 
             mSystemInterface.getAudioManager().setAudioServerStateCallback(
@@ -1636,11 +1668,17 @@ public class HeadsetStateMachine extends StateMachine {
 
     private void setAudioParameters() {
         AudioManager am = mSystemInterface.getAudioManager();
-        Log.i(TAG, "setAudioParameters for " + mDevice + ":"
-                + " Name=" + getCurrentDeviceName()
-                + " hasNrecEnabled=" + mHasNrecEnabled
-                + " hasWbsEnabled=" + mHasWbsEnabled);
-        am.setParameters("bt_lc3_swb=" + (mHasSwbEnabled ? "on" : "off"));
+        Log.i(
+                TAG,
+                ("setAudioParameters for " + mDevice + ":")
+                        + (" Name=" + getCurrentDeviceName())
+                        + (" hasNrecEnabled=" + mHasNrecEnabled)
+                        + (" hasWbsEnabled=" + mHasWbsEnabled)
+                        + (" hasSwbEnabled=" + mHasSwbLc3Enabled)
+                        + (" hasAptXSwbEnabled=" + mHasSwbAptXEnabled));
+        am.setParameters("bt_lc3_swb=" + (mHasSwbLc3Enabled ? "on" : "off"));
+        /* AptX bt_swb: 0 -> on, 65535 -> off */
+        am.setParameters("bt_swb=" + (mHasSwbAptXEnabled ? "0" : "65535"));
         am.setBluetoothHeadsetProperties(getCurrentDeviceName(), mHasNrecEnabled, mHasWbsEnabled);
     }
 
@@ -1797,21 +1835,48 @@ public class HeadsetStateMachine extends StateMachine {
         log("processWBSEvent: " + prevWbs + " -> " + mHasWbsEnabled);
     }
 
-    private void processSWBEvent(int swbConfig) {
-        boolean prev_swb = mHasSwbEnabled;
+    private void processSWBEvent(int swbCodec, int swbConfig) {
+        boolean prevSwbLc3 = mHasSwbLc3Enabled;
+        boolean prevSwbAptx = mHasSwbAptXEnabled;
+        boolean success = true;
+
         switch (swbConfig) {
             case HeadsetHalConstants.BTHF_SWB_YES:
-                mHasSwbEnabled = true;
+                switch (swbCodec) {
+                    case HeadsetHalConstants.BTHF_SWB_CODEC_LC3:
+                        mHasSwbLc3Enabled = true;
+                        mHasWbsEnabled = false;
+                        mHasSwbAptXEnabled = false;
+                        break;
+                    case HeadsetHalConstants.BTHF_SWB_CODEC_VENDOR_APTX:
+                        mHasSwbLc3Enabled = false;
+                        mHasWbsEnabled = false;
+                        mHasSwbAptXEnabled = true;
+                        break;
+                    default:
+                        success = false;
+                        break;
+                }
                 break;
             case HeadsetHalConstants.BTHF_SWB_NO:
             case HeadsetHalConstants.BTHF_SWB_NONE:
-                mHasSwbEnabled = false;
+                mHasSwbLc3Enabled = false;
+                mHasSwbAptXEnabled = false;
                 break;
             default:
-                Log.e(TAG, "processSWBEvent: unknown swb_config");
-                return;
+                success = false;
         }
-        log("processSWBEvent: " + prev_swb + " -> " + mHasSwbEnabled);
+
+        if (!success) {
+            Log.e(
+                    TAG,
+                    ("processSWBEvent failed: swbCodec: " + swbCodec)
+                            + (" swb_config: " + swbConfig));
+            return;
+        }
+
+        log("processSWBEvent LC3 SWB config: " + prevSwbLc3 + " -> " + mHasSwbLc3Enabled);
+        log("processSWBEvent AptX SWB config: " + prevSwbAptx + " -> " + mHasSwbAptXEnabled);
     }
 
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
@@ -1993,7 +2058,32 @@ public class HeadsetStateMachine extends StateMachine {
     void processVendorSpecificAt(String atString, BluetoothDevice device) {
         log("processVendorSpecificAt - atString = " + atString);
 
-        // Currently we accept only SET type commands.
+        // Currently we accept only SET type commands, except the 4 AT commands
+        // which requests the device's information: +CGMI, +CGMM, +CGMR and +CGSN, which we
+        // responds to right away without any further processing.
+        boolean isIopInfoRequestAt = true;
+        switch (atString) {
+            case BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMI:
+                processAtCgmi(device);
+                break;
+            case BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMM:
+                processAtCgmm(device);
+                break;
+            case BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGMR:
+                processAtCgmr(device);
+                break;
+            case BluetoothHeadset.VENDOR_SPECIFIC_HEADSET_EVENT_CGSN:
+                processAtCgsn(device);
+                break;
+            default:
+                isIopInfoRequestAt = false;
+        }
+        if (isIopInfoRequestAt) {
+            mNativeInterface.atResponseCode(device, HeadsetHalConstants.AT_RESPONSE_OK, 0);
+            return;
+        }
+
+        // Check if the command is a SET type command.
         int indexOfEqual = atString.indexOf("=");
         if (indexOfEqual == -1) {
             Log.w(TAG, "processVendorSpecificAt: command type error in " + atString);
@@ -2182,6 +2272,47 @@ public class HeadsetStateMachine extends StateMachine {
                 Integer.parseInt(macAddress[1], 16), Integer.parseInt(macAddress[2], 16));
         // feature = 2 indicates that we support battery level reporting only
         mNativeInterface.atResponseString(device, "+XAPL=iPhone," + String.valueOf(2));
+    }
+
+    /**
+     * Process AT+CGMI AT command
+     *
+     * @param device Remote device that has sent this command
+     */
+    @VisibleForTesting
+    void processAtCgmi(BluetoothDevice device) {
+        mNativeInterface.atResponseString(device, Build.MANUFACTURER);
+    }
+
+    /**
+     * Process AT+CGMM AT command
+     *
+     * @param device Remote device that has sent this command
+     */
+    @VisibleForTesting
+    void processAtCgmm(BluetoothDevice device) {
+        mNativeInterface.atResponseString(device, Build.MODEL);
+    }
+
+    /**
+     * Process AT+CGMR AT command
+     *
+     * @param device Remote device that has sent this command
+     */
+    @VisibleForTesting
+    void processAtCgmr(BluetoothDevice device) {
+        mNativeInterface.atResponseString(
+                device, String.format("%s (%s)", Build.VERSION.RELEASE, Build.VERSION.INCREMENTAL));
+    }
+
+    /**
+     * Process AT+CGSN AT command
+     *
+     * @param device Remote device that has sent this command
+     */
+    @VisibleForTesting
+    void processAtCgsn(BluetoothDevice device) {
+        mNativeInterface.atResponseString(device, Build.getSerial());
     }
 
     @VisibleForTesting

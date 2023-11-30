@@ -92,6 +92,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelUuid;
+import android.os.Parcelable;
 import android.os.PowerManager;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
@@ -1040,16 +1041,11 @@ public class AdapterService extends Service {
                     false, LeAudioService.class, BluetoothProfile.LE_AUDIO_BROADCAST);
         }
 
-        if (!nonSupportedProfiles.isEmpty()) {
-            // Remove non-supported profiles from the supported list
-            // since the controller doesn't support
-            Config.removeProfileFromSupportedList(nonSupportedProfiles);
-
-            // Disable the non-supported profiles service
-            for (Class profileService : nonSupportedProfiles) {
-                if (isStartedProfile(profileService.getSimpleName())) {
-                    setProfileServiceState(profileService, BluetoothAdapter.STATE_OFF);
-                }
+        // Disable the non-supported profiles service
+        for (Class profileService : nonSupportedProfiles) {
+            Config.setProfileEnabled(profileService, false);
+            if (isStartedProfile(profileService.getSimpleName())) {
+                setProfileServiceState(profileService, BluetoothAdapter.STATE_OFF);
             }
         }
     }
@@ -4699,7 +4695,7 @@ public class AdapterService extends Service {
 
             enforceBluetoothPrivilegedPermission(service);
 
-            service.mAdapterStateMachine.sendMessage(AdapterState.USER_TURN_ON);
+            service.startBrEdr();
         }
 
         @Override
@@ -4727,7 +4723,7 @@ public class AdapterService extends Service {
 
             enforceBluetoothPrivilegedPermission(service);
 
-            service.mAdapterStateMachine.sendMessage(AdapterState.BLE_TURN_OFF);
+            service.stopBle();
         }
 
         @Override
@@ -6086,6 +6082,16 @@ public class AdapterService extends Service {
             if (device == null) {
                 mA2dpService.removeActiveDevice(false);
             } else {
+                /* Workaround for the controller issue which is not able to handle correctly
+                 * A2DP offloader vendor specific command while ISO Data path is set.
+                 * Proper solutions should be delivered in b/312396770
+                 */
+                if (mLeAudioService != null) {
+                    List<BluetoothDevice> activeLeAudioDevices = mLeAudioService.getActiveDevices();
+                    if (activeLeAudioDevices.get(0) != null) {
+                        mLeAudioService.removeActiveDevice(true);
+                    }
+                }
                 mA2dpService.setActiveDevice(device);
             }
         }
@@ -6931,6 +6937,25 @@ public class AdapterService extends Service {
     }
 
     /**
+     * Notify {@link BluetoothProfile} when ACL connection disconnects from {@link BluetoothDevice}
+     * for a given {@code transport}.
+     */
+    public void notifyAclDisconnected(BluetoothDevice device, int transport) {
+        if (mMapService != null && mMapService.isAvailable()) {
+            mMapService.aclDisconnected(device);
+        }
+        if (mMapClientService != null && mMapClientService.isAvailable()) {
+            mMapClientService.aclDisconnected(device, transport);
+        }
+        if (mSapService != null && mSapService.isAvailable()) {
+            mSapService.aclDisconnected(device);
+        }
+        if (mPbapClientService != null && mPbapClientService.isAvailable()) {
+            mPbapClientService.aclDisconnected(device, transport);
+        }
+    }
+
+    /**
      * Notify GATT of a Bluetooth profile's connection state change for a given {@link
      * BluetoothProfile}.
      */
@@ -6961,6 +6986,57 @@ public class AdapterService extends Service {
         mSilenceDeviceManager.profileActiveDeviceChanged(profile, device);
         if (mPhonePolicy != null) {
             mPhonePolicy.profileActiveDeviceChanged(profile, device);
+        }
+    }
+
+    /** Notify MAP and Pbap when a new sdp search record is found. */
+    public void sendSdpSearchRecord(
+            BluetoothDevice device, int status, Parcelable record, ParcelUuid uuid) {
+        if (mMapService != null && mMapService.isAvailable()) {
+            mMapService.receiveSdpSearchRecord(status, record, uuid);
+        }
+        if (mMapClientService != null && mMapClientService.isAvailable()) {
+            mMapClientService.receiveSdpSearchRecord(device, status, record, uuid);
+        }
+        if (mPbapClientService != null && mPbapClientService.isAvailable()) {
+            mPbapClientService.receiveSdpSearchRecord(device, status, record, uuid);
+        }
+    }
+
+    /** Handle Bluetooth profiles when bond state changes with a {@link BluetoothDevice} */
+    public void handleBondStateChanged(BluetoothDevice device, int fromState, int toState) {
+        if (mA2dpService != null && mA2dpService.isAvailable()) {
+            mA2dpService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mHeadsetService != null && mHeadsetService.isAvailable()) {
+            mHeadsetService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mLeAudioService != null && mLeAudioService.isAvailable()) {
+            mLeAudioService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mHearingAidService != null && mHearingAidService.isAvailable()) {
+            mHearingAidService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mHapClientService != null && mHapClientService.isAvailable()) {
+            mHapClientService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mBassClientService != null && mBassClientService.isAvailable()) {
+            mBassClientService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mBatteryService != null && mBatteryService.isAvailable()) {
+            mBatteryService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mVolumeControlService != null && mVolumeControlService.isAvailable()) {
+            mVolumeControlService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mPbapService != null && mPbapService.isAvailable()) {
+            mPbapService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mCsipSetCoordinatorService != null && mCsipSetCoordinatorService.isAvailable()) {
+            mCsipSetCoordinatorService.handleBondStateChanged(device, fromState, toState);
+        }
+        if (mDatabaseManager != null) {
+            mDatabaseManager.handleBondStateChanged(device, fromState, toState);
         }
     }
 
@@ -7195,10 +7271,13 @@ public class AdapterService extends Service {
 
         final int currentState = mAdapterProperties.getState();
         if (currentState == BluetoothAdapter.STATE_OFF
+                || currentState == BluetoothAdapter.STATE_BLE_TURNING_ON
                 || currentState == BluetoothAdapter.STATE_TURNING_OFF
                 || currentState == BluetoothAdapter.STATE_BLE_TURNING_OFF) {
             writer.println();
-            writer.println("Not dumping, since Bluetooth is turning off");
+            writer.println(
+                    "Impossible to dump native stack. state="
+                            + BluetoothAdapter.nameForState(currentState));
             writer.println();
         } else {
             mNativeInterface.dump(fd, args);

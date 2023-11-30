@@ -29,7 +29,7 @@
 #include <string>
 
 #include "btm_api.h"
-#include "btm_ble_int.h"
+#include "btm_int_types.h"
 #include "btm_sec_api.h"
 #include "btm_sec_cb.h"
 #include "device/include/controller.h"
@@ -53,6 +53,12 @@ namespace {
 
 constexpr char kBtmLogTag[] = "BOND";
 
+}
+
+static void wipe_secrets_and_remove(tBTM_SEC_DEV_REC* p_dev_rec) {
+  p_dev_rec->link_key.fill(0);
+  memset(&p_dev_rec->ble_keys, 0, sizeof(tBTM_SEC_BLE_KEYS));
+  list_remove(btm_sec_cb.sec_dev_rec, p_dev_rec);
 }
 
 /*******************************************************************************
@@ -140,12 +146,6 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
   p_dev_rec->device_type |= BT_DEVICE_TYPE_BREDR;
 
   return true;
-}
-
-void wipe_secrets_and_remove(tBTM_SEC_DEV_REC* p_dev_rec) {
-  p_dev_rec->link_key.fill(0);
-  memset(&p_dev_rec->ble_keys, 0, sizeof(tBTM_SEC_BLE_KEYS));
-  list_remove(btm_sec_cb.sec_dev_rec, p_dev_rec);
 }
 
 /** Removes the device from acceptlist */
@@ -366,7 +366,7 @@ tBTM_SEC_DEV_REC* btm_find_dev_by_handle(uint16_t handle) {
   return NULL;
 }
 
-bool is_address_equal(void* data, void* context) {
+static bool is_address_equal(void* data, void* context) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
   const RawAddress* bd_addr = ((RawAddress*)context);
 
@@ -427,7 +427,7 @@ tBTM_SEC_DEV_REC* btm_find_dev_with_lenc(const RawAddress& bd_addr) {
 /*******************************************************************************
  *
  * Function         btm_consolidate_dev
-5**
+ *
  * Description      combine security records if identified as same peer
  *
  * Returns          none
@@ -554,7 +554,8 @@ void btm_dev_consolidate_existing_connections(const RawAddress& bd_addr) {
  * Function         btm_find_or_alloc_dev
  *
  * Description      Look for the record in the device database for the record
- *                  with specified BD address
+ *                  with specified BD address, if not found, allocate a new
+ *                  record
  *
  * Returns          Pointer to the record or NULL
  *
@@ -574,7 +575,7 @@ tBTM_SEC_DEV_REC* btm_find_or_alloc_dev(const RawAddress& bd_addr) {
  *
  * Function         btm_find_oldest_dev_rec
  *
- * Description      Locates the oldest device in use. It first looks for
+ * Description      Locates the oldest device record in use. It first looks for
  *                  the oldest non-paired device.  If all devices are paired it
  *                  returns the oldest paired device.
  *
@@ -691,9 +692,9 @@ bool btm_set_bond_type_dev(const RawAddress& bd_addr,
  *
  * Function         btm_get_sec_dev_rec
  *
- * Description      Get security device records satisfying given filter
+ * Description      Get all security device records
  *
- * Returns          A vector containing pointers of security device records
+ * Returns          A vector containing pointers to all security device records
  *
  ******************************************************************************/
 std::vector<tBTM_SEC_DEV_REC*> btm_get_sec_dev_rec() {
@@ -790,3 +791,15 @@ bool BTM_IsRemoteNameKnown(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   return (p_dev_rec == nullptr) ? false : p_dev_rec->is_name_known();
 }
+
+namespace bluetooth {
+namespace testing {
+namespace legacy {
+
+void wipe_secrets_and_remove(tBTM_SEC_DEV_REC* p_dev_rec) {
+  ::wipe_secrets_and_remove(p_dev_rec);
+}
+
+}  // namespace legacy
+}  // namespace testing
+}  // namespace bluetooth

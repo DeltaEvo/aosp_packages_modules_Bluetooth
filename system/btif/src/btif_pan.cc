@@ -46,9 +46,9 @@
 #include "btif/include/btif_sock_thread.h"
 #include "device/include/controller.h"
 #include "include/hardware/bt_pan.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/main_thread.h"
@@ -122,9 +122,7 @@ void btif_pan_init() {
     if (GET_SYSPROP(Pan, nap, true)) {
       role |= BTPAN_ROLE_PANNAP;
     }
-#if PANU_DISABLED == FALSE
     role |= BTPAN_ROLE_PANU;
-#endif
     btpan_enable(role);
   }
 }
