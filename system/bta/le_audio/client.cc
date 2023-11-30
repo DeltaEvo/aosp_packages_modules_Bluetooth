@@ -75,6 +75,8 @@ using bluetooth::le_audio::LeAudioHealthBasedAction;
 using le_audio::CodecManager;
 using le_audio::ContentControlIdKeeper;
 using le_audio::DeviceConnectState;
+using le_audio::DsaMode;
+using le_audio::DsaModes;
 using le_audio::LeAudioCodecConfiguration;
 using le_audio::LeAudioDevice;
 using le_audio::LeAudioDeviceGroup;
@@ -1054,6 +1056,11 @@ class LeAudioClientImpl : public LeAudioClient {
     ASSERT_LOG(le_audio_source_hal_client_, "Source session not acquired");
     ASSERT_LOG(le_audio_sink_hal_client_, "Sink session not acquired");
 
+    DsaModes dsa_modes = {DsaMode::DISABLED};
+    if (IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
+      dsa_modes = group->GetAllowedDsaModes();
+    }
+
     /* We assume that peer device always use same frame duration */
     uint32_t frame_duration_us = 0;
     if (!source_config->IsInvalid()) {
@@ -1066,7 +1073,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
     audio_framework_source_config.data_interval_us = frame_duration_us;
     le_audio_source_hal_client_->Start(audio_framework_source_config,
-                                       audioSinkReceiver);
+                                       audioSinkReceiver, dsa_modes);
 
     /* We use same frame duration for sink/source */
     audio_framework_sink_config.data_interval_us = frame_duration_us;
@@ -1085,7 +1092,7 @@ class LeAudioClientImpl : public LeAudioClient {
     }
 
     le_audio_sink_hal_client_->Start(audio_framework_sink_config,
-                                     audioSourceReceiver);
+                                     audioSourceReceiver, dsa_modes);
   }
 
   bool isOutputPreferenceLeAudio(const RawAddress& address) {
@@ -1902,6 +1909,12 @@ class LeAudioClientImpl : public LeAudioClient {
 
     if (!leAudioDevice) return;
 
+    if (leAudioDevice->conn_id_ != GATT_INVALID_CONN_ID) {
+      LOG_DEBUG("Already connected %s, conn_id=0x%04x",
+                ADDRESS_TO_LOGGABLE_CSTR(address), leAudioDevice->conn_id_);
+      return;
+    }
+
     if (status != GATT_SUCCESS) {
       /* Clear current connection request and let it be set again if needed */
       BTA_GATTC_CancelOpen(gatt_if_, address, false);
@@ -1940,6 +1953,9 @@ class LeAudioClientImpl : public LeAudioClient {
       }
     }
 
+    leAudioDevice->conn_id_ = conn_id;
+    leAudioDevice->mtu_ = mtu;
+
     /* Remove device from the background connect (it might be either Allow list
      * or TA) and add it again with reconnection_mode_. In case it is TA, we are
      * sure that device will not be in the allow list for other applications
@@ -1965,8 +1981,6 @@ class LeAudioClientImpl : public LeAudioClient {
           DeviceConnectState::CONNECTED_BY_USER_GETTING_READY);
     }
 
-    leAudioDevice->conn_id_ = conn_id;
-    leAudioDevice->mtu_ = mtu;
     /* Check if the device is in allow list and update the flag */
     leAudioDevice->UpdateDeviceAllowlistFlag();
     if (BTM_SecIsSecurityPending(address)) {
@@ -4496,7 +4510,8 @@ class LeAudioClientImpl : public LeAudioClient {
     return true;
   }
 
-  void OnLocalAudioSourceMetadataUpdate(source_metadata_v7 source_metadata) {
+  void OnLocalAudioSourceMetadataUpdate(source_metadata_v7 source_metadata,
+                                        DsaMode dsa_mode) {
     if (active_group_id_ == bluetooth::groups::kGroupUnknown) {
       LOG(WARNING) << ", cannot start streaming if no active group set";
       return;
@@ -4521,6 +4536,8 @@ class LeAudioClientImpl : public LeAudioClient {
         ToString(group->GetTargetState()).c_str(),
         ToString(audio_receiver_state_).c_str(),
         ToString(audio_sender_state_).c_str());
+
+    group->dsa_mode_ = dsa_mode;
 
     /* Set the remote sink metadata context from the playback tracks metadata */
     local_metadata_context_types_.source =
@@ -5743,9 +5760,11 @@ class SourceCallbacksImpl : public LeAudioSourceAudioHalClient::Callbacks {
     if (instance) instance->OnLocalAudioSourceResume();
   }
 
-  void OnAudioMetadataUpdate(source_metadata_v7 source_metadata) override {
+  void OnAudioMetadataUpdate(source_metadata_v7 source_metadata,
+                             DsaMode dsa_mode) override {
     if (instance)
-      instance->OnLocalAudioSourceMetadataUpdate(std::move(source_metadata));
+      instance->OnLocalAudioSourceMetadataUpdate(std::move(source_metadata),
+                                                 dsa_mode);
   }
 };
 
