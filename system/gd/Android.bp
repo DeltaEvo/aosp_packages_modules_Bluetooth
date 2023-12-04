@@ -170,10 +170,12 @@ cc_defaults {
     static_libs: [
         "libbluetooth-dumpsys",
         "libbluetooth-protos",
+        "libbluetooth-types",
         "libbluetooth_rust_interop",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
+        "libosi",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system/include",
@@ -187,6 +189,9 @@ cc_library {
     defaults: [
         "libbluetooth_gd_defaults",
     ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+    ],
     apex_available: [
         "com.android.btservices",
     ],
@@ -199,20 +204,31 @@ cc_library {
     defaults: [
         "libbluetooth_gd_defaults",
     ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+    ],
     srcs: [
         ":BluetoothOsSources_fake_timer",
     ],
     cflags: [
         "-DFUZZ_TARGET",
         "-DUSE_FAKE_TIMERS",
+        "-Wno-unused-parameter",
     ],
-    static_libs: ["libchrome"],
+    static_libs: [
+        "libbluetooth-types",
+        "libchrome",
+        "libosi",
+    ],
 }
 
 cc_library {
     name: "libbluetooth_gd_unit_tests",
     defaults: [
         "libbluetooth_gd_defaults",
+    ],
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
     ],
     srcs: [
         ":BluetoothOsSources_fake_timer",
@@ -221,7 +237,9 @@ cc_library {
         "-DUSE_FAKE_TIMERS",
     ],
     static_libs: [
+        "libbluetooth-types",
         "libchrome",
+        "libosi",
     ],
 }
 
@@ -231,6 +249,7 @@ cc_binary {
         "gd_defaults",
     ],
     include_dirs: [
+        "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/types",
     ],
@@ -252,7 +271,6 @@ cc_binary {
         "BlueberryFacadeGeneratedStub_h",
         "BluetoothGeneratedBundlerSchema_h_bfbs",
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
         // Needed here to guarantee that generated zip file is created before
         // bluetooth_cert_tests.zip is packaged
         "BlueberryFacadeAndCertGeneratedStub_py",
@@ -264,12 +282,17 @@ cc_binary {
         "breakpad_client",
         "libbluetooth-dumpsys",
         "libbluetooth-protos",
+        "libbluetooth-types",
         "libbluetooth_gd",
+        "libbluetooth_hci_pdl",
+        "libbluetooth_l2cap_pdl",
         "libbluetooth_rust_interop",
+        "libbluetooth_smp_pdl",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
         "libflatbuffers-cpp",
+        "libosi",
     ],
     shared_libs: [
         "libcrypto",
@@ -380,15 +403,18 @@ cc_test {
         "BluetoothGeneratedDumpsysDataSchema_h",
         "BluetoothGeneratedDumpsysInternalTestData_h",
         "BluetoothGeneratedDumpsysTestData_h",
-        "BluetoothGeneratedPackets_h",
     ],
     static_libs: [
         "libbluetooth-dumpsys",
         "libbluetooth-dumpsys-test",
         "libbluetooth-dumpsys-unittest",
         "libbluetooth-protos",
+        "libbluetooth-types",
         "libbluetooth_gd_unit_tests",
+        "libbluetooth_hci_pdl",
+        "libbluetooth_l2cap_pdl",
         "libbluetooth_rust_interop",
+        "libbluetooth_smp_pdl",
         "libbt-platform-protos-lite",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
@@ -397,6 +423,7 @@ cc_test {
         "libchrome",
         "libflatbuffers-cpp",
         "libgmock",
+        "libosi",
     ],
     shared_libs: [
         "libcrypto",
@@ -423,7 +450,6 @@ cc_test {
     srcs: [
         ":BluetoothPacketParserTestPacketTestSources",
         ":BluetoothPacketSources",
-        "hci/address.cc",
     ],
     generated_headers: [
         "BluetoothPacketParserTestPacketPdlGen_h",
@@ -465,6 +491,7 @@ cc_defaults {
     ],
     static_libs: [
         "libbluetooth-protos",
+        "libbluetooth-types",
         "libbluetooth_gd_fuzzing",
         "libbluetooth_rust_interop",
         "libbt_shim_bridge",
@@ -472,11 +499,11 @@ cc_defaults {
         "libchrome",
         "libgmock",
         "libgtest",
+        "libosi",
     ],
     host_supported: true,
     generated_headers: [
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     shared_libs: [
         "libcrypto",
@@ -515,6 +542,7 @@ cc_fuzz {
         cc: ["android-bluetooth-security@google.com"],
         componentid: 27441,
     },
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_fuzz {
@@ -524,6 +552,7 @@ cc_fuzz {
         ":BluetoothHalFuzzSources",
         "hci/fuzz/hci_layer_fuzz_test.cc",
     ],
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_fuzz {
@@ -536,6 +565,7 @@ cc_fuzz {
         cc: ["android-bluetooth-security@google.com"],
         componentid: 27441,
     },
+    cflags: ["-Wno-unused-parameter"],
 }
 
 cc_benchmark {
@@ -552,14 +582,6 @@ cc_benchmark {
         "libbluetooth_gd",
         "libbt_shim_bridge",
         "libchrome",
-    ],
-}
-
-filegroup {
-    name: "BluetoothHciClassSources",
-    srcs: [
-        "hci/address.cc",
-        "hci/class_of_device.cc",
     ],
 }
 
@@ -745,20 +767,18 @@ cc_library_host_shared {
     srcs: [
         ":BluetoothPacketSources",
         "common/strings.cc",
-        "hci/address.cc",
-        "hci/class_of_device.cc",
         "l2cap/fcs.cc",
         "packet/python3_module.cc",
 
-    ],
-    generated_headers: [
-        "BluetoothGeneratedPackets_h",
     ],
     generated_sources: [
         "BluetoothGeneratedPackets_python3_cc",
     ],
     header_libs: [
         "pybind11_headers",
+    ],
+    static_libs: [
+        "libbluetooth_l2cap_pdl",
     ],
     cflags: [
         "-fexceptions",

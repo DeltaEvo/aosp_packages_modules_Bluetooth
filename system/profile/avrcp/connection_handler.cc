@@ -268,8 +268,8 @@ void ConnectionHandler::InitiatorControlCb(uint8_t handle, uint8_t event,
       // devices SDP is completed after the device connects AVRCP so that
       // information isn't very useful when trying to control our
       // capabilities. For now always use AVRCP 1.6.
-      auto&& callback = base::Bind(&ConnectionHandler::SendMessage,
-                                   base::Unretained(this), handle);
+      auto&& callback = base::BindRepeating(&ConnectionHandler::SendMessage,
+                                            base::Unretained(this), handle);
       auto&& ctrl_mtu = avrc_->GetPeerMtu(handle) - AVCT_HDR_LEN;
       auto&& browse_mtu = avrc_->GetBrowseMtu(handle) - AVCT_HDR_LEN;
       std::shared_ptr<Device> newDevice = std::make_shared<Device>(
@@ -356,8 +356,9 @@ void ConnectionHandler::AcceptorControlCb(uint8_t handle, uint8_t event,
         AvrcpConnect(false, RawAddress::kAny);
         return;
       }
-      auto&& callback = base::Bind(&ConnectionHandler::SendMessage,
-                                   weak_ptr_factory_.GetWeakPtr(), handle);
+      auto&& callback =
+          base::BindRepeating(&ConnectionHandler::SendMessage,
+                              weak_ptr_factory_.GetWeakPtr(), handle);
       auto&& ctrl_mtu = avrc_->GetPeerMtu(handle) - AVCT_HDR_LEN;
       auto&& browse_mtu = avrc_->GetBrowseMtu(handle) - AVCT_HDR_LEN;
       std::shared_ptr<Device> newDevice = std::make_shared<Device>(
@@ -395,9 +396,19 @@ void ConnectionHandler::AcceptorControlCb(uint8_t handle, uint8_t event,
         }
       };
 
-      SdpLookup(*peer_addr, base::Bind(sdp_lambda, this, handle), false);
-
-      avrc_->OpenBrowse(handle, AVCT_ACP);
+      if (SdpLookup(*peer_addr, base::Bind(sdp_lambda, this, handle), false)) {
+        avrc_->OpenBrowse(handle, AVCT_ACP);
+      } else {
+        // SDP search failed, this could be due to a collision between outgoing
+        // and incoming connection. In any case, we need to reject the current
+        // connection.
+        LOG(ERROR) << __PRETTY_FUNCTION__
+                   << ": SDP search failed for handle: " << loghex(handle)
+                   << ", closing connection";
+        DisconnectDevice(*peer_addr);
+      }
+      // Open for the next incoming connection. The handle will not be the same
+      // as this one which will be closed when the device is disconnected.
       AvrcpConnect(false, RawAddress::kAny);
     } break;
 

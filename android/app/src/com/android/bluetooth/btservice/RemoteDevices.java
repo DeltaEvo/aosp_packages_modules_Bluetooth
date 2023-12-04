@@ -180,6 +180,11 @@ public class RemoteDevices {
             mSdpTracker.clear();
         }
 
+        // Unregister Handler and stop all queued messages.
+        if (mMainHandler != null) {
+            mMainHandler.removeCallbacksAndMessages(null);
+        }
+
         synchronized (mDevices) {
             if (mDevices != null) {
                 debugLog("reset(): Broadcasting ACL_DISCONNECTED");
@@ -1107,6 +1112,7 @@ public class RemoteDevices {
             if (batteryService != null && transportLinkType == BluetoothDevice.TRANSPORT_LE) {
                 batteryService.connectIfPossible(device);
             }
+            mAdapterService.updatePhonePolicyOnAclConnect(device);
             SecurityLog.writeEvent(SecurityLog.TAG_BLUETOOTH_CONNECTION,
                     Utils.getLoggableAddress(device), /* success */ 1, /* reason */ "");
             debugLog(

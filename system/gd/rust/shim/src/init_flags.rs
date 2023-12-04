@@ -15,6 +15,7 @@ mod ffi {
         fn always_send_services_if_gatt_disc_done_is_enabled() -> bool;
         fn always_use_private_gatt_for_debugging_is_enabled() -> bool;
         fn bta_dm_clear_conn_id_on_client_close_is_enabled() -> bool;
+        fn bluetooth_power_telemetry_is_enabled() -> bool;
         fn delay_hidh_cleanup_until_hidh_ready_start_is_enabled() -> bool;
         fn btm_dm_flush_discovery_queue_on_search_cancel_is_enabled() -> bool;
         fn bta_dm_stop_discovery_on_search_cancel_is_enabled() -> bool;
@@ -24,7 +25,6 @@ mod ffi {
         fn dynamic_avrcp_version_enhancement_is_enabled() -> bool;
         fn gatt_robust_caching_client_is_enabled() -> bool;
         fn gatt_robust_caching_server_is_enabled() -> bool;
-        fn gd_l2cap_is_enabled() -> bool;
         fn get_default_log_level() -> i32;
         fn get_hci_adapter() -> i32;
         fn get_log_level_for_tag(tag: &str) -> i32;
@@ -52,6 +52,7 @@ mod ffi {
         fn sdp_return_classic_services_when_le_discovery_fails_is_enabled() -> bool;
         fn use_rsi_from_cached_inqiry_results_is_enabled() -> bool;
         fn get_att_mtu_default() -> i32;
+        fn encryption_in_busy_state_is_enabled() -> bool;
     }
 }
 

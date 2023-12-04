@@ -25,7 +25,7 @@ use crate::bluetooth_adv::{
 };
 use crate::callbacks::Callbacks;
 use crate::uuid::UuidHelper;
-use crate::{Message, RPCProxy, SuspendMode};
+use crate::{APIMessage, BluetoothAPI, Message, RPCProxy, SuspendMode};
 use log::{debug, warn};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::{FromPrimitive, ToPrimitive};
@@ -33,9 +33,10 @@ use num_traits::clamp;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::sync::mpsc::Sender;
+use tokio::time;
 
 struct Client {
     id: Option<i32>,
@@ -1144,7 +1145,7 @@ impl Default for GattWriteType {
     }
 }
 
-#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[derive(Debug, FromPrimitive, ToPrimitive, Clone)]
 #[repr(u32)]
 /// Scan type configuration.
 pub enum ScanType {
@@ -1162,11 +1163,29 @@ impl Default for ScanType {
 ///
 /// This configuration is general and supported on all Bluetooth hardware, irrelevant of the
 /// hardware filter offload (APCF or MSFT).
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct ScanSettings {
     pub interval: i32,
     pub window: i32,
     pub scan_type: ScanType,
+}
+
+impl ScanSettings {
+    fn extract_scan_parameters(self) -> Option<(u16, u16)> {
+        let interval = u16::try_from(self.interval);
+        if interval.is_err() {
+            println!("Invalid scan interval {}", self.interval);
+            return None;
+        }
+
+        let window = u16::try_from(self.window);
+        if window.is_err() {
+            println!("Invalid scan window {}", self.window);
+            return None;
+        }
+
+        return Some((interval.unwrap(), window.unwrap()));
+    }
 }
 
 /// Represents scan result
@@ -1312,13 +1331,22 @@ impl GattAsyncIntf {
     ///
     /// Note: this does not need to be async, but declared as async for consistency in this struct.
     /// May be converted into real async in the future if btif supports it.
-    async fn update_scan(&mut self) {
+    async fn update_scan(&mut self, scanner_id: u8, scan_settings: Option<ScanSettings>) {
         if self.scanners.lock().unwrap().values().find(|scanner| scanner.is_active).is_some() {
             // Toggle the scan off and on so that we reset the scan parameters based on whether
             // we have active scanners using hardware filtering.
             // TODO(b/266752123): We can do more bookkeeping to optimize when we really need to
             // toggle. Also improve toggling API into 1 operation that guarantees correct ordering.
             self.gatt.as_ref().unwrap().lock().unwrap().scanner.stop_scan();
+            if let Some(settings) = scan_settings {
+                if let Some((scan_interval, scan_window)) = settings.extract_scan_parameters() {
+                    self.gatt.as_ref().unwrap().lock().unwrap().scanner.set_scan_parameters(
+                        scanner_id,
+                        scan_interval,
+                        scan_window,
+                    );
+                }
+            }
             self.gatt.as_ref().unwrap().lock().unwrap().scanner.start_scan();
         } else {
             self.gatt.as_ref().unwrap().lock().unwrap().scanner.stop_scan();
@@ -1389,7 +1417,12 @@ impl BluetoothGatt {
         }
     }
 
-    pub fn init_profiles(&mut self, tx: Sender<Message>, adapter: Arc<Mutex<Box<Bluetooth>>>) {
+    pub fn init_profiles(
+        &mut self,
+        tx: Sender<Message>,
+        api_tx: Sender<APIMessage>,
+        adapter: Arc<Mutex<Box<Bluetooth>>>,
+    ) {
         self.gatt = Gatt::new(&self.intf.lock().unwrap()).map(|gatt| Arc::new(Mutex::new(gatt)));
         self.adapter = Some(adapter);
 
@@ -1464,8 +1497,14 @@ impl BluetoothGatt {
 
         let gatt = self.gatt.clone();
         let gatt_async = self.gatt_async.clone();
+        let api_tx_clone = api_tx.clone();
         tokio::spawn(async move {
             gatt_async.lock().await.gatt = gatt;
+            // TODO(b/247093293): Gatt topshim api is only usable some
+            // time after init. Investigate why this delay is needed
+            // and make it a blocking part before removing this.
+            time::sleep(time::Duration::from_millis(500)).await;
+            let _ = api_tx_clone.send(APIMessage::IsReady(BluetoothAPI::Gatt)).await;
         });
     }
 
@@ -1669,7 +1708,10 @@ impl BluetoothGatt {
                 }
             }
 
-            gatt_async.update_scan().await;
+            let scan_settings = Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
+                .map_or(None, |s| s.scan_settings.clone());
+
+            gatt_async.update_scan(scanner_id, scan_settings).await;
         });
 
         BtStatus::Success
@@ -1756,22 +1798,13 @@ impl BluetoothGatt {
     /// Start an active scan on given scanner id. This will look up and assign
     /// the correct ScanSettings for it as well.
     pub(crate) fn start_active_scan(&mut self, scanner_id: u8) -> BtStatus {
-        let interval: u16 = sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanInterval)
-            .try_into()
-            .expect("Bad value configured for LeInquiryScanInterval");
-        let window: u16 = sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanWindow)
-            .try_into()
-            .expect("Bad value configured for LeInquiryScanWindow");
+        let settings = ScanSettings {
+            interval: sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanInterval),
+            window: sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanWindow),
+            scan_type: ScanType::Active,
+        };
 
-        self.gatt
-            .as_ref()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .scanner
-            .set_scan_parameters(scanner_id, interval, window);
-
-        self.start_scan(scanner_id, ScanSettings::default(), /*filter=*/ None)
+        self.start_scan(scanner_id, settings, /*filter=*/ None)
     }
 
     pub(crate) fn stop_active_scan(&mut self, scanner_id: u8) -> BtStatus {
@@ -1805,6 +1838,8 @@ struct ScannerInfo {
     monitor_handle: Option<u8>,
     // Used by start_scan() to determine if it is called because of system resuming.
     is_suspended: bool,
+    // The scan parameters to use
+    scan_settings: Option<ScanSettings>,
 }
 
 impl ScannerInfo {
@@ -1816,6 +1851,7 @@ impl ScannerInfo {
             filter: None,
             monitor_handle: None,
             is_suspended: false,
+            scan_settings: None,
         }
     }
 }
@@ -1906,6 +1942,16 @@ impl IBluetoothGatt for BluetoothGatt {
             return BtStatus::Busy;
         }
 
+        // We're supposed to directly use the settings provided by the input parameter, but
+        // currently UI is sending temporary variables instead. Therefore, load some preset values
+        // known to work.
+        // TODO(b/217274013): Fix UI plumbing and directly use the provided settings.
+        let settings = ScanSettings {
+            interval: sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanInterval),
+            window: sysprop::get_i32(sysprop::PropertyI32::LeInquiryScanWindow),
+            scan_type: ScanType::Active,
+        };
+
         // Multiplexing scanners happens at this layer. The implementations of start_scan
         // and stop_scan maintains the state of all registered scanners and based on the states
         // update the scanning and/or filter states of libbluetooth.
@@ -1915,6 +1961,7 @@ impl IBluetoothGatt for BluetoothGatt {
             if let Some(scanner) = Self::find_scanner_by_id(&mut scanners_lock, scanner_id) {
                 scanner.is_active = true;
                 scanner.filter = filter.clone();
+                scanner.scan_settings = Some(settings);
             } else {
                 log::warn!("Scanner {} not found", scanner_id);
                 return BtStatus::Fail;
@@ -1975,7 +2022,10 @@ impl IBluetoothGatt for BluetoothGatt {
                 }
             }
 
-            gatt_async.update_scan().await;
+            let scan_settings = Self::find_scanner_by_id(&mut scanners.lock().unwrap(), scanner_id)
+                .map_or(None, |s| s.scan_settings.clone());
+
+            gatt_async.update_scan(scanner_id, scan_settings).await;
         });
 
         BtStatus::Success
@@ -2042,8 +2092,8 @@ impl IBluetoothGatt for BluetoothGatt {
         let adv_timeout = clamp(duration, 0, 0xffff) as u16;
         let adv_events = clamp(max_ext_adv_events, 0, 0xff) as u8;
 
-        let s = AdvertisingSetInfo::new(callback_id, adv_timeout, adv_events, is_legacy);
-        let reg_id = s.reg_id();
+        let reg_id = self.advertisers.new_reg_id();
+        let s = AdvertisingSetInfo::new(callback_id, adv_timeout, adv_events, is_legacy, reg_id);
         self.advertisers.add(s);
 
         self.gatt.as_ref().unwrap().lock().unwrap().advertiser.start_advertising_set(

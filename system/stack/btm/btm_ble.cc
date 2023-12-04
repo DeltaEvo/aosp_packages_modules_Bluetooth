@@ -701,13 +701,6 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
     return BTM_WRONG_MODE;
   }
 
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    uint16_t handle = bluetooth::shim::L2CA_GetLeHandle(bd_addr);
-    btsnd_hcic_ble_set_data_length(handle, tx_pdu_length, tx_time);
-    p_dev_rec->set_suggested_tx_octect(tx_pdu_length);
-    return BTM_SUCCESS;
-  }
-
   uint16_t hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   if (!acl_peer_supports_ble_packet_extension(hci_handle)) {
@@ -1506,28 +1499,27 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
   if (p_dev_rec->p_callback && enc_cback) {
     if (encr_enable)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_SUCCESS, true);
-    else if (p_dev_rec->sec_flags & ~BTM_SEC_LE_LINK_KEY_KNOWN) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
-    }
     /* LTK missing on peripheral */
     else if (p_dev_rec->role_central && (p_dev_rec->sec_status == HCI_ERR_KEY_MISSING)) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_KEY_MISSING, true);
+    }
+    else if (!(p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN)) {
+      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
     }
     else if (p_dev_rec->role_central)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
   }
 
   if (encr_enable) {
-    uint8_t remote_lmp_version = 0;
-    if (!BTM_ReadRemoteVersion(p_dev_rec->ble.pseudo_addr, &remote_lmp_version,
+    uint8_t remote_ll_version = 0;
+    if (!BTM_ReadRemoteVersion(p_dev_rec->ble.pseudo_addr, &remote_ll_version,
                                nullptr, nullptr) ||
-        remote_lmp_version == 0) {
+        remote_ll_version == 0) {
       LOG_WARN("BLE Unable to determine remote version");
     }
 
-    if (remote_lmp_version == 0 ||
-        remote_lmp_version >= HCI_PROTO_VERSION_5_2) {
-      /* Link is encrypted, start EATT if remote LMP version is unknown, or 5.2
+    if (remote_ll_version == 0 || remote_ll_version >= HCI_PROTO_VERSION_5_0) {
+      /* Link is encrypted, start EATT if remote LMP version is unknown, or 5.0
        * or greater */
       bluetooth::eatt::EattExtension::GetInstance()->Connect(
           p_dev_rec->ble.pseudo_addr);
@@ -1872,8 +1864,20 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
 
           if (res == BTM_SUCCESS) {
             p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
-            /* add all bonded device into resolving list if IRK is available*/
-            btm_ble_resolving_list_load_dev(*p_dev_rec);
+
+            if (p_dev_rec->bond_type != tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY) {
+              // Add all bonded device into resolving list if IRK is available.
+              btm_ble_resolving_list_load_dev(*p_dev_rec);
+            } else if (p_dev_rec->ble_hci_handle == HCI_INVALID_HANDLE) {
+              // At this point LTK should have been dropped by btif.
+              // Reset the flags here if LE is not connected (over BR),
+              // otherwise they would be reset on disconnected.
+              LOG_DEBUG(
+                  "SMP over BR triggered by temporary bond has completed,"
+                  " resetting the LK flags");
+              p_dev_rec->sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
+              p_dev_rec->ble.key_type = BTM_LE_KEY_NONE;
+            }
           }
 
           btm_sec_dev_rec_cback_event(p_dev_rec, res, true);

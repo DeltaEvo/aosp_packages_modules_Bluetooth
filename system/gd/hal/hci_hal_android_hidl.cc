@@ -61,9 +61,11 @@ namespace {
 class HciDeathRecipient : public ::android::hardware::hidl_death_recipient {
  public:
   virtual void serviceDied(uint64_t /*cookie*/, const android::wp<::android::hidl::base::V1_0::IBase>& /*who*/) {
-    LOG_ERROR("Bluetooth HAL service died. Calling exit(0);");
+    LOG_ERROR("The Bluetooth HAL service died. Dumping logs and crashing in 1 second.");
     common::StopWatch::DumpStopWatchLog();
-    exit(0);
+    // At shutdown, sometimes the HAL service gets killed before Bluetooth.
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    LOG_ALWAYS_FATAL("The Bluetooth HAL died.");
   }
 };
 
@@ -382,7 +384,7 @@ class HciHalHidl : public HciHal {
     if (aidl_hci_ != nullptr) {
       LOG_INFO("Using the AIDL interface");
       aidl_death_recipient_ =
-          ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new([](void* cookie) {
+          ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new([](void* /* cookie*/) {
             LOG_ERROR("The Bluetooth HAL service died. Dumping logs and crashing in 1 second.");
             common::StopWatch::DumpStopWatchLog();
             // At shutdown, sometimes the HAL service gets killed before Bluetooth.
