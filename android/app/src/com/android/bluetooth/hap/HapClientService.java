@@ -33,9 +33,10 @@ import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothHapClient;
 import android.bluetooth.IBluetoothHapClientCallback;
 import android.content.AttributionSource;
+import android.content.Context;
 import android.content.Intent;
-import android.os.HandlerThread;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.RemoteCallbackList;
@@ -127,6 +128,12 @@ public class HapClientService extends ProfileService {
     }
 
     protected HapClientService() {
+        mFeatureFlags = new FeatureFlagsImpl();
+    }
+
+    @VisibleForTesting
+    HapClientService(Context ctx) {
+        super(ctx);
         mFeatureFlags = new FeatureFlagsImpl();
     }
 

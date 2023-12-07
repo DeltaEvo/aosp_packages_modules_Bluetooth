@@ -18,6 +18,7 @@ package com.android.bluetooth.hfp;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.MODIFY_PHONE_STATE;
+
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 import static com.android.modules.utils.build.SdkLevel.isAtLeastU;
 
@@ -150,6 +151,13 @@ public class HeadsetService extends ProfileService {
     private static HeadsetService sHeadsetService;
 
     private final ServiceFactory mFactory = new ServiceFactory();
+
+    HeadsetService() {}
+
+    @VisibleForTesting
+    HeadsetService(Context ctx) {
+        super(ctx);
+    }
 
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileHfpAgEnabled().orElse(false);
