@@ -44,9 +44,12 @@
 #include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
 #include "l2c_api.h"
+#include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_ble_int.h"
+#include "stack/btm/btm_ble_sec.h"
 #include "stack/btm/btm_dev.h"
+#include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec_cb.h"
 #include "stack/btm/btm_sec_int_types.h"
 #include "stack/btm/security_device_record.h"
@@ -54,6 +57,7 @@
 #include "stack/include/bt_psm_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_addr.h"
+#include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_ble_privacy.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/btm_sec_api.h"
@@ -85,14 +89,11 @@ extern tBTM_CB btm_cb;
    BTM_SEC_LE_LINK_KEY_KNOWN | BTM_SEC_LE_LINK_KEY_AUTHED)
 
 void btm_inq_stop_on_ssp(void);
-void btm_ble_advertiser_notify_terminated_legacy(uint8_t status,
-                                                 uint16_t connection_handle);
 bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                               const RawAddress& new_pseudo_addr);
 void bta_dm_remove_device(const RawAddress& bd_addr);
 void bta_dm_process_remove_device(const RawAddress& bd_addr);
 void btm_inq_clear_ssp(void);
-void HACK_acl_check_sm4(tBTM_SEC_DEV_REC& p_dev_rec);
 
 /*******************************************************************************
  *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
@@ -1701,8 +1702,8 @@ tBTM_STATUS btm_sec_l2cap_access_req_by_requirement(
 
       if (rc == BTM_SUCCESS) {
         if (p_callback)
-          (*p_callback)(&bd_addr, transport, (void*)p_ref_data, BTM_SUCCESS);
-        return (BTM_SUCCESS);
+          (*p_callback)(&bd_addr, transport, (void*)p_ref_data, rc);
+        return rc;
       }
     }
 
@@ -3896,12 +3897,6 @@ void btm_sec_disconnected(uint16_t handle, tHCI_REASON reason,
     if ((p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN) == 0) {
       p_dev_rec->sec_flags &=
           ~(BTM_SEC_LE_LINK_KEY_AUTHED | BTM_SEC_LE_AUTHENTICATED);
-    }
-
-    // This is for chips that don't support being in connected and advertising
-    // state at same time.
-    if (!p_dev_rec->IsLocallyInitiated()) {
-      btm_ble_advertiser_notify_terminated_legacy(HCI_SUCCESS, handle);
     }
   } else {
     p_dev_rec->hci_handle = HCI_INVALID_HANDLE;

@@ -851,6 +851,13 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         return;
       }
 
+      if (event->status == HCI_ERR_UNSUPPORTED_REM_FEATURE &&
+          group->asymmetric_phy_for_unidirectional_cis_supported == true &&
+          group->GetSduInterval(le_audio::types::kLeAudioDirectionSource) ==
+              0) {
+        group->asymmetric_phy_for_unidirectional_cis_supported = false;
+      }
+
       LOG_ERROR("CIS creation failed %d times, stopping the stream",
                 leAudioDevice->cis_failed_to_be_established_retry_cnt_);
       leAudioDevice->cis_failed_to_be_established_retry_cnt_ = 0;
@@ -1369,6 +1376,15 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
       LOG_ERROR("Latency and interval not properly set");
       group->PrintDebugState();
       return false;
+    }
+
+    // Use 1M Phy for the ACK packet from remote device to phone for better
+    // sensitivity
+    if (group->asymmetric_phy_for_unidirectional_cis_supported &&
+        sdu_interval_stom == 0 &&
+        (phy_stom & bluetooth::hci::kIsoCigPhy1M) != 0) {
+      LOG_INFO("Use asymmetric PHY for unidirectional CIS");
+      phy_stom = bluetooth::hci::kIsoCigPhy1M;
     }
 
     uint8_t rtn_mtos = 0;

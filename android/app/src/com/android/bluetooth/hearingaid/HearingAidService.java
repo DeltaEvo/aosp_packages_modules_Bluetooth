@@ -17,6 +17,7 @@
 package com.android.bluetooth.hearingaid;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
+
 import static com.android.bluetooth.Utils.callerIsSystemOrActiveOrManagedUser;
 import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
@@ -28,6 +29,7 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothHearingAid;
 import android.content.AttributionSource;
+import android.content.Context;
 import android.content.Intent;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
@@ -100,6 +102,13 @@ public class HearingAidService extends ProfileService {
 
     private final ServiceFactory mFactory = new ServiceFactory();
 
+    HearingAidService() {}
+
+    @VisibleForTesting
+    HearingAidService(Context ctx) {
+        super(ctx);
+    }
+
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileAshaCentralEnabled().orElse(true);
     }
@@ -107,13 +116,6 @@ public class HearingAidService extends ProfileService {
     @Override
     protected IProfileServiceBinder initBinder() {
         return new BluetoothHearingAidBinder(this);
-    }
-
-    @Override
-    protected void create() {
-        if (DBG) {
-            Log.d(TAG, "create()");
-        }
     }
 
     @Override

@@ -28,17 +28,17 @@
 #include "common/init_flags.h"
 #include "common/strings.h"
 #include "hal/snoop_logger_common.h"
-#include "hal/syscall_wrapper_impl.h"
-#include "os/fake_timer/fake_timerfd.h"
 #include "os/files.h"
 #include "os/log.h"
 #include "os/parameter_provider.h"
 #include "os/system_properties.h"
 
-namespace bluetooth {
 #ifdef USE_FAKE_TIMERS
-using os::fake_timer::fake_timerfd_get_clock;
+#include "os/fake_timer/fake_timerfd.h"
+using bluetooth::os::fake_timer::fake_timerfd_get_clock;
 #endif
+
+namespace bluetooth {
 namespace hal {
 
 // Adds L2CAP channel to acceptlist.
@@ -214,11 +214,11 @@ void ProfilesFilter::PrintProfilesConfig() {
   for (int i = 0; i < FILTER_PROFILE_MAX; i++) {
     if (profiles[i].enabled) {
       LOG_DEBUG(
-          "\ntype: %s \
-                \nenabled: %d, l2cap_opened: %d, rfcomm_opened: %d\
-                \nflow_ext_l2cap: %d, flow_ext_rfcomm: %d\
-                \nlcid: %d, rcid: %d, rfcomm_uuid: %d, psm: %d\
-                \nscn: %d \n",
+          "\ntype: %s"
+          "\nenabled: %d, l2cap_opened: %d, rfcomm_opened: %d"
+          "\nflow_ext_l2cap: %d, flow_ext_rfcomm: %d"
+          "\nlcid: %d, rcid: %d, rfcomm_uuid: %d, psm: %d"
+          "\nscn: %d\n",
           ProfilesFilter::ProfileToString(profiles[i].type).c_str(),
           profiles[i].enabled,
           profiles[i].l2cap_opened,
