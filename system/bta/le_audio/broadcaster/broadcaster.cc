@@ -21,7 +21,6 @@
 
 #include <mutex>
 
-#include "bta/include/bta_le_audio_api.h"
 #include "bta/include/bta_le_audio_broadcaster_api.h"
 #include "bta/le_audio/broadcaster/state_machine.h"
 #include "bta/le_audio/codec_interface.h"
@@ -29,11 +28,12 @@
 #include "bta/le_audio/le_audio_types.h"
 #include "bta/le_audio/le_audio_utils.h"
 #include "bta/le_audio/metrics_collector.h"
+#include "common/strings.h"
 #include "device/include/controller.h"
-#include "gd/common/strings.h"
 #include "internal_include/stack_config.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 #include "osi/include/properties.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_iso_api.h"
 
@@ -157,7 +157,7 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
     BasicAudioAnnouncementData announcement;
 
     /* Prepare the announcement */
-    announcement.presentation_delay = 0x004E20; /* TODO: Use the proper value */
+    announcement.presentation_delay = 40000; /* us */
 
     auto const& codec_id = codec_config.GetLeAudioCodecId();
 
@@ -442,6 +442,10 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
         auto stream_context_vec = ltv.Find(
             le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
         if (stream_context_vec) {
+          if (stream_context_vec.value().size() < 2) {
+            LOG_ERROR("kLeAudioMetadataTypeStreamingAudioContext size < 2");
+            return;
+          }
           auto pp = stream_context_vec.value().data();
           UINT16_TO_STREAM(pp, context_type.value());
         }
@@ -450,6 +454,11 @@ class LeAudioBroadcasterImpl : public LeAudioBroadcaster, public BigCallbacks {
       auto stream_context_vec =
           ltv.Find(le_audio::types::kLeAudioMetadataTypeStreamingAudioContext);
       if (stream_context_vec) {
+        if (stream_context_vec.value().size() < 2) {
+          LOG_ERROR("kLeAudioMetadataTypeStreamingAudioContext size < 2");
+          return;
+        }
+
         auto pp = stream_context_vec.value().data();
         STREAM_TO_UINT16(context_type.value_ref(), pp);
       }

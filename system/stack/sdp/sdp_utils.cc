@@ -46,6 +46,7 @@
 #include "stack/include/avrc_defs.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/btm_sec_api_types.h"
@@ -253,7 +254,9 @@ void sdpu_log_attribute_metrics(const RawAddress& bda,
       case UUID_SERVCLASS_AUDIO_SINK: {
         tSDP_DISC_ATTR* p_attr =
             SDP_FindAttributeInRec(p_rec, ATTR_ID_SUPPORTED_FEATURES);
-        if (p_attr == nullptr) {
+        if (p_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 2) {
           break;
         }
         uint16_t supported_features = p_attr->attr_value.v.u16;
@@ -266,7 +269,9 @@ void sdpu_log_attribute_metrics(const RawAddress& bda,
       case UUID_SERVCLASS_MESSAGE_ACCESS: {
         tSDP_DISC_ATTR* p_attr =
             SDP_FindAttributeInRec(p_rec, ATTR_ID_MAP_SUPPORTED_FEATURES);
-        if (p_attr == nullptr) {
+        if (p_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 4) {
           break;
         }
         uint32_t map_supported_features = p_attr->attr_value.v.u32;
@@ -279,7 +284,9 @@ void sdpu_log_attribute_metrics(const RawAddress& bda,
       case UUID_SERVCLASS_PBAP_PSE: {
         tSDP_DISC_ATTR* p_attr =
             SDP_FindAttributeInRec(p_rec, ATTR_ID_PBAP_SUPPORTED_FEATURES);
-        if (p_attr == nullptr) {
+        if (p_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 4) {
           break;
         }
         uint32_t pbap_supported_features = p_attr->attr_value.v.u32;

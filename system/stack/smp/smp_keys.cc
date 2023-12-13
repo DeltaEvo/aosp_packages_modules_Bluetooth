@@ -40,6 +40,7 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_ble_sec_api.h"
 #include "types/raw_address.h"
@@ -1035,8 +1036,8 @@ bool smp_calculate_long_term_key_from_link_key(tSMP_CB* p_cb) {
   }
 
   Octet16 rev_link_key;
-  std::reverse_copy(p_dev_rec->link_key.begin(), p_dev_rec->link_key.end(),
-                    rev_link_key.begin());
+  std::reverse_copy(p_dev_rec->sec_rec.link_key.begin(),
+                    p_dev_rec->sec_rec.link_key.end(), rev_link_key.begin());
   p_cb->ltk = crypto_toolbox::link_key_to_ltk(rev_link_key,
                                               p_cb->key_derivation_h7_used);
 
