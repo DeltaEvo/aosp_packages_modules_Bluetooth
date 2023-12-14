@@ -1008,7 +1008,10 @@ void bta_av_rc_msg(tBTA_AV_CB* p_cb, tBTA_AV_DATA* p_data) {
     av.remote_cmd.rc_handle = p_data->rc_msg.handle;
     (*p_cb->p_cback)(evt, &av);
     /* If browsing message, then free the browse message buffer */
-    bta_av_rc_free_browse_msg(p_cb, p_data);
+    if (p_data->rc_msg.opcode == AVRC_OP_BROWSE &&
+        p_data->rc_msg.msg.browse.p_browse_pkt != NULL) {
+      bta_av_rc_free_browse_msg(p_cb, p_data);
+    }
   }
 }
 
@@ -1708,7 +1711,9 @@ tBTA_AV_FEAT bta_av_check_peer_features(uint16_t service_uuid) {
       if (peer_rc_version >= AVRC_REV_1_4) {
         /* get supported categories */
         p_attr = SDP_FindAttributeInRec(p_rec, ATTR_ID_SUPPORTED_FEATURES);
-        if (p_attr != NULL) {
+        if (p_attr != NULL &&
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
           categories = p_attr->attr_value.v.u16;
           if (categories & AVRC_SUPF_CT_CAT2)
             peer_features |= (BTA_AV_FEAT_ADV_CTRL);
@@ -1772,7 +1777,9 @@ tBTA_AV_FEAT bta_avk_check_peer_features(uint16_t service_uuid) {
       /* Get supported features */
       tSDP_DISC_ATTR* p_attr =
           SDP_FindAttributeInRec(p_rec, ATTR_ID_SUPPORTED_FEATURES);
-      if (p_attr != NULL) {
+      if (p_attr != NULL &&
+          SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+          SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
         uint16_t categories = p_attr->attr_value.v.u16;
         /*
          * Though Absolute Volume came after in 1.4 and above, but there are
