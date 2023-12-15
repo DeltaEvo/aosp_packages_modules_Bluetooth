@@ -55,7 +55,7 @@ java_library {
 
 cc_library_shared {
     name: "libbluetooth_jni",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     srcs: ["jni/**/*.cpp"],
     version_script: "libbluetooth_jni.map",
     header_libs: [
@@ -77,7 +77,7 @@ cc_library_shared {
     // is required to maintain FIPS compliance.
     stl: "libc++_static",
     static_libs: [
-        "android.hardware.audio.common-V1-ndk",
+        "android.hardware.audio.common-V2-ndk",
         "android.hardware.audio.common@5.0",
         "android.hardware.bluetooth.audio-V3-ndk",
         "android.hardware.bluetooth.audio@2.0",
@@ -100,15 +100,18 @@ cc_library_shared {
         "libbluetooth-types",
         "libbluetooth_core_rs",
         "libbluetooth_core_rs_bridge",
+        "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",
+        "libbt-btu-main-thread",
         "libbt-common",
         "libbt-hci",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
         "libbt-stack-core",
+        "libbt_shim_bridge",
         "libbtcore",
         "libbtdevice",
         "libbte",
@@ -118,6 +121,7 @@ cc_library_shared {
         "libchrome",
         "libcutils",
         "libevent",
+        "libflatbuffers-cpp",
         "libfmq",
         "libg722codec",
         "libhidlbase",
@@ -125,6 +129,8 @@ cc_library_shared {
         "libmodpb64",
         "libopus",
         "libosi",
+        "libprotobuf-cpp-lite",
+        "libstatslog_bt",
         "libudrv-uipc",
         "libutils",
     ],
@@ -148,7 +154,7 @@ cc_library_shared {
 
 cc_library {
     name: "libbluetooth-core",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     header_libs: [
         "jni_headers",
         "libbluetooth_headers",
@@ -199,8 +205,12 @@ android_app {
     srcs: [
         ":statslog-bluetooth-java-gen",
         ":statslog-bt-restricted-java-gen",
+        "proto/keystore.proto",
         "src/**/*.java",
     ],
+    proto: {
+        type: "lite",
+    },
     aaptflags: [
         "--custom-package",
         "com.android.bluetooth",
@@ -222,6 +232,9 @@ android_app {
         "framework-statsd.stubs.module_lib",
         "framework-tethering.stubs.module_lib",
         "unsupportedappusage",
+
+        // Need to link the class at runtime
+        "framework-bluetooth",
     ],
     static_libs: [
         "android.hardware.radio-V1.0-java",
@@ -244,7 +257,6 @@ android_app {
         "modules-utils-backgroundthread",
         "modules-utils-bytesmatcher",
         "modules-utils-statemachine",
-        "modules-utils-synchronous-result-receiver",
         "net-utils-services-common",
         "networkstack-client",
         "sap-api-java-static",
@@ -275,6 +287,8 @@ android_app {
         enabled: true,
         shrink: true,
         optimize: false,
+        // TODO(b/289285719): Revisit after resolving mocking issues in testing.
+        proguard_compatibility: true,
         proguard_flags_files: ["proguard.flags"],
     },
     apex_available: [

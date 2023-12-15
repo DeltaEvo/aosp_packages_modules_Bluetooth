@@ -25,7 +25,6 @@
 #include "common/message_loop_thread.h"
 #include "device/include/interop.h"
 #include "include/hardware/bt_rc.h"
-#include "osi/test/AllocationTestHarness.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_api_types.h"
 #include "test/common/mock_functions.h"
@@ -36,8 +35,6 @@
 #undef LOG_TAG
 #include "avrcp_service.h"
 #include "btif/src/btif_rc.cc"
-
-void allocation_tracker_uninit(void);
 
 namespace bluetooth {
 namespace avrcp {
@@ -175,16 +172,7 @@ bool interop_match_addr(const interop_feature_t feature,
 /**
  * Test class to test selected functionality in hci/src/hci_layer.cc
  */
-class BtifRcTest : public AllocationTestHarness {
- protected:
-  void SetUp() override {
-    AllocationTestHarness::SetUp();
-    // Disable our allocation tracker to allow ASAN full range
-    allocation_tracker_uninit();
-  }
-
-  void TearDown() override { AllocationTestHarness::TearDown(); }
-};
+class BtifRcTest : public ::testing::Test {};
 
 TEST_F(BtifRcTest, get_element_attr_rsp) {
   RawAddress bd_addr;
@@ -330,8 +318,8 @@ TEST_F(BtifRcBrowseConnectionTest, handle_rc_browse_connect) {
       g_btrc_browse_connection_state_promise.get_future();
 
   tBTA_AV_RC_BROWSE_OPEN browse_data = {
-      .status = BTA_AV_SUCCESS,
       .rc_handle = 0,
+      .status = BTA_AV_SUCCESS,
   };
 
   btif_rc_cb.rc_multi_cb[0].rc_handle = 0;
@@ -425,4 +413,43 @@ TEST_F(BtifRcConnectionTest, BTA_AV_RC_OPEN_EVT) {
   CHECK(std::future_status::ready == future.wait_for(std::chrono::seconds(2)));
   auto res = future.get();
   CHECK(res.rc_state == true);
+}
+
+class BtifTrackChangeCBTest : public BtifRcTest {
+ protected:
+  void SetUp() override {
+    BtifRcTest::SetUp();
+    init_ctrl(&btrc_ctrl_callbacks);
+    jni_thread.StartUp();
+    btrc_ctrl_callbacks.track_changed_cb = [](const RawAddress& bd_addr,
+                       uint8_t num_attr, btrc_element_attr_val_t* p_attrs) {
+      btif_rc_cb.rc_multi_cb[0].rc_addr = bd_addr;
+    };
+  }
+
+  void TearDown() override {
+    btrc_ctrl_callbacks.track_changed_cb = [](const RawAddress& bd_addr,
+                       uint8_t num_attr, btrc_element_attr_val_t* p_attrs) {};
+    BtifRcTest::TearDown();
+  }
+};
+
+TEST_F(BtifTrackChangeCBTest, handle_get_metadata_attr_response) {
+  tBTA_AV_META_MSG meta_msg = {
+    .rc_handle = 0,
+  };
+
+  tAVRC_GET_ATTRS_RSP rsp = {
+    .status = AVRC_STS_NO_ERROR,
+    .num_attrs = 0,
+  };
+
+  btif_rc_cb.rc_multi_cb[0].rc_handle = 0;
+  btif_rc_cb.rc_multi_cb[0].rc_addr = RawAddress::kEmpty;
+  btif_rc_cb.rc_multi_cb[0].rc_state = BTRC_CONNECTION_STATE_CONNECTED;
+  btif_rc_cb.rc_multi_cb[0].rc_connected = true;
+
+  handle_get_metadata_attr_response(&meta_msg, &rsp);
+
+  ASSERT_EQ(1, get_func_call_count("osi_free_and_reset"));
 }

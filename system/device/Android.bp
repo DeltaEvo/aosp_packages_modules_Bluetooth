@@ -10,7 +10,7 @@ package {
 
 cc_library_static {
     name: "libbtdevice",
-    defaults: ["fluoride_basic_defaults"],
+    defaults: ["fluoride_defaults"],
     host_supported: true,
     local_include_dirs: [
         "include",
@@ -28,7 +28,12 @@ cc_library_static {
         "src/esco_parameters.cc",
         "src/interop.cc",
     ],
+    apex_available: [
+        "com.android.btservices",
+    ],
     min_sdk_version: "Tiramisu",
+    header_libs: ["libbluetooth_headers"],
+    static_libs: ["libbt_shim_bridge"],
 }
 
 // Bluetooth device unit tests for target
@@ -50,12 +55,15 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_gd",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtcore",
         "libbtdevice",
         "libchrome",
         "libosi",
-        "libosi-AllocationTestHarness",
     ],
+    header_libs: ["libbluetooth_headers"],
 }
 
 // Bluetooth device unit tests for target
@@ -84,10 +92,14 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbt-platform-protos-lite",
+        "libbt_shim_bridge",
+        "libbt_shim_ffi",
         "libbtcore",
         "libbtdevice",
         "libchrome",
         "libgmock",
-        "libosi-AllocationTestHarness",
     ],
+    header_libs: ["libbluetooth_headers"],
+    cflags: ["-Wno-unused-parameter"],
 }

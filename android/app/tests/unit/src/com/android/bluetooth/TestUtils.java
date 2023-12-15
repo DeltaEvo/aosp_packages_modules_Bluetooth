@@ -15,7 +15,6 @@
  */
 package com.android.bluetooth;
 
-import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,8 +28,11 @@ import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.MessageQueue;
+import android.os.test.TestLooper;
 import android.service.media.MediaBrowserService;
+import android.util.Log;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.rule.ServiceTestRule;
@@ -39,8 +41,12 @@ import androidx.test.uiautomator.UiDevice;
 import com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.gatt.GattService;
 
 import org.junit.Assert;
+import org.junit.rules.TestRule;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 import org.mockito.ArgumentCaptor;
 import org.mockito.internal.util.MockUtil;
 
@@ -48,12 +54,11 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.IntStream;
 
 /**
  * A set of methods useful in Bluetooth instrumentation tests
@@ -62,6 +67,8 @@ public class TestUtils {
     private static final int SERVICE_TOGGLE_TIMEOUT_MS = 1000;    // 1s
 
     private static String sSystemScreenOffTimeout = "10000";
+
+    private static final String TAG = "BluetoothTestUtils";
 
     /**
      * Utility method to replace obj.fieldName with newValue where obj is of type c
@@ -88,49 +95,45 @@ public class TestUtils {
     /**
      * Set the return value of {@link AdapterService#getAdapterService()} to a test specified value
      *
-     * @param adapterService the designated {@link AdapterService} in test, must not be null, can
-     *                       be mocked or spied
-     * @throws NoSuchMethodException     when setAdapterService method is not found
-     * @throws IllegalAccessException    when setAdapterService method cannot be accessed
-     * @throws InvocationTargetException when setAdapterService method cannot be invoked, which
-     *                                   should never happen since setAdapterService is a static
-     *                                   method
+     * @param adapterService the designated {@link AdapterService} in test, must not be null, can be
+     *     mocked or spied
      */
-    public static void setAdapterService(AdapterService adapterService)
-            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public static void setAdapterService(AdapterService adapterService) {
         Assert.assertNull("AdapterService.getAdapterService() must be null before setting another"
                 + " AdapterService", AdapterService.getAdapterService());
         Assert.assertNotNull("Adapter service should not be null", adapterService);
         // We cannot mock AdapterService.getAdapterService() with Mockito.
-        // Hence we need to use reflection to call a private method to
-        // initialize properly the AdapterService.sAdapterService field.
-        Method method =
-                AdapterService.class.getDeclaredMethod("setAdapterService", AdapterService.class);
-        method.setAccessible(true);
-        method.invoke(null, adapterService);
+        // Hence we need to set AdapterService.sAdapterService field.
+        AdapterService.setAdapterService(adapterService);
     }
 
     /**
      * Clear the return value of {@link AdapterService#getAdapterService()} to null
      *
-     * @param adapterService the {@link AdapterService} used when calling
-     *                       {@link TestUtils#setAdapterService(AdapterService)}
-     * @throws NoSuchMethodException     when clearAdapterService method is not found
-     * @throws IllegalAccessException    when clearAdapterService method cannot be accessed
-     * @throws InvocationTargetException when clearAdappterService method cannot be invoked,
-     *                                   which should never happen since clearAdapterService is a
-     *                                   static method
+     * @param adapterService the {@link AdapterService} used when calling {@link
+     *     TestUtils#setAdapterService(AdapterService)}
      */
-    public static void clearAdapterService(AdapterService adapterService)
-            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public static void clearAdapterService(AdapterService adapterService) {
         Assert.assertSame("AdapterService.getAdapterService() must return the same object as the"
                         + " supplied adapterService in this method", adapterService,
                 AdapterService.getAdapterService());
         Assert.assertNotNull("Adapter service should not be null", adapterService);
-        Method method =
-                AdapterService.class.getDeclaredMethod("clearAdapterService", AdapterService.class);
-        method.setAccessible(true);
-        method.invoke(null, adapterService);
+        AdapterService.clearAdapterService(adapterService);
+    }
+
+    /** Helper function to mock getSystemService calls */
+    public static <T> void mockGetSystemService(
+            Context ctx, String serviceName, Class<T> serviceClass, T mockService) {
+        when(ctx.getSystemService(eq(serviceName))).thenReturn(mockService);
+        when(ctx.getSystemServiceName(eq(serviceClass))).thenReturn(serviceName);
+    }
+
+    /** Helper function to mock getSystemService calls */
+    public static <T> T mockGetSystemService(
+            Context ctx, String serviceName, Class<T> serviceClass) {
+        T mockedService = mock(serviceClass);
+        mockGetSystemService(ctx, serviceName, serviceClass, mockedService);
+        return mockedService;
     }
 
     /**
@@ -151,6 +154,9 @@ public class TestUtils {
      */
     public static <T extends ProfileService> void startService(ServiceTestRule serviceTestRule,
             Class<T> profileServiceClass) throws TimeoutException {
+        if (profileServiceClass == GattService.class) {
+            Assert.assertFalse("GattService cannot be started as a service", true);
+        }
         AdapterService adapterService = AdapterService.getAdapterService();
         Assert.assertNotNull("Adapter service should not be null", adapterService);
         Assert.assertTrue("AdapterService.getAdapterService() must return a mocked or spied object"
@@ -282,6 +288,28 @@ public class TestUtils {
     }
 
     /**
+     * Dispatch all the message on the Loopper and check that the `what` is expected
+     *
+     * @param looper looper to execute the message from
+     * @param what list of Messages.what that are expected to be run by the handler
+     */
+    public static void syncHandler(TestLooper looper, int... what) {
+        IntStream.of(what)
+                .forEach(
+                        w -> {
+                            Message msg = looper.nextMessage();
+                            assertWithMessage("Expecting [" + w + "] instead of null Msg")
+                                    .that(msg)
+                                    .isNotNull();
+                            assertWithMessage("Not the expected Message:\n" + msg)
+                                    .that(msg.what)
+                                    .isEqualTo(w);
+                            Log.d(TAG, "Processing message: " + msg);
+                            msg.getTarget().dispatchMessage(msg);
+                        });
+    }
+
+    /**
      * Wait for looper to become idle
      *
      * @param looper looper of interest
@@ -366,6 +394,7 @@ public class TestUtils {
                 }
                 if (line.startsWith("[")) {
                     if (line.charAt(line.length() - 1) != ']') {
+                        Log.e(TAG, "readAdapterConfig: config line is not correct: " + line);
                         return null;
                     }
                     section = line.substring(1, line.length() - 1);
@@ -377,6 +406,7 @@ public class TestUtils {
                 }
             }
         } catch (IOException e) {
+            Log.e(TAG, "readAdapterConfig: Exception while reading the config" + e);
             return null;
         }
         return adapterConfig;
@@ -397,19 +427,22 @@ public class TestUtils {
     public static void setUpUiTest() throws Exception {
         final UiDevice device = UiDevice.getInstance(
                 androidx.test.platform.app.InstrumentationRegistry.getInstrumentation());
-        // Turn on screen and unlock
-        device.wakeUp();
-        device.executeShellCommand("wm dismiss-keyguard");
-
         // Disable animation
         device.executeShellCommand("settings put global window_animation_scale 0.0");
         device.executeShellCommand("settings put global transition_animation_scale 0.0");
         device.executeShellCommand("settings put global animator_duration_scale 0.0");
 
-        // change device screen_off_timeout
+        // change device screen_off_timeout to 5 minutes
         sSystemScreenOffTimeout =
                 device.executeShellCommand("settings get system screen_off_timeout");
-        device.executeShellCommand("settings put system screen_off_timeout 30000");
+        device.executeShellCommand("settings put system screen_off_timeout 300000");
+
+        // Turn on screen and unlock
+        device.wakeUp();
+        device.executeShellCommand("wm dismiss-keyguard");
+
+        // Back to home screen, in case some dialog/activity is in front
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressHome();
     }
 
     public static void tearDownUiTest() throws Exception {
@@ -425,6 +458,48 @@ public class TestUtils {
         // restore screen_off_timeout
         device.executeShellCommand("settings put system screen_off_timeout "
                 + sSystemScreenOffTimeout);
+    }
+
+    public static class RetryTestRule implements TestRule {
+        private int retryCount = 5;
+
+        public RetryTestRule() {
+            this(5);
+        }
+
+        public RetryTestRule(int retryCount) {
+            this.retryCount = retryCount;
+        }
+
+        public Statement apply(Statement base, Description description) {
+            return new Statement() {
+                @Override
+                public void evaluate() throws Throwable {
+                    Throwable caughtThrowable = null;
+
+                    // implement retry logic here
+                    for (int i = 0; i < retryCount; i++) {
+                        try {
+                            base.evaluate();
+                            return;
+                        } catch (Throwable t) {
+                            caughtThrowable = t;
+                            Log.e(
+                                    TAG,
+                                    description.getDisplayName() + ": run " + (i + 1) + " failed",
+                                    t);
+                        }
+                    }
+                    Log.e(
+                            TAG,
+                            description.getDisplayName()
+                                    + ": giving up after "
+                                    + retryCount
+                                    + " failures");
+                    throw caughtThrowable;
+                }
+            };
+        }
     }
 
     /**

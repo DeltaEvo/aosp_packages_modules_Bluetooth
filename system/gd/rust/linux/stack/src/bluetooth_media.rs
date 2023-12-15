@@ -6,18 +6,19 @@ use bt_topshim::btif::{
 };
 use bt_topshim::profiles::a2dp::{
     A2dp, A2dpCallbacks, A2dpCallbacksDispatcher, A2dpCodecBitsPerSample, A2dpCodecChannelMode,
-    A2dpCodecConfig, A2dpCodecSampleRate, BtavAudioState, BtavConnectionState,
-    PresentationPosition,
+    A2dpCodecConfig, A2dpCodecIndex, A2dpCodecPriority, A2dpCodecSampleRate, BtavAudioState,
+    BtavConnectionState, PresentationPosition,
 };
 use bt_topshim::profiles::avrcp::{
     Avrcp, AvrcpCallbacks, AvrcpCallbacksDispatcher, PlayerMetadata,
 };
 use bt_topshim::profiles::hfp::{
     BthfAudioState, BthfConnectionState, CallHoldCommand, CallInfo, CallState, Hfp, HfpCallbacks,
-    HfpCallbacksDispatcher, HfpCodecCapability, PhoneState, TelephonyDeviceStatus,
+    HfpCallbacksDispatcher, HfpCodecCapability, HfpCodecId, PhoneState, TelephonyDeviceStatus,
 };
 use bt_topshim::profiles::ProfileConnectionState;
 use bt_topshim::{metrics, topstack};
+use bt_utils::at_command_parser::{calculate_battery_percent, parse_at_command_data};
 use bt_utils::uinput::UInput;
 
 use itertools::Itertools;
@@ -42,8 +43,9 @@ use crate::uuid::Profile;
 use crate::{Message, RPCProxy};
 
 // The timeout we have to wait for all supported profiles to connect after we
-// receive the first profile connected event. The host shall disconnect the
-// device after this many seconds of timeout.
+// receive the first profile connected event. The host shall disconnect or
+// force connect the potentially partially connected device after this many
+// seconds of timeout.
 const PROFILE_DISCOVERY_TIMEOUT_SEC: u64 = 10;
 // The timeout we have to wait for the initiator peer device to complete the
 // initial profile connection. After this many seconds, we will begin to
@@ -89,9 +91,11 @@ pub trait IBluetoothMedia {
 
     fn set_audio_config(
         &mut self,
-        sample_rate: i32,
-        bits_per_sample: i32,
-        channel_mode: i32,
+        address: String,
+        codec_type: A2dpCodecIndex,
+        sample_rate: A2dpCodecSampleRate,
+        bits_per_sample: A2dpCodecBitsPerSample,
+        channel_mode: A2dpCodecChannelMode,
     ) -> bool;
 
     // Set the A2DP/AVRCP volume. Valid volume specified by the spec should be
@@ -171,7 +175,7 @@ pub trait IBluetoothMediaCallback: RPCProxy {
     fn on_hfp_debug_dump(
         &mut self,
         active: bool,
-        wbs: bool,
+        codec_id: u16,
         total_num_decoded_frames: i32,
         pkt_loss_ratio: f64,
         begin_ts: u64,
@@ -253,6 +257,7 @@ enum DeviceConnectionStates {
     ConnectingAfterRetry,  // Host initiated requests to missing profiles after timeout
     FullyConnected,        // All profiles (excluding AVRCP) are connected
     Disconnecting,         // Working towards disconnection of each connected profile
+    WaitingConnection,     // Waiting for new connections initiated by peer
 }
 
 pub struct BluetoothMedia {
@@ -602,7 +607,8 @@ impl BluetoothMedia {
                     info!("[{}]: state {:?}", DisplayAddress(&addr), state);
                     match state {
                         DeviceConnectionStates::ConnectingBeforeRetry
-                        | DeviceConnectionStates::ConnectingAfterRetry => {
+                        | DeviceConnectionStates::ConnectingAfterRetry
+                        | DeviceConnectionStates::WaitingConnection => {
                             self.delay_volume_update.insert(Profile::AvrcpController, volume);
                         }
                         DeviceConnectionStates::FullyConnected => {
@@ -776,7 +782,8 @@ impl BluetoothMedia {
                 );
                 match states.get(&addr).unwrap() {
                     DeviceConnectionStates::ConnectingBeforeRetry
-                    | DeviceConnectionStates::ConnectingAfterRetry => {
+                    | DeviceConnectionStates::ConnectingAfterRetry
+                    | DeviceConnectionStates::WaitingConnection => {
                         self.delay_volume_update.insert(Profile::Hfp, volume);
                     }
                     DeviceConnectionStates::FullyConnected => {
@@ -786,6 +793,35 @@ impl BluetoothMedia {
                     }
                     _ => {}
                 }
+            }
+            HfpCallbacks::VendorSpecificAtCommand(at_string, addr) => {
+                let at_command = match parse_at_command_data(at_string) {
+                    Ok(command) => command,
+                    Err(e) => {
+                        debug!("{}", e);
+                        return;
+                    }
+                };
+                let battery_level = match calculate_battery_percent(at_command.clone()) {
+                    Ok(level) => level,
+                    Err(e) => {
+                        debug!("{}", e);
+                        return;
+                    }
+                };
+                let source_info = match at_command.vendor {
+                    Some(vendor) => format!("HFP - {}", vendor),
+                    _ => "HFP - UnknownAtCommand".to_string(),
+                };
+                self.battery_provider_manager.lock().unwrap().set_battery_info(
+                    self.battery_provider_id,
+                    BatterySet::new(
+                        addr.to_string(),
+                        uuid::HFP.to_string(),
+                        source_info,
+                        vec![Battery { percentage: battery_level, variant: "".to_string() }],
+                    ),
+                );
             }
             HfpCallbacks::BatteryLevelUpdate(battery_level, addr) => {
                 let battery_set = BatterySet::new(
@@ -948,7 +984,7 @@ impl BluetoothMedia {
             }
             HfpCallbacks::DebugDump(
                 active,
-                wbs,
+                codec_id,
                 total_num_decoded_frames,
                 pkt_loss_ratio,
                 begin_ts,
@@ -956,8 +992,10 @@ impl BluetoothMedia {
                 pkt_status_in_hex,
                 pkt_status_in_binary,
             ) => {
-                debug!("[HFP] DebugDump: active:{} wbs:{}", active, wbs);
-                if wbs {
+                let is_wbs = codec_id == HfpCodecId::MSBC as u16;
+                let is_swb = codec_id == HfpCodecId::LC3 as u16;
+                debug!("[HFP] DebugDump: active:{}, codec_id:{}", active, codec_id);
+                if is_wbs || is_swb {
                     debug!(
                         "total_num_decoded_frames:{} pkt_loss_ratio:{}",
                         total_num_decoded_frames, pkt_loss_ratio
@@ -971,7 +1009,7 @@ impl BluetoothMedia {
                 self.callbacks.lock().unwrap().for_all_callbacks(|callback| {
                     callback.on_hfp_debug_dump(
                         active,
-                        wbs,
+                        codec_id,
                         total_num_decoded_frames,
                         pkt_loss_ratio,
                         begin_ts,
@@ -1061,6 +1099,15 @@ impl BluetoothMedia {
         let sleep_duration = (first_conn_ts + total_duration).saturating_duration_since(now_ts);
         sleep(sleep_duration).await;
 
+        Self::async_disconnect(fallback_tasks, device_states, txl, addr).await;
+    }
+
+    async fn async_disconnect(
+        fallback_tasks: &Arc<Mutex<HashMap<RawAddress, Option<(JoinHandle<()>, Instant)>>>>,
+        device_states: &Arc<Mutex<HashMap<RawAddress, DeviceConnectionStates>>>,
+        txl: &Sender<Message>,
+        addr: &RawAddress,
+    ) {
         device_states.lock().unwrap().insert(*addr, DeviceConnectionStates::Disconnecting);
         fallback_tasks.lock().unwrap().insert(*addr, None);
 
@@ -1079,10 +1126,20 @@ impl BluetoothMedia {
         first_conn_ts: Instant,
     ) {
         let now_ts = Instant::now();
-        let total_duration = Duration::from_secs(CONNECT_MISSING_PROFILES_TIMEOUT_SEC);
+        let total_duration = Duration::from_secs(PROFILE_DISCOVERY_TIMEOUT_SEC);
         let sleep_duration = (first_conn_ts + total_duration).saturating_duration_since(now_ts);
         sleep(sleep_duration).await;
         let _ = txl.send(Message::Media(MediaActions::ForceEnterConnected(addr.to_string()))).await;
+    }
+
+    fn is_bonded(&self, addr: &RawAddress) -> bool {
+        match &self.adapter {
+            Some(adapter) => {
+                BtBondState::Bonded
+                    == adapter.lock().unwrap().get_bond_state_by_addr(&addr.to_string())
+            }
+            _ => false,
+        }
     }
 
     fn notify_media_capability_updated(&mut self, addr: RawAddress) {
@@ -1101,8 +1158,22 @@ impl BluetoothMedia {
                 guard.insert(addr, None);
             } else {
                 // The device is already added or is disconnecting.
-                // Ignore unless all profiles are cleared.
+                // Ignore unless all profiles are cleared, where we need to do some clean up.
                 if !is_profile_cleared {
+                    // Unbonded device is special, we need to reject the connection from them.
+                    if !self.is_bonded(&addr) {
+                        let tasks = self.fallback_tasks.clone();
+                        let states = self.device_states.clone();
+                        let txl = self.tx.clone();
+                        let task = topstack::get_runtime().spawn(async move {
+                            warn!(
+                                "[{}]: Rejecting an unbonded device's attempt to connect media",
+                                DisplayAddress(&addr)
+                            );
+                            BluetoothMedia::async_disconnect(&tasks, &states, &txl, &addr).await;
+                        });
+                        guard.insert(addr, Some((task, first_conn_ts)));
+                    }
                     return;
                 }
             }
@@ -1126,17 +1197,46 @@ impl BluetoothMedia {
         if states.get(&addr).is_none() {
             states.insert(addr, DeviceConnectionStates::ConnectingBeforeRetry);
         }
-        if missing_profiles.is_empty()
-            || missing_profiles == HashSet::from([Profile::AvrcpController])
-        {
-            info!(
-                "[{}]: Fully connected, available profiles: {:?}, connected profiles: {:?}.",
-                DisplayAddress(&addr),
-                available_profiles,
-                connected_profiles
-            );
 
-            states.insert(addr, DeviceConnectionStates::FullyConnected);
+        if states.get(&addr).unwrap() != &DeviceConnectionStates::FullyConnected {
+            if available_profiles.is_empty() {
+                // Some headsets may start initiating connections to audio profiles before they are
+                // exposed to the stack. In this case, wait for either all critical profiles have been
+                // connected or some timeout to enter the |FullyConnected| state.
+                if connected_profiles.contains(&Profile::Hfp)
+                    && connected_profiles.contains(&Profile::A2dpSink)
+                {
+                    info!(
+                        "[{}]: Fully connected, available profiles: {:?}, connected profiles: {:?}.",
+                        DisplayAddress(&addr),
+                        available_profiles,
+                        connected_profiles
+                    );
+
+                    states.insert(addr, DeviceConnectionStates::FullyConnected);
+                } else {
+                    warn!(
+                        "[{}]: Connected profiles: {:?}, waiting for peer to initiate remaining connections.",
+                        DisplayAddress(&addr),
+                        connected_profiles
+                    );
+
+                    states.insert(addr, DeviceConnectionStates::WaitingConnection);
+                }
+            } else {
+                if missing_profiles.is_empty()
+                    || missing_profiles == HashSet::from([Profile::AvrcpController])
+                {
+                    info!(
+                        "[{}]: Fully connected, available profiles: {:?}, connected profiles: {:?}.",
+                        DisplayAddress(&addr),
+                        available_profiles,
+                        connected_profiles
+                    );
+
+                    states.insert(addr, DeviceConnectionStates::FullyConnected);
+                }
+            }
         }
 
         info!(
@@ -1188,39 +1288,18 @@ impl BluetoothMedia {
             }
             DeviceConnectionStates::FullyConnected => {
                 // Rejecting the unbonded connection after we finished our profile
-                // reconnectinglogic to avoid a collision.
-                if let Some(adapter) = &self.adapter {
-                    if BtBondState::Bonded
-                        != adapter.lock().unwrap().get_bond_state_by_addr(&addr.to_string())
-                    {
-                        warn!(
-                            "[{}]: Rejecting a unbonded device's attempt to connect to media profiles",
-                            DisplayAddress(&addr));
-                        let fallback_tasks = self.fallback_tasks.clone();
-                        let device_states = self.device_states.clone();
-                        let txl = self.tx.clone();
-                        let task = topstack::get_runtime().spawn(async move {
-                            {
-                                device_states
-                                    .lock()
-                                    .unwrap()
-                                    .insert(addr, DeviceConnectionStates::Disconnecting);
-                                fallback_tasks.lock().unwrap().insert(addr, None);
-                            }
+                // reconnecting logic to avoid a collision.
+                if !self.is_bonded(&addr) {
+                    warn!(
+                        "[{}]: Rejecting a unbonded device's attempt to connect to media profiles",
+                        DisplayAddress(&addr)
+                    );
 
-                            debug!(
-                                "[{}]: Device connection state: {:?}.",
-                                DisplayAddress(&addr),
-                                DeviceConnectionStates::Disconnecting
-                            );
-
-                            let _ = txl
-                                .send(Message::Media(MediaActions::Disconnect(addr.to_string())))
-                                .await;
-                        });
-                        guard.insert(addr, Some((task, first_conn_ts)));
-                        return;
-                    }
+                    let task = topstack::get_runtime().spawn(async move {
+                        BluetoothMedia::async_disconnect(&tasks, &device_states, &txl, &addr).await;
+                    });
+                    guard.insert(addr, Some((task, ts)));
+                    return;
                 }
 
                 let cur_a2dp_caps = self.a2dp_caps.get(&addr);
@@ -1254,6 +1333,13 @@ impl BluetoothMedia {
                 guard.insert(addr, None);
             }
             DeviceConnectionStates::Disconnecting => {}
+            DeviceConnectionStates::WaitingConnection => {
+                let task = topstack::get_runtime().spawn(async move {
+                    BluetoothMedia::wait_retry(&tasks, &device_states, &txl, &addr, ts).await;
+                    BluetoothMedia::wait_force_enter_connected(&txl, &addr, ts).await;
+                });
+                guard.insert(addr, Some((task, ts)));
+            }
         }
     }
 
@@ -1670,9 +1756,9 @@ impl BluetoothMedia {
     }
 
     // Force the media enters the FullyConnected state and then triggers a retry.
-    // This function is only used for qualification as a replacement of normal retry.
-    // Usually PTS initiates the connection of the necessary profiles, and Floss should notify
-    // CRAS of the new audio device regardless of the unconnected profiles.
+    // When this function is used for qualification as a replacement of normal retry,
+    // PTS could initiate the connection of the necessary profiles, and Floss should
+    // notify CRAS of the new audio device regardless of the unconnected profiles.
     // Still retry in the end because some test cases require that.
     fn force_enter_connected(&mut self, address: String) {
         let addr = match RawAddress::from_string(address.clone()) {
@@ -2132,21 +2218,71 @@ impl IBluetoothMedia for BluetoothMedia {
 
     fn set_audio_config(
         &mut self,
-        sample_rate: i32,
-        bits_per_sample: i32,
-        channel_mode: i32,
+        address: String,
+        codec_type: A2dpCodecIndex,
+        sample_rate: A2dpCodecSampleRate,
+        bits_per_sample: A2dpCodecBitsPerSample,
+        channel_mode: A2dpCodecChannelMode,
     ) -> bool {
-        if !A2dpCodecSampleRate::validate_bits(sample_rate)
-            || !A2dpCodecBitsPerSample::validate_bits(bits_per_sample)
-            || !A2dpCodecChannelMode::validate_bits(channel_mode)
-        {
+        let addr = match RawAddress::from_string(address.clone()) {
+            None => {
+                warn!("Invalid device address {}", address);
+                return false;
+            }
+            Some(addr) => addr,
+        };
+
+        if self.a2dp_states.get(&addr).is_none() {
+            warn!(
+                "[{}]: Ignore set config event for unconnected or disconnected A2DP device",
+                DisplayAddress(&addr)
+            );
             return false;
         }
 
         match self.a2dp.as_mut() {
             Some(a2dp) => {
-                a2dp.set_audio_config(sample_rate, bits_per_sample, channel_mode);
-                true
+                let caps = self.a2dp_caps.get(&addr).unwrap_or(&Vec::new()).to_vec();
+
+                for cap in &caps {
+                    if A2dpCodecIndex::from(cap.codec_type) == codec_type {
+                        if (A2dpCodecSampleRate::from_bits(cap.sample_rate).unwrap() & sample_rate)
+                            != sample_rate
+                        {
+                            warn!("Unsupported sample rate {:?}", sample_rate);
+                            return false;
+                        }
+                        if (A2dpCodecBitsPerSample::from_bits(cap.bits_per_sample).unwrap()
+                            & bits_per_sample)
+                            != bits_per_sample
+                        {
+                            warn!("Unsupported bit depth {:?}", bits_per_sample);
+                            return false;
+                        }
+                        if (A2dpCodecChannelMode::from_bits(cap.channel_mode).unwrap()
+                            & channel_mode)
+                            != channel_mode
+                        {
+                            warn!("Unsupported channel mode {:?}", channel_mode);
+                            return false;
+                        }
+
+                        let config = vec![A2dpCodecConfig {
+                            codec_type: codec_type as i32,
+                            codec_priority: A2dpCodecPriority::Highest as i32,
+                            sample_rate: sample_rate.bits() as i32,
+                            bits_per_sample: bits_per_sample.bits() as i32,
+                            channel_mode: channel_mode.bits() as i32,
+                            ..Default::default()
+                        }];
+
+                        a2dp.config_codec(addr, config);
+                        return true;
+                    }
+                }
+
+                warn!("Unsupported codec type {:?}", codec_type);
+                false
             }
             None => {
                 warn!("Uninitialized A2DP to set audio config");

@@ -113,6 +113,7 @@ bool is_valid_event_code(bluetooth::hci::EventCode event_code) {
       return true;
     case bluetooth::hci::EventCode::VENDOR_SPECIFIC:
     case bluetooth::hci::EventCode::LE_META_EVENT:  // Private to hci
+    case bluetooth::hci::EventCode::AUTHENTICATED_PAYLOAD_TIMEOUT_EXPIRED:
       return false;
   }
   return false;
@@ -311,6 +312,16 @@ static void subevent_callback(
   }
   send_data_upwards.Run(FROM_HERE, WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_EVT,
                                                      &le_meta_event_view));
+}
+
+static void vendor_specific_event_callback(
+    bluetooth::hci::VendorSpecificEventView vendor_specific_event_view) {
+  if (!send_data_upwards) {
+    return;
+  }
+  send_data_upwards.Run(
+      FROM_HERE,
+      WrapPacketAndCopy(MSG_HC_TO_STACK_HCI_EVT, &vendor_specific_event_view));
 }
 
 void OnTransmitPacketCommandComplete(command_complete_cb complete_callback,
@@ -539,6 +550,12 @@ void bluetooth::shim::hci_on_reset_complete() {
 
     cpp::register_le_event(subevent_code);
   }
+
+  // TODO handle BQR event in GD
+  auto handler = bluetooth::shim::GetGdShimHandler();
+  bluetooth::shim::GetVendorSpecificEventManager()->RegisterEventHandler(
+      bluetooth::hci::VseSubeventCode::BQR_EVENT,
+      handler->Bind(cpp::vendor_specific_event_callback));
 
   cpp::register_for_iso();
 }

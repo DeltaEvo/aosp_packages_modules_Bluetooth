@@ -34,19 +34,22 @@
 #include "bta/jv/bta_jv_int.h"
 #include "bta/sys/bta_sys.h"
 #include "osi/include/allocator.h"
+#include "osi/include/osi.h"  // UNUSED_ATTR
+#include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/avct_api.h"  // AVCT_PSM
 #include "stack/include/avdt_api.h"  // AVDT_PSM
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/gap_api.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/port_api.h"
+#include "stack/include/rfcdefs.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
 using namespace bluetooth::legacy::stack::sdp;
-using bluetooth::Uuid;
 
 tBTA_JV_CB bta_jv_cb;
 std::unordered_set<uint16_t> used_l2cap_classic_dynamic_psm;
@@ -767,7 +770,7 @@ void bta_jv_free_scn(int32_t type /* One of BTA_JV_CONN_TYPE_ */,
                      uint16_t scn) {
   switch (type) {
     case BTA_JV_CONN_TYPE_RFCOMM: {
-      if (scn > 0 && scn <= BTA_JV_MAX_SCN && bta_jv_cb.scn[scn - 1]) {
+      if (scn > 0 && scn <= RFCOMM_MAX_SCN && bta_jv_cb.scn[scn - 1]) {
         /* this scn is used by JV */
         bta_jv_cb.scn[scn - 1] = false;
         BTM_FreeSCN(scn);
@@ -795,7 +798,8 @@ void bta_jv_free_scn(int32_t type /* One of BTA_JV_CONN_TYPE_ */,
  * Returns      void
  *
  ******************************************************************************/
-static void bta_jv_start_discovery_cback(tSDP_RESULT result,
+static void bta_jv_start_discovery_cback(UNUSED_ATTR const RawAddress& bd_addr,
+                                         tSDP_RESULT result,
                                          const void* user_data) {
   tBTA_JV_STATUS status;
   uint32_t* p_rfcomm_slot_id =
@@ -1258,6 +1262,11 @@ static int bta_jv_port_data_co_cback(uint16_t port_handle, uint8_t* buf,
   if (p_pcb != NULL) {
     switch (type) {
       case DATA_CO_CALLBACK_TYPE_INCOMING:
+        // Exit sniff mode when receiving data by sysproxy
+        if (osi_property_get_bool("bluetooth.rfcomm.sysproxy.rx.exit_sniff",
+                                  false)) {
+          bta_jv_pm_conn_busy(p_pcb->p_pm_cb);
+        }
         return bta_co_rfc_data_incoming(p_pcb->rfcomm_slot_id, (BT_HDR*)buf);
       case DATA_CO_CALLBACK_TYPE_OUTGOING_SIZE:
         return bta_co_rfc_data_outgoing_size(p_pcb->rfcomm_slot_id, (int*)buf);
@@ -1492,9 +1501,14 @@ static void bta_jv_port_mgmt_sr_cback(uint32_t code, uint16_t port_handle) {
       evt_data.rfc_srv_open.new_listen_handle = p_pcb_new_listen->handle;
       p_pcb_new_listen->rfcomm_slot_id =
           p_cb->p_cback(BTA_JV_RFCOMM_SRV_OPEN_EVT, &evt_data, rfcomm_slot_id);
-      VLOG(2) << __func__ << ": curr_sess=" << p_cb->curr_sess
-              << ", max_sess=" << p_cb->max_sess;
-      failed = false;
+      if (p_pcb_new_listen->rfcomm_slot_id == 0) {
+        LOG(ERROR) << __func__ << ": rfcomm_slot_id == "
+                   << p_pcb_new_listen->rfcomm_slot_id;
+      } else {
+        VLOG(2) << __func__ << ": curr_sess=" << p_cb->curr_sess
+                << ", max_sess=" << p_cb->max_sess;
+        failed = false;
+      }
     } else
       LOG(ERROR) << __func__ << ": failed to create new listen port";
   }
@@ -1809,9 +1823,9 @@ static void bta_jv_pm_conn_busy(tBTA_JV_PM_CB* p_cb) {
 
 /*******************************************************************************
  *
- * Function    bta_jv_pm_conn_busy
+ * Function    bta_jv_pm_conn_idle
  *
- * Description set pm connection busy state (input param safe)
+ * Description set pm connection idle state (input param safe)
  *
  * Params      p_cb: pm control block of jv connection
  *

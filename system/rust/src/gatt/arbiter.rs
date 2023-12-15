@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use log::{error, trace};
+use log::{error, trace, warn};
 use std::sync::RwLock;
 
 use crate::{
@@ -52,6 +52,11 @@ pub fn with_arbiter<T>(f: impl FnOnce(&mut IsolationManager) -> T) -> T {
     f(ARBITER.read().unwrap().as_ref().expect("Rust stack is not started").lock().as_mut().unwrap())
 }
 
+/// Check if the Arbiter is initialized.
+pub fn has_arbiter() -> bool {
+    ARBITER.read().unwrap().is_some()
+}
+
 /// Test to see if a buffer contains a valid ATT packet with an opcode we
 /// are interested in intercepting (those intended for servers that are isolated)
 fn try_parse_att_server_packet(
@@ -89,6 +94,14 @@ fn on_le_connect(tcb_idx: u8, advertiser: u8) {
 }
 
 fn on_le_disconnect(tcb_idx: u8) {
+    // Events may be received after a FactoryReset
+    // is initiated for Bluetooth and the rust arbiter is taken
+    // down.
+    if !has_arbiter() {
+        warn!("arbiter is not yet initialized");
+        return;
+    }
+
     let tcb_idx = TransportIndex(tcb_idx);
     let was_isolated = with_arbiter(|arbiter| arbiter.is_connection_isolated(tcb_idx));
     if was_isolated {
@@ -101,6 +114,14 @@ fn on_le_disconnect(tcb_idx: u8) {
 }
 
 fn intercept_packet(tcb_idx: u8, packet: Vec<u8>) -> InterceptAction {
+    // Events may be received after a FactoryReset
+    // is initiated for Bluetooth and the rust arbiter is taken
+    // down.
+    if !has_arbiter() {
+        warn!("arbiter is not yet initialized");
+        return InterceptAction::Drop;
+    }
+
     let tcb_idx = TransportIndex(tcb_idx);
     if let Some(att) = with_arbiter(|arbiter| {
         try_parse_att_server_packet(arbiter, tcb_idx, packet.into_boxed_slice())

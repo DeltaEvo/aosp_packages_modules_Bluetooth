@@ -28,9 +28,14 @@
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 
+#ifdef __ANDROID__
+#include <ble.sysprop.h>
+#endif
+
 #include <cstdint>
 #include <list>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "bta/include/bta_api.h"
@@ -42,6 +47,7 @@
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
+#include "osi/include/stack_power_telemetry.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_ble_int_types.h"
@@ -179,9 +185,18 @@ AdvertisingCache cache;
 
 }  // namespace
 
-#if (BLE_VND_INCLUDED == TRUE)
-static tBTM_BLE_CTRL_FEATURES_CBACK* p_ctrl_le_feature_rd_cmpl_cback = NULL;
+bool ble_vnd_is_included() {
+#ifdef __ANDROID__
+  // replace build time config BLE_VND_INCLUDED with runtime
+  static const bool vnd_is_included =
+      android::sysprop::bluetooth::Ble::vnd_included().value_or(true);
+  return vnd_is_included;
+#else
+  return true;
 #endif
+}
+
+static tBTM_BLE_CTRL_FEATURES_CBACK* p_ctrl_le_feature_rd_cmpl_cback = NULL;
 /**********PAST & PS *******************/
 using StartSyncCb = base::Callback<void(
     uint8_t /*status*/, uint16_t /*sync_handle*/, uint8_t /*advertising_sid*/,
@@ -607,8 +622,6 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
   return status;
 }
 
-#if (BLE_VND_INCLUDED == TRUE)
-
 static void btm_get_dynamic_audio_buffer_vsc_cmpl_cback(
     tBTM_VSC_CMPL* p_vsc_cmpl_params) {
   LOG(INFO) << __func__;
@@ -754,8 +767,6 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
       btm_cb.cmn_ble_vsc_cb.energy_support,
       btm_cb.cmn_ble_vsc_cb.extended_scan_support);
 
-  btm_ble_adv_init();
-
   if (btm_cb.cmn_ble_vsc_cb.max_filter > 0) btm_ble_adv_filter_init();
 
   /* VS capability included and non-4.2 device */
@@ -770,7 +781,6 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
   if (p_ctrl_le_feature_rd_cmpl_cback != NULL)
     p_ctrl_le_feature_rd_cmpl_cback(static_cast<tHCI_STATUS>(status));
 }
-#endif /* (BLE_VND_INCLUDED == TRUE) */
 
 /*******************************************************************************
  *
@@ -812,8 +822,9 @@ void BTM_BleGetDynamicAudioBuffer(
  * Returns          void
  *
  ******************************************************************************/
-#if (BLE_VND_INCLUDED == TRUE)
 void BTM_BleReadControllerFeatures(tBTM_BLE_CTRL_FEATURES_CBACK* p_vsc_cback) {
+  if (!ble_vnd_is_included()) return;
+
   if (btm_cb.cmn_ble_vsc_cb.values_read) return;
 
   BTM_TRACE_DEBUG("BTM_BleReadControllerFeatures");
@@ -822,10 +833,6 @@ void BTM_BleReadControllerFeatures(tBTM_BLE_CTRL_FEATURES_CBACK* p_vsc_cback) {
   BTM_VendorSpecificCommand(HCI_BLE_VENDOR_CAP, 0, NULL,
                             btm_ble_vendor_capability_vsc_cmpl_cback);
 }
-#else
-void BTM_BleReadControllerFeatures(
-    UNUSED_ATTR tBTM_BLE_CTRL_FEATURES_CBACK* p_vsc_cback) {}
-#endif
 
 /*******************************************************************************
  *
@@ -1482,6 +1489,16 @@ void btm_ble_biginfo_adv_report_rcvd(uint8_t* p, uint16_t param_len) {
   uint16_t sync_handle, iso_interval, max_pdu, max_sdu;
   uint8_t num_bises, nse, bn, pto, irc, phy, framing, encryption;
   uint32_t sdu_interval;
+
+  // 2 bytes for sync handle, 1 byte for num_bises, 1 byte for nse, 2 bytes for
+  // iso_interval, 1 byte each for bn, pto, irc, 2 bytes for max_pdu, 3 bytes
+  // for sdu_interval, 2 bytes for max_sdu, 1 byte each for phy, framing,
+  // encryption
+  if (param_len < 19) {
+    LOG_ERROR("Insufficient data");
+    return;
+  }
+
   STREAM_TO_UINT16(sync_handle, p);
   STREAM_TO_UINT8(num_bises, p);
   STREAM_TO_UINT8(nse, p);
@@ -1605,15 +1622,17 @@ static uint8_t btm_set_conn_mode_adv_init_addr(
   if (evt_type == BTM_BLE_CONNECT_EVT) {
     CHECK(p_peer_addr_type != nullptr);
     const tBLE_BD_ADDR ble_bd_addr = {
-        .bda = p_peer_addr_ptr,
         .type = *p_peer_addr_type,
+        .bda = p_peer_addr_ptr,
     };
     LOG_DEBUG("Received BLE connect event %s", ADDRESS_TO_LOGGABLE_CSTR(ble_bd_addr));
 
     evt_type = p_cb->directed_conn;
 
-    if (p_cb->directed_conn == BTM_BLE_CONNECT_DIR_EVT ||
-        p_cb->directed_conn == BTM_BLE_CONNECT_LO_DUTY_DIR_EVT) {
+    if (static_cast<std::underlying_type_t<tBTM_BLE_EVT>>(
+            p_cb->directed_conn) == BTM_BLE_CONNECT_DIR_EVT ||
+        static_cast<std::underlying_type_t<tBTM_BLE_EVT>>(
+            p_cb->directed_conn) == BTM_BLE_CONNECT_LO_DUTY_DIR_EVT) {
       /* for privacy 1.2, convert peer address as static, own address set as ID
        * addr */
       if (btm_cb.ble_ctr_cb.privacy_mode == BTM_PRIVACY_1_2 ||
@@ -2602,20 +2621,27 @@ void btm_ble_process_ext_adv_pkt(uint8_t data_len, const uint8_t* data) {
       advertising_sid;
   int8_t rssi, tx_power;
   uint16_t event_type, periodic_adv_int, direct_address_type;
+  size_t bytes_to_process;
 
   /* Only process the results if the inquiry is still active */
   if (!btm_cb.ble_ctr_cb.is_ble_scan_active()) return;
 
+  bytes_to_process = 1;
+
+  if (data_len < bytes_to_process) {
+    LOG(ERROR) << "Malformed LE extended advertising packet: not enough room "
+                  "for num reports";
+    return;
+  }
+
   /* Extract the number of reports in this event. */
   STREAM_TO_UINT8(num_reports, p);
 
-  constexpr int extended_report_header_size = 24;
   while (num_reports--) {
-    if (p + extended_report_header_size > data + data_len) {
-      // TODO(jpawlowski): we should crash the stack here
-      BTM_TRACE_ERROR(
-          "Malformed LE Extended Advertising Report Event from controller - "
-          "can't loop the data");
+    bytes_to_process += 24;
+    if (data_len < bytes_to_process) {
+      LOG(ERROR) << "Malformed LE extended advertising packet: not enough room "
+                    "for metadata";
       return;
     }
 
@@ -2635,8 +2661,11 @@ void btm_ble_process_ext_adv_pkt(uint8_t data_len, const uint8_t* data) {
 
     const uint8_t* pkt_data = p;
     p += pkt_data_len; /* Advance to the the next packet*/
-    if (p > data + data_len) {
-      LOG(ERROR) << "Invalid pkt_data_len: " << +pkt_data_len;
+
+    bytes_to_process += pkt_data_len;
+    if (data_len < bytes_to_process) {
+      LOG(ERROR) << "Malformed LE extended advertising packet: not enough room "
+                    "for packet data";
       return;
     }
 
@@ -2669,18 +2698,28 @@ void btm_ble_process_adv_pkt(uint8_t data_len, const uint8_t* data) {
   const uint8_t* p = data;
   uint8_t legacy_evt_type, addr_type, num_reports, pkt_data_len;
   int8_t rssi;
+  size_t bytes_to_process;
 
   /* Only process the results if the inquiry is still active */
   if (!btm_cb.ble_ctr_cb.is_ble_scan_active()) return;
 
+  bytes_to_process = 1;
+
+  if (data_len < bytes_to_process) {
+    LOG(ERROR)
+        << "Malformed LE advertising packet: not enough room for num reports";
+    return;
+  }
+
   /* Extract the number of reports in this event. */
   STREAM_TO_UINT8(num_reports, p);
 
-  constexpr int report_header_size = 10;
   while (num_reports--) {
-    if (p + report_header_size > data + data_len) {
-      // TODO(jpawlowski): we should crash the stack here
-      BTM_TRACE_ERROR("Malformed LE Advertising Report Event from controller");
+    bytes_to_process += 9;
+
+    if (data_len < bytes_to_process) {
+      LOG(ERROR)
+          << "Malformed LE advertising packet: not enough room for metadata";
       return;
     }
 
@@ -2692,8 +2731,12 @@ void btm_ble_process_adv_pkt(uint8_t data_len, const uint8_t* data) {
 
     const uint8_t* pkt_data = p;
     p += pkt_data_len; /* Advance to the the rssi byte */
-    if (p > data + data_len - sizeof(rssi)) {
-      LOG(ERROR) << "Invalid pkt_data_len: " << +pkt_data_len;
+
+    // include rssi for this check
+    bytes_to_process += pkt_data_len + 1;
+    if (data_len < bytes_to_process) {
+      LOG(ERROR) << "Malformed LE advertising packet: not enough room for "
+                    "packet data and/or RSSI";
       return;
     }
 
@@ -2833,7 +2876,7 @@ void btm_ble_process_adv_pkt_cont(uint16_t evt_type, tBLE_ADDR_TYPE addr_type,
   /* If existing entry, use that, else get  a new one (possibly reusing the
    * oldest) */
   if (p_i == NULL) {
-    p_i = btm_inq_db_new(bda);
+    p_i = btm_inq_db_new(bda, true);
     if (p_i != NULL) {
       p_inq->inq_cmpl_info.num_resp++;
       p_i->time_of_resp = bluetooth::common::time_get_os_boottime_ms();
@@ -2939,7 +2982,7 @@ void btm_ble_process_adv_pkt_cont_for_inquiry(
   /* If existing entry, use that, else get  a new one (possibly reusing the
    * oldest) */
   if (p_i == NULL) {
-    p_i = btm_inq_db_new(bda);
+    p_i = btm_inq_db_new(bda, true);
     if (p_i != NULL) {
       p_inq->inq_cmpl_info.num_resp++;
       p_i->time_of_resp = bluetooth::common::time_get_os_boottime_ms();
@@ -3202,6 +3245,8 @@ static tBTM_STATUS btm_ble_start_adv(void) {
   btsnd_hcic_ble_set_adv_enable(BTM_BLE_ADV_ENABLE);
   p_cb->adv_mode = BTM_BLE_ADV_ENABLE;
   btm_ble_adv_states_operation(btm_ble_set_topology_mask, p_cb->evt_type);
+  power_telemetry::GetInstance().LogBleAdvStarted();
+
   return BTM_SUCCESS;
 }
 
@@ -3222,9 +3267,9 @@ static tBTM_STATUS btm_ble_stop_adv(void) {
 
     p_cb->fast_adv_on = false;
     p_cb->adv_mode = BTM_BLE_ADV_DISABLE;
-
     /* clear all adv states */
     btm_ble_clear_topology_mask(BTM_BLE_STATE_ALL_ADV_MASK);
+    power_telemetry::GetInstance().LogBleAdvStopped();
   }
   return BTM_SUCCESS;
 }
@@ -3525,9 +3570,9 @@ void btm_ble_init(void) {
       alarm_new("btm_ble_addr.refresh_raddr_timer");
   btm_ble_pa_sync_cb = {};
   sync_timeout_alarm = alarm_new("btm.sync_start_task");
-#if (BLE_VND_INCLUDED == FALSE)
-  btm_ble_adv_filter_init();
-#endif
+  if (!ble_vnd_is_included()) {
+    btm_ble_adv_filter_init();
+  }
 }
 
 // Clean up btm ble control block

@@ -64,6 +64,7 @@ use bt_topshim::{
 pub enum Message {
     // Shuts down the stack.
     Shutdown,
+    Cleanup,
 
     // Adapter is enabled and ready.
     AdapterReady,
@@ -149,6 +150,17 @@ pub enum Message {
     QaSendHidData(String, String),
 }
 
+pub enum BluetoothAPI {
+    Adapter,
+    Battery,
+    Media,
+    Gatt,
+}
+
+pub enum APIMessage {
+    IsReady(BluetoothAPI),
+}
+
 /// Represents suspend mode of a module.
 ///
 /// Being in suspend mode means that the module pauses some activities if required for suspend and
@@ -196,6 +208,10 @@ impl Stack {
             match m.unwrap() {
                 Message::Shutdown => {
                     bluetooth.lock().unwrap().disable();
+                }
+
+                Message::Cleanup => {
+                    bluetooth.lock().unwrap().cleanup();
                 }
 
                 Message::AdapterReady => {

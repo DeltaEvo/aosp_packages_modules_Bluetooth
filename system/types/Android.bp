@@ -14,8 +14,6 @@ cc_library_headers {
     export_include_dirs: ["./"],
     vendor_available: true,
     host_supported: true,
-    // TODO(b/153609531): remove when no longer needed.
-    native_bridge_supported: true,
     apex_available: [
         "//apex_available:platform",
         "com.android.btservices",
@@ -34,7 +32,7 @@ cc_library_headers {
 cc_library_static {
     name: "libbluetooth-types",
     vendor_available: true,
-    defaults: ["fluoride_types_defaults_fuzzable"],
+    defaults: ["fluoride_defaults"],
     cflags: [
         /* we export all classes, so change default visibility, instead of having EXPORT_SYMBOL on each class*/
         "-fvisibility=default",
@@ -59,6 +57,7 @@ cc_library_static {
 cc_test {
     name: "net_test_types",
     static_libs: [
+        "libbluetooth-types",
         "libchrome",
         "libosi", // strlcpy
     ],

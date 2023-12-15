@@ -28,7 +28,8 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothUuid
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
-import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.AdvertisingSet
+import android.bluetooth.le.AdvertisingSetCallback
 import android.bluetooth.le.AdvertisingSetParameters
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanRecord
@@ -62,7 +63,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import pandora.HostGrpc.HostImplBase
 import pandora.HostProto.*
 
@@ -118,7 +118,7 @@ class Host(
     private val advertisers = mutableMapOf<UUID, AdvertiseCallback>()
 
     init {
-        scope = CoroutineScope(Dispatchers.Default)
+        scope = CoroutineScope(Dispatchers.Default.limitedParallelism(1))
 
         // Add all intent actions to be listened.
         val intentFilter = IntentFilter()
@@ -134,7 +134,7 @@ class Host(
         // This flow is started eagerly to make sure that the broadcast receiver is registered
         // before
         // any function call. This flow is only cancelled when the corresponding scope is cancelled.
-        flow = intentFlow(context, intentFilter).shareIn(scope, SharingStarted.Eagerly)
+        flow = intentFlow(context, intentFilter, scope).shareIn(scope, SharingStarted.Eagerly)
     }
 
     override fun close() {
@@ -435,7 +435,8 @@ class Host(
                         throw IllegalArgumentException("Request address field must be set")
                 }
             Log.i(TAG, "connectLE: $address")
-            val bluetoothDevice = scanLeDevice(address.decodeAsMacAddressToString(), type)!!
+            val bluetoothDevice =
+                bluetoothAdapter.getRemoteLeDevice(address.decodeAsMacAddressToString(), type)
             initiatedConnection.add(bluetoothDevice)
             GattInstance(bluetoothDevice, TRANSPORT_LE, context)
                 .waitForState(BluetoothProfile.STATE_CONNECTED)
@@ -443,37 +444,6 @@ class Host(
                 .setConnection(bluetoothDevice.toConnection(TRANSPORT_LE))
                 .build()
         }
-    }
-
-    private fun scanLeDevice(address: String, addressType: Int): BluetoothDevice? {
-        Log.d(TAG, "scanLeDevice")
-        var bluetoothDevice: BluetoothDevice? = null
-        runBlocking {
-            val flow = callbackFlow {
-                val leScanCallback =
-                    object : ScanCallback() {
-                        override fun onScanFailed(errorCode: Int) {
-                            super.onScanFailed(errorCode)
-                            Log.d(TAG, "onScanFailed: errorCode: $errorCode")
-                            trySendBlocking(null)
-                        }
-                        override fun onScanResult(callbackType: Int, result: ScanResult) {
-                            super.onScanResult(callbackType, result)
-                            val deviceAddress = result.device.address
-                            val deviceAddressType = result.device.addressType
-                            if (deviceAddress == address && deviceAddressType == addressType) {
-                                Log.d(TAG, "found device address: $deviceAddress")
-                                trySendBlocking(result.device)
-                            }
-                        }
-                    }
-                val bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
-                bluetoothLeScanner?.startScan(leScanCallback) ?: run { trySendBlocking(null) }
-                awaitClose { bluetoothLeScanner?.stopScan(leScanCallback) }
-            }
-            bluetoothDevice = flow.first()
-        }
-        return bluetoothDevice
     }
 
     override fun advertise(
@@ -484,12 +454,16 @@ class Host(
         grpcServerStream(scope, responseObserver) {
             callbackFlow {
                 val callback =
-                    object : AdvertiseCallback() {
-                        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-                            Log.d(TAG, "advertising started")
-                        }
-                        override fun onStartFailure(errorCode: Int) {
-                            error("failed to start advertising: $errorCode")
+                    object : AdvertisingSetCallback() {
+                        override fun onAdvertisingSetStarted(
+                            advertisingSet: AdvertisingSet,
+                            txPower: Int,
+                            status: Int
+                        ) {
+                            Log.d(TAG, "advertising started with status " + status)
+                            if (status != 0) {
+                                error("failed to start advertisingSet: $status")
+                            }
                         }
                     }
                 val advertisingDataBuilder = AdvertiseData.Builder()
@@ -573,15 +547,21 @@ class Host(
                         OwnAddressType.RANDOM -> AdvertisingSetParameters.ADDRESS_TYPE_RANDOM
                         else -> AdvertisingSetParameters.ADDRESS_TYPE_DEFAULT
                     }
-                val advertiseSettings =
-                    AdvertiseSettings.Builder()
+
+                val advertisingSetParameters =
+                    AdvertisingSetParameters.Builder()
                         .setConnectable(request.connectable)
                         .setOwnAddressType(ownAddressType)
+                        .setLegacyMode(request.legacy)
+                        .setScannable(request.legacy && request.connectable)
                         .build()
 
-                bluetoothAdapter.bluetoothLeAdvertiser.startAdvertising(
-                    advertiseSettings,
+                bluetoothAdapter.bluetoothLeAdvertiser.startAdvertisingSet(
+                    advertisingSetParameters,
                     advertisingData,
+                    null, /* scanResponse */
+                    null, /* periodicParameters */
+                    null, /* periodicData */
                     callback,
                 )
 
@@ -599,7 +579,7 @@ class Host(
                     }
                 }
 
-                awaitClose { bluetoothAdapter.bluetoothLeAdvertiser.stopAdvertising(callback) }
+                awaitClose { bluetoothAdapter.bluetoothLeAdvertiser.stopAdvertisingSet(callback) }
             }
         }
     }
@@ -614,8 +594,10 @@ class Host(
                         override fun onScanResult(callbackType: Int, result: ScanResult) {
                             val bluetoothDevice = result.device
                             val scanRecord = result.scanRecord
+                            checkNotNull(scanRecord)
                             val scanData = scanRecord.getAdvertisingDataMap()
-                            val serviceData = scanRecord?.serviceData!!
+                            val serviceData = scanRecord.serviceData
+                            checkNotNull(serviceData)
 
                             var dataTypesBuilder =
                                 DataTypes.newBuilder().setTxPowerLevel(scanRecord.getTxPowerLevel())
@@ -732,7 +714,7 @@ class Host(
 
                             // Flags DataTypes CSSv10 1.3 Flags
                             val mode: DiscoverabilityMode =
-                                when (result.scanRecord.advertiseFlags and 0b11) {
+                                when (scanRecord.advertiseFlags and 0b11) {
                                     0b01 -> DiscoverabilityMode.DISCOVERABLE_LIMITED
                                     0b10 -> DiscoverabilityMode.DISCOVERABLE_GENERAL
                                     else -> DiscoverabilityMode.NOT_DISCOVERABLE

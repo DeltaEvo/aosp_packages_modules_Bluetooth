@@ -76,7 +76,7 @@ static const uint16_t bta_hh_uuid_to_rtp_type[BTA_LE_HID_RTP_UUID_MAX][2] = {
     {GATT_UUID_BATTERY_LEVEL, BTA_HH_RPTT_INPUT}};
 
 static void bta_hh_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data);
-static void bta_hh_le_add_dev_bg_conn(tBTA_HH_DEV_CB* p_cb, bool check_bond);
+static void bta_hh_le_add_dev_bg_conn(tBTA_HH_DEV_CB* p_cb);
 static void bta_hh_process_cache_rpt(tBTA_HH_DEV_CB* p_cb,
                                      tBTA_HH_RPT_CACHE_ENTRY* p_rpt_cache,
                                      uint8_t num_rpt);
@@ -628,7 +628,7 @@ static void bta_hh_le_open_cmpl(tBTA_HH_DEV_CB* p_cb) {
     bta_hh_sm_execute(p_cb, BTA_HH_OPEN_CMPL_EVT, NULL);
 
     if (kBTA_HH_LE_RECONN && p_cb->status == BTA_HH_OK) {
-      bta_hh_le_add_dev_bg_conn(p_cb, true);
+      bta_hh_le_add_dev_bg_conn(p_cb);
     }
   }
 }
@@ -978,16 +978,18 @@ void bta_hh_security_cmpl(tBTA_HH_DEV_CB* p_cb,
   APPL_TRACE_DEBUG("%s", __func__);
   if (p_cb->status == BTA_HH_OK) {
     if (p_cb->hid_srvc.state < BTA_HH_SERVICE_DISCOVERED) {
-      APPL_TRACE_DEBUG("bta_hh_security_cmpl no reports loaded, try to load");
+      LOG_DEBUG("No reports loaded, try to load");
 
       /* start loading the cache if not in stack */
       tBTA_HH_RPT_CACHE_ENTRY* p_rpt_cache;
       uint8_t num_rpt = 0;
       if ((p_rpt_cache = bta_hh_le_co_cache_load(p_cb->addr, &num_rpt,
                                                  p_cb->app_id)) != NULL) {
+        LOG_DEBUG("Cache found, no need to perform service discovery");
         bta_hh_process_cache_rpt(p_cb, p_rpt_cache, num_rpt);
       }
     }
+
     /*  discovery has been done for HID service */
     if (p_cb->app_id != 0 &&
         p_cb->hid_srvc.state >= BTA_HH_SERVICE_DISCOVERED) {
@@ -1177,14 +1179,14 @@ static void bta_hh_le_close(const tBTA_GATTC_CLOSE& gattc_data) {
     const tBTA_HH_DATA data = {
         .le_close =
             {
-                .conn_id = gattc_data.conn_id,
-                .reason = gattc_data.reason,
                 .hdr =
                     {
                         .event = BTA_HH_GATT_CLOSE_EVT,
                         .layer_specific =
                             static_cast<uint16_t>(p_cb->hid_handle),
                     },
+                .conn_id = gattc_data.conn_id,
+                .reason = gattc_data.reason,
             },
     };
     bta_hh_sm_execute(p_cb, BTA_HH_GATT_CLOSE_EVT, &data);
@@ -1638,8 +1640,7 @@ void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
     LOG_DEBUG("gd_acl: Re-adding HID device to acceptlist");
     // gd removes from bg list after failed connection
     // Correct the cached state to allow re-add to acceptlist.
-    p_cb->in_bg_conn = false;
-    bta_hh_le_add_dev_bg_conn(p_cb, false);
+    bta_hh_le_add_dev_bg_conn(p_cb);
   }
 
   p_cb->disc_active = BTA_HH_LE_DISC_NONE;
@@ -1647,12 +1648,12 @@ void bta_hh_le_open_fail(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
   tBTA_HH data = {
       .conn =
           {
-              .handle = p_cb->hid_handle,
               .bda = p_cb->addr,
-              .le_hid = true,
-              .scps_supported = p_cb->scps_supported,
               .status = (le_close->reason != GATT_CONN_OK) ? BTA_HH_ERR
                                                            : p_cb->status,
+              .handle = p_cb->hid_handle,
+              .le_hid = true,
+              .scps_supported = p_cb->scps_supported,
           },
   };
 
@@ -1704,8 +1705,7 @@ void bta_hh_gatt_close(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
             gatt_disconnection_reason_text(le_close->reason).c_str());
         // gd removes from bg list after successful connection
         // Correct the cached state to allow re-add to acceptlist.
-        p_cb->in_bg_conn = false;
-        bta_hh_le_add_dev_bg_conn(p_cb, false);
+        bta_hh_le_add_dev_bg_conn(p_cb);
         break;
 
       case BTA_GATT_CONN_NONE:
@@ -1999,8 +1999,12 @@ void bta_hh_le_write_dev_act(tBTA_HH_DEV_CB* p_cb, const tBTA_HH_DATA* p_data) {
  ******************************************************************************/
 void bta_hh_le_get_dscp_act(tBTA_HH_DEV_CB* p_cb) {
   if (p_cb->hid_srvc.state >= BTA_HH_SERVICE_DISCOVERED) {
-    p_cb->dscp_info.descriptor.dl_len = p_cb->hid_srvc.descriptor.dl_len;
-    p_cb->dscp_info.descriptor.dsc_list = p_cb->hid_srvc.descriptor.dsc_list;
+    if (p_cb->hid_srvc.descriptor.dl_len != 0) {
+      p_cb->dscp_info.descriptor.dl_len = p_cb->hid_srvc.descriptor.dl_len;
+      p_cb->dscp_info.descriptor.dsc_list = p_cb->hid_srvc.descriptor.dsc_list;
+    } else {
+      LOG_WARN("hid_srvc.descriptor.dl_len is 0");
+    }
 
     (*bta_hh_cb.p_cback)(BTA_HH_GET_DSCP_EVT, (tBTA_HH*)&p_cb->dscp_info);
   }
@@ -2016,26 +2020,11 @@ void bta_hh_le_get_dscp_act(tBTA_HH_DEV_CB* p_cb) {
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hh_le_add_dev_bg_conn(tBTA_HH_DEV_CB* p_cb, bool check_bond) {
-  bool to_add = true;
-
-  if (check_bond) {
-    /* start reconnection if remote is a bonded device */
-    if (!BTM_IsLinkKeyKnown(p_cb->addr, BT_TRANSPORT_LE)) to_add = false;
-  }
-
-  if (!p_cb->in_bg_conn && to_add) {
-    /* add device into BG connection to accept remote initiated connection */
-    BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->addr,
-                   BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
-    p_cb->in_bg_conn = true;
-  } else {
-    // Let the lower layers manage acceptlist and do not cache
-    // at the higher layer
-    p_cb->in_bg_conn = true;
-    BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->addr,
-                   BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
-  }
+static void bta_hh_le_add_dev_bg_conn(tBTA_HH_DEV_CB* p_cb) {
+  /* Add device into BG connection to accept remote initiated connection */
+  BTA_GATTC_Open(bta_hh_cb.gatt_if, p_cb->addr,
+                 BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
+  p_cb->in_bg_conn = true;
 }
 
 /*******************************************************************************
@@ -2068,7 +2057,7 @@ uint8_t bta_hh_le_add_device(tBTA_HH_DEV_CB* p_cb,
       p_dev_info->dscp_info.ssr_max_latency, p_dev_info->dscp_info.ssr_min_tout,
       p_dev_info->app_id);
 
-  bta_hh_le_add_dev_bg_conn(p_cb, false);
+  bta_hh_le_add_dev_bg_conn(p_cb);
 
   return p_cb->hid_handle;
 }
@@ -2117,13 +2106,13 @@ static void bta_hh_le_service_changed(RawAddress remote_bda) {
   const tBTA_HH_DATA data = {
       .le_close =
           {
-              .conn_id = p_cb->conn_id,
-              .reason = GATT_CONN_OK,
               .hdr =
                   {
                       .event = BTA_HH_GATT_CLOSE_EVT,
                       .layer_specific = static_cast<uint16_t>(p_cb->hid_handle),
                   },
+              .conn_id = p_cb->conn_id,
+              .reason = GATT_CONN_OK,
           },
   };
   bta_hh_sm_execute(p_cb, BTA_HH_GATT_CLOSE_EVT, &data);
@@ -2234,7 +2223,7 @@ static void bta_hh_process_cache_rpt(tBTA_HH_DEV_CB* p_cb,
 
   if (num_rpt != 0) /* no cache is found */
   {
-    p_cb->hid_srvc.state = BTA_HH_SERVICE_UNKNOWN;
+    p_cb->hid_srvc.state = BTA_HH_SERVICE_DISCOVERED;
 
     /* set the descriptor info */
     p_cb->hid_srvc.descriptor.dl_len = p_cb->dscp_info.descriptor.dl_len;

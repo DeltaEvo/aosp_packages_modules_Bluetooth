@@ -43,7 +43,7 @@ LogCapture* LogCapture::Rewind() {
   return this;
 }
 
-bool LogCapture::Find(std::string to_find) {
+bool LogCapture::Find(const std::string& /* to_find */) {
   // For |atest| assume all log captures succeed
   return true;
 }
@@ -63,10 +63,7 @@ size_t LogCapture::Size() const {
   return size;
 }
 
-void LogCapture::WaitUntilLogContains(std::promise<void>* promise, std::string text) {
-  std::async([promise, text]() { promise->set_value(); });
-  promise->get_future().wait();
-}
+void LogCapture::WaitUntilLogContains(const std::string& /* text */) {}
 
 std::pair<int, int> LogCapture::create_backing_store() const {
   int dup_fd = -1;
@@ -74,7 +71,7 @@ std::pair<int, int> LogCapture::create_backing_store() const {
   return std::make_pair(dup_fd, fd);
 }
 
-bool LogCapture::set_non_blocking(int fd) const {
+bool LogCapture::set_non_blocking(int /* fd */) const {
   return true;
 }
 

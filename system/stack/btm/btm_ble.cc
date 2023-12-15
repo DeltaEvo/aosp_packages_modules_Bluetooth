@@ -35,6 +35,7 @@
 #include "main/shim/btm_api.h"
 #include "main/shim/l2c_api.h"
 #include "main/shim/shim.h"
+#include "openssl/mem.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
 #include "stack/btm/btm_dev.h"
@@ -585,9 +586,6 @@ bool BTM_ReadConnectedTransportAddress(RawAddress* remote_bda,
  *
  ******************************************************************************/
 void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleReceiverTest(rx_freq, p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
 
   btsnd_hcic_ble_receiver_test(rx_freq);
@@ -609,10 +607,6 @@ void BTM_BleReceiverTest(uint8_t rx_freq, tBTM_CMPL_CB* p_cmd_cmpl_cback) {
 void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
                             uint8_t packet_payload,
                             tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTransmitterTest(
-        tx_freq, test_data_len, packet_payload, p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
   btsnd_hcic_ble_transmitter_test(tx_freq, test_data_len, packet_payload);
 }
@@ -628,9 +622,6 @@ void BTM_BleTransmitterTest(uint8_t tx_freq, uint8_t test_data_len,
  *
  ******************************************************************************/
 void BTM_BleTestEnd(tBTM_CMPL_CB* p_cmd_cmpl_cback) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    return bluetooth::shim::BTM_BleTestEnd(p_cmd_cmpl_cback);
-  }
   btm_cb.devcb.p_le_test_cmd_cmpl_cb = p_cmd_cmpl_cback;
 
   btsnd_hcic_ble_test_end();
@@ -708,13 +699,6 @@ tBTM_STATUS BTM_SetBleDataLength(const RawAddress& bd_addr,
     LOG_INFO(
         "Unable to set data length because no le acl link connected to device");
     return BTM_WRONG_MODE;
-  }
-
-  if (bluetooth::shim::is_gd_l2cap_enabled()) {
-    uint16_t handle = bluetooth::shim::L2CA_GetLeHandle(bd_addr);
-    btsnd_hcic_ble_set_data_length(handle, tx_pdu_length, tx_time);
-    p_dev_rec->set_suggested_tx_octect(tx_pdu_length);
-    return BTM_SUCCESS;
   }
 
   uint16_t hci_handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
@@ -1001,78 +985,16 @@ tL2CAP_LE_RESULT_CODE btm_ble_start_sec_check(const RawAddress& bd_addr,
       break;
   }
 
-  if (ble_sec_act == BTM_BLE_SEC_NONE) {
-    if (bluetooth::common::init_flags::queue_l2cap_coc_while_encrypting_is_enabled()) {
-      if (sec_act != BTM_SEC_ENC_PENDING) {
-        return result;
-      }
-    } else {
-      return result;
-    }
-  } else {
-    l2cble_update_sec_act(bd_addr, sec_act);
+  if (ble_sec_act == BTM_BLE_SEC_NONE && sec_act != BTM_SEC_ENC_PENDING) {
+    return result;
   }
+
+  l2cble_update_sec_act(bd_addr, sec_act);
 
   BTM_SetEncryption(bd_addr, BT_TRANSPORT_LE, p_callback, p_ref_data,
                     ble_sec_act);
 
   return L2CAP_LE_RESULT_CONN_OK;
-}
-
-/*******************************************************************************
- *
- * Function         btm_ble_rand_enc_complete
- *
- * Description      This function is the callback functions for HCI_Rand command
- *                  and HCI_Encrypt command is completed.
- *                  This message is received from the HCI.
- *
- * Returns          void
- *
- ******************************************************************************/
-void btm_ble_rand_enc_complete(uint8_t* p, uint16_t evt_len,
-                               uint16_t op_code,
-                               tBTM_RAND_ENC_CB* p_enc_cplt_cback) {
-  tBTM_RAND_ENC params;
-  uint8_t* p_dest = params.param_buf;
-
-  BTM_TRACE_DEBUG("btm_ble_rand_enc_complete");
-
-  memset(&params, 0, sizeof(tBTM_RAND_ENC));
-
-  /* If there was a callback address for vcs complete, call it */
-  if (p_enc_cplt_cback && p) {
-
-    if (evt_len < 1) {
-      goto err_out;
-    }
-
-    /* Pass paramters to the callback function */
-    STREAM_TO_UINT8(params.status, p); /* command status */
-
-    if (params.status == HCI_SUCCESS) {
-      params.opcode = op_code;
-
-      if (op_code == HCI_BLE_RAND)
-        params.param_len = BT_OCTET8_LEN;
-      else
-        params.param_len = OCTET16_LEN;
-
-      if (evt_len < 1 + params.param_len) {
-        goto err_out;
-      }
-
-      /* Fetch return info from HCI event message */
-      memcpy(p_dest, p, params.param_len);
-    }
-    if (p_enc_cplt_cback) /* Call the Encryption complete callback function */
-      (*p_enc_cplt_cback)(&params);
-  }
-
-  return;
-
-err_out:
-  BTM_TRACE_ERROR("%s malformatted event packet, too short", __func__);
 }
 
 /*******************************************************************************
@@ -1577,21 +1499,31 @@ void btm_ble_link_encrypted(const RawAddress& bd_addr, uint8_t encr_enable) {
   if (p_dev_rec->p_callback && enc_cback) {
     if (encr_enable)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_SUCCESS, true);
-    else if (p_dev_rec->sec_flags & ~BTM_SEC_LE_LINK_KEY_KNOWN) {
-      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
-    }
     /* LTK missing on peripheral */
     else if (p_dev_rec->role_central && (p_dev_rec->sec_status == HCI_ERR_KEY_MISSING)) {
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_KEY_MISSING, true);
+    }
+    else if (!(p_dev_rec->sec_flags & BTM_SEC_LE_LINK_KEY_KNOWN)) {
+      btm_sec_dev_rec_cback_event(p_dev_rec, BTM_FAILED_ON_SECURITY, true);
     }
     else if (p_dev_rec->role_central)
       btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, true);
   }
 
   if (encr_enable) {
-    /* Link is encrypted, start EATT */
-    bluetooth::eatt::EattExtension::GetInstance()->Connect(
-        p_dev_rec->ble.pseudo_addr);
+    uint8_t remote_ll_version = 0;
+    if (!BTM_ReadRemoteVersion(p_dev_rec->ble.pseudo_addr, &remote_ll_version,
+                               nullptr, nullptr) ||
+        remote_ll_version == 0) {
+      LOG_WARN("BLE Unable to determine remote version");
+    }
+
+    if (remote_ll_version == 0 || remote_ll_version >= HCI_PROTO_VERSION_5_0) {
+      /* Link is encrypted, start EATT if remote LMP version is unknown, or 5.0
+       * or greater */
+      bluetooth::eatt::EattExtension::GetInstance()->Connect(
+          p_dev_rec->ble.pseudo_addr);
+    }
   }
 
   /* to notify GATT to send data if any request is pending */
@@ -1752,11 +1684,11 @@ uint8_t btm_ble_br_keys_req(tBTM_SEC_DEV_REC* p_dev_rec,
   BTM_TRACE_DEBUG("%s", __func__);
   *p_data = tBTM_LE_IO_REQ{
       .io_cap = BTM_IO_CAP_UNKNOWN,
+      .oob_data = false,
       .auth_req = BTM_LE_AUTH_REQ_SC_MITM_BOND,
+      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
       .init_keys = SMP_BR_SEC_DEFAULT_KEY,
       .resp_keys = SMP_BR_SEC_DEFAULT_KEY,
-      .max_key_size = BTM_BLE_MAX_KEY_SIZE,
-      .oob_data = false,
   };
 
   if (osi_property_get_bool(kPropertyCtkdDisableCsrkDistribution, false)) {
@@ -1932,8 +1864,20 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
 
           if (res == BTM_SUCCESS) {
             p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
-            /* add all bonded device into resolving list if IRK is available*/
-            btm_ble_resolving_list_load_dev(*p_dev_rec);
+
+            if (p_dev_rec->bond_type != tBTM_SEC_DEV_REC::BOND_TYPE_TEMPORARY) {
+              // Add all bonded device into resolving list if IRK is available.
+              btm_ble_resolving_list_load_dev(*p_dev_rec);
+            } else if (p_dev_rec->ble_hci_handle == HCI_INVALID_HANDLE) {
+              // At this point LTK should have been dropped by btif.
+              // Reset the flags here if LE is not connected (over BR),
+              // otherwise they would be reset on disconnected.
+              LOG_DEBUG(
+                  "SMP over BR triggered by temporary bond has completed,"
+                  " resetting the LK flags");
+              p_dev_rec->sec_flags &= ~(BTM_SEC_LE_LINK_KEY_KNOWN);
+              p_dev_rec->ble.key_type = BTM_LE_KEY_NONE;
+            }
           }
 
           btm_sec_dev_rec_cback_event(p_dev_rec, res, true);
@@ -2062,7 +2006,7 @@ bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
 
     crypto_toolbox::aes_cmac(p_rec->ble.keys.pcsrk, p_orig, len,
                              BTM_CMAC_TLEN_SIZE, p_mac);
-    if (memcmp(p_mac, p_comp, BTM_CMAC_TLEN_SIZE) == 0) {
+    if (CRYPTO_memcmp(p_mac, p_comp, BTM_CMAC_TLEN_SIZE) == 0) {
       btm_ble_increment_sign_ctr(bd_addr, false);
       verified = true;
     }
@@ -2083,9 +2027,6 @@ bool BTM_BleVerifySignature(const RawAddress& bd_addr, uint8_t* p_orig,
  *
  ******************************************************************************/
 void BTM_BleSirkConfirmDeviceReply(const RawAddress& bd_addr, uint8_t res) {
-  if (bluetooth::shim::is_gd_shim_enabled()) {
-    ASSERT_LOG(false, "This should not be invoked from code path");
-  }
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev(bd_addr);
   tSMP_STATUS res_smp = (res == BTM_SUCCESS) ? SMP_SUCCESS : SMP_FAIL;
 

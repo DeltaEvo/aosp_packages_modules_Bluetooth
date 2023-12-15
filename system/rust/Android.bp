@@ -109,7 +109,7 @@ rust_test_host {
 
 cc_library_static {
     name: "libbluetooth_core_rs_bridge",
-    defaults: ["fluoride_common_options"],
+    defaults: ["bluetooth_cflags"],
     srcs: [
         "src/connection/ffi/connection_shim.cc",
         "src/core/ffi/module.cc",
@@ -118,7 +118,6 @@ cc_library_static {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/gd/rust/shim",
         "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
@@ -126,9 +125,9 @@ cc_library_static {
     ],
     export_include_dirs: ["."],
     static_libs: [
+        "libbluetooth_hci_pdl",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-
         "libchrome",
         "libflatbuffers-cpp",
     ],
@@ -138,7 +137,6 @@ cc_library_static {
 
         "BluetoothGeneratedBundlerSchema_h_bfbs",
         "BluetoothGeneratedDumpsysDataSchema_h",
-        "BluetoothGeneratedPackets_h",
     ],
     export_generated_headers: [
         "libbluetooth_core_rs_bridge_codegen_header",

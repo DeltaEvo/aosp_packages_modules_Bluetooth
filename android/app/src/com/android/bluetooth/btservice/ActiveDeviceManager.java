@@ -23,16 +23,9 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothHapClient;
-import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothHearingAid;
-import android.bluetooth.BluetoothLeAudio;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothSinkAudioPolicy;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
@@ -70,14 +63,9 @@ import java.util.Set;
  *    devices is more than one, the rules below will apply.
  * 2) The selected A2DP active device is the one used for AVRCP as well.
  * 3) The HFP active device might be different from the A2DP active device.
- * 4) The Active Device Manager always listens for ACTION_ACTIVE_DEVICE_CHANGED
- *    broadcasts for each profile:
- *    - BluetoothHeadset.ACTION_ACTIVE_DEVICE_CHANGED for HFP
- *    - BluetoothHearingAid.ACTION_ACTIVE_DEVICE_CHANGED for HearingAid
- *    - BluetoothLeAudio.ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED for LE audio
- *    If such broadcast is received (e.g., triggered indirectly by user
- *    action on the UI), the device in the received broadcast is marked
- *    as the current active device for that profile.
+ * 4) The Active Device Manager always listens for the change of active devices.
+ *    When it changed (e.g., triggered indirectly by user action on the UI),
+ *    the new active device is marked as the current active device for that profile.
  * 5) If there is a HearingAid active device, then A2DP, HFP and LE audio active devices
  *    must be set to null (i.e., A2DP, HFP and LE audio cannot have active devices).
  *    The reason is that A2DP, HFP or LE audio cannot be used together with HearingAid.
@@ -92,11 +80,8 @@ import java.util.Set;
  * 7) If the currently active device (per profile) is disconnected, the
  *    Active Device Manager just marks that the profile has no active device,
  *    and the lastly activated BT device that is still connected would be selected.
- * 8) If there is already an active device, and the corresponding
- *    ACTION_ACTIVE_DEVICE_CHANGED broadcast is received, the device
- *    contained in the broadcast is marked as active. However, if
- *    the contained device is null, the corresponding profile is marked
- *    as having no active device.
+ * 8) If there is already an active device, however, if active device change notified
+ *    with a null device, the corresponding profile is marked as having no active device.
  * 9) If a wired audio device is connected, the audio output is switched
  *    by the Audio Framework itself to that device. We detect this here,
  *    and the active device for each profile (A2DP/HFP/HearingAid/LE audio) is set
@@ -112,7 +97,7 @@ import java.util.Set;
  *      will have no impact. E.g., music will continue streaming over the
  *      active Bluetooth device.
  */
-public class ActiveDeviceManager {
+public class ActiveDeviceManager implements AdapterService.BluetoothStateCallback {
     private static final String TAG = "ActiveDeviceManager";
     private static final boolean DBG = true;
     @VisibleForTesting
@@ -155,102 +140,81 @@ public class ActiveDeviceManager {
     private BluetoothDevice mClassicDeviceToBeActivated = null;
     private BluetoothDevice mClassicDeviceNotToBeActivated = null;
 
-    // Broadcast receiver for all changes
-    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (DBG) {
-                Log.d(TAG, "Received intent: action=" + intent.getAction() + ", extras="
-                        + intent.getExtras());
-            }
-            String action = intent.getAction();
-            if (action == null) {
-                Log.e(TAG, "Received intent with null action");
-                return;
-            }
-
-            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
-                int currentState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1);
-                mHandler.post(() -> handleAdapterStateChanged(currentState));
-                return;
-            }
-
-            final BluetoothDevice device = intent.getParcelableExtra(
-                    BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
-            final int previousState = intent.getIntExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, -1);
-            final int currentState = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
-
-            if (currentState != -1 && previousState == currentState) {
-                return;
-            }
-
-            switch (action) {
-                case BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED:
-                    if (currentState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleHfpConnected(device));
-                    } else if (previousState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleHfpDisconnected(device));
-                    }
-                    break;
-                case BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED:
-                    if (currentState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleHearingAidConnected(device));
-                    } else if (previousState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleHearingAidDisconnected(device));
-                    }
-                    break;
-                case BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED:
-                    if (currentState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleLeAudioConnected(device));
-                    } else if (previousState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleLeAudioDisconnected(device));
-                    }
-                    break;
-                case BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED:
-                    if (currentState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleHapConnected(device));
-                    } else if (previousState == BluetoothProfile.STATE_CONNECTED) {
-                        mHandler.post(() -> handleHapDisconnected(device));
-                    }
-                    break;
-                case BluetoothHeadset.ACTION_ACTIVE_DEVICE_CHANGED:
-                    mHandler.post(() -> handleHfpActiveDeviceChanged(device));
-                    break;
-                case BluetoothHearingAid.ACTION_ACTIVE_DEVICE_CHANGED:
-                    mHandler.post(() -> handleHearingAidActiveDeviceChanged(device));
-                    break;
-                case BluetoothLeAudio.ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED:
-                    mHandler.post(() -> handleLeAudioActiveDeviceChanged(device));
-                    break;
-                default:
-                    Log.e(TAG, "Received unexpected intent, action=" + action);
-                    break;
-            }
-        }
-    };
+    @Override
+    public void onBluetoothStateChange(int prevState, int newState) {
+        mHandler.post(() -> handleAdapterStateChanged(newState));
+    }
 
     /**
-     * Called when A2DP connection state changed by A2dpStateMachine
+     * Called when audio profile connection state changed
      *
+     * @param profile The Bluetooth profile of which connection state changed
      * @param device The device of which connection state was changed
-     * @param fropmState The previous connection state of the device
+     * @param fromState The previous connection state of the device
      * @param toState The new connection state of the device
      */
-    public void a2dpConnectionStateChanged(BluetoothDevice device, int fropmState, int toState) {
+    public void profileConnectionStateChanged(
+            int profile, BluetoothDevice device, int fromState, int toState) {
         if (toState == BluetoothProfile.STATE_CONNECTED) {
-            mHandler.post(() -> handleA2dpConnected(device));
-        } else if (fropmState == BluetoothProfile.STATE_CONNECTED) {
-            mHandler.post(() -> handleA2dpDisconnected(device));
+            switch (profile) {
+                case BluetoothProfile.A2DP:
+                    mHandler.post(() -> handleA2dpConnected(device));
+                    break;
+                case BluetoothProfile.HEADSET:
+                    mHandler.post(() -> handleHfpConnected(device));
+                    break;
+                case BluetoothProfile.LE_AUDIO:
+                    mHandler.post(() -> handleLeAudioConnected(device));
+                    break;
+                case BluetoothProfile.HEARING_AID:
+                    mHandler.post(() -> handleHearingAidConnected(device));
+                    break;
+                case BluetoothProfile.HAP_CLIENT:
+                    mHandler.post(() -> handleHapConnected(device));
+                    break;
+            }
+        } else if (fromState == BluetoothProfile.STATE_CONNECTED) {
+            switch (profile) {
+                case BluetoothProfile.A2DP:
+                    mHandler.post(() -> handleA2dpDisconnected(device));
+                    break;
+                case BluetoothProfile.HEADSET:
+                    mHandler.post(() -> handleHfpDisconnected(device));
+                    break;
+                case BluetoothProfile.LE_AUDIO:
+                    mHandler.post(() -> handleLeAudioDisconnected(device));
+                    break;
+                case BluetoothProfile.HEARING_AID:
+                    mHandler.post(() -> handleHearingAidDisconnected(device));
+                    break;
+                case BluetoothProfile.HAP_CLIENT:
+                    mHandler.post(() -> handleHapDisconnected(device));
+                    break;
+            }
         }
     }
 
     /**
-     * Called when A2DP active state changed by A2dpService
+     * Called when active state of audio profiles changed
      *
-     * @param device The device currently activated. {@code null} if no A2DP device activated
+     * @param profile The Bluetooth profile of which active state changed
+     * @param device The device currently activated. {@code null} if no device is active
      */
-    public void a2dpActiveStateChanged(BluetoothDevice device) {
-        mHandler.post(() -> handleA2dpActiveDeviceChanged(device));
+    public void profileActiveDeviceChanged(int profile, BluetoothDevice device) {
+        switch (profile) {
+            case BluetoothProfile.A2DP:
+                mHandler.post(() -> handleA2dpActiveDeviceChanged(device));
+                break;
+            case BluetoothProfile.HEADSET:
+                mHandler.post(() -> handleHfpActiveDeviceChanged(device));
+                break;
+            case BluetoothProfile.LE_AUDIO:
+                mHandler.post(() -> handleLeAudioActiveDeviceChanged(device));
+                break;
+            case BluetoothProfile.HEARING_AID:
+                mHandler.post(() -> handleHearingAidActiveDeviceChanged(device));
+                break;
+        }
     }
 
     private void handleAdapterStateChanged(int currentState) {
@@ -812,19 +776,8 @@ public class ActiveDeviceManager {
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
-        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        filter.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
-        filter.addAction(BluetoothHeadset.ACTION_ACTIVE_DEVICE_CHANGED);
-        filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
-        filter.addAction(BluetoothHearingAid.ACTION_ACTIVE_DEVICE_CHANGED);
-        filter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_CONNECTION_STATE_CHANGED);
-        filter.addAction(BluetoothLeAudio.ACTION_LE_AUDIO_ACTIVE_DEVICE_CHANGED);
-        filter.addAction(BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
-        mAdapterService.registerReceiver(mReceiver, filter, Context.RECEIVER_EXPORTED);
-
         mAudioManager.registerAudioDeviceCallback(mAudioManagerAudioDeviceCallback, mHandler);
+        mAdapterService.registerBluetoothStateCallback((command) -> mHandler.post(command), this);
     }
 
     void cleanup() {
@@ -833,7 +786,7 @@ public class ActiveDeviceManager {
         }
 
         mAudioManager.unregisterAudioDeviceCallback(mAudioManagerAudioDeviceCallback);
-        mAdapterService.unregisterReceiver(mReceiver);
+        mAdapterService.unregisterBluetoothStateCallback(this);
         if (mHandlerThread != null) {
             mHandlerThread.quit();
             mHandlerThread = null;
@@ -931,12 +884,13 @@ public class ActiveDeviceManager {
             Log.d(TAG, "setHearingAidActiveDevice(" + device + ")"
                     + (device == null ? " hasFallbackDevice=" + hasFallbackDevice : ""));
         }
-        synchronized (mLock) {
-            final HearingAidService hearingAidService = mFactory.getHearingAidService();
-            if (hearingAidService == null) {
-                return false;
-            }
 
+        final HearingAidService hearingAidService = mFactory.getHearingAidService();
+        if (hearingAidService == null) {
+            return false;
+        }
+
+        synchronized (mLock) {
             if (device == null) {
                 if (!hearingAidService.removeActiveDevice(!hasFallbackDevice)) {
                     return false;
@@ -1019,6 +973,7 @@ public class ActiveDeviceManager {
      *
      * @return true when the fallback device is activated, false otherwise
      */
+    @GuardedBy("mLock")
     private boolean setFallbackDeviceActiveLocked() {
         if (DBG) {
             Log.d(TAG, "setFallbackDeviceActive");
@@ -1176,11 +1131,6 @@ public class ActiveDeviceManager {
     }
 
     @VisibleForTesting
-    BroadcastReceiver getBroadcastReceiver() {
-        return mReceiver;
-    }
-
-    @VisibleForTesting
     BluetoothDevice getA2dpActiveDevice() {
         return mA2dpActiveDevice;
     }
@@ -1200,7 +1150,8 @@ public class ActiveDeviceManager {
         return mLeAudioActiveDevice;
     }
 
-    long getHearingAidActiveHiSyncIdLocked() {
+    @GuardedBy("mLock")
+    private long getHearingAidActiveHiSyncIdLocked() {
         final HearingAidService hearingAidService = mFactory.getHearingAidService();
         if (hearingAidService != null && !mHearingAidActiveDevices.isEmpty()) {
             return hearingAidService.getHiSyncId(mHearingAidActiveDevices.iterator().next());

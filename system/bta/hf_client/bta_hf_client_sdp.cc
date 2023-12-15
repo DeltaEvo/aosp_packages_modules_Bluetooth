@@ -31,6 +31,7 @@
 #include "bta/include/bta_hf_client_api.h"
 #include "bta/sys/bta_sys.h"
 #include "osi/include/allocator.h"
+#include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/btm_api.h"
@@ -58,7 +59,8 @@ using namespace bluetooth::legacy::stack::sdp;
  * Returns          void
  *
  ******************************************************************************/
-static void bta_hf_client_sdp_cback(tSDP_STATUS status, const void* data) {
+static void bta_hf_client_sdp_cback(UNUSED_ATTR const RawAddress& bd_addr,
+                                    tSDP_STATUS status, const void* data) {
   uint16_t event;
   tBTA_HF_CLIENT_DISC_RESULT* p_buf = (tBTA_HF_CLIENT_DISC_RESULT*)osi_malloc(
       sizeof(tBTA_HF_CLIENT_DISC_RESULT));
@@ -257,7 +259,9 @@ bool bta_hf_client_sdp_find_attr(tBTA_HF_CLIENT_CB* client_cb) {
     /* get features */
     p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
         p_rec, ATTR_ID_SUPPORTED_FEATURES);
-    if (p_attr != NULL) {
+    if (p_attr != NULL &&
+        SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+        SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
       /* Found attribute. Get value. */
       /* There might be race condition between SDP and BRSF.  */
       /* Do not update if we already received BRSF.           */
@@ -273,7 +277,9 @@ bool bta_hf_client_sdp_find_attr(tBTA_HF_CLIENT_CB* client_cb) {
         /* get network for ability to reject calls */
         p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
             p_rec, ATTR_ID_NETWORK);
-        if (p_attr != NULL) {
+        if (p_attr != NULL &&
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
           if (p_attr->attr_value.v.u16 == 0x01) {
             client_cb->peer_features |= BTA_HF_CLIENT_PEER_REJECT;
           }

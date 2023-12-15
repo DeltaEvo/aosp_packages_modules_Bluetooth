@@ -18,6 +18,8 @@
  *
  ******************************************************************************/
 
+#include <base/logging.h>
+
 #include "audio_hal_client.h"
 #include "audio_hal_interface/le_audio_software.h"
 #include "bta/le_audio/codec_manager.h"
@@ -162,7 +164,7 @@ bool SourceImpl::OnResumeReq(bool start_media_task) {
   bt_status_t status = do_in_main_thread(
       FROM_HERE,
       base::BindOnce(&LeAudioSourceAudioHalClient::Callbacks::OnAudioResume,
-                     base::Unretained(audioSourceCallbacks_)));
+                     audioSourceCallbacks_->weak_factory_.GetWeakPtr()));
   if (status == BT_STATUS_SUCCESS) {
     return true;
   }
@@ -252,16 +254,11 @@ bool SourceImpl::OnSuspendReq() {
     return false;
   }
 
-  // Call OnAudioSuspend and block till it returns.
-  std::promise<void> do_suspend_promise;
-  std::future<void> do_suspend_future = do_suspend_promise.get_future();
   bt_status_t status = do_in_main_thread(
       FROM_HERE,
       base::BindOnce(&LeAudioSourceAudioHalClient::Callbacks::OnAudioSuspend,
-                     base::Unretained(audioSourceCallbacks_),
-                     std::move(do_suspend_promise)));
+                     audioSourceCallbacks_->weak_factory_.GetWeakPtr()));
   if (status == BT_STATUS_SUCCESS) {
-    do_suspend_future.wait();
     return true;
   }
 
@@ -285,7 +282,7 @@ bool SourceImpl::OnMetadataUpdateReq(const source_metadata_t& source_metadata) {
       FROM_HERE,
       base::BindOnce(
           &LeAudioSourceAudioHalClient::Callbacks::OnAudioMetadataUpdate,
-          base::Unretained(audioSourceCallbacks_), metadata));
+          audioSourceCallbacks_->weak_factory_.GetWeakPtr(), metadata));
   if (status == BT_STATUS_SUCCESS) {
     return true;
   }

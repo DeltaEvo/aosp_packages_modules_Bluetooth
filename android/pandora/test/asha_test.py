@@ -16,10 +16,7 @@ import asyncio
 import avatar
 import enum
 import grpc
-import inspect
-import itertools
 import logging
-import math
 import numpy as np
 
 from avatar import BumblePandoraDevice, PandoraDevice, PandoraDevices, asynchronous
@@ -34,7 +31,7 @@ from mobly.asserts import assert_in  # type: ignore
 from mobly.asserts import assert_is_not_none  # type: ignore
 from mobly.asserts import assert_not_equal  # type: ignore
 from mobly.asserts import assert_true  # type: ignore
-from pandora._utils import AioStream, Stream
+from pandora._utils import AioStream
 from pandora.host_pb2 import PUBLIC, RANDOM, AdvertiseResponse, Connection, DataTypes, OwnAddressType, ScanningResponse
 from pandora.security_pb2 import LE_LEVEL3
 from pandora_experimental.asha_grpc_aio import Asha as AioAsha, add_AshaServicer_to_server
@@ -900,6 +897,9 @@ class AshaTest(base_test.BaseTestClass):  # type: ignore[misc]
         logging.info(f"stop_result:{stop_result}")
         assert_is_not_none(stop_result)
 
+        # Sleep 0.5 second to mitigate flaky test first.
+        await asyncio.sleep(0.5)
+
         audio_data = await self.get_audio_data(
             ref_asha=AioAsha(self.ref_left.aio.channel), connection=ref_dut, timeout=10
         )
@@ -1018,6 +1018,10 @@ class AshaTest(base_test.BaseTestClass):  # type: ignore[misc]
         assert_is_not_none(start_result_left['volume'])
         assert_equal(start_result_left['otherstate'], 0)
 
+        # Start playing audio before connecting to ref_right
+        generated_audio = self.generate_sine(connection=dut_ref_left)
+        dut_asha.PlaybackAudio(generated_audio)
+
         # connect ref_right
         dut_ref_right, ref_right_dut = await ref_device_connect(self.ref_right, Ear.RIGHT)
         le_psm_future_right = self.get_le_psm_future(self.ref_right)
@@ -1115,6 +1119,9 @@ class AshaTest(base_test.BaseTestClass):  # type: ignore[misc]
         logging.info(f"stop_result_right:{stop_result_right}")
         assert_is_not_none(stop_result_left)
         assert_is_not_none(stop_result_right)
+
+        # Sleep 0.5 second to mitigate flaky test first.
+        await asyncio.sleep(0.5)
 
         (audio_data_left, audio_data_right) = await asyncio.gather(
             self.get_audio_data(ref_asha=ref_left_asha, connection=ref_left_dut, timeout=10),

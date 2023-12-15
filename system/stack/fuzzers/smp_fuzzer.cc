@@ -64,13 +64,13 @@ class FakeBtStack {
   FakeBtStack() {
     test::mock::stack_acl::BTM_ReadConnectionAddr.body =
         [](const RawAddress& remote_bda, RawAddress& local_conn_addr,
-           tBLE_ADDR_TYPE* p_addr_type) {
+           tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
           local_conn_addr = kDummyAddr;
           *p_addr_type = BLE_ADDR_PUBLIC;
         };
     test::mock::stack_acl::BTM_ReadRemoteConnectionAddr.body =
         [](const RawAddress& pseudo_addr, RawAddress& conn_addr,
-           tBLE_ADDR_TYPE* p_addr_type) {
+           tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
           conn_addr = kDummyRemoteAddr;
           *p_addr_type = BLE_ADDR_PUBLIC;
           return true;
@@ -132,13 +132,6 @@ class Fakes {
 
 }  // namespace
 
-// Mocking some ECC operations
-bool ECC_ValidatePoint(Point const&) { return true; }
-void ECC_PointMult_Bin_NAF(Point* q, Point* p, uint32_t* n) {}
-void p_256_init_curve() {}
-elliptic_curve_t curve_p256;
-
-tBTM_CB btm_cb;
 uint8_t oob_data[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
                       0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
 tSMP_IO_REQ io_req = {};
@@ -183,9 +176,7 @@ void Fuzz(const uint8_t* data, size_t size) {
   tBT_TRANSPORT transport;
   tL2CAP_FIXED_CHNL_REG* chnl_reg;
 
-  btm_cb = tBTM_CB();
-
-  SMP_Init();
+  SMP_Init(BTM_SEC_MODE_SP);
   SMP_Register(smp_callback);
   SMP_SetTraceLevel(BT_TRACE_LEVEL_DEBUG);
   SMP_ClearLocScOobData();

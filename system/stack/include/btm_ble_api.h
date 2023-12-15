@@ -361,7 +361,8 @@ bool BTM_IsBleConnection(uint16_t conn_handle);
  ******************************************************************************/
 bool BTM_ReadRemoteConnectionAddr(const RawAddress& pseudo_addr,
                                   RawAddress& conn_addr,
-                                  tBLE_ADDR_TYPE* p_addr_type);
+                                  tBLE_ADDR_TYPE* p_addr_type,
+                                  bool ota_address);
 
 /*******************************************************************************
  *
@@ -639,8 +640,6 @@ void BTM_BleReadPhy(
  ******************************************************************************/
 void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
                    uint16_t phy_options);
-
-void btm_ble_multi_adv_cleanup(void);
 
 /*******************************************************************************
  *

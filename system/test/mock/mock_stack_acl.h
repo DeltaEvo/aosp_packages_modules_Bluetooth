@@ -131,20 +131,28 @@ struct BTM_IsPhy2mSupported {
 };
 extern struct BTM_IsPhy2mSupported BTM_IsPhy2mSupported;
 // Name: BTM_ReadRemoteConnectionAddr
-// Params: const RawAddress& pseudo_addr, RawAddress& conn_addr,
-// tBLE_ADDR_TYPE* p_addr_type
-// Returns: bool
+// Params: const RawAddress& pseudo_addr, RawAddress& conn_addr, bool
+// ota_address tBLE_ADDR_TYPE* p_addr_type Returns: bool
 struct BTM_ReadRemoteConnectionAddr {
   std::function<bool(const RawAddress& pseudo_addr, RawAddress& conn_addr,
-                     tBLE_ADDR_TYPE* p_addr_type)>
+                     tBLE_ADDR_TYPE* p_addr_type, bool ota_address)>
       body{[](const RawAddress& pseudo_addr, RawAddress& conn_addr,
-              tBLE_ADDR_TYPE* p_addr_type) { return false; }};
+              tBLE_ADDR_TYPE* p_addr_type, bool ota_address) { return false; }};
   bool operator()(const RawAddress& pseudo_addr, RawAddress& conn_addr,
-                  tBLE_ADDR_TYPE* p_addr_type) {
-    return body(pseudo_addr, conn_addr, p_addr_type);
+                  tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
+    return body(pseudo_addr, conn_addr, p_addr_type, ota_address);
   };
 };
 extern struct BTM_ReadRemoteConnectionAddr BTM_ReadRemoteConnectionAddr;
+// Name: BTM_IsRemoteVersionReceived
+// Params: const RawAddress& addr
+// Returns: bool
+struct BTM_IsRemoteVersionReceived {
+  std::function<bool(const RawAddress& addr)> body{
+      [](const RawAddress& addr) { return false; }};
+  bool operator()(const RawAddress& addr) { return body(addr); };
+};
+extern struct BTM_IsRemoteVersionReceived BTM_IsRemoteVersionReceived;
 // Name: BTM_ReadRemoteVersion
 // Params: const RawAddress& addr, uint8_t* lmp_version, uint16_t*
 // manufacturer, uint16_t* lmp_sub_version
@@ -612,16 +620,16 @@ struct ACL_UnregisterClient {
 };
 extern struct ACL_UnregisterClient ACL_UnregisterClient;
 // Name: BTM_ReadConnectionAddr
-// Params: const RawAddress& remote_bda, RawAddress& local_conn_addr,
-// tBLE_ADDR_TYPE* p_addr_type Returns: void
+// Params: const RawAddress& remote_bda, RawAddress& local_conn_addr, bool
+// ota_address tBLE_ADDR_TYPE* p_addr_type Returns: void
 struct BTM_ReadConnectionAddr {
   std::function<void(const RawAddress& remote_bda, RawAddress& local_conn_addr,
-                     tBLE_ADDR_TYPE* p_addr_type)>
+                     tBLE_ADDR_TYPE* p_addr_type, bool ota_address)>
       body{[](const RawAddress& remote_bda, RawAddress& local_conn_addr,
-              tBLE_ADDR_TYPE* p_addr_type) { ; }};
+              tBLE_ADDR_TYPE* p_addr_type, bool ota_address) { ; }};
   void operator()(const RawAddress& remote_bda, RawAddress& local_conn_addr,
-                  tBLE_ADDR_TYPE* p_addr_type) {
-    body(remote_bda, local_conn_addr, p_addr_type);
+                  tBLE_ADDR_TYPE* p_addr_type, bool ota_address) {
+    body(remote_bda, local_conn_addr, p_addr_type, ota_address);
   };
 };
 extern struct BTM_ReadConnectionAddr BTM_ReadConnectionAddr;
@@ -1137,18 +1145,6 @@ struct btm_read_remote_ext_features_failed {
 };
 extern struct btm_read_remote_ext_features_failed
     btm_read_remote_ext_features_failed;
-// Name: btm_read_remote_features_complete
-// Params: uint16_t handle, uint8_t* features
-// Returns: void
-struct btm_read_remote_features_complete {
-  std::function<void(uint16_t handle, uint8_t* features)> body{
-      [](uint16_t handle, uint8_t* features) { ; }};
-  void operator()(uint16_t handle, uint8_t* features) {
-    body(handle, features);
-  };
-};
-extern struct btm_read_remote_features_complete
-    btm_read_remote_features_complete;
 // Name: btm_read_remote_version_complete
 // Params: tHCI_STATUS status, uint16_t handle, uint8_t lmp_version, uint16_t
 // manufacturer, uint16_t lmp_subversion Returns: void

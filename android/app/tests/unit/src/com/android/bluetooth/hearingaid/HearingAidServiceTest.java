@@ -44,6 +44,7 @@ import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
+import com.android.bluetooth.btservice.ActiveDeviceManager;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.x.com.android.modules.utils.SynchronousResultReceiver;
@@ -77,9 +78,10 @@ public class HearingAidServiceTest {
     private HashMap<BluetoothDevice, LinkedBlockingQueue<Intent>> mDeviceQueueMap;
     private static final int TIMEOUT_MS = 1000;
 
-    private BroadcastReceiver mHearingAidIntentReceiver;
+    private HearingAidIntentReceiver mHearingAidIntentReceiver;
 
     @Mock private AdapterService mAdapterService;
+    @Mock private ActiveDeviceManager mActiveDeviceManager;
     @Mock private DatabaseManager mDatabaseManager;
     @Mock private HearingAidNativeInterface mNativeInterface;
     @Mock private AudioManager mAudioManager;
@@ -97,25 +99,19 @@ public class HearingAidServiceTest {
         }
 
         TestUtils.setAdapterService(mAdapterService);
+        doReturn(mActiveDeviceManager).when(mAdapterService).getActiveDeviceManager();
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
         doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
 
         mAdapter = BluetoothAdapter.getDefaultAdapter();
+        HearingAidNativeInterface.setInstance(mNativeInterface);
         startService();
-        mService.mHearingAidNativeInterface = mNativeInterface;
         mService.mAudioManager = mAudioManager;
         mServiceBinder = (HearingAidService.BluetoothHearingAidBinder) mService.initBinder();
         mServiceBinder.mIsTesting = true;
 
         // Override the timeout value to speed up the test
         HearingAidStateMachine.sConnectTimeoutMs = TIMEOUT_MS;    // 1s
-
-        // Set up the Connection State Changed receiver
-        IntentFilter filter = new IntentFilter();
-        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
-        filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
-        mHearingAidIntentReceiver = new HearingAidIntentReceiver();
-        mTargetContext.registerReceiver(mHearingAidIntentReceiver, filter);
 
         // Get a device for testing
         mLeftDevice = TestUtils.getTestDevice(mAdapter, 0);
@@ -129,12 +125,21 @@ public class HearingAidServiceTest {
                 .getBondState(any(BluetoothDevice.class));
         doReturn(new ParcelUuid[]{BluetoothUuid.HEARING_AID}).when(mAdapterService)
                 .getRemoteUuids(any(BluetoothDevice.class));
+
+        // Set up the Connection State Changed receiver
+        IntentFilter filter = new IntentFilter();
+        filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
+        filter.addAction(BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
+        mHearingAidIntentReceiver = new HearingAidIntentReceiver(mDeviceQueueMap);
+        mTargetContext.registerReceiver(mHearingAidIntentReceiver, filter);
     }
 
     @After
     public void tearDown() throws Exception {
         stopService();
+        HearingAidNativeInterface.setInstance(null);
         mTargetContext.unregisterReceiver(mHearingAidIntentReceiver);
+        mHearingAidIntentReceiver.clear();
         mDeviceQueueMap.clear();
         TestUtils.clearAdapterService(mAdapterService);
         reset(mAudioManager);
@@ -144,7 +149,6 @@ public class HearingAidServiceTest {
         TestUtils.startService(mServiceRule, HearingAidService.class);
         mService = HearingAidService.getHearingAidService();
         Assert.assertNotNull(mService);
-        verify(mAdapterService).notifyActivityAttributionInfo(any(), any());
     }
 
     private void stopService() throws TimeoutException {
@@ -153,10 +157,22 @@ public class HearingAidServiceTest {
         Assert.assertNull(mService);
     }
 
-    private class HearingAidIntentReceiver extends BroadcastReceiver {
+    private static class HearingAidIntentReceiver extends BroadcastReceiver {
+        HashMap<BluetoothDevice, LinkedBlockingQueue<Intent>> mDeviceQueueMap;
+
+        public HearingAidIntentReceiver(
+                HashMap<BluetoothDevice, LinkedBlockingQueue<Intent>> deviceQueueMap) {
+            mDeviceQueueMap = deviceQueueMap;
+        }
+
+        public void clear() {
+            mDeviceQueueMap = null;
+        }
+
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED.equals(intent.getAction())) {
+            if (BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED.equals(intent.getAction())
+                    && mDeviceQueueMap != null) {
                 try {
                     BluetoothDevice device = intent.getParcelableExtra(
                             BluetoothDevice.EXTRA_DEVICE);

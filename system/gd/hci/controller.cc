@@ -22,6 +22,7 @@
 #include <utility>
 
 #include "common/init_flags.h"
+#include "hci/event_checkers.h"
 #include "hci/hci_layer.h"
 #include "hci_controller_generated.h"
 #include "os/metrics.h"
@@ -205,9 +206,6 @@ struct Controller::impl {
   }
 
   void Stop() {
-    if (bluetooth::common::init_flags::gd_core_is_enabled()) {
-      hci_->UnregisterEventHandler(EventCode::NUMBER_OF_COMPLETED_PACKETS);
-    }
     hci_ = nullptr;
   }
 
@@ -592,8 +590,9 @@ struct Controller::impl {
 
   void set_event_mask(uint64_t event_mask) {
     std::unique_ptr<SetEventMaskBuilder> packet = SetEventMaskBuilder::Create(event_mask);
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<SetEventMaskCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<SetEventMaskCompleteView>));
   }
 
   void write_le_host_support(Enable enable, Enable deprecated_host_bit) {
@@ -604,27 +603,28 @@ struct Controller::impl {
     std::unique_ptr<WriteLeHostSupportBuilder> packet = WriteLeHostSupportBuilder::Create(enable, deprecated_host_bit);
     hci_->EnqueueCommand(
         std::move(packet),
-        module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<WriteLeHostSupportCompleteView>));
+        module_.GetHandler()->BindOnce(check_complete<WriteLeHostSupportCompleteView>));
   }
 
   void write_simple_pairing_mode(Enable enable) {
     std::unique_ptr<WriteSimplePairingModeBuilder> packet = WriteSimplePairingModeBuilder::Create(enable);
     hci_->EnqueueCommand(
         std::move(packet),
-        module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<WriteSimplePairingModeCompleteView>));
+        module_.GetHandler()->BindOnce(check_complete<WriteSimplePairingModeCompleteView>));
   }
 
   void reset() {
     std::unique_ptr<ResetBuilder> packet = ResetBuilder::Create();
-    hci_->EnqueueCommand(std::move(packet),
-                         module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_status<ResetCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet), module_.GetHandler()->BindOnce(check_complete<ResetCompleteView>));
   }
 
   void le_rand(LeRandCallback cb) {
     std::unique_ptr<LeRandBuilder> packet = LeRandBuilder::Create();
     hci_->EnqueueCommand(
         std::move(packet),
-        module_.GetHandler()->BindOnceOn(this, &Controller::impl::le_rand_cb<LeRandCompleteView>, cb));
+        module_.GetHandler()->BindOnceOn(
+            this, &Controller::impl::le_rand_cb<LeRandCompleteView>, std::move(cb)));
   }
 
   template <class T>
@@ -633,12 +633,13 @@ struct Controller::impl {
     auto status_view = T::Create(view);
     ASSERT(status_view.IsValid());
     ASSERT(status_view.GetStatus() == ErrorCode::SUCCESS);
-    cb.Run(status_view.GetRandomNumber());
+    std::move(cb).Run(status_view.GetRandomNumber());
   }
 
   void set_event_filter(std::unique_ptr<SetEventFilterBuilder> packet) {
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<SetEventFilterCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<SetEventFilterCompleteView>));
   }
 
   void write_local_name(std::string local_name) {
@@ -649,8 +650,9 @@ struct Controller::impl {
     std::copy(std::begin(local_name), std::end(local_name), std::begin(local_name_array));
 
     std::unique_ptr<WriteLocalNameBuilder> packet = WriteLocalNameBuilder::Create(local_name_array);
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<WriteLocalNameCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<WriteLocalNameCompleteView>));
   }
 
   void host_buffer_size(uint16_t host_acl_data_packet_length, uint8_t host_synchronous_data_packet_length,
@@ -658,32 +660,16 @@ struct Controller::impl {
     std::unique_ptr<HostBufferSizeBuilder> packet =
         HostBufferSizeBuilder::Create(host_acl_data_packet_length, host_synchronous_data_packet_length,
                                       host_total_num_acl_data_packets, host_total_num_synchronous_data_packets);
-    hci_->EnqueueCommand(std::move(packet), module_.GetHandler()->BindOnceOn(
-                                                this, &Controller::impl::check_status<HostBufferSizeCompleteView>));
+    hci_->EnqueueCommand(
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<HostBufferSizeCompleteView>));
   }
 
   void le_set_event_mask(uint64_t le_event_mask) {
     std::unique_ptr<LeSetEventMaskBuilder> packet = LeSetEventMaskBuilder::Create(le_event_mask);
     hci_->EnqueueCommand(
-        std::move(packet), module_.GetHandler()->BindOnceOn(this, &Controller::impl::check_le_set_event_mask_status));
-  }
-
-  void check_le_set_event_mask_status(CommandCompleteView view) {
-    ASSERT(view.IsValid());
-    auto status_view = LeSetEventMaskCompleteView::Create(view);
-    ASSERT(status_view.IsValid());
-    auto status = status_view.GetStatus();
-    if (status != ErrorCode::SUCCESS) {
-      LOG_WARN("Unexpected return status %s", ErrorCodeText(status).c_str());
-    }
-  }
-
-  template <class T>
-  void check_status(CommandCompleteView view) {
-    ASSERT(view.IsValid());
-    auto status_view = T::Create(view);
-    ASSERT(status_view.IsValid());
-    ASSERT(status_view.GetStatus() == ErrorCode::SUCCESS);
+        std::move(packet),
+        module_.GetHandler()->BindOnce(check_complete<LeSetEventMaskCompleteView>));
   }
 
 #define OP_CODE_MAPPING(name)                                                  \
@@ -1042,6 +1028,22 @@ struct Controller::impl {
         return true;
       case OpCode::NONE:
         return false;
+      case OpCode::LE_CS_READ_LOCAL_SUPPORTED_CAPABILITIES:
+      case OpCode::LE_CS_READ_REMOTE_SUPPORTED_CAPABILITIES:
+      case OpCode::LE_CS_WRITE_CACHED_REMOTE_SUPPORTED_CAPABILITIES:
+      case OpCode::LE_CS_SECURITY_ENABLE:
+      case OpCode::LE_CS_SET_DEFAULT_SETTINGS:
+      case OpCode::LE_CS_READ_REMOTE_FAE_TABLE:
+      case OpCode::LE_CS_WRITE_CACHED_REMOTE_FAE_TABLE:
+      case OpCode::LE_CS_CREATE_CONFIG:
+      case OpCode::LE_CS_REMOVE_CONFIG:
+      case OpCode::LE_CS_SET_CHANNEL_CLASSIFICATION:
+      case OpCode::LE_CS_PROCEDURE_ENABLE:
+      case OpCode::LE_CS_TEST:
+      case OpCode::LE_CS_TEST_END:
+      case OpCode::LE_CS_SET_PROCEDURE_PARAMETERS:
+        // TODO add to OP_CODE_MAPPING list
+        return false;
     }
     return false;
   }
@@ -1223,7 +1225,7 @@ void Controller::Reset() {
 }
 
 void Controller::LeRand(LeRandCallback cb) {
-  CallOn(impl_.get(), &impl::le_rand, cb);
+  CallOn(impl_.get(), &impl::le_rand, std::move(cb));
 }
 
 void Controller::SetEventFilterClearAll() {
@@ -1346,6 +1348,25 @@ uint8_t Controller::GetLePeriodicAdvertiserListSize() const {
 
 bool Controller::IsSupported(bluetooth::hci::OpCode op_code) const {
   return impl_->is_supported(op_code);
+}
+
+uint64_t Controller::MaskLeEventMask(HciVersion version, uint64_t mask) {
+  if (!common::init_flags::subrating_is_enabled()) {
+    mask = mask & ~(static_cast<uint64_t>(LLFeaturesBits::CONNECTION_SUBRATING_HOST_SUPPORT));
+  }
+  if (version >= HciVersion::V_5_3) {
+    return mask;
+  } else if (version >= HciVersion::V_5_2) {
+    return mask & kLeEventMask52;
+  } else if (version >= HciVersion::V_5_1) {
+    return mask & kLeEventMask51;
+  } else if (version >= HciVersion::V_5_0) {
+    return mask & kLeEventMask50;
+  } else if (version >= HciVersion::V_4_2) {
+    return mask & kLeEventMask42;
+  } else {
+    return mask & kLeEventMask41;
+  }
 }
 
 const ModuleFactory Controller::Factory = ModuleFactory([]() { return new Controller(); });

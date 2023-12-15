@@ -54,7 +54,6 @@
 #define BT_PROFILE_HAP_CLIENT_ID "has_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
 #define BT_KEYSTORE_ID "bluetooth_keystore"
-#define BT_ACTIVITY_ATTRIBUTION_ID "activity_attribution"
 #define BT_PROFILE_VC_ID "volume_control"
 #define BT_PROFILE_CSIS_CLIENT_ID "csis_client"
 #define BT_PROFILE_LE_AUDIO_ID "le_audio"
@@ -105,7 +104,8 @@ typedef enum {
   BT_STATUS_AUTH_REJECTED,
   BT_STATUS_JNI_ENVIRONMENT_ERROR,
   BT_STATUS_JNI_THREAD_ATTACH_ERROR,
-  BT_STATUS_WAKELOCK_ERROR
+  BT_STATUS_WAKELOCK_ERROR,
+  BT_STATUS_TIMEOUT
 } bt_status_t;
 
 inline std::string bt_status_text(const bt_status_t& status) {
@@ -140,6 +140,8 @@ inline std::string bt_status_text(const bt_status_t& status) {
       return std::string("jni_thread_error");
     case BT_STATUS_WAKELOCK_ERROR:
       return std::string("wakelock_error");
+    case BT_STATUS_TIMEOUT:
+      return std::string("timeout_error");
     default:
       return std::string("UNKNOWN");
   }
@@ -392,6 +394,13 @@ typedef enum {
    */
   BT_PROPERTY_REMOTE_MODEL_NUM,
 
+  /**
+   * Description - Address type of the remote device - PUBLIC or REMOTE
+   * Access mode - GET.
+   * Data Type - uint8_t.
+   */
+  BT_PROPERTY_REMOTE_ADDR_TYPE,
+
   BT_PROPERTY_REMOTE_DEVICE_TIMESTAMP = 0xFF,
 } bt_property_type_t;
 
@@ -613,9 +622,6 @@ typedef struct {
   le_rand_callback le_rand_cb;
 } bt_callbacks_t;
 
-typedef void (*alarm_cb)(void* data);
-typedef bool (*set_wake_alarm_callout)(uint64_t delay_millis, bool should_wake,
-                                       alarm_cb cb, void* data);
 typedef int (*acquire_wake_lock_callout)(const char* lock_name);
 typedef int (*release_wake_lock_callout)(const char* lock_name);
 
@@ -627,7 +633,6 @@ typedef struct {
   /* set to sizeof(bt_os_callouts_t) */
   size_t size;
 
-  set_wake_alarm_callout set_wake_alarm;
   acquire_wake_lock_callout acquire_wake_lock;
   release_wake_lock_callout release_wake_lock;
 } bt_os_callouts_t;

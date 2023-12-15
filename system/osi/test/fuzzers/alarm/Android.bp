@@ -23,10 +23,13 @@ cc_fuzz {
     ],
     static_libs: [
         "libbt-common",
-        "libbt-protos-lite",
         "libchrome",
         "libgmock",
         "libosi",
     ],
-    cflags: ["-Wno-unused-function"],
+    cflags: [
+        "-Wno-unused-function",
+        "-Wno-unused-parameter",
+    ],
+    header_libs: ["libbluetooth_headers"],
 }

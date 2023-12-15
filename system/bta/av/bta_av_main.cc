@@ -31,19 +31,20 @@
 #include "bt_target.h"  // Must be first to define build configuration
 #include "bta/av/bta_av_int.h"
 #include "bta/include/bta_ar_api.h"
+#include "bta/include/bta_av_co.h"
 #include "bta/include/utl.h"
+#include "bta/sys/bta_sys.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/btif_av.h"
 #include "btif/include/btif_av_co.h"
 #include "btif/include/btif_config.h"
-#include "main/shim/dumpsys.h"
+#include "gd/os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
-#include "stack/include/btm_api.h"
+#include "stack/include/hci_error_code.h"
 #include "stack/include/sdp_api.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
@@ -105,10 +106,12 @@ static void bta_av_ci_data(tBTA_AV_DATA* p_data);
 static void bta_av_rpc_conn(tBTA_AV_DATA* p_data);
 static void bta_av_api_to_ssm(tBTA_AV_DATA* p_data);
 
-static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
-                                 uint8_t app_id, const RawAddress& peer_addr);
-static void bta_av_sys_rs_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
-                                uint8_t app_id, const RawAddress& peer_addr);
+static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status,
+                                 uint8_t num_sco_links, uint8_t app_id,
+                                 const RawAddress& peer_addr);
+static void bta_av_sys_rs_cback(tBTA_SYS_CONN_STATUS status, tHCI_ROLE new_role,
+                                tHCI_STATUS hci_status,
+                                const RawAddress& peer_addr);
 
 /*****************************************************************************
  * Global data
@@ -233,6 +236,7 @@ tBTA_AV_SCB* bta_av_addr_to_scb(const RawAddress& bd_addr) {
   return p_scb;
 }
 
+extern const RawAddress& btif_av_find_by_handle(tBTA_AV_HNDL bta_handle);
 int BTA_AvObtainPeerChannelIndex(const RawAddress& peer_address) {
   // Find the entry for the peer (if exists)
   tBTA_AV_SCB* p_scb = bta_av_addr_to_scb(peer_address);
@@ -247,6 +251,12 @@ int BTA_AvObtainPeerChannelIndex(const RawAddress& peer_address) {
       continue;
     }
     if (p_scb->PeerAddress().IsEmpty()) {
+      const RawAddress& btif_addr = btif_av_find_by_handle(p_scb->hndl);
+      if (!btif_addr.IsEmpty() && btif_addr != peer_address)  {
+        APPL_TRACE_DEBUG("%s: btif_addr = %s, index=%d!",
+                         __func__, btif_addr.ToString().c_str(), index);
+        continue;
+      }
       return p_scb->hdi;
     }
   }
@@ -402,8 +412,8 @@ void bta_av_conn_cback(UNUSED_ATTR uint8_t handle, const RawAddress& bd_addr,
       APPL_TRACE_DEBUG("%s: bta_handle x%x, role x%x", __func__, p_scb->hndl,
                        p_scb->role);
     }
-    LOG_INFO("%s: conn_cback bd_addr: %s", __func__,
-             ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    LOG_INFO("%s: conn_cback bd_addr: %s, scb_index: %d", __func__,
+             ADDRESS_TO_LOGGABLE_CSTR(bd_addr), scb_index);
     bta_sys_sendmsg(p_msg);
   }
 }
@@ -559,7 +569,8 @@ static void bta_av_api_register(tBTA_AV_DATA* p_data) {
           if (btif_av_src_sink_coexist_enabled()) {
             bta_ar_reg_avrc_for_src_sink_coexist(
                 UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target",
-                NULL, p_bta_av_cfg->avrc_tg_cat, BTA_ID_AV + local_role,
+                NULL, p_bta_av_cfg->avrc_tg_cat,
+                static_cast<tBTA_SYS_ID>(BTA_ID_AV + local_role),
                 (bta_av_cb.features & BTA_AV_FEAT_BROWSE), profile_version);
           } else {
             bta_ar_reg_avrc(
@@ -917,7 +928,7 @@ void bta_av_restore_switch(void) {
  *
  ******************************************************************************/
 static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
-                                uint8_t id, uint8_t app_id,
+                                tHCI_ROLE new_role, tHCI_STATUS hci_status,
                                 const RawAddress& peer_addr) {
   int i;
   tBTA_AV_SCB* p_scb = NULL;
@@ -926,7 +937,8 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
 
   APPL_TRACE_DEBUG(
       "%s: peer %s new_role:%d hci_status:0x%x bta_av_cb.rs_idx:%d", __func__,
-      ADDRESS_TO_LOGGABLE_CSTR(peer_addr), id, app_id, bta_av_cb.rs_idx);
+      ADDRESS_TO_LOGGABLE_CSTR(peer_addr), new_role, hci_status,
+      bta_av_cb.rs_idx);
 
   for (i = 0; i < BTA_AV_NUM_STRS; i++) {
     /* loop through all the SCBs to find matching peer addresses and report the
@@ -938,12 +950,12 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
           (tBTA_AV_ROLE_RES*)osi_malloc(sizeof(tBTA_AV_ROLE_RES));
       APPL_TRACE_DEBUG(
           "%s: peer %s found: new_role:%d, hci_status:0x%x bta_handle:0x%x",
-          __func__, ADDRESS_TO_LOGGABLE_CSTR(peer_addr), id, app_id,
+          __func__, ADDRESS_TO_LOGGABLE_CSTR(peer_addr), new_role, hci_status,
           p_scb->hndl);
       p_buf->hdr.event = BTA_AV_ROLE_CHANGE_EVT;
       p_buf->hdr.layer_specific = p_scb->hndl;
-      p_buf->new_role = id;
-      p_buf->hci_status = app_id;
+      p_buf->new_role = new_role;
+      p_buf->hci_status = hci_status;
       bta_sys_sendmsg(p_buf);
 
       peer_idx = p_scb->hdi + 1; /* Handle index for the peer_addr */
@@ -951,7 +963,7 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
   }
 
   /* restore role switch policy, if role switch failed */
-  if ((HCI_SUCCESS != app_id) &&
+  if ((HCI_SUCCESS != hci_status) &&
       (BTM_GetRole(peer_addr, &cur_role) == BTM_SUCCESS) &&
       (cur_role == HCI_ROLE_PERIPHERAL)) {
     BTM_unblock_role_switch_for(peer_addr);
@@ -969,14 +981,15 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
                        __func__, ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()),
                        bta_av_cb.rs_idx, p_scb->hndl, p_scb->q_tag);
 
-      if (HCI_SUCCESS == app_id || HCI_ERR_NO_CONNECTION == app_id) {
+      if (HCI_SUCCESS == hci_status || HCI_ERR_NO_CONNECTION == hci_status) {
         p_scb->q_info.open.switch_res = BTA_AV_RS_OK;
       } else {
         APPL_TRACE_ERROR(
             "%s: peer %s (p_scb peer %s) role switch failed: new_role:%d "
             "hci_status:0x%x",
             __func__, ADDRESS_TO_LOGGABLE_CSTR(peer_addr),
-            ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), id, app_id);
+            ADDRESS_TO_LOGGABLE_CSTR(p_scb->PeerAddress()), new_role,
+            hci_status);
         p_scb->q_info.open.switch_res = BTA_AV_RS_FAIL;
       }
 
@@ -999,7 +1012,8 @@ static void bta_av_sys_rs_cback(UNUSED_ATTR tBTA_SYS_CONN_STATUS status,
  * Returns          void
  *
  ******************************************************************************/
-static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
+static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status,
+                                 uint8_t num_sco_links,
                                  UNUSED_ATTR uint8_t app_id,
                                  UNUSED_ATTR const RawAddress& peer_addr) {
   tBTA_AV_SCB* p_scb;
@@ -1007,8 +1021,8 @@ static void bta_av_sco_chg_cback(tBTA_SYS_CONN_STATUS status, uint8_t id,
   tBTA_AV_API_STOP stop;
 
   LOG(INFO) << __func__ << ": status=" << bta_sys_conn_status_text(status)
-            << ", num_links=" << +id;
-  if (id) {
+            << ", num_links=" << +num_sco_links;
+  if (num_sco_links) {
     bta_av_cb.sco_occupied = true;
     LOG_DEBUG("SCO occupied peer:%s status:%s", ADDRESS_TO_LOGGABLE_CSTR(peer_addr),
               bta_sys_conn_status_text(status).c_str());

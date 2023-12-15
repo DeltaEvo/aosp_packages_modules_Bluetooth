@@ -42,6 +42,7 @@
 #include "test/mock/mock_osi_alarm.h"
 #include "test/mock/mock_osi_allocator.h"
 #include "test/mock/mock_stack_acl.h"
+#include "test/mock/mock_stack_btm.h"
 #include "test/mock/mock_stack_btm_ble.h"
 #include "test/mock/mock_stack_btm_inq.h"
 #include "test/mock/mock_stack_btm_sec.h"
@@ -49,8 +50,6 @@
 
 using namespace std::chrono_literals;
 using ::testing::ElementsAre;
-
-extern struct btm_client_interface_t btm_client_interface;
 
 namespace base {
 class MessageLoop;
@@ -76,8 +75,9 @@ namespace bluetooth {
 namespace legacy {
 namespace testing {
 
-void bta_dm_init_cb();
 void bta_dm_deinit_cb();
+void bta_dm_init_cb();
+void bta_dm_remote_name_cmpl(const tBTA_DM_MSG* p_data);
 
 }  // namespace testing
 }  // namespace legacy
@@ -106,6 +106,7 @@ class BtaDmTest : public testing::Test {
     bluetooth::legacy::testing::bta_dm_deinit_cb();
     post_on_bt_main([]() { LOG_INFO("Main thread shutting down"); });
     main_thread_shut_down();
+    btm_client_interface = {};
   }
 
   std::unique_ptr<test::fake::FakeOsi> fake_osi_;
@@ -378,8 +379,8 @@ TEST_F(BtaDmTest, bta_dm_state_text) {
 
 TEST_F(BtaDmTest, bta_dm_remname_cback__typical) {
   bta_dm_search_cb = {
-      .name_discover_done = false,
       .peer_bdaddr = kRawAddress,
+      .name_discover_done = false,
   };
 
   tBTM_REMOTE_DEV_NAME name = {
@@ -392,6 +393,11 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__typical) {
   strlcpy(reinterpret_cast<char*>(&name.remote_bd_name), kRemoteName,
           strlen(kRemoteName));
 
+  btm_client_interface.security.BTM_SecDeleteRmtNameNotifyCallback =
+      [](tBTM_RMT_NAME_CALLBACK*) -> bool {
+    inc_func_call_count("BTM_SecDeleteRmtNameNotifyCallback");
+    return true;
+  };
   bluetooth::legacy::testing::bta_dm_remname_cback(&name);
 
   sync_main_handler();
@@ -402,8 +408,8 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__typical) {
 
 TEST_F(BtaDmTest, bta_dm_remname_cback__wrong_address) {
   bta_dm_search_cb = {
-      .name_discover_done = false,
       .peer_bdaddr = kRawAddress,
+      .name_discover_done = false,
   };
 
   tBTM_REMOTE_DEV_NAME name = {
@@ -416,6 +422,11 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__wrong_address) {
   strlcpy(reinterpret_cast<char*>(&name.remote_bd_name), kRemoteName,
           strlen(kRemoteName));
 
+  btm_client_interface.security.BTM_SecDeleteRmtNameNotifyCallback =
+      [](tBTM_RMT_NAME_CALLBACK*) -> bool {
+    inc_func_call_count("BTM_SecDeleteRmtNameNotifyCallback");
+    return true;
+  };
   bluetooth::legacy::testing::bta_dm_remname_cback(&name);
 
   sync_main_handler();
@@ -426,8 +437,8 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__wrong_address) {
 
 TEST_F(BtaDmTest, bta_dm_remname_cback__HCI_ERR_CONNECTION_EXISTS) {
   bta_dm_search_cb = {
-      .name_discover_done = false,
       .peer_bdaddr = kRawAddress,
+      .name_discover_done = false,
   };
 
   tBTM_REMOTE_DEV_NAME name = {
@@ -440,6 +451,11 @@ TEST_F(BtaDmTest, bta_dm_remname_cback__HCI_ERR_CONNECTION_EXISTS) {
   strlcpy(reinterpret_cast<char*>(&name.remote_bd_name), kRemoteName,
           strlen(kRemoteName));
 
+  btm_client_interface.security.BTM_SecDeleteRmtNameNotifyCallback =
+      [](tBTM_RMT_NAME_CALLBACK*) -> bool {
+    inc_func_call_count("BTM_SecDeleteRmtNameNotifyCallback");
+    return true;
+  };
   bluetooth::legacy::testing::bta_dm_remname_cback(&name);
 
   sync_main_handler();
@@ -555,7 +571,7 @@ TEST_F(BtaDmTest, bta_dm_remote_name_cmpl) {
               .hci_status = HCI_SUCCESS,
           },
   };
-  bta_dm_remote_name_cmpl(&msg);
+  bluetooth::legacy::testing::bta_dm_remote_name_cmpl(&msg);
   ASSERT_EQ(1, get_func_call_count("BTM_InqDbRead"));
 }
 

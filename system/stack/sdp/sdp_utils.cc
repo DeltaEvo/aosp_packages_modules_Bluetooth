@@ -37,16 +37,15 @@
 
 #include "btif/include/btif_config.h"
 #include "btif/include/stack_manager.h"
-#include "common/init_flags.h"
 #include "device/include/interop.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "osi/include/properties.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/avrc_defs.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_psm_types.h"
 #include "stack/include/btm_api_types.h"
-#include "stack/include/sdp_api.h"
 #include "stack/include/sdpdefs.h"
 #include "stack/include/stack_metrics_logging.h"
 #include "stack/sdp/sdpint.h"
@@ -251,7 +250,9 @@ void sdpu_log_attribute_metrics(const RawAddress& bda,
       case UUID_SERVCLASS_AUDIO_SINK: {
         tSDP_DISC_ATTR* p_attr =
             SDP_FindAttributeInRec(p_rec, ATTR_ID_SUPPORTED_FEATURES);
-        if (p_attr == nullptr) {
+        if (p_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 2) {
           break;
         }
         uint16_t supported_features = p_attr->attr_value.v.u16;
@@ -264,7 +265,9 @@ void sdpu_log_attribute_metrics(const RawAddress& bda,
       case UUID_SERVCLASS_MESSAGE_ACCESS: {
         tSDP_DISC_ATTR* p_attr =
             SDP_FindAttributeInRec(p_rec, ATTR_ID_MAP_SUPPORTED_FEATURES);
-        if (p_attr == nullptr) {
+        if (p_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 4) {
           break;
         }
         uint32_t map_supported_features = p_attr->attr_value.v.u32;
@@ -277,7 +280,9 @@ void sdpu_log_attribute_metrics(const RawAddress& bda,
       case UUID_SERVCLASS_PBAP_PSE: {
         tSDP_DISC_ATTR* p_attr =
             SDP_FindAttributeInRec(p_rec, ATTR_ID_PBAP_SUPPORTED_FEATURES);
-        if (p_attr == nullptr) {
+        if (p_attr == nullptr ||
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 4) {
           break;
         }
         uint32_t pbap_supported_features = p_attr->attr_value.v.u32;
@@ -412,9 +417,9 @@ tCONN_CB* sdpu_allocate_ccb(void) {
  ******************************************************************************/
 void sdpu_callback(tCONN_CB& ccb, tSDP_REASON reason) {
   if (ccb.p_cb) {
-    (ccb.p_cb)(reason);
+    (ccb.p_cb)(ccb.device_address, reason);
   } else if (ccb.p_cb2) {
-    (ccb.p_cb2)(reason, ccb.user_data);
+    (ccb.p_cb2)(ccb.device_address, reason, ccb.user_data);
   }
 }
 
@@ -1132,8 +1137,28 @@ bool sdpu_compare_uuid_arrays(const uint8_t* p_uuid1, uint32_t len1,
  ******************************************************************************/
 bool sdpu_compare_uuid_with_attr(const Uuid& uuid, tSDP_DISC_ATTR* p_attr) {
   int len = uuid.GetShortestRepresentationSize();
-  if (len == 2) return uuid.As16Bit() == p_attr->attr_value.v.u16;
-  if (len == 4) return uuid.As32Bit() == p_attr->attr_value.v.u32;
+  if (len == 2) {
+    if (SDP_DISC_ATTR_LEN(p_attr->attr_len_type) == Uuid::kNumBytes16) {
+      return uuid.As16Bit() == p_attr->attr_value.v.u16;
+    } else {
+      LOG_ERROR("invalid length for discovery attribute");
+      return (false);
+    }
+  }
+  if (len == 4) {
+    if (SDP_DISC_ATTR_LEN(p_attr->attr_len_type) == Uuid::kNumBytes32) {
+      return uuid.As32Bit() == p_attr->attr_value.v.u32;
+    } else {
+      LOG_ERROR("invalid length for discovery attribute");
+      return (false);
+    }
+  }
+
+  if (SDP_DISC_ATTR_LEN(p_attr->attr_len_type) != Uuid::kNumBytes128) {
+    LOG_ERROR("invalid length for discovery attribute");
+    return (false);
+  }
+
   if (memcmp(uuid.To128BitBE().data(), (void*)p_attr->attr_value.v.array,
              Uuid::kNumBytes128) == 0)
     return (true);

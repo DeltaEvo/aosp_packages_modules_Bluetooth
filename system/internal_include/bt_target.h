@@ -257,7 +257,7 @@
 
 /* The size in bytes of the BTM inquiry database. */
 #ifndef BTM_INQ_DB_SIZE
-#define BTM_INQ_DB_SIZE 40
+#define BTM_INQ_DB_SIZE 80
 #endif
 
 /* Sets the Page_Scan_Window:  the length of time that the device is performing
@@ -497,14 +497,6 @@
 
 #ifndef LOCAL_BLE_CONTROLLER_ID
 #define LOCAL_BLE_CONTROLLER_ID 1
-#endif
-
-/*
- * Toggles support for vendor specific extensions such as RPA offloading,
- * feature discovery, multi-adv etc.
- */
-#ifndef BLE_VND_INCLUDED
-#define BLE_VND_INCLUDED TRUE
 #endif
 
 /* The maximum number of simultaneous applications that can register with LE

@@ -34,7 +34,6 @@ import android.os.Looper;
 import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.KeyEvent;
 
 import com.android.bluetooth.BluetoothEventLogger;
 import com.android.bluetooth.Utils;
@@ -247,6 +246,7 @@ public class MediaPlayerList {
     }
 
     public void cleanup() {
+        mCallback = null;
         mContext.unregisterReceiver(mPackageChangedBroadcastReceiver);
 
         mActivePlayerId = NO_ACTIVE_PLAYER;
@@ -671,14 +671,6 @@ public class MediaPlayerList {
         sendMediaUpdate(data);
     }
 
-    // TODO (apanicke): Add logging for media key events in dumpsys
-    public void sendMediaKeyEvent(int key, boolean pushed) {
-        d("sendMediaKeyEvent: key=" + key + " pushed=" + pushed);
-        int action = pushed ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
-        KeyEvent event = new KeyEvent(action, AvrcpPassthrough.toKeyCode(key));
-        mAudioManager.dispatchMediaKeyEvent(event);
-    }
-
     private void sendFolderUpdate(boolean availablePlayers, boolean addressedPlayers,
             boolean uids) {
         d("sendFolderUpdate");
@@ -960,7 +952,6 @@ public class MediaPlayerList {
         sb.append("\n");
         mAudioPlaybackStateLogger.dump(sb);
         sb.append("\n");
-        // TODO (apanicke): Add last sent data
     }
 
     private static void e(String message) {

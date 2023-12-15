@@ -21,7 +21,10 @@ filegroup {
     srcs: [
         ":statslog-bluetooth-java-gen",
         "src/**/*.java",
-        "src/**/*.kt",
+        "src/AdapterState.kt",
+        "src/RadioModeListener.kt",
+        "src/com/**/*.kt",
+        "src/satellite/ModeListener.kt",
     ],
     visibility: [":__subpackages__"],
 }
@@ -42,17 +45,26 @@ java_defaults {
             "-Xep:ReferenceEquality:ERROR",
         ],
     },
-    product_variables: {
-        pdk: {
-            enabled: false,
-        },
-    },
 
     sdk_version: "system_server_current",
 
     lint: {
+        error_checks: [
+            "ExtraText",
+            "NewApi",
+            "ObsoleteSdkInt",
+            "Recycle",
+            "RtlHardcoded",
+            "UseSparseArrays",
+            "UseValueOf",
+        ],
         strict_updatability_linting: true,
     },
+
+    kotlincflags: [
+        "-Werror",
+    ],
+
     libs: [
         "framework-annotations-lib",
         "framework-bluetooth-pre-jarjar",
@@ -137,4 +149,31 @@ java_library {
         "com.android.btservices",
     ],
     min_sdk_version: "Tiramisu",
+}
+
+android_robolectric_test {
+    name: "ServiceBluetoothRoboTests",
+    instrumentation_for: "ServiceBluetoothFakeTestApp",
+
+    srcs: [
+        "src/AdapterState.kt",
+        "src/AdapterStateTest.kt",
+        "src/RadioModeListener.kt",
+        "src/RadioModeListenerTest.kt",
+        "src/satellite/ModeListener.kt",
+        "src/satellite/ModeListenerTest.kt",
+    ],
+
+    static_libs: [
+        "androidx.test.core",
+        "kotlinx_coroutines",
+        "kotlinx_coroutines_test",
+        "mockito-robolectric-prebuilt",
+        "platform-test-annotations",
+        "testng",
+        "truth",
+    ],
+
+    upstream: true,
+    test_suites: ["general-tests"],
 }

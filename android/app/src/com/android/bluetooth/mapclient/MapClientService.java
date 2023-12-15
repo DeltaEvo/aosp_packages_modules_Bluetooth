@@ -155,6 +155,8 @@ public class MapClientService extends ProfileService {
             Log.d(TAG, "Statemachine exists for a device in unexpected state: " + state);
         }
         mMapInstanceMap.remove(device);
+        mapStateMachine.doQuit();
+
         addDeviceToMapAndConnect(device);
         if (DBG) {
             StringBuilder sb = new StringBuilder();
@@ -328,9 +330,6 @@ public class MapClientService extends ProfileService {
         removeUncleanAccounts();
         MapClientContent.clearAllContent(this);
         setMapClientService(this);
-        mAdapterService.notifyActivityAttributionInfo(
-                getAttributionSource(),
-                AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
         return true;
     }
 
@@ -340,11 +339,6 @@ public class MapClientService extends ProfileService {
             Log.d(TAG, "stop()");
         }
 
-        if (mAdapterService != null) {
-            mAdapterService.notifyActivityAttributionInfo(
-                    getAttributionSource(),
-                    AdapterService.ACTIVITY_ATTRIBUTION_NO_ACTIVE_DEVICE_ADDRESS);
-        }
         if (mMapReceiver != null) {
             unregisterReceiver(mMapReceiver);
             mMapReceiver = null;
@@ -389,6 +383,7 @@ public class MapClientService extends ProfileService {
             MceStateMachine stateMachine = mMapInstanceMap.get(device);
             if (stateMachine != null) {
                 mMapInstanceMap.remove(device);
+                stateMachine.doQuit();
             }
         }
         if (DBG) {
@@ -773,19 +768,14 @@ public class MapClientService extends ProfileService {
                 }
 
                 if (uuid.equals(BluetoothUuid.MAS)) {
-                    // Check if we have a valid SDP record.
+                    // Check if we have a successful status with a valid SDP record.
+                    int status = intent.getIntExtra(BluetoothDevice.EXTRA_SDP_SEARCH_STATUS, -1);
                     SdpMasRecord masRecord =
                             intent.getParcelableExtra(BluetoothDevice.EXTRA_SDP_RECORD);
                     if (DBG) {
-                        Log.d(TAG, "SDP = " + masRecord);
+                        Log.d(TAG, "SDP complete, status: " + status + ", record:" + masRecord);
                     }
-                    int status = intent.getIntExtra(BluetoothDevice.EXTRA_SDP_SEARCH_STATUS, -1);
-                    if (masRecord == null) {
-                        Log.w(TAG, "SDP search ended with no MAS record. Status: " + status);
-                        return;
-                    }
-                    stateMachine.obtainMessage(MceStateMachine.MSG_MAS_SDP_DONE,
-                            masRecord).sendToTarget();
+                    stateMachine.sendSdpResult(status, masRecord);
                 }
             }
         }

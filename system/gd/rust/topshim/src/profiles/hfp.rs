@@ -11,6 +11,14 @@ use topshim_macros::{cb_variant, profile_enabled_or};
 use log::warn;
 
 #[derive(Debug, FromPrimitive, ToPrimitive, PartialEq, PartialOrd, Clone)]
+pub enum HfpCodecId {
+    NONE = 0x00,
+    CVSD = 0x01,
+    MSBC = 0x02,
+    LC3 = 0x03,
+}
+
+#[derive(Debug, FromPrimitive, ToPrimitive, PartialEq, PartialOrd, Clone)]
 #[repr(u32)]
 pub enum BthfConnectionState {
     Disconnected = 0,
@@ -165,6 +173,7 @@ pub mod ffi {
         fn hfp_connection_state_callback(state: u32, addr: RawAddress);
         fn hfp_audio_state_callback(state: u32, addr: RawAddress);
         fn hfp_volume_update_callback(volume: u8, addr: RawAddress);
+        fn hfp_vendor_specific_at_command_callback(at_string: String, addr: RawAddress);
         fn hfp_battery_level_update_callback(battery_level: u8, addr: RawAddress);
         fn hfp_wbs_caps_update_callback(wbs_supported: bool, addr: RawAddress);
         fn hfp_swb_caps_update_callback(swb_supported: bool, addr: RawAddress);
@@ -176,7 +185,7 @@ pub mod ffi {
         fn hfp_call_hold_callback(chld: CallHoldCommand, addr: RawAddress);
         fn hfp_debug_dump_callback(
             active: bool,
-            wbs: bool,
+            codec_id: u16,
             total_num_decoded_frames: i32,
             pkt_loss_ratio: f64,
             begin_ts: u64,
@@ -210,6 +219,7 @@ pub enum HfpCallbacks {
     ConnectionState(BthfConnectionState, RawAddress),
     AudioState(BthfAudioState, RawAddress),
     VolumeUpdate(u8, RawAddress),
+    VendorSpecificAtCommand(String, RawAddress),
     BatteryLevelUpdate(u8, RawAddress),
     WbsCapsUpdate(bool, RawAddress),
     SwbCapsUpdate(bool, RawAddress),
@@ -219,7 +229,7 @@ pub enum HfpCallbacks {
     HangupCall(RawAddress),
     DialCall(String, RawAddress),
     CallHold(CallHoldCommand, RawAddress),
-    DebugDump(bool, bool, i32, f64, u64, u64, String, String),
+    DebugDump(bool, u16, i32, f64, u64, u64, String, String),
 }
 
 pub struct HfpCallbacksDispatcher {
@@ -242,6 +252,11 @@ cb_variant!(
     HfpCb,
     hfp_volume_update_callback -> HfpCallbacks::VolumeUpdate,
     u8, RawAddress);
+
+cb_variant!(
+    HfpCb,
+    hfp_vendor_specific_at_command_callback -> HfpCallbacks::VendorSpecificAtCommand,
+    String, RawAddress);
 
 cb_variant!(
     HfpCb,
@@ -291,7 +306,7 @@ cb_variant!(
 cb_variant!(
     HfpCb,
     hfp_debug_dump_callback -> HfpCallbacks::DebugDump,
-    bool, bool, i32, f64, u64, u64, String, String);
+    bool, u16, i32, f64, u64, u64, String, String);
 
 pub struct Hfp {
     internal: cxx::UniquePtr<ffi::HfpIntf>,
