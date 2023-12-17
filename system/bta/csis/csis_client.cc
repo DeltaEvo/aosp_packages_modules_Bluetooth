@@ -41,12 +41,13 @@
 #include "gap_api.h"
 #include "gatt_api.h"
 #include "gd/common/init_flags.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/le_scanning_manager.h"
 #include "osi/include/osi.h"
 #include "osi/include/stack_power_telemetry.h"
-#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/gatt/gatt_int.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_sec_api.h"
 
 using base::Closure;

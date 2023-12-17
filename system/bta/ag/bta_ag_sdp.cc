@@ -27,20 +27,20 @@
 #include <base/location.h>
 #include <base/logging.h>
 
-#include "bt_target.h"  // Legacy stack config
 #include "bta/ag/bta_ag_int.h"
+#include "bta/include/bta_hfp_api.h"
 #include "bta/include/bta_rfcomm_scn.h"
 #include "btif/include/btif_config.h"
 #include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
-#include "internal_include/bt_trace.h"
+#include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "stack/btm/btm_sco_hfp_hal.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
-#include "stack/include/btm_api.h"
 #include "stack/include/main_thread.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
@@ -400,7 +400,9 @@ bool bta_ag_sdp_find_attr(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK service) {
       /* get features if HFP */
       p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
           p_rec, ATTR_ID_SUPPORTED_FEATURES);
-      if (p_attr != nullptr) {
+      if (p_attr != nullptr &&
+          SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == UINT_DESC_TYPE &&
+          SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 2) {
         /* Found attribute. Get value. */
         /* There might be race condition between SDP and BRSF.  */
         /* Do not update if we already received BRSF.           */
@@ -445,7 +447,9 @@ bool bta_ag_sdp_find_attr(tBTA_AG_SCB* p_scb, tBTA_SERVICE_MASK service) {
       /* get features if HSP */
       p_attr = get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
           p_rec, ATTR_ID_REMOTE_AUDIO_VOLUME_CONTROL);
-      if (p_attr != nullptr) {
+      if (p_attr != nullptr &&
+            SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) == BOOLEAN_DESC_TYPE &&
+            SDP_DISC_ATTR_LEN(p_attr->attr_len_type) >= 1) {
         /* Remote volume control of HSP */
         if (p_attr->attr_value.v.u8)
           p_scb->peer_features |= BTA_AG_PEER_FEAT_VOL;

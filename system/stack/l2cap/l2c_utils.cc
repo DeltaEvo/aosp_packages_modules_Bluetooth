@@ -29,17 +29,20 @@
 
 #include "device/include/controller.h"
 #include "gd/hal/snoop_logger.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/entry.h"
-#include "main/shim/l2c_api.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/hci_error_code.h"
 #include "stack/include/hcidefs.h"
 #include "stack/include/l2c_api.h"
+#include "stack/include/l2cap_acl_interface.h"
+#include "stack/include/l2cap_hci_link_interface.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/l2cap/l2c_int.h"
 #include "types/raw_address.h"
@@ -2337,6 +2340,34 @@ static void l2cu_set_acl_priority_unisoc(tL2C_LCB* p_lcb,
 
 /*******************************************************************************
  *
+ * Function         l2cu_set_acl_priority_latency_mtk
+ *
+ * Description      Sends a VSC to set the ACL priority and recorded latency on
+ *                  Mediatek chip.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+
+static void l2cu_set_acl_priority_latency_mtk(tL2C_LCB* p_lcb,
+                                               tL2CAP_PRIORITY priority) {
+  uint8_t vs_param;
+  if (priority == L2CAP_PRIORITY_HIGH) {
+    // priority to high, if using latency mode check preset latency
+    LOG_INFO("Set ACL priority: High Priority Mode");
+    vs_param = HCI_MTK_ACL_HIGH_PRIORITY;
+  } else {
+    // priority to normal
+    LOG_INFO("Set ACL priority: Normal Mode");
+    vs_param = HCI_MTK_ACL_NORMAL_PRIORITY;
+  }
+
+  BTM_VendorSpecificCommand(HCI_MTK_SET_ACL_PRIORITY,
+                            HCI_MTK_ACL_PRIORITY_PARAM_SIZE, &vs_param, NULL);
+}
+
+/*******************************************************************************
+ *
  * Function         l2cu_set_acl_priority
  *
  * Description      Sets the transmission priority for a channel.
@@ -2377,6 +2408,10 @@ bool l2cu_set_acl_priority(const RawAddress& bd_addr, tL2CAP_PRIORITY priority,
 
       case LMP_COMPID_UNISOC:
         l2cu_set_acl_priority_unisoc(p_lcb, priority);
+        break;
+
+      case LMP_COMPID_MEDIATEK:
+        l2cu_set_acl_priority_latency_mtk(p_lcb, priority);
         break;
 
       default:

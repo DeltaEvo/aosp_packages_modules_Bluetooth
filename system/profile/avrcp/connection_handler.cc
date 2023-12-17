@@ -24,6 +24,7 @@
 
 #include "avrc_defs.h"
 #include "avrcp_message_converter.h"
+#include "internal_include/bt_target.h"
 #include "packet/avrcp/avrcp_packet.h"
 // TODO (apanicke): Remove dependency on this header once we cleanup feature
 // handling.
@@ -533,7 +534,9 @@ void ConnectionHandler::SdpCb(RawAddress bdaddr, SdpCallback cb,
         VLOG(1) << __PRETTY_FUNCTION__ << " Get Supported categories";
         tSDP_DISC_ATTR* sdp_attribute =
             sdp_->FindAttributeInRec(sdp_record, ATTR_ID_SUPPORTED_FEATURES);
-        if (sdp_attribute != NULL) {
+        if (sdp_attribute != NULL &&
+            SDP_DISC_ATTR_TYPE(sdp_attribute->attr_len_type) == UINT_DESC_TYPE &&
+            SDP_DISC_ATTR_LEN(sdp_attribute->attr_len_type) >= 2) {
           VLOG(1) << __PRETTY_FUNCTION__
                   << "Get Supported categories SDP ATTRIBUTES != null";
           uint16_t categories = sdp_attribute->attr_value.v.u16;
@@ -580,7 +583,9 @@ void ConnectionHandler::SdpCb(RawAddress bdaddr, SdpCallback cb,
         VLOG(1) << __PRETTY_FUNCTION__ << " Get Supported categories";
         tSDP_DISC_ATTR* sdp_attribute =
             sdp_->FindAttributeInRec(sdp_record, ATTR_ID_SUPPORTED_FEATURES);
-        if (sdp_attribute != NULL) {
+        if (sdp_attribute != NULL &&
+            SDP_DISC_ATTR_TYPE(sdp_attribute->attr_len_type) == UINT_DESC_TYPE &&
+            SDP_DISC_ATTR_LEN(sdp_attribute->attr_len_type) >= 2) {
           VLOG(1) << __PRETTY_FUNCTION__
                   << "Get Supported categories SDP ATTRIBUTES != null";
           uint16_t categories = sdp_attribute->attr_value.v.u16;

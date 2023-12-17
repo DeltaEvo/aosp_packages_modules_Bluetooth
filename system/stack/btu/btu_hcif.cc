@@ -35,9 +35,11 @@
 
 #include <cstdint>
 
+#include "common/init_flags.h"
 #include "common/metrics.h"
 #include "device/include/controller.h"
-#include "gd/common/init_flags.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
 #include "main/shim/hci_layer.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
@@ -1660,6 +1662,12 @@ static void btu_ble_data_length_change_evt(uint8_t* p, uint16_t evt_len) {
 
   if (!controller_get_interface()->supports_ble_packet_extension()) {
     LOG_WARN("%s, request not supported", __func__);
+    return;
+  }
+
+  // 2 bytes each for handle, tx_data_len, TxTimer, rx_data_len
+  if (evt_len < 8) {
+    LOG_ERROR("Event packet too short");
     return;
   }
 

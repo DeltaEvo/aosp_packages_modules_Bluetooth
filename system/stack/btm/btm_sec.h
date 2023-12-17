@@ -42,11 +42,6 @@
 #define BTM_SEC_MAX_COLLISION_DELAY (5000)
 
 /*******************************************************************************
- *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
- ******************************************************************************/
-tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
-
-/*******************************************************************************
  *
  * Function         BTM_SecRegister
  *
@@ -83,19 +78,6 @@ bool BTM_SecAddRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);
  *
  ******************************************************************************/
 bool BTM_SecDeleteRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);
-
-/*******************************************************************************
- *
- * Function         BTM_GetSecurityFlagsByTransport
- *
- * Description      Get security flags for the device on a particular transport
- *
- * Returns          bool    true or false is device found
- *
- ******************************************************************************/
-bool BTM_GetSecurityFlagsByTransport(const RawAddress& bd_addr,
-                                     uint8_t* p_sec_flags,
-                                     tBT_TRANSPORT transport);
 
 bool BTM_IsEncrypted(const RawAddress& bd_addr, tBT_TRANSPORT transport);
 bool BTM_IsLinkKeyAuthed(const RawAddress& bd_addr, tBT_TRANSPORT transport);
@@ -714,18 +696,6 @@ void btm_sec_pin_code_request(const RawAddress bda);
  *
  ******************************************************************************/
 void btm_sec_update_clock_offset(uint16_t handle, uint16_t clock_offset);
-
-/*******************************************************************************
- *
- * Function         btm_sec_find_first_serv
- *
- * Description      Look for the first record in the service database
- *                  with specified PSM
- *
- * Returns          Pointer to the record or NULL
- *
- ******************************************************************************/
-tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
 
 /*******************************************************************************
  *

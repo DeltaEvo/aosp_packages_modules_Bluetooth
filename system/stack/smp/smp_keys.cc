@@ -40,6 +40,7 @@
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_ble_sec_api.h"
 #include "types/raw_address.h"
@@ -67,12 +68,14 @@ void smp_save_local_oob_data(tSMP_CB* p_cb) {
 
 void smp_clear_local_oob_data() { saved_local_oob_data = {}; }
 
-static bool is_empty(tSMP_LOC_OOB_DATA* data) {
+static bool is_oob_data_empty(tSMP_LOC_OOB_DATA* data) {
   tSMP_LOC_OOB_DATA empty_data = {};
   return memcmp(data, &empty_data, sizeof(tSMP_LOC_OOB_DATA)) == 0;
 }
 
-bool smp_has_local_oob_data() { return !is_empty(&saved_local_oob_data); }
+bool smp_has_local_oob_data() {
+  return !is_oob_data_empty(&saved_local_oob_data);
+}
 
 void smp_debug_print_nbyte_little_endian(uint8_t* p, const char* key_name,
                                          uint8_t len) {}
@@ -605,7 +608,7 @@ void smp_create_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     // pairing will fail Not much we can do about it at this point, just have to
     // generate new data The data will be cleared after the advertiser times
     // out, so if the advertiser times out we want the pairing to fail anyway.
-    if (!is_empty(&saved_local_oob_data)) {
+    if (!is_oob_data_empty(&saved_local_oob_data)) {
       LOG_WARN("Found OOB data, loading keys");
       for (int i = 0; i < BT_OCTET32_LEN; i++) {
         p_cb->private_key[i] = saved_local_oob_data.private_key_used[i];
@@ -675,7 +678,7 @@ void smp_use_oob_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
         // point, just have to generate new data The data will be cleared after
         // the advertiser times out, so if the advertiser times out we want the
         // pairing to fail anyway.
-        if (!is_empty(&saved_local_oob_data)) {
+        if (!is_oob_data_empty(&saved_local_oob_data)) {
           LOG_INFO("Found OOB data, loading keys");
           for (int i = 0; i < BT_OCTET32_LEN; i++) {
             p_cb->private_key[i] = saved_local_oob_data.private_key_used[i];
@@ -1035,8 +1038,8 @@ bool smp_calculate_long_term_key_from_link_key(tSMP_CB* p_cb) {
   }
 
   Octet16 rev_link_key;
-  std::reverse_copy(p_dev_rec->link_key.begin(), p_dev_rec->link_key.end(),
-                    rev_link_key.begin());
+  std::reverse_copy(p_dev_rec->sec_rec.link_key.begin(),
+                    p_dev_rec->sec_rec.link_key.end(), rev_link_key.begin());
   p_cb->ltk = crypto_toolbox::link_key_to_ltk(rev_link_key,
                                               p_cb->key_derivation_h7_used);
 

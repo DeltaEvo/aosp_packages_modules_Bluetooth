@@ -53,6 +53,31 @@ cc_library {
     },
 }
 
+cc_library_static {
+    name: "libbt-jni-thread",
+    defaults: ["fluoride_defaults"],
+    host_supported: true,
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/include",
+        "packages/modules/Bluetooth/system/stack/include",
+        "packages/modules/Bluetooth/system/types",
+    ],
+    srcs: ["src/btif_jni_task.cc"],
+    static_libs: [
+        "libbt_shim_bridge",
+        "libosi",
+    ],
+    shared_libs: [
+        "libchrome",
+    ],
+    apex_available: [
+        "com.android.btservices",
+    ],
+    min_sdk_version: "Tiramisu",
+}
+
 genrule {
     name: "statslog_bt.h",
     tools: ["stats-log-api-gen"],
@@ -129,6 +154,7 @@ cc_library_static {
     },
     static_libs: [
         "avrcp-target-service",
+        "bluetooth_flags_c_lib",
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",
@@ -177,7 +203,6 @@ cc_library_static {
         "src/btif_gatt_test.cc",
         "src/btif_gatt_util.cc",
         "src/btif_iot_config.cc",
-        "src/btif_jni_task.cc",
         "src/btif_keystore.cc",
         "src/btif_metrics_logging.cc",
         "src/btif_profile_queue.cc",
@@ -219,6 +244,7 @@ cc_library_static {
         "libaudio-a2dp-hw-utils",
         "libbluetooth_crypto_toolbox",
         "libbt-audio-hal-interface",
+        "libbt-jni-thread",
         "libbt-platform-protos-lite",
         "libbt-stack-core",
         "libbt_shim_bridge",
@@ -285,6 +311,7 @@ cc_test {
         "libbt-btu-main-thread",
         "libbt-common",
         "libbt-hci",
+        "libbt-jni-thread",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
@@ -554,7 +581,6 @@ cc_test {
         ":TestCommonCoreInterface",
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
-        ":TestMockAndroidHardware",
         ":TestMockBtaAg",
         ":TestMockBtaAr",
         ":TestMockBtaAv",
@@ -580,7 +606,6 @@ cc_test {
         ":TestMockMainShim",
         ":TestMockStack",
         ":TestMockUdrv",
-        ":TestMockUtils",
         "test/btif_hh_test.cc",
     ],
     generated_headers: [
@@ -610,6 +635,7 @@ cc_test {
         "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-common",
+        "libbt-jni-thread",
         "libbt-platform-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
@@ -677,7 +703,6 @@ cc_test {
         ":TestCommonMainHandler",
         ":TestCommonMockFunctions",
         ":TestFakeOsi",
-        ":TestMockAndroidHardware",
         ":TestMockBtaAg",
         ":TestMockBtaAr",
         ":TestMockBtaAv",
@@ -703,7 +728,6 @@ cc_test {
         ":TestMockMainShim",
         ":TestMockStack",
         ":TestMockUdrv",
-        ":TestMockUtils",
         "test/btif_core_test.cc",
     ],
     generated_headers: [
@@ -732,6 +756,7 @@ cc_test {
         "libbluetooth_gd",
         "libbt-audio-hal-interface",
         "libbt-common",
+        "libbt-jni-thread",
         "libbt-platform-protos-lite",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",

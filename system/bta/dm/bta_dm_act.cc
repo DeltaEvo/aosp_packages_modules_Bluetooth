@@ -43,6 +43,7 @@
 #include "btif/include/stack_manager.h"
 #include "device/include/controller.h"
 #include "include/bind_helpers.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/btm_api.h"
 #include "osi/include/allocator.h"
@@ -51,6 +52,7 @@
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/btm_client_interface.h"
 #include "stack/include/gatt_api.h"
@@ -59,7 +61,6 @@
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-using namespace bluetooth::legacy::stack::sdp;
 using bluetooth::Uuid;
 
 bool ble_vnd_is_included();

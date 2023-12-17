@@ -30,6 +30,7 @@
 #include "gd/common/strings.h"
 #include "hci/hci_packets.h"
 #include "hcimsgs.h"
+#include "internal_include/bt_trace.h"
 #include "le_audio_health_status.h"
 #include "le_audio_log_history.h"
 #include "le_audio_types.h"
@@ -618,9 +619,22 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
     if (group->GetState() == AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING &&
         !group->GetFirstActiveDeviceByCisAndDataPathState(
             CisState::CONNECTED, DataPathState::IDLE)) {
-      /* No more transition for group */
+      /* No more transition for group. Here we are for the late join device
+       * scenario */
       cancel_watchdog_if_needed(group->group_id_);
     }
+
+    if (group->GetNotifyStreamingWhenCisesAreReadyFlag() &&
+        group->IsGroupStreamReady()) {
+      group->SetNotifyStreamingWhenCisesAreReadyFlag(false);
+      LOG_INFO("Ready to notify Group Streaming.");
+      cancel_watchdog_if_needed(group->group_id_);
+      if (group->GetState() != AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
+        group->SetState(AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING);
+      }
+      state_machine_callbacks_->StatusReportCb(group->group_id_,
+                                               GroupStreamStatus::STREAMING);
+    };
   }
 
   void ProcessHciNotifRemoveIsoDataPath(LeAudioDeviceGroup* group,
@@ -2682,7 +2696,11 @@ class LeAudioGroupStateMachineImpl : public LeAudioGroupStateMachine {
         }
 
         /* Not all CISes establish events will came */
-        if (!group->IsGroupStreamReady()) return;
+        if (!group->IsGroupStreamReady()) {
+          LOG_INFO("CISes are not yet ready, wait for it.");
+          group->SetNotifyStreamingWhenCisesAreReadyFlag(true);
+          return;
+        }
 
         if (group->GetTargetState() ==
             AseState::BTA_LE_AUDIO_ASE_STATE_STREAMING) {
