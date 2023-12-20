@@ -34,7 +34,6 @@ source_set("nonstandard_codecs") {
       "//bt/system/bta/include",
       "//bt/system/btif/include",
       "//bt/system/include",
-      "//bt/system/internal_include",
       "//bt/system/stack",
       "//bt/system/stack/include",
       "//bt/system/utils/include",
@@ -55,6 +54,7 @@ source_set("stack") {
   sources = [
     "a2dp/a2dp_api.cc",
     "a2dp/a2dp_codec_config.cc",
+    "a2dp/a2dp_ext.cc",
     "a2dp/a2dp_sbc.cc",
     "a2dp/a2dp_sbc_decoder.cc",
     "a2dp/a2dp_sbc_encoder.cc",
@@ -207,7 +207,6 @@ source_set("stack") {
     "//bt/system/ctrlr/include",
     "//bt/system/gd",
     "//bt/system/hcis",
-    "//bt/system/internal_include",
     "//bt/system/linux_include",
     "//bt/system/rpc/include",
     "//bt/system/types",
@@ -245,7 +244,6 @@ if (use.test) {
       "btm",
       "include",
       "test/common",
-      "//bt/system/internal_include",
       "//bt/system/packet/tests",
     ]
 
@@ -275,7 +273,6 @@ if (defined(use.android) && use.android) {
       "//bt/system/bta/include",
       "//bt/system/bta/sys",
       "//bt/system/embdrv/sbc/encoder/include",
-      "//bt/system/internal_include",
       "//bt/system/stack/a2dp",
       "//bt/system/stack/btm",
       "//bt/system/stack/include",
@@ -325,11 +322,9 @@ if (defined(use.android) && use.android) {
     include_dirs = [
       "//bt/system/",
       "//bt/system/linux_include",
-      "//bt/system/internal_include",
       "//bt/system/bta/include",
       "//bt/system/bta/sys",
       "//bt/system/embdrv/sbc/encoder/include",
-      "//bt/system/internal_include",
       "//bt/system/stack/a2dp",
       "//bt/system/stack/l2cap",
       "//bt/system/stack/btm",
