@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-#include "gd/hci/acl_manager_mock.h"
-#include "gd/hci/controller_mock.h"
-#include "gd/hci/distance_measurement_manager_mock.h"
-#include "gd/hci/hci_layer.h"
-#include "gd/hci/hci_layer_mock.h"
-#include "gd/hci/le_advertising_manager_mock.h"
-#include "gd/hci/le_scanning_manager_mock.h"
-#include "gd/neighbor/connectability.h"
-#include "gd/neighbor/discoverability.h"
-#include "gd/neighbor/inquiry.h"
-#include "gd/neighbor/page.h"
-#include "gd/os/handler.h"
-#include "gd/security/security_module.h"
-#include "gd/storage/storage_module.h"
+#include "hci/acl_manager_mock.h"
+#include "hci/controller_mock.h"
+#include "hci/distance_measurement_manager_mock.h"
+#include "hci/hci_layer.h"
+#include "hci/hci_layer_mock.h"
+#include "hci/le_advertising_manager_mock.h"
+#include "hci/le_scanning_manager_mock.h"
 #include "main/shim/entry.h"
+#include "neighbor/connectability.h"
+#include "neighbor/discoverability.h"
+#include "neighbor/inquiry.h"
+#include "neighbor/page.h"
+#include "os/handler.h"
+#include "security/security_module.h"
+#include "storage/storage_module.h"
 
 namespace bluetooth {
 namespace hci {
@@ -65,14 +65,11 @@ hci::DistanceMeasurementManager* GetDistanceMeasurementManager() {
 hci::VendorSpecificEventManager* GetVendorSpecificEventManager() {
   return nullptr;
 }
-l2cap::classic::L2capClassicModule* GetL2capClassicModule() { return nullptr; }
-l2cap::le::L2capLeModule* GetL2capLeModule() { return nullptr; }
 neighbor::ConnectabilityModule* GetConnectability() { return nullptr; }
 neighbor::DiscoverabilityModule* GetDiscoverability() { return nullptr; }
 neighbor::InquiryModule* GetInquiry() { return nullptr; }
 neighbor::PageModule* GetPage() { return nullptr; }
 os::Handler* GetGdShimHandler() { return hci::testing::mock_gd_shim_handler_; }
-security::SecurityModule* GetSecurityModule() { return nullptr; }
 hal::SnoopLogger* GetSnoopLogger() { return nullptr; }
 storage::StorageModule* GetStorage() { return nullptr; }
 metrics::CounterMetrics* GetCounterMetrics() { return nullptr; }

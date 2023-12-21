@@ -14,7 +14,6 @@ btifCommonIncludes = [
     "packages/modules/Bluetooth/system/btif/include",
     "packages/modules/Bluetooth/system/gd",
     "packages/modules/Bluetooth/system/include",
-    "packages/modules/Bluetooth/system/internal_include",
     "packages/modules/Bluetooth/system/stack/include",
 ]
 
@@ -154,6 +153,7 @@ cc_library_static {
     },
     static_libs: [
         "avrcp-target-service",
+        "bluetooth_flags_c_lib",
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
         "lib-bt-packets-base",

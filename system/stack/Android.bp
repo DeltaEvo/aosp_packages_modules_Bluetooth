@@ -16,7 +16,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/types",
     ],
@@ -72,7 +71,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/device/include",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/gd/hal",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/udrv/include",
     ],
     generated_headers: [
@@ -84,6 +82,7 @@ cc_library_static {
         "a2dp/a2dp_aac_encoder.cc",
         "a2dp/a2dp_api.cc",
         "a2dp/a2dp_codec_config.cc",
+        "a2dp/a2dp_ext.cc",
         "a2dp/a2dp_sbc.cc",
         "a2dp/a2dp_sbc_decoder.cc",
         "a2dp/a2dp_sbc_encoder.cc",
@@ -204,7 +203,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system/bta/sys",
         "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/udrv/include",
     ],
     srcs: [
@@ -304,6 +302,7 @@ cc_library_static {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libcom.android.sysprop.bluetooth.wrapped",
+        "server_configurable_flags",
     ],
     shared_libs: [
         "libPlatformProperties",
@@ -331,7 +330,6 @@ cc_defaults {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/test/common",
         "packages/modules/Bluetooth/system/types",
@@ -492,7 +490,11 @@ cc_fuzz {
         "fuzzers/smp_fuzzer.cc",
         "smp/*.cc", // add other sources files  (p256 related) under smp into this test
     ],
+    shared_libs: [
+        "server_configurable_flags",
+    ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_hci_pdl",
@@ -659,7 +661,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         "test/gatt/gatt_api_test.cc",
@@ -746,7 +747,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/gd/hal",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMockFunctions",
@@ -831,7 +831,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMainHandler",
@@ -862,6 +861,7 @@ cc_test {
     shared_libs: [
         "libcrypto",
         "libcutils",
+        "server_configurable_flags",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -936,7 +936,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMainHandler",
@@ -1146,12 +1145,14 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
+        ":TestMockAudioHalInterface",
         ":TestMockBta",
         ":TestMockStackA2dpApi",
         "a2dp/a2dp_aac.cc",
         "a2dp/a2dp_aac_decoder.cc",
         "a2dp/a2dp_aac_encoder.cc",
         "a2dp/a2dp_codec_config.cc",
+        "a2dp/a2dp_ext.cc",
         "a2dp/a2dp_sbc.cc",
         "a2dp/a2dp_sbc_decoder.cc",
         "a2dp/a2dp_sbc_encoder.cc",
@@ -1394,7 +1395,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMainHandler",
@@ -2039,7 +2039,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/device/include/",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/btm",
     ],
     srcs: [

@@ -20,6 +20,7 @@
 #define LOG_TAG "bt_btif_a2dp_source"
 #define ATRACE_TAG ATRACE_TAG_AUDIO
 
+#include <android_bluetooth_flags.h>
 #include <base/logging.h>
 #include <base/run_loop.h>
 #ifdef __ANDROID__
@@ -335,13 +336,19 @@ bool btif_a2dp_source_init(void) {
   // Start A2DP Source media task
   btif_a2dp_source_thread.StartUp();
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_init_delayed));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_init_delayed));
   return true;
 }
 
 static void btif_a2dp_source_init_delayed(void) {
   LOG_INFO("%s", __func__);
-  // Nothing to do
+  // When codec extensibility is enabled in the audio HAL interface,
+  // the provider needs to be initialized earlier in order to ensure
+  // get_a2dp_configuration and parse_a2dp_configuration can be
+  // invoked before the stream is started.
+  if (IS_FLAG_ENABLED(a2dp_offload_codec_extensibility)) {
+    bluetooth::audio::a2dp::init(&btif_a2dp_source_thread);
+  }
 }
 
 bool btif_a2dp_source_startup(void) {
@@ -358,7 +365,7 @@ bool btif_a2dp_source_startup(void) {
 
   // Schedule the rest of the operations
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_startup_delayed));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_startup_delayed));
 
   return true;
 }
@@ -460,7 +467,7 @@ bool btif_a2dp_source_end_session(const RawAddress& peer_address) {
            btif_a2dp_source_cb.StateStr().c_str());
   btif_a2dp_source_thread.DoInThread(
       FROM_HERE,
-      base::Bind(&btif_a2dp_source_end_session_delayed, peer_address));
+      base::BindOnce(&btif_a2dp_source_end_session_delayed, peer_address));
   btif_a2dp_source_cleanup_codec();
   return true;
 }
@@ -531,7 +538,7 @@ void btif_a2dp_source_cleanup(void) {
   btif_a2dp_source_shutdown(std::move(shutdown_complete_promise));
 
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_cleanup_delayed));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_cleanup_delayed));
 
   // Exit the thread
   btif_a2dp_source_thread.ShutDown();
@@ -567,7 +574,7 @@ static void btif_a2dp_source_setup_codec(const RawAddress& peer_address) {
   btif_a2dp_source_audio_tx_flush_req();
   btif_a2dp_source_thread.DoInThread(
       FROM_HERE,
-      base::Bind(&btif_a2dp_source_setup_codec_delayed, peer_address));
+      base::BindOnce(&btif_a2dp_source_setup_codec_delayed, peer_address));
 }
 
 static void btif_a2dp_source_setup_codec_delayed(
@@ -614,7 +621,7 @@ static void btif_a2dp_source_cleanup_codec() {
   // Must stop media task first before cleaning up the encoder
   btif_a2dp_source_stop_audio_req();
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_cleanup_codec_delayed));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_cleanup_codec_delayed));
 }
 
 static void btif_a2dp_source_cleanup_codec_delayed() {
@@ -629,14 +636,14 @@ void btif_a2dp_source_start_audio_req(void) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
 
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_audio_tx_start_event));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_audio_tx_start_event));
 }
 
 void btif_a2dp_source_stop_audio_req(void) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
 
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_audio_tx_stop_event));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_audio_tx_stop_event));
 }
 
 void btif_a2dp_source_encoder_user_config_update_req(
@@ -702,8 +709,8 @@ void btif_a2dp_source_feeding_update_req(
     const btav_a2dp_codec_config_t& codec_audio_config) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_audio_feeding_update_event,
-                            codec_audio_config));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_audio_feeding_update_event,
+                                codec_audio_config));
 }
 
 static void btif_a2dp_source_audio_feeding_update_event(
@@ -818,12 +825,8 @@ static void btif_a2dp_source_audio_tx_start_event(void) {
   wakelock_acquire();
   btif_a2dp_source_cb.media_alarm.SchedulePeriodic(
       btif_a2dp_source_thread.GetWeakPtr(), FROM_HERE,
-      base::Bind(&btif_a2dp_source_audio_handle_timer),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMilliseconds(
-#else
-      base::Milliseconds(
-#endif
+      base::BindRepeating(&btif_a2dp_source_audio_handle_timer),
+      std::chrono::milliseconds(
           btif_a2dp_source_cb.encoder_interface->get_encoder_interval_ms()));
   btif_a2dp_source_cb.sw_audio_is_encoding = true;
 
@@ -1080,7 +1083,7 @@ static bool btif_a2dp_source_audio_tx_flush_req(void) {
   LOG_INFO("%s: state=%s", __func__, btif_a2dp_source_cb.StateStr().c_str());
 
   btif_a2dp_source_thread.DoInThread(
-      FROM_HERE, base::Bind(&btif_a2dp_source_audio_tx_flush_event));
+      FROM_HERE, base::BindOnce(&btif_a2dp_source_audio_tx_flush_event));
   return true;
 }
 

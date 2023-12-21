@@ -62,6 +62,7 @@
 #include "stack/acl/peer_packet_types.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
+#include "stack/btm/btm_sco.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/btm/security_device_record.h"
 #include "stack/include/acl_api.h"
@@ -77,7 +78,6 @@
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/main_thread.h"
-#include "stack/include/sco_hci_link_interface.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
 
@@ -566,7 +566,7 @@ tBTM_STATUS BTM_GetRole(const RawAddress& remote_bd_addr, tHCI_ROLE* p_role) {
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SwitchRoleToCentral(const RawAddress& remote_bd_addr) {
-  if (!controller_get_interface()->supports_central_peripheral_role_switch()) {
+  if (!controller_get_interface()->supports_role_switch()) {
     LOG_INFO("Local controller does not support role switching");
     return BTM_MODE_UNSUPPORTED;
   }
@@ -2512,12 +2512,6 @@ void btm_acl_connected(const RawAddress& bda, uint16_t handle,
   }
 }
 
-void btm_acl_iso_disconnected(uint16_t handle, tHCI_REASON reason) {
-  LOG_INFO("ISO disconnection from GD, handle: 0x%02x, reason: 0x%02x", handle,
-           reason);
-  bluetooth::hci::IsoManager::GetInstance()->HandleDisconnect(handle, reason);
-}
-
 void btm_acl_disconnected(tHCI_STATUS status, uint16_t handle,
                           tHCI_REASON reason) {
   if (status != HCI_SUCCESS) {
@@ -2532,11 +2526,8 @@ void btm_acl_disconnected(tHCI_STATUS status, uint16_t handle,
     acl_set_disconnect_reason(static_cast<tHCI_STATUS>(reason));
   }
 
-  /* If L2CAP or SCO doesn't know about it, send it to ISO */
-  if (!l2c_link_hci_disc_comp(handle, reason) &&
-      !btm_sco_removed(handle, reason)) {
-    bluetooth::hci::IsoManager::GetInstance()->HandleDisconnect(handle, reason);
-  }
+  /* Let L2CAP know about it */
+  l2c_link_hci_disc_comp(handle, reason);
 
   /* Notify security manager */
   btm_sec_disconnected(handle, reason,

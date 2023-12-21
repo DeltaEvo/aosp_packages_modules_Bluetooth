@@ -21,7 +21,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "gd/common/init_flags.h"
+#include "common/init_flags.h"
 #include "hci/hci_layer_mock.h"
 #include "hci/include/hci_layer.h"
 #include "internal_include/bt_target.h"
@@ -299,4 +299,8 @@ TEST_F(StackBtmWithInitFreeTest, is_disconnect_reason_valid) {
     else
       ASSERT_FALSE(is_disconnect_reason_valid(reason));
   }
+}
+
+TEST_F(StackBtmWithInitFreeTest, Init) {
+  ASSERT_FALSE(btm_cb.btm_inq_vars.remname_active);
 }
