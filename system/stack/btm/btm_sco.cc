@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "common/bidi_queue.h"
 #include "device/include/controller.h"
@@ -553,7 +554,7 @@ static tBTM_STATUS btm_send_connect_request(uint16_t acl_handle,
       ** If so, we cannot use SCO-only packet types (HFP 1.7)
       */
       const bool local_supports_sc =
-          controller_get_interface()->supports_secure_connections();
+          controller_get_interface()->SupportsSecureConnections();
       const bool remote_supports_sc =
           BTM_PeerSupportsSecureConnections(bd_addr);
 
