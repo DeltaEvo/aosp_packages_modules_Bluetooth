@@ -106,8 +106,6 @@ static_assert(
     "  Host interface device profile is always enabled in the bluetooth stack"
     "*** Conditional Compilation Directive error");
 
-void main_thread_shut_down();
-void main_thread_start_up();
 void BTA_dm_on_hw_on();
 void BTA_dm_on_hw_off();
 
@@ -163,13 +161,13 @@ static void start_up_stack_async(bluetooth::core::CoreInterface* interface,
                                  ProfileStartCallback startProfiles,
                                  ProfileStopCallback stopProfiles) {
   management_thread.DoInThread(
-      FROM_HERE,
-      base::Bind(event_start_up_stack, interface, startProfiles, stopProfiles));
+      FROM_HERE, base::BindOnce(event_start_up_stack, interface, startProfiles,
+                                stopProfiles));
 }
 
 static void shut_down_stack_async(ProfileStopCallback stopProfiles) {
-  management_thread.DoInThread(FROM_HERE,
-                               base::Bind(event_shut_down_stack, stopProfiles));
+  management_thread.DoInThread(
+      FROM_HERE, base::BindOnce(event_shut_down_stack, stopProfiles));
 }
 
 static void clean_up_stack(ProfileStopCallback stopProfiles) {

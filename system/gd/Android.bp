@@ -148,7 +148,7 @@ cc_defaults {
         ":BluetoothSyspropsSources",
         "module.cc",
         "module_dumper.cc",
-        "module_dumper_flatbuffer.cc",
+        "module_state_dumper.cc",
         "stack_manager.cc",
     ],
     generated_headers: [
@@ -460,7 +460,10 @@ cc_test {
     host_supported: true,
     srcs: [
         ":TestCommonMockFunctions",
+        "module_gdx_unittest.cc",
+        "module_jniloop_unittest.cc",
         "module_mainloop_unittest.cc",
+        "module_state_dumper_unittest.cc",
     ],
     generated_headers: [
         "BluetoothGeneratedBundlerSchema_h_bfbs",
@@ -472,11 +475,13 @@ cc_test {
         "libbluetooth_gd",
         "libbt-btu-main-thread",
         "libbt-common",
+        "libbt-jni-thread",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libchrome",
         "libevent",
         "libflatbuffers-cpp",
+        "libosi",
     ],
     sanitize: {
         address: true,
