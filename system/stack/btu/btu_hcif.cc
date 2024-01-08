@@ -38,6 +38,7 @@
 #include "common/init_flags.h"
 #include "common/metrics.h"
 #include "device/include/controller.h"
+#include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/hci_layer.h"
@@ -1660,7 +1661,7 @@ static void btu_ble_data_length_change_evt(uint8_t* p, uint16_t evt_len) {
   uint16_t tx_data_len;
   uint16_t rx_data_len;
 
-  if (!controller_get_interface()->supports_ble_packet_extension()) {
+  if (!controller_get_interface()->SupportsBleDataPacketLengthExtension()) {
     LOG_WARN("%s, request not supported", __func__);
     return;
   }

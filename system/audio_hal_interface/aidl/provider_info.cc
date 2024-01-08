@@ -22,6 +22,7 @@
 #include <android_bluetooth_flags.h>
 
 #include <optional>
+#include <vector>
 
 #include "a2dp_codec_api.h"
 #include "a2dp_constants.h"
@@ -48,7 +49,7 @@ using ::aidl::android::hardware::bluetooth::audio::SessionType;
  * getProviderInfo, or if the feature flag for codec
  * extensibility is disabled.
  ***/
-ProviderInfo* ProviderInfo::GetProviderInfo() {
+std::unique_ptr<ProviderInfo> ProviderInfo::GetProviderInfo() {
   if (!IS_FLAG_ENABLED(a2dp_offload_codec_extensibility)) {
     LOG(INFO) << "a2dp offload codec extensibility is disabled;"
               << " not going to load the ProviderInfo";
@@ -78,7 +79,8 @@ ProviderInfo* ProviderInfo::GetProviderInfo() {
     sink_codecs = std::move(sink_provider_info->codecInfos);
   }
 
-  return new ProviderInfo(std::move(source_codecs), std::move(sink_codecs));
+  return std::make_unique<ProviderInfo>(std::move(source_codecs),
+                                        std::move(sink_codecs));
 }
 
 /***

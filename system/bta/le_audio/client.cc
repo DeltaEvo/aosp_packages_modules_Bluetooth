@@ -41,6 +41,7 @@
 #include "device/include/controller.h"
 #include "devices.h"
 #include "gd/common/strings.h"
+#include "include/check.h"
 #include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "le_audio_health_status.h"
@@ -1994,7 +1995,7 @@ class LeAudioClientImpl : public LeAudioClient {
     BTA_GATTC_CancelOpen(gatt_if_, address, false);
     BTA_GATTC_Open(gatt_if_, address, reconnection_mode_, false);
 
-    if (controller_get_interface()->supports_ble_2m_phy()) {
+    if (controller_get_interface()->SupportsBle2mPhy()) {
       LOG(INFO) << ADDRESS_TO_LOGGABLE_STR(address)
                 << " set preferred PHY to 2M";
       BTM_BleSetPhy(address, PHY_LE_2M, PHY_LE_2M, 0);
@@ -4240,7 +4241,7 @@ class LeAudioClientImpl : public LeAudioClient {
 
   void notifyAudioLocalSink(UnicastMonitorModeStatus status) {
     if (sink_monitor_notified_status_ != status) {
-      LOG_INFO("Stram monitoring status changed to: %d",
+      LOG_INFO("Stream monitoring status changed to: %d",
                static_cast<int>(status));
       sink_monitor_notified_status_ = status;
       callbacks_->OnUnicastMonitorModeStatus(
@@ -4262,7 +4263,8 @@ class LeAudioClientImpl : public LeAudioClient {
 
     if (sink_monitor_mode_ &&
         active_group_id_ == bluetooth::groups::kGroupUnknown) {
-      if (!sink_monitor_notified_status_) {
+      if (sink_monitor_notified_status_ !=
+          UnicastMonitorModeStatus::STREAMING_REQUESTED) {
         notifyAudioLocalSink(UnicastMonitorModeStatus::STREAMING_REQUESTED);
       }
       CancelLocalAudioSinkStreamingRequest();
@@ -5487,6 +5489,14 @@ class LeAudioClientImpl : public LeAudioClient {
                 kLeAudioContextAllRemoteSource.test(configuration_context_type_)
                     ? le_audio::types::kLeAudioDirectionSource
                     : le_audio::types::kLeAudioDirectionSink;
+
+            /* Reconfiguration to non requiring source scenario */
+            if (sink_monitor_mode_ &&
+                (remote_direction == le_audio::types::kLeAudioDirectionSink)) {
+              notifyAudioLocalSink(
+                  UnicastMonitorModeStatus::STREAMING_SUSPENDED);
+            }
+
             auto remote_contexts =
                 DirectionalRealignMetadataAudioContexts(group, remote_direction);
             ApplyRemoteMetadataAudioContextPolicy(group, remote_contexts,
@@ -5501,8 +5511,7 @@ class LeAudioClientImpl : public LeAudioClient {
             group->ClearPendingConfiguration();
           } else {
             if (sink_monitor_mode_) {
-              callbacks_->OnUnicastMonitorModeStatus(
-                  le_audio::types::kLeAudioDirectionSink,
+              notifyAudioLocalSink(
                   UnicastMonitorModeStatus::STREAMING_SUSPENDED);
             }
           }
@@ -5942,9 +5951,9 @@ void LeAudioClient::Initialize(
   }
 
   if (!controller_get_interface()
-           ->supports_ble_connected_isochronous_stream_central() &&
+           ->SupportsBleConnectedIsochronousStreamCentral() &&
       !controller_get_interface()
-           ->supports_ble_connected_isochronous_stream_peripheral()) {
+           ->SupportsBleConnectedIsochronousStreamPeripheral()) {
     LOG(ERROR) << "Controller reports no ISO support."
                   " LeAudioClient Init aborted.";
     return;

@@ -21,8 +21,9 @@
 #include <string>
 #include <vector>
 
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "gd/hal/snoop_logger.h"
+#include "include/check.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/include/bt_psm_types.h"

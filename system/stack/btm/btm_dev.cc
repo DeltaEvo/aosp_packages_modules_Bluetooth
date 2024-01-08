@@ -318,7 +318,7 @@ bool btm_dev_support_role_switch(const RawAddress& bd_addr) {
     return false;
   }
 
-  if (!controller_get_interface()->supports_role_switch()) {
+  if (!controller_get_interface()->SupportsRoleSwitch()) {
     LOG_VERBOSE("%s Local controller does not support role switch", __func__);
     return false;
   }
@@ -453,6 +453,7 @@ void btm_consolidate_dev(tBTM_SEC_DEV_REC* p_target_rec) {
     if (p_dev_rec->bd_addr == p_target_rec->bd_addr) {
       memcpy(p_target_rec, p_dev_rec, sizeof(tBTM_SEC_DEV_REC));
       p_target_rec->ble = temp_rec.ble;
+      p_target_rec->sec_rec.ble_keys = temp_rec.sec_rec.ble_keys;
       p_target_rec->ble_hci_handle = temp_rec.ble_hci_handle;
       p_target_rec->sec_rec.enc_key_size = temp_rec.sec_rec.enc_key_size;
       p_target_rec->conn_params = temp_rec.conn_params;

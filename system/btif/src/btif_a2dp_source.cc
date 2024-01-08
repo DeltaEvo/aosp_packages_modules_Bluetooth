@@ -36,21 +36,19 @@
 #include "audio_a2dp_hw/include/audio_a2dp_hw.h"
 #include "audio_hal_interface/a2dp_encoding.h"
 #include "bta_av_ci.h"
-#include "btif_a2dp.h"
 #include "btif_a2dp_control.h"
 #include "btif_a2dp_source.h"
 #include "btif_av.h"
 #include "btif_av_co.h"
 #include "btif_metrics_logging.h"
-#include "btif_util.h"
 #include "common/message_loop_thread.h"
 #include "common/metrics.h"
 #include "common/repeating_timer.h"
 #include "common/time_util.h"
+#include "include/check.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
 #include "osi/include/wakelock.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_api_types.h"
@@ -1361,6 +1359,16 @@ static void btif_a2dp_source_update_metrics(void) {
     }
   }
   BluetoothMetricsLogger::GetInstance()->LogA2dpSession(metrics);
+
+  if (metrics.audio_duration_ms != -1) {
+    log_a2dp_session_metrics_event(
+        btif_av_source_active_peer(), metrics.audio_duration_ms,
+        metrics.media_timer_min_ms, metrics.media_timer_max_ms,
+        metrics.media_timer_avg_ms, metrics.total_scheduling_count,
+        metrics.buffer_overruns_max_count, metrics.buffer_overruns_total,
+        metrics.buffer_underruns_average, metrics.buffer_underruns_count,
+        metrics.codec_index, metrics.is_a2dp_offload);
+  }
 }
 
 void btif_a2dp_source_set_dynamic_audio_buffer_size(

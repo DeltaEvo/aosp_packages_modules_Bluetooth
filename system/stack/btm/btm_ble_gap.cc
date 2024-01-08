@@ -39,6 +39,7 @@
 #include "bta/include/bta_api.h"
 #include "common/time_util.h"
 #include "device/include/controller.h"
+#include "include/check.h"
 #include "main/shim/acl_api.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -70,7 +71,6 @@
 extern tBTM_CB btm_cb;
 
 void btm_inq_remote_name_timer_timeout(void* data);
-void btm_ble_batchscan_init(void);
 void btm_ble_adv_filter_init(void);
 
 #define BTM_EXT_BLE_RMT_NAME_TIMEOUT_MS (30 * 1000)
@@ -523,7 +523,7 @@ tBTM_STATUS BTM_BleObserve(bool start, uint8_t duration,
   LOG_VERBOSE("%s : scan_type:%d, %d, %d", __func__,
               btm_cb.ble_ctr_cb.inq_var.scan_type, scan_interval, scan_window);
 
-  if (!controller_get_interface()->supports_ble()) return BTM_ILLEGAL_VALUE;
+  if (!controller_get_interface()->SupportsBle()) return BTM_ILLEGAL_VALUE;
 
   if (start) {
     /* shared inquiry database, do not allow observe if any inquiry is active.
@@ -763,13 +763,11 @@ static void btm_ble_vendor_capability_vsc_cmpl_cback(
   if (btm_cb.cmn_ble_vsc_cb.max_filter > 0) btm_ble_adv_filter_init();
 
   /* VS capability included and non-4.2 device */
-  if (controller_get_interface()->supports_ble() &&
-      controller_get_interface()->supports_ble_privacy() &&
+  if (controller_get_interface()->SupportsBle() &&
+      controller_get_interface()->SupportsBlePrivacy() &&
       btm_cb.cmn_ble_vsc_cb.max_irk_list_sz > 0 &&
       controller_get_interface()->get_ble_resolving_list_max_size() == 0)
     btm_ble_resolving_list_init(btm_cb.cmn_ble_vsc_cb.max_irk_list_sz);
-
-  if (btm_cb.cmn_ble_vsc_cb.tot_scan_results_strg > 0) btm_ble_batchscan_init();
 
   if (p_ctrl_le_feature_rd_cmpl_cback != NULL)
     p_ctrl_le_feature_rd_cmpl_cback(static_cast<tHCI_STATUS>(status));
@@ -843,7 +841,7 @@ bool BTM_BleConfigPrivacy(bool privacy_mode) {
   LOG_WARN("%s %d", __func__, (int)privacy_mode);
 
   /* if LE is not supported, return error */
-  if (!controller_get_interface()->supports_ble()) return false;
+  if (!controller_get_interface()->SupportsBle()) return false;
 
   tGAP_BLE_ATTR_VALUE gap_ble_attr_value;
   gap_ble_attr_value.addr_resolution = 0;
@@ -860,7 +858,7 @@ bool BTM_BleConfigPrivacy(bool privacy_mode) {
 
     /* 4.2 controller only allow privacy 1.2 or mixed mode, resolvable private
      * address in controller */
-    if (controller_get_interface()->supports_ble_privacy()) {
+    if (controller_get_interface()->SupportsBlePrivacy()) {
       gap_ble_attr_value.addr_resolution = 1;
       btm_cb.ble_ctr_cb.privacy_mode = BTM_PRIVACY_1_2;
     } else /* 4.1/4.0 controller */
@@ -1076,17 +1074,6 @@ static void btm_ble_start_sync_timeout(void* data) {
   p->in_use = false;
 }
 
-static int btm_ble_get_free_psync_index() {
-  int i;
-  for (i = 0; i < MAX_SYNC_TRANSACTION; i++) {
-    if (btm_ble_pa_sync_cb.p_sync[i].in_use == false) {
-      LOG_DEBUG("found index at %d", i);
-      return i;
-    }
-  }
-  return i;
-}
-
 static int btm_ble_get_psync_index_from_handle(uint16_t handle) {
   int i;
   for (i = 0; i < MAX_SYNC_TRANSACTION; i++) {
@@ -1104,17 +1091,6 @@ static int btm_ble_get_psync_index(uint8_t adv_sid, RawAddress addr) {
   for (i = 0; i < MAX_SYNC_TRANSACTION; i++) {
     if (btm_ble_pa_sync_cb.p_sync[i].sid == adv_sid &&
         btm_ble_pa_sync_cb.p_sync[i].remote_bda == addr) {
-      LOG_DEBUG("found index at %d", i);
-      return i;
-    }
-  }
-  return i;
-}
-
-static int btm_ble_get_free_sync_transfer_index() {
-  int i;
-  for (i = 0; i < MAX_SYNC_TRANSACTION; i++) {
-    if (!btm_ble_pa_sync_cb.sync_transfer[i].in_use) {
       LOG_DEBUG("found index at %d", i);
       return i;
     }
@@ -1252,102 +1228,6 @@ void btm_ble_periodic_adv_sync_lost(uint16_t sync_handle) {
 
 /*******************************************************************************
  *
- * Function        BTM_BleStartPeriodicSync
- *
- * Description     Create sync request to PA associated with address and sid
- *
- ******************************************************************************/
-void BTM_BleStartPeriodicSync(uint8_t adv_sid, RawAddress address,
-                              uint16_t skip, uint16_t timeout,
-                              StartSyncCb syncCb, SyncReportCb reportCb,
-                              SyncLostCb lostCb, BigInfoReportCb biginfo_reportCb) {
-  LOG_DEBUG("%s", "[PSync]");
-  int index = btm_ble_get_free_psync_index();
-
-  if (index == MAX_SYNC_TRANSACTION) {
-    syncCb.Run(BTM_NO_RESOURCES, 0, adv_sid, BLE_ADDR_RANDOM, address, 0, 0);
-    return;
-  }
-
-  tBTM_BLE_PERIODIC_SYNC* p = &btm_ble_pa_sync_cb.p_sync[index];
-
-  p->in_use = true;
-  p->remote_bda = address;
-  p->sid = adv_sid;
-  p->sync_start_cb = syncCb;
-  p->sync_report_cb = reportCb;
-  p->sync_lost_cb = lostCb;
-  p->biginfo_report_cb = biginfo_reportCb;
-  btm_queue_start_sync_req(adv_sid, address, skip, timeout);
-}
-
-/*******************************************************************************
- *
- * Function        BTM_BleStopPeriodicSync
- *
- * Description     Terminate sync request to PA associated with sync handle
- *
- ******************************************************************************/
-void BTM_BleStopPeriodicSync(uint16_t handle) {
-  LOG_DEBUG("[PSync]: handle = %u", handle);
-  int index = btm_ble_get_psync_index_from_handle(handle);
-  if (index == MAX_SYNC_TRANSACTION) {
-    LOG_ERROR("[PSync]: invalid index for handle %u", handle);
-    if (BleScanningManager::IsInitialized()) {
-      BleScanningManager::Get()->PeriodicScanTerminate(handle);
-    }
-    return;
-  }
-  tBTM_BLE_PERIODIC_SYNC* p = &btm_ble_pa_sync_cb.p_sync[index];
-  p->sync_state = PERIODIC_SYNC_IDLE;
-  p->in_use = false;
-  p->remote_bda = RawAddress::kEmpty;
-  p->sid = 0;
-  p->sync_handle = 0;
-  p->in_use = false;
-  if (BleScanningManager::IsInitialized()) {
-    BleScanningManager::Get()->PeriodicScanTerminate(handle);
-  }
-}
-
-/*******************************************************************************
- *
- * Function        BTM_BleCancelPeriodicSync
- *
- * Description     Cancel create sync request to PA associated with sid and
- *                 address
- *
- ******************************************************************************/
-void BTM_BleCancelPeriodicSync(uint8_t adv_sid, RawAddress address) {
-  LOG_DEBUG("%s", "[PSync]");
-  int index = btm_ble_get_psync_index(adv_sid, address);
-  if (index == MAX_SYNC_TRANSACTION) {
-    LOG_ERROR("[PSync]:Invalid index for sid=%u", adv_sid);
-    return;
-  }
-  tBTM_BLE_PERIODIC_SYNC* p = &btm_ble_pa_sync_cb.p_sync[index];
-  if (p->sync_state == PERIODIC_SYNC_PENDING) {
-    LOG_WARN("[PSync]: Sync state is pending for index %d", index);
-    if (BleScanningManager::IsInitialized()) {
-      BleScanningManager::Get()->PeriodicScanCancelStart();
-    }
-  } else if (p->sync_state == PERIODIC_SYNC_IDLE) {
-    LOG_DEBUG("[PSync]: Removing Sync request from queue for index %d", index);
-    remove_sync_node_t remove_node;
-    remove_node.sid = adv_sid;
-    remove_node.address = address;
-    btm_ble_sync_queue_handle(BTM_QUEUE_SYNC_CLEANUP_EVT, (char*)&remove_node);
-  }
-  p->sync_state = PERIODIC_SYNC_IDLE;
-  p->in_use = false;
-  p->remote_bda = RawAddress::kEmpty;
-  p->sid = 0;
-  p->sync_handle = 0;
-  p->in_use = false;
-}
-
-/*******************************************************************************
- *
  * Function        btm_ble_periodic_syc_transfer_cmd_cmpl
  *
  * Description     PAST complete callback
@@ -1374,96 +1254,6 @@ void btm_ble_periodic_syc_transfer_cmd_cmpl(uint8_t status,
 
 void btm_ble_periodic_syc_transfer_param_cmpl(uint8_t status) {
   LOG_DEBUG("[PAST]: status = %d", status);
-}
-
-/*******************************************************************************
- *
- * Function        BTM_BlePeriodicSyncTransfer
- *
- * Description     Initiate PAST to connected remote device with sync handle
- *
- ******************************************************************************/
-void BTM_BlePeriodicSyncTransfer(RawAddress addr, uint16_t service_data,
-                                 uint16_t sync_handle, SyncTransferCb cb) {
-  uint16_t conn_handle = BTM_GetHCIConnHandle(addr, BT_TRANSPORT_LE);
-  tACL_CONN* p_acl = btm_acl_for_bda(addr, BT_TRANSPORT_LE);
-  LOG_VERBOSE("[PAST]%s for connection_handle = %x", __func__, conn_handle);
-  if (conn_handle == 0xFFFF || p_acl == NULL) {
-    LOG_ERROR("[PAST]%s:Invalid connection handle or no LE ACL link", __func__);
-    cb.Run(BTM_UNKNOWN_ADDR, addr);
-    return;
-  }
-
-  if (!HCI_LE_PERIODIC_ADVERTISING_SYNC_TRANSFER_RECIPIENT(
-          p_acl->peer_le_features)) {
-    LOG_ERROR("[PAST]%s:Remote doesn't support PAST", __func__);
-    cb.Run(BTM_MODE_UNSUPPORTED, addr);
-    return;
-  }
-
-  int index = btm_ble_get_free_sync_transfer_index();
-  if (index == MAX_SYNC_TRANSACTION) {
-    LOG_ERROR("Failed to get sync transfer index");
-    cb.Run(BTM_ILLEGAL_VALUE, addr);
-    return;
-  }
-
-  tBTM_BLE_PERIODIC_SYNC_TRANSFER* p_sync_transfer =
-      &btm_ble_pa_sync_cb.sync_transfer[index];
-  p_sync_transfer->in_use = true;
-  p_sync_transfer->conn_handle = conn_handle;
-  p_sync_transfer->addr = addr;
-  p_sync_transfer->cb = cb;
-  if (BleScanningManager::IsInitialized()) {
-    BleScanningManager::Get()->PeriodicAdvSyncTransfer(
-        addr, service_data, sync_handle,
-        base::Bind(&btm_ble_periodic_syc_transfer_cmd_cmpl));
-  }
-}
-
-/*******************************************************************************
- *
- * Function        BTM_BlePeriodicSyncSetInfo
- *
- * Description     Initiate PAST to connected remote device with adv handle
- *
- ******************************************************************************/
-void BTM_BlePeriodicSyncSetInfo(RawAddress addr, uint16_t service_data,
-                                uint8_t adv_handle, SyncTransferCb cb) {
-  uint16_t conn_handle = BTM_GetHCIConnHandle(addr, BT_TRANSPORT_LE);
-  tACL_CONN* p_acl = btm_acl_for_bda(addr, BT_TRANSPORT_LE);
-  LOG_DEBUG("[PAST] for connection_handle = %u", conn_handle);
-  if (conn_handle == 0xFFFF || p_acl == nullptr) {
-    LOG_ERROR("[PAST]:Invalid connection handle %u or no LE ACL link",
-              conn_handle);
-    cb.Run(BTM_UNKNOWN_ADDR, addr);
-    return;
-  }
-  if (!HCI_LE_PERIODIC_ADVERTISING_SYNC_TRANSFER_RECIPIENT(
-          p_acl->peer_le_features)) {
-    LOG_ERROR("%s", "[PAST]:Remote doesn't support PAST");
-    cb.Run(BTM_MODE_UNSUPPORTED, addr);
-    return;
-  }
-
-  int index = btm_ble_get_free_sync_transfer_index();
-  if (index == MAX_SYNC_TRANSACTION) {
-    LOG_ERROR("Failed to get sync transfer index");
-    cb.Run(BTM_ILLEGAL_VALUE, addr);
-    return;
-  }
-
-  tBTM_BLE_PERIODIC_SYNC_TRANSFER* p_sync_transfer =
-      &btm_ble_pa_sync_cb.sync_transfer[index];
-  p_sync_transfer->in_use = true;
-  p_sync_transfer->conn_handle = conn_handle;
-  p_sync_transfer->addr = addr;
-  p_sync_transfer->cb = cb;
-  if (BleScanningManager::IsInitialized()) {
-    BleScanningManager::Get()->PeriodicAdvSetInfoTransfer(
-        addr, service_data, adv_handle,
-        base::Bind(&btm_ble_periodic_syc_transfer_cmd_cmpl));
-  }
 }
 
 /*******************************************************************************
@@ -1556,29 +1346,6 @@ void btm_ble_periodic_adv_sync_tx_rcvd(const uint8_t* p, uint16_t param_len) {
   if (syncRcvdCbRegistered) {
     sync_rcvd_cb.Run(status, sync_handle, adv_sid, address_type, addr, adv_phy,
                      pa_int);
-  }
-}
-
-/*******************************************************************************
- *
- * Function        BTM_BlePeriodicSyncTxParameters
- *
- * Description     On receiver side this command is used to specify how BT SoC
- *                 will process PA sync info received from the remote device
- *                 identified by the addr.
- *
- ******************************************************************************/
-void BTM_BlePeriodicSyncTxParameters(RawAddress addr, uint8_t mode,
-                                     uint16_t skip, uint16_t timeout,
-                                     StartSyncCb syncCb) {
-  LOG_DEBUG("[PAST]: mode=%u, skip=%u, timeout=%u", mode, skip, timeout);
-  uint8_t cte_type = 7;
-  sync_rcvd_cb = syncCb;
-  syncRcvdCbRegistered = true;
-  if (BleScanningManager::IsInitialized()) {
-    BleScanningManager::Get()->SetPeriodicAdvSyncTransferParams(
-        addr, mode, skip, timeout, cte_type, true,
-        base::Bind(&btm_ble_periodic_syc_transfer_param_cmpl));
   }
 }
 
@@ -1774,7 +1541,7 @@ void btm_ble_update_dmt_flag_bits(uint8_t* adv_flag_value,
 
   /* if local controller support, mark both controller and host support in flag
    */
-  if (controller_get_interface()->supports_simultaneous_le_bredr())
+  if (controller_get_interface()->SupportsSimultaneousLeBrEdr())
     *adv_flag_value |= (BTM_BLE_DMT_CONTROLLER_SPT | BTM_BLE_DMT_HOST_SPT);
   else
     *adv_flag_value &= ~(BTM_BLE_DMT_CONTROLLER_SPT | BTM_BLE_DMT_HOST_SPT);
@@ -1984,7 +1751,7 @@ tBTM_STATUS btm_ble_set_connectability(uint16_t combined_mode) {
 
 static void btm_send_hci_scan_enable(uint8_t enable,
                                      uint8_t filter_duplicates) {
-  if (controller_get_interface()->supports_ble_extended_advertising()) {
+  if (controller_get_interface()->SupportsBleExtendedAdvertising()) {
     btsnd_hcic_ble_set_extended_scan_enable(enable, filter_duplicates, 0x0000,
                                             0x0000);
   } else {
@@ -1996,7 +1763,7 @@ void btm_send_hci_set_scan_params(uint8_t scan_type, uint16_t scan_int,
                                   uint16_t scan_win,
                                   tBLE_ADDR_TYPE addr_type_own,
                                   uint8_t scan_filter_policy) {
-  if (controller_get_interface()->supports_ble_extended_advertising()) {
+  if (controller_get_interface()->SupportsBleExtendedAdvertising()) {
     scanning_phy_cfg phy_cfg;
     phy_cfg.scan_type = scan_type;
     phy_cfg.scan_int = scan_int;
@@ -2152,7 +1919,7 @@ void btm_ble_read_remote_name_cmpl(bool status, const RawAddress& bda,
  ******************************************************************************/
 tBTM_STATUS btm_ble_read_remote_name(const RawAddress& remote_bda,
                                      tBTM_NAME_CMPL_CB* p_cb) {
-  if (!controller_get_interface()->supports_ble()) return BTM_ERR_PROCESSING;
+  if (!controller_get_interface()->SupportsBle()) return BTM_ERR_PROCESSING;
 
   tINQ_DB_ENT* p_i = btm_inq_db_find(remote_bda);
   if (p_i && !ble_evt_type_is_connectable(p_i->inq_info.results.ble_evt_type)) {

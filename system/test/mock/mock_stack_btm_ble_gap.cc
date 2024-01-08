@@ -27,7 +27,6 @@
 
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_ble_int_types.h"
-#include "stack/btm/btm_dev.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/hci_error_code.h"
 #include "test/common/mock_functions.h"
@@ -216,38 +215,6 @@ void btm_send_hci_set_scan_params(uint8_t /* scan_type */,
                                   uint16_t /* scan_win */,
                                   tBLE_ADDR_TYPE /* addr_type_own */,
                                   uint8_t /* scan_filter_policy */) {
-  inc_func_call_count(__func__);
-}
-void BTM_BleStartPeriodicSync(uint8_t /* adv_sid */, RawAddress /* address */,
-                              uint16_t /* skip */, uint16_t /* timeout */,
-                              StartSyncCb /* syncCb */,
-                              SyncReportCb /* reportCb */,
-                              SyncLostCb /* lostCb */) {
-  inc_func_call_count(__func__);
-}
-void BTM_BleStopPeriodicSync(uint16_t /* handle */) {
-  inc_func_call_count(__func__);
-}
-void BTM_BleCancelPeriodicSync(uint8_t /* adv_sid */,
-                               RawAddress /* address */) {
-  inc_func_call_count(__func__);
-}
-void BTM_BlePeriodicSyncTransfer(RawAddress /* addr */,
-                                 uint16_t /* service_data */,
-                                 uint16_t /* sync_handle */,
-                                 SyncTransferCb /* cb */) {
-  inc_func_call_count(__func__);
-}
-void BTM_BlePeriodicSyncSetInfo(RawAddress /* addr */,
-                                uint16_t /* service_data */,
-                                uint8_t /* adv_handle */,
-                                SyncTransferCb /* cb */) {
-  inc_func_call_count(__func__);
-}
-void BTM_BlePeriodicSyncTxParameters(RawAddress /* addr */, uint8_t /* mode */,
-                                     uint16_t /* skip */,
-                                     uint16_t /* timeout */,
-                                     StartSyncCb /* syncCb */) {
   inc_func_call_count(__func__);
 }
 void btm_ble_periodic_adv_sync_tx_rcvd(const uint8_t* /* p */,

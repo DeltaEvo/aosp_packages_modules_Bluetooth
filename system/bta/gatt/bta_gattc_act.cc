@@ -25,6 +25,7 @@
 
 #define LOG_TAG "bt_bta_gattc"
 
+#include <android_bluetooth_flags.h>
 #include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
@@ -34,6 +35,7 @@
 #include "btif/include/btif_debug_conn.h"
 #include "device/include/controller.h"
 #include "hardware/bt_gatt_types.h"
+#include "include/check.h"
 #include "internal_include/bt_trace.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
@@ -223,7 +225,7 @@ void bta_gattc_register(const Uuid& app_uuid, tBTA_GATTC_CBACK* p_cback,
 /** De-Register a GATT client application with BTA */
 void bta_gattc_deregister(tBTA_GATTC_RCB* p_clreg) {
   uint8_t accept_list_size = 0;
-  if (controller_get_interface()->supports_ble()) {
+  if (controller_get_interface()->SupportsBle()) {
     accept_list_size = controller_get_interface()->get_ble_acceptlist_size();
   }
 
@@ -904,8 +906,11 @@ void bta_gattc_continue_discovery_if_needed(const RawAddress& bd_addr,
 void bta_gattc_continue_with_version_and_cache_known(
     tBTA_GATTC_CLCB* p_clcb, RobustCachingSupport cache_support,
     bool is_svc_chg) {
-  if (cache_support == RobustCachingSupport::UNSUPPORTED) {
-    // Skip initial DB hash read if we have strong reason (due to interop,
+  if (cache_support == RobustCachingSupport::UNSUPPORTED ||
+      (IS_FLAG_ENABLED(skip_unknown_robust_caching) &&
+       cache_support == RobustCachingSupport::UNKNOWN)) {
+    // Skip initial DB hash read if no DB hash is known, or if
+    // we have strong reason (due to interop,
     // or a prior discovery) to believe that it is unsupported.
     p_clcb->p_srcb->srvc_hdl_db_hash = false;
   }

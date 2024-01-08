@@ -18,8 +18,6 @@
 
 #define LOG_TAG "bt_stack_manager"
 
-#include "btif/include/stack_manager.h"
-
 #include <hardware/bluetooth.h>
 
 #include <cstdlib>
@@ -27,10 +25,12 @@
 
 #include "btcore/include/module.h"
 #include "btcore/include/osi_module.h"
+#include "btif/include/stack_manager_t.h"
 #include "btif_api.h"
 #include "btif_common.h"
 #include "common/message_loop_thread.h"
 #include "core_callbacks.h"
+#include "include/check.h"
 #include "main/shim/shim.h"
 #include "os/log.h"
 #include "osi/include/osi.h"

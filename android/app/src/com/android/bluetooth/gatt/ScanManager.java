@@ -29,6 +29,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.hardware.display.DisplayManager;
 import android.location.LocationManager;
 import android.os.Handler;
@@ -45,6 +46,7 @@ import android.view.Display;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.BluetoothAdapterProxy;
+import com.android.bluetooth.flags.FeatureFlags;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -116,6 +118,8 @@ public class ScanManager {
     private final Object mCurUsedTrackableAdvertisementsLock = new Object();
     @GuardedBy("mCurUsedTrackableAdvertisementsLock")
     private int mCurUsedTrackableAdvertisements = 0;
+
+    private final FeatureFlags mFeatureFlags;
     private final GattService mService;
     private final AdapterService mAdapterService;
     private BroadcastReceiver mBatchAlarmReceiver;
@@ -160,7 +164,8 @@ public class ScanManager {
             GattService service,
             AdapterService adapterService,
             BluetoothAdapterProxy bluetoothAdapterProxy,
-            Looper looper) {
+            Looper looper,
+            FeatureFlags featureFlags) {
         mRegularScanClients =
                 Collections.newSetFromMap(new ConcurrentHashMap<ScanClient, Boolean>());
         mBatchClients = Collections.newSetFromMap(new ConcurrentHashMap<ScanClient, Boolean>());
@@ -169,6 +174,7 @@ public class ScanManager {
         mService = service;
         mAdapterService = adapterService;
         mScanNative = new ScanNative();
+        mFeatureFlags = featureFlags;
         mDm = mService.getSystemService(DisplayManager.class);
         mActivityManager = mService.getSystemService(ActivityManager.class);
         mLocationManager = mAdapterService.getSystemService(LocationManager.class);
@@ -445,6 +451,9 @@ public class ScanManager {
                         Message msg = obtainMessage(MSG_SCAN_TIMEOUT);
                         msg.obj = client;
                         // Only one timeout message should exist at any time
+                        if (mFeatureFlags.scanTimeoutReset()) {
+                            removeMessages(MSG_SCAN_TIMEOUT, client);
+                        }
                         sendMessageDelayed(msg, mAdapterService.getScanTimeoutMillis());
                         if (DBG) {
                             Log.d(TAG,
@@ -736,12 +745,15 @@ public class ScanManager {
         }
 
         private void fetchAppForegroundState(ScanClient client) {
-            if (mActivityManager == null || mAdapterService.getPackageManager() == null) {
+            PackageManager packageManager = mAdapterService.getPackageManager();
+            if (mActivityManager == null || packageManager == null) {
                 return;
             }
-            String packageName =
-                    mAdapterService.getPackageManager().getPackagesForUid(client.appUid)[0];
-            int importance = mActivityManager.getPackageImportance(packageName);
+            String[] packages = packageManager.getPackagesForUid(client.appUid);
+            if (packages == null || packages.length == 0) {
+                return;
+            }
+            int importance = mActivityManager.getPackageImportance(packages[0]);
             boolean isForeground =
                     importance
                             <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE;

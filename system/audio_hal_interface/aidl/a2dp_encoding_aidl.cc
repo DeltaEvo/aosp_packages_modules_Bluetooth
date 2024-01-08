@@ -17,6 +17,8 @@
 
 #include "a2dp_encoding_aidl.h"
 
+#include <vector>
+
 #include "a2dp_transport.h"
 #include "audio_aidl_interfaces.h"
 #include "bta/av/bta_av_int.h"
@@ -217,7 +219,7 @@ BluetoothAudioSinkClientInterface* active_hal_interface = nullptr;
 // ProviderInfo for A2DP hardware offload encoding and decoding data paths,
 // if supported by the HAL and enabled. nullptr if not supported
 // or disabled.
-::bluetooth::audio::aidl::a2dp::ProviderInfo* provider_info;
+std::unique_ptr<::bluetooth::audio::aidl::a2dp::ProviderInfo> provider_info;
 
 // Save the value if the remote reports its delay before this interface is
 // initialized
