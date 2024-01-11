@@ -30,12 +30,12 @@
 #include <string>
 
 #include "device/include/controller.h"
-#include "gd/os/system_properties.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "os/log.h"
+#include "os/system_properties.h"
 #include "osi/include/allocator.h"
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/arbiter/acl_arbiter.h"
@@ -706,7 +706,7 @@ tGATT_STATUS GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu) {
 
   /* Validate that the link is BLE, not BR/EDR */
   if (p_tcb->transport != BT_TRANSPORT_LE) {
-    return GATT_ERROR;
+    return GATT_REQ_NOT_SUPPORTED;
   }
 
   tGATT_CLCB* p_clcb = gatt_clcb_alloc(conn_id);
