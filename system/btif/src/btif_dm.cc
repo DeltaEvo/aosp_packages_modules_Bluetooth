@@ -50,6 +50,7 @@
 #include <mutex>
 #include <optional>
 
+#include <android_bluetooth_flags.h>
 #include "advertise_data_parser.h"
 #include "android_bluetooth_flags.h"
 #include "bta/dm/bta_dm_disc.h"
@@ -72,6 +73,7 @@
 #include "internal_include/stack_config.h"
 #include "main/shim/le_advertising_manager.h"
 #include "os/log.h"
+#include "os/logging/log_adapter.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"
 #include "osi/include/properties.h"
@@ -1411,7 +1413,7 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
                         &bdaddr, &properties[2]) == BT_STATUS_SUCCESS) {
           LOG_VERBOSE("BTA_DM_NAME_READ_EVT, cod in storage=0x%08x", cod);
         } else {
-          LOG_DEBUG("BTA_DM_NAME_READ_EVT, no cod in storage");
+          LOG_INFO("BTA_DM_NAME_READ_EVT, no cod in storage");
           cod = 0;
         }
         if (cod != 0) {
@@ -1419,6 +1421,10 @@ static void btif_dm_search_devices_evt(tBTA_DM_SEARCH_EVT event,
           BTIF_STORAGE_FILL_PROPERTY(&properties[2], BT_PROPERTY_CLASS_OF_DEVICE, sizeof(uint32_t), &cod);
           LOG_DEBUG("report new device to JNI");
           GetInterfaceToProfiles()->events->invoke_device_found_cb(3, properties);
+        } else {
+          LOG_INFO("Skipping RNR callback because cod is zero addr:%s name:%s",
+                   ADDRESS_TO_LOGGABLE_CSTR(bdaddr),
+                   PRIVATE_NAME(p_search_data->disc_res.bd_name));
         }
         /** @} */
       }
@@ -3471,6 +3477,18 @@ static void btif_dm_ble_key_notif_evt(tBTA_DM_SP_KEY_NOTIF* p_ssp_key_notif) {
       p_ssp_key_notif->passkey);
 }
 
+static bool btif_dm_ble_is_temp_pairing(RawAddress& bd_addr, bool ctkd) {
+  if (btm_get_bond_type_dev(bd_addr) == BOND_TYPE_TEMPORARY) {
+    if (!IS_FLAG_ENABLED(ignore_bond_type_for_le)) {
+      return true;
+    }
+
+    return ctkd;
+  }
+
+  return false;
+}
+
 /*******************************************************************************
  *
  * Function         btif_dm_ble_auth_cmpl_evt
@@ -3503,7 +3521,7 @@ static void btif_dm_ble_auth_cmpl_evt(tBTA_DM_AUTH_CMPL* p_auth_cmpl) {
       btif_storage_set_remote_addr_type(&bd_addr, p_auth_cmpl->addr_type);
 
     /* Test for temporary bonding */
-    if (btm_get_bond_type_dev(bd_addr) == BOND_TYPE_TEMPORARY) {
+    if (btif_dm_ble_is_temp_pairing(bd_addr, p_auth_cmpl->is_ctkd)) {
       LOG_DEBUG("sending BT_BOND_STATE_NONE for Temp pairing");
       btif_storage_remove_bonded_device(&bd_addr);
       state = BT_BOND_STATE_NONE;

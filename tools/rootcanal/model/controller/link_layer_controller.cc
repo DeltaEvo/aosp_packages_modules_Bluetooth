@@ -58,8 +58,10 @@ using TaskId = rootcanal::LinkLayerController::TaskId;
 
 namespace rootcanal {
 
+constexpr milliseconds kScanRequestTimeout(200);
 constexpr milliseconds kNoDelayMs(0);
 constexpr milliseconds kPageInterval(1000);
+constexpr milliseconds kInquiryInterval(500);
 
 const Address& LinkLayerController::GetAddress() const { return address_; }
 
@@ -266,6 +268,43 @@ LinkLayerController::GenerateResolvablePrivateAddress(AddressWithType address,
 // =============================================================================
 //  BR/EDR Commands
 // =============================================================================
+
+// HCI Inquiry command (Vol 4, Part E § 7.1.1).
+ErrorCode LinkLayerController::Inquiry(uint8_t lap, uint8_t inquiry_length,
+                                       uint8_t num_responses) {
+  if (inquiry_.has_value()) {
+    INFO(id_, "inquiry is already started");
+    return ErrorCode::COMMAND_DISALLOWED;
+  }
+
+  if (inquiry_length < 0x1 || inquiry_length > 0x30) {
+    INFO(id_, "invalid inquiry length ({})", inquiry_length);
+    return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
+  }
+
+  // The Inquiry_Length parameter, added to Extended_Inquiry_Length
+  // (see Section 6.42), specifies the total duration of the Inquiry Mode and,
+  // when this time expires, Inquiry will be halted.
+  std::chrono::microseconds inquiry_timeout =
+      1280ms * inquiry_length +
+      std::chrono::duration_cast<milliseconds>(extended_inquiry_length_);
+
+  auto now = std::chrono::steady_clock::now();
+  inquiry_ = InquiryState{
+      .lap = lap,
+      .num_responses = num_responses,
+      .next_inquiry_event = now + kInquiryInterval,
+      .inquiry_timeout = now + inquiry_timeout,
+  };
+
+  return ErrorCode::SUCCESS;
+}
+
+// HCI Inquiry Cancel command (Vol 4, Part E § 7.1.2).
+ErrorCode LinkLayerController::InquiryCancel() {
+  inquiry_ = {};
+  return ErrorCode::SUCCESS;
+}
 
 // HCI Read Rssi command (Vol 4, Part E § 7.5.4).
 ErrorCode LinkLayerController::ReadRssi(uint16_t connection_handle,
@@ -1255,6 +1294,7 @@ ErrorCode LinkLayerController::LeSetScanEnable(bool enable,
   if (!enable) {
     scanner_.scan_enable = false;
     scanner_.pending_scan_request = {};
+    scanner_.pending_scan_request_timeout = {};
     scanner_.history.clear();
     return ErrorCode::SUCCESS;
   }
@@ -1284,6 +1324,7 @@ ErrorCode LinkLayerController::LeSetScanEnable(bool enable,
   scanner_.timeout = {};
   scanner_.periodical_timeout = {};
   scanner_.pending_scan_request = {};
+  scanner_.pending_scan_request_timeout = {};
   scanner_.filter_duplicates = filter_duplicates
                                    ? bluetooth::hci::FilterDuplicates::ENABLED
                                    : bluetooth::hci::FilterDuplicates::DISABLED;
@@ -1415,6 +1456,7 @@ ErrorCode LinkLayerController::LeSetExtendedScanEnable(
   if (!enable) {
     scanner_.scan_enable = false;
     scanner_.pending_scan_request = {};
+    scanner_.pending_scan_request_timeout = {};
     scanner_.history.clear();
     return ErrorCode::SUCCESS;
   }
@@ -1472,6 +1514,7 @@ ErrorCode LinkLayerController::LeSetExtendedScanEnable(
   scanner_.timeout = {};
   scanner_.periodical_timeout = {};
   scanner_.pending_scan_request = {};
+  scanner_.pending_scan_request_timeout = {};
   scanner_.filter_duplicates = filter_duplicates;
   scanner_.duration = duration_ms;
   scanner_.period = period_ms;
@@ -3146,6 +3189,8 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
     // is connectable in the scan response report.
     scanner_.connectable_scan_response = connectable_advertising;
     scanner_.pending_scan_request = advertising_address;
+    scanner_.pending_scan_request_timeout =
+        std::chrono::steady_clock::now() + kScanRequestTimeout;
 
     INFO(id_,
          "Sending LE Scan request to advertising address {} with scanning "
@@ -5019,6 +5064,15 @@ void LinkLayerController::LeScanning() {
     scanner_.timeout = now + scanner_.duration;
     scanner_.periodical_timeout = now + scanner_.period;
   }
+
+  // Pending scan timeout.
+  // Cancel the pending scan request. This may condition may be triggered
+  // when the advertiser is stopped before sending the scan request.
+  if (scanner_.pending_scan_request_timeout.has_value() &&
+      now >= scanner_.pending_scan_request_timeout.value()) {
+    scanner_.pending_scan_request = {};
+    scanner_.pending_scan_request_timeout = {};
+  }
 }
 
 void LinkLayerController::LeSynchronization() {
@@ -5155,10 +5209,7 @@ void LinkLayerController::IncomingPageResponsePacket(
 void LinkLayerController::Tick() {
   RunPendingTasks();
   Paging();
-
-  if (inquiry_timer_task_id_ != kInvalidTaskId) {
-    Inquiry();
-  }
+  Inquiring();
   LeAdvertising();
   LeScanning();
   link_manager_tick(lm_.get());
@@ -5386,7 +5437,7 @@ ErrorCode LinkLayerController::CreateConnection(const Address& bd_addr,
   }
 
   auto now = std::chrono::steady_clock::now();
-  page_ = Page{
+  page_ = PageState{
       .bd_addr = bd_addr,
       .allow_role_switch = allow_role_switch,
       .next_page_event = now + kPageInterval,
@@ -6043,10 +6094,7 @@ void LinkLayerController::Reset() {
   initiator_ = Initiator{};
   synchronizing_ = {};
   synchronized_ = {};
-  last_inquiry_ = steady_clock::now();
   inquiry_mode_ = InquiryType::STANDARD;
-  inquiry_lap_ = 0;
-  inquiry_max_responses_ = 0;
   default_tx_phys_ = properties_.LeSupportedPhys();
   default_rx_phys_ = properties_.LeSupportedPhys();
 
@@ -6056,11 +6104,7 @@ void LinkLayerController::Reset() {
   current_iac_lap_list_.emplace_back(general_iac);
 
   page_ = {};
-
-  if (inquiry_timer_task_id_ != kInvalidTaskId) {
-    CancelScheduledTask(inquiry_timer_task_id_);
-    inquiry_timer_task_id_ = kInvalidTaskId;
-  }
+  inquiry_ = {};
 
   lm_.reset(link_manager_create(controller_ops_));
   ll_.reset(link_layer_create(controller_ops_));
@@ -6071,7 +6115,7 @@ void LinkLayerController::Paging() {
   auto now = std::chrono::steady_clock::now();
 
   if (page_.has_value() && now >= page_->page_timeout) {
-    INFO("page timeout triggered for connection with {}",
+    INFO(id_, "page timeout triggered for connection with {}",
          page_->bd_addr.ToString());
 
     send_event_(bluetooth::hci::ConnectionCompleteBuilder::Create(
@@ -6094,47 +6138,30 @@ void LinkLayerController::Paging() {
   }
 }
 
-void LinkLayerController::StartInquiry(milliseconds timeout) {
-  inquiry_timer_task_id_ = ScheduleTask(milliseconds(timeout), [this]() {
-    LinkLayerController::InquiryTimeout();
-  });
-}
+/// Drive the logic for the Inquiry controller substate.
+void LinkLayerController::Inquiring() {
+  auto now = std::chrono::steady_clock::now();
 
-void LinkLayerController::InquiryCancel() {
-  ASSERT(inquiry_timer_task_id_ != kInvalidTaskId);
-  CancelScheduledTask(inquiry_timer_task_id_);
-  inquiry_timer_task_id_ = kInvalidTaskId;
-}
+  if (inquiry_.has_value() && now >= inquiry_->inquiry_timeout) {
+    INFO(id_, "inquiry timeout triggered");
 
-void LinkLayerController::InquiryTimeout() {
-  if (inquiry_timer_task_id_ != kInvalidTaskId) {
-    inquiry_timer_task_id_ = kInvalidTaskId;
-    if (IsEventUnmasked(EventCode::INQUIRY_COMPLETE)) {
-      send_event_(
-          bluetooth::hci::InquiryCompleteBuilder::Create(ErrorCode::SUCCESS));
-    }
+    send_event_(
+        bluetooth::hci::InquiryCompleteBuilder::Create(ErrorCode::SUCCESS));
+
+    inquiry_ = {};
+    return;
+  }
+
+  // Send a Inquiry packet when the inquiry interval has passed.
+  if (inquiry_.has_value() && now >= inquiry_->next_inquiry_event) {
+    SendLinkLayerPacket(model::packets::InquiryBuilder::Create(
+        GetAddress(), Address::kEmpty, inquiry_mode_, inquiry_->lap));
+    inquiry_->next_inquiry_event = now + kInquiryInterval;
   }
 }
 
 void LinkLayerController::SetInquiryMode(uint8_t mode) {
   inquiry_mode_ = static_cast<model::packets::InquiryType>(mode);
-}
-
-void LinkLayerController::SetInquiryLAP(uint64_t lap) { inquiry_lap_ = lap; }
-
-void LinkLayerController::SetInquiryMaxResponses(uint8_t max) {
-  inquiry_max_responses_ = max;
-}
-
-void LinkLayerController::Inquiry() {
-  steady_clock::time_point now = steady_clock::now();
-  if (duration_cast<milliseconds>(now - last_inquiry_) < milliseconds(2000)) {
-    return;
-  }
-
-  SendLinkLayerPacket(model::packets::InquiryBuilder::Create(
-      GetAddress(), Address::kEmpty, inquiry_mode_, inquiry_lap_));
-  last_inquiry_ = now;
 }
 
 void LinkLayerController::SetInquiryScanEnable(bool enable) {
