@@ -49,7 +49,7 @@ using ::aidl::android::hardware::bluetooth::audio::SessionType;
  * getProviderInfo, or if the feature flag for codec
  * extensibility is disabled.
  ***/
-std::unique_ptr<ProviderInfo> ProviderInfo::GetProviderInfo() {
+ProviderInfo* ProviderInfo::GetProviderInfo() {
   if (!IS_FLAG_ENABLED(a2dp_offload_codec_extensibility)) {
     LOG(INFO) << "a2dp offload codec extensibility is disabled;"
               << " not going to load the ProviderInfo";
@@ -79,8 +79,7 @@ std::unique_ptr<ProviderInfo> ProviderInfo::GetProviderInfo() {
     sink_codecs = std::move(sink_provider_info->codecInfos);
   }
 
-  return std::make_unique<ProviderInfo>(std::move(source_codecs),
-                                        std::move(sink_codecs));
+  return new ProviderInfo(std::move(source_codecs), std::move(sink_codecs));
 }
 
 /***

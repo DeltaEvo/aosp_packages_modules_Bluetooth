@@ -38,7 +38,7 @@ class ProviderInfo {
    * getProviderInfo, or if the feature flag for codec
    * extensibility is disabled.
    ***/
-  static std::unique_ptr<ProviderInfo> GetProviderInfo();
+  static ProviderInfo* GetProviderInfo();
 
   ProviderInfo(std::vector<CodecInfo> source_codecs,
                std::vector<CodecInfo> sink_codecs);
