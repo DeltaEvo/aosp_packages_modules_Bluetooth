@@ -31,6 +31,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/smp_api_types.h"
+#include "types/hci_role.h"
 #include "types/raw_address.h"
 
 typedef enum : uint16_t {
@@ -58,10 +59,6 @@ typedef enum : uint8_t {
   SMP_MODEL_SEC_CONN_OOB = 8, /* Secure Connections mode, OOB model */
   SMP_MODEL_OUT_OF_RANGE = 9,
 } tSMP_ASSO_MODEL;
-
-#ifndef SMP_MAX_CONN
-#define SMP_MAX_CONN 2
-#endif
 
 #define SMP_WAIT_FOR_RSP_TIMEOUT_MS (30 * 1000)
 #define SMP_DELAYED_AUTH_TIMEOUT_MS 500
@@ -290,7 +287,7 @@ class tSMP_CB {
   tSMP_BR_STATE br_state; /* if SMP over BR/ERD has priority over SMP */
   uint8_t failure;
   tSMP_STATUS status;
-  uint8_t role;
+  tHCI_ROLE role;
   uint16_t flags;
   tSMP_EVT cb_evt;
   tSMP_SEC_LEVEL sec_level;
@@ -317,11 +314,14 @@ class tSMP_CB {
   tSMP_OOB_FLAG loc_oob_flag;
   tSMP_AUTH_REQ peer_auth_req;
   tSMP_AUTH_REQ loc_auth_req;
-  bool secure_connections_only_mode_required; /* true if locally SM is required
-                                                 to operate */
+
+  bool sc_only_mode_locally_required; /* true if sc_only required required
+                                         locally */
+  bool sc_mode_required_by_peer;      /* true if peer requires sc in pair_req or
+                                         pair_rsp */
+
   /* either in Secure Connections mode or not at all */
   tSMP_ASSO_MODEL selected_association_model;
-  bool le_secure_connections_mode_is_used;
   bool key_derivation_h7_used;
   bool le_sc_kp_notif_is_used;
   tSMP_SC_KEY_TYPE local_keypress_notification;

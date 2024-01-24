@@ -61,7 +61,6 @@ namespace rootcanal {
 constexpr milliseconds kScanRequestTimeout(200);
 constexpr milliseconds kNoDelayMs(0);
 constexpr milliseconds kPageInterval(1000);
-constexpr milliseconds kInquiryInterval(500);
 
 const Address& LinkLayerController::GetAddress() const { return address_; }
 
@@ -209,7 +208,7 @@ bool LinkLayerController::ResolvingListBusy() {
 }
 
 std::optional<AddressWithType> LinkLayerController::ResolvePrivateAddress(
-    AddressWithType address, IrkSelection irk) {
+    AddressWithType address) {
   if (!address.IsRpa()) {
     return address;
   }
@@ -219,22 +218,45 @@ std::optional<AddressWithType> LinkLayerController::ResolvePrivateAddress(
   }
 
   for (auto& entry : le_resolving_list_) {
-    std::array<uint8_t, LinkLayerController::kIrkSize> const& used_irk =
-        irk == IrkSelection::Local ? entry.local_irk : entry.peer_irk;
-
-    if (address.IsRpaThatMatchesIrk(used_irk)) {
+    if (address.IsRpaThatMatchesIrk(entry.peer_irk)) {
       // Update the peer resolvable address used for the peer
       // with the returned identity address.
-      if (irk == IrkSelection::Peer) {
-        entry.peer_resolvable_address = address.GetAddress();
-      }
+      entry.peer_resolvable_address = address.GetAddress();
 
-      return PeerIdentityAddress(entry.peer_identity_address,
-                                 entry.peer_identity_address_type);
+      return PeerDeviceAddress(entry.peer_identity_address,
+                               entry.peer_identity_address_type);
     }
   }
 
   return {};
+}
+
+bool LinkLayerController::ResolveTargetA(AddressWithType target_a,
+                                         AddressWithType adv_a) {
+  if (!le_resolving_list_enabled_) {
+    return false;
+  }
+
+  for (auto const& entry : le_resolving_list_) {
+    if (adv_a == PeerDeviceAddress(entry.peer_identity_address,
+                                   entry.peer_identity_address_type) &&
+        target_a.IsRpaThatMatchesIrk(entry.local_irk)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool LinkLayerController::ValidateTargetA(AddressWithType target_a,
+                                          AddressWithType adv_a) {
+  if (IsLocalPublicOrRandomAddress(target_a)) {
+    return true;
+  }
+  if (target_a.IsRpa()) {
+    return ResolveTargetA(target_a, adv_a);
+  }
+  return false;
 }
 
 std::optional<AddressWithType>
@@ -268,43 +290,6 @@ LinkLayerController::GenerateResolvablePrivateAddress(AddressWithType address,
 // =============================================================================
 //  BR/EDR Commands
 // =============================================================================
-
-// HCI Inquiry command (Vol 4, Part E § 7.1.1).
-ErrorCode LinkLayerController::Inquiry(uint8_t lap, uint8_t inquiry_length,
-                                       uint8_t num_responses) {
-  if (inquiry_.has_value()) {
-    INFO(id_, "inquiry is already started");
-    return ErrorCode::COMMAND_DISALLOWED;
-  }
-
-  if (inquiry_length < 0x1 || inquiry_length > 0x30) {
-    INFO(id_, "invalid inquiry length ({})", inquiry_length);
-    return ErrorCode::INVALID_HCI_COMMAND_PARAMETERS;
-  }
-
-  // The Inquiry_Length parameter, added to Extended_Inquiry_Length
-  // (see Section 6.42), specifies the total duration of the Inquiry Mode and,
-  // when this time expires, Inquiry will be halted.
-  std::chrono::microseconds inquiry_timeout =
-      1280ms * inquiry_length +
-      std::chrono::duration_cast<milliseconds>(extended_inquiry_length_);
-
-  auto now = std::chrono::steady_clock::now();
-  inquiry_ = InquiryState{
-      .lap = lap,
-      .num_responses = num_responses,
-      .next_inquiry_event = now + kInquiryInterval,
-      .inquiry_timeout = now + inquiry_timeout,
-  };
-
-  return ErrorCode::SUCCESS;
-}
-
-// HCI Inquiry Cancel command (Vol 4, Part E § 7.1.2).
-ErrorCode LinkLayerController::InquiryCancel() {
-  inquiry_ = {};
-  return ErrorCode::SUCCESS;
-}
 
 // HCI Read Rssi command (Vol 4, Part E § 7.5.4).
 ErrorCode LinkLayerController::ReadRssi(uint16_t connection_handle,
@@ -2940,11 +2925,7 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
   // address. The scanner’s filter policy shall then determine if the scanner
   // responds with a scan request.
   AddressWithType resolved_advertising_address =
-      ResolvePrivateAddress(advertising_address, IrkSelection::Peer)
-          .value_or(advertising_address);
-
-  std::optional<AddressWithType> resolved_target_address =
-      ResolvePrivateAddress(target_address, IrkSelection::Peer);
+      ResolvePrivateAddress(advertising_address).value_or(advertising_address);
 
   if (resolved_advertising_address != advertising_address) {
     DEBUG(id_, "Resolved the advertising address {} to {}", advertising_address,
@@ -2987,8 +2968,7 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
       //  resolution is enabled, and the address is resolved successfully
       case bluetooth::hci::LeScanningFilterPolicy::ACCEPT_ALL:
       case bluetooth::hci::LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY:
-        if (!IsLocalPublicOrRandomAddress(target_address) &&
-            !(target_address.IsRpa() && resolved_target_address)) {
+        if (!ValidateTargetA(target_address, resolved_advertising_address)) {
           DEBUG(id_,
                 "Legacy advertising ignored by scanner because the directed "
                 "address {} does not match the current device or cannot be "
@@ -3014,7 +2994,8 @@ void LinkLayerController::ScanIncomingLeLegacyAdvertisingPdu(
           return;
         }
         should_send_directed_advertising_report =
-            target_address.IsRpa() && !resolved_target_address;
+            target_address.IsRpa() &&
+            !ResolveTargetA(target_address, resolved_advertising_address);
         break;
     }
   }
@@ -3247,12 +3228,7 @@ void LinkLayerController::ConnectIncomingLeLegacyAdvertisingPdu(
       static_cast<AddressType>(pdu.GetTargetAddressType())};
 
   AddressWithType resolved_advertising_address =
-      ResolvePrivateAddress(advertising_address, IrkSelection::Peer)
-          .value_or(advertising_address);
-
-  AddressWithType resolved_target_address =
-      ResolvePrivateAddress(target_address, IrkSelection::Peer)
-          .value_or(target_address);
+      ResolvePrivateAddress(advertising_address).value_or(advertising_address);
 
   // Vol 6, Part B § 4.3.5 Initiator filter policy.
   switch (initiator_.initiator_filter_policy) {
@@ -3285,14 +3261,14 @@ void LinkLayerController::ConnectIncomingLeLegacyAdvertisingPdu(
   // contain Public or Static addresses for the target’s address (TargetA
   // field).
   if (directed_advertising) {
-    if (!IsLocalPublicOrRandomAddress(resolved_target_address)) {
+    if (!ValidateTargetA(target_address, resolved_advertising_address)) {
       DEBUG(id_,
             "Directed legacy advertising ignored by initiator because the "
             "target address {} does not match the current device addresses",
-            resolved_advertising_address);
+            target_address);
       return;
     }
-    if (resolved_target_address == target_address &&
+    if (!target_address.IsRpa() &&
         (initiator_.own_address_type ==
              OwnAddressType::RESOLVABLE_OR_PUBLIC_ADDRESS ||
          initiator_.own_address_type ==
@@ -3301,7 +3277,7 @@ void LinkLayerController::ConnectIncomingLeLegacyAdvertisingPdu(
             "Directed legacy advertising ignored by initiator because the "
             "target address {} is static or public and the initiator is "
             "configured to use resolvable addresses",
-            resolved_advertising_address);
+            target_address);
       return;
     }
   }
@@ -3415,11 +3391,7 @@ void LinkLayerController::ScanIncomingLeExtendedAdvertisingPdu(
   // address. The scanner’s filter policy shall then determine if the scanner
   // responds with a scan request.
   AddressWithType resolved_advertising_address =
-      ResolvePrivateAddress(advertising_address, IrkSelection::Peer)
-          .value_or(advertising_address);
-
-  std::optional<AddressWithType> resolved_target_address =
-      ResolvePrivateAddress(target_address, IrkSelection::Peer);
+      ResolvePrivateAddress(advertising_address).value_or(advertising_address);
 
   if (resolved_advertising_address != advertising_address) {
     DEBUG(id_, "Resolved the advertising address {} to {}", advertising_address,
@@ -3456,8 +3428,7 @@ void LinkLayerController::ScanIncomingLeExtendedAdvertisingPdu(
       //    resolution is enabled, and the address is resolved successfully
       case bluetooth::hci::LeScanningFilterPolicy::ACCEPT_ALL:
       case bluetooth::hci::LeScanningFilterPolicy::FILTER_ACCEPT_LIST_ONLY:
-        if (!IsLocalPublicOrRandomAddress(target_address) &&
-            !(target_address.IsRpa() && resolved_target_address)) {
+        if (!ValidateTargetA(target_address, resolved_advertising_address)) {
           DEBUG(id_,
                 "Extended advertising ignored by scanner because the directed "
                 "address {} does not match the current device or cannot be "
@@ -3676,12 +3647,7 @@ void LinkLayerController::ConnectIncomingLeExtendedAdvertisingPdu(
       static_cast<AddressType>(pdu.GetTargetAddressType())};
 
   AddressWithType resolved_advertising_address =
-      ResolvePrivateAddress(advertising_address, IrkSelection::Peer)
-          .value_or(advertising_address);
-
-  AddressWithType resolved_target_address =
-      ResolvePrivateAddress(target_address, IrkSelection::Peer)
-          .value_or(target_address);
+      ResolvePrivateAddress(advertising_address).value_or(advertising_address);
 
   // Vol 6, Part B § 4.3.5 Initiator filter policy.
   switch (initiator_.initiator_filter_policy) {
@@ -3714,14 +3680,14 @@ void LinkLayerController::ConnectIncomingLeExtendedAdvertisingPdu(
   // contain Public or Static addresses for the target’s address (TargetA
   // field).
   if (pdu.GetDirected()) {
-    if (!IsLocalPublicOrRandomAddress(resolved_target_address)) {
+    if (!ValidateTargetA(target_address, resolved_advertising_address)) {
       DEBUG(id_,
             "Directed extended advertising ignored by initiator because the "
             "target address {} does not match the current device addresses",
-            resolved_advertising_address);
+            target_address);
       return;
     }
-    if (resolved_target_address == target_address &&
+    if (!target_address.IsRpa() &&
         (initiator_.own_address_type ==
              OwnAddressType::RESOLVABLE_OR_PUBLIC_ADDRESS ||
          initiator_.own_address_type ==
@@ -3730,7 +3696,7 @@ void LinkLayerController::ConnectIncomingLeExtendedAdvertisingPdu(
             "Directed extended advertising ignored by initiator because the "
             "target address {} is static or public and the initiator is "
             "configured to use resolvable addresses",
-            resolved_advertising_address);
+            target_address);
       return;
     }
   }
@@ -3837,8 +3803,7 @@ void LinkLayerController::IncomingLePeriodicAdvertisingPdu(
   // address. The scanner's periodic sync establishment filter policy shall
   // determine if the scanner processes the advertising packet.
   AddressWithType resolved_advertiser_address =
-      ResolvePrivateAddress(advertiser_address, IrkSelection::Peer)
-          .value_or(advertiser_address);
+      ResolvePrivateAddress(advertiser_address).value_or(advertiser_address);
 
   bluetooth::hci::AdvertiserAddressType advertiser_address_type;
   switch (resolved_advertiser_address.GetAddressType()) {
@@ -4279,16 +4244,7 @@ uint16_t LinkLayerController::HandleLeConnection(
     AddressType peer_address_type = address.GetAddressType();
     if (peer_resolved_address != AddressWithType()) {
       peer_resolvable_private_address = address.GetAddress();
-      if (peer_resolved_address.GetAddressType() ==
-          AddressType::PUBLIC_DEVICE_ADDRESS) {
-        peer_address_type = AddressType::PUBLIC_IDENTITY_ADDRESS;
-      } else if (peer_resolved_address.GetAddressType() ==
-                 AddressType::RANDOM_DEVICE_ADDRESS) {
-        peer_address_type = AddressType::RANDOM_IDENTITY_ADDRESS;
-      } else {
-        WARNING(id_, "Unhandled resolved address type {} -> {}", address,
-                peer_resolved_address);
-      }
+      peer_address_type = peer_resolved_address.GetAddressType();
       connection_address = peer_resolved_address.GetAddress();
     }
     Address local_resolved_address = own_address.GetAddress();
@@ -4369,8 +4325,7 @@ bool LinkLayerController::ProcessIncomingLegacyConnectRequest(
   // The advertising filter policy shall then determine if the
   // advertiser establishes a connection.
   AddressWithType resolved_initiating_address =
-      ResolvePrivateAddress(initiating_address, IrkSelection::Peer)
-          .value_or(initiating_address);
+      ResolvePrivateAddress(initiating_address).value_or(initiating_address);
 
   if (resolved_initiating_address != initiating_address) {
     DEBUG(id_, "Resolved the initiating address {} to {}", initiating_address,
@@ -4481,8 +4436,7 @@ bool LinkLayerController::ProcessIncomingExtendedConnectRequest(
   // The advertising filter policy shall then determine if the
   // advertiser establishes a connection.
   AddressWithType resolved_initiating_address =
-      ResolvePrivateAddress(initiating_address, IrkSelection::Peer)
-          .value_or(initiating_address);
+      ResolvePrivateAddress(initiating_address).value_or(initiating_address);
 
   if (resolved_initiating_address != initiating_address) {
     DEBUG(id_, "Resolved the initiating address {} to {}", initiating_address,
@@ -4916,8 +4870,7 @@ void LinkLayerController::IncomingLeScanPacket(
   // address. The advertising filter policy shall then determine if
   // the advertiser processes the scan request.
   AddressWithType resolved_scanning_address =
-      ResolvePrivateAddress(scanning_address, IrkSelection::Peer)
-          .value_or(scanning_address);
+      ResolvePrivateAddress(scanning_address).value_or(scanning_address);
 
   if (resolved_scanning_address != scanning_address) {
     DEBUG(id_, "Resolved the scanning address {} to {}", scanning_address,
@@ -4966,8 +4919,7 @@ void LinkLayerController::IncomingLeScanResponsePacket(
   }
 
   AddressWithType resolved_advertising_address =
-      ResolvePrivateAddress(advertising_address, IrkSelection::Peer)
-          .value_or(advertising_address);
+      ResolvePrivateAddress(advertising_address).value_or(advertising_address);
 
   if (advertising_address != resolved_advertising_address) {
     DEBUG(id_, "Resolved the advertising address {} to {}", advertising_address,
@@ -5209,7 +5161,10 @@ void LinkLayerController::IncomingPageResponsePacket(
 void LinkLayerController::Tick() {
   RunPendingTasks();
   Paging();
-  Inquiring();
+
+  if (inquiry_timer_task_id_ != kInvalidTaskId) {
+    Inquiry();
+  }
   LeAdvertising();
   LeScanning();
   link_manager_tick(lm_.get());
@@ -5437,7 +5392,7 @@ ErrorCode LinkLayerController::CreateConnection(const Address& bd_addr,
   }
 
   auto now = std::chrono::steady_clock::now();
-  page_ = PageState{
+  page_ = Page{
       .bd_addr = bd_addr,
       .allow_role_switch = allow_role_switch,
       .next_page_event = now + kPageInterval,
@@ -6094,7 +6049,10 @@ void LinkLayerController::Reset() {
   initiator_ = Initiator{};
   synchronizing_ = {};
   synchronized_ = {};
+  last_inquiry_ = steady_clock::now();
   inquiry_mode_ = InquiryType::STANDARD;
+  inquiry_lap_ = 0;
+  inquiry_max_responses_ = 0;
   default_tx_phys_ = properties_.LeSupportedPhys();
   default_rx_phys_ = properties_.LeSupportedPhys();
 
@@ -6104,7 +6062,11 @@ void LinkLayerController::Reset() {
   current_iac_lap_list_.emplace_back(general_iac);
 
   page_ = {};
-  inquiry_ = {};
+
+  if (inquiry_timer_task_id_ != kInvalidTaskId) {
+    CancelScheduledTask(inquiry_timer_task_id_);
+    inquiry_timer_task_id_ = kInvalidTaskId;
+  }
 
   lm_.reset(link_manager_create(controller_ops_));
   ll_.reset(link_layer_create(controller_ops_));
@@ -6115,7 +6077,7 @@ void LinkLayerController::Paging() {
   auto now = std::chrono::steady_clock::now();
 
   if (page_.has_value() && now >= page_->page_timeout) {
-    INFO(id_, "page timeout triggered for connection with {}",
+    INFO("page timeout triggered for connection with {}",
          page_->bd_addr.ToString());
 
     send_event_(bluetooth::hci::ConnectionCompleteBuilder::Create(
@@ -6138,30 +6100,47 @@ void LinkLayerController::Paging() {
   }
 }
 
-/// Drive the logic for the Inquiry controller substate.
-void LinkLayerController::Inquiring() {
-  auto now = std::chrono::steady_clock::now();
+void LinkLayerController::StartInquiry(milliseconds timeout) {
+  inquiry_timer_task_id_ = ScheduleTask(milliseconds(timeout), [this]() {
+    LinkLayerController::InquiryTimeout();
+  });
+}
 
-  if (inquiry_.has_value() && now >= inquiry_->inquiry_timeout) {
-    INFO(id_, "inquiry timeout triggered");
+void LinkLayerController::InquiryCancel() {
+  ASSERT(inquiry_timer_task_id_ != kInvalidTaskId);
+  CancelScheduledTask(inquiry_timer_task_id_);
+  inquiry_timer_task_id_ = kInvalidTaskId;
+}
 
-    send_event_(
-        bluetooth::hci::InquiryCompleteBuilder::Create(ErrorCode::SUCCESS));
-
-    inquiry_ = {};
-    return;
-  }
-
-  // Send a Inquiry packet when the inquiry interval has passed.
-  if (inquiry_.has_value() && now >= inquiry_->next_inquiry_event) {
-    SendLinkLayerPacket(model::packets::InquiryBuilder::Create(
-        GetAddress(), Address::kEmpty, inquiry_mode_, inquiry_->lap));
-    inquiry_->next_inquiry_event = now + kInquiryInterval;
+void LinkLayerController::InquiryTimeout() {
+  if (inquiry_timer_task_id_ != kInvalidTaskId) {
+    inquiry_timer_task_id_ = kInvalidTaskId;
+    if (IsEventUnmasked(EventCode::INQUIRY_COMPLETE)) {
+      send_event_(
+          bluetooth::hci::InquiryCompleteBuilder::Create(ErrorCode::SUCCESS));
+    }
   }
 }
 
 void LinkLayerController::SetInquiryMode(uint8_t mode) {
   inquiry_mode_ = static_cast<model::packets::InquiryType>(mode);
+}
+
+void LinkLayerController::SetInquiryLAP(uint64_t lap) { inquiry_lap_ = lap; }
+
+void LinkLayerController::SetInquiryMaxResponses(uint8_t max) {
+  inquiry_max_responses_ = max;
+}
+
+void LinkLayerController::Inquiry() {
+  steady_clock::time_point now = steady_clock::now();
+  if (duration_cast<milliseconds>(now - last_inquiry_) < milliseconds(2000)) {
+    return;
+  }
+
+  SendLinkLayerPacket(model::packets::InquiryBuilder::Create(
+      GetAddress(), Address::kEmpty, inquiry_mode_, inquiry_lap_));
+  last_inquiry_ = now;
 }
 
 void LinkLayerController::SetInquiryScanEnable(bool enable) {

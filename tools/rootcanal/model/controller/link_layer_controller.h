@@ -185,7 +185,6 @@ class LinkLayerController {
   void Reset();
 
   void Paging();
-  void Inquiring();
   void LeAdvertising();
   void LeScanning();
   void LeSynchronization();
@@ -229,8 +228,17 @@ class LinkLayerController {
   // resolve the address using the resolving list. If the address cannot
   // be resolved none is returned. If the address is not a Resolvable
   // Private Address, the original address is returned.
-  std::optional<AddressWithType> ResolvePrivateAddress(AddressWithType address,
-                                                       IrkSelection irk);
+  std::optional<AddressWithType> ResolvePrivateAddress(AddressWithType address);
+
+  // Returns true if the input address resolves with the local IRK
+  // associated with the given peer identity address.
+  bool ResolveTargetA(AddressWithType target_a, AddressWithType adv_a);
+
+  // Returns true if either:
+  //  • TargetA is identical to the device address, or
+  //  • TargetA is a resolvable private address, address
+  //    resolution is enabled, and the address is resolved successfully
+  bool ValidateTargetA(AddressWithType target_a, AddressWithType adv_a);
 
   // Generate a Resolvable Private for the selected peer.
   // If the address is not found in the resolving list none is returned.
@@ -268,7 +276,13 @@ class LinkLayerController {
   uint8_t LeReadNumberOfSupportedAdvertisingSets();
 
   // Classic
+  void StartInquiry(std::chrono::milliseconds timeout);
+  void InquiryCancel();
+  void InquiryTimeout();
   void SetInquiryMode(uint8_t mode);
+  void SetInquiryLAP(uint64_t lap);
+  void SetInquiryMaxResponses(uint8_t max);
+  void Inquiry();
 
   bool GetInquiryScanEnable() const { return inquiry_scan_enable_; }
   void SetInquiryScanEnable(bool enable);
@@ -328,12 +342,6 @@ class LinkLayerController {
   void HandleIso(bluetooth::hci::IsoView iso);
 
   // BR/EDR Commands
-
-  // HCI Inquiry command (Vol 4, Part E § 7.1.1).
-  ErrorCode Inquiry(uint8_t lap, uint8_t inquiry_length, uint8_t num_responses);
-
-  // HCI Inquiry Cancel command (Vol 4, Part E § 7.1.2).
-  ErrorCode InquiryCancel();
 
   // HCI Read Rssi command (Vol 4, Part E § 7.5.4).
   ErrorCode ReadRssi(uint16_t connection_handle, int8_t* rssi);
@@ -940,9 +948,6 @@ class LinkLayerController {
   // Class of Device (Vol 4, Part E § 6.26).
   uint32_t class_of_device_{0};
 
-  // Extended Inquiry Length (Vol 4, Part E § 6.42).
-  slots extended_inquiry_length_{0};
-
   // Other configuration parameters.
 
   // Current IAC LAP (Vol 4, Part E § 7.3.44).
@@ -1167,27 +1172,23 @@ class LinkLayerController {
   struct ControllerOps controller_ops_;
 
   // Classic state.
-  struct PageState {
+  struct Page {
     Address bd_addr;
     uint8_t allow_role_switch;
     std::chrono::steady_clock::time_point next_page_event{};
     std::chrono::steady_clock::time_point page_timeout{};
   };
 
-  struct InquiryState {
-    uint64_t lap;
-    uint8_t num_responses;
-    std::chrono::steady_clock::time_point next_inquiry_event{};
-    std::chrono::steady_clock::time_point inquiry_timeout{};
-  };
-
-  // Page and inquiry substates.
+  // Page substate.
   // RootCanal will allow only one page request running at the same time.
-  std::optional<PageState> page_;
-  std::optional<InquiryState> inquiry_;
+  std::optional<Page> page_;
 
+  std::chrono::steady_clock::time_point last_inquiry_;
   model::packets::InquiryType inquiry_mode_{
       model::packets::InquiryType::STANDARD};
+  TaskId inquiry_timer_task_id_ = kInvalidTaskId;
+  uint64_t inquiry_lap_{};
+  uint8_t inquiry_max_responses_{};
 
  public:
   // Type of scheduled tasks.

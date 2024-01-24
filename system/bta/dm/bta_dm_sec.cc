@@ -34,6 +34,7 @@
 #include "stack/include/btm_sec_api.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/security_client_callbacks.h"
+#include "types/bt_transport.h"
 #include "types/raw_address.h"
 
 static tBTM_STATUS bta_dm_sp_cback(tBTM_SP_EVT event, tBTM_SP_EVT_DATA* p_data);
@@ -114,6 +115,14 @@ void bta_dm_sec_enable(tBTA_DM_SEC_CBACK* p_sec_cback) {
   if (p_sec_cback != NULL) bta_dm_sec_cb.p_sec_cback = p_sec_cback;
 
   btm_local_io_caps = btif_storage_get_local_io_caps();
+}
+
+void bta_dm_remote_key_missing(RawAddress bd_addr) {
+  if (bta_dm_sec_cb.p_sec_cback) {
+    tBTA_DM_SEC sec_event;
+    sec_event.key_missing.bd_addr = bd_addr;
+    bta_dm_sec_cb.p_sec_cback(BTA_DM_KEY_MISSING_EVT, &sec_event);
+  }
 }
 
 /*******************************************************************************
@@ -210,8 +219,8 @@ void bta_dm_pin_reply(std::unique_ptr<tBTA_DM_API_PIN_REPLY> msg) {
 
 /** Send the user confirm request reply in response to a request from BTM */
 void bta_dm_confirm(const RawAddress& bd_addr, bool accept) {
-  get_btm_client_interface().security.BTM_ConfirmReqReply(
-      accept ? BTM_SUCCESS : BTM_NOT_AUTHORIZED, bd_addr);
+  get_btm_client_interface().security.BTM_SecConfirmReqReply(
+      accept ? BTM_SUCCESS : BTM_NOT_AUTHORIZED, BT_TRANSPORT_BR_EDR, bd_addr);
 }
 
 /** respond to the OOB data request for the remote device from BTM */
@@ -1053,15 +1062,15 @@ void bta_dm_add_ble_device(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
  ******************************************************************************/
 void bta_dm_ble_passkey_reply(const RawAddress& bd_addr, bool accept,
                               uint32_t passkey) {
-  get_btm_client_interface().ble.BTM_BlePasskeyReply(
+  get_btm_client_interface().security.BTM_BlePasskeyReply(
       bd_addr, accept ? BTM_SUCCESS : BTM_NOT_AUTHORIZED, passkey);
 }
 
 /** This is response to SM numeric comparison request submitted to application.
  */
 void bta_dm_ble_confirm_reply(const RawAddress& bd_addr, bool accept) {
-  get_btm_client_interface().ble.BTM_BleConfirmReply(
-      bd_addr, accept ? BTM_SUCCESS : BTM_NOT_AUTHORIZED);
+  get_btm_client_interface().security.BTM_SecConfirmReqReply(
+      accept ? BTM_SUCCESS : BTM_NOT_AUTHORIZED, BT_TRANSPORT_LE, bd_addr);
 }
 
 /** This function set the local device LE privacy settings. */
