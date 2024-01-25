@@ -63,8 +63,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class VolumeControlService extends ProfileService {
-    private static final boolean DBG = false;
     private static final String TAG = "VolumeControlService";
+    private static final boolean DBG = Log.isLoggable(TAG, Log.DEBUG);
 
     // Timeout for state machine thread join, to prevent potential ANR.
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
@@ -239,7 +239,7 @@ public class VolumeControlService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         if (DBG) {
             Log.d(TAG, "start()");
         }
@@ -277,18 +277,16 @@ public class VolumeControlService extends ProfileService {
 
         // Initialize native interface
         mVolumeControlNativeInterface.init();
-
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         if (DBG) {
             Log.d(TAG, "stop()");
         }
         if (sVolumeControlService == null) {
             Log.w(TAG, "stop() called before start()");
-            return true;
+            return;
         }
 
         // Mark service as stopped
@@ -337,8 +335,6 @@ public class VolumeControlService extends ProfileService {
             mCallbacks.kill();
             mCallbacks = null;
         }
-
-        return true;
     }
 
     @Override
@@ -426,10 +422,7 @@ public class VolumeControlService extends ProfileService {
         return true;
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public List<BluetoothDevice> getConnectedDevices() {
-        enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
-                "Need BLUETOOTH_PRIVILEGED permission");
         synchronized (mStateMachines) {
             List<BluetoothDevice> devices = new ArrayList<>();
             for (VolumeControlStateMachine sm : mStateMachines.values()) {
@@ -555,10 +548,7 @@ public class VolumeControlService extends ProfileService {
      * @param connectionPolicy is the connection policy to set to for this profile
      * @return true on success, otherwise false
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean setConnectionPolicy(BluetoothDevice device, int connectionPolicy) {
-        enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
-                "Need BLUETOOTH_PRIVILEGED permission");
         if (DBG) {
             Log.d(TAG, "Saved connectionPolicy " + device + " = " + connectionPolicy);
         }
@@ -572,10 +562,7 @@ public class VolumeControlService extends ProfileService {
         return true;
     }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
     public int getConnectionPolicy(BluetoothDevice device) {
-        enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
-                "Need BLUETOOTH_PRIVILEGED permission");
         return mDatabaseManager.getProfileConnectionPolicy(device, BluetoothProfile.VOLUME_CONTROL);
     }
 
@@ -1275,15 +1262,15 @@ public class VolumeControlService extends ProfileService {
                     cachedVolume = getGroupVolume(groupId);
                 }
             }
+            int broadcastVolume = cachedVolume;
+            if (volume.isPresent()) {
+                broadcastVolume = volume.get();
+                mDeviceVolumeCache.put(dev, broadcastVolume);
+            }
             int n = callbacks.beginBroadcast();
             for (int i = 0; i < n; i++) {
                 try {
-                    if (!volume.isPresent()) {
-                        callbacks.getBroadcastItem(i).onDeviceVolumeChanged(dev, cachedVolume);
-                    } else {
-                        mDeviceVolumeCache.put(dev, volume.get());
-                        callbacks.getBroadcastItem(i).onDeviceVolumeChanged(dev, volume.get());
-                    }
+                    callbacks.getBroadcastItem(i).onDeviceVolumeChanged(dev, broadcastVolume);
                 } catch (RemoteException e) {
                     continue;
                 }
@@ -1539,6 +1526,7 @@ public class VolumeControlService extends ProfileService {
                 VolumeControlService service = getService(source);
                 boolean defaultValue = false;
                 if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
                     defaultValue = service.setConnectionPolicy(device, connectionPolicy);
                 }
                 receiver.send(defaultValue);
@@ -1558,6 +1546,7 @@ public class VolumeControlService extends ProfileService {
                 VolumeControlService service = getService(source);
                 int defaultValue = BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
                 if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
                     defaultValue = service.getConnectionPolicy(device);
                 }
                 receiver.send(defaultValue);
@@ -1577,6 +1566,7 @@ public class VolumeControlService extends ProfileService {
                 boolean defaultValue = false;
                 VolumeControlService service = getService(source);
                 if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
                     defaultValue = service.isVolumeOffsetAvailable(device);
                 }
                 receiver.send(defaultValue);
@@ -1595,6 +1585,7 @@ public class VolumeControlService extends ProfileService {
 
                 VolumeControlService service = getService(source);
                 if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
                     service.setVolumeOffset(device, volumeOffset);
                 }
                 receiver.send(null);
@@ -1617,6 +1608,7 @@ public class VolumeControlService extends ProfileService {
 
                 VolumeControlService service = getService(source);
                 if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
                     service.setDeviceVolume(device, volume, isGroupOp);
                 }
                 receiver.send(null);

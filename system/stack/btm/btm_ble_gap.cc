@@ -22,8 +22,10 @@
  *
  ******************************************************************************/
 
+#include "bt_dev_class.h"
 #define LOG_TAG "bt_btm_ble"
 
+#include <android_bluetooth_flags.h>
 #include <android_bluetooth_sysprop.h>
 #include <base/functional/bind.h>
 #include <base/logging.h>
@@ -35,12 +37,13 @@
 #include <type_traits>
 #include <vector>
 
-#include "android_bluetooth_flags.h"
 #include "bta/include/bta_api.h"
 #include "common/time_util.h"
 #include "device/include/controller.h"
+#include "hci/controller.h"
 #include "include/check.h"
 #include "main/shim/acl_api.h"
+#include "main/shim/entry.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
@@ -91,6 +94,8 @@ static void btm_ble_start_scan();
 static void btm_ble_stop_scan();
 static tBTM_STATUS btm_ble_stop_adv(void);
 static tBTM_STATUS btm_ble_start_adv(void);
+
+using bluetooth::shim::GetController;
 
 namespace {
 
@@ -820,9 +825,92 @@ void BTM_BleReadControllerFeatures(tBTM_BLE_CTRL_FEATURES_CBACK* p_vsc_cback) {
 
   LOG_VERBOSE("BTM_BleReadControllerFeatures");
 
-  p_ctrl_le_feature_rd_cmpl_cback = p_vsc_cback;
-  BTM_VendorSpecificCommand(HCI_BLE_VENDOR_CAP, 0, NULL,
-                            btm_ble_vendor_capability_vsc_cmpl_cback);
+  if (IS_FLAG_ENABLED(report_vsc_data_from_the_gd_controller)) {
+    btm_cb.cmn_ble_vsc_cb.values_read = true;
+    bluetooth::hci::Controller::VendorCapabilities vendor_capabilities =
+        GetController()->GetVendorCapabilities();
+
+    btm_cb.cmn_ble_vsc_cb.adv_inst_max =
+        vendor_capabilities.max_advt_instances_;
+    btm_cb.cmn_ble_vsc_cb.rpa_offloading =
+        vendor_capabilities.offloaded_resolution_of_private_address_;
+    btm_cb.cmn_ble_vsc_cb.tot_scan_results_strg =
+        vendor_capabilities.total_scan_results_storage_;
+    btm_cb.cmn_ble_vsc_cb.max_irk_list_sz =
+        vendor_capabilities.max_irk_list_sz_;
+    btm_cb.cmn_ble_vsc_cb.filter_support =
+        vendor_capabilities.filtering_support_;
+    btm_cb.cmn_ble_vsc_cb.max_filter = vendor_capabilities.max_filter_;
+    btm_cb.cmn_ble_vsc_cb.energy_support =
+        vendor_capabilities.activity_energy_info_support_;
+
+    btm_cb.cmn_ble_vsc_cb.version_supported =
+        vendor_capabilities.version_supported_;
+    btm_cb.cmn_ble_vsc_cb.total_trackable_advertisers =
+        vendor_capabilities.total_num_of_advt_tracked_;
+    btm_cb.cmn_ble_vsc_cb.extended_scan_support =
+        vendor_capabilities.extended_scan_support_;
+    btm_cb.cmn_ble_vsc_cb.debug_logging_supported =
+        vendor_capabilities.debug_logging_supported_;
+
+    btm_cb.cmn_ble_vsc_cb.le_address_generation_offloading_support =
+        vendor_capabilities.le_address_generation_offloading_support_;
+    btm_cb.cmn_ble_vsc_cb.a2dp_source_offload_capability_mask =
+        vendor_capabilities.a2dp_source_offload_capability_mask_;
+    btm_cb.cmn_ble_vsc_cb.quality_report_support =
+        vendor_capabilities.bluetooth_quality_report_support_;
+    btm_cb.cmn_ble_vsc_cb.dynamic_audio_buffer_support =
+        vendor_capabilities.dynamic_audio_buffer_support_;
+
+    if (vendor_capabilities.dynamic_audio_buffer_support_) {
+      std::array<bluetooth::hci::DynamicAudioBufferCodecCapability,
+                 BTM_CODEC_TYPE_MAX_RECORDS>
+          capabilities = GetController()->GetDabCodecCapabilities();
+
+      for (size_t i = 0; i < capabilities.size(); i++) {
+        btm_cb.dynamic_audio_buffer_cb[i].default_buffer_time =
+            capabilities[i].default_time_ms_;
+        btm_cb.dynamic_audio_buffer_cb[i].maximum_buffer_time =
+            capabilities[i].maximum_time_ms_;
+        btm_cb.dynamic_audio_buffer_cb[i].minimum_buffer_time =
+            capabilities[i].minimum_time_ms_;
+      }
+    }
+
+    if (btm_cb.cmn_ble_vsc_cb.filter_support == 1 &&
+        GetController()->GetLocalVersionInformation().manufacturer_name_ ==
+            LMP_COMPID_QTI) {
+      // QTI controller, TDS data filter are supported by default.
+      btm_cb.cmn_ble_vsc_cb.adv_filter_extended_features_mask = 0x01;
+    } else {
+      btm_cb.cmn_ble_vsc_cb.adv_filter_extended_features_mask = 0x00;
+    }
+
+    LOG_VERBOSE("irk=%d, ADV ins:%d, rpa=%d, ener=%d, ext_scan=%d",
+                btm_cb.cmn_ble_vsc_cb.max_irk_list_sz,
+                btm_cb.cmn_ble_vsc_cb.adv_inst_max,
+                btm_cb.cmn_ble_vsc_cb.rpa_offloading,
+                btm_cb.cmn_ble_vsc_cb.energy_support,
+                btm_cb.cmn_ble_vsc_cb.extended_scan_support);
+
+    if (btm_cb.cmn_ble_vsc_cb.max_filter > 0) btm_ble_adv_filter_init();
+
+    /* VS capability included and non-4.2 device */
+    if (GetController()->SupportsBle() &&
+        GetController()->SupportsBlePrivacy() &&
+        btm_cb.cmn_ble_vsc_cb.max_irk_list_sz > 0 &&
+        GetController()->GetLeResolvingListSize() == 0) {
+      btm_ble_resolving_list_init(btm_cb.cmn_ble_vsc_cb.max_irk_list_sz);
+    }
+
+    if (p_vsc_cback != NULL) {
+      p_vsc_cback(tHCI_STATUS::HCI_SUCCESS);
+    }
+  } else {
+    p_ctrl_le_feature_rd_cmpl_cback = p_vsc_cback;
+    BTM_VendorSpecificCommand(HCI_BLE_VENDOR_CAP, 0, NULL,
+                              btm_ble_vendor_capability_vsc_cmpl_cback);
+  }
 }
 
 /*******************************************************************************
@@ -2039,8 +2127,8 @@ static uint8_t btm_ble_is_discoverable(const RawAddress& bda,
   return scan_state;
 }
 
-static void btm_ble_appearance_to_cod(uint16_t appearance, uint8_t* dev_class) {
-  dev_class[0] = 0;
+static DEV_CLASS btm_ble_appearance_to_cod(uint16_t appearance) {
+  DEV_CLASS dev_class = kDevClassEmpty;
 
   switch (appearance) {
     case BTM_BLE_APPEARANCE_GENERIC_PHONE:
@@ -2171,6 +2259,7 @@ static void btm_ble_appearance_to_cod(uint16_t appearance, uint8_t* dev_class) {
       dev_class[1] = BTM_COD_MAJOR_UNCLASSIFIED;
       dev_class[2] = BTM_COD_MINOR_UNCLASSIFIED;
   };
+  return dev_class;
 }
 
 bool btm_ble_get_appearance_as_cod(std::vector<uint8_t> const& data,
@@ -2184,8 +2273,8 @@ bool btm_ble_get_appearance_as_cod(std::vector<uint8_t> const& data,
   const uint8_t* p_uuid16 = AdvertiseDataParser::GetFieldByType(
       data, BTM_BLE_AD_TYPE_APPEARANCE, &len);
   if (p_uuid16 && len == 2) {
-    btm_ble_appearance_to_cod((uint16_t)p_uuid16[0] | (p_uuid16[1] << 8),
-                              dev_class);
+    dev_class =
+        btm_ble_appearance_to_cod((uint16_t)p_uuid16[0] | (p_uuid16[1] << 8));
     return true;
   }
 
@@ -3225,24 +3314,6 @@ void btm_ble_update_mode_operation(uint8_t link_role, const RawAddress* bd_addr,
   if (btm_cb.ble_ctr_cb.inq_var.connectable_mode == BTM_BLE_CONNECTABLE) {
     btm_ble_set_connectability(btm_cb.btm_inq_vars.connectable_mode |
                                btm_cb.ble_ctr_cb.inq_var.connectable_mode);
-  }
-
-  /* in case of disconnected, we must cancel bgconn and restart
-     in order to add back device to acceptlist in order to reconnect */
-  if (bd_addr != nullptr) {
-      LOG_DEBUG("gd_acl enabled so skip background connection logic");
-  }
-
-  /* when no connection is attempted, and controller is not rejecting last
-     request
-     due to resource limitation, start next direct connection or background
-     connection
-     now in order */
-  if (btm_cb.ble_ctr_cb.is_connection_state_idle() &&
-      status != HCI_ERR_HOST_REJECT_RESOURCES &&
-      status != HCI_ERR_MAX_NUM_OF_CONNECTIONS) {
-      LOG_DEBUG("Resuming le background connections");
-      btm_ble_resume_bg_conn();
   }
 }
 

@@ -163,6 +163,10 @@ using bluetooth::Uuid;
 
 #define BTIF_DM_DEFAULT_INQ_MAX_DURATION 10
 
+#ifndef PROPERTY_INQ_LENGTH
+#define PROPERTY_INQ_LENGTH "bluetooth.core.classic.inq_length"
+#endif
+
 /******************************************************************************/
 /*               L O C A L    D A T A    D E F I N I T I O N S                */
 /******************************************************************************/
@@ -260,7 +264,6 @@ void SendRemoteNameRequest(const RawAddress& raw_address) {
 tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
   uint8_t scan_mode = 0;
   uint16_t service_class;
-  uint8_t* p_cod;
   uint8_t major, minor;
   DEV_CLASS cod;
   LAP temp_lap[2];
@@ -326,13 +329,13 @@ tBTM_STATUS BTM_SetDiscoverability(uint16_t inq_mode) {
   btm_cb.btm_inq_vars.discoverable_mode |= inq_mode;
 
   /* Change the service class bit if mode has changed */
-  p_cod = BTM_ReadDeviceClass();
-  BTM_COD_SERVICE_CLASS(service_class, p_cod);
+  DEV_CLASS old_cod = BTM_ReadDeviceClass();
+  BTM_COD_SERVICE_CLASS(service_class, old_cod);
   is_limited = (inq_mode & BTM_LIMITED_DISCOVERABLE) ? true : false;
   cod_limited = (service_class & BTM_COD_SERVICE_LMTD_DISCOVER) ? true : false;
   if (is_limited ^ cod_limited) {
-    BTM_COD_MINOR_CLASS(minor, p_cod);
-    BTM_COD_MAJOR_CLASS(major, p_cod);
+    BTM_COD_MINOR_CLASS(minor, old_cod);
+    BTM_COD_MAJOR_CLASS(major, old_cod);
     if (is_limited)
       service_class |= BTM_COD_SERVICE_LMTD_DISCOVER;
     else
@@ -633,12 +636,15 @@ tBTM_STATUS BTM_StartInquiry(tBTM_INQ_RESULTS_CB* p_results_cb,
                                ? ""
                                : "ERROR Already in progress"));
 
+  const uint8_t inq_length = osi_property_get_int32(
+      PROPERTY_INQ_LENGTH, BTIF_DM_DEFAULT_INQ_MAX_DURATION);
+
   /* Save the inquiry parameters to be used upon the completion of
    * setting/clearing the inquiry filter */
   btm_cb.btm_inq_vars.inqparms = {
       // tBTM_INQ_PARMS
       .mode = BTM_GENERAL_INQUIRY | BTM_BLE_GENERAL_INQUIRY,
-      .duration = BTIF_DM_DEFAULT_INQ_MAX_DURATION,
+      .duration = inq_length,
   };
 
   /* Initialize the inquiry variables */

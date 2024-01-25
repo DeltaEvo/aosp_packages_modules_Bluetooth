@@ -25,6 +25,7 @@
 
 #define LOG_TAG "bt_bta_dm"
 
+#include <android_bluetooth_flags.h>
 #include <android_bluetooth_sysprop.h>
 #include <base/location.h>
 #include <base/logging.h>
@@ -41,7 +42,7 @@
 #include "bta/include/bta_sec_api.h"
 #include "bta/sys/bta_sys.h"
 #include "btif/include/btif_dm.h"
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "device/include/controller.h"
 #include "include/bind_helpers.h"
 #include "include/check.h"
@@ -85,6 +86,9 @@ static void bta_dm_rm_cback(tBTA_SYS_CONN_STATUS status, tBTA_SYS_ID id,
 static void bta_dm_adjust_roles(bool delay_role_switch);
 tBTM_CONTRL_STATE bta_dm_pm_obtain_controller_state(void);
 static void bta_dm_ctrl_features_rd_cmpl_cback(tHCI_STATUS result);
+
+static const char kPropertySniffOffloadEnabled[] =
+    "bluetooth.sniff_offload.enabled";
 
 #ifndef BTA_DM_BLE_ADV_CHNL_MAP
 #define BTA_DM_BLE_ADV_CHNL_MAP \
@@ -246,11 +250,11 @@ void BTA_dm_on_hw_on() {
   btif_dm_get_ble_local_keys(&key_mask, &er, &id_key);
 
   if (key_mask & BTA_BLE_LOCAL_KEY_TYPE_ER) {
-    get_btm_client_interface().ble.BTM_BleLoadLocalKeys(
+    get_btm_client_interface().security.BTM_BleLoadLocalKeys(
         BTA_BLE_LOCAL_KEY_TYPE_ER, (tBTM_BLE_LOCAL_KEYS*)&er);
   }
   if (key_mask & BTA_BLE_LOCAL_KEY_TYPE_ID) {
-    get_btm_client_interface().ble.BTM_BleLoadLocalKeys(
+    get_btm_client_interface().security.BTM_BleLoadLocalKeys(
         BTA_BLE_LOCAL_KEY_TYPE_ID, (tBTM_BLE_LOCAL_KEYS*)&id_key);
   }
 
@@ -287,8 +291,13 @@ void BTA_dm_on_hw_on() {
 
   bta_sys_rm_register(bta_dm_rm_cback);
 
-  /* initialize bluetooth low power manager */
-  bta_dm_init_pm();
+  /* if sniff is offload, no need to handle it in the stack */
+  if (IS_FLAG_ENABLED(enable_sniff_offload) &&
+      osi_property_get_bool(kPropertySniffOffloadEnabled, false)) {
+  } else {
+    /* initialize bluetooth low power manager */
+    bta_dm_init_pm();
+  }
 
   bta_dm_disc_gattc_register();
 }
@@ -1710,6 +1719,7 @@ tBTA_DM_PEER_DEVICE* allocate_device_for(const RawAddress& bd_addr,
 
 void bta_dm_init_cb() { ::bta_dm_init_cb(); }
 void bta_dm_deinit_cb() { ::bta_dm_deinit_cb(); }
+void BTA_dm_on_hw_on() { ::BTA_dm_on_hw_on(); }
 
 }  // namespace testing
 }  // namespace legacy

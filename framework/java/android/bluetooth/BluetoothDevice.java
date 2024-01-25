@@ -52,6 +52,7 @@ import android.os.RemoteException;
 import android.util.Log;
 import android.util.Pair;
 
+import com.android.bluetooth.flags.Flags;
 import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.io.IOException;
@@ -304,7 +305,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      *
      * @hide
      */
-    @FlaggedApi("com.android.bluetooth.flags.key_missing_broadcast")
+    @FlaggedApi(Flags.FLAG_KEY_MISSING_BROADCAST)
     @SuppressLint("ActionValue")
     @RequiresPermission(
             allOf = {
@@ -549,7 +550,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 METADATA_FAST_PAIR_CUSTOMIZED_FIELDS,
                 METADATA_LE_AUDIO,
                 METADATA_GMCS_CCCD,
-                METADATA_GTBS_CCCD
+                METADATA_GTBS_CCCD,
+                METADATA_EXCLUSIVE_MANAGER
             })
     @Retention(RetentionPolicy.SOURCE)
     public @interface MetadataKey {}
@@ -795,7 +797,24 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      */
     public static final int METADATA_GTBS_CCCD = 28;
 
-    private static final int METADATA_MAX_KEY = METADATA_GTBS_CCCD;
+    /**
+     * Specify the exclusive manager app for this BluetoothDevice.
+     *
+     * <p>If there's a manager app specified for this BluetoothDevice, and the app is currently
+     * installed on the device, that manager app shall be responsible for providing the
+     * BluetoothDevice management functionality (e.g. connect, disconnect, forget, etc.). Android
+     * Settings app shall not provide any management functionality for such BluetoothDevice.
+     *
+     * <p>Data type should be a {@link String} representing the package name of the app (e.g.
+     * "com.android.settings"), provided as a {@link Byte} array.
+     *
+     * @hide
+     */
+    @FlaggedApi(Flags.FLAG_SUPPORT_EXCLUSIVE_MANAGER)
+    @SystemApi
+    public static final int METADATA_EXCLUSIVE_MANAGER = 29;
+
+    private static final int METADATA_MAX_KEY = METADATA_EXCLUSIVE_MANAGER;
 
     /**
      * Device type which is used in METADATA_DEVICE_TYPE Indicates this Bluetooth device is a
@@ -834,7 +853,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      *
      * @hide
      */
-    @FlaggedApi("com.android.bluetooth.flags.support_metadata_device_types_apis")
+    @FlaggedApi(Flags.FLAG_SUPPORT_METADATA_DEVICE_TYPES_APIS)
     @SystemApi
     public static final String DEVICE_TYPE_SPEAKER = "Speaker";
 
@@ -844,7 +863,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      *
      * @hide
      */
-    @FlaggedApi("com.android.bluetooth.flags.support_metadata_device_types_apis")
+    @FlaggedApi(Flags.FLAG_SUPPORT_METADATA_DEVICE_TYPES_APIS)
     @SystemApi
     public static final String DEVICE_TYPE_HEADSET = "Headset";
 
@@ -854,7 +873,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      *
      * @hide
      */
-    @FlaggedApi("com.android.bluetooth.flags.support_metadata_device_types_apis")
+    @FlaggedApi(Flags.FLAG_SUPPORT_METADATA_DEVICE_TYPES_APIS)
     @SystemApi
     public static final String DEVICE_TYPE_CARKIT = "Carkit";
 
@@ -864,7 +883,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      *
      * @hide
      */
-    @FlaggedApi("com.android.bluetooth.flags.support_metadata_device_types_apis")
+    @FlaggedApi(Flags.FLAG_SUPPORT_METADATA_DEVICE_TYPES_APIS)
     @SystemApi
     public static final String DEVICE_TYPE_HEARING_AID = "HearingAid";
 
@@ -1326,6 +1345,7 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             value = {
                 ADDRESS_TYPE_PUBLIC,
                 ADDRESS_TYPE_RANDOM,
+                ADDRESS_TYPE_ANONYMOUS,
                 ADDRESS_TYPE_UNKNOWN,
             })
     public @interface AddressType {}
@@ -1338,6 +1358,10 @@ public final class BluetoothDevice implements Parcelable, Attributable {
 
     /** Address type is unknown or unavailable */
     public static final int ADDRESS_TYPE_UNKNOWN = 0xFFFF;
+
+    /** Address type used to indicate an anonymous advertisement. */
+    @FlaggedApi(Flags.FLAG_GET_ADDRESS_TYPE_API)
+    public static final int ADDRESS_TYPE_ANONYMOUS = 0xFF;
 
     private static final String NULL_MAC_ADDRESS = "00:00:00:00:00:00";
 
@@ -1368,8 +1392,15 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             throw new IllegalArgumentException(address + " is not a valid Bluetooth address");
         }
 
-        if (addressType != ADDRESS_TYPE_PUBLIC && addressType != ADDRESS_TYPE_RANDOM) {
+        if (addressType != ADDRESS_TYPE_PUBLIC
+                && addressType != ADDRESS_TYPE_RANDOM
+                && addressType != ADDRESS_TYPE_ANONYMOUS) {
             throw new IllegalArgumentException(addressType + " is not a Bluetooth address type");
+        }
+
+        if (addressType == ADDRESS_TYPE_ANONYMOUS && !NULL_MAC_ADDRESS.equals(address)) {
+            throw new IllegalArgumentException(
+                    "Invalid address for anonymous address type: " + getAnonymizedAddress());
         }
 
         mAddress = address;
@@ -1539,12 +1570,13 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     }
 
     /**
-     * Returns the address type of this BluetoothDevice.
+     * Returns the address type of this BluetoothDevice, one of {@link ADDRESS_TYPE_PUBLIC}, {@link
+     * ADDRESS_TYPE_RANDOM}, {@link ADDRESS_TYPE_ANONYMOUS}, or {@link ADDRESS_TYPE_UNKNOWN}.
      *
      * @return Bluetooth address type
-     * @hide
      */
-    public int getAddressType() {
+    @FlaggedApi(Flags.FLAG_GET_ADDRESS_TYPE_API)
+    public @AddressType int getAddressType() {
         if (DBG) Log.d(TAG, "mAddressType: " + mAddressType);
         return mAddressType;
     }

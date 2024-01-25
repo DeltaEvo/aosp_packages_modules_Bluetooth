@@ -17,6 +17,7 @@
 
 #include "dumpsys/dumpsys.h"
 
+#include <android_bluetooth_flags.h>
 #include <unistd.h>
 
 #include <future>
@@ -138,7 +139,11 @@ void Dumpsys::impl::DumpWithArgsAsync(int fd, const char** args) {
   ParsedDumpsysArgs parsed_dumpsys_args(args);
   const auto registry = dumpsys_module_.GetModuleRegistry();
 
-  ModuleDumper dumper(STDOUT_FILENO, *registry, kDumpsysTitle);
+  int dumper_fd = STDOUT_FILENO;
+  if (IS_FLAG_ENABLED(dumpsys_use_passed_in_fd)) {
+    dumper_fd = fd;
+  }
+  ModuleDumper dumper(dumper_fd, *registry, kDumpsysTitle);
   std::string dumpsys_data;
   std::ostringstream oss;
   dumper.DumpState(&dumpsys_data, oss);

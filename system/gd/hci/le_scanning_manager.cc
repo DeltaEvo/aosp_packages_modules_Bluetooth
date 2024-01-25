@@ -15,10 +15,11 @@
  */
 #include "hci/le_scanning_manager.h"
 
+#include <android_bluetooth_flags.h>
+
 #include <memory>
 #include <unordered_map>
 
-#include "android_bluetooth_flags.h"
 #include "hci/acl_manager.h"
 #include "hci/controller.h"
 #include "hci/event_checkers.h"
@@ -603,7 +604,14 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
       case ScanApiType::EXTENDED:
         le_scanning_interface_->EnqueueCommand(
             LeSetExtendedScanEnableBuilder::Create(
-                Enable::ENABLED, FilterDuplicates::DISABLED /* filter duplicates */, 0, 0),
+                Enable::ENABLED,
+#if TARGET_FLOSS
+                FilterDuplicates::ENABLED /* filter duplicates */,
+#else
+                FilterDuplicates::DISABLED /* filter duplicates */,
+#endif
+                0,
+                0),
             module_handler_->BindOnce(check_complete<LeSetExtendedScanEnableCompleteView>));
         break;
       case ScanApiType::ANDROID_HCI:
@@ -627,7 +635,14 @@ struct LeScanningManager::impl : public LeAddressManagerCallback {
       case ScanApiType::EXTENDED:
         le_scanning_interface_->EnqueueCommand(
             LeSetExtendedScanEnableBuilder::Create(
-                Enable::DISABLED, FilterDuplicates::DISABLED /* filter duplicates */, 0, 0),
+                Enable::DISABLED,
+#if TARGET_FLOSS
+                FilterDuplicates::ENABLED /* filter duplicates */,
+#else
+                FilterDuplicates::DISABLED /* filter duplicates */,
+#endif
+                0,
+                0),
             module_handler_->BindOnce(check_complete<LeSetExtendedScanEnableCompleteView>));
         break;
       case ScanApiType::ANDROID_HCI:

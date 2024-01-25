@@ -18,11 +18,13 @@
 
 #define LOG_TAG "smp_act"
 
+#include <android_bluetooth_flags.h>
+
 #include <cstring>
 
 #include "btif/include/btif_common.h"
 #include "btif/include/core_callbacks.h"
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "crypto_toolbox/crypto_toolbox.h"
 #include "device/include/interop.h"
 #include "internal_include/bt_target.h"
@@ -77,7 +79,7 @@ static void smp_update_key_mask(tSMP_CB* p_cb, uint8_t key_type, bool recv) {
       "before update role=%d recv=%d local_i_key=0x%02x, local_r_key=0x%02x",
       p_cb->role, recv, p_cb->local_i_key, p_cb->local_r_key);
 
-  if (((p_cb->le_secure_connections_mode_is_used) || (p_cb->smp_over_br)) &&
+  if (((p_cb->sc_mode_required_by_peer) || (p_cb->smp_over_br)) &&
       ((key_type == SMP_SEC_KEY_TYPE_ENC) ||
        (key_type == SMP_SEC_KEY_TYPE_LK))) {
     /* in LE SC mode LTK, CSRK and BR/EDR LK are derived locally instead of
@@ -109,6 +111,10 @@ void smp_send_app_cback(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   tSMP_EVT_DATA cb_data;
   tBTM_STATUS callback_rc;
   uint8_t remote_lmp_version = 0;
+
+  LOG_DEBUG("addr:%s event:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda),
+            smp_evt_to_text(p_cb->cb_evt).c_str());
+
   if (p_cb->p_callback && p_cb->cb_evt != 0) {
     switch (p_cb->cb_evt) {
       case SMP_IO_CAP_REQ_EVT:
@@ -163,34 +169,32 @@ void smp_send_app_cback(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
           p_cb->local_r_key = cb_data.io_req.resp_keys;
 
           if (!(p_cb->loc_auth_req & SMP_AUTH_BOND)) {
-            LOG_INFO("Non bonding: No keys will be exchanged");
+            LOG_DEBUG("Non bonding: No keys will be exchanged");
             p_cb->local_i_key = 0;
             p_cb->local_r_key = 0;
           }
 
           LOG_DEBUG(
               "Remote request IO capabilities precondition auth_req:0x%02x,"
-              " io_cap:%d loc_oob_flag:%d loc_enc_size:%d, "
+              "io_cap:%d loc_oob_flag:%d loc_enc_size:%d, "
               "local_i_key:0x%02x, local_r_key:0x%02x",
               p_cb->loc_auth_req, p_cb->local_io_capability, p_cb->loc_oob_flag,
               p_cb->loc_enc_size, p_cb->local_i_key, p_cb->local_r_key);
 
-          p_cb->secure_connections_only_mode_required =
+          p_cb->sc_only_mode_locally_required =
               (p_cb->init_security_mode == BTM_SEC_MODE_SC) ? true : false;
           /* just for PTS, force SC bit */
-          if (p_cb->secure_connections_only_mode_required) {
+          if (p_cb->sc_only_mode_locally_required) {
             p_cb->loc_auth_req |= SMP_SC_SUPPORT_BIT;
           }
 
           if (!BTM_ReadRemoteVersion(p_cb->pairing_bda, &remote_lmp_version,
                                      nullptr, nullptr)) {
-            LOG_WARN(
-                "SMP Unable to determine remote security authentication "
-                "remote_lmp_version:%hu",
-                remote_lmp_version);
+            LOG_WARN("SMP Unable to determine remote_lmp_version:%hu",
+                     remote_lmp_version);
           }
 
-          if (!p_cb->secure_connections_only_mode_required &&
+          if (!p_cb->sc_only_mode_locally_required &&
               (!(p_cb->loc_auth_req & SMP_SC_SUPPORT_BIT) ||
                (remote_lmp_version &&
                 remote_lmp_version < HCI_PROTO_VERSION_4_2) ||
@@ -213,7 +217,7 @@ void smp_send_app_cback(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
 
           LOG_DEBUG(
               "Remote request IO capabilities postcondition auth_req:0x%02x,"
-              " local_i_key:0x%02x, local_r_key:0x%02x",
+              "local_i_key:0x%02x, local_r_key:0x%02x",
               p_cb->loc_auth_req, p_cb->local_i_key, p_cb->local_r_key);
 
           smp_sm_event(p_cb, SMP_IO_RSP_EVT, NULL);
@@ -466,11 +470,11 @@ void smp_proc_sec_req(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       break;
 
     case BTM_BLE_SEC_REQ_ACT_PAIR:
-      p_cb->secure_connections_only_mode_required =
+      p_cb->sc_only_mode_locally_required =
           (p_cb->init_security_mode == BTM_SEC_MODE_SC) ? true : false;
 
       /* respond to non SC pairing request as failure in SC only mode */
-      if (p_cb->secure_connections_only_mode_required &&
+      if (p_cb->sc_only_mode_locally_required &&
           (auth_req & SMP_SC_SUPPORT_BIT) == 0) {
         tSMP_INT_DATA smp_int_data;
         smp_int_data.status = SMP_PAIR_AUTH_FAIL;
@@ -521,7 +525,11 @@ void smp_proc_pair_fail(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
              p_cb->rcvd_cmd_len);
     p_cb->status = SMP_INVALID_PARAMETERS;
   } else {
-    p_cb->status = p_data->status;
+    if (IS_FLAG_ENABLED(fix_pairing_failure_reason_from_remote)) {
+      p_cb->status = static_cast<tSMP_STATUS>(p_data->p_data[0]);
+    } else {
+      p_cb->status = p_data->status;
+    }
   }
 
   /* Cancel pending auth complete timer if set */
@@ -590,8 +598,8 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       p_cb->local_r_key &= p_cb->peer_r_key;
       p_cb->selected_association_model = smp_select_association_model(p_cb);
 
-      if (p_cb->secure_connections_only_mode_required &&
-          (!(p_cb->le_secure_connections_mode_is_used) ||
+      if (p_cb->sc_only_mode_locally_required &&
+          (!(p_cb->sc_mode_required_by_peer) ||
            (p_cb->selected_association_model ==
             SMP_MODEL_SEC_CONN_JUSTWORKS))) {
         LOG_ERROR(
@@ -612,8 +620,8 @@ void smp_proc_pair_cmd(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   {
     p_cb->selected_association_model = smp_select_association_model(p_cb);
 
-    if (p_cb->secure_connections_only_mode_required &&
-        (!(p_cb->le_secure_connections_mode_is_used) ||
+    if (p_cb->sc_only_mode_locally_required &&
+        (!(p_cb->sc_mode_required_by_peer) ||
          (p_cb->selected_association_model == SMP_MODEL_SEC_CONN_JUSTWORKS))) {
       LOG_ERROR(
           "Central requires secure connection only mode "
@@ -651,7 +659,7 @@ void smp_proc_confirm(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     }
   }
 
-  p_cb->flags |= SMP_PAIR_FLAGS_CMD_CONFIRM;
+  p_cb->flags |= SMP_PAIR_FLAGS_CMD_CONFIRM_RCVD;
 }
 
 /*******************************************************************************
@@ -1128,7 +1136,7 @@ void smp_proc_sl_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   } else if (key_type == SMP_KEY_TYPE_CFM) {
     smp_set_state(SMP_STATE_WAIT_CONFIRM);
 
-    if (p_cb->flags & SMP_PAIR_FLAGS_CMD_CONFIRM)
+    if (p_cb->flags & SMP_PAIR_FLAGS_CMD_CONFIRM_RCVD)
       smp_sm_event(p_cb, SMP_CONFIRM_EVT, NULL);
   }
 }
@@ -1233,7 +1241,7 @@ void smp_check_auth_req(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
       "rcvs enc_enable=%d i_keys=0x%x r_keys=0x%x (i-initiator r-responder)",
       enc_enable, p_cb->local_i_key, p_cb->local_r_key);
   if (enc_enable == 1) {
-    if (p_cb->le_secure_connections_mode_is_used) {
+    if (p_cb->sc_mode_required_by_peer) {
       /* In LE SC mode LTK is used instead of STK and has to be always saved */
       p_cb->local_i_key |= SMP_SEC_KEY_TYPE_ENC;
       p_cb->local_r_key |= SMP_SEC_KEY_TYPE_ENC;
@@ -1468,8 +1476,8 @@ void smp_process_io_response(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     /* pairing started by peer (central) Pairing Request */
     p_cb->selected_association_model = smp_select_association_model(p_cb);
 
-    if (p_cb->secure_connections_only_mode_required &&
-        (!(p_cb->le_secure_connections_mode_is_used) ||
+    if (p_cb->sc_only_mode_locally_required &&
+        (!(p_cb->sc_mode_required_by_peer) ||
          (p_cb->selected_association_model == SMP_MODEL_SEC_CONN_JUSTWORKS))) {
       LOG_ERROR(
           "Peripheral requires secure connection only mode "

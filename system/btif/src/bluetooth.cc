@@ -63,7 +63,7 @@
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/btif_sock.h"
 #include "btif/include/core_callbacks.h"
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "btif_a2dp.h"
 #include "btif_api.h"
 #include "btif_av.h"
@@ -82,17 +82,17 @@
 #include "btif_sock.h"
 #include "btif_storage.h"
 #include "common/address_obfuscator.h"
+#include "common/init_flags.h"
 #include "common/metrics.h"
 #include "common/os_utils.h"
 #include "device/include/device_iot_config.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
-#include "gd/common/init_flags.h"
-#include "gd/os/parameter_provider.h"
 #include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "main/shim/dumpsys.h"
 #include "os/log.h"
+#include "os/parameter_provider.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
 #include "osi/include/stack_power_telemetry.h"
@@ -343,6 +343,7 @@ static bluetooth::core::CoreInterface* CreateInterfaceToProfiles() {
       .invoke_le_test_mode_cb = invoke_le_test_mode_cb,
       .invoke_energy_info_cb = invoke_energy_info_cb,
       .invoke_link_quality_report_cb = invoke_link_quality_report_cb,
+      .invoke_key_missing_cb = invoke_key_missing_cb,
   };
   static bluetooth::core::HACK_ProfileInterface profileInterface{
       // HID
@@ -670,7 +671,7 @@ static int pin_reply(const RawAddress* bd_addr, uint8_t accept, uint8_t pin_len,
 }
 
 static int ssp_reply(const RawAddress* bd_addr, bt_ssp_variant_t variant,
-                     uint8_t accept, uint32_t passkey) {
+                     uint8_t accept, uint32_t /* passkey */) {
   if (!interface_ready()) return BT_STATUS_NOT_READY;
   if (variant == BT_SSP_VARIANT_PASSKEY_ENTRY) return BT_STATUS_FAIL;
 
@@ -803,7 +804,7 @@ static void dump(int fd, const char** arguments) {
   wakelock_debug_dump(fd);
   alarm_debug_dump(fd);
   bluetooth::csis::CsisClient::DebugDump(fd);
-  le_audio::has::HasClient::DebugDump(fd);
+  ::le_audio::has::HasClient::DebugDump(fd);
   HearingAid::DebugDump(fd);
   LeAudioClient::DebugDump(fd);
   LeAudioBroadcaster::DebugDump(fd);
@@ -1028,7 +1029,8 @@ static int set_dynamic_audio_buffer_size(int codec, int size) {
   return btif_set_dynamic_audio_buffer_size(codec, size);
 }
 
-static bool allow_low_latency_audio(bool allowed, const RawAddress& address) {
+static bool allow_low_latency_audio(bool allowed,
+                                    const RawAddress& /* address */) {
   LOG_INFO("%s %s", __func__, allowed ? "true" : "false");
   bluetooth::audio::a2dp::set_audio_low_latency_mode_allowed(allowed);
   return true;
@@ -1491,4 +1493,13 @@ void invoke_switch_codec_cb(bool is_low_latency_buffer_size) {
                                               is_low_latency_buffer_size);
                                   },
                                   is_low_latency_buffer_size));
+}
+
+void invoke_key_missing_cb(RawAddress bd_addr) {
+  do_in_jni_thread(FROM_HERE, base::BindOnce(
+                                  [](RawAddress bd_addr) {
+                                    HAL_CBACK(bt_hal_cbacks, key_missing_cb,
+                                              bd_addr);
+                                  },
+                                  bd_addr));
 }

@@ -26,6 +26,8 @@
 
 #include "stack/btm/btm_dev.h"
 
+#include <android_bluetooth_flags.h>
+
 #include <string>
 
 #include "btm_api.h"
@@ -115,7 +117,7 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
     p_dev_rec->sec_rec.bond_type = BOND_TYPE_UNKNOWN;
   }
 
-  if (dev_class) memcpy(p_dev_rec->dev_class, dev_class, DEV_CLASS_LEN);
+  if (dev_class != kDevClassEmpty) p_dev_rec->dev_class = dev_class;
 
   memset(p_dev_rec->sec_bd_name, 0, sizeof(tBTM_BD_NAME));
 
@@ -133,6 +135,10 @@ bool BTM_SecAddDevice(const RawAddress& bd_addr, DEV_CLASS dev_class,
     p_dev_rec->sec_rec.link_key = *p_link_key;
     p_dev_rec->sec_rec.link_key_type = key_type;
     p_dev_rec->sec_rec.pin_code_length = pin_length;
+
+    if (IS_FLAG_ENABLED(correct_bond_type_of_loaded_devices)) {
+      p_dev_rec->sec_rec.bond_type = BOND_TYPE_PERSISTENT;
+    }
 
     if (pin_length >= 16 || key_type == BTM_LKEY_TYPE_AUTH_COMB ||
         key_type == BTM_LKEY_TYPE_AUTH_COMB_P_256) {
@@ -270,7 +276,7 @@ tBTM_SEC_DEV_REC* btm_sec_alloc_dev(const RawAddress& bd_addr) {
   /* outgoing connection */
   p_inq_info = BTM_InqDbRead(bd_addr);
   if (p_inq_info != NULL) {
-    memcpy(p_dev_rec->dev_class, p_inq_info->results.dev_class, DEV_CLASS_LEN);
+    p_dev_rec->dev_class = p_inq_info->results.dev_class;
 
     p_dev_rec->device_type = p_inq_info->results.device_type;
     if (is_ble_addr_type_known(p_inq_info->results.ble_addr_type))
@@ -280,7 +286,7 @@ tBTM_SEC_DEV_REC* btm_sec_alloc_dev(const RawAddress& bd_addr) {
           "Please do not update device record from anonymous le advertisement");
 
   } else if (bd_addr == btm_sec_cb.connecting_bda)
-    memcpy(p_dev_rec->dev_class, btm_sec_cb.connecting_dc, DEV_CLASS_LEN);
+    p_dev_rec->dev_class = btm_sec_cb.connecting_dc;
 
   /* update conn params, use default value for background connection params */
   memset(&p_dev_rec->conn_params, 0xff, sizeof(tBTM_LE_CONN_PRAMS));
@@ -632,6 +638,12 @@ static tBTM_SEC_DEV_REC* btm_find_oldest_dev_rec(void) {
  ******************************************************************************/
 tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void) {
   tBTM_SEC_DEV_REC* p_dev_rec = NULL;
+
+  if (btm_sec_cb.sec_dev_rec == nullptr) {
+    LOG_WARN(
+        "Unable to allocate device record with destructed device record list");
+    return nullptr;
+  }
 
   if (list_length(btm_sec_cb.sec_dev_rec) > BTM_SEC_MAX_DEVICE_RECORDS) {
     p_dev_rec = btm_find_oldest_dev_rec();

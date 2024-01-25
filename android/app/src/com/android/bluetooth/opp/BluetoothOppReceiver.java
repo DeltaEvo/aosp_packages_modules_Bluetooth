@@ -1,33 +1,17 @@
 /*
- * Copyright (c) 2008-2009, Motorola, Inc.
+ * Copyright (C) 2024 The Android Open Source Project
  *
- * All rights reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * - Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * - Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * - Neither the name of the Motorola, Inc. nor the names of its contributors
- * may be used to endorse or promote products derived from this software
- * without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.android.bluetooth.opp;
@@ -35,6 +19,8 @@ package com.android.bluetooth.opp;
 import android.app.NotificationManager;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothDevicePicker;
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -45,13 +31,17 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
+import com.android.bluetooth.flags.Flags;
 
 /**
- * Receives and handles: system broadcasts; Intents from other applications;
- * Intents from OppService; Intents from modules in Opp application layer.
+ * Receives and handles: system broadcasts; Intents from other applications; Intents from
+ * OppService; Intents from modules in Opp application layer.
  */
+// Next tag value for ContentProfileErrorReportUtils.report(): 2
 public class BluetoothOppReceiver extends BroadcastReceiver {
     private static final String TAG = "BluetoothOppReceiver";
     private static final boolean D = Constants.DEBUG;
@@ -73,7 +63,10 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
             }
 
             if (D) {
-                Log.d(TAG, "Received BT device selected intent, bt device: " + remoteDevice.getIdentityAddress());
+                Log.d(
+                        TAG,
+                        "Received BT device selected intent, bt device: "
+                                + remoteDevice.getIdentityAddress());
             }
 
             // Insert transfer session record to database
@@ -91,16 +84,17 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
             }
             Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show();
         } else if (action.equals(Constants.ACTION_INCOMING_FILE_CONFIRM)) {
-            if (V) {
-                Log.v(TAG, "Receiver ACTION_INCOMING_FILE_CONFIRM");
+            if (!Flags.oppStartActivityDirectlyFromNotification()) {
+                if (V) {
+                    Log.v(TAG, "Receiver ACTION_INCOMING_FILE_CONFIRM");
+                }
+
+                Uri uri = intent.getData();
+                Intent in = new Intent(context, BluetoothOppIncomingFileConfirmActivity.class);
+                in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                in.setDataAndNormalize(uri);
+                context.startActivity(in);
             }
-
-            Uri uri = intent.getData();
-            Intent in = new Intent(context, BluetoothOppIncomingFileConfirmActivity.class);
-            in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            in.setDataAndNormalize(uri);
-            context.startActivity(in);
-
         } else if (action.equals(Constants.ACTION_DECLINE)) {
             if (V) {
                 Log.v(TAG, "Receiver ACTION_DECLINE");
@@ -138,6 +132,11 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
             transInfo = BluetoothOppUtility.queryRecord(context, uri);
             if (transInfo == null) {
                 Log.e(TAG, "Error: Can not get data from db");
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.OPP,
+                        BluetoothProtoEnums.BLUETOOTH_OPP_RECEIVER,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                        0);
                 return;
             }
 
@@ -155,33 +154,27 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
             }
 
         } else if (action.equals(Constants.ACTION_OPEN_OUTBOUND_TRANSFER)) {
-            if (V) {
-                Log.v(TAG, "Received ACTION_OPEN_OUTBOUND_TRANSFER.");
-            }
+            if (!Flags.oppStartActivityDirectlyFromNotification()) {
+                if (V) {
+                    Log.v(TAG, "Received ACTION_OPEN_OUTBOUND_TRANSFER.");
+                }
 
-            Intent in = new Intent(context, BluetoothOppTransferHistory.class);
-            in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            in.putExtra("direction", BluetoothShare.DIRECTION_OUTBOUND);
-            context.startActivity(in);
+                Intent in = new Intent(context, BluetoothOppTransferHistory.class);
+                in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                in.putExtra(Constants.EXTRA_DIRECTION, BluetoothShare.DIRECTION_OUTBOUND);
+                context.startActivity(in);
+            }
         } else if (action.equals(Constants.ACTION_OPEN_INBOUND_TRANSFER)) {
-            if (V) {
-                Log.v(TAG, "Received ACTION_OPEN_INBOUND_TRANSFER.");
-            }
+            if (!Flags.oppStartActivityDirectlyFromNotification()) {
+                if (V) {
+                    Log.v(TAG, "Received ACTION_OPEN_INBOUND_TRANSFER.");
+                }
 
-            Intent in = new Intent(context, BluetoothOppTransferHistory.class);
-            in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            in.putExtra("direction", BluetoothShare.DIRECTION_INBOUND);
-            context.startActivity(in);
-        } else if (action.equals(Constants.ACTION_OPEN_RECEIVED_FILES)) {
-            if (V) {
-                Log.v(TAG, "Received ACTION_OPEN_RECEIVED_FILES.");
+                Intent in = new Intent(context, BluetoothOppTransferHistory.class);
+                in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                in.putExtra(Constants.EXTRA_DIRECTION, BluetoothShare.DIRECTION_INBOUND);
+                context.startActivity(in);
             }
-
-            Intent in = new Intent(context, BluetoothOppTransferHistory.class);
-            in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            in.putExtra("direction", BluetoothShare.DIRECTION_INBOUND);
-            in.putExtra(Constants.EXTRA_SHOW_ALL_FILES, true);
-            context.startActivity(in);
         } else if (action.equals(Constants.ACTION_HIDE)) {
             if (V) {
                 Log.v(TAG, "Receiver hide for " + intent.getData());
@@ -228,6 +221,11 @@ public class BluetoothOppReceiver extends BroadcastReceiver {
             transInfo = BluetoothOppUtility.queryRecord(context, intent.getData());
             if (transInfo == null) {
                 Log.e(TAG, "Error: Can not get data from db");
+                ContentProfileErrorReportUtils.report(
+                        BluetoothProfile.OPP,
+                        BluetoothProtoEnums.BLUETOOTH_OPP_RECEIVER,
+                        BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                        1);
                 return;
             }
 

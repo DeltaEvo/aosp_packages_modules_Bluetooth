@@ -28,22 +28,16 @@ cc_library {
         "com.android.btservices",
     ],
     min_sdk_version: "30",
+    shared_libs: [
+        "libstatssocket",
+    ],
+    export_shared_lib_headers: [
+        "libstatssocket",
+    ],
     target: {
-        android: {
-            shared_libs: [
-                "libstatssocket",
-            ],
-            export_shared_lib_headers: [
-                "libstatssocket",
-            ],
-        },
         host: {
             static_libs: [
                 "libbase",
-                "libstatssocket",
-            ],
-            export_static_lib_headers: [
-                "libstatssocket",
             ],
         },
         darwin: {
@@ -159,12 +153,14 @@ cc_library_static {
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
         "libbluetooth-types",
+        "libbluetooth_hci_pdl",
         "libbt-audio-hal-interface",
         "libbt-platform-protos-lite",
         "libbt-stack",
         "libbt-stack-core",
         "libbt_shim_bridge",
         "libbtif-core",
+        "libflatbuffers-cpp",
     ],
     shared_libs: [
         "android.hardware.bluetooth.audio@2.1",
@@ -242,11 +238,13 @@ cc_library_static {
         "lib-bt-packets-base",
         "libaudio-a2dp-hw-utils",
         "libbluetooth_crypto_toolbox",
+        "libbluetooth_hci_pdl",
         "libbt-audio-hal-interface",
         "libbt-jni-thread",
         "libbt-platform-protos-lite",
         "libbt-stack-core",
         "libbt_shim_bridge",
+        "libflatbuffers-cpp",
         "libstatslog_bt",
     ],
     whole_static_libs: [
@@ -304,6 +302,7 @@ cc_test {
         "libbluetooth-types",
         "libbluetooth_core_rs",
         "libbluetooth_crypto_toolbox",
+        "libbt-audio-asrc",
         "libbt-audio-hal-interface",
         "libbt-bta",
         "libbt-bta-core",

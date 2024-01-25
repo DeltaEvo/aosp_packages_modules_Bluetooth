@@ -21,7 +21,6 @@ cc_defaults {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/btif/avrcp",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/btm",
         "packages/modules/Bluetooth/system/stack/include",
@@ -99,9 +98,7 @@ cc_library_static {
         "hh/bta_hh_le.cc",
         "hh/bta_hh_main.cc",
         "hh/bta_hh_utils.cc",
-        "le_audio/audio_hal_client/asrc_tables.cc",
         "le_audio/audio_hal_client/audio_sink_hal_client.cc",
-        "le_audio/audio_hal_client/audio_source_hal_asrc.cc",
         "le_audio/audio_hal_client/audio_source_hal_client.cc",
         "le_audio/broadcaster/broadcaster.cc",
         "le_audio/broadcaster/broadcaster_types.cc",
@@ -140,6 +137,7 @@ cc_library_static {
         "lib-bt-packets",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
+        "libbt-audio-asrc",
         "libbt-bta-core",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
@@ -269,12 +267,17 @@ cc_test {
         "BluetoothGeneratedDumpsysDataSchema_h",
     ],
     shared_libs: [
+        "android.hardware.bluetooth.audio-V4-ndk",
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
         "libbase",
+        "libbinder_ndk",
         "libcrypto",
         "libcutils",
+        "libfmq",
+        "libhidlbase",
         "liblog",
+        "libutils",
         "server_configurable_flags",
     ],
     static_libs: [
@@ -306,7 +309,10 @@ cc_test {
         ":audio_set_scenarios_bfbs",
         ":audio_set_scenarios_json",
     ],
-    cflags: ["-Wno-unused-parameter"],
+    cflags: [
+        "-Wno-macro-redefined",
+        "-Wno-unused-parameter",
+    ],
 }
 
 // bta GATT unit tests
@@ -484,7 +490,6 @@ cc_test {
         "packages/modules/Bluetooth/system/bta/groups",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/test/common",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/osi/include",
     ],
     srcs: [
@@ -730,7 +735,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/test/common",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/include",
     ],
@@ -807,7 +811,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/test/common",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/include",
     ],
@@ -815,11 +818,10 @@ cc_test {
         ":TestCommonMockFunctions",
         ":TestMockBtaLeAudioHalVerifier",
         ":TestMockMainShim",
+        ":TestMockStackL2cap",
         ":TestStubOsi",
-        "le_audio/audio_hal_client/asrc_tables.cc",
         "le_audio/audio_hal_client/audio_hal_client_test.cc",
         "le_audio/audio_hal_client/audio_sink_hal_client.cc",
-        "le_audio/audio_hal_client/audio_source_hal_asrc.cc",
         "le_audio/audio_hal_client/audio_source_hal_client.cc",
         "le_audio/client_parser.cc",
         "le_audio/client_parser_test.cc",
@@ -870,6 +872,7 @@ cc_test {
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
+        "libbt-audio-asrc",
         "libbt-common",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
@@ -907,6 +910,7 @@ cc_test {
         ":TestCommonMockFunctions",
         ":TestMockBtaLeAudioHalVerifier",
         ":TestMockMainShim",
+        ":TestMockStackL2cap",
         ":TestStubOsi",
         "gatt/database.cc",
         "gatt/database_builder.cc",
@@ -1008,7 +1012,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/le_audio",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/stack/btm",
         "packages/modules/Bluetooth/system/stack/include",
     ],
@@ -1065,7 +1068,6 @@ cc_test {
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/le_audio",
         "packages/modules/Bluetooth/system/bta/test/common",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/stack/btm",
         "packages/modules/Bluetooth/system/stack/include",
     ],
@@ -1254,38 +1256,4 @@ cc_test {
         },
     },
     cflags: ["-Wno-unused-parameter"],
-}
-
-cc_library_host_shared {
-    name: "libasrc_resampler_test",
-    defaults: ["bluetooth_cflags"],
-    srcs: [
-        "le_audio/audio_hal_client/asrc_resampler_test.cc",
-        "le_audio/audio_hal_client/asrc_tables.cc",
-    ],
-    static_libs: [
-        "libchrome",
-        "libflatbuffers-cpp",
-    ],
-    stl: "libc++_static",
-    include_dirs: [
-        "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/gd",
-    ],
-    generated_headers: [
-        "BluetoothGeneratedDumpsysDataSchema_h",
-    ],
-}
-
-python_test_host {
-    name: "asrc_resampler_test",
-    main: "le_audio/audio_hal_client/asrc_resampler_test.py",
-    srcs: ["le_audio/audio_hal_client/asrc_resampler_test.py"],
-    libs: ["mobly"],
-    data: [":libasrc_resampler_test"],
-    test_config: "le_audio/audio_hal_client/asrc_resampler_test.config",
-    test_suites: ["general-tests"],
-    test_options: {
-        unit_test: false,
-    },
 }

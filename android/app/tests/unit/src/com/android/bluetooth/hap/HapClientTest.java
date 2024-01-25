@@ -20,7 +20,6 @@ package com.android.bluetooth.hap;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
@@ -255,21 +254,11 @@ public class HapClientTest {
     public void testStopHapService() {
         Assert.assertEquals(mService, HapClientService.getHapClientService());
 
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
-            public void run() {
-                Assert.assertTrue(mService.stop());
-            }
-        });
-        InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
-            public void run() {
-                Assert.assertTrue(mService.start());
-            }
-        });
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::stop);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(mService::start);
     }
 
-    /**
-     * Test get/set policy for BluetoothDevice
-     */
+    /** Test get/set policy for BluetoothDevice */
     @Test
     public void testGetSetPolicy() throws Exception {
         when(mDatabaseManager
@@ -391,6 +380,8 @@ public class HapClientTest {
 
         // Send a connect request
         Assert.assertTrue("Connect expected to succeed", mService.connect(mDevice));
+
+        TestUtils.waitForIntent(TIMEOUT_MS, mIntentQueue.get(mDevice));
     }
 
     /**
@@ -1055,6 +1046,8 @@ public class HapClientTest {
 
         // Add state machine for testing dump()
         mService.connect(mDevice);
+
+        TestUtils.waitForIntent(TIMEOUT_MS, mIntentQueue.get(mDevice));
 
         mService.dump(new StringBuilder());
     }

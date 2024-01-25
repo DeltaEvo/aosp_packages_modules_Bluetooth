@@ -74,6 +74,7 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.flags.FeatureFlags;
+import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.BluetoothManagerServiceDumpProto;
@@ -86,11 +87,14 @@ import kotlin.time.TimeSource;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -637,7 +641,7 @@ class BluetoothManagerService {
                         mContext.getSystemService(UserManager.class),
                         "UserManager system service cannot be null");
 
-        mBinder = new BluetoothServiceBinder(this, mContext, mUserManager);
+        mBinder = new BluetoothServiceBinder(this, mLooper, mContext, mUserManager);
         mHandler = new BluetoothHandler(mLooper);
 
 
@@ -2429,12 +2433,17 @@ class BluetoothManagerService {
             args[0] = "--print";
         }
 
+        try {
+            dumpBluetoothFlags(writer);
+        } catch (Exception e) {
+            writer.println("Exception while dumping Bluetooth Flags");
+        }
+
         if (mAdapter == null) {
             errorMsg = "Bluetooth Service not connected";
         } else {
             try {
-                // TODO(b/239890880): system_server cannot make non-oneway call
-                mAdapter.getAdapterBinder().asBinder().dump(fd, args);
+                mAdapter.getAdapterBinder().asBinder().dumpAsync(fd, args);
             } catch (RemoteException re) {
                 errorMsg = "RemoteException while dumping Bluetooth Service";
             }
@@ -2442,6 +2451,30 @@ class BluetoothManagerService {
         if (errorMsg != null) {
             writer.println(errorMsg);
         }
+    }
+
+    private void dumpBluetoothFlags(PrintWriter writer)
+            throws IllegalAccessException, InvocationTargetException {
+        writer.println("🚩Flag dump:");
+
+        // maxLen is used to align the flag output
+        int maxLen =
+                Arrays.stream(Flags.class.getDeclaredMethods())
+                        .map(Method::getName)
+                        .map(String::length)
+                        .max(Integer::compare)
+                        .get();
+
+        String fmt = "\t%s: %-" + maxLen + "s %s";
+
+        for (Method m : Flags.class.getDeclaredMethods()) {
+            String flagStatus = ((Boolean) m.invoke(null)) ? "[■]" : "[ ]";
+            String name = m.getName();
+            String snakeCaseName =
+                    name.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase(Locale.US);
+            writer.println(String.format(fmt, flagStatus, name, snakeCaseName));
+        }
+        writer.println("");
     }
 
     private void dumpProto(FileDescriptor fd) {

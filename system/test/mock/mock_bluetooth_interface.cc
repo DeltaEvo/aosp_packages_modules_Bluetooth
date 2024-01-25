@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "hardware/bluetooth.h"
 #include "stack/include/bt_octets.h"
 #include "types/raw_address.h"
@@ -58,6 +58,7 @@ void invoke_link_quality_report_cb(uint64_t timestamp, int report_id, int rssi,
                                    int snr, int retransmission_count,
                                    int packets_not_receive_count,
                                    int negative_acknowledgement_count) {}
+void invoke_key_missing_cb(RawAddress bd_addr) {}
 
 static void init_stack(bluetooth::core::CoreInterface* interface) {}
 

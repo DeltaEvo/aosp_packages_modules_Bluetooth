@@ -76,6 +76,7 @@ import android.bluetooth.IBluetoothSocketManager;
 import android.bluetooth.IncomingRfcommSocketInfo;
 import android.bluetooth.OobData;
 import android.bluetooth.UidTraffic;
+import android.bluetooth.rfcomm.BluetoothRfcommProtoEnums;
 import android.companion.CompanionDeviceManager;
 import android.content.AttributionSource;
 import android.content.Context;
@@ -126,7 +127,7 @@ import com.android.bluetooth.btservice.storage.MetadataDatabase;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
 import com.android.bluetooth.flags.FeatureFlagsImpl;
 import com.android.bluetooth.gatt.GattService;
-import com.android.bluetooth.gatt.ScanManager;
+import com.android.bluetooth.le_scan.ScanManager;
 import com.android.bluetooth.hap.HapClientService;
 import com.android.bluetooth.hearingaid.HearingAidService;
 import com.android.bluetooth.hfp.HeadsetService;
@@ -400,6 +401,7 @@ public class AdapterService extends Service {
     private volatile boolean mTestModeEnabled = false;
 
     private MetricsLogger mMetricsLogger;
+    private FeatureFlagsImpl mFeatureFlags;
 
     /**
      * Register a {@link ProfileService} with AdapterService.
@@ -683,9 +685,9 @@ public class AdapterService extends Service {
 
         mSdpManager = SdpManager.init(this);
 
-        FeatureFlagsImpl featureFlags = new FeatureFlagsImpl();
+        mFeatureFlags = new FeatureFlagsImpl();
 
-        mDatabaseManager = new DatabaseManager(this, featureFlags);
+        mDatabaseManager = new DatabaseManager(this, mFeatureFlags);
         mDatabaseManager.start(MetadataDatabase.createDatabase(this));
 
         boolean isAutomotiveDevice =
@@ -701,18 +703,18 @@ public class AdapterService extends Service {
          */
         if (!isAutomotiveDevice && getResources().getBoolean(R.bool.enable_phone_policy)) {
             Log.i(TAG, "Phone policy enabled");
-            mPhonePolicy = new PhonePolicy(this, new ServiceFactory(), featureFlags);
+            mPhonePolicy = new PhonePolicy(this, new ServiceFactory(), mFeatureFlags);
             mPhonePolicy.start();
         } else {
             Log.i(TAG, "Phone policy disabled");
         }
 
-        if (featureFlags.audioRoutingCentralization()) {
+        if (mFeatureFlags.audioRoutingCentralization()) {
             mActiveDeviceManager =
-                    new AudioRoutingManager(this, new ServiceFactory(), featureFlags);
+                    new AudioRoutingManager(this, new ServiceFactory(), mFeatureFlags);
         } else {
             mActiveDeviceManager =
-                    new ActiveDeviceManager(this, new ServiceFactory(), featureFlags);
+                    new ActiveDeviceManager(this, new ServiceFactory(), mFeatureFlags);
         }
         mActiveDeviceManager.start();
 
@@ -869,22 +871,23 @@ public class AdapterService extends Service {
      * @param port port of socket
      * @param isSecured if secured API is called
      * @param result transaction result of the connection
-     * @param socketCreationLatencyMillis latency of the connection
+     * @param socketCreationLatencyNanos latency of the connection
      */
     public void logL2capcocClientConnection(
             BluetoothDevice device,
             int port,
             boolean isSecured,
             int result,
-            long socketCreationTimeMillis,
-            long socketCreationLatencyMillis,
-            long socketConnectionTimeMillis,
+            long socketCreationTimeNanos,
+            long socketCreationLatencyNanos,
+            long socketConnectionTimeNanos,
             int appUid) {
 
         int metricId = getMetricId(device);
-        long currentTime = System.currentTimeMillis();
-        long endToEndLatencyMillis = currentTime - socketCreationTimeMillis;
-        long socketConnectionLatencyMillis = currentTime - socketConnectionTimeMillis;
+        long currentTime = System.nanoTime();
+        long endToEndLatencyMillis = (currentTime - socketCreationTimeNanos) / 1000000;
+        long socketCreationLatencyMillis = socketCreationLatencyNanos / 1000000;
+        long socketConnectionLatencyMillis = (currentTime - socketConnectionTimeNanos) / 1000000;
         Log.i(
                 TAG,
                 "Statslog L2capcoc client connection."
@@ -906,6 +909,37 @@ public class AdapterService extends Service {
                 appUid,
                 socketCreationLatencyMillis,
                 socketConnectionLatencyMillis);
+    }
+
+    /**
+     * Log RFCOMM Connection Metrics
+     *
+     * @param device Bluetooth device
+     * @param isSecured if secured API is called
+     * @param resultCode transaction result of the connection
+     * @param isSerialPort true if service class UUID is 0x1101
+     */
+    public void logRfcommConnectionAttempt(
+            BluetoothDevice device,
+            boolean isSecured,
+            int resultCode,
+            long socketCreationTimeNanos,
+            boolean isSerialPort,
+            int appUid) {
+
+        int metricId = getMetricId(device);
+        long currentTime = System.nanoTime();
+        long endToEndLatencyNanos = currentTime - socketCreationTimeNanos;
+        BluetoothStatsLog.write(
+                BluetoothStatsLog.BLUETOOTH_RFCOMM_CONNECTION_ATTEMPTED,
+                metricId,
+                endToEndLatencyNanos,
+                isSecured
+                        ? BluetoothRfcommProtoEnums.SOCKET_SECURITY_SECURE
+                        : BluetoothRfcommProtoEnums.SOCKET_SECURITY_INSECURE,
+                resultCode,
+                isSerialPort,
+                appUid);
     }
 
     @RequiresPermission(
@@ -3933,9 +3967,9 @@ public class AdapterService extends Service {
                 int port,
                 boolean isSecured,
                 int result,
-                long socketCreationTimeMillis,
-                long socketCreationLatencyMillis,
-                long socketConnectionTimeMillis,
+                long socketCreationTimeNanos,
+                long socketCreationLatencyNanos,
+                long socketConnectionTimeNanos,
                 SynchronousResultReceiver receiver) {
             AdapterService service = getService();
             if (service == null) {
@@ -3947,9 +3981,35 @@ public class AdapterService extends Service {
                         port,
                         isSecured,
                         result,
-                        socketCreationTimeMillis,
-                        socketCreationLatencyMillis,
-                        socketConnectionTimeMillis,
+                        socketCreationTimeNanos,
+                        socketCreationLatencyNanos,
+                        socketConnectionTimeNanos,
+                        Binder.getCallingUid());
+                receiver.send(null);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        @Override
+        public void logRfcommConnectionAttempt(
+                BluetoothDevice device,
+                boolean isSecured,
+                int resultCode,
+                long socketCreationTimeNanos,
+                boolean isSerialPort,
+                SynchronousResultReceiver receiver) {
+            AdapterService service = getService();
+            if (service == null) {
+                return;
+            }
+            try {
+                service.logRfcommConnectionAttempt(
+                        device,
+                        isSecured,
+                        resultCode,
+                        socketCreationTimeNanos,
+                        isSerialPort,
                         Binder.getCallingUid());
                 receiver.send(null);
             } catch (RuntimeException e) {
@@ -6026,6 +6086,12 @@ public class AdapterService extends Service {
     }
 
     int getConnectionState(BluetoothDevice device) {
+        if (mFeatureFlags.apiGetConnectionStateUsingIdentityAddress()) {
+            final String identityAddress = device.getIdentityAddress();
+            return (identityAddress == null)
+                    ? mNativeInterface.getConnectionState(getBytesFromAddress(device.getAddress()))
+                    : mNativeInterface.getConnectionState(getBytesFromAddress(identityAddress));
+        }
         return mNativeInterface.getConnectionState(getBytesFromAddress(device.getAddress()));
     }
 

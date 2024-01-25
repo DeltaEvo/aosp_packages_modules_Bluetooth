@@ -155,6 +155,7 @@ public class LeAudioService extends ProfileService {
     private boolean mAwaitingBroadcastCreateResponse = false;
     private final LinkedList<BluetoothLeBroadcastSettings> mCreateBroadcastQueue =
             new LinkedList<>();
+    boolean mIsSourceStreamMonitorModeEnabled = false;
 
     @VisibleForTesting
     TbsService mTbsService;
@@ -302,7 +303,7 @@ public class LeAudioService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         Log.i(TAG, "start()");
         if (sLeAudioService != null) {
             throw new IllegalStateException("start() called twice");
@@ -371,8 +372,6 @@ public class LeAudioService extends ProfileService {
         // Delay the call to init by posting it. This ensures TBS and MCS are fully initialized
         // before we start accepting connections
         mHandler.post(this::init);
-
-        return true;
     }
 
     private void init() {
@@ -394,16 +393,17 @@ public class LeAudioService extends ProfileService {
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         Log.i(TAG, "stop()");
         if (sLeAudioService == null) {
             Log.w(TAG, "stop() called before start()");
-            return true;
+            return;
         }
 
         mQueuedInCallValue = Optional.empty();
         mCreateBroadcastQueue.clear();
         mAwaitingBroadcastCreateResponse = false;
+        mIsSourceStreamMonitorModeEnabled = false;
 
         mHandler.removeCallbacks(this::init);
         removeActiveDevice(false);
@@ -497,8 +497,6 @@ public class LeAudioService extends ProfileService {
         mVolumeControlService = null;
         mCsipSetCoordinatorService = null;
         mBassClientService = null;
-
-        return true;
     }
 
     @Override
@@ -1108,6 +1106,29 @@ public class LeAudioService extends ProfileService {
         return 1;
     }
 
+    /**
+     * Active Broadcast Assistant notification handler
+     */
+    public void activeBroadcastAssistantNotification(boolean active) {
+        if (getBassClientService() == null) {
+            Log.w(TAG, "Ignore active Broadcast Assistant notification");
+            return;
+        }
+
+        if (active) {
+            mIsSourceStreamMonitorModeEnabled = true;
+            mLeAudioNativeInterface
+                    .setUnicastMonitorMode(LeAudioStackEvent.DIRECTION_SOURCE, true);
+        } else {
+            if (mIsSourceStreamMonitorModeEnabled) {
+                mLeAudioNativeInterface
+                        .setUnicastMonitorMode(LeAudioStackEvent.DIRECTION_SOURCE, false);
+            }
+
+            mIsSourceStreamMonitorModeEnabled = false;
+        }
+    }
+
     private boolean areBroadcastsAllStopped() {
         if (mBroadcastDescriptors == null) {
             Log.e(TAG, "areBroadcastsAllStopped: Invalid Broadcast Descriptors");
@@ -1132,6 +1153,18 @@ public class LeAudioService extends ProfileService {
         }
 
         return Optional.empty();
+    }
+
+    private boolean areAllGroupsInNotActiveState() {
+        synchronized (mGroupLock) {
+            for (Map.Entry<Integer, LeAudioGroupDescriptor> entry : mGroupDescriptors.entrySet()) {
+                LeAudioGroupDescriptor descriptor = entry.getValue();
+                if (descriptor.mIsActive) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private BluetoothDevice getLeadDeviceForTheGroup(Integer groupId) {
@@ -2063,7 +2096,7 @@ public class LeAudioService extends ProfileService {
         }
     }
 
-    private void handleUnicastStreamStatusChange(int status) {
+    private void handleSinkStreamStatusChange(int status) {
         if (DBG) {
             Log.d(TAG, "status: " + status);
         }
@@ -2085,7 +2118,31 @@ public class LeAudioService extends ProfileService {
             mBroadcastIdDeactivatedForUnicastTransition = Optional.of(broadcastId.get());
             pauseBroadcast(broadcastId.get());
         } else if (status == LeAudioStackEvent.STATUS_LOCAL_STREAM_SUSPENDED) {
-            removeActiveDevice(true);
+            if (!areAllGroupsInNotActiveState()) {
+                removeActiveDevice(true);
+            }
+        }
+    }
+
+    private void handleSourceStreamStatusChange(int status) {
+        BassClientService bassClientService = getBassClientService();
+        if (bassClientService == null) {
+            Log.e(TAG, "handleSourceStreamStatusChange: BASS Client service is not available");
+
+            mLeAudioNativeInterface.setUnicastMonitorMode(
+                    LeAudioStackEvent.DIRECTION_SOURCE, false);
+        }
+
+        bassClientService.handleUnicastSourceStreamStatusChange(status);
+    }
+
+    private void handleUnicastStreamStatusChange(int direction, int status) {
+        if (direction == LeAudioStackEvent.DIRECTION_SINK) {
+            handleSinkStreamStatusChange(status);
+        } else if (direction == LeAudioStackEvent.DIRECTION_SOURCE) {
+            handleSourceStreamStatusChange(status);
+        } else {
+            Log.e(TAG, "handleUnicastStreamStatusChange: invalid direction: " + direction);
         }
     }
 
@@ -2197,8 +2254,8 @@ public class LeAudioService extends ProfileService {
         if (mAudioServersScanner == null || mScanCallback == null) {
             if (DBG) {
                 Log.d(TAG, "stopAudioServersBackgroundScan: already stopped");
-                return;
             }
+            return;
         }
 
         try {
@@ -2232,8 +2289,8 @@ public class LeAudioService extends ProfileService {
             if (mScanCallback != null) {
                 if (DBG) {
                     Log.d(TAG, "startAudioServersBackgroundScan: Scanning already enabled");
-                    return;
                 }
+                return;
             }
             mScanCallback = new AudioServerScanCallback();
         }
@@ -2658,7 +2715,7 @@ public class LeAudioService extends ProfileService {
 
                     if (previousState == LeAudioStackEvent.BROADCAST_STATE_PAUSED) {
                         if (bassClientService != null) {
-                            bassClientService.resumeReceiversSourceSynchronization(broadcastId);
+                            bassClientService.resumeReceiversSourceSynchronization();
                         }
                     }
 
@@ -2703,11 +2760,7 @@ public class LeAudioService extends ProfileService {
                 mTmapStarted = registerTmap();
             }
         } else if (stackEvent.type == LeAudioStackEvent.EVENT_TYPE_UNICAST_MONITOR_MODE_STATUS) {
-            if (stackEvent.valueInt1 == LeAudioStackEvent.DIRECTION_SINK) {
-                handleUnicastStreamStatusChange(stackEvent.valueInt2);
-            } else {
-                Log.e(TAG, "Invalid direction: " + stackEvent.valueInt2);
-            }
+            handleUnicastStreamStatusChange(stackEvent.valueInt1, stackEvent.valueInt2);
         }
     }
 
@@ -3015,7 +3068,9 @@ public class LeAudioService extends ProfileService {
             mQueuedInCallValue = Optional.of(true);
 
             /* Request activation of unicast group */
-            handleUnicastStreamStatusChange(LeAudioStackEvent.STATUS_LOCAL_STREAM_REQUESTED);
+            handleUnicastStreamStatusChange(
+                    LeAudioStackEvent.DIRECTION_SINK,
+                    LeAudioStackEvent.STATUS_LOCAL_STREAM_REQUESTED);
             return;
         }
 
@@ -3024,7 +3079,9 @@ public class LeAudioService extends ProfileService {
         /* For clearing inCall mode */
         if (mFeatureFlags.leaudioBroadcastAudioHandoverPolicies() && !inCall
                 && mBroadcastIdDeactivatedForUnicastTransition.isPresent()) {
-            handleUnicastStreamStatusChange(LeAudioStackEvent.STATUS_LOCAL_STREAM_SUSPENDED);
+            handleUnicastStreamStatusChange(
+                    LeAudioStackEvent.DIRECTION_SINK,
+                    LeAudioStackEvent.STATUS_LOCAL_STREAM_SUSPENDED);
         }
     }
 

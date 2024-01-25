@@ -1360,7 +1360,7 @@ void btm_ble_ltk_request_reply(const RawAddress& bda, bool use_stk,
   tBTM_SEC_DEV_REC* p_rec = btm_find_dev(bda);
   tBTM_SEC_CB* p_cb = &btm_sec_cb;
 
-  LOG_VERBOSE("bd_addr:%s, use_stk:%d", ADDRESS_TO_LOGGABLE_CSTR(bda), use_stk);
+  LOG_DEBUG("bd_addr:%s,use_stk:%d", ADDRESS_TO_LOGGABLE_CSTR(bda), use_stk);
 
   if (p_rec == NULL) {
     LOG_ERROR("unknown device");
@@ -1395,7 +1395,8 @@ void btm_ble_ltk_request_reply(const RawAddress& bda, bool use_stk,
    * end up here. We will eventually consolidate both entries, this is to avoid
    * race conditions. */
 
-  LOG_ASSERT(p_rec->sec_rec.ble_keys.key_type & BTM_LE_KEY_LENC);
+  ASSERT_LOG(p_rec->sec_rec.ble_keys.key_type & BTM_LE_KEY_LENC,
+             "local enccryption key not present");
   p_cb->key_size = p_rec->sec_rec.ble_keys.key_size;
   btsnd_hcic_ble_ltk_req_reply(btm_sec_cb.enc_handle,
                                p_rec->sec_rec.ble_keys.lltk);
@@ -1599,8 +1600,8 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
            * capability... */
           LOG_VERBOSE("btm_sec_cb.api.p_le_callback=0x%p",
                       btm_sec_cb.api.p_le_callback);
-          (*btm_sec_cb.api.p_le_callback)(event, bd_addr,
-                                          (tBTM_LE_EVT_DATA*)p_data);
+          (*btm_sec_cb.api.p_le_callback)(static_cast<tBTM_LE_EVT>(event),
+                                          bd_addr, (tBTM_LE_EVT_DATA*)p_data);
         }
 
         if (event == SMP_COMPLT_EVT) {
@@ -1677,8 +1678,8 @@ tBTM_STATUS btm_proc_smp_cback(tSMP_EVT event, const RawAddress& bd_addr,
         if (btm_sec_cb.api.p_le_callback) {
           LOG_VERBOSE("btm_sec_cb.api.p_le_callback=0x%p",
                       btm_sec_cb.api.p_le_callback);
-          (*btm_sec_cb.api.p_le_callback)(event, bd_addr,
-                                          (tBTM_LE_EVT_DATA*)p_data);
+          (*btm_sec_cb.api.p_le_callback)(static_cast<tBTM_LE_EVT>(event),
+                                          bd_addr, (tBTM_LE_EVT_DATA*)p_data);
         }
         break;
 

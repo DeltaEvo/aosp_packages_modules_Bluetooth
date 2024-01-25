@@ -35,12 +35,12 @@
 #include "bta_groups.h"
 #include "bta_le_audio_uuids.h"
 #include "bta_sec_api.h"
-#include "btif_storage.h"
+#include "btif/include/btif_storage.h"
+#include "common/init_flags.h"
 #include "crypto_toolbox/crypto_toolbox.h"
 #include "csis_types.h"
 #include "gap_api.h"
 #include "gatt_api.h"
-#include "gd/common/init_flags.h"
 #include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
@@ -902,7 +902,15 @@ class CsisClientImpl : public CsisClient {
         auto g = FindCsisGroup(group_id_to_discover);
         LOG_DEBUG("Group size  %d  target size %d", g->GetDesiredSize(),
                   g->GetCurrentSize());
-        if (g->GetDesiredSize() > g->GetCurrentSize()) {
+
+        auto dev_waiting_for_bonding_cnt =
+            GetNumOfKnownExpectedDevicesWaitingForBonding(g->GetGroupId());
+        LOG_DEBUG("Group size: %d, desired size: %d, waiting for bonding: %d",
+                  g->GetCurrentSize(), g->GetDesiredSize(),
+                  dev_waiting_for_bonding_cnt);
+
+        if (g->GetDesiredSize() >
+            g->GetCurrentSize() + dev_waiting_for_bonding_cnt) {
           CsisActiveDiscovery(g);
         }
       }
@@ -1302,6 +1310,14 @@ class CsisClientImpl : public CsisClient {
     }
 
     return std::move(devices);
+  }
+
+  int GetNumOfKnownExpectedDevicesWaitingForBonding(int group_id) {
+    return std::count_if(
+        devices_.begin(), devices_.end(), [group_id](const auto& device) {
+          return device->GetExpectedGroupIdMember() == group_id &&
+                 !device->GetCsisInstanceByGroupId(group_id);
+        });
   }
 
   void CacheAndAdvertiseExpectedMember(const RawAddress& address,

@@ -1,33 +1,17 @@
 /*
- * Copyright (c) 2008-2009, Motorola, Inc.
+ * Copyright (C) 2024 The Android Open Source Project
  *
- * All rights reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * - Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * - Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * - Neither the name of the Motorola, Inc. nor the names of its contributors
- * may be used to endorse or promote products derived from this software
- * without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.android.bluetooth.opp;
@@ -51,6 +35,7 @@ import android.util.Log;
 import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.flags.Flags;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -95,7 +80,7 @@ class BluetoothOppNotification {
             WHERE_COMPLETED + " AND " + "(" + BluetoothShare.DIRECTION + " == "
                     + BluetoothShare.DIRECTION_INBOUND + ")";
 
-    static final String WHERE_CONFIRM_PENDING =
+    private static final String WHERE_CONFIRM_PENDING =
             BluetoothShare.USER_CONFIRMATION + " == '" + BluetoothShare.USER_CONFIRMATION_PENDING
                     + "'" + " AND " + VISIBLE;
 
@@ -445,8 +430,20 @@ class BluetoothOppNotification {
         if (outboundNum > 0) {
             String caption = BluetoothOppUtility.formatResultText(outboundSuccNumber,
                     outboundFailNumber, mContext);
-            Intent contentIntent = new Intent(Constants.ACTION_OPEN_OUTBOUND_TRANSFER).setClassName(
-                    mContext, BluetoothOppReceiver.class.getName());
+
+            PendingIntent pi;
+            if (Flags.oppStartActivityDirectlyFromNotification()) {
+                Intent in = new Intent(Constants.ACTION_OPEN_OUTBOUND_TRANSFER);
+                in.setClass(mContext, BluetoothOppTransferHistory.class);
+                in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                pi = PendingIntent.getActivity(mContext, 0, in, PendingIntent.FLAG_IMMUTABLE);
+            } else {
+                Intent in =
+                        new Intent(Constants.ACTION_OPEN_OUTBOUND_TRANSFER)
+                                .setClassName(mContext, BluetoothOppReceiver.class.getName());
+                pi = PendingIntent.getBroadcast(mContext, 0, in, PendingIntent.FLAG_IMMUTABLE);
+            }
+
             Intent deleteIntent = new Intent(Constants.ACTION_COMPLETE_HIDE).setClassName(
                     mContext, BluetoothOppReceiver.class.getName());
             Notification outNoti =
@@ -460,9 +457,7 @@ class BluetoothOppNotification {
                                             android.R.color
                                                     .system_notification_accent_color,
                                             mContext.getTheme()))
-                            .setContentIntent(
-                                    PendingIntent.getBroadcast(mContext, 0, contentIntent,
-                                        PendingIntent.FLAG_IMMUTABLE))
+                            .setContentIntent(pi)
                             .setDeleteIntent(
                                     PendingIntent.getBroadcast(mContext, 0, deleteIntent,
                                         PendingIntent.FLAG_IMMUTABLE))
@@ -510,8 +505,20 @@ class BluetoothOppNotification {
         if (inboundNum > 0) {
             String caption = BluetoothOppUtility.formatResultText(inboundSuccNumber,
                     inboundFailNumber, mContext);
-            Intent contentIntent = new Intent(Constants.ACTION_OPEN_INBOUND_TRANSFER).setClassName(
-                    mContext, BluetoothOppReceiver.class.getName());
+
+            PendingIntent pi;
+            if (Flags.oppStartActivityDirectlyFromNotification()) {
+                Intent in = new Intent(Constants.ACTION_OPEN_INBOUND_TRANSFER);
+                in.setClass(mContext, BluetoothOppTransferHistory.class);
+                in.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                pi = PendingIntent.getActivity(mContext, 0, in, PendingIntent.FLAG_IMMUTABLE);
+            } else {
+                Intent in =
+                        new Intent(Constants.ACTION_OPEN_INBOUND_TRANSFER)
+                                .setClassName(mContext, BluetoothOppReceiver.class.getName());
+                pi = PendingIntent.getBroadcast(mContext, 0, in, PendingIntent.FLAG_IMMUTABLE);
+            }
+
             Intent deleteIntent = new Intent(Constants.ACTION_COMPLETE_HIDE).setClassName(
                     mContext, BluetoothOppReceiver.class.getName());
             Notification inNoti =
@@ -526,9 +533,7 @@ class BluetoothOppNotification {
                                                     .system_notification_accent_color,
                                             mContext.getTheme()))
 
-                            .setContentIntent(
-                                    PendingIntent.getBroadcast(mContext, 0, contentIntent,
-                                        PendingIntent.FLAG_IMMUTABLE))
+                            .setContentIntent(pi)
                             .setDeleteIntent(
                                     PendingIntent.getBroadcast(mContext, 0, deleteIntent,
                                         PendingIntent.FLAG_IMMUTABLE))
@@ -577,15 +582,31 @@ class BluetoothOppNotification {
                     PendingIntent.getBroadcast(mContext, 0,
                             new Intent(baseIntent).setAction(Constants.ACTION_ACCEPT),
                             PendingIntent.FLAG_IMMUTABLE)).build();
+
+            PendingIntent contentIntent;
+            if (Flags.oppStartActivityDirectlyFromNotification()) {
+                Intent intent = new Intent(mContext, BluetoothOppIncomingFileConfirmActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.setDataAndNormalize(contentUri);
+                contentIntent =
+                        PendingIntent.getActivity(
+                                mContext, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+            } else {
+                contentIntent =
+                        PendingIntent.getBroadcast(
+                                mContext,
+                                0,
+                                new Intent(baseIntent)
+                                        .setAction(Constants.ACTION_INCOMING_FILE_CONFIRM),
+                                PendingIntent.FLAG_IMMUTABLE);
+            }
+
             Notification public_n =
                     new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL).setOnlyAlertOnce(
                             true)
                             .setOngoing(true)
                             .setWhen(info.mTimeStamp)
-                            .setContentIntent(PendingIntent.getBroadcast(mContext, 0,
-                                    new Intent(baseIntent).setAction(
-                                            Constants.ACTION_INCOMING_FILE_CONFIRM),
-                                    PendingIntent.FLAG_IMMUTABLE))
+                            .setContentIntent(contentIntent)
                             .setDeleteIntent(PendingIntent.getBroadcast(mContext, 0,
                                     new Intent(baseIntent).setAction(Constants.ACTION_HIDE),
                                     PendingIntent.FLAG_IMMUTABLE))
@@ -609,10 +630,7 @@ class BluetoothOppNotification {
                             true)
                             .setOngoing(true)
                             .setWhen(info.mTimeStamp)
-                            .setContentIntent(PendingIntent.getBroadcast(mContext, 0,
-                                    new Intent(baseIntent).setAction(
-                                            Constants.ACTION_INCOMING_FILE_CONFIRM),
-                                    PendingIntent.FLAG_IMMUTABLE))
+                            .setContentIntent(contentIntent)
                             .setDeleteIntent(PendingIntent.getBroadcast(mContext, 0,
                                     new Intent(baseIntent).setAction(Constants.ACTION_HIDE),
                                     PendingIntent.FLAG_IMMUTABLE))

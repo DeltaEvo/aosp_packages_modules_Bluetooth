@@ -15,6 +15,13 @@ flag {
 }
 
 flag {
+    name: "support_exclusive_manager"
+    namespace: "bluetooth"
+    description: "Support setting/retrieving the exclusive manager app for a BluetoothDevice"
+    bug: "319716512"
+}
+
+flag {
     name: "key_missing_broadcast"
     namespace: "bluetooth"
     description: "Broadcast when remote device it lost bond"
@@ -29,8 +36,15 @@ flag {
 }
 
 flag {
-    name: "fix_anonymous_advertisements_scan_results"
+    name: "identity_address_null_if_unknown"
     namespace: "bluetooth"
-    description: "Allow constructing BluetoothDevice with anonymous (0xff) address type"
-    bug: "317246779"
+    description: "Return null for identity address if identity address is not known"
+    bug: "317120534"
+}
+
+flag {
+    name: "get_address_type_api"
+    namespace: "bluetooth"
+    description: "Change visibility of BluetoothDevice#getAddressType API to public"
+    bug: "321120941"
 }
