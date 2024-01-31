@@ -59,8 +59,8 @@ import com.android.bluetooth.flags.FeatureFlagsImpl;
 import com.android.bluetooth.le_audio.LeAudioService;
 import com.android.internal.annotations.VisibleForTesting;
 
-import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
@@ -1396,7 +1396,7 @@ public class BassClientService extends ProfileService {
                     mBroadcastMetadataMap.put(device, sourceMetadata);
 
                     Message message =
-                            stateMachine.obtainMessage(BassClientStateMachine.SWITH_BCAST_SOURCE);
+                            stateMachine.obtainMessage(BassClientStateMachine.SWITCH_BCAST_SOURCE);
                     message.obj = sourceMetadata;
                     message.arg1 = sourceId;
                     stateMachine.sendMessage(message);
@@ -1583,12 +1583,9 @@ public class BassClientService extends ProfileService {
                 continue;
             }
 
-            BluetoothLeBroadcastReceiveState recvState =
-                    stateMachine.getBroadcastReceiveStateForSourceId(sourceId);
             BluetoothLeBroadcastMetadata metaData =
                     stateMachine.getCurrentBroadcastMetadata(sourceId);
-            if (metaData != null && recvState != null && recvState.getPaSyncState()
-                    == BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_SYNCHRONIZED) {
+            if (metaData != null && stateMachine.isSyncedToTheSource(sourceId)) {
                 sEventLogger.logd(
                         DBG,
                         TAG,

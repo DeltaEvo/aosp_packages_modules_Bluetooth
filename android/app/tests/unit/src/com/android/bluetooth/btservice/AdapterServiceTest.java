@@ -59,6 +59,7 @@ import android.os.UserManager;
 import android.os.test.TestLooper;
 import android.permission.PermissionCheckerManager;
 import android.permission.PermissionManager;
+import android.platform.test.flag.junit.SetFlagsRule;
 import android.provider.Settings;
 import android.sysprop.BluetoothProperties;
 import android.test.mock.MockContentProvider;
@@ -72,10 +73,11 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.bluetoothkeystore.BluetoothKeystoreNativeInterface;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.gatt.AdvertiseManagerNativeInterface;
 import com.android.bluetooth.gatt.DistanceMeasurementNativeInterface;
 import com.android.bluetooth.gatt.GattNativeInterface;
-import com.android.bluetooth.gatt.PeriodicScanNativeInterface;
+import com.android.bluetooth.le_scan.PeriodicScanNativeInterface;
 import com.android.bluetooth.sdp.SdpManagerNativeInterface;
 import com.android.internal.app.IBatteryStats;
 
@@ -84,6 +86,7 @@ import libcore.util.HexEncoding;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -131,6 +134,8 @@ public class AdapterServiceTest {
     private @Mock GattNativeInterface mGattNativeInterface;
     private @Mock PeriodicScanNativeInterface mPeriodicNativeInterface;
     private @Mock JniCallbacks mJniCallbacks;
+
+    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
     // SystemService that are not mocked
     private BluetoothManager mBluetoothManager;
@@ -860,7 +865,9 @@ public class AdapterServiceTest {
         RemoteDevices remoteDevices = mAdapterService.getRemoteDevices();
         remoteDevices.addDeviceProperties(Utils.getBytesFromAddress((TEST_BT_ADDR_1)));
         String identityAddress = mAdapterService.getIdentityAddress(TEST_BT_ADDR_1);
-        assertThat(identityAddress).isEqualTo(TEST_BT_ADDR_1);
+        if (!Flags.identityAddressNullIfUnknown()) {
+            assertThat(identityAddress).isEqualTo(TEST_BT_ADDR_1);
+        }
 
         // Trigger address consolidate callback
         remoteDevices.addressConsolidateCallback(Utils.getBytesFromAddress(TEST_BT_ADDR_1),
@@ -869,6 +876,16 @@ public class AdapterServiceTest {
         // Verify we can get correct identity address
         identityAddress = mAdapterService.getIdentityAddress(TEST_BT_ADDR_1);
         assertThat(identityAddress).isEqualTo(TEST_BT_ADDR_2);
+    }
+
+    @Test
+    public void testIdentityAddressNullIfUnknown() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_IDENTITY_ADDRESS_NULL_IF_UNKNOWN);
+
+        BluetoothDevice device = TestUtils.getTestDevice(BluetoothAdapter.getDefaultAdapter(), 0);
+
+        assertThat(mAdapterService.getByteIdentityAddress(device)).isNull();
+        assertThat(mAdapterService.getIdentityAddress(device.getAddress())).isNull();
     }
 
     public static byte[] getMetricsSalt(HashMap<String, HashMap<String, String>> adapterConfig) {

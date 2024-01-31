@@ -94,6 +94,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -257,6 +258,14 @@ class BluetoothManagerService {
                     + getEnableDisableReasonString(mReason)
                     + " by "
                     + mPackageName;
+        }
+
+        long getTimestamp() {
+            return mTimestamp;
+        }
+
+        boolean getEnable() {
+            return mEnable;
         }
 
         void dump(ProtoOutputStream proto) {
@@ -2174,6 +2183,7 @@ class BluetoothManagerService {
     }
 
     private void addActiveLog(int reason, String packageName, boolean enable) {
+        ActiveLog lastActiveLog = mActiveLogs.peekLast();
         synchronized (mActiveLogs) {
             if (mActiveLogs.size() > ACTIVE_LOG_MAX_SIZE) {
                 mActiveLogs.remove();
@@ -2185,13 +2195,29 @@ class BluetoothManagerService {
                             ? BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__ENABLED
                             : BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__DISABLED;
 
+            int lastState;
+            long timeSinceLastChanged;
+            if (lastActiveLog == null) {
+                lastState = BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__UNKNOWN;
+                timeSinceLastChanged = 0;
+            } else {
+                lastState =
+                        lastActiveLog.getEnable()
+                                ? BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__ENABLED
+                                : BluetoothStatsLog
+                                        .BLUETOOTH_ENABLED_STATE_CHANGED__STATE__DISABLED;
+                timeSinceLastChanged = System.currentTimeMillis() - lastActiveLog.getTimestamp();
+            }
+
             BluetoothStatsLog.write_non_chained(
                     BluetoothStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED,
                     Binder.getCallingUid(),
                     null,
                     state,
                     reason,
-                    packageName);
+                    packageName,
+                    lastState,
+                    timeSinceLastChanged);
         }
     }
 
@@ -2452,12 +2478,26 @@ class BluetoothManagerService {
         }
     }
 
-    void dumpBluetoothFlags(PrintWriter writer)
+    private void dumpBluetoothFlags(PrintWriter writer)
             throws IllegalAccessException, InvocationTargetException {
         writer.println("🚩Flag dump:");
+
+        // maxLen is used to align the flag output
+        int maxLen =
+                Arrays.stream(Flags.class.getDeclaredMethods())
+                        .map(Method::getName)
+                        .map(String::length)
+                        .max(Integer::compare)
+                        .get();
+
+        String fmt = "\t%s: %-" + maxLen + "s %s";
+
         for (Method m : Flags.class.getDeclaredMethods()) {
             String flagStatus = ((Boolean) m.invoke(null)) ? "[■]" : "[ ]";
-            writer.println("\t" + flagStatus + ": " + m.getName());
+            String name = m.getName();
+            String snakeCaseName =
+                    name.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase(Locale.US);
+            writer.println(String.format(fmt, flagStatus, name, snakeCaseName));
         }
         writer.println("");
     }

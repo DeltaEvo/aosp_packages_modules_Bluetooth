@@ -41,6 +41,7 @@
 #include "common/time_util.h"
 #include "device/include/controller.h"
 #include "hci/controller.h"
+#include "hci/controller_interface.h"
 #include "include/check.h"
 #include "main/shim/acl_api.h"
 #include "main/shim/entry.h"
@@ -1629,7 +1630,7 @@ void btm_ble_update_dmt_flag_bits(uint8_t* adv_flag_value,
 
   /* if local controller support, mark both controller and host support in flag
    */
-  if (controller_get_interface()->SupportsSimultaneousLeBrEdr())
+  if (bluetooth::shim::GetController()->SupportsSimultaneousLeBrEdr())
     *adv_flag_value |= (BTM_BLE_DMT_CONTROLLER_SPT | BTM_BLE_DMT_HOST_SPT);
   else
     *adv_flag_value &= ~(BTM_BLE_DMT_CONTROLLER_SPT | BTM_BLE_DMT_HOST_SPT);
@@ -2311,7 +2312,7 @@ void btm_ble_update_inq_result(tINQ_DB_ENT* p_i, uint8_t addr_type,
   uint8_t len;
 
   /* Save the info */
-  p_cur->inq_result_type |= BTM_INQ_RESULT_BLE;
+  p_cur->inq_result_type |= BT_DEVICE_TYPE_BLE;
   p_cur->ble_addr_type = static_cast<tBLE_ADDR_TYPE>(addr_type);
   p_cur->rssi = rssi;
   p_cur->ble_primary_phy = primary_phy;

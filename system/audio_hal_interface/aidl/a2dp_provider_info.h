@@ -38,7 +38,8 @@ class ProviderInfo {
    * getProviderInfo, or if the feature flag for codec
    * extensibility is disabled.
    ***/
-  static std::unique_ptr<ProviderInfo> GetProviderInfo();
+  static std::unique_ptr<ProviderInfo> GetProviderInfo(
+      bool supports_a2dp_hw_offload_v2);
 
   ProviderInfo(std::vector<CodecInfo> source_codecs,
                std::vector<CodecInfo> sink_codecs);
@@ -64,6 +65,8 @@ class ProviderInfo {
   /***
    * Find the sink codec index by codec capabilities.
    ***/
+  std::optional<btav_a2dp_codec_index_t> SinkCodecIndex(
+      CodecId const& codec_id) const;
   std::optional<btav_a2dp_codec_index_t> SinkCodecIndex(
       uint32_t vendor_id, uint16_t codec_id) const;
   std::optional<btav_a2dp_codec_index_t> SinkCodecIndex(
