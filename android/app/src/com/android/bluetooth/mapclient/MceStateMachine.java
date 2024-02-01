@@ -117,6 +117,9 @@ class MceStateMachine extends StateMachine {
     private static final boolean MESSAGE_SEEN = true;
     private static final boolean MESSAGE_NOT_SEEN = false;
 
+    // Do we download attachments, e.g., if a MMS contains an image.
+    private static final boolean DOWNLOAD_ATTACHMENTS = false;
+
     // Folder names as defined in Bluetooth.org MAP spec V10
     private static final String FOLDER_TELECOM = "telecom";
     private static final String FOLDER_MSG = "msg";
@@ -713,7 +716,9 @@ class MceStateMachine extends StateMachine {
                 case MSG_INBOUND_MESSAGE:
                     mMasClient.makeRequest(
                             new RequestGetMessage(
-                                    (String) message.obj, MasClient.CharsetType.UTF_8, false));
+                                    (String) message.obj,
+                                    MasClient.CharsetType.UTF_8,
+                                    DOWNLOAD_ATTACHMENTS));
                     break;
 
                 case MSG_NOTIFICATION:
@@ -894,7 +899,9 @@ class MceStateMachine extends StateMachine {
                     }
                     mMasClient.makeRequest(
                             new RequestGetMessage(
-                                    event.getHandle(), MasClient.CharsetType.UTF_8, false));
+                                    event.getHandle(),
+                                    MasClient.CharsetType.UTF_8,
+                                    DOWNLOAD_ATTACHMENTS));
                     break;
                 case DELIVERY_FAILURE:
                     // fall through
