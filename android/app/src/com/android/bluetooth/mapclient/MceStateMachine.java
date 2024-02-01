@@ -770,19 +770,34 @@ class MceStateMachine extends StateMachine {
                                 Utils.getLoggableAddress(mDevice)
                                         + " [Connected]: Message Sent, handle="
                                         + messageHandle);
-                        // ignore the top-order byte (converted to string) in the handle for now
-                        // some test devices don't populate messageHandle field.
-                        // in such cases, no need to wait up for response for such messages.
-                        if (messageHandle != null && messageHandle.length() > 2) {
-                            if (SAVE_OUTBOUND_MESSAGES) {
-                                mDatabase.storeMessage(
-                                        requestPushMessage.getBMsg(),
-                                        messageHandle,
-                                        System.currentTimeMillis(),
-                                        MESSAGE_SEEN);
+                        if (Flags.useEntireMessageHandle()) {
+                            // some test devices don't populate messageHandle field.
+                            // in such cases, no need to wait up for response for such messages.
+                            if (messageHandle != null) {
+                                if (SAVE_OUTBOUND_MESSAGES) {
+                                    mDatabase.storeMessage(
+                                            requestPushMessage.getBMsg(),
+                                            messageHandle,
+                                            System.currentTimeMillis(),
+                                            MESSAGE_SEEN);
+                                }
+                                mSentMessageLog.put(messageHandle, requestPushMessage.getBMsg());
                             }
-                            mSentMessageLog.put(
-                                    messageHandle.substring(2), requestPushMessage.getBMsg());
+                        } else {
+                            // ignore the top-order byte (converted to string) in the handle for now
+                            // some test devices don't populate messageHandle field.
+                            // in such cases, no need to wait up for response for such messages.
+                            if (messageHandle != null && messageHandle.length() > 2) {
+                                if (SAVE_OUTBOUND_MESSAGES) {
+                                    mDatabase.storeMessage(
+                                            requestPushMessage.getBMsg(),
+                                            messageHandle,
+                                            System.currentTimeMillis(),
+                                            MESSAGE_SEEN);
+                                }
+                                mSentMessageLog.put(
+                                        messageHandle.substring(2), requestPushMessage.getBMsg());
+                            }
                         }
                     } else if (message.obj instanceof RequestGetMessagesListing) {
                         processMessageListing((RequestGetMessagesListing) message.obj);
@@ -1177,16 +1192,31 @@ class MceStateMachine extends StateMachine {
             Log.d(TAG, "got a status for " + handle + " Status = " + status);
             // some test devices don't populate messageHandle field.
             // in such cases, ignore such messages.
-            if (handle == null || handle.length() <= 2) return;
+            if (Flags.useEntireMessageHandle()) {
+                if (handle == null) return;
+            } else {
+                if (handle == null || handle.length() <= 2) return;
+            }
             PendingIntent intentToSend = null;
-            // ignore the top-order byte (converted to string) in the handle for now
-            String shortHandle = handle.substring(2);
-            if (status == EventReport.Type.SENDING_FAILURE
-                    || status == EventReport.Type.SENDING_SUCCESS) {
-                intentToSend = mSentReceiptRequested.remove(mSentMessageLog.get(shortHandle));
-            } else if (status == EventReport.Type.DELIVERY_SUCCESS
-                    || status == EventReport.Type.DELIVERY_FAILURE) {
-                intentToSend = mDeliveryReceiptRequested.remove(mSentMessageLog.get(shortHandle));
+            if (Flags.useEntireMessageHandle()) {
+                if (status == EventReport.Type.SENDING_FAILURE
+                        || status == EventReport.Type.SENDING_SUCCESS) {
+                    intentToSend = mSentReceiptRequested.remove(mSentMessageLog.get(handle));
+                } else if (status == EventReport.Type.DELIVERY_SUCCESS
+                        || status == EventReport.Type.DELIVERY_FAILURE) {
+                    intentToSend = mDeliveryReceiptRequested.remove(mSentMessageLog.get(handle));
+                }
+            } else {
+                // ignore the top-order byte (converted to string) in the handle for now
+                String shortHandle = handle.substring(2);
+                if (status == EventReport.Type.SENDING_FAILURE
+                        || status == EventReport.Type.SENDING_SUCCESS) {
+                    intentToSend = mSentReceiptRequested.remove(mSentMessageLog.get(shortHandle));
+                } else if (status == EventReport.Type.DELIVERY_SUCCESS
+                        || status == EventReport.Type.DELIVERY_FAILURE) {
+                    intentToSend =
+                            mDeliveryReceiptRequested.remove(mSentMessageLog.get(shortHandle));
+                }
             }
 
             if (intentToSend != null) {
