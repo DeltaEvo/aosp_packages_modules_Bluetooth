@@ -236,6 +236,10 @@ public class RemoteDevices {
     }
 
     DeviceProperties getDeviceProperties(BluetoothDevice device) {
+        if (device == null) {
+            return null;
+        }
+
         synchronized (mDevices) {
             String address = mDualDevicesMap.get(device.getAddress());
             // If the device is not in the dual map, use its original address
@@ -1154,12 +1158,14 @@ public class RemoteDevices {
                         Utils.getTempAllowlistBroadcastOptions());
             } else if (device.getBondState() == BluetoothDevice.BOND_NONE) {
                 String key = Utils.getAddressStringFromByte(address);
-                mDevices.remove(key);
-                mDeviceQueue.remove(key); // Remove from LRU cache
+                synchronized (mDevices) {
+                    mDevices.remove(key);
+                    mDeviceQueue.remove(key); // Remove from LRU cache
 
-                // Remove from dual mode device mappings
-                mDualDevicesMap.values().remove(key);
-                mDualDevicesMap.remove(key);
+                    // Remove from dual mode device mappings
+                    mDualDevicesMap.values().remove(key);
+                    mDualDevicesMap.remove(key);
+                }
             }
             if (state == BluetoothAdapter.STATE_ON || state == BluetoothAdapter.STATE_TURNING_OFF) {
                 mAdapterService.notifyAclDisconnected(device, transportLinkType);
