@@ -24,16 +24,18 @@
 
 #define LOG_TAG "bluetooth"
 
+#include <android_bluetooth_flags.h>
 #include <base/logging.h>
 
 #include <cstdint>
 #include <unordered_set>
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/include/bta_jv_co.h"
 #include "bta/include/bta_rfcomm_scn.h"
 #include "bta/jv/bta_jv_int.h"
 #include "bta/sys/bta_sys.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
 #include "osi/include/properties.h"
@@ -42,11 +44,12 @@
 #include "stack/include/avdt_api.h"  // AVDT_PSM
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_client_interface.h"
 #include "stack/include/gap_api.h"
 #include "stack/include/l2cdefs.h"
 #include "stack/include/port_api.h"
-#include "stack/include/rfcdefs.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
@@ -63,6 +66,7 @@ static void bta_jv_pm_conn_busy(tBTA_JV_PM_CB* p_cb);
 static void bta_jv_pm_conn_idle(tBTA_JV_PM_CB* p_cb);
 static void bta_jv_pm_state_change(tBTA_JV_PM_CB* p_cb,
                                    const tBTA_JV_CONN_STATE state);
+static void bta_jv_reset_sniff_timer(tBTA_JV_PM_CB* p_cb);
 
 #ifndef BTA_JV_SDP_DB_SIZE
 #define BTA_JV_SDP_DB_SIZE 4500
@@ -1256,10 +1260,10 @@ static int bta_jv_port_data_co_cback(uint16_t port_handle, uint8_t* buf,
   if (p_pcb != NULL) {
     switch (type) {
       case DATA_CO_CALLBACK_TYPE_INCOMING:
-        // Exit sniff mode when receiving data by sysproxy
+        // Reset sniff timer when receiving data by sysproxy
         if (osi_property_get_bool("bluetooth.rfcomm.sysproxy.rx.exit_sniff",
                                   false)) {
-          bta_jv_pm_conn_busy(p_pcb->p_pm_cb);
+          bta_jv_reset_sniff_timer(p_pcb->p_pm_cb);
         }
         return bta_co_rfc_data_incoming(p_pcb->rfcomm_slot_id, (BT_HDR*)buf);
       case DATA_CO_CALLBACK_TYPE_OUTGOING_SIZE:
@@ -1371,6 +1375,21 @@ void bta_jv_rfcomm_connect(tBTA_SEC sec_mask, uint8_t remote_scn,
   tBTA_JV_RFCOMM_CL_INIT evt_data;
   memset(&evt_data, 0, sizeof(evt_data));
   evt_data.status = BTA_JV_SUCCESS;
+
+#ifdef TARGET_FLOSS
+  if (true)
+#else
+  if (IS_FLAG_ENABLED(rfcomm_always_use_mitm))
+#endif
+  {
+    // Update security service record for RFCOMM client so that
+    // secure RFCOMM connection will be authenticated with MTIM protection
+    // while creating the L2CAP connection.
+    get_btm_client_interface().security.BTM_SetSecurityLevel(
+        true, "RFC_MUX", BTM_SEC_SERVICE_RFC_MUX, sec_mask, BT_PSM_RFCOMM,
+        BTM_SEC_PROTO_RFCOMM, 0);
+  }
+
   if (evt_data.status == BTA_JV_SUCCESS &&
       RFCOMM_CreateConnectionWithSecurity(
           UUID_SERVCLASS_SERIAL_PORT, remote_scn, false, BTA_JV_DEF_RFC_MTU,
@@ -1882,6 +1901,24 @@ static void bta_jv_pm_state_change(tBTA_JV_PM_CB* p_cb,
     default:
       LOG(WARNING) << __func__ << ": Invalid state=" << +state;
       break;
+  }
+}
+
+/*******************************************************************************
+ *
+ * Function    bta_jv_reset_sniff_timer
+ *
+ * Description reset pm sniff timer state (input param safe)
+ *
+ * Params      p_cb: pm control block of jv connection
+ *
+ * Returns     void
+ *
+ ******************************************************************************/
+static void bta_jv_reset_sniff_timer(tBTA_JV_PM_CB* p_cb) {
+  if (NULL != p_cb) {
+    p_cb->state = BTA_JV_PM_IDLE_ST;
+    bta_sys_reset_sniff(BTA_ID_JV, p_cb->app_id, p_cb->peer_bd_addr);
   }
 }
 /******************************************************************************/

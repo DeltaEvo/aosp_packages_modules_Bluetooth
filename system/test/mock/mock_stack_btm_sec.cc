@@ -46,7 +46,6 @@ struct BTM_CanReadDiscoverableCharacteristics
 struct BTM_ConfirmReqReply BTM_ConfirmReqReply;
 struct BTM_GetClockOffset BTM_GetClockOffset;
 struct BTM_GetPeerDeviceTypeFromFeatures BTM_GetPeerDeviceTypeFromFeatures;
-struct BTM_GetSecurityFlagsByTransport BTM_GetSecurityFlagsByTransport;
 struct BTM_IsAuthenticated BTM_IsAuthenticated;
 struct BTM_IsEncrypted BTM_IsEncrypted;
 struct BTM_IsLinkKeyAuthed BTM_IsLinkKeyAuthed;
@@ -90,8 +89,7 @@ struct btm_sec_dev_reset btm_sec_dev_reset;
 struct btm_sec_disconnect btm_sec_disconnect;
 struct btm_sec_disconnected btm_sec_disconnected;
 struct btm_sec_encrypt_change btm_sec_encrypt_change;
-struct btm_sec_execute_procedure btm_sec_execute_procedure;
-struct btm_sec_find_first_serv btm_sec_find_first_serv;
+struct btm_sec_encryption_change_evt btm_sec_encryption_change_evt;
 struct btm_sec_is_a_bonded_dev btm_sec_is_a_bonded_dev;
 struct btm_sec_l2cap_access_req btm_sec_l2cap_access_req;
 struct btm_sec_l2cap_access_req_by_requirement
@@ -124,7 +122,6 @@ bool BTM_BothEndsSupportSecureConnections::return_value = false;
 bool BTM_CanReadDiscoverableCharacteristics::return_value = false;
 uint16_t BTM_GetClockOffset::return_value = 0;
 tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures::return_value = 0;
-bool BTM_GetSecurityFlagsByTransport::return_value = false;
 bool BTM_IsAuthenticated::return_value = false;
 bool BTM_IsEncrypted::return_value = false;
 bool BTM_IsLinkKeyAuthed::return_value = false;
@@ -141,11 +138,9 @@ bool BTM_SecIsSecurityPending::return_value = false;
 bool BTM_SecRegister::return_value = false;
 tBTM_STATUS BTM_SetEncryption::return_value = 0;
 bool BTM_SetSecurityLevel::return_value = false;
-const uint8_t* btm_get_dev_class::return_value = nullptr;
+const DEV_CLASS btm_get_dev_class::return_value = kDevClassEmpty;
 tBTM_STATUS btm_sec_bond_by_transport::return_value = 0;
 tBTM_STATUS btm_sec_disconnect::return_value = 0;
-tBTM_STATUS btm_sec_execute_procedure::return_value = 0;
-tBTM_SEC_SERV_REC* btm_sec_find_first_serv::return_value = nullptr;
 bool btm_sec_is_a_bonded_dev::return_value = false;
 tBTM_STATUS btm_sec_l2cap_access_req::return_value = 0;
 tBTM_STATUS btm_sec_l2cap_access_req_by_requirement::return_value = 0;
@@ -179,13 +174,6 @@ uint16_t BTM_GetClockOffset(const RawAddress& remote_bda) {
 tBT_DEVICE_TYPE BTM_GetPeerDeviceTypeFromFeatures(const RawAddress& bd_addr) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::BTM_GetPeerDeviceTypeFromFeatures(bd_addr);
-}
-bool BTM_GetSecurityFlagsByTransport(const RawAddress& bd_addr,
-                                     uint8_t* p_sec_flags,
-                                     tBT_TRANSPORT transport) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::BTM_GetSecurityFlagsByTransport(
-      bd_addr, p_sec_flags, transport);
 }
 bool BTM_IsAuthenticated(const RawAddress& bd_addr, tBT_TRANSPORT transport) {
   inc_func_call_count(__func__);
@@ -299,7 +287,7 @@ void btm_create_conn_cancel_complete(uint8_t status, const RawAddress bd_addr) {
   inc_func_call_count(__func__);
   test::mock::stack_btm_sec::btm_create_conn_cancel_complete(status, bd_addr);
 }
-const uint8_t* btm_get_dev_class(const RawAddress& bda) {
+const DEV_CLASS btm_get_dev_class(const RawAddress& bda) {
   inc_func_call_count(__func__);
   return test::mock::stack_btm_sec::btm_get_dev_class(bda);
 }
@@ -390,13 +378,11 @@ void btm_sec_encrypt_change(uint16_t handle, tHCI_STATUS status,
   test::mock::stack_btm_sec::btm_sec_encrypt_change(handle, status,
                                                     encr_enable);
 }
-tBTM_STATUS btm_sec_execute_procedure(tBTM_SEC_DEV_REC* p_dev_rec) {
+void btm_sec_encryption_change_evt(uint16_t handle, tHCI_STATUS status,
+                                   uint8_t encr_enable) {
   inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::btm_sec_execute_procedure(p_dev_rec);
-}
-tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm) {
-  inc_func_call_count(__func__);
-  return test::mock::stack_btm_sec::btm_sec_find_first_serv(is_originator, psm);
+  test::mock::stack_btm_sec::btm_sec_encryption_change_evt(handle, status,
+                                                           encr_enable);
 }
 bool btm_sec_is_a_bonded_dev(const RawAddress& bda) {
   inc_func_call_count(__func__);

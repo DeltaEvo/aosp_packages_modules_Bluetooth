@@ -14,7 +14,6 @@ cc_defaults {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
     ],
 }
@@ -130,6 +129,7 @@ cc_test {
         "libcrypto",
         "libcutils",
         "liblog",
+        "server_configurable_flags",
     ],
     local_include_dirs: [
         "include_internal",

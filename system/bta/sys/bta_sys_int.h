@@ -25,8 +25,9 @@
 #define BTA_SYS_INT_H
 
 #include <cstdint>
-#include "bta/sys/bta_sys.h"
 
+#include "bta/sys/bta_sys.h"
+#include "internal_include/bt_target.h"
 /*****************************************************************************
  *  Constants and data types
  ****************************************************************************/
@@ -47,12 +48,13 @@ typedef struct {
 typedef struct {
   tBTA_SYS_REG* reg[BTA_ID_MAX]; /* registration structures */
   bool is_reg[BTA_ID_MAX];       /* registration structures */
-  bool forward_hw_failures;
   uint16_t sys_features;         /* Bitmask of sys features */
 
   tBTA_SYS_CONN_CBACK* prm_cb; /* role management callback registered by DM */
   tBTA_SYS_CONN_CBACK*
       ppm_cb; /* low power management callback registered by DM */
+  tBTA_SYS_SNIFF_CBACK*
+      sniff_cb; /* low power management sniff callback registered by DM */
   tBTA_SYS_CONN_SCO_CBACK*
       p_sco_cb; /* SCO connection change callback registered by AV */
   tBTA_SYS_ROLE_SWITCH_CBACK*

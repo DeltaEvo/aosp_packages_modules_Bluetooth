@@ -41,13 +41,14 @@
 #include <unordered_set>
 #include <vector>
 
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "btif_api.h"
 #include "btif_config.h"
 #include "btif_storage.h"
 #include "btif_util.h"
 #include "core_callbacks.h"
 #include "device/include/controller.h"
+#include "internal_include/bt_target.h"
 #include "osi/include/allocator.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_uuid16.h"
@@ -490,7 +491,7 @@ static bt_status_t btif_in_fetch_bonded_devices(
           int cod;
           int pin_length = 0;
           if (btif_config_get_int(name, BTIF_STORAGE_KEY_DEV_CLASS, &cod))
-            uint2devclass((uint32_t)cod, dev_class);
+            dev_class = uint2devclass((uint32_t)cod);
           btif_config_get_int(name, BTIF_STORAGE_KEY_PIN_LENGTH, &pin_length);
           BTA_DmAddDevice(bd_addr, dev_class, link_key, (uint8_t)linkkey_type,
                           pin_length);

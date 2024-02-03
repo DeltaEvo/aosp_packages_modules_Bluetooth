@@ -18,15 +18,15 @@
 
 #include <cstddef>
 
-#include "bt_types.h"
 #include "btif/include/btif_storage.h"
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "mock_btif_config.h"
 #include "profile/avrcp/avrcp_config.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/avrc_defs.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/sdp/sdpint.h"
 #include "test/mock/mock_btif_config.h"

@@ -25,6 +25,7 @@
 
 #define LOG_TAG "bt_bta_gattc"
 
+#include <android_bluetooth_flags.h>
 #include <base/functional/bind.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
@@ -34,6 +35,8 @@
 #include "btif/include/btif_debug_conn.h"
 #include "device/include/controller.h"
 #include "hardware/bt_gatt_types.h"
+#include "include/check.h"
+#include "internal_include/bt_trace.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -222,7 +225,7 @@ void bta_gattc_register(const Uuid& app_uuid, tBTA_GATTC_CBACK* p_cback,
 /** De-Register a GATT client application with BTA */
 void bta_gattc_deregister(tBTA_GATTC_RCB* p_clreg) {
   uint8_t accept_list_size = 0;
-  if (controller_get_interface()->supports_ble()) {
+  if (controller_get_interface()->SupportsBle()) {
     accept_list_size = controller_get_interface()->get_ble_acceptlist_size();
   }
 
@@ -355,12 +358,24 @@ void bta_gattc_open_error(tBTA_GATTC_CLCB* p_clcb,
 
 void bta_gattc_open_fail(tBTA_GATTC_CLCB* p_clcb,
                          UNUSED_ATTR const tBTA_GATTC_DATA* p_data) {
-  LOG(WARNING) << __func__ << ": Cannot establish Connection. conn_id="
-               << loghex(p_clcb->bta_conn_id) << ". Return GATT_ERROR("
-               << +GATT_ERROR << ")";
+  if (IS_FLAG_ENABLED(enumerate_gatt_errors) &&
+      p_data->int_conn.reason == GATT_CONN_TIMEOUT) {
+    LOG(WARNING) << __func__
+                 << ": Connection timed out after 30 seconds. conn_id="
+                 << loghex(p_clcb->bta_conn_id)
+                 << ". Return GATT_CONNECTION_TIMEOUT("
+                 << +GATT_CONNECTION_TIMEOUT << ")";
+    bta_gattc_send_open_cback(p_clcb->p_rcb, GATT_CONNECTION_TIMEOUT,
+                              p_clcb->bda, p_clcb->bta_conn_id,
+                              p_clcb->transport, 0);
+  } else {
+    LOG(WARNING) << __func__ << ": Cannot establish Connection. conn_id="
+                 << loghex(p_clcb->bta_conn_id) << ". Return GATT_ERROR("
+                 << +GATT_ERROR << ")";
+    bta_gattc_send_open_cback(p_clcb->p_rcb, GATT_ERROR, p_clcb->bda,
+                              p_clcb->bta_conn_id, p_clcb->transport, 0);
+  }
 
-  bta_gattc_send_open_cback(p_clcb->p_rcb, GATT_ERROR, p_clcb->bda,
-                            p_clcb->bta_conn_id, p_clcb->transport, 0);
   /* open failure, remove clcb */
   bta_gattc_clcb_dealloc(p_clcb);
 }
@@ -798,7 +813,7 @@ void bta_gattc_cfg_mtu(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 
 void bta_gattc_start_discover_internal(tBTA_GATTC_CLCB* p_clcb) {
   if (p_clcb->transport == BT_TRANSPORT_LE)
-    L2CA_EnableUpdateBleConnParams(p_clcb->p_srcb->server_bda, false);
+    L2CA_LockBleConnParamsForServiceDiscovery(p_clcb->p_srcb->server_bda, true);
 
   bta_gattc_init_cache(p_clcb->p_srcb);
   p_clcb->status = bta_gattc_discover_pri_service(
@@ -903,8 +918,11 @@ void bta_gattc_continue_discovery_if_needed(const RawAddress& bd_addr,
 void bta_gattc_continue_with_version_and_cache_known(
     tBTA_GATTC_CLCB* p_clcb, RobustCachingSupport cache_support,
     bool is_svc_chg) {
-  if (cache_support == RobustCachingSupport::UNSUPPORTED) {
-    // Skip initial DB hash read if we have strong reason (due to interop,
+  if (cache_support == RobustCachingSupport::UNSUPPORTED ||
+      (IS_FLAG_ENABLED(skip_unknown_robust_caching) &&
+       cache_support == RobustCachingSupport::UNKNOWN)) {
+    // Skip initial DB hash read if no DB hash is known, or if
+    // we have strong reason (due to interop,
     // or a prior discovery) to believe that it is unsupported.
     p_clcb->p_srcb->srvc_hdl_db_hash = false;
   }
@@ -929,8 +947,10 @@ void bta_gattc_disc_cmpl(tBTA_GATTC_CLCB* p_clcb,
 
   VLOG(1) << __func__ << ": conn_id=" << loghex(p_clcb->bta_conn_id);
 
-  if (p_clcb->transport == BT_TRANSPORT_LE)
-    L2CA_EnableUpdateBleConnParams(p_clcb->p_srcb->server_bda, true);
+  if (p_clcb->transport == BT_TRANSPORT_LE) {
+    L2CA_LockBleConnParamsForServiceDiscovery(p_clcb->p_srcb->server_bda,
+                                              false);
+  }
   p_clcb->p_srcb->state = BTA_GATTC_SERV_IDLE;
   p_clcb->disc_active = false;
 
@@ -964,7 +984,9 @@ void bta_gattc_disc_cmpl(tBTA_GATTC_CLCB* p_clcb,
      * want to free the underlying buffer that's being
      * referenced by p_clcb->p_q_cmd
      */
-    if (p_q_cmd != p_clcb->p_q_cmd) osi_free_and_reset((void**)&p_q_cmd);
+    if (!bta_gattc_is_data_queued(p_clcb, p_q_cmd)) {
+      osi_free_and_reset((void**)&p_q_cmd);
+    }
   } else {
     bta_gattc_continue(p_clcb);
   }
@@ -1014,16 +1036,26 @@ void bta_gattc_read_multi(tBTA_GATTC_CLCB* p_clcb,
                           const tBTA_GATTC_DATA* p_data) {
   if (bta_gattc_enqueue(p_clcb, p_data) == ENQUEUED_FOR_LATER) return;
 
+  if (p_data->api_read_multi.handles.num_attr > GATT_MAX_READ_MULTI_HANDLES) {
+    LOG(ERROR) << "api_read_multi.num_attr > GATT_MAX_READ_MULTI_HANDLES";
+    return;
+  }
+
   tGATT_READ_PARAM read_param;
   memset(&read_param, 0, sizeof(tGATT_READ_PARAM));
 
-  read_param.read_multiple.num_handles = p_data->api_read_multi.num_attr;
+  read_param.read_multiple.num_handles =
+      p_data->api_read_multi.handles.num_attr;
   read_param.read_multiple.auth_req = p_data->api_read_multi.auth_req;
-  memcpy(&read_param.read_multiple.handles, p_data->api_read_multi.handles,
-         sizeof(uint16_t) * p_data->api_read_multi.num_attr);
+  read_param.read_multiple.variable_len = p_data->api_read_multi.variable_len;
+  memcpy(&read_param.read_multiple.handles,
+         p_data->api_read_multi.handles.handles,
+         sizeof(uint16_t) * p_data->api_read_multi.handles.num_attr);
 
-  tGATT_STATUS status =
-      GATTC_Read(p_clcb->bta_conn_id, GATT_READ_MULTIPLE, &read_param);
+  tGATT_READ_TYPE read_type = (read_param.read_multiple.variable_len)
+                                  ? GATT_READ_MULTIPLE_VAR_LEN
+                                  : GATT_READ_MULTIPLE;
+  tGATT_STATUS status = GATTC_Read(p_clcb->bta_conn_id, read_type, &read_param);
   /* read fail */
   if (status != GATT_SUCCESS) {
     /* Dequeue the data, if it was enqueued */
@@ -1105,21 +1137,37 @@ void bta_gattc_confirm(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
 /** read complete */
 static void bta_gattc_read_cmpl(tBTA_GATTC_CLCB* p_clcb,
                                 const tBTA_GATTC_OP_CMPL* p_data) {
-  GATT_READ_OP_CB cb = p_clcb->p_q_cmd->api_read.read_cb;
-  void* my_cb_data = p_clcb->p_q_cmd->api_read.read_cb_data;
+  void* my_cb_data;
 
-  /* if it was read by handle, return the handle requested, if read by UUID, use
-   * handle returned from remote
-   */
-  uint16_t handle = p_clcb->p_q_cmd->api_read.handle;
-  if (handle == 0) handle = p_data->p_cmpl->att_value.handle;
+  if (!p_clcb->p_q_cmd->api_read.is_multi_read) {
+    GATT_READ_OP_CB cb = p_clcb->p_q_cmd->api_read.read_cb;
+    my_cb_data = p_clcb->p_q_cmd->api_read.read_cb_data;
 
-  osi_free_and_reset((void**)&p_clcb->p_q_cmd);
+    /* if it was read by handle, return the handle requested, if read by UUID,
+     * use handle returned from remote
+     */
+    uint16_t handle = p_clcb->p_q_cmd->api_read.handle;
+    if (handle == 0) handle = p_data->p_cmpl->att_value.handle;
 
-  if (cb) {
-    cb(p_clcb->bta_conn_id, p_data->status, handle,
-       p_data->p_cmpl->att_value.len, p_data->p_cmpl->att_value.value,
-       my_cb_data);
+    osi_free_and_reset((void**)&p_clcb->p_q_cmd);
+
+    if (cb) {
+      cb(p_clcb->bta_conn_id, p_data->status, handle,
+         p_data->p_cmpl->att_value.len, p_data->p_cmpl->att_value.value,
+         my_cb_data);
+    }
+  } else {
+    GATT_READ_MULTI_OP_CB cb = p_clcb->p_q_cmd->api_read_multi.read_cb;
+    my_cb_data = p_clcb->p_q_cmd->api_read_multi.read_cb_data;
+    tBTA_GATTC_MULTI handles = p_clcb->p_q_cmd->api_read_multi.handles;
+
+    osi_free_and_reset((void**)&p_clcb->p_q_cmd);
+
+    if (cb) {
+      cb(p_clcb->bta_conn_id, p_data->status, handles,
+         p_data->p_cmpl->att_value.len, p_data->p_cmpl->att_value.value,
+         my_cb_data);
+    }
   }
 }
 
@@ -1218,9 +1266,12 @@ void bta_gattc_op_cmpl(tBTA_GATTC_CLCB* p_clcb, const tBTA_GATTC_DATA* p_data) {
   }
 
   if (p_clcb->p_q_cmd->hdr.event !=
-      bta_gattc_opcode_to_int_evt[op - GATTC_OPTYPE_READ]) {
+          bta_gattc_opcode_to_int_evt[op - GATTC_OPTYPE_READ] &&
+      (p_clcb->p_q_cmd->hdr.event != BTA_GATTC_API_READ_MULTI_EVT ||
+       op != GATTC_OPTYPE_READ)) {
     uint8_t mapped_op =
         p_clcb->p_q_cmd->hdr.event - BTA_GATTC_API_READ_EVT + GATTC_OPTYPE_READ;
+
     if (mapped_op > GATTC_OPTYPE_INDICATION) mapped_op = 0;
 
     LOG(ERROR) << StringPrintf(

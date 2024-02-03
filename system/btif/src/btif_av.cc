@@ -44,17 +44,20 @@
 #include "btif/include/btif_profile_queue.h"
 #include "btif/include/btif_rc.h"
 #include "btif/include/btif_util.h"
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "btif_metrics_logging.h"
 #include "common/state_machine.h"
 #include "device/include/device_iot_config.h"
 #include "hardware/bt_av.h"
+#include "include/check.h"
 #include "include/hardware/bt_rc.h"
+#include "internal_include/bt_trace.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
 #include "stack/include/avrc_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_log_history.h"
 #include "stack/include/main_thread.h"
 #include "types/raw_address.h"
@@ -392,7 +395,8 @@ class BtifAvSource {
   bt_status_t Init(
       btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
       const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-      const std::vector<btav_a2dp_codec_config_t>& offloading_preference);
+      const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+      std::vector<btav_a2dp_codec_info_t>* supported_codecs);
   void Cleanup();
 
   btav_source_callbacks_t* Callbacks() { return callbacks_; }
@@ -1124,7 +1128,8 @@ BtifAvSource::~BtifAvSource() { CleanupAllPeers(); }
 bt_status_t BtifAvSource::Init(
     btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
     const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-    const std::vector<btav_a2dp_codec_config_t>& offloading_preference) {
+    const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+    std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
   LOG_INFO("%s: max_connected_audio_devices=%d", __PRETTY_FUNCTION__,
            max_connected_audio_devices);
   if (enabled_) return BT_STATUS_SUCCESS;
@@ -1138,10 +1143,13 @@ bt_status_t BtifAvSource::Init(
 
   callbacks_ = callbacks;
   if (a2dp_offload_enabled_) {
+    tBTM_BLE_VSC_CB vsc_cb = {};
+    BTM_BleGetVendorCapabilities(&vsc_cb);
+    bool supports_a2dp_hw_offload_v2 = vsc_cb.version_supported >= 0x0103;
     bluetooth::audio::a2dp::update_codec_offloading_capabilities(
-        offloading_preference);
+        offloading_preference, supports_a2dp_hw_offload_v2);
   }
-  bta_av_co_init(codec_priorities);
+  bta_av_co_init(codec_priorities, supported_codecs);
 
   if (!btif_a2dp_source_init()) {
     return BT_STATUS_FAIL;
@@ -1397,7 +1405,8 @@ bt_status_t BtifAvSink::Init(btav_sink_callbacks_t* callbacks,
   if (!btif_av_source.Enabled()) {
     std::vector<btav_a2dp_codec_config_t>
         codec_priorities;  // Default priorities
-    bta_av_co_init(codec_priorities);
+    std::vector<btav_a2dp_codec_info_t> supported_codecs;
+    bta_av_co_init(codec_priorities, &supported_codecs);
   }
 
   if (!btif_a2dp_sink_init()) {
@@ -3474,10 +3483,12 @@ static void bta_av_sink_media_callback(const RawAddress& peer_address,
 static bt_status_t init_src(
     btav_source_callbacks_t* callbacks, int max_connected_audio_devices,
     const std::vector<btav_a2dp_codec_config_t>& codec_priorities,
-    const std::vector<btav_a2dp_codec_config_t>& offloading_preference) {
+    const std::vector<btav_a2dp_codec_config_t>& offloading_preference,
+    std::vector<btav_a2dp_codec_info_t>* supported_codecs) {
   LOG_VERBOSE("%s", __func__);
   return btif_av_source.Init(callbacks, max_connected_audio_devices,
-                             codec_priorities, offloading_preference);
+                             codec_priorities, offloading_preference,
+                             supported_codecs);
 }
 
 // Initializes the AV interface for sink mode

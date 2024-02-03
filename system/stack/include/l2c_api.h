@@ -29,8 +29,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "bt_target.h"
 #include "hcidefs.h"
+#include "internal_include/bt_target.h"
 #include "l2cdefs.h"
 #include "stack/include/bt_hdr.h"
 #include "types/bt_transport.h"
@@ -735,6 +735,8 @@ typedef struct {
   tL2CA_FIXED_CONGESTION_STATUS_CB* pL2CA_FixedCong_Cb;
 
   uint16_t default_idle_tout;
+  tL2CA_TX_COMPLETE_CB*
+      pL2CA_FixedTxComplete_Cb; /* fixed channel tx complete callback */
 } tL2CAP_FIXED_CHNL_REG;
 
 /*******************************************************************************
@@ -824,19 +826,19 @@ bool L2CA_UpdateBleConnParams(const RawAddress& rem_bda, uint16_t min_int,
                               uint16_t timeout, uint16_t min_ce_len,
                               uint16_t max_ce_len);
 
-/*******************************************************************************
- *
- *  Function        L2CA_EnableUpdateBleConnParams
- *
- *  Description     Update BLE connection parameters.
- *
- *  Parameters:     BD Address of remote
- *                  enable flag
- *
- *  Return value:   true if update started
- *
- ******************************************************************************/
-bool L2CA_EnableUpdateBleConnParams(const RawAddress& rem_bda, bool enable);
+/* When called with lock=true, LE connection parameters will be locked on
+ * fastest value, and we won't accept request to change it from remote. When
+ * called with lock=false, parameters are relaxed.
+ */
+void L2CA_LockBleConnParamsForServiceDiscovery(const RawAddress& rem_bda,
+                                               bool lock);
+
+/* When called with lock=true, LE connection parameters will be locked on
+ * fastest value, and we won't accept request to change it from remote. When
+ * called with lock=false, parameters are relaxed.
+ */
+void L2CA_LockBleConnParamsForProfileConnection(const RawAddress& rem_bda,
+                                                bool lock);
 
 /*******************************************************************************
  *

@@ -19,10 +19,9 @@ package com.android.bluetooth.bass_client;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doCallRealMethod;
@@ -62,7 +61,6 @@ import android.os.RemoteException;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
-import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
@@ -70,11 +68,13 @@ import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
+import com.android.bluetooth.flags.FakeFeatureFlagsImpl;
+import com.android.bluetooth.flags.Flags;
+import com.android.bluetooth.le_audio.LeAudioService;
 
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -82,14 +82,14 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
 /**
  * Tests for {@link BassClientService}
@@ -138,8 +138,7 @@ public class BassClientServiceTest {
     private BluetoothDevice mCurrentDevice;
     private BluetoothDevice mCurrentDevice1;
     private BassIntentReceiver mBassIntentReceiver;
-
-    @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
+    private FakeFeatureFlagsImpl mFakeFlagsImpl;
 
     @Spy private BassObjectsFactory mObjectsFactory = BassObjectsFactory.getInstance();
     @Mock private AdapterService mAdapterService;
@@ -147,6 +146,7 @@ public class BassClientServiceTest {
     @Mock private BluetoothLeScannerWrapper mBluetoothLeScannerWrapper;
     @Mock private ServiceFactory mServiceFactory;
     @Mock private CsipSetCoordinatorService mCsipService;
+    @Mock private LeAudioService mLeAudioService;
     @Mock private IBluetoothLeBroadcastAssistantCallback mCallback;
     @Mock private Binder mBinder;
 
@@ -216,7 +216,6 @@ public class BassClientServiceTest {
         doReturn(BluetoothDevice.BOND_BONDED).when(mAdapterService)
                 .getBondState(any(BluetoothDevice.class));
         doReturn(mDatabaseManager).when(mAdapterService).getDatabase();
-        doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
         doAnswer(invocation -> {
             Set<BluetoothDevice> keys = mStateMachines.keySet();
             return keys.toArray(new BluetoothDevice[keys.size()]);
@@ -244,12 +243,15 @@ public class BassClientServiceTest {
         doReturn(mBluetoothLeScannerWrapper).when(mObjectsFactory)
                 .getBluetoothLeScannerWrapper(any());
 
-        TestUtils.startService(mServiceRule, BassClientService.class);
-        mBassClientService = BassClientService.getBassClientService();
-        assertThat(mBassClientService).isNotNull();
+        mFakeFlagsImpl = new FakeFeatureFlagsImpl();
+        mFakeFlagsImpl.setFlag(Flags.FLAG_LEAUDIO_BROADCAST_AUDIO_HANDOVER_POLICIES, false);
+
+        mBassClientService = new BassClientService(mTargetContext, mFakeFlagsImpl);
+        mBassClientService.doStart();
 
         mBassClientService.mServiceFactory = mServiceFactory;
         doReturn(mCsipService).when(mServiceFactory).getCsipSetCoordinatorService();
+        doReturn(mLeAudioService).when(mServiceFactory).getLeAudioService();
 
         when(mCallback.asBinder()).thenReturn(mBinder);
         mBassClientService.registerCallback(mCallback);
@@ -274,7 +276,7 @@ public class BassClientServiceTest {
         }
         mBassClientService.unregisterCallback(mCallback);
 
-        TestUtils.stopService(mServiceRule, BassClientService.class);
+        mBassClientService.doStop();
         mBassClientService = BassClientService.getBassClientService();
         assertThat(mBassClientService).isNull();
         mStateMachines.clear();
@@ -450,7 +452,7 @@ public class BassClientServiceTest {
 
             // Inject initial broadcast source state
             BluetoothLeBroadcastMetadata meta = createBroadcastMetadata(TEST_BROADCAST_ID);
-            injectRemoteSourceState(sm, meta, TEST_SOURCE_ID,
+            injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
                 BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                 meta.isEncrypted() ?
                         BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -458,7 +460,7 @@ public class BassClientServiceTest {
                 null);
             injectRemoteSourceStateRemoval(sm, TEST_SOURCE_ID);
 
-            injectRemoteSourceState(sm, meta, TEST_SOURCE_ID + 1,
+            injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
                 BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                 meta.isEncrypted() ?
                         BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -499,9 +501,9 @@ public class BassClientServiceTest {
         }
     }
 
-    private void injectRemoteSourceState(BassClientStateMachine sm,
+    private BluetoothLeBroadcastReceiveState injectRemoteSourceState(BassClientStateMachine sm,
             BluetoothLeBroadcastMetadata meta, int sourceId, int paSynState, int encryptionState,
-            byte[] badCode) {
+            byte[] badCode, long bisSyncState) {
         BluetoothLeBroadcastReceiveState recvState = new BluetoothLeBroadcastReceiveState(
                 sourceId,
                 meta.getSourceAddressType(),
@@ -514,7 +516,7 @@ public class BassClientServiceTest {
                 meta.getSubgroups().size(),
                 // Bis sync states
                 meta.getSubgroups().stream()
-                        .map(e -> (long) 0x00000002)
+                        .map(e -> bisSyncState)
                         .collect(Collectors.toList()),
                 meta.getSubgroups().stream()
                                 .map(e -> e.getContentMetadata())
@@ -531,9 +533,35 @@ public class BassClientServiceTest {
         stateList.add(recvState);
         doReturn(stateList).when(sm).getAllSources();
 
+        return recvState;
+    }
+
+    private BluetoothLeBroadcastReceiveState injectRemoteSourceStateSourceAdded(
+            BassClientStateMachine sm, BluetoothLeBroadcastMetadata meta, int sourceId,
+            int paSynState, int encryptionState, byte[] badCode) {
+        BluetoothLeBroadcastReceiveState recvState =
+                injectRemoteSourceState(sm, meta, sourceId, paSynState, encryptionState, badCode,
+                        (long) 0x00000002);
+
         mBassClientService.getCallbacks().notifySourceAdded(sm.getDevice(), recvState,
                         BluetoothStatusCodes.REASON_LOCAL_APP_REQUEST);
         TestUtils.waitForLooperToFinishScheduledTask(mBassClientService.getCallbacks().getLooper());
+
+        return recvState;
+    }
+
+    private BluetoothLeBroadcastReceiveState injectRemoteSourceStateChanged(
+            BassClientStateMachine sm, BluetoothLeBroadcastMetadata meta, int sourceId,
+            int paSynState, int encryptionState, byte[] badCode, long bisSyncState) {
+        BluetoothLeBroadcastReceiveState recvState =
+                injectRemoteSourceState(sm, meta, sourceId, paSynState, encryptionState, badCode,
+                        bisSyncState);
+
+        mBassClientService.getCallbacks().notifyReceiveStateChanged(sm.getDevice(),
+                        recvState.getSourceId(), recvState);
+        TestUtils.waitForLooperToFinishScheduledTask(mBassClientService.getCallbacks().getLooper());
+
+        return recvState;
     }
 
     private void injectRemoteSourceStateRemoval(BassClientStateMachine sm, int sourceId) {
@@ -587,7 +615,7 @@ public class BassClientServiceTest {
         verifyAddSourceForGroup(meta);
         for (BassClientStateMachine sm: mStateMachines.values()) {
             if (sm.getDevice().equals(mCurrentDevice)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -602,7 +630,7 @@ public class BassClientServiceTest {
                     throw e.rethrowFromSystemServer();
                 }
             } else if (sm.getDevice().equals(mCurrentDevice1)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID + 1,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -630,14 +658,14 @@ public class BassClientServiceTest {
         verifyAddSourceForGroup(meta);
         for (BassClientStateMachine sm: mStateMachines.values()) {
             if (sm.getDevice().equals(mCurrentDevice)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null);
             } else if (sm.getDevice().equals(mCurrentDevice1)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID + 1,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -684,14 +712,14 @@ public class BassClientServiceTest {
         verifyAddSourceForGroup(meta);
         for (BassClientStateMachine sm: mStateMachines.values()) {
             if (sm.getDevice().equals(mCurrentDevice)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null);
             } else if (sm.getDevice().equals(mCurrentDevice1)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID + 1,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -724,6 +752,89 @@ public class BassClientServiceTest {
     }
 
     /**
+     * Test whether service.removeSource() does send modify source to all the state machines if
+     * either PA or BIS is synced
+     */
+    @Test
+    public void testRemoveSourceForGroupAndTriggerModifySource() {
+        prepareConnectedDeviceGroup();
+        BluetoothLeBroadcastMetadata meta = createBroadcastMetadata(TEST_BROADCAST_ID);
+        verifyAddSourceForGroup(meta);
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            injectRemoteSourceStateSourceAdded(
+                    sm,
+                    meta,
+                    TEST_SOURCE_ID,
+                    BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_SYNCHRONIZED,
+                    meta.isEncrypted()
+                            ? BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING
+                            : BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                    null);
+            doReturn(meta).when(sm).getCurrentBroadcastMetadata(eq(TEST_SOURCE_ID));
+            doReturn(true).when(sm).isSyncedToTheSource(eq(TEST_SOURCE_ID));
+        }
+
+        // Remove broadcast source
+        mBassClientService.removeSource(mCurrentDevice, TEST_SOURCE_ID);
+
+        // Verify all group members getting UPDATE_BCAST_SOURCE message
+        // because PA state is synced
+        assertThat(mStateMachines.size()).isEqualTo(2);
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+            verify(sm, atLeast(1)).sendMessage(messageCaptor.capture());
+
+            Optional<Message> msg =
+                    messageCaptor.getAllValues().stream()
+                            .filter(m -> m.what == BassClientStateMachine.UPDATE_BCAST_SOURCE)
+                            .findFirst();
+            assertThat(msg.isPresent()).isEqualTo(true);
+
+            // Verify using the right sourceId on each device
+            assertThat(msg.get().arg1).isEqualTo(TEST_SOURCE_ID);
+        }
+
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            // Update receiver state
+            injectRemoteSourceStateChanged(
+                    sm,
+                    meta,
+                    TEST_SOURCE_ID,
+                    BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                    meta.isEncrypted()
+                            ? BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING
+                            : BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                    null,
+                    (long) 0x00000001);
+            verify(mLeAudioService).activeBroadcastAssistantNotification(eq(true));
+        }
+
+        // Remove broadcast source
+        mBassClientService.removeSource(mCurrentDevice, TEST_SOURCE_ID);
+
+        // Verify all group members getting UPDATE_BCAST_SOURCE message if
+        // bis sync state is non-zero and pa sync state is not synced
+        assertThat(mStateMachines.size()).isEqualTo(2);
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+            verify(sm, atLeast(1)).sendMessage(messageCaptor.capture());
+
+            Optional<Message> msg =
+                    messageCaptor.getAllValues().stream()
+                            .filter(m -> m.what == BassClientStateMachine.UPDATE_BCAST_SOURCE)
+                            .findFirst();
+            assertThat(msg.isPresent()).isEqualTo(true);
+
+            // Verify using the right sourceId on each device
+            assertThat(msg.get().arg1).isEqualTo(TEST_SOURCE_ID);
+        }
+
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            injectRemoteSourceStateRemoval(sm, TEST_SOURCE_ID);
+        }
+    }
+
+    /**
      * Test whether the group operation flag is set on addSource() and removed on removeSource
      */
     @Test
@@ -735,14 +846,14 @@ public class BassClientServiceTest {
         // Inject source added
         for (BassClientStateMachine sm: mStateMachines.values()) {
             if (sm.getDevice().equals(mCurrentDevice)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null);
             } else if (sm.getDevice().equals(mCurrentDevice1)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID + 1,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -797,6 +908,58 @@ public class BassClientServiceTest {
         assertThat(msg.isPresent()).isFalse();
     }
 
+    /** Test switch source will be triggered if adding new source when sink has source */
+    @Test
+    public void testSwitchSourceAfterSourceAdded() {
+        prepareConnectedDeviceGroup();
+        BluetoothLeBroadcastMetadata meta = createBroadcastMetadata(TEST_BROADCAST_ID);
+        BluetoothLeBroadcastMetadata newMeta = createBroadcastMetadata(TEST_BROADCAST_ID + 1);
+        verifyAddSourceForGroup(meta);
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            injectRemoteSourceStateSourceAdded(
+                    sm,
+                    meta,
+                    TEST_SOURCE_ID,
+                    BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                    meta.isEncrypted()
+                            ? BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING
+                            : BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                    null);
+            injectRemoteSourceStateSourceAdded(
+                    sm,
+                    meta,
+                    TEST_SOURCE_ID + 1,
+                    BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                    meta.isEncrypted()
+                            ? BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING
+                            : BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                    null);
+        }
+
+        // Add another new broadcast source
+        mBassClientService.addSource(mCurrentDevice, newMeta, true);
+
+        // Verify all group members getting SWITCH_BCAST_SOURCE message and first source got
+        // selected
+        // to remove
+        assertThat(mStateMachines.size()).isEqualTo(2);
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+            verify(sm, atLeast(1)).sendMessage(messageCaptor.capture());
+
+            Optional<Message> msg =
+                    messageCaptor.getAllValues().stream()
+                            .filter(
+                                    m ->
+                                            (m.what == BassClientStateMachine.SWITCH_BCAST_SOURCE)
+                                                    && (m.obj == newMeta)
+                                                    && (m.arg1 == TEST_SOURCE_ID))
+                            .findFirst();
+            assertThat(msg.isPresent()).isTrue();
+            assertThat(msg.orElse(null)).isNotNull();
+        }
+    }
+
     /**
      * Test that after multiple calls to service.addSource() with a group operation flag set,
      * there are two call to service.removeSource() needed to clear the flag
@@ -809,14 +972,14 @@ public class BassClientServiceTest {
         assertThat(mStateMachines.size()).isEqualTo(2);
         for (BassClientStateMachine sm: mStateMachines.values()) {
             if (sm.getDevice().equals(mCurrentDevice)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null);
             } else if (sm.getDevice().equals(mCurrentDevice1)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID + 1,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -835,14 +998,14 @@ public class BassClientServiceTest {
         assertThat(mStateMachines.size()).isEqualTo(2);
         for (BassClientStateMachine sm: mStateMachines.values()) {
             if (sm.getDevice().equals(mCurrentDevice)) {
-                injectRemoteSourceState(sm, meta1, TEST_SOURCE_ID + 2,
+                injectRemoteSourceStateSourceAdded(sm, meta1, TEST_SOURCE_ID + 2,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta1.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null);
             } else if (sm.getDevice().equals(mCurrentDevice1)) {
-                injectRemoteSourceState(sm, meta1, TEST_SOURCE_ID + 3,
+                injectRemoteSourceStateSourceAdded(sm, meta1, TEST_SOURCE_ID + 3,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta1.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -934,7 +1097,7 @@ public class BassClientServiceTest {
 
             BluetoothLeBroadcastMetadata metaOther =
                     createBroadcastMetadata(TEST_BROADCAST_ID + 20);
-            injectRemoteSourceState(sm, metaOther, TEST_SOURCE_ID + 20,
+            injectRemoteSourceStateSourceAdded(sm, metaOther, TEST_SOURCE_ID + 20,
                     BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                     meta.isEncrypted() ?
                             BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
@@ -966,36 +1129,32 @@ public class BassClientServiceTest {
     public void testInvalidRequestForGroup() {
         // Prepare the initial state
         prepareConnectedDeviceGroup();
+
+        // Verify errors are reported for the entire group
+        mBassClientService.addSource(mCurrentDevice1, null, true);
+        assertThat(mStateMachines.size()).isEqualTo(2);
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            verify(sm, times(0)).sendMessage(any());
+        }
+
+        // Prepare valid source for group
         BluetoothLeBroadcastMetadata meta = createBroadcastMetadata(TEST_BROADCAST_ID);
         verifyAddSourceForGroup(meta);
         for (BassClientStateMachine sm: mStateMachines.values()) {
             if (sm.getDevice().equals(mCurrentDevice)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null);
             } else if (sm.getDevice().equals(mCurrentDevice1)) {
-                injectRemoteSourceState(sm, meta, TEST_SOURCE_ID + 1,
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
                         BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
                         meta.isEncrypted() ?
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
                                 BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
                         null);
-            }
-        }
-
-        // Verify errors are reported for the entire group
-        mBassClientService.addSource(mCurrentDevice1, null, true);
-        assertThat(mStateMachines.size()).isEqualTo(2);
-        for (BassClientStateMachine sm: mStateMachines.values()) {
-            BluetoothDevice dev = sm.getDevice();
-            try {
-                verify(mCallback, after(TIMEOUT_MS).times(1)).onSourceAddFailed(eq(dev),
-                        eq(null), eq(BluetoothStatusCodes.ERROR_BAD_PARAMETERS));
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
             }
         }
 
@@ -1241,5 +1400,166 @@ public class BassClientServiceTest {
                 .isEqualTo(testSyncHandle);
         assertThat(mBassClientService.getBroadcastIdForSyncHandle(testSyncHandle))
                 .isEqualTo(testBroadcastId);
+    }
+
+    @Test
+    public void testSuspendResumeSourceSynchronization() {
+        prepareConnectedDeviceGroup();
+        BluetoothLeBroadcastMetadata meta = createBroadcastMetadata(TEST_BROADCAST_ID);
+        verifyAddSourceForGroup(meta);
+        for (BassClientStateMachine sm: mStateMachines.values()) {
+            if (sm.getDevice().equals(mCurrentDevice)) {
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null);
+            } else if (sm.getDevice().equals(mCurrentDevice1)) {
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null);
+            }
+        }
+
+        mBassClientService.suspendAllReceiversSourceSynchronization();
+
+        // Inject source removed
+        for (BassClientStateMachine sm: mStateMachines.values()) {
+            ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+            verify(sm, atLeast(1)).sendMessage(messageCaptor.capture());
+
+            Optional<Message> msg = messageCaptor.getAllValues().stream()
+                    .filter(m -> m.what == BassClientStateMachine.REMOVE_BCAST_SOURCE)
+                    .findFirst();
+            assertThat(msg.isPresent()).isEqualTo(true);
+
+            if (sm.getDevice().equals(mCurrentDevice)) {
+                assertThat(msg.get().arg1).isEqualTo(TEST_SOURCE_ID);
+                injectRemoteSourceStateRemoval(sm, TEST_SOURCE_ID);
+            } else if (sm.getDevice().equals(mCurrentDevice1)) {
+                assertThat(msg.get().arg1).isEqualTo(TEST_SOURCE_ID + 1);
+                injectRemoteSourceStateRemoval(sm, TEST_SOURCE_ID + 1);
+            }
+        }
+
+        mBassClientService.resumeReceiversSourceSynchronization();
+
+        // Verify all group members getting ADD_BCAST_SOURCE message
+        assertThat(mStateMachines.size()).isEqualTo(2);
+        for (BassClientStateMachine sm: mStateMachines.values()) {
+            ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+            verify(sm, atLeast(1)).sendMessage(messageCaptor.capture());
+
+            long count = messageCaptor.getAllValues().stream()
+                    .filter(m -> (m.what == BassClientStateMachine.ADD_BCAST_SOURCE)
+                                        && (m.obj == meta))
+                    .count();
+            assertThat(count).isEqualTo(2);
+        }
+    }
+
+    @Test
+    public void testHandleUnicastSourceStreamStatusChange() {
+        prepareConnectedDeviceGroup();
+        BluetoothLeBroadcastMetadata meta = createBroadcastMetadata(TEST_BROADCAST_ID);
+        verifyAddSourceForGroup(meta);
+        for (BassClientStateMachine sm: mStateMachines.values()) {
+            if (sm.getDevice().equals(mCurrentDevice)) {
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null);
+
+                // Update receiver state
+                injectRemoteSourceStateChanged(sm, meta, TEST_SOURCE_ID,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null, (long) 0x00000001);
+                verify(mLeAudioService).activeBroadcastAssistantNotification(eq(true));
+            } else if (sm.getDevice().equals(mCurrentDevice1)) {
+                injectRemoteSourceStateSourceAdded(sm, meta, TEST_SOURCE_ID + 1,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null);
+
+                // Update receiver state
+                injectRemoteSourceStateChanged(sm, meta, TEST_SOURCE_ID + 1,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null, (long) 0x00000002);
+            }
+        }
+
+        /* Unicast would like to stream */
+        mBassClientService.handleUnicastSourceStreamStatusChange(
+                0 /* STATUS_LOCAL_STREAM_REQUESTED */);
+
+        // Inject source removed
+        for (BassClientStateMachine sm: mStateMachines.values()) {
+            ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+            verify(sm, atLeast(1)).sendMessage(messageCaptor.capture());
+
+            Optional<Message> msg = messageCaptor.getAllValues().stream()
+                    .filter(m -> m.what == BassClientStateMachine.REMOVE_BCAST_SOURCE)
+                    .findFirst();
+            assertThat(msg.isPresent()).isEqualTo(true);
+
+            if (sm.getDevice().equals(mCurrentDevice)) {
+                assertThat(msg.get().arg1).isEqualTo(TEST_SOURCE_ID);
+                injectRemoteSourceStateRemoval(sm, TEST_SOURCE_ID);
+            } else if (sm.getDevice().equals(mCurrentDevice1)) {
+                assertThat(msg.get().arg1).isEqualTo(TEST_SOURCE_ID + 1);
+                injectRemoteSourceStateRemoval(sm, TEST_SOURCE_ID + 1);
+            }
+        }
+
+        /* Unicast finished streaming */
+        mBassClientService.handleUnicastSourceStreamStatusChange(
+                2 /* STATUS_LOCAL_STREAM_SUSPENDED */);
+
+        // Verify all group members getting ADD_BCAST_SOURCE message
+        assertThat(mStateMachines.size()).isEqualTo(2);
+        for (BassClientStateMachine sm: mStateMachines.values()) {
+            ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+            verify(sm, atLeast(1)).sendMessage(messageCaptor.capture());
+
+            long count = messageCaptor.getAllValues().stream()
+                    .filter(m -> (m.what == BassClientStateMachine.ADD_BCAST_SOURCE)
+                                        && (m.obj == meta))
+                    .count();
+            assertThat(count).isEqualTo(2);
+        }
+
+        // Update receiver state with lost BIS sync
+        for (BassClientStateMachine sm: mStateMachines.values()) {
+            if (sm.getDevice().equals(mCurrentDevice)) {
+                injectRemoteSourceStateChanged(sm, meta, TEST_SOURCE_ID,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null, (long) 0x00000000);
+                verify(mLeAudioService).activeBroadcastAssistantNotification(eq(false));
+            } else if (sm.getDevice().equals(mCurrentDevice1)) {
+                injectRemoteSourceStateChanged(sm, meta, TEST_SOURCE_ID + 1,
+                        BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_IDLE,
+                        meta.isEncrypted() ?
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_DECRYPTING :
+                                BluetoothLeBroadcastReceiveState.BIG_ENCRYPTION_STATE_NOT_ENCRYPTED,
+                        null, (long) 0x00000000);
+            }
+        }
     }
 }

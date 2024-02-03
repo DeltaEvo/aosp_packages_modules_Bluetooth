@@ -19,8 +19,9 @@ import enum
 class BtTransport(enum.IntEnum):
     """Bluetooth transport type."""
     AUTO = 0
-    BR_EDR = 1
+    BREDR = 1
     LE = 2
+    DUAL = 3
 
 
 class GattWriteRequestStatus(enum.IntEnum):
@@ -142,19 +143,49 @@ class BondState(enum.IntEnum):
     BONDED = 2
 
 
-class Transport(enum.IntEnum):
-    """Bluetooth transport type."""
-    AUTO = 0
-    BREDR = 1
-    LE = 2
+class BtPropertyType(enum.IntEnum):
+    """Bluetooth's property type."""
+    BdName = 0x1
+    BdAddr = 0x2
+    Uuids = 0x3
+    ClassOfDevice = 0x4
+    TypeOfDevice = 0x5
+    ServiceRecord = 0x6
+    AdapterScanMode = 0x7
+    AdapterBondedDevices = 0x8
+    AdapterDiscoverableTimeout = 0x9
+    RemoteFriendlyName = 0xA
+    RemoteRssi = 0xB
+    RemoteVersionInfo = 0xC
+    LocalLeFeatures = 0xD
+    LocalIoCaps = 0xE
+    LocalIoCapsBle = 0xF
+    DynamicAudioBuffer = 0x10
+    RemoteIsCoordinatedSetMember = 0x11
+    Appearance = 0x12
+    VendorProductInfo = 0x13
+    # Unimplemented:
+    #  BT_PROPERTY_WL_MEDIA_PLAYERS_LIST,
+    #  BT_PROPERTY_REMOTE_ASHA_CAPABILITY,
+    #  BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
+    #  BT_PROPERTY_REMOTE_MODEL_NUM,
+    RemoteAddrType = 0x18
+    Unknown = 0xFE
+    RemoteDeviceTimestamp = 0xFF
 
 
-class SspVariant(enum.IntEnum):
-    """Bluetooth SSP variant type."""
+class PairingVariant(enum.IntEnum):
+    """Bluetooth pairing variant type."""
+    # SSP variants.
     PASSKEY_CONFIRMATION = 0
     PASSKEY_ENTRY = 1
     CONSENT = 2
     PASSKEY_NOTIFICATION = 3
+
+    # Legacy pairing variants.
+    PIN_ENTRY = 4
+    PIN_16_DIGITS_ENTRY = 5
+    PIN_NOTIFICATION = 6
 
 
 class BleAddressType(enum.IntEnum):
@@ -171,9 +202,59 @@ class OwnAddressType(enum.IntEnum):
     RANDOM = 1
 
 
+class BtConnectionState(enum.IntEnum):
+    NOT_CONNECTED = 0
+    CONNECTED_ONLY = 1
+    ENCRYPTED_BR_EDR = 3
+    ENCRYPTED_LE = 5
+    ENCRYPTED_BOTH = 7
+
+
 class CompanyIdentifiers(enum.IntEnum):
     """Bluetooth SIG Company ID values.
 
     Bluetooth SIG official document: https://www.bluetooth.com/specifications/assigned-numbers/
     """
     GOOGLE = 0x00E0
+
+
+class AdvertisingDataType(enum.IntEnum):
+    FLAGS = 0x01
+    INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS = 0x02
+    COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS = 0x03
+    INCOMPLETE_LIST_OF_32_BIT_SERVICE_CLASS_UUIDS = 0x04
+    COMPLETE_LIST_OF_32_BIT_SERVICE_CLASS_UUIDS = 0x05
+    INCOMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS = 0x06
+    COMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS = 0x07
+    SHORTENED_LOCAL_NAME = 0x08
+    COMPLETE_LOCAL_NAME = 0x09
+    TX_POWER_LEVEL = 0x0A
+    CLASS_OF_DEVICE = 0x0D
+    SLAVE_CONNECTION_INTERVAL_RANGE = 0x12
+    LIST_OF_16_BIT_SERVICE_SOLICITATION_UUIDS = 0x14
+    LIST_OF_128_BIT_SERVICE_SOLICITATION_UUIDS = 0x15
+    SERVICE_DATA_16_BIT_UUID = 0x16
+    PUBLIC_TARGET_ADDRESS = 0x17
+    RANDOM_TARGET_ADDRESS = 0x18
+    APPEARANCE = 0x19
+    ADVERTISING_INTERVAL = 0x1A
+    LIST_OF_32_BIT_SERVICE_SOLICITATION_UUIDS = 0x1F
+    SERVICE_DATA_32_BIT_UUID = 0x20
+    SERVICE_DATA_128_BIT_UUID = 0x21
+    URI = 0x24
+    LE_SUPPORTED_FEATURES = 0x27
+    MANUFACTURER_SPECIFIC_DATA = 0xFF
+
+
+class BtDiscMode(enum.IntEnum):
+    """Bluetooth discoverable mode."""
+    NON_DISCOVERABLE = 0
+    LIMITED_DISCOVERABLE = 1
+    GENERAL_DISCOVERABLE = 2
+
+
+class BthhReportType(enum.IntEnum):
+    """Bluetooth HID report type."""
+    INPUT_REPORT = 1
+    OUTPUT_REPORT = 2
+    FEATURE_REPORT = 3

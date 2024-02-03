@@ -28,6 +28,7 @@
 #include "btif_av.h"
 #include "btif_common.h"
 #include "device.h"
+#include "include/check.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/main_thread.h"
@@ -413,7 +414,8 @@ void AvrcpService::Init(MediaInterface* media_interface,
   player_settings_interface_ = wrapped_player_settings_interface;
 
   ConnectionHandler::Initialize(
-      base::Bind(&AvrcpService::DeviceCallback, base::Unretained(instance_)),
+      base::BindRepeating(&AvrcpService::DeviceCallback,
+                          base::Unretained(instance_)),
       &avrcp_interface_, &sdp_interface_, wrapped_volume_interface);
   connection_handler_ = ConnectionHandler::Get();
 }

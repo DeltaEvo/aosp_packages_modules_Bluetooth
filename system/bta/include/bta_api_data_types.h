@@ -18,9 +18,12 @@
 
 #pragma once
 
+#include <base/strings/stringprintf.h>
+
 #include <cstdint>
 #include <string>
-#include <base/strings/stringprintf.h>
+
+#include "macros.h"
 #include "types/raw_address.h"
 
 /*****************************************************************************
@@ -37,12 +40,6 @@ typedef enum : uint8_t {
   BTA_WRONG_MODE = 5,
 } tBTA_STATUS;
 
-#ifndef CASE_RETURN_TEXT
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-#endif
-
 inline std::string bta_status_text(const tBTA_STATUS& status) {
   switch (status) {
     CASE_RETURN_TEXT(BTA_SUCCESS);
@@ -56,10 +53,11 @@ inline std::string bta_status_text(const tBTA_STATUS& status) {
   }
 }
 
-#undef CASE_RETURN_TEXT
-
 typedef struct {
   RawAddress pairing_bda;
   RawAddress id_addr;
 } tBTA_DM_PROC_ID_ADDR;
 
+typedef struct {
+  RawAddress bd_addr;
+} tBTA_DM_KEY_MISSING;

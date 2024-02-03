@@ -28,10 +28,12 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothHidDevice;
 import android.bluetooth.IBluetoothHidDeviceCallback;
 import android.content.AttributionSource;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
@@ -86,11 +88,19 @@ public class HidDeviceService extends ProfileService {
 
     private HidDeviceServiceHandler mHandler;
 
+    public HidDeviceService(Context ctx) {
+        super(ctx);
+    }
+
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileHidDeviceEnabled().orElse(false);
     }
 
     private class HidDeviceServiceHandler extends Handler {
+        HidDeviceServiceHandler(Looper looper) {
+            super(looper);
+        }
+
         @Override
         public void handleMessage(Message msg) {
             if (DBG) {
@@ -264,6 +274,7 @@ public class HidDeviceService extends ProfileService {
         }
 
         public void cleanup() {
+            mService.unregisterApp();
             mService = null;
         }
     }
@@ -762,7 +773,7 @@ public class HidDeviceService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         if (DBG) {
             Log.d(TAG, "start()");
         }
@@ -770,7 +781,7 @@ public class HidDeviceService extends ProfileService {
         mDatabaseManager = Objects.requireNonNull(AdapterService.getAdapterService().getDatabase(),
                 "DatabaseManager cannot be null when HidDeviceService starts");
 
-        mHandler = new HidDeviceServiceHandler();
+        mHandler = new HidDeviceServiceHandler(Looper.getMainLooper());
         mHidDeviceNativeInterface = HidDeviceNativeInterface.getInstance();
         mHidDeviceNativeInterface.init();
         mNativeAvailable = true;
@@ -778,18 +789,17 @@ public class HidDeviceService extends ProfileService {
         mActivityManager.addOnUidImportanceListener(mUidImportanceListener,
                 FOREGROUND_IMPORTANCE_CUTOFF);
         setHidDeviceService(this);
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         if (DBG) {
             Log.d(TAG, "stop()");
         }
 
         if (sHidDeviceService == null) {
             Log.w(TAG, "stop() called before start()");
-            return true;
+            return;
         }
 
         setHidDeviceService(null);
@@ -798,14 +808,6 @@ public class HidDeviceService extends ProfileService {
             mNativeAvailable = false;
         }
         mActivityManager.removeOnUidImportanceListener(mUidImportanceListener);
-        return true;
-    }
-
-    @Override
-    public boolean onUnbind(Intent intent) {
-        Log.d(TAG, "Need to unregister app");
-        unregisterApp();
-        return super.onUnbind(intent);
     }
 
     /**

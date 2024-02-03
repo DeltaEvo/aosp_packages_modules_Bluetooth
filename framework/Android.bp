@@ -25,6 +25,7 @@ java_defaults {
     defaults: ["bluetooth-module-sdk-version-defaults"],
     static_libs: [
         "PlatformProperties",
+        "bluetooth_flags_java_lib",
         "modules-utils-expresslog",
         "modules-utils-synchronous-result-receiver",
     ],
@@ -73,7 +74,6 @@ java_sdk_library {
         "//packages/modules/Bluetooth/android/pandora/server",
         "//packages/modules/Bluetooth/framework/tests/bumble",
         "//packages/modules/Bluetooth/service",
-        "//packages/modules/Connectivity/nearby/tests/multidevices/clients/test_support/fastpair_provider",
         "//packages/services/Car/car-builtin-lib",
         // TODO(240720385)
         "//packages/services/Car/tests/carservice_unit_test",
@@ -86,9 +86,17 @@ java_sdk_library {
 
     permitted_packages: [
         "android.bluetooth",
+        "com.android.bluetooth.flags",
         // Created by jarjar rules.
         "com.android.bluetooth.x",
     ],
+    errorprone: {
+        javacflags: [
+            "-Xep:InlineMeSuggester:OFF", // The @InlineMe annotation is not available
+            "-XepExcludedPaths:.*/srcjars/.*", // Exclude generated files
+        ],
+        enabled: true,
+    },
     lint: {
         strict_updatability_linting: true,
     },
@@ -113,15 +121,6 @@ java_defaults {
 filegroup {
     name: "bluetooth-jarjar-rules",
     srcs: ["jarjar-rules.txt"],
-}
-
-java_api_contribution {
-    name: "framework-bluetooth-public-stubs",
-    api_surface: "public",
-    api_file: "api/current.txt",
-    visibility: [
-        "//build/orchestrator/apis",
-    ],
 }
 
 platform_compat_config {

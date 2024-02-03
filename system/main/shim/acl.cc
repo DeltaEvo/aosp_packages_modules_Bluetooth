@@ -30,40 +30,39 @@
 #include <string>
 #include <unordered_set>
 
+#include "common/bind.h"
 #include "common/interfaces/ILoggable.h"
+#include "common/strings.h"
+#include "common/sync_map_count.h"
 #include "device/include/controller.h"
-#include "gd/common/bind.h"
-#include "gd/common/strings.h"
-#include "gd/common/sync_map_count.h"
-#include "gd/hci/acl_manager.h"
-#include "gd/hci/acl_manager/acl_connection.h"
-#include "gd/hci/acl_manager/classic_acl_connection.h"
-#include "gd/hci/acl_manager/connection_management_callbacks.h"
-#include "gd/hci/acl_manager/le_acl_connection.h"
-#include "gd/hci/acl_manager/le_connection_management_callbacks.h"
-#include "gd/hci/address.h"
-#include "gd/hci/address_with_type.h"
-#include "gd/hci/class_of_device.h"
-#include "gd/hci/controller.h"
-#include "gd/os/handler.h"
+#include "hci/acl_manager.h"
+#include "hci/acl_manager/acl_connection.h"
+#include "hci/acl_manager/classic_acl_connection.h"
+#include "hci/acl_manager/connection_management_callbacks.h"
+#include "hci/acl_manager/le_acl_connection.h"
+#include "hci/acl_manager/le_connection_management_callbacks.h"
+#include "hci/address.h"
+#include "hci/address_with_type.h"
+#include "hci/class_of_device.h"
+#include "hci/controller_interface.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/dumpsys.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
 #include "main/shim/stack.h"
+#include "os/handler.h"
 #include "osi/include/allocator.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec_cb.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/btm_log_history.h"
+#include "stack/include/main_thread.h"
 #include "stack/l2cap/l2c_int.h"
 #include "types/ble_address_with_type.h"
 #include "types/raw_address.h"
 
 extern tBTM_CB btm_cb;
-
-bt_status_t do_in_main_thread(const base::Location& from_here,
-                              base::OnceClosure task);
 
 using namespace bluetooth;
 
@@ -1385,17 +1384,6 @@ shim::legacy::Acl::Acl(os::Handler* handler,
       handler->BindOn(this, &Acl::on_incoming_acl_credits));
   shim::RegisterDumpsysFunction(static_cast<void*>(this),
                                 [this](int fd) { Dump(fd); });
-
-  GetAclManager()->HACK_SetNonAclDisconnectCallback(
-      [this](uint16_t handle, uint8_t reason) {
-        TRY_POSTING_ON_MAIN(acl_interface_.connection.sco.on_disconnected,
-                            handle, static_cast<tHCI_REASON>(reason));
-
-        // HACKCEPTION! LE ISO connections, just like SCO are not registered in
-        // GD, so ISO can use same hack to get notified about disconnections
-        TRY_POSTING_ON_MAIN(acl_interface_.connection.le.on_iso_disconnected,
-                            handle, static_cast<tHCI_REASON>(reason));
-      });
 }
 
 shim::legacy::Acl::~Acl() {
@@ -1631,11 +1619,8 @@ void shim::legacy::Acl::OnConnectRequest(hci::Address address,
                                          hci::ClassOfDevice cod) {
   const RawAddress bd_addr = ToRawAddress(address);
 
-  types::ClassOfDevice legacy_cod;
-  legacy_cod.FromOctets(cod.data());
-
   TRY_POSTING_ON_MAIN(acl_interface_.connection.classic.on_connect_request,
-                      bd_addr, legacy_cod);
+                      bd_addr, cod);
   LOG_DEBUG("Received connect request remote:%s",
             ADDRESS_TO_LOGGABLE_CSTR(address));
   BTM_LogHistory(kBtmLogTag, ToRawAddress(address), "Connection request");
@@ -1652,31 +1637,6 @@ void shim::legacy::Acl::OnConnectFail(hci::Address address,
   BTM_LogHistory(kBtmLogTag, ToRawAddress(address), "Connection failed",
                  base::StringPrintf("classic reason:%s",
                                     hci::ErrorCodeText(reason).c_str()));
-}
-
-void shim::legacy::Acl::HACK_OnEscoConnectRequest(hci::Address address,
-                                                  hci::ClassOfDevice cod) {
-  const RawAddress bd_addr = ToRawAddress(address);
-  types::ClassOfDevice legacy_cod;
-  types::ClassOfDevice::FromString(cod.ToLegacyConfigString(), legacy_cod);
-
-  TRY_POSTING_ON_MAIN(acl_interface_.connection.sco.on_esco_connect_request,
-                      bd_addr, legacy_cod);
-  LOG_DEBUG("Received ESCO connect request remote:%s",
-            ADDRESS_TO_LOGGABLE_CSTR(address));
-  BTM_LogHistory(kBtmLogTag, ToRawAddress(address), "ESCO Connection request");
-}
-
-void shim::legacy::Acl::HACK_OnScoConnectRequest(hci::Address address,
-                                                 hci::ClassOfDevice cod) {
-  const RawAddress bd_addr = ToRawAddress(address);
-  types::ClassOfDevice legacy_cod;
-  types::ClassOfDevice::FromString(cod.ToLegacyConfigString(), legacy_cod);
-
-  TRY_POSTING_ON_MAIN(acl_interface_.connection.sco.on_sco_connect_request,
-                      bd_addr, legacy_cod);
-  LOG_DEBUG("Received SCO connect request remote:%s", ADDRESS_TO_LOGGABLE_CSTR(address));
-  BTM_LogHistory(kBtmLogTag, ToRawAddress(address), "SCO Connection request");
 }
 
 void shim::legacy::Acl::OnLeConnectSuccess(

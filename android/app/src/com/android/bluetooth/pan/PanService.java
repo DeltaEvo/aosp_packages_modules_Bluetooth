@@ -28,6 +28,7 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothPan;
 import android.bluetooth.IBluetoothPanCallback;
 import android.content.AttributionSource;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources.NotFoundException;
 import android.net.TetheringInterface;
@@ -113,6 +114,10 @@ public class PanService extends ProfileService {
                 }
             };
 
+    public PanService(Context ctx) {
+        super(ctx);
+    }
+
     public static boolean isEnabled() {
         return BluetoothProperties.isProfilePanNapEnabled().orElse(false)
                 || BluetoothProperties.isProfilePanPanuEnabled().orElse(false);
@@ -143,7 +148,7 @@ public class PanService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         mAdapterService = Objects.requireNonNull(AdapterService.getAdapterService(),
                 "AdapterService cannot be null when PanService starts");
         mDatabaseManager = Objects.requireNonNull(AdapterService.getAdapterService().getDatabase(),
@@ -170,15 +175,13 @@ public class PanService extends ProfileService {
                 new HandlerExecutor(new Handler(Looper.getMainLooper())), mTetheringCallback);
         setPanService(this);
         mStarted = true;
-
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         if (!mStarted) {
             Log.w(TAG, "stop() called before start()");
-            return true;
+            return;
         }
         if (mTetheringManager != null) {
             mTetheringManager.unregisterTetheringEventCallback(mTetheringCallback);
@@ -186,7 +189,6 @@ public class PanService extends ProfileService {
         }
         mNativeInterface.cleanup();
         mHandler.removeCallbacksAndMessages(null);
-        return true;
     }
 
     @Override
@@ -215,7 +217,7 @@ public class PanService extends ProfileService {
     }
 
     private final Handler mHandler =
-            new Handler() {
+            new Handler(Looper.getMainLooper()) {
                 @Override
                 public void handleMessage(Message msg) {
                     switch (msg.what) {

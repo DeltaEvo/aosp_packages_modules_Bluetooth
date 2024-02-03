@@ -16,7 +16,6 @@ cc_library_static {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/types",
     ],
@@ -68,11 +67,9 @@ cc_library_static {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/sys",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/device/include",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/gd/hal",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/udrv/include",
     ],
     generated_headers: [
@@ -84,6 +81,7 @@ cc_library_static {
         "a2dp/a2dp_aac_encoder.cc",
         "a2dp/a2dp_api.cc",
         "a2dp/a2dp_codec_config.cc",
+        "a2dp/a2dp_ext.cc",
         "a2dp/a2dp_sbc.cc",
         "a2dp/a2dp_sbc_decoder.cc",
         "a2dp/a2dp_sbc_encoder.cc",
@@ -202,9 +200,7 @@ cc_library_static {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/bta/include",
         "packages/modules/Bluetooth/system/bta/sys",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/udrv/include",
     ],
     srcs: [
@@ -212,15 +208,12 @@ cc_library_static {
         "acl/acl.cc",
         "acl/ble_acl.cc",
         "acl/btm_acl.cc",
-        "acl/btm_ble_connection_establishment.cc",
         "acl/btm_pm.cc",
         "arbiter/acl_arbiter.cc",
-        "btm/ble_advertiser_hci_interface.cc",
         "btm/ble_scanner_hci_interface.cc",
         "btm/btm_ble.cc",
         "btm/btm_ble_addr.cc",
         "btm/btm_ble_adv_filter.cc",
-        "btm/btm_ble_batchscan.cc",
         "btm/btm_ble_bgconn.cc",
         "btm/btm_ble_cont_energy.cc",
         "btm/btm_ble_gap.cc",
@@ -260,6 +253,7 @@ cc_library_static {
         "hcic/hcicmds.cc",
         "l2cap/l2c_api.cc",
         "l2cap/l2c_ble.cc",
+        "l2cap/l2c_ble_conn_params.cc",
         "l2cap/l2c_csm.cc",
         "l2cap/l2c_fcr.cc",
         "l2cap/l2c_link.cc",
@@ -305,6 +299,7 @@ cc_library_static {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libcom.android.sysprop.bluetooth.wrapped",
+        "server_configurable_flags",
     ],
     shared_libs: [
         "libPlatformProperties",
@@ -332,7 +327,6 @@ cc_defaults {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/include",
         "packages/modules/Bluetooth/system/test/common",
         "packages/modules/Bluetooth/system/types",
@@ -450,7 +444,11 @@ cc_fuzz {
         "fuzzers/gatt_fuzzer.cc",
         "gatt/*.cc",
     ],
+    shared_libs: [
+        "server_configurable_flags",
+    ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_hci_pdl",
@@ -493,7 +491,11 @@ cc_fuzz {
         "fuzzers/smp_fuzzer.cc",
         "smp/*.cc", // add other sources files  (p256 related) under smp into this test
     ],
+    shared_libs: [
+        "server_configurable_flags",
+    ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_hci_pdl",
@@ -591,7 +593,6 @@ cc_fuzz {
         "libbt_shim_ffi",
         "libcom.android.sysprop.bluetooth.wrapped",
         "libgmock",
-        "libosi",
     ],
 }
 
@@ -660,7 +661,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         "test/gatt/gatt_api_test.cc",
@@ -676,6 +676,7 @@ cc_test {
         "libcrypto",
         "libcutils",
         "libdl",
+        "libevent",
         "libfmq",
         "libhidlbase",
         "liblog",
@@ -690,8 +691,10 @@ cc_test {
         "android.hardware.bluetooth@1.1",
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
+        "android.system.suspend-V1-ndk",
         "android.system.suspend.control-V1-ndk",
         "libFraunhoferAAC",
+        "libaudio-a2dp-hw-utils",
         "libbluetooth-dumpsys",
         "libbluetooth-types",
         "libbluetooth_core_rs",
@@ -702,6 +705,7 @@ cc_test {
         "libbt-btu-main-thread",
         "libbt-common",
         "libbt-hci",
+        "libbt-jni-thread",
         "libbt-sbc-decoder",
         "libbt-sbc-encoder",
         "libbt-stack",
@@ -746,7 +750,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/gd/hal",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMockFunctions",
@@ -831,7 +834,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/include",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMainHandler",
@@ -862,6 +864,7 @@ cc_test {
     shared_libs: [
         "libcrypto",
         "libcutils",
+        "server_configurable_flags",
     ],
     static_libs: [
         "libbluetooth-types",
@@ -936,7 +939,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMainHandler",
@@ -993,7 +995,6 @@ cc_test {
         "gatt/gatt_utils.cc",
         "test/common/mock_eatt.cc",
         "test/common/mock_gatt_layer.cc",
-        "test/common/mock_main_shim.cc",
         "test/gatt/gatt_sr_test.cc",
     ],
     shared_libs: [
@@ -1120,7 +1121,6 @@ cc_test {
         "external/libldac/inc",
         "external/libopus/include",
         "packages/modules/Bluetooth/system",
-        "packages/modules/Bluetooth/system/btif/include",
         "packages/modules/Bluetooth/system/embdrv/encoder_for_aptxhd/include",
         "packages/modules/Bluetooth/system/gd",
         "packages/modules/Bluetooth/system/stack/include",
@@ -1146,12 +1146,14 @@ cc_test {
     ],
     srcs: [
         ":TestCommonMockFunctions",
+        ":TestMockAudioHalInterface",
         ":TestMockBta",
         ":TestMockStackA2dpApi",
         "a2dp/a2dp_aac.cc",
         "a2dp/a2dp_aac_decoder.cc",
         "a2dp/a2dp_aac_encoder.cc",
         "a2dp/a2dp_codec_config.cc",
+        "a2dp/a2dp_ext.cc",
         "a2dp/a2dp_sbc.cc",
         "a2dp/a2dp_sbc_decoder.cc",
         "a2dp/a2dp_sbc_encoder.cc",
@@ -1287,7 +1289,6 @@ cc_test {
         "gatt/gatt_utils.cc",
         "test/common/mock_eatt.cc",
         "test/common/mock_gatt_layer.cc",
-        "test/common/mock_main_shim.cc",
         "test/gatt/mock_gatt_utils_ref.cc",
         "test/stack_gatt_sr_hash_test.cc",
     ],
@@ -1336,12 +1337,17 @@ cc_test {
         "include",
         "test/common",
     ],
+    generated_headers: [
+        "BluetoothGeneratedDumpsysDataSchema_h",
+    ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
     ],
     srcs: [
+        ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
+        ":TestMockMainShim",
         "btm/btm_iso.cc",
         "test/btm_iso_test.cc",
         "test/common/mock_controller.cc",
@@ -1350,9 +1356,12 @@ cc_test {
     ],
     static_libs: [
         "libbluetooth-types",
+        "libbluetooth_hci_pdl",
         "libbt-common",
+        "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libchrome",
+        "libflatbuffers-cpp",
         "libgmock",
         "liblog",
         "libosi",
@@ -1394,7 +1403,6 @@ cc_test {
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
     ],
     srcs: [
         ":TestCommonMainHandler",
@@ -1488,14 +1496,11 @@ cc_test {
         "acl/acl.cc",
         "acl/ble_acl.cc",
         "acl/btm_acl.cc",
-        "acl/btm_ble_connection_establishment.cc",
         "acl/btm_pm.cc",
-        "btm/ble_advertiser_hci_interface.cc",
         "btm/ble_scanner_hci_interface.cc",
         "btm/btm_ble.cc",
         "btm/btm_ble_addr.cc",
         "btm/btm_ble_adv_filter.cc",
-        "btm/btm_ble_batchscan.cc",
         "btm/btm_ble_bgconn.cc",
         "btm/btm_ble_cont_energy.cc",
         "btm/btm_ble_gap.cc",
@@ -1523,6 +1528,7 @@ cc_test {
         "test/btm/peer_packet_types_test.cc",
         "test/btm/sco_hci_test.cc",
         "test/btm/sco_pkt_status_test.cc",
+        "test/btm/stack_btm_dev_test.cc",
         "test/btm/stack_btm_power_mode_test.cc",
         "test/btm/stack_btm_regression_tests.cc",
         "test/btm/stack_btm_sec_test.cc",
@@ -1554,6 +1560,7 @@ cc_test {
     ],
     shared_libs: [
         "libcrypto",
+        "server_configurable_flags",
     ],
     sanitize: {
         address: true,
@@ -1807,6 +1814,7 @@ cc_test {
         "test/gatt/stack_gatt_test.cc",
     ],
     static_libs: [
+        "bluetooth_flags_c_lib",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -1817,6 +1825,7 @@ cc_test {
         "libbtdevice",
         "libchrome",
         "libevent",
+        "libflagtest",
         "libgmock",
         "liblog",
         "libosi",
@@ -1824,9 +1833,11 @@ cc_test {
         "libstatslog_bt",
     ],
     shared_libs: [
+        "libbase",
         "libbinder_ndk",
         "libcrypto",
         "libcutils",
+        "server_configurable_flags",
     ],
     target: {
         android: {
@@ -1884,6 +1895,7 @@ cc_test {
         ":TestMockStackSmp",
         "l2cap/l2c_api.cc",
         "l2cap/l2c_ble.cc",
+        "l2cap/l2c_ble_conn_params.cc",
         "l2cap/l2c_csm.cc",
         "l2cap/l2c_fcr.cc",
         "l2cap/l2c_link.cc",
@@ -1908,9 +1920,11 @@ cc_test {
         "libstatslog_bt",
     ],
     shared_libs: [
+        "libbase",
         "libbinder_ndk",
         "libcrypto",
         "libcutils",
+        "server_configurable_flags",
     ],
     target: {
         android: {
@@ -1996,8 +2010,10 @@ cc_test {
         "libstatslog_bt",
     ],
     shared_libs: [
+        "libbase",
         "libbinder_ndk",
         "libcrypto",
+        "server_configurable_flags",
     ],
     target: {
         android: {
@@ -2035,7 +2051,6 @@ cc_test {
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/device/include/",
         "packages/modules/Bluetooth/system/gd",
-        "packages/modules/Bluetooth/system/internal_include",
         "packages/modules/Bluetooth/system/stack/btm",
     ],
     srcs: [

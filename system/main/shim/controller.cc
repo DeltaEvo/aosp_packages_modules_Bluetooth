@@ -19,8 +19,9 @@
 #include "main/shim/controller.h"
 
 #include "btcore/include/module.h"
-#include "gd/hci/controller.h"
 #include "hci/controller.h"
+#include "hci/controller_interface.h"
+#include "include/check.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
 #include "main/shim/shim.h"
@@ -116,27 +117,6 @@ static const uint8_t* get_ble_supported_states(void) {
 #define MAP_TO_GD(legacy, gd) \
   static bool legacy(void) { return GetController()->gd(); }
 
-MAP_TO_GD(supports_simple_pairing, SupportsSimplePairing)
-MAP_TO_GD(supports_secure_connections, SupportsSecureConnections)
-MAP_TO_GD(supports_simultaneous_le_bredr, SupportsSimultaneousLeBrEdr)
-MAP_TO_GD(supports_interlaced_inquiry_scan, SupportsInterlacedInquiryScan)
-MAP_TO_GD(supports_rssi_with_inquiry_results, SupportsRssiWithInquiryResults)
-MAP_TO_GD(supports_extended_inquiry_response, SupportsExtendedInquiryResponse)
-MAP_TO_GD(supports_three_slot_packets, Supports3SlotPackets)
-MAP_TO_GD(supports_five_slot_packets, Supports5SlotPackets)
-MAP_TO_GD(supports_classic_2m_phy, SupportsClassic2mPhy)
-MAP_TO_GD(supports_classic_3m_phy, SupportsClassic3mPhy)
-MAP_TO_GD(supports_three_slot_edr_packets, Supports3SlotEdrPackets)
-MAP_TO_GD(supports_five_slot_edr_packets, Supports5SlotEdrPackets)
-MAP_TO_GD(supports_sco, SupportsSco)
-MAP_TO_GD(supports_hv2_packets, SupportsHv2Packets)
-MAP_TO_GD(supports_hv3_packets, SupportsHv3Packets)
-MAP_TO_GD(supports_ev3_packets, SupportsEv3Packets)
-MAP_TO_GD(supports_ev4_packets, SupportsEv4Packets)
-MAP_TO_GD(supports_ev5_packets, SupportsEv5Packets)
-MAP_TO_GD(supports_esco_2m_phy, SupportsEsco2mPhy)
-MAP_TO_GD(supports_esco_3m_phy, SupportsEsco3mPhy)
-MAP_TO_GD(supports_three_slot_esco_edr_packets, Supports3SlotEscoEdrPackets)
 MAP_TO_GD(supports_role_switch, SupportsRoleSwitch)
 MAP_TO_GD(supports_hold_mode, SupportsHoldMode)
 MAP_TO_GD(supports_sniff_mode, SupportsSniffMode)
@@ -156,8 +136,6 @@ MAP_TO_GD(supports_extended_advertising, SupportsBleExtendedAdvertising)
 MAP_TO_GD(supports_periodic_advertising, SupportsBlePeriodicAdvertising)
 MAP_TO_GD(supports_peripheral_initiated_feature_exchange,
           SupportsBlePeripheralInitiatedFeaturesExchange)
-MAP_TO_GD(supports_connection_parameter_request,
-          SupportsBleConnectionParametersRequest)
 
 MAP_TO_GD(supports_periodic_advertising_sync_transfer_sender,
           SupportsBlePeriodicAdvertisingSyncTransferSender)
@@ -187,10 +165,6 @@ FORWARD(supports_set_min_encryption_key_size,
 FORWARD(supports_read_encryption_key_size,
         GetController()->IsSupported(
             bluetooth::hci::OpCode::READ_ENCRYPTION_KEY_SIZE))
-
-FORWARD(supports_reading_remote_extended_features,
-        GetController()->IsSupported(
-            bluetooth::hci::OpCode::READ_REMOTE_EXTENDED_FEATURES))
 
 FORWARD(supports_enhanced_setup_synchronous_connection,
         GetController()->IsSupported(
@@ -328,72 +302,46 @@ static const controller_t interface = {
 
     .get_ble_supported_states = get_ble_supported_states,
 
-    .supports_simple_pairing = supports_simple_pairing,
-    .supports_secure_connections = supports_secure_connections,
-    .supports_simultaneous_le_bredr = supports_simultaneous_le_bredr,
-    .supports_reading_remote_extended_features =
-        supports_reading_remote_extended_features,
-    .supports_interlaced_inquiry_scan = supports_interlaced_inquiry_scan,
-    .supports_rssi_with_inquiry_results = supports_rssi_with_inquiry_results,
-    .supports_extended_inquiry_response = supports_extended_inquiry_response,
-    .supports_central_peripheral_role_switch = supports_role_switch,
     .supports_enhanced_setup_synchronous_connection =
         supports_enhanced_setup_synchronous_connection,
     .supports_enhanced_accept_synchronous_connection =
         supports_enhanced_accept_synchronous_connection,
-    .supports_3_slot_packets = supports_three_slot_packets,
-    .supports_5_slot_packets = supports_five_slot_packets,
-    .supports_classic_2m_phy = supports_classic_2m_phy,
-    .supports_classic_3m_phy = supports_classic_3m_phy,
-    .supports_3_slot_edr_packets = supports_three_slot_edr_packets,
-    .supports_5_slot_edr_packets = supports_five_slot_edr_packets,
-    .supports_sco = supports_sco,
-    .supports_hv2_packets = supports_hv2_packets,
-    .supports_hv3_packets = supports_hv3_packets,
-    .supports_ev3_packets = supports_ev3_packets,
-    .supports_ev4_packets = supports_ev4_packets,
-    .supports_ev5_packets = supports_ev5_packets,
-    .supports_esco_2m_phy = supports_esco_2m_phy,
-    .supports_esco_3m_phy = supports_esco_3m_phy,
-    .supports_3_slot_esco_edr_packets = supports_three_slot_esco_edr_packets,
-    .supports_role_switch = supports_role_switch,
-    .supports_hold_mode = supports_hold_mode,
-    .supports_sniff_mode = supports_sniff_mode,
-    .supports_park_mode = supports_park_mode,
-    .supports_non_flushable_pb = supports_non_flushable_pb,
-    .supports_sniff_subrating = supports_sniff_subrating,
-    .supports_encryption_pause = supports_encryption_pause,
+    .SupportsRoleSwitch = supports_role_switch,
+    .SupportsHoldMode = supports_hold_mode,
+    .SupportsSniffMode = supports_sniff_mode,
+    .SupportsParkMode = supports_park_mode,
+    .SupportsNonFlushablePb = supports_non_flushable_pb,
+    .SupportsSniffSubrating = supports_sniff_subrating,
+    .SupportsEncryptionPause = supports_encryption_pause,
     .supports_configure_data_path = supports_configure_data_path,
     .supports_set_min_encryption_key_size =
         supports_set_min_encryption_key_size,
     .supports_read_encryption_key_size = supports_read_encryption_key_size,
 
-    .supports_ble = supports_ble,
-    .supports_ble_packet_extension = supports_packet_extension,
-    .supports_ble_connection_parameters_request =
+    .SupportsBle = supports_ble,
+    .SupportsBleDataPacketLengthExtension = supports_packet_extension,
+    .SupportsBleConnectionParametersRequest =
         supports_connection_parameters_request,
-    .supports_ble_privacy = supports_privacy,
+    .SupportsBlePrivacy = supports_privacy,
     .supports_ble_set_privacy_mode = supports_ble_set_privacy_mode,
-    .supports_ble_2m_phy = supports_ble_2m_phy,
-    .supports_ble_coded_phy = supports_ble_coded_phy,
-    .supports_ble_extended_advertising = supports_extended_advertising,
-    .supports_ble_periodic_advertising = supports_periodic_advertising,
-    .supports_ble_peripheral_initiated_feature_exchange =
+    .SupportsBle2mPhy = supports_ble_2m_phy,
+    .SupportsBleCodedPhy = supports_ble_coded_phy,
+    .SupportsBleExtendedAdvertising = supports_extended_advertising,
+    .SupportsBlePeriodicAdvertising = supports_periodic_advertising,
+    .SupportsBlePeripheralInitiatedFeaturesExchange =
         supports_peripheral_initiated_feature_exchange,
-    .supports_ble_connection_parameter_request =
-        supports_connection_parameter_request,
-    .supports_ble_periodic_advertising_sync_transfer_sender =
+    .SupportsBlePeriodicAdvertisingSyncTransferSender =
         supports_periodic_advertising_sync_transfer_sender,
-    .supports_ble_periodic_advertising_sync_transfer_recipient =
+    .SupportsBlePeriodicAdvertisingSyncTransferRecipient =
         supports_periodic_advertising_sync_transfer_recipient,
-    .supports_ble_connected_isochronous_stream_central =
+    .SupportsBleConnectedIsochronousStreamCentral =
         supports_connected_iso_stream_central,
-    .supports_ble_connected_isochronous_stream_peripheral =
+    .SupportsBleConnectedIsochronousStreamPeripheral =
         supports_connected_iso_stream_peripheral,
-    .supports_ble_isochronous_broadcaster = supports_iso_broadcaster,
-    .supports_ble_synchronized_receiver = supports_synchronized_receiver,
-    .supports_ble_connection_subrating = supports_ble_connection_subrating,
-    .supports_ble_connection_subrating_host =
+    .SupportsBleIsochronousBroadcaster = supports_iso_broadcaster,
+    .SupportsBleSynchronizedReceiver = supports_synchronized_receiver,
+    .SupportsBleConnectionSubrating = supports_ble_connection_subrating,
+    .SupportsBleConnectionSubratingHost =
         supports_ble_connection_subrating_host,
 
     .get_acl_data_size_classic = get_acl_buffer_length,

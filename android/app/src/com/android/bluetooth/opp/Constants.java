@@ -1,37 +1,23 @@
 /*
- * Copyright (c) 2008-2009, Motorola, Inc.
+ * Copyright (C) 2024 The Android Open Source Project
  *
- * All rights reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * - Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * - Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * - Neither the name of the Motorola, Inc. nor the names of its contributors
- * may be used to endorse or promote products derived from this software
- * without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.android.bluetooth.opp;
 
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -39,14 +25,15 @@ import android.net.Uri;
 import android.util.Log;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.BluetoothStatsLog;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
 import com.android.obex.HeaderSet;
 
 import java.io.IOException;
 import java.util.regex.Pattern;
 
-/**
- * Bluetooth OPP internal constant definitions
- */
+/** Bluetooth OPP internal constant definitions */
+// Next tag value for ContentProfileErrorReportUtils.report(): 1
 public class Constants {
     /** Tag used for debugging/logging */
     public static final String TAG = "BluetoothOpp";
@@ -70,18 +57,17 @@ public class Constants {
     /** the intent that gets sent when clicking a inbound transfer notification */
     static final String ACTION_OPEN_INBOUND_TRANSFER = "android.btopp.intent.action.OPEN_INBOUND";
 
-    /** the intent that gets sent from the Settings app to show the received files */
-    static final String ACTION_OPEN_RECEIVED_FILES =
-            "android.btopp.intent.action.OPEN_RECEIVED_FILES";
-
     /** the intent that acceptlists a remote bluetooth device for auto-receive confirmation (NFC) */
     static final String ACTION_ACCEPTLIST_DEVICE = "android.btopp.intent.action.ACCEPTLIST_DEVICE";
 
     /** the intent that can be sent by handover requesters to stop a BTOPP transfer */
     static final String ACTION_STOP_HANDOVER = "android.btopp.intent.action.STOP_HANDOVER_TRANSFER";
 
-    /** the intent extra to show all received files in the transfer history */
-    static final String EXTRA_SHOW_ALL_FILES = "android.btopp.intent.extra.SHOW_ALL";
+    /**
+     * the intent extra to show the direction of a transfer. Value should be one of {@link
+     * BluetoothShare#DIRECTION_INBOUND} or {@link BluetoothShare#DIRECTION_OUTBOUND}
+     */
+    static final String EXTRA_DIRECTION = "android.btopp.intent.extra.DIRECTION";
 
     /** the intent that gets sent when clicking an incomplete/failed transfer */
     static final String ACTION_LIST = "android.btopp.intent.action.LIST";
@@ -156,10 +142,20 @@ public class Constants {
     static final String ACTION_DECLINE = "android.btopp.intent.action.DECLINE";
 
     /**
-     * the intent that gets sent when deleting the notifications of outbound and
-     * inbound completed transfer
+     * The intent that gets sent when deleting the notifications of outbound and inbound completed
+     * transfer.
      */
+    // TODO(b/323096132): Remove this variable when the flag
+    //                    opp_fix_multiple_notifications_issues is ramped up.
     static final String ACTION_COMPLETE_HIDE = "android.btopp.intent.action.HIDE_COMPLETE";
+
+    /** The intent that gets sent when deleting the notifications of completed inbound transfer. */
+    static final String ACTION_HIDE_COMPLETED_INBOUND_TRANSFER =
+            "android.btopp.intent.action.HIDE_COMPLETED_INBOUND_TRANSFER";
+
+    /** The intent that gets sent when deleting the notifications of completed outbound transfer. */
+    static final String ACTION_HIDE_COMPLETED_OUTBOUND_TRANSFER =
+            "android.btopp.intent.action.HIDE_COMPLETED_OUTBOUND_TRANSFER";
 
     /** the intent that gets sent when clicking a incoming file confirm notification */
     static final String ACTION_INCOMING_FILE_CONFIRM = "android.btopp.intent.action.CONFIRM";
@@ -280,6 +276,11 @@ public class Constants {
             Log.v(TAG, "OBJECT_CLASS : " + hs.getHeader(HeaderSet.OBJECT_CLASS));
             Log.v(TAG, "APPLICATION_PARAMETER : " + hs.getHeader(HeaderSet.APPLICATION_PARAMETER));
         } catch (IOException e) {
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.OPP,
+                    BluetoothProtoEnums.BLUETOOTH_OPP_CONSTANTS,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    0);
             Log.e(TAG, "dump HeaderSet error " + e);
         }
     }

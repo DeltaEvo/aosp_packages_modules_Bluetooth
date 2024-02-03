@@ -29,6 +29,7 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.IBluetoothHidHost;
 import android.content.AttributionSource;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
@@ -87,7 +88,8 @@ public class HidHostService extends ProfileService {
     private static final int MESSAGE_ON_GET_IDLE_TIME = 15;
     private static final int MESSAGE_SET_IDLE_TIME = 16;
 
-    HidHostService() {
+    public HidHostService(Context ctx) {
+        super(ctx);
         mNativeInterface = requireNonNull(HidHostNativeInterface.getInstance());
     }
 
@@ -101,7 +103,7 @@ public class HidHostService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         mDatabaseManager =
                 requireNonNull(
                         AdapterService.getAdapterService().getDatabase(),
@@ -115,15 +117,13 @@ public class HidHostService extends ProfileService {
         mNativeInterface.init(this);
         mNativeAvailable = true;
         setHidHostService(this);
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         if (DBG) {
             Log.d(TAG, "Stopping Bluetooth HidHostService");
         }
-        return true;
     }
 
     @Override

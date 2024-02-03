@@ -44,15 +44,6 @@ struct BTA_sys_signal_hw_error {
 };
 extern struct BTA_sys_signal_hw_error BTA_sys_signal_hw_error;
 
-// Name: bta_set_forward_hw_failures
-// Params: bool value
-// Return: void
-struct bta_set_forward_hw_failures {
-  std::function<void(bool value)> body{[](bool value) {}};
-  void operator()(bool value) { body(value); };
-};
-extern struct bta_set_forward_hw_failures bta_set_forward_hw_failures;
-
 // Name: bta_sys_deregister
 // Params: uint8_t id
 // Return: void
@@ -111,12 +102,12 @@ struct bta_sys_sendmsg {
 extern struct bta_sys_sendmsg bta_sys_sendmsg;
 
 // Name: bta_sys_sendmsg_delayed
-// Params: void* p_msg, const base::TimeDelta& delay
+// Params: void* p_msg, std::chrono::microseconds delay
 // Return: void
 struct bta_sys_sendmsg_delayed {
-  std::function<void(void* p_msg, const base::TimeDelta& delay)> body{
-      [](void* p_msg, const base::TimeDelta& delay) {}};
-  void operator()(void* p_msg, const base::TimeDelta& delay) {
+  std::function<void(void* p_msg, std::chrono::microseconds delay)> body{
+      [](void* p_msg, std::chrono::microseconds delay) {}};
+  void operator()(void* p_msg, std::chrono::microseconds delay) {
     body(p_msg, delay);
   };
 };

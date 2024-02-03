@@ -433,9 +433,6 @@
 /* Multi adv opcode */
 #define HCI_BLE_MULTI_ADV (0x0154 | HCI_GRP_VENDOR_SPECIFIC)
 
-/* Batch scan opcode */
-#define HCI_BLE_BATCH_SCAN (0x0156 | HCI_GRP_VENDOR_SPECIFIC)
-
 /* ADV filter opcode */
 #define HCI_BLE_ADV_FILTER (0x0157 | HCI_GRP_VENDOR_SPECIFIC)
 
@@ -916,6 +913,9 @@ typedef struct {
 // TODO Remove this once all UNISOC specific hacks are removed.
 #define LMP_COMPID_UNISOC 0x073F
 
+// TODO Remove this once all Mediatek specific hacks are removed.
+#define LMP_COMPID_MEDIATEK 0x0046
+
 /* Parameter information for HCI_SYNA_SET_ACL_PRIORITY */
 #define HCI_SYNA_ACL_PRIORITY_PARAM_SIZE 3
 #define HCI_SYNA_ACL_NORMAL_PRIORITY 0xF0
@@ -928,6 +928,12 @@ typedef struct {
 #define HCI_UNISOC_SET_ACL_PRIORITY (0x0057 | HCI_GRP_VENDOR_SPECIFIC)
 #define HCI_UNISOC_ACL_NORMAL_PRIORITY 0x00
 #define HCI_UNISOC_ACL_HIGH_PRIORITY 0xFF
+
+/* Parameter information for HCI_MTK_SET_ACL_PRIORITY */
+#define HCI_MTK_ACL_PRIORITY_PARAM_SIZE 1
+#define HCI_MTK_SET_ACL_PRIORITY (0xFD95 | HCI_GRP_VENDOR_SPECIFIC)
+#define HCI_MTK_ACL_NORMAL_PRIORITY 0x00
+#define HCI_MTK_ACL_HIGH_PRIORITY 0x01
 
 /*
  * Define packet size

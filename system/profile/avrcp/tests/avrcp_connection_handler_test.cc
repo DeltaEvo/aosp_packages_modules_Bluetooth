@@ -19,6 +19,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "sdpdefs.h"
 #include "avrcp_internal.h"
 #include "avrcp_test_helper.h"
 #include "connection_handler.h"
@@ -63,7 +64,7 @@ class AvrcpConnectionHandlerTest : public testing::Test {
     fake_features = {
         .p_next_attr = nullptr,
         .attr_id = 0,
-        .attr_len_type = 0,
+        .attr_len_type = (UINT_DESC_TYPE<<12) | 2,
         .attr_value = {.v = {.u16 = 0}},
     };
 
@@ -105,8 +106,8 @@ TEST_F(AvrcpConnectionHandlerTest, initializeTest) {
       .WillOnce(
           DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -129,8 +130,8 @@ TEST_F(AvrcpConnectionHandlerTest, notConnectedDisconnectTest) {
           DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -153,8 +154,8 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectAfterCleanupTest) {
           DoAll(SetArgPointee<0>(1), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -182,8 +183,8 @@ TEST_F(AvrcpConnectionHandlerTest, remoteDeviceConnectionTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -228,8 +229,8 @@ TEST_F(AvrcpConnectionHandlerTest, noAbsoluteVolumeTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -266,8 +267,8 @@ TEST_F(AvrcpConnectionHandlerTest, absoluteVolumeTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
 
   StrictMock<MockVolumeInterface> strict_volume;
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
@@ -300,8 +301,8 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectTest) {
       .WillOnce(DoAll(SetArgPointee<0>(2), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -338,8 +339,8 @@ TEST_F(AvrcpConnectionHandlerTest, multipleRemoteDeviceConnectionTest) {
           DoAll(SetArgPointee<0>(3), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -397,8 +398,8 @@ TEST_F(AvrcpConnectionHandlerTest, cleanupTest) {
           DoAll(SetArgPointee<0>(3), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -419,8 +420,8 @@ TEST_F(AvrcpConnectionHandlerTest, cleanupTest) {
 
 TEST_F(AvrcpConnectionHandlerTest, connectToRemoteDeviceTest) {
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -464,8 +465,8 @@ TEST_F(AvrcpConnectionHandlerTest, connectToRemoteDeviceTest) {
 
 TEST_F(AvrcpConnectionHandlerTest, connectToBrowsableRemoteDeviceTest) {
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -518,8 +519,8 @@ TEST_F(AvrcpConnectionHandlerTest, disconnectWhileDoingSdpTest) {
       .WillOnce(DoAll(SetArgPointee<0>(2), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -556,8 +557,8 @@ TEST_F(AvrcpConnectionHandlerTest, connectionCollisionTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();
@@ -611,8 +612,8 @@ TEST_F(AvrcpConnectionHandlerTest, acceptorSdpSearchFailTest) {
           DoAll(SetArgPointee<0>(2), SaveArgPointee<1>(&conn_cb), Return(0)));
 
   // Initialize the interface
-  auto bound_callback = base::Bind(&MockFunction<void(device_ptr)>::Call,
-                                   base::Unretained(&device_cb));
+  auto bound_callback = base::BindRepeating(
+      &MockFunction<void(device_ptr)>::Call, base::Unretained(&device_cb));
   ASSERT_TRUE(ConnectionHandler::Initialize(bound_callback, &mock_avrcp_,
                                             &mock_sdp_, &mock_volume_));
   connection_handler_ = ConnectionHandler::Get();

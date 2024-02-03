@@ -39,21 +39,25 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/include/bta_pan_api.h"
 #include "btif/include/btif_common.h"
 #include "btif/include/btif_pan_internal.h"
 #include "btif/include/btif_sock_thread.h"
 #include "device/include/controller.h"
+#include "include/check.h"
 #include "include/hardware/bt_pan.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/compat.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/main_thread.h"
 #include "stack/include/pan_api.h"
 #include "types/raw_address.h"
+
+#ifdef __ANDROID__
+#include <android/sysprop/BluetoothProperties.sysprop.h>
+#endif
 
 #define FORWARD_IGNORE 1
 #define FORWARD_SUCCESS 0
@@ -119,9 +123,12 @@ void btif_pan_init() {
     btpan_cb.enabled = 1;
 
     int role = BTPAN_ROLE_NONE;
-    if (GET_SYSPROP(Pan, nap, true)) {
+#ifdef __ANDROID__
+    if (android::sysprop::BluetoothProperties::isProfilePanNapEnabled()
+            .value_or(false)) {
       role |= BTPAN_ROLE_PANNAP;
     }
+#endif
     role |= BTPAN_ROLE_PANU;
     btpan_enable(role);
   }
@@ -203,6 +210,7 @@ static bt_status_t btpan_connect(const RawAddress* bd_addr, int local_role,
   return BT_STATUS_SUCCESS;
 }
 
+constexpr uint16_t BTIF_PAN_CB_DISCONNECTING = 0x8401;
 static void btif_in_pan_generic_evt(uint16_t event, char* p_param) {
   LOG_VERBOSE("%s: event=%d", __func__, event);
   switch (event) {
@@ -383,7 +391,7 @@ int btpan_tap_open() {
 
 int btpan_tap_send(int tap_fd, const RawAddress& src, const RawAddress& dst,
                    uint16_t proto, const char* buf, uint16_t len,
-                   UNUSED_ATTR bool ext, UNUSED_ATTR bool forward) {
+                   bool /* ext */, bool /* forward */) {
   if (tap_fd != INVALID_FD) {
     tETH_HDR eth_hdr;
     eth_hdr.h_dest = dst;

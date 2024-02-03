@@ -187,7 +187,7 @@ class TestAclManager : public AclManager {
 class LeAdvertisingManagerTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    test_hci_layer_ = new TestHciLayer;  // Ownership is transferred to registry
+    test_hci_layer_ = new HciLayerFake;  // Ownership is transferred to registry
     test_controller_ = new TestController;
     test_acl_manager_ = new TestAclManager;
     test_controller_->AddSupported(param_opcode_);
@@ -210,7 +210,7 @@ class LeAdvertisingManagerTest : public ::testing::Test {
   }
 
   TestModuleRegistry fake_registry_;
-  TestHciLayer* test_hci_layer_ = nullptr;
+  HciLayerFake* test_hci_layer_ = nullptr;
   TestController* test_controller_ = nullptr;
   TestAclManager* test_acl_manager_ = nullptr;
   os::Thread& thread_ = fake_registry_.GetTestThread();
@@ -1717,6 +1717,47 @@ TEST_F(LeExtendedAdvertisingAPITest, trigger_advertiser_callbacks_if_started_whi
   sync_client_handler();
 }
 
+TEST_F(LeExtendedAdvertisingAPITest, duration_maxevents_restored_on_resume) {
+  // arrange
+  auto test_le_address_manager = (TestLeAddressManager*)test_acl_manager_->GetLeAddressManager();
+  uint16_t duration = 1000;
+  uint8_t max_extended_advertising_events = 100;
+
+  // enable advertiser
+  le_advertising_manager_->EnableAdvertiser(
+      advertiser_id_, true, duration, max_extended_advertising_events);
+  ASSERT_EQ(OpCode::LE_SET_EXTENDED_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
+  EXPECT_CALL(
+      mock_advertising_callback_,
+      OnAdvertisingEnabled(advertiser_id_, true, AdvertisingCallback::AdvertisingStatus::SUCCESS));
+  test_hci_layer_->IncomingEvent(
+      LeSetExtendedAdvertisingEnableCompleteBuilder::Create(uint8_t{1}, ErrorCode::SUCCESS));
+
+  test_le_address_manager->client_->OnPause();
+  // verify advertising is disabled onPause
+  ASSERT_EQ(OpCode::LE_SET_EXTENDED_ADVERTISING_ENABLE, test_hci_layer_->GetCommand().GetOpCode());
+  test_hci_layer_->IncomingEvent(
+      LeSetExtendedAdvertisingEnableCompleteBuilder::Create(1, ErrorCode::SUCCESS));
+  sync_client_handler();
+
+  test_le_address_manager->client_->OnResume();
+  // verify advertising is reenabled onResume with correct parameters
+  auto command = test_hci_layer_->GetCommand();
+  ASSERT_EQ(OpCode::LE_SET_EXTENDED_ADVERTISING_ENABLE, command.GetOpCode());
+  auto enable_command_view =
+      LeSetExtendedAdvertisingEnableView::Create(LeAdvertisingCommandView::Create(command));
+  ASSERT_TRUE(enable_command_view.IsValid());
+  ASSERT_EQ(bluetooth::hci::Enable::ENABLED, enable_command_view.GetEnable());
+  auto enabled_sets = enable_command_view.GetEnabledSets();
+  ASSERT_EQ(static_cast<uint8_t>(1), enabled_sets.size());
+  ASSERT_EQ(duration, enabled_sets[0].duration_);
+  ASSERT_EQ(max_extended_advertising_events, enabled_sets[0].max_extended_advertising_events_);
+  test_hci_layer_->IncomingEvent(
+      LeSetExtendedAdvertisingEnableCompleteBuilder::Create(1, ErrorCode::SUCCESS));
+
+  sync_client_handler();
+}
+
 TEST_F(LeExtendedAdvertisingAPITest, no_callbacks_on_pause) {
   // arrange
   auto test_le_address_manager = (TestLeAddressManager*)test_acl_manager_->GetLeAddressManager();
@@ -1831,6 +1872,79 @@ TEST_F(LeExtendedAdvertisingManagerTest, use_public_address_type_if_public_addre
       AdvertisingConfig{
           .requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM,
           .channel_map = 1,
+      },
+      scan_callback,
+      set_terminated_callback,
+      0,
+      0,
+      client_handler_);
+  auto command = LeAdvertisingCommandView::Create(test_hci_layer_->GetCommand());
+
+  // assert
+  ASSERT_TRUE(command.IsValid());
+  EXPECT_EQ(command.GetOpCode(), OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS);
+
+  auto set_parameters_command =
+      LeSetExtendedAdvertisingParametersView::Create(LeAdvertisingCommandView::Create(command));
+  ASSERT_TRUE(set_parameters_command.IsValid());
+  EXPECT_EQ(set_parameters_command.GetOwnAddressType(), OwnAddressType::PUBLIC_DEVICE_ADDRESS);
+}
+
+TEST_F_WITH_FLAGS(
+    LeExtendedAdvertisingManagerTest,
+    use_nrpa_if_public_address_policy_non_connectable,
+    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, nrpa_non_connectable_adv))) {
+  // arrange: use PUBLIC address policy
+  test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS);
+
+  // act: start non-connectable advertising set with RPA
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      kAdvertiserClientIdJni,
+      0x00,
+      AdvertisingConfig{
+          .requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM,
+          .channel_map = 1,
+          .connectable = false,
+      },
+      scan_callback,
+      set_terminated_callback,
+      0,
+      0,
+      client_handler_);
+  ASSERT_EQ(
+      test_hci_layer_->GetCommand().GetOpCode(), OpCode::LE_SET_EXTENDED_ADVERTISING_PARAMETERS);
+  test_hci_layer_->IncomingEvent(LeSetExtendedAdvertisingParametersCompleteBuilder::Create(
+      uint8_t{1}, ErrorCode::SUCCESS, static_cast<uint8_t>(-23)));
+
+  auto command = LeAdvertisingCommandView::Create(test_hci_layer_->GetCommand());
+  ASSERT_TRUE(command.IsValid());
+  ASSERT_EQ(command.GetOpCode(), OpCode::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS);
+
+  auto set_address_command =
+      LeSetAdvertisingSetRandomAddressView::Create(LeAdvertisingCommandView::Create(command));
+  ASSERT_TRUE(set_address_command.IsValid());
+  EXPECT_EQ(set_address_command.GetOpCode(), OpCode::LE_SET_ADVERTISING_SET_RANDOM_ADDRESS);
+
+  // checking that it is an NRPA (first two bits = 0b00)
+  Address address = set_address_command.GetRandomAddress();
+  EXPECT_EQ(address.data()[5] >> 6, 0b00);
+}
+
+TEST_F_WITH_FLAGS(
+    LeExtendedAdvertisingManagerTest,
+    use_public_if_requested_with_public_address_policy_non_connectable,
+    REQUIRES_FLAGS_ENABLED(ACONFIG_FLAG(TEST_BT, nrpa_non_connectable_adv))) {
+  // arrange: use PUBLIC address policy
+  test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS);
+
+  // act: start non-connectable advertising set with PUBLIC
+  le_advertising_manager_->ExtendedCreateAdvertiser(
+      kAdvertiserClientIdJni,
+      0x00,
+      AdvertisingConfig{
+          .requested_advertiser_address_type = AdvertiserAddressType::PUBLIC,
+          .channel_map = 1,
+          .connectable = false,
       },
       scan_callback,
       set_terminated_callback,

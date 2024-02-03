@@ -27,32 +27,19 @@
 #include <base/strings/stringprintf.h>
 
 #include <string>
+#include <vector>
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/include/bta_api.h"
 #include "bta/include/bta_sec_api.h"
 #include "bta/sys/bta_sys.h"
-#include "stack/btm/neighbor_inquiry.h"
-#include "stack/include/sdp_status.h"
-#include "stack/sdp/sdp_discovery_db.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
+#include "macros.h"
 #include "types/raw_address.h"
-
-#ifndef CASE_RETURN_TEXT
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-#endif
 
 /*****************************************************************************
  *  Constants and data types
  ****************************************************************************/
-
-#define BTA_COPY_DEVICE_CLASS(coddst, codsrc)          \
-  {                                                    \
-    ((uint8_t*)(coddst))[0] = ((uint8_t*)(codsrc))[0]; \
-    ((uint8_t*)(coddst))[1] = ((uint8_t*)(codsrc))[1]; \
-    ((uint8_t*)(coddst))[2] = ((uint8_t*)(codsrc))[2]; \
-  }
 
 #define BTA_DM_MSG_LEN 50
 
@@ -236,8 +223,6 @@ typedef struct {
 
   alarm_t* switch_delay_timer;
 } tBTA_DM_CB;
-
-#undef CASE_RETURN_TEXT
 
 /* DI control block */
 typedef struct {

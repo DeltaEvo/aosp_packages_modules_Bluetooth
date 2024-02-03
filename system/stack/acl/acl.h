@@ -18,8 +18,10 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
-#include "bt_target.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
 #include "stack/acl/peer_packet_types.h"
 #include "stack/btm/power_mode.h"
 #include "stack/include/btm_status.h"
@@ -302,8 +304,6 @@ struct tACL_CONN {
     return is_switch_role_switching() || is_switch_role_in_progress();
   }
 
-  friend void DumpsysL2cap(int fd);
-
  public:
   uint8_t sca; /* Sleep clock accuracy */
 
@@ -324,7 +324,6 @@ struct tACL_CB {
   friend void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
                                      uint8_t encr_enable);
 
-  friend void DumpsysL2cap(int fd);
   friend void DumpsysAcl(int fd);
   friend struct StackAclBtmAcl;
 
@@ -361,3 +360,6 @@ struct tACL_CB {
 };
 
 tACL_CONN* btm_acl_for_bda(const RawAddress& bd_addr, tBT_TRANSPORT transport);
+
+void btm_acl_encrypt_change(uint16_t handle, uint8_t status,
+                            uint8_t encr_enable);

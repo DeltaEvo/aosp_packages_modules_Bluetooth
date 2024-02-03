@@ -33,19 +33,23 @@
 #include "bta_gatt_api.h"
 #include "bta_gatt_queue.h"
 #include "bta_groups.h"
+#include "bta_le_audio_uuids.h"
 #include "bta_sec_api.h"
-#include "btif_storage.h"
+#include "btif/include/btif_storage.h"
+#include "common/init_flags.h"
 #include "crypto_toolbox/crypto_toolbox.h"
 #include "csis_types.h"
 #include "gap_api.h"
 #include "gatt_api.h"
-#include "gd/common/init_flags.h"
+#include "include/check.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
 #include "main/shim/le_scanning_manager.h"
 #include "osi/include/osi.h"
 #include "osi/include/stack_power_telemetry.h"
-#include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/gatt/gatt_int.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_sec_api.h"
 
 using base::Closure;
@@ -664,6 +668,7 @@ class CsisClientImpl : public CsisClient {
       devices_.push_back(device);
     }
 
+    bool is_le_audio_device = false;
     for (const auto& csis_group : csis_groups_) {
       if (!csis_group->IsDeviceInTheGroup(device)) continue;
 
@@ -677,11 +682,20 @@ class CsisClientImpl : public CsisClient {
         callbacks_->OnDeviceAvailable(device->addr, group_id,
                                       csis_group->GetDesiredSize(), rank,
                                       csis_group->GetUuid());
+
+        if (csis_group->GetUuid() ==
+            bluetooth::Uuid::From16Bit(UUID_COMMON_AUDIO_SERVICE)) {
+          is_le_audio_device = true;
+        }
       }
     }
 
+    /* For now, if this is LeAudio device, CSIP is opportunistic profile. */
+    bool is_opportunistic = is_le_audio_device;
+
     if (autoconnect) {
-      BTA_GATTC_Open(gatt_if_, addr, BTM_BLE_BKG_CONNECT_ALLOW_LIST, false);
+      BTA_GATTC_Open(gatt_if_, addr, BTM_BLE_BKG_CONNECT_ALLOW_LIST,
+                     is_opportunistic);
     }
   }
 
@@ -695,6 +709,7 @@ class CsisClientImpl : public CsisClient {
     }
 
     devices_.clear();
+    csis_groups_.clear();
 
     CsisObserverSetBackground(false);
     dev_groups_->CleanUp(device_group_callbacks);
@@ -887,7 +902,15 @@ class CsisClientImpl : public CsisClient {
         auto g = FindCsisGroup(group_id_to_discover);
         LOG_DEBUG("Group size  %d  target size %d", g->GetDesiredSize(),
                   g->GetCurrentSize());
-        if (g->GetDesiredSize() > g->GetCurrentSize()) {
+
+        auto dev_waiting_for_bonding_cnt =
+            GetNumOfKnownExpectedDevicesWaitingForBonding(g->GetGroupId());
+        LOG_DEBUG("Group size: %d, desired size: %d, waiting for bonding: %d",
+                  g->GetCurrentSize(), g->GetDesiredSize(),
+                  dev_waiting_for_bonding_cnt);
+
+        if (g->GetDesiredSize() >
+            g->GetCurrentSize() + dev_waiting_for_bonding_cnt) {
           CsisActiveDiscovery(g);
         }
       }
@@ -1287,6 +1310,14 @@ class CsisClientImpl : public CsisClient {
     }
 
     return std::move(devices);
+  }
+
+  int GetNumOfKnownExpectedDevicesWaitingForBonding(int group_id) {
+    return std::count_if(
+        devices_.begin(), devices_.end(), [group_id](const auto& device) {
+          return device->GetExpectedGroupIdMember() == group_id &&
+                 !device->GetCsisInstanceByGroupId(group_id);
+        });
   }
 
   void CacheAndAdvertiseExpectedMember(const RawAddress& address,
@@ -1950,7 +1981,15 @@ class CsisClientImpl : public CsisClient {
 
     int result = BTM_SetEncryption(device->addr, BT_TRANSPORT_LE, nullptr,
                                    nullptr, BTM_BLE_SEC_ENCRYPT);
-    LOG_INFO("Encryption required. Request result: 0x%02x", result);
+
+    LOG_INFO("Encryption required for %s. Request result: 0x%02x",
+             ADDRESS_TO_LOGGABLE_CSTR(device->addr), result);
+
+    if (result == BTM_ERR_KEY_MISSING) {
+      LOG_ERROR("Link key unknown for %s, disconnect profile",
+                ADDRESS_TO_LOGGABLE_CSTR(device->addr));
+      BTA_GATTC_Close(device->conn_id);
+    }
   }
 
   void OnGattDisconnected(const tBTA_GATTC_CLOSE& evt) {

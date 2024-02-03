@@ -100,10 +100,6 @@ public class AdapterNativeInterface {
         return getAdapterPropertyNative(type);
     }
 
-    boolean setAdapterProperty(int type) {
-        return setAdapterPropertyNative(type);
-    }
-
     boolean setDeviceProperty(byte[] address, int type, byte[] val) {
         return setDevicePropertyNative(address, type, val);
     }
@@ -126,6 +122,10 @@ public class AdapterNativeInterface {
 
     boolean cancelBond(byte[] address) {
         return cancelBondNative(address);
+    }
+
+    boolean pairingIsBusy() {
+        return pairingIsBusyNative();
     }
 
     void generateLocalOobData(int transport) {
@@ -276,8 +276,6 @@ public class AdapterNativeInterface {
 
     private native boolean getAdapterPropertyNative(int type);
 
-    private native boolean setAdapterPropertyNative(int type);
-
     private native boolean setDevicePropertyNative(byte[] address, int type, byte[] val);
 
     private native boolean getDevicePropertyNative(byte[] address, int type);
@@ -290,6 +288,8 @@ public class AdapterNativeInterface {
     private native boolean removeBondNative(byte[] address);
 
     private native boolean cancelBondNative(byte[] address);
+
+    private native boolean pairingIsBusyNative();
 
     private native void generateLocalOobDataNative(int transport);
 

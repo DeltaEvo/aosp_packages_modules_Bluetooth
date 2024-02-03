@@ -74,17 +74,17 @@ public class A2dpSinkService extends ProfileService {
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
 
-    A2dpSinkService() {
+    public A2dpSinkService(Context ctx) {
+        super(ctx);
         mNativeInterface = requireNonNull(A2dpSinkNativeInterface.getInstance());
         mLooper = Looper.getMainLooper();
     }
 
     @VisibleForTesting
     A2dpSinkService(Context ctx, A2dpSinkNativeInterface nativeInterface, Looper looper) {
-        attachBaseContext(ctx);
+        super(ctx);
         mNativeInterface = requireNonNull(nativeInterface);
         mLooper = looper;
-        onCreate();
     }
 
     public static boolean isEnabled() {
@@ -92,7 +92,7 @@ public class A2dpSinkService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         mAdapterService =
                 requireNonNull(
                         AdapterService.getAdapterService(),
@@ -110,11 +110,10 @@ public class A2dpSinkService extends ProfileService {
         }
 
         setA2dpSinkService(this);
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         setA2dpSinkService(null);
         mNativeInterface.cleanup();
         for (A2dpSinkStateMachine stateMachine : mDeviceStateMap.values()) {
@@ -127,7 +126,6 @@ public class A2dpSinkService extends ProfileService {
                 mA2dpSinkStreamHandler = null;
             }
         }
-        return true;
     }
 
     public static synchronized A2dpSinkService getA2dpSinkService() {

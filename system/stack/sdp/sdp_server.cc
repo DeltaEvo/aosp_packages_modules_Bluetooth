@@ -24,15 +24,17 @@
  ******************************************************************************/
 #define LOG_TAG "sdp_server"
 
+#include <base/logging.h>
 #include <string.h>  // memcpy
 
 #include <cstdint>
 
 #include "btif/include/btif_profile_storage.h"
 #include "btif/include/btif_storage.h"
+#include "common/init_flags.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
-#include "gd/common/init_flags.h"
+#include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/properties.h"
@@ -40,6 +42,7 @@
 #include "stack/btm/btm_sco_hfp_hal.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/sdpdefs.h"
 #include "stack/sdp/sdpint.h"

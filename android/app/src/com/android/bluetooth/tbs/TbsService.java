@@ -17,18 +17,19 @@
 
 package com.android.bluetooth.tbs;
 
+import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
+
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothLeCall;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.IBluetoothLeCallControl;
 import android.bluetooth.IBluetoothLeCallControlCallback;
 import android.content.AttributionSource;
+import android.content.Context;
 import android.os.ParcelUuid;
 import android.os.RemoteException;
 import android.sysprop.BluetoothProperties;
 import android.util.Log;
-
-import static com.android.bluetooth.Utils.enforceBluetoothPrivilegedPermission;
 
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.ProfileService;
@@ -50,6 +51,10 @@ public class TbsService extends ProfileService {
 
     private final TbsGeneric mTbsGeneric = new TbsGeneric();
 
+    public TbsService(Context ctx) {
+        super(ctx);
+    }
+
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileCcpServerEnabled().orElse(false);
     }
@@ -60,14 +65,7 @@ public class TbsService extends ProfileService {
     }
 
     @Override
-    protected void create() {
-        if (DBG) {
-            Log.d(TAG, "create()");
-        }
-    }
-
-    @Override
-    protected boolean start() {
+    protected void start() {
 
         if (DBG) {
             Log.d(TAG, "start()");
@@ -80,18 +78,16 @@ public class TbsService extends ProfileService {
         setTbsService(this);
 
         mTbsGeneric.init(new TbsGatt(this));
-
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         if (DBG) {
             Log.d(TAG, "stop()");
         }
         if (sTbsService == null) {
             Log.w(TAG, "stop() called before start()");
-            return true;
+            return;
         }
 
         // Mark service as stopped
@@ -100,8 +96,6 @@ public class TbsService extends ProfileService {
         if (mTbsGeneric != null) {
             mTbsGeneric.cleanup();
         }
-
-        return true;
     }
 
     @Override

@@ -22,11 +22,11 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
+import android.os.Looper;
 import android.os.UserHandle;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
-import androidx.test.rule.ServiceTestRule;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.TestUtils;
@@ -37,7 +37,6 @@ import com.android.bluetooth.btservice.storage.DatabaseManager;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -61,7 +60,6 @@ public class MapClientTest {
     @Mock private MnsService mMockMnsService;
     @Mock private DatabaseManager mDatabaseManager;
 
-    @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
     @Before
     public void setUp() throws Exception {
@@ -70,19 +68,17 @@ public class MapClientTest {
         TestUtils.setAdapterService(mAdapterService);
         mIsAdapterServiceSet = true;
         when(mAdapterService.getDatabase()).thenReturn(mDatabaseManager);
-        doReturn(true, false).when(mAdapterService).isStartedProfile(anyString());
-        MapUtils.setMnsService(mMockMnsService);
-        TestUtils.startService(mServiceRule, MapClientService.class);
         mIsMapClientServiceStarted = true;
-        mService = MapClientService.getMapClientService();
-        Assert.assertNotNull(mService);
+        Looper looper = null;
+        mService = new MapClientService(mTargetContext, looper, mMockMnsService);
+        mService.doStart();
         mAdapter = BluetoothAdapter.getDefaultAdapter();
     }
 
     @After
     public void tearDown() throws Exception {
         if (mIsMapClientServiceStarted) {
-            TestUtils.stopService(mServiceRule, MapClientService.class);
+            mService.doStop();
             mService = MapClientService.getMapClientService();
             Assert.assertNull(mService);
         }

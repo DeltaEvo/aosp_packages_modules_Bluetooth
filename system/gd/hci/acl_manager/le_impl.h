@@ -22,17 +22,21 @@
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "common/bind.h"
 #include "common/init_flags.h"
 #include "hci/acl_manager/assembler.h"
 #include "hci/acl_manager/le_acceptlist_callbacks.h"
+#include "hci/acl_manager/le_acl_connection.h"
+#include "hci/acl_manager/le_connection_callbacks.h"
 #include "hci/acl_manager/le_connection_management_callbacks.h"
 #include "hci/acl_manager/round_robin_scheduler.h"
 #include "hci/controller.h"
 #include "hci/hci_layer.h"
 #include "hci/hci_packets.h"
 #include "hci/le_address_manager.h"
+#include "macros.h"
 #include "os/alarm.h"
 #include "os/handler.h"
 #include "os/system_properties.h"
@@ -84,10 +88,6 @@ enum class ConnectabilityState {
   DISARMING = 3,
 };
 
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-
 inline std::string connectability_state_machine_text(const ConnectabilityState& state) {
   switch (state) {
     CASE_RETURN_TEXT(ConnectabilityState::DISARMED);
@@ -98,7 +98,6 @@ inline std::string connectability_state_machine_text(const ConnectabilityState& 
       return base::StringPrintf("UNKNOWN[%d]", state);
   }
 }
-#undef CASE_RETURN_TEXT
 
 struct le_acl_connection {
   le_acl_connection(
@@ -352,6 +351,11 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       connectability_state_ = ConnectabilityState::DISARMED;
       if (status == ErrorCode::UNKNOWN_CONNECTION && pause_connection) {
         on_le_connection_canceled_on_pause();
+        return;
+      }
+      if (status == ErrorCode::UNKNOWN_CONNECTION && arm_on_disarm_) {
+        arm_on_disarm_ = false;
+        arm_connectability();
         return;
       }
       on_common_le_connection_complete(remote_address);
@@ -1021,9 +1025,13 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
       return;
     }
 
+    bool already_in_connect_list = connect_list.find(address_with_type) != connect_list.end();
     // TODO: Configure default LE connection parameters?
     if (add_to_connect_list) {
-      add_device_to_connect_list(address_with_type);
+      if (!already_in_connect_list) {
+        add_device_to_connect_list(address_with_type);
+      }
+
       if (is_direct) {
         direct_connections_.insert(address_with_type);
         if (create_connection_timeout_alarms_.find(address_with_type) == create_connection_timeout_alarms_.end()) {
@@ -1060,10 +1068,16 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
     switch (connectability_state_) {
       case ConnectabilityState::ARMED:
       case ConnectabilityState::ARMING:
-        // Ignored, if we add new device to the filter accept list, create connection command will be sent by OnResume.
-        LOG_DEBUG(
-            "Deferred until filter accept list updated create connection state %s",
-            connectability_state_machine_text(connectability_state_).c_str());
+        if (already_in_connect_list) {
+          arm_on_disarm_ = true;
+          disarm_connectability();
+        } else {
+          // Ignored, if we add new device to the filter accept list, create connection command will
+          // be sent by OnResume.
+          LOG_DEBUG(
+              "Deferred until filter accept list updated create connection state %s",
+              connectability_state_machine_text(connectability_state_).c_str());
+        }
         break;
       default:
         // If we added to filter accept list then the arming of the le state machine
@@ -1299,6 +1313,7 @@ struct le_impl : public bluetooth::hci::LeAddressManagerCallback {
   LeAcceptlistCallbacks* le_acceptlist_callbacks_ = nullptr;
   std::unordered_set<AddressWithType> connecting_le_{};
   bool arm_on_resume_{};
+  bool arm_on_disarm_{};
   std::unordered_set<AddressWithType> direct_connections_{};
   // Set of devices that will not be removed from connect list after direct connect timeout
   std::unordered_set<AddressWithType> background_connections_;

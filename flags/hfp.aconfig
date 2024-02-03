@@ -27,3 +27,31 @@ flag {
     description: "use codec on the DSP when the BT controller does not support it"
     bug: "308838380"
 }
+
+flag {
+    name: "is_sco_managed_by_audio"
+    namespace: "bluetooth"
+    description: "start and stop of the SCO is managed by Audio instead of Bluetooth"
+    bug: "315234036"
+}
+
+flag {
+    name: "retry_esco_with_zero_retransmission_effort"
+    namespace: "bluetooth"
+    description: "retry eSCO connection based on retransmission_effort"
+    bug: "316498257"
+}
+
+flag {
+    name: "close_rfcomm_instead_of_reset"
+    namespace: "bluetooth"
+    description: "Closing Rfcomm Connection instead of reset"
+    bug: "316993992"
+}
+
+flag {
+    name: "pretend_network_service"
+    namespace: "bluetooth"
+    description: "during ongoing call, pretend network service in +CIND when network is unavailable"
+    bug: "317307596"
+}

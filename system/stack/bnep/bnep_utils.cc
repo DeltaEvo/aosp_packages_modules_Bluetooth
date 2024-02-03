@@ -22,20 +22,19 @@
  *
  ******************************************************************************/
 
+#include <base/logging.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "bnep_int.h"
 #include "device/include/controller.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
-
-#include <base/logging.h>
 
 using bluetooth::Uuid;
 
@@ -427,33 +426,36 @@ void bnepu_check_send_packet(tBNEP_CONN* p_bcb, BT_HDR* p_buf) {
  *
  ******************************************************************************/
 void bnepu_build_bnep_hdr(tBNEP_CONN* p_bcb, BT_HDR* p_buf, uint16_t protocol,
-                          const RawAddress* p_src_addr,
-                          const RawAddress* p_dest_addr, bool fw_ext_present) {
+                          const RawAddress& src_addr,
+                          const RawAddress& dest_addr, bool fw_ext_present) {
   const controller_t* controller = controller_get_interface();
   uint8_t ext_bit, *p = (uint8_t*)NULL;
   uint8_t type = BNEP_FRAME_COMPRESSED_ETHERNET;
+  RawAddress source_addr = src_addr;
 
   ext_bit = fw_ext_present ? 0x80 : 0x00;
 
-  if (p_src_addr && *p_src_addr != *controller->get_address())
+  if (source_addr != RawAddress::kEmpty &&
+      source_addr != *controller->get_address())
     type = BNEP_FRAME_COMPRESSED_ETHERNET_SRC_ONLY;
 
-  if (*p_dest_addr != p_bcb->rem_bda)
+  if (dest_addr != p_bcb->rem_bda)
     type = (type == BNEP_FRAME_COMPRESSED_ETHERNET)
                ? BNEP_FRAME_COMPRESSED_ETHERNET_DEST_ONLY
                : BNEP_FRAME_GENERAL_ETHERNET;
 
-  if (!p_src_addr) p_src_addr = controller->get_address();
+  if (source_addr == RawAddress::kEmpty)
+    source_addr = *controller->get_address();
 
   switch (type) {
     case BNEP_FRAME_GENERAL_ETHERNET:
       p = bnepu_init_hdr(p_buf, 15,
                          (uint8_t)(ext_bit | BNEP_FRAME_GENERAL_ETHERNET));
 
-      memcpy(p, p_dest_addr->address, BD_ADDR_LEN);
+      memcpy(p, dest_addr.address, BD_ADDR_LEN);
       p += BD_ADDR_LEN;
 
-      memcpy(p, p_src_addr->address, BD_ADDR_LEN);
+      memcpy(p, source_addr.address, BD_ADDR_LEN);
       p += BD_ADDR_LEN;
       break;
 
@@ -467,7 +469,7 @@ void bnepu_build_bnep_hdr(tBNEP_CONN* p_bcb, BT_HDR* p_buf, uint16_t protocol,
           p_buf, 9,
           (uint8_t)(ext_bit | BNEP_FRAME_COMPRESSED_ETHERNET_SRC_ONLY));
 
-      memcpy(p, p_src_addr->address, BD_ADDR_LEN);
+      memcpy(p, source_addr.address, BD_ADDR_LEN);
       p += BD_ADDR_LEN;
       break;
 
@@ -476,7 +478,7 @@ void bnepu_build_bnep_hdr(tBNEP_CONN* p_bcb, BT_HDR* p_buf, uint16_t protocol,
           p_buf, 9,
           (uint8_t)(ext_bit | BNEP_FRAME_COMPRESSED_ETHERNET_DEST_ONLY));
 
-      memcpy(p, p_dest_addr->address, BD_ADDR_LEN);
+      memcpy(p, dest_addr.address, BD_ADDR_LEN);
       p += BD_ADDR_LEN;
       break;
   }
@@ -1188,7 +1190,7 @@ void bnep_sec_check_complete(const RawAddress* bd_addr, tBT_TRANSPORT trasnport,
  *
  ******************************************************************************/
 tBNEP_RESULT bnep_is_packet_allowed(tBNEP_CONN* p_bcb,
-                                    const RawAddress& p_dest_addr,
+                                    const RawAddress& dest_addr,
                                     uint16_t protocol, bool fw_ext_present,
                                     uint8_t* p_data, uint16_t org_len) {
   if (p_bcb->rcvd_num_filters) {
@@ -1234,7 +1236,7 @@ tBNEP_RESULT bnep_is_packet_allowed(tBNEP_CONN* p_bcb,
   }
 
   /* Ckeck for multicast address filtering */
-  if ((p_dest_addr.address[0] & 0x01) && p_bcb->rcvd_mcast_filters) {
+  if ((dest_addr.address[0] & 0x01) && p_bcb->rcvd_mcast_filters) {
     uint16_t i;
 
     /* Check if every multicast should be filtered */
@@ -1242,9 +1244,9 @@ tBNEP_RESULT bnep_is_packet_allowed(tBNEP_CONN* p_bcb,
       /* Check if the address is mentioned in the filter range */
       for (i = 0; i < p_bcb->rcvd_mcast_filters; i++) {
         if ((memcmp(p_bcb->rcvd_mcast_filter_start[i].address,
-                    p_dest_addr.address, BD_ADDR_LEN) <= 0) &&
-            (memcmp(p_bcb->rcvd_mcast_filter_end[i].address,
-                    p_dest_addr.address, BD_ADDR_LEN) >= 0))
+                    dest_addr.address, BD_ADDR_LEN) <= 0) &&
+            (memcmp(p_bcb->rcvd_mcast_filter_end[i].address, dest_addr.address,
+                    BD_ADDR_LEN) >= 0))
           break;
       }
     }
@@ -1256,7 +1258,7 @@ tBNEP_RESULT bnep_is_packet_allowed(tBNEP_CONN* p_bcb,
     */
     if ((p_bcb->rcvd_mcast_filters == 0xFFFF) ||
         (i == p_bcb->rcvd_mcast_filters)) {
-      VLOG(1) << "Ignoring multicast address " << p_dest_addr
+      VLOG(1) << "Ignoring multicast address " << dest_addr
               << " in BNEP data write";
       return BNEP_IGNORE_CMD;
     }

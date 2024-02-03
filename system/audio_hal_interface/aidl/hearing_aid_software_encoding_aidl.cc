@@ -29,6 +29,7 @@ using ::aidl::android::hardware::bluetooth::audio::ChannelMode;
 using ::aidl::android::hardware::bluetooth::audio::CodecType;
 using ::bluetooth::audio::aidl::AudioConfiguration;
 using ::bluetooth::audio::aidl::BluetoothAudioCtrlAck;
+using ::bluetooth::audio::aidl::LatencyMode;
 using ::bluetooth::audio::aidl::PcmConfiguration;
 using ::bluetooth::audio::aidl::SessionType;
 using ::bluetooth::audio::aidl::hearing_aid::StreamCallbacks;
@@ -74,7 +75,7 @@ class HearingAidTransport
     }
   }
 
-  void SetLowLatency(bool is_low_latency) override {}
+  void SetLatencyMode(LatencyMode latency_mode) override {}
 
   bool GetPresentationPosition(uint64_t* remote_delay_report_ns,
                                uint64_t* total_bytes_read,
@@ -178,7 +179,7 @@ namespace hearing_aid {
 bool is_hal_enabled() { return hearing_aid_hal_clientinterface != nullptr; }
 
 bool init(StreamCallbacks stream_cb,
-          bluetooth::common::MessageLoopThread* message_loop) {
+          bluetooth::common::MessageLoopThread* /*message_loop*/) {
   LOG(INFO) << __func__;
 
   if (is_hal_force_disabled()) {
@@ -195,7 +196,7 @@ bool init(StreamCallbacks stream_cb,
   hearing_aid_sink = new HearingAidTransport(std::move(stream_cb));
   hearing_aid_hal_clientinterface =
       new bluetooth::audio::aidl::BluetoothAudioSinkClientInterface(
-          hearing_aid_sink, message_loop);
+          hearing_aid_sink);
   if (!hearing_aid_hal_clientinterface->IsValid()) {
     LOG(WARNING) << __func__
                  << ": BluetoothAudio HAL for Hearing Aid is invalid?!";

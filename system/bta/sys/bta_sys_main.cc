@@ -29,17 +29,15 @@
 
 #include <cstring>
 
-#include "bt_target.h"  // Must be first to define build configuration
 #include "bta/sys/bta_sys.h"
 #include "bta/sys/bta_sys_int.h"
 #include "include/hardware/bluetooth.h"
+#include "internal_include/bt_target.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
 #include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/main_thread.h"
-
-void BTIF_dm_on_hw_error();
 
 /* system manager control block definition */
 tBTA_SYS_CB bta_sys_cb;
@@ -56,16 +54,6 @@ tBTA_SYS_CB bta_sys_cb;
  ******************************************************************************/
 void bta_sys_init(void) {
   memset(&bta_sys_cb, 0, sizeof(tBTA_SYS_CB));
-}
-
-void bta_set_forward_hw_failures(bool value) {
-  bta_sys_cb.forward_hw_failures = value;
-}
-
-void BTA_sys_signal_hw_error() {
-  if (bta_sys_cb.forward_hw_failures) {
-    BTIF_dm_on_hw_error();
-  }
 }
 
 /*******************************************************************************
@@ -165,7 +153,7 @@ void bta_sys_sendmsg(void* p_msg) {
   }
 }
 
-void bta_sys_sendmsg_delayed(void* p_msg, const base::TimeDelta& delay) {
+void bta_sys_sendmsg_delayed(void* p_msg, std::chrono::microseconds delay) {
   if (do_in_main_thread_delayed(
           FROM_HERE,
           base::Bind(&bta_sys_event, static_cast<BT_HDR_RIGID*>(p_msg)),

@@ -109,22 +109,6 @@ struct BTM_GetPeerDeviceTypeFromFeatures {
 extern struct BTM_GetPeerDeviceTypeFromFeatures
     BTM_GetPeerDeviceTypeFromFeatures;
 
-// Name: BTM_GetSecurityFlagsByTransport
-// Params: const RawAddress& bd_addr, uint8_t* p_sec_flags, tBT_TRANSPORT
-// transport Return: bool
-struct BTM_GetSecurityFlagsByTransport {
-  static bool return_value;
-  std::function<bool(const RawAddress& bd_addr, uint8_t* p_sec_flags,
-                     tBT_TRANSPORT transport)>
-      body{[](const RawAddress& /* bd_addr */, uint8_t* /* p_sec_flags */,
-              tBT_TRANSPORT /* transport */) { return return_value; }};
-  bool operator()(const RawAddress& bd_addr, uint8_t* p_sec_flags,
-                  tBT_TRANSPORT transport) {
-    return body(bd_addr, p_sec_flags, transport);
-  };
-};
-extern struct BTM_GetSecurityFlagsByTransport BTM_GetSecurityFlagsByTransport;
-
 // Name: BTM_IsAuthenticated
 // Params: const RawAddress& bd_addr, tBT_TRANSPORT transport
 // Return: bool
@@ -459,12 +443,12 @@ extern struct btm_create_conn_cancel_complete btm_create_conn_cancel_complete;
 
 // Name: btm_get_dev_class
 // Params: const RawAddress& bda
-// Return: const uint8_t*
+// Return: DEV_CLASS
 struct btm_get_dev_class {
-  static const uint8_t* return_value;
-  std::function<const uint8_t*(const RawAddress& bda)> body{
+  static const DEV_CLASS return_value;
+  std::function<const DEV_CLASS(const RawAddress& bda)> body{
       [](const RawAddress& /* bda */) { return return_value; }};
-  const uint8_t* operator()(const RawAddress& bda) { return body(bda); };
+  const DEV_CLASS operator()(const RawAddress& bda) { return body(bda); };
 };
 extern struct btm_get_dev_class btm_get_dev_class;
 
@@ -685,33 +669,18 @@ struct btm_sec_encrypt_change {
 };
 extern struct btm_sec_encrypt_change btm_sec_encrypt_change;
 
-// Name: btm_sec_execute_procedure
-// Params: tBTM_SEC_DEV_REC* p_dev_rec
-// Return: tBTM_STATUS
-struct btm_sec_execute_procedure {
-  static tBTM_STATUS return_value;
-  std::function<tBTM_STATUS(tBTM_SEC_DEV_REC* p_dev_rec)> body{
-      [](tBTM_SEC_DEV_REC* /* p_dev_rec */) { return return_value; }};
-  tBTM_STATUS operator()(tBTM_SEC_DEV_REC* p_dev_rec) {
-    return body(p_dev_rec);
+// Name: btm_sec_encryption_change_evt
+// Params: uint16_t handle, tHCI_STATUS status, uint8_t encr_enable
+// Return: void
+struct btm_sec_encryption_change_evt {
+  std::function<void(uint16_t handle, tHCI_STATUS status, uint8_t encr_enable)>
+      body{[](uint16_t /* handle */, tHCI_STATUS /* status */,
+              uint8_t /* encr_enable */) {}};
+  void operator()(uint16_t handle, tHCI_STATUS status, uint8_t encr_enable) {
+    body(handle, status, encr_enable);
   };
 };
-extern struct btm_sec_execute_procedure btm_sec_execute_procedure;
-
-// Name: btm_sec_find_first_serv
-// Params: bool is_originator, uint16_t psm
-// Return: tBTM_SEC_SERV_REC*
-struct btm_sec_find_first_serv {
-  static tBTM_SEC_SERV_REC* return_value;
-  std::function<tBTM_SEC_SERV_REC*(bool is_originator, uint16_t psm)> body{
-      [](bool /* is_originator */, uint16_t /* psm */) {
-        return return_value;
-      }};
-  tBTM_SEC_SERV_REC* operator()(bool is_originator, uint16_t psm) {
-    return body(is_originator, psm);
-  };
-};
-extern struct btm_sec_find_first_serv btm_sec_find_first_serv;
+extern struct btm_sec_encryption_change_evt btm_sec_encryption_change_evt;
 
 // Name: btm_sec_is_a_bonded_dev
 // Params: const RawAddress& bda

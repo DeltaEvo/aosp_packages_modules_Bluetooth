@@ -27,8 +27,8 @@
 #include <thread>
 
 #include "abstract_message_loop.h"
-#include "gd/common/contextual_callback.h"
-#include "gd/common/i_postable_context.h"
+#include "common/contextual_callback.h"
+#include "common/i_postable_context.h"
 
 namespace bluetooth {
 
@@ -166,7 +166,8 @@ class MessageLoopThread final : public IPostableContext {
    * scheduled
    */
   bool DoInThreadDelayed(const base::Location& from_here,
-                         base::OnceClosure task, const base::TimeDelta& delay);
+                         base::OnceClosure task,
+                         std::chrono::microseconds delay);
   /**
    * Wrapper around DoInThread without a location.
    */

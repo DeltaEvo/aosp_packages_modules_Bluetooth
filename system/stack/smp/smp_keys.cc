@@ -27,24 +27,28 @@
 #include <base/functional/callback.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 
-#include "bt_target.h"
-#include "btm_ble_int.h"
-#include "btm_ble_sec_api.h"
 #include "crypto_toolbox/crypto_toolbox.h"
-#include "device/include/controller.h"
+#include "hci/controller_interface.h"
+#include "main/shim/entry.h"
 #include "os/log.h"
 #include "osi/include/osi.h"
 #include "p_256_ecc_pp.h"
 #include "smp_int.h"
+#include "stack/btm/btm_ble_sec.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
+#include "stack/include/bt_types.h"
+#include "stack/include/btm_ble_api.h"
+#include "stack/include/btm_ble_sec_api.h"
 #include "types/raw_address.h"
 
-using base::Bind;
+using bluetooth::common::BindOnce;
+using bluetooth::common::OnceCallback;
 using crypto_toolbox::aes_128;
 
 #ifndef SMP_MAX_ENC_REPEAT
@@ -55,7 +59,9 @@ static void smp_process_stk(tSMP_CB* p_cb, Octet16* p);
 static Octet16 smp_calculate_legacy_short_term_key(tSMP_CB* p_cb);
 static void smp_process_private_key(tSMP_CB* p_cb);
 
-#define SMP_PASSKEY_MASK 0xfff00000
+static void send_ble_rand(OnceCallback<void(uint64_t)> callback);
+
+#define SMP_PASSKEY_MASK 0x000fffff
 
 // If there is data saved here, then use its info instead
 // This needs to be cleared on a successfult pairing using the oob data
@@ -67,12 +73,14 @@ void smp_save_local_oob_data(tSMP_CB* p_cb) {
 
 void smp_clear_local_oob_data() { saved_local_oob_data = {}; }
 
-static bool is_empty(tSMP_LOC_OOB_DATA* data) {
+static bool is_oob_data_empty(tSMP_LOC_OOB_DATA* data) {
   tSMP_LOC_OOB_DATA empty_data = {};
   return memcmp(data, &empty_data, sizeof(tSMP_LOC_OOB_DATA)) == 0;
 }
 
-bool smp_has_local_oob_data() { return !is_empty(&saved_local_oob_data); }
+bool smp_has_local_oob_data() {
+  return !is_oob_data_empty(&saved_local_oob_data);
+}
 
 void smp_debug_print_nbyte_little_endian(uint8_t* p, const char* key_name,
                                          uint8_t len) {}
@@ -88,14 +96,11 @@ void smp_debug_print_nbyte_big_endian(uint8_t* p, const char* key_name,
                                       uint8_t len) {}
 
 /** This function is called to process a passkey. */
-void smp_proc_passkey(tSMP_CB* p_cb, BT_OCTET8 rand) {
+void smp_proc_passkey(tSMP_CB* p_cb, uint64_t rand) {
   uint8_t* tt = p_cb->tk.data();
-  uint32_t passkey; /* 19655 test number; */
-  uint8_t* pp = rand;
+  uint32_t passkey = static_cast<uint32_t>(rand & SMP_PASSKEY_MASK);
 
-  LOG_VERBOSE("%s", __func__);
-  STREAM_TO_UINT32(passkey, pp);
-  passkey &= ~SMP_PASSKEY_MASK;
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   /* truncate by maximum value */
   while (passkey > BTM_MAX_PASSKEY_VAL) passkey >>= 1;
@@ -136,9 +141,9 @@ void smp_proc_passkey(tSMP_CB* p_cb, BT_OCTET8 rand) {
  *
  ******************************************************************************/
 void smp_generate_passkey(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   /* generate MRand or SRand */
-  btsnd_hcic_ble_rand(Bind(&smp_proc_passkey, p_cb));
+  send_ble_rand(BindOnce(&smp_proc_passkey, p_cb));
 }
 
 /*******************************************************************************
@@ -155,9 +160,9 @@ void smp_generate_passkey(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
 void smp_generate_stk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
   Octet16 output;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
-  if (p_cb->le_secure_connections_mode_is_used) {
+  if (p_cb->sc_mode_required_by_peer) {
     LOG_VERBOSE("FOR LE SC LTK IS USED INSTEAD OF STK");
     output = p_cb->ltk;
   } else {
@@ -177,7 +182,7 @@ void smp_compute_csrk(uint16_t div, tSMP_CB* p_cb) {
 
   p_cb->div = div;
 
-  LOG_VERBOSE("%s: div=%x", __func__, p_cb->div);
+  LOG_VERBOSE("div=0x%x", p_cb->div);
   const Octet16& er = BTM_GetDeviceEncRoot();
   /* CSRK = d1(ER, DIV, 1) */
   UINT16_TO_STREAM(p, p_cb->div);
@@ -193,17 +198,16 @@ void smp_compute_csrk(uint16_t div, tSMP_CB* p_cb) {
 void smp_generate_csrk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
   bool div_status;
 
-  LOG_VERBOSE("smp_generate_csrk");
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   div_status = btm_get_local_div(p_cb->pairing_bda, &p_cb->div);
   if (div_status) {
     smp_compute_csrk(p_cb->div, p_cb);
   } else {
     LOG_VERBOSE("Generate DIV for CSRK");
-    btsnd_hcic_ble_rand(Bind(
-        [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-          uint16_t div;
-          STREAM_TO_UINT16(div, rand);
+    send_ble_rand(BindOnce(
+        [](tSMP_CB* p_cb, uint64_t rand) {
+          uint16_t div = static_cast<uint16_t>(rand);
           smp_compute_csrk(div, p_cb);
         },
         p_cb));
@@ -217,7 +221,7 @@ void smp_generate_csrk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
 void smp_concatenate_local(tSMP_CB* p_cb, uint8_t** p_data, uint8_t op_code) {
   uint8_t* p = *p_data;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   UINT8_TO_STREAM(p, op_code);
   UINT8_TO_STREAM(p, p_cb->local_io_capability);
   UINT8_TO_STREAM(p, p_cb->loc_oob_flag);
@@ -236,7 +240,7 @@ void smp_concatenate_local(tSMP_CB* p_cb, uint8_t** p_data, uint8_t op_code) {
 void smp_concatenate_peer(tSMP_CB* p_cb, uint8_t** p_data, uint8_t op_code) {
   uint8_t* p = *p_data;
 
-  LOG_VERBOSE("smp_concatenate_peer ");
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   UINT8_TO_STREAM(p, op_code);
   UINT8_TO_STREAM(p, p_cb->peer_io_caps);
   UINT8_TO_STREAM(p, p_cb->peer_oob_flag);
@@ -255,7 +259,9 @@ void smp_concatenate_peer(tSMP_CB* p_cb, uint8_t** p_data, uint8_t op_code) {
  */
 Octet16 smp_gen_p1_4_confirm(tSMP_CB* p_cb,
                              tBLE_ADDR_TYPE remote_bd_addr_type) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("pairing_addr:%s, rmt_addr_type:%s",
+              ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda),
+              AddressTypeText(remote_bd_addr_type).c_str());
   Octet16 p1;
   uint8_t* p = p1.data();
   if (p_cb->role == HCI_ROLE_CENTRAL) {
@@ -289,7 +295,7 @@ Octet16 smp_gen_p1_4_confirm(tSMP_CB* p_cb,
  *                  p2 = ra || ia || padding
  */
 Octet16 smp_gen_p2_4_confirm(tSMP_CB* p_cb, const RawAddress& remote_bda) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   Octet16 p2{0};
   uint8_t* p = p2.data();
   /* 32-bit Padding */
@@ -320,13 +326,13 @@ Octet16 smp_gen_p2_4_confirm(tSMP_CB* p_cb, const RawAddress& remote_bda) {
  ******************************************************************************/
 tSMP_STATUS smp_calculate_comfirm(tSMP_CB* p_cb, const Octet16& rand,
                                   Octet16* output) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   RawAddress remote_bda;
   tBLE_ADDR_TYPE remote_bd_addr_type = BLE_ADDR_PUBLIC;
   /* get remote connection specific bluetooth address */
   if (!BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, remote_bda,
                                     &remote_bd_addr_type, true)) {
-    LOG_ERROR("%s: cannot obtain remote device address", __func__);
+    LOG_ERROR("cannot obtain remote device address");
     return SMP_PAIR_FAIL_UNKNOWN;
   }
   /* get local connection specific bluetooth address */
@@ -363,7 +369,7 @@ tSMP_STATUS smp_calculate_comfirm(tSMP_CB* p_cb, const Octet16& rand,
  *
  ******************************************************************************/
 static void smp_generate_confirm(tSMP_CB* p_cb) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   smp_debug_print_nbyte_little_endian(p_cb->rand.data(), "local_rand", 16);
   Octet16 output;
   tSMP_STATUS status = smp_calculate_comfirm(p_cb, p_cb->rand, &output);
@@ -397,16 +403,16 @@ static void smp_generate_confirm(tSMP_CB* p_cb) {
  ******************************************************************************/
 void smp_generate_srand_mrand_confirm(tSMP_CB* p_cb,
                                       UNUSED_ATTR tSMP_INT_DATA* p_data) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   /* generate MRand or SRand */
-  btsnd_hcic_ble_rand(Bind(
-      [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-        memcpy(p_cb->rand.data(), rand, 8);
-
+  send_ble_rand(BindOnce(
+      [](tSMP_CB* p_cb, uint64_t rand) {
+        memcpy(p_cb->rand.data(), (uint8_t*)&rand, sizeof(uint64_t));
         /* generate 64 MSB of MRand or SRand */
-        btsnd_hcic_ble_rand(Bind(
-            [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-              memcpy((void*)&p_cb->rand[8], rand, BT_OCTET8_LEN);
+        send_ble_rand(BindOnce(
+            [](tSMP_CB* p_cb, uint64_t rand) {
+              memcpy(p_cb->rand.data() + sizeof(uint64_t), (uint8_t*)&rand,
+                     sizeof(uint64_t));
               smp_generate_confirm(p_cb);
             },
             p_cb));
@@ -427,7 +433,7 @@ void smp_generate_srand_mrand_confirm(tSMP_CB* p_cb,
  *
  ******************************************************************************/
 void smp_generate_compare(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
-  LOG_VERBOSE("smp_generate_compare ");
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   smp_debug_print_nbyte_little_endian(p_cb->rrand, "peer rand", 16);
   Octet16 output;
   tSMP_STATUS status = smp_calculate_comfirm(p_cb, p_cb->rrand, &output);
@@ -452,7 +458,7 @@ void smp_generate_compare(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
 static void smp_process_stk(tSMP_CB* p_cb, Octet16* p) {
   tSMP_KEY key;
 
-  LOG_VERBOSE("smp_process_stk ");
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   smp_mask_enc_key(p_cb->loc_enc_size, p);
 
   key.key_type = SMP_KEY_TYPE_STK;
@@ -469,13 +475,12 @@ static void smp_process_ediv(tSMP_CB* p_cb, Octet16& p) {
   uint8_t* pp = p.data();
   uint16_t y;
 
-  LOG_VERBOSE("smp_process_ediv ");
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   STREAM_TO_UINT16(y, pp);
 
   /* EDIV = Y xor DIV */
   p_cb->ediv = p_cb->div ^ y;
   /* send LTK ready */
-  LOG_ERROR("LTK ready");
   key.key_type = SMP_KEY_TYPE_LTK;
   key.p_data = p.data();
 
@@ -487,14 +492,14 @@ static void smp_process_ediv(tSMP_CB* p_cb, Octet16& p) {
 /**
  * This function is to proceed generate Y = E(DHK, Rand)
  */
-static void smp_generate_y(tSMP_CB* p_cb, BT_OCTET8 rand) {
-  LOG_VERBOSE("%s ", __func__);
+static void smp_generate_y(tSMP_CB* p_cb, uint64_t rand) {
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   const Octet16& dhk = BTM_GetDeviceDHK();
 
-  memcpy(p_cb->enc_rand, rand, BT_OCTET8_LEN);
+  memcpy(p_cb->enc_rand, (uint8_t*)&rand, sizeof(uint64_t));
   Octet16 rand16{};
-  memcpy(rand16.data(), rand, BT_OCTET8_LEN);
+  memcpy(rand16.data(), (uint8_t*)&rand, sizeof(uint64_t));
   Octet16 output = aes_128(dhk, rand16);
   smp_process_ediv(p_cb, output);
 }
@@ -505,7 +510,7 @@ static void smp_generate_y(tSMP_CB* p_cb, BT_OCTET8 rand) {
 static void smp_generate_ltk_cont(uint16_t div, tSMP_CB* p_cb) {
   p_cb->div = div;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   const Octet16& er = BTM_GetDeviceEncRoot();
 
   /* LTK = d1(ER, DIV, 0)= e(ER, DIV)*/
@@ -518,7 +523,7 @@ static void smp_generate_ltk_cont(uint16_t div, tSMP_CB* p_cb) {
   p_cb->ltk = ltk;
 
   /* generate EDIV and rand now */
-  btsnd_hcic_ble_rand(Bind(&smp_generate_y, p_cb));
+  send_ble_rand(BindOnce(&smp_generate_y, p_cb));
 }
 
 /*******************************************************************************
@@ -537,12 +542,12 @@ static void smp_generate_ltk_cont(uint16_t div, tSMP_CB* p_cb) {
  *
  ******************************************************************************/
 void smp_generate_ltk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (smp_get_br_state() == SMP_BR_STATE_BOND_PENDING) {
     smp_br_process_link_key(p_cb, NULL);
     return;
-  } else if (p_cb->le_secure_connections_mode_is_used) {
+  } else if (p_cb->sc_mode_required_by_peer) {
     smp_process_secure_connection_long_term_key();
     return;
   }
@@ -552,13 +557,12 @@ void smp_generate_ltk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
   if (div_status) {
     smp_generate_ltk_cont(p_cb->div, p_cb);
   } else {
-    LOG_VERBOSE("%s: Generate DIV for LTK", __func__);
+    LOG_VERBOSE("Generate DIV for LTK");
 
     /* generate MRand or SRand */
-    btsnd_hcic_ble_rand(Bind(
-        [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-          uint16_t div;
-          STREAM_TO_UINT16(div, rand);
+    send_ble_rand(BindOnce(
+        [](tSMP_CB* p_cb, uint64_t rand) {
+          uint16_t div = static_cast<uint16_t>(rand);
           smp_generate_ltk_cont(div, p_cb);
         },
         p_cb));
@@ -567,7 +571,7 @@ void smp_generate_ltk(tSMP_CB* p_cb, UNUSED_ATTR tSMP_INT_DATA* p_data) {
 
 /* The function calculates legacy STK */
 Octet16 smp_calculate_legacy_short_term_key(tSMP_CB* p_cb) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   Octet16 text{};
   if (p_cb->role == HCI_ROLE_CENTRAL) {
@@ -595,7 +599,7 @@ Octet16 smp_calculate_legacy_short_term_key(tSMP_CB* p_cb) {
  *
  ******************************************************************************/
 void smp_create_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   // Only use the stored OOB data if we are in an oob association model
   if (p_cb->selected_association_model == SMP_MODEL_SEC_CONN_OOB) {
@@ -604,7 +608,7 @@ void smp_create_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     // pairing will fail Not much we can do about it at this point, just have to
     // generate new data The data will be cleared after the advertiser times
     // out, so if the advertiser times out we want the pairing to fail anyway.
-    if (!is_empty(&saved_local_oob_data)) {
+    if (!is_oob_data_empty(&saved_local_oob_data)) {
       LOG_WARN("Found OOB data, loading keys");
       for (int i = 0; i < BT_OCTET32_LEN; i++) {
         p_cb->private_key[i] = saved_local_oob_data.private_key_used[i];
@@ -619,19 +623,20 @@ void smp_create_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
     LOG_WARN("OOB Association Model with no saved data present");
   }
 
-  btsnd_hcic_ble_rand(Bind(
-      [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-        memcpy((void*)p_cb->private_key, rand, BT_OCTET8_LEN);
-        btsnd_hcic_ble_rand(Bind(
-            [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-              memcpy((void*)&p_cb->private_key[8], rand, BT_OCTET8_LEN);
-              btsnd_hcic_ble_rand(Bind(
-                  [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-                    memcpy((void*)&p_cb->private_key[16], rand, BT_OCTET8_LEN);
-                    btsnd_hcic_ble_rand(Bind(
-                        [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-                          memcpy((void*)&p_cb->private_key[24], rand,
-                                 BT_OCTET8_LEN);
+  send_ble_rand(BindOnce(
+      [](tSMP_CB* p_cb, uint64_t rand) {
+        memcpy(p_cb->private_key, (uint8_t*)&rand, sizeof(uint64_t));
+        send_ble_rand(BindOnce(
+            [](tSMP_CB* p_cb, uint64_t rand) {
+              memcpy(&p_cb->private_key[8], (uint8_t*)&rand, sizeof(uint64_t));
+              send_ble_rand(BindOnce(
+                  [](tSMP_CB* p_cb, uint64_t rand) {
+                    memcpy(&p_cb->private_key[16], (uint8_t*)&rand,
+                           sizeof(uint64_t));
+                    send_ble_rand(BindOnce(
+                        [](tSMP_CB* p_cb, uint64_t rand) {
+                          memcpy(&p_cb->private_key[24], (uint8_t*)&rand,
+                                 sizeof(uint64_t));
                           smp_process_private_key(p_cb);
                         },
                         p_cb));
@@ -660,7 +665,7 @@ void smp_create_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
  *
  ******************************************************************************/
 void smp_use_oob_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
-  LOG_INFO("req_oob_type: %d, role: %d", p_cb->req_oob_type, p_cb->role);
+  LOG_INFO("req_oob_type:%d, role:%d", p_cb->req_oob_type, p_cb->role);
 
   switch (p_cb->req_oob_type) {
     case SMP_OOB_BOTH:
@@ -674,7 +679,7 @@ void smp_use_oob_private_key(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
         // point, just have to generate new data The data will be cleared after
         // the advertiser times out, so if the advertiser times out we want the
         // pairing to fail anyway.
-        if (!is_empty(&saved_local_oob_data)) {
+        if (!is_oob_data_empty(&saved_local_oob_data)) {
           LOG_INFO("Found OOB data, loading keys");
           for (int i = 0; i < BT_OCTET32_LEN; i++) {
             p_cb->private_key[i] = saved_local_oob_data.private_key_used[i];
@@ -716,7 +721,7 @@ void smp_process_private_key(tSMP_CB* p_cb) {
   Point public_key;
   BT_OCTET32 private_key;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   memcpy(private_key, p_cb->private_key, BT_OCTET32_LEN);
   ECC_PointMult(&public_key, &(curve_p256.G), (uint32_t*)private_key);
@@ -749,7 +754,7 @@ void smp_compute_dhkey(tSMP_CB* p_cb) {
   Point peer_publ_key, new_publ_key;
   BT_OCTET32 private_key;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   memcpy(private_key, p_cb->private_key, BT_OCTET32_LEN);
   memcpy(peer_publ_key.x, p_cb->peer_publ_key.x, BT_OCTET32_LEN);
@@ -775,7 +780,7 @@ void smp_compute_dhkey(tSMP_CB* p_cb) {
 void smp_calculate_local_commitment(tSMP_CB* p_cb) {
   uint8_t random_input;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   switch (p_cb->selected_association_model) {
     case SMP_MODEL_SEC_CONN_JUSTWORKS:
@@ -802,19 +807,17 @@ void smp_calculate_local_commitment(tSMP_CB* p_cb) {
           p_cb->loc_publ_key.x, p_cb->loc_publ_key.x, p_cb->local_random, 0);
       break;
     default:
-      LOG_ERROR("Association Model = %d is not used in LE SC",
+      LOG_ERROR("Association Model=%d is not used in LE SC",
                 p_cb->selected_association_model);
       return;
   }
-
-  LOG_VERBOSE("local commitment calculation is completed");
 }
 
 /** The function calculates peer commmitment */
 Octet16 smp_calculate_peer_commitment(tSMP_CB* p_cb) {
   uint8_t ri;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   Octet16 output{0};
   switch (p_cb->selected_association_model) {
     case SMP_MODEL_SEC_CONN_JUSTWORKS:
@@ -837,12 +840,11 @@ Octet16 smp_calculate_peer_commitment(tSMP_CB* p_cb) {
                                   p_cb->peer_random, 0);
       break;
     default:
-      LOG_ERROR("Association Model = %d is not used in LE SC",
+      LOG_ERROR("Association Model=%d is not used in LE SC",
                 p_cb->selected_association_model);
       return output;
   }
 
-  LOG_VERBOSE("peer commitment calculation is completed");
   return output;
 }
 
@@ -858,7 +860,7 @@ Octet16 smp_calculate_peer_commitment(tSMP_CB* p_cb) {
  ******************************************************************************/
 void smp_calculate_numeric_comparison_display_number(tSMP_CB* p_cb,
                                                      tSMP_INT_DATA* p_data) {
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (p_cb->role == HCI_ROLE_CENTRAL) {
     p_cb->number_to_display = crypto_toolbox::g2(
@@ -872,17 +874,16 @@ void smp_calculate_numeric_comparison_display_number(tSMP_CB* p_cb,
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_PAIR_FAIL_UNKNOWN;
     p_cb->failure = SMP_PAIR_FAIL_UNKNOWN;
+    LOG_VERBOSE("Number to display in numeric comparison=%d too large",
+                p_cb->number_to_display);
     smp_sm_event(p_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
     return;
   }
 
-  LOG_VERBOSE("Number to display in numeric comparison = %d",
-              p_cb->number_to_display);
   p_cb->cb_evt = SMP_NC_REQ_EVT;
   tSMP_INT_DATA smp_int_data;
   smp_int_data.passkey = p_cb->number_to_display;
   smp_sm_event(p_cb, SMP_SC_DSPL_NC_EVT, &smp_int_data);
-  return;
 }
 
 /*******************************************************************************
@@ -902,7 +903,7 @@ void smp_calculate_numeric_comparison_display_number(tSMP_CB* p_cb,
 void smp_calculate_local_dhkey_check(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   uint8_t iocap[3], a[7], b[7];
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   smp_calculate_f5_mackey_and_long_term_key(p_cb);
 
@@ -912,8 +913,6 @@ void smp_calculate_local_dhkey_check(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   smp_collect_peer_ble_address(b, p_cb);
   p_cb->dhkey_check = crypto_toolbox::f6(p_cb->mac_key, p_cb->rand, p_cb->rrand,
                                          p_cb->peer_random, iocap, a, b);
-
-  LOG_VERBOSE("local DHKey check calculation is completed");
 }
 
 /*******************************************************************************
@@ -929,7 +928,7 @@ void smp_calculate_peer_dhkey_check(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   uint8_t iocap[3], a[7], b[7];
   tSMP_KEY key;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   smp_collect_peer_io_capabilities(iocap, p_cb);
 
@@ -937,8 +936,6 @@ void smp_calculate_peer_dhkey_check(tSMP_CB* p_cb, tSMP_INT_DATA* p_data) {
   smp_collect_peer_ble_address(b, p_cb);
   Octet16 param_buf = crypto_toolbox::f6(p_cb->mac_key, p_cb->rrand, p_cb->rand,
                                          p_cb->local_random, iocap, b, a);
-
-  LOG_VERBOSE("peer DHKey check calculation is completed");
   key.key_type = SMP_KEY_TYPE_PEER_DHK_CHCK;
   key.p_data = param_buf.data();
   tSMP_INT_DATA smp_int_data;
@@ -961,7 +958,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
   RawAddress bda_for_lk;
   tBLE_ADDR_TYPE conn_addr_type;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (p_cb->id_addr_rcvd && p_cb->id_addr_type == BLE_ADDR_PUBLIC) {
     LOG_VERBOSE(
@@ -978,7 +975,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
 
   p_dev_rec = btm_find_dev(p_cb->pairing_bda);
   if (p_dev_rec == NULL) {
-    LOG_ERROR("%s failed to find Security Record", __func__);
+    LOG_ERROR("failed to find Security Record");
     return false;
   }
 
@@ -989,7 +986,7 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
   if (p_cb->init_security_mode == BTM_SEC_MODE_SC) {
     /* Secure Connections Only Mode */
     link_key_type = BTM_LKEY_TYPE_AUTH_COMB_P_256;
-  } else if (controller_get_interface()->supports_secure_connections()) {
+  } else if (bluetooth::shim::GetController()->SupportsSecureConnections()) {
     /* both transports are SC capable */
     if (p_cb->sec_level == SMP_SEC_AUTHENTICATED)
       link_key_type = BTM_LKEY_TYPE_AUTH_COMB_P_256;
@@ -1002,8 +999,8 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
     else
       link_key_type = BTM_LKEY_TYPE_UNAUTH_COMB;
   } else {
-    LOG_ERROR("%s failed to update link_key. Sec Mode = %d, sm4 = 0x%02x",
-              __func__, p_cb->init_security_mode, p_dev_rec->sm4);
+    LOG_ERROR("failed to update link_key. Sec Mode=%d, sm4=0x%02x",
+              p_cb->init_security_mode, p_dev_rec->sm4);
     return false;
   }
 
@@ -1013,8 +1010,6 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
   std::reverse_copy(link_key.begin(), link_key.end(), notif_link_key.begin());
   btm_sec_link_key_notification(bda_for_lk, notif_link_key, link_key_type);
 
-  LOG_VERBOSE("%s is completed", __func__);
-
   return true;
 }
 
@@ -1022,38 +1017,36 @@ bool smp_calculate_link_key_from_long_term_key(tSMP_CB* p_cb) {
 bool smp_calculate_long_term_key_from_link_key(tSMP_CB* p_cb) {
   tBTM_SEC_DEV_REC* p_dev_rec;
 
-  LOG_VERBOSE("%s", __func__);
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p_dev_rec = btm_find_dev(p_cb->pairing_bda);
   if (p_dev_rec == NULL) {
-    LOG_ERROR("%s failed to find Security Record", __func__);
+    LOG_ERROR("ailed to find Security Record");
     return false;
   }
 
   uint8_t br_link_key_type;
   br_link_key_type = BTM_SecGetDeviceLinkKeyType(p_cb->pairing_bda);
   if (br_link_key_type == BTM_LKEY_TYPE_IGNORE) {
-    LOG_ERROR("%s failed to retrieve BR link type", __func__);
+    LOG_ERROR("failed to retrieve BR link type");
     return false;
   }
 
   if ((br_link_key_type != BTM_LKEY_TYPE_AUTH_COMB_P_256) &&
       (br_link_key_type != BTM_LKEY_TYPE_UNAUTH_COMB_P_256)) {
-    LOG_ERROR("%s LE SC LTK can't be derived from LK %d", __func__,
-              br_link_key_type);
+    LOG_ERROR("LE SC LTK can't be derived from LK %d", br_link_key_type);
     return false;
   }
 
   Octet16 rev_link_key;
-  std::reverse_copy(p_dev_rec->link_key.begin(), p_dev_rec->link_key.end(),
-                    rev_link_key.begin());
+  std::reverse_copy(p_dev_rec->sec_rec.link_key.begin(),
+                    p_dev_rec->sec_rec.link_key.end(), rev_link_key.begin());
   p_cb->ltk = crypto_toolbox::link_key_to_ltk(rev_link_key,
                                               p_cb->key_derivation_h7_used);
 
   p_cb->sec_level = (br_link_key_type == BTM_LKEY_TYPE_AUTH_COMB_P_256)
                         ? SMP_SEC_AUTHENTICATED
                         : SMP_SEC_UNAUTHENTICATE;
-  LOG_VERBOSE("%s is completed", __func__);
   return true;
 }
 
@@ -1061,18 +1054,23 @@ bool smp_calculate_long_term_key_from_link_key(tSMP_CB* p_cb) {
  * This function generates nonce.
  */
 void smp_start_nonce_generation(tSMP_CB* p_cb) {
-  LOG_VERBOSE("%s", __func__);
-  btsnd_hcic_ble_rand(Bind(
-      [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-        memcpy(p_cb->rand.data(), rand, BT_OCTET8_LEN);
-        btsnd_hcic_ble_rand(Bind(
-            [](tSMP_CB* p_cb, BT_OCTET8 rand) {
-              memcpy(p_cb->rand.data() + 8, rand, BT_OCTET8_LEN);
-              LOG_VERBOSE("%s round %d", __func__, p_cb->round);
+  LOG_VERBOSE("start generating nonce");
+  send_ble_rand(BindOnce(
+      [](tSMP_CB* p_cb, uint64_t rand) {
+        memcpy(p_cb->rand.data(), (uint8_t*)&rand, sizeof(uint64_t));
+        send_ble_rand(BindOnce(
+            [](tSMP_CB* p_cb, uint64_t rand) {
+              memcpy(p_cb->rand.data() + sizeof(uint64_t), (uint8_t*)&rand,
+                     sizeof(uint64_t));
+              LOG_VERBOSE("round %d, done", p_cb->round);
               /* notifies SM that it has new nonce. */
               smp_sm_event(p_cb, SMP_HAVE_LOC_NONCE_EVT, NULL);
             },
             p_cb));
       },
       p_cb));
+}
+
+static void send_ble_rand(OnceCallback<void(uint64_t)> callback) {
+  bluetooth::shim::GetController()->LeRand(std::move(callback));
 }

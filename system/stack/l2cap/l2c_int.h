@@ -29,18 +29,15 @@
 
 #include <string>
 
-#include "btm_api.h"
-#include "btm_ble_api.h"
+#include "internal_include/bt_target.h"
 #include "l2c_api.h"
-#include "l2cap_acl_interface.h"
-#include "l2cap_controller_interface.h"
-#include "l2cap_hci_link_interface.h"
-#include "l2cap_security_interface.h"
 #include "l2cdefs.h"
+#include "macros.h"
 #include "osi/include/alarm.h"
 #include "osi/include/fixed_queue.h"
 #include "osi/include/list.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/btm_sec_api_types.h"
 #include "stack/include/hci_error_code.h"
 #include "types/hci_role.h"
 #include "types/raw_address.h"
@@ -85,10 +82,6 @@ typedef enum {
   CST_W4_L2CA_DISCONNECT_RSP   /* Waiting for upper layer disc rsp */
 } tL2C_CHNL_STATE;
 
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-
 inline std::string channel_state_text(const tL2C_CHNL_STATE& state) {
   switch (state) {
     CASE_RETURN_TEXT(CST_CLOSED);
@@ -104,7 +97,6 @@ inline std::string channel_state_text(const tL2C_CHNL_STATE& state) {
       return base::StringPrintf("UNKNOWN[%d]", state);
   }
 }
-#undef CASE_RETURN_TEXT
 
 /* Define the possible L2CAP link states
 */
@@ -271,15 +263,11 @@ typedef struct {
 #define L2CAP_CBB_DEFAULT_DATA_RATE_BUFF_QUOTA 100
 #endif
 
-typedef void(tL2CAP_SEC_CBACK)(const RawAddress& bd_addr,
-                               tBT_TRANSPORT trasnport, void* p_ref_data,
-                               tBTM_STATUS result);
-
 typedef struct {
   uint16_t psm;
   tBT_TRANSPORT transport;
   bool is_originator;
-  tL2CAP_SEC_CBACK* p_callback;
+  tBTM_SEC_CALLBACK* p_callback;
   void* p_ref_data;
 } tL2CAP_SEC_DATA;
 
@@ -538,6 +526,9 @@ typedef struct t_l2c_linkcb {
 
   uint8_t conn_update_mask;
 
+  bool conn_update_blocked_by_service_discovery;
+  bool conn_update_blocked_by_profile_connection;
+
   uint16_t min_interval; /* parameters as requested by peripheral */
   uint16_t max_interval;
   uint16_t latency;
@@ -680,6 +671,14 @@ typedef struct {
 
 typedef void(tL2C_FCR_MGMT_EVT_HDLR)(uint8_t, tL2C_CCB*);
 
+/* Necessary info for postponed TX completion callback
+ */
+typedef struct {
+  uint16_t local_cid;
+  uint16_t num_sdu;
+  tL2CA_TX_COMPLETE_CB* cb;
+} tL2C_TX_COMPLETE_CB_INFO;
+
 /* The offset in a buffer that L2CAP will use when building commands.
 */
 #define L2CAP_SEND_CMD_OFFSET 0
@@ -746,6 +745,8 @@ void l2cu_send_peer_info_req(tL2C_LCB* p_lcb, uint16_t info_type);
 void l2cu_set_acl_hci_header(BT_HDR* p_buf, tL2C_CCB* p_ccb);
 void l2cu_check_channel_congestion(tL2C_CCB* p_ccb);
 void l2cu_disconnect_chnl(tL2C_CCB* p_ccb);
+
+void l2cu_tx_complete(tL2C_TX_COMPLETE_CB_INFO* p_cbi);
 
 void l2cu_send_peer_ble_par_req(tL2C_LCB* p_lcb, uint16_t min_int,
                                 uint16_t max_int, uint16_t latency,
@@ -817,8 +818,6 @@ void l2c_link_adjust_allocation(void);
 
 void l2c_link_sec_comp(const RawAddress* p_bda, tBT_TRANSPORT trasnport,
                        void* p_ref_data, tBTM_STATUS status);
-void l2c_link_sec_comp2(const RawAddress& p_bda, tBT_TRANSPORT trasnport,
-                        void* p_ref_data, tBTM_STATUS status);
 void l2c_link_adjust_chnl_allocation(void);
 
 #if (L2CAP_CONFORMANCE_TESTING == TRUE)
@@ -873,7 +872,7 @@ void l2cble_send_peer_disc_req(tL2C_CCB* p_ccb);
 void l2cble_send_flow_control_credit(tL2C_CCB* p_ccb, uint16_t credit_value);
 tL2CAP_LE_RESULT_CODE l2ble_sec_access_req(const RawAddress& bd_addr,
                                            uint16_t psm, bool is_originator,
-                                           tL2CAP_SEC_CBACK* p_callback,
+                                           tBTM_SEC_CALLBACK* p_callback,
                                            void* p_ref_data);
 
 void l2cble_update_data_length(tL2C_LCB* p_lcb);

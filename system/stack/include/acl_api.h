@@ -313,10 +313,8 @@ bool btm_is_acl_locally_initiated(void);
 tBTM_STATUS btm_remove_acl(const RawAddress& bd_addr, tBT_TRANSPORT transport);
 
 void btm_acl_device_down(void);
-void btm_acl_update_inquiry_status(uint8_t status);
 
 void ACL_RegisterClient(struct acl_client_callback_s* callbacks);
 void ACL_UnregisterClient(struct acl_client_callback_s* callbacks);
-bool ACL_SupportTransparentSynchronousData(const RawAddress& bd_addr);
 void btm_acl_consolidate(const RawAddress& identity_addr,
                          const RawAddress& rpa);

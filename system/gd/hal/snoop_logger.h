@@ -17,14 +17,14 @@
 #pragma once
 
 #include <fstream>
-#include <iostream>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "common/circular_buffer.h"
 #include "hal/hci_hal.h"
+#include "hal/snoop_logger_socket_interface.h"
 #include "hal/snoop_logger_socket_thread.h"
 #include "hal/syscall_wrapper_impl.h"
 #include "module.h"

@@ -26,16 +26,16 @@
 #include <cstring>
 #include <mutex>
 
-#include "gd/hci/le_advertising_manager.h"
-#include "gd/hci/le_scanning_manager.h"
-#include "gd/neighbor/connectability.h"
-#include "gd/neighbor/discoverability.h"
-#include "gd/neighbor/inquiry.h"
-#include "gd/neighbor/page.h"
-#include "gd/security/security_module.h"
+#include "hci/le_advertising_manager.h"
+#include "hci/le_scanning_manager.h"
 #include "main/shim/controller.h"
 #include "main/shim/entry.h"
 #include "main/shim/helpers.h"
+#include "neighbor/connectability.h"
+#include "neighbor/discoverability.h"
+#include "neighbor/inquiry.h"
+#include "neighbor/page.h"
+#include "security/security_module.h"
 #include "stack/btm/btm_dev.h"
 #include "stack/btm/btm_int_types.h"
 #include "types/ble_address_with_type.h"
@@ -49,8 +49,6 @@ static constexpr bool kPassiveScanning = false;
 
 using BtmRemoteDeviceName = tBTM_REMOTE_DEV_NAME;
 
-void btm_process_cancel_complete(tHCI_STATUS status, uint8_t mode);
-void btm_process_inq_complete(tHCI_STATUS status, uint8_t result_type);
 void btm_ble_process_adv_addr(RawAddress& raw_address,
                               tBLE_ADDR_TYPE* address_type);
 void btm_ble_process_adv_pkt_cont(uint16_t event_type,
@@ -61,24 +59,6 @@ void btm_ble_process_adv_pkt_cont(uint16_t event_type,
                                   int8_t rssi, uint16_t periodic_adv_int,
                                   uint8_t data_len, const uint8_t* data,
                                   const RawAddress& original_bda);
-
-void btm_api_process_inquiry_result(const RawAddress& raw_address,
-                                    uint8_t page_scan_rep_mode,
-                                    DEV_CLASS device_class,
-                                    uint16_t clock_offset);
-
-void btm_api_process_inquiry_result_with_rssi(RawAddress raw_address,
-                                              uint8_t page_scan_rep_mode,
-                                              DEV_CLASS device_class,
-                                              uint16_t clock_offset,
-                                              int8_t rssi);
-
-void btm_api_process_extended_inquiry_result(RawAddress raw_address,
-                                             uint8_t page_scan_rep_mode,
-                                             DEV_CLASS device_class,
-                                             uint16_t clock_offset, int8_t rssi,
-                                             const uint8_t* eir_data,
-                                             size_t eir_len);
 
 namespace bluetooth {
 
@@ -190,7 +170,7 @@ void Btm::SetInterlacedInquiryScan() { GetInquiry()->SetInterlacedScan(); }
 void Btm::SetStandardInquiryScan() { GetInquiry()->SetStandardScan(); }
 
 bool Btm::IsInterlacedScanSupported() const {
-  return controller_get_interface()->supports_interlaced_inquiry_scan();
+  return bluetooth::shim::GetController()->SupportsInterlacedInquiryScan();
 }
 
 /**
@@ -419,20 +399,6 @@ BtmStatus Btm::ReadClassicRemoteDeviceName(const RawAddress& raw_address,
   return BTM_UNDEFINED;
 }
 
-BtmStatus Btm::ReadLeRemoteDeviceName(const RawAddress& raw_address,
-                                      tBTM_NAME_CMPL_CB* callback) {
-  if (!CheckLeAclLink(raw_address)) {
-    return BTM_UNKNOWN_ADDR;
-  }
-
-  if (!le_read_remote_name_.Start(raw_address)) {
-    return BTM_BUSY;
-  }
-
-  LOG_INFO("UNIMPLEMENTED %s need access to GATT module", __func__);
-  return BTM_UNKNOWN_ADDR;
-}
-
 BtmStatus Btm::CancelAllReadRemoteDeviceName() {
   LOG_ALWAYS_FATAL("unreachable");
   return BTM_UNDEFINED;
@@ -485,44 +451,6 @@ void Btm::StartScanning(bool use_active_scanning) {
 
 size_t Btm::GetNumberOfAdvertisingInstances() const {
   return GetAdvertising()->GetNumberOfAdvertisingInstances();
-}
-
-tBTM_STATUS Btm::CreateBond(const RawAddress& bd_addr, tBLE_ADDR_TYPE addr_type,
-                            tBT_TRANSPORT transport, int device_type) {
-  if (transport == BT_TRANSPORT_AUTO) {
-    if (device_type & BT_DEVICE_TYPE_BLE) {
-      transport = BT_TRANSPORT_LE;
-    } else if (device_type & BT_DEVICE_TYPE_BREDR) {
-      transport = BT_TRANSPORT_BR_EDR;
-    }
-    LOG_INFO("%s guessing transport as %02x ", __func__, transport);
-  }
-
-  auto security_manager = GetSecurityModule()->GetSecurityManager();
-  switch (transport) {
-    case BT_TRANSPORT_BR_EDR:
-      security_manager->CreateBond(ToAddressWithType(bd_addr, BLE_ADDR_PUBLIC));
-      break;
-    case BT_TRANSPORT_LE:
-      security_manager->CreateBondLe(ToAddressWithType(bd_addr, addr_type));
-      break;
-    default:
-      return BTM_ILLEGAL_VALUE;
-  }
-  return BTM_CMD_STARTED;
-}
-
-bool Btm::CancelBond(const RawAddress& bd_addr) {
-  auto security_manager = GetSecurityModule()->GetSecurityManager();
-  security_manager->CancelBond(ToAddressWithType(bd_addr, BLE_ADDR_PUBLIC));
-  return true;
-}
-
-bool Btm::RemoveBond(const RawAddress& bd_addr) {
-  // TODO(cmanton) Check if acl is connected
-  auto security_manager = GetSecurityModule()->GetSecurityManager();
-  security_manager->RemoveBond(ToAddressWithType(bd_addr, BLE_ADDR_PUBLIC));
-  return true;
 }
 
 uint16_t Btm::GetAclHandle(const RawAddress& remote_bda,

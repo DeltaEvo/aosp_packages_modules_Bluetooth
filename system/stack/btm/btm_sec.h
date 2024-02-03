@@ -42,11 +42,6 @@
 #define BTM_SEC_MAX_COLLISION_DELAY (5000)
 
 /*******************************************************************************
- *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
- ******************************************************************************/
-tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
-
-/*******************************************************************************
  *
  * Function         BTM_SecRegister
  *
@@ -83,19 +78,6 @@ bool BTM_SecAddRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);
  *
  ******************************************************************************/
 bool BTM_SecDeleteRmtNameNotifyCallback(tBTM_RMT_NAME_CALLBACK* p_callback);
-
-/*******************************************************************************
- *
- * Function         BTM_GetSecurityFlagsByTransport
- *
- * Description      Get security flags for the device on a particular transport
- *
- * Returns          bool    true or false is device found
- *
- ******************************************************************************/
-bool BTM_GetSecurityFlagsByTransport(const RawAddress& bd_addr,
-                                     uint8_t* p_sec_flags,
-                                     tBT_TRANSPORT transport);
 
 bool BTM_IsEncrypted(const RawAddress& bd_addr, tBT_TRANSPORT transport);
 bool BTM_IsLinkKeyAuthed(const RawAddress& bd_addr, tBT_TRANSPORT transport);
@@ -279,6 +261,7 @@ tBTM_LINK_KEY_TYPE BTM_SecGetDeviceLinkKeyType(const RawAddress& bd_addr);
  *                  BTM_PENDING   - command will be returned in the callback
  *                  BTM_WRONG_MODE- connection not up.
  *                  BTM_BUSY      - security procedures are currently active
+ *                  BTM_ERR_KEY_MISSING  - link key is missing.
  *                  BTM_MODE_UNSUPPORTED - if security manager not linked in.
  *
  ******************************************************************************/
@@ -610,6 +593,18 @@ void btm_sec_auth_complete(uint16_t handle, tHCI_STATUS status);
 
 /*******************************************************************************
  *
+ * Function         btm_sec_encryption_change_evt
+ *
+ * Description      This function is called to process an encryption change.
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void btm_sec_encryption_change_evt(uint16_t handle, tHCI_STATUS status,
+                                   uint8_t encr_enable);
+
+/*******************************************************************************
+ *
  * Function         btm_sec_encrypt_change
  *
  * Description      This function is when encryption of the connection is
@@ -716,18 +711,6 @@ void btm_sec_update_clock_offset(uint16_t handle, uint16_t clock_offset);
 
 /*******************************************************************************
  *
- * Function         btm_sec_find_first_serv
- *
- * Description      Look for the first record in the service database
- *                  with specified PSM
- *
- * Returns          Pointer to the record or NULL
- *
- ******************************************************************************/
-tBTM_SEC_SERV_REC* btm_sec_find_first_serv(bool is_originator, uint16_t psm);
-
-/*******************************************************************************
- *
  * Function         btm_sec_dev_rec_cback_event
  *
  * Description      This function calls the callback function with the given
@@ -790,5 +773,5 @@ void btm_sec_set_peer_sec_caps(uint16_t hci_handle, bool ssp_supported,
 void btm_sec_cr_loc_oob_data_cback_event(const RawAddress& address,
                                          tSMP_LOC_OOB_DATA loc_oob_data);
 
-// Return DEV_CLASS (uint8_t[3]) of bda. If record doesn't exist, create one.
-const uint8_t* btm_get_dev_class(const RawAddress& bda);
+// Return DEV_CLASS of bda. If record doesn't exist, create one.
+DEV_CLASS btm_get_dev_class(const RawAddress& bda);

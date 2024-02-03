@@ -25,11 +25,12 @@
 #include <cstdint>
 #include <mutex>
 
+#include "include/check.h"
 #include "include/hardware/bt_sock.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/list.h"
-#include "osi/include/log.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
+#include "osi/include/osi.h"  // INVALID_FD
 #include "osi/include/socket.h"
 #include "osi/include/thread.h"
 #include "stack/include/btm_api.h"
@@ -97,7 +98,7 @@ bt_status_t btsock_sco_cleanup(void) {
   return BT_STATUS_SUCCESS;
 }
 
-bt_status_t btsock_sco_listen(int* sock_fd, UNUSED_ATTR int flags) {
+bt_status_t btsock_sco_listen(int* sock_fd, int /* flags */) {
   CHECK(sock_fd != NULL);
 
   std::unique_lock<std::mutex> lock(sco_lock);
@@ -112,7 +113,7 @@ bt_status_t btsock_sco_listen(int* sock_fd, UNUSED_ATTR int flags) {
 }
 
 bt_status_t btsock_sco_connect(const RawAddress* bd_addr, int* sock_fd,
-                               UNUSED_ATTR int flags) {
+                               int /* flags */) {
   CHECK(bd_addr != NULL);
   CHECK(sock_fd != NULL);
 
@@ -304,7 +305,7 @@ static void disconnect_completed_cb(uint16_t sco_handle) {
   list_remove(sco_sockets, sco_socket);
 }
 
-static void socket_read_ready_cb(UNUSED_ATTR socket_t* socket, void* context) {
+static void socket_read_ready_cb(socket_t* /* socket */, void* context) {
   std::unique_lock<std::mutex> lock(sco_lock);
 
   sco_socket_t* sco_socket = (sco_socket_t*)context;

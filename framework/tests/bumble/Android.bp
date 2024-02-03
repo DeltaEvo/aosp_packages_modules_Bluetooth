@@ -26,11 +26,14 @@ android_test_helper_app {
         "androidx.test.rules",
         "bluetooth-test-util-lib",
         "compatibility-device-util-axt",
+        "flag-junit",
         "grpc-java-lite",
         "grpc-java-okhttp-client-lite",
+        "mockito-kotlin2",
         "opencensus-java-contrib-grpc-metrics",
         "pandora_experimental-grpc-java",
         "pandora_experimental-proto-java",
+        "truth-java8-extension",
     ],
 
     // Include all test java and kotlin files.

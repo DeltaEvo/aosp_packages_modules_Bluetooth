@@ -23,7 +23,8 @@
 
 #include <algorithm>
 
-#include "bt_trace.h"
+#include "include/check.h"
+#include "internal_include/bt_trace.h"
 #include "types/raw_address.h"
 
 namespace bluetooth {

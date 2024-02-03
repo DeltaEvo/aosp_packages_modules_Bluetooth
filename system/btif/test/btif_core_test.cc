@@ -166,7 +166,7 @@ controller_t controller = {};
 class BtifCoreWithControllerTest : public BtifCoreTest {
   void SetUp() override {
     BtifCoreTest::SetUp();
-    controller.supports_sniff_subrating = []() { return true; };
+    controller.SupportsSniffSubrating = []() { return true; };
     bluetooth::testing::controller = &controller;
     ASSERT_TRUE(controller_get_interface() != nullptr);
   }
@@ -267,6 +267,7 @@ TEST_F(BtifCoreTest, dump_dm_search_event) {
                      "BTA_DM_SEARCH_CANCEL_CMPL_EVT"),
       std::make_pair(BTA_DM_GATT_OVER_SDP_RES_EVT,
                      "BTA_DM_GATT_OVER_SDP_RES_EVT"),
+      std::make_pair(BTA_DM_NAME_READ_EVT, "BTA_DM_NAME_READ_EVT"),
   };
   for (const auto& event : events) {
     ASSERT_STREQ(event.second.c_str(), dump_dm_search_event(event.first));

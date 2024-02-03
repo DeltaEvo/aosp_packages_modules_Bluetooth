@@ -24,12 +24,11 @@
 
 #include <base/logging.h>
 
-#include "bt_target.h"
 #include "gatt_int.h"
+#include "internal_include/bt_target.h"
 #include "l2c_api.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "types/bluetooth/uuid.h"
@@ -358,6 +357,12 @@ BT_HDR* attp_build_sr_msg(tGATT_TCB& tcb, uint8_t op_code, tGATT_SR_MSG* p_msg,
                           uint16_t payload_size) {
   uint16_t offset = 0;
 
+  if (payload_size == 0) {
+    LOG_ERROR("Cannot send response (op: 0x%02x) due to payload size = 0, %s",
+              op_code, ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda));
+    return nullptr;
+  }
+
   switch (op_code) {
     case GATT_RSP_READ_BLOB:
     case GATT_RSP_PREPARE_WRITE:
@@ -530,6 +535,11 @@ tGATT_STATUS attp_send_cl_msg(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
   }
 
   uint16_t payload_size = gatt_tcb_get_payload_size(tcb, p_clcb->cid);
+  if (payload_size == 0) {
+    LOG_ERROR("Cannot send request (op: 0x%02x) due to payload size = 0, %s",
+              op_code, ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda));
+    return GATT_NO_RESOURCES;
+  }
 
   switch (op_code) {
     case GATT_REQ_MTU:
@@ -617,3 +627,16 @@ tGATT_STATUS attp_send_cl_msg(tGATT_TCB& tcb, tGATT_CLCB* p_clcb,
 
   return attp_cl_send_cmd(tcb, p_clcb, op_code, p_cmd);
 }
+
+namespace bluetooth {
+namespace legacy {
+namespace testing {
+BT_HDR* attp_build_value_cmd(uint16_t payload_size, uint8_t op_code,
+                             uint16_t handle, uint16_t offset, uint16_t len,
+                             uint8_t* p_data) {
+  return ::attp_build_value_cmd(payload_size, op_code, handle, offset, len,
+                                p_data);
+}
+}  // namespace testing
+}  // namespace legacy
+}  // namespace bluetooth

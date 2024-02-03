@@ -22,14 +22,16 @@
  *
  ******************************************************************************/
 
+#include <android_bluetooth_flags.h>
 #include <base/logging.h>
 
-#include "bt_target.h"
 #include "btif/include/btif_dm.h"
 #include "btif/include/btif_storage.h"
-#include "btif/include/stack_manager.h"
+#include "btif/include/stack_manager_t.h"
 #include "connection_manager.h"
 #include "device/include/interop.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "main/shim/acl_api.h"
@@ -44,6 +46,7 @@
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/l2cap_acl_interface.h"
 #include "stack/include/srvc_api.h"  // tDIS_VALUE
 #include "types/raw_address.h"
@@ -461,7 +464,11 @@ bool gatt_act_connect(tGATT_REG* p_reg, const RawAddress& bd_addr,
 
 namespace connection_manager {
 void on_connection_timed_out(uint8_t app_id, const RawAddress& address) {
-  gatt_le_connect_cback(L2CAP_ATT_CID, address, false, 0xff, BT_TRANSPORT_LE);
+  if (IS_FLAG_ENABLED(enumerate_gatt_errors)) {
+    gatt_le_connect_cback(L2CAP_ATT_CID, address, false, 0x08, BT_TRANSPORT_LE);
+  } else {
+    gatt_le_connect_cback(L2CAP_ATT_CID, address, false, 0xff, BT_TRANSPORT_LE);
+  }
 }
 }  // namespace connection_manager
 

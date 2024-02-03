@@ -34,9 +34,10 @@
 #include <cstring>
 
 #include "bta/sys/bta_sys.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/dumpsys.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/include/bnep_api.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_uuid16.h"
@@ -440,7 +441,7 @@ tPAN_RESULT PAN_Write(uint16_t handle, const RawAddress& dst,
     int i;
     for (i = 0; i < MAX_PAN_CONNS; ++i) {
       if (pan_cb.pcb[i].con_state == PAN_STATE_CONNECTED)
-        BNEP_Write(pan_cb.pcb[i].handle, dst, p_data, len, protocol, &src, ext);
+        BNEP_Write(pan_cb.pcb[i].handle, dst, p_data, len, protocol, src, ext);
     }
     return PAN_SUCCESS;
   }
@@ -495,7 +496,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst,
     uint8_t* data = (uint8_t*)p_buf + sizeof(BT_HDR) + p_buf->offset;
     for (i = 0; i < MAX_PAN_CONNS; ++i) {
       if (pan_cb.pcb[i].con_state == PAN_STATE_CONNECTED)
-        BNEP_Write(pan_cb.pcb[i].handle, dst, data, p_buf->len, protocol, &src,
+        BNEP_Write(pan_cb.pcb[i].handle, dst, data, p_buf->len, protocol, src,
                    ext);
     }
     osi_free(p_buf);
@@ -518,7 +519,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst,
     }
 
     result =
-        BNEP_WriteBuf(pan_cb.pcb[i].handle, dst, p_buf, protocol, &src, ext);
+        BNEP_WriteBuf(pan_cb.pcb[i].handle, dst, p_buf, protocol, src, ext);
     if (result == BNEP_IGNORE_CMD) {
       LOG_VERBOSE("PAN ignored data write for PANU connection");
       return (tPAN_RESULT)result;
@@ -550,7 +551,7 @@ tPAN_RESULT PAN_WriteBuf(uint16_t handle, const RawAddress& dst,
   }
 
   uint16_t len = p_buf->len;
-  result = BNEP_WriteBuf(pcb->handle, dst, p_buf, protocol, &src, ext);
+  result = BNEP_WriteBuf(pcb->handle, dst, p_buf, protocol, src, ext);
   if (result == BNEP_IGNORE_CMD) {
     LOG_VERBOSE("PAN ignored data buf write to PANU");
     pcb->write.errors++;

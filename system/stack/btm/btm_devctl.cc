@@ -31,15 +31,21 @@
 
 #include "acl_api_types.h"
 #include "btif/include/btif_bqr.h"
-#include "btm_ble_int.h"
 #include "btm_sec_cb.h"
 #include "btm_sec_int_types.h"
+#include "device/include/controller.h"
+#include "hci/controller_interface.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/btm_api.h"
+#include "main/shim/entry.h"
 #include "os/log.h"
+#include "stack/btm/btm_int_types.h"
 #include "stack/btm/btm_sec.h"
 #include "stack/gatt/connection_manager.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_api_types.h"
+#include "stack/include/bt_types.h"
+#include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_privacy.h"
 #include "stack/include/l2cap_controller_interface.h"
 #include "types/raw_address.h"
@@ -159,7 +165,7 @@ void BTM_db_reset(void) {
 
 static bool set_sec_state_idle(void* data, void* context) {
   tBTM_SEC_DEV_REC* p_dev_rec = static_cast<tBTM_SEC_DEV_REC*>(data);
-  p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
+  p_dev_rec->sec_rec.sec_state = BTM_SEC_STATE_IDLE;
   return true;
 }
 
@@ -193,7 +199,7 @@ void BTM_reset_complete() {
   std::srand(std::time(nullptr));
 
   /* Set up the BLE privacy settings */
-  if (controller->supports_ble() && controller->supports_ble_privacy() &&
+  if (controller->SupportsBle() && controller->SupportsBlePrivacy() &&
       controller->get_ble_resolving_list_max_size() > 0) {
     btm_ble_resolving_list_init(controller->get_ble_resolving_list_max_size());
     /* set the default random private address timeout */
@@ -204,7 +210,7 @@ void BTM_reset_complete() {
         "Le Address Resolving list disabled due to lack of controller support");
   }
 
-  if (controller->supports_ble()) {
+  if (controller->SupportsBle()) {
     l2c_link_processs_ble_num_bufs(controller->get_acl_buffer_count_ble());
   }
 
@@ -241,44 +247,42 @@ static void btm_read_local_name_timeout(UNUSED_ATTR void* data) {
 }
 
 static void decode_controller_support() {
-  const controller_t* controller = controller_get_interface();
-
   /* Create (e)SCO supported packet types mask */
   btm_cb.btm_sco_pkt_types_supported = 0;
   btm_cb.sco_cb.esco_supported = false;
-  if (controller->supports_sco()) {
+  if (bluetooth::shim::GetController()->SupportsSco()) {
     btm_cb.btm_sco_pkt_types_supported = ESCO_PKT_TYPES_MASK_HV1;
 
-    if (controller->supports_hv2_packets())
+    if (bluetooth::shim::GetController()->SupportsHv2Packets())
       btm_cb.btm_sco_pkt_types_supported |= ESCO_PKT_TYPES_MASK_HV2;
 
-    if (controller->supports_hv3_packets())
+    if (bluetooth::shim::GetController()->SupportsHv3Packets())
       btm_cb.btm_sco_pkt_types_supported |= ESCO_PKT_TYPES_MASK_HV3;
   }
 
-  if (controller->supports_ev3_packets())
+  if (bluetooth::shim::GetController()->SupportsEv3Packets())
     btm_cb.btm_sco_pkt_types_supported |= ESCO_PKT_TYPES_MASK_EV3;
 
-  if (controller->supports_ev4_packets())
+  if (bluetooth::shim::GetController()->SupportsEv4Packets())
     btm_cb.btm_sco_pkt_types_supported |= ESCO_PKT_TYPES_MASK_EV4;
 
-  if (controller->supports_ev5_packets())
+  if (bluetooth::shim::GetController()->SupportsEv5Packets())
     btm_cb.btm_sco_pkt_types_supported |= ESCO_PKT_TYPES_MASK_EV5;
 
   if (btm_cb.btm_sco_pkt_types_supported & BTM_ESCO_LINK_ONLY_MASK) {
     btm_cb.sco_cb.esco_supported = true;
 
     /* Add in EDR related eSCO types */
-    if (controller->supports_esco_2m_phy()) {
-      if (!controller->supports_3_slot_edr_packets())
+    if (bluetooth::shim::GetController()->SupportsEsco2mPhy()) {
+      if (!bluetooth::shim::GetController()->Supports3SlotEdrPackets())
         btm_cb.btm_sco_pkt_types_supported |= ESCO_PKT_TYPES_MASK_NO_2_EV5;
     } else {
       btm_cb.btm_sco_pkt_types_supported |=
           (ESCO_PKT_TYPES_MASK_NO_2_EV3 + ESCO_PKT_TYPES_MASK_NO_2_EV5);
     }
 
-    if (controller->supports_esco_3m_phy()) {
-      if (!controller->supports_3_slot_edr_packets())
+    if (bluetooth::shim::GetController()->SupportsEsco3mPhy()) {
+      if (!bluetooth::shim::GetController()->Supports3SlotEdrPackets())
         btm_cb.btm_sco_pkt_types_supported |= ESCO_PKT_TYPES_MASK_NO_3_EV5;
     } else {
       btm_cb.btm_sco_pkt_types_supported |=
@@ -292,14 +296,15 @@ static void decode_controller_support() {
   BTM_acl_after_controller_started(controller_get_interface());
   btm_sec_dev_reset();
 
-  if (controller->supports_rssi_with_inquiry_results()) {
-    if (controller->supports_extended_inquiry_response())
+  if (bluetooth::shim::GetController()->SupportsRssiWithInquiryResults()) {
+    if (bluetooth::shim::GetController()->SupportsExtendedInquiryResponse())
       BTM_SetInquiryMode(BTM_INQ_RESULT_EXTENDED);
     else
       BTM_SetInquiryMode(BTM_INQ_RESULT_WITH_RSSI);
   }
 
-  l2cu_set_non_flushable_pbf(controller->supports_non_flushable_pb());
+  l2cu_set_non_flushable_pbf(
+      bluetooth::shim::GetController()->SupportsNonFlushablePb());
   BTM_EnableInterlacedPageScan();
   BTM_EnableInterlacedInquiryScan();
 }
@@ -412,10 +417,9 @@ void btm_read_local_name_complete(uint8_t* p, UNUSED_ATTR uint16_t evt_len) {
  *
  ******************************************************************************/
 tBTM_STATUS BTM_SetDeviceClass(DEV_CLASS dev_class) {
-  if (!memcmp(btm_cb.devcb.dev_class, dev_class, DEV_CLASS_LEN))
-    return (BTM_SUCCESS);
+  if (btm_cb.devcb.dev_class == dev_class) return (BTM_SUCCESS);
 
-  memcpy(btm_cb.devcb.dev_class, dev_class, DEV_CLASS_LEN);
+  btm_cb.devcb.dev_class = dev_class;
 
   if (!controller_get_interface()->get_is_ready()) return (BTM_DEV_RESET);
 
@@ -430,12 +434,10 @@ tBTM_STATUS BTM_SetDeviceClass(DEV_CLASS dev_class) {
  *
  * Description      This function is called to read the local device class
  *
- * Returns          pointer to the device class
+ * Returns          the device class
  *
  ******************************************************************************/
-uint8_t* BTM_ReadDeviceClass(void) {
-  return ((uint8_t*)btm_cb.devcb.dev_class);
-}
+DEV_CLASS BTM_ReadDeviceClass(void) { return btm_cb.devcb.dev_class; }
 
 /*******************************************************************************
  *

@@ -34,12 +34,6 @@ Handler* Module::GetHandler() const {
   return handler_;
 }
 
-DumpsysDataFinisher EmptyDumpsysDataFinisher = [](DumpsysDataBuilder* /* dumpsys_data_builder */) {
-};
-DumpsysDataFinisher Module::GetDumpsysData(flatbuffers::FlatBufferBuilder* /* builder */) const {
-  return EmptyDumpsysDataFinisher;
-}
-
 const ModuleRegistry* Module::GetModuleRegistry() const {
   return registry_;
 }

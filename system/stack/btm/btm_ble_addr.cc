@@ -35,6 +35,7 @@
 #include "crypto_toolbox/crypto_toolbox.h"
 #include "device/include/controller.h"
 #include "os/log.h"
+#include "stack/btm/btm_int_types.h"
 #include "stack/include/acl_api.h"
 #include "stack/include/bt_octets.h"
 #include "stack/include/btm_ble_privacy.h"
@@ -146,8 +147,8 @@ bool btm_ble_addr_resolvable(const RawAddress& rpa,
   if (!BTM_BLE_IS_RESOLVE_BDA(rpa)) return false;
 
   if ((p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) &&
-      (p_dev_rec->ble_keys.key_type & BTM_LE_KEY_PID)) {
-    if (rpa_matches_irk(rpa, p_dev_rec->ble_keys.irk)) {
+      (p_dev_rec->sec_rec.ble_keys.key_type & BTM_LE_KEY_PID)) {
+    if (rpa_matches_irk(rpa, p_dev_rec->sec_rec.ble_keys.irk)) {
       btm_ble_init_pseudo_addr(p_dev_rec, rpa);
       return true;
     }
@@ -163,11 +164,11 @@ static bool btm_ble_match_random_bda(void* data, void* context) {
   RawAddress* random_bda = static_cast<RawAddress*>(context);
 
   if (!(p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) ||
-      !(p_dev_rec->ble_keys.key_type & BTM_LE_KEY_PID))
+      !(p_dev_rec->sec_rec.ble_keys.key_type & BTM_LE_KEY_PID))
     // Match fails preconditions
     return true;
 
-  if (rpa_matches_irk(*random_bda, p_dev_rec->ble_keys.irk)) {
+  if (rpa_matches_irk(*random_bda, p_dev_rec->sec_rec.ble_keys.irk)) {
     // Matched
     return false;
   }
@@ -204,9 +205,8 @@ static tBTM_SEC_DEV_REC* btm_find_dev_by_identity_addr(
     if (p_dev_rec->ble.identity_address_with_type.bda == bd_addr) {
       if ((p_dev_rec->ble.identity_address_with_type.type &
            (~BLE_ADDR_TYPE_ID_BIT)) != (addr_type & (~BLE_ADDR_TYPE_ID_BIT)))
-        LOG_WARN("%s find pseudo->random match with diff addr type: %d vs %d",
-                 __func__, p_dev_rec->ble.identity_address_with_type.type,
-                 addr_type);
+        LOG_WARN("pseudo->random match with diff addr type: %d vs %d",
+                 p_dev_rec->ble.identity_address_with_type.type, addr_type);
 
       /* found the match */
       return p_dev_rec;
@@ -271,7 +271,7 @@ bool btm_random_pseudo_to_identity_addr(RawAddress* random_pseudo,
     if (p_dev_rec->ble.in_controller_list & BTM_RESOLVING_LIST_BIT) {
       *p_identity_addr_type = p_dev_rec->ble.identity_address_with_type.type;
       *random_pseudo = p_dev_rec->ble.identity_address_with_type.bda;
-      if (controller_get_interface()->supports_ble_privacy())
+      if (controller_get_interface()->SupportsBlePrivacy())
         *p_identity_addr_type |= BLE_ADDR_TYPE_ID_BIT;
       return true;
     }
@@ -293,7 +293,7 @@ void btm_ble_refresh_peer_resolvable_private_addr(
     tBLE_RAND_ADDR_TYPE rra_type) {
   tBTM_SEC_DEV_REC* p_sec_rec = btm_find_dev(pseudo_bda);
   if (p_sec_rec == nullptr) {
-    LOG_WARN("%s No matching known device in record", __func__);
+    LOG_WARN("No matching known device in record");
     return;
   }
 
@@ -316,7 +316,7 @@ void btm_ble_refresh_peer_resolvable_private_addr(
     if (!acl_refresh_remote_address(identity_address, identity_address_type,
                                     p_sec_rec->ble.pseudo_addr, rra_type,
                                     rpa)) {
-      LOG_ERROR("%s Unknown device to refresh remote device", __func__);
+      LOG_ERROR("Unknown device to refresh remote device");
     }
   }
 }
@@ -341,7 +341,8 @@ bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
   if (!is_in_security_db && addr_is_rpa) {
     tBTM_SEC_DEV_REC* match_rec = btm_ble_resolve_random_addr(*bda);
     if (match_rec) {
-      LOG(INFO) << __func__ << ": matched and resolved random address";
+      LOG_INFO("matched/resolved random address:%s",
+               ADDRESS_TO_LOGGABLE_CSTR(*bda));
       is_in_security_db = true;
       match_rec->ble.active_addr_type = BTM_BLE_ADDR_RRA;
       match_rec->ble.cur_rand_addr = *bda;
@@ -353,7 +354,8 @@ bool maybe_resolve_address(RawAddress* bda, tBLE_ADDR_TYPE* bda_type) {
         *bda = match_rec->bd_addr;
       }
     } else {
-      LOG(INFO) << __func__ << ": unable to match and resolve random address";
+      LOG_INFO("unable to match/resolve random address:%s",
+               ADDRESS_TO_LOGGABLE_CSTR(*bda));
     }
   }
   return is_in_security_db;

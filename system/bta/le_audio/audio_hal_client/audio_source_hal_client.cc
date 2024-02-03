@@ -18,13 +18,16 @@
  *
  ******************************************************************************/
 
+#include <android_bluetooth_flags.h>
 #include <base/logging.h>
 
+#include "audio/asrc/asrc_resampler.h"
 #include "audio_hal_client.h"
 #include "audio_hal_interface/le_audio_software.h"
 #include "bta/le_audio/codec_manager.h"
+#include "common/repeating_timer.h"
 #include "common/time_util.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 #include "osi/include/wakelock.h"
 #include "stack/include/main_thread.h"
 
@@ -32,13 +35,6 @@ using bluetooth::audio::le_audio::LeAudioClientInterface;
 
 namespace le_audio {
 namespace {
-// TODO: HAL state should be in the HAL implementation
-enum {
-  HAL_UNINITIALIZED,
-  HAL_STOPPED,
-  HAL_STARTED,
-} le_audio_sink_hal_state;
-
 struct AudioHalStats {
   size_t media_read_total_underflow_bytes;
   size_t media_read_total_underflow_count;
@@ -54,10 +50,17 @@ struct AudioHalStats {
 } sStats;
 
 class SourceImpl : public LeAudioSourceAudioHalClient {
+  enum LeAudioSinkHalState {
+    HAL_UNINITIALIZED,
+    HAL_STOPPED,
+    HAL_STARTED,
+  } le_audio_sink_hal_state_;
+
  public:
   // Interface implementation
   bool Start(const LeAudioCodecConfiguration& codec_configuration,
-             LeAudioSourceAudioHalClient::Callbacks* audioReceiver) override;
+             LeAudioSourceAudioHalClient::Callbacks* audioReceiver,
+             DsaModes dsa_modes) override;
   void Stop() override;
   void ConfirmStreamingRequest() override;
   void CancelStreamingRequest() override;
@@ -70,14 +73,17 @@ class SourceImpl : public LeAudioSourceAudioHalClient {
   void ReconfigurationComplete() override;
 
   // Internal functionality
-  SourceImpl(bool is_broadcaster) : is_broadcaster_(is_broadcaster){};
+  SourceImpl(bool is_broadcaster)
+      : le_audio_sink_hal_state_(HAL_UNINITIALIZED),
+        is_broadcaster_(is_broadcaster){};
   ~SourceImpl() override {
-    if (le_audio_sink_hal_state != HAL_UNINITIALIZED) Release();
+    if (le_audio_sink_hal_state_ != HAL_UNINITIALIZED) Release();
   }
 
   bool OnResumeReq(bool start_media_task);
   bool OnSuspendReq();
-  bool OnMetadataUpdateReq(const source_metadata_v7_t& source_metadata);
+  bool OnMetadataUpdateReq(const source_metadata_v7_t& source_metadata,
+                           DsaMode latency_mode);
   bool Acquire();
   void Release();
   bool InitAudioSinkThread();
@@ -95,6 +101,7 @@ class SourceImpl : public LeAudioSourceAudioHalClient {
       nullptr;
   LeAudioSourceAudioHalClient::Callbacks* audioSourceCallbacks_ = nullptr;
   std::mutex audioSourceCallbacksMutex_;
+  std::unique_ptr<bluetooth::audio::asrc::SourceAudioHalAsrc> asrc_;
 };
 
 bool SourceImpl::Acquire() {
@@ -102,8 +109,9 @@ bool SourceImpl::Acquire() {
       .on_resume_ =
           std::bind(&SourceImpl::OnResumeReq, this, std::placeholders::_1),
       .on_suspend_ = std::bind(&SourceImpl::OnSuspendReq, this),
-      .on_metadata_update_ = std::bind(&SourceImpl::OnMetadataUpdateReq, this,
-                                       std::placeholders::_1),
+      .on_metadata_update_ =
+          std::bind(&SourceImpl::OnMetadataUpdateReq, this,
+                    std::placeholders::_1, std::placeholders::_2),
       .on_sink_metadata_update_ =
           [](const sink_metadata_v7_t& sink_metadata) {
             // TODO: update microphone configuration based on sink metadata
@@ -127,12 +135,12 @@ bool SourceImpl::Acquire() {
   }
 
   LOG_INFO();
-  le_audio_sink_hal_state = HAL_STOPPED;
+  le_audio_sink_hal_state_ = HAL_STOPPED;
   return this->InitAudioSinkThread();
 }
 
 void SourceImpl::Release() {
-  if (le_audio_sink_hal_state == HAL_UNINITIALIZED) {
+  if (le_audio_sink_hal_state_ == HAL_UNINITIALIZED) {
     LOG_WARN("Audio HAL Audio sink is not running");
     return;
   }
@@ -150,7 +158,7 @@ void SourceImpl::Release() {
       LOG_ERROR("Can't get LE Audio HAL interface");
     }
 
-    le_audio_sink_hal_state = HAL_UNINITIALIZED;
+    le_audio_sink_hal_state_ = HAL_UNINITIALIZED;
     halSinkInterface_ = nullptr;
   }
 }
@@ -197,9 +205,20 @@ void SourceImpl::SendAudioData() {
         bluetooth::common::time_get_os_boottime_us();
   }
 
-  std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
-  if (audioSourceCallbacks_ != nullptr) {
-    audioSourceCallbacks_->OnAudioDataReady(data);
+  if (IS_FLAG_ENABLED(leaudio_hal_client_asrc)) {
+    auto asrc_buffers = asrc_->Run(data);
+
+    std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
+    for (auto buffer : asrc_buffers) {
+      if (audioSourceCallbacks_ != nullptr) {
+        audioSourceCallbacks_->OnAudioDataReady(*buffer);
+      }
+    }
+  } else {
+    std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
+    if (audioSourceCallbacks_ != nullptr) {
+      audioSourceCallbacks_->OnAudioDataReady(data);
+    }
   }
 }
 
@@ -227,18 +246,21 @@ bool SourceImpl::InitAudioSinkThread() {
 
 void SourceImpl::StartAudioTicks() {
   wakelock_acquire();
+  if (IS_FLAG_ENABLED(leaudio_hal_client_asrc)) {
+    asrc_ = std::make_unique<bluetooth::audio::asrc::SourceAudioHalAsrc>(
+        source_codec_config_.num_channels, source_codec_config_.sample_rate,
+        source_codec_config_.bits_per_sample,
+        source_codec_config_.data_interval_us);
+  }
   audio_timer_.SchedulePeriodic(
       worker_thread_->GetWeakPtr(), FROM_HERE,
-      base::Bind(&SourceImpl::SendAudioData, base::Unretained(this)),
-#if BASE_VER < 931007
-      base::TimeDelta::FromMicroseconds(source_codec_config_.data_interval_us));
-#else
-      base::Microseconds(source_codec_config_.data_interval_us));
-#endif
+      base::BindRepeating(&SourceImpl::SendAudioData, base::Unretained(this)),
+      std::chrono::microseconds(source_codec_config_.data_interval_us));
 }
 
 void SourceImpl::StopAudioTicks() {
   audio_timer_.CancelAndWait();
+  asrc_.reset(nullptr);
   wakelock_release();
 }
 
@@ -267,7 +289,7 @@ bool SourceImpl::OnSuspendReq() {
 }
 
 bool SourceImpl::OnMetadataUpdateReq(
-    const source_metadata_v7_t& source_metadata) {
+    const source_metadata_v7_t& source_metadata, DsaMode dsa_mode) {
   std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
   if (audioSourceCallbacks_ == nullptr) {
     LOG(ERROR) << __func__ << ", audio receiver not started";
@@ -278,7 +300,8 @@ bool SourceImpl::OnMetadataUpdateReq(
       FROM_HERE,
       base::BindOnce(
           &LeAudioSourceAudioHalClient::Callbacks::OnAudioMetadataUpdate,
-          audioSourceCallbacks_->weak_factory_.GetWeakPtr(), source_metadata));
+          audioSourceCallbacks_->weak_factory_.GetWeakPtr(), source_metadata,
+          dsa_mode));
   if (status == BT_STATUS_SUCCESS) {
     return true;
   }
@@ -288,13 +311,14 @@ bool SourceImpl::OnMetadataUpdateReq(
 }
 
 bool SourceImpl::Start(const LeAudioCodecConfiguration& codec_configuration,
-                       LeAudioSourceAudioHalClient::Callbacks* audioReceiver) {
+                       LeAudioSourceAudioHalClient::Callbacks* audioReceiver,
+                       DsaModes dsa_modes) {
   if (!halSinkInterface_) {
     LOG_ERROR("Audio HAL Audio sink interface not acquired");
     return false;
   }
 
-  if (le_audio_sink_hal_state == HAL_STARTED) {
+  if (le_audio_sink_hal_state_ == HAL_STARTED) {
     LOG_ERROR("Audio HAL Audio sink is already in use");
     return false;
   }
@@ -315,11 +339,12 @@ bool SourceImpl::Start(const LeAudioCodecConfiguration& codec_configuration,
       .channels_count = codec_configuration.num_channels};
 
   halSinkInterface_->SetPcmParameters(pcmParameters);
+  LeAudioClientInterface::Get()->SetAllowedDsaModes(dsa_modes);
   halSinkInterface_->StartSession();
 
   std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
   audioSourceCallbacks_ = audioReceiver;
-  le_audio_sink_hal_state = HAL_STARTED;
+  le_audio_sink_hal_state_ = HAL_STARTED;
   return true;
 }
 
@@ -329,7 +354,7 @@ void SourceImpl::Stop() {
     return;
   }
 
-  if (le_audio_sink_hal_state != HAL_STARTED) {
+  if (le_audio_sink_hal_state_ != HAL_STARTED) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
     return;
   }
@@ -337,7 +362,7 @@ void SourceImpl::Stop() {
   LOG_INFO();
 
   halSinkInterface_->StopSession();
-  le_audio_sink_hal_state = HAL_STOPPED;
+  le_audio_sink_hal_state_ = HAL_STOPPED;
 
   if (CodecManager::GetInstance()->GetCodecLocation() ==
       types::CodecLocation::HOST) {
@@ -350,7 +375,7 @@ void SourceImpl::Stop() {
 
 void SourceImpl::ConfirmStreamingRequest() {
   if ((halSinkInterface_ == nullptr) ||
-      (le_audio_sink_hal_state != HAL_STARTED)) {
+      (le_audio_sink_hal_state_ != HAL_STARTED)) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
     return;
   }
@@ -366,7 +391,7 @@ void SourceImpl::ConfirmStreamingRequest() {
 
 void SourceImpl::SuspendedForReconfiguration() {
   if ((halSinkInterface_ == nullptr) ||
-      (le_audio_sink_hal_state != HAL_STARTED)) {
+      (le_audio_sink_hal_state_ != HAL_STARTED)) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
     return;
   }
@@ -377,7 +402,7 @@ void SourceImpl::SuspendedForReconfiguration() {
 
 void SourceImpl::ReconfigurationComplete() {
   if ((halSinkInterface_ == nullptr) ||
-      (le_audio_sink_hal_state != HAL_STARTED)) {
+      (le_audio_sink_hal_state_ != HAL_STARTED)) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
     return;
   }
@@ -388,7 +413,7 @@ void SourceImpl::ReconfigurationComplete() {
 
 void SourceImpl::CancelStreamingRequest() {
   if ((halSinkInterface_ == nullptr) ||
-      (le_audio_sink_hal_state != HAL_STARTED)) {
+      (le_audio_sink_hal_state_ != HAL_STARTED)) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
     return;
   }
@@ -399,7 +424,7 @@ void SourceImpl::CancelStreamingRequest() {
 
 void SourceImpl::UpdateRemoteDelay(uint16_t remote_delay_ms) {
   if ((halSinkInterface_ == nullptr) ||
-      (le_audio_sink_hal_state != HAL_STARTED)) {
+      (le_audio_sink_hal_state_ != HAL_STARTED)) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
     return;
   }
@@ -411,7 +436,7 @@ void SourceImpl::UpdateRemoteDelay(uint16_t remote_delay_ms) {
 void SourceImpl::UpdateAudioConfigToHal(
     const ::le_audio::offload_config& config) {
   if ((halSinkInterface_ == nullptr) ||
-      (le_audio_sink_hal_state != HAL_STARTED)) {
+      (le_audio_sink_hal_state_ != HAL_STARTED)) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
     return;
   }

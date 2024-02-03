@@ -24,10 +24,9 @@
 
 #include <cstdint>
 
-#include "bt_target.h"  // Must be first to define build configuration
-
 #include "bta/sys/bta_sys.h"
 #include "bta/sys/bta_sys_int.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/dumpsys.h"
 #include "osi/include/log.h"
 #include "osi/include/osi.h"  // UNUSED_ATTR
@@ -168,6 +167,37 @@ void bta_sys_sco_register(tBTA_SYS_CONN_SCO_CBACK* p_cback) {
  ******************************************************************************/
 void bta_sys_pm_register(tBTA_SYS_CONN_CBACK* p_cback) {
   bta_sys_cb.ppm_cb = p_cback;
+}
+
+/*******************************************************************************
+ *
+ * Function         bta_sys_sniff_register
+ *
+ * Description      Called by BTA DM to register sniff callbacks
+ *
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void bta_sys_sniff_register(tBTA_SYS_SNIFF_CBACK* p_cback) {
+  bta_sys_cb.sniff_cb = p_cback;
+}
+
+/*******************************************************************************
+ *
+ * Function         bta_sys_reset_sniff
+ *
+ * Description      Called by BTA subsystems to reset sniff timer
+ *
+ *
+ * Returns          void
+ *
+ ******************************************************************************/
+void bta_sys_reset_sniff(uint8_t id, uint8_t app_id,
+                         const RawAddress& peer_addr) {
+  if (bta_sys_cb.sniff_cb) {
+    bta_sys_cb.sniff_cb(id, app_id, peer_addr);
+  }
 }
 
 /*******************************************************************************

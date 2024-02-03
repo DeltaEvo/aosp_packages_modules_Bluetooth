@@ -53,6 +53,7 @@ import android.bluetooth.BluetoothUuid;
 import android.bluetooth.SdpMasRecord;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Looper;
 import android.os.Message;
 import android.os.SystemProperties;
 import android.provider.Telephony;
@@ -139,6 +140,11 @@ class MceStateMachine extends StateMachine {
     // URI Scheme for messages with email contact
     private static final String SCHEME_MAILTO = "mailto";
 
+    private static final String FETCH_MESSAGE_TYPE =
+            "persist.bluetooth.pts.mapclient.fetchmessagetype";
+    private static final String SEND_MESSAGE_TYPE =
+            "persist.bluetooth.pts.mapclient.sendmessagetype";
+
     // Connectivity States
     private int mPreviousState = BluetoothProfile.STATE_DISCONNECTED;
     private int mMostRecentState = BluetoothProfile.STATE_DISCONNECTED;
@@ -219,17 +225,39 @@ class MceStateMachine extends StateMachine {
         this(service, device, null, null);
     }
 
+    MceStateMachine(MapClientService service, BluetoothDevice device, Looper looper) {
+        this(service, device, null, null, looper);
+    }
+
     @VisibleForTesting
     MceStateMachine(MapClientService service, BluetoothDevice device, MasClient masClient,
             MapClientContent database) {
         super(TAG);
-        mMasClient = masClient;
         mService = service;
+        mMasClient = masClient;
+        mDevice = device;
         mDatabase = database;
+        initStateMachine();
+    }
 
+    @VisibleForTesting
+    MceStateMachine(
+            MapClientService service,
+            BluetoothDevice device,
+            MasClient masClient,
+            MapClientContent database,
+            Looper looper) {
+        super(TAG, looper);
+        mService = service;
+        mMasClient = masClient;
+        mDevice = device;
+        mDatabase = database;
+        initStateMachine();
+    }
+
+    private void initStateMachine() {
         mPreviousState = BluetoothProfile.STATE_DISCONNECTED;
 
-        mDevice = device;
         mDisconnected = new Disconnected();
         mConnecting = new Connecting();
         mDisconnecting = new Disconnecting();
@@ -469,7 +497,10 @@ class MceStateMachine extends StateMachine {
     Bmessage.Type getDefaultMessageType() {
         synchronized (mDefaultMessageType) {
             if (Utils.isPtsTestMode()) {
-                return MapUtils.sendMessageType();
+                int messageType = SystemProperties.getInt(SEND_MESSAGE_TYPE, -1);
+                if (messageType > 0 && messageType < Bmessage.Type.values().length) {
+                    return Bmessage.Type.values()[messageType];
+                }
             }
             return mDefaultMessageType;
         }
@@ -695,7 +726,15 @@ class MceStateMachine extends StateMachine {
                 case MSG_GET_MESSAGE_LISTING:
                     // Get latest 50 Unread messages in the last week
                     MessagesFilter filter = new MessagesFilter();
-                    filter.setMessageType(MapUtils.fetchMessageType());
+                    if (Utils.isPtsTestMode()) {
+                        filter.setMessageType(
+                                (byte)
+                                        SystemProperties.getInt(
+                                                FETCH_MESSAGE_TYPE,
+                                                MessagesFilter.MESSAGE_TYPE_ALL));
+                    } else {
+                        filter.setMessageType(MessagesFilter.MESSAGE_TYPE_ALL);
+                    }
                     Calendar calendar = Calendar.getInstance();
                     calendar.add(Calendar.DATE, -7);
                     filter.setPeriod(calendar.getTime(), null);

@@ -18,13 +18,15 @@
 
 #include "bta/dm/bta_dm_disc.h"
 
+#include <android_bluetooth_flags.h>
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
 #include <stddef.h>
 
 #include <cstdint>
+#include <vector>
 
-#include "bta/dm/bta_dm_disc.h"
+#include "android_bluetooth_flags.h"
 #include "bta/dm/bta_dm_disc_int.h"
 #include "bta/include/bta_gatt_api.h"
 #include "bta/include/bta_sdp_api.h"
@@ -34,11 +36,13 @@
 #include "common/strings.h"
 #include "device/include/interop.h"
 #include "include/bind_helpers.h"
+#include "include/check.h"
+#include "internal_include/bt_target.h"
 #include "main/shim/dumpsys.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/fixed_queue.h"
-#include "osi/include/osi.h"  // UNUSED_ATTR
+#include "osi/include/osi.h"          // UNUSED_ATTR
 #include "stack/btm/btm_int_types.h"  // TimestampedStringCircularBuffer
 #include "stack/btm/neighbor_inquiry.h"
 #include "stack/include/avrc_api.h"
@@ -306,7 +310,13 @@ static void bta_dm_search_cancel() {
      active */
   else if (!bta_dm_search_cb.name_discover_done) {
     get_btm_client_interface().peer.BTM_CancelRemoteDeviceName();
-    bta_dm_search_cmpl();
+#ifndef TARGET_FLOSS
+    /* bta_dm_search_cmpl is called when receiving the remote name cancel evt */
+    if (!IS_FLAG_ENABLED(
+            bta_dm_defer_device_discovery_state_change_until_rnr_complete)) {
+      bta_dm_search_cmpl();
+    }
+#endif
   } else {
     bta_dm_inq_cmpl(0);
   }
@@ -494,7 +504,7 @@ static void bta_dm_remote_name_cmpl(const tBTA_DM_MSG* p_data) {
     if (remote_name_msg.hci_status == HCI_SUCCESS) {
       bd_name_copy(search_data.disc_res.bd_name, remote_name_msg.bd_name);
     }
-    bta_dm_search_cb.p_search_cback(BTA_DM_DISC_RES_EVT, &search_data);
+    bta_dm_search_cb.p_search_cback(BTA_DM_NAME_READ_EVT, &search_data);
   } else {
     LOG_WARN("Received remote name complete without callback");
   }
@@ -518,7 +528,9 @@ static void store_avrcp_profile_feature(tSDP_DISC_REC* sdp_rec) {
   tSDP_DISC_ATTR* p_attr =
       get_legacy_stack_sdp_api()->record.SDP_FindAttributeInRec(
           sdp_rec, ATTR_ID_SUPPORTED_FEATURES);
-  if (p_attr == NULL) {
+  if (p_attr == NULL ||
+      SDP_DISC_ATTR_TYPE(p_attr->attr_len_type) != UINT_DESC_TYPE ||
+      SDP_DISC_ATTR_LEN(p_attr->attr_len_type) < 2) {
     return;
   }
 
@@ -1477,7 +1489,7 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
   // Pass the original address to GattService#onScanResult
   result.inq_res.original_bda = p_inq->original_bda;
 
-  memcpy(result.inq_res.dev_class, p_inq->dev_class, DEV_CLASS_LEN);
+  result.inq_res.dev_class = p_inq->dev_class;
   BTM_COD_SERVICE_CLASS(service_class, p_inq->dev_class);
   result.inq_res.is_limited =
       (service_class & BTM_COD_SERVICE_LMTD_DISCOVER) ? true : false;
@@ -1960,6 +1972,13 @@ static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status) {
             bta_dm_clear_conn_id_on_client_close_is_enabled()) {
       bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
     }
+
+    if (IS_FLAG_ENABLED(bta_dm_disc_stuck_in_cancelling_fix)) {
+      LOG_INFO("Discovery complete for invalid conn ID. Will pick up next job");
+      bta_dm_search_set_state(BTA_DM_SEARCH_IDLE);
+      bta_dm_free_sdp_db();
+      bta_dm_execute_queued_request();
+    }
   }
 }
 
@@ -2058,37 +2077,6 @@ static void bta_dm_proc_open_evt(tBTA_GATTC_OPEN* p_data) {
                                                         nullptr);
   } else {
     bta_dm_gatt_disc_complete(GATT_INVALID_CONN_ID, p_data->status);
-  }
-}
-
-void bta_dm_proc_close_evt(const tBTA_GATTC_CLOSE& close) {
-  LOG_INFO("Gatt connection closed peer:%s reason:%s",
-           ADDRESS_TO_LOGGABLE_CSTR(close.remote_bda),
-           gatt_disconnection_reason_text(close.reason).c_str());
-
-  disc_gatt_history_.Push(base::StringPrintf(
-      "%-32s bd_addr:%s client_if:%hu status:%s event:%s",
-      "GATTC_EventCallback", ADDRESS_TO_LOGGABLE_CSTR(close.remote_bda),
-      close.client_if, gatt_status_text(close.status).c_str(),
-      gatt_client_event_text(BTA_GATTC_CLOSE_EVT).c_str()));
-
-  if (close.remote_bda == bta_dm_search_cb.peer_bdaddr) {
-    if (bluetooth::common::init_flags::
-            bta_dm_clear_conn_id_on_client_close_is_enabled()) {
-      LOG_DEBUG("Clearing connection id on client close");
-      bta_dm_search_cb.conn_id = GATT_INVALID_CONN_ID;
-    }
-  } else {
-    LOG_WARN("Received close event for unknown peer:%s",
-             ADDRESS_TO_LOGGABLE_CSTR(close.remote_bda));
-  }
-
-  /* in case of disconnect before search is completed */
-  if ((bta_dm_search_cb.state != BTA_DM_SEARCH_IDLE) &&
-      (bta_dm_search_cb.state != BTA_DM_SEARCH_ACTIVE) &&
-      close.remote_bda == bta_dm_search_cb.peer_bdaddr) {
-    bta_dm_gatt_disc_complete((uint16_t)GATT_INVALID_CONN_ID,
-                              (tGATT_STATUS)GATT_ERROR);
   }
 }
 

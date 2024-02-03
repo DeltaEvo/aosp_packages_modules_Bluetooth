@@ -18,20 +18,22 @@
 #include <base/logging.h>
 
 #include <map>
+#include <vector>
 
 #include "bind_helpers.h"
 #include "device/include/controller.h"
 #include "eatt.h"
+#include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "os/log.h"
 #include "osi/include/alarm.h"
 #include "osi/include/allocator.h"
 #include "stack/btm/btm_sec.h"
-#include "stack/include/btm_sec_api.h"
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_psm_types.h"
+#include "stack/include/btm_sec_api.h"
 #include "stack/include/main_thread.h"
 
 namespace bluetooth {
@@ -61,6 +63,8 @@ struct eatt_impl {
   uint16_t default_mtu_;
   uint16_t max_mps_;
   tL2CAP_APPL_INFO reg_info_;
+
+  base::WeakPtrFactory<eatt_impl> weak_factory_{this};
 
   eatt_impl() {
     default_mtu_ = EATT_DEFAULT_MTU;
@@ -239,13 +243,8 @@ struct eatt_impl {
     bt_status_t status = do_in_main_thread_delayed(
         FROM_HERE,
         base::BindOnce(&eatt_impl::upper_tester_delay_connect_cb,
-                       base::Unretained(this), bda),
-#if BASE_VER < 931007
-        base::TimeDelta::FromMilliseconds(timeout_ms)
-#else
-        base::Milliseconds(timeout_ms)
-#endif
-    );
+                       weak_factory_.GetWeakPtr(), bda),
+        std::chrono::milliseconds(timeout_ms));
 
     LOG_INFO("Scheduled peripheral connect eatt for device with status: %d",
              (int)status);
@@ -290,14 +289,9 @@ struct eatt_impl {
     if (stack_config_get_interface()->get_pts_l2cap_ecoc_reconfigure()) {
       bt_status_t status = do_in_main_thread_delayed(
           FROM_HERE,
-          base::BindOnce(&eatt_impl::reconfigure_all, base::Unretained(this),
-                         bda, 300),
-#if BASE_VER < 931007
-          base::TimeDelta::FromMilliseconds(4000)
-#else
-          base::Milliseconds(4000)
-#endif
-      );
+          base::BindOnce(&eatt_impl::reconfigure_all,
+                         weak_factory_.GetWeakPtr(), bda, 300),
+          std::chrono::seconds(4));
       LOG_INFO("Scheduled ECOC reconfiguration with status: %d", (int)status);
     }
   }
@@ -455,13 +449,8 @@ struct eatt_impl {
       do_in_main_thread_delayed(
           FROM_HERE,
           base::BindOnce(&eatt_impl::upper_tester_send_data_if_needed,
-                         base::Unretained(this), bda, lcid),
-#if BASE_VER < 931007
-          base::TimeDelta::FromMilliseconds(1000)
-#else
-          base::Milliseconds(1000)
-#endif
-      );
+                         weak_factory_.GetWeakPtr(), bda, lcid),
+          std::chrono::seconds(1));
     }
   }
 
@@ -981,7 +970,8 @@ struct eatt_impl {
     /* If we don't know yet, read GATT server supported features. */
     if (gatt_cl_read_sr_supp_feat_req(
             bd_addr, base::BindOnce(&eatt_impl::supported_features_cb,
-                                    base::Unretained(this), role)) == false) {
+                                    weak_factory_.GetWeakPtr(), role)) ==
+        false) {
       LOG_INFO("Read server supported features failed for device %s",
                ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     }
@@ -1032,7 +1022,8 @@ struct eatt_impl {
     /* If we don't know yet, read GATT server supported features. */
     if (gatt_cl_read_sr_supp_feat_req(
             bd_addr, base::BindOnce(&eatt_impl::supported_features_cb,
-                                    base::Unretained(this), role)) == false) {
+                                    weak_factory_.GetWeakPtr(), role)) ==
+        false) {
       LOG_INFO("Read server supported features failed for device %s",
                ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     }

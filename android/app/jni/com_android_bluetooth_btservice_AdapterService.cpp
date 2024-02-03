@@ -69,6 +69,7 @@ static jmethodID method_switchCodecCallback;
 static jmethodID method_acquireWakeLock;
 static jmethodID method_releaseWakeLock;
 static jmethodID method_energyInfo;
+static jmethodID method_keyMissingCallback;
 
 static struct {
   jclass clazz;
@@ -752,6 +753,29 @@ static void le_rand_callback(uint64_t /* random */) {
   // Android doesn't support the LeRand API.
 }
 
+static void key_missing_callback(const RawAddress bd_addr) {
+  std::shared_lock<std::shared_timed_mutex> lock(jniObjMutex);
+  if (!sJniCallbacksObj) {
+    ALOGE("%s, JNI obj is null. Failed to call JNI callback", __func__);
+    return;
+  }
+
+  CallbackEnv sCallbackEnv(__func__);
+  if (!sCallbackEnv.valid()) return;
+
+  ScopedLocalRef<jbyteArray> addr(
+      sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
+  if (!addr.get()) {
+    ALOGE("Address allocation failed in %s", __func__);
+    return;
+  }
+  sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
+                                   (jbyte*)&bd_addr);
+
+  sCallbackEnv->CallVoidMethod(sJniCallbacksObj, method_keyMissingCallback,
+                               addr.get());
+}
+
 static void callback_thread_event(bt_cb_thread_evt event) {
   if (event == ASSOCIATE_JVM) {
     JavaVMAttachArgs args;
@@ -770,6 +794,7 @@ static void callback_thread_event(bt_cb_thread_evt event) {
     }
     vm->DetachCurrentThread();
     sHaveCallbackThread = false;
+    callbackEnv = NULL;
   }
 }
 
@@ -837,7 +862,8 @@ static bt_callbacks_t sBluetoothCallbacks = {sizeof(sBluetoothCallbacks),
                                              generate_local_oob_data_callback,
                                              switch_buffer_size_callback,
                                              switch_codec_callback,
-                                             le_rand_callback};
+                                             le_rand_callback,
+                                             key_missing_callback};
 
 class JNIThreadAttacher {
  public:
@@ -1464,6 +1490,14 @@ static jboolean cancelBondNative(JNIEnv* env, jobject /* obj */,
   int ret = sBluetoothInterface->cancel_bond((RawAddress*)addr);
   env->ReleaseByteArrayElements(address, addr, 0);
   return (ret == BT_STATUS_SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
+static jboolean pairingIsBusyNative(JNIEnv* /*env*/, jobject /* obj */) {
+  ALOGV("%s", __func__);
+
+  if (!sBluetoothInterface) return JNI_FALSE;
+
+  return sBluetoothInterface->pairing_is_busy();
 }
 
 static int getConnectionStateNative(JNIEnv* env, jobject /* obj */,
@@ -2115,6 +2149,7 @@ int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {
        (void*)createBondOutOfBandNative},
       {"removeBondNative", "([B)Z", (void*)removeBondNative},
       {"cancelBondNative", "([B)Z", (void*)cancelBondNative},
+      {"pairingIsBusyNative", "()Z", (void*)pairingIsBusyNative},
       {"generateLocalOobDataNative", "(I)V", (void*)generateLocalOobDataNative},
       {"getConnectionStateNative", "([B)I", (void*)getConnectionStateNative},
       {"pinReplyNative", "([BZI[B)Z", (void*)pinReplyNative},
@@ -2197,6 +2232,7 @@ int register_com_android_bluetooth_btservice_AdapterService(JNIEnv* env) {
       {"releaseWakeLock", "(Ljava/lang/String;)Z", &method_releaseWakeLock},
       {"energyInfoCallback", "(IIJJJJ[Landroid/bluetooth/UidTraffic;)V",
        &method_energyInfo},
+      {"keyMissingCallback", "([B)V", &method_keyMissingCallback},
   };
   GET_JAVA_METHODS(env, "com/android/bluetooth/btservice/JniCallbacks",
                    javaMethods);

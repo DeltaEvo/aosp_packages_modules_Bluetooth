@@ -28,9 +28,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/time_util.h"
+#include "include/check.h"
+#include "internal_include/bt_target.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/l2c_api.h"

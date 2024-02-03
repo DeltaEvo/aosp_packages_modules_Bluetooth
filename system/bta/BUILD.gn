@@ -138,8 +138,6 @@ static_library("bta") {
     "//bt/system/linux_include",
     "//bt/system/bta",
     "//bt/system/gd",
-    "//bt/system/internal_include",
-    "//bt/system/internal_include",
     "//bt/system/stack/include",
     "//bt/system/stack/btm",
     "//bt/system/udrv/include",
@@ -157,6 +155,7 @@ static_library("bta") {
   ]
 
   deps = [
+    "//bt/system/audio:libbt-audio-asrc",
     "//bt/system/bta:LeAudioSetScenariosSchema_bfbs",
     "//bt/system/bta:LeAudioSetConfigsSchema_bfbs",
     "//bt/system/bta:install_audio_set_scenarios_json",
@@ -223,7 +222,6 @@ if (use.test) {
       "include",
       "//bt/system/",
       "//bt/system/bta",
-      "//bt/system/internal_include",
       "//bt/system/stack/btm",
     ]
 

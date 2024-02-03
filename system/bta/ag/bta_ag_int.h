@@ -30,6 +30,7 @@
 #include "bta/include/bta_ag_api.h"
 #include "bta/include/bta_api.h"
 #include "bta/sys/bta_sys.h"
+#include "internal_include/bt_target.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/sdp/sdp_discovery_db.h"
 #include "types/raw_address.h"
@@ -241,6 +242,7 @@ struct tBTA_AG_SCB {
   bool cmer_enabled;        /* set to true if HF enables CMER reporting */
   bool cmee_enabled;        /* set to true if HF enables CME ERROR reporting */
   bool inband_enabled;      /* set to true if inband ring enabled */
+  bool nrec_enabled;        /* noise reduction & echo canceling */
   bool svc_conn;            /* set to true when service level connection up */
   uint8_t state;            /* state machine state */
   uint8_t conn_service;     /* connected service */
@@ -269,6 +271,8 @@ struct tBTA_AG_SCB {
       inuse_codec;     /* codec being used for the current SCO connection */
   bool codec_updated;  /* set to true whenever the app updates codec type */
   bool codec_fallback; /* If sco nego fails for mSBC, fallback to CVSD */
+  uint8_t retransmission_effort_retries;         /* Retry eSCO
+                                                  with retransmission_effort value*/
   tBTA_AG_SCO_MSBC_SETTINGS codec_msbc_settings; /* settings to be used for the
                                                     impending eSCO on WB */
   tBTA_AG_SCO_LC3_SETTINGS codec_lc3_settings;   /* settings to be used for the
@@ -287,10 +291,10 @@ struct tBTA_AG_SCB {
 
   std::string ToString() const {
     return base::StringPrintf(
-        "codec_updated=%d, codec_fallback=%d, "
+        "codec_updated=%d, codec_fallback=%d, nrec=%d"
         "sco_codec=%d, peer_codec=%d, msbc_settings=%d, lc3_settings=%d, "
         "device=%s",
-        codec_updated, codec_fallback, sco_codec, peer_codecs,
+        codec_updated, codec_fallback, nrec_enabled, sco_codec, peer_codecs,
         codec_msbc_settings, codec_lc3_settings,
         ADDRESS_TO_LOGGABLE_CSTR(peer_addr));
   }
@@ -429,6 +433,7 @@ void bta_ag_sco_codec_nego(tBTA_AG_SCB* p_scb, bool result);
 void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb);
 bool bta_ag_is_sco_open_allowed(tBTA_AG_SCB* p_scb, const std::string event);
 void bta_ag_send_bcs(tBTA_AG_SCB* p_scb);
+bool bta_ag_get_sco_offload_enabled();
 void bta_ag_set_sco_offload_enabled(bool value);
 void bta_ag_set_sco_allowed(bool value);
 const RawAddress& bta_ag_get_active_device();

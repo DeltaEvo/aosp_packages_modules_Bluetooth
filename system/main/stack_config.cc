@@ -18,10 +18,11 @@
 
 #define LOG_TAG "bt_stack_config"
 
-#include "stack_config.h"
+#include "internal_include/stack_config.h"
 
 #include <base/logging.h>
 
+#include "include/check.h"
 #include "osi/include/future.h"
 #include "osi/include/log.h"
 

@@ -1,33 +1,17 @@
 /*
- * Copyright (c) 2008-2009, Motorola, Inc.
+ * Copyright (C) 2024 The Android Open Source Project
  *
- * All rights reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * - Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * - Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * - Neither the name of the Motorola, Inc. nor the names of its contributors
- * may be used to endorse or promote products derived from this software
- * without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.android.bluetooth.opp;
@@ -35,6 +19,8 @@ package com.android.bluetooth.opp;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothProtoEnums;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.database.Cursor;
@@ -53,13 +39,16 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ListView;
 
 import com.android.bluetooth.BluetoothMethodProxy;
+import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
+import com.android.bluetooth.content_profiles.ContentProfileErrorReportUtils;
+import com.android.bluetooth.flags.Flags;
 
 /**
- * View showing the user's finished bluetooth opp transfers that the user does
- * not confirm. Including outbound and inbound transfers, both successful and
- * failed. *
+ * View showing the user's finished bluetooth opp transfers that the user does not confirm.
+ * Including outbound and inbound transfers, both successful and failed.
  */
+// Next tag value for ContentProfileErrorReportUtils.report(): 2
 public class BluetoothOppTransferHistory extends Activity
         implements View.OnCreateContextMenuListener, OnItemClickListener {
     private static final String TAG = "BluetoothOppTransferHistory";
@@ -90,31 +79,32 @@ public class BluetoothOppTransferHistory extends Activity
         mListView = (ListView) findViewById(R.id.list);
         mListView.setEmptyView(findViewById(R.id.empty));
 
-        mShowAllIncoming = getIntent().getBooleanExtra(Constants.EXTRA_SHOW_ALL_FILES, false);
-
         String direction;
-        int dir = getIntent().getIntExtra("direction", 0);
-        if (dir == BluetoothShare.DIRECTION_OUTBOUND) {
+
+        boolean isOutbound = false;
+
+        if (Flags.oppStartActivityDirectlyFromNotification()) {
+            String action = getIntent().getAction();
+            isOutbound = Constants.ACTION_OPEN_OUTBOUND_TRANSFER.equals(action);
+        } else {
+            int dir = getIntent().getIntExtra(Constants.EXTRA_DIRECTION, 0);
+            isOutbound = (dir == BluetoothShare.DIRECTION_OUTBOUND);
+        }
+
+        if (isOutbound) {
             setTitle(getText(R.string.outbound_history_title));
             direction = "(" + BluetoothShare.DIRECTION + " == " + BluetoothShare.DIRECTION_OUTBOUND
                     + ")";
         } else {
-            if (mShowAllIncoming) {
-                setTitle(getText(R.string.btopp_live_folder));
-            } else {
-                setTitle(getText(R.string.inbound_history_title));
-            }
+            setTitle(getText(R.string.inbound_history_title));
             direction = "(" + BluetoothShare.DIRECTION + " == " + BluetoothShare.DIRECTION_INBOUND
                     + ")";
         }
 
-        String selection = BluetoothShare.STATUS + " >= '200' AND " + direction;
-
-        if (!mShowAllIncoming) {
-            selection = selection + " AND (" + BluetoothShare.VISIBILITY + " IS NULL OR "
+        String selection = BluetoothShare.STATUS + " >= '200' AND " + direction + " AND ("
+                    + BluetoothShare.VISIBILITY + " IS NULL OR "
                     + BluetoothShare.VISIBILITY + " == '" + BluetoothShare.VISIBILITY_VISIBLE
                     + "')";
-        }
 
         final String sortOrder = BluetoothShare.TIMESTAMP + " DESC";
         mTransferCursor = BluetoothMethodProxy.getInstance().contentResolverQuery(
@@ -150,7 +140,7 @@ public class BluetoothOppTransferHistory extends Activity
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        if (mTransferCursor != null && !mShowAllIncoming) {
+        if (mTransferCursor != null) {
             MenuInflater inflater = getMenuInflater();
             inflater.inflate(R.menu.transferhistory, menu);
         }
@@ -159,9 +149,7 @@ public class BluetoothOppTransferHistory extends Activity
 
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        if (!mShowAllIncoming) {
-            menu.findItem(R.id.transfer_menu_clear_all).setEnabled(isTransferComplete());
-        }
+        menu.findItem(R.id.transfer_menu_clear_all).setEnabled(isTransferComplete());
         return super.onPrepareOptionsMenu(menu);
     }
 
@@ -220,13 +208,7 @@ public class BluetoothOppTransferHistory extends Activity
                 fileName = this.getString(R.string.unknown_file);
             }
             menu.setHeaderTitle(fileName);
-
-            MenuInflater inflater = getMenuInflater();
-            if (mShowAllIncoming) {
-                inflater.inflate(R.menu.receivedfilescontextfinished, menu);
-            } else {
-                inflater.inflate(R.menu.transferhistorycontextfinished, menu);
-            }
+            getMenuInflater().inflate(R.menu.transferhistorycontextfinished, menu);
         }
     }
 
@@ -263,6 +245,11 @@ public class BluetoothOppTransferHistory extends Activity
                 }
             }
         } catch (StaleDataException e) {
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.OPP,
+                    BluetoothProtoEnums.BLUETOOTH_OPP_TRANSFER_HISTORY,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__EXCEPTION,
+                    0);
         }
         return false;
     }
@@ -313,6 +300,11 @@ public class BluetoothOppTransferHistory extends Activity
         BluetoothOppTransferInfo transInfo = BluetoothOppUtility.queryRecord(this, contentUri);
         if (transInfo == null) {
             Log.e(TAG, "Error: Can not get data from db");
+            ContentProfileErrorReportUtils.report(
+                    BluetoothProfile.OPP,
+                    BluetoothProtoEnums.BLUETOOTH_OPP_TRANSFER_HISTORY,
+                    BluetoothStatsLog.BLUETOOTH_CONTENT_PROFILE_ERROR_REPORTED__TYPE__LOG_ERROR,
+                    1);
             return;
         }
         if (transInfo.mDirection == BluetoothShare.DIRECTION_INBOUND

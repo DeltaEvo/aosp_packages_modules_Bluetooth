@@ -42,8 +42,8 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.bluetooth.R;
 import com.android.bluetooth.TestUtils;
-import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.a2dpsink.A2dpSinkNativeInterface;
+import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 
@@ -101,18 +101,14 @@ public class AvrcpControllerStateMachineTest {
 
         // Start a real A2dpSinkService so we can replace the static instance with our mock
         doReturn(mDatabaseManager).when(mA2dpAdapterService).getDatabase();
-        doReturn(true).when(mA2dpAdapterService).isStartedProfile(anyString());
         TestUtils.setAdapterService(mA2dpAdapterService);
         A2dpSinkNativeInterface.setInstance(mA2dpSinkNativeInterface);
-        TestUtils.startService(mA2dpServiceRule, A2dpSinkService.class);
         A2dpSinkService.setA2dpSinkService(mA2dpSinkService);
         TestUtils.clearAdapterService(mA2dpAdapterService);
 
         // Start an AvrcpControllerService to get a real BluetoothMediaBrowserService up
-        doReturn(true).when(mAvrcpAdapterService).isStartedProfile(anyString());
         TestUtils.setAdapterService(mAvrcpAdapterService);
         AvrcpControllerNativeInterface.setInstance(mNativeInterface);
-        TestUtils.startService(mAvrcpServiceRule, AvrcpControllerService.class);
 
         // Mock an AvrcpControllerService to give to all state machines
         doReturn(BluetoothProfile.STATE_DISCONNECTED).when(mCoverArtManager).getState(any());
@@ -1110,11 +1106,12 @@ public class AvrcpControllerStateMachineTest {
      */
     @Test
     public void testRegisterAbsVolumeNotification() {
+        byte label = 42;
         setUpConnectedState(true, true);
         mAvrcpStateMachine.sendMessage(
-                AvrcpControllerStateMachine.MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION);
-        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS).times(1))
-                .sendRegisterAbsVolRsp(any(), anyByte(), eq(127), anyInt());
+                AvrcpControllerStateMachine.MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION, label);
+        verify(mNativeInterface, timeout(ASYNC_CALL_TIMEOUT_MILLIS))
+                .sendRegisterAbsVolRsp(any(), anyByte(), eq(127), eq((int) label));
     }
 
     /**

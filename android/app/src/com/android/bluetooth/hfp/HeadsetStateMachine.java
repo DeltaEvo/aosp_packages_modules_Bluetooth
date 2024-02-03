@@ -36,6 +36,7 @@ import android.os.Build;
 import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.PhoneStateListener;
@@ -48,9 +49,11 @@ import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
+import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
+import com.android.modules.expresslog.Counter;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -164,6 +167,10 @@ public class HeadsetStateMachine extends StateMachine {
     private int mAudioDisconnectRetry = 0;
 
     private BluetoothSinkAudioPolicy mHsClientAudioPolicy;
+
+    static final boolean IS_APTX_SUPPORT_ENABLED =
+            Flags.hfpCodecAptxVoice()
+                    && SystemProperties.getBoolean("bluetooth.hfp.codec_aptx_voice.enabled", false);
 
     // Keys are AT commands, and values are the company IDs.
     private static final Map<String, Integer> VENDOR_SPECIFIC_AT_COMMAND_COMPANY_ID;
@@ -457,7 +464,14 @@ public class HeadsetStateMachine extends StateMachine {
          * @param message the current message for the event
          * @param state connection state to transition to
          */
-        public abstract void processConnectionEvent(Message message, int state);
+        public void processConnectionEvent(Message message, int state) {
+            stateLogD(
+                    "processConnectionEvent, state="
+                            + HeadsetHalConstants.getConnectionStateName(state)
+                            + "["
+                            + state
+                            + "]");
+        }
 
         /**
          * Get a state value from {@link BluetoothProfile} that represents the connection state of
@@ -576,7 +590,7 @@ public class HeadsetStateMachine extends StateMachine {
 
         @Override
         public void processConnectionEvent(Message message, int state) {
-            stateLogD("processConnectionEvent, state=" + state);
+            super.processConnectionEvent(message, state);
             switch (state) {
                 case HeadsetHalConstants.CONNECTION_STATE_DISCONNECTED:
                     stateLogW("ignore DISCONNECTED event");
@@ -771,7 +785,7 @@ public class HeadsetStateMachine extends StateMachine {
 
         @Override
         public void processConnectionEvent(Message message, int state) {
-            stateLogD("processConnectionEvent, state=" + state);
+            super.processConnectionEvent(message, state);
             switch (state) {
                 case HeadsetHalConstants.CONNECTION_STATE_DISCONNECTED:
                     stateLogW("Disconnected");
@@ -866,6 +880,7 @@ public class HeadsetStateMachine extends StateMachine {
         // in Disconnecting state
         @Override
         public void processConnectionEvent(Message message, int state) {
+            super.processConnectionEvent(message, state);
             switch (state) {
                 case HeadsetHalConstants.CONNECTION_STATE_DISCONNECTED:
                     stateLogD("processConnectionEvent: Disconnected");
@@ -1091,7 +1106,7 @@ public class HeadsetStateMachine extends StateMachine {
 
         @Override
         public void processConnectionEvent(Message message, int state) {
-            stateLogD("processConnectionEvent, state=" + state);
+            super.processConnectionEvent(message, state);
             switch (state) {
                 case HeadsetHalConstants.CONNECTION_STATE_CONNECTED:
                     stateLogE("processConnectionEvent: RFCOMM connected again, shouldn't happen");
@@ -1360,6 +1375,20 @@ public class HeadsetStateMachine extends StateMachine {
                     && !hasDeferredMessages(DISCONNECT_AUDIO)) {
                 mHeadsetService.setActiveDevice(mDevice);
             }
+
+            // TODO (b/276463350): Remove check when Express metrics no longer need jni
+            if (!Utils.isInstrumentationTestMode()) {
+                if (mHasSwbLc3Enabled) {
+                    Counter.logIncrement("bluetooth.value_lc3_codec_usage_over_hfp");
+                } else if (mHasSwbAptXEnabled) {
+                    Counter.logIncrement("bluetooth.value_aptx_codec_usage_over_hfp");
+                } else if (mHasWbsEnabled) {
+                    Counter.logIncrement("bluetooth.value_msbc_codec_usage_over_hfp");
+                } else {
+                    Counter.logIncrement("bluetooth.value_cvsd_codec_usage_over_hfp");
+                }
+            }
+
             setAudioParameters();
 
             mSystemInterface.getAudioManager().setAudioServerStateCallback(
@@ -1474,6 +1503,11 @@ public class HeadsetStateMachine extends StateMachine {
 
         private void processIntentScoVolume(Intent intent, BluetoothDevice device) {
             int volumeValue = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_VALUE, 0);
+            stateLogD(
+                    "processIntentScoVolume: mSpeakerVolume="
+                            + mSpeakerVolume
+                            + ", volumeValue="
+                            + volumeValue);
             if (mSpeakerVolume != volumeValue) {
                 mSpeakerVolume = volumeValue;
                 mNativeInterface.setVolume(device, HeadsetHalConstants.VOLUME_TYPE_SPK,
@@ -1662,8 +1696,10 @@ public class HeadsetStateMachine extends StateMachine {
                         + (" hasSwbEnabled=" + mHasSwbLc3Enabled)
                         + (" hasAptXSwbEnabled=" + mHasSwbAptXEnabled));
         am.setParameters("bt_lc3_swb=" + (mHasSwbLc3Enabled ? "on" : "off"));
-        /* AptX bt_swb: 0 -> on, 65535 -> off */
-        am.setParameters("bt_swb=" + (mHasSwbAptXEnabled ? "0" : "65535"));
+        if (IS_APTX_SUPPORT_ENABLED) {
+            /* AptX bt_swb: 0 -> on, 65535 -> off */
+            am.setParameters("bt_swb=" + (mHasSwbAptXEnabled ? "0" : "65535"));
+        }
         am.setBluetoothHeadsetProperties(getCurrentDeviceName(), mHasNrecEnabled, mHasWbsEnabled);
     }
 
@@ -1890,8 +1926,10 @@ public class HeadsetStateMachine extends StateMachine {
     }
 
     private void processAtCind(BluetoothDevice device) {
-        int call, callSetup;
+        logi("processAtCind: for device=" + device);
         final HeadsetPhoneState phoneState = mSystemInterface.getHeadsetPhoneState();
+        int call, callSetup;
+        int service = phoneState.getCindService(), signal = phoneState.getCindSignal();
 
         /* Handsfree carkits expect that +CIND is properly responded to
          Hence we ensure that a proper response is sent
@@ -1905,8 +1943,36 @@ public class HeadsetStateMachine extends StateMachine {
             callSetup = phoneState.getNumHeldCall();
         }
 
-        mNativeInterface.cindResponse(device, phoneState.getCindService(), call, callSetup,
-                phoneState.getCallState(), phoneState.getCindSignal(), phoneState.getCindRoam(),
+        if (Flags.pretendNetworkService()) {
+            logd("processAtCind: pretendNetworkService enabled");
+            boolean isCallOngoing =
+                    (phoneState.getNumActiveCall() > 0)
+                            || (phoneState.getNumHeldCall() > 0)
+                            || phoneState.getCallState() == HeadsetHalConstants.CALL_STATE_ALERTING
+                            || phoneState.getCallState() == HeadsetHalConstants.CALL_STATE_DIALING
+                            || phoneState.getCallState() == HeadsetHalConstants.CALL_STATE_INCOMING;
+            if ((isCallOngoing
+                    && (!mHeadsetService.isVirtualCallStarted())
+                    && (phoneState.getCindService()
+                            == HeadsetHalConstants.NETWORK_STATE_NOT_AVAILABLE))) {
+                logi(
+                        "processAtCind: If regular call is in progress/active/held while no network"
+                            + " during BT-ON, pretend service availability and signal strength");
+                service = HeadsetHalConstants.NETWORK_STATE_AVAILABLE;
+                signal = 3;
+            } else {
+                service = phoneState.getCindService();
+                signal = phoneState.getCindSignal();
+            }
+        }
+        mNativeInterface.cindResponse(
+                device,
+                service,
+                call,
+                callSetup,
+                phoneState.getCallState(),
+                signal,
+                phoneState.getCindRoam(),
                 phoneState.getCindBatteryCharge());
     }
 

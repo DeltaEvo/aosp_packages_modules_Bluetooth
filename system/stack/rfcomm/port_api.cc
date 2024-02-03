@@ -30,6 +30,8 @@
 
 #include <cstdint>
 
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
 #include "os/log.h"
 #include "osi/include/allocator.h"
 #include "osi/include/mutex.h"
@@ -328,7 +330,7 @@ int RFCOMM_RemoveServer(uint16_t handle) {
   p_port->p_mgmt_callback = nullptr;
 
   if (!p_port->in_use || (p_port->state == PORT_CONNECTION_STATE_CLOSED)) {
-    VLOG(1) << __func__ << ": handle " << handle << " not opened";
+    LOG_DEBUG("handle %u not opened", handle);
     return (PORT_SUCCESS);
   }
   LOG(INFO) << __func__ << ": handle=" << handle;

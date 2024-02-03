@@ -32,6 +32,7 @@
 #include "stack/btm/btm_int_types.h"
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/acl_api.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/btu_hcif.h"
 #include "stack/include/gatt_api.h"
@@ -133,7 +134,7 @@ void read_phy_cb(
   uint8_t status, tx_phy, rx_phy;
   uint16_t handle;
 
-  LOG_ASSERT(len == 5) << "Received bad response length: " << len;
+  ASSERT_LOG(len == 5, "Received bad response length:%d", len);
   uint8_t* pp = data;
   STREAM_TO_UINT8(status, pp);
   STREAM_TO_UINT16(handle, pp);
@@ -160,19 +161,16 @@ void read_phy_cb(
 void BTM_BleReadPhy(
     const RawAddress& bd_addr,
     base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
-  LOG_VERBOSE("%s", __func__);
-
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
-    LOG_ERROR("%s: Wrong mode: no LE link exist or LE not supported", __func__);
+    LOG_ERROR("Wrong mode: no LE link exist or LE not supported");
     cb.Run(0, 0, HCI_ERR_NO_CONNECTION);
     return;
   }
 
   // checking if local controller supports it!
-  if (!controller_get_interface()->supports_ble_2m_phy() &&
-      !controller_get_interface()->supports_ble_coded_phy()) {
-    LOG_ERROR("%s failed, request not supported in local controller!",
-              __func__);
+  if (!controller_get_interface()->SupportsBle2mPhy() &&
+      !controller_get_interface()->SupportsBleCodedPhy()) {
+    LOG_ERROR("request not supported in local controller!");
     cb.Run(0, 0, GATT_REQ_NOT_SUPPORTED);
     return;
   }
@@ -185,7 +183,6 @@ void BTM_BleReadPhy(
   UINT16_TO_STREAM(pp, handle);
   btu_hcif_send_cmd_with_cb(FROM_HERE, HCI_BLE_READ_PHY, data, len,
                             base::Bind(&read_phy_cb, std::move(cb)));
-  return;
 }
 
 void doNothing(uint8_t* data, uint16_t len) {}
@@ -206,8 +203,8 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
   uint16_t handle = BTM_GetHCIConnHandle(bd_addr, BT_TRANSPORT_LE);
 
   // checking if local controller supports it!
-  if (!controller_get_interface()->supports_ble_2m_phy() &&
-      !controller_get_interface()->supports_ble_coded_phy()) {
+  if (!controller_get_interface()->SupportsBle2mPhy() &&
+      !controller_get_interface()->SupportsBleCodedPhy()) {
     LOG_INFO("Local controller unable to support setting of le phy parameters");
     gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
                             handle, tx_phys, rx_phys);

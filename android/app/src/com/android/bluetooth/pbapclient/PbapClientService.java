@@ -120,6 +120,10 @@ public class PbapClientService extends ProfileService {
         }
     };
 
+    public PbapClientService(Context ctx) {
+        super(ctx);
+    }
+
     public static boolean isEnabled() {
         return BluetoothProperties.isProfilePbapClientEnabled().orElse(false);
     }
@@ -130,7 +134,7 @@ public class PbapClientService extends ProfileService {
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         if (VDBG) {
             Log.v(TAG, "onStart");
         }
@@ -156,11 +160,10 @@ public class PbapClientService extends ProfileService {
         initializeAuthenticationService();
         registerSdpRecord();
         setPbapClientService(this);
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         setPbapClientService(null);
         cleanUpSdpRecord();
         try {
@@ -181,7 +184,6 @@ public class PbapClientService extends ProfileService {
 
         cleanupAuthenicationService();
         setComponentAvailable(AUTHENTICATOR_SERVICE, false);
-        return true;
     }
 
     void cleanupDevice(BluetoothDevice device) {

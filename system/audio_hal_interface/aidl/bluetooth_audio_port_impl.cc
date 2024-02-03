@@ -16,6 +16,8 @@
 
 #include "bluetooth_audio_port_impl.h"
 
+#include <vector>
+
 #include "btif/include/btif_common.h"
 #include "common/stop_watch_legacy.h"
 
@@ -217,7 +219,7 @@ ndk::ScopedAStatus BluetoothAudioPortImpl::setLatencyMode(
     LatencyMode latency_mode) {
   bool is_low_latency = latency_mode == LatencyMode::LOW_LATENCY ? true : false;
   invoke_switch_buffer_size_cb(is_low_latency);
-  transport_instance_->SetLowLatency(is_low_latency);
+  transport_instance_->SetLatencyMode(latency_mode);
   return ndk::ScopedAStatus::ok();
 }
 

@@ -26,18 +26,18 @@
 #include <string>
 #include <vector>
 
-#include "bind_helpers.h"
 #include "bta/le_audio/le_audio_types.h"
 #include "bta_csis_api.h"
 #include "bta_gatt_api.h"
 #include "bta_gatt_queue.h"
 #include "bta_vc_api.h"
-#include "btif_storage.h"
 #include "devices.h"
-#include "gd/common/strings.h"
-#include "osi/include/log.h"
+#include "include/check.h"
+#include "internal_include/bt_trace.h"
+#include "os/log.h"
 #include "osi/include/osi.h"
 #include "stack/btm/btm_sec.h"
+#include "stack/include/bt_types.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -184,7 +184,11 @@ class VolumeControlImpl : public VolumeControl {
       return;
     }
 
-    device->EnableEncryption();
+    if (!device->EnableEncryption()) {
+      LOG_ERROR("Link key is not known for %s, disconnect profile",
+                ADDRESS_TO_LOGGABLE_CSTR(address));
+      device->Disconnect(gatt_if_);
+    }
   }
 
   void OnEncryptionComplete(const RawAddress& address, uint8_t success) {

@@ -17,11 +17,10 @@
  */
 #pragma once
 
-#include <future>
 #include <memory>
+#include <vector>
 
 #include "audio_hal_interface/le_audio_software.h"
-#include "common/repeating_timer.h"
 
 namespace le_audio {
 /* Represents configuration of audio codec, as exchanged between le audio and
@@ -112,7 +111,8 @@ class LeAudioSinkAudioHalClient {
 
   virtual ~LeAudioSinkAudioHalClient() = default;
   virtual bool Start(const LeAudioCodecConfiguration& codecConfiguration,
-                     Callbacks* audioReceiver) = 0;
+                     Callbacks* audioReceiver,
+                     DsaModes dsa_modes = {DsaMode::DISABLED}) = 0;
   virtual void Stop() = 0;
   virtual size_t SendData(uint8_t* data, uint16_t size) = 0;
 
@@ -144,14 +144,16 @@ class LeAudioSourceAudioHalClient {
     virtual void OnAudioDataReady(const std::vector<uint8_t>& data) = 0;
     virtual void OnAudioSuspend(void) = 0;
     virtual void OnAudioResume(void) = 0;
-    virtual void OnAudioMetadataUpdate(source_metadata_v7 source_metadata) = 0;
+    virtual void OnAudioMetadataUpdate(source_metadata_v7 source_metadata,
+                                       DsaMode dsa_mode) = 0;
 
     base::WeakPtrFactory<Callbacks> weak_factory_{this};
   };
 
   virtual ~LeAudioSourceAudioHalClient() = default;
   virtual bool Start(const LeAudioCodecConfiguration& codecConfiguration,
-                     Callbacks* audioReceiver) = 0;
+                     Callbacks* audioReceiver,
+                     DsaModes dsa_modes = {DsaMode::DISABLED}) = 0;
   virtual void Stop() = 0;
   virtual size_t SendData(uint8_t* data, uint16_t size) { return 0; }
   virtual void ConfirmStreamingRequest() = 0;

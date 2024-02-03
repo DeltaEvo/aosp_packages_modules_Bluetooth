@@ -33,8 +33,8 @@
 #include "audio_hal_client/audio_hal_client.h"
 #include "bta_groups.h"
 #include "btm_iso_api_types.h"
+#include "common/strings.h"
 #include "gatt_api.h"
-#include "gd/common/strings.h"
 #include "le_audio_log_history.h"
 #include "le_audio_types.h"
 #include "osi/include/alarm.h"
@@ -100,6 +100,7 @@ class LeAudioDevice {
   bool encrypted_;
   int group_id_;
   bool csis_member_;
+  int cis_failed_to_be_established_retry_cnt_;
   std::bitset<16> tmap_role_;
 
   uint8_t audio_directions_;
@@ -135,10 +136,12 @@ class LeAudioDevice {
         encrypted_(false),
         group_id_(group_id),
         csis_member_(false),
+        cis_failed_to_be_established_retry_cnt_(0),
         audio_directions_(0),
         model_name_(""),
         allowlist_flag_(false),
-        link_quality_timer(nullptr) {}
+        link_quality_timer(nullptr),
+        dsa_modes_({DsaMode::DISABLED}) {}
   ~LeAudioDevice(void);
 
   void SetConnectionState(DeviceConnectState state);
@@ -246,10 +249,12 @@ class LeAudioDevice {
 
   void GetDeviceModelName(void);
   void UpdateDeviceAllowlistFlag(void);
+  DsaModes GetDsaModes(void);
 
  private:
   types::BidirectionalPair<types::AudioContexts> avail_contexts_;
   types::BidirectionalPair<types::AudioContexts> supp_contexts_;
+  DsaModes dsa_modes_;
   static constexpr char kLeAudioDeviceAllowListProp[] =
       "persist.bluetooth.leaudio.allow_list";
 

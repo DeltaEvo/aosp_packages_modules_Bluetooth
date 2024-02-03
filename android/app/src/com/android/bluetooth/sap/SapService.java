@@ -93,7 +93,7 @@ public class SapService extends ProfileService implements AdapterService.Bluetoo
     private BluetoothDevice mRemoteDevice = null;
     private static String sRemoteDeviceName = null;
     private volatile boolean mInterrupted;
-    private int mState;
+    private int mState = BluetoothSap.STATE_DISCONNECTED;
     private SapServer mSapServer = null;
     private AlarmManager mAlarmManager = null;
     private boolean mRemoveTimeoutMsg = false;
@@ -107,13 +107,13 @@ public class SapService extends ProfileService implements AdapterService.Bluetoo
             BluetoothUuid.SAP,
     };
 
-    public static boolean isEnabled() {
-        return BluetoothProperties.isProfileSapServerEnabled().orElse(false);
+    public SapService(Context ctx) {
+        super(ctx);
+        BluetoothSap.invalidateBluetoothGetConnectionStateCache();
     }
 
-    public SapService() {
-        mState = BluetoothSap.STATE_DISCONNECTED;
-        BluetoothSap.invalidateBluetoothGetConnectionStateCache();
+    public static boolean isEnabled() {
+        return BluetoothProperties.isProfileSapServerEnabled().orElse(false);
     }
 
     /***
@@ -680,7 +680,7 @@ public class SapService extends ProfileService implements AdapterService.Bluetoo
     }
 
     @Override
-    protected boolean start() {
+    protected void start() {
         Log.v(TAG, "start()");
         IntentFilter filter = new IntentFilter();
         filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
@@ -699,15 +699,14 @@ public class SapService extends ProfileService implements AdapterService.Bluetoo
         // start RFCOMM listener
         mSessionStatusHandler.sendMessage(mSessionStatusHandler.obtainMessage(START_LISTENER));
         setSapService(this);
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         Log.v(TAG, "stop()");
         if (!mIsRegistered) {
             Log.i(TAG, "Avoid unregister when receiver it is not registered");
-            return true;
+            return;
         }
         setSapService(null);
         try {
@@ -719,7 +718,6 @@ public class SapService extends ProfileService implements AdapterService.Bluetoo
         mAdapterService.unregisterBluetoothStateCallback(this);
         setState(BluetoothSap.STATE_DISCONNECTED, BluetoothSap.RESULT_CANCELED);
         sendShutdownMessage();
-        return true;
     }
 
     @Override

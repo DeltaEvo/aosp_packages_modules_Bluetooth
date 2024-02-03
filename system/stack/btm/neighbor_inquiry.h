@@ -18,7 +18,8 @@
 
 #include <cstdint>
 
-#include "bt_target.h"  // BTM_NO_SSP_ON_INQUIRY
+#include "internal_include/bt_target.h"
+#include "macros.h"
 #include "osi/include/alarm.h"
 #include "stack/include/bt_device_type.h"
 #include "stack/include/bt_name.h"
@@ -197,12 +198,6 @@ typedef struct {
   long long start_time_ms;
 } tBTM_INQUIRY_CMPL;
 
-#ifndef CASE_RETURN_TEXT
-#define CASE_RETURN_TEXT(code) \
-  case code:                   \
-    return #code
-#endif
-
 inline std::string btm_inquiry_cmpl_status_text(
     const tBTM_INQUIRY_CMPL::STATUS& status) {
   switch (status) {
@@ -215,7 +210,6 @@ inline std::string btm_inquiry_cmpl_status_text(
              std::string("]");
   }
 }
-#undef CASE_RETURN_TEXT
 
 /* Structure returned with remote name  request */
 typedef struct {
@@ -228,10 +222,8 @@ typedef struct {
 
 typedef void(tBTM_NAME_CMPL_CB)(const tBTM_REMOTE_DEV_NAME*);
 
-typedef struct {
+struct tBTM_INQUIRY_VAR_ST {
   tBTM_NAME_CMPL_CB* p_remname_cmpl_cb;
-
-#define BTM_EXT_RMT_NAME_TIMEOUT_MS (40 * 1000) /* 40 seconds */
 
   alarm_t* remote_name_timer;
   alarm_t* classic_inquiry_timer;
@@ -273,21 +265,44 @@ typedef struct {
   bool no_inc_ssp;    /* true, to stop inquiry on incoming SSP */
 
   void Init() {
+    p_remname_cmpl_cb = nullptr;
+
     alarm_free(remote_name_timer);
     alarm_free(classic_inquiry_timer);
     remote_name_timer = alarm_new("btm_inq.remote_name_timer");
     classic_inquiry_timer = alarm_new("btm_inq.classic_inquiry_timer");
+
+    discoverable_mode = BTM_NON_DISCOVERABLE;
+    connectable_mode = BTM_NON_CONNECTABLE;
+
+    page_scan_window = HCI_DEF_PAGESCAN_WINDOW;
+    page_scan_period = HCI_DEF_PAGESCAN_INTERVAL;
+    inq_scan_window = HCI_DEF_INQUIRYSCAN_WINDOW;
+    inq_scan_period = HCI_DEF_INQUIRYSCAN_INTERVAL;
+    inq_scan_type = BTM_SCAN_TYPE_STANDARD;
+    page_scan_type = HCI_DEF_SCAN_TYPE;
+
+    remname_bda = {};
+    remname_active = false;
+
+    p_inq_cmpl_cb = nullptr;
+    p_inq_results_cb = nullptr;
+
+    inq_counter = 0;
+    inqparms = {};
+    inq_cmpl_info = {};
+
+    per_min_delay = 0;
+    per_max_delay = 0;
+    state = BTM_INQ_INACTIVE_STATE;
+    inq_active = 0;
     no_inc_ssp = BTM_NO_SSP_ON_INQUIRY;
   }
   void Free() {
     alarm_free(remote_name_timer);
     alarm_free(classic_inquiry_timer);
   }
-
-} tBTM_INQUIRY_VAR_ST;
-
-#define BTM_INQ_RESULT_BR 0x01
-#define BTM_INQ_RESULT_BLE 0x02
+};
 
 bool btm_inq_find_bdaddr(const RawAddress& p_bda);
 tINQ_DB_ENT* btm_inq_db_find(const RawAddress& p_bda);

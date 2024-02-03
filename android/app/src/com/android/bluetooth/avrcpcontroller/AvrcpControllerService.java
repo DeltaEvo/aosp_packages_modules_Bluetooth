@@ -134,15 +134,15 @@ public class AvrcpControllerService extends ProfileService {
         }
     }
 
-    AvrcpControllerService() {
-        mNativeInterface = AvrcpControllerNativeInterface.getInstance();
+    public AvrcpControllerService(Context ctx) {
+        super(ctx);
+        mNativeInterface = requireNonNull(AvrcpControllerNativeInterface.getInstance());
     }
 
     @VisibleForTesting
-    AvrcpControllerService(Context ctx, AvrcpControllerNativeInterface nativeInterface) {
-        attachBaseContext(ctx);
+    public AvrcpControllerService(Context ctx, AvrcpControllerNativeInterface nativeInterface) {
+        super(ctx);
         mNativeInterface = requireNonNull(nativeInterface);
-        onCreate();
     }
 
     public static boolean isEnabled() {
@@ -150,7 +150,7 @@ public class AvrcpControllerService extends ProfileService {
     }
 
     @Override
-    protected synchronized boolean start() {
+    protected synchronized void start() {
         mNativeInterface.init(this);
         setComponentAvailable(ON_ERROR_SETTINGS_ACTIVITY, true);
         mAdapterService = AdapterService.getAdapterService();
@@ -166,11 +166,10 @@ public class AvrcpControllerService extends ProfileService {
         Intent startIntent = new Intent(this, BluetoothMediaBrowserService.class);
         startService(startIntent);
         setActiveDevice(null);
-        return true;
     }
 
     @Override
-    protected synchronized boolean stop() {
+    protected synchronized void stop() {
         setActiveDevice(null);
         Intent stopIntent = new Intent(this, BluetoothMediaBrowserService.class);
         stopService(stopIntent);
@@ -188,7 +187,6 @@ public class AvrcpControllerService extends ProfileService {
         }
         setComponentAvailable(ON_ERROR_SETTINGS_ACTIVITY, false);
         mNativeInterface.cleanup();
-        return true;
     }
 
     public static AvrcpControllerService getAvrcpControllerService() {
@@ -508,7 +506,8 @@ public class AvrcpControllerService extends ProfileService {
         AvrcpControllerStateMachine stateMachine = getStateMachine(device);
         if (stateMachine != null) {
             stateMachine.sendMessage(
-                    AvrcpControllerStateMachine.MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION);
+                    AvrcpControllerStateMachine.MESSAGE_PROCESS_REGISTER_ABS_VOL_NOTIFICATION,
+                    label);
         }
     }
 
@@ -517,8 +516,8 @@ public class AvrcpControllerService extends ProfileService {
     synchronized void handleSetAbsVolume(BluetoothDevice device, byte absVol, byte label) {
         AvrcpControllerStateMachine stateMachine = getStateMachine(device);
         if (stateMachine != null) {
-            stateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PROCESS_SET_ABS_VOL_CMD,
-                    absVol);
+            stateMachine.sendMessage(
+                    AvrcpControllerStateMachine.MESSAGE_PROCESS_SET_ABS_VOL_CMD, absVol, label);
         }
     }
 

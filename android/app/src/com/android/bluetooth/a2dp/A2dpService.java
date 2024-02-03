@@ -33,6 +33,7 @@ import android.bluetooth.BluetoothA2dp.OptionalCodecsSupportStatus;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothCodecConfig;
 import android.bluetooth.BluetoothCodecStatus;
+import android.bluetooth.BluetoothCodecType;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
@@ -58,13 +59,14 @@ import android.util.Log;
 import com.android.bluetooth.BluetoothMetricsProto;
 import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.Utils;
+import com.android.bluetooth.btservice.ActiveDeviceManager;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.btservice.AudioRoutingManager;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
-import com.android.bluetooth.flags.FeatureFlags;
-import com.android.bluetooth.flags.FeatureFlagsImpl;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -88,7 +90,6 @@ public class A2dpService extends ProfileService {
 
     private static A2dpService sA2dpService;
 
-    private final FeatureFlags mFeatureFlags;
     private AdapterService mAdapterService;
     private DatabaseManager mDatabaseManager;
     private HandlerThread mStateMachinesThread;
@@ -125,17 +126,15 @@ public class A2dpService extends ProfileService {
     private final AudioManagerAudioDeviceCallback mAudioManagerAudioDeviceCallback =
             new AudioManagerAudioDeviceCallback();
 
-    A2dpService() {
+    public A2dpService(Context ctx) {
+        super(ctx);
         mNativeInterface = requireNonNull(A2dpNativeInterface.getInstance());
-        mFeatureFlags = new FeatureFlagsImpl();
     }
 
     @VisibleForTesting
-    A2dpService(Context ctx, A2dpNativeInterface nativeInterface, FeatureFlags featureFlags) {
-        attachBaseContext(ctx);
+    A2dpService(Context ctx, A2dpNativeInterface nativeInterface) {
+        super(ctx);
         mNativeInterface = requireNonNull(nativeInterface);
-        mFeatureFlags = featureFlags;
-        onCreate();
     }
 
     public static boolean isEnabled() {
@@ -144,16 +143,12 @@ public class A2dpService extends ProfileService {
 
     @Override
     protected IProfileServiceBinder initBinder() {
-        return new BluetoothA2dpBinder(this);
+        return new BluetoothA2dpBinder(
+                this, AdapterService.getAdapterService().getActiveDeviceManager());
     }
 
     @Override
-    protected void create() {
-        Log.i(TAG, "create()");
-    }
-
-    @Override
-    protected boolean start() {
+    protected void start() {
         Log.i(TAG, "start()");
         if (sA2dpService != null) {
             throw new IllegalStateException("start() called twice");
@@ -207,16 +202,14 @@ public class A2dpService extends ProfileService {
 
         // Step 9: Clear active device
         removeActiveDevice(false);
-
-        return true;
     }
 
     @Override
-    protected boolean stop() {
+    protected void stop() {
         Log.i(TAG, "stop()");
         if (sA2dpService == null) {
             Log.w(TAG, "stop() called before start()");
-            return true;
+            return;
         }
 
         // Step 9: Clear active device and stop playing audio
@@ -263,8 +256,6 @@ public class A2dpService extends ProfileService {
         // Step 1: Clear AdapterService, AudioManager
         mAudioManager = null;
         mAdapterService = null;
-
-        return true;
     }
 
     @Override
@@ -729,6 +720,12 @@ public class A2dpService extends ProfileService {
             }
             return sm.isPlaying();
         }
+    }
+
+    /** Returns the list of locally supported codec types. */
+    public List<BluetoothCodecType> getSupportedCodecTypes() {
+        Log.d(TAG, "getSupportedCodecTypes()");
+        return mNativeInterface.getSupportedCodecTypes();
     }
 
     /**
@@ -1324,7 +1321,7 @@ public class A2dpService extends ProfileService {
         if (toState == BluetoothProfile.STATE_CONNECTED) {
             MetricsLogger.logProfileConnectionEvent(BluetoothMetricsProto.ProfileId.A2DP);
         }
-        if (!mFeatureFlags.audioRoutingCentralization()) {
+        if (!Flags.audioRoutingCentralization()) {
             // Set the active device if only one connected device is supported and it was connected
             if (toState == BluetoothProfile.STATE_CONNECTED && (mMaxConnectedAudioDevices == 1)) {
                 setActiveDevice(device);
@@ -1375,6 +1372,7 @@ public class A2dpService extends ProfileService {
     static class BluetoothA2dpBinder extends IBluetoothA2dp.Stub
             implements IProfileServiceBinder {
         private A2dpService mService;
+        private ActiveDeviceManager mActiveDeviceManager;
 
         @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
         private A2dpService getService(AttributionSource source) {
@@ -1389,8 +1387,9 @@ public class A2dpService extends ProfileService {
             return mService;
         }
 
-        BluetoothA2dpBinder(A2dpService svc) {
+        BluetoothA2dpBinder(A2dpService svc, ActiveDeviceManager activeDeviceManager) {
             mService = svc;
+            mActiveDeviceManager = activeDeviceManager;
         }
 
         @Override
@@ -1478,15 +1477,22 @@ public class A2dpService extends ProfileService {
                 SynchronousResultReceiver receiver) {
             try {
                 A2dpService service = getService(source);
-                boolean result = false;
                 if (service != null) {
-                    if (device == null) {
-                        result = service.removeActiveDevice(false);
+                    if (Flags.audioRoutingCentralization()) {
+                        ((AudioRoutingManager) mActiveDeviceManager)
+                                .activateDeviceProfile(device, BluetoothProfile.A2DP, receiver);
                     } else {
-                        result = service.setActiveDevice(device);
+                        boolean result;
+                        if (device == null) {
+                            result = service.removeActiveDevice(false);
+                        } else {
+                            result = service.setActiveDevice(device);
+                        }
+                        receiver.send(result);
                     }
+                } else {
+                    receiver.send(false);
                 }
-                receiver.send(result);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1555,6 +1561,22 @@ public class A2dpService extends ProfileService {
                 boolean result = false;
                 if (service != null) {
                     result = service.isA2dpPlaying(device);
+                }
+                receiver.send(result);
+            } catch (RuntimeException e) {
+                receiver.propagateException(e);
+            }
+        }
+
+        @Override
+        public void getSupportedCodecTypes(
+                AttributionSource source, SynchronousResultReceiver receiver) {
+            try {
+                A2dpService service = getService(source);
+                List<BluetoothCodecType> result = new ArrayList<>();
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    result = service.getSupportedCodecTypes();
                 }
                 receiver.send(result);
             } catch (RuntimeException e) {

@@ -25,16 +25,18 @@
 
 #include "stack/include/gatt_api.h"
 
+#include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 
 #include <string>
 
-#include "bt_target.h"
 #include "device/include/controller.h"
-#include "gd/os/system_properties.h"
+#include "internal_include/bt_target.h"
+#include "internal_include/bt_trace.h"
 #include "internal_include/stack_config.h"
 #include "l2c_api.h"
 #include "os/log.h"
+#include "os/system_properties.h"
 #include "osi/include/allocator.h"
 #include "rust/src/connection/ffi/connection_shim.h"
 #include "stack/arbiter/acl_arbiter.h"
@@ -42,6 +44,7 @@
 #include "stack/gatt/connection_manager.h"
 #include "stack/gatt/gatt_int.h"
 #include "stack/include/bt_hdr.h"
+#include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
 #include "stack/include/sdp_api.h"
 #include "types/bluetooth/uuid.h"
@@ -704,7 +707,7 @@ tGATT_STATUS GATTC_ConfigureMTU(uint16_t conn_id, uint16_t mtu) {
 
   /* Validate that the link is BLE, not BR/EDR */
   if (p_tcb->transport != BT_TRANSPORT_LE) {
-    return GATT_ERROR;
+    return GATT_REQ_NOT_SUPPORTED;
   }
 
   tGATT_CLCB* p_clcb = gatt_clcb_alloc(conn_id);
@@ -977,7 +980,8 @@ tGATT_STATUS GATTC_Read(uint16_t conn_id, tGATT_READ_TYPE type,
       p_clcb->e_handle = p_read->service.e_handle;
       p_clcb->uuid = p_read->service.uuid;
       break;
-    case GATT_READ_MULTIPLE: {
+    case GATT_READ_MULTIPLE:
+    case GATT_READ_MULTIPLE_VAR_LEN: {
       p_clcb->s_handle = 0;
       /* copy multiple handles in CB */
       tGATT_READ_MULTI* p_read_multi =
@@ -1681,12 +1685,12 @@ void gatt_load_bonded(void) {
     return;
   }
   for (tBTM_SEC_DEV_REC* p_dev_rec : btm_get_sec_dev_rec()) {
-    if (p_dev_rec->is_link_key_known()) {
+    if (p_dev_rec->sec_rec.is_link_key_known()) {
       LOG_VERBOSE("Add bonded BR/EDR transport %s",
                   ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->bd_addr));
       gatt_bonded_check_add_address(p_dev_rec->bd_addr);
     }
-    if (p_dev_rec->is_le_link_key_known()) {
+    if (p_dev_rec->sec_rec.is_le_link_key_known()) {
       LOG_VERBOSE("Add bonded BLE %s",
                   ADDRESS_TO_LOGGABLE_CSTR(p_dev_rec->ble.pseudo_addr));
       gatt_bonded_check_add_address(p_dev_rec->ble.pseudo_addr);

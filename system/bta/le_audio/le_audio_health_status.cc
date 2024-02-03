@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "bta/include/bta_groups.h"
-#include "gd/common/strings.h"
+#include "common/strings.h"
 #include "main/shim/metrics_api.h"
 #include "osi/include/log.h"
 #include "osi/include/properties.h"
@@ -144,6 +144,9 @@ class LeAudioHealthStatusImpl : public LeAudioHealthStatus {
         group->stream_signaling_failures_cnt_++;
         group->stream_failures_cnt_++;
         break;
+      case LeAudioHealthGroupStatType::STREAM_CONTEXT_NOT_AVAILABLE:
+        group->stream_context_not_avail_cnt_++;
+        break;
     }
 
     LeAudioHealthBasedAction action = LeAudioHealthBasedAction::NONE;
@@ -152,12 +155,20 @@ class LeAudioHealthStatusImpl : public LeAudioHealthStatus {
       if ((group->stream_failures_cnt_ >=
            MAX_ALLOWED_FAILURES_IN_A_ROW_WITHOUT_SUCCESS)) {
         action = LeAudioHealthBasedAction::DISABLE;
+      } else if (group->stream_context_not_avail_cnt_ >=
+                 MAX_ALLOWED_FAILURES_IN_A_ROW_WITHOUT_SUCCESS) {
+        action = LeAudioHealthBasedAction::INACTIVATE_GROUP;
+        group->stream_context_not_avail_cnt_ = 0;
       }
     } else {
       /* Had some success before */
       if ((100 * group->stream_failures_cnt_ / group->stream_success_cnt_) >=
           THRESHOLD_FOR_DISABLE_CONSIDERATION) {
         action = LeAudioHealthBasedAction::CONSIDER_DISABLING;
+      } else if (group->stream_context_not_avail_cnt_ >=
+                 MAX_ALLOWED_FAILURES_IN_A_ROW_WITHOUT_SUCCESS) {
+        action = LeAudioHealthBasedAction::INACTIVATE_GROUP;
+        group->stream_context_not_avail_cnt_ = 0;
       }
     }
 
@@ -195,7 +206,8 @@ class LeAudioHealthStatusImpl : public LeAudioHealthStatus {
            << ", success: " << group.stream_success_cnt_
            << ", fail total: " << group.stream_failures_cnt_
            << ", fail cis: " << group.stream_cis_failures_cnt_
-           << ", fail signaling: " << group.stream_signaling_failures_cnt_;
+           << ", fail signaling: " << group.stream_signaling_failures_cnt_
+           << ", context not avail: " << group.stream_context_not_avail_cnt_;
 
     dprintf(fd, "%s", stream.str().c_str());
   }

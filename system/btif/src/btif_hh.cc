@@ -33,18 +33,18 @@
 
 #include <cstdint>
 
-#include "bta_sec_api.h"
 #include "bta_hh_co.h"
+#include "bta_sec_api.h"
 #include "btif/include/btif_common.h"
 #include "btif/include/btif_profile_storage.h"
+#include "btif/include/btif_storage.h"
 #include "btif/include/btif_util.h"
 #include "include/hardware/bt_hh.h"
 #include "main/shim/dumpsys.h"
+#include "os/log.h"
 #include "osi/include/allocator.h"
-#include "osi/include/log.h"
 #include "stack/include/bt_hdr.h"
 #include "stack/include/hidh_api.h"
-#include "stack/include/l2c_api.h"
 #include "types/raw_address.h"
 
 #define COD_HID_KEYBOARD 0x0540
@@ -1536,7 +1536,7 @@ static bt_status_t set_info(RawAddress* bd_addr, bthh_hid_info_t hid_info) {
  *
  ******************************************************************************/
 static bt_status_t get_protocol(RawAddress* bd_addr,
-                                UNUSED_ATTR bthh_protocol_mode_t protocolMode) {
+                                bthh_protocol_mode_t /* protocolMode */) {
   CHECK_BTHH_INIT();
 
   VLOG(1) << __func__ << " BTHH: addr = " << ADDRESS_TO_LOGGABLE_STR(*bd_addr);

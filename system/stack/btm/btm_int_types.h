@@ -24,18 +24,14 @@
 #include <memory>
 #include <string>
 
-#include "gd/common/circular_buffer.h"
-#include "osi/include/allocator.h"
+#include "common/circular_buffer.h"
+#include "internal_include/bt_target.h"
 #include "osi/include/fixed_queue.h"
-#include "osi/include/list.h"
 #include "stack/acl/acl.h"
 #include "stack/btm/btm_ble_int_types.h"
 #include "stack/btm/btm_sco.h"
 #include "stack/btm/neighbor_inquiry.h"
-#include "stack/btm/security_device_record.h"
-#include "stack/include/bt_octets.h"
 #include "stack/include/btm_ble_api_types.h"
-#include "stack/include/rfcdefs.h"
 #include "stack/include/security_client_callbacks.h"
 #include "types/raw_address.h"
 
@@ -161,7 +157,6 @@ typedef struct tBTM_CB {
 
   uint16_t disc_handle{0};          /* for legacy devices */
   uint8_t disc_reason{0};           /* for legacy devices */
-  bool is_inquiry{false}; /* true, if inquiry is in progess */
 
   fixed_queue_t* sec_pending_q{nullptr}; /* pending sequrity requests in
                                             tBTM_SEC_QUEUE_ENTRY format */
