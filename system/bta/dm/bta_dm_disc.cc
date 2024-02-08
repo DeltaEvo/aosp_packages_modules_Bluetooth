@@ -57,6 +57,7 @@
 #include "stack/include/hidh_api.h"
 #include "stack/include/sdp_status.h"
 #include "stack/sdp/sdpint.h"  // is_sdp_pbap_pce_disabled
+#include "storage/config_keys.h"
 #include "types/raw_address.h"
 
 #ifdef TARGET_FLOSS
@@ -540,7 +541,7 @@ static void store_avrcp_profile_feature(tSDP_DISC_REC* sdp_rec) {
   }
 
   if (btif_config_set_bin(sdp_rec->remote_bd_addr.ToString().c_str(),
-                          AV_REM_CTRL_FEATURES_CONFIG_KEY,
+                          BTIF_STORAGE_KEY_AV_REM_CTRL_FEATURES,
                           (const uint8_t*)&avrcp_features,
                           sizeof(avrcp_features))) {
     LOG_INFO("Saving avrcp_features: 0x%x", avrcp_features);
@@ -562,7 +563,7 @@ static void bta_dm_store_audio_profiles_version() {
       {
           .servclass_uuid = UUID_SERVCLASS_AV_REMOTE_CONTROL,
           .btprofile_uuid = UUID_SERVCLASS_AV_REMOTE_CONTROL,
-          .profile_key = AVRCP_CONTROLLER_VERSION_CONFIG_KEY,
+          .profile_key = BTIF_STORAGE_KEY_AVRCP_CONTROLLER_VERSION,
           .store_audio_profile_feature = store_avrcp_profile_feature,
       },
   }};

@@ -34,6 +34,7 @@
 #include "hci/remote_name_request.h"
 #include "hci_acl_manager_generated.h"
 #include "security/security_module.h"
+#include "storage/config_keys.h"
 #include "storage/storage_module.h"
 
 namespace bluetooth {
@@ -281,8 +282,8 @@ void AclManager::SetPrivacyPolicyForInitiatorAddress(
     std::chrono::milliseconds minimum_rotation_time,
     std::chrono::milliseconds maximum_rotation_time) {
   Octet16 rotation_irk{};
-  auto irk_prop =
-      GetDependency<storage::StorageModule>()->GetProperty("Adapter", "LE_LOCAL_KEY_IRK");
+  auto irk_prop = GetDependency<storage::StorageModule>()->GetProperty(
+      BTIF_STORAGE_SECTION_ADAPTER, BTIF_STORAGE_KEY_LE_LOCAL_KEY_IRK);
   if (irk_prop.has_value()) {
     auto irk = common::ByteArray<16>::FromString(irk_prop.value());
     if (irk.has_value()) {

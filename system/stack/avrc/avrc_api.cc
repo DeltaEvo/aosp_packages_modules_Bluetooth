@@ -39,6 +39,7 @@
 #include "stack/include/bt_hdr.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
+#include "storage/config_keys.h"
 #include "types/raw_address.h"
 
 /*****************************************************************************
@@ -1433,12 +1434,12 @@ void AVRC_SaveControllerVersion(const RawAddress& bdaddr,
   uint16_t old_version = 0;
   size_t version_value_size = sizeof(old_version);
   if (btif_config_get_bin(bdaddr.ToString(),
-                          AVRCP_CONTROLLER_VERSION_CONFIG_KEY,
+                          BTIF_STORAGE_KEY_AVRCP_CONTROLLER_VERSION,
                           (uint8_t*)&old_version, &version_value_size) &&
       new_version == old_version) {
     LOG_INFO("AVRC controller version same as cached config");
   } else if (btif_config_set_bin(
-                 bdaddr.ToString(), AVRCP_CONTROLLER_VERSION_CONFIG_KEY,
+                 bdaddr.ToString(), BTIF_STORAGE_KEY_AVRCP_CONTROLLER_VERSION,
                  (const uint8_t*)&new_version, sizeof(new_version))) {
     LOG_INFO("store AVRC controller version %x for %s into config.",
              new_version, ADDRESS_TO_LOGGABLE_CSTR(bdaddr));
