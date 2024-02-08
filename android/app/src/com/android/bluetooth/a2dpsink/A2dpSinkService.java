@@ -92,7 +92,7 @@ public class A2dpSinkService extends ProfileService {
     }
 
     @Override
-    protected void start() {
+    public void start() {
         mAdapterService =
                 requireNonNull(
                         AdapterService.getAdapterService(),
@@ -113,7 +113,7 @@ public class A2dpSinkService extends ProfileService {
     }
 
     @Override
-    protected void stop() {
+    public void stop() {
         setA2dpSinkService(null);
         mNativeInterface.cleanup();
         for (A2dpSinkStateMachine stateMachine : mDeviceStateMap.values()) {
@@ -636,6 +636,13 @@ public class A2dpSinkService extends ProfileService {
             return;
         }
         A2dpSinkStateMachine stateMachine = getStateMachineForDevice(device);
+        if (stateMachine == null) {
+            Log.w(
+                    TAG,
+                    "Received audio config changed event for an unconnected device, device="
+                            + device);
+            return;
+        }
         stateMachine.onStackEvent(event);
     }
 
