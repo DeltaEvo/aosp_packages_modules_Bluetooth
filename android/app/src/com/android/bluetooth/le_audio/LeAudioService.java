@@ -111,8 +111,6 @@ public class LeAudioService extends ProfileService {
     // Timeout for state machine thread join, to prevent potential ANR.
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
 
-    // Upper limit of all LeAudio devices: Bonded or Connected
-    private static final int MAX_LE_AUDIO_DEVICES = 10;
     private static LeAudioService sLeAudioService;
 
     /**
@@ -572,14 +570,6 @@ public class LeAudioService extends ProfileService {
             boolean isInbandRingtoneEnabled) {
         LeAudioDeviceDescriptor descriptor = mDeviceDescriptors.get(device);
         if (descriptor == null) {
-
-            // Limit the maximum number of devices to avoid DoS attack
-            if (mDeviceDescriptors.size() >= MAX_LE_AUDIO_DEVICES) {
-                Log.e(TAG, "Maximum number of LeAudio state machines reached: "
-                        + MAX_LE_AUDIO_DEVICES);
-                return null;
-            }
-
             mDeviceDescriptors.put(device, new LeAudioDeviceDescriptor(isInbandRingtoneEnabled));
             descriptor = mDeviceDescriptors.get(device);
             Log.d(TAG, "Created descriptor for device: " + device);
@@ -2175,6 +2165,22 @@ public class LeAudioService extends ProfileService {
         }
     }
 
+    private void notifyGroupStreamStatusChanged(int groupId, int groupStreamStatus) {
+        if (mLeAudioCallbacks != null) {
+            int n = mLeAudioCallbacks.beginBroadcast();
+            for (int i = 0; i < n; i++) {
+                try {
+                    mLeAudioCallbacks
+                            .getBroadcastItem(i)
+                            .onGroupStreamStatusChanged(groupId, groupStreamStatus);
+                } catch (RemoteException e) {
+                    continue;
+                }
+            }
+            mLeAudioCallbacks.finishBroadcast();
+        }
+    }
+
     @VisibleForTesting
     void handleGroupIdleDuringCall() {
         if (mHfpHandoverDevice == null) {
@@ -2789,6 +2795,8 @@ public class LeAudioService extends ProfileService {
             }
         } else if (stackEvent.type == LeAudioStackEvent.EVENT_TYPE_UNICAST_MONITOR_MODE_STATUS) {
             handleUnicastStreamStatusChange(stackEvent.valueInt1, stackEvent.valueInt2);
+        } else if (stackEvent.type == LeAudioStackEvent.EVENT_TYPE_GROUP_STREAM_STATUS_CHANGED) {
+            notifyGroupStreamStatusChanged(stackEvent.valueInt1, stackEvent.valueInt2);
         }
     }
 
@@ -2949,26 +2957,26 @@ public class LeAudioService extends ProfileService {
      * Process a change for disconnection of a device.
      */
     public synchronized void deviceDisconnected(BluetoothDevice device, boolean hasFallbackDevice) {
-        LeAudioDeviceDescriptor deviceDescriptor = getDeviceDescriptor(device);
-        if (deviceDescriptor == null) {
-            Log.e(TAG, "deviceDisconnected: No valid descriptor for device: " + device);
-            return;
-        }
-
-        int bondState = mAdapterService.getBondState(device);
-        if (bondState == BluetoothDevice.BOND_NONE) {
-            if (DBG) {
-                Log.d(TAG, device + " is unbond. Remove state machine");
-            }
-            removeStateMachine(device);
-            removeAuthorizationInfoForRelatedProfiles(device);
-        }
-
-        if (!isScannerNeeded()) {
-            stopAudioServersBackgroundScan();
-        }
-
         synchronized (mGroupLock) {
+            LeAudioDeviceDescriptor deviceDescriptor = getDeviceDescriptor(device);
+            if (deviceDescriptor == null) {
+                Log.e(TAG, "deviceDisconnected: No valid descriptor for device: " + device);
+                return;
+            }
+
+            int bondState = mAdapterService.getBondState(device);
+            if (bondState == BluetoothDevice.BOND_NONE) {
+                if (DBG) {
+                    Log.d(TAG, device + " is unbond. Remove state machine");
+                }
+                removeStateMachine(device);
+                removeAuthorizationInfoForRelatedProfiles(device);
+            }
+
+            if (!isScannerNeeded()) {
+                stopAudioServersBackgroundScan();
+            }
+
             LeAudioGroupDescriptor descriptor = getGroupDescriptor(deviceDescriptor.mGroupId);
             if (descriptor == null) {
                 Log.e(TAG, "deviceDisconnected: no descriptors for group: "

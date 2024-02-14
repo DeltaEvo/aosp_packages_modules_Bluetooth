@@ -109,6 +109,7 @@ public class LeAudioServiceTest {
     private LinkedBlockingQueue<Intent> mGroupIntentQueue = new LinkedBlockingQueue<>();
     private int testGroupId = 1;
     private boolean onGroupStatusCallbackCalled = false;
+    private boolean onGroupStreamStatusCallbackCalled = false;
     private boolean onGroupCodecConfChangedCallbackCalled = false;
     private BluetoothLeAudioCodecStatus testCodecStatus = null;
     private FakeFeatureFlagsImpl mFakeFlagsImpl;
@@ -839,7 +840,7 @@ public class LeAudioServiceTest {
                 .when(mAdapterService)
                 .getBondState(any(BluetoothDevice.class));
         mService.bondStateChanged(mLeftDevice, BluetoothDevice.BOND_NONE);
-        assertThat(mService.getDevices().contains(mLeftDevice)).isTrue();
+
         verifyConnectionStateIntent(
                 TIMEOUT_MS,
                 mLeftDevice,
@@ -850,6 +851,8 @@ public class LeAudioServiceTest {
 
         reset(mTbsService);
         reset(mMcpService);
+
+        assertThat(mService.getDevices().contains(mLeftDevice)).isFalse();
 
         // Unbond received in CONNECTION_STATE_CONNECTED
         // Create device descriptor with connect request. To connect service,
@@ -920,8 +923,8 @@ public class LeAudioServiceTest {
         assertThat(mService.getConnectionState(mLeftDevice))
                 .isEqualTo(BluetoothProfile.STATE_CONNECTED);
 
-        assertThat(mService.getDevices().contains(mLeftDevice)).isTrue();
         injectAndVerifyDeviceDisconnected(mLeftDevice);
+        assertThat(mService.getDevices().contains(mLeftDevice)).isTrue();
 
         verify(mTbsService, times(0)).removeDeviceAuthorizationInfo(mLeftDevice);
         verify(mMcpService, times(0)).removeDeviceAuthorizationInfo(mLeftDevice);
@@ -930,9 +933,6 @@ public class LeAudioServiceTest {
         reset(mMcpService);
 
         // Device unbond
-        doReturn(BluetoothDevice.BOND_NONE)
-                .when(mAdapterService)
-                .getBondState(any(BluetoothDevice.class));
         mService.bondStateChanged(mLeftDevice, BluetoothDevice.BOND_NONE);
 
         verify(mTbsService, times(1)).removeDeviceAuthorizationInfo(mLeftDevice);
@@ -1616,6 +1616,14 @@ public class LeAudioServiceTest {
         mService.messageFromNative(groupStatusChangedEvent);
     }
 
+    private void injectGroupStreamStatusChange(int groupId, int groupStreamStatus) {
+        int eventType = LeAudioStackEvent.EVENT_TYPE_GROUP_STREAM_STATUS_CHANGED;
+        LeAudioStackEvent groupStreamStatusChangedEvent = new LeAudioStackEvent(eventType);
+        groupStreamStatusChangedEvent.valueInt1 = groupId;
+        groupStreamStatusChangedEvent.valueInt2 = groupStreamStatus;
+        mService.messageFromNative(groupStreamStatusChangedEvent);
+    }
+
     private void injectAudioConfChanged(int groupId, Integer availableContexts, int direction) {
         int snkAudioLocation = 3;
         int srcAudioLocation = 4;
@@ -1762,20 +1770,26 @@ public class LeAudioServiceTest {
         onGroupStatusCallbackCalled = false;
 
         IBluetoothLeAudioCallback leAudioCallbacks =
-        new IBluetoothLeAudioCallback.Stub() {
-            @Override
-            public void onCodecConfigChanged(int gid, BluetoothLeAudioCodecStatus status) {}
-            @Override
-            public void onGroupStatusChanged(int gid, int gStatus) {
-                onGroupStatusCallbackCalled = true;
-                assertThat(gid == groupId).isTrue();
-                assertThat(gStatus == groupStatus).isTrue();
-            }
-            @Override
-            public void onGroupNodeAdded(BluetoothDevice device, int gid) {}
-            @Override
-            public void onGroupNodeRemoved(BluetoothDevice device, int gid) {}
-        };
+                new IBluetoothLeAudioCallback.Stub() {
+                    @Override
+                    public void onCodecConfigChanged(int gid, BluetoothLeAudioCodecStatus status) {}
+
+                    @Override
+                    public void onGroupStatusChanged(int gid, int gStatus) {
+                        onGroupStatusCallbackCalled = true;
+                        assertThat(gid == groupId).isTrue();
+                        assertThat(gStatus == groupStatus).isTrue();
+                    }
+
+                    @Override
+                    public void onGroupNodeAdded(BluetoothDevice device, int gid) {}
+
+                    @Override
+                    public void onGroupNodeRemoved(BluetoothDevice device, int gid) {}
+
+                    @Override
+                    public void onGroupStreamStatusChanged(int groupId, int groupStreamStatus) {}
+                };
 
         mService.mLeAudioCallbacks.register(leAudioCallbacks);
 
@@ -1801,6 +1815,60 @@ public class LeAudioServiceTest {
 
         sendEventAndVerifyIntentForGroupStatusChanged(testGroupId, LeAudioStackEvent.GROUP_STATUS_ACTIVE);
         sendEventAndVerifyIntentForGroupStatusChanged(testGroupId, LeAudioStackEvent.GROUP_STATUS_INACTIVE);
+    }
+
+    private void sendEventAndVerifyGroupStreamStatusChanged(int groupId, int groupStreamStatus) {
+
+        onGroupStreamStatusCallbackCalled = false;
+
+        IBluetoothLeAudioCallback leAudioCallbacks =
+                new IBluetoothLeAudioCallback.Stub() {
+                    @Override
+                    public void onCodecConfigChanged(int gid, BluetoothLeAudioCodecStatus status) {}
+
+                    @Override
+                    public void onGroupStatusChanged(int gid, int gStatus) {}
+
+                    @Override
+                    public void onGroupNodeAdded(BluetoothDevice device, int gid) {}
+
+                    @Override
+                    public void onGroupNodeRemoved(BluetoothDevice device, int gid) {}
+
+                    @Override
+                    public void onGroupStreamStatusChanged(int gid, int gStreamStatus) {
+                        onGroupStreamStatusCallbackCalled = true;
+                        assertThat(gid == groupId).isTrue();
+                        assertThat(gStreamStatus == groupStreamStatus).isTrue();
+                    }
+                };
+
+        mService.mLeAudioCallbacks.register(leAudioCallbacks);
+
+        injectGroupStreamStatusChange(groupId, groupStreamStatus);
+
+        TestUtils.waitForLooperToFinishScheduledTask(mService.getMainLooper());
+        assertThat(onGroupStreamStatusCallbackCalled).isTrue();
+
+        onGroupStreamStatusCallbackCalled = false;
+        mService.mLeAudioCallbacks.unregister(leAudioCallbacks);
+    }
+
+    /** Test native interface group stream status message handling */
+    @Test
+    public void testMessageFromNativeGroupStreamStatusChanged() {
+        doReturn(true).when(mNativeInterface).connectLeAudio(any(BluetoothDevice.class));
+        connectTestDevice(mSingleDevice, testGroupId);
+
+        injectAudioConfChanged(
+                testGroupId,
+                BluetoothLeAudio.CONTEXT_TYPE_MEDIA | BluetoothLeAudio.CONTEXT_TYPE_CONVERSATIONAL,
+                3);
+
+        sendEventAndVerifyGroupStreamStatusChanged(
+                testGroupId, LeAudioStackEvent.GROUP_STREAM_STATUS_IDLE);
+        sendEventAndVerifyGroupStreamStatusChanged(
+                testGroupId, LeAudioStackEvent.GROUP_STREAM_STATUS_STREAMING);
     }
 
     private void injectLocalCodecConfigCapaChanged(List<BluetoothLeAudioCodecConfig> inputCodecCapa,
@@ -1860,19 +1928,25 @@ public class LeAudioServiceTest {
                                 OUTPUT_SELECTABLE_CONFIG);
 
         IBluetoothLeAudioCallback leAudioCallbacks =
-        new IBluetoothLeAudioCallback.Stub() {
-            @Override
-            public void onCodecConfigChanged(int gid, BluetoothLeAudioCodecStatus status) {
-                onGroupCodecConfChangedCallbackCalled = true;
-                assertThat(status.equals(testCodecStatus)).isTrue();
-            }
-            @Override
-            public void onGroupStatusChanged(int gid, int gStatus) {}
-            @Override
-            public void onGroupNodeAdded(BluetoothDevice device, int gid) {}
-            @Override
-            public void onGroupNodeRemoved(BluetoothDevice device, int gid) {}
-        };
+                new IBluetoothLeAudioCallback.Stub() {
+                    @Override
+                    public void onCodecConfigChanged(int gid, BluetoothLeAudioCodecStatus status) {
+                        onGroupCodecConfChangedCallbackCalled = true;
+                        assertThat(status.equals(testCodecStatus)).isTrue();
+                    }
+
+                    @Override
+                    public void onGroupStatusChanged(int gid, int gStatus) {}
+
+                    @Override
+                    public void onGroupNodeAdded(BluetoothDevice device, int gid) {}
+
+                    @Override
+                    public void onGroupNodeRemoved(BluetoothDevice device, int gid) {}
+
+                    @Override
+                    public void onGroupStreamStatusChanged(int groupId, int groupStreamStatus) {}
+                };
 
         mService.mLeAudioCallbacks.register(leAudioCallbacks);
 
