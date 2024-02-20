@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <bluetooth/log.h>
+
 #include <cstdint>
 
 #include "internal_include/bt_target.h"
@@ -264,6 +266,8 @@ struct tBTM_INQUIRY_VAR_ST {
   uint8_t inq_active; /* Bit Mask indicating type of inquiry is active */
   bool no_inc_ssp;    /* true, to stop inquiry on incoming SSP */
 
+  bool registered_for_hci_events;
+
   void Init() {
     p_remname_cmpl_cb = nullptr;
 
@@ -297,6 +301,7 @@ struct tBTM_INQUIRY_VAR_ST {
     state = BTM_INQ_INACTIVE_STATE;
     inq_active = 0;
     no_inc_ssp = BTM_NO_SSP_ON_INQUIRY;
+    registered_for_hci_events = false;
   }
   void Free() {
     alarm_free(remote_name_timer);
@@ -306,3 +311,9 @@ struct tBTM_INQUIRY_VAR_ST {
 
 bool btm_inq_find_bdaddr(const RawAddress& p_bda);
 tINQ_DB_ENT* btm_inq_db_find(const RawAddress& p_bda);
+
+namespace fmt {
+template <>
+struct formatter<tBTM_INQUIRY_CMPL::STATUS>
+    : enum_formatter<tBTM_INQUIRY_CMPL::STATUS> {};
+}  // namespace fmt

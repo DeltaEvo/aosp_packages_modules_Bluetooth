@@ -30,6 +30,7 @@
 #include "os/parameter_provider.h"
 #include "os/system_properties.h"
 #include "storage/config_cache.h"
+#include "storage/config_keys.h"
 #include "storage/legacy_config_file.h"
 #include "storage/mutation.h"
 
@@ -53,12 +54,12 @@ const int kConfigBackupComparePass = 2;
 const std::string kConfigFilePrefix = "bt_config-origin";
 const std::string kConfigFileHash = "hash";
 
-const std::string StorageModule::kInfoSection = "Info";
+const std::string StorageModule::kInfoSection = BTIF_STORAGE_SECTION_INFO;
 const std::string StorageModule::kFileSourceProperty = "FileSource";
 const std::string StorageModule::kTimeCreatedProperty = "TimeCreated";
 const std::string StorageModule::kTimeCreatedFormat = "%Y-%m-%d %H:%M:%S";
 
-const std::string StorageModule::kAdapterSection = "Adapter";
+const std::string StorageModule::kAdapterSection = BTIF_STORAGE_SECTION_ADAPTER;
 
 StorageModule::StorageModule(
     std::string config_file_path,

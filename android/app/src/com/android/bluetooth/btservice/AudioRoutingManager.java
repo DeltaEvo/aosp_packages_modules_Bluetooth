@@ -43,7 +43,6 @@ import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
-import com.android.bluetooth.flags.FeatureFlags;
 import com.android.bluetooth.hearingaid.HearingAidService;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.le_audio.LeAudioService;
@@ -51,10 +50,13 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 public class AudioRoutingManager extends ActiveDeviceManager {
@@ -143,8 +145,8 @@ public class AudioRoutingManager extends ActiveDeviceManager {
         }
     }
 
-    AudioRoutingManager(AdapterService service, ServiceFactory factory, FeatureFlags featureFlags) {
-        super(service, factory, featureFlags);
+    AudioRoutingManager(AdapterService service, ServiceFactory factory) {
+        super(service, factory);
         mAdapterService = service;
         mDbManager = mAdapterService.getDatabase();
         mFactory = factory;
@@ -309,8 +311,8 @@ public class AudioRoutingManager extends ActiveDeviceManager {
             List<BluetoothDevice> activeDevices = mActiveDevices.get(profile);
             if (activeDevices != null && activeDevices.contains(device)) {
                 activeDevices.remove(device);
-                if (activeDevices.size() == 0) {
-                    if (!setFallbackDeviceActive()) {
+                if (activeDevices.isEmpty()) {
+                    if (!setFallbackDeviceActive(profile)) {
                         removeActiveDevice(profile, false);
                     }
                 }
@@ -329,53 +331,69 @@ public class AudioRoutingManager extends ActiveDeviceManager {
                             + device);
         }
 
-        private boolean setFallbackDeviceActive() {
-            if (DBG) {
-                Log.d(TAG, "setFallbackDeviceActive");
+        private Optional<BluetoothDevice> getFallbackDevice(
+                Collection<AudioRoutingDevice> candidates) {
+            List<BluetoothDevice> activatableDevices = new ArrayList<>();
+            for (AudioRoutingDevice d : candidates) {
+                if (d.isA2dpOnly() || d.isHfpOnly()) continue;
+                boolean canActivate = true;
+                for (int p : d.connectedProfiles) {
+                    if (!d.canActivateNow(p)) {
+                        canActivate = false;
+                        break;
+                    } else if (p != BluetoothProfile.A2DP && p != BluetoothProfile.HEADSET) {
+                        break;
+                    }
+                }
+                if (canActivate) {
+                    activatableDevices.add(d.device);
+                }
             }
-            List<BluetoothDevice> candidates = new ArrayList<>();
-            int audioMode = mAudioManager.getMode();
-            for (AudioRoutingDevice routingDevice : mConnectedDevices.values()) {
-                for (int profile : routingDevice.connectedProfiles) {
-                    if (audioMode == AudioManager.MODE_NORMAL) {
-                        if (profile != BluetoothProfile.HEADSET) {
-                            candidates.add(routingDevice.device);
-                            break;
-                        }
+            return Optional.ofNullable(
+                    mDbManager.getMostRecentlyConnectedDevicesInList(activatableDevices));
+        }
+
+        private boolean setFallbackDeviceActive(int profile) {
+            if (DBG) {
+                Log.d(TAG, "setFallbackDeviceActive: " + BluetoothProfile.getProfileName(profile));
+            }
+            // 1. Activate the lastly activated device among currently activated devices.
+            Set<AudioRoutingDevice> candidates = new HashSet<>();
+            for (int i = 0; i < mActiveDevices.size(); ++i) {
+                for (BluetoothDevice d : mActiveDevices.valueAt(i)) {
+                    candidates.add(getAudioRoutingDevice(d));
+                }
+            }
+            try {
+                // 2. Activate the lastly activated device for the profile
+                Optional<BluetoothDevice> fallbackDevice =
+                        getFallbackDevice(candidates)
+                                .or(() -> getFallbackDevice(mConnectedDevices.values()));
+                AudioRoutingDevice fallbackRoutingDevice =
+                        getAudioRoutingDevice(fallbackDevice.get());
+                int profileToActivate = profile;
+                if (!fallbackRoutingDevice.canActivateNow(profile)) {
+                    // if it can't activate the given profile, try LE_AUDIO
+                    if (fallbackRoutingDevice.canActivateNow(BluetoothProfile.LE_AUDIO)) {
+                        profileToActivate = BluetoothProfile.LE_AUDIO;
                     } else {
-                        if (profile != BluetoothProfile.A2DP) {
-                            candidates.add(routingDevice.device);
-                            break;
+                        // if it can't activate both the given profile and LE_AUDIO, select any
+                        for (int p : fallbackRoutingDevice.connectedProfiles) {
+                            if (fallbackRoutingDevice.canActivateNow(p)) {
+                                profileToActivate = p;
+                                break;
+                            }
                         }
                     }
                 }
-            }
-            AudioRoutingDevice deviceToActivate = null;
-            BluetoothDevice device = mDbManager.getMostRecentlyConnectedDevicesInList(candidates);
-            if (device != null) {
-                deviceToActivate = getAudioRoutingDevice(device);
-            }
-            if (deviceToActivate != null) {
+                return activateDeviceProfile(fallbackRoutingDevice, profileToActivate);
+            } catch (NoSuchElementException e) {
+                // Thrown when no available fallback devices found
                 if (DBG) {
-                    Log.d(TAG, "activateDevice: device=" + deviceToActivate.device);
+                    Log.d(TAG, "Found no available BT fallback devices.");
                 }
-                // Try to activate hearing aid and LE audio first
-                if (deviceToActivate.connectedProfiles.contains(BluetoothProfile.HEARING_AID)) {
-                    return activateDeviceProfile(deviceToActivate, BluetoothProfile.HEARING_AID);
-                } else if (deviceToActivate.connectedProfiles.contains(BluetoothProfile.LE_AUDIO)) {
-                    return activateDeviceProfile(deviceToActivate, BluetoothProfile.LE_AUDIO);
-                } else if (deviceToActivate.connectedProfiles.contains(BluetoothProfile.A2DP)) {
-                    return activateDeviceProfile(deviceToActivate, BluetoothProfile.A2DP);
-                } else if (deviceToActivate.connectedProfiles.contains(BluetoothProfile.HEADSET)) {
-                    return activateDeviceProfile(deviceToActivate, BluetoothProfile.HEADSET);
-                }
-                Log.w(
-                        TAG,
-                        "Fail to activate the device: "
-                                + deviceToActivate.device
-                                + ", no connected audio profiles");
+                return false;
             }
-            return false;
         }
 
         // TODO: handle the connection policy change events.
@@ -660,7 +678,7 @@ public class AudioRoutingManager extends ActiveDeviceManager {
             for (int p : connectedDevice.supportedProfiles) {
                 if (!getActiveDevices(p).isEmpty()) {
                     BluetoothMethodProxy mp = BluetoothMethodProxy.getInstance();
-                    if (mp.mediaSessionManagerGetActiveSessions(mSessionManager).size() > 0
+                    if (!mp.mediaSessionManagerGetActiveSessions(mSessionManager).isEmpty()
                             || mAudioManager.getMode() == AudioManager.MODE_IN_CALL) {
                         Log.i(
                                 TAG,
@@ -733,7 +751,6 @@ public class AudioRoutingManager extends ActiveDeviceManager {
 
             public boolean canActivateNow(int profile) {
                 if (!connectedProfiles.contains(profile)) return false;
-                // TODO: Return false if there are another active remote streaming an audio.
                 return switch (profile) {
                     case BluetoothProfile.HEADSET -> !supportedProfiles.contains(
                                     BluetoothProfile.A2DP)

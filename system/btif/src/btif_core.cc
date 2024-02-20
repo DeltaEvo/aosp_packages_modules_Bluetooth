@@ -49,7 +49,7 @@
 #include "common/message_loop_thread.h"
 #include "device/include/controller.h"
 #include "device/include/device_iot_config.h"
-#include "hci/controller.h"
+#include "hci/controller_interface.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
 #include "main/shim/entry.h"
@@ -61,6 +61,7 @@
 #include "stack/include/bt_types.h"
 #include "stack/include/btm_api.h"
 #include "stack/include/btm_ble_api.h"
+#include "storage/config_keys.h"
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
@@ -186,13 +187,15 @@ void btif_enable_bluetooth_evt() {
 
   char val[PROPERTY_VALUE_MAX] = "";
   int val_size = PROPERTY_VALUE_MAX;
-  if (!btif_config_get_str("Adapter", "Address", val, &val_size) ||
+  if (!btif_config_get_str(BTIF_STORAGE_SECTION_ADAPTER,
+                           BTIF_STORAGE_KEY_ADDRESS, val, &val_size) ||
       strcmp(bdstr.c_str(), val) != 0) {
     // We failed to get an address or the one in the config file does not match
     // the address given by the controller interface. Update the config cache
-    LOG_INFO("%s: Storing '%s' into the config file", __func__,
-            ADDRESS_TO_LOGGABLE_CSTR(local_bd_addr));
-    btif_config_set_str("Adapter", "Address", bdstr.c_str());
+    LOG_INFO("Storing '%s' into the config file",
+             ADDRESS_TO_LOGGABLE_CSTR(local_bd_addr));
+    btif_config_set_str(BTIF_STORAGE_SECTION_ADAPTER, BTIF_STORAGE_KEY_ADDRESS,
+                        bdstr.c_str());
 
     // fire HAL callback for property change
     bt_property_t prop;
@@ -249,20 +252,6 @@ bt_status_t btif_cleanup_bluetooth() {
 
 /*******************************************************************************
  *
- * Function         btif_dut_mode_cback
- *
- * Description     Callback invoked on completion of vendor specific test mode
- *                 command
- *
- * Returns          None
- *
- ******************************************************************************/
-static void btif_dut_mode_cback(UNUSED_ATTR tBTM_VSC_CMPL* p) {
-  /* For now nothing to be done. */
-}
-
-/*******************************************************************************
- *
  * Function         btif_dut_mode_configure
  *
  * Description      Configure Test Mode - 'enable' to 1 puts the device in test
@@ -290,7 +279,8 @@ void btif_dut_mode_configure(uint8_t enable) {
  ******************************************************************************/
 void btif_dut_mode_send(uint16_t opcode, uint8_t* buf, uint8_t len) {
   LOG_VERBOSE("%s", __func__);
-  BTM_VendorSpecificCommand(opcode, len, buf, btif_dut_mode_cback);
+  /* For now nothing to be done. */
+  BTM_VendorSpecificCommand(opcode, len, buf, [](tBTM_VSC_CMPL*) {});
 }
 
 /*****************************************************************************

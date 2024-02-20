@@ -22,6 +22,7 @@ cc_library_static {
     name: "libbte",
     defaults: ["fluoride_defaults"],
     srcs: [
+        ":BluetoothStackManagerSources",
         ":LibBluetoothShimSources",
         ":LibBluetoothSources",
     ],
@@ -54,8 +55,10 @@ cc_library_static {
     min_sdk_version: "Tiramisu",
     static_libs: [
         "libbluetooth_gd",
+        "libbluetooth_log",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
+        "libcom.android.sysprop.bluetooth.wrapped",
     ],
     header_libs: ["libbluetooth_headers"],
     cflags: ["-Wno-unused-parameter"],
@@ -123,6 +126,7 @@ cc_library_static {
     defaults: ["fluoride_defaults"],
 
     srcs: [
+        ":BluetoothStackManagerSources",
         ":LibBluetoothShimSources",
         ":LibBluetoothSources",
     ],
@@ -145,9 +149,11 @@ cc_library_static {
     ],
     whole_static_libs: [
         "libbluetooth_gd", // Gabeldorsche
+        "libcom.android.sysprop.bluetooth.wrapped",
     ],
     header_libs: ["libbluetooth_headers"],
     static_libs: [
+        "libbluetooth_log",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
     ],
@@ -177,6 +183,7 @@ cc_test {
         ":TestMockBta",
         ":TestMockBtif",
         ":TestMockBtu",
+        ":TestMockJni",
         ":TestMockLegacyHciCommands",
         ":TestMockLegacyHciInterface",
         ":TestMockMainShimEntry",
@@ -201,20 +208,24 @@ cc_test {
         "shim/utils.cc",
         "test/common_stack_test.cc",
         "test/main_shim_dumpsys_test.cc",
+        "test/main_shim_stack_lifecycle_test.cc",
         "test/main_shim_test.cc",
     ],
     static_libs: [
+        "libbase",
         "libbluetooth-dumpsys",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
         "libbluetooth_hci_pdl",
+        "libbluetooth_log",
         "libbt-common",
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libbtdevice",
         "libchrome",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libevent",
         "libflatbuffers-cpp",
         "libgmock",
@@ -222,6 +233,7 @@ cc_test {
         "libosi",
     ],
     shared_libs: [
+        "libPlatformProperties",
         "libcrypto",
         "server_configurable_flags",
     ],

@@ -50,6 +50,7 @@
 #include "stack/include/acl_api.h"
 #include "stack/include/acl_api_types.h"
 #include "stack/include/main_thread.h"
+#include "storage/config_keys.h"
 #include "types/ble_address_with_type.h"
 #include "types/bluetooth/uuid.h"
 #include "types/bt_transport.h"
@@ -651,7 +652,8 @@ static bt_status_t btif_gattc_read_phy(
 static int btif_gattc_get_device_type(const RawAddress& bd_addr) {
   int device_type = 0;
 
-  if (btif_config_get_int(bd_addr.ToString().c_str(), "DevType", &device_type))
+  if (btif_config_get_int(bd_addr.ToString().c_str(), BTIF_STORAGE_KEY_DEV_TYPE,
+                          &device_type))
     return device_type;
   return 0;
 }

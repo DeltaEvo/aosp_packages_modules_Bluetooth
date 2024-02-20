@@ -60,8 +60,7 @@ import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.ServiceFactory;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
-import com.android.bluetooth.flags.FeatureFlags;
-import com.android.bluetooth.flags.FeatureFlagsImpl;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.hfpclient.HeadsetClientService;
 import com.android.bluetooth.hfpclient.HeadsetClientStateMachine;
 import com.android.bluetooth.le_audio.LeAudioService;
@@ -126,7 +125,6 @@ public class HeadsetService extends ProfileService {
     // Timeout for state machine thread join, to prevent potential ANR.
     private static final int SM_THREAD_JOIN_TIMEOUT_MS = 1000;
 
-    private FeatureFlags mFeatureFlags = new FeatureFlagsImpl();
     private int mMaxHeadsetConnections = 1;
     private BluetoothDevice mActiveDevice;
     private AdapterService mAdapterService;
@@ -170,7 +168,7 @@ public class HeadsetService extends ProfileService {
     }
 
     @Override
-    protected void start() {
+    public void start() {
         Log.i(TAG, "start()");
         if (mStarted) {
             throw new IllegalStateException("start() called twice");
@@ -213,7 +211,7 @@ public class HeadsetService extends ProfileService {
     }
 
     @Override
-    protected void stop() {
+    public void stop() {
         Log.i(TAG, "stop()");
         if (!mStarted) {
             Log.w(TAG, "stop() called before start()");
@@ -283,7 +281,7 @@ public class HeadsetService extends ProfileService {
     }
 
     @Override
-    protected void cleanup() {
+    public void cleanup() {
         Log.i(TAG, "cleanup");
     }
 
@@ -851,7 +849,7 @@ public class HeadsetService extends ProfileService {
             try {
                 HeadsetService service = getService(source);
                 if (service != null) {
-                    if (service.mFeatureFlags.audioRoutingCentralization()) {
+                    if (Flags.audioRoutingCentralization()) {
                         ((AudioRoutingManager) service.mAdapterService.getActiveDeviceManager())
                                 .activateDeviceProfile(device, BluetoothProfile.HEADSET, receiver);
                     } else {

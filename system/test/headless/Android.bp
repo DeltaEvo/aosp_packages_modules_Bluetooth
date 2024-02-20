@@ -26,6 +26,7 @@ genrule {
 
 cc_binary {
     name: "bt_headless",
+    host_supported: true,
     defaults: [
         "fluoride_defaults",
         "latest_android_hardware_bluetooth_audio_ndk_shared",
@@ -40,7 +41,8 @@ cc_binary {
         "HeadlessBuildTimestamp",
     ],
     srcs: [
-        "bt_property.cc",
+        "adapter/adapter.cc",
+        "bt_stack_info.cc",
         "connect/connect.cc",
         "discovery/discovery.cc",
         "dumpsys/dumpsys.cc",
@@ -50,6 +52,7 @@ cc_binary {
         "log.cc",
         "main.cc",
         "messenger.cc",
+        "mode/mode.cc",
         "nop/nop.cc",
         "pairing/pairing.cc",
         "property.cc",
@@ -58,16 +61,17 @@ cc_binary {
         "scan/scan.cc",
         "sdp/sdp.cc",
         "sdp/sdp_db.cc",
+        "text.cc",
         "util.cc",
     ],
     include_dirs: [
         "packages/modules/Bluetooth/system",
         "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/include",
         "packages/modules/Bluetooth/system/stack/include",
     ],
     static_libs: [
         "android.hardware.bluetooth.a2dp@1.0",
-        "android.system.suspend.control-V1-ndk",
         "avrcp-target-service",
         "lib-bt-packets",
         "lib-bt-packets-avrcp",
@@ -79,6 +83,7 @@ cc_binary {
         "libbluetooth_core_rs",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
+        "libbluetooth_log",
         "libbluetooth_rust_interop",
         "libbt-audio-asrc",
         "libbt-audio-hal-interface",
@@ -101,6 +106,7 @@ cc_binary {
         "libbtif-core",
         "libc++fs",
         "libchrome",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libevent",
         "libflatbuffers-cpp",
         "libg722codec",
@@ -118,9 +124,7 @@ cc_binary {
         "android.hardware.bluetooth.audio@2.1",
         "android.hardware.bluetooth@1.0",
         "android.hardware.bluetooth@1.1",
-        "android.system.suspend-V1-ndk",
         "libPlatformProperties",
-        "libaaudio",
         "libbase",
         "libbinder_ndk",
         "libcrypto",
@@ -129,9 +133,21 @@ cc_binary {
         "libhidlbase",
         "libjsoncpp",
         "liblog", // __android_log_print
-        "libstatssocket",
         "libutils",
         "server_configurable_flags",
     ],
     header_libs: ["libbluetooth_headers"],
+    target: {
+        android: {
+            static_libs: [
+                "android.system.suspend.control-V1-ndk",
+            ],
+            shared_libs: [
+                "android.hardware.bluetooth.audio-V4-ndk",
+                "android.system.suspend-V1-ndk",
+                "libaaudio",
+                "libstatssocket",
+            ],
+        },
+    },
 }

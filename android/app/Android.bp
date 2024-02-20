@@ -110,6 +110,7 @@ cc_library_shared {
         "libbluetooth_core_rs_bridge",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
+        "libbluetooth_log",
         "libbt-audio-asrc",
         "libbt-audio-hal-interface",
         "libbt-bta",
@@ -147,6 +148,7 @@ cc_library_shared {
         "server_configurable_flags",
     ],
     shared_libs: [
+        "libPlatformProperties",
         "libaaudio",
         "libbinder_ndk",
         "libcrypto",
@@ -287,11 +289,11 @@ android_app {
     javacflags: ["-Aroom.schemaLocation=packages/modules/Bluetooth/android/app/tests/unit/src/com/android/bluetooth/btservice/storage/schemas"],
 
     lint: {
-        // TODO(b/318814235): Add back ObsoleteSdkInt to this list.
         error_checks: [
             "ExtraText",
             "MissingClass",
             "NewApi",
+            "ObsoleteSdkInt",
             "Recycle",
             "RtlHardcoded",
             "UseSparseArrays",

@@ -22,7 +22,7 @@
 #include "aidl/hfp_client_interface_aidl.h"
 #include "hal_version_manager.h"
 #include "hfp_client_interface.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 #include "osi/include/properties.h"
 
 using ::bluetooth::audio::aidl::hfp::HfpDecodingTransport;
@@ -504,6 +504,12 @@ void HfpClientInterface::Offload::CancelStreamingRequest() {
     default:
       LOG_WARN("Invalid state, %d", pending_cmd);
   }
+}
+
+std::unordered_map<int, ::hfp::sco_config>
+HfpClientInterface::Offload::GetHfpScoConfig() {
+  return aidl::hfp::HfpTransport::GetHfpScoConfig(
+      aidl::SessionType::HFP_HARDWARE_OFFLOAD_DATAPATH);
 }
 
 HfpClientInterface::Offload* HfpClientInterface::GetOffload(

@@ -325,6 +325,19 @@ public class BassClientStateMachine extends StateMachine {
         return null;
     }
 
+    boolean isSyncedToTheSource(int sourceId) {
+        BluetoothLeBroadcastReceiveState recvState = getBroadcastReceiveStateForSourceId(sourceId);
+
+        return recvState != null
+                && (recvState.getPaSyncState()
+                                == BluetoothLeBroadcastReceiveState.PA_SYNC_STATE_SYNCHRONIZED
+                        || recvState.getBisSyncState().stream()
+                                .anyMatch(
+                                        bitmap -> {
+                                            return bitmap != 0;
+                                        }));
+    }
+
     void parseBaseData(BluetoothDevice device, int syncHandle, byte[] serviceData) {
         log("parseBaseData" + Arrays.toString(serviceData));
         BaseData base = BaseData.parseBaseData(serviceData);
@@ -1486,10 +1499,12 @@ public class BassClientStateMachine extends StateMachine {
         stream.write((metaData.getBroadcastId() & 0x0000000000FF0000) >>> 16);
 
         // PA_Sync
-        if (!mDefNoPAS) {
-            stream.write(0x01);
+        if (mDefNoPAS) {
+            // Synchronize to PA – PAST not available
+            stream.write(0x02);
         } else {
-            stream.write(0x00);
+            // Synchronize to PA – PAST available
+            stream.write(0x01);
         }
 
         // PA_Interval
@@ -1686,6 +1701,7 @@ public class BassClientStateMachine extends StateMachine {
                     log("Disconnecting from " + mDevice);
                     mAllowReconnect = false;
                     if (mBluetoothGatt != null) {
+                        mService.handleDeviceDisconnection(mDevice, true);
                         mBluetoothGatt.disconnect();
                         mBluetoothGatt.close();
                         mBluetoothGatt = null;
@@ -1702,6 +1718,7 @@ public class BassClientStateMachine extends StateMachine {
                         Log.w(TAG, "device is already connected to Bass" + mDevice);
                     } else {
                         Log.w(TAG, "unexpected disconnected from " + mDevice);
+                        mService.handleDeviceDisconnection(mDevice, false);
                         resetBluetoothGatt();
                         cancelActiveSync(null);
                         transitionTo(mDisconnected);
@@ -1759,15 +1776,9 @@ public class BassClientStateMachine extends StateMachine {
                     // Save pending source to be added once existing source got removed
                     mPendingSourceToSwitch = metaData;
                     // Remove the source first
-                    BluetoothLeBroadcastReceiveState recvStateToUpdate =
-                            getBroadcastReceiveStateForSourceId(sourceIdToRemove);
                     BluetoothLeBroadcastMetadata metaDataToUpdate =
                             getCurrentBroadcastMetadata(sourceIdToRemove);
-                    if (metaDataToUpdate != null
-                            && recvStateToUpdate != null
-                            && recvStateToUpdate.getPaSyncState()
-                                    == BluetoothLeBroadcastReceiveState
-                                            .PA_SYNC_STATE_SYNCHRONIZED) {
+                    if (metaDataToUpdate != null && isSyncedToTheSource(sourceIdToRemove)) {
                         log("SWITCH_BCAST_SOURCE force source to lost PA sync");
                         Message msg = obtainMessage(UPDATE_BCAST_SOURCE);
                         msg.arg1 = sourceIdToRemove;
@@ -2043,6 +2054,7 @@ public class BassClientStateMachine extends StateMachine {
                     Log.w(TAG, "DISCONNECT requested!: " + mDevice);
                     mAllowReconnect = false;
                     if (mBluetoothGatt != null) {
+                        mService.handleDeviceDisconnection(mDevice, true);
                         mBluetoothGatt.disconnect();
                         mBluetoothGatt.close();
                         mBluetoothGatt = null;
@@ -2063,6 +2075,7 @@ public class BassClientStateMachine extends StateMachine {
                         Log.w(TAG, "should never happen from this state");
                     } else {
                         Log.w(TAG, "Unexpected disconnection " + mDevice);
+                        mService.handleDeviceDisconnection(mDevice, false);
                         resetBluetoothGatt();
                         cancelActiveSync(null);
                         transitionTo(mDisconnected);

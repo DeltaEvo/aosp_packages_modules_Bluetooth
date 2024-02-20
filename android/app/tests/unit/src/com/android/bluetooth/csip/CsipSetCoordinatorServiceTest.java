@@ -163,11 +163,12 @@ public class CsipSetCoordinatorServiceTest {
 
     private void startService() throws TimeoutException {
         mService = new CsipSetCoordinatorService(mTargetContext);
-        mService.doStart();
+        mService.start();
+        mService.setAvailable(true);
     }
 
     private void stopService() throws TimeoutException {
-        mService.doStop();
+        mService.stop();
         mService = CsipSetCoordinatorService.getCsipSetCoordinatorService();
         Assert.assertNull(mService);
     }
@@ -405,6 +406,8 @@ public class CsipSetCoordinatorServiceTest {
 
         // Send a connect request
         Assert.assertTrue("Connect expected to succeed", mService.connect(mTestDevice));
+
+        TestUtils.waitForIntent(TIMEOUT_MS, mIntentQueue.get(mTestDevice));
     }
 
     /**
@@ -660,6 +663,8 @@ public class CsipSetCoordinatorServiceTest {
                 .getRemoteUuids(any(BluetoothDevice.class));
         // add state machines for testing dump()
         mService.connect(mTestDevice);
+
+        TestUtils.waitForIntent(TIMEOUT_MS, mIntentQueue.get(mTestDevice));
 
         mService.dump(new StringBuilder());
     }

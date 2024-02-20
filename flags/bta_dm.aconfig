@@ -1,4 +1,5 @@
 package: "com.android.bluetooth.flags"
+container: "com.android.btservices"
 
 flag {
     name: "synchronous_bta_sec"
@@ -26,4 +27,11 @@ flag {
     namespace: "bluetooth"
     description: "Fix double-sending device discovery state change when canceling RNR"
     bug: "321170442"
+}
+
+flag {
+    name: "bt_system_context_report"
+    namespace: "bluetooth"
+    description: "Report Bluetooth system context through bta_ble_energy_info_cmpl"
+    bug: "323083457"
 }

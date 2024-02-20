@@ -45,8 +45,8 @@ import android.location.LocationManager;
 import android.os.Binder;
 import android.os.RemoteException;
 import android.os.WorkSource;
+import android.platform.test.flag.junit.SetFlagsRule;
 
-import android.platform.test.annotations.RequiresFlagsEnabled;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 import androidx.test.rule.ServiceTestRule;
@@ -57,12 +57,14 @@ import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.CompanionManager;
 import com.android.bluetooth.le_scan.AppScanStats;
 import com.android.bluetooth.le_scan.PeriodicScanManager;
+import com.android.bluetooth.le_scan.ScanClient;
 import com.android.bluetooth.le_scan.ScanManager;
+import com.android.bluetooth.le_scan.TransitionalScanHelper;
 
 import com.android.bluetooth.flags.Flags;
+
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -94,8 +96,8 @@ public class GattServiceTest {
     private Context mTargetContext;
     private GattService mService;
     @Mock private GattService.ClientMap mClientMap;
-    @Mock private GattService.ScannerMap mScannerMap;
-    @Mock private GattService.ScannerMap.App mApp;
+    @Mock private TransitionalScanHelper.ScannerMap mScannerMap;
+    @Mock private TransitionalScanHelper.ScannerMap.App mApp;
     @Mock private GattService.PendingIntentInfo mPiInfo;
     @Mock private PeriodicScanManager mPeriodicScanManager;
     @Mock private ScanManager mScanManager;
@@ -105,6 +107,7 @@ public class GattServiceTest {
     @Mock private AdvertiseManagerNativeInterface mAdvertiseManagerNativeInterface;
 
     @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
+    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
     private BluetoothDevice mDevice;
     private BluetoothAdapter mAdapter;
@@ -126,7 +129,7 @@ public class GattServiceTest {
 
         GattObjectsFactory.setInstanceForTesting(mFactory);
         doReturn(mNativeInterface).when(mFactory).getNativeInterface();
-        doReturn(mScanManager).when(mFactory).createScanManager(any(), any(), any(), any(), any());
+        doReturn(mScanManager).when(mFactory).createScanManager(any(), any(), any(), any());
         doReturn(mPeriodicScanManager).when(mFactory).createPeriodicScanManager(any());
         doReturn(mDistanceMeasurementManager).when(mFactory)
                 .createDistanceMeasurementManager(any());
@@ -152,7 +155,7 @@ public class GattServiceTest {
         mService.start();
 
         mService.mClientMap = mClientMap;
-        mService.mScannerMap = mScannerMap;
+        mService.mTransitionalScanHelper.setScannerMap(mScannerMap);
         mService.mReliableQueue = mReliableQueue;
         mService.mServerMap = mServerMap;
     }
@@ -240,7 +243,7 @@ public class GattServiceTest {
         mService.connectionParameterUpdate(clientIf, address, connectionPriority,
                 mAttributionSource);
 
-        connectionPriority = BluetoothGatt.CONNECTION_PRIORITY_BALANCED;;
+        connectionPriority = BluetoothGatt.CONNECTION_PRIORITY_BALANCED;
         mService.connectionParameterUpdate(clientIf, address, connectionPriority,
                 mAttributionSource);
 
@@ -494,10 +497,9 @@ public class GattServiceTest {
         verify(mScanManager).flushBatchScanResults(new ScanClient(scannerId));
     }
 
-    @RequiresFlagsEnabled(Flags.FLAG_LE_SCAN_FIX_REMOTE_EXCEPTION)
     @Test
     public void onScanResult_remoteException_clientDied() throws Exception {
-        Assume.assumeTrue(Flags.leScanFixRemoteException());
+        mSetFlagsRule.enableFlags(Flags.FLAG_LE_SCAN_FIX_REMOTE_EXCEPTION);
         int scannerId = 1;
 
         int eventType = 0;
@@ -883,5 +885,47 @@ public class GattServiceTest {
                         BluetoothProfile.A2DP,
                         BluetoothProfile.STATE_CONNECTING,
                         BluetoothProfile.STATE_CONNECTED);
+    }
+
+    @Test
+    public void restrictedHandles() throws Exception {
+        mSetFlagsRule.enableFlags(Flags.FLAG_GATT_CLEANUP_RESTRICTED_HANDLES);
+        int clientIf = 1;
+        int connId = 1;
+        ArrayList<GattDbElement> db = new ArrayList<>();
+
+        GattService.ClientMap.App app = mock(GattService.ClientMap.App.class);
+        IBluetoothGattCallback callback = mock(IBluetoothGattCallback.class);
+
+        doReturn(app).when(mClientMap).getByConnId(connId);
+        app.callback = callback;
+
+        GattDbElement hidService =
+                GattDbElement.createPrimaryService(
+                        UUID.fromString("00001812-0000-1000-8000-00805F9B34FB"));
+        hidService.id = 1;
+
+        GattDbElement hidInfoChar =
+                GattDbElement.createCharacteristic(
+                        UUID.fromString("00002A4A-0000-1000-8000-00805F9B34FB"), 0, 0);
+        hidInfoChar.id = 2;
+
+        GattDbElement randomChar =
+                GattDbElement.createCharacteristic(
+                        UUID.fromString("0000FFFF-0000-1000-8000-00805F9B34FB"), 0, 0);
+        randomChar.id = 3;
+
+        db.add(hidService);
+        db.add(hidInfoChar);
+        db.add(randomChar);
+
+        mService.onGetGattDb(connId, db);
+        // HID characteristics should be restricted
+        assertThat(mService.mRestrictedHandles.get(connId)).contains(hidInfoChar.id);
+        assertThat(mService.mRestrictedHandles.get(connId)).doesNotContain(randomChar.id);
+
+        mService.onDisconnected(
+                clientIf, connId, BluetoothGatt.GATT_SUCCESS, REMOTE_DEVICE_ADDRESS);
+        assertThat(mService.mRestrictedHandles).doesNotContainKey(connId);
     }
 }

@@ -1,4 +1,5 @@
 package: "com.android.bluetooth.flags"
+container: "com.android.btservices"
 
 flag {
     name: "encrypted_advertising_data"
@@ -61,4 +62,32 @@ flag {
     namespace: "bluetooth"
     description: "Enumerate GATT error situations"
     bug: "320574336"
+}
+
+flag {
+    name: "gatt_fix_device_busy"
+    namespace: "bluetooth"
+    description: "Fix device busy bug in BluetoothGatt"
+    bug: "322580271"
+}
+
+flag {
+    name: "gatt_cleanup_restricted_handles"
+    namespace: "bluetooth"
+    description: "Cleans up restricted handles when disconnected"
+    bug: "323110155"
+}
+
+flag {
+    name: "brcm_better_le_scan_params"
+    namespace: "bluetooth"
+    description: "Optimize LE scan parameters for BRCM controllers"
+    bug: "324238597"
+}
+
+flag {
+    name: "le_periodic_scanning_reassembler"
+    namespace: "bluetooth"
+    description: "Enable reassembly of LE periodic advertising events"
+    bug: "324886466"
 }

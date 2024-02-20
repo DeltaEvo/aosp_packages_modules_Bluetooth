@@ -1,17 +1,33 @@
 /*
- * Copyright (C) 2024 The Android Open Source Project
+ * Copyright (c) 2008-2009, Motorola, Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * All rights reserved.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Motorola, Inc. nor the names of its contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 package com.android.bluetooth.opp;
@@ -72,13 +88,23 @@ class BluetoothOppNotification {
             BluetoothShare.STATUS + " >= '200' AND " + VISIBLE + " AND " + NOT_THROUGH_HANDOVER;
     // Don't show handover-initiated transfers
 
-    private static final String WHERE_COMPLETED_OUTBOUND =
-            WHERE_COMPLETED + " AND " + "(" + BluetoothShare.DIRECTION + " == "
-                    + BluetoothShare.DIRECTION_OUTBOUND + ")";
+    static final String WHERE_COMPLETED_OUTBOUND =
+            WHERE_COMPLETED
+                    + " AND "
+                    + "("
+                    + BluetoothShare.DIRECTION
+                    + " == "
+                    + BluetoothShare.DIRECTION_OUTBOUND
+                    + ")";
 
-    private static final String WHERE_COMPLETED_INBOUND =
-            WHERE_COMPLETED + " AND " + "(" + BluetoothShare.DIRECTION + " == "
-                    + BluetoothShare.DIRECTION_INBOUND + ")";
+    static final String WHERE_COMPLETED_INBOUND =
+            WHERE_COMPLETED
+                    + " AND "
+                    + "("
+                    + BluetoothShare.DIRECTION
+                    + " == "
+                    + BluetoothShare.DIRECTION_INBOUND
+                    + ")";
 
     private static final String WHERE_CONFIRM_PENDING =
             BluetoothShare.USER_CONFIRMATION + " == '" + BluetoothShare.USER_CONFIRMATION_PENDING
@@ -104,6 +130,15 @@ class BluetoothOppNotification {
 
     @VisibleForTesting
     static final int NOTIFICATION_ID_INBOUND_COMPLETE = -1000006;
+
+    static final int NOTIFICATION_ID_COMPLETE_SUMMARY = -1000007;
+
+    private static final String NOTIFICATION_GROUP_KEY_PROGRESS = "PROGRESS";
+
+    private static final String NOTIFICATION_GROUP_KEY_TRANSFER_COMPLETE = "TRANSFER_COMPLETE";
+
+    private static final String NOTIFICATION_GROUP_KEY_INCOMING_FILE_CONFIRM =
+            "INCOMING_FILE_CONFIRM";
 
     private boolean mUpdateCompleteNotification = true;
 
@@ -382,6 +417,9 @@ class BluetoothOppNotification {
             intent.setDataAndNormalize(Uri.parse(BluetoothShare.CONTENT_URI + "/" + item.id));
             b.setContentIntent(PendingIntent.getBroadcast(mContext, 0, intent,
                         PendingIntent.FLAG_IMMUTABLE));
+            if (Flags.oppFixMultipleNotificationsIssues()) {
+                b.setGroup(NOTIFICATION_GROUP_KEY_PROGRESS);
+            }
             mNotificationMgr.notify(NOTIFICATION_ID_PROGRESS, b.build());
         }
     }
@@ -444,9 +482,14 @@ class BluetoothOppNotification {
                 pi = PendingIntent.getBroadcast(mContext, 0, in, PendingIntent.FLAG_IMMUTABLE);
             }
 
-            Intent deleteIntent = new Intent(Constants.ACTION_COMPLETE_HIDE).setClassName(
-                    mContext, BluetoothOppReceiver.class.getName());
-            Notification outNoti =
+            Intent deleteIntent = new Intent(mContext, BluetoothOppReceiver.class);
+            if (Flags.oppFixMultipleNotificationsIssues()) {
+                deleteIntent.setAction(Constants.ACTION_HIDE_COMPLETED_OUTBOUND_TRANSFER);
+            } else {
+                deleteIntent.setAction(Constants.ACTION_COMPLETE_HIDE);
+            }
+
+            Notification.Builder b =
                     new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL).setOnlyAlertOnce(
                             true)
                             .setContentTitle(mContext.getString(R.string.outbound_noti_title))
@@ -462,9 +505,11 @@ class BluetoothOppNotification {
                                     PendingIntent.getBroadcast(mContext, 0, deleteIntent,
                                         PendingIntent.FLAG_IMMUTABLE))
                             .setWhen(timeStamp)
-                            .setLocalOnly(true)
-                            .build();
-            mNotificationMgr.notify(NOTIFICATION_ID_OUTBOUND_COMPLETE, outNoti);
+                            .setLocalOnly(true);
+            if (Flags.oppFixMultipleNotificationsIssues()) {
+                b.setGroup(NOTIFICATION_GROUP_KEY_TRANSFER_COMPLETE);
+            }
+            mNotificationMgr.notify(NOTIFICATION_ID_OUTBOUND_COMPLETE, b.build());
         } else {
             if (mNotificationMgr != null) {
                 mNotificationMgr.cancel(NOTIFICATION_ID_OUTBOUND_COMPLETE);
@@ -519,9 +564,14 @@ class BluetoothOppNotification {
                 pi = PendingIntent.getBroadcast(mContext, 0, in, PendingIntent.FLAG_IMMUTABLE);
             }
 
-            Intent deleteIntent = new Intent(Constants.ACTION_COMPLETE_HIDE).setClassName(
-                    mContext, BluetoothOppReceiver.class.getName());
-            Notification inNoti =
+            Intent deleteIntent = new Intent(mContext, BluetoothOppReceiver.class);
+            if (Flags.oppFixMultipleNotificationsIssues()) {
+                deleteIntent.setAction(Constants.ACTION_HIDE_COMPLETED_INBOUND_TRANSFER);
+            } else {
+                deleteIntent.setAction(Constants.ACTION_COMPLETE_HIDE);
+            }
+
+            Notification.Builder b =
                     new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL).setOnlyAlertOnce(
                             true)
                             .setContentTitle(mContext.getString(R.string.inbound_noti_title))
@@ -538,9 +588,11 @@ class BluetoothOppNotification {
                                     PendingIntent.getBroadcast(mContext, 0, deleteIntent,
                                         PendingIntent.FLAG_IMMUTABLE))
                             .setWhen(timeStamp)
-                            .setLocalOnly(true)
-                            .build();
-            mNotificationMgr.notify(NOTIFICATION_ID_INBOUND_COMPLETE, inNoti);
+                            .setLocalOnly(true);
+            if (Flags.oppFixMultipleNotificationsIssues()) {
+                b.setGroup(NOTIFICATION_GROUP_KEY_TRANSFER_COMPLETE);
+            }
+            mNotificationMgr.notify(NOTIFICATION_ID_INBOUND_COMPLETE, b.build());
         } else {
             if (mNotificationMgr != null) {
                 mNotificationMgr.cancel(NOTIFICATION_ID_INBOUND_COMPLETE);
@@ -548,6 +600,24 @@ class BluetoothOppNotification {
                     Log.v(TAG, "inbound notification was removed.");
                 }
             }
+        }
+
+        if (Flags.oppFixMultipleNotificationsIssues() && inboundNum > 0 && outboundNum > 0) {
+            Notification.Builder b =
+                    new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL)
+                            .setGroup(NOTIFICATION_GROUP_KEY_TRANSFER_COMPLETE)
+                            .setGroupSummary(true)
+                            .setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN)
+                            .setSmallIcon(R.drawable.ic_bluetooth_file_transfer_notification)
+                            .setColor(
+                                    mContext.getResources()
+                                            .getColor(
+                                                    android.R.color
+                                                            .system_notification_accent_color,
+                                                    mContext.getTheme()))
+                            .setLocalOnly(true);
+
+            mNotificationMgr.notify(NOTIFICATION_ID_COMPLETE_SUMMARY, b.build());
         }
     }
 
@@ -601,7 +671,7 @@ class BluetoothOppNotification {
                                 PendingIntent.FLAG_IMMUTABLE);
             }
 
-            Notification public_n =
+            Notification.Builder publicNotificationBuilder =
                     new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL).setOnlyAlertOnce(
                             true)
                             .setOngoing(true)
@@ -622,10 +692,13 @@ class BluetoothOppNotification {
                                     R.string.incoming_file_confirm_Notification_content,
                                     info.mDeviceName, fileNameSafe)))
                             .setSubText(Formatter.formatFileSize(mContext, info.mTotalBytes))
-                            .setSmallIcon(R.drawable.bt_incomming_file_notification)
-                            .setLocalOnly(true)
-                            .build();
-            Notification n =
+                            .setSmallIcon(R.drawable.ic_bluetooth_file_transfer_notification)
+                            .setLocalOnly(true);
+            if (Flags.oppFixMultipleNotificationsIssues()) {
+                publicNotificationBuilder.setGroup(NOTIFICATION_GROUP_KEY_INCOMING_FILE_CONFIRM);
+            }
+
+            Notification.Builder builder =
                     new Notification.Builder(mContext, OPP_NOTIFICATION_CHANNEL).setOnlyAlertOnce(
                             true)
                             .setOngoing(true)
@@ -646,14 +719,16 @@ class BluetoothOppNotification {
                                     R.string.incoming_file_confirm_Notification_content,
                                     info.mDeviceName, fileNameSafe)))
                             .setSubText(Formatter.formatFileSize(mContext, info.mTotalBytes))
-                            .setSmallIcon(R.drawable.bt_incomming_file_notification)
+                            .setSmallIcon(R.drawable.ic_bluetooth_file_transfer_notification)
                             .setLocalOnly(true)
                             .setVisibility(Notification.VISIBILITY_PRIVATE)
                             .addAction(actionDecline)
                             .addAction(actionAccept)
-                            .setPublicVersion(public_n)
-                            .build();
-            mNotificationMgr.notify(NOTIFICATION_ID_PROGRESS, n);
+                            .setPublicVersion(publicNotificationBuilder.build());
+            if (Flags.oppFixMultipleNotificationsIssues()) {
+                builder.setGroup(NOTIFICATION_GROUP_KEY_INCOMING_FILE_CONFIRM);
+            }
+            mNotificationMgr.notify(NOTIFICATION_ID_PROGRESS, builder.build());
         }
         cursor.close();
     }

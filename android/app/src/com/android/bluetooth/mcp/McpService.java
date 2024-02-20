@@ -101,7 +101,7 @@ public class McpService extends ProfileService {
     }
 
     @Override
-    protected void start() {
+    public void start() {
         if (DBG) {
             Log.d(TAG, "start()");
         }
@@ -133,7 +133,7 @@ public class McpService extends ProfileService {
     }
 
     @Override
-    protected void stop() {
+    public void stop() {
         if (DBG) {
             Log.d(TAG, "stop()");
         }
@@ -161,7 +161,7 @@ public class McpService extends ProfileService {
     }
 
     @Override
-    protected void cleanup() {
+    public void cleanup() {
         if (DBG) {
             Log.d(TAG, "cleanup()");
         }
@@ -198,6 +198,17 @@ public class McpService extends ProfileService {
         }
         Log.w(TAG, "onDeviceUnauthorized - authorization notification not implemented yet ");
         setDeviceAuthorized(device, false);
+    }
+
+    /**
+     * Remove authorization information for the device.
+     *
+     * @param device device to remove from the service information
+     * @hide
+     */
+    public void removeDeviceAuthorizationInfo(BluetoothDevice device) {
+        Log.i(TAG, "removeDeviceAuthorizationInfo(): device: " + device);
+        mDeviceAuthorizations.remove(device);
     }
 
     public void setDeviceAuthorized(BluetoothDevice device, boolean isAuthorized) {

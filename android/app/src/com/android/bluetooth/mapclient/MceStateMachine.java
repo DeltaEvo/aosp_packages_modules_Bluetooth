@@ -66,6 +66,7 @@ import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.map.BluetoothMapbMessageMime;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.State;
@@ -725,21 +726,30 @@ class MceStateMachine extends StateMachine {
 
                 case MSG_GET_MESSAGE_LISTING:
                     // Get latest 50 Unread messages in the last week
-                    MessagesFilter filter = new MessagesFilter();
+                    Calendar calendar = Calendar.getInstance();
+                    calendar.add(Calendar.DATE, -7);
+                    byte messageType;
                     if (Utils.isPtsTestMode()) {
-                        filter.setMessageType(
+                        messageType =
                                 (byte)
                                         SystemProperties.getInt(
                                                 FETCH_MESSAGE_TYPE,
-                                                MessagesFilter.MESSAGE_TYPE_ALL));
+                                                MessagesFilter.MESSAGE_TYPE_ALL);
                     } else {
-                        filter.setMessageType(MessagesFilter.MESSAGE_TYPE_ALL);
+                        messageType = MessagesFilter.MESSAGE_TYPE_ALL;
                     }
-                    Calendar calendar = Calendar.getInstance();
-                    calendar.add(Calendar.DATE, -7);
-                    filter.setPeriod(calendar.getTime(), null);
-                    mMasClient.makeRequest(new RequestGetMessagesListing(
-                            (String) message.obj, 0, filter, 0, 50, 0));
+
+                    mMasClient.makeRequest(
+                            new RequestGetMessagesListing(
+                                    (String) message.obj,
+                                    0,
+                                    new MessagesFilter.Builder()
+                                            .setPeriod(calendar.getTime(), null)
+                                            .setMessageType(messageType)
+                                            .build(),
+                                    0,
+                                    50,
+                                    0));
                     break;
 
                 case MSG_SET_MESSAGE_STATUS:
@@ -854,7 +864,15 @@ class MceStateMachine extends StateMachine {
                     mMasClient.makeRequest(new RequestGetMessage(event.getHandle(),
                             MasClient.CharsetType.UTF_8, false));
                     break;
+                case DELIVERY_FAILURE:
+                    // fall through
+                case SENDING_FAILURE:
+                    if (!Flags.handleDeliverySendingFailureEvents()) {
+                        break;
+                    }
+                    // fall through
                 case DELIVERY_SUCCESS:
+                    // fall through
                 case SENDING_SUCCESS:
                     notifySentMessageStatus(event.getHandle(), event.getType());
                     break;
@@ -864,6 +882,10 @@ class MceStateMachine extends StateMachine {
                 case MESSAGE_DELETED:
                     mDatabase.deleteMessage(event.getHandle());
                     break;
+                default:
+                    if (DBG) {
+                        Log.d(TAG, "processNotification: ignoring event type=" + event.getType());
+                    }
             }
         }
 

@@ -47,7 +47,7 @@ import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.R;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.bas.BatteryService;
-import com.android.bluetooth.flags.FeatureFlagsImpl;
+import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.hfp.HeadsetHalConstants;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -70,7 +70,6 @@ public class RemoteDevices {
 
     private BluetoothAdapter mAdapter;
     private AdapterService mAdapterService;
-    private FeatureFlagsImpl mFeatureFlags;
     private ArrayList<BluetoothDevice> mSdpTracker;
     private final Object mObject = new Object();
 
@@ -155,7 +154,6 @@ public class RemoteDevices {
     RemoteDevices(AdapterService service, Looper looper) {
         mAdapter = ((Context) service).getSystemService(BluetoothManager.class).getAdapter();
         mAdapterService = service;
-        mFeatureFlags = new FeatureFlagsImpl();
         mSdpTracker = new ArrayList<BluetoothDevice>();
         mDevices = new HashMap<String, DeviceProperties>();
         mDualDevicesMap = new HashMap<String, String>();
@@ -236,6 +234,10 @@ public class RemoteDevices {
     }
 
     DeviceProperties getDeviceProperties(BluetoothDevice device) {
+        if (device == null) {
+            return null;
+        }
+
         synchronized (mDevices) {
             String address = mDualDevicesMap.get(device.getAddress());
             // If the device is not in the dual map, use its original address
@@ -1154,12 +1156,14 @@ public class RemoteDevices {
                         Utils.getTempAllowlistBroadcastOptions());
             } else if (device.getBondState() == BluetoothDevice.BOND_NONE) {
                 String key = Utils.getAddressStringFromByte(address);
-                mDevices.remove(key);
-                mDeviceQueue.remove(key); // Remove from LRU cache
+                synchronized (mDevices) {
+                    mDevices.remove(key);
+                    mDeviceQueue.remove(key); // Remove from LRU cache
 
-                // Remove from dual mode device mappings
-                mDualDevicesMap.values().remove(key);
-                mDualDevicesMap.remove(key);
+                    // Remove from dual mode device mappings
+                    mDualDevicesMap.values().remove(key);
+                    mDualDevicesMap.remove(key);
+                }
             }
             if (state == BluetoothAdapter.STATE_ON || state == BluetoothAdapter.STATE_TURNING_OFF) {
                 mAdapterService.notifyAclDisconnected(device, transportLinkType);
@@ -1253,7 +1257,7 @@ public class RemoteDevices {
         Log.d(TAG, "keyMissingCallback device: " + bluetoothDevice);
 
         if (bluetoothDevice.getBondState() == BluetoothDevice.BOND_BONDED) {
-            if (!mFeatureFlags.keyMissingBroadcast()) {
+            if (!Flags.keyMissingBroadcast()) {
                 Log.d(TAG, "flag not set - don't send key missing broadcast");
                 return;
             }

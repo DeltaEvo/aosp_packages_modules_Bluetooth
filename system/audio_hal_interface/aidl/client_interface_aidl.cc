@@ -369,7 +369,8 @@ bool BluetoothAudioClientInterface::SetAllowedLatencyModes(
   }
 
   /* Low latency mode is used if modes other than FREE are present */
-  bool allowed = !(latency_modes_.empty());
+  bool allowed = (latency_modes_.size() > 1);
+  LOG(INFO) << __func__ << ": Latency mode allowed: " << allowed;
   auto aidl_retval = provider_->setLowLatencyModeAllowed(allowed);
   if (!aidl_retval.isOk()) {
     LOG(WARNING) << __func__ << ": BluetoothAudioHal is not ready: "
@@ -653,22 +654,6 @@ size_t BluetoothAudioSourceClientInterface::WriteAudioData(const uint8_t* p_buf,
 
   source_->LogBytesWritten(total_written);
   return total_written;
-}
-
-std::optional<IBluetoothAudioProviderFactory::ProviderInfo>
-BluetoothAudioClientInterface::GetProviderInfo(SessionType session_type) {
-  if (provider_factory_ == nullptr) {
-    LOG(WARNING) << __func__ << ": No provider factory";
-    return std::nullopt;
-  }
-  std::optional<IBluetoothAudioProviderFactory::ProviderInfo> provider_info;
-  auto aidl_retval =
-      provider_factory_->getProviderInfo(session_type, &provider_info);
-  if (!aidl_retval.isOk()) {
-    LOG(FATAL) << __func__ << ": BluetoothAudioHal::getProviderInfo failure: "
-               << aidl_retval.getDescription();
-  }
-  return provider_info;
 }
 
 void BluetoothAudioClientInterface::SetCodecPriority(CodecId codec_id,

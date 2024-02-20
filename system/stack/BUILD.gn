@@ -46,6 +46,7 @@ source_set("nonstandard_codecs") {
 
     configs += [
       "//bt/system:target_defaults",
+      "//bt/system/log:log_defaults",
     ]
   }
 }
@@ -113,6 +114,7 @@ source_set("stack") {
     "btm/btm_sec.cc",
     "btm/btm_sec_cb.cc",
     "btm/btm_security_client_interface.cc",
+    "btm/security_event_parser.cc",
     "btm/hfp_lc3_encoder_linux.cc",
     "btm/hfp_lc3_decoder_linux.cc",
     "btm/hfp_msbc_encoder.cc",
@@ -221,11 +223,11 @@ source_set("stack") {
     "//bt/system/gd/rust/shim:init_flags_bridge_header",
     "//bt/system/stack/mmc",
     "//bt/system/types",
-    "//bt/system/types",
   ]
 
   configs += [
     "//bt/system:target_defaults",
+    "//bt/system/log:log_defaults",
   ]
 }
 
@@ -281,6 +283,7 @@ if (defined(use.android) && use.android) {
 
     libs = [
       "dl",
+      "fmt",
       "pthread",
       "resolv",
       "rt",
@@ -334,6 +337,7 @@ if (defined(use.android) && use.android) {
 
     libs = [
       "dl",
+      "fmt",
       "pthread",
       "resolv",
       "rt",

@@ -34,6 +34,7 @@
 #include "hci/remote_name_request.h"
 #include "hci_acl_manager_generated.h"
 #include "security/security_module.h"
+#include "storage/config_keys.h"
 #include "storage/storage_module.h"
 
 namespace bluetooth {
@@ -281,8 +282,8 @@ void AclManager::SetPrivacyPolicyForInitiatorAddress(
     std::chrono::milliseconds minimum_rotation_time,
     std::chrono::milliseconds maximum_rotation_time) {
   Octet16 rotation_irk{};
-  auto irk_prop =
-      GetDependency<storage::StorageModule>()->GetProperty("Adapter", "LE_LOCAL_KEY_IRK");
+  auto irk_prop = GetDependency<storage::StorageModule>()->GetProperty(
+      BTIF_STORAGE_SECTION_ADAPTER, BTIF_STORAGE_KEY_LE_LOCAL_KEY_IRK);
   if (irk_prop.has_value()) {
     auto irk = common::ByteArray<16>::FromString(irk_prop.value());
     if (irk.has_value()) {
@@ -442,7 +443,7 @@ AclManager::~AclManager() = default;
 void AclManager::impl::Dump(
     std::promise<flatbuffers::Offset<AclManagerData>> promise, flatbuffers::FlatBufferBuilder* fb_builder) const {
   const std::lock_guard<std::mutex> lock(dumpsys_mutex_);
-  const auto connect_list = (le_impl_ != nullptr) ? le_impl_->connect_list : std::unordered_set<AddressWithType>();
+  const auto accept_list = (le_impl_ != nullptr) ? le_impl_->accept_list : std::unordered_set<AddressWithType>();
   const auto le_connectability_state_text =
       (le_impl_ != nullptr) ? connectability_state_machine_text(le_impl_->connectability_state_) : "INDETERMINATE";
   const auto le_create_connection_timeout_alarms_count =
@@ -451,17 +452,17 @@ void AclManager::impl::Dump(
   auto title = fb_builder->CreateString("----- Acl Manager Dumpsys -----");
   auto le_connectability_state = fb_builder->CreateString(le_connectability_state_text);
 
-  flatbuffers::Offset<flatbuffers::String> strings[connect_list.size()];
+  flatbuffers::Offset<flatbuffers::String> strings[accept_list.size()];
 
   size_t cnt = 0;
-  for (const auto& it : connect_list) {
+  for (const auto& it : accept_list) {
     strings[cnt++] = fb_builder->CreateString(it.ToString());
   }
-  auto vecofstrings = fb_builder->CreateVector(strings, connect_list.size());
+  auto vecofstrings = fb_builder->CreateVector(strings, accept_list.size());
 
   AclManagerDataBuilder builder(*fb_builder);
   builder.add_title(title);
-  builder.add_le_filter_accept_list_count(connect_list.size());
+  builder.add_le_filter_accept_list_count(accept_list.size());
   builder.add_le_filter_accept_list(vecofstrings);
   builder.add_le_connectability_state(le_connectability_state);
   builder.add_le_create_connection_timeout_alarms_count(le_create_connection_timeout_alarms_count);

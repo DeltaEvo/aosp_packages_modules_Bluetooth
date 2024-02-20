@@ -6,6 +6,7 @@ package {
 aconfig_declarations {
     name: "bluetooth_aconfig_flags",
     package: "com.android.bluetooth.flags",
+    container: "com.android.btservices",
     srcs: [
         "**/*.aconfig",
     ],
@@ -18,6 +19,7 @@ java_aconfig_library {
         "//cts/tests/tests/bluetooth:__subpackages__",
         "//packages/modules/Bluetooth/android/app",
         "//packages/modules/Bluetooth/framework",
+        "//packages/modules/Bluetooth/framework/tests/bumble",
         "//packages/modules/Bluetooth/framework/tests/util",
         "//packages/modules/Bluetooth/service:__subpackages__",
     ],

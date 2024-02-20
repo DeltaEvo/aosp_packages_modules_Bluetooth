@@ -19,6 +19,8 @@
 
 #include "le_audio_software.h"
 
+#include <android_bluetooth_flags.h>
+
 #include <unordered_map>
 #include <vector>
 
@@ -26,7 +28,7 @@
 #include "bta/le_audio/codec_manager.h"
 #include "hal_version_manager.h"
 #include "hidl/le_audio_software_hidl.h"
-#include "osi/include/log.h"
+#include "os/log.h"
 #include "osi/include/properties.h"
 
 namespace bluetooth {
@@ -868,8 +870,18 @@ bool LeAudioClientInterface::ReleaseSource(
 }
 
 void LeAudioClientInterface::SetAllowedDsaModes(DsaModes dsa_modes) {
+  if (!IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
+    return;
+  }
+
   if (HalVersionManager::GetHalTransport() ==
       BluetoothAudioHalTransport::AIDL) {
+    if (aidl::le_audio::LeAudioSinkTransport::interface_unicast_ == nullptr ||
+        aidl::le_audio::LeAudioSinkTransport::instance_unicast_ == nullptr) {
+      LOG(WARNING) << __func__ << ": LeAudioSourceTransport::interface is null";
+      return;
+    }
+
     std::vector<LatencyMode> latency_modes = {LatencyMode::FREE};
     for (auto dsa_mode : dsa_modes) {
       switch (dsa_mode) {
@@ -890,12 +902,8 @@ void LeAudioClientInterface::SetAllowedDsaModes(DsaModes dsa_modes) {
           break;
       }
     }
-    if (aidl::le_audio::LeAudioSourceTransport::interface) {
-      aidl::le_audio::LeAudioSourceTransport::interface->SetAllowedLatencyModes(
-          latency_modes);
-    } else {
-      LOG(WARNING) << "LeAudioSourceTransport::interface is null";
-    }
+    aidl::le_audio::LeAudioSinkTransport::interface_unicast_
+        ->SetAllowedLatencyModes(latency_modes);
   }
 }
 

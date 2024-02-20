@@ -26,6 +26,7 @@ cc_library_static {
     ],
     static_libs: [
         "bluetooth_flags_c_lib",
+        "libbluetooth_log",
         "libbt-common",
         "libbt_shim_bridge",
         "libosi",
@@ -47,6 +48,7 @@ cc_library_static {
                 "aidl/hearing_aid_software_encoding_aidl.cc",
                 "aidl/hfp_client_interface_aidl.cc",
                 "aidl/le_audio_software_aidl.cc",
+                "aidl/provider_info.cc",
                 "hal_version_manager.cc",
                 "hearing_aid_software_encoding.cc",
                 "hfp_client_interface.cc",
@@ -99,6 +101,7 @@ cc_test {
     shared_libs: [
         "android.hardware.bluetooth.audio@2.0",
         "android.hardware.bluetooth.audio@2.1",
+        "libbase",
         "libbinder_ndk",
         "libcutils",
         "libfmq",
@@ -107,6 +110,7 @@ cc_test {
         "libutils",
     ],
     static_libs: [
+        "libbluetooth_log",
         "libbt-audio-hal-interface",
         "libbt-common",
         "libbt_shim_bridge",
@@ -114,6 +118,79 @@ cc_test {
     ],
     cflags: [
         "-DBUILDCFG",
+    ],
+    header_libs: ["libbluetooth_headers"],
+}
+
+// Bluetooth Audio Provider Info unit tests for target and host
+cc_test {
+    name: "bluetooth-test-audio-hal-a2dp-provider-info",
+    test_suites: ["general-tests"],
+    defaults: [
+        "fluoride_defaults",
+        "latest_android_hardware_bluetooth_audio_ndk_shared",
+        "mts_defaults",
+    ],
+    cflags: [
+        "-DBUILDCFG",
+        "-DUNIT_TESTS",
+        "-Wno-unused-parameter",
+    ],
+    host_supported: true,
+    test_options: {
+        unit_test: true,
+    },
+    include_dirs: [
+        "packages/modules/Bluetooth/system",
+        "packages/modules/Bluetooth/system/gd",
+        "packages/modules/Bluetooth/system/stack/include",
+    ],
+    target: {
+        host: {
+            srcs: [
+                ":BluetoothHostTestingLogCapture",
+            ],
+        },
+        android: {
+            srcs: [
+                ":BluetoothAndroidTestingLogCapture",
+            ],
+        },
+    },
+    sanitize: {
+        cfi: true,
+        scs: true,
+        address: true,
+        all_undefined: true,
+        integer_overflow: true,
+        diag: {
+            undefined: true,
+        },
+    },
+    srcs: [
+        ":TestCommonMockFunctions",
+        ":TestMockAudioHalInterface",
+        "aidl/a2dp_provider_info.cc",
+        "aidl/a2dp_provider_info_unittest.cc",
+    ],
+    shared_libs: [
+        "libbase",
+        "libbase",
+        "libcutils",
+        "libfmq",
+        "liblog",
+        "libutils",
+        "server_configurable_flags",
+    ],
+    static_libs: [
+        "bluetooth_flags_c_lib",
+        "libbluetooth_log",
+        "libbt-common",
+        "libbt_shim_bridge",
+        "libchrome",
+        "libflagtest",
+        "libgmock",
+        "libosi",
     ],
     header_libs: ["libbluetooth_headers"],
 }
