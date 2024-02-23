@@ -126,8 +126,7 @@ public class BluetoothOppTransferHistoryTest {
                         BluetoothShare.USER_CONFIRMATION_HANDOVER_CONFIRMED)
         ));
 
-        BluetoothOppTestUtils.enableActivity(
-                BluetoothOppTransferHistory.class, true, mTargetContext);
+        BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
         TestUtils.setUpUiTest();
     }
 
@@ -135,8 +134,7 @@ public class BluetoothOppTransferHistoryTest {
     public void tearDown() throws Exception {
         TestUtils.tearDownUiTest();
         BluetoothMethodProxy.setInstanceForTesting(null);
-        BluetoothOppTestUtils.enableActivity(
-                BluetoothOppTransferHistory.class, false, mTargetContext);
+        BluetoothOppTestUtils.enableOppActivities(false, mTargetContext);
     }
 
     @Test

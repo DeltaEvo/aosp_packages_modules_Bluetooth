@@ -14,8 +14,8 @@ use bt_topshim::profiles::sdp::{
 };
 
 use btstack::bluetooth::{
-    Bluetooth, BluetoothDevice, BtAdapterRole, IBluetooth, IBluetoothCallback,
-    IBluetoothConnectionCallback, IBluetoothQALegacy,
+    Bluetooth, BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
+    IBluetoothQALegacy,
 };
 use btstack::socket_manager::{
     BluetoothServerSocket, BluetoothSocket, BluetoothSocketManager, CallbackId,
@@ -162,7 +162,6 @@ impl_dbus_arg_enum!(BtPropertyType);
 impl_dbus_arg_enum!(BtSspVariant);
 impl_dbus_arg_enum!(BtTransport);
 impl_dbus_arg_enum!(ProfileConnectionState);
-impl_dbus_arg_enum!(BtAdapterRole);
 
 #[allow(dead_code)]
 struct BluetoothConnectionCallbackDBus {}
@@ -705,11 +704,6 @@ impl IBluetooth for IBluetoothDBus {
 
     #[dbus_method("IsSwbSupported", DBusLog::Disable)]
     fn is_swb_supported(&self) -> bool {
-        dbus_generated!()
-    }
-
-    #[dbus_method("GetSupportedRoles", DBusLog::Disable)]
-    fn get_supported_roles(&self) -> Vec<BtAdapterRole> {
         dbus_generated!()
     }
 }

@@ -38,7 +38,8 @@ import com.android.bluetooth.Utils;
 import com.android.bluetooth.a2dp.A2dpService;
 import com.android.bluetooth.a2dpsink.A2dpSinkService;
 import com.android.bluetooth.btservice.RemoteDevices.DeviceProperties;
-import com.android.bluetooth.flags.Flags;
+import com.android.bluetooth.flags.FeatureFlags;
+import com.android.bluetooth.flags.FeatureFlagsImpl;
 import com.android.bluetooth.hfp.HeadsetService;
 import com.android.bluetooth.hfpclient.HeadsetClientService;
 import com.android.bluetooth.hid.HidHostService;
@@ -96,6 +97,8 @@ final class BondStateMachine extends StateMachine {
 
     @VisibleForTesting Set<BluetoothDevice> mPendingBondedDevices = new HashSet<>();
 
+    private final FeatureFlags mFeatureFlags = new FeatureFlagsImpl();
+
     private BondStateMachine(AdapterService service, AdapterProperties prop,
             RemoteDevices remoteDevices) {
         super("BondStateMachine:");
@@ -150,7 +153,7 @@ final class BondStateMachine extends StateMachine {
                     next pairing is started while previous still makes service discovery, it
                     would fail. Check the busy status of BTIF instead, and wait with starting
                     the bond. */
-                    if (Flags.delayBondingWhenBusy()
+                    if (mFeatureFlags.delayBondingWhenBusy()
                             && mAdapterService.getNative().pairingIsBusy()) {
                         short retry_no =
                                 (msg.getData() != null)

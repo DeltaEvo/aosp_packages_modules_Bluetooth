@@ -57,14 +57,13 @@ constexpr uint16_t kSsrMaxLatency = 18; /* slots * 0.625ms */
  * Returns          void
  *
  ******************************************************************************/
-uint8_t bta_hh_find_cb(const tAclLinkSpec& link_spec) {
+uint8_t bta_hh_find_cb(const RawAddress& bda) {
   uint8_t xx;
 
   /* See how many active devices there are. */
   for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
     /* check if any active/known devices is a match */
-    if ((link_spec.addrt.bda == bta_hh_cb.kdev[xx].link_spec.addrt.bda &&
-         !link_spec.addrt.bda.IsEmpty())) {
+    if ((bda == bta_hh_cb.kdev[xx].addr && !bda.IsEmpty())) {
 #if (BTA_HH_DEBUG == TRUE)
       LOG_VERBOSE("found kdev_cb[%d] hid_handle=%d", xx,
                   bta_hh_cb.kdev[xx].hid_handle);
@@ -82,7 +81,7 @@ uint8_t bta_hh_find_cb(const tAclLinkSpec& link_spec) {
   /* if no active device match, find a spot for it */
   for (xx = 0; xx < BTA_HH_MAX_DEVICE; xx++) {
     if (!bta_hh_cb.kdev[xx].in_use) {
-      bta_hh_cb.kdev[xx].link_spec = link_spec;
+      bta_hh_cb.kdev[xx].addr = bda;
       break;
     }
   }
@@ -96,8 +95,8 @@ uint8_t bta_hh_find_cb(const tAclLinkSpec& link_spec) {
   return xx;
 }
 
-tBTA_HH_DEV_CB* bta_hh_get_cb(const tAclLinkSpec& link_spec) {
-  uint8_t idx = bta_hh_find_cb(link_spec);
+tBTA_HH_DEV_CB* bta_hh_get_cb(const RawAddress& bda) {
+  uint8_t idx = bta_hh_find_cb(bda);
   if (idx == BTA_HH_IDX_INVALID) {
     return nullptr;
   }
@@ -246,12 +245,12 @@ bool bta_hh_tod_spt(tBTA_HH_DEV_CB* p_cb, uint8_t sub_class) {
  * Returns          tBTA_HH_STATUS  operation status
  *
  ******************************************************************************/
-tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec,
+tBTA_HH_STATUS bta_hh_read_ssr_param(const RawAddress& bd_addr,
                                      uint16_t* p_max_ssr_lat,
                                      uint16_t* p_min_ssr_tout) {
-  tBTA_HH_DEV_CB* p_cb = bta_hh_get_cb(link_spec);
+  tBTA_HH_DEV_CB* p_cb = bta_hh_get_cb(bd_addr);
   if (p_cb == nullptr) {
-    LOG_WARN("Unable to find device:%s", ADDRESS_TO_LOGGABLE_CSTR(link_spec));
+    LOG_WARN("Unable to find device:%s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     return BTA_HH_ERR;
   }
 
@@ -262,9 +261,9 @@ tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec,
 
     uint16_t ssr_max_latency;
     if (get_btm_client_interface().link_controller.BTM_GetLinkSuperTout(
-            p_cb->link_spec.addrt.bda, &ssr_max_latency) != BTM_SUCCESS) {
+            p_cb->addr, &ssr_max_latency) != BTM_SUCCESS) {
       LOG_WARN("Unable to get supervision timeout for peer:%s",
-               ADDRESS_TO_LOGGABLE_CSTR(p_cb->link_spec));
+               ADDRESS_TO_LOGGABLE_CSTR(p_cb->addr));
       return BTA_HH_ERR;
     }
     ssr_max_latency = BTA_HH_GET_DEF_SSR_MAX_LAT(ssr_max_latency);
@@ -276,7 +275,7 @@ tBTA_HH_STATUS bta_hh_read_ssr_param(const tAclLinkSpec& link_spec,
       ssr_max_latency = BTA_HH_SSR_MAX_LATENCY_DEF;
 
     char remote_name[BTM_MAX_REM_BD_NAME_LEN] = "";
-    if (btif_storage_get_stored_remote_name(link_spec.addrt.bda, remote_name)) {
+    if (btif_storage_get_stored_remote_name(bd_addr, remote_name)) {
       if (interop_match_name(INTEROP_HID_HOST_LIMIT_SNIFF_INTERVAL,
                              remote_name)) {
         if (ssr_max_latency > kSsrMaxLatency /* slots * 0.625ms */) {

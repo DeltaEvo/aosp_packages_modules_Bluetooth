@@ -18,7 +18,6 @@
 
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
-#include <bluetooth/log.h>
 
 #include <list>
 
@@ -28,7 +27,6 @@
 #include "types/bluetooth/uuid.h"
 
 using bluetooth::Uuid;
-using namespace bluetooth;
 
 static size_t calculate_database_info_size(std::list<tGATT_SRV_LIST_ELEM>* lst_ptr) {
   size_t len = 0;
@@ -127,7 +125,8 @@ Octet16 gatts_calculate_database_hash(std::list<tGATT_SRV_LIST_ELEM>* lst_ptr) {
   std::reverse(serialized.begin(), serialized.end());
   Octet16 db_hash = crypto_toolbox::aes_cmac(Octet16{0}, serialized.data(),
                                   serialized.size());
-  log::info("hash={}", base::HexEncode(db_hash.data(), db_hash.size()));
+  LOG(INFO) << __func__ << ": hash="
+           << base::HexEncode(db_hash.data(), db_hash.size());
 
   return db_hash;
 }

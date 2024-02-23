@@ -19,7 +19,6 @@
 #define LOG_TAG "bt_srvc"
 
 #include <base/logging.h>
-#include <bluetooth/log.h>
 
 #include "gatt_api.h"
 #include "hardware/bt_gatt_types.h"
@@ -34,8 +33,6 @@
 #include "types/raw_address.h"
 
 using base::StringPrintf;
-using namespace bluetooth;
-
 #define DIS_MAX_NUM_INC_SVR 0
 #define DIS_MAX_CHAR_NUM 9
 #define DIS_MAX_ATTR_NUM (DIS_MAX_CHAR_NUM * 2 + DIS_MAX_NUM_INC_SVR + 1)
@@ -163,7 +160,8 @@ uint8_t dis_read_attr_value(UNUSED_ATTR uint8_t clcb_idx, uint16_t handle,
             p_value->len -= offset;
             pp += offset;
             ARRAY_TO_STREAM(p, pp, p_value->len);
-            log::verbose("GATT_UUID_MANU_NAME len=0x{:x}", p_value->len);
+            VLOG(1) << "GATT_UUID_MANU_NAME len=0x" << std::hex
+                    << +p_value->len;
           }
           break;
 
@@ -204,8 +202,8 @@ static void dis_gatt_c_read_dis_value_cmpl(uint16_t conn_id) {
   srvc_eng_release_channel(conn_id);
 
   if (dis_cb.p_read_dis_cback && p_clcb) {
-    log::info("conn_id:{} attr_mask = 0x{:04x}", conn_id,
-              p_clcb->dis_value.attr_mask);
+    LOG_INFO("%s conn_id:%d attr_mask = 0x%04x", __func__, conn_id,
+             p_clcb->dis_value.attr_mask);
 
     (*dis_cb.p_read_dis_cback)(p_clcb->bda, &p_clcb->dis_value);
     dis_cb.p_read_dis_cback = NULL;
@@ -239,7 +237,8 @@ bool dis_gatt_c_read_dis_req(uint16_t conn_id) {
       if (GATTC_Read(conn_id, GATT_READ_BY_TYPE, &param) == GATT_SUCCESS)
         return true;
 
-      log::error("Read DISInfo: {} GATT_Read Failed", param.service.uuid);
+      LOG(ERROR) << "Read DISInfo: " << param.service.uuid
+                 << " GATT_Read Failed";
     }
 
     dis_cb.dis_read_uuid_idx++;
@@ -265,8 +264,9 @@ void dis_c_cmpl_cback(tSRVC_CLCB* p_clcb, tGATTC_OPTYPE op, tGATT_STATUS status,
   uint8_t *pp = NULL, *p_str;
   uint16_t conn_id = p_clcb->conn_id;
 
-  log::verbose("op_code: 0x{:02x}  status: 0x{:02x} read_type: 0x{:04x}", op,
-               status, read_type);
+  VLOG(1) << __func__
+          << StringPrintf("op_code: 0x%02x  status: 0x%02x read_type: 0x%04x",
+                          op, status, read_type);
 
   if (op != GATTC_OPTYPE_READ) return;
 
@@ -275,7 +275,7 @@ void dis_c_cmpl_cback(tSRVC_CLCB* p_clcb, tGATTC_OPTYPE op, tGATT_STATUS status,
 
     switch (read_type) {
       case GATT_UUID_SYSTEM_ID:
-        log::verbose("DIS_ATTR_SYS_ID_BIT");
+        VLOG(1) << "DIS_ATTR_SYS_ID_BIT";
         if (p_data->att_value.len == DIS_SYSTEM_ID_SIZE) {
           p_clcb->dis_value.attr_mask |= DIS_ATTR_SYS_ID_BIT;
           /* save system ID*/
@@ -334,7 +334,7 @@ tDIS_STATUS DIS_SrInit(tDIS_ATTR_MASK dis_attr_mask) {
   tGATT_STATUS status;
 
   if (dis_cb.enabled) {
-    log::error("DIS already initalized");
+    LOG(ERROR) << "DIS already initalized";
     return DIS_SUCCESS;
   }
 
@@ -365,7 +365,7 @@ tDIS_STATUS DIS_SrInit(tDIS_ATTR_MASK dis_attr_mask) {
   status = GATTS_AddService(srvc_eng_cb.gatt_if, service,
                             sizeof(service) / sizeof(btgatt_db_element_t));
   if (status != GATT_SERVICE_STARTED) {
-    log::error("Can not create service, DIS_Init failed!");
+    LOG(ERROR) << "Can not create service, DIS_Init failed!";
     return GATT_ERROR;
   }
 
@@ -375,8 +375,9 @@ tDIS_STATUS DIS_SrInit(tDIS_ATTR_MASK dis_attr_mask) {
   for (int i = 0; i < DIS_MAX_CHAR_NUM; i++) {
     dis_cb.dis_attr[i].handle = service[i + 1].attribute_handle;
 
-    log::verbose("handle of new attribute 0x{:04x} = {}",
-                 dis_cb.dis_attr[i].uuid, dis_cb.dis_attr[i].handle);
+    VLOG(1) << StringPrintf("%s:  handle of new attribute 0x%04x = %d",
+                            __func__, dis_cb.dis_attr[i].uuid,
+                            dis_cb.dis_attr[i].handle);
   }
 
   dis_cb.enabled = true;
@@ -448,9 +449,9 @@ bool DIS_ReadDISInfo(const RawAddress& peer_bda, tDIS_READ_CBACK* p_cback,
 
   dis_cb.request_mask = mask;
 
-  log::verbose("BDA: {} cl_read_uuid: 0x{:04x}",
-               ADDRESS_TO_LOGGABLE_STR(peer_bda),
-               dis_attr_uuid[dis_cb.dis_read_uuid_idx]);
+  VLOG(1) << __func__ << " BDA: " << ADDRESS_TO_LOGGABLE_STR(peer_bda)
+          << StringPrintf(" cl_read_uuid: 0x%04x",
+                          dis_attr_uuid[dis_cb.dis_read_uuid_idx]);
 
   if (!GATT_GetConnIdIfConnected(srvc_eng_cb.gatt_if, peer_bda, &conn_id,
                                  BT_TRANSPORT_LE)) {

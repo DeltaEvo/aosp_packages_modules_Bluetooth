@@ -94,11 +94,11 @@ struct iso_impl {
   iso_impl() {
     iso_credits_ = controller_get_interface()->get_iso_buffer_count();
     iso_buffer_size_ = controller_get_interface()->get_iso_data_size();
-    log::info("{} created, iso credits: {}, buffer size: {}.", fmt::ptr(this),
-              iso_credits_.load(), iso_buffer_size_);
+    LOG_INFO("%p created, iso credits: %d, buffer size: %d.", this,
+             iso_credits_.load(), iso_buffer_size_);
   }
 
-  ~iso_impl() { log::info("{} removed.", fmt::ptr(this)); }
+  ~iso_impl() { LOG_INFO("%p removed.", this); }
 
   void handle_register_cis_callbacks(CigCallbacks* callbacks) {
     LOG_ASSERT(callbacks != nullptr) << "Invalid CIG callbacks";
@@ -253,7 +253,7 @@ struct iso_impl {
     if (!force) {
       LOG_ASSERT(IsCigKnown(cig_id)) << "No such cig: " << +cig_id;
     } else {
-      log::warn("Forcing to remove CIG {}", cig_id);
+      LOG_WARN("Forcing to remove CIG %d", cig_id);
     }
 
     btsnd_hcic_remove_cig(cig_id, base::BindOnce(&iso_impl::on_remove_cig,
@@ -347,7 +347,7 @@ struct iso_impl {
     if (iso == nullptr) {
       /* That can happen when ACL has been disconnected while ISO patch was
        * creating */
-      log::warn("Invalid connection handle: {}", +conn_handle);
+      LOG(WARNING) << __func__ << "Invalid connection handle: " << +conn_handle;
       return;
     }
 
@@ -398,7 +398,7 @@ struct iso_impl {
     uint16_t conn_handle;
 
     if (len < 3) {
-      log::warn("Malformatted packet received");
+      LOG(WARNING) << __func__ << "Malformatted packet received";
       return;
     }
     STREAM_TO_UINT8(status, stream);
@@ -408,7 +408,7 @@ struct iso_impl {
     if (iso == nullptr) {
       /* That could happen when ACL has been disconnected while removing data
        * path */
-      log::warn("Invalid connection handle: {}", +conn_handle);
+      LOG(WARNING) << __func__ << "Invalid connection handle: " << +conn_handle;
       return;
     }
 
@@ -460,13 +460,14 @@ struct iso_impl {
     // 1 + 2 + 4 * 7
 #define ISO_LINK_QUALITY_SIZE 31
     if (len < ISO_LINK_QUALITY_SIZE) {
-      log::error("Malformated link quality format, len={}", len);
+      LOG(ERROR) << "Malformated link quality format, len=" << len;
       return;
     }
 
     STREAM_TO_UINT8(status, stream);
     if (status != HCI_SUCCESS) {
-      log::error("Failed to Read ISO Link Quality, status: {}", loghex(status));
+      LOG(ERROR) << "Failed to Read ISO Link Quality, status: "
+                 << loghex(status);
       return;
     }
 
@@ -476,7 +477,7 @@ struct iso_impl {
     if (iso == nullptr) {
       /* That could happen when ACL has been disconnected while waiting on the
        * read respose */
-      log::warn("Invalid connection handle: {}", +conn_handle);
+      LOG(WARNING) << __func__ << "Invalid connection handle: " << +conn_handle;
       return;
     }
 
@@ -498,7 +499,7 @@ struct iso_impl {
   void read_iso_link_quality(uint16_t iso_handle) {
     iso_base* iso = GetIsoIfKnown(iso_handle);
     if (iso == nullptr) {
-      log::error("No such iso connection: {}", loghex(iso_handle));
+      LOG(ERROR) << __func__ << "No such iso connection: " << loghex(iso_handle);
       return;
     }
 
@@ -538,13 +539,14 @@ struct iso_impl {
 
     if (!(iso->state_flags & kStateFlagIsBroadcast)) {
       if (!(iso->state_flags & kStateFlagIsConnected)) {
-        log::warn("Cis handle: {} not established", loghex(iso_handle));
+        LOG(WARNING) << __func__ << "Cis handle: " << loghex(iso_handle)
+                     << " not established";
         return;
       }
     }
 
     if (!(iso->state_flags & kStateFlagHasDataPathSet)) {
-      log::warn("Data path not set for handle: 0x{:04x}", iso_handle);
+      LOG_WARN("Data path not set for handle: 0x%04x", iso_handle);
       return;
     }
 
@@ -560,10 +562,10 @@ struct iso_impl {
       iso->cr_stats.credits_last_underflow_us =
           bluetooth::common::time_get_os_boottime_us();
 
-      log::warn(
-          ", dropping ISO packet, len: {}, iso credits: {}, iso handle: {}",
-          static_cast<int>(data_len), static_cast<int>(iso_credits_),
-          loghex(iso_handle));
+      LOG(WARNING) << __func__ << ", dropping ISO packet, len: "
+                   << static_cast<int>(data_len)
+                   << ", iso credits: " << static_cast<int>(iso_credits_)
+                   << ", iso handle: " << loghex(iso_handle);
       return;
     }
 
@@ -629,7 +631,7 @@ struct iso_impl {
 
     LOG_ASSERT(cig_callbacks_ != nullptr) << "Invalid CIG callbacks";
 
-    log::info("flags: {}", +cis->state_flags);
+    LOG_INFO("%s flags: %d", __func__, +cis->state_flags);
 
     BTM_LogHistory(
         kBtmLogTag, cis_hdl_to_addr[handle], "CIS disconnected",
@@ -730,7 +732,7 @@ struct iso_impl {
       uint16_t conn_handle;
       STREAM_TO_UINT16(conn_handle, data);
       evt.conn_handles.push_back(conn_handle);
-      log::info(" received BIS conn_hdl {}", +conn_handle);
+      LOG_INFO(" received BIS conn_hdl %d", +conn_handle);
 
       if (evt.status == HCI_SUCCESS) {
         auto bis = std::unique_ptr<iso_bis>(new iso_bis());
@@ -791,7 +793,7 @@ struct iso_impl {
         << "Invalid big - already exists: " << +big_id;
 
     if (stack_config_get_interface()->get_pts_unencrypt_broadcast()) {
-      log::info("Force create broadcst without encryption for PTS test");
+      LOG_INFO("Force create broadcst without encryption for PTS test");
       big_params.enc = 0;
       big_params.enc_code = {0};
     }
@@ -831,7 +833,7 @@ struct iso_impl {
         /* Not supported */
         break;
       default:
-        log::error("Unhandled event code {}", +code);
+        LOG_ERROR("Unhandled event code %d", +code);
     }
   }
 
@@ -852,7 +854,7 @@ struct iso_impl {
 
     iso_base* iso = GetCisIfKnown(evt.cis_conn_hdl);
     if (iso == nullptr) {
-      log::error(", received data for the non-registered CIS!");
+      LOG(ERROR) << __func__ << ", received data for the non-registered CIS!";
       return;
     }
 
@@ -874,7 +876,7 @@ struct iso_impl {
       iso->evt_stats.evt_last_lost_us =
           bluetooth::common::time_get_os_boottime_us();
 
-      log::warn("{} packets lost.", evt.evt_lost);
+      LOG(WARNING) << evt.evt_lost << " packets lost.";
       iso->evt_stats.seq_nb_mismatch_count++;
     }
 

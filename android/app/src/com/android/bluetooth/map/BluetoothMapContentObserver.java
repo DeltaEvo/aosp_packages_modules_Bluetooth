@@ -3334,10 +3334,8 @@ public class BluetoothMapContentObserver {
 
         uri = Uri.parse(Mms.CONTENT_URI + "/" + handle + "/addr");
         uri = mResolver.insert(uri, values);
-        if (uri != null) {
-            if (V) {
-                Log.v(TAG, " NEW URI " + uri.toString());
-            }
+        if (uri != null && V) {
+            Log.v(TAG, " NEW URI " + uri.toString());
         }
 
         values.clear();
@@ -3348,10 +3346,8 @@ public class BluetoothMapContentObserver {
             values.put(Mms.Addr.ADDRESS, address);
             uri = Uri.parse(Mms.CONTENT_URI + "/" + handle + "/addr");
             uri = mResolver.insert(uri, values);
-            if (uri != null) {
-                if (V) {
-                    Log.v(TAG, " NEW URI " + uri.toString());
-                }
+            if (uri != null && V) {
+                Log.v(TAG, " NEW URI " + uri.toString());
             }
         }
         return handle;
@@ -3632,11 +3628,7 @@ public class BluetoothMapContentObserver {
                 /* Delete from DB */
                 Uri msgUri = ContentUris.withAppendedId(Sms.CONTENT_URI, handle);
                 int nRows = mResolver.delete(msgUri, null, null);
-                if (nRows > 0) {
-                    if (V) {
-                        Log.v(TAG, "Deleted message with Uri = " + msgUri);
-                    }
-                }
+                if (V && nRows > 0) Log.v(TAG, "Deleted message with Uri = " + msgUri);
             }
         }
     }

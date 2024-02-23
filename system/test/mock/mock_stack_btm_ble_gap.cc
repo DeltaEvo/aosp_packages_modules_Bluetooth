@@ -27,7 +27,6 @@
 
 #include "stack/btm/btm_ble_int.h"
 #include "stack/btm/btm_ble_int_types.h"
-#include "stack/include/bt_dev_class.h"
 #include "stack/include/btm_api_types.h"
 #include "stack/include/hci_error_code.h"
 #include "test/common/mock_functions.h"
@@ -138,13 +137,17 @@ void btm_ble_increment_link_topology_mask(uint8_t /* link_role */) {
   inc_func_call_count(__func__);
 }
 void btm_ble_init(void) { inc_func_call_count(__func__); }
-DEV_CLASS btm_ble_get_appearance_as_cod(
-    std::vector<uint8_t> const& /* data */) {
+bool btm_ble_get_appearance_as_cod(std::vector<uint8_t> const& /* data */,
+                                   DEV_CLASS /* dev_class */) {
   inc_func_call_count(__func__);
-  return kDevClassUnclassified;
+  return false;
 }
 void btm_ble_process_adv_addr(RawAddress& /* bda */,
                               tBLE_ADDR_TYPE* /* addr_type */) {
+  inc_func_call_count(__func__);
+}
+void btm_ble_process_adv_pkt(uint8_t /* data_len */,
+                             const uint8_t* /* data */) {
   inc_func_call_count(__func__);
 }
 void btm_ble_process_adv_pkt_cont(
@@ -162,6 +165,13 @@ void btm_ble_process_adv_pkt_cont_for_inquiry(
     uint8_t /* secondary_phy */, uint8_t /* advertising_sid */,
     int8_t /* tx_power */, int8_t /* rssi */, uint16_t /* periodic_adv_int */,
     std::vector<uint8_t> /* advertising_data */) {
+  inc_func_call_count(__func__);
+}
+void btm_ble_process_ext_adv_pkt(uint8_t /* data_len */,
+                                 const uint8_t* /* data */) {
+  inc_func_call_count(__func__);
+}
+void btm_ble_process_phy_update_pkt(uint8_t /* len */, uint8_t* /* data */) {
   inc_func_call_count(__func__);
 }
 void btm_ble_read_remote_features_complete(uint8_t* /* p */,

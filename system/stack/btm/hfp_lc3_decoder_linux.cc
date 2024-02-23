@@ -16,16 +16,12 @@
 
 #define LOG_TAG "hfp_lc3_decoder"
 
-#include <bluetooth/log.h>
-
 #include <algorithm>
 
 #include "hfp_lc3_decoder.h"
 #include "mmc/codec_client/codec_client.h"
 #include "mmc/proto/mmc_config.pb.h"
 #include "os/log.h"
-
-using namespace bluetooth;
 
 const int HFP_LC3_H2_HEADER_LEN = 2;
 const int HFP_LC3_PKT_FRAME_LEN = 58;
@@ -55,7 +51,8 @@ bool hfp_lc3_decoder_init() {
 
   int ret = client->init(config);
   if (ret < 0) {
-    log::error("Init failed with error message, {}", strerror(-ret));
+    LOG_ERROR("%s: Init failed with error message, %s", __func__,
+              strerror(-ret));
     return false;
   }
 
@@ -73,13 +70,13 @@ void hfp_lc3_decoder_cleanup() {
 bool hfp_lc3_decoder_decode_packet(const uint8_t* i_buf, int16_t* o_buf,
                                    size_t out_len) {
   if (o_buf == nullptr || out_len < HFP_LC3_PCM_BYTES) {
-    log::error("Output buffer size {} is less than LC3 frame size {}", out_len,
-               HFP_LC3_PCM_BYTES);
+    LOG_ERROR("%s: Output buffer size %zu is less than LC3 frame size %d",
+              __func__, out_len, HFP_LC3_PCM_BYTES);
     return false;
   }
 
   if (!client) {
-    log::error("CodecClient has not been initialized");
+    LOG_ERROR("%s: CodecClient has not been initialized", __func__);
     return false;
   }
 
@@ -94,7 +91,8 @@ bool hfp_lc3_decoder_decode_packet(const uint8_t* i_buf, int16_t* o_buf,
                              o_packet, out_len + 1);
 
   if (rc < 0) {
-    log::warn("Decode failed with error message, {}", strerror(-rc));
+    LOG_WARN("%s: Decode failed with error message, %s", __func__,
+             strerror(-rc));
     return false;
   }
 

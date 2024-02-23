@@ -18,13 +18,9 @@
 
 #define LOG_TAG "smp"
 
-#include <bluetooth/log.h>
-
 #include "os/log.h"
 #include "smp_int.h"
 #include "types/hci_role.h"
-
-using namespace bluetooth;
 
 const char* const smp_br_state_name[SMP_BR_STATE_MAX + 1] = {
     "SMP_BR_STATE_IDLE", "SMP_BR_STATE_WAIT_APP_RSP",
@@ -250,12 +246,12 @@ static const tSMP_BR_ENTRY_TBL smp_br_entry_table[] = {
  ******************************************************************************/
 void smp_set_br_state(tSMP_BR_STATE br_state) {
   if (br_state < SMP_BR_STATE_MAX) {
-    log::verbose("BR_State change:{}({})==>{}({})",
-                 smp_get_br_state_name(smp_cb.br_state), smp_cb.br_state,
-                 smp_get_br_state_name(br_state), br_state);
+    LOG_VERBOSE("BR_State change:%s(%d)==>%s(%d)",
+                smp_get_br_state_name(smp_cb.br_state), smp_cb.br_state,
+                smp_get_br_state_name(br_state), br_state);
     smp_cb.br_state = br_state;
   } else {
-    log::verbose("invalid br_state={}", br_state);
+    LOG_VERBOSE("invalid br_state=%d", br_state);
   }
 }
 
@@ -309,22 +305,23 @@ void smp_br_state_machine_event(tSMP_CB* p_cb, tSMP_BR_EVENT event,
   tSMP_BR_SM_TBL state_table;
   uint8_t action, entry;
 
-  log::debug("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_DEBUG("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   if (curr_state >= SMP_BR_STATE_MAX) {
-    log::error("Invalid br_state: {}", curr_state);
+    LOG_ERROR("Invalid br_state: %d", curr_state);
     return;
   }
 
   if (p_cb->role > HCI_ROLE_PERIPHERAL) {
-    log::error("invalid role {}", p_cb->role);
+    LOG_ERROR("invalid role %d", p_cb->role);
     return;
   }
 
   tSMP_BR_ENTRY_TBL entry_table = smp_br_entry_table[p_cb->role];
 
-  log::debug("Role:{} State:[{}({})], Event:[{}({})]",
-             hci_role_text(p_cb->role), smp_get_br_state_name(p_cb->br_state),
-             p_cb->br_state, smp_get_br_event_name(event), event);
+  LOG_DEBUG("Role:%s State:[%s(%d)], Event:[%s(%d)]",
+            hci_role_text(p_cb->role).c_str(),
+            smp_get_br_state_name(p_cb->br_state), p_cb->br_state,
+            smp_get_br_event_name(event), event);
 
   /* look up the state table for the current state */
   /* lookup entry / w event & curr_state */
@@ -339,9 +336,9 @@ void smp_br_state_machine_event(tSMP_CB* p_cb, tSMP_BR_EVENT event,
       state_table = smp_br_state_table[curr_state][p_cb->role];
     }
   } else {
-    log::verbose("Ignore event[{}({})] in state[{}({})]",
-                 smp_get_br_event_name(event), event,
-                 smp_get_br_state_name(curr_state), curr_state);
+    LOG_VERBOSE("Ignore event[%s(%d)] in state[%s(%d)]",
+                smp_get_br_event_name(event), event,
+                smp_get_br_state_name(curr_state), curr_state);
     return;
   }
 
@@ -361,5 +358,5 @@ void smp_br_state_machine_event(tSMP_CB* p_cb, tSMP_BR_EVENT event,
       break;
     }
   }
-  log::verbose("result state={}", smp_get_br_state_name(p_cb->br_state));
+  LOG_VERBOSE("result state=%s", smp_get_br_state_name(p_cb->br_state));
 }

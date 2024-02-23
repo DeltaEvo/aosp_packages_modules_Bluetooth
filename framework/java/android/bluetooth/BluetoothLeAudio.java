@@ -201,21 +201,6 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
                         executor.execute(() -> callback.onGroupStatusChanged(groupId, groupStatus));
                     }
                 }
-
-                @Override
-                public void onGroupStreamStatusChanged(int groupId, int groupStreamStatus) {
-                    if (Flags.leaudioCallbackOnGroupStreamStatus()) {
-                        for (Map.Entry<BluetoothLeAudio.Callback, Executor> callbackExecutorEntry :
-                                mCallbackExecutorMap.entrySet()) {
-                            BluetoothLeAudio.Callback callback = callbackExecutorEntry.getKey();
-                            Executor executor = callbackExecutorEntry.getValue();
-                            executor.execute(
-                                    () ->
-                                            callback.onGroupStreamStatusChanged(
-                                                    groupId, groupStreamStatus));
-                        }
-                    }
-                }
             };
 
     /**

@@ -21,7 +21,6 @@ fn main() {
         "/system/btcore",
         "/system/include",
         "/system/include/hardware",
-        "/system/log/include",
         "/system/types",
     ];
 

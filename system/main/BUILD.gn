@@ -85,7 +85,6 @@ target(lib_type, "bluetooth") {
     "//bt/system/gd:libbluetooth_gd",
     "//bt/system/log:libbluetooth_log",
     "//bt/system/hci",
-    "//bt/system/main/shim:BluetoothStackManagerSources",
     "//bt/system/main/shim:LibBluetoothShimSources",
     "//bt/system/osi",
     "//bt/system/packet",

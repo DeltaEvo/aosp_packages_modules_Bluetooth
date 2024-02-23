@@ -135,8 +135,7 @@ public class IncomingFileConfirmActivityTest {
                         BluetoothShare.USER_CONFIRMATION_HANDOVER_CONFIRMED)
         ));
 
-        BluetoothOppTestUtils.enableActivity(
-                BluetoothOppIncomingFileConfirmActivity.class, true, mTargetContext);
+        BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
         TestUtils.setUpUiTest();
     }
 
@@ -145,8 +144,7 @@ public class IncomingFileConfirmActivityTest {
         TestUtils.tearDownUiTest();
 
         BluetoothMethodProxy.setInstanceForTesting(null);
-        BluetoothOppTestUtils.enableActivity(
-                BluetoothOppIncomingFileConfirmActivity.class, false, mTargetContext);
+        BluetoothOppTestUtils.enableOppActivities(false, mTargetContext);
     }
 
     @Test

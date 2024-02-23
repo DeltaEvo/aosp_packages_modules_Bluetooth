@@ -37,25 +37,21 @@ class DistanceMeasurementTracker {
     final BluetoothDevice mDevice;
     final String mIdentityAddress;
     final UUID mUuid;
-    final int mInterval; // Report interval in ms
+    final int mFrequency; // Report frequency in ms
     final int mDuration; // Report duration in s
     final int mMethod;
     final IDistanceMeasurementCallback mCallback;
     boolean mStarted = false;
     private Handler mHandler;
 
-    DistanceMeasurementTracker(
-            DistanceMeasurementManager manager,
-            DistanceMeasurementParams params,
-            String identityAddress,
-            UUID uuid,
-            int interval,
+    DistanceMeasurementTracker(DistanceMeasurementManager manager, DistanceMeasurementParams params,
+            String identityAddress, UUID uuid, int frequency,
             IDistanceMeasurementCallback callback) {
         mManager = manager;
         mDevice = params.getDevice();
         mIdentityAddress = identityAddress;
         mUuid = uuid;
-        mInterval = interval;
+        mFrequency = frequency;
         mDuration = params.getDurationSeconds();
         mMethod = params.getMethodId();
         mCallback = callback;

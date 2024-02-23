@@ -16,7 +16,8 @@
  *
  ******************************************************************************/
 
-#include <bluetooth/log.h>
+#include <base/logging.h>
+#include <base/strings/stringprintf.h>
 #include <string.h>
 
 #include "device/include/controller.h"
@@ -31,7 +32,7 @@
 #include "stack/include/bt_hdr.h"
 #include "types/raw_address.h"
 
-using namespace bluetooth;
+using base::StringPrintf;
 
 /* Define the GAP Connection Control Block */
 typedef struct {
@@ -196,8 +197,8 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
   /* A client MUST have specified a bd addr to connect with */
   if (!p_ccb->rem_addr_specified && !is_server) {
     gap_release_ccb(p_ccb);
-    log::error(
-        "GAP ERROR: Client must specify a remote BD ADDR to connect to!");
+    LOG(ERROR)
+        << "GAP ERROR: Client must specify a remote BD ADDR to connect to!";
     return (GAP_INVALID_HANDLE);
   }
 
@@ -211,7 +212,7 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
 
     uint16_t max_mps = controller_get_interface()->get_acl_data_size_ble();
     if (le_mps > max_mps) {
-      log::info("Limiting MPS to one buffer size - {}", max_mps);
+      LOG(INFO) << "Limiting MPS to one buffer size - " << max_mps;
       le_mps = max_mps;
     }
     p_ccb->local_coc_cfg.mps = le_mps;
@@ -240,7 +241,8 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
         L2CA_Register2(psm, conn.reg_info, false /* enable_snoop */,
                        &p_ccb->ertm_info, L2CAP_SDU_LENGTH_MAX, 0, security);
     if (p_ccb->psm == 0) {
-      log::error("Failure registering PSM 0x{:04x}", psm);
+      LOG(ERROR) << StringPrintf("%s: Failure registering PSM 0x%04x", __func__,
+                                 psm);
       gap_release_ccb(p_ccb);
       return (GAP_INVALID_HANDLE);
     }
@@ -250,7 +252,8 @@ uint16_t GAP_ConnOpen(const char* p_serv_name, uint8_t service_id,
     p_ccb->psm =
         L2CA_RegisterLECoc(psm, conn.reg_info, security, p_ccb->local_coc_cfg);
     if (p_ccb->psm == 0) {
-      log::error("Failure registering PSM 0x{:04x}", psm);
+      LOG(ERROR) << StringPrintf("%s: Failure registering PSM 0x%04x", __func__,
+                                 psm);
       gap_release_ccb(p_ccb);
       return (GAP_INVALID_HANDLE);
     }
@@ -590,10 +593,10 @@ static void gap_connect_ind(const RawAddress& bd_addr, uint16_t l2cap_cid,
   }
 
   if (xx == GAP_MAX_CONNECTIONS) {
-    log::warn("*******");
-    log::warn(
-        "WARNING: GAP Conn Indication for Unexpected Bd Addr...Disconnecting");
-    log::warn("*******");
+    LOG(WARNING) << "*******";
+    LOG(WARNING) << "WARNING: GAP Conn Indication for Unexpected Bd "
+                    "Addr...Disconnecting";
+    LOG(WARNING) << "*******";
 
     /* Disconnect because it is an unexpected connection */
     if (BTM_UseLeLink(bd_addr)) {
@@ -826,8 +829,10 @@ static void gap_data_ind(uint16_t l2cap_cid, BT_HDR* p_msg) {
     fixed_queue_enqueue(p_ccb->rx_queue, p_msg);
 
     p_ccb->rx_queue_size += p_msg->len;
-    // log::verbose("gap_data_ind - rx_queue_size={}, msg len={}",
-    //              p_ccb->rx_queue_size, p_msg->len);
+    /*
+    VLOG(1) << StringPrintf ("gap_data_ind - rx_queue_size=%d, msg len=%d",
+                                   p_ccb->rx_queue_size, p_msg->len);
+     */
 
     p_ccb->p_callback(p_ccb->gap_handle, GAP_EVT_CONN_DATA_AVAIL, nullptr);
   } else {

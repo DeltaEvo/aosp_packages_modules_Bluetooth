@@ -26,9 +26,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.util.Log;
 
-import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
-import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -263,11 +261,7 @@ public class HidDeviceNativeInterface {
     }
 
     private byte[] getByteAddress(BluetoothDevice device) {
-        if (Flags.identityAddressNullIfUnknown()) {
-            return Utils.getByteBrEdrAddress(device);
-        } else {
-            return mAdapterService.getByteIdentityAddress(device);
-        }
+        return mAdapterService.getByteIdentityAddress(device);
     }
 
     private native void initNative();

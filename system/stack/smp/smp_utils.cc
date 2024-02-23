@@ -24,7 +24,6 @@
 #define LOG_TAG "smp"
 
 #include <android_bluetooth_flags.h>
-#include <bluetooth/log.h>
 
 #include <cstdint>
 #include <cstring>
@@ -69,8 +68,6 @@
   (1 /* opcode */ + OCTET16_LEN /*DHKey \
                                                                    Check*/)
 #define SMP_PAIR_KEYPR_NOTIF_SIZE (1 /* opcode */ + 1 /*Notif Type*/)
-
-using namespace bluetooth;
 
 namespace {
 constexpr char kBtmLogTag[] = "SMP";
@@ -329,7 +326,7 @@ static tSMP_ASSO_MODEL smp_select_association_model_secure_connections(
 void smp_log_metrics(const RawAddress& bd_addr, bool is_outgoing,
                      const uint8_t* p_buf, size_t buf_len, bool is_over_br) {
   if (buf_len < 1) {
-    log::warn("buffer is too small");
+    LOG_WARN("buffer is too small");
     return;
   }
   uint8_t raw_cmd;
@@ -367,8 +364,8 @@ bool smp_send_msg_to_L2CAP(const RawAddress& rem_bda, BT_HDR* p_toL2CAP) {
     fixed_cid = L2CAP_SMP_BR_CID;
   }
 
-  log::verbose("rem_bda:{}, over_bredr:{}", ADDRESS_TO_LOGGABLE_CSTR(rem_bda),
-               smp_cb.smp_over_br);
+  LOG_VERBOSE("rem_bda:%s, over_bredr:%d", ADDRESS_TO_LOGGABLE_CSTR(rem_bda),
+              smp_cb.smp_over_br);
 
   smp_log_metrics(rem_bda, true /* outgoing */,
                   p_toL2CAP->data + p_toL2CAP->offset, p_toL2CAP->len,
@@ -385,21 +382,21 @@ bool smp_send_msg_to_L2CAP(const RawAddress& rem_bda, BT_HDR* p_toL2CAP) {
     l2cap_ret = L2CA_SendFixedChnlData(fixed_cid, rem_bda, p_toL2CAP);
     if (l2cap_ret == L2CAP_DW_FAILED) {
       smp_cb.total_tx_unacked--;
-      log::error("SMP failed to pass msg to L2CAP");
+      LOG_ERROR("SMP failed to pass msg to L2CAP");
       return false;
     }
-    log::verbose("l2cap_tx_complete_cb_info is enabled");
+    LOG_VERBOSE("l2cap_tx_complete_cb_info is enabled");
     return true;
   }
 
   l2cap_ret = L2CA_SendFixedChnlData(fixed_cid, rem_bda, p_toL2CAP);
   if (l2cap_ret == L2CAP_DW_FAILED) {
-    log::error("SMP failed to pass msg to L2CAP");
+    LOG_ERROR("SMP failed to pass msg to L2CAP");
     return false;
   } else {
     tSMP_CB* p_cb = &smp_cb;
 
-    log::verbose("l2cap_tx_complete_cb_info is disabled");
+    LOG_VERBOSE("l2cap_tx_complete_cb_info is disabled");
     if (p_cb->wait_for_authorization_complete) {
       tSMP_INT_DATA smp_int_data;
       smp_int_data.status = SMP_SUCCESS;
@@ -424,9 +421,9 @@ bool smp_send_cmd(uint8_t cmd_code, tSMP_CB* p_cb) {
   BT_HDR* p_buf;
   bool sent = false;
 
-  log::debug("Sending SMP command:{}[0x{:x}] pairing_bda={}",
-             smp_opcode_text(static_cast<tSMP_OPCODE>(cmd_code)), cmd_code,
-             ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_DEBUG("Sending SMP command:%s[0x%x] pairing_bda=%s",
+            smp_opcode_text(static_cast<tSMP_OPCODE>(cmd_code)).c_str(),
+            cmd_code, ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (cmd_code <= (SMP_OPCODE_MAX + 1 /* for SMP_OPCODE_PAIR_COMMITM */) &&
       smp_cmd_build_act[cmd_code] != NULL) {
@@ -463,7 +460,7 @@ bool smp_send_cmd(uint8_t cmd_code, tSMP_CB* p_cb) {
 void smp_rsp_timeout(UNUSED_ATTR void* data) {
   tSMP_CB* p_cb = &smp_cb;
 
-  log::verbose("state:{} br_state:{}", p_cb->state, p_cb->br_state);
+  LOG_VERBOSE("state:%d br_state:%d", p_cb->state, p_cb->br_state);
 
   tSMP_INT_DATA smp_int_data;
   smp_int_data.status = SMP_RSP_TIMEOUT;
@@ -490,7 +487,7 @@ void smp_delayed_auth_complete_timeout(UNUSED_ATTR void* data) {
    * the state is still in bond pending.
    */
   if (smp_get_state() == SMP_STATE_BOND_PENDING) {
-    log::verbose("sending delayed auth complete.");
+    LOG_VERBOSE("sending delayed auth complete.");
     tSMP_INT_DATA smp_int_data;
     smp_int_data.status = SMP_SUCCESS;
     smp_sm_event(&smp_cb, SMP_AUTH_CMPL_EVT, &smp_int_data);
@@ -509,8 +506,8 @@ BT_HDR* smp_build_pairing_cmd(uint8_t cmd_code, tSMP_CB* p_cb) {
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_PAIRING_REQ_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("building cmd:{}",
-               smp_opcode_text(static_cast<tSMP_OPCODE>(cmd_code)));
+  LOG_VERBOSE("building cmd:%s",
+              smp_opcode_text(static_cast<tSMP_OPCODE>(cmd_code)).c_str());
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, cmd_code);
@@ -541,7 +538,7 @@ static BT_HDR* smp_build_confirm_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_CONFIRM_CMD_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
 
@@ -566,7 +563,7 @@ static BT_HDR* smp_build_rand_cmd(UNUSED_ATTR uint8_t cmd_code, tSMP_CB* p_cb) {
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_RAND_CMD_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_RAND);
@@ -591,7 +588,7 @@ static BT_HDR* smp_build_encrypt_info_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_ENC_INFO_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_ENCRYPT_INFO);
@@ -616,7 +613,7 @@ static BT_HDR* smp_build_central_id_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_CENTRAL_ID_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_CENTRAL_ID);
@@ -642,7 +639,7 @@ static BT_HDR* smp_build_identity_info_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf =
       (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_ID_INFO_SIZE + L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
 
@@ -670,7 +667,7 @@ static BT_HDR* smp_build_id_addr_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf =
       (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_ID_ADDR_SIZE + L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_ID_ADDR);
@@ -696,7 +693,7 @@ static BT_HDR* smp_build_signing_info_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_SIGN_INFO_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_SIGN_INFO);
@@ -721,7 +718,7 @@ static BT_HDR* smp_build_pairing_fail(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_PAIR_FAIL_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_PAIRING_FAILED);
@@ -745,7 +742,7 @@ static BT_HDR* smp_build_security_request(UNUSED_ATTR uint8_t cmd_code,
   uint8_t* p;
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + 2 + L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_SEC_REQ);
@@ -754,8 +751,8 @@ static BT_HDR* smp_build_security_request(UNUSED_ATTR uint8_t cmd_code,
   p_buf->offset = L2CAP_MIN_OFFSET;
   p_buf->len = SMP_SECURITY_REQUEST_SIZE;
 
-  log::verbose("opcode={} auth_req=0x{:x}", SMP_OPCODE_SEC_REQ,
-               p_cb->loc_auth_req);
+  LOG_VERBOSE("opcode=%d auth_req=0x%x", SMP_OPCODE_SEC_REQ,
+              p_cb->loc_auth_req);
 
   return p_buf;
 }
@@ -775,7 +772,7 @@ static BT_HDR* smp_build_pair_public_key_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_PAIR_PUBL_KEY_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   memcpy(p_publ_key, p_cb->loc_publ_key.x, BT_OCTET32_LEN);
   memcpy(p_publ_key + BT_OCTET32_LEN, p_cb->loc_publ_key.y, BT_OCTET32_LEN);
@@ -803,7 +800,7 @@ static BT_HDR* smp_build_pairing_commitment_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_PAIR_COMMITM_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_CONFIRM);
@@ -828,7 +825,7 @@ static BT_HDR* smp_build_pair_dhkey_check_cmd(UNUSED_ATTR uint8_t cmd_code,
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(
       sizeof(BT_HDR) + SMP_PAIR_DHKEY_CHECK_SIZE + L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_PAIR_DHKEY_CHECK);
@@ -853,7 +850,7 @@ static BT_HDR* smp_build_pairing_keypress_notification_cmd(
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(
       sizeof(BT_HDR) + SMP_PAIR_KEYPR_NOTIF_SIZE + L2CAP_MIN_OFFSET);
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_PAIR_KEYPR_NOTIF);
@@ -870,7 +867,7 @@ static BT_HDR* smp_build_pairing_keypress_notification_cmd(
 void smp_convert_string_to_tk(Octet16* tk, uint32_t passkey) {
   uint8_t* p = tk->data();
   tSMP_KEY key;
-  log::verbose("smp_convert_string_to_tk");
+  LOG_VERBOSE("smp_convert_string_to_tk");
   UINT32_TO_STREAM(p, passkey);
 
   key.key_type = SMP_KEY_TYPE_TK;
@@ -884,7 +881,7 @@ void smp_convert_string_to_tk(Octet16* tk, uint32_t passkey) {
 /** This function is called to mask off the encryption key based on the maximum
  * encryption key size. */
 void smp_mask_enc_key(uint8_t loc_enc_size, Octet16* p_data) {
-  log::verbose("smp_mask_enc_key");
+  LOG_VERBOSE("smp_mask_enc_key");
   if (loc_enc_size < OCTET16_LEN) {
     for (; loc_enc_size < OCTET16_LEN; loc_enc_size++)
       (*p_data)[loc_enc_size] = 0;
@@ -912,7 +909,7 @@ void tSMP_CB::init(uint8_t security_mode) {
   smp_cb.smp_rsp_timer_ent = alarm_new("smp.smp_rsp_timer_ent");
   smp_cb.delayed_auth_timer_ent = alarm_new("smp.delayed_auth_timer_ent");
 
-  log::verbose("init_security_mode:{}", init_security_mode);
+  LOG_VERBOSE("init_security_mode:%d", init_security_mode);
 
   smp_l2cap_if_init();
   /* initialization of P-256 parameters */
@@ -922,7 +919,7 @@ void tSMP_CB::init(uint8_t security_mode) {
   smp_cb.cert_failure = static_cast<tSMP_STATUS>(
       stack_config_get_interface()->get_pts_smp_failure_case());
   if (smp_cb.cert_failure)
-    log::error("PTS FAILURE MODE IN EFFECT (CASE {})", smp_cb.cert_failure);
+    LOG_ERROR("PTS FAILURE MODE IN EFFECT (CASE %d)", smp_cb.cert_failure);
 }
 
 /*******************************************************************************
@@ -940,7 +937,7 @@ void tSMP_CB::reset() {
   alarm_t* smp_rsp_timer_ent = this->smp_rsp_timer_ent;
   alarm_t* delayed_auth_timer_ent = this->delayed_auth_timer_ent;
 
-  log::verbose("resetting SMP_CB");
+  LOG_VERBOSE("resetting SMP_CB");
 
   alarm_cancel(this->smp_rsp_timer_ent);
   alarm_cancel(this->delayed_auth_timer_ent);
@@ -964,7 +961,7 @@ void tSMP_CB::reset() {
  *
  ******************************************************************************/
 void smp_remove_fixed_channel(tSMP_CB* p_cb) {
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (p_cb->smp_over_br)
     L2CA_RemoveFixedChnl(L2CAP_SMP_BR_CID, p_cb->pairing_bda);
@@ -984,7 +981,7 @@ void smp_remove_fixed_channel(tSMP_CB* p_cb) {
  *
  ******************************************************************************/
 void smp_reset_control_value(tSMP_CB* p_cb) {
-  log::verbose("reset smp_cb");
+  LOG_VERBOSE("reset smp_cb");
 
   alarm_cancel(p_cb->smp_rsp_timer_ent);
   p_cb->flags = 0;
@@ -1026,17 +1023,16 @@ void smp_proc_pairing_cmpl(tSMP_CB* p_cb) {
   };
 
   if (p_cb->status == SMP_SUCCESS) {
-    log::debug(
-        "Pairing process has completed successfully remote:{} "
-        "sec_level:0x{:0x}",
+    LOG_DEBUG(
+        "Pairing process has completed successfully remote:%s sec_level:0x%0x",
         ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda), evt_data.cmplt.sec_level);
     BTM_LogHistory(kBtmLogTag, pairing_bda, "Pairing success");
   } else {
-    log::warn(
-        "Pairing process has failed to remote:{} smp_reason:{} "
-        "sec_level:0x{:0x}",
+    LOG_WARN(
+        "Pairing process has failed to remote:%s smp_reason:%s sec_level:0x%0x",
         ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda),
-        smp_status_text(evt_data.cmplt.reason), evt_data.cmplt.sec_level);
+        smp_status_text(evt_data.cmplt.reason).c_str(),
+        evt_data.cmplt.sec_level);
     BTM_LogHistory(
         kBtmLogTag, pairing_bda, "Pairing failed",
         base::StringPrintf("reason:%s",
@@ -1084,7 +1080,7 @@ bool smp_command_has_invalid_length(tSMP_CB* p_cb) {
 
   if ((cmd_code > (SMP_OPCODE_MAX + 1 /* for SMP_OPCODE_PAIR_COMMITM */)) ||
       (cmd_code < SMP_OPCODE_MIN)) {
-    log::warn("Received command with RESERVED code 0x{:02x}", cmd_code);
+    LOG_WARN("Received command with RESERVED code 0x%02x", cmd_code);
     return true;
   }
 
@@ -1112,17 +1108,17 @@ bool smp_command_has_invalid_parameters(tSMP_CB* p_cb) {
 
   if ((cmd_code > (SMP_OPCODE_MAX + 1 /* for SMP_OPCODE_PAIR_COMMITM */)) ||
       (cmd_code < SMP_OPCODE_MIN)) {
-    log::warn("Received command with RESERVED code 0x{:02x}", cmd_code);
+    LOG_WARN("Received command with RESERVED code 0x%02x", cmd_code);
     return true;
   }
 
   if (!(*smp_cmd_len_is_valid[cmd_code])(p_cb)) {
-    log::warn("Command length not valid for cmd_code 0x{:02x}", cmd_code);
+    LOG_WARN("Command length not valid for cmd_code 0x%02x", cmd_code);
     return true;
   }
 
   if (!(*smp_cmd_param_ranges_are_valid[cmd_code])(p_cb)) {
-    log::warn("Parameter ranges not valid code 0x{:02x}", cmd_code);
+    LOG_WARN("Parameter ranges not valid code 0x%02x", cmd_code);
     return true;
   }
 
@@ -1143,12 +1139,12 @@ bool smp_command_has_invalid_parameters(tSMP_CB* p_cb) {
 bool smp_command_has_valid_fixed_length(tSMP_CB* p_cb) {
   uint8_t cmd_code = p_cb->rcvd_cmd_code;
 
-  log::verbose("cmd code 0x{:02x}", cmd_code);
+  LOG_VERBOSE("cmd code 0x%02x", cmd_code);
 
   if (p_cb->rcvd_cmd_len != smp_cmd_size_per_spec[cmd_code]) {
-    log::warn(
-        "Rcvd from the peer cmd 0x{:02x} with invalid length 0x{:02x} (per "
-        "spec the length is 0x{:02x}).",
+    LOG_WARN(
+        "Rcvd from the peer cmd 0x%02x with invalid length "
+        "0x%02x (per spec the length is 0x%02x).",
         cmd_code, p_cb->rcvd_cmd_len, smp_cmd_size_per_spec[cmd_code]);
     return false;
   }
@@ -1178,27 +1174,27 @@ bool smp_pairing_request_response_parameters_are_valid(tSMP_CB* p_cb) {
       p_cb->peer_auth_req & 0x03;  // 0x03 is gen bond with appropriate mask
   uint8_t enc_size = p_cb->peer_enc_size;
 
-  log::verbose("cmd code 0x{:02x}", p_cb->rcvd_cmd_code);
+  LOG_VERBOSE("cmd code 0x%02x", p_cb->rcvd_cmd_code);
 
   if (io_caps >= BTM_IO_CAP_MAX) {
-    log::warn(
-        "Rcvd from the peer cmd 0x{:02x} with IO Capability value (0x{:02x}) "
-        "out of range).",
+    LOG_WARN(
+        "Rcvd from the peer cmd 0x%02x with IO Capability "
+        "value (0x%02x) out of range).",
         p_cb->rcvd_cmd_code, io_caps);
     return false;
   }
 
   if (!((oob_flag == SMP_OOB_NONE) || (oob_flag == SMP_OOB_PRESENT))) {
-    log::warn(
-        "Rcvd from the peer cmd 0x{:02x} with OOB data flag value (0x{:02x}) "
-        "out of range).",
+    LOG_WARN(
+        "Rcvd from the peer cmd 0x%02x with OOB data flag value "
+        "(0x%02x) out of range).",
         p_cb->rcvd_cmd_code, oob_flag);
     return false;
   }
 
   if (!((bond_flag == SMP_AUTH_NO_BOND) || (bond_flag == SMP_AUTH_BOND))) {
-    log::warn(
-        "Rcvd from the peer cmd 0x{:02x} with Bonding_Flags value (0x{:02x}) "
+    LOG_WARN(
+        "Rcvd from the peer cmd 0x%02x with Bonding_Flags value (0x%02x) "
         "out of range).",
         p_cb->rcvd_cmd_code, bond_flag);
     return false;
@@ -1206,9 +1202,9 @@ bool smp_pairing_request_response_parameters_are_valid(tSMP_CB* p_cb) {
 
   if ((enc_size < SMP_ENCR_KEY_SIZE_MIN) ||
       (enc_size > SMP_ENCR_KEY_SIZE_MAX)) {
-    log::warn(
-        "Rcvd from the peer cmd 0x{:02x} with Maximum Encryption Key value "
-        "(0x{:02x}) out of range).",
+    LOG_WARN(
+        "Rcvd from the peer cmd 0x%02x with Maximum Encryption "
+        "Key value (0x%02x) out of range).",
         p_cb->rcvd_cmd_code, enc_size);
     return false;
   }
@@ -1228,12 +1224,12 @@ bool smp_pairing_request_response_parameters_are_valid(tSMP_CB* p_cb) {
 bool smp_pairing_keypress_notification_is_valid(tSMP_CB* p_cb) {
   tSMP_SC_KEY_TYPE keypress_notification = p_cb->peer_keypress_notification;
 
-  log::verbose("cmd code 0x{:02x}", p_cb->rcvd_cmd_code);
+  LOG_VERBOSE("cmd code 0x%02x", p_cb->rcvd_cmd_code);
 
   if (keypress_notification >= SMP_SC_KEY_OUT_OF_RANGE) {
-    log::warn(
-        "Rcvd from the peer cmd 0x{:02x} with Pairing Keypress Notification "
-        "value (0x{:02x}) out of range).",
+    LOG_WARN(
+        "Rcvd from the peer cmd 0x%02x with Pairing Keypress "
+        "Notification value (0x%02x) out of range).",
         p_cb->rcvd_cmd_code, keypress_notification);
     return false;
   }
@@ -1278,7 +1274,7 @@ void smp_reject_unexpected_pairing_command(const RawAddress& bd_addr) {
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(sizeof(BT_HDR) + SMP_PAIR_FAIL_SIZE +
                                       L2CAP_MIN_OFFSET);
 
-  log::verbose("bd_addr:{}", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+  LOG_VERBOSE("bd_addr:%s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
 
   p = (uint8_t*)(p_buf + 1) + L2CAP_MIN_OFFSET;
   UINT8_TO_STREAM(p, SMP_OPCODE_PAIRING_FAILED);
@@ -1311,14 +1307,14 @@ tSMP_ASSO_MODEL smp_select_association_model(tSMP_CB* p_cb) {
   tSMP_ASSO_MODEL model = SMP_MODEL_OUT_OF_RANGE;
   p_cb->sc_mode_required_by_peer = false;
 
-  log::verbose("p_cb->peer_io_caps = {} p_cb->local_io_capability = {}",
-               p_cb->peer_io_caps, p_cb->local_io_capability);
-  log::verbose("p_cb->peer_oob_flag = {} p_cb->loc_oob_flag = {}",
-               p_cb->peer_oob_flag, p_cb->loc_oob_flag);
-  log::verbose("p_cb->peer_auth_req = 0x{:02x} p_cb->loc_auth_req = 0x{:02x}",
-               p_cb->peer_auth_req, p_cb->loc_auth_req);
-  log::verbose("p_cb->sc_only_mode_locally_required = {}",
-               p_cb->sc_only_mode_locally_required);
+  LOG_VERBOSE("p_cb->peer_io_caps = %d p_cb->local_io_capability = %d",
+              p_cb->peer_io_caps, p_cb->local_io_capability);
+  LOG_VERBOSE("p_cb->peer_oob_flag = %d p_cb->loc_oob_flag = %d",
+              p_cb->peer_oob_flag, p_cb->loc_oob_flag);
+  LOG_VERBOSE("p_cb->peer_auth_req = 0x%02x p_cb->loc_auth_req = 0x%02x",
+              p_cb->peer_auth_req, p_cb->loc_auth_req);
+  LOG_VERBOSE("p_cb->sc_only_mode_locally_required = %s",
+              p_cb->sc_only_mode_locally_required ? "true" : "false");
 
   if ((p_cb->peer_auth_req & SMP_SC_SUPPORT_BIT) &&
       (p_cb->loc_auth_req & SMP_SC_SUPPORT_BIT)) {
@@ -1330,8 +1326,8 @@ tSMP_ASSO_MODEL smp_select_association_model(tSMP_CB* p_cb) {
     p_cb->key_derivation_h7_used = TRUE;
   }
 
-  log::verbose("use_sc_process = {}, h7 use = {}",
-               p_cb->sc_mode_required_by_peer, p_cb->key_derivation_h7_used);
+  LOG_VERBOSE("use_sc_process = %d, h7 use = %d",
+              p_cb->sc_mode_required_by_peer, p_cb->key_derivation_h7_used);
 
   if (p_cb->sc_mode_required_by_peer) {
     model = smp_select_association_model_secure_connections(p_cb);
@@ -1351,7 +1347,7 @@ tSMP_ASSO_MODEL smp_select_association_model(tSMP_CB* p_cb) {
 tSMP_ASSO_MODEL smp_select_legacy_association_model(tSMP_CB* p_cb) {
   tSMP_ASSO_MODEL model = SMP_MODEL_OUT_OF_RANGE;
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   /* if OOB data is present on both devices, then use OOB association model */
   if (p_cb->peer_oob_flag == SMP_OOB_PRESENT &&
       p_cb->loc_oob_flag == SMP_OOB_PRESENT)
@@ -1388,7 +1384,7 @@ tSMP_ASSO_MODEL smp_select_legacy_association_model(tSMP_CB* p_cb) {
 tSMP_ASSO_MODEL smp_select_association_model_secure_connections(tSMP_CB* p_cb) {
   tSMP_ASSO_MODEL model = SMP_MODEL_OUT_OF_RANGE;
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
   /* if OOB data is present on at least one device, then use OOB association
    * model */
   if (p_cb->peer_oob_flag == SMP_OOB_PRESENT ||
@@ -1433,8 +1429,8 @@ uint8_t smp_calculate_random_input(uint8_t* random, uint8_t round) {
   uint8_t ri;
 
   ri = ((random[i] >> j) & 1) | 0x80;
-  log::verbose("random:0x{:02x}, round:{}, i:{}, j:{}, ri:0x{:02x}", random[i],
-               round, i, j, ri);
+  LOG_VERBOSE("random:0x%02x, round:%d, i:%d, j:%d, ri:0x%02x", random[i],
+              round, i, j, ri);
   return ri;
 }
 
@@ -1448,7 +1444,7 @@ uint8_t smp_calculate_random_input(uint8_t* random, uint8_t round) {
  *
  ******************************************************************************/
 void smp_collect_local_io_capabilities(uint8_t* iocap, tSMP_CB* p_cb) {
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   iocap[0] = p_cb->local_io_capability;
   iocap[1] = p_cb->loc_oob_flag;
@@ -1465,7 +1461,7 @@ void smp_collect_local_io_capabilities(uint8_t* iocap, tSMP_CB* p_cb) {
  *
  ******************************************************************************/
 void smp_collect_peer_io_capabilities(uint8_t* iocap, tSMP_CB* p_cb) {
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   iocap[0] = p_cb->peer_io_caps;
   iocap[1] = p_cb->peer_oob_flag;
@@ -1487,7 +1483,7 @@ void smp_collect_local_ble_address(uint8_t* le_addr, tSMP_CB* p_cb) {
   RawAddress bda;
   uint8_t* p = le_addr;
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   BTM_ReadConnectionAddr(p_cb->pairing_bda, bda, &addr_type, true);
   BDADDR_TO_STREAM(p, bda);
@@ -1509,10 +1505,10 @@ void smp_collect_peer_ble_address(uint8_t* le_addr, tSMP_CB* p_cb) {
   RawAddress bda;
   uint8_t* p = le_addr;
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (!BTM_ReadRemoteConnectionAddr(p_cb->pairing_bda, bda, &addr_type, true)) {
-    log::error("can not collect peer le addr information for unknown device");
+    LOG_ERROR("can not collect peer le addr information for unknown device");
     return;
   }
 
@@ -1532,14 +1528,14 @@ void smp_collect_peer_ble_address(uint8_t* le_addr, tSMP_CB* p_cb) {
  *
  ******************************************************************************/
 bool smp_check_commitment(tSMP_CB* p_cb) {
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   Octet16 expected = smp_calculate_peer_commitment(p_cb);
-  print128(expected, "calculated peer commitment");
-  print128(p_cb->remote_commitment, "received peer commitment");
+  print128(expected, (const uint8_t*)"calculated peer commitment");
+  print128(p_cb->remote_commitment, (const uint8_t*)"received peer commitment");
 
   if (memcmp(p_cb->remote_commitment.data(), expected.data(), OCTET16_LEN)) {
-    log::warn("Commitment check fails");
+    LOG_WARN("Commitment check fails");
     return false;
   }
 
@@ -1557,7 +1553,7 @@ bool smp_check_commitment(tSMP_CB* p_cb) {
  *
  ******************************************************************************/
 void smp_save_secure_connections_long_term_key(tSMP_CB* p_cb) {
-  log::verbose("Save LTK as local and peer key");
+  LOG_VERBOSE("Save LTK as local and peer key");
   tBTM_LE_KEY_VALUE lle_key = {
       .lenc_key =
           {
@@ -1591,7 +1587,7 @@ void smp_calculate_f5_mackey_and_long_term_key(tSMP_CB* p_cb) {
   Octet16 na;
   Octet16 nb;
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (p_cb->role == HCI_ROLE_CENTRAL) {
     smp_collect_local_ble_address(a, p_cb);
@@ -1621,7 +1617,7 @@ void smp_calculate_f5_mackey_and_long_term_key(tSMP_CB* p_cb) {
 bool smp_request_oob_data(tSMP_CB* p_cb) {
   tSMP_OOB_DATA_TYPE req_oob_type = SMP_OOB_INVALID_TYPE;
 
-  log::verbose("addr:{}", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
+  LOG_VERBOSE("addr:%s", ADDRESS_TO_LOGGABLE_CSTR(p_cb->pairing_bda));
 
   if (p_cb->peer_oob_flag == SMP_OOB_PRESENT &&
       p_cb->loc_oob_flag == SMP_OOB_PRESENT) {
@@ -1634,7 +1630,7 @@ bool smp_request_oob_data(tSMP_CB* p_cb) {
     req_oob_type = SMP_OOB_PEER;
   }
 
-  log::verbose("req_oob_type={}", req_oob_type);
+  LOG_VERBOSE("req_oob_type=%d", req_oob_type);
 
   if (req_oob_type == SMP_OOB_INVALID_TYPE) return false;
 
@@ -1647,13 +1643,13 @@ bool smp_request_oob_data(tSMP_CB* p_cb) {
   return true;
 }
 
-void print128(const Octet16& x, const char* key_name) {
+void print128(const Octet16& x, const uint8_t* key_name) {
   uint8_t* p = (uint8_t*)x.data();
 
-  log::info("{}(MSB~LSB):", key_name);
+  LOG_INFO("%s(MSB~LSB):", key_name);
   for (int i = 0; i < 4; i++) {
-    log::info("{:02x}:{:02x}:{:02x}:{:02x}", p[OCTET16_LEN - i * 4 - 1],
-              p[OCTET16_LEN - i * 4 - 2], p[OCTET16_LEN - i * 4 - 3],
-              p[OCTET16_LEN - i * 4 - 4]);
+    LOG_INFO("%02x:%02x:%02x:%02x", p[OCTET16_LEN - i * 4 - 1],
+             p[OCTET16_LEN - i * 4 - 2], p[OCTET16_LEN - i * 4 - 3],
+             p[OCTET16_LEN - i * 4 - 4]);
   }
 }

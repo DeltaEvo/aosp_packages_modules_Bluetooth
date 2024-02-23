@@ -16,7 +16,8 @@
  *
  ******************************************************************************/
 
-#include <bluetooth/log.h>
+#include <base/logging.h>
+#include <base/strings/stringprintf.h>
 #include <string.h>
 
 #include <array>
@@ -33,8 +34,8 @@
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
 
+using base::StringPrintf;
 using bluetooth::Uuid;
-using namespace bluetooth;
 
 namespace {
 
@@ -221,16 +222,17 @@ void server_attr_request_cback(uint16_t conn_id, uint32_t trans_id,
 
     case GATTS_REQ_TYPE_WRITE_EXEC:
       ignore = true;
-      log::verbose("Ignore GATTS_REQ_TYPE_WRITE_EXEC");
+      VLOG(1) << "Ignore GATTS_REQ_TYPE_WRITE_EXEC";
       break;
 
     case GATTS_REQ_TYPE_MTU:
-      log::verbose("Get MTU exchange new mtu size: {}", +p_data->mtu);
+      VLOG(1) << "Get MTU exchange new mtu size: " << +p_data->mtu;
       ignore = true;
       break;
 
     default:
-      log::verbose("Unknown/unexpected LE GAP ATT request: 0x{:02x}", type);
+      VLOG(1) << StringPrintf("Unknown/unexpected LE GAP ATT request: 0x%02x",
+                              type);
       break;
   }
 
@@ -293,20 +295,19 @@ void client_connect_cback(tGATT_IF, const RawAddress& bda, uint16_t conn_id,
                           tBT_TRANSPORT) {
   tGAP_CLCB* p_clcb = find_clcb_by_bd_addr(bda);
   if (p_clcb == NULL) {
-    log::info("No active GAP service found for peer:{} callback:{}",
-              ADDRESS_TO_LOGGABLE_CSTR(bda),
-              (connected) ? "Connected" : "Disconnected");
+    LOG_INFO("No active GAP service found for peer:%s callback:%s",
+             ADDRESS_TO_LOGGABLE_CSTR(bda), (connected) ? "Connected" : "Disconnected");
     return;
   }
 
   if (connected) {
-    log::debug("Connected GAP to remote device");
+    LOG_DEBUG("Connected GAP to remote device");
     p_clcb->conn_id = conn_id;
     p_clcb->connected = true;
     /* start operation is pending */
     send_cl_read_request(*p_clcb);
   } else {
-    log::warn("Disconnected GAP from remote device");
+    LOG_WARN("Disconnected GAP from remote device");
     p_clcb->connected = false;
     cl_op_cmpl(*p_clcb, false, 0, NULL);
     /* clean up clcb */
@@ -544,13 +545,13 @@ bool GAP_BleCancelReadPeerDevName(const RawAddress& peer_bda) {
   tGAP_CLCB* p_clcb = find_clcb_by_bd_addr(peer_bda);
 
   if (p_clcb == NULL) {
-    log::error("Cannot cancel current op is not get dev name");
+    LOG(ERROR) << "Cannot cancel current op is not get dev name";
     return false;
   }
 
   if (!p_clcb->connected) {
     if (!GATT_CancelConnect(gatt_if, peer_bda, true)) {
-      log::error("Cannot cancel where No connection id");
+      LOG(ERROR) << "Cannot cancel where No connection id";
       return false;
     }
   }

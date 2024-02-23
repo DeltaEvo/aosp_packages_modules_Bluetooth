@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-#pragma once
-
-#include <bluetooth/log.h>
+#ifndef COM_ANDROID_BLUETOOTH_H
+#define COM_ANDROID_BLUETOOTH_H
 
 #include "hardware/bluetooth.h"
 #include "hardware/hardware.h"
 #include "jni.h"
+#include "jni_logging.h"
 #include "nativehelper/ScopedLocalRef.h"
-
-namespace log = bluetooth::log;
+#include "utils/Log.h"
 
 namespace android {
 
@@ -39,15 +38,15 @@ public:
 
     ~CallbackEnv() {
       if (mCallbackEnv && mCallbackEnv->ExceptionCheck()) {
-        log::error("An exception was thrown by callback '{}'.", mName);
-        jniLogException(mCallbackEnv, ANDROID_LOG_ERROR, LOG_TAG);
-        mCallbackEnv->ExceptionClear();
+          ALOGE("An exception was thrown by callback '%s'.", mName);
+          LOGE_EX(mCallbackEnv);
+          mCallbackEnv->ExceptionClear();
       }
     }
 
     bool valid() const {
       if (!mCallbackEnv || !isCallbackThread()) {
-        log::error("{}: Callback env fail", mName);
+        ALOGE("%s: Callback env fail", mName);
         return false;
       }
       return true;
@@ -185,3 +184,5 @@ void jniGetMethodsOrDie(JNIEnv* env, const char* className,
     jniGetMethodsOrDie(env, classname, methodsArray, NELEM(methodsArray))
 
 }  // namespace android
+
+#endif /* COM_ANDROID_BLUETOOTH_H */

@@ -339,7 +339,6 @@ cc_defaults {
         "libchrome",
     ],
     shared_libs: [
-        "libbase",
         "liblog",
     ],
     target: {
@@ -430,7 +429,6 @@ cc_fuzz {
         "BluetoothGeneratedDumpsysDataSchema_h",
     ],
     srcs: [
-        ":BluetoothPacketSources",
         ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
         ":TestFakeOsi",
@@ -438,7 +436,6 @@ cc_fuzz {
         ":TestMockDevice",
         ":TestMockGdOsLoggingLogRedaction",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockRustFfi",
         ":TestMockSrvcDis",
         ":TestMockStackAcl",
@@ -485,7 +482,6 @@ cc_fuzz {
         "BluetoothGeneratedDumpsysDataSchema_h",
     ],
     srcs: [
-        ":BluetoothPacketSources",
         ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
         ":TestFakeOsi",
@@ -493,7 +489,6 @@ cc_fuzz {
         ":TestMockDevice",
         ":TestMockGdOsLoggingLogRedaction",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackAcl",
         ":TestMockStackBtm",
         ":TestMockStackHcic",
@@ -535,7 +530,6 @@ cc_fuzz {
         "BluetoothGeneratedDumpsysDataSchema_h",
     ],
     srcs: [
-        ":BluetoothPacketSources",
         ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
         ":TestFakeOsi",
@@ -543,7 +537,6 @@ cc_fuzz {
         ":TestMockDevice",
         ":TestMockGdOsLoggingLogRedaction",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackAcl",
         ":TestMockStackBtm",
         ":TestMockStackHcic",
@@ -580,7 +573,6 @@ cc_fuzz {
         "BluetoothGeneratedDumpsysDataSchema_h",
     ],
     srcs: [
-        ":BluetoothPacketSources",
         ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
         ":TestFakeOsi",
@@ -588,7 +580,6 @@ cc_fuzz {
         ":TestMockDevice",
         ":TestMockGdOsLoggingLogRedaction",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackAcl",
         ":TestMockStackBtm",
         ":TestMockStackHcic",
@@ -629,7 +620,6 @@ cc_fuzz {
         "BluetoothGeneratedDumpsysDataSchema_h",
     ],
     srcs: [
-        ":BluetoothPacketSources",
         ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
         ":TestFakeOsi",
@@ -637,7 +627,6 @@ cc_fuzz {
         ":TestMockDevice",
         ":TestMockGdOsLoggingLogRedaction",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackAcl",
         ":TestMockStackBtm",
         ":TestMockStackHcic",
@@ -778,7 +767,6 @@ cc_test {
         ":TestCommonMockFunctions",
         ":TestMockHci",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackMetrics",
         "rfcomm/port_api.cc",
         "rfcomm/port_rfc.cc",
@@ -806,7 +794,6 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -867,7 +854,6 @@ cc_test {
         ":TestMockBtif",
         ":TestMockDevice",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackAcl",
         ":TestMockStackBtm",
         ":TestMockStackHcic",
@@ -894,7 +880,6 @@ cc_test {
         "server_configurable_flags",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -980,7 +965,6 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",
@@ -1034,7 +1018,6 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -1337,7 +1320,6 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -1387,11 +1369,9 @@ cc_test {
         "packages/modules/Bluetooth/system/gd",
     ],
     srcs: [
-        ":BluetoothPacketSources",
         ":TestCommonMockFunctions",
         ":TestCommonStackConfig",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         "btm/btm_iso.cc",
         "test/btm_iso_test.cc",
         "test/common/mock_controller.cc",
@@ -1399,7 +1379,6 @@ cc_test {
         "test/common/mock_hcic_layer.cc",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_hci_pdl",
         "libbluetooth_log",
@@ -1467,7 +1446,6 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",
@@ -1533,7 +1511,6 @@ cc_test {
         ":TestMockLegacyHciInterface",
         ":TestMockMainBte",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockRustFfi",
         ":TestMockStackBtu",
         ":TestMockStackGap",
@@ -1707,7 +1684,6 @@ cc_test {
         "test/hid/stack_hid_test.cc",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_log",
@@ -1774,7 +1750,6 @@ cc_test {
         ":TestMockHci",
         ":TestMockLegacyHciCommands",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackAcl",
         ":TestMockStackBtm",
         ":TestMockStackHcic",
@@ -1787,7 +1762,6 @@ cc_test {
         "test/stack_btu_test.cc",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",
@@ -1850,7 +1824,6 @@ cc_test {
         ":TestMockHci",
         ":TestMockLegacyHciCommands",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockRustFfi",
         ":TestMockSrvcDis",
         ":TestMockStackAcl",
@@ -1875,7 +1848,6 @@ cc_test {
     ],
     static_libs: [
         "bluetooth_flags_c_lib",
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",
         "libbluetooth_gd",
@@ -1951,7 +1923,6 @@ cc_test {
         ":TestMockJni",
         ":TestMockLegacyHciCommands",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockStackAcl",
         ":TestMockStackBtm",
         ":TestMockStackHcic",
@@ -2045,7 +2016,6 @@ cc_test {
         ":TestMockLegacyHciCommands",
         ":TestMockLegacyHciInterface",
         ":TestMockMainShim",
-        ":TestMockMainShimEntry",
         ":TestMockRustFfi",
         ":TestMockStackBtm",
         ":TestMockStackBtu",
@@ -2135,7 +2105,6 @@ cc_test {
         "libcutils",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-types",
         "libbluetooth_gd",
         "libbluetooth_log",

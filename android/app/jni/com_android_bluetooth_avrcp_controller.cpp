@@ -55,28 +55,28 @@ static std::shared_timed_mutex sCallbacks_mutex;
 
 static void btavrcp_passthrough_response_callback(
     const RawAddress& /* bd_addr */, int id, int pressed) {
-  log::verbose("id: {}, pressed: {} --- Not implemented", id, pressed);
+  ALOGV("%s: id: %d, pressed: %d --- Not implemented", __func__, id, pressed);
 }
 
 static void btavrcp_groupnavigation_response_callback(int id, int pressed) {
-  log::verbose("id: {}, pressed: {} --- Not implemented", id, pressed);
+  ALOGV("%s: id: %d, pressed: %d --- Not implemented", __func__, id, pressed);
 }
 
 static void btavrcp_connection_state_callback(bool rc_connect, bool br_connect,
                                               const RawAddress& bd_addr) {
-  log::info("conn state: rc: {} br: {}", rc_connect, br_connect);
+  ALOGI("%s: conn state: rc: %d br: %d", __func__, rc_connect, br_connect);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -89,30 +89,30 @@ static void btavrcp_connection_state_callback(bool rc_connect, bool br_connect,
 
 static void btavrcp_get_rcfeatures_callback(const RawAddress& /* bd_addr */,
                                             int /* features */) {
-  log::verbose("--- Not implemented");
+  ALOGV("%s --- Not implemented", __func__);
 }
 static void btavrcp_setplayerapplicationsetting_rsp_callback(
     const RawAddress& /* bd_addr */, uint8_t /* accepted */) {
-  log::verbose("--- Not implemented");
+  ALOGV("%s --- Not implemented", __func__);
 }
 
 static void btavrcp_playerapplicationsetting_callback(
     const RawAddress& bd_addr, uint8_t num_attr,
     btrc_player_app_attr_t* app_attrs, uint8_t /* num_ext_attr */,
     btrc_player_app_ext_attr_t* /* ext_attrs */) {
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -125,12 +125,12 @@ static void btavrcp_playerapplicationsetting_callback(
     /*2 bytes for id and num */
     arraylen += 2 + app_attrs[i].num_val;
   }
-  log::verbose(" arraylen {}", arraylen);
+  ALOGV(" arraylen %d", arraylen);
 
   ScopedLocalRef<jbyteArray> playerattribs(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(arraylen));
   if (!playerattribs.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -152,19 +152,19 @@ static void btavrcp_playerapplicationsetting_callback(
 
 static void btavrcp_playerapplicationsetting_changed_callback(
     const RawAddress& bd_addr, const btrc_player_settings_t& vals) {
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -174,7 +174,7 @@ static void btavrcp_playerapplicationsetting_changed_callback(
   ScopedLocalRef<jbyteArray> playerattribs(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(arraylen));
   if (!playerattribs.get()) {
-    log::error("Fail to new jbyteArray playerattribs ");
+    ALOGE("Fail to new jbyteArray playerattribs ");
     return;
   }
   /*
@@ -195,19 +195,19 @@ static void btavrcp_playerapplicationsetting_changed_callback(
 
 static void btavrcp_set_abs_vol_cmd_callback(const RawAddress& bd_addr,
                                              uint8_t abs_vol, uint8_t label) {
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -219,19 +219,19 @@ static void btavrcp_set_abs_vol_cmd_callback(const RawAddress& bd_addr,
 
 static void btavrcp_register_notification_absvol_callback(
     const RawAddress& bd_addr, uint8_t label) {
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -249,26 +249,26 @@ static void btavrcp_track_changed_callback(const RawAddress& bd_addr,
    * byteArray will be formatted like this: id,len,string
    * Assuming text feild to be null terminated.
    */
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
   ScopedLocalRef<jintArray> attribIds(sCallbackEnv.get(),
                                       sCallbackEnv->NewIntArray(num_attr));
   if (!attribIds.get()) {
-    log::error(" failed to set new array for attribIds");
+    ALOGE(" failed to set new array for attribIds");
     return;
   }
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -279,7 +279,7 @@ static void btavrcp_track_changed_callback(const RawAddress& bd_addr,
       sCallbackEnv.get(),
       sCallbackEnv->NewObjectArray((jint)num_attr, strclazz, 0));
   if (!stringArray.get()) {
-    log::error(" failed to get String array");
+    ALOGE(" failed to get String array");
     return;
   }
 
@@ -288,7 +288,7 @@ static void btavrcp_track_changed_callback(const RawAddress& bd_addr,
         sCallbackEnv.get(),
         sCallbackEnv->NewStringUTF((char*)(p_attrs[i].text)));
     if (!str.get()) {
-      log::error("Unable to get str");
+      ALOGE("Unable to get str");
       return;
     }
     sCallbackEnv->SetIntArrayRegion(attribIds.get(), i, 1,
@@ -304,19 +304,19 @@ static void btavrcp_track_changed_callback(const RawAddress& bd_addr,
 static void btavrcp_play_position_changed_callback(const RawAddress& bd_addr,
                                                    uint32_t song_len,
                                                    uint32_t song_pos) {
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -327,19 +327,19 @@ static void btavrcp_play_position_changed_callback(const RawAddress& bd_addr,
 
 static void btavrcp_play_status_changed_callback(
     const RawAddress& bd_addr, btrc_play_status_t play_status) {
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
   sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -355,19 +355,19 @@ static void btavrcp_get_folder_items_callback(
    * BTRC_ITEM_MEDIA, BTRC_ITEM_FOLDER. Here we translate them to their java
    * counterparts by calling the java constructor for each of the items.
    */
-  log::verbose("count {}", count);
+  ALOGV("%s count %d", __func__, count);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -389,12 +389,12 @@ static void btavrcp_get_folder_items_callback(
         (jint)count, class_AvrcpItem, 0));
   }
   if (!itemArray.get()) {
-    log::error("itemArray allocation failed.");
+    ALOGE("%s itemArray allocation failed.", __func__);
     return;
   }
   for (int i = 0; i < count; i++) {
     const btrc_folder_items_t* item = &(folder_items[i]);
-    log::verbose("item type {}", item->item_type);
+    ALOGV("%s item type %d", __func__, item->item_type);
     switch (item->item_type) {
       case BTRC_ITEM_MEDIA: {
         // Parse name
@@ -402,7 +402,7 @@ static void btavrcp_get_folder_items_callback(
             sCallbackEnv.get(),
             sCallbackEnv->NewStringUTF((const char*)item->media.name));
         if (!mediaName.get()) {
-          log::error("can't allocate media name string!");
+          ALOGE("%s can't allocate media name string!", __func__);
           return;
         }
         // Parse UID
@@ -412,7 +412,7 @@ static void btavrcp_get_folder_items_callback(
             sCallbackEnv.get(),
             sCallbackEnv->NewIntArray(item->media.num_attrs));
         if (!attrIdArray.get()) {
-          log::error("can't allocate attr id array!");
+          ALOGE("%s can't allocate attr id array!", __func__);
           return;
         }
         ScopedLocalRef<jobjectArray> attrValArray(
@@ -421,7 +421,7 @@ static void btavrcp_get_folder_items_callback(
                 item->media.num_attrs,
                 sCallbackEnv->FindClass("java/lang/String"), 0));
         if (!attrValArray.get()) {
-          log::error("can't allocate attr val array!");
+          ALOGE("%s can't allocate attr val array!", __func__);
           return;
         }
 
@@ -444,7 +444,7 @@ static void btavrcp_get_folder_items_callback(
                 (jint)item->media.type, mediaName.get(), attrIdArray.get(),
                 attrValArray.get()));
         if (!mediaObj.get()) {
-          log::error("failed to create AvrcpItem for type ITEM_MEDIA");
+          ALOGE("%s failed to create AvrcpItem for type ITEM_MEDIA", __func__);
           return;
         }
         sCallbackEnv->SetObjectArrayElement(itemArray.get(), i, mediaObj.get());
@@ -457,7 +457,7 @@ static void btavrcp_get_folder_items_callback(
             sCallbackEnv.get(),
             sCallbackEnv->NewStringUTF((const char*)item->folder.name));
         if (!folderName.get()) {
-          log::error("can't allocate folder name string!");
+          ALOGE("%s can't allocate folder name string!", __func__);
           return;
         }
         // Parse UID
@@ -470,7 +470,7 @@ static void btavrcp_get_folder_items_callback(
                 (jint)item->folder.type, folderName.get(),
                 (jint)item->folder.playable));
         if (!folderObj.get()) {
-          log::error("failed to create AvrcpItem for type ITEM_FOLDER");
+          ALOGE("%s failed to create AvrcpItem for type ITEM_FOLDER", __func__);
           return;
         }
         sCallbackEnv->SetObjectArrayElement(itemArray.get(), i,
@@ -489,7 +489,7 @@ static void btavrcp_get_folder_items_callback(
             sCallbackEnv->NewByteArray(BTRC_FEATURE_BIT_MASK_SIZE *
                                        sizeof(uint8_t)));
         if (!featureBitArray.get()) {
-          log::error("failed to allocate featureBitArray");
+          ALOGE("%s failed to allocate featureBitArray", __func__);
           return;
         }
         sCallbackEnv->SetByteArrayRegion(
@@ -500,7 +500,7 @@ static void btavrcp_get_folder_items_callback(
             sCallbackEnv.get(),
             sCallbackEnv->NewStringUTF((const char*)item->player.name));
         if (!playerName.get()) {
-          log::error("can't allocate player name string!");
+          ALOGE("%s can't allocate player name string!", __func__);
           return;
         }
         ScopedLocalRef<jobject> playerObj(
@@ -511,7 +511,7 @@ static void btavrcp_get_folder_items_callback(
                 playerName.get(), featureBitArray.get(), playStatus,
                 playerType));
         if (!playerObj.get()) {
-          log::error("failed to create AvrcpPlayer from ITEM_PLAYER");
+          ALOGE("%s failed to create AvrcpPlayer from ITEM_PLAYER", __func__);
           return;
         }
         sCallbackEnv->SetObjectArrayElement(itemArray.get(), i,
@@ -520,7 +520,7 @@ static void btavrcp_get_folder_items_callback(
       }
 
       default:
-        log::error("cannot understand type {}", item->item_type);
+        ALOGE("%s cannot understand type %d", __func__, item->item_type);
     }
   }
 
@@ -535,18 +535,18 @@ static void btavrcp_get_folder_items_callback(
 
 static void btavrcp_change_path_callback(const RawAddress& bd_addr,
                                          uint32_t count) {
-  log::info("count {}", count);
+  ALOGI("%s count %d", __func__, count);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -560,18 +560,18 @@ static void btavrcp_change_path_callback(const RawAddress& bd_addr,
 static void btavrcp_set_browsed_player_callback(const RawAddress& bd_addr,
                                                 uint8_t num_items,
                                                 uint8_t depth) {
-  log::info("items {} depth {}", num_items, depth);
+  ALOGI("%s items %d depth %d", __func__, num_items, depth);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -584,18 +584,18 @@ static void btavrcp_set_browsed_player_callback(const RawAddress& bd_addr,
 
 static void btavrcp_set_addressed_player_callback(const RawAddress& bd_addr,
                                                   uint8_t status) {
-  log::info("status {}", status);
+  ALOGI("%s status %d", __func__, status);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -609,18 +609,18 @@ static void btavrcp_set_addressed_player_callback(const RawAddress& bd_addr,
 
 static void btavrcp_addressed_player_changed_callback(const RawAddress& bd_addr,
                                                       uint16_t id) {
-  log::info("status {}", id);
+  ALOGI("%s status %d", __func__, id);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -633,14 +633,14 @@ static void btavrcp_addressed_player_changed_callback(const RawAddress& bd_addr,
 
 static void btavrcp_now_playing_content_changed_callback(
     const RawAddress& bd_addr) {
-  log::info("");
+  ALOGI("%s", __func__);
 
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -653,19 +653,19 @@ static void btavrcp_now_playing_content_changed_callback(
 
 static void btavrcp_available_player_changed_callback (
     const RawAddress& bd_addr) {
-  log::info("");
+  ALOGI("%s", __func__);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
-    return;
+      ALOGE("%s: sCallbacksObj is null", __func__);
+      return;
   }
   if (!sCallbackEnv.valid()) return;
 
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -677,11 +677,11 @@ static void btavrcp_available_player_changed_callback (
 
 static void btavrcp_get_rcpsm_callback(const RawAddress& bd_addr,
                                        uint16_t psm) {
-  log::error("-> psm received of {}", psm);
+  ALOGE("%s -> psm received of %d", __func__, psm);
   std::shared_lock<std::shared_timed_mutex> lock(sCallbacks_mutex);
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbacksObj) {
-    log::error("sCallbacksObj is null");
+    ALOGE("%s: sCallbacksObj is null", __func__);
     return;
   }
   if (!sCallbackEnv.valid()) return;
@@ -689,7 +689,7 @@ static void btavrcp_get_rcpsm_callback(const RawAddress& bd_addr,
   ScopedLocalRef<jbyteArray> addr(
       sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
   if (!addr.get()) {
-    log::error("Failed to allocate a new byte array");
+    ALOGE("%s: Failed to allocate a new byte array", __func__);
     return;
   }
 
@@ -741,18 +741,18 @@ static void initNative(JNIEnv* env, jobject object) {
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
-    log::error("Bluetooth module is not loaded");
+    ALOGE("Bluetooth module is not loaded");
     return;
   }
 
   if (sBluetoothAvrcpInterface != NULL) {
-    log::warn("Cleaning up Avrcp Interface before initializing...");
+    ALOGW("Cleaning up Avrcp Interface before initializing...");
     sBluetoothAvrcpInterface->cleanup();
     sBluetoothAvrcpInterface = NULL;
   }
 
   if (sCallbacksObj != NULL) {
-    log::warn("Cleaning up Avrcp callback object");
+    ALOGW("Cleaning up Avrcp callback object");
     env->DeleteGlobalRef(sCallbacksObj);
     sCallbacksObj = NULL;
   }
@@ -761,15 +761,15 @@ static void initNative(JNIEnv* env, jobject object) {
       (btrc_ctrl_interface_t*)btInf->get_profile_interface(
           BT_PROFILE_AV_RC_CTRL_ID);
   if (sBluetoothAvrcpInterface == NULL) {
-    log::error("Failed to get Bluetooth Avrcp Controller Interface");
+    ALOGE("Failed to get Bluetooth Avrcp Controller Interface");
     return;
   }
 
   bt_status_t status =
       sBluetoothAvrcpInterface->init(&sBluetoothAvrcpCallbacks);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed to initialize Bluetooth Avrcp Controller, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed to initialize Bluetooth Avrcp Controller, status: %d",
+          status);
     sBluetoothAvrcpInterface = NULL;
     return;
   }
@@ -782,7 +782,7 @@ static void cleanupNative(JNIEnv* env, jobject /* object */) {
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == NULL) {
-    log::error("Bluetooth module is not loaded");
+    ALOGE("Bluetooth module is not loaded");
     return;
   }
 
@@ -802,9 +802,9 @@ static jboolean sendPassThroughCommandNative(JNIEnv* env, jobject /* object */,
                                              jint key_state) {
   if (!sBluetoothAvrcpInterface) return JNI_FALSE;
 
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
 
-  log::info("key_code: {}, key_state: {}", key_code, key_state);
+  ALOGI("key_code: %d, key_state: %d", key_code, key_state);
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
@@ -817,8 +817,7 @@ static jboolean sendPassThroughCommandNative(JNIEnv* env, jobject /* object */,
   bt_status_t status = sBluetoothAvrcpInterface->send_pass_through_cmd(
       rawAddress, (uint8_t)key_code, (uint8_t)key_state);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending passthru command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending passthru command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 
@@ -832,9 +831,9 @@ static jboolean sendGroupNavigationCommandNative(JNIEnv* env,
                                                  jint key_state) {
   if (!sBluetoothAvrcpInterface) return JNI_FALSE;
 
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
 
-  log::info("key_code: {}, key_state: {}", key_code, key_state);
+  ALOGI("key_code: %d, key_state: %d", key_code, key_state);
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
@@ -847,8 +846,7 @@ static jboolean sendGroupNavigationCommandNative(JNIEnv* env,
   bt_status_t status = sBluetoothAvrcpInterface->send_group_navigation_cmd(
       rawAddress, (uint8_t)key_code, (uint8_t)key_state);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending Grp Navigation command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending Grp Navigation command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 
@@ -858,7 +856,7 @@ static jboolean sendGroupNavigationCommandNative(JNIEnv* env,
 static void setPlayerApplicationSettingValuesNative(
     JNIEnv* env, jobject /* object */, jbyteArray address, jbyte num_attrib,
     jbyteArray attrib_ids, jbyteArray attrib_val) {
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   if (!sBluetoothAvrcpInterface) return;
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
@@ -871,8 +869,7 @@ static void setPlayerApplicationSettingValuesNative(
   uint8_t* pAttrsVal = new uint8_t[num_attrib];
   if ((!pAttrs) || (!pAttrsVal)) {
     delete[] pAttrs;
-    log::error(
-        "setPlayerApplicationSettingValuesNative: not have enough memory");
+    ALOGE("setPlayerApplicationSettingValuesNative: not have enough memeory");
     return;
   }
 
@@ -896,8 +893,7 @@ static void setPlayerApplicationSettingValuesNative(
   bt_status_t status = sBluetoothAvrcpInterface->set_player_app_setting_cmd(
       rawAddress, (uint8_t)num_attrib, pAttrs, pAttrsVal);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending setPlAppSettValNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending setPlAppSettValNative command, status: %d", status);
   }
   delete[] pAttrs;
   delete[] pAttrsVal;
@@ -916,15 +912,14 @@ static void sendAbsVolRspNative(JNIEnv* env, jobject /* object */,
     return;
   }
 
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status = sBluetoothAvrcpInterface->set_volume_rsp(
       rawAddress, (uint8_t)abs_vol, (uint8_t)label);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending sendAbsVolRspNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending sendAbsVolRspNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -939,7 +934,7 @@ static void sendRegisterAbsVolRspNative(JNIEnv* env, jobject /* object */,
     jniThrowIOException(env, EINVAL);
     return;
   }
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
@@ -947,8 +942,8 @@ static void sendRegisterAbsVolRspNative(JNIEnv* env, jobject /* object */,
       rawAddress, (btrc_notification_type_t)rsp_type, (uint8_t)abs_vol,
       (uint8_t)label);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending sendRegisterAbsVolRspNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending sendRegisterAbsVolRspNative command, status: %d",
+          status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -962,16 +957,14 @@ static void getCurrentMetadataNative(JNIEnv* env, jobject /* object */,
     jniThrowIOException(env, EINVAL);
     return;
   }
-  log::verbose("sBluetoothAvrcpInterface: {}",
-               fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGV("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status =
       sBluetoothAvrcpInterface->get_current_metadata_cmd(rawAddress);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending getCurrentMetadataNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending getCurrentMetadataNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -985,16 +978,14 @@ static void getPlaybackStateNative(JNIEnv* env, jobject /* object */,
     jniThrowIOException(env, EINVAL);
     return;
   }
-  log::verbose("sBluetoothAvrcpInterface: {}",
-               fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGV("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status =
       sBluetoothAvrcpInterface->get_playback_state_cmd(rawAddress);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending getPlaybackStateNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending getPlaybackStateNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -1007,16 +998,14 @@ static void getNowPlayingListNative(JNIEnv* env, jobject /* object */,
     jniThrowIOException(env, EINVAL);
     return;
   }
-  log::verbose("sBluetoothAvrcpInterface: {}",
-               fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGV("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status = sBluetoothAvrcpInterface->get_now_playing_list_cmd(
       rawAddress, start, end);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending getNowPlayingListNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending getNowPlayingListNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -1029,16 +1018,14 @@ static void getFolderListNative(JNIEnv* env, jobject /* object */,
     jniThrowIOException(env, EINVAL);
     return;
   }
-  log::verbose("sBluetoothAvrcpInterface: {}",
-               fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGV("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status =
       sBluetoothAvrcpInterface->get_folder_list_cmd(rawAddress, start, end);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending getFolderListNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending getFolderListNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -1051,15 +1038,14 @@ static void getPlayerListNative(JNIEnv* env, jobject /* object */,
     jniThrowIOException(env, EINVAL);
     return;
   }
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status =
       sBluetoothAvrcpInterface->get_player_list_cmd(rawAddress, start, end);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending getPlayerListNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending getPlayerListNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -1080,15 +1066,14 @@ static void changeFolderPathNative(JNIEnv* env, jobject /* object */,
   //  return;
   //}
 
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
   bt_status_t status = sBluetoothAvrcpInterface->change_folder_path_cmd(
       rawAddress, (uint8_t)direction, (uint8_t*)&uid);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending changeFolderPathNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending changeFolderPathNative command, status: %d", status);
   }
   // env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -1104,12 +1089,11 @@ static void setBrowsedPlayerNative(JNIEnv* env, jobject /* object */,
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   bt_status_t status = sBluetoothAvrcpInterface->set_browsed_player_cmd(
       rawAddress, (uint16_t)id);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending setBrowsedPlayerNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending setBrowsedPlayerNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -1125,12 +1109,12 @@ static void setAddressedPlayerNative(JNIEnv* env, jobject /* object */,
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   bt_status_t status = sBluetoothAvrcpInterface->set_addressed_player_cmd(
       rawAddress, (uint16_t)id);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending setAddressedPlayerNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending setAddressedPlayerNative command, status: %d",
+          status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }
@@ -1153,12 +1137,11 @@ static void playItemNative(JNIEnv* env, jobject /* object */,
   RawAddress rawAddress;
   rawAddress.FromOctets((uint8_t*)addr);
 
-  log::info("sBluetoothAvrcpInterface: {}", fmt::ptr(sBluetoothAvrcpInterface));
+  ALOGI("%s: sBluetoothAvrcpInterface: %p", __func__, sBluetoothAvrcpInterface);
   bt_status_t status = sBluetoothAvrcpInterface->play_item_cmd(
       rawAddress, (uint8_t)scope, (uint8_t*)&uid, (uint16_t)uidCounter);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed sending playItemNative command, status: {}",
-               bt_status_text(status));
+    ALOGE("Failed sending playItemNative command, status: %d", status);
   }
   env->ReleaseByteArrayElements(address, addr, 0);
 }

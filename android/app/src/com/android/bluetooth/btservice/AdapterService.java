@@ -7369,7 +7369,7 @@ public class AdapterService extends Service {
         return true;
     }
 
-    void energyInfoCallbackInternal(
+    void energyInfoCallback(
             int status,
             int ctrlState,
             long txTime,
@@ -7377,6 +7377,8 @@ public class AdapterService extends Service {
             long idleTime,
             long energyUsed,
             UidTraffic[] data) {
+        if (ctrlState >= BluetoothActivityEnergyInfo.BT_STACK_STATE_INVALID
+                && ctrlState <= BluetoothActivityEnergyInfo.BT_STACK_STATE_STATE_IDLE) {
             // Energy is product of mA, V and ms. If the chipset doesn't
             // report it, we have to compute it from time
             if (energyUsed == 0) {
@@ -7431,24 +7433,8 @@ public class AdapterService extends Service {
                 }
                 mEnergyInfoLock.notifyAll();
             }
-    }
-
-    void energyInfoCallback(
-            int status,
-            int ctrlState,
-            long txTime,
-            long rxTime,
-            long idleTime,
-            long energyUsed,
-            UidTraffic[] data) {
-        if (Flags.btSystemContextReport()) {
-            energyInfoCallbackInternal(
-                    status, ctrlState, txTime, rxTime, idleTime, energyUsed, data);
-        } else if (ctrlState >= BluetoothActivityEnergyInfo.BT_STACK_STATE_INVALID
-                && ctrlState <= BluetoothActivityEnergyInfo.BT_STACK_STATE_STATE_IDLE) {
-            energyInfoCallbackInternal(
-                    status, ctrlState, txTime, rxTime, idleTime, energyUsed, data);
         }
+
         verboseLog(
                 "energyInfoCallback()"
                         + (" status = " + status)
@@ -7456,7 +7442,7 @@ public class AdapterService extends Service {
                         + (" rxTime = " + rxTime)
                         + (" idleTime = " + idleTime)
                         + (" energyUsed = " + energyUsed)
-                        + (" ctrlState = " + String.format("0x%08x", ctrlState))
+                        + (" ctrlState = " + ctrlState)
                         + (" traffic = " + Arrays.toString(data)));
     }
 

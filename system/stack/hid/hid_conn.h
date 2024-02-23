@@ -26,7 +26,6 @@
 #define HID_CONN_H
 
 #include <base/strings/stringprintf.h>
-#include <bluetooth/log.h>
 
 #include "macros.h"
 #include "osi/include/alarm.h"
@@ -77,10 +76,5 @@ typedef struct hid_conn {
 #define HID_NOSEC_CHN 2
 
 #define HIDD_SEC_CHN 3
-
-namespace fmt {
-template <>
-struct formatter<tHID_CONN_STATE> : enum_formatter<tHID_CONN_STATE> {};
-}  // namespace fmt
 
 #endif

@@ -75,8 +75,8 @@ class CsisClientCallbacksImpl : public CsisClientCallbacks {
 
   void OnConnectionState(const RawAddress& bd_addr,
                          ConnectionState state) override {
-    log::info("state:{}, addr: {}", int(state),
-              bd_addr.ToRedactedStringForLogging());
+    LOG(INFO) << __func__ << ", state:" << int(state)
+              << ", addr: " << bd_addr.ToRedactedStringForLogging();
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -85,7 +85,7 @@ class CsisClientCallbacksImpl : public CsisClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      log::error("Failed to new bd addr jbyteArray for connection state");
+      LOG(ERROR) << "Failed to new bd addr jbyteArray for connection state";
       return;
     }
 
@@ -105,7 +105,7 @@ class CsisClientCallbacksImpl : public CsisClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      log::error("Failed to new bd addr jbyteArray for device available");
+      LOG(ERROR) << "Failed to new bd addr jbyteArray for device available";
       return;
     }
     sCallbackEnv->SetByteArrayRegion(addr.get(), 0, sizeof(RawAddress),
@@ -117,7 +117,7 @@ class CsisClientCallbacksImpl : public CsisClientCallbacks {
   }
 
   void OnSetMemberAvailable(const RawAddress& bd_addr, int group_id) override {
-    log::info("group id:{}", group_id);
+    LOG(INFO) << __func__ << ", group id:" << group_id;
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -126,7 +126,7 @@ class CsisClientCallbacksImpl : public CsisClientCallbacks {
     ScopedLocalRef<jbyteArray> addr(
         sCallbackEnv.get(), sCallbackEnv->NewByteArray(sizeof(RawAddress)));
     if (!addr.get()) {
-      log::error("Failed to new jbyteArray bd addr for connection state");
+      LOG(ERROR) << "Failed to new jbyteArray bd addr for connection state";
       return;
     }
 
@@ -138,8 +138,8 @@ class CsisClientCallbacksImpl : public CsisClientCallbacks {
 
   void OnGroupLockChanged(int group_id, bool locked,
                           CsisGroupLockStatus status) override {
-    log::info("group_id: {}, locked: {}, status: {}", group_id, locked,
-              (int)status);
+    LOG(INFO) << __func__ << ", group_id: " << int(group_id)
+              << ", locked: " << locked << ", status: " << (int)status;
 
     std::shared_lock<std::shared_timed_mutex> lock(callbacks_mutex);
     CallbackEnv sCallbackEnv(__func__);
@@ -159,31 +159,31 @@ static void initNative(JNIEnv* env, jobject object) {
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    log::error("Bluetooth module is not loaded");
+    LOG(ERROR) << "Bluetooth module is not loaded";
     return;
   }
 
   if (sCsisClientInterface != nullptr) {
-    log::info("Cleaning up Csis Interface before initializing...");
+    LOG(INFO) << "Cleaning up Csis Interface before initializing...";
     sCsisClientInterface->Cleanup();
     sCsisClientInterface = nullptr;
   }
 
   if (mCallbacksObj != nullptr) {
-    log::info("Cleaning up Csis callback object");
+    LOG(INFO) << "Cleaning up Csis callback object";
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = nullptr;
   }
 
   if ((mCallbacksObj = env->NewGlobalRef(object)) == nullptr) {
-    log::error("Failed to allocate Global Ref for Csis Client Callbacks");
+    LOG(ERROR) << "Failed to allocate Global Ref for Csis Client Callbacks";
     return;
   }
 
   sCsisClientInterface = (CsisClientInterface*)btInf->get_profile_interface(
       BT_PROFILE_CSIS_CLIENT_ID);
   if (sCsisClientInterface == nullptr) {
-    log::error("Failed to get Csis Client Interface");
+    LOG(ERROR) << "Failed to get Csis Client Interface";
     return;
   }
 
@@ -196,7 +196,7 @@ static void cleanupNative(JNIEnv* env, jobject /* object */) {
 
   const bt_interface_t* btInf = getBluetoothInterface();
   if (btInf == nullptr) {
-    log::error("Bluetooth module is not loaded");
+    LOG(ERROR) << "Bluetooth module is not loaded";
     return;
   }
 
@@ -215,7 +215,8 @@ static jboolean connectNative(JNIEnv* env, jobject /* object */,
                               jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sCsisClientInterface) {
-    log::error("Failed to get the Csis Client Interface Interface");
+    LOG(ERROR) << __func__
+               << ": Failed to get the Csis Client Interface Interface";
     return JNI_FALSE;
   }
 
@@ -235,7 +236,7 @@ static jboolean disconnectNative(JNIEnv* env, jobject /* object */,
                                  jbyteArray address) {
   std::shared_lock<std::shared_timed_mutex> lock(interface_mutex);
   if (!sCsisClientInterface) {
-    log::error("Failed to get the Csis Client Interface");
+    LOG(ERROR) << __func__ << ": Failed to get the Csis Client Interface";
     return JNI_FALSE;
   }
 
@@ -253,10 +254,11 @@ static jboolean disconnectNative(JNIEnv* env, jobject /* object */,
 
 static void groupLockSetNative(JNIEnv* /* env */, jobject /* object */,
                                jint group_id, jboolean lock) {
-  log::info("");
+  LOG(INFO) << __func__;
 
   if (!sCsisClientInterface) {
-    log::error("Failed to get the Bluetooth Csis Client Interface");
+    LOG(ERROR) << __func__
+               << ": Failed to get the Bluetooth Csis Client Interface";
     return;
   }
 

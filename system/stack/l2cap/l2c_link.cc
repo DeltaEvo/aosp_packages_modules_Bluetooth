@@ -25,8 +25,6 @@
  ******************************************************************************/
 #define LOG_TAG "l2c_link"
 
-#include <bluetooth/log.h>
-
 #include <cstdint>
 
 #include "device/include/device_iot_config.h"
@@ -45,8 +43,6 @@
 #include "stack/l2cap/l2c_int.h"
 #include "types/bt_transport.h"
 #include "types/raw_address.h"
-
-using namespace bluetooth;
 
 extern tBTM_CB btm_cb;
 
@@ -82,26 +78,26 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle,
   if (p_lcb == nullptr) {
     p_lcb = l2cu_allocate_lcb(ci.bd_addr, false, BT_TRANSPORT_BR_EDR);
     if (p_lcb == nullptr) {
-      log::warn("Failed to allocate an LCB");
+      LOG_WARN("Failed to allocate an LCB");
       return;
     }
-    log::debug("Allocated l2cap control block for new connection state:{}",
-               link_state_text(p_lcb->link_state));
+    LOG_DEBUG("Allocated l2cap control block for new connection state:%s",
+              link_state_text(p_lcb->link_state).c_str());
     p_lcb->link_state = LST_CONNECTING;
   }
 
   if ((p_lcb->link_state == LST_CONNECTED) &&
       (status == HCI_ERR_CONNECTION_EXISTS)) {
-    log::warn("Connection already exists handle:0x{:04x}", handle);
+    LOG_WARN("Connection already exists handle:0x%04x", handle);
     return;
   } else if (p_lcb->link_state != LST_CONNECTING) {
-    log::error(
-        "Link received unexpected connection complete state:{} status:{} "
-        "handle:0x{:04x}",
-        link_state_text(p_lcb->link_state), hci_error_code_text(status),
-        p_lcb->Handle());
+    LOG_ERROR(
+        "Link received unexpected connection complete state:%s status:%s "
+        "handle:0x%04x",
+        link_state_text(p_lcb->link_state).c_str(),
+        hci_error_code_text(status).c_str(), p_lcb->Handle());
     if (status != HCI_SUCCESS) {
-      log::error("Disconnecting...");
+      LOG_ERROR("Disconnecting...");
       l2c_link_hci_disc_comp(p_lcb->Handle(), status);
     }
     return;
@@ -118,7 +114,7 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle,
     l2cu_send_peer_info_req(p_lcb, L2CAP_EXTENDED_FEATURES_INFO_TYPE);
 
     if (p_lcb->IsBonding()) {
-      log::debug("Link is dedicated bonding handle:0x{:04x}", p_lcb->Handle());
+      LOG_DEBUG("Link is dedicated bonding handle:0x%04x", p_lcb->Handle());
       if (l2cu_start_post_bond_timer(handle)) return;
     }
 
@@ -140,8 +136,8 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle,
   /* If there's an lcb disconnecting set this one to holding */
   else if ((ci.status == HCI_ERR_MAX_NUM_OF_CONNECTIONS) &&
            l2cu_lcb_disconnecting()) {
-    log::warn("Delaying connection as reached max number of links:{}",
-              HCI_ERR_MAX_NUM_OF_CONNECTIONS);
+    LOG_WARN("Delaying connection as reached max number of links:%u",
+             HCI_ERR_MAX_NUM_OF_CONNECTIONS);
     p_lcb->link_state = LST_CONNECT_HOLDING;
     p_lcb->InvalidateHandle();
   } else {
@@ -158,8 +154,8 @@ void l2c_link_hci_conn_comp(tHCI_STATUS status, uint16_t handle,
       p_ccb = pn;
     }
 
-    log::info("Disconnecting link handle:0x{:04x} status:{}", p_lcb->Handle(),
-              hci_error_code_text(status));
+    LOG_INFO("Disconnecting link handle:0x%04x status:%s", p_lcb->Handle(),
+             hci_error_code_text(status).c_str());
     p_lcb->SetDisconnectReason(status);
     /* Release the LCB */
     if (p_lcb->ccb_queue.p_first_ccb == NULL)
@@ -195,8 +191,9 @@ void l2c_link_sec_comp(const RawAddress* p_bda,
   tL2C_CCB* p_ccb;
   tL2C_CCB* p_next_ccb;
 
-  log::debug("btm_status={}, BD_ADDR={}, transport={}", btm_status_text(status),
-             ADDRESS_TO_LOGGABLE_CSTR(*p_bda), bt_transport_text(transport));
+  LOG_DEBUG("btm_status=%s, BD_ADDR=%s, transport=%s",
+            btm_status_text(status).c_str(), ADDRESS_TO_LOGGABLE_CSTR(*p_bda),
+            bt_transport_text(transport).c_str());
 
   if (status == BTM_SUCCESS_NO_SECURITY) {
     status = BTM_SUCCESS;
@@ -210,7 +207,7 @@ void l2c_link_sec_comp(const RawAddress* p_bda,
 
   /* If we don't have one, this is an error */
   if (!p_lcb) {
-    log::warn("L2CAP got sec_comp for unknown BD_ADDR");
+    LOG_WARN("L2CAP got sec_comp for unknown BD_ADDR");
     return;
   }
 
@@ -327,7 +324,7 @@ bool l2c_link_hci_disc_comp(uint16_t handle, tHCI_REASON reason) {
        disconnecting
      */
     if (p_lcb->ccb_queue.p_first_ccb != NULL || p_lcb->p_pending_ccb) {
-      log::debug("l2c_link_hci_disc_comp: Restarting pending ACL request");
+      LOG_DEBUG("l2c_link_hci_disc_comp: Restarting pending ACL request");
       /* Release any held buffers */
       while (!list_is_empty(p_lcb->link_xmit_data_q)) {
         BT_HDR* p_buf =
@@ -398,8 +395,9 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
   tL2C_CCB* p_ccb;
   tBTM_STATUS rc;
 
-  log::debug("L2CAP - l2c_link_timeout() link state:{} is_bonding:{}",
-             link_state_text(p_lcb->link_state), logbool(p_lcb->IsBonding()));
+  LOG_DEBUG("L2CAP - l2c_link_timeout() link state:%s is_bonding:%s",
+            link_state_text(p_lcb->link_state).c_str(),
+            logbool(p_lcb->IsBonding()).c_str());
 
   /* If link was connecting or disconnecting, clear all channels and drop the
    * LCB */
@@ -430,7 +428,7 @@ void l2c_link_timeout(tL2C_LCB* p_lcb) {
       uint64_t timeout_ms;
       bool start_timeout = true;
 
-      log::warn("TODO: Remove this callback into bcm_sec_disconnect");
+      LOG_WARN("TODO: Remove this callback into bcm_sec_disconnect");
       rc = btm_sec_disconnect(
           p_lcb->Handle(), HCI_ERR_PEER_USER,
           "stack::l2cap::l2c_link::l2c_link_timeout All channels closed");
@@ -598,9 +596,9 @@ void l2c_link_adjust_allocation(void) {
     qq = qq_remainder = 1;
   }
 
-  log::debug(
-      "l2c_link_adjust_allocation  num_hipri: {}  num_lowpri: {}  low_quota: "
-      "{}  round_robin_quota: {}  qq: {}",
+  LOG_DEBUG(
+      "l2c_link_adjust_allocation  num_hipri: %u  num_lowpri: %u  low_quota: "
+      "%u  round_robin_quota: %u  qq: %u",
       num_hipri_links, num_lowpri_links, low_quota, l2cb.round_robin_quota, qq);
 
   /* Now, assign the quotas to each link */
@@ -625,12 +623,12 @@ void l2c_link_adjust_allocation(void) {
         }
       }
 
-      log::debug(
-          "l2c_link_adjust_allocation LCB {}   Priority: {}  XmitQuota: {}", yy,
+      LOG_DEBUG(
+          "l2c_link_adjust_allocation LCB %d   Priority: %d  XmitQuota: %d", yy,
           p_lcb->acl_priority, p_lcb->link_xmit_quota);
 
-      log::debug("SentNotAcked: {}  RRUnacked: {}", p_lcb->sent_not_acked,
-                 l2cb.round_robin_unacked);
+      LOG_DEBUG("        SentNotAcked: %d  RRUnacked: %d",
+                p_lcb->sent_not_acked, l2cb.round_robin_unacked);
 
       /* There is a special case where we have readjusted the link quotas and */
       /* this link may have sent anything but some other link sent packets so */
@@ -669,9 +667,9 @@ void l2c_link_adjust_chnl_allocation(void) {
 
     tL2CAP_CHNL_DATA_RATE data_rate = p_ccb->tx_data_rate + p_ccb->rx_data_rate;
     p_ccb->buff_quota = L2CAP_CBB_DEFAULT_DATA_RATE_BUFF_QUOTA * data_rate;
-    log::debug(
-        "CID:0x{:04x} FCR Mode:{} Priority:{} TxDataRate:{} RxDataRate:{} "
-        "Quota:{}",
+    LOG_DEBUG(
+        "CID:0x%04x FCR Mode:%u Priority:%u TxDataRate:%u RxDataRate:%u "
+        "Quota:%u",
         p_ccb->local_cid, p_ccb->peer_cfg.fcr.mode, p_ccb->ccb_priority,
         p_ccb->tx_data_rate, p_ccb->rx_data_rate, p_ccb->buff_quota);
 
@@ -782,7 +780,7 @@ static bool l2c_link_check_power_mode(tL2C_LCB* p_lcb) {
     tBTM_PM_MODE mode;
     if (BTM_ReadPowerMode(p_lcb->remote_bd_addr, &mode)) {
       if (mode == BTM_PM_STS_PENDING) {
-        log::debug("LCB(0x{:x}) is in PM pending state", p_lcb->Handle());
+        LOG_DEBUG("LCB(0x%x) is in PM pending state", p_lcb->Handle());
         return true;
       }
     }
@@ -828,7 +826,7 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
    ** This LCB will be served when receiving number of completed packet event.
    */
   if (l2cb.is_cong_cback_context) {
-    log::info("skipping, is_cong_cback_context=true");
+    LOG_INFO("skipping, is_cong_cback_context=true");
     return;
   }
 
@@ -836,7 +834,7 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
   ** have at least 1, then do a round-robin for all the LCBs
   */
   if ((p_lcb == NULL) || (p_lcb->link_xmit_quota == 0)) {
-    log::debug("Round robin");
+    LOG_DEBUG("Round robin");
     if (p_lcb == NULL) {
       p_lcb = l2cb.lcb_pool;
     } else if (!single_write) {
@@ -855,34 +853,34 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
           (p_lcb->transport == BT_TRANSPORT_LE &&
            (l2cb.ble_round_robin_unacked >= l2cb.ble_round_robin_quota ||
             l2cb.controller_le_xmit_window == 0))) {
-        log::debug("Skipping lcb {} due to controller window full", xx);
+        LOG_DEBUG("Skipping lcb %d due to controller window full", xx);
         continue;
       }
 
       if ((!p_lcb->in_use) || (p_lcb->link_state != LST_CONNECTED) ||
           (p_lcb->link_xmit_quota != 0) || (l2c_link_check_power_mode(p_lcb))) {
-        log::debug("Skipping lcb {} due to quota", xx);
+        LOG_DEBUG("Skipping lcb %d due to quota", xx);
         continue;
       }
 
       /* See if we can send anything from the Link Queue */
       if (!list_is_empty(p_lcb->link_xmit_data_q)) {
-        log::verbose("Sending to lower layer");
+        LOG_VERBOSE("Sending to lower layer");
         p_buf = (BT_HDR*)list_front(p_lcb->link_xmit_data_q);
         list_remove(p_lcb->link_xmit_data_q, p_buf);
         l2c_link_send_to_lower(p_lcb, p_buf, NULL);
       } else if (single_write) {
         /* If only doing one write, break out */
-        log::debug("single_write is true, skipping");
+        LOG_DEBUG("single_write is true, skipping");
         break;
       }
       /* If nothing on the link queue, check the channel queue */
       else {
         tL2C_TX_COMPLETE_CB_INFO cbi = {};
-        log::debug("Check next buffer");
+        LOG_DEBUG("Check next buffer");
         p_buf = l2cu_get_next_buffer_to_send(p_lcb, &cbi);
         if (p_buf != NULL) {
-          log::debug("Sending next buffer");
+          LOG_DEBUG("Sending next buffer");
           l2c_link_send_to_lower(p_lcb, p_buf, &cbi);
         }
       }
@@ -903,12 +901,12 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
     /* If a partial segment is being sent, can't send anything else */
     if ((p_lcb->link_state != LST_CONNECTED) ||
         (l2c_link_check_power_mode(p_lcb))) {
-      log::info("A partial segment is being sent, cannot send anything else");
+      LOG_INFO("A partial segment is being sent, cannot send anything else");
       return;
     }
-    log::verbose(
-        "Direct send, transport={}, xmit_window={}, le_xmit_window={}, "
-        "sent_not_acked={}, link_xmit_quota={}",
+    LOG_VERBOSE(
+        "Direct send, transport=%d, xmit_window=%d, le_xmit_window=%d, "
+        "sent_not_acked=%d, link_xmit_quota=%d",
         p_lcb->transport, l2cb.controller_xmit_window,
         l2cb.controller_le_xmit_window, p_lcb->sent_not_acked,
         p_lcb->link_xmit_quota);
@@ -920,10 +918,10 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
              (p_lcb->transport == BT_TRANSPORT_LE))) &&
            (p_lcb->sent_not_acked < p_lcb->link_xmit_quota)) {
       if (list_is_empty(p_lcb->link_xmit_data_q)) {
-        log::verbose("No transmit data, skipping");
+        LOG_VERBOSE("No transmit data, skipping");
         break;
       }
-      log::verbose("Sending to lower layer");
+      LOG_VERBOSE("Sending to lower layer");
       p_buf = (BT_HDR*)list_front(p_lcb->link_xmit_data_q);
       list_remove(p_lcb->link_xmit_data_q, p_buf);
       l2c_link_send_to_lower(p_lcb, p_buf, NULL);
@@ -931,7 +929,7 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
 
     if (!single_write) {
       /* See if we can send anything for any channel */
-      log::verbose("Trying to send other data when single_write is false");
+      LOG_VERBOSE("Trying to send other data when single_write is false");
       while (((l2cb.controller_xmit_window != 0 &&
                (p_lcb->transport == BT_TRANSPORT_BR_EDR)) ||
               (l2cb.controller_le_xmit_window != 0 &&
@@ -940,10 +938,10 @@ void l2c_link_check_send_pkts(tL2C_LCB* p_lcb, uint16_t local_cid,
         tL2C_TX_COMPLETE_CB_INFO cbi = {};
         p_buf = l2cu_get_next_buffer_to_send(p_lcb, &cbi);
         if (p_buf == NULL) {
-          log::verbose("No next buffer, skipping");
+          LOG_VERBOSE("No next buffer, skipping");
           break;
         }
-        log::verbose("Sending to lower layer");
+        LOG_VERBOSE("Sending to lower layer");
         l2c_link_send_to_lower(p_lcb, p_buf, &cbi);
       }
     }
@@ -965,7 +963,7 @@ void l2c_OnHciModeChangeSendPendingPackets(RawAddress remote) {
   if (p_lcb != NULL) {
     /* There might be any pending packets due to SNIFF or PENDING state */
     /* Trigger L2C to start transmission of the pending packets. */
-    log::verbose(
+    LOG_VERBOSE(
         "btm mode change to active; check l2c_link for outgoing packets");
     l2c_link_check_send_pkts(p_lcb, 0, NULL);
   }
@@ -989,10 +987,10 @@ static void l2c_link_send_to_lower_br_edr(tL2C_LCB* p_lcb, BT_HDR* p_buf) {
   l2cb.controller_xmit_window--;
 
   acl_send_data_packet_br_edr(p_lcb->remote_bd_addr, p_buf);
-  log::verbose(
-      "TotalWin={},Hndl=0x{:x},Quota={},Unack={},RRQuota={},RRUnack={}",
-      l2cb.controller_xmit_window, p_lcb->Handle(), p_lcb->link_xmit_quota,
-      p_lcb->sent_not_acked, l2cb.round_robin_quota, l2cb.round_robin_unacked);
+  LOG_VERBOSE("TotalWin=%d,Hndl=0x%x,Quota=%d,Unack=%d,RRQuota=%d,RRUnack=%d",
+              l2cb.controller_xmit_window, p_lcb->Handle(),
+              p_lcb->link_xmit_quota, p_lcb->sent_not_acked,
+              l2cb.round_robin_quota, l2cb.round_robin_unacked);
 }
 
 static void l2c_link_send_to_lower_ble(tL2C_LCB* p_lcb, BT_HDR* p_buf) {
@@ -1006,10 +1004,10 @@ static void l2c_link_send_to_lower_ble(tL2C_LCB* p_lcb, BT_HDR* p_buf) {
   l2cb.controller_le_xmit_window--;
 
   acl_send_data_packet_ble(p_lcb->remote_bd_addr, p_buf);
-  log::debug("TotalWin={},Hndl=0x{:x},Quota={},Unack={},RRQuota={},RRUnack={}",
-             l2cb.controller_le_xmit_window, p_lcb->Handle(),
-             p_lcb->link_xmit_quota, p_lcb->sent_not_acked,
-             l2cb.ble_round_robin_quota, l2cb.ble_round_robin_unacked);
+  LOG_DEBUG("TotalWin=%d,Hndl=0x%x,Quota=%d,Unack=%d,RRQuota=%d,RRUnack=%d",
+            l2cb.controller_le_xmit_window, p_lcb->Handle(),
+            p_lcb->link_xmit_quota, p_lcb->sent_not_acked,
+            l2cb.ble_round_robin_quota, l2cb.ble_round_robin_unacked);
 }
 
 static void l2c_link_send_to_lower(tL2C_LCB* p_lcb, BT_HDR* p_buf,
@@ -1041,7 +1039,7 @@ void l2c_packets_completed(uint16_t handle, uint16_t num_sent) {
         l2cb.update_outstanding_le_packets(num_sent);
       break;
     default:
-      log::error("Unknown transport received:{}", p_lcb->transport);
+      LOG_ERROR("Unknown transport received:%u", p_lcb->transport);
       return;
   }
 
@@ -1087,15 +1085,15 @@ void l2c_link_segments_xmitted(BT_HDR* p_msg) {
   /* Find the LCB based on the handle */
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_handle(handle);
   if (p_lcb == nullptr) {
-    log::warn("Received segment complete for unknown connection handle:{}",
-              handle);
+    LOG_WARN("Received segment complete for unknown connection handle:%d",
+             handle);
     osi_free(p_msg);
     return;
   }
 
   if (p_lcb->link_state != LST_CONNECTED) {
-    log::info("Received segment complete for unconnected connection handle:{}:",
-              handle);
+    LOG_INFO("Received segment complete for unconnected connection handle:%d:",
+             handle);
     osi_free(p_msg);
     return;
   }
@@ -1111,14 +1109,14 @@ tBTM_STATUS l2cu_ConnectAclForSecurity(const RawAddress& bd_addr) {
   tL2C_LCB* p_lcb = l2cu_find_lcb_by_bd_addr(bd_addr, BT_TRANSPORT_BR_EDR);
   if (p_lcb && (p_lcb->link_state == LST_CONNECTED ||
                 p_lcb->link_state == LST_CONNECTING)) {
-    log::warn("Connection already exists");
+    LOG_WARN("Connection already exists");
     return BTM_CMD_STARTED;
   }
 
   /* Make sure an L2cap link control block is available */
   if (!p_lcb &&
       (p_lcb = l2cu_allocate_lcb(bd_addr, true, BT_TRANSPORT_BR_EDR)) == NULL) {
-    log::warn("failed allocate LCB for {}", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
+    LOG_WARN("failed allocate LCB for %s", ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
     return BTM_NO_RESOURCES;
   }
 
@@ -1157,13 +1155,13 @@ tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* p_lcb) {
       p_ccb = p_lcb->rr_serv[p_lcb->rr_pri].p_serve_ccb;
 
       if (!p_ccb) {
-        log::error("p_serve_ccb is NULL, rr_pri={}", p_lcb->rr_pri);
+        LOG_ERROR("p_serve_ccb is NULL, rr_pri=%d", p_lcb->rr_pri);
         return NULL;
       }
 
-      log::verbose("RR scan pri={}, lcid=0x{:04x}, q_cout={}",
-                   p_ccb->ccb_priority, p_ccb->local_cid,
-                   fixed_queue_length(p_ccb->xmit_hold_q));
+      LOG_VERBOSE("RR scan pri=%d, lcid=0x%04x, q_cout=%zu",
+                  p_ccb->ccb_priority, p_ccb->local_cid,
+                  fixed_queue_length(p_ccb->xmit_hold_q));
 
       /* store the next serving channel */
       /* this channel is the last channel of its priority group */
@@ -1180,7 +1178,7 @@ tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* p_lcb) {
       if (p_ccb->chnl_state != CST_OPEN) continue;
 
       if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE) {
-        log::debug("Connection oriented channel");
+        LOG_DEBUG("Connection oriented channel");
         if (fixed_queue_is_empty(p_ccb->xmit_hold_q)) continue;
 
       } else {
@@ -1219,10 +1217,10 @@ tL2C_CCB* l2cu_get_next_channel_in_rr(tL2C_LCB* p_lcb) {
   }
 
   if (p_serve_ccb) {
-    log::verbose("RR service pri={}, quota={}, lcid=0x{:04x}",
-                 p_serve_ccb->ccb_priority,
-                 p_lcb->rr_serv[p_serve_ccb->ccb_priority].quota,
-                 p_serve_ccb->local_cid);
+    LOG_VERBOSE("RR service pri=%d, quota=%d, lcid=0x%04x",
+                p_serve_ccb->ccb_priority,
+                p_lcb->rr_serv[p_serve_ccb->ccb_priority].quota,
+                p_serve_ccb->local_cid);
   }
 
   return p_serve_ccb;
@@ -1276,7 +1274,7 @@ BT_HDR* l2cu_get_next_buffer_to_send(tL2C_LCB* p_lcb,
       if (!fixed_queue_is_empty(p_ccb->xmit_hold_q)) {
         p_buf = (BT_HDR*)fixed_queue_try_dequeue(p_ccb->xmit_hold_q);
         if (NULL == p_buf) {
-          log::error("No data to be sent");
+          LOG_ERROR("No data to be sent");
           return (NULL);
         }
 
@@ -1301,7 +1299,7 @@ BT_HDR* l2cu_get_next_buffer_to_send(tL2C_LCB* p_lcb,
   if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE) {
     /* Check credits */
     if (p_ccb->peer_conn_cfg.credits == 0) {
-      log::debug("No credits to send packets");
+      LOG_DEBUG("No credits to send packets");
       return NULL;
     }
 
@@ -1321,7 +1319,7 @@ BT_HDR* l2cu_get_next_buffer_to_send(tL2C_LCB* p_lcb,
     } else {
       p_buf = (BT_HDR*)fixed_queue_try_dequeue(p_ccb->xmit_hold_q);
       if (NULL == p_buf) {
-        log::error("#2: No data to be sent");
+        LOG_ERROR("#2: No data to be sent");
         return (NULL);
       }
     }

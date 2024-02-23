@@ -23,7 +23,6 @@
  ******************************************************************************/
 
 #include <base/logging.h>
-#include <bluetooth/log.h>
 #include <log/log.h>
 #include <stdio.h>
 #include <string.h>
@@ -35,8 +34,8 @@
 #include "stack/include/bt_types.h"
 #include "types/bluetooth/uuid.h"
 
+using base::StringPrintf;
 using bluetooth::Uuid;
-using namespace bluetooth;
 
 /*******************************************************************************
  *             L O C A L    F U N C T I O N     P R O T O T Y P E S            *
@@ -54,7 +53,8 @@ void gatts_init_service_db(tGATT_SVC_DB& db, const Uuid& service_uuid,
                            bool is_pri, uint16_t s_hdl, uint16_t num_handle) {
   db.attr_list.reserve(num_handle);
 
-  log::verbose("s_hdl= {} num_handle= {}", s_hdl, num_handle);
+  VLOG(1) << StringPrintf("%s: s_hdl= %d num_handle= %d", __func__, s_hdl,
+                          num_handle);
 
   /* update service database information */
   db.next_handle = s_hdl;
@@ -70,7 +70,7 @@ void gatts_init_service_db(tGATT_SVC_DB& db, const Uuid& service_uuid,
 
 Uuid* gatts_get_service_uuid(tGATT_SVC_DB* p_db) {
   if (!p_db || p_db->attr_list.empty()) {
-    log::error("service DB empty");
+    LOG(ERROR) << "service DB empty";
     return NULL;
   } else {
     return &p_db->attr_list[0].p_value->uuid;
@@ -92,29 +92,29 @@ static tGATT_STATUS gatts_check_attr_readability(const tGATT_ATTR& attr,
   }
 
   if (!(perm & GATT_READ_ALLOWED)) {
-    log::error("GATT_READ_NOT_PERMIT");
+    LOG(ERROR) << __func__ << ": GATT_READ_NOT_PERMIT";
     return GATT_READ_NOT_PERMIT;
   }
 
   if ((perm & GATT_READ_AUTH_REQUIRED) && !sec_flag.is_link_key_known &&
       !sec_flag.is_encrypted) {
-    log::error("GATT_INSUF_AUTHENTICATION");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_AUTHENTICATION";
     return GATT_INSUF_AUTHENTICATION;
   }
 
   if ((perm & GATT_READ_MITM_REQUIRED) && !sec_flag.is_link_key_authed) {
-    log::error("GATT_INSUF_AUTHENTICATION: MITM Required");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_AUTHENTICATION: MITM Required";
     return GATT_INSUF_AUTHENTICATION;
   }
 
   if ((perm & GATT_READ_ENCRYPTED_REQUIRED) && !sec_flag.is_encrypted) {
-    log::error("GATT_INSUF_ENCRYPTION");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_ENCRYPTION";
     return GATT_INSUF_ENCRYPTION;
   }
 
   if ((perm & GATT_READ_ENCRYPTED_REQUIRED) && sec_flag.is_encrypted &&
       (key_size < min_key_size)) {
-    log::error("GATT_INSUF_KEY_SIZE");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_KEY_SIZE";
     return GATT_INSUF_KEY_SIZE;
   }
 
@@ -141,7 +141,7 @@ static tGATT_STATUS gatts_check_attr_readability(const tGATT_ATTR& attr,
       case GATT_UUID_CHAR_CLIENT_CONFIG:
       case GATT_UUID_CHAR_SRVR_CONFIG:
       case GATT_UUID_CHAR_PRESENT_FORMAT:
-        log::error("GATT_NOT_LONG");
+        LOG(ERROR) << __func__ << ": GATT_NOT_LONG";
         return GATT_NOT_LONG;
 
       default:
@@ -176,8 +176,9 @@ static tGATT_STATUS read_attr_value(tGATT_ATTR& attr16, uint16_t offset,
                                     tGATT_SEC_FLAG sec_flag, uint8_t key_size) {
   uint8_t* p = *p_data;
 
-  log::verbose("uuid={} perm=0x{:02x} offset={} read_long={}", attr16.uuid,
-               attr16.permission, offset, read_long);
+  VLOG(1) << __func__ << " uuid=" << attr16.uuid
+          << StringPrintf(" perm=0x%02x offset=%d read_long=%d",
+                          attr16.permission, offset, read_long);
 
   tGATT_STATUS status = gatts_check_attr_readability(attr16, offset, read_long,
                                                      sec_flag, key_size);
@@ -311,7 +312,7 @@ tGATT_STATUS gatts_db_read_attr_value_by_type(
             p_rsp->len += (len + 2);
             *p_len -= (len + 2);
           } else {
-            log::error("format mismatch");
+            LOG(ERROR) << "format mismatch";
             status = GATT_NO_RESOURCES;
             break;
           }
@@ -339,11 +340,12 @@ uint16_t gatts_add_included_service(tGATT_SVC_DB& db, uint16_t s_handle,
                                     uint16_t e_handle, const Uuid& service) {
   Uuid uuid = Uuid::From16Bit(GATT_UUID_INCLUDE_SERVICE);
 
-  log::verbose("s_hdl=0x{:04x} e_hdl=0x{:04x} service uuid = {}", s_handle,
-               e_handle, service);
+  VLOG(1) << __func__
+          << StringPrintf(": s_hdl=0x%04x e_hdl=0x%04x ", s_handle, e_handle)
+          << "service uuid = " << service;
 
   if (service.IsEmpty() || s_handle == 0 || e_handle == 0) {
-    log::error("Illegal Params.");
+    LOG(ERROR) << __func__ << ": Illegal Params.";
     return 0;
   }
 
@@ -378,7 +380,8 @@ uint16_t gatts_add_characteristic(tGATT_SVC_DB& db, tGATT_PERM perm,
                                   const Uuid& char_uuid) {
   Uuid uuid = Uuid::From16Bit(GATT_UUID_CHAR_DECLARE);
 
-  log::verbose("perm=0x{:0x} property=0x{:0x}", perm, property);
+  VLOG(1) << StringPrintf("%s: perm=0x%0x property=0x%0x", __func__, perm,
+                          property);
 
   tGATT_ATTR& char_decl = allocate_attr_in_db(db, uuid, GATT_PERM_READ);
   tGATT_ATTR& char_val = allocate_attr_in_db(db, char_uuid, perm);
@@ -407,7 +410,8 @@ uint16_t gatts_add_char_ext_prop_descr(
     tGATT_SVC_DB& db, uint16_t extended_properties) {
   Uuid descr_uuid = Uuid::From16Bit(GATT_UUID_CHAR_EXT_PROP);
 
-  log::verbose("gatts_add_char_ext_prop_descr uuid={}", descr_uuid.ToString());
+  VLOG(1) << StringPrintf("gatts_add_char_ext_prop_descr uuid=%s",
+                          descr_uuid.ToString().c_str());
 
   tGATT_ATTR& char_dscptr = allocate_attr_in_db(db, descr_uuid, GATT_PERM_READ);
   char_dscptr.gatt_type = BTGATT_DB_DESCRIPTOR;
@@ -433,7 +437,8 @@ uint16_t gatts_add_char_ext_prop_descr(
  ******************************************************************************/
 uint16_t gatts_add_char_descr(tGATT_SVC_DB& db, tGATT_PERM perm,
                               const Uuid& descr_uuid) {
-  log::verbose("gatts_add_char_descr uuid={}", descr_uuid.ToString());
+  VLOG(1) << StringPrintf("gatts_add_char_descr uuid=%s",
+                          descr_uuid.ToString().c_str());
 
   /* Add characteristic descriptors */
   tGATT_ATTR& char_dscptr = allocate_attr_in_db(db, descr_uuid, perm);
@@ -546,8 +551,10 @@ tGATT_STATUS gatts_write_attr_perm_check(tGATT_SVC_DB* p_db, uint8_t op_code,
                                          uint8_t* p_data, uint16_t len,
                                          tGATT_SEC_FLAG sec_flag,
                                          uint8_t key_size) {
-  log::verbose("op_code=0x%{:x} handle=0x{:04x} offset={} len={} key_size={}",
-               op_code, handle, offset, len, key_size);
+  VLOG(1) << StringPrintf(
+      "%s: op_code=0x%0x handle=0x%04x offset=%d len=%d "
+      "key_size=%d",
+      __func__, op_code, handle, offset, len, key_size);
 
   tGATT_ATTR* p_attr = find_attr_by_handle(p_db, handle);
   if (!p_attr) return GATT_NOT_FOUND;
@@ -557,8 +564,8 @@ tGATT_STATUS gatts_write_attr_perm_check(tGATT_SVC_DB* p_db, uint8_t op_code,
   if (min_key_size != 0) {
     min_key_size += 6;
   }
-  log::verbose("p_attr->permission =0x{:04x} min_key_size==0x{:04x}",
-               p_attr->permission, min_key_size);
+  VLOG(1) << StringPrintf("%s: p_attr->permission =0x%04x min_key_size==0x%04x",
+                          __func__, p_attr->permission, min_key_size);
 
   if ((op_code == GATT_CMD_WRITE || op_code == GATT_REQ_WRITE) &&
       (perm & GATT_WRITE_SIGNED_PERM)) {
@@ -582,36 +589,38 @@ tGATT_STATUS gatts_write_attr_perm_check(tGATT_SVC_DB* p_db, uint8_t op_code,
   tGATT_STATUS status = GATT_NOT_FOUND;
   if ((op_code == GATT_SIGN_CMD_WRITE) && !(perm & GATT_WRITE_SIGNED_PERM)) {
     status = GATT_WRITE_NOT_PERMIT;
-    log::verbose("sign cmd write not allowed");
+    VLOG(1) << __func__ << ": sign cmd write not allowed";
   }
   if ((op_code == GATT_SIGN_CMD_WRITE) && sec_flag.is_encrypted) {
     status = GATT_INVALID_PDU;
-    log::error("Error!! sign cmd write sent on a encypted link");
+    LOG(ERROR) << __func__
+               << ": Error!! sign cmd write sent on a encypted link";
   } else if (!(perm & GATT_WRITE_ALLOWED)) {
     status = GATT_WRITE_NOT_PERMIT;
-    log::error("GATT_WRITE_NOT_PERMIT");
+    LOG(ERROR) << __func__ << ": GATT_WRITE_NOT_PERMIT";
   }
   /* require authentication, but not been authenticated */
   else if ((perm & GATT_WRITE_AUTH_REQUIRED) && !sec_flag.is_link_key_known) {
     status = GATT_INSUF_AUTHENTICATION;
-    log::error("GATT_INSUF_AUTHENTICATION");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_AUTHENTICATION";
   } else if ((perm & GATT_WRITE_MITM_REQUIRED) &&
              !sec_flag.is_link_key_authed) {
     status = GATT_INSUF_AUTHENTICATION;
-    log::error("GATT_INSUF_AUTHENTICATION: MITM required");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_AUTHENTICATION: MITM required";
   } else if ((perm & GATT_WRITE_ENCRYPTED_PERM) && !sec_flag.is_encrypted) {
     status = GATT_INSUF_ENCRYPTION;
-    log::error("GATT_INSUF_ENCRYPTION");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_ENCRYPTION";
   } else if ((perm & GATT_WRITE_ENCRYPTED_PERM) && sec_flag.is_encrypted &&
              (key_size < min_key_size)) {
     status = GATT_INSUF_KEY_SIZE;
-    log::error("GATT_INSUF_KEY_SIZE");
+    LOG(ERROR) << __func__ << ": GATT_INSUF_KEY_SIZE";
   }
   /* LE security mode 2 attribute  */
   else if (perm & GATT_WRITE_SIGNED_PERM && op_code != GATT_SIGN_CMD_WRITE &&
            !sec_flag.is_encrypted && (perm & GATT_WRITE_ALLOWED) == 0) {
     status = GATT_INSUF_AUTHENTICATION;
-    log::error("GATT_INSUF_AUTHENTICATION: LE security mode 2 required");
+    LOG(ERROR) << __func__
+               << ": GATT_INSUF_AUTHENTICATION: LE security mode 2 required";
   } else /* writable: must be char value declaration or char descritpors */
   {
     uint16_t max_size = 0;
@@ -652,11 +661,11 @@ tGATT_STATUS gatts_write_attr_perm_check(tGATT_SVC_DB* p_db, uint8_t op_code,
       if (op_code == GATT_REQ_PREPARE_WRITE && offset != 0) {
         /* does not allow write blob */
         status = GATT_NOT_LONG;
-        log::error("GATT_NOT_LONG");
+        LOG(ERROR) << __func__ << ": GATT_NOT_LONG";
       } else if (len != max_size) {
         /* data does not match the required format */
         status = GATT_INVALID_ATTR_LEN;
-        log::error("GATT_INVALID_PDU");
+        LOG(ERROR) << __func__ << ": GATT_INVALID_PDU";
       } else {
         return GATT_SUCCESS;
       }
@@ -680,8 +689,9 @@ tGATT_STATUS gatts_write_attr_perm_check(tGATT_SVC_DB* p_db, uint8_t op_code,
 static tGATT_ATTR& allocate_attr_in_db(tGATT_SVC_DB& db, const Uuid& uuid,
                                        tGATT_PERM perm) {
   if (db.next_handle >= db.end_handle) {
-    log::fatal("wrong number of handles! handle_max = {}, next_handle = {}",
-               db.end_handle, db.next_handle);
+    LOG(FATAL) << __func__
+               << " wrong number of handles! handle_max = " << +db.end_handle
+               << ", next_handle = " << +db.next_handle;
   }
 
   db.attr_list.emplace_back();
@@ -726,9 +736,9 @@ static tGATT_STATUS gatts_send_app_read_request(
     } else if (gatt_type == BTGATT_DB_CHARACTERISTIC) {
       opcode = GATTS_REQ_TYPE_READ_CHARACTERISTIC;
     } else {
-      log::error(
-          "Attempt to read attribute that's not tied with characteristic or "
-          "descriptor value.");
+      LOG(ERROR) << __func__
+                 << ": Attempt to read attribute that's not tied with "
+                    "characteristic or descriptor value.";
       return GATT_ERROR;
     }
 

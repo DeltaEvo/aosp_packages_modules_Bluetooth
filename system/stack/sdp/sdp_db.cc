@@ -25,7 +25,6 @@
 
 #define LOG_TAG "sdp"
 
-#include <bluetooth/log.h>
 #include <string.h>
 
 #include <cstdint>
@@ -38,8 +37,6 @@
 #include "stack/include/sdpdefs.h"
 #include "stack/sdp/sdp_discovery_db.h"
 #include "stack/sdp/sdpint.h"
-
-using namespace bluetooth;
 
 /******************************************************************************/
 /*            L O C A L    F U N C T I O N     P R O T O T Y P E S            */
@@ -128,7 +125,7 @@ static bool find_uuid_in_seq(uint8_t* p, uint32_t seq_len,
     type = *p++;
     p = sdpu_get_len_from_type(p, p_end, type, &len);
     if (p == NULL || (p + len) > p_end) {
-      log::warn("bad length");
+      LOG_WARN("%s: bad length", __func__);
       break;
     }
     type = type >> 3;
@@ -278,7 +275,7 @@ uint32_t SDP_CreateRecord(void) {
     p_db->record[p_db->num_records].record_handle = handle;
 
     p_db->num_records++;
-    log::verbose("SDP_CreateRecord ok, num_records:{}", p_db->num_records);
+    LOG_VERBOSE("SDP_CreateRecord ok, num_records:%d", p_db->num_records);
     /* Add the first attribute (the handle) automatically */
     UINT32_TO_BE_FIELD(buf, handle);
     SDP_AddAttribute(handle, ATTR_ID_SERVICE_RECORD_HDL, UINT_DESC_TYPE, 4,
@@ -286,8 +283,8 @@ uint32_t SDP_CreateRecord(void) {
 
     return (p_db->record[p_db->num_records - 1].record_handle);
   } else
-    log::error("SDP_CreateRecord fail, exceed maximum records:{}",
-               SDP_MAX_RECORDS);
+    LOG_ERROR("SDP_CreateRecord fail, exceed maximum records:%d",
+              SDP_MAX_RECORDS);
   return (0);
 }
 
@@ -331,8 +328,8 @@ bool SDP_DeleteRecord(uint32_t handle) {
 
         sdp_cb.server_db.num_records--;
 
-        log::verbose("SDP_DeleteRecord ok, num_records:{}",
-                     sdp_cb.server_db.num_records);
+        LOG_VERBOSE("SDP_DeleteRecord ok, num_records:%d",
+                    sdp_cb.server_db.num_records);
         /* if we're deleting the primary DI record, clear the */
         /* value in the control block */
         if (sdp_cb.server_db.di_primary_handle == handle) {
@@ -366,7 +363,7 @@ bool SDP_AddAttribute(uint32_t handle, uint16_t attr_id, uint8_t attr_type,
   tSDP_RECORD* p_rec = &sdp_cb.server_db.record[0];
 
   if (p_val == nullptr) {
-    log::warn("Trying to add attribute with p_val == nullptr, skipped");
+    LOG_WARN("Trying to add attribute with p_val == nullptr, skipped");
     return (false);
   }
 
@@ -381,41 +378,39 @@ bool SDP_AddAttribute(uint32_t handle, uint16_t attr_id, uint8_t attr_type,
 
       #define MAX_ARR_LEN 200
       // one extra byte for storing terminating zero byte
-      char num_array[2 * MAX_ARR_LEN + 1] = {0};
+      uint8_t num_array[2 * MAX_ARR_LEN + 1] = {0};
       uint32_t len = (attr_len > MAX_ARR_LEN) ? MAX_ARR_LEN : attr_len;
       #undef MAX_ARR_LEN
 
       for (uint32_t i = 0; i < len; i++) {
-        snprintf(&num_array[i * 2], sizeof(num_array) - i * 2, "%02X",
+        snprintf((char*)&num_array[i * 2], sizeof(num_array) - i * 2, "%02X",
                  (uint8_t)(p_val[i]));
       }
-      log::verbose(
-          "SDP_AddAttribute: handle:{:X}, id:{:04X}, type:{}, len:{}, "
-          "p_val:{}, *p_val:{}",
-          handle, attr_id, attr_type, attr_len, fmt::ptr(p_val), num_array);
+      LOG_VERBOSE(
+          "SDP_AddAttribute: handle:%X, id:%04X, type:%d, len:%d, p_val:%p, "
+          "*p_val:%s",
+          handle, attr_id, attr_type, attr_len, p_val, num_array);
     } else if (attr_type == BOOLEAN_DESC_TYPE) {
-      log::verbose(
-          "SDP_AddAttribute: handle:{:X}, id:{:04X}, type:{}, len:{}, "
-          "p_val:{}, *p_val:{}",
-          handle, attr_id, attr_type, attr_len, fmt::ptr(p_val), *p_val);
+      LOG_VERBOSE(
+          "SDP_AddAttribute: handle:%X, id:%04X, type:%d, len:%d, p_val:%p, "
+          "*p_val:%d",
+          handle, attr_id, attr_type, attr_len, p_val, *p_val);
     } else if ((attr_type == TEXT_STR_DESC_TYPE) ||
                (attr_type == URL_DESC_TYPE)) {
       if (p_val[attr_len - 1] == '\0') {
-        log::verbose(
-            "SDP_AddAttribute: handle:{:X}, id:{:04X}, type:{}, len:{}, "
-            "p_val:{}, *p_val:{}",
-            handle, attr_id, attr_type, attr_len, fmt::ptr(p_val),
-            (char*)p_val);
+        LOG_VERBOSE(
+            "SDP_AddAttribute: handle:%X, id:%04X, type:%d, len:%d, p_val:%p, "
+            "*p_val:%s",
+            handle, attr_id, attr_type, attr_len, p_val, (char*)p_val);
       } else {
-        log::verbose(
-            "SDP_AddAttribute: handle:{:X}, id:{:04X}, type:{}, len:{}, "
-            "p_val:{}",
-            handle, attr_id, attr_type, attr_len, fmt::ptr(p_val));
+        LOG_VERBOSE(
+            "SDP_AddAttribute: handle:%X, id:%04X, type:%d, len:%d, p_val:%p",
+            handle, attr_id, attr_type, attr_len, p_val);
       }
     } else {
-      log::verbose(
-          "SDP_AddAttribute: handle:{:X}, id:{:04X}, type:{}, len:{}, p_val:{}",
-          handle, attr_id, attr_type, attr_len, fmt::ptr(p_val));
+      LOG_VERBOSE(
+          "SDP_AddAttribute: handle:%X, id:%04X, type:%d, len:%d, p_val:%p",
+          handle, attr_id, attr_type, attr_len, p_val);
     }
   }
 
@@ -425,9 +420,9 @@ bool SDP_AddAttribute(uint32_t handle, uint16_t attr_id, uint8_t attr_type,
 
       // error out early, no need to look up
       if (p_rec->free_pad_ptr >= SDP_MAX_PAD_LEN) {
-        log::error(
-            "the free pad for SDP record with handle {} is full, skip adding "
-            "the attribute",
+        LOG_ERROR(
+            "the free pad for SDP record with handle %d is "
+            "full, skip adding the attribute",
             handle);
         return (false);
       }
@@ -486,17 +481,17 @@ bool SDP_AddAttributeToRecord(tSDP_RECORD* p_rec, uint16_t attr_id,
 
   if (p_rec->free_pad_ptr + attr_len >= SDP_MAX_PAD_LEN) {
     if (p_rec->free_pad_ptr >= SDP_MAX_PAD_LEN) {
-      log::error(
-          "SDP_AddAttributeToRecord failed: free pad {} equals or exceeds max "
-          "padding length {}",
+      LOG_ERROR(
+          "SDP_AddAttributeToRecord failed: free pad %d equals or exceeds max "
+          "padding length %d",
           p_rec->free_pad_ptr, SDP_MAX_PAD_LEN);
       return (false);
     }
 
     /* do truncate only for text string type descriptor */
     if (attr_type == TEXT_STR_DESC_TYPE) {
-      log::warn(
-          "SDP_AddAttributeToRecord: attr_len:{} too long. truncate to ({})",
+      LOG_WARN(
+          "SDP_AddAttributeToRecord: attr_len:%d too long. truncate to (%d)",
           attr_len, SDP_MAX_PAD_LEN - p_rec->free_pad_ptr);
 
       attr_len = SDP_MAX_PAD_LEN - p_rec->free_pad_ptr;
@@ -512,9 +507,9 @@ bool SDP_AddAttributeToRecord(tSDP_RECORD* p_rec, uint16_t attr_id,
     p_rec->free_pad_ptr += attr_len;
   } else if (attr_len == 0 && p_attr->len != 0) {
     /* if truncate to 0 length, simply don't add */
-    log::error(
-        "SDP_AddAttributeToRecord fail, length exceed maximum: ID {}: "
-        "attr_len:{}",
+    LOG_ERROR(
+        "SDP_AddAttributeToRecord fail, length exceed maximum: ID %d: "
+        "attr_len:%d ",
         attr_id, attr_len);
     p_attr->id = p_attr->type = p_attr->len = 0;
     return (false);
@@ -580,12 +575,12 @@ bool SDP_AddSequence(uint32_t handle, uint16_t attr_id, uint16_t num_elem,
       p = p_head;
       if (p_head == p_buff) {
         /* the first element exceed the max length */
-        log::error("SDP_AddSequence - too long(attribute is not added)!!");
+        LOG_ERROR("SDP_AddSequence - too long(attribute is not added)!!");
         osi_free(p_buff);
         return false;
       } else
-        log::error("SDP_AddSequence - too long, add {} elements of {}", xx,
-                   num_elem);
+        LOG_ERROR("SDP_AddSequence - too long, add %d elements of %d", xx,
+                  num_elem);
       break;
     }
   }
@@ -624,8 +619,8 @@ bool SDP_AddUuidSequence(uint32_t handle, uint16_t attr_id, uint16_t num_uuids,
     UINT16_TO_BE_STREAM(p, *p_uuids);
 
     if ((p - p_buff) > max_len) {
-      log::warn("SDP_AddUuidSequence - too long, add {} uuids of {}", xx,
-                num_uuids);
+      LOG_WARN("SDP_AddUuidSequence - too long, add %d uuids of %d", xx,
+               num_uuids);
       break;
     }
   }

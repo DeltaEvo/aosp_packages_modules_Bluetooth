@@ -80,6 +80,7 @@ public class BluetoothOppBtEnablingActivityTest {
         mIntent.setClass(mTargetContext, BluetoothOppBtEnablingActivity.class);
 
         mRealTimeoutValue = BluetoothOppBtEnablingActivity.sBtEnablingTimeoutMs;
+        BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
         TestUtils.setUpUiTest();
     }
 
@@ -88,6 +89,7 @@ public class BluetoothOppBtEnablingActivityTest {
         TestUtils.tearDownUiTest();
         BluetoothMethodProxy.setInstanceForTesting(null);
         BluetoothOppBtEnablingActivity.sBtEnablingTimeoutMs = mRealTimeoutValue;
+        BluetoothOppTestUtils.enableOppActivities(false, mTargetContext);
     }
 
     @Ignore("b/277594572")

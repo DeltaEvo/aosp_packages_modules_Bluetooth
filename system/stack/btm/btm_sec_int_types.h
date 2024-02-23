@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <bluetooth/log.h>
-
 #include <cstdint>
 
 #include "stack/include/bt_octets.h"
@@ -107,8 +105,3 @@ typedef struct tBTM_SEC_DEVCB {
 #define BTM_SEC_ENC_PENDING 5     /* wait for link encryption pending */
 
 typedef uint8_t tBTM_SEC_ACTION;
-
-namespace fmt {
-template <>
-struct formatter<tBTM_PAIRING_STATE> : enum_formatter<tBTM_PAIRING_STATE> {};
-}  // namespace fmt

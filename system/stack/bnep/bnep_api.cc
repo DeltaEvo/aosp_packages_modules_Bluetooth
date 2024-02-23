@@ -24,7 +24,7 @@
 
 #include "bnep_api.h"
 
-#include <bluetooth/log.h>
+#include <base/logging.h>
 #include <string.h>
 
 #include "bnep_int.h"
@@ -37,7 +37,6 @@
 #include "types/bluetooth/uuid.h"
 #include "types/raw_address.h"
 
-using namespace bluetooth;
 using bluetooth::Uuid;
 
 /*******************************************************************************
@@ -137,7 +136,7 @@ tBNEP_RESULT BNEP_Connect(const RawAddress& p_rem_bda, const Uuid& src_uuid,
   uint16_t cid;
   tBNEP_CONN* p_bcb = bnepu_find_bcb_by_bd_addr(p_rem_bda);
 
-  log::verbose("BDA:{}", ADDRESS_TO_LOGGABLE_STR(p_rem_bda));
+  VLOG(0) << __func__ << " BDA:" << p_rem_bda;
 
   if (!bnep_cb.profile_registered) return BNEP_WRONG_STATE;
 
@@ -163,8 +162,8 @@ tBNEP_RESULT BNEP_Connect(const RawAddress& p_rem_bda, const Uuid& src_uuid,
      */
     p_bcb->con_state = BNEP_STATE_SEC_CHECKING;
 
-    log::verbose("BNEP initiating security procedures for src uuid {}",
-                 p_bcb->src_uuid.ToString().c_str());
+    LOG_VERBOSE("BNEP initiating security procedures for src uuid %s",
+                p_bcb->src_uuid.ToString().c_str());
 
     bnep_sec_check_complete(&p_bcb->rem_bda, BT_TRANSPORT_BR_EDR, p_bcb);
   } else {
@@ -178,7 +177,7 @@ tBNEP_RESULT BNEP_Connect(const RawAddress& p_rem_bda, const Uuid& src_uuid,
       p_bcb->l2cap_cid = cid;
 
     } else {
-      log::error("BNEP - Originate failed");
+      LOG_ERROR("BNEP - Originate failed");
       if (bnep_cb.p_conn_state_cb)
         (*bnep_cb.p_conn_state_cb)(p_bcb->handle, p_bcb->rem_bda,
                                    BNEP_CONN_FAILED, false);
@@ -222,7 +221,7 @@ tBNEP_RESULT BNEP_ConnectResp(uint16_t handle, tBNEP_RESULT resp) {
       (!(p_bcb->con_flags & BNEP_FLAGS_SETUP_RCVD)))
     return (BNEP_WRONG_STATE);
 
-  log::debug("handle {}, responce {}", handle, resp);
+  LOG_DEBUG("handle %d, responce %d", handle, resp);
 
   /* Form appropriate responce based on profile responce */
   if (resp == BNEP_CONN_FAILED_SRC_UUID)
@@ -295,7 +294,7 @@ tBNEP_RESULT BNEP_Disconnect(uint16_t handle) {
 
   if (p_bcb->con_state == BNEP_STATE_IDLE) return (BNEP_WRONG_HANDLE);
 
-  log::verbose("BNEP_Disconnect()  for handle {}", handle);
+  LOG_VERBOSE("BNEP_Disconnect()  for handle %d", handle);
 
   L2CA_DisconnectReq(p_bcb->l2cap_cid);
 
@@ -341,7 +340,8 @@ tBNEP_RESULT BNEP_WriteBuf(uint16_t handle, const RawAddress& dest_addr,
   p_bcb = &(bnep_cb.bcb[handle - 1]);
   /* Check MTU size */
   if (p_buf->len > BNEP_MTU_SIZE) {
-    log::error("length {} exceeded MTU {}", p_buf->len, BNEP_MTU_SIZE);
+    LOG_ERROR("%s length %d exceeded MTU %d", __func__, p_buf->len,
+              BNEP_MTU_SIZE);
     osi_free(p_buf);
     return (BNEP_MTU_EXCEDED);
   }
@@ -445,7 +445,7 @@ tBNEP_RESULT BNEP_Write(uint16_t handle, const RawAddress& dest_addr,
 
   /* Check MTU size. Consider the possibility of having extension headers */
   if (len > BNEP_MTU_SIZE) {
-    log::error("length {} exceeded MTU {}", len, BNEP_MTU_SIZE);
+    LOG_ERROR("%s length %d exceeded MTU %d", __func__, len, BNEP_MTU_SIZE);
     return (BNEP_MTU_EXCEDED);
   }
 

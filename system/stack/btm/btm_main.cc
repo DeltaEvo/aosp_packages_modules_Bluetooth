@@ -22,8 +22,6 @@
  *
  ******************************************************************************/
 
-#include <bluetooth/log.h>
-
 #include <memory>
 #include <string>
 
@@ -36,8 +34,6 @@
 #ifdef TARGET_FLOSS
 #include "stack/include/inq_hci_link_interface.h"  // btm_inq_db_set_inq_by_rssi
 #endif                                             // TARGET_FLOSS
-
-using namespace bluetooth;
 
 /* Global BTM control block structure
 */
@@ -78,8 +74,7 @@ constexpr size_t kMaxLogHistoryMsgLength = 25;
 static void btm_log_history(const std::string& tag, const char* addr,
                             const std::string& msg, const std::string& extra) {
   if (btm_cb.history_ == nullptr) {
-    log::error(
-        "BTM_LogHistory has not been constructed or already destroyed !");
+    LOG_ERROR("BTM_LogHistory has not been constructed or already destroyed !");
     return;
   }
 

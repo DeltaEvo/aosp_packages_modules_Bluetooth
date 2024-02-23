@@ -46,7 +46,6 @@ import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.btservice.ProfileService;
 import com.android.bluetooth.btservice.storage.DatabaseManager;
-import com.android.bluetooth.flags.Flags;
 import com.android.modules.utils.SynchronousResultReceiver;
 
 import java.util.ArrayList;
@@ -155,11 +154,7 @@ public class HidHostService extends ProfileService {
             return Utils.getByteAddress(device);
         } else {
             // if only classic HID is available, force usage of BREDR address
-            if (Flags.identityAddressNullIfUnknown()) {
-                return Utils.getByteBrEdrAddress(device);
-            } else {
-                return mAdapterService.getByteIdentityAddress(device);
-            }
+            return mAdapterService.getByteIdentityAddress(device);
         }
     }
 

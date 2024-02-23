@@ -61,6 +61,7 @@ public class BluetoothOppBtEnableActivityTest {
         mIntent = new Intent();
         mIntent.setClass(mTargetContext, BluetoothOppBtEnableActivity.class);
         Intents.init();
+        BluetoothOppTestUtils.enableOppActivities(true, mTargetContext);
         TestUtils.setUpUiTest();
     }
 
@@ -68,6 +69,7 @@ public class BluetoothOppBtEnableActivityTest {
     public void tearDown() throws Exception {
         TestUtils.tearDownUiTest();
         Intents.release();
+        BluetoothOppTestUtils.enableOppActivities(false, mTargetContext);
     }
 
     @Test

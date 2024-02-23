@@ -25,7 +25,6 @@
 
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
-#include <bluetooth/log.h>
 
 #include <cstdint>
 #include <deque>
@@ -51,8 +50,8 @@
 uint8_t btm_ble_read_sec_key_size(const RawAddress& bd_addr);
 
 using namespace bluetooth::legacy::stack::sdp;
-using namespace bluetooth;
 
+using base::StringPrintf;
 using bluetooth::Uuid;
 using bluetooth::eatt::EattExtension;
 using bluetooth::eatt::EattChannel;
@@ -115,7 +114,7 @@ uint16_t gatt_get_local_mtu(void) {
  *
  ******************************************************************************/
 void gatt_free_pending_ind(tGATT_TCB* p_tcb) {
-  log::verbose("");
+  VLOG(1) << __func__;
 
   if (p_tcb->pending_ind_q == NULL) return;
 
@@ -136,7 +135,7 @@ void gatt_free_pending_ind(tGATT_TCB* p_tcb) {
  *
  ******************************************************************************/
 void gatt_delete_dev_from_srv_chg_clt_list(const RawAddress& bd_addr) {
-  log::verbose("");
+  VLOG(1) << __func__;
 
   tGATTS_SRV_CHG* p_buf = gatt_is_bda_in_the_srv_chg_clt_list(bd_addr);
   if (p_buf != NULL) {
@@ -161,18 +160,18 @@ void gatt_delete_dev_from_srv_chg_clt_list(const RawAddress& bd_addr) {
  *
  ******************************************************************************/
 void gatt_set_srv_chg(void) {
-  log::verbose("");
+  VLOG(1) << __func__;
 
   if (fixed_queue_is_empty(gatt_cb.srv_chg_clt_q)) return;
 
   list_t* list = fixed_queue_get_list(gatt_cb.srv_chg_clt_q);
   for (const list_node_t* node = list_begin(list); node != list_end(list);
        node = list_next(node)) {
-    log::verbose("found a srv_chg clt");
+    VLOG(1) << "found a srv_chg clt";
 
     tGATTS_SRV_CHG* p_buf = (tGATTS_SRV_CHG*)list_node(node);
     if (!p_buf->srv_changed) {
-      log::verbose("set srv_changed to true");
+      VLOG(1) << "set srv_changed to true";
       p_buf->srv_changed = true;
       tGATTS_SRV_CHG_REQ req;
       memcpy(&req.srv_chg, p_buf, sizeof(tGATTS_SRV_CHG));
@@ -185,7 +184,7 @@ void gatt_set_srv_chg(void) {
 
 /** Add a pending indication */
 void gatt_add_pending_ind(tGATT_TCB* p_tcb, tGATT_VALUE* p_ind) {
-  log::verbose("enqueue a pending indication");
+  VLOG(1) << __func__ << "enqueue a pending indication";
 
   tGATT_VALUE* p_buf = (tGATT_VALUE*)osi_malloc(sizeof(tGATT_VALUE));
   memcpy(p_buf, p_ind, sizeof(tGATT_VALUE));
@@ -204,7 +203,7 @@ void gatt_add_pending_ind(tGATT_TCB* p_tcb, tGATT_VALUE* p_ind) {
  ******************************************************************************/
 tGATTS_SRV_CHG* gatt_add_srv_chg_clt(tGATTS_SRV_CHG* p_srv_chg) {
   tGATTS_SRV_CHG* p_buf = (tGATTS_SRV_CHG*)osi_malloc(sizeof(tGATTS_SRV_CHG));
-  log::verbose("enqueue a srv chg client");
+  VLOG(1) << __func__ << "enqueue a srv chg client";
 
   memcpy(p_buf, p_srv_chg, sizeof(tGATTS_SRV_CHG));
   fixed_queue_enqueue(gatt_cb.srv_chg_clt_q, p_buf);
@@ -277,7 +276,7 @@ bool gatt_find_the_connected_bda(uint8_t start_idx, RawAddress& bda,
                                  tBT_TRANSPORT* p_transport) {
   uint8_t i;
   bool found = false;
-  log::debug("start_idx={}", start_idx);
+  LOG_DEBUG("start_idx=%d", +start_idx);
 
   for (i = start_idx; i < GATT_MAX_PHY_CHANNEL; i++) {
     if (gatt_cb.tcb[i].in_use && gatt_cb.tcb[i].ch_state == GATT_CH_OPEN) {
@@ -285,11 +284,11 @@ bool gatt_find_the_connected_bda(uint8_t start_idx, RawAddress& bda,
       *p_found_idx = i;
       *p_transport = gatt_cb.tcb[i].transport;
       found = true;
-      log::debug("bda: {}", ADDRESS_TO_LOGGABLE_CSTR(bda));
+      LOG_DEBUG("bda: %s", ADDRESS_TO_LOGGABLE_CSTR(bda));
       break;
     }
   }
-  log::debug("found={} found_idx={}", found, i);
+  LOG_DEBUG("found=%d found_idx=%d", found, +i);
   return found;
 }
 
@@ -304,7 +303,8 @@ bool gatt_find_the_connected_bda(uint8_t start_idx, RawAddress& bda,
  *
  ******************************************************************************/
 bool gatt_is_srv_chg_ind_pending(tGATT_TCB* p_tcb) {
-  log::verbose("is_queue_empty={}", fixed_queue_is_empty(p_tcb->pending_ind_q));
+  VLOG(1) << __func__
+          << " is_queue_empty=" << fixed_queue_is_empty(p_tcb->pending_ind_q);
 
   if (p_tcb->indicate_handle == gatt_cb.handle_of_h_r) return true;
 
@@ -337,7 +337,8 @@ bool gatt_is_srv_chg_ind_pending(tGATT_TCB* p_tcb) {
  *
  ******************************************************************************/
 tGATTS_SRV_CHG* gatt_is_bda_in_the_srv_chg_clt_list(const RawAddress& bda) {
-  log::verbose("{}", ADDRESS_TO_LOGGABLE_STR(bda));
+
+  VLOG(1) << __func__ << ": " << bda;
 
   if (fixed_queue_is_empty(gatt_cb.srv_chg_clt_q)) return NULL;
 
@@ -346,7 +347,7 @@ tGATTS_SRV_CHG* gatt_is_bda_in_the_srv_chg_clt_list(const RawAddress& bda) {
        node = list_next(node)) {
     tGATTS_SRV_CHG* p_buf = (tGATTS_SRV_CHG*)list_node(node);
     if (bda == p_buf->bda) {
-      log::verbose("bda is in the srv chg clt list");
+      VLOG(1) << "bda is in the srv chg clt list";
       return p_buf;
     }
   }
@@ -495,9 +496,9 @@ void gatt_set_conn_id_waiting_for_mtu_exchange(tGATT_TCB* p_tcb,
                       p_tcb->conn_ids_waiting_for_mtu_exchange.end(), conn_id);
   if (it == p_tcb->conn_ids_waiting_for_mtu_exchange.end()) {
     p_tcb->conn_ids_waiting_for_mtu_exchange.push_back(conn_id);
-    log::info("Put conn_id=0x{:04x} on wait list", conn_id);
+    LOG_INFO("Put conn_id=0x%04x on wait list", conn_id);
   } else {
-    log::info("Conn_id=0x{:04x} already on wait list", conn_id);
+    LOG_INFO("Conn_id=0x%04x already on wait list", conn_id);
   }
 }
 
@@ -554,12 +555,12 @@ bool gatt_parse_uuid_from_cmd(Uuid* p_uuid_rec, uint16_t uuid_size,
 
     /* do not allow 32 bits UUID in ATT PDU now */
     case Uuid::kNumBytes32:
-      log::error("DO NOT ALLOW 32 BITS UUID IN ATT PDU");
+      LOG(ERROR) << "DO NOT ALLOW 32 BITS UUID IN ATT PDU";
       return false;
     case 0:
     default:
       if (uuid_size != 0) ret = false;
-      log::warn("invalid uuid size");
+      LOG(WARNING) << __func__ << ": invalid uuid size";
       break;
   }
 
@@ -689,16 +690,16 @@ void gatt_rsp_timeout(void* data) {
   tGATT_CLCB* p_clcb = (tGATT_CLCB*)data;
 
   if (p_clcb == NULL || p_clcb->p_tcb == NULL) {
-    log::warn("clcb is already deleted");
+    LOG(WARNING) << __func__ << " clcb is already deleted";
     return;
   }
   if (p_clcb->operation == GATTC_OPTYPE_DISCOVERY &&
       p_clcb->op_subtype == GATT_DISC_SRVC_ALL &&
       p_clcb->retry_count < GATT_REQ_RETRY_LIMIT) {
     uint8_t rsp_code;
-    log::warn("retry discovery primary service");
+    LOG(WARNING) << __func__ << " retry discovery primary service";
     if (p_clcb != gatt_cmd_dequeue(*p_clcb->p_tcb, p_clcb->cid, &rsp_code)) {
-      log::error("command queue out of sync, disconnect");
+      LOG(ERROR) << __func__ << " command queue out of sync, disconnect";
     } else {
       p_clcb->retry_count++;
       gatt_act_discovery(p_clcb);
@@ -709,11 +710,11 @@ void gatt_rsp_timeout(void* data) {
   auto eatt_channel = EattExtension::GetInstance()->FindEattChannelByCid(
       p_clcb->p_tcb->peer_bda, p_clcb->cid);
   if (eatt_channel) {
-    log::warn("disconnecting EATT cid: {}", p_clcb->cid);
+    LOG_WARN("disconnecting EATT cid: %d", p_clcb->cid);
     EattExtension::GetInstance()->Disconnect(p_clcb->p_tcb->peer_bda,
                                              p_clcb->cid);
   } else {
-    log::warn("disconnecting GATT...");
+    LOG_WARN("disconnecting GATT...");
     gatt_disconnect(p_clcb->p_tcb);
   }
 }
@@ -746,14 +747,13 @@ void gatt_indication_confirmation_timeout(void* data) {
      * TODO: In future, we should properly expose CCC, and send indication only
      * to devices that register for it.
      */
-    log::warn(
-        "Service Changed notification timed out in 30 seconds, assuming "
-        "server-only remote, not disconnecting");
+    LOG(WARNING) << " Service Changed notification timed out in 30 "
+                    "seconds, assuming server-only remote, not disconnecting";
     gatts_proc_srv_chg_ind_ack(*p_tcb);
     return;
   }
 
-  log::warn("disconnecting...");
+  LOG(WARNING) << __func__ << " disconnecting...";
   gatt_disconnect(p_tcb);
 }
 
@@ -770,7 +770,7 @@ void  gatt_ind_ack_timeout(void* data) {
   tGATT_TCB* p_tcb = (tGATT_TCB*)data;
   CHECK(p_tcb);
 
-  log::warn("send ack now");
+  LOG(WARNING) << __func__ << ": send ack now";
   p_tcb->ind_count = 0;
   /*TODO: For now ATT used only, but we need to have timeout per CID
    * and use it here corretly.
@@ -836,14 +836,14 @@ void gatt_sr_send_req_callback(uint16_t conn_id, uint32_t trans_id,
   tGATT_REG* p_reg = gatt_get_regcb(gatt_if);
 
   if (!p_reg) {
-    log::error("p_reg not found discard request");
+    LOG(ERROR) << "p_reg not found discard request";
     return;
   }
 
   if (p_reg->in_use && p_reg->app_cb.p_req_cb) {
     (*p_reg->app_cb.p_req_cb)(conn_id, trans_id, type, p_data);
   } else {
-    log::warn("Call back not found for application conn_id={}", conn_id);
+    LOG(WARNING) << "Call back not found for application conn_id=" << conn_id;
   }
 }
 
@@ -893,7 +893,8 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
   uint8_t buff[60];
   uint8_t* p = buff;
 
-  log::verbose("s_hdl=0x{:x}  s_hdl=0x{:x}", start_hdl, end_hdl);
+  VLOG(1) << __func__
+          << StringPrintf(" s_hdl=0x%x  s_hdl=0x%x", start_hdl, end_hdl);
 
   uint32_t sdp_handle = get_legacy_stack_sdp_api()->handle.SDP_CreateRecord();
   if (sdp_handle == 0) return 0;
@@ -957,8 +958,9 @@ uint32_t gatt_add_sdp_record(const Uuid& uuid, uint16_t start_hdl,
  *
  ******************************************************************************/
 void gatt_set_err_rsp(bool enable, uint8_t req_op_code, uint8_t err_status) {
-  log::verbose("enable={} op_code={}, err_status={}", enable, req_op_code,
-               err_status);
+  VLOG(1) << __func__
+          << StringPrintf(" enable=%d op_code=%d, err_status=%d", enable,
+                          req_op_code, err_status);
   gatt_cb.enable_err_rsp = enable;
   gatt_cb.req_op_code = req_op_code;
   gatt_cb.err_status = err_status;
@@ -979,7 +981,7 @@ tGATT_REG* gatt_get_regcb(tGATT_IF gatt_if) {
   tGATT_REG* p_reg = NULL;
 
   if (ii < 1 || ii > GATT_MAX_APPS) {
-    log::warn("gatt_if out of range = {}", ii);
+    LOG(WARNING) << "gatt_if out of range = " << +ii;
     return NULL;
   }
 
@@ -987,7 +989,7 @@ tGATT_REG* gatt_get_regcb(tGATT_IF gatt_if) {
   p_reg = &gatt_cb.cl_rcb[ii - 1];
 
   if (!p_reg->in_use) {
-    log::warn("gatt_if found but not in use.");
+    LOG(WARNING) << "gatt_if found but not in use.";
     return NULL;
   }
 
@@ -1010,8 +1012,8 @@ bool gatt_tcb_is_cid_busy(tGATT_TCB& tcb, uint16_t cid) {
   EattChannel* channel =
       EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
   if (channel == nullptr) {
-    log::warn("{}, cid 0x{:02x} already disconnected",
-              ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+    LOG_WARN("%s, cid 0x%02x already disconnected",
+             ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
     return false;
   }
 
@@ -1049,8 +1051,8 @@ tGATT_CLCB* gatt_clcb_alloc(uint16_t conn_id) {
      * bigger than that and also if it is bigger, we  believe it should not
      * cause the problem. This WARN is just to monitor number of CLCB and will
      * help in debugging in case we are wrong */
-    log::warn("Number of CLCB: {} > {}", gatt_cb.clcb_queue.size(),
-              GATT_CL_MAX_LCB);
+    LOG_WARN("Number of CLCB: %zu > %d", gatt_cb.clcb_queue.size(),
+             GATT_CL_MAX_LCB);
   }
   return p_clcb;
 }
@@ -1154,8 +1156,8 @@ uint16_t gatt_tcb_get_payload_size(tGATT_TCB& tcb, uint16_t cid) {
   EattChannel* channel =
       EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
   if (channel == nullptr) {
-    log::warn("{}, cid 0x{:02x} already disconnected",
-              ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+    LOG_WARN("%s, cid 0x%02x already disconnected",
+             ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
     return 0;
   }
 
@@ -1203,9 +1205,8 @@ void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb) {
   if (!p_tcb->pending_enc_clcb.empty()) {
     for (size_t i = 0; i < p_tcb->pending_enc_clcb.size(); i++) {
       if (p_tcb->pending_enc_clcb.at(i) == p_clcb) {
-        log::warn(
-            "Removing clcb ({}) for conn id=0x{:04x} from pending_enc_clcb",
-            fmt::ptr(p_clcb), p_clcb->conn_id);
+        LOG_WARN("Removing clcb (%p) for conn id=0x%04x from pending_enc_clcb",
+                 p_clcb, p_clcb->conn_id);
         p_tcb->pending_enc_clcb.at(i) = NULL;
         break;
       }
@@ -1218,8 +1219,8 @@ void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb) {
     EattChannel* channel = EattExtension::GetInstance()->FindEattChannelByCid(
         p_tcb->peer_bda, cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda), cid);
+      LOG_WARN("%s, cid 0x%02x already disconnected",
+               ADDRESS_TO_LOGGABLE_CSTR(p_tcb->peer_bda), cid);
       return;
     }
     cl_cmd_q_p = &channel->cl_cmd_q_;
@@ -1239,15 +1240,15 @@ void gatt_clcb_invalidate(tGATT_TCB* p_tcb, const tGATT_CLCB* p_clcb) {
   if (iter->to_send) {
     /* If command was not send, just remove the entire element */
     cl_cmd_q_p->erase(iter);
-    log::warn("Removing scheduled clcb ({}) for conn_id=0x{:04x}",
-              fmt::ptr(p_clcb), p_clcb->conn_id);
+    LOG_WARN("Removing scheduled clcb (%p) for conn_id=0x%04x", p_clcb,
+             p_clcb->conn_id);
   } else {
     /* If command has been sent, just invalidate p_clcb pointer for proper
      * response handling */
     iter->p_clcb = NULL;
-    log::warn(
-        "Invalidating clcb ({}) for already sent request on conn_id=0x{:04x}",
-        fmt::ptr(p_clcb), p_clcb->conn_id);
+    LOG_WARN(
+        "Invalidating clcb (%p) for already sent request on conn_id=0x%04x",
+        p_clcb, p_clcb->conn_id);
   }
 }
 /*******************************************************************************
@@ -1367,8 +1368,8 @@ void gatt_sr_reset_cback_cnt(tGATT_TCB& tcb, uint16_t cid) {
       EattChannel* channel =
           EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
       if (channel == nullptr) {
-        log::warn("{}, cid 0x{:02x} already disconnected",
-                  ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+        LOG_WARN("%s, cid 0x%02x already disconnected",
+                 ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
         return;
       }
       channel->server_outstanding_cmd_.cback_cnt[i] = 0;
@@ -1395,15 +1396,15 @@ void gatt_sr_reset_prep_cnt(tGATT_TCB& tcb) {
 tGATT_SR_CMD* gatt_sr_get_cmd_by_cid(tGATT_TCB& tcb, uint16_t cid) {
   tGATT_SR_CMD* sr_cmd_p;
 
-  log::info("cid: {} tcb cid {}", int(cid), tcb.att_lcid);
+  LOG(INFO) << __func__ << " cid: " << int(cid) << " tcb cid " << tcb.att_lcid;
   if (cid == tcb.att_lcid) {
     sr_cmd_p = &tcb.sr_cmd;
   } else {
     EattChannel* channel =
         EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+      LOG_WARN("%s, cid 0x%02x already disconnected",
+               ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
       return nullptr;
     }
 
@@ -1417,15 +1418,15 @@ tGATT_SR_CMD* gatt_sr_get_cmd_by_cid(tGATT_TCB& tcb, uint16_t cid) {
 tGATT_READ_MULTI* gatt_sr_get_read_multi(tGATT_TCB& tcb, uint16_t cid) {
   tGATT_READ_MULTI* read_multi_p;
 
-  log::info("cid: {} tcb cid {}", int(cid), tcb.att_lcid);
+  LOG(INFO) << __func__ << " cid: " << int(cid) << " tcb cid " << tcb.att_lcid;
   if (cid == tcb.att_lcid) {
     read_multi_p = &tcb.sr_cmd.multi_req;
   } else {
     EattChannel* channel =
         EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+      LOG_WARN("%s, cid 0x%02x already disconnected",
+               ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
       return nullptr;
     }
     read_multi_p = &channel->server_outstanding_cmd_.multi_req;
@@ -1454,8 +1455,8 @@ void gatt_sr_update_cback_cnt(tGATT_TCB& tcb, uint16_t cid, tGATT_IF gatt_if,
     EattChannel* channel =
         EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+      LOG_WARN("%s, cid 0x%02x already disconnected",
+               ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
       return;
     }
     sr_cmd_p = &channel->server_outstanding_cmd_;
@@ -1486,8 +1487,9 @@ void gatt_sr_update_prep_cnt(tGATT_TCB& tcb, tGATT_IF gatt_if, bool is_inc,
                              bool is_reset_first) {
   uint8_t idx = ((uint8_t)gatt_if) - 1;
 
-  log::verbose("tcb idx={} gatt_if={} is_inc={} is_reset_first={}", tcb.tcb_idx,
-               gatt_if, is_inc, is_reset_first);
+  VLOG(1) << StringPrintf(
+      "%s tcb idx=%d gatt_if=%d is_inc=%d is_reset_first=%d", __func__,
+      tcb.tcb_idx, gatt_if, is_inc, is_reset_first);
 
   if (is_reset_first) {
     gatt_sr_reset_prep_cnt(tcb);
@@ -1505,22 +1507,23 @@ void gatt_sr_update_prep_cnt(tGATT_TCB& tcb, tGATT_IF gatt_if, bool is_inc,
 bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, BT_TRANSPORT_LE);
   if (!p_tcb) {
-    log::warn("Unable to cancel open for unknown connection gatt_if:{} peer:{}",
-              gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
+    LOG_WARN(
+        "Unable to cancel open for unknown connection gatt_if:%hhu peer:%s",
+        gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
     return true;
   }
 
   if (gatt_get_ch_state(p_tcb) == GATT_CH_OPEN) {
-    log::error("link connected Too late to cancel");
+    LOG(ERROR) << __func__ << ": link connected Too late to cancel";
     return false;
   }
 
   gatt_update_app_use_link_flag(gatt_if, p_tcb, false, false);
 
   if (p_tcb->app_hold_link.empty()) {
-    log::debug(
-        "Client reference count is zero disconnecting device gatt_if:{} "
-        "peer:{}",
+    LOG_DEBUG(
+        "Client reference count is zero disconnecting device gatt_if:%hhu "
+        "peer:%s",
         gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
     gatt_disconnect(p_tcb);
   }
@@ -1533,14 +1536,14 @@ bool gatt_cancel_open(tGATT_IF gatt_if, const RawAddress& bda) {
     if (!connection_manager::direct_connect_remove(gatt_if, bda)) {
       if (!connection_manager::is_background_connection(bda)) {
         BTM_AcceptlistRemove(bda);
-        log::info(
-            "Gatt connection manager has no background record but  removed "
-            "filter acceptlist gatt_if:{} peer:{}",
+        LOG_INFO(
+            "Gatt connection manager has no background record but "
+            " removed filter acceptlist gatt_if:%hhu peer:%s",
             gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
       } else {
-        log::info(
-            "Gatt connection manager maintains a background record preserving "
-            "filter acceptlist gatt_if:{} peer:{}",
+        LOG_INFO(
+            "Gatt connection manager maintains a background record"
+            " preserving filter acceptlist gatt_if:%hhu peer:%s",
             gatt_if, ADDRESS_TO_LOGGABLE_CSTR(bda));
       }
     }
@@ -1565,8 +1568,8 @@ bool gatt_cmd_enq(tGATT_TCB& tcb, tGATT_CLCB* p_clcb, bool to_send,
     EattChannel* channel =
         EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cmd.cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cmd.cid);
+      LOG_WARN("%s, cid 0x%02x already disconnected",
+               ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cmd.cid);
       return false;
     }
     channel->cl_cmd_q_.push_back(cmd);
@@ -1585,8 +1588,8 @@ tGATT_CLCB* gatt_cmd_dequeue(tGATT_TCB& tcb, uint16_t cid, uint8_t* p_op_code) {
     EattChannel* channel =
         EattExtension::GetInstance()->FindEattChannelByCid(tcb.peer_bda, cid);
     if (channel == nullptr) {
-      log::warn("{}, cid 0x{:02x} already disconnected",
-                ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
+      LOG_WARN("%s, cid 0x%02x already disconnected",
+               ADDRESS_TO_LOGGABLE_CSTR(tcb.peer_bda), cid);
       return nullptr;
     }
 
@@ -1603,8 +1606,8 @@ tGATT_CLCB* gatt_cmd_dequeue(tGATT_TCB& tcb, uint16_t cid, uint8_t* p_op_code) {
    * peer, device p_clcb will be null.
    */
   if (p_clcb && p_clcb->cid != cid) {
-    log::warn("CID does not match ({}!={}), conn_id=0x{:04x}", p_clcb->cid, cid,
-              p_clcb->conn_id);
+    LOG_WARN(" CID does not match (%d!=%d), conn_id=0x%04x", p_clcb->cid, cid,
+             p_clcb->conn_id);
   }
 
   cl_cmd_q_p->pop_front();
@@ -1659,8 +1662,9 @@ void gatt_end_operation(tGATT_CLCB* p_clcb, tGATT_STATUS status, void* p_data) {
   uint16_t conn_id;
   uint8_t operation;
 
-  log::verbose("status={} op={} subtype={}", status, p_clcb->operation,
-               p_clcb->op_subtype);
+  VLOG(1) << __func__
+          << StringPrintf(" status=%d op=%d subtype=%d", status,
+                          p_clcb->operation, p_clcb->op_subtype);
   memset(&cb_data.att_value, 0, sizeof(tGATT_VALUE));
 
   if (p_cmpl_cb != NULL && p_clcb->operation != 0) {
@@ -1669,7 +1673,9 @@ void gatt_end_operation(tGATT_CLCB* p_clcb, tGATT_STATUS status, void* p_data) {
       cb_data.att_value.len = p_clcb->counter;
 
       if (cb_data.att_value.len > GATT_MAX_ATTR_LEN) {
-        log::warn("Large cb_data.att_value, size={}", cb_data.att_value.len);
+        LOG(WARNING) << __func__
+                     << StringPrintf(" Large cb_data.att_value, size=%d",
+                                     cb_data.att_value.len);
         cb_data.att_value.len = GATT_MAX_ATTR_LEN;
       }
 
@@ -1684,7 +1690,7 @@ void gatt_end_operation(tGATT_CLCB* p_clcb, tGATT_STATUS status, void* p_data) {
         if (p_data) {
           cb_data.att_value = *((tGATT_VALUE*)p_data);
         } else {
-          log::verbose("Rcv Prepare write rsp but no data");
+          VLOG(1) << "Rcv Prepare write rsp but no data";
         }
       }
     }
@@ -1710,21 +1716,23 @@ void gatt_end_operation(tGATT_CLCB* p_clcb, tGATT_STATUS status, void* p_data) {
   else if (p_cmpl_cb && op)
     (*p_cmpl_cb)(conn_id, op, status, &cb_data);
   else
-    log::warn("not sent out op={} p_disc_cmpl_cb:{} p_cmpl_cb:{}", operation,
-              fmt::ptr(p_disc_cmpl_cb), fmt::ptr(p_cmpl_cb));
+    LOG(WARNING) << __func__
+                 << StringPrintf(
+                        ": not sent out op=%d p_disc_cmpl_cb:%p p_cmpl_cb:%p",
+                        operation, p_disc_cmpl_cb, p_cmpl_cb);
 }
 
 /** This function cleans up the control blocks when L2CAP channel disconnect */
 void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
                             tBT_TRANSPORT transport) {
-  log::verbose("");
+  VLOG(1) << __func__;
 
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bda, transport);
   if (!p_tcb) {
-    log::error(
-        "Disconnect for unknown connection bd_addr:{} reason:{} transport:{}",
-        ADDRESS_TO_LOGGABLE_CSTR(bda), gatt_disconnection_reason_text(reason),
-        bt_transport_text(transport));
+    LOG_ERROR(
+        "Disconnect for unknown connection bd_addr:%s reason:%s transport:%s",
+        ADDRESS_TO_LOGGABLE_CSTR(bda), gatt_disconnection_reason_text(reason).c_str(),
+        bt_transport_text(transport).c_str());
     return;
   }
 
@@ -1741,7 +1749,7 @@ void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
     }
 
     gatt_stop_rsp_timer(&(*clcb_it));
-    log::verbose("found p_clcb conn_id={}", clcb_it->conn_id);
+    VLOG(1) << "found p_clcb conn_id=" << +clcb_it->conn_id;
     if (clcb_it->operation == GATTC_OPTYPE_NONE) {
       clcb_it = gatt_cb.clcb_queue.erase(clcb_it);
       continue;
@@ -1773,7 +1781,7 @@ void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
   }
 
   *p_tcb = tGATT_TCB();
-  log::verbose("exit");
+  VLOG(1) << __func__ << ": exit";
 }
 /*******************************************************************************
  *
@@ -1784,7 +1792,7 @@ void gatt_cleanup_upon_disc(const RawAddress& bda, tGATT_DISCONN_REASON reason,
  * Returns          uint8_t *: name of the operation.
  *
  ******************************************************************************/
-char const* gatt_dbg_op_name(uint8_t op_code) {
+uint8_t* gatt_dbg_op_name(uint8_t op_code) {
   uint8_t pseduo_op_code_idx = op_code & (~GATT_WRITE_CMD_MASK);
 
   if (op_code == GATT_CMD_WRITE) {
@@ -1797,10 +1805,10 @@ char const* gatt_dbg_op_name(uint8_t op_code) {
 
   #define ARR_SIZE(a) (sizeof(a)/sizeof(a[0]))
   if (pseduo_op_code_idx < ARR_SIZE(op_code_name))
-    return op_code_name[pseduo_op_code_idx];
+    return (uint8_t*)op_code_name[pseduo_op_code_idx];
   else
-    return "Op Code Exceed Max";
-#undef ARR_SIZE
+    return (uint8_t*)"Op Code Exceed Max";
+  #undef ARR_SIZE
 }
 
 /** Remove the application interface for the specified background device */

@@ -257,11 +257,7 @@ void SinkImpl::ConfirmStreamingRequest() {
   }
 
   LOG_INFO();
-  if (IS_FLAG_ENABLED(leaudio_start_stream_race_fix)) {
-    halSourceInterface_->ConfirmStreamingRequestV2();
-  } else {
-    halSourceInterface_->ConfirmStreamingRequest();
-  }
+  halSourceInterface_->ConfirmStreamingRequest();
 }
 
 void SinkImpl::SuspendedForReconfiguration() {
@@ -294,11 +290,7 @@ void SinkImpl::CancelStreamingRequest() {
   }
 
   LOG_INFO();
-  if (IS_FLAG_ENABLED(leaudio_start_stream_race_fix)) {
-    halSourceInterface_->CancelStreamingRequestV2();
-  } else {
-    halSourceInterface_->CancelStreamingRequest();
-  }
+  halSourceInterface_->CancelStreamingRequest();
 }
 
 void SinkImpl::UpdateRemoteDelay(uint16_t remote_delay_ms) {

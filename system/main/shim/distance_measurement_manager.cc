@@ -41,10 +41,10 @@ class DistanceMeasurementInterfaceImpl
     distance_measurement_callbacks_ = callbacks;
   }
 
-  void StartDistanceMeasurement(RawAddress raw_address, uint16_t interval,
+  void StartDistanceMeasurement(RawAddress raw_address, uint16_t frequency,
                                 uint8_t method) {
     bluetooth::shim::GetDistanceMeasurementManager()->StartDistanceMeasurement(
-        bluetooth::ToGdAddress(raw_address), interval,
+        bluetooth::ToGdAddress(raw_address), frequency,
         static_cast<DistanceMeasurementMethod>(method));
   }
 

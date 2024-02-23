@@ -24,7 +24,6 @@
  ******************************************************************************/
 
 #include <base/logging.h>
-#include <bluetooth/log.h>
 
 #include <cstdint>
 #include <cstring>
@@ -42,8 +41,6 @@
 #include "stack/l2cap/l2c_int.h"
 #include "stack/rfcomm/port_int.h"
 #include "stack/rfcomm/rfc_int.h"
-
-using namespace bluetooth;
 
 static const std::set<uint16_t> uuid_logging_acceptlist = {
     UUID_SERVCLASS_HEADSET_AUDIO_GATEWAY,
@@ -84,9 +81,9 @@ static void rfc_set_port_state(tPORT_STATE* port_pars, MX_FRAME* p_frame);
  ******************************************************************************/
 void rfc_port_sm_execute(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
   CHECK(p_port != nullptr) << __func__ << ": NULL port event " << event;
-  log::info("bd_addr:{}, port:{}, state:{}, event:{}",
-            ADDRESS_TO_LOGGABLE_CSTR(p_port->bd_addr), p_port->handle,
-            p_port->rfc.state, event);
+  LOG_INFO("bd_addr:%s, port:%u, state:%u, event:%d",
+           ADDRESS_TO_LOGGABLE_CSTR(p_port->bd_addr), p_port->handle,
+           p_port->rfc.state, event);
   switch (p_port->rfc.state) {
     case RFC_STATE_CLOSED:
       rfc_port_sm_state_closed(p_port, event, p_data);
@@ -161,7 +158,7 @@ void rfc_port_sm_state_closed(tPORT* p_port, tRFC_PORT_EVENT event,
       return;
 
     case RFC_PORT_EVENT_DM:
-      log::warn("RFC_EVENT_DM, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_EVENT_DM, index=%d", __func__, p_port->handle);
       rfc_port_closed(p_port);
       return;
 
@@ -176,14 +173,14 @@ void rfc_port_sm_state_closed(tPORT* p_port, tRFC_PORT_EVENT event,
 
     case RFC_PORT_EVENT_TIMEOUT:
       PORT_TimeOutCloseMux(p_port->rfc.p_mcb);
-      log::error("Port error state {} event {}", p_port->rfc.state, event);
+      LOG_ERROR("Port error state %d event %d", p_port->rfc.state, event);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event,
-                 p_port->rfc.state);
+      LOG_ERROR("Received unexpected event:%hu in state:%hhu", event,
+                p_port->rfc.state);
   }
 
-  log::warn("Port state closed Event ignored {}", event);
+  LOG_WARN("Port state closed Event ignored %d", event);
   return;
 }
 
@@ -202,7 +199,7 @@ void rfc_port_sm_sabme_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
   switch (event) {
     case RFC_PORT_EVENT_OPEN:
     case RFC_PORT_EVENT_ESTABLISH_RSP:
-      log::error("Port error state {} event {}", p_port->rfc.state, event);
+      LOG_ERROR("Port error state %d event %d", p_port->rfc.state, event);
       return;
 
     case RFC_PORT_EVENT_CLOSE:
@@ -213,7 +210,7 @@ void rfc_port_sm_sabme_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
       return;
 
     case RFC_PORT_EVENT_CLEAR:
-      log::warn("RFC_PORT_EVENT_CLEAR, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_PORT_EVENT_CLEAR, index=%d", __func__, p_port->handle);
       rfc_port_closed(p_port);
       return;
 
@@ -254,7 +251,7 @@ void rfc_port_sm_sabme_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
       return;
 
     case RFC_PORT_EVENT_DM:
-      log::warn("RFC_EVENT_DM, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_EVENT_DM, index=%d", __func__, p_port->handle);
       p_port->rfc.p_mcb->is_disc_initiator = true;
       PORT_DlcEstablishCnf(p_port->rfc.p_mcb, p_port->dlci,
                            p_port->rfc.p_mcb->peer_l2cap_mtu, RFCOMM_ERROR);
@@ -262,7 +259,7 @@ void rfc_port_sm_sabme_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
       return;
 
     case RFC_PORT_EVENT_DISC:
-      log::warn("RFC_EVENT_DISC, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_EVENT_DISC, index=%d", __func__, p_port->handle);
       rfc_send_ua(p_port->rfc.p_mcb, p_port->dlci);
       PORT_DlcEstablishCnf(p_port->rfc.p_mcb, p_port->dlci,
                            p_port->rfc.p_mcb->peer_l2cap_mtu, RFCOMM_ERROR);
@@ -284,10 +281,10 @@ void rfc_port_sm_sabme_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
                            p_port->rfc.p_mcb->peer_l2cap_mtu, RFCOMM_ERROR);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event,
-                 p_port->rfc.state);
+      LOG_ERROR("Received unexpected event:%hu in state:%hhu", event,
+                p_port->rfc.state);
   }
-  log::warn("Port state sabme_wait_ua Event ignored {}", event);
+  LOG_WARN("Port state sabme_wait_ua Event ignored %d", event);
 }
 
 /*******************************************************************************
@@ -322,17 +319,17 @@ void rfc_port_sm_term_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event,
 
     case RFC_PORT_EVENT_OPEN:
     case RFC_PORT_EVENT_CLOSE:
-      log::error("Port error state {} event {}", p_port->rfc.state, event);
+      LOG_ERROR("Port error state %d event %d", p_port->rfc.state, event);
       return;
 
     case RFC_PORT_EVENT_CLEAR:
-      log::warn("RFC_PORT_EVENT_CLEAR, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_PORT_EVENT_CLEAR, index=%d", __func__, p_port->handle);
       btm_sec_abort_access_req(p_port->rfc.p_mcb->bd_addr);
       rfc_port_closed(p_port);
       return;
 
     case RFC_PORT_EVENT_DATA:
-      log::error("Port error state Term Wait Sec event Data");
+      LOG_ERROR("Port error state Term Wait Sec event Data");
       osi_free(p_data);
       return;
 
@@ -386,10 +383,10 @@ void rfc_port_sm_term_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event,
       }
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event,
-                 p_port->rfc.state);
+      LOG_ERROR("Received unexpected event:%hu in state:%hhu", event,
+                p_port->rfc.state);
   }
-  log::warn("Port state term_wait_sec_check Event ignored {}", event);
+  LOG_WARN("Port state term_wait_sec_check Event ignored %d", event);
 }
 
 /*******************************************************************************
@@ -408,8 +405,8 @@ void rfc_port_sm_orig_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event,
   switch (event) {
     case RFC_PORT_EVENT_SEC_COMPLETE:
       if (*((uint8_t*)p_data) != BTM_SUCCESS) {
-        log::error("RFC_PORT_EVENT_SEC_COMPLETE, index={}, result={}",
-                   p_port->handle, *((uint8_t*)p_data));
+        LOG_ERROR("%s, RFC_PORT_EVENT_SEC_COMPLETE, index=%d, result=%d",
+                  __func__, p_port->handle, *((uint8_t*)p_data));
         p_port->rfc.p_mcb->is_disc_initiator = true;
         PORT_DlcEstablishCnf(p_port->rfc.p_mcb, p_port->dlci, 0,
                              RFCOMM_SECURITY_ERR);
@@ -423,17 +420,17 @@ void rfc_port_sm_orig_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event,
 
     case RFC_PORT_EVENT_OPEN:
     case RFC_PORT_EVENT_SABME: /* Peer should not use the same dlci */
-      log::error("Port error state {} event {}", p_port->rfc.state, event);
+      LOG_ERROR("Port error state %d event %d", p_port->rfc.state, event);
       return;
 
     case RFC_PORT_EVENT_CLOSE:
-      log::warn("RFC_PORT_EVENT_CLOSE, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_PORT_EVENT_CLOSE, index=%d", __func__, p_port->handle);
       btm_sec_abort_access_req(p_port->rfc.p_mcb->bd_addr);
       rfc_port_closed(p_port);
       return;
 
     case RFC_PORT_EVENT_DATA:
-      log::error("Port error state Orig Wait Sec event Data");
+      LOG_ERROR("Port error state Orig Wait Sec event Data");
       osi_free(p_data);
       return;
 
@@ -441,10 +438,10 @@ void rfc_port_sm_orig_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event,
       osi_free(p_data);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event,
-                 p_port->rfc.state);
+      LOG_ERROR("Received unexpected event:%hu in state:%hhu", event,
+                p_port->rfc.state);
   }
-  log::warn("Port state orig_wait_sec_check Event ignored {}", event);
+  LOG_WARN("Port state orig_wait_sec_check Event ignored %d", event);
 }
 
 /*******************************************************************************
@@ -460,7 +457,7 @@ void rfc_port_sm_orig_wait_sec_check(tPORT* p_port, tRFC_PORT_EVENT event,
 void rfc_port_sm_opened(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
   switch (event) {
     case RFC_PORT_EVENT_OPEN:
-      log::error("Port error state {} event {}", p_port->rfc.state, event);
+      LOG_ERROR("Port error state %d event %d", p_port->rfc.state, event);
       return;
 
     case RFC_PORT_EVENT_CLOSE:
@@ -471,7 +468,7 @@ void rfc_port_sm_opened(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
       return;
 
     case RFC_PORT_EVENT_CLEAR:
-      log::warn("RFC_PORT_EVENT_CLEAR, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_PORT_EVENT_CLEAR, index=%d", __func__, p_port->handle);
       rfc_port_closed(p_port);
       return;
 
@@ -503,7 +500,7 @@ void rfc_port_sm_opened(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
       return;
 
     case RFC_PORT_EVENT_DM:
-      log::warn("RFC_EVENT_DM, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_EVENT_DM, index=%d", __func__, p_port->handle);
       PORT_DlcReleaseInd(p_port->rfc.p_mcb, p_port->dlci);
       rfc_port_closed(p_port);
       return;
@@ -513,7 +510,7 @@ void rfc_port_sm_opened(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
       rfc_send_ua(p_port->rfc.p_mcb, p_port->dlci);
       if (!fixed_queue_is_empty(p_port->rx.queue)) {
         /* give a chance to upper stack to close port properly */
-        log::verbose("port queue is not empty");
+        LOG_VERBOSE("port queue is not empty");
         rfc_port_timer_start(p_port, RFC_DISC_TIMEOUT);
       } else
         PORT_DlcReleaseInd(p_port->rfc.p_mcb, p_port->dlci);
@@ -525,13 +522,13 @@ void rfc_port_sm_opened(tPORT* p_port, tRFC_PORT_EVENT event, void* p_data) {
 
     case RFC_PORT_EVENT_TIMEOUT:
       PORT_TimeOutCloseMux(p_port->rfc.p_mcb);
-      log::error("Port error state {} event {}", p_port->rfc.state, event);
+      LOG_ERROR("Port error state %d event %d", p_port->rfc.state, event);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event,
-                 p_port->rfc.state);
+      LOG_ERROR("Received unexpected event:%hu in state:%hhu", event,
+                p_port->rfc.state);
   }
-  log::warn("Port state opened Event ignored {}", event);
+  LOG_WARN("Port state opened Event ignored %d", event);
 }
 
 /*******************************************************************************
@@ -549,11 +546,11 @@ void rfc_port_sm_disc_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
   switch (event) {
     case RFC_PORT_EVENT_OPEN:
     case RFC_PORT_EVENT_ESTABLISH_RSP:
-      log::error("Port error state {} event {}", p_port->rfc.state, event);
+      LOG_ERROR("Port error state %d event %d", p_port->rfc.state, event);
       return;
 
     case RFC_PORT_EVENT_CLEAR:
-      log::warn("RFC_PORT_EVENT_CLEAR, index={}", p_port->handle);
+      LOG_WARN("%s, RFC_PORT_EVENT_CLEAR, index=%d", __func__, p_port->handle);
       rfc_port_closed(p_port);
       return;
 
@@ -566,8 +563,8 @@ void rfc_port_sm_disc_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
       FALLTHROUGH_INTENDED; /* FALLTHROUGH */
 
     case RFC_PORT_EVENT_DM:
-      log::warn("RFC_EVENT_DM|RFC_EVENT_UA[{}], index={}", event,
-                p_port->handle);
+      LOG_WARN("%s, RFC_EVENT_DM|RFC_EVENT_UA[%d], index=%d", __func__, event,
+               p_port->handle);
       rfc_port_closed(p_port);
       return;
 
@@ -585,15 +582,15 @@ void rfc_port_sm_disc_wait_ua(tPORT* p_port, tRFC_PORT_EVENT event,
       return;
 
     case RFC_PORT_EVENT_TIMEOUT:
-      log::error("RFC_EVENT_TIMEOUT, index={}", p_port->handle);
+      LOG_ERROR("%s, RFC_EVENT_TIMEOUT, index=%d", __func__, p_port->handle);
       rfc_port_closed(p_port);
       return;
     default:
-      log::error("Received unexpected event:{} in state:{}", event,
-                 p_port->rfc.state);
+      LOG_ERROR("Received unexpected event:%hu in state:%hhu", event,
+                p_port->rfc.state);
   }
 
-  log::warn("Port state disc_wait_ua Event ignored {}", event);
+  LOG_WARN("Port state disc_wait_ua Event ignored %d", event);
 }
 
 /*******************************************************************************
@@ -616,9 +613,9 @@ void rfc_port_uplink_data(tPORT* p_port, BT_HDR* p_buf) {
  *
  ******************************************************************************/
 void rfc_process_pn(tRFC_MCB* p_mcb, bool is_command, MX_FRAME* p_frame) {
-  log::verbose("is_initiator={}, is_cmd={}, state={}, bd_addr={}",
-               p_mcb->is_initiator, is_command, p_mcb->state,
-               ADDRESS_TO_LOGGABLE_CSTR(p_mcb->bd_addr));
+  LOG_VERBOSE("%s: is_initiator=%d, is_cmd=%d, state=%d, bd_addr=%s", __func__,
+              p_mcb->is_initiator, is_command, p_mcb->state,
+              ADDRESS_TO_LOGGABLE_CSTR(p_mcb->bd_addr));
   uint8_t dlci = p_frame->dlci;
 
   if (is_command) {
@@ -627,8 +624,9 @@ void rfc_process_pn(tRFC_MCB* p_mcb, bool is_command, MX_FRAME* p_frame) {
       PORT_ParNegInd(p_mcb, dlci, p_frame->u.pn.mtu, p_frame->u.pn.conv_layer,
                      p_frame->u.pn.k);
     } else {
-      log::warn("MX PN while disconnecting, bd_addr={}, p_mcb={}",
-                ADDRESS_TO_LOGGABLE_STR(p_mcb->bd_addr), fmt::ptr(p_mcb));
+      LOG(WARNING) << __func__
+                   << ": MX PN while disconnecting, bd_addr=" << p_mcb->bd_addr
+                   << ", p_mcb=" << p_mcb;
       rfc_send_dm(p_mcb, dlci, false);
     }
 
@@ -637,8 +635,9 @@ void rfc_process_pn(tRFC_MCB* p_mcb, bool is_command, MX_FRAME* p_frame) {
   /* If we are not awaiting response just ignore it */
   tPORT* p_port = port_find_mcb_dlci_port(p_mcb, dlci);
   if ((p_port == nullptr) || !(p_port->rfc.expected_rsp & RFC_RSP_PN)) {
-    log::warn(": Ignore unwanted response, p_mcb={}, bd_addr={}, dlci={}",
-              fmt::ptr(p_mcb), ADDRESS_TO_LOGGABLE_STR(p_mcb->bd_addr), dlci);
+    LOG(WARNING) << ": Ignore unwanted response, p_mcb=" << p_mcb
+                 << ", bd_addr=" << p_mcb->bd_addr
+                 << ", dlci=" << std::to_string(dlci);
     return;
   }
 
@@ -696,7 +695,8 @@ void rfc_process_rpn(tRFC_MCB* p_mcb, bool is_command, bool is_request,
   p_port = port_find_mcb_dlci_port(p_mcb, p_frame->dlci);
   if ((p_port == nullptr) ||
       !(p_port->rfc.expected_rsp & (RFC_RSP_RPN | RFC_RSP_RPN_REPLY))) {
-    log::warn("ignore DLC parameter negotiation as we are not waiting for any");
+    LOG(WARNING) << __func__ << ": ignore DLC parameter negotiation as we are"
+                 << " not waiting for any";
     return;
   }
 

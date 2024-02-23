@@ -25,8 +25,6 @@
 
 #define LOG_TAG "ble"
 
-#include <bluetooth/log.h>
-
 #include <cstdint>
 
 #include "base/functional/bind.h"
@@ -39,8 +37,6 @@
 #include "stack/include/btu_hcif.h"
 #include "stack/include/gatt_api.h"
 #include "stack/include/hcimsgs.h"
-
-using namespace bluetooth;
 
 extern tBTM_CB btm_cb;
 
@@ -166,7 +162,7 @@ void BTM_BleReadPhy(
     const RawAddress& bd_addr,
     base::Callback<void(uint8_t tx_phy, uint8_t rx_phy, uint8_t status)> cb) {
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
-    log::error("Wrong mode: no LE link exist or LE not supported");
+    LOG_ERROR("Wrong mode: no LE link exist or LE not supported");
     cb.Run(0, 0, HCI_ERR_NO_CONNECTION);
     return;
   }
@@ -174,7 +170,7 @@ void BTM_BleReadPhy(
   // checking if local controller supports it!
   if (!controller_get_interface()->SupportsBle2mPhy() &&
       !controller_get_interface()->SupportsBleCodedPhy()) {
-    log::error("request not supported in local controller!");
+    LOG_ERROR("request not supported in local controller!");
     cb.Run(0, 0, GATT_REQ_NOT_SUPPORTED);
     return;
   }
@@ -194,7 +190,7 @@ void doNothing(uint8_t* data, uint16_t len) {}
 void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
                    uint16_t phy_options) {
   if (!BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
-    log::info(
+    LOG_INFO(
         "Unable to set phy preferences because no le acl is connected to "
         "device");
     return;
@@ -209,8 +205,7 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
   // checking if local controller supports it!
   if (!controller_get_interface()->SupportsBle2mPhy() &&
       !controller_get_interface()->SupportsBleCodedPhy()) {
-    log::info(
-        "Local controller unable to support setting of le phy parameters");
+    LOG_INFO("Local controller unable to support setting of le phy parameters");
     gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
                             handle, tx_phys, rx_phys);
     return;
@@ -218,7 +213,7 @@ void BTM_BleSetPhy(const RawAddress& bd_addr, uint8_t tx_phys, uint8_t rx_phys,
 
   if (!acl_peer_supports_ble_2m_phy(handle) &&
       !acl_peer_supports_ble_coded_phy(handle)) {
-    log::info("Remote device unable to support setting of le phy parameter");
+    LOG_INFO("Remote device unable to support setting of le phy parameter");
     gatt_notify_phy_updated(static_cast<tHCI_STATUS>(GATT_REQ_NOT_SUPPORTED),
                             handle, tx_phys, rx_phys);
     return;

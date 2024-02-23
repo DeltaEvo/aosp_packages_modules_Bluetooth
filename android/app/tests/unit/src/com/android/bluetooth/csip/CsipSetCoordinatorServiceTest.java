@@ -406,8 +406,6 @@ public class CsipSetCoordinatorServiceTest {
 
         // Send a connect request
         Assert.assertTrue("Connect expected to succeed", mService.connect(mTestDevice));
-
-        TestUtils.waitForIntent(TIMEOUT_MS, mIntentQueue.get(mTestDevice));
     }
 
     /**
@@ -663,8 +661,6 @@ public class CsipSetCoordinatorServiceTest {
                 .getRemoteUuids(any(BluetoothDevice.class));
         // add state machines for testing dump()
         mService.connect(mTestDevice);
-
-        TestUtils.waitForIntent(TIMEOUT_MS, mIntentQueue.get(mTestDevice));
 
         mService.dump(new StringBuilder());
     }

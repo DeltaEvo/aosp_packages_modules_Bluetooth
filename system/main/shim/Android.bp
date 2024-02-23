@@ -8,14 +8,6 @@ package {
 }
 
 filegroup {
-    name: "BluetoothStackManagerSources",
-    srcs: [
-        "entry.cc",
-        "stack.cc",
-    ],
-}
-
-filegroup {
     name: "LibBluetoothShimSources",
     srcs: [
         "acl.cc",
@@ -27,6 +19,7 @@ filegroup {
         "controller.cc",
         "distance_measurement_manager.cc",
         "dumpsys.cc",
+        "entry.cc",
         "hci_layer.cc",
         "l2c_api.cc",
         "le_advertising_manager.cc",
@@ -34,6 +27,7 @@ filegroup {
         "metric_id_api.cc",
         "metrics_api.cc",
         "shim.cc",
+        "stack.cc",
         "utils.cc",
     ],
 }

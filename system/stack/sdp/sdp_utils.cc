@@ -25,7 +25,6 @@
  ******************************************************************************/
 
 #include <base/logging.h>
-#include <bluetooth/log.h>
 #include <log/log.h>
 
 #include <array>
@@ -60,7 +59,6 @@
 #include "types/raw_address.h"
 
 using bluetooth::Uuid;
-using namespace bluetooth;
 
 bool SDP_FindProtocolListElemInRec(const tSDP_DISC_REC* p_rec,
                                    uint16_t layer_uuid,
@@ -109,8 +107,8 @@ static std::vector<std::pair<uint16_t, uint16_t>> sdpu_find_profile_version(
       // Safety check - each entry should itself be a sequence
       if (SDP_DISC_ATTR_TYPE(p_sattr->attr_len_type) !=
           DATA_ELE_SEQ_DESC_TYPE) {
-        log::warn("Descriptor type is not sequence: {}",
-                  loghex(SDP_DISC_ATTR_TYPE(p_sattr->attr_len_type)));
+        LOG(WARNING) << __func__ << ": Descriptor type is not sequence: "
+                     << loghex(SDP_DISC_ATTR_TYPE(p_sattr->attr_len_type));
         return std::vector<std::pair<uint16_t, uint16_t>>();
       }
       // Now, see if the entry contains the profile UUID we are interested in
@@ -127,11 +125,13 @@ static std::vector<std::pair<uint16_t, uint16_t>> sdpu_find_profile_version(
             SDP_DISC_ATTR_TYPE(version_attr->attr_len_type) != UINT_DESC_TYPE ||
             SDP_DISC_ATTR_LEN(version_attr->attr_len_type) != 2) {
           if (version_attr == nullptr) {
-            log::warn("version attr not found");
+            LOG(WARNING) << __func__ << ": version attr not found";
           } else {
-            log::warn("Bad version type {}, or length {}",
-                      loghex(SDP_DISC_ATTR_TYPE(version_attr->attr_len_type)),
-                      SDP_DISC_ATTR_LEN(version_attr->attr_len_type));
+            LOG(WARNING) << __func__ << ": Bad version type "
+                         << loghex(
+                                SDP_DISC_ATTR_TYPE(version_attr->attr_len_type))
+                         << ", or length "
+                         << SDP_DISC_ATTR_LEN(version_attr->attr_len_type);
           }
           return std::vector<std::pair<uint16_t, uint16_t>>();
         }
@@ -179,7 +179,7 @@ static uint16_t sdpu_find_most_specific_service_uuid(tSDP_DISC_REC* p_rec) {
           }
         }
       } else {
-        log::warn("Bad Service Class ID list attribute");
+        LOG(WARNING) << __func__ << ": Bad Service Class ID list attribute";
         return 0;
       }
     } else if (p_attr->attr_id == ATTR_ID_SERVICE_ID) {
@@ -200,8 +200,8 @@ void sdpu_log_attribute_metrics(const RawAddress& bda,
        p_rec = p_rec->p_next_rec) {
     uint16_t service_uuid = sdpu_find_most_specific_service_uuid(p_rec);
     if (service_uuid == 0) {
-      log::info("skipping record without service uuid {}",
-                ADDRESS_TO_LOGGABLE_STR(bda));
+      LOG(INFO) << __func__ << ": skipping record without service uuid "
+                << ADDRESS_TO_LOGGABLE_STR(bda);
       continue;
     }
     // Log the existence of a profile role
@@ -447,7 +447,7 @@ void sdpu_release_ccb(tCONN_CB& ccb) {
   ccb.is_attr_search = false;
 
   /* Free the response buffer */
-  if (ccb.rsp_list) log::verbose("releasing SDP rsp_list");
+  if (ccb.rsp_list) LOG_VERBOSE("releasing SDP rsp_list");
   osi_free_and_reset((void**)&ccb.rsp_list);
 }
 
@@ -723,8 +723,8 @@ void sdpu_build_n_send_error(tCONN_CB* p_ccb, uint16_t trans_num,
   uint16_t rsp_param_len;
   BT_HDR* p_buf = (BT_HDR*)osi_malloc(SDP_DATA_BUF_SIZE);
 
-  log::warn("SDP - sdpu_build_n_send_error  code: 0x{:x}  CID: 0x{:x}",
-            error_code, p_ccb->connection_id);
+  LOG_WARN("SDP - sdpu_build_n_send_error  code: 0x%x  CID: 0x%x", error_code,
+           p_ccb->connection_id);
 
   /* Send the packet to L2CAP */
   p_buf->offset = L2CAP_MIN_OFFSET;
@@ -1074,7 +1074,7 @@ bool sdpu_compare_uuid_arrays(const uint8_t* p_uuid1, uint32_t len1,
 
   if (((len1 != 2) && (len1 != 4) && (len1 != 16)) ||
       ((len2 != 2) && (len2 != 4) && (len2 != 16))) {
-    log::error("invalid length");
+    LOG_ERROR("%s: invalid length", __func__);
     return false;
   }
 
@@ -1338,7 +1338,7 @@ uint8_t* sdpu_build_partial_attrib_entry(uint8_t* p_out,
   uint16_t attr_len = sdpu_get_attrib_entry_len(p_attr);
 
   if (len > SDP_MAX_ATTR_LEN) {
-    log::error("len {} exceeds SDP_MAX_ATTR_LEN", len);
+    LOG_ERROR("%s len %d exceeds SDP_MAX_ATTR_LEN", __func__, len);
     len = SDP_MAX_ATTR_LEN;
   }
 
@@ -1450,10 +1450,10 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
   // Check attribute is AVRCP profile description list and get AVRC Target
   // version
   uint16_t avrcp_version = sdpu_is_avrcp_profile_description_list(p_attr);
-  log::info("SDP AVRCP DB Version {:x}", avrcp_version);
+  LOG_INFO("SDP AVRCP DB Version %x", avrcp_version);
   if (avrcp_version == 0) {
-    log::info("Not AVRCP version attribute or version not valid for device {}",
-              ADDRESS_TO_LOGGABLE_CSTR(*bdaddr));
+    LOG_INFO("Not AVRCP version attribute or version not valid for device %s",
+             ADDRESS_TO_LOGGABLE_CSTR(*bdaddr));
     return;
   }
 
@@ -1464,7 +1464,7 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
                 ->profileSpecific_HACK->AVRC_GetProfileVersion()
           : avrcp_version;
 
-  log::info("Current DUT AVRCP Version {:x}", dut_avrcp_version);
+  LOG_INFO("Current DUT AVRCP Version %x", dut_avrcp_version);
   // Some remote devices will have interoperation issue when receive higher
   // AVRCP version. If those devices are in IOP database and our version higher
   // than device, we reply a lower version to them.
@@ -1478,9 +1478,9 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
   }
 
   if (iop_version != 0) {
-    log::info(
-        "device={} is in IOP database. Reply AVRC Target version {:x} instead "
-        "of {:x}.",
+    LOG_INFO(
+        "device=%s is in IOP database. "
+        "Reply AVRC Target version %x instead of %x.",
         ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), iop_version, avrcp_version);
     uint8_t* p_version = p_attr->value_ptr + 6;
     UINT16_TO_BE_FIELD(p_version, iop_version);
@@ -1490,7 +1490,7 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
   // Dynamic AVRCP version. If our version high than remote device's version,
   // reply version same as its. Otherwise, reply default version.
   if (!osi_property_get_bool(AVRC_DYNAMIC_AVRCP_ENABLE_PROPERTY, true)) {
-    log::info(
+    LOG_INFO(
         "Dynamic AVRCP version feature is not enabled, skipping this method");
     return;
   }
@@ -1500,26 +1500,28 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
   size_t version_value_size = btif_config_get_bin_length(
       bdaddr->ToString(), BTIF_STORAGE_KEY_AVRCP_CONTROLLER_VERSION);
   if (version_value_size != sizeof(cached_version)) {
-    log::error("cached value len wrong, bdaddr={}. Len is {} but should be {}.",
-               ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), version_value_size,
-               sizeof(cached_version));
+    LOG_ERROR(
+        "cached value len wrong, bdaddr=%s. Len is %zu but should be %zu.",
+        ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), version_value_size,
+        sizeof(cached_version));
     return;
   }
 
   if (!btif_config_get_bin(bdaddr->ToString(),
                            BTIF_STORAGE_KEY_AVRCP_CONTROLLER_VERSION,
                            (uint8_t*)&cached_version, &version_value_size)) {
-    log::info(
-        "no cached AVRC Controller version for {}. Reply default AVRC Target "
-        "version {:x}.DUT AVRC Target version {:x}.",
+    LOG_INFO(
+        "no cached AVRC Controller version for %s. "
+        "Reply default AVRC Target version %x."
+        "DUT AVRC Target version %x.",
         ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), avrcp_version, dut_avrcp_version);
     return;
   }
 
   if (!spdu_is_avrcp_version_valid(cached_version)) {
-    log::error(
-        "cached AVRC Controller version {:x} of {} is not valid. Reply default "
-        "AVRC Target version {:x}.",
+    LOG_ERROR(
+        "cached AVRC Controller version %x of %s is not valid. "
+        "Reply default AVRC Target version %x.",
         cached_version, ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), avrcp_version);
     return;
   }
@@ -1532,9 +1534,10 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
 
   uint16_t negotiated_avrcp_version =
       std::min(dut_avrcp_version, cached_version);
-  log::info(
-      "read cached AVRC Controller version {:x} of {}. DUT AVRC Target version "
-      "{:x}.Negotiated AVRCP version to update peer {:x}.",
+  LOG_INFO(
+      "read cached AVRC Controller version %x of %s. "
+      "DUT AVRC Target version %x."
+      "Negotiated AVRCP version to update peer %x. ",
       cached_version, ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), dut_avrcp_version,
       negotiated_avrcp_version);
   uint8_t* p_version = p_attr->value_ptr + 6;
@@ -1556,24 +1559,24 @@ void sdpu_set_avrc_target_version(const tSDP_ATTRIBUTE* p_attr,
 void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr,
                                    const RawAddress* bdaddr,
                                    uint16_t avrcp_version) {
-  log::info("SDP AVRCP Version {:x}", avrcp_version);
+  LOG_INFO("SDP AVRCP Version %x", avrcp_version);
 
   if ((p_attr->id != ATTR_ID_SUPPORTED_FEATURES) || (p_attr->len != 2) ||
       (p_attr->value_ptr == nullptr)) {
-    log::info("Invalid request for AVRC feature ignore");
+    LOG_INFO("Invalid request for AVRC feature ignore");
     return;
   }
 
   if (avrcp_version == 0) {
-    log::info("AVRCP version not valid for device {}",
-              ADDRESS_TO_LOGGABLE_CSTR(*bdaddr));
+    LOG_INFO("AVRCP version not valid for device %s",
+             ADDRESS_TO_LOGGABLE_CSTR(*bdaddr));
     return;
   }
 
   // Dynamic AVRCP version. If our version high than remote device's version,
   // reply version same as its. Otherwise, reply default version.
   if (!osi_property_get_bool(AVRC_DYNAMIC_AVRCP_ENABLE_PROPERTY, false)) {
-    log::info(
+    LOG_INFO(
         "Dynamic AVRCP version feature is not enabled, skipping this method");
     return;
   }
@@ -1582,16 +1585,17 @@ void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr,
   size_t version_value_size = btif_config_get_bin_length(
       bdaddr->ToString(), BTIF_STORAGE_KEY_AV_REM_CTRL_FEATURES);
   if (version_value_size != sizeof(avrcp_peer_features)) {
-    log::error("cached value len wrong, bdaddr={}. Len is {} but should be {}.",
-               ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), version_value_size,
-               sizeof(avrcp_peer_features));
+    LOG_ERROR(
+        "cached value len wrong, bdaddr=%s. Len is %zu but should be %zu.",
+        ADDRESS_TO_LOGGABLE_CSTR(*bdaddr), version_value_size,
+        sizeof(avrcp_peer_features));
     return;
   }
 
   if (!btif_config_get_bin(
           bdaddr->ToString(), BTIF_STORAGE_KEY_AV_REM_CTRL_FEATURES,
           (uint8_t*)&avrcp_peer_features, &version_value_size)) {
-    log::error("Unable to fetch cached AVRC features");
+    LOG_ERROR("Unable to fetch cached AVRC features");
     return;
   }
 
@@ -1600,12 +1604,11 @@ void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr,
   bool coverart_supported =
       ((AVRCP_FEAT_CA_BIT & avrcp_peer_features) == AVRCP_FEAT_CA_BIT);
 
-  log::info(
-      "SDP AVRCP DB Version 0x{:x}, browse supported {}, cover art supported "
-      "{}",
+  LOG_INFO(
+      "SDP AVRCP DB Version 0x%x, browse supported %d, cover art supported %d",
       avrcp_peer_features, browsing_supported, coverart_supported);
   if (avrcp_version < AVRC_REV_1_4 || !browsing_supported) {
-    log::info("Reset Browsing Feature");
+    LOG_INFO("Reset Browsing Feature ");
     p_attr->value_ptr[AVRCP_SUPPORTED_FEATURES_POSITION] &=
         ~AVRCP_BROWSE_SUPPORT_BITMASK;
     p_attr->value_ptr[AVRCP_SUPPORTED_FEATURES_POSITION] &=
@@ -1613,13 +1616,13 @@ void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr,
   }
 
   if (avrcp_version < AVRC_REV_1_6 || !coverart_supported) {
-    log::info("Reset CoverArt Feature");
+    LOG_INFO("Reset CoverArt Feature ");
     p_attr->value_ptr[AVRCP_SUPPORTED_FEATURES_POSITION - 1] &=
         ~AVRCP_CA_SUPPORT_BITMASK;
   }
 
   if (avrcp_version >= AVRC_REV_1_4 && browsing_supported) {
-    log::info("Set Browsing Feature");
+    LOG_INFO("Set Browsing Feature ");
     p_attr->value_ptr[AVRCP_SUPPORTED_FEATURES_POSITION] |=
         AVRCP_BROWSE_SUPPORT_BITMASK;
     p_attr->value_ptr[AVRCP_SUPPORTED_FEATURES_POSITION] |=
@@ -1627,7 +1630,7 @@ void sdpu_set_avrc_target_features(const tSDP_ATTRIBUTE* p_attr,
   }
 
   if (avrcp_version == AVRC_REV_1_6 && coverart_supported) {
-    log::info("Set CoverArt Feature");
+    LOG_INFO("Set CoverArt Feature ");
     p_attr->value_ptr[AVRCP_SUPPORTED_FEATURES_POSITION - 1] |=
         AVRCP_CA_SUPPORT_BITMASK;
   }

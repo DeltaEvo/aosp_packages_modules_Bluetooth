@@ -457,10 +457,6 @@ size_t Btm::GetNumberOfAdvertisingInstances() const {
   return GetAdvertising()->GetNumberOfAdvertisingInstances();
 }
 
-size_t Btm::GetNumberOfAdvertisingInstancesInUse() const {
-  return GetAdvertising()->GetNumberOfAdvertisingInstancesInUse();
-}
-
 uint16_t Btm::GetAclHandle(const RawAddress& remote_bda,
                            tBT_TRANSPORT transport) {
   auto acl_manager = GetAclManager();

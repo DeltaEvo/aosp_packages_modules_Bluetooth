@@ -131,11 +131,11 @@ inline std::string bt_status_text(const bt_status_t& status) {
     case BT_STATUS_UNHANDLED:
       return std::string("unhandled");
     case BT_STATUS_AUTH_FAILURE:
-      return std::string("auth_failure");
+      return std::string("failure");
     case BT_STATUS_RMT_DEV_DOWN:
       return std::string("remote_device_down");
     case BT_STATUS_AUTH_REJECTED:
-      return std::string("auth_rejected");
+      return std::string("rejected");
     case BT_STATUS_JNI_ENVIRONMENT_ERROR:
       return std::string("jni_env_error");
     case BT_STATUS_JNI_THREAD_ATTACH_ERROR:
@@ -158,7 +158,7 @@ typedef struct { uint8_t pin[16]; } __attribute__((packed)) bt_pin_code_t;
 
 typedef struct {
   uint8_t status;
-  uint32_t ctrl_state;  /* stack reported state */
+  uint8_t ctrl_state;   /* stack reported state */
   uint64_t tx_time;     /* in ms */
   uint64_t rx_time;     /* in ms */
   uint64_t idle_time;   /* in ms */

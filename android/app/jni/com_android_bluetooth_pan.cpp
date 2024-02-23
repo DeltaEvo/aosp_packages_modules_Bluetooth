@@ -16,12 +16,22 @@
 
 #define LOG_TAG "BluetoothPanServiceJni"
 
-#include <cutils/log.h>
-#include <string.h>
-
 #include "com_android_bluetooth.h"
 #include "hardware/bt_pan.h"
 #include "utils/Log.h"
+
+#include <string.h>
+
+#include <cutils/log.h>
+#define info(fmt, ...) ALOGI("%s(L%d): " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define debug(fmt, ...) \
+  ALOGD("%s(L%d): " fmt, __func__, __LINE__, ##__VA_ARGS__)
+#define warn(fmt, ...) \
+  ALOGW("## WARNING : %s(L%d): " fmt "##", __func__, __LINE__, ##__VA_ARGS__)
+#define error(fmt, ...) \
+  ALOGE("## ERROR : %s(L%d): " fmt "##", __func__, __LINE__, ##__VA_ARGS__)
+#define asrt(s) \
+  if (!(s)) ALOGE("## %s(L%d): ASSERT %s failed! ##", __func__, __LINE__, #s)
 
 namespace android {
 
@@ -37,7 +47,7 @@ static jbyteArray marshall_bda(const RawAddress* bd_addr) {
 
   jbyteArray addr = sCallbackEnv->NewByteArray(sizeof(RawAddress));
   if (!addr) {
-    log::error("Fail to new jbyteArray bd addr");
+    ALOGE("Fail to new jbyteArray bd addr");
     return NULL;
   }
   sCallbackEnv->SetByteArrayRegion(addr, 0, sizeof(RawAddress),
@@ -47,9 +57,9 @@ static jbyteArray marshall_bda(const RawAddress* bd_addr) {
 
 static void control_state_callback(btpan_control_state_t state, int local_role,
                                    bt_status_t error, const char* ifname) {
-  log::debug("state:{}, local_role:{}, ifname:{}", state, local_role, ifname);
+  debug("state:%d, local_role:%d, ifname:%s", state, local_role, ifname);
   if (mCallbacksObj == NULL) {
-    log::error("Callbacks Obj is NULL");
+    error("Callbacks Obj is NULL: '%s", __func__);
     return;
   }
   CallbackEnv sCallbackEnv(__func__);
@@ -65,17 +75,17 @@ static void connection_state_callback(btpan_connection_state_t state,
                                       bt_status_t error,
                                       const RawAddress* bd_addr, int local_role,
                                       int remote_role) {
-  log::debug("state:{}, local_role:{}, remote_role:{}", state, local_role,
-             remote_role);
+  debug("state:%d, local_role:%d, remote_role:%d", state, local_role,
+        remote_role);
   if (mCallbacksObj == NULL) {
-    log::error("Callbacks Obj is NULL");
+    error("Callbacks Obj is NULL: '%s", __func__);
     return;
   }
   CallbackEnv sCallbackEnv(__func__);
   if (!sCallbackEnv.valid()) return;
   ScopedLocalRef<jbyteArray> addr(sCallbackEnv.get(), marshall_bda(bd_addr));
   if (!addr.get()) {
-    log::error("Fail to new jbyteArray bd addr for PAN channel state");
+    error("Fail to new jbyteArray bd addr for PAN channel state");
     return;
   }
   sCallbackEnv->CallVoidMethod(mCallbacksObj, method_onConnectStateChanged,
@@ -91,30 +101,30 @@ static btpan_callbacks_t sBluetoothPanCallbacks = {
 static const bt_interface_t* btIf;
 
 static void initializeNative(JNIEnv* env, jobject object) {
-  log::debug("Initialize pan");
+  debug("Initialize pan");
   if (btIf) return;
 
   btIf = getBluetoothInterface();
   if (btIf == NULL) {
-    log::error("Bluetooth module is not loaded");
+    error("Bluetooth module is not loaded");
     return;
   }
 
   if (sPanIf != NULL) {
-    log::warn("Cleaning up Bluetooth PAN Interface before initializing...");
+    ALOGW("Cleaning up Bluetooth PAN Interface before initializing...");
     sPanIf->cleanup();
     sPanIf = NULL;
   }
 
   if (mCallbacksObj != NULL) {
-    log::warn("Cleaning up Bluetooth PAN callback object");
+    ALOGW("Cleaning up Bluetooth PAN callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = NULL;
   }
 
   sPanIf = (btpan_interface_t*)btIf->get_profile_interface(BT_PROFILE_PAN_ID);
   if (sPanIf == NULL) {
-    log::error("Failed to get Bluetooth PAN Interface");
+    error("Failed to get Bluetooth PAN Interface");
     return;
   }
 
@@ -122,12 +132,10 @@ static void initializeNative(JNIEnv* env, jobject object) {
 
   bt_status_t status = sPanIf->init(&sBluetoothPanCallbacks);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed to initialize Bluetooth PAN, status: {}",
-               bt_status_text(status));
+    error("Failed to initialize Bluetooth PAN, status: %d", status);
     sPanIf = NULL;
     if (mCallbacksObj != NULL) {
-      log::warn(
-          "initialization failed: Cleaning up Bluetooth PAN callback object");
+      ALOGW("initialization failed: Cleaning up Bluetooth PAN callback object");
       env->DeleteGlobalRef(mCallbacksObj);
       mCallbacksObj = NULL;
     }
@@ -136,17 +144,17 @@ static void initializeNative(JNIEnv* env, jobject object) {
 }
 
 static void cleanupNative(JNIEnv* env, jobject /* object */) {
-  log::debug("Cleanup pan");
+  debug("Cleanup pan");
   if (!btIf) return;
 
   if (sPanIf != NULL) {
-    log::warn("Cleaning up Bluetooth PAN Interface...");
+    ALOGW("Cleaning up Bluetooth PAN Interface...");
     sPanIf->cleanup();
     sPanIf = NULL;
   }
 
   if (mCallbacksObj != NULL) {
-    log::warn("Cleaning up Bluetooth PAN callback object");
+    ALOGW("Cleaning up Bluetooth PAN callback object");
     env->DeleteGlobalRef(mCallbacksObj);
     mCallbacksObj = NULL;
   }
@@ -156,20 +164,19 @@ static void cleanupNative(JNIEnv* env, jobject /* object */) {
 static jboolean connectPanNative(JNIEnv* env, jobject /* object */,
                                  jbyteArray address, jint src_role,
                                  jint dest_role) {
-  log::debug("Connect pan");
+  debug("Connect pan");
   if (!sPanIf) return JNI_FALSE;
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
-    log::error("Bluetooth device address null");
+    error("Bluetooth device address null");
     return JNI_FALSE;
   }
 
   jboolean ret = JNI_TRUE;
   bt_status_t status = sPanIf->connect((RawAddress*)addr, src_role, dest_role);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed PAN channel connection, status: {}",
-               bt_status_text(status));
+    error("Failed PAN channel connection, status: %d", status);
     ret = JNI_FALSE;
   }
   env->ReleaseByteArrayElements(address, addr, 0);
@@ -179,20 +186,19 @@ static jboolean connectPanNative(JNIEnv* env, jobject /* object */,
 
 static jboolean disconnectPanNative(JNIEnv* env, jobject /* object */,
                                     jbyteArray address) {
-  log::debug("Disconnects pan");
+  debug("Disconnects pan");
   if (!sPanIf) return JNI_FALSE;
 
   jbyte* addr = env->GetByteArrayElements(address, NULL);
   if (!addr) {
-    log::error("Bluetooth device address null");
+    error("Bluetooth device address null");
     return JNI_FALSE;
   }
 
   jboolean ret = JNI_TRUE;
   bt_status_t status = sPanIf->disconnect((RawAddress*)addr);
   if (status != BT_STATUS_SUCCESS) {
-    log::error("Failed disconnect pan channel, status: {}",
-               bt_status_text(status));
+    error("Failed disconnect pan channel, status: %d", status);
     ret = JNI_FALSE;
   }
   env->ReleaseByteArrayElements(address, addr, 0);

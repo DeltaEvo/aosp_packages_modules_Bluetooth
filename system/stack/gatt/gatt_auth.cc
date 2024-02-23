@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 #include <base/logging.h>
-#include <bluetooth/log.h>
 #include <string.h>
 
 #include "gatt_api.h"
@@ -37,7 +36,7 @@
 #include "stack/include/btm_ble_sec_api.h"
 #include "types/raw_address.h"
 
-using namespace bluetooth;
+using base::StringPrintf;
 
 /*******************************************************************************
  *
@@ -105,8 +104,8 @@ void gatt_verify_signature(tGATT_TCB& tcb, uint16_t cid, BT_HDR* p_buf) {
   uint32_t counter;
 
   if (p_buf->len < GATT_AUTH_SIGN_LEN + 4) {
-    log::error("Data length {} less than expected {}", p_buf->len,
-               GATT_AUTH_SIGN_LEN + 4);
+    LOG(ERROR) << StringPrintf("%s: Data length %u less than expected %u",
+                               __func__, p_buf->len, GATT_AUTH_SIGN_LEN + 4);
     return;
   }
   cmd_len = p_buf->len - GATT_AUTH_SIGN_LEN + 4;
@@ -115,7 +114,7 @@ void gatt_verify_signature(tGATT_TCB& tcb, uint16_t cid, BT_HDR* p_buf) {
 
   if (!BTM_BleVerifySignature(tcb.peer_bda, p_orig, cmd_len, counter, p)) {
     /* if this is a bad signature, assume from attacker, ignore it  */
-    log::error("Signature Verification Failed, data ignored");
+    LOG(ERROR) << StringPrintf("Signature Verification Failed, data ignored");
     return;
   }
 
@@ -159,17 +158,19 @@ static void gatt_enc_cmpl_cback(const RawAddress* bd_addr,
                                 tBT_TRANSPORT transport,
                                 UNUSED_ATTR void* p_ref_data,
                                 tBTM_STATUS result) {
-  log::verbose("");
+  VLOG(1) << StringPrintf("gatt_enc_cmpl_cback");
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(*bd_addr, transport);
   if (!p_tcb) {
-    log::error("enc callback for unknown bd_addr");
+    LOG(ERROR) << StringPrintf("%s: enc callback for unknown bd_addr",
+                               __func__);
     return;
   }
 
   if (gatt_get_sec_act(p_tcb) == GATT_SEC_ENC_PENDING) return;
 
   if (p_tcb->pending_enc_clcb.empty()) {
-    log::error("no operation waiting for encrypting");
+    LOG(ERROR) << StringPrintf("%s: no operation waiting for encrypting",
+                               __func__);
     return;
   }
 
@@ -213,7 +214,8 @@ static void gatt_enc_cmpl_cback(const RawAddress* bd_addr,
 void gatt_notify_enc_cmpl(const RawAddress& bd_addr) {
   tGATT_TCB* p_tcb = gatt_find_tcb_by_addr(bd_addr, BT_TRANSPORT_LE);
   if (!p_tcb) {
-    log::verbose("notify GATT for encryption completion of unknown device");
+    VLOG(1) << StringPrintf(
+        "notify GATT for encryption completion of unknown device");
     return;
   }
 
@@ -363,7 +365,8 @@ tGATT_STATUS gatt_get_link_encrypt_status(tGATT_TCB& tcb) {
     }
   }
 
-  log::verbose("gatt_get_link_encrypt_status status=0x{:x}", encrypt_status);
+  VLOG(1) << StringPrintf("gatt_get_link_encrypt_status status=0x%x",
+                          encrypt_status);
   return encrypt_status;
 }
 
@@ -409,21 +412,24 @@ bool gatt_security_check_start(tGATT_CLCB* p_clcb) {
 
   switch (gatt_sec_act) {
     case GATT_SEC_SIGN_DATA:
-      log::verbose("Do data signing");
+      VLOG(1) << StringPrintf("%s: Do data signing", __func__);
       gatt_sign_data(p_clcb);
       break;
     case GATT_SEC_ENCRYPT:
     case GATT_SEC_ENCRYPT_NO_MITM:
     case GATT_SEC_ENCRYPT_MITM:
       if (sec_act_old < GATT_SEC_ENCRYPT) {
-        log::verbose("Encrypt now or key upgreade first");
+        VLOG(1) << StringPrintf("%s: Encrypt now or key upgreade first",
+                                __func__);
         tBTM_BLE_SEC_ACT btm_ble_sec_act;
         gatt_convert_sec_action(gatt_sec_act, &btm_ble_sec_act);
         tBTM_STATUS btm_status =
             BTM_SetEncryption(p_tcb->peer_bda, p_tcb->transport,
                               gatt_enc_cmpl_cback, NULL, btm_ble_sec_act);
         if ((btm_status != BTM_SUCCESS) && (btm_status != BTM_CMD_STARTED)) {
-          log::error("BTM_SetEncryption failed btm_status={}", btm_status);
+          LOG(ERROR) << StringPrintf(
+              "%s BTM_SetEncryption failed btm_status=%d", __func__,
+              btm_status);
           gatt_set_sec_act(p_tcb, GATT_SEC_NONE);
           gatt_set_ch_state(p_tcb, GATT_CH_OPEN);
 

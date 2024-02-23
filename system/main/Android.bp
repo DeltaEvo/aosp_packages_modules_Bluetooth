@@ -22,7 +22,6 @@ cc_library_static {
     name: "libbte",
     defaults: ["fluoride_defaults"],
     srcs: [
-        ":BluetoothStackManagerSources",
         ":LibBluetoothShimSources",
         ":LibBluetoothSources",
     ],
@@ -126,7 +125,6 @@ cc_library_static {
     defaults: ["fluoride_defaults"],
 
     srcs: [
-        ":BluetoothStackManagerSources",
         ":LibBluetoothShimSources",
         ":LibBluetoothSources",
     ],
@@ -208,11 +206,9 @@ cc_test {
         "shim/utils.cc",
         "test/common_stack_test.cc",
         "test/main_shim_dumpsys_test.cc",
-        "test/main_shim_stack_lifecycle_test.cc",
         "test/main_shim_test.cc",
     ],
     static_libs: [
-        "libbase",
         "libbluetooth-dumpsys",
         "libbluetooth-types",
         "libbluetooth_crypto_toolbox",

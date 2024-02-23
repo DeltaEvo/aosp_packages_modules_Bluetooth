@@ -67,7 +67,6 @@ class LeAudioClient {
   virtual void SetInVoipCall(bool in_call) = 0;
   virtual void SetUnicastMonitorMode(uint8_t direction, bool enable) = 0;
   virtual bool IsInVoipCall() = 0;
-  virtual bool IsInStreaming() = 0;
   virtual void SendAudioProfilePreferences(
       const int group_id, bool is_output_preference_le_audio,
       bool is_duplex_preference_le_audio) = 0;
@@ -92,5 +91,4 @@ class LeAudioClient {
   static bool GetAsesForStorage(const RawAddress& addr,
                                 std::vector<uint8_t>& out);
   static bool IsLeAudioClientRunning();
-  static bool IsLeAudioClientInStreaming();
 };

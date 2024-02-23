@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include <bluetooth/log.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -45,7 +44,6 @@ using testing::StrictMock;
 
 using bluetooth::eatt::EattChannel;
 using bluetooth::eatt::EattChannelState;
-using namespace bluetooth;
 
 #define BLE_GATT_SVR_SUP_FEAT_EATT_BITMASK 0x01
 
@@ -56,7 +54,7 @@ void gatt_consolidate(const RawAddress& identity_addr, const RawAddress& rpa) {}
 void gatt_data_process(tGATT_TCB& tcb, uint16_t cid, BT_HDR* p_buf) { return; }
 tGATT_TCB* gatt_find_tcb_by_addr(const RawAddress& bda,
                                  tBT_TRANSPORT transport) {
-  log::info("");
+  LOG(INFO) << __func__;
   return &test_tcb;
 }
 

@@ -61,6 +61,14 @@ public class BluetoothMapMasInstanceTest {
     }
 
     @Test
+    public void constructor_withNoParameters() {
+        BluetoothMapMasInstance instance = new BluetoothMapMasInstance();
+
+        assertThat(instance.mTag).isEqualTo(
+                "BluetoothMapMasInstance" + (BluetoothMapMasInstance.sInstanceCounter - 1));
+    }
+
+    @Test
     public void toString_returnsInfo() {
         BluetoothMapMasInstance instance = new BluetoothMapMasInstance(mMapService, mContext,
                 mAccountItem, TEST_MAS_ID, TEST_ENABLE_SMS_MMS);
