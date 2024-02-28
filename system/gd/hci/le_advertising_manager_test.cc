@@ -103,10 +103,10 @@ class TestLeAddressManager : public LeAddressManager {
       common::Callback<void(std::unique_ptr<CommandBuilder>)> enqueue_command,
       os::Handler* handler,
       Address public_address,
-      uint8_t connect_list_size,
+      uint8_t accept_list_size,
       uint8_t resolving_list_size)
       : LeAddressManager(
-            enqueue_command, handler, public_address, connect_list_size, resolving_list_size) {
+            enqueue_command, handler, public_address, accept_list_size, resolving_list_size) {
     address_policy_ = AddressPolicy::USE_STATIC_ADDRESS;
     minimum_rotation_time_ = 0ms;
     maximum_rotation_time_ = 100ms;
@@ -1801,13 +1801,14 @@ TEST_F(LeExtendedAdvertisingManagerTest, use_rpa) {
   test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_RESOLVABLE_ADDRESS);
 
   // act: start advertising set with RPA
+  AdvertisingConfig config{};
+  config.requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM;
+  config.channel_map = 1;
+
   le_advertising_manager_->ExtendedCreateAdvertiser(
       kAdvertiserClientIdJni,
       0x00,
-      AdvertisingConfig{
-          .requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM,
-          .channel_map = 1,
-      },
+      config,
       scan_callback,
       set_terminated_callback,
       0,
@@ -1829,13 +1830,14 @@ TEST_F(LeExtendedAdvertisingManagerTest, use_non_resolvable_address) {
   test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_RESOLVABLE_ADDRESS);
 
   // start advertising set with NRPA
+  AdvertisingConfig config{};
+  config.requested_advertiser_address_type = AdvertiserAddressType::NONRESOLVABLE_RANDOM;
+  config.channel_map = 1;
+
   le_advertising_manager_->ExtendedCreateAdvertiser(
       kAdvertiserClientIdJni,
       0x00,
-      AdvertisingConfig{
-          .requested_advertiser_address_type = AdvertiserAddressType::NONRESOLVABLE_RANDOM,
-          .channel_map = 1,
-      },
+      config,
       scan_callback,
       set_terminated_callback,
       0,
@@ -1866,13 +1868,14 @@ TEST_F(LeExtendedAdvertisingManagerTest, use_public_address_type_if_public_addre
   test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS);
 
   // act: start advertising set with RPA
+  AdvertisingConfig config{};
+  config.requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM;
+  config.channel_map = 1;
+
   le_advertising_manager_->ExtendedCreateAdvertiser(
       kAdvertiserClientIdJni,
       0x00,
-      AdvertisingConfig{
-          .requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM,
-          .channel_map = 1,
-      },
+      config,
       scan_callback,
       set_terminated_callback,
       0,
@@ -1898,14 +1901,15 @@ TEST_F_WITH_FLAGS(
   test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS);
 
   // act: start non-connectable advertising set with RPA
+  AdvertisingConfig config{};
+  config.requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM;
+  config.channel_map = 1;
+  config.connectable = false;
+
   le_advertising_manager_->ExtendedCreateAdvertiser(
       kAdvertiserClientIdJni,
       0x00,
-      AdvertisingConfig{
-          .requested_advertiser_address_type = AdvertiserAddressType::RESOLVABLE_RANDOM,
-          .channel_map = 1,
-          .connectable = false,
-      },
+      config,
       scan_callback,
       set_terminated_callback,
       0,
@@ -1938,14 +1942,15 @@ TEST_F_WITH_FLAGS(
   test_acl_manager_->SetAddressPolicy(LeAddressManager::AddressPolicy::USE_PUBLIC_ADDRESS);
 
   // act: start non-connectable advertising set with PUBLIC
+  AdvertisingConfig config{};
+  config.requested_advertiser_address_type = AdvertiserAddressType::PUBLIC;
+  config.channel_map = 1;
+  config.connectable = false;
+
   le_advertising_manager_->ExtendedCreateAdvertiser(
       kAdvertiserClientIdJni,
       0x00,
-      AdvertisingConfig{
-          .requested_advertiser_address_type = AdvertiserAddressType::PUBLIC,
-          .channel_map = 1,
-          .connectable = false,
-      },
+      config,
       scan_callback,
       set_terminated_callback,
       0,

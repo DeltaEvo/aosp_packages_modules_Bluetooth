@@ -1,4 +1,5 @@
 package: "com.android.bluetooth.flags"
+container: "com.android.btservices"
 
 flag {
     name: "mfi_has_uuid"
@@ -47,4 +48,11 @@ flag {
     namespace: "bluetooth"
     description: "Change visibility of BluetoothDevice#getAddressType API to public"
     bug: "321120941"
+}
+
+flag {
+    name: "remove_bond_with_address_map"
+    namespace: "bluetooth"
+    description: "Removes the address map when the bond is removed"
+    bug: "326603271"
 }

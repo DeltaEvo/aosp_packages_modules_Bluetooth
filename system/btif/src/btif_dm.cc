@@ -26,6 +26,7 @@
  *
  ******************************************************************************/
 
+#include "bt_dev_class.h"
 #define LOG_TAG "bt_btif_dm"
 
 #include "btif_dm.h"
@@ -63,6 +64,7 @@
 #include "btif_profile_storage.h"
 #include "btif_storage.h"
 #include "btif_util.h"
+#include "common/init_flags.h"
 #include "common/lru_cache.h"
 #include "common/metrics.h"
 #include "device/include/controller.h"
@@ -84,6 +86,7 @@
 #include "stack/include/bt_octets.h"
 #include "stack/include/bt_types.h"
 #include "stack/include/bt_uuid16.h"
+#include "stack/include/btm_ble_addr.h"
 #include "stack/include/btm_ble_api.h"
 #include "stack/include/btm_ble_sec_api.h"
 #include "stack/include/btm_ble_sec_api_types.h"
@@ -849,9 +852,13 @@ static void btif_dm_cb_create_bond(const RawAddress bd_addr,
 
   if (!IS_FLAG_ENABLED(connect_hid_after_service_discovery) &&
       is_hid && (device_type & BT_DEVICE_TYPE_BLE) == 0) {
+    tAclLinkSpec link_spec;
+    link_spec.addrt.bda = bd_addr;
+    link_spec.addrt.type = addr_type;
+    link_spec.transport = transport;
     const bt_status_t status =
         GetInterfaceToProfiles()->profileSpecific_HACK->btif_hh_connect(
-            &bd_addr);
+            &link_spec);
     if (status != BT_STATUS_SUCCESS)
       bond_state_changed(status, bd_addr, BT_BOND_STATE_NONE);
   } else {
@@ -914,6 +921,50 @@ uint16_t btif_dm_get_connection_state(const RawAddress& bd_addr) {
                          (rc & ENCRYPTED_BREDR) ? 'T' : 'F',
                          (rc & ENCRYPTED_LE) ? 'T' : 'F'));
   return rc;
+}
+
+static uint16_t btif_dm_get_resolved_connection_state(
+    tBLE_BD_ADDR ble_bd_addr) {
+  uint16_t rc = 0;
+  if (maybe_resolve_address(&ble_bd_addr.bda, &ble_bd_addr.type)) {
+    if (BTA_DmGetConnectionState(ble_bd_addr.bda)) {
+      rc = 0x0001;
+      if (BTM_IsEncrypted(ble_bd_addr.bda, BT_TRANSPORT_BR_EDR)) {
+        rc |= ENCRYPTED_BREDR;
+      }
+      if (BTM_IsEncrypted(ble_bd_addr.bda, BT_TRANSPORT_LE)) {
+        rc |= ENCRYPTED_LE;
+      }
+
+      BTM_LogHistory(
+          kBtmLogTag, ble_bd_addr.bda, "RESOLVED connection state",
+          base::StringPrintf(
+              "connected:%c classic_encrypted:%c le_encrypted:%c",
+              (rc & 0x0001) ? 'T' : 'F', (rc & ENCRYPTED_BREDR) ? 'T' : 'F',
+              (rc & ENCRYPTED_LE) ? 'T' : 'F'));
+    }
+  }
+  return rc;
+}
+
+uint16_t btif_dm_get_connection_state_sync(const RawAddress& bd_addr) {
+  std::promise<uint16_t> promise;
+  std::future future = promise.get_future();
+
+  ASSERT(BT_STATUS_SUCCESS ==
+         do_in_main_thread(
+             FROM_HERE,
+             base::BindOnce(
+                 [](const RawAddress bd_addr, std::promise<uint16_t> promise) {
+                   // Experiment to try with maybe resolved address
+                   btif_dm_get_resolved_connection_state({
+                       .type = BLE_ADDR_RANDOM,
+                       .bda = bd_addr,
+                   });
+                   promise.set_value(btif_dm_get_connection_state(bd_addr));
+                 },
+                 bd_addr, std::move(promise))));
+  return future.get();
 }
 
 /******************************************************************************
@@ -1731,7 +1782,11 @@ static void btif_dm_search_services_evt(tBTA_DM_SEARCH_EVT event,
           LOG_WARN("SDP failed after bonding re-attempting for %s",
                    ADDRESS_TO_LOGGABLE_CSTR(bd_addr));
           pairing_cb.sdp_attempts++;
-          btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_AUTO);
+          if (IS_FLAG_ENABLED(force_bredr_for_sdp_retry)) {
+            btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_BR_EDR);
+          } else {
+            btif_dm_get_remote_services(bd_addr, BT_TRANSPORT_AUTO);
+          }
         } else {
           LOG_WARN("SDP triggered by someone failed when bonding");
         }
@@ -2834,8 +2889,13 @@ void btif_dm_remove_bond(const RawAddress bd_addr) {
   // there is a valid hid connection with this bd_addr. If yes VUP will be
   // issued.
 #if (BTA_HH_INCLUDED == TRUE)
+  tAclLinkSpec link_spec;
+  link_spec.addrt.bda = bd_addr;
+  link_spec.transport = BT_TRANSPORT_AUTO;
+  link_spec.addrt.type = BLE_ADDR_PUBLIC;
+
   if (GetInterfaceToProfiles()->profileSpecific_HACK->btif_hh_virtual_unplug(
-          &bd_addr) != BT_STATUS_SUCCESS)
+          &link_spec) != BT_STATUS_SUCCESS)
 #endif
   {
     LOG_DEBUG("Removing HH device");
@@ -2911,15 +2971,12 @@ void btif_dm_ssp_reply(const RawAddress bd_addr, bt_ssp_variant_t variant,
  *
  * Description      Reads the system property configured class of device
  *
- * Inputs           A pointer to a DEV_CLASS that you want filled with the
- *                  current class of device. Size is assumed to be 3.
- *
- * Returns          Nothing. device_class will contain the current class of
- *                  device. If no value is present, or the value is malformed
- *                  the default "unclassified" value will be used
+ * Returns          A DEV_CLASS containing the current class of device.
+ *                  If no value is present, or the value is malformed
+ *                  the default kEmpty value will be used
  *
  ******************************************************************************/
-void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
+DEV_CLASS btif_dm_get_local_class_of_device() {
   /* A class of device is a {SERVICE_CLASS, MAJOR_CLASS, MINOR_CLASS}
    *
    * The input is expected to be a string of the following format:
@@ -2929,18 +2986,13 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
    *
    * Notice there is always two commas and no spaces.
    */
-
-  device_class[0] = 0x00;
-  device_class[1] = BTM_COD_MAJOR_UNCLASSIFIED;
-  device_class[2] = BTM_COD_MINOR_UNCLASSIFIED;
-
   char prop_cod[PROPERTY_VALUE_MAX];
   osi_property_get(PROPERTY_CLASS_OF_DEVICE, prop_cod, "");
 
   // If the property is empty, use the default
   if (prop_cod[0] == '\0') {
     LOG_ERROR("COD property is empty");
-    return;
+    return kDevClassUnclassified;
   }
 
   // Start reading the contents of the property string. If at any point anything
@@ -2957,7 +3009,7 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
       char c = prop_cod[i++];
       if (!std::isdigit(c)) {
         LOG_ERROR("COD malformed, '%c' is a non-digit", c);
-        return;
+        return kDevClassUnclassified;
       }
       value += c;
     }
@@ -2965,20 +3017,20 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
     // If we hit the end and it wasn't null terminated then return the default
     if (i == PROPERTY_VALUE_MAX && prop_cod[PROPERTY_VALUE_MAX - 1] != '\0') {
       LOG_ERROR("COD malformed, value was truncated");
-      return;
+      return kDevClassUnclassified;
     }
 
     // Each number in the list must be one byte, meaning 0 (0x00) -> 255 (0xFF)
     if (value.size() > 3 || value.size() == 0) {
       LOG_ERROR("COD malformed, '%s' must be between [0, 255]", value.c_str());
-      return;
+      return kDevClassUnclassified;
     }
 
     // Grab the value. If it's too large, then return the default
     uint32_t uint32_val = static_cast<uint32_t>(std::stoul(value.c_str()));
     if (uint32_val > 0xFF) {
       LOG_ERROR("COD malformed, '%s' must be between [0, 255]", value.c_str());
-      return;
+      return kDevClassUnclassified;
     }
 
     // Otherwise, it's safe to use
@@ -2988,7 +3040,7 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
     if (j >= 3) {
       if (prop_cod[i] != '\0') {
         LOG_ERROR("COD malformed, more than three numbers");
-        return;
+        return kDevClassUnclassified;
       }
       break;
     }
@@ -3003,6 +3055,7 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
   }
 
   // We must have read exactly 3 numbers
+  DEV_CLASS device_class = kDevClassUnclassified;
   if (j == 3) {
     device_class[0] = temp_device_class[0];
     device_class[1] = temp_device_class[1];
@@ -3036,6 +3089,7 @@ void btif_dm_get_local_class_of_device(DEV_CLASS device_class) {
       "0x%x'",
       device_class[0], device_class[1], device_class[2]);
 #endif
+  return device_class;
 }
 
 /*******************************************************************************

@@ -16,6 +16,8 @@
 
 #include "hci/controller.h"
 
+#include <android_bluetooth_flags.h>
+
 #include <future>
 #include <memory>
 #include <string>
@@ -107,7 +109,7 @@ struct Controller::impl {
 
     hci_->EnqueueCommand(
         LeReadFilterAcceptListSizeBuilder::Create(),
-        handler->BindOnceOn(this, &Controller::impl::le_read_connect_list_size_handler));
+        handler->BindOnceOn(this, &Controller::impl::le_read_accept_list_size_handler));
 
     if (is_supported(OpCode::LE_READ_RESOLVING_LIST_SIZE) && module_.SupportsBlePrivacy()) {
       hci_->EnqueueCommand(
@@ -484,12 +486,12 @@ struct Controller::impl {
     le_supported_states_ = complete_view.GetLeStates();
   }
 
-  void le_read_connect_list_size_handler(CommandCompleteView view) {
+  void le_read_accept_list_size_handler(CommandCompleteView view) {
     auto complete_view = LeReadFilterAcceptListSizeCompleteView::Create(view);
     ASSERT(complete_view.IsValid());
     ErrorCode status = complete_view.GetStatus();
     ASSERT_LOG(status == ErrorCode::SUCCESS, "Status 0x%02hhx, %s", status, ErrorCodeText(status).c_str());
-    le_connect_list_size_ = complete_view.GetFilterAcceptListSize();
+    le_accept_list_size_ = complete_view.GetFilterAcceptListSize();
   }
 
   void le_read_resolving_list_size_handler(CommandCompleteView view) {
@@ -560,6 +562,7 @@ struct Controller::impl {
     vendor_capabilities_.le_address_generation_offloading_support_ = 0x00;
     vendor_capabilities_.a2dp_source_offload_capability_mask_ = 0x00;
     vendor_capabilities_.bluetooth_quality_report_support_ = 0x00;
+    vendor_capabilities_.a2dp_offload_v2_support_ = 0x00;
 
     if (!complete_view.IsValid()) {
       vendor_promise.set_value();
@@ -636,16 +639,38 @@ struct Controller::impl {
     }
     vendor_capabilities_.dynamic_audio_buffer_support_ = v103.GetDynamicAudioBufferSupport();
 
-    if (vendor_capabilities_.dynamic_audio_buffer_support_ == 0) {
+    if (IS_FLAG_ENABLED(a2dp_offload_codec_extensibility)) {
+      // v1.04
+      auto v104 = LeGetVendorCapabilitiesComplete104View::Create(v103);
+      if (!v104.IsValid()) {
+        LOG_INFO("invalid data for hci requirements v1.04");
+      } else {
+        vendor_capabilities_.a2dp_offload_v2_support_ = v104.GetA2dpOffloadV2Support();
+      }
+
+      if (vendor_capabilities_.dynamic_audio_buffer_support_) {
+        hci_->EnqueueCommand(
+            DabGetAudioBufferTimeCapabilityBuilder::Create(),
+            module_.GetHandler()->BindOnceOn(
+                this,
+                &Controller::impl::le_get_dynamic_audio_buffer_support_handler,
+                std::move(vendor_promise)));
+        return;
+      }
+
       vendor_promise.set_value();
-      return;
+    } else {
+      if (vendor_capabilities_.dynamic_audio_buffer_support_ == 0) {
+        vendor_promise.set_value();
+        return;
+      }
+      hci_->EnqueueCommand(
+          DabGetAudioBufferTimeCapabilityBuilder::Create(),
+          module_.GetHandler()->BindOnceOn(
+              this,
+              &Controller::impl::le_get_dynamic_audio_buffer_support_handler,
+              std::move(vendor_promise)));
     }
-    hci_->EnqueueCommand(
-        DabGetAudioBufferTimeCapabilityBuilder::Create(),
-        module_.GetHandler()->BindOnceOn(
-            this,
-            &Controller::impl::le_get_dynamic_audio_buffer_support_handler,
-            std::move(vendor_promise)));
   }
 
   void le_get_dynamic_audio_buffer_support_handler(
@@ -1186,7 +1211,7 @@ struct Controller::impl {
   LeBufferSize iso_buffer_size_{};
   uint64_t le_local_supported_features_{};
   uint64_t le_supported_states_{};
-  uint8_t le_connect_list_size_{};
+  uint8_t le_accept_list_size_{};
   uint8_t le_resolving_list_size_{};
   LeMaximumDataLength le_maximum_data_length_{};
   uint16_t le_maximum_advertising_data_length_{};
@@ -1439,7 +1464,7 @@ uint64_t Controller::GetLeSupportedStates() const {
 }
 
 uint8_t Controller::GetLeFilterAcceptListSize() const {
-  return impl_->le_connect_list_size_;
+  return impl_->le_accept_list_size_;
 }
 
 uint8_t Controller::GetLeResolvingListSize() const {
@@ -1594,7 +1619,7 @@ void Controller::impl::Dump(
   builder.add_iso_buffer_size(&iso_buffer_size_data);
   builder.add_le_buffer_size(&le_buffer_size_data);
 
-  builder.add_le_connect_list_size(le_connect_list_size_);
+  builder.add_le_accept_list_size(le_accept_list_size_);
   builder.add_le_resolving_list_size(le_resolving_list_size_);
 
   builder.add_le_maximum_data_length(&le_maximum_data_length_data);

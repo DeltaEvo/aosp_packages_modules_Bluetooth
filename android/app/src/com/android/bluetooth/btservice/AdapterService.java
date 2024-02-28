@@ -125,7 +125,6 @@ import com.android.bluetooth.btservice.bluetoothkeystore.BluetoothKeystoreServic
 import com.android.bluetooth.btservice.storage.DatabaseManager;
 import com.android.bluetooth.btservice.storage.MetadataDatabase;
 import com.android.bluetooth.csip.CsipSetCoordinatorService;
-import com.android.bluetooth.flags.FeatureFlagsImpl;
 import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.gatt.GattService;
 import com.android.bluetooth.hap.HapClientService;
@@ -402,7 +401,6 @@ public class AdapterService extends Service {
     private volatile boolean mTestModeEnabled = false;
 
     private MetricsLogger mMetricsLogger;
-    private FeatureFlagsImpl mFeatureFlags;
 
     /**
      * Register a {@link ProfileService} with AdapterService.
@@ -686,9 +684,7 @@ public class AdapterService extends Service {
 
         mSdpManager = SdpManager.init(this);
 
-        mFeatureFlags = new FeatureFlagsImpl();
-
-        mDatabaseManager = new DatabaseManager(this, mFeatureFlags);
+        mDatabaseManager = new DatabaseManager(this);
         mDatabaseManager.start(MetadataDatabase.createDatabase(this));
 
         boolean isAutomotiveDevice =
@@ -704,18 +700,16 @@ public class AdapterService extends Service {
          */
         if (!isAutomotiveDevice && getResources().getBoolean(R.bool.enable_phone_policy)) {
             Log.i(TAG, "Phone policy enabled");
-            mPhonePolicy = new PhonePolicy(this, new ServiceFactory(), mFeatureFlags);
+            mPhonePolicy = new PhonePolicy(this, new ServiceFactory());
             mPhonePolicy.start();
         } else {
             Log.i(TAG, "Phone policy disabled");
         }
 
-        if (mFeatureFlags.audioRoutingCentralization()) {
-            mActiveDeviceManager =
-                    new AudioRoutingManager(this, new ServiceFactory(), mFeatureFlags);
+        if (Flags.audioRoutingCentralization()) {
+            mActiveDeviceManager = new AudioRoutingManager(this, new ServiceFactory());
         } else {
-            mActiveDeviceManager =
-                    new ActiveDeviceManager(this, new ServiceFactory(), mFeatureFlags);
+            mActiveDeviceManager = new ActiveDeviceManager(this, new ServiceFactory());
         }
         mActiveDeviceManager.start();
 
@@ -1433,35 +1427,39 @@ public class AdapterService extends Service {
         BluetoothSap.invalidateBluetoothGetConnectionStateCache();
     }
 
-    private static final Map<Integer, Function<Context, ProfileService>> PROFILE_CONSTRUCTORS =
-            Map.ofEntries(
-                    Map.entry(BluetoothProfile.A2DP, A2dpService::new),
-                    Map.entry(BluetoothProfile.A2DP_SINK, A2dpSinkService::new),
-                    Map.entry(BluetoothProfile.AVRCP, AvrcpTargetService::new),
-                    Map.entry(BluetoothProfile.AVRCP_CONTROLLER, AvrcpControllerService::new),
-                    Map.entry(
-                            BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT, BassClientService::new),
-                    Map.entry(BluetoothProfile.BATTERY, BatteryService::new),
-                    Map.entry(
-                            BluetoothProfile.CSIP_SET_COORDINATOR, CsipSetCoordinatorService::new),
-                    Map.entry(BluetoothProfile.HAP_CLIENT, HapClientService::new),
-                    Map.entry(BluetoothProfile.HEADSET, HeadsetService::new),
-                    Map.entry(BluetoothProfile.HEADSET_CLIENT, HeadsetClientService::new),
-                    Map.entry(BluetoothProfile.HEARING_AID, HearingAidService::new),
-                    Map.entry(BluetoothProfile.HID_DEVICE, HidDeviceService::new),
-                    Map.entry(BluetoothProfile.HID_HOST, HidHostService::new),
-                    Map.entry(BluetoothProfile.GATT, GattService::new),
-                    Map.entry(BluetoothProfile.LE_AUDIO, LeAudioService::new),
-                    Map.entry(BluetoothProfile.LE_CALL_CONTROL, TbsService::new),
-                    Map.entry(BluetoothProfile.MAP, BluetoothMapService::new),
-                    Map.entry(BluetoothProfile.MAP_CLIENT, MapClientService::new),
-                    Map.entry(BluetoothProfile.MCP_SERVER, McpService::new),
-                    Map.entry(BluetoothProfile.OPP, BluetoothOppService::new),
-                    Map.entry(BluetoothProfile.PAN, PanService::new),
-                    Map.entry(BluetoothProfile.PBAP, BluetoothPbapService::new),
-                    Map.entry(BluetoothProfile.PBAP_CLIENT, PbapClientService::new),
-                    Map.entry(BluetoothProfile.SAP, SapService::new),
-                    Map.entry(BluetoothProfile.VOLUME_CONTROL, VolumeControlService::new));
+    private static final Map<Integer, Function<AdapterService, ProfileService>>
+            PROFILE_CONSTRUCTORS =
+                    Map.ofEntries(
+                            Map.entry(BluetoothProfile.A2DP, A2dpService::new),
+                            Map.entry(BluetoothProfile.A2DP_SINK, A2dpSinkService::new),
+                            Map.entry(BluetoothProfile.AVRCP, AvrcpTargetService::new),
+                            Map.entry(
+                                    BluetoothProfile.AVRCP_CONTROLLER, AvrcpControllerService::new),
+                            Map.entry(
+                                    BluetoothProfile.LE_AUDIO_BROADCAST_ASSISTANT,
+                                    BassClientService::new),
+                            Map.entry(BluetoothProfile.BATTERY, BatteryService::new),
+                            Map.entry(
+                                    BluetoothProfile.CSIP_SET_COORDINATOR,
+                                    CsipSetCoordinatorService::new),
+                            Map.entry(BluetoothProfile.HAP_CLIENT, HapClientService::new),
+                            Map.entry(BluetoothProfile.HEADSET, HeadsetService::new),
+                            Map.entry(BluetoothProfile.HEADSET_CLIENT, HeadsetClientService::new),
+                            Map.entry(BluetoothProfile.HEARING_AID, HearingAidService::new),
+                            Map.entry(BluetoothProfile.HID_DEVICE, HidDeviceService::new),
+                            Map.entry(BluetoothProfile.HID_HOST, HidHostService::new),
+                            Map.entry(BluetoothProfile.GATT, GattService::new),
+                            Map.entry(BluetoothProfile.LE_AUDIO, LeAudioService::new),
+                            Map.entry(BluetoothProfile.LE_CALL_CONTROL, TbsService::new),
+                            Map.entry(BluetoothProfile.MAP, BluetoothMapService::new),
+                            Map.entry(BluetoothProfile.MAP_CLIENT, MapClientService::new),
+                            Map.entry(BluetoothProfile.MCP_SERVER, McpService::new),
+                            Map.entry(BluetoothProfile.OPP, BluetoothOppService::new),
+                            Map.entry(BluetoothProfile.PAN, PanService::new),
+                            Map.entry(BluetoothProfile.PBAP, BluetoothPbapService::new),
+                            Map.entry(BluetoothProfile.PBAP_CLIENT, PbapClientService::new),
+                            Map.entry(BluetoothProfile.SAP, SapService::new),
+                            Map.entry(BluetoothProfile.VOLUME_CONTROL, VolumeControlService::new));
 
     @VisibleForTesting
     void setProfileServiceState(int profileId, int state) {
@@ -6188,7 +6186,7 @@ public class AdapterService extends Service {
     }
 
     int getConnectionState(BluetoothDevice device) {
-        if (mFeatureFlags.apiGetConnectionStateUsingIdentityAddress()) {
+        if (Flags.apiGetConnectionStateUsingIdentityAddress()) {
             final String identityAddress = device.getIdentityAddress();
             return (identityAddress == null)
                     ? mNativeInterface.getConnectionState(getBytesFromAddress(device.getAddress()))
@@ -7371,7 +7369,7 @@ public class AdapterService extends Service {
         return true;
     }
 
-    void energyInfoCallback(
+    void energyInfoCallbackInternal(
             int status,
             int ctrlState,
             long txTime,
@@ -7379,8 +7377,6 @@ public class AdapterService extends Service {
             long idleTime,
             long energyUsed,
             UidTraffic[] data) {
-        if (ctrlState >= BluetoothActivityEnergyInfo.BT_STACK_STATE_INVALID
-                && ctrlState <= BluetoothActivityEnergyInfo.BT_STACK_STATE_STATE_IDLE) {
             // Energy is product of mA, V and ms. If the chipset doesn't
             // report it, we have to compute it from time
             if (energyUsed == 0) {
@@ -7435,8 +7431,24 @@ public class AdapterService extends Service {
                 }
                 mEnergyInfoLock.notifyAll();
             }
-        }
+    }
 
+    void energyInfoCallback(
+            int status,
+            int ctrlState,
+            long txTime,
+            long rxTime,
+            long idleTime,
+            long energyUsed,
+            UidTraffic[] data) {
+        if (Flags.btSystemContextReport()) {
+            energyInfoCallbackInternal(
+                    status, ctrlState, txTime, rxTime, idleTime, energyUsed, data);
+        } else if (ctrlState >= BluetoothActivityEnergyInfo.BT_STACK_STATE_INVALID
+                && ctrlState <= BluetoothActivityEnergyInfo.BT_STACK_STATE_STATE_IDLE) {
+            energyInfoCallbackInternal(
+                    status, ctrlState, txTime, rxTime, idleTime, energyUsed, data);
+        }
         verboseLog(
                 "energyInfoCallback()"
                         + (" status = " + status)
@@ -7444,7 +7456,7 @@ public class AdapterService extends Service {
                         + (" rxTime = " + rxTime)
                         + (" idleTime = " + idleTime)
                         + (" energyUsed = " + energyUsed)
-                        + (" ctrlState = " + ctrlState)
+                        + (" ctrlState = " + String.format("0x%08x", ctrlState))
                         + (" traffic = " + Arrays.toString(data)));
     }
 

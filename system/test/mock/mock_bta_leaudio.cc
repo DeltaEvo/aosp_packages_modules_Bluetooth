@@ -84,6 +84,10 @@ bool LeAudioClient::IsLeAudioClientRunning(void) {
   inc_func_call_count(__func__);
   return false;
 }
+bool LeAudioClient::IsLeAudioClientInStreaming(void) {
+  inc_func_call_count(__func__);
+  return false;
+}
 void LeAudioClient::Initialize(
     bluetooth::le_audio::LeAudioClientCallbacks* callbacks_,
     base::Closure initCb, base::Callback<bool()> hal_2_1_verifier,
@@ -92,3 +96,8 @@ void LeAudioClient::Initialize(
   inc_func_call_count(__func__);
 }
 void LeAudioClient::DebugDump(int fd) { inc_func_call_count(__func__); }
+
+bool LeAudioClient::RegisterIsoDataConsumer(LeAudioIsoDataCallback callback) {
+  inc_func_call_count(__func__);
+  return true;
+}

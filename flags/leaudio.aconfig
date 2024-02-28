@@ -1,4 +1,5 @@
 package: "com.android.bluetooth.flags"
+container: "com.android.btservices"
 
 flag {
     name: "leaudio_broadcast_monitor_source_sync_status"
@@ -134,6 +135,56 @@ flag {
     namespace: "bluetooth"
     description: "Apply the volume update to call volume during ringtone"
     bug: "324041939"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "leaudio_active_device_manager_group_handling_fix"
+    namespace: "bluetooth"
+    description: "Make sure Active Device Manager understands LeAudio groups"
+    bug: "324364321"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "leaudio_start_stream_race_fix"
+    namespace: "bluetooth"
+    description: "Fix possible race on start stream request"
+    bug: "325181889"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "leaudio_api_synchronized_block_fix"
+    namespace: "bluetooth"
+    description: "Fix possible deadlocks when synchronizing LeAudioService states"
+    bug: "326295400"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "run_ble_audio_ticks_in_worker_thread"
+    namespace: "bluetooth"
+    description: "Fix thread ownership issue in ble_audio_ticks"
+    bug: "325984257"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}
+
+flag {
+    name: "leaudio_codec_config_callback_order_fix"
+    namespace: "bluetooth"
+    description: "Fix for the order on the callback"
+    bug: "326442537"
     metadata {
         purpose: PURPOSE_BUGFIX
     }
