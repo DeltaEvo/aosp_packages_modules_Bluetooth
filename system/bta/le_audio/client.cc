@@ -21,6 +21,7 @@
 #include <lc3.h>
 
 #include <deque>
+#include <map>
 #include <mutex>
 #include <optional>
 
@@ -179,6 +180,7 @@ LeAudioSinkAudioHalClient::Callbacks* audioSourceReceiver;
 CigCallbacks* stateMachineHciCallbacks;
 LeAudioGroupStateMachine::Callbacks* stateMachineCallbacks;
 DeviceGroupsCallbacks* device_group_callbacks;
+LeAudioIsoDataCallback* iso_data_callback;
 
 /*
  * Coordinatet Set Identification Profile (CSIP) based on CSIP 1.0
@@ -739,6 +741,7 @@ class LeAudioClientImpl : public LeAudioClient {
               ToString(group->cig.GetState()).c_str());
     if (group->IsEmpty() &&
         (group->cig.GetState() == le_audio::types::CigState::NONE)) {
+      lastNotifiedGroupStreamStatusMap_.erase(group->group_id_);
       aseGroups_.Remove(group->group_id_);
     }
   }
@@ -1042,6 +1045,11 @@ class LeAudioClientImpl : public LeAudioClient {
 
   bool IsInVoipCall() override { return in_voip_call_; }
 
+  bool IsInStreaming() override {
+    return audio_sender_state_ == AudioState::STARTED ||
+           audio_receiver_state_ == AudioState::STARTED;
+  }
+
   void SetUnicastMonitorMode(uint8_t direction, bool enable) override {
     if (!IS_FLAG_ENABLED(leaudio_broadcast_audio_handover_policies)) {
       LOG_WARN("Monitor mode is disabled, Set Unicast Monitor mode is ignored");
@@ -1315,8 +1323,13 @@ class LeAudioClientImpl : public LeAudioClient {
 
     /* Reset sink listener notified status */
     sink_monitor_notified_status_ = std::nullopt;
-    SendAudioGroupSelectableCodecConfigChanged(group);
-    callbacks_->OnGroupStatus(active_group_id_, GroupStatus::ACTIVE);
+    if (IS_FLAG_ENABLED(leaudio_codec_config_callback_order_fix)) {
+      SendAudioGroupSelectableCodecConfigChanged(group);
+      callbacks_->OnGroupStatus(active_group_id_, GroupStatus::ACTIVE);
+    } else {
+      callbacks_->OnGroupStatus(active_group_id_, GroupStatus::ACTIVE);
+      SendAudioGroupSelectableCodecConfigChanged(group);
+    }
   }
 
   void SetEnableState(const RawAddress& address, bool enabled) override {
@@ -3429,6 +3442,10 @@ class LeAudioClientImpl : public LeAudioClient {
       return;
     }
 
+    if (DsaDataConsume(group, cis_conn_hdl, data, size, timestamp)) {
+      return;
+    }
+
     uint16_t left_cis_handle = 0;
     uint16_t right_cis_handle = 0;
     for (auto [cis_handle, audio_location] :
@@ -3840,6 +3857,7 @@ class LeAudioClientImpl : public LeAudioClient {
     }
     groupStateMachine_->Cleanup();
     aseGroups_.Cleanup();
+    lastNotifiedGroupStreamStatusMap_.clear();
     leAudioDevices_.Cleanup(gatt_if_);
     if (gatt_if_) BTA_GATTC_AppDeregister(gatt_if_);
 
@@ -3897,6 +3915,10 @@ class LeAudioClientImpl : public LeAudioClient {
       }
 
       sink_cfg_available = false;
+    }
+
+    if (DsaReconfigureNeeded(group, context_type)) {
+      reconfiguration_needed = true;
     }
 
     LOG_DEBUG(
@@ -4618,13 +4640,13 @@ class LeAudioClientImpl : public LeAudioClient {
 
     LOG_INFO(
         "group_id %d state=%s, target_state=%s, audio_receiver_state_: %s, "
-        "audio_sender_state_: %s",
+        "audio_sender_state_: %s, dsa_mode: %d",
         group->group_id_, ToString(group->GetState()).c_str(),
         ToString(group->GetTargetState()).c_str(),
         ToString(audio_receiver_state_).c_str(),
-        ToString(audio_sender_state_).c_str());
+        ToString(audio_sender_state_).c_str(), static_cast<int>(dsa_mode));
 
-    group->dsa_mode_ = dsa_mode;
+    group->dsa_.mode = dsa_mode;
 
     /* Set the remote sink metadata context from the playback tracks metadata */
     local_metadata_context_types_.source =
@@ -5055,11 +5077,36 @@ class LeAudioClientImpl : public LeAudioClient {
                                        remote_metadata);
   }
 
+  bool DsaReconfigureNeeded(LeAudioDeviceGroup* group,
+                            LeAudioContextType context) {
+    if (!IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
+      return false;
+    }
+
+    // Reconfigure if DSA mode changed for media streaming
+    if (context != le_audio::types::LeAudioContextType::MEDIA) {
+      return false;
+    }
+
+    if (group->dsa_.mode != DsaMode::ISO_SW &&
+        group->dsa_.mode != DsaMode::ISO_HW) {
+      return false;
+    }
+
+    if (group->dsa_.active) {
+      return false;
+    }
+
+    LOG_INFO("DSA mode %d requested but not active", group->dsa_.mode);
+    return true;
+  }
+
   /* Return true if stream is started */
   bool ReconfigureOrUpdateMetadata(
       LeAudioDeviceGroup* group, LeAudioContextType new_configuration_context,
       BidirectionalPair<AudioContexts> remote_contexts) {
-    if (new_configuration_context != configuration_context_type_) {
+    if (new_configuration_context != configuration_context_type_ ||
+        DsaReconfigureNeeded(group, new_configuration_context)) {
       LOG_INFO("Checking whether to change configuration context from %s to %s",
                ToString(configuration_context_type_).c_str(),
                ToString(new_configuration_context).c_str());
@@ -5415,6 +5462,30 @@ class LeAudioClientImpl : public LeAudioClient {
     stream_setup_start_timestamp_ = 0;
   }
 
+  void notifyGroupStreamStatus(int group_id,
+                               GroupStreamStatus groupStreamStatus) {
+    if (!IS_FLAG_ENABLED(leaudio_callback_on_group_stream_status)) {
+      return;
+    }
+
+    GroupStreamStatus newGroupStreamStatus = GroupStreamStatus::IDLE;
+    if (groupStreamStatus == GroupStreamStatus::STREAMING) {
+      newGroupStreamStatus = GroupStreamStatus::STREAMING;
+    }
+
+    auto it = lastNotifiedGroupStreamStatusMap_.find(group_id);
+
+    if (it != lastNotifiedGroupStreamStatusMap_.end()) {
+      if (it->second != newGroupStreamStatus) {
+        callbacks_->OnGroupStreamStatus(group_id, newGroupStreamStatus);
+        it->second = newGroupStreamStatus;
+      }
+    } else {
+      callbacks_->OnGroupStreamStatus(group_id, newGroupStreamStatus);
+      lastNotifiedGroupStreamStatusMap_.emplace(group_id, newGroupStreamStatus);
+    }
+  }
+
   void OnStateMachineStatusReportCb(int group_id, GroupStreamStatus status) {
     LOG_INFO(
         "status: %d ,  group_id: %d, audio_sender_state %s, "
@@ -5423,6 +5494,9 @@ class LeAudioClientImpl : public LeAudioClient {
         bluetooth::common::ToString(audio_sender_state_).c_str(),
         bluetooth::common::ToString(audio_receiver_state_).c_str());
     LeAudioDeviceGroup* group = aseGroups_.FindById(group_id);
+
+    notifyGroupStreamStatus(group_id, status);
+
     switch (status) {
       case GroupStreamStatus::STREAMING: {
         ASSERT_LOG(group_id == active_group_id_, "invalid group id %d!=%d",
@@ -5709,6 +5783,8 @@ class LeAudioClientImpl : public LeAudioClient {
 
   base::WeakPtrFactory<LeAudioClientImpl> weak_factory_{this};
 
+  std::map<int, GroupStreamStatus> lastNotifiedGroupStreamStatusMap_;
+
   void ClientAudioInterfaceRelease() {
     if (le_audio_source_hal_client_) {
       le_audio_source_hal_client_->Stop();
@@ -5731,6 +5807,41 @@ class LeAudioClientImpl : public LeAudioClient {
     configuration_context_type_ = LeAudioContextType::UNINITIALIZED;
 
     le_audio::MetricsCollector::Get()->OnStreamEnded(active_group_id_);
+  }
+
+  bool DsaDataConsume(LeAudioDeviceGroup* group, uint16_t cis_conn_hdl,
+                      uint8_t* data, uint16_t size, uint32_t timestamp) {
+    if (!IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
+      return false;
+    }
+
+    if (iso_data_callback == nullptr || !group->dsa_.active ||
+        group->dsa_.mode != DsaMode::ISO_SW) {
+      return false;
+    }
+
+    // Find LE Audio device
+    LeAudioDevice* leAudioDevice = group->GetFirstDevice();
+    while (leAudioDevice != nullptr) {
+      if (leAudioDevice->GetDsaCisHandle() == cis_conn_hdl &&
+          leAudioDevice->GetDsaDataPathState() == DataPathState::CONFIGURED) {
+        break;
+      }
+      leAudioDevice = group->GetNextDevice(leAudioDevice);
+    }
+    if (leAudioDevice == nullptr) {
+      LOG_WARN("No LE Audio device found for CIS handle: %d", cis_conn_hdl);
+      return false;
+    }
+
+    bool consumed = iso_data_callback(leAudioDevice->address_, cis_conn_hdl,
+                                      data, size, timestamp);
+    if (consumed) {
+      return true;
+    } else {
+      LOG_VERBOSE("ISO data consumer not ready to accept data");
+      return false;
+    }
   }
 };
 
@@ -5990,6 +6101,13 @@ bool LeAudioClient::GetAsesForStorage(const RawAddress& addr,
 
 bool LeAudioClient::IsLeAudioClientRunning(void) { return instance != nullptr; }
 
+bool LeAudioClient::IsLeAudioClientInStreaming(void) {
+  if (!instance) {
+    return false;
+  }
+  return instance->IsInStreaming();
+}
+
 LeAudioClient* LeAudioClient::Get() {
   CHECK(instance);
   return instance;
@@ -6077,4 +6195,13 @@ void LeAudioClient::Cleanup(void) {
   LeAudioGroupStateMachine::Cleanup();
   IsoManager::GetInstance()->Stop();
   le_audio::MetricsCollector::Get()->Flush();
+}
+
+bool LeAudioClient::RegisterIsoDataConsumer(LeAudioIsoDataCallback callback) {
+  if (!IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
+    return false;
+  }
+
+  iso_data_callback = callback;
+  return true;
 }

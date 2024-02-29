@@ -20,6 +20,7 @@
 
 #include "btif/include/btif_av.h"
 
+#include <android_bluetooth_flags.h>
 #include <android_bluetooth_sysprop.h>
 #include <base/functional/bind.h>
 #include <base/logging.h>
@@ -1145,7 +1146,8 @@ bt_status_t BtifAvSource::Init(
   if (a2dp_offload_enabled_) {
     tBTM_BLE_VSC_CB vsc_cb = {};
     BTM_BleGetVendorCapabilities(&vsc_cb);
-    bool supports_a2dp_hw_offload_v2 = vsc_cb.version_supported >= 0x0103;
+    bool supports_a2dp_hw_offload_v2 =
+        vsc_cb.version_supported >= 0x0104 && vsc_cb.a2dp_offload_v2_support;
     bluetooth::audio::a2dp::update_codec_offloading_capabilities(
         offloading_preference, supports_a2dp_hw_offload_v2);
   }

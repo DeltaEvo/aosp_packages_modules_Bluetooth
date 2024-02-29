@@ -552,6 +552,7 @@ impl InformationalRule {
         let device = self.get_or_allocate_device(address);
         device.report_connection_start(handle, ts);
         self.handles.insert(handle, *address);
+        self.pending_disconnect_due_to_host_power_off.remove(&handle);
     }
 
     fn report_sco_connection_start(
@@ -930,7 +931,10 @@ impl Rule for InformationalRule {
                     // PacketChild::AclRx(rx).specialize()
                     _ => {}
                 }
-            } // packet.inner
+            }
+
+            // End packet.inner match
+            _ => (),
         }
     }
 

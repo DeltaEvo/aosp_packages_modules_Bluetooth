@@ -27,6 +27,7 @@
 #include "bta/le_audio/codec_manager.h"
 #include "common/repeating_timer.h"
 #include "common/time_util.h"
+#include "gd/hal/link_clocker.h"
 #include "os/log.h"
 #include "osi/include/wakelock.h"
 #include "stack/include/main_thread.h"
@@ -248,6 +249,7 @@ void SourceImpl::StartAudioTicks() {
   wakelock_acquire();
   if (IS_FLAG_ENABLED(leaudio_hal_client_asrc)) {
     asrc_ = std::make_unique<bluetooth::audio::asrc::SourceAudioHalAsrc>(
+        std::make_shared<bluetooth::hal::NocpIsoEvents>(),
         source_codec_config_.num_channels, source_codec_config_.sample_rate,
         source_codec_config_.bits_per_sample,
         source_codec_config_.data_interval_us);
@@ -268,7 +270,13 @@ bool SourceImpl::OnSuspendReq() {
   std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
   if (CodecManager::GetInstance()->GetCodecLocation() ==
       types::CodecLocation::HOST) {
-    StopAudioTicks();
+    if (IS_FLAG_ENABLED(run_ble_audio_ticks_in_worker_thread)) {
+      worker_thread_->DoInThread(
+          FROM_HERE,
+          base::BindOnce(&SourceImpl::StopAudioTicks, base::Unretained(this)));
+    } else {
+      StopAudioTicks();
+    }
   }
 
   if (audioSourceCallbacks_ == nullptr) {
@@ -366,7 +374,13 @@ void SourceImpl::Stop() {
 
   if (CodecManager::GetInstance()->GetCodecLocation() ==
       types::CodecLocation::HOST) {
-    StopAudioTicks();
+    if (IS_FLAG_ENABLED(run_ble_audio_ticks_in_worker_thread)) {
+      worker_thread_->DoInThread(
+          FROM_HERE,
+          base::BindOnce(&SourceImpl::StopAudioTicks, base::Unretained(this)));
+    } else {
+      StopAudioTicks();
+    }
   }
 
   std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
@@ -381,12 +395,22 @@ void SourceImpl::ConfirmStreamingRequest() {
   }
 
   LOG_INFO();
-  halSinkInterface_->ConfirmStreamingRequest();
+  if (IS_FLAG_ENABLED(leaudio_start_stream_race_fix)) {
+    halSinkInterface_->ConfirmStreamingRequestV2();
+  } else {
+    halSinkInterface_->ConfirmStreamingRequest();
+  }
   if (CodecManager::GetInstance()->GetCodecLocation() !=
       types::CodecLocation::HOST)
     return;
 
-  StartAudioTicks();
+  if (IS_FLAG_ENABLED(run_ble_audio_ticks_in_worker_thread)) {
+    worker_thread_->DoInThread(
+        FROM_HERE,
+        base::BindOnce(&SourceImpl::StartAudioTicks, base::Unretained(this)));
+  } else {
+    StartAudioTicks();
+  }
 }
 
 void SourceImpl::SuspendedForReconfiguration() {
@@ -419,7 +443,11 @@ void SourceImpl::CancelStreamingRequest() {
   }
 
   LOG_INFO();
-  halSinkInterface_->CancelStreamingRequest();
+  if (IS_FLAG_ENABLED(leaudio_start_stream_race_fix)) {
+    halSinkInterface_->CancelStreamingRequestV2();
+  } else {
+    halSinkInterface_->CancelStreamingRequest();
+  }
 }
 
 void SourceImpl::UpdateRemoteDelay(uint16_t remote_delay_ms) {

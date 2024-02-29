@@ -10,7 +10,7 @@ use bt_topshim::profiles::a2dp::{
 };
 use bt_topshim::profiles::avrcp::PlayerMetadata;
 use bt_topshim::profiles::gatt::{AdvertisingStatus, GattStatus, LePhy};
-use bt_topshim::profiles::hfp::HfpCodecCapability;
+use bt_topshim::profiles::hfp::{EscoCodingFormat, HfpCodecBitId, HfpCodecFormat};
 use bt_topshim::profiles::hid_host::BthhReportType;
 use bt_topshim::profiles::sdp::{
     BtSdpDipRecord, BtSdpHeaderOverlay, BtSdpMasRecord, BtSdpMnsRecord, BtSdpMpsRecord,
@@ -22,7 +22,7 @@ use bt_topshim::profiles::ProfileConnectionState;
 
 use btstack::battery_manager::{Battery, BatterySet, IBatteryManager, IBatteryManagerCallback};
 use btstack::bluetooth::{
-    BluetoothDevice, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
+    BluetoothDevice, BtAdapterRole, IBluetooth, IBluetoothCallback, IBluetoothConnectionCallback,
     IBluetoothQALegacy,
 };
 use btstack::bluetooth_admin::{IBluetoothAdmin, IBluetoothAdminPolicyCallback, PolicyEffect};
@@ -96,6 +96,7 @@ impl_dbus_arg_enum!(SuspendMode);
 impl_dbus_arg_enum!(SuspendType);
 impl_dbus_arg_from_into!(Uuid, Vec<u8>);
 impl_dbus_arg_enum!(BthhReportType);
+impl_dbus_arg_enum!(BtAdapterRole);
 
 impl RefArgToRust for Uuid {
     type RustType = Vec<u8>;
@@ -434,13 +435,16 @@ impl_dbus_arg_from_into!(A2dpCodecSampleRate, i32);
 impl_dbus_arg_from_into!(A2dpCodecBitsPerSample, i32);
 impl_dbus_arg_from_into!(A2dpCodecChannelMode, i32);
 
-impl_dbus_arg_from_into!(HfpCodecCapability, i32);
+impl_dbus_arg_from_into!(EscoCodingFormat, u8);
+impl_dbus_arg_from_into!(HfpCodecBitId, i32);
+impl_dbus_arg_from_into!(HfpCodecFormat, i32);
+
 #[dbus_propmap(BluetoothAudioDevice)]
 pub struct BluetoothAudioDeviceDBus {
     address: String,
     name: String,
     a2dp_caps: Vec<A2dpCodecConfig>,
-    hfp_cap: HfpCodecCapability,
+    hfp_cap: HfpCodecFormat,
     absolute_volume: bool,
 }
 
@@ -993,6 +997,16 @@ impl IBluetooth for BluetoothDBus {
 
     #[dbus_method("IsSwbSupported")]
     fn is_swb_supported(&self) -> bool {
+        dbus_generated!()
+    }
+
+    #[dbus_method("GetSupportedRoles")]
+    fn get_supported_roles(&self) -> Vec<BtAdapterRole> {
+        dbus_generated!()
+    }
+
+    #[dbus_method("IsCodingFormatSupported")]
+    fn is_coding_format_supported(&self, coding_format: EscoCodingFormat) -> bool {
         dbus_generated!()
     }
 }
@@ -2650,7 +2664,7 @@ impl IBluetoothMedia for BluetoothMediaDBus {
         &mut self,
         address: String,
         sco_offload: bool,
-        disabled_codecs: HfpCodecCapability,
+        disabled_codecs: HfpCodecBitId,
     ) -> bool {
         dbus_generated!()
     }

@@ -105,6 +105,7 @@ cc_library_shared {
         "libbase",
         "libbluetooth",
         "libbluetooth-dumpsys",
+        "libbluetooth-gdx",
         "libbluetooth-types",
         "libbluetooth_core_rs",
         "libbluetooth_core_rs_bridge",
@@ -148,7 +149,6 @@ cc_library_shared {
         "server_configurable_flags",
     ],
     shared_libs: [
-        "libPlatformProperties",
         "libaaudio",
         "libbinder_ndk",
         "libcrypto",

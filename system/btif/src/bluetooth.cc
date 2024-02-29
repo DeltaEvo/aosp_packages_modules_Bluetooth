@@ -27,6 +27,7 @@
 
 #define LOG_TAG "bt_btif"
 
+#include <android_bluetooth_flags.h>
 #include <base/logging.h>
 #include <hardware/bluetooth.h>
 #include <hardware/bluetooth_headset_interface.h>
@@ -86,6 +87,7 @@
 #include "common/metrics.h"
 #include "common/os_utils.h"
 #include "device/include/device_iot_config.h"
+#include "device/include/esco_parameters.h"
 #include "device/include/interop.h"
 #include "device/include/interop_config.h"
 #include "include/check.h"
@@ -174,8 +176,10 @@ bt_status_t btif_av_sink_execute_service(bool b_enable);
 bt_status_t btif_hh_execute_service(bool b_enable);
 bt_status_t btif_hf_client_execute_service(bool b_enable);
 bt_status_t btif_sdp_execute_service(bool b_enable);
-bt_status_t btif_hh_connect(const RawAddress* bd_addr);
+bt_status_t btif_hh_connect(const tAclLinkSpec* link_spec);
 bt_status_t btif_hd_execute_service(bool b_enable);
+
+extern void gatt_tcb_dump(int fd);
 
 /*******************************************************************************
  *  Callbacks from bluetooth::core (see go/invisalign-bt)
@@ -303,7 +307,12 @@ struct CoreInterfaceImpl : bluetooth::core::CoreInterface {
   void removeDeviceFromProfiles(const RawAddress& bd_addr) override {
 /*special handling for HID devices */
 #if (defined(BTA_HH_INCLUDED) && (BTA_HH_INCLUDED == TRUE))
-    btif_hh_remove_device(bd_addr);
+    tAclLinkSpec link_spec;
+    link_spec.addrt.bda = bd_addr;
+    link_spec.addrt.type = BLE_ADDR_PUBLIC;
+    link_spec.transport = BT_TRANSPORT_AUTO;
+
+    btif_hh_remove_device(link_spec);
 #endif
 #if (defined(BTA_HD_INCLUDED) && (BTA_HD_INCLUDED == TRUE))
     btif_hd_remove_device(bd_addr);
@@ -481,6 +490,10 @@ static bool get_swb_supported() {
   return hfp_hal_interface::get_swb_supported();
 }
 
+static bool is_coding_format_supported(esco_coding_format_t coding_format) {
+  return hfp_hal_interface::is_coding_format_supported(coding_format);
+}
+
 bool is_common_criteria_mode() {
   return is_bluetooth_uid() && common_criteria_mode;
 }
@@ -655,7 +668,11 @@ static int get_connection_state(const RawAddress* bd_addr) {
 
   if (bd_addr == nullptr) return 0;
 
-  return btif_dm_get_connection_state(*bd_addr);
+  if (IS_FLAG_ENABLED(api_get_connection_state_sync_on_main)) {
+    return btif_dm_get_connection_state_sync(*bd_addr);
+  } else {
+    return btif_dm_get_connection_state(*bd_addr);
+  }
 }
 
 static int pin_reply(const RawAddress* bd_addr, uint8_t accept, uint8_t pin_len,
@@ -800,6 +817,7 @@ static void dump(int fd, const char** arguments) {
   btif_sock_dump(fd);
   bluetooth::avrcp::AvrcpService::DebugDump(fd);
   btif_debug_config_dump(fd);
+  gatt_tcb_dump(fd);
   device_debug_iot_config_dump(fd);
   BTA_HfClientDumpStatistics(fd);
   wakelock_debug_dump(fd);
@@ -1192,6 +1210,7 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
         set_event_filter_connection_setup_all_devices,
     .get_wbs_supported = get_wbs_supported,
     .get_swb_supported = get_swb_supported,
+    .is_coding_format_supported = is_coding_format_supported,
     .metadata_changed = metadata_changed,
     .interop_match_addr = interop_match_addr,
     .interop_match_name = interop_match_name,
