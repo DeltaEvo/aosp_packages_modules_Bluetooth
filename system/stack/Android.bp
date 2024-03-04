@@ -320,7 +320,6 @@ cc_defaults {
     name: "btstack_fuzzer_default",
     host_supported: true,
     cflags: [
-        "-DHAS_NO_BDROID_BUILDCFG",
         "-Wall",
         "-Werror",
         "-Wextra",
@@ -337,6 +336,8 @@ cc_defaults {
     ],
     static_libs: [
         "libchrome",
+        "libgmock",
+        "libgtest",
     ],
     shared_libs: [
         "libbase",
@@ -466,7 +467,6 @@ cc_fuzz {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-        "libgmock",
     ],
 }
 
@@ -516,7 +516,6 @@ cc_fuzz {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-        "libgmock",
     ],
 }
 
@@ -561,7 +560,6 @@ cc_fuzz {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-        "libgmock",
     ],
 }
 
@@ -610,7 +608,6 @@ cc_fuzz {
         "libbt_shim_bridge",
         "libbt_shim_ffi",
         "libcom.android.sysprop.bluetooth.wrapped",
-        "libgmock",
     ],
 }
 
@@ -654,7 +651,6 @@ cc_fuzz {
         "libbt-platform-protos-lite",
         "libbt_shim_bridge",
         "libbt_shim_ffi",
-        "libgmock",
     ],
     target: {
         android: {
@@ -1676,7 +1672,6 @@ cc_test {
         "libosi",
     ],
     shared_libs: [
-        "libPlatformProperties",
         "libcrypto",
     ],
     sanitize: {
@@ -1740,7 +1735,6 @@ cc_test {
         "libprotobuf-cpp-lite",
     ],
     shared_libs: [
-        "libPlatformProperties",
         "libcrypto",
     ],
     target: {
@@ -2144,6 +2138,7 @@ cc_test {
         ":TestMockStackBtm",
         ":TestMockStackL2cap",
         ":TestMockStackMetrics",
+        "test/sdp/stack_sdp_db_test.cc",
         "test/sdp/stack_sdp_test.cc",
         "test/sdp/stack_sdp_utils_test.cc",
     ],

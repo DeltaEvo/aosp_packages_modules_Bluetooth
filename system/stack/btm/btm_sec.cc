@@ -93,7 +93,6 @@ extern tBTM_CB btm_cb;
   (BTM_SEC_LE_AUTHENTICATED | BTM_SEC_LE_ENCRYPTED | \
    BTM_SEC_LE_LINK_KEY_KNOWN | BTM_SEC_LE_LINK_KEY_AUTHED)
 
-void btm_inq_stop_on_ssp(void);
 bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                               const RawAddress& new_pseudo_addr);
 void bta_dm_remove_device(const RawAddress& bd_addr);
@@ -2646,9 +2645,6 @@ void btm_io_capabilities_rsp(const tBTM_SP_IO_RSP evt_data) {
     btm_sec_cb.pairing_bda = evt_data.bd_addr;
 
     btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_INCOMING_SSP);
-
-    /* work around for FW bug */
-    btm_inq_stop_on_ssp();
   }
 
   /* Notify L2CAP to increase timeout */
@@ -3428,10 +3424,12 @@ void btm_sec_encryption_change_evt(uint16_t handle, tHCI_STATUS status,
                                    uint8_t encr_enable) {
   if (status != HCI_SUCCESS || encr_enable == 0 ||
       BTM_IsBleConnection(handle) ||
-      !controller_get_interface()->supports_read_encryption_key_size() ||
+      !bluetooth::shim::GetController()->IsSupported(
+          bluetooth::hci::OpCode::READ_ENCRYPTION_KEY_SIZE) ||
       // Skip encryption key size check when using set_min_encryption_key_size
       (bluetooth::common::init_flags::set_min_encryption_is_enabled() &&
-       controller_get_interface()->supports_set_min_encryption_key_size())) {
+       bluetooth::shim::GetController()->IsSupported(
+           bluetooth::hci::OpCode::SET_MIN_ENCRYPTION_KEY_SIZE))) {
     if (status == HCI_ERR_CONNECTION_TOUT) {
       smp_cancel_start_encryption_attempt();
       return;
@@ -3971,7 +3969,8 @@ void btm_sec_encryption_key_refresh_complete(uint16_t handle,
                                              tHCI_STATUS status) {
   if (status != HCI_SUCCESS || BTM_IsBleConnection(handle) ||
       // Skip encryption key size check when using set_min_encryption_key_size
-      controller_get_interface()->supports_set_min_encryption_key_size()) {
+      bluetooth::shim::GetController()->IsSupported(
+          bluetooth::hci::OpCode::SET_MIN_ENCRYPTION_KEY_SIZE)) {
     btm_sec_encrypt_change(handle, static_cast<tHCI_STATUS>(status),
                            (status == HCI_SUCCESS) ? 1 : 0);
   } else {
