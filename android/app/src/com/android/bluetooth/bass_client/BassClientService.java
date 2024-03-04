@@ -717,6 +717,12 @@ public class BassClientService extends ProfileService {
         if (mGroupManagedSources.containsKey(sink)
                 && mGroupManagedSources.get(sink).contains(sourceId)) {
             BassClientStateMachine stateMachine = getOrCreateStateMachine(sink);
+            if (stateMachine == null) {
+                Log.e(TAG, "Can't get state machine for device: " + sink);
+                return new Pair<BluetoothLeBroadcastMetadata, Map<BluetoothDevice, Integer>>(
+                        null, null);
+            }
+
             BluetoothLeBroadcastMetadata metadata =
                     stateMachine.getCurrentBroadcastMetadata(sourceId);
             if (metadata != null) {
@@ -867,8 +873,15 @@ public class BassClientService extends ProfileService {
             stateMachine =
                     BassObjectsFactory.getInstance()
                             .makeStateMachine(
-                                    device, this, mStateMachinesThread.getLooper(), mFeatureFlags);
-            mStateMachines.put(device, stateMachine);
+                                    device,
+                                    this,
+                                    mAdapterService,
+                                    mStateMachinesThread.getLooper(),
+                                    mFeatureFlags);
+            if (stateMachine != null) {
+                mStateMachines.put(device, stateMachine);
+            }
+
             return stateMachine;
         }
     }
@@ -965,6 +978,20 @@ public class BassClientService extends ProfileService {
         }
     }
 
+    private void informConnectedDeviceAboutScanOffloadStop() {
+        for (BluetoothDevice device : getConnectedDevices()) {
+            synchronized (mStateMachines) {
+                BassClientStateMachine stateMachine = getOrCreateStateMachine(device);
+                if (stateMachine == null) {
+                    Log.w(TAG, "informConnectedDeviceAboutScanOffloadStop: Can't get state "
+                            + "machine for device: " + device);
+                    continue;
+                }
+                stateMachine.sendMessage(BassClientStateMachine.STOP_SCAN_OFFLOAD);
+            }
+        }
+    }
+
     void handleConnectionStateChanged(BluetoothDevice device, int fromState, int toState) {
         mHandler.post(() -> connectionStateChanged(device, fromState, toState));
     }
@@ -1050,6 +1077,11 @@ public class BassClientService extends ProfileService {
         }
         synchronized (mStateMachines) {
             BassClientStateMachine stateMachine = getOrCreateStateMachine(device);
+            if (stateMachine == null) {
+                Log.e(TAG, "Can't get state machine for device: " + device);
+                return false;
+            }
+
             stateMachine.sendMessage(BassClientStateMachine.CONNECT);
         }
         return true;
@@ -1071,6 +1103,11 @@ public class BassClientService extends ProfileService {
         }
         synchronized (mStateMachines) {
             BassClientStateMachine stateMachine = getOrCreateStateMachine(device);
+            if (stateMachine == null) {
+                Log.e(TAG, "Can't get state machine for device: " + device);
+                return false;
+            }
+
             stateMachine.sendMessage(BassClientStateMachine.DISCONNECT);
         }
         return true;
@@ -1316,6 +1353,7 @@ public class BassClientService extends ProfileService {
 
                 public void onScanFailed(int errorCode) {
                     Log.e(TAG, "Scan Failure:" + errorCode);
+                    informConnectedDeviceAboutScanOffloadStop();
                 }
             };
             // when starting scan, clear the previously cached broadcast scan results
@@ -1341,6 +1379,19 @@ public class BassClientService extends ProfileService {
                         .setServiceData(BassConstants.BAAS_UUID,
                                 serviceData, serviceDataMask).build());
             }
+
+            for (BluetoothDevice device : getConnectedDevices()) {
+                synchronized (mStateMachines) {
+                    BassClientStateMachine stateMachine = getOrCreateStateMachine(device);
+                    if (stateMachine == null) {
+                        Log.w(TAG, "startSearchingForSources: Can't get state machine for "
+                                + "device: " + device);
+                        continue;
+                    }
+                    stateMachine.sendMessage(BassClientStateMachine.START_SCAN_OFFLOAD);
+                }
+            }
+
             scanner.startScan(filters, settings, mSearchScanCallback);
             sEventLogger.logd(TAG, "startSearchingForSources");
             mCallbacks.notifySearchStarted(BluetoothStatusCodes.REASON_LOCAL_APP_REQUEST);
@@ -1368,6 +1419,7 @@ public class BassClientService extends ProfileService {
                 mCallbacks.notifySearchStopFailed(BluetoothStatusCodes.ERROR_UNKNOWN);
                 return;
             }
+            informConnectedDeviceAboutScanOffloadStop();
             scanner.stopScan(mSearchScanCallback);
             mSearchScanCallback = null;
             sEventLogger.logd(TAG, "stopSearchingForSources");
@@ -1393,6 +1445,10 @@ public class BassClientService extends ProfileService {
             // removing the 1st synced source before proceeding to add new
             synchronized (mStateMachines) {
                 BassClientStateMachine stateMachine = getOrCreateStateMachine(sink);
+                if (stateMachine == null) {
+                    Log.e(TAG, "Can't get state machine for device: " + sink);
+                    return;
+                }
                 Message message =
                         stateMachine.obtainMessage(BassClientStateMachine.REACHED_MAX_SOURCE_LIMIT);
                 message.arg1 = syncHandle;
@@ -1404,6 +1460,10 @@ public class BassClientService extends ProfileService {
             sEventLogger.logd(TAG, "Select Broadcast Source");
 
             BassClientStateMachine stateMachine = getOrCreateStateMachine(sink);
+            if (stateMachine == null) {
+                Log.e(TAG, "Can't get state machine for device: " + sink);
+                return;
+            }
             Message message = stateMachine.obtainMessage(
                     BassClientStateMachine.SELECT_BCAST_SOURCE);
             message.obj = result;

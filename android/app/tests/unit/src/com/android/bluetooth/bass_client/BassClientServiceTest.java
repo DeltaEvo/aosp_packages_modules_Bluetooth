@@ -79,6 +79,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
@@ -239,7 +240,7 @@ public class BassClientServiceTest {
                             return stateMachine;
                         })
                 .when(mObjectsFactory)
-                .makeStateMachine(any(), any(), any(), any());
+                .makeStateMachine(any(), any(), any(), any(), any());
         doReturn(mBluetoothLeScannerWrapper).when(mObjectsFactory)
                 .getBluetoothLeScannerWrapper(any());
 
@@ -350,7 +351,12 @@ public class BassClientServiceTest {
 
         assertThat(mBassClientService.connect(mCurrentDevice)).isTrue();
         verify(mObjectsFactory)
-                .makeStateMachine(eq(mCurrentDevice), eq(mBassClientService), any(), any());
+                .makeStateMachine(
+                        eq(mCurrentDevice),
+                        eq(mBassClientService),
+                        eq(mAdapterService),
+                        any(),
+                        any());
         BassClientStateMachine stateMachine = mStateMachines.get(mCurrentDevice);
         assertThat(stateMachine).isNotNull();
         verify(stateMachine).sendMessage(BassClientStateMachine.CONNECT);
@@ -390,10 +396,20 @@ public class BassClientServiceTest {
      */
     @Test
     public void testStartSearchingForSources() {
+        prepareConnectedDeviceGroup();
         List<ScanFilter> scanFilters = new ArrayList<>();
+
+        assertThat(mStateMachines.size()).isEqualTo(2);
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            Mockito.clearInvocations(sm);
+        }
+
         mBassClientService.startSearchingForSources(scanFilters);
 
         verify(mBluetoothLeScannerWrapper).startScan(notNull(), notNull(), notNull());
+        for (BassClientStateMachine sm : mStateMachines.values()) {
+            verify(sm).sendMessage(BassClientStateMachine.START_SCAN_OFFLOAD);
+        }
     }
 
     /**
