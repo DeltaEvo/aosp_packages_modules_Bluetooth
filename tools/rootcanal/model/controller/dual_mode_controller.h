@@ -40,6 +40,13 @@ namespace rootcanal {
 using ::bluetooth::hci::Address;
 using ::bluetooth::hci::CommandView;
 
+// List of reject reasons for invalid packets.
+enum InvalidPacketReason {
+  kUnknown = 0,
+  kParseError = 1,
+  kUnsupported = 2,
+};
+
 // Emulates a dual mode BR/EDR + LE controller by maintaining the link layer
 // state machine detailed in the Bluetooth Core Specification Version 4.2,
 // Volume 6, Part B, Section 1.1 (page 30). Provides methods corresponding to
@@ -539,12 +546,35 @@ class DualModeController : public Device {
   void SendCommandCompleteUnknownOpCodeEvent(
       bluetooth::hci::OpCode op_code) const;
 
+  // Validate that a received packet is correctly formatted.
+  // If the packet failed to be parsed, the function sends a
+  // HCI Hardware Error event to the host and logs the packet to
+  // the configured handler.
+  template <typename T>
+  bool CheckPacketView(T const& view, std::string reason) {
+    if (view.IsValid()) {
+      return true;
+    }
+
+    // Send a hardware error to reset the host, and report the packet
+    // for tracing.
+    send_event_(bluetooth::hci::HardwareErrorBuilder::Create(0x43));
+    invalid_packet_handler_(id_, InvalidPacketReason::kParseError, reason,
+                            view.bytes().bytes());
+    return false;
+  }
+
   // Callbacks to send packets back to the HCI.
   std::function<void(std::shared_ptr<bluetooth::hci::AclBuilder>)> send_acl_;
   std::function<void(std::shared_ptr<bluetooth::hci::EventBuilder>)>
       send_event_;
   std::function<void(std::shared_ptr<bluetooth::hci::ScoBuilder>)> send_sco_;
   std::function<void(std::shared_ptr<bluetooth::hci::IsoBuilder>)> send_iso_;
+
+  // Report invalid packets received on this controller instance.
+  std::function<void(uint32_t, InvalidPacketReason, std::string,
+                     std::vector<uint8_t> const&)>
+      invalid_packet_handler_;
 
   // Loopback mode (Vol 4, Part E § 7.6.1).
   // The local loopback mode is used to pass the android Vendor Test Suite
