@@ -58,12 +58,14 @@ static void bta_dm_pm_btm_cback(const RawAddress& bd_addr,
                                 tBTM_PM_STATUS status, uint16_t value,
                                 tHCI_STATUS hci_status);
 static bool bta_dm_pm_park(const RawAddress& peer_addr);
-void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index);
+static void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index);
 static void bta_dm_sniff_cback(uint8_t id, uint8_t app_id,
                                const RawAddress& peer_addr);
 static int bta_dm_get_sco_index();
 static void bta_dm_pm_stop_timer_by_index(tBTA_PM_TIMER* p_timer,
                                           uint8_t timer_idx);
+
+static tBTM_PM_PWR_MD get_sniff_entry(uint8_t index);
 
 #include "../hh/bta_hh_int.h"
 /* BTA_DM_PM_SSR1 will be dedicated for HH SSR setting entry, no other profile
@@ -790,7 +792,7 @@ static bool bta_dm_pm_park(const RawAddress& peer_addr) {
  * Returns          tBTM_PM_PWR_MD with specified |index|.
  *
  ******************************************************************************/
-tBTM_PM_PWR_MD get_sniff_entry(uint8_t index) {
+static tBTM_PM_PWR_MD get_sniff_entry(uint8_t index) {
   static std::vector<tBTM_PM_PWR_MD> pwr_mds_cache;
   if (pwr_mds_cache.size() == BTA_DM_PM_PARK_IDX) {
     if (index >= BTA_DM_PM_PARK_IDX) {
@@ -843,7 +845,7 @@ tBTM_PM_PWR_MD get_sniff_entry(uint8_t index) {
  * Returns          true if sniff attempted, false otherwise.
  *
  ******************************************************************************/
-void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index) {
+static void bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE* p_peer_dev, uint8_t index) {
   tBTM_PM_MODE mode = BTM_PM_MD_ACTIVE;
   tBTM_PM_PWR_MD pwr_md;
   tBTM_STATUS status;
