@@ -37,7 +37,7 @@
 #include "osi/include/alarm.h"
 #include "stack/include/bt_types.h"
 
-namespace le_audio {
+namespace bluetooth::le_audio {
 
 #define UINT8_TO_VEC_UINT8(u8) \
   std::vector<uint8_t> { u8 }
@@ -591,6 +591,11 @@ struct LeAudioCoreCodecConfig {
   uint8_t GetChannelCountPerIsoStream(void) const {
     return allocated_channel_count;
   }
+
+  uint16_t CalculateMaxSduSize() const {
+    return GetChannelCountPerIsoStream() * octets_per_codec_frame.value_or(0) *
+           codec_frames_blocks_per_sdu.value_or(1);
+  }
 };
 
 struct LeAudioCoreCodecCapabilities {
@@ -927,6 +932,26 @@ struct hdl_pair {
   uint16_t ccc_hdl = 0;
 };
 
+struct AseQosConfiguration {
+  uint32_t presentation_delay = 0;
+  uint32_t sdu_interval = 0;
+  uint16_t max_transport_latency = 0;
+  uint16_t max_sdu_size = 0;
+  uint8_t retrans_nb = 0;
+  uint8_t framing = 0;
+  uint8_t phy = 0;
+};
+
+struct AseQosPreferences {
+  uint8_t supported_framing = 0;
+  uint8_t preferred_phy = 0;
+  uint8_t preferred_retrans_nb = 0;
+  uint32_t pres_delay_min = 0;
+  uint32_t pres_delay_max = 0;
+  uint32_t preferred_pres_delay_min = 0;
+  uint32_t preferred_pres_delay_max = 0;
+};
+
 struct ase {
   static constexpr uint8_t kAseIdInvalid = 0x00;
 
@@ -942,16 +967,8 @@ struct ase {
         cis_state(CisState::IDLE),
         data_path_state(DataPathState::IDLE),
         configured_for_context_type(LeAudioContextType::UNINITIALIZED),
-        preferred_phy(0),
         is_codec_in_controller(false),
         data_path_id(bluetooth::hci::iso_manager::kIsoDataPathDisabled),
-        max_sdu_size(0),
-        retrans_nb(0),
-        max_transport_latency(0),
-        pres_delay_min(0),
-        pres_delay_max(0),
-        preferred_pres_delay_min(0),
-        preferred_pres_delay_max(0),
         autonomous_operation_timer_(nullptr),
         autonomous_target_state_(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE),
         state(AseState::BTA_LE_AUDIO_ASE_STATE_IDLE) {}
@@ -973,9 +990,6 @@ struct ase {
   LeAudioCodecId codec_id;
   LeAudioLtvMap codec_config;
 
-  uint8_t framing;
-  uint8_t preferred_phy;
-
   /* Set to true, if the codec is implemented in BT controller, false if it's
    * implemented in host, or in separate DSP
    */
@@ -984,13 +998,10 @@ struct ase {
   uint8_t data_path_id;
 
   /* Qos configuration */
-  uint16_t max_sdu_size;
-  uint8_t retrans_nb;
-  uint16_t max_transport_latency;
-  uint32_t pres_delay_min;
-  uint32_t pres_delay_max;
-  uint32_t preferred_pres_delay_min;
-  uint32_t preferred_pres_delay_max;
+  AseQosConfiguration qos_config;
+
+  /* QoS requirements in Codec Configured state */
+  AseQosPreferences qos_preferences;
 
   std::vector<uint8_t> metadata;
 
@@ -1059,13 +1070,14 @@ struct QosConfigSetting {
 };
 
 struct SetConfiguration {
-  SetConfiguration(uint8_t direction, uint8_t device_cnt, uint8_t ase_cnt,
-                   CodecConfigSetting codec,
-                   QosConfigSetting qos = {.retransmission_number = 0,
-                                           .max_transport_latency = 0},
-                   le_audio::types::LeAudioConfigurationStrategy strategy =
-                       le_audio::types::LeAudioConfigurationStrategy::
-                           MONO_ONE_CIS_PER_DEVICE)
+  SetConfiguration(
+      uint8_t direction, uint8_t device_cnt, uint8_t ase_cnt,
+      CodecConfigSetting codec,
+      QosConfigSetting qos = {.retransmission_number = 0,
+                              .max_transport_latency = 0},
+      bluetooth::le_audio::types::LeAudioConfigurationStrategy strategy =
+          bluetooth::le_audio::types::LeAudioConfigurationStrategy::
+              MONO_ONE_CIS_PER_DEVICE)
       : direction(direction),
         device_cnt(device_cnt),
         ase_cnt(ase_cnt),
@@ -1153,7 +1165,7 @@ struct stream_configuration {
   bool pending_configuration;
 
   /* Currently selected remote device set configuration */
-  const le_audio::set_configurations::AudioSetConfiguration* conf;
+  const bluetooth::le_audio::set_configurations::AudioSetConfiguration* conf;
 
   /* Currently selected local audio codec */
   types::LeAudioCodecId codec_id;
@@ -1167,4 +1179,4 @@ void AppendMetadataLtvEntryForCcidList(std::vector<uint8_t>& metadata,
 void AppendMetadataLtvEntryForStreamingContext(
     std::vector<uint8_t>& metadata, types::AudioContexts context_type);
 uint8_t GetMaxCodecFramesPerSduFromPac(const types::acs_ac_record* pac_record);
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

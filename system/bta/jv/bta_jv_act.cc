@@ -905,8 +905,6 @@ void bta_jv_start_discovery(const RawAddress& bd_addr, uint16_t num_uuid,
   p_bta_jv_cfg->p_sdp_db->raw_data = p_bta_jv_cfg->p_sdp_raw_data;
   p_bta_jv_cfg->p_sdp_db->raw_size = p_bta_jv_cfg->sdp_raw_size;
 
-  bta_jv_cb.p_sel_raw_data = 0;
-
   // Optimistically set this as active
   bta_jv_cb.sdp_cb = {
       .sdp_active = true,
@@ -1575,9 +1573,13 @@ static void bta_jv_port_mgmt_sr_cback(uint32_t code, uint16_t port_handle) {
       evt_data.rfc_srv_open.new_listen_handle = p_pcb_new_listen->handle;
       p_pcb_new_listen->rfcomm_slot_id =
           p_cb->p_cback(BTA_JV_RFCOMM_SRV_OPEN_EVT, &evt_data, rfcomm_slot_id);
-      log::verbose("curr_sess={}, max_sess={}", p_cb->curr_sess,
-                   p_cb->max_sess);
-      failed = false;
+      if (p_pcb_new_listen->rfcomm_slot_id == 0) {
+        log::error("rfcomm_slot_id == {}", p_pcb_new_listen->rfcomm_slot_id);
+      } else {
+        log::verbose("curr_sess={}, max_sess={}", p_cb->curr_sess,
+                     p_cb->max_sess);
+        failed = false;
+      }
     } else
       log::error("failed to create new listen port");
   }

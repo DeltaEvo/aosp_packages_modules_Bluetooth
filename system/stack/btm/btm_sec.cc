@@ -253,6 +253,7 @@ static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
 }
 
 /*******************************************************************************
+ *
  * Function         access_secure_service_from_temp_bond
  *
  * Description      a utility function to test whether an access to
@@ -2215,7 +2216,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     }
   }
 
-  if (!p_bd_name) p_bd_name = (const uint8_t*)"";
+  if (!p_bd_name) p_bd_name = (const uint8_t*)kBtmBdNameEmpty;
 
   if (p_dev_rec == nullptr) {
     log::debug(
@@ -4296,8 +4297,7 @@ void btm_sec_pin_code_request(const RawAddress p_bda) {
 
   /* Use the connecting device's CoD for the connection */
   if ((p_bda == p_cb->connecting_bda) &&
-      (p_cb->connecting_dc[0] || p_cb->connecting_dc[1] ||
-       p_cb->connecting_dc[2]))
+      (p_cb->connecting_dc != kDevClassEmpty))
     p_dev_rec->dev_class = p_cb->connecting_dc;
 
   /* We could have started connection after asking user for the PIN code */

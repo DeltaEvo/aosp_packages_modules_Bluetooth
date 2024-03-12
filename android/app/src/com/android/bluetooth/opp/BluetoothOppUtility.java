@@ -267,10 +267,6 @@ public class BluetoothOppUtility {
         if (isRecognizedFileType(context, path, mimetype)) {
             Intent activityIntent = new Intent(Intent.ACTION_VIEW);
             activityIntent.setDataAndTypeAndNormalize(path, mimetype);
-
-            List<ResolveInfo> resInfoList = context.getPackageManager()
-                    .queryIntentActivities(activityIntent, PackageManager.MATCH_DEFAULT_ONLY);
-
             activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activityIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
@@ -302,10 +298,9 @@ public class BluetoothOppUtility {
         // Open a specific media item using ParcelFileDescriptor.
         ContentResolver resolver = context.getContentResolver();
         String readOnlyMode = "r";
-        ParcelFileDescriptor pfd = null;
-        try {
-            pfd = BluetoothMethodProxy.getInstance()
-                    .contentResolverOpenFileDescriptor(resolver, uri, readOnlyMode);
+        try (ParcelFileDescriptor unusedPfd =
+                BluetoothMethodProxy.getInstance()
+                        .contentResolverOpenFileDescriptor(resolver, uri, readOnlyMode)) {
             return true;
         } catch (IOException e) {
             ContentProfileErrorReportUtils.report(

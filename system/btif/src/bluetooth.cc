@@ -64,6 +64,7 @@
 #include "bta/include/bta_vc_api.h"
 #include "btif/avrcp/avrcp_service.h"
 #include "btif/include/btif_sock.h"
+#include "btif/include/btif_sock_logging.h"
 #include "btif/include/core_callbacks.h"
 #include "btif/include/stack_manager_t.h"
 #include "btif_a2dp.h"
@@ -82,6 +83,7 @@
 #include "btif_profile_storage.h"
 #include "btif_rc.h"
 #include "btif_sock.h"
+#include "btif_sock_logging.h"
 #include "btif_storage.h"
 #include "common/address_obfuscator.h"
 #include "common/init_flags.h"
@@ -182,6 +184,7 @@ bt_status_t btif_hh_connect(const tAclLinkSpec* link_spec);
 bt_status_t btif_hd_execute_service(bool b_enable);
 
 extern void gatt_tcb_dump(int fd);
+extern void bta_gatt_client_dump(int fd);
 
 /*******************************************************************************
  *  Callbacks from bluetooth::core (see go/invisalign-bt)
@@ -824,12 +827,13 @@ static void dump(int fd, const char** arguments) {
   bluetooth::avrcp::AvrcpService::DebugDump(fd);
   btif_debug_config_dump(fd);
   gatt_tcb_dump(fd);
+  bta_gatt_client_dump(fd);
   device_debug_iot_config_dump(fd);
   BTA_HfClientDumpStatistics(fd);
   wakelock_debug_dump(fd);
   alarm_debug_dump(fd);
   bluetooth::csis::CsisClient::DebugDump(fd);
-  ::le_audio::has::HasClient::DebugDump(fd);
+  ::bluetooth::le_audio::has::HasClient::DebugDump(fd);
   HearingAid::DebugDump(fd);
   LeAudioClient::DebugDump(fd);
   LeAudioBroadcaster::DebugDump(fd);

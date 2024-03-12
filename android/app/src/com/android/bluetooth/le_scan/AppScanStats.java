@@ -19,6 +19,7 @@ package com.android.bluetooth.le_scan;
 import android.bluetooth.BluetoothProtoEnums;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanSettings;
+import android.content.Context;
 import android.os.BatteryStatsManager;
 import android.os.Binder;
 import android.os.SystemClock;
@@ -29,7 +30,6 @@ import com.android.bluetooth.BluetoothStatsLog;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.MetricsLogger;
 import com.android.bluetooth.gatt.ContextMap;
-import com.android.bluetooth.gatt.GattService;
 import com.android.bluetooth.util.WorkSourceUtil;
 import com.android.internal.annotations.GuardedBy;
 
@@ -66,8 +66,8 @@ public class AppScanStats {
     // ContextMap here is needed to grab Apps and Connections
     ContextMap mContextMap;
 
-    // GattService is needed to add scan event protos to be dumped later
-    final GattService mGattService;
+    // TransitionalScanHelper is needed to add scan event protos to be dumped later
+    final TransitionalScanHelper mScanHelper;
 
     // Battery stats is used to keep track of scans and result stats
     BatteryStatsManager mBatteryStatsManager;
@@ -149,11 +149,16 @@ public class AppScanStats {
     private long stopTime = 0;
     private int results = 0;
 
-    public AppScanStats(String name, WorkSource source, ContextMap map, GattService service) {
+    public AppScanStats(
+            String name,
+            WorkSource source,
+            ContextMap map,
+            Context context,
+            TransitionalScanHelper scanHelper) {
         appName = name;
         mContextMap = map;
-        mGattService = service;
-        mBatteryStatsManager = service.getSystemService(BatteryStatsManager.class);
+        mScanHelper = scanHelper;
+        mBatteryStatsManager = context.getSystemService(BatteryStatsManager.class);
 
         if (source == null) {
             // Bill the caller if the work source isn't passed through
@@ -263,7 +268,7 @@ public class AppScanStats {
                         BluetoothMetricsProto.ScanEvent.ScanTechnologyType.SCAN_TECH_TYPE_LE)
                 .setEventTimeMillis(System.currentTimeMillis())
                 .setInitiator(truncateAppName(appName)).build();
-        mGattService.addScanEvent(scanEvent);
+        mScanHelper.addScanEvent(scanEvent);
 
         if (!isScanning()) {
             mScanStartTime = startTime;
@@ -308,7 +313,7 @@ public class AppScanStats {
                 .setInitiator(truncateAppName(appName))
                 .setNumberResults(scan.results)
                 .build();
-        mGattService.addScanEvent(scanEvent);
+        mScanHelper.addScanEvent(scanEvent);
 
         mTotalScanTime += scanDuration;
         long activeDuration = scanDuration - scan.suspendDuration;
@@ -536,13 +541,12 @@ public class AppScanStats {
 
     synchronized void recordScanResume(int scannerId) {
         LastScan scan = getScanFromScannerId(scannerId);
-        long suspendDuration = 0;
         if (scan == null || !scan.isSuspended) {
             return;
         }
         scan.isSuspended = false;
         stopTime = SystemClock.elapsedRealtime();
-        suspendDuration = stopTime - scan.suspendStartTime;
+        long suspendDuration = stopTime - scan.suspendStartTime;
         scan.suspendDuration += suspendDuration;
         mTotalSuspendTime += suspendDuration;
     }
@@ -702,7 +706,6 @@ public class AppScanStats {
     public synchronized void dumpToString(StringBuilder sb) {
         long currentTime = System.currentTimeMillis();
         long currTime = SystemClock.elapsedRealtime();
-        long Score = 0;
         long scanDuration = 0;
         long suspendDuration = 0;
         long activeDuration = 0;
@@ -753,9 +756,13 @@ public class AppScanStats {
                 }
             }
         }
-        Score = (oppScanTime * OPPORTUNISTIC_WEIGHT + lowPowerScanTime * LOW_POWER_WEIGHT
-              + balancedScanTime * BALANCED_WEIGHT + lowLatencyScanTime * LOW_LATENCY_WEIGHT
-              + ambientDiscoveryScanTime * AMBIENT_DISCOVERY_WEIGHT) / 100;
+        long Score =
+                (oppScanTime * OPPORTUNISTIC_WEIGHT
+                                + lowPowerScanTime * LOW_POWER_WEIGHT
+                                + balancedScanTime * BALANCED_WEIGHT
+                                + lowLatencyScanTime * LOW_LATENCY_WEIGHT
+                                + ambientDiscoveryScanTime * AMBIENT_DISCOVERY_WEIGHT)
+                        / 100;
 
         sb.append("  " + appName);
         if (isRegistered) {
@@ -862,8 +869,6 @@ public class AppScanStats {
                     sb.append("Regular Scan");
                 }
                 if (scan.suspendStartTime != 0) {
-                    long duration = scan.suspendDuration + (scan.isSuspended ? (currTime
-                            - scan.suspendStartTime) : 0);
                     activeDuration = scan.duration - scan.suspendDuration;
                     sb.append("\n      └ " + "Suspended Time:" + scan.suspendDuration
                             + "ms, Active Time:" + activeDuration);

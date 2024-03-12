@@ -44,8 +44,8 @@ using ::bluetooth::audio::aidl::BluetoothAudioCtrlAck;
 using ::bluetooth::audio::le_audio::LeAudioClientInterface;
 using ::bluetooth::audio::le_audio::StartRequestState;
 using ::bluetooth::audio::le_audio::StreamCallbacks;
-using ::le_audio::set_configurations::SetConfiguration;
-using ::le_audio::types::LeAudioCoreCodecConfig;
+using ::bluetooth::le_audio::set_configurations::SetConfiguration;
+using ::bluetooth::le_audio::types::LeAudioCoreCodecConfig;
 
 static ChannelMode le_audio_channel_mode2audio_hal(uint8_t channels_count) {
   switch (channels_count) {
@@ -67,7 +67,15 @@ LeAudioTransport::LeAudioTransport(void (*flush)(void),
       data_position_({}),
       pcm_config_(std::move(pcm_config)),
       start_request_state_(StartRequestState::IDLE),
-      dsa_mode_(DsaMode::DISABLED){};
+      dsa_mode_(DsaMode::DISABLED),
+      cached_source_metadata_({}){};
+
+LeAudioTransport::~LeAudioTransport() {
+  if (cached_source_metadata_.tracks != nullptr) {
+    free(cached_source_metadata_.tracks);
+    cached_source_metadata_.tracks = nullptr;
+  }
+}
 
 BluetoothAudioCtrlAck LeAudioTransport::StartRequest(bool is_low_latency) {
   // Check if operation is pending already
@@ -166,6 +174,9 @@ void LeAudioTransport::SetLatencyMode(LatencyMode latency_mode) {
   LOG_DEBUG("Latency mode: %s",
             ::aidl::android::hardware::bluetooth::audio::toString(latency_mode)
                 .c_str());
+
+  DsaMode prev_dsa_mode = dsa_mode_;
+
   switch (latency_mode) {
     case LatencyMode::FREE:
       dsa_mode_ = DsaMode::DISABLED;
@@ -181,7 +192,16 @@ void LeAudioTransport::SetLatencyMode(LatencyMode latency_mode) {
       break;
     default:
       LOG(WARNING) << ", invalid latency mode: " << (int)latency_mode;
-      break;
+      return;
+  }
+
+  if (IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
+    if (dsa_mode_ != prev_dsa_mode &&
+        cached_source_metadata_.tracks != nullptr &&
+        cached_source_metadata_.tracks != 0) {
+      LOG(INFO) << ", latency mode changed, update source metadata";
+      stream_cb_.on_metadata_update_(cached_source_metadata_, dsa_mode_);
+    }
   }
 }
 
@@ -209,6 +229,22 @@ void LeAudioTransport::SourceMetadataChanged(
   if (track_count == 0) {
     LOG(WARNING) << ", invalid number of metadata changed tracks";
     return;
+  }
+
+  if (IS_FLAG_ENABLED(leaudio_dynamic_spatial_audio)) {
+    if (cached_source_metadata_.tracks != nullptr) {
+      free(cached_source_metadata_.tracks);
+      cached_source_metadata_.tracks = nullptr;
+    }
+
+    LOG(INFO) << ", caching source metadata";
+
+    playback_track_metadata_v7* tracks;
+    tracks = (playback_track_metadata_v7*)malloc(sizeof(*tracks) * track_count);
+    memcpy(tracks, source_metadata.tracks, sizeof(*tracks) * track_count);
+
+    cached_source_metadata_.track_count = track_count;
+    cached_source_metadata_.tracks = tracks;
   }
 
   stream_cb_.on_metadata_update_(source_metadata, dsa_mode_);
@@ -261,7 +297,7 @@ void LeAudioTransport::LeAudioSetSelectedHalPcmConfig(uint32_t sample_rate_hz,
 }
 
 void LeAudioTransport::LeAudioSetBroadcastConfig(
-    const ::le_audio::broadcast_offload_config& offload_config) {
+    const ::bluetooth::le_audio::broadcast_offload_config& offload_config) {
   broadcast_config_.streamMap.resize(0);
   for (auto& [handle, location] : offload_config.stream_map) {
     Lc3Configuration lc3_config{
@@ -404,7 +440,7 @@ void LeAudioSinkTransport::LeAudioSetSelectedHalPcmConfig(
 }
 
 void LeAudioSinkTransport::LeAudioSetBroadcastConfig(
-    const ::le_audio::broadcast_offload_config& offload_config) {
+    const ::bluetooth::le_audio::broadcast_offload_config& offload_config) {
   transport_->LeAudioSetBroadcastConfig(offload_config);
 }
 
@@ -521,41 +557,51 @@ void LeAudioSourceTransport::SetStartRequestState(StartRequestState state) {
 }
 
 std::unordered_map<int32_t, uint8_t> sampling_freq_map{
-    {8000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq8000Hz},
-    {16000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq16000Hz},
-    {24000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq24000Hz},
-    {32000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq32000Hz},
-    {44100, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq44100Hz},
-    {48000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq48000Hz},
-    {88200, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq88200Hz},
-    {96000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq96000Hz},
-    {176400, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq176400Hz},
-    {192000, ::le_audio::codec_spec_conf::kLeAudioSamplingFreq192000Hz}};
+    {8000, ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq8000Hz},
+    {16000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq16000Hz},
+    {24000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq24000Hz},
+    {32000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq32000Hz},
+    {44100,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq44100Hz},
+    {48000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq48000Hz},
+    {88200,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq88200Hz},
+    {96000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq96000Hz},
+    {176400,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq176400Hz},
+    {192000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioSamplingFreq192000Hz}};
 
 std::unordered_map<int32_t, uint8_t> frame_duration_map{
-    {7500, ::le_audio::codec_spec_conf::kLeAudioCodecFrameDur7500us},
-    {10000, ::le_audio::codec_spec_conf::kLeAudioCodecFrameDur10000us}};
+    {7500, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameDur7500us},
+    {10000,
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameDur10000us}};
 
 std::unordered_map<int32_t, uint16_t> octets_per_frame_map{
-    {30, ::le_audio::codec_spec_conf::kLeAudioCodecFrameLen30},
-    {40, ::le_audio::codec_spec_conf::kLeAudioCodecFrameLen40},
-    {60, ::le_audio::codec_spec_conf::kLeAudioCodecFrameLen60},
-    {80, ::le_audio::codec_spec_conf::kLeAudioCodecFrameLen80},
-    {100, ::le_audio::codec_spec_conf::kLeAudioCodecFrameLen100},
-    {120, ::le_audio::codec_spec_conf::kLeAudioCodecFrameLen120}};
+    {30, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen30},
+    {40, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen40},
+    {60, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen60},
+    {80, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen80},
+    {100, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen100},
+    {120, ::bluetooth::le_audio::codec_spec_conf::kLeAudioCodecFrameLen120}};
 
 std::unordered_map<AudioLocation, uint32_t> audio_location_map{
     {AudioLocation::UNKNOWN,
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontCenter},
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontCenter},
     {AudioLocation::FRONT_LEFT,
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft},
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft},
     {AudioLocation::FRONT_RIGHT,
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight},
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight},
     {static_cast<AudioLocation>(
          static_cast<uint8_t>(AudioLocation::FRONT_LEFT) |
          static_cast<uint8_t>(AudioLocation::FRONT_RIGHT)),
-     ::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
-         ::le_audio::codec_spec_conf::kLeAudioLocationFrontRight}};
+     ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontLeft |
+         ::bluetooth::le_audio::codec_spec_conf::kLeAudioLocationFrontRight}};
 
 bool hal_ucast_capability_to_stack_format(
     const UnicastCapability& hal_capability,
@@ -596,21 +642,22 @@ bool hal_ucast_capability_to_stack_format(
     return false;
   }
 
-  stack_capability.id = ::le_audio::set_configurations::LeAudioCodecIdLc3;
+  stack_capability.id =
+      ::bluetooth::le_audio::set_configurations::LeAudioCodecIdLc3;
   stack_capability.channel_count_per_iso_stream = channel_count;
 
   stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
       sampling_freq_map[sample_rate_hz]);
   stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
       frame_duration_map[frame_duration_us]);
-  stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
-      audio_location_map[supported_channel]);
-  stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
-      octets_per_frame_map[octets_per_frame]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeAudioChannelAllocation,
+                              audio_location_map[supported_channel]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeOctetsPerCodecFrame,
+                              octets_per_frame_map[octets_per_frame]);
   return true;
 }
 
@@ -658,21 +705,22 @@ bool hal_bcast_capability_to_stack_format(
     return false;
   }
 
-  stack_capability.id = ::le_audio::set_configurations::LeAudioCodecIdLc3;
+  stack_capability.id =
+      ::bluetooth::le_audio::set_configurations::LeAudioCodecIdLc3;
   stack_capability.channel_count_per_iso_stream = channel_count;
 
   stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeSamplingFreq,
       sampling_freq_map[sample_rate_hz]);
   stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
+      ::bluetooth::le_audio::codec_spec_conf::kLeAudioLtvTypeFrameDuration,
       frame_duration_map[frame_duration_us]);
-  stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeAudioChannelAllocation,
-      audio_location_map[supported_channel]);
-  stack_capability.params.Add(
-      ::le_audio::codec_spec_conf::kLeAudioLtvTypeOctetsPerCodecFrame,
-      octets_per_frame_map[octets_per_frame]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeAudioChannelAllocation,
+                              audio_location_map[supported_channel]);
+  stack_capability.params.Add(::bluetooth::le_audio::codec_spec_conf::
+                                  kLeAudioLtvTypeOctetsPerCodecFrame,
+                              octets_per_frame_map[octets_per_frame]);
   return true;
 }
 
@@ -700,7 +748,8 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
 
     if (hal_ucast_capability_to_stack_format(hal_encode_cap, encode_cap)) {
       audio_set_config.confs.push_back(SetConfiguration(
-          ::le_audio::types::kLeAudioDirectionSink, hal_encode_cap.deviceCount,
+          ::bluetooth::le_audio::types::kLeAudioDirectionSink,
+          hal_encode_cap.deviceCount,
           hal_encode_cap.deviceCount * hal_encode_cap.channelCountPerDevice,
           encode_cap));
       str_capability_log = " Encode Capability: " + hal_encode_cap.toString();
@@ -708,7 +757,7 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
 
     if (hal_ucast_capability_to_stack_format(hal_decode_cap, decode_cap)) {
       audio_set_config.confs.push_back(SetConfiguration(
-          ::le_audio::types::kLeAudioDirectionSource,
+          ::bluetooth::le_audio::types::kLeAudioDirectionSource,
           hal_decode_cap.deviceCount,
           hal_decode_cap.deviceCount * hal_decode_cap.channelCountPerDevice,
           decode_cap));
@@ -717,8 +766,9 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
 
     if (hal_bcast_capability_to_stack_format(hal_bcast_cap, bcast_cap)) {
       // Set device_cnt, ase_cnt to zero to ignore these fields for broadcast
-      audio_set_config.confs.push_back(SetConfiguration(
-          ::le_audio::types::kLeAudioDirectionSink, 0, 0, bcast_cap));
+      audio_set_config.confs.push_back(
+          SetConfiguration(::bluetooth::le_audio::types::kLeAudioDirectionSink,
+                           0, 0, bcast_cap));
       str_capability_log +=
           " Broadcast Capability: " + hal_bcast_cap.toString();
     }
@@ -738,7 +788,7 @@ std::vector<AudioSetConfiguration> get_offload_capabilities() {
 }
 
 AudioConfiguration offload_config_to_hal_audio_config(
-    const ::le_audio::offload_config& offload_config) {
+    const ::bluetooth::le_audio::offload_config& offload_config) {
   Lc3Configuration lc3_config{
       .pcmBitDepth = static_cast<int8_t>(offload_config.bits_per_sample),
       .samplingFrequencyHz = static_cast<int32_t>(offload_config.sampling_rate),
