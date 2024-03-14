@@ -310,7 +310,7 @@ typedef struct {
 typedef struct {
   RawAddress bd_addr;   /* peer address */
   DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
+  BD_NAME bd_name;      /* peer device name */
   uint32_t num_val; /* the numeric value for comparison. If just_works, do not
                        show this number to UI */
   bool just_works;  /* true, if "Just Works" association model */
@@ -324,14 +324,14 @@ typedef struct {
 typedef struct {
   RawAddress bd_addr;   /* peer address */
   DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
+  BD_NAME bd_name;      /* peer device name */
 } tBTM_SP_KEY_REQ;
 
 /* data type for BTM_SP_KEY_NOTIF_EVT */
 typedef struct {
   RawAddress bd_addr;   /* peer address */
   DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
+  BD_NAME bd_name;      /* peer device name */
   uint32_t passkey;     /* passkey */
 } tBTM_SP_KEY_NOTIF;
 
@@ -346,7 +346,7 @@ typedef struct {
 typedef struct {
   RawAddress bd_addr;   /* peer address */
   DEV_CLASS dev_class;  /* peer CoD */
-  tBTM_BD_NAME bd_name; /* peer device name */
+  BD_NAME bd_name;      /* peer device name */
 } tBTM_SP_RMT_OOB;
 
 typedef union {
@@ -529,4 +529,6 @@ inline std::string bond_type_text(const tBTM_BOND_TYPE& bond_type) {
 namespace fmt {
 template <>
 struct formatter<tBTM_BLE_SEC_ACT> : enum_formatter<tBTM_BLE_SEC_ACT> {};
+template <>
+struct formatter<tBTM_BOND_TYPE> : enum_formatter<tBTM_BOND_TYPE> {};
 }  // namespace fmt

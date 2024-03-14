@@ -56,7 +56,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,6 +75,8 @@ public class AvrcpControllerStateMachineTest {
 
     @Rule public final ServiceTestRule mAvrcpServiceRule = new ServiceTestRule();
     @Rule public final ServiceTestRule mA2dpServiceRule = new ServiceTestRule();
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mA2dpAdapterService;
     @Mock private AdapterService mAvrcpAdapterService;
     @Mock private A2dpSinkService mA2dpSinkService;
@@ -97,7 +100,6 @@ public class AvrcpControllerStateMachineTest {
         }
         Assert.assertNotNull(Looper.myLooper());
 
-        MockitoAnnotations.initMocks(this);
 
         // Start a real A2dpSinkService so we can replace the static instance with our mock
         doReturn(mDatabaseManager).when(mA2dpAdapterService).getDatabase();
@@ -240,13 +242,16 @@ public class AvrcpControllerStateMachineTest {
         return builder.build();
     }
 
-    private AvrcpPlayer makePlayer(BluetoothDevice device, int playerId, String playerName,
-            int playerType, byte[] playerFeatures, int playStatus) {
+    private AvrcpPlayer makePlayer(
+            BluetoothDevice device,
+            int playerId,
+            String playerName,
+            byte[] playerFeatures,
+            int playStatus) {
         AvrcpPlayer.Builder apb = new AvrcpPlayer.Builder();
         apb.setDevice(device);
         apb.setPlayerId(playerId);
         apb.setName(playerName);
-        apb.setPlayerType(playerType);
         apb.setSupportedFeatures(playerFeatures);
         apb.setPlayStatus(playStatus);
         return apb.build();
@@ -727,7 +732,7 @@ public class AvrcpControllerStateMachineTest {
         //Provide back a player object
         byte[] playerFeatures =
                 new byte[]{0, 0, 0, 0, 0, (byte) 0xb7, 0x01, 0x0c, 0x0a, 0, 0, 0, 0, 0, 0, 0};
-        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, playerName, 1, playerFeatures, 1);
+        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, playerName, playerFeatures, 1);
         List<AvrcpPlayer> testPlayers = new ArrayList<>();
         testPlayers.add(playerOne);
         mAvrcpStateMachine.sendMessage(AvrcpControllerStateMachine.MESSAGE_PROCESS_GET_PLAYER_ITEMS,
@@ -803,8 +808,8 @@ public class AvrcpControllerStateMachineTest {
         // Send available players set that contains our addressed player
         byte[] playerFeatures =
                 new byte[]{0, 0, 0, 0, 0, (byte) 0xb7, 0x01, 0x0c, 0x0a, 0, 0, 0, 0, 0, 0, 0};
-        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", 1, playerFeatures, 1);
-        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", 1, playerFeatures, 1);
+        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", playerFeatures, 1);
+        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", playerFeatures, 1);
         List<AvrcpPlayer> testPlayers = new ArrayList<>();
         testPlayers.add(playerOne);
         testPlayers.add(playerTwo);
@@ -855,8 +860,8 @@ public class AvrcpControllerStateMachineTest {
         // Send available players set that does not contain the addressed player
         byte[] playerFeatures =
                 new byte[]{0, 0, 0, 0, 0, (byte) 0xb7, 0x01, 0x0c, 0x0a, 0, 0, 0, 0, 0, 0, 0};
-        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", 1, playerFeatures, 1);
-        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", 1, playerFeatures, 1);
+        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", playerFeatures, 1);
+        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", playerFeatures, 1);
         List<AvrcpPlayer> testPlayers = new ArrayList<>();
         testPlayers.add(playerOne);
         testPlayers.add(playerTwo);
@@ -909,8 +914,8 @@ public class AvrcpControllerStateMachineTest {
         //Provide back two player objects, IDs 1 and 2
         byte[] playerFeatures =
                 new byte[]{0, 0, 0, 0, 0, (byte) 0xb7, 0x01, 0x0c, 0x0a, 0, 0, 0, 0, 0, 0, 0};
-        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", 1, playerFeatures, 1);
-        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", 1, playerFeatures, 1);
+        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", playerFeatures, 1);
+        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", playerFeatures, 1);
         List<AvrcpPlayer> testPlayers = new ArrayList<>();
         testPlayers.add(playerOne);
         testPlayers.add(playerTwo);
@@ -970,7 +975,7 @@ public class AvrcpControllerStateMachineTest {
         //Provide back a player object
         byte[] playerFeatures =
                 new byte[]{0, 0, 0, 0, 0, (byte) 0xb7, 0x01, 0x0c, 0x0a, 0, 0, 0, 0, 0, 0, 0};
-        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", 1, playerFeatures, 1);
+        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", playerFeatures, 1);
         List<AvrcpPlayer> testPlayers = new ArrayList<>();
         testPlayers.add(playerOne);
         mAvrcpStateMachine.sendMessage(
@@ -1027,8 +1032,8 @@ public class AvrcpControllerStateMachineTest {
         // Send available players set that contains our addressed player
         byte[] playerFeatures =
                 new byte[]{0, 0, 0, 0, 0, (byte) 0xb7, 0x01, 0x0c, 0x0a, 0, 0, 0, 0, 0, 0, 0};
-        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", 1, playerFeatures, 1);
-        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", 1, playerFeatures, 1);
+        AvrcpPlayer playerOne = makePlayer(mTestDevice, 1, "Player 1", playerFeatures, 1);
+        AvrcpPlayer playerTwo = makePlayer(mTestDevice, 2, "Player 2", playerFeatures, 1);
         List<AvrcpPlayer> testPlayers = new ArrayList<>();
         testPlayers.add(playerOne);
         testPlayers.add(playerTwo);

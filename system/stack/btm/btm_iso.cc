@@ -126,12 +126,7 @@ void IsoManager::HandleDisconnect(uint16_t handle, uint8_t reason) {
     pimpl_->iso_impl_->disconnection_complete(handle, reason);
 }
 
-void IsoManager::HandleNumComplDataPkts(uint8_t* p, uint8_t evt_len) {
-  if (pimpl_->IsRunning())
-    pimpl_->iso_impl_->handle_num_completed_pkts(p, evt_len);
-}
-
-void IsoManager::HandleGdNumComplDataPkts(uint16_t handle, uint16_t credits) {
+void IsoManager::HandleNumComplDataPkts(uint16_t handle, uint16_t credits) {
   if (pimpl_->IsRunning())
     pimpl_->iso_impl_->handle_gd_num_completed_pkts(handle, credits);
 }
@@ -157,6 +152,11 @@ void IsoManager::Dump(int fd) {
 }
 
 IsoManager::~IsoManager() = default;
+
+IsoManager* IsoManager::GetInstance() {
+  static IsoManager* instance = new IsoManager();
+  return instance;
+}
 
 }  // namespace hci
 }  // namespace bluetooth

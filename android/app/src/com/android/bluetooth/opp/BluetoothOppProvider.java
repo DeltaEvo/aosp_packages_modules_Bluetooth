@@ -58,7 +58,6 @@ import java.util.List;
 public final class BluetoothOppProvider extends ContentProvider {
 
     private static final String TAG = "BluetoothOppProvider";
-    private static final boolean D = Constants.DEBUG;
     private static final boolean V = Constants.VERBOSE;
 
     /** Database filename */
@@ -225,9 +224,6 @@ public final class BluetoothOppProvider extends ContentProvider {
         to.put(key, from.getLong(from.getColumnIndexOrThrow(key)));
     }
 
-    /**
-     * @hide
-     */
     public static boolean oppDatabaseMigration(Context ctx, Cursor cursor) {
         boolean result = true;
         SQLiteDatabase db = new DatabaseHelper(ctx).getWritableDatabase();

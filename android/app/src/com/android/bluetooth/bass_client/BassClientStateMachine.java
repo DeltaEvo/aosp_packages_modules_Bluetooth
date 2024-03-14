@@ -53,7 +53,7 @@ import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.Utils;
 import com.android.bluetooth.btservice.AdapterService;
 import com.android.bluetooth.btservice.ProfileService;
-import com.android.bluetooth.flags.FeatureFlags;
+import com.android.bluetooth.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
@@ -70,7 +70,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Scanner;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -86,7 +85,6 @@ public class BassClientStateMachine extends StateMachine {
     private static final byte OPCODE_UPDATE_SOURCE = 0x03;
     private static final byte OPCODE_SET_BCAST_PIN = 0x04;
     private static final byte OPCODE_REMOVE_SOURCE = 0x05;
-    private static final int ADD_SOURCE_FIXED_LENGTH = 16;
     private static final int UPDATE_SOURCE_FIXED_LENGTH = 6;
 
     static final int CONNECT = 1;
@@ -128,7 +126,6 @@ public class BassClientStateMachine extends StateMachine {
     private final Connected mConnected = new Connected();
     private final Connecting mConnecting = new Connecting();
     private final ConnectedProcessing mConnectedProcessing = new ConnectedProcessing();
-    private final FeatureFlags mFeatureFlags;
     private final List<Pair<ScanResult, Integer>> mSourceSyncRequestsQueue =
             new ArrayList<Pair<ScanResult, Integer>>();
 
@@ -151,7 +148,6 @@ public class BassClientStateMachine extends StateMachine {
     BluetoothGattCharacteristic mBroadcastScanControlPoint;
     private final Map<Integer, Boolean> mFirstTimeBisDiscoveryMap;
     private int mPASyncRetryCounter = 0;
-    private ScanResult mScanRes = null;
     @VisibleForTesting
     int mNumOfBroadcastReceiverStates = 0;
     @VisibleForTesting
@@ -186,14 +182,12 @@ public class BassClientStateMachine extends StateMachine {
             BassClientService svc,
             AdapterService adapterService,
             Looper looper,
-            int connectTimeoutMs,
-            FeatureFlags featureFlags) {
+            int connectTimeoutMs) {
         super(TAG + "(" + device.toString() + ")", looper);
         mDevice = device;
         mService = svc;
         mAdapterService = adapterService;
         mConnectTimeoutMs = connectTimeoutMs;
-        mFeatureFlags = Objects.requireNonNull(featureFlags, "Feature Flags cannot be null");
         addState(mDisconnected);
         addState(mConnected);
         addState(mConnecting);
@@ -214,8 +208,7 @@ public class BassClientStateMachine extends StateMachine {
             BluetoothDevice device,
             BassClientService svc,
             AdapterService adapterService,
-            Looper looper,
-            FeatureFlags featureFlags) {
+            Looper looper) {
         Log.d(TAG, "make for device " + device);
 
         if (!BassClientPeriodicAdvertisingManager
@@ -226,12 +219,7 @@ public class BassClientStateMachine extends StateMachine {
 
         BassClientStateMachine BassclientSm =
                 new BassClientStateMachine(
-                        device,
-                        svc,
-                        adapterService,
-                        looper,
-                        BassConstants.CONNECT_TIMEOUT_MS,
-                        featureFlags);
+                        device, svc, adapterService, looper, BassConstants.CONNECT_TIMEOUT_MS);
         BassclientSm.start();
         return BassclientSm;
     }
@@ -552,11 +540,6 @@ public class BassClientStateMachine extends StateMachine {
     }
 
     private BluetoothLeBroadcastMetadata getBroadcastMetadataFromBaseData(
-            BaseData baseData, BluetoothDevice device, int syncHandle) {
-        return getBroadcastMetadataFromBaseData(baseData, device, syncHandle, false);
-    }
-
-    private BluetoothLeBroadcastMetadata getBroadcastMetadataFromBaseData(
             BaseData baseData, BluetoothDevice device, int syncHandle, boolean encrypted) {
         BluetoothLeBroadcastMetadata.Builder metaData =
                 new BluetoothLeBroadcastMetadata.Builder();
@@ -646,7 +629,7 @@ public class BassClientStateMachine extends StateMachine {
             }
         }
         metaData.setEncrypted(encrypted);
-        if (mFeatureFlags.leaudioBroadcastMonitorSourceSyncStatus()) {
+        if (Flags.leaudioBroadcastMonitorSourceSyncStatus()) {
             // update the rssi value
             ScanResult scanRes = mService.getCachedBroadcast(result.getBroadcastId());
             if (scanRes != null) {
@@ -1185,7 +1168,7 @@ public class BassClientStateMachine extends StateMachine {
         @Override
         public void onSyncLost(int syncHandle) {
             log("OnSyncLost" + syncHandle);
-            if (mFeatureFlags.leaudioBroadcastMonitorSourceSyncStatus()) {
+            if (Flags.leaudioBroadcastMonitorSourceSyncStatus()) {
                 int broadcastId = mService.getBroadcastIdForSyncHandle(syncHandle);
                 if (broadcastId != BassConstants.INVALID_BROADCAST_ID) {
                     log("Notify broadcast source lost, broadcast id: " + broadcastId);

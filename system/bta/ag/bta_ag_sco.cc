@@ -434,12 +434,10 @@ void bta_ag_create_sco(tBTA_AG_SCB* p_scb, bool is_orig) {
     return;
   }
 
-#if (DISABLE_WBS == FALSE)
   if ((p_scb->sco_codec == BTM_SCO_CODEC_MSBC) && !p_scb->codec_fallback &&
       hfp_hal_interface::get_wbs_supported()) {
     esco_codec = UUID_CODEC_MSBC;
   }
-#endif
 
   if (is_hfp_aptx_voice_enabled()) {
     if ((p_scb->sco_codec == BTA_AG_SCO_APTX_SWB_SETTINGS_Q0) &&
@@ -737,8 +735,10 @@ void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb) {
     p_scb->sco_codec = UUID_CODEC_CVSD;
   }
   const bool aptx_voice =
-      is_hfp_aptx_voice_enabled() && p_scb->is_aptx_swb_codec &&
-      (p_scb->peer_codecs & BTA_AG_SCO_APTX_SWB_SETTINGS_Q0_MASK);
+      is_hfp_aptx_voice_enabled() &&
+      (get_swb_codec_status(bluetooth::headset::BTHF_SWB_CODEC_VENDOR_APTX,
+                            &p_scb->peer_addr) ||
+       p_scb->is_aptx_swb_codec);
   log::verbose(
       "aptx_voice={}, is_aptx_swb_codec={}, Q0 codec supported={}",
       logbool(aptx_voice), logbool(p_scb->is_aptx_swb_codec),
@@ -752,7 +752,9 @@ void bta_ag_codec_negotiate(tBTA_AG_SCB* p_scb) {
     /* Change the power mode to Active until SCO open is completed. */
     bta_sys_busy(BTA_ID_AG, p_scb->app_id, p_scb->peer_addr);
 
-    if (p_scb->peer_codecs & BTA_AG_SCO_APTX_SWB_SETTINGS_Q0_MASK) {
+    if (get_swb_codec_status(bluetooth::headset::BTHF_SWB_CODEC_VENDOR_APTX,
+                             &p_scb->peer_addr) &&
+        (p_scb->peer_codecs & BTA_AG_SCO_APTX_SWB_SETTINGS_Q0_MASK)) {
       if (p_scb->is_aptx_swb_codec == false) {
         p_scb->sco_codec = BTA_AG_SCO_APTX_SWB_SETTINGS_Q0;
         p_scb->is_aptx_swb_codec = true;
@@ -818,14 +820,9 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           /* remove listening connection */
           bta_ag_remove_sco(p_scb, false);
 
-#if (DISABLE_WBS == FALSE)
           /* start codec negotiation */
           p_sco->state = BTA_AG_SCO_CODEC_ST;
           bta_ag_codec_negotiate(p_scb);
-#else
-          bta_ag_create_sco(p_scb, true);
-          p_sco->state = BTA_AG_SCO_OPENING_ST;
-#endif
           break;
 
         case BTA_AG_SCO_SHUTDOWN_E:
@@ -928,13 +925,11 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           }
           break;
 
-#if (DISABLE_WBS == FALSE)
         case BTA_AG_SCO_REOPEN_E:
           /* start codec negotiation */
           p_sco->state = BTA_AG_SCO_CODEC_ST;
           bta_ag_codec_negotiate(p_scb);
           break;
-#endif
 
         case BTA_AG_SCO_XFER_E:
           /* save xfer scb */
@@ -1206,18 +1201,11 @@ static void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           bta_ag_create_sco(p_scb, false);
           bta_ag_remove_sco(p_sco->p_xfer_scb, false);
 
-#if (DISABLE_WBS == FALSE)
           /* start codec negotiation */
           p_sco->state = BTA_AG_SCO_CODEC_ST;
           tBTA_AG_SCB* p_cn_scb = p_sco->p_xfer_scb;
           p_sco->p_xfer_scb = nullptr;
           bta_ag_codec_negotiate(p_cn_scb);
-#else
-          /* create sco connection to peer */
-          bta_ag_create_sco(p_sco->p_xfer_scb, true);
-          p_sco->p_xfer_scb = nullptr;
-          p_sco->state = BTA_AG_SCO_OPENING_ST;
-#endif
           break;
         }
 

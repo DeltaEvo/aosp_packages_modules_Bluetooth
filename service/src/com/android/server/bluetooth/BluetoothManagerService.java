@@ -83,6 +83,8 @@ import com.android.server.BluetoothManagerServiceDumpProto;
 import com.android.server.bluetooth.airplane.AirplaneModeListener;
 import com.android.server.bluetooth.satellite.SatelliteModeListener;
 
+import libcore.util.SneakyThrow;
+
 import kotlin.Unit;
 import kotlin.time.TimeSource;
 
@@ -101,20 +103,21 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 class BluetoothManagerService {
     private static final String TAG = BluetoothManagerService.class.getSimpleName();
 
-    private static final String BLUETOOTH_PRIVILEGED =
-            android.Manifest.permission.BLUETOOTH_PRIVILEGED;
-
     private static final int ACTIVE_LOG_MAX_SIZE = 20;
     private static final int CRASH_LOG_MAX_SIZE = 100;
 
-    private static final int DEFAULT_REBIND_COUNT = 3;
     // Maximum msec to wait for a bind
     private static final int TIMEOUT_BIND_MS =
             3000 * SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
@@ -177,9 +180,6 @@ class BluetoothManagerService {
     // and Airplane mode will have higher priority.
     @VisibleForTesting static final int BLUETOOTH_ON_AIRPLANE = 2;
 
-    private static final int FLAGS_SYSTEM_APP =
-            ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
-
     // APM enhancement feature is enabled by default
     // Set this value to 0 to disable the feature
     private static final int DEFAULT_APM_ENHANCEMENT_STATE = 1;
@@ -188,11 +188,6 @@ class BluetoothManagerService {
     private final Looper mLooper;
 
     private final UserManager mUserManager;
-
-    // -3     match with Userhandle.USER_CURRENT_OR_SELF
-    private static final UserHandle USER_HANDLE_CURRENT_OR_SELF = UserHandle.of(-3);
-    // -10000 match with Userhandle.USER_NULL
-    private static final UserHandle USER_HANDLE_NULL = UserHandle.of(-10000);
 
     // Locks are not provided for mName and mAddress.
     // They are accessed in handler or broadcast receiver, same thread context.
@@ -298,8 +293,6 @@ class BluetoothManagerService {
     private int mErrorRecoveryRetryCounter = 0;
 
     private final boolean mIsHearingAidProfileSupported;
-
-    private volatile boolean mUnbindingAll = false;
 
     private final IBluetoothCallback mBluetoothCallback =
             new IBluetoothCallback.Stub() {
@@ -979,7 +972,7 @@ class BluetoothManagerService {
     // Monitor change of BLE scan only mode settings.
     private void registerForBleScanModeChange() {
         ContentObserver contentObserver =
-                new ContentObserver(null) {
+                new ContentObserver(new Handler(mLooper)) {
                     @Override
                     public void onChange(boolean selfChange) {
                         if (isBleScanAlwaysAvailable()) {
@@ -1817,7 +1810,9 @@ class BluetoothManagerService {
                             Log.e(TAG, "Unable to register BluetoothCallback", e);
                         }
                         // Inform BluetoothAdapter instances that service is up
-                        sendBluetoothServiceUpCallback();
+                        if (!Flags.fastBindToApp()) {
+                            sendBluetoothServiceUpCallback();
+                        }
 
                         // Get the supported profiles list
                         try {
@@ -1834,6 +1829,9 @@ class BluetoothManagerService {
                             }
                         } catch (RemoteException | TimeoutException e) {
                             Log.e(TAG, "Unable to call enable()", e);
+                        }
+                        if (Flags.fastBindToApp()) {
+                            sendBluetoothServiceUpCallback();
                         }
                     } finally {
                         mAdapterLock.writeLock().unlock();
@@ -2023,7 +2021,7 @@ class BluetoothManagerService {
                     android.Manifest.permission.BLUETOOTH_CONNECT,
                     android.Manifest.permission.BLUETOOTH_PRIVILEGED
                 })
-        private void restartForNewUser(UserHandle newUser) {
+        private void restartForNewUser(UserHandle unusedNewUser) {
             mAdapterLock.readLock().lock();
             try {
                 if (mAdapter != null) {
@@ -2718,31 +2716,48 @@ class BluetoothManagerService {
                 mLooper, mCurrentUserContext, mState, this::enableFromAutoOn);
     }
 
+    private <T> T postAndWait(Callable<T> callable) {
+        FutureTask<T> task = new FutureTask(callable);
+
+        mHandler.post(task);
+        try {
+            return task.get(1, TimeUnit.SECONDS);
+        } catch (TimeoutException | InterruptedException e) {
+            SneakyThrow.sneakyThrow(e);
+        } catch (ExecutionException e) {
+            SneakyThrow.sneakyThrow(e.getCause());
+        }
+        return null;
+    }
+
     boolean isAutoOnSupported() {
         return mDeviceConfigAllowAutoOn
-                && AutoOnFeature.isUserSupported(mCurrentUserContext.getContentResolver());
+                && postAndWait(
+                        () ->
+                                AutoOnFeature.isUserSupported(
+                                        mCurrentUserContext.getContentResolver()));
     }
 
     boolean isAutoOnEnabled() {
         if (!mDeviceConfigAllowAutoOn) {
             throw new IllegalStateException("AutoOnFeature is not supported in current config");
         }
-        return AutoOnFeature.isUserEnabled(mCurrentUserContext);
+        return postAndWait(() -> AutoOnFeature.isUserEnabled(mCurrentUserContext));
     }
 
     void setAutoOnEnabled(boolean status) {
         if (!mDeviceConfigAllowAutoOn) {
             throw new IllegalStateException("AutoOnFeature is not supported in current config");
         }
-        // Call coming from binder thread need to be posted before exec
-        mHandler.post(
-                () ->
-                        AutoOnFeature.setUserEnabled(
-                                mLooper,
-                                mCurrentUserContext,
-                                mState,
-                                status,
-                                this::enableFromAutoOn));
+        postAndWait(
+                Executors.callable(
+                        () ->
+                                AutoOnFeature.setUserEnabled(
+                                        mLooper,
+                                        mCurrentUserContext,
+                                        mState,
+                                        status,
+                                        this::enableFromAutoOn)));
     }
 
     /**

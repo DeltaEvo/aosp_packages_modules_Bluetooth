@@ -93,7 +93,6 @@ extern tBTM_CB btm_cb;
   (BTM_SEC_LE_AUTHENTICATED | BTM_SEC_LE_ENCRYPTED | \
    BTM_SEC_LE_LINK_KEY_KNOWN | BTM_SEC_LE_LINK_KEY_AUTHED)
 
-void btm_inq_stop_on_ssp(void);
 bool btm_ble_init_pseudo_addr(tBTM_SEC_DEV_REC* p_dev_rec,
                               const RawAddress& new_pseudo_addr);
 void bta_dm_remove_device(const RawAddress& bd_addr);
@@ -254,6 +253,7 @@ static tBTM_SEC_DEV_REC* btm_sec_find_dev_by_sec_state(uint8_t state) {
 }
 
 /*******************************************************************************
+ *
  * Function         access_secure_service_from_temp_bond
  *
  * Description      a utility function to test whether an access to
@@ -689,10 +689,6 @@ tBTM_STATUS btm_sec_bond_by_transport(const RawAddress& bd_addr,
 
   log::verbose("BTM_SecBond: Remote sm4: 0x{:x}  HCI Handle: 0x{:04x}",
                p_dev_rec->sm4, p_dev_rec->hci_handle);
-
-#if (BTM_SEC_FORCE_RNR_FOR_DBOND == TRUE)
-  p_dev_rec->sec_rec.sec_flags &= ~BTM_SEC_NAME_KNOWN;
-#endif
 
   /* If connection already exists... */
   if (BTM_IsAclConnectionUpAndHandleValid(bd_addr, transport)) {
@@ -2220,7 +2216,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
     }
   }
 
-  if (!p_bd_name) p_bd_name = (const uint8_t*)"";
+  if (!p_bd_name) p_bd_name = (const uint8_t*)kBtmBdNameEmpty;
 
   if (p_dev_rec == nullptr) {
     log::debug(
@@ -2244,8 +2240,7 @@ void btm_sec_rmt_name_request_complete(const RawAddress* p_bd_addr,
         reinterpret_cast<char const*>(p_bd_name),
         security_state_text(p_dev_rec->sec_rec.sec_state).c_str());
 
-    strlcpy((char*)p_dev_rec->sec_bd_name, (const char*)p_bd_name,
-            BTM_MAX_REM_BD_NAME_LEN + 1);
+    bd_name_copy(p_dev_rec->sec_bd_name, p_bd_name);
     p_dev_rec->sec_rec.sec_flags |= BTM_SEC_NAME_KNOWN;
     log::verbose("setting BTM_SEC_NAME_KNOWN sec_flags:0x{:x}",
                  p_dev_rec->sec_rec.sec_flags);
@@ -2646,9 +2641,6 @@ void btm_io_capabilities_rsp(const tBTM_SP_IO_RSP evt_data) {
     btm_sec_cb.pairing_bda = evt_data.bd_addr;
 
     btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_INCOMING_SSP);
-
-    /* work around for FW bug */
-    btm_inq_stop_on_ssp();
   }
 
   /* Notify L2CAP to increase timeout */
@@ -2708,9 +2700,7 @@ void btm_proc_sp_req_evt(tBTM_SP_EVT event, const RawAddress bda,
       (btm_sec_cb.pairing_bda == p_bda)) {
     evt_data.cfm_req.bd_addr = p_dev_rec->bd_addr;
     evt_data.cfm_req.dev_class = p_dev_rec->dev_class;
-
-    strlcpy((char*)evt_data.cfm_req.bd_name, (char*)p_dev_rec->sec_bd_name,
-            BTM_MAX_REM_BD_NAME_LEN + 1);
+    bd_name_copy(evt_data.cfm_req.bd_name, p_dev_rec->sec_bd_name);
 
     switch (event) {
       case BTM_SP_CFM_REQ_EVT:
@@ -2907,8 +2897,7 @@ void btm_rem_oob_req(const RawAddress bd_addr) {
   if ((p_dev_rec != NULL) && btm_sec_cb.api.p_sp_callback) {
     evt_data.bd_addr = p_dev_rec->bd_addr;
     evt_data.dev_class = p_dev_rec->dev_class;
-    strlcpy((char*)evt_data.bd_name, (char*)p_dev_rec->sec_bd_name,
-            BTM_MAX_REM_BD_NAME_LEN + 1);
+    bd_name_copy(evt_data.bd_name, p_dev_rec->sec_bd_name);
 
     btm_sec_cb.change_pairing_state(BTM_PAIR_STATE_WAIT_LOCAL_OOB_RSP);
     if ((*btm_sec_cb.api.p_sp_callback)(BTM_SP_RMT_OOB_EVT,
@@ -4304,8 +4293,7 @@ void btm_sec_pin_code_request(const RawAddress p_bda) {
 
   /* Use the connecting device's CoD for the connection */
   if ((p_bda == p_cb->connecting_bda) &&
-      (p_cb->connecting_dc[0] || p_cb->connecting_dc[1] ||
-       p_cb->connecting_dc[2]))
+      (p_cb->connecting_dc != kDevClassEmpty))
     p_dev_rec->dev_class = p_cb->connecting_dc;
 
   /* We could have started connection after asking user for the PIN code */

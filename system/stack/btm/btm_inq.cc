@@ -1084,7 +1084,6 @@ void btm_inq_db_init(void) {
   alarm_free(btm_cb.btm_inq_vars.remote_name_timer);
   btm_cb.btm_inq_vars.remote_name_timer =
       alarm_new("btm_inq.remote_name_timer");
-  btm_cb.btm_inq_vars.no_inc_ssp = BTM_NO_SSP_ON_INQUIRY;
   btm_inq_db_set_inq_by_rssi();
 }
 
@@ -1094,43 +1093,6 @@ void btm_inq_db_free(void) {
 
 void btm_inq_db_set_inq_by_rssi(void) {
   internal_.inq_by_rssi = osi_property_get_bool(PROPERTY_INQ_BY_RSSI, false);
-}
-
-/*******************************************************************************
- *
- * Function         btm_inq_stop_on_ssp
- *
- * Description      This function is called on incoming SSP
- *
- * Returns          void
- *
- ******************************************************************************/
-void btm_inq_stop_on_ssp(void) {
-  uint8_t normal_active = (BTM_GENERAL_INQUIRY_ACTIVE);
-
-#if (BTM_INQ_DEBUG == TRUE)
-  log::verbose("btm_inq_stop_on_ssp: no_inc_ssp={} inq_active:0x{:x} state:{} ",
-               btm_cb.btm_inq_vars.no_inc_ssp, btm_cb.btm_inq_vars.inq_active,
-               btm_cb.btm_inq_vars.state);
-#endif
-  if (btm_cb.btm_inq_vars.no_inc_ssp) {
-    if (btm_cb.btm_inq_vars.state == BTM_INQ_ACTIVE_STATE) {
-      if (btm_cb.btm_inq_vars.inq_active & normal_active) {
-        /* can not call BTM_CancelInquiry() here. We need to report inquiry
-         * complete evt */
-        bluetooth::shim::GetHciLayer()->EnqueueCommand(
-            bluetooth::hci::InquiryCancelBuilder::Create(),
-            get_main_thread()->BindOnce(
-                [](bluetooth::hci::CommandCompleteView complete_view) {
-                  bluetooth::hci::check_complete<
-                      bluetooth::hci::InquiryCancelCompleteView>(complete_view);
-                  btm_process_cancel_complete(HCI_SUCCESS, BTM_BR_INQUIRY_MASK);
-                }));
-      }
-    }
-    /* do not allow inquiry to start */
-    btm_cb.btm_inq_vars.inq_active |= BTM_SSP_INQUIRY_ACTIVE;
-  }
 }
 
 /*******************************************************************************
@@ -2001,9 +1963,6 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
                              uint16_t evt_len, tHCI_STATUS hci_status) {
   tBTM_REMOTE_DEV_NAME rem_name;
   tBTM_NAME_CMPL_CB* p_cb = btm_cb.btm_inq_vars.p_remname_cmpl_cb;
-  uint8_t* p_n1;
-
-  uint16_t temp_evt_len;
 
   if (bda) {
     rem_name.bd_addr = *bda;
@@ -2035,17 +1994,11 @@ void btm_process_remote_name(const RawAddress* bda, const BD_NAME bdn,
       /* Copy the name from the data stream into the return structure */
       /* Note that even if it is not being returned, it is used as a  */
       /*      temporary buffer.                                       */
-      p_n1 = (uint8_t*)rem_name.remote_bd_name;
       rem_name.length = (evt_len < BD_NAME_LEN) ? evt_len : BD_NAME_LEN;
-      rem_name.remote_bd_name[rem_name.length] = 0;
       rem_name.status = BTM_SUCCESS;
       rem_name.hci_status = hci_status;
-      temp_evt_len = rem_name.length;
 
-      while (temp_evt_len > 0) {
-        *p_n1++ = *bdn++;
-        temp_evt_len--;
-      }
+      bd_name_copy(rem_name.remote_bd_name, bdn);
       rem_name.remote_bd_name[rem_name.length] = 0;
     } else {
       /* If processing a stand alone remote name then report the error in the
@@ -2105,7 +2058,7 @@ void btm_inq_rmt_name_failed_cancelled(void) {
 tBTM_STATUS BTM_WriteEIR(BT_HDR* p_buff) {
   if (bluetooth::shim::GetController()->SupportsExtendedInquiryResponse()) {
     log::verbose("Write Extended Inquiry Response to controller");
-    btsnd_hcic_write_ext_inquiry_response(p_buff, BTM_EIR_DEFAULT_FEC_REQUIRED);
+    btsnd_hcic_write_ext_inquiry_response(p_buff, TRUE);
     return BTM_SUCCESS;
   } else {
     osi_free(p_buff);

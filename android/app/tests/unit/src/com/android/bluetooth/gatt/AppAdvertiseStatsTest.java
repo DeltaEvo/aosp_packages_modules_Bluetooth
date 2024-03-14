@@ -34,11 +34,13 @@ import com.android.bluetooth.btservice.MetricsLogger;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Test cases for {@link AppAdvertiseStats}.
@@ -46,6 +48,8 @@ import org.mockito.MockitoAnnotations;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class AppAdvertiseStatsTest {
+
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock
     private ContextMap map;
@@ -58,7 +62,6 @@ public class AppAdvertiseStatsTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         MetricsLogger.setInstanceForTesting(mMetricsLogger);
     }
 
@@ -70,11 +73,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void constructor() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         assertThat(appAdvertiseStats.mContextMap).isEqualTo(map);
         assertThat(appAdvertiseStats.mGattService).isEqualTo(service);
@@ -82,11 +84,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void recordAdvertiseStart() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         assertThat(appAdvertiseStats.mAdvertiserRecords.size())
                 .isEqualTo(0);
@@ -121,11 +122,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void recordAdvertiseStop() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         int duration = 1;
         int maxExtAdvEvents = 2;
@@ -162,11 +162,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void enableAdvertisingSet() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         int duration = 1;
         int maxExtAdvEvents = 2;
@@ -185,11 +184,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void setAdvertisingData() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         AdvertiseData advertiseData = new AdvertiseData.Builder().build();
         appAdvertiseStats.setAdvertisingData(advertiseData);
@@ -199,11 +197,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void setScanResponseData() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         AdvertiseData scanResponse = new AdvertiseData.Builder().build();
         appAdvertiseStats.setScanResponseData(scanResponse);
@@ -213,11 +210,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void setAdvertisingParameters() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         AdvertisingSetParameters parameters = new AdvertisingSetParameters.Builder().build();
         appAdvertiseStats.setAdvertisingParameters(parameters);
@@ -225,11 +221,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void setPeriodicAdvertisingParameters() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         PeriodicAdvertisingParameters periodicParameters =
                 new PeriodicAdvertisingParameters.Builder().build();
@@ -238,11 +233,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void setPeriodicAdvertisingData() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         AdvertiseData periodicData = new AdvertiseData.Builder().build();
         appAdvertiseStats.setPeriodicAdvertisingData(periodicData);
@@ -254,11 +248,10 @@ public class AppAdvertiseStatsTest {
     public void testDump_doesNotCrash() throws Exception {
         StringBuilder sb = new StringBuilder();
 
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         AdvertisingSetParameters parameters = new AdvertisingSetParameters.Builder().build();
         AdvertiseData advertiseData = new AdvertiseData.Builder().build();
@@ -284,11 +277,10 @@ public class AppAdvertiseStatsTest {
 
     @Test
     public void testAdvertiseCounterMetrics() {
-        int appUid = 0;
         int id = 1;
         String name = "name";
 
-        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(appUid, id, name, map, service);
+        AppAdvertiseStats appAdvertiseStats = new AppAdvertiseStats(id, name, map, service);
 
         AdvertisingSetParameters parameters = new AdvertisingSetParameters.Builder()
                 .setConnectable(true).build();

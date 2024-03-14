@@ -552,6 +552,39 @@ public class BluetoothInCallService extends InCallService {
         }
     }
 
+    /** Check for HD codec for voice call */
+    public boolean isHighDefCallInProgress() {
+        boolean isHighDef = false;
+        /* TODO: Add as an API in TelephonyManager aosp/2679237 */
+        int phoneTypeIms = 5;
+        int phoneTypeCdmaLte = 6;
+        BluetoothCall ringingCall = mCallInfo.getRingingOrSimulatedRingingCall();
+        BluetoothCall dialingCall = mCallInfo.getOutgoingCall();
+        BluetoothCall activeCall = mCallInfo.getActiveCall();
+
+        /* If it's an incoming call we will have codec info in dialing state */
+        if (ringingCall != null) {
+            isHighDef = ringingCall.isHighDefAudio();
+        } else if (dialingCall != null) {
+            /* CS dialing call has codec info in dialing state */
+            Bundle extras = dialingCall.getDetails().getExtras();
+            if (extras != null) {
+                int phoneType = extras.getInt(TelecomManager.EXTRA_CALL_TECHNOLOGY_TYPE);
+                if (phoneType == TelephonyManager.PHONE_TYPE_GSM
+                        || phoneType == TelephonyManager.PHONE_TYPE_CDMA) {
+                    isHighDef = dialingCall.isHighDefAudio();
+                    /* For IMS calls codec info is not present in dialing state */
+                } else if (phoneType == phoneTypeIms || phoneType == phoneTypeCdmaLte) {
+                    isHighDef = true;
+                }
+            }
+        } else if (activeCall != null) {
+            isHighDef = activeCall.isHighDefAudio();
+        }
+        Log.i(TAG, "isHighDefCallInProgress: Call is High Def " + isHighDef);
+        return isHighDef;
+    }
+
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public boolean processChld(int chld) {
         synchronized (LOCK) {
@@ -986,20 +1019,6 @@ public class BluetoothInCallService extends InCallService {
             mBluetoothHeadset.clccResponse(
                     index, direction, state, 0, isPartOfConference, address, addressType);
         }
-    }
-
-    private String getClccMapKey(BluetoothCall call) {
-        if (mCallInfo.isNullCall(call) || call.getHandle() == null) {
-            return "";
-        }
-        Uri handle = call.getHandle();
-        String key;
-        if (call.hasProperty(Call.Details.PROPERTY_SELF_MANAGED)) {
-            key = handle.toString() + " self managed " + call.getId();
-        } else {
-            key = handle.toString();
-        }
-        return key;
     }
 
     int getNextAvailableClccIndex(int index) {
@@ -1576,7 +1595,6 @@ public class BluetoothInCallService extends InCallService {
 
     private BluetoothLeCall createTbsCall(BluetoothCall call) {
         Integer state = getTbsCallState(call);
-        boolean isPartOfConference = false;
         boolean isConferenceWithNoChildren = isConferenceWithNoChildren(call);
 
         if (state == null) {
@@ -1585,8 +1603,6 @@ public class BluetoothInCallService extends InCallService {
 
         BluetoothCall conferenceCall = getBluetoothCallById(call.getParentId());
         if (!mCallInfo.isNullCall(conferenceCall)) {
-            isPartOfConference = true;
-
             // Run some alternative states for Conference-level merge/swap support.
             // Basically, if BluetoothCall supports swapping or merging at the
             // conference-level,
@@ -1608,7 +1624,6 @@ public class BluetoothInCallService extends InCallService {
                                     && !conferenceCall.wasConferencePreviouslyMerged());
 
                 if (shouldReevaluateState) {
-                    isPartOfConference = false;
                     if (call == activeChild) {
                         state = BluetoothLeCall.STATE_ACTIVE;
                     } else {
@@ -1631,7 +1646,6 @@ public class BluetoothInCallService extends InCallService {
             // The BluetoothCall will be marked as a conference, but the conference will not
             // have
             // child calls where conference event packages are not used by the carrier.
-            isPartOfConference = true;
         }
 
         final Uri addressUri;

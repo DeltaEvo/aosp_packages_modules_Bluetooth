@@ -204,6 +204,7 @@ cc_library_static {
         "src/btif_sdp_server.cc",
         "src/btif_sock.cc",
         "src/btif_sock_l2cap.cc",
+        "src/btif_sock_logging.cc",
         "src/btif_sock_rfc.cc",
         "src/btif_sock_sco.cc",
         "src/btif_sock_sdp.cc",
@@ -244,6 +245,7 @@ cc_library_static {
         "libbt-platform-protos-lite",
         "libbt-stack-core",
         "libbt_shim_bridge",
+        "libcom.android.sysprop.bluetooth.wrapped",
         "libflatbuffers-cpp",
         "libstatslog_bt",
     ],
@@ -287,6 +289,7 @@ cc_test {
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
+        "libbase",
         "libcrypto",
         "libcutils",
         "libhidlbase",
@@ -396,7 +399,10 @@ cc_test {
     cflags: [
         "-Wno-unused-parameter",
     ],
-    shared_libs: ["liblog"],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
 }
 
 // btif avrcp audio track unit tests
@@ -430,6 +436,7 @@ cc_test {
         "libosi",
     ],
     shared_libs: [
+        "libbase",
         "liblog",
     ],
     cflags: [
@@ -460,6 +467,7 @@ cc_test {
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
+        "libbase",
         "libcrypto",
         "libcutils",
         "liblog",
@@ -510,6 +518,7 @@ cc_test {
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
+        "libbase",
         "libbinder_ndk",
         "libcrypto",
         "libcutils",
@@ -551,6 +560,7 @@ cc_test {
     ],
     header_libs: ["libbluetooth_headers"],
     shared_libs: [
+        "libbase",
         "libcutils",
         "liblog",
     ],
@@ -562,6 +572,7 @@ cc_test {
         "libbt_shim_ffi",
         "libchrome",
         "libcom.android.sysprop.bluetooth.wrapped",
+        "libgmock",
     ],
     cflags: [
         "-Wno-unused-parameter",

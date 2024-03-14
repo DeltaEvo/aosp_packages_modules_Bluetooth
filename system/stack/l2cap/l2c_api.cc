@@ -40,6 +40,7 @@
 #include "include/check.h"
 #include "internal_include/bt_target.h"
 #include "internal_include/bt_trace.h"
+#include "main/shim/dumpsys.h"
 #include "main/shim/entry.h"
 #include "os/log.h"
 #include "os/system_properties.h"
@@ -1773,3 +1774,53 @@ bool L2CA_isMediaChannel(uint16_t handle, uint16_t channel_id,
 
   return ret;
 }
+
+/*******************************************************************************
+ *
+ *  Function        L2CA_GetPeerChannelId
+ *
+ *  Description     Get remote channel ID for Connection Oriented Channel.
+ *
+ *  Parameters:     lcid: Local CID
+ *                  rcid: Pointer to remote CID
+ *
+ *  Return value:   true if peer is connected
+ *
+ ******************************************************************************/
+bool L2CA_GetPeerChannelId(uint16_t lcid, uint16_t* rcid) {
+  log::verbose("CID: 0x{:04x}", lcid);
+
+  tL2C_CCB* p_ccb = l2cu_find_ccb_by_cid(nullptr, lcid);
+  if (p_ccb == nullptr) {
+    log::error("No CCB for CID:0x{:04x}", lcid);
+    return false;
+  }
+
+  ASSERT(rcid != nullptr);
+  *rcid = p_ccb->remote_cid;
+  return true;
+}
+
+using namespace bluetooth;
+
+#define DUMPSYS_TAG "shim::legacy::l2cap"
+
+void L2CA_Dumpsys(int fd) {
+  LOG_DUMPSYS_TITLE(fd, DUMPSYS_TAG);
+  for (int i = 0; i < MAX_L2CAP_LINKS; i++) {
+    const tL2C_LCB& lcb = l2cb.lcb_pool[i];
+    if (!lcb.in_use) continue;
+    LOG_DUMPSYS(fd, "link_state:%s", link_state_text(lcb.link_state).c_str());
+    LOG_DUMPSYS(fd, "handle:0x%04x", lcb.Handle());
+
+    const tL2C_CCB* ccb = lcb.ccb_queue.p_first_ccb;
+    while (ccb != nullptr) {
+      LOG_DUMPSYS(
+          fd, "  active channel lcid:0x%04x rcid:0x%04x is_ecoc:%s in_use:%s",
+          ccb->local_cid, ccb->remote_cid, logbool(ccb->ecoc).c_str(),
+          logbool(ccb->in_use).c_str());
+      ccb = ccb->p_next_ccb;
+    }
+  }
+}
+#undef DUMPSYS_TAG

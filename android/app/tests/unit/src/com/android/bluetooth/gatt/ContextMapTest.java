@@ -35,6 +35,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.bluetooth.BluetoothMethodProxy;
 import com.android.bluetooth.TestUtils;
 import com.android.bluetooth.btservice.AdapterService;
+import com.android.bluetooth.le_scan.TransitionalScanHelper;
 
 import org.junit.After;
 import org.junit.Before;
@@ -42,8 +43,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.UUID;
 
@@ -58,9 +60,12 @@ public class ContextMapTest {
     @Rule
     public final ServiceTestRule mServiceRule = new ServiceTestRule();
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mAdapterService;
     @Mock private AppAdvertiseStats appAdvertiseStats;
     @Mock private GattService mMockGatt;
+    @Mock private TransitionalScanHelper mMockScanHelper;
     @Mock private PackageManager mMockPackageManager;
 
     @Spy
@@ -68,7 +73,6 @@ public class ContextMapTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         BluetoothMethodProxy.setInstanceForTesting(mMapMethodProxy);
 
         TestUtils.setAdapterService(mAdapterService);
@@ -91,7 +95,7 @@ public class ContextMapTest {
         int id = 12345;
         contextMap.add(id, null, mMockGatt);
 
-        contextMap.add(UUID.randomUUID(), null, null, null, mMockGatt);
+        contextMap.add(UUID.randomUUID(), null, null, null, mMockGatt, mMockScanHelper);
 
         int appUid = Binder.getCallingUid();
 
@@ -110,7 +114,7 @@ public class ContextMapTest {
         int id = 12345;
         doReturn(appAdvertiseStats)
                 .when(mMapMethodProxy)
-                .createAppAdvertiseStats(appUid, id, APP_NAME, contextMap, mMockGatt);
+                .createAppAdvertiseStats(id, APP_NAME, contextMap, mMockGatt);
 
         contextMap.add(id, null, mMockGatt);
 
@@ -169,7 +173,7 @@ public class ContextMapTest {
         int id = 12345;
         contextMap.add(id, null, mMockGatt);
 
-        contextMap.add(UUID.randomUUID(), null, null, null, mMockGatt);
+        contextMap.add(UUID.randomUUID(), null, null, null, mMockGatt, mMockScanHelper);
 
         contextMap.recordAdvertiseStop(id);
 

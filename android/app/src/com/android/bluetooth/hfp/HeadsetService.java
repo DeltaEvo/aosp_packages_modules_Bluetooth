@@ -37,6 +37,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.BatteryManager;
@@ -74,6 +75,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.FutureTask;
 
 /**
  * Provides Bluetooth Headset and Handsfree profile, as a service in the Bluetooth application.
@@ -152,12 +155,14 @@ public class HeadsetService extends ProfileService {
     private boolean mStarted;
     private static HeadsetService sHeadsetService;
 
+    @VisibleForTesting boolean mIsAptXSwbEnabled = false;
+    @VisibleForTesting boolean mIsAptXSwbPmEnabled = false;
+
     private final ServiceFactory mFactory = new ServiceFactory();
 
     public HeadsetService(Context ctx) {
         super(ctx);
     }
-
     public static boolean isEnabled() {
         return BluetoothProperties.isProfileHfpAgEnabled().orElse(false);
     }
@@ -188,11 +193,26 @@ public class HeadsetService extends ProfileService {
         // Step 3: Initialize system interface
         mSystemInterface = HeadsetObjectsFactory.getInstance().makeSystemInterface(this);
         // Step 4: Initialize native interface
+        if (Flags.hfpCodecAptxVoice()) {
+            mIsAptXSwbEnabled =
+                    SystemProperties.getBoolean("bluetooth.hfp.codec_aptx_voice.enabled", false);
+            Log.i(TAG, "mIsAptXSwbEnabled: " + mIsAptXSwbEnabled);
+            mIsAptXSwbPmEnabled =
+                    SystemProperties.getBoolean(
+                            "bluetooth.hfp.swb.aptx.power_management.enabled", false);
+            Log.i(TAG, "mIsAptXSwbPmEnabled: " + mIsAptXSwbPmEnabled);
+        }
         setHeadsetService(this);
         mMaxHeadsetConnections = mAdapterService.getMaxConnectedAudioDevices();
         mNativeInterface = HeadsetObjectsFactory.getInstance().getNativeInterface();
         // Add 1 to allow a pending device to be connecting or disconnecting
         mNativeInterface.init(mMaxHeadsetConnections + 1, isInbandRingingEnabled());
+        if (Flags.hfpCodecAptxVoice()) {
+            enableSwbCodec(
+                    HeadsetHalConstants.BTHF_SWB_CODEC_VENDOR_APTX,
+                    mIsAptXSwbEnabled,
+                    mActiveDevice);
+        }
         // Step 5: Check if state machine table is empty, crash if not
         if (mStateMachines.size() > 0) {
             throw new IllegalStateException(
@@ -1089,7 +1109,6 @@ public class HeadsetService extends ProfileService {
      *
      * @param device Bluetooth device
      * @return connection policy of the device
-     * @hide
      */
     public int getConnectionPolicy(BluetoothDevice device) {
         return mDatabaseManager
@@ -1179,7 +1198,34 @@ public class HeadsetService extends ProfileService {
             } else {
                 stateMachine.sendMessage(HeadsetStateMachine.VOICE_RECOGNITION_START, device);
             }
+            if (Flags.isScoManagedByAudio()) {
+                // when isScoManagedByAudio is on, tell AudioManager to connect SCO
+                AudioManager am = mSystemInterface.getAudioManager();
+                BluetoothDevice finalDevice = device;
+                Optional<AudioDeviceInfo> audioDeviceInfo =
+                        am.getAvailableCommunicationDevices().stream()
+                                .filter(
+                                        x ->
+                                                x.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                                                        && x.getAddress()
+                                                                .equals(finalDevice.getAddress()))
+                                .findFirst();
+                if (audioDeviceInfo.isPresent()) {
+                    am.setCommunicationDevice(audioDeviceInfo.get());
+                    Log.i(TAG, "Audio Manager will initiate the SCO connection");
+                    return true;
+                }
+                Log.w(
+                        TAG,
+                        "Cannot find audioDeviceInfo that matches device="
+                                + device
+                                + " to create the SCO");
+                return false;
+            }
             stateMachine.sendMessage(HeadsetStateMachine.CONNECT_AUDIO, device);
+        }
+        if (Flags.hfpCodecAptxVoice()) {
+            enableSwbCodec(HeadsetHalConstants.BTHF_SWB_CODEC_VENDOR_APTX, true, device);
         }
         return true;
     }
@@ -1209,7 +1255,14 @@ public class HeadsetService extends ProfileService {
             }
             mVoiceRecognitionStarted = false;
             stateMachine.sendMessage(HeadsetStateMachine.VOICE_RECOGNITION_STOP, device);
+            if (Flags.isScoManagedByAudio()) {
+                mSystemInterface.getAudioManager().clearCommunicationDevice();
+                return true;
+            }
             stateMachine.sendMessage(HeadsetStateMachine.DISCONNECT_AUDIO, device);
+        }
+        if (Flags.hfpCodecAptxVoice()) {
+            enableSwbCodec(HeadsetHalConstants.BTHF_SWB_CODEC_VENDOR_APTX, false, device);
         }
         return true;
     }
@@ -1775,6 +1828,9 @@ public class HeadsetService extends ProfileService {
             if (!mSystemInterface.getVoiceRecognitionWakeLock().isHeld()) {
                 mSystemInterface.getVoiceRecognitionWakeLock().acquire(sStartVrTimeoutMs);
             }
+            if (Flags.hfpCodecAptxVoice()) {
+                enableSwbCodec(HeadsetHalConstants.BTHF_SWB_CODEC_VENDOR_APTX, true, fromDevice);
+            }
             return true;
         }
     }
@@ -1812,6 +1868,9 @@ public class HeadsetService extends ProfileService {
             if (!mSystemInterface.deactivateVoiceRecognition()) {
                 Log.w(TAG, "stopVoiceRecognitionByHeadset: failed request from " + fromDevice);
                 return false;
+            }
+            if (Flags.hfpCodecAptxVoice()) {
+                enableSwbCodec(HeadsetHalConstants.BTHF_SWB_CODEC_VENDOR_APTX, false, fromDevice);
             }
             return true;
         }
@@ -1859,7 +1918,8 @@ public class HeadsetService extends ProfileService {
             mSystemInterface.getHeadsetPhoneState().setCallState(callState);
             // Suspend A2DP when call about is about to become active
             if (mActiveDevice != null && callState != HeadsetHalConstants.CALL_STATE_DISCONNECTED
-                    && !mSystemInterface.isCallIdle() && isCallIdleBefore) {
+                && !mSystemInterface.isCallIdle() && isCallIdleBefore
+                && !Flags.isScoManagedByAudio()) {
                 mSystemInterface.getAudioManager().setA2dpSuspended(true);
                 if (isAtLeastU()) {
                     mSystemInterface.getAudioManager().setLeAudioSuspended(true);
@@ -1869,9 +1929,25 @@ public class HeadsetService extends ProfileService {
         doForEachConnectedStateMachine(
                 stateMachine -> stateMachine.sendMessage(HeadsetStateMachine.CALL_STATE_CHANGED,
                         new HeadsetCallState(numActive, numHeld, callState, number, type, name)));
+        if (Flags.isScoManagedByAudio()) {
+            if (mActiveDevice == null) {
+                Log.i(TAG, "HeadsetService's active device is null");
+            } else {
+                // wait until mActiveDevice's state machine processed CALL_STATE_CHANGED message,
+                // then Audio Framework starts the SCO connection
+                FutureTask task = new FutureTask(() -> {}, null);
+                mStateMachines.get(mActiveDevice).getHandler().post(task);
+                try {
+                    task.get();
+                } catch (Exception e) {
+                    Log.e(TAG,
+                        "Exception when waiting for CALL_STATE_CHANGED message" + e.toString());
+                }
+            }
+        }
         getStateMachinesThreadHandler().post(() -> {
             if (callState == HeadsetHalConstants.CALL_STATE_IDLE
-                    && mSystemInterface.isCallIdle() && !isAudioOn()) {
+                && mSystemInterface.isCallIdle() && !isAudioOn() && !Flags.isScoManagedByAudio()) {
                 // Resume A2DP when call ended and SCO is not connected
                 mSystemInterface.getAudioManager().setA2dpSuspended(false);
                 if (isAtLeastU()) {
@@ -2331,6 +2407,25 @@ public class HeadsetService extends ProfileService {
                 stateMachine.dump(sb);
             }
         }
+    }
+
+    /** Enable SWB Codec. */
+    void enableSwbCodec(int swbCodec, boolean enable, BluetoothDevice device) {
+        logD("enableSwbCodec: swbCodec: " + swbCodec + " enable: " + enable + " device: " + device);
+        boolean result = mNativeInterface.enableSwb(swbCodec, enable, device);
+        logD("enableSwbCodec result: " + result);
+    }
+
+    /** Check whether AptX SWB Codec is enabled. */
+    boolean isAptXSwbEnabled() {
+        logD("mIsAptXSwbEnabled: " + mIsAptXSwbEnabled);
+        return mIsAptXSwbEnabled;
+    }
+
+    /** Check whether AptX SWB Codec Power Management is enabled. */
+    boolean isAptXSwbPmEnabled() {
+        logD("isAptXSwbPmEnabled: " + mIsAptXSwbPmEnabled);
+        return mIsAptXSwbPmEnabled;
     }
 
     private static void logD(String message) {

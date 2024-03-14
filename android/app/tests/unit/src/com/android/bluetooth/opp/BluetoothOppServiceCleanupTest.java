@@ -40,7 +40,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -51,11 +52,12 @@ public class BluetoothOppServiceCleanupTest {
 
     private Context mTargetContext;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mAdapterService;
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         mTargetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         TestUtils.setAdapterService(mAdapterService);
@@ -107,11 +109,11 @@ public class BluetoothOppServiceCleanupTest {
                         COMPONENT_ENABLED_STATE_ENABLED,
                         DONT_KILL_APP);
 
-        ComponentName activityName =
+        ComponentName providerName =
                 new ComponentName(mTargetContext, BluetoothOppProvider.class.getCanonicalName());
         mTargetContext
                 .getPackageManager()
                 .setComponentEnabledSetting(
-                        activityName, COMPONENT_ENABLED_STATE_ENABLED, DONT_KILL_APP);
+                        providerName, COMPONENT_ENABLED_STATE_ENABLED, DONT_KILL_APP);
     }
 }

@@ -49,7 +49,6 @@ import com.android.bluetooth.btservice.BluetoothAdapterProxy;
 import com.android.bluetooth.flags.Flags;
 import com.android.bluetooth.gatt.FilterParams;
 import com.android.bluetooth.gatt.GattObjectsFactory;
-import com.android.bluetooth.gatt.GattService;
 import com.android.bluetooth.gatt.GattServiceConfig;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -67,8 +66,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Class that handles Bluetooth LE scan related operations.
- *
- * @hide
  */
 public class ScanManager {
     private static final boolean DBG = GattServiceConfig.DBG;
@@ -88,9 +85,9 @@ public class ScanManager {
     public static final int SCAN_MODE_SCREEN_OFF_BALANCED_WINDOW_MS = 183;
     public static final int SCAN_MODE_SCREEN_OFF_BALANCED_INTERVAL_MS = 730;
 
-    // Result type defined in bt stack. Need to be accessed by GattService.
-    public static final int SCAN_RESULT_TYPE_TRUNCATED = 1;
-    public static final int SCAN_RESULT_TYPE_FULL = 2;
+    // Result type defined in bt stack. Need to be accessed by TransitionalScanHelper.
+    static final int SCAN_RESULT_TYPE_TRUNCATED = 1;
+    static final int SCAN_RESULT_TYPE_FULL = 2;
     static final int SCAN_RESULT_TYPE_BOTH = 3;
 
     // Messages for handling BLE scan operations.
@@ -123,7 +120,8 @@ public class ScanManager {
     @GuardedBy("mCurUsedTrackableAdvertisementsLock")
     private int mCurUsedTrackableAdvertisements = 0;
 
-    private final GattService mService;
+    private final Context mContext;
+    private final TransitionalScanHelper mScanHelper;
     private final AdapterService mAdapterService;
     private BroadcastReceiver mBatchAlarmReceiver;
     private boolean mBatchAlarmReceiverRegistered;
@@ -164,7 +162,8 @@ public class ScanManager {
     }
 
     public ScanManager(
-            GattService service,
+            Context context,
+            TransitionalScanHelper scanHelper,
             AdapterService adapterService,
             BluetoothAdapterProxy bluetoothAdapterProxy,
             Looper looper) {
@@ -173,11 +172,12 @@ public class ScanManager {
         mBatchClients = Collections.newSetFromMap(new ConcurrentHashMap<ScanClient, Boolean>());
         mSuspendedScanClients =
                 Collections.newSetFromMap(new ConcurrentHashMap<ScanClient, Boolean>());
-        mService = service;
+        mContext = context;
+        mScanHelper = scanHelper;
         mAdapterService = adapterService;
-        mScanNative = new ScanNative();
-        mDm = mService.getSystemService(DisplayManager.class);
-        mActivityManager = mService.getSystemService(ActivityManager.class);
+        mScanNative = new ScanNative(scanHelper);
+        mDm = mContext.getSystemService(DisplayManager.class);
+        mActivityManager = mContext.getSystemService(ActivityManager.class);
         mLocationManager = mAdapterService.getSystemService(LocationManager.class);
         mBluetoothAdapterProxy = bluetoothAdapterProxy;
         mIsConnecting = false;
@@ -204,7 +204,7 @@ public class ScanManager {
         }
         IntentFilter locationIntentFilter = new IntentFilter(LocationManager.MODE_CHANGED_ACTION);
         locationIntentFilter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
-        mService.registerReceiver(mLocationReceiver, locationIntentFilter);
+        mContext.registerReceiver(mLocationReceiver, locationIntentFilter);
     }
 
     public void cleanup() {
@@ -236,7 +236,7 @@ public class ScanManager {
         }
 
         try {
-            mService.unregisterReceiver(mLocationReceiver);
+            mContext.unregisterReceiver(mLocationReceiver);
         } catch (IllegalArgumentException e) {
             Log.w(TAG, "exception when invoking unregisterReceiver(mLocationReceiver)", e);
         }
@@ -523,7 +523,7 @@ public class ScanManager {
                 if (DBG) {
                     Log.d(TAG, "app died, unregister scanner - " + client.scannerId);
                 }
-                mService.unregisterScanner(client.scannerId, mService.getAttributionSource());
+                mScanHelper.unregisterScanner(client.scannerId, mContext.getAttributionSource());
             }
         }
 
@@ -1018,36 +1018,39 @@ public class ScanManager {
         private PendingIntent mBatchScanIntervalIntent;
         private ScanNativeInterface mNativeInterface;
 
-        ScanNative() {
+        ScanNative(TransitionalScanHelper scanHelper) {
             mNativeInterface = GattObjectsFactory.getInstance().getScanNativeInterface();
+            mNativeInterface.init(scanHelper);
             mFilterIndexStack = new ArrayDeque<Integer>();
             mClientFilterIndexMap = new HashMap<Integer, Deque<Integer>>();
 
-            mAlarmManager = mService.getSystemService(AlarmManager.class);
+            mAlarmManager = mContext.getSystemService(AlarmManager.class);
             Intent batchIntent = new Intent(ACTION_REFRESH_BATCHED_SCAN, null);
-            mBatchScanIntervalIntent = PendingIntent.getBroadcast(mService, 0, batchIntent,
-                    PendingIntent.FLAG_IMMUTABLE);
+            mBatchScanIntervalIntent =
+                    PendingIntent.getBroadcast(
+                            mContext, 0, batchIntent, PendingIntent.FLAG_IMMUTABLE);
             IntentFilter filter = new IntentFilter();
             filter.setPriority(IntentFilter.SYSTEM_HIGH_PRIORITY);
             filter.addAction(ACTION_REFRESH_BATCHED_SCAN);
-            mBatchAlarmReceiver = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    Log.d(TAG, "awakened up at time " + SystemClock.elapsedRealtime());
-                    String action = intent.getAction();
+            mBatchAlarmReceiver =
+                    new BroadcastReceiver() {
+                        @Override
+                        public void onReceive(Context context, Intent intent) {
+                            Log.d(TAG, "awakened up at time " + SystemClock.elapsedRealtime());
+                            String action = intent.getAction();
 
-                    if (action.equals(ACTION_REFRESH_BATCHED_SCAN)) {
-                        if (mBatchClients.isEmpty()) {
-                            return;
+                            if (action.equals(ACTION_REFRESH_BATCHED_SCAN)) {
+                                if (mBatchClients.isEmpty()) {
+                                    return;
+                                }
+                                // Note this actually flushes all pending batch data.
+                                if (mBatchClients.iterator().hasNext()) {
+                                    flushBatchScanResults(mBatchClients.iterator().next());
+                                }
+                            }
                         }
-                        // Note this actually flushes all pending batch data.
-                        if (mBatchClients.iterator().hasNext()) {
-                            flushBatchScanResults(mBatchClients.iterator().next());
-                        }
-                    }
-                }
-            };
-            mService.registerReceiver(mBatchAlarmReceiver, filter);
+                    };
+            mContext.registerReceiver(mBatchAlarmReceiver, filter);
             mBatchAlarmReceiverRegistered = true;
         }
 
@@ -1292,7 +1295,7 @@ public class ScanManager {
         // infrequently anyway. To avoid redefining paramete sets, map to the low duty cycle
         // parameter set as follows.
         private int getBatchScanWindowMillis(int scanMode) {
-            ContentResolver resolver = mService.getContentResolver();
+            ContentResolver resolver = mContext.getContentResolver();
             switch (scanMode) {
                 case ScanSettings.SCAN_MODE_LOW_LATENCY:
                     return Settings.Global.getInt(
@@ -1310,7 +1313,7 @@ public class ScanManager {
         }
 
         private int getBatchScanIntervalMillis(int scanMode) {
-            ContentResolver resolver = mService.getContentResolver();
+            ContentResolver resolver = mContext.getContentResolver();
             switch (scanMode) {
                 case ScanSettings.SCAN_MODE_LOW_LATENCY:
                     return Settings.Global.getInt(
@@ -1351,14 +1354,17 @@ public class ScanManager {
             }
             int deliveryMode = getDeliveryMode(client);
             if (deliveryMode == DELIVERY_MODE_ON_FOUND_LOST) {
-                for (ScanFilter filter : client.filters) {
-                    int entriesToFree = getNumOfTrackingAdvertisements(client.settings);
-                    if (!manageAllocationOfTrackingAdvertisement(entriesToFree, false)) {
-                        Log.e(TAG, "Error freeing for onfound/onlost filter resources "
-                                + entriesToFree);
+                // Decrement the count of trackable advertisements in use
+                int entriesToFreePerFilter = getNumOfTrackingAdvertisements(client.settings);
+                for (int i = 0; i < client.filters.size(); i++) {
+                    if (!manageAllocationOfTrackingAdvertisement(entriesToFreePerFilter, false)) {
+                        Log.e(
+                                TAG,
+                                "Error freeing for onfound/onlost filter resources "
+                                        + entriesToFreePerFilter);
                         try {
-                            mService.onScanManagerErrorCallback(client.scannerId,
-                                    ScanCallback.SCAN_FAILED_INTERNAL_ERROR);
+                            mScanHelper.onScanManagerErrorCallback(
+                                    client.scannerId, ScanCallback.SCAN_FAILED_INTERNAL_ERROR);
                         } catch (RemoteException e) {
                             Log.e(TAG, "failed on onScanManagerCallback at freeing", e);
                         }
@@ -1480,9 +1486,10 @@ public class ScanManager {
             mAlarmManager.cancel(mBatchScanIntervalIntent);
             // Protect against multiple calls of cleanup.
             if (mBatchAlarmReceiverRegistered) {
-                mService.unregisterReceiver(mBatchAlarmReceiver);
+                mContext.unregisterReceiver(mBatchAlarmReceiver);
             }
             mBatchAlarmReceiverRegistered = false;
+            mNativeInterface.cleanup();
         }
 
         private long getBatchTriggerIntervalMillis() {
@@ -1543,12 +1550,14 @@ public class ScanManager {
                     if (deliveryMode == DELIVERY_MODE_ON_FOUND_LOST) {
                         trackEntries = getNumOfTrackingAdvertisements(client.settings);
                         if (!manageAllocationOfTrackingAdvertisement(trackEntries, true)) {
-                            Log.e(TAG, "No hardware resources for onfound/onlost filter "
-                                    + trackEntries);
+                            Log.e(
+                                    TAG,
+                                    "No hardware resources for onfound/onlost filter "
+                                            + trackEntries);
                             client.stats.recordTrackingHwFilterNotAvailableCountMetrics();
                             try {
-                                mService.onScanManagerErrorCallback(scannerId,
-                                        ScanCallback.SCAN_FAILED_INTERNAL_ERROR);
+                                mScanHelper.onScanManagerErrorCallback(
+                                        scannerId, ScanCallback.SCAN_FAILED_INTERNAL_ERROR);
                             } catch (RemoteException e) {
                                 Log.e(TAG, "failed on onScanManagerCallback", e);
                             }
@@ -1670,9 +1679,8 @@ public class ScanManager {
             int rssiThreshold = Byte.MIN_VALUE;
             ScanSettings settings = client.settings;
             int onFoundTimeout = getOnFoundOnLostTimeoutMillis(settings, true);
-            int onLostTimeout = getOnFoundOnLostTimeoutMillis(settings, false);
             int onFoundCount = getOnFoundOnLostSightings(settings);
-            onLostTimeout = 10000;
+            int onLostTimeout = 10000;
             if (DBG) {
                 Log.d(TAG, "configureFilterParamter " + onFoundTimeout + " " + onLostTimeout + " "
                         + onFoundCount + " " + numOfTrackingEntries);
@@ -1698,7 +1706,8 @@ public class ScanManager {
                 return DELIVERY_MODE_ON_FOUND_LOST;
             }
             if (isAllMatchesAutoBatchScanClient(client)) {
-                return isAutoBatchScanClientEnabled(client) ? DELIVERY_MODE_BATCH
+                return isAutoBatchScanClientEnabled(client)
+                        ? DELIVERY_MODE_BATCH
                         : DELIVERY_MODE_IMMEDIATE;
             }
             return settings.getReportDelayMillis() == 0 ? DELIVERY_MODE_IMMEDIATE
@@ -1706,7 +1715,7 @@ public class ScanManager {
         }
 
         private int getScanWindowMillis(ScanSettings settings) {
-            ContentResolver resolver = mService.getContentResolver();
+            ContentResolver resolver = mContext.getContentResolver();
             if (settings == null) {
                 return Settings.Global.getInt(
                     resolver,
@@ -1737,14 +1746,14 @@ public class ScanManager {
                     return mAdapterService.getScreenOffBalancedWindowMillis();
                 default:
                     return Settings.Global.getInt(
-                        resolver,
-                        Settings.Global.BLE_SCAN_LOW_POWER_WINDOW_MS,
-                        SCAN_MODE_LOW_POWER_WINDOW_MS);
+                            resolver,
+                            Settings.Global.BLE_SCAN_LOW_POWER_WINDOW_MS,
+                            SCAN_MODE_LOW_POWER_WINDOW_MS);
             }
         }
 
         private int getScanIntervalMillis(ScanSettings settings) {
-            ContentResolver resolver = mService.getContentResolver();
+            ContentResolver resolver = mContext.getContentResolver();
             if (settings == null) {
                 return Settings.Global.getInt(
                     resolver,
@@ -1919,8 +1928,7 @@ public class ScanManager {
             new ActivityManager.OnUidImportanceListener() {
                 @Override
                 public void onUidImportance(final int uid, final int importance) {
-                    if (mService.mTransitionalScanHelper.getScannerMap().getAppScanStatsByUid(uid)
-                            != null) {
+                    if (mScanHelper.getScannerMap().getAppScanStatsByUid(uid) != null) {
                         Message message = new Message();
                         message.what = MSG_IMPORTANCE_CHANGE;
                         message.obj = new UidImportance(uid, importance);

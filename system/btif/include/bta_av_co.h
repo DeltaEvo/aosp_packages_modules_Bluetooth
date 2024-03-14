@@ -20,12 +20,59 @@
 
 #include "btif/include/bta_av_co_peer.h"
 
+/**
+ * BTA AV codec callouts state.
+ */
+class BtaAvCoState {
+ public:
+  BtaAvCoState() = default;
+
+  /**
+   * Set the active peer for the state.
+   * @param peer
+   */
+  void setActivePeer(BtaAvCoPeer* peer);
+
+  /**
+   * Gets the active peer for the state.
+   * @return pointer to the active peer.
+   */
+  BtaAvCoPeer* getActivePeer() const;
+
+  /**
+   * Gets the codec config for the state.
+   * @return the active codec config.
+   */
+  uint8_t* getCodecConfig();
+
+  /**
+   * Updates the codec config
+   * @param codec_config codec config that needs to be updated.
+   */
+  void setCodecConfig(const uint8_t* codec_config);
+
+  /**
+   * Clears the codec config.
+   */
+  void clearCodecConfig();
+
+  /**
+   * Resets the state.
+   */
+  void Reset();
+  virtual ~BtaAvCoState() = default;
+
+ private:
+  // The current active peer
+  BtaAvCoPeer* active_peer_;
+  // Current codec configuration
+  uint8_t codec_config_[AVDT_CODEC_SIZE];
+};
+
 class BtaAvCo {
  public:
   BtaAvCo(bool content_protect_enabled, BtaAvCoPeerCache* bta_av_co_peer_bank)
       : peer_cache_(bta_av_co_peer_bank),
-        active_peer_(nullptr),
-        codec_config_{},
         content_protect_enabled_(content_protect_enabled),
         content_protect_flag_(0) {
     Reset();
@@ -241,9 +288,10 @@ class BtaAvCo {
    * Set the active peer.
    *
    * @param peer_address the peer address
+   * @param t_local_sep update the active peer for the profile type.
    * @return true on success, otherwise false
    */
-  bool SetActivePeer(const RawAddress& peer_address);
+  bool SetActivePeer(const RawAddress& peer_address, const uint8_t t_local_sep);
 
   /**
    * Save the reconfig codec
@@ -387,9 +435,12 @@ class BtaAvCo {
    * @param new_codec_config the new codec configuration to use
    * @param num_protect the number of content protection elements
    * @param p_protect_info the content protection info to use
+   * @param t_local_sep the profile for which the codec config needs to be
+   * saved.
    */
   void SaveNewCodecConfig(BtaAvCoPeer* p_peer, const uint8_t* new_codec_config,
-                          uint8_t num_protect, const uint8_t* p_protect_info);
+                          uint8_t num_protect, const uint8_t* p_protect_info,
+                          const uint8_t t_local_sep);
 
   /**
    * Set the Over-The-Air preferred codec configuration.
@@ -408,11 +459,12 @@ class BtaAvCo {
    * @param p_restart_output if there is a change in the encoder configuration
    * that requires restarting of the A2DP connection, flag |p_restart_output|
    * is set to true.
+   * @param t_local_sep the profile for which ota config needs to be set.
    * @return true on success, otherwise false
    */
   bool SetCodecOtaConfig(BtaAvCoPeer* p_peer, const uint8_t* p_ota_codec_config,
                          uint8_t num_protect, const uint8_t* p_protect_info,
-                         bool* p_restart_output);
+                         bool* p_restart_output, const uint8_t t_local_sep);
 
   /**
    * Update all selectable Source codecs with the corresponding codec
@@ -493,11 +545,25 @@ class BtaAvCo {
       const ::bluetooth::audio::a2dp::provider::a2dp_configuration&
           provider_codec_config);
 
+  /**
+   * Returns the state that needs to be accessed.
+   * @param p_peer peer address.
+   * @return state of the profile.
+   */
+  BtaAvCoState* getStateFromPeer(const BtaAvCoPeer* p_peer);
+
+  /**
+   * Returns the state based on the local profile of the stack.
+   * @param t_local_sep local sep type
+   * @return state of the profile.
+   */
+  BtaAvCoState* getStateFromLocalProfile(const uint8_t t_local_sep);
+
   bool ContentProtectEnabled() const { return content_protect_enabled_; }
 
-  // TODO: Remove active peer once no longer needed.
-  BtaAvCoPeer* active_peer_;               // The current active peer
-  uint8_t codec_config_[AVDT_CODEC_SIZE];  // Current codec configuration
-  const bool content_protect_enabled_;     // True if Content Protect is enabled
-  uint8_t content_protect_flag_;           // Content Protect flag
+  const bool content_protect_enabled_;  // True if Content Protect is enabled
+  uint8_t content_protect_flag_;        // Content Protect flag
+  BtaAvCoState bta_av_legacy_state_;    // Legacy state
+  BtaAvCoState bta_av_source_state_;    // Source profile state
+  BtaAvCoState bta_av_sink_state_;      // Sink profile state
 };

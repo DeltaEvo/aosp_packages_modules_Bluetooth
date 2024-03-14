@@ -16,12 +16,16 @@
  *
  ******************************************************************************/
 
+#include <bluetooth/log.h>
+
 #include "bta_sec_api.h"
 #include "btif_storage.h"
 #include "device/include/device_iot_config.h"
 #include "internal_include/bt_target.h"
 #include "os/log.h"
 #include "stack/include/btm_ble_api.h"
+
+using namespace bluetooth;
 
 /*******************************************************************************
  *  Constants & Macros
@@ -80,8 +84,8 @@ void btif_iot_update_remote_info(tBTA_DM_AUTH_CMPL* p_auth_cmpl, bool is_ble,
 
   // save remote name to iot conf file
   if (strlen((const char*)p_auth_cmpl->bd_name)) {
-    name_length = strlen((char*)p_auth_cmpl->bd_name) > BTM_MAX_LOC_BD_NAME_LEN
-                      ? BTM_MAX_LOC_BD_NAME_LEN
+    name_length = strlen((char*)p_auth_cmpl->bd_name) > BD_NAME_LEN
+                      ? BD_NAME_LEN
                       : strlen((char*)p_auth_cmpl->bd_name) + 1;
     strncpy(value, (char*)p_auth_cmpl->bd_name, name_length);
     DEVICE_IOT_CONFIG_ADDR_SET_STR(p_auth_cmpl->bd_addr,
@@ -100,9 +104,9 @@ void btif_iot_update_remote_info(tBTA_DM_AUTH_CMPL* p_auth_cmpl, bool is_ble,
   if (btif_storage_get_remote_device_property(&p_auth_cmpl->bd_addr,
                                               &properties[num_properties]) ==
       BT_STATUS_SUCCESS)
-    LOG_VERBOSE("%s cod retrieved from storage is 0x%06x", __func__, cod);
+    log::verbose("cod retrieved from storage is 0x{:06x}", cod);
   if (cod == 0) {
-    LOG_VERBOSE("%s cod is 0, set as unclassified", __func__);
+    log::verbose("cod is 0, set as unclassified");
     cod = COD_UNCLASSIFIED;
   }
   DEVICE_IOT_CONFIG_ADDR_SET_INT(p_auth_cmpl->bd_addr, IOT_CONF_KEY_DEVCLASS,
@@ -118,7 +122,7 @@ void btif_iot_update_remote_info(tBTA_DM_AUTH_CMPL* p_auth_cmpl, bool is_ble,
   if (btif_storage_get_remote_device_property(&p_auth_cmpl->bd_addr,
                                               &properties[num_properties]) ==
       BT_STATUS_SUCCESS) {
-    LOG_VERBOSE("%s retrieve dev type from storage", __func__);
+    log::verbose("retrieve dev type from storage");
     dev_type = (bt_device_type_t)(remote_dev_type | p_auth_cmpl->dev_type);
   } else {
     dev_type = (bt_device_type_t)(p_auth_cmpl->dev_type);

@@ -78,6 +78,7 @@ import com.android.bluetooth.gatt.AdvertiseManagerNativeInterface;
 import com.android.bluetooth.gatt.DistanceMeasurementNativeInterface;
 import com.android.bluetooth.gatt.GattNativeInterface;
 import com.android.bluetooth.le_scan.PeriodicScanNativeInterface;
+import com.android.bluetooth.le_scan.ScanNativeInterface;
 import com.android.bluetooth.sdp.SdpManagerNativeInterface;
 import com.android.internal.app.IBatteryStats;
 
@@ -90,7 +91,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -115,6 +117,8 @@ public class AdapterServiceTest {
 
     private AdapterService mAdapterService;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     private @Mock Context mMockContext;
     private @Mock ApplicationInfo mMockApplicationInfo;
     private @Mock Resources mMockResources;
@@ -133,6 +137,7 @@ public class AdapterServiceTest {
     private @Mock DistanceMeasurementNativeInterface mDistanceNativeInterface;
     private @Mock GattNativeInterface mGattNativeInterface;
     private @Mock PeriodicScanNativeInterface mPeriodicNativeInterface;
+    private @Mock ScanNativeInterface mScanNativeInterface;
     private @Mock JniCallbacks mJniCallbacks;
 
     @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
@@ -186,7 +191,6 @@ public class AdapterServiceTest {
     @Before
     public void setUp() throws PackageManager.NameNotFoundException {
         Log.e(TAG, "setUp()");
-        MockitoAnnotations.initMocks(this);
 
         mLooper = new TestLooper();
         Handler handler = new Handler(mLooper.getLooper());
@@ -201,6 +205,7 @@ public class AdapterServiceTest {
         DistanceMeasurementNativeInterface.setInstance(mDistanceNativeInterface);
         GattNativeInterface.setInstance(mGattNativeInterface);
         PeriodicScanNativeInterface.setInstance(mPeriodicNativeInterface);
+        ScanNativeInterface.setInstance(mScanNativeInterface);
 
         // Post the creation of AdapterService since it rely on Looper.myLooper()
         handler.post(() -> mAdapterService = spy(new AdapterService(mLooper.getLooper())));
@@ -329,6 +334,7 @@ public class AdapterServiceTest {
         DistanceMeasurementNativeInterface.setInstance(null);
         GattNativeInterface.setInstance(null);
         PeriodicScanNativeInterface.setInstance(null);
+        ScanNativeInterface.setInstance(null);
     }
 
     private void syncHandler(int... what) {

@@ -42,8 +42,6 @@ import java.util.Map;
 
 /**
  * Manages Bluetooth LE advertising operations and interacts with bluedroid stack. TODO: add tests.
- *
- * @hide
  */
 @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
 public class AdvertiseManager {
@@ -51,7 +49,6 @@ public class AdvertiseManager {
     private static final String TAG = GattServiceConfig.TAG_PREFIX + "AdvertiseManager";
 
     private final GattService mService;
-    private final AdapterService mAdapterService;
     private final AdvertiseManagerNativeInterface mNativeInterface;
     private final AdvertiserMap mAdvertiserMap;
     private Handler mHandler;
@@ -62,14 +59,12 @@ public class AdvertiseManager {
     AdvertiseManager(
             GattService service,
             AdvertiseManagerNativeInterface nativeInterface,
-            AdapterService adapterService,
             AdvertiserMap advertiserMap) {
         if (DBG) {
             Log.d(TAG, "advertise manager created");
         }
         mService = service;
         mNativeInterface = nativeInterface;
-        mAdapterService = adapterService;
         mAdvertiserMap = advertiserMap;
 
         // Start a HandlerThread that handles advertising operations

@@ -32,9 +32,7 @@
 #include "osi/include/wakelock.h"
 #include "stack/include/main_thread.h"
 
-using bluetooth::audio::le_audio::LeAudioClientInterface;
-
-namespace le_audio {
+namespace bluetooth::le_audio {
 namespace {
 struct AudioHalStats {
   size_t media_read_total_underflow_bytes;
@@ -67,9 +65,9 @@ class SourceImpl : public LeAudioSourceAudioHalClient {
   void CancelStreamingRequest() override;
   void UpdateRemoteDelay(uint16_t remote_delay_ms) override;
   void UpdateAudioConfigToHal(
-      const ::le_audio::offload_config& config) override;
+      const ::bluetooth::le_audio::offload_config& config) override;
   void UpdateBroadcastAudioConfigToHal(
-      const ::le_audio::broadcast_offload_config& config) override;
+      const ::bluetooth::le_audio::broadcast_offload_config& config) override;
   void SuspendedForReconfiguration() override;
   void ReconfigurationComplete() override;
 
@@ -121,7 +119,7 @@ bool SourceImpl::Acquire() {
   };
 
   /* Get pointer to singleton LE audio client interface */
-  auto halInterface = LeAudioClientInterface::Get();
+  auto halInterface = audio::le_audio::LeAudioClientInterface::Get();
   if (halInterface == nullptr) {
     LOG_ERROR("Can't get LE Audio HAL interface");
     return false;
@@ -152,7 +150,7 @@ void SourceImpl::Release() {
   if (halSinkInterface_) {
     halSinkInterface_->Cleanup();
 
-    auto halInterface = LeAudioClientInterface::Get();
+    auto halInterface = audio::le_audio::LeAudioClientInterface::Get();
     if (halInterface != nullptr) {
       halInterface->ReleaseSink(halSinkInterface_);
     } else {
@@ -249,7 +247,6 @@ void SourceImpl::StartAudioTicks() {
   wakelock_acquire();
   if (IS_FLAG_ENABLED(leaudio_hal_client_asrc)) {
     asrc_ = std::make_unique<bluetooth::audio::asrc::SourceAudioHalAsrc>(
-        std::make_shared<bluetooth::hal::NocpIsoEvents>(),
         source_codec_config_.num_channels, source_codec_config_.sample_rate,
         source_codec_config_.bits_per_sample,
         source_codec_config_.data_interval_us);
@@ -340,14 +337,14 @@ bool SourceImpl::Start(const LeAudioCodecConfiguration& codec_configuration,
 
   /* Global config for periodic audio data */
   source_codec_config_ = codec_configuration;
-  LeAudioClientInterface::PcmParameters pcmParameters = {
+  audio::le_audio::LeAudioClientInterface::PcmParameters pcmParameters = {
       .data_interval_us = codec_configuration.data_interval_us,
       .sample_rate = codec_configuration.sample_rate,
       .bits_per_sample = codec_configuration.bits_per_sample,
       .channels_count = codec_configuration.num_channels};
 
   halSinkInterface_->SetPcmParameters(pcmParameters);
-  LeAudioClientInterface::Get()->SetAllowedDsaModes(dsa_modes);
+  audio::le_audio::LeAudioClientInterface::Get()->SetAllowedDsaModes(dsa_modes);
   halSinkInterface_->StartSession();
 
   std::lock_guard<std::mutex> guard(audioSourceCallbacksMutex_);
@@ -462,7 +459,7 @@ void SourceImpl::UpdateRemoteDelay(uint16_t remote_delay_ms) {
 }
 
 void SourceImpl::UpdateAudioConfigToHal(
-    const ::le_audio::offload_config& config) {
+    const ::bluetooth::le_audio::offload_config& config) {
   if ((halSinkInterface_ == nullptr) ||
       (le_audio_sink_hal_state_ != HAL_STARTED)) {
     LOG_ERROR("Audio HAL Audio sink was not started!");
@@ -474,7 +471,7 @@ void SourceImpl::UpdateAudioConfigToHal(
 }
 
 void SourceImpl::UpdateBroadcastAudioConfigToHal(
-    const ::le_audio::broadcast_offload_config& config) {
+    const ::bluetooth::le_audio::broadcast_offload_config& config) {
   if (halSinkInterface_ == nullptr) {
     LOG_ERROR("Audio HAL Audio sink interface not acquired");
     return;
@@ -528,4 +525,4 @@ void LeAudioSourceAudioHalClient::DebugDump(int fd) {
          << std::endl;
   dprintf(fd, "%s", stream.str().c_str());
 }
-}  // namespace le_audio
+}  // namespace bluetooth::le_audio

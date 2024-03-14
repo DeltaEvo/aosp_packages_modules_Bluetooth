@@ -85,8 +85,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -125,8 +126,11 @@ public class ScanManagerTest {
     @Rule public final ServiceTestRule mServiceRule = new ServiceTestRule();
     @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mAdapterService;
     @Mock private GattService mMockGattService;
+    @Mock private TransitionalScanHelper mMockScanHelper;
     @Mock private BluetoothAdapterProxy mBluetoothAdapterProxy;
     @Mock private LocationManager mLocationManager;
     @Spy private GattObjectsFactory mFactory = GattObjectsFactory.getInstance();
@@ -141,7 +145,6 @@ public class ScanManagerTest {
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        MockitoAnnotations.initMocks(this);
 
         TestUtils.setAdapterService(mAdapterService);
         when(mAdapterService.getScanTimeoutMillis())
@@ -197,6 +200,7 @@ public class ScanManagerTest {
         mScanManager =
                 new ScanManager(
                         mMockGattService,
+                        mMockScanHelper,
                         mAdapterService,
                         mBluetoothAdapterProxy,
                         mTestLooper.getLooper());
@@ -208,7 +212,8 @@ public class ScanManagerTest {
         assertThat(mLatch).isNotNull();
 
         mScanReportDelay = DEFAULT_SCAN_REPORT_DELAY_MS;
-        mMockAppScanStats = spy(new AppScanStats("Test", null, null, mMockGattService));
+        mMockAppScanStats =
+                spy(new AppScanStats("Test", null, null, mMockGattService, mMockScanHelper));
     }
 
     @After

@@ -85,9 +85,6 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-/**
- * @hide
- */
 public final class Utils {
     private static final String TAG = "BluetoothUtils";
     private static final int MICROS_PER_UNIT = 625;
@@ -187,6 +184,20 @@ public final class Utils {
         }
 
         return String.format("XX:XX:XX:XX:%02X:%02X", address[4], address[5]);
+    }
+
+    /**
+     * Returns the correct device address to be used for connections over BR/EDR transport.
+     *
+     * @param device the device for which to obtain the connection address
+     * @return either identity address or device address in String format
+     */
+    public static String getBrEdrAddress(BluetoothDevice device) {
+        String address = device.getIdentityAddress();
+        if (address == null) {
+            address = device.getAddress();
+        }
+        return address;
     }
 
     /**

@@ -30,8 +30,6 @@ import java.util.UUID;
 
 /**
  * Helper class used to manage advertisement package filters.
- *
- * @hide
  */
 /* package */ class ScanFilterQueue {
     public static final int TYPE_DEVICE_ADDRESS = 0;
@@ -46,9 +44,6 @@ import java.util.UUID;
 
     // Max length is 31 - 3(flags) - 2 (one byte for length and one byte for type).
     private static final int MAX_LEN_PER_FIELD = 26;
-
-    // Values defined in bluedroid.
-    private static final byte DEVICE_TYPE_ALL = 2;
 
     // Meta data type for Transport Block Filter
     public static final int TYPE_INVALID = 0x00;

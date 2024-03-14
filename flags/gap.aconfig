@@ -112,3 +112,20 @@ flag {
     description: "Remove ACL when there is not resource to handle more gatt connections."
     bug: "325929235"
 }
+
+flag {
+    name: "ble_scan_adv_metrics_redesign"
+    namespace: "bluetooth"
+    description: "Reimplement BLE scan and advertisement metrics logging."
+    bug: "328303508"
+}
+
+flag {
+    name: "ble_context_map_remove_fix"
+    namespace: "bluetooth"
+    description: "Fix connection removal logic in ContextMap class"
+    bug: "329154715"
+    metadata {
+        purpose: PURPOSE_BUGFIX
+    }
+}

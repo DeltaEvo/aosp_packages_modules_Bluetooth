@@ -38,10 +38,12 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -58,12 +60,13 @@ public class PbapStateMachineTest {
     private BluetoothPbapService mBluetoothPbapService;
     private boolean mIsAdapterServiceSet;
 
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+
     @Mock private AdapterService mAdapterService;
 
     @Before
     public void setUp() throws Exception {
         mTargetContext = InstrumentationRegistry.getTargetContext();
-        MockitoAnnotations.initMocks(this);
         TestUtils.setAdapterService(mAdapterService);
         mIsAdapterServiceSet = true;
         // This line must be called to make sure relevant objects are initialized properly
@@ -76,8 +79,14 @@ public class PbapStateMachineTest {
         mHandler = new Handler(mHandlerThread.getLooper());
         mBluetoothPbapService = mock(BluetoothPbapService.class);
         doNothing().when(mBluetoothPbapService).checkOrGetPhonebookPermission(any());
-        mPbapStateMachine = PbapStateMachine.make(mBluetoothPbapService, mHandlerThread.getLooper(),
-                mTestDevice, mSocket, mBluetoothPbapService, mHandler, TEST_NOTIFICATION_ID);
+        mPbapStateMachine =
+                PbapStateMachine.make(
+                        mBluetoothPbapService,
+                        mHandlerThread.getLooper(),
+                        mTestDevice,
+                        mSocket,
+                        mHandler,
+                        TEST_NOTIFICATION_ID);
     }
 
     @After

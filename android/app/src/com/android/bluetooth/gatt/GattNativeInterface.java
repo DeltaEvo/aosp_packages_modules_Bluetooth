@@ -67,18 +67,6 @@ public class GattNativeInterface {
 
     /* Callbacks */
 
-    void onScanResult(int eventType, int addressType, String address, int primaryPhy,
-            int secondaryPhy, int advertisingSid, int txPower, int rssi, int periodicAdvInt,
-            byte[] advData, String originalAddress) {
-        getGattService().onScanResult(eventType, addressType, address, primaryPhy, secondaryPhy,
-                advertisingSid, txPower, rssi, periodicAdvInt, advData, originalAddress);
-    }
-
-    void onScannerRegistered(int status, int scannerId, long uuidLsb, long uuidMsb)
-            throws RemoteException {
-        getGattService().onScannerRegistered(status, scannerId, uuidLsb, uuidMsb);
-    }
-
     void onClientRegistered(int status, int clientIf, long uuidLsb, long uuidMsb)
             throws RemoteException {
         getGattService().onClientRegistered(status, clientIf, uuidLsb, uuidMsb);
@@ -186,53 +174,6 @@ public class GattNativeInterface {
         getGattService().onReadRemoteRssi(clientIf, address, rssi, status);
     }
 
-    void onScanFilterEnableDisabled(int action, int status, int clientIf) {
-        getGattService().onScanFilterEnableDisabled(action, status, clientIf);
-    }
-
-    void onScanFilterParamsConfigured(int action, int status, int clientIf, int availableSpace) {
-        getGattService().onScanFilterParamsConfigured(action, status, clientIf, availableSpace);
-    }
-
-    void onScanFilterConfig(int action, int status, int clientIf, int filterType,
-            int availableSpace) {
-        getGattService().onScanFilterConfig(action, status, clientIf, filterType, availableSpace);
-    }
-
-    void onBatchScanStorageConfigured(int status, int clientIf) {
-        getGattService().onBatchScanStorageConfigured(status, clientIf);
-    }
-
-    void onBatchScanStartStopped(int startStopAction, int status, int clientIf) {
-        getGattService().onBatchScanStartStopped(startStopAction, status, clientIf);
-    }
-
-    void onBatchScanReports(int status, int scannerId, int reportType, int numRecords,
-            byte[] recordData) throws RemoteException {
-        getGattService().onBatchScanReports(status, scannerId, reportType, numRecords, recordData);
-    }
-
-    void onBatchScanThresholdCrossed(int clientIf) {
-        getGattService().onBatchScanThresholdCrossed(clientIf);
-    }
-
-    AdvtFilterOnFoundOnLostInfo createOnTrackAdvFoundLostObject(int clientIf, int advPktLen,
-            byte[] advPkt, int scanRspLen, byte[] scanRsp, int filtIndex, int advState,
-            int advInfoPresent, String address, int addrType, int txPower, int rssiValue,
-            int timeStamp) {
-        return getGattService().createOnTrackAdvFoundLostObject(clientIf, advPktLen, advPkt,
-                scanRspLen, scanRsp, filtIndex, advState, advInfoPresent, address, addrType,
-                txPower, rssiValue, timeStamp);
-    }
-
-    void onTrackAdvFoundLost(AdvtFilterOnFoundOnLostInfo trackingInfo) throws RemoteException {
-        getGattService().onTrackAdvFoundLost(trackingInfo);
-    }
-
-    void onScanParamSetupCompleted(int status, int scannerId) throws RemoteException {
-        getGattService().onScanParamSetupCompleted(status, scannerId);
-    }
-
     void onConfigureMTU(int connId, int status, int mtu) throws RemoteException {
         getGattService().onConfigureMTU(connId, status, mtu);
     }
@@ -268,17 +209,26 @@ public class GattNativeInterface {
 
     void onServerReadCharacteristic(String address, int connId, int transId, int handle, int offset,
             boolean isLong) throws RemoteException {
-        getGattService().onServerReadCharacteristic(address, connId, transId, handle, offset,
-                isLong);
+        getGattService()
+                .onServerReadCharacteristic(address, connId, transId, handle, offset, isLong);
     }
 
-    void onServerReadDescriptor(String address, int connId, int transId, int handle, int offset,
-            boolean isLong) throws RemoteException {
+    void onServerReadDescriptor(
+            String address, int connId, int transId, int handle, int offset, boolean isLong)
+            throws RemoteException {
         getGattService().onServerReadDescriptor(address, connId, transId, handle, offset, isLong);
     }
 
-    void onServerWriteCharacteristic(String address, int connId, int transId, int handle,
-            int offset, int length, boolean needRsp, boolean isPrep, byte[] data)
+    void onServerWriteCharacteristic(
+            String address,
+            int connId,
+            int transId,
+            int handle,
+            int offset,
+            int length,
+            boolean needRsp,
+            boolean isPrep,
+            byte[] data)
             throws RemoteException {
         getGattService().onServerWriteCharacteristic(address, connId, transId, handle, offset,
                 length, needRsp, isPrep, data);
@@ -286,8 +236,9 @@ public class GattNativeInterface {
 
     void onServerWriteDescriptor(String address, int connId, int transId, int handle, int offset,
             int length, boolean needRsp, boolean isPrep, byte[] data) throws RemoteException {
-        getGattService().onServerWriteDescriptor(address, connId, transId, handle, offset, length,
-                needRsp, isPrep, data);
+        getGattService()
+                .onServerWriteDescriptor(
+                        address, connId, transId, handle, offset, length, needRsp, isPrep, data);
     }
 
     void onExecuteWrite(String address, int connId, int transId, int execWrite)

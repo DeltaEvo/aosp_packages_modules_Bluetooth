@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package com.android.bluetooth.gatt;
+package com.android.bluetooth.le_scan;
 
 import android.annotation.Nullable;
 
-/** @hide */
 public class AdvtFilterOnFoundOnLostInfo {
     private int mClientIf;
 
