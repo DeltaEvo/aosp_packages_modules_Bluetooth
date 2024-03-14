@@ -69,7 +69,6 @@ import java.util.stream.Collectors;
 
 /**
  * Provides Bluetooth CSIP Set Coordinator profile, as a service.
- * @hide
  */
 public class CsipSetCoordinatorService extends ProfileService {
     private static final boolean DBG = false;
@@ -499,8 +498,6 @@ public class CsipSetCoordinatorService extends ProfileService {
      * @param groupId group ID to lock
      * @param callback callback with the lock request result
      * @return unique lock identifier used for unlocking
-     *
-     * @hide
      */
     public @Nullable UUID lockGroup(
             int groupId, @NonNull IBluetoothCsipSetCoordinatorLockCallback callback) {
@@ -553,8 +550,6 @@ public class CsipSetCoordinatorService extends ProfileService {
     /**
      * Unlock a given group.
      * @param lockUuid unique lock identifier used for unlocking
-     *
-     * @hide
      */
     public void unlockGroup(@NonNull UUID lockUuid) {
         if (lockUuid == null) {
@@ -583,8 +578,6 @@ public class CsipSetCoordinatorService extends ProfileService {
      * Check whether a given group is currently locked.
      * @param groupId unique group identifier
      * @return true if group is currently locked, otherwise false.
-     *
-     * @hide
      */
     public boolean isGroupLocked(int groupId) {
         return mLocks.containsKey(groupId);
@@ -1077,15 +1070,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                boolean defaultValue = false;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.connect(device);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                boolean result = service.connect(device);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1099,15 +1090,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                boolean defaultValue = false;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.disconnect(device);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                boolean result = service.disconnect(device);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1120,15 +1109,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                List<BluetoothDevice> defaultValue = new ArrayList<>();
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.getConnectedDevices();
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                List<BluetoothDevice> result = service.getConnectedDevices();
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1141,15 +1128,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                List<BluetoothDevice> defaultValue = new ArrayList<>();
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.getDevicesMatchingConnectionStates(states);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                List<BluetoothDevice> result = service.getDevicesMatchingConnectionStates(states);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1163,14 +1148,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                int defaultValue = BluetoothProfile.STATE_DISCONNECTED;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.getConnectionState(device);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-                int result = service.getConnectionState(device);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1184,15 +1168,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                boolean defaultValue = false;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.setConnectionPolicy(device, connectionPolicy);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                boolean result = service.setConnectionPolicy(device, connectionPolicy);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1206,15 +1188,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                int defaultValue = BluetoothProfile.CONNECTION_POLICY_UNKNOWN;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.getConnectionPolicy(device);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                int result = service.getConnectionPolicy(device);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1229,16 +1209,14 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                ParcelUuid defaultValue = null;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    UUID lockUuid = service.lockGroup(groupId, callback);
+                    defaultValue = lockUuid == null ? null : new ParcelUuid(lockUuid);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                UUID lockUuid = service.lockGroup(groupId, callback);
-                ParcelUuid result = lockUuid == null ? null : new ParcelUuid(lockUuid);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1253,13 +1231,11 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    service.unlockGroup(lockUuid.getUuid());
                 }
 
-                enforceBluetoothPrivilegedPermission(service);
-
-                service.unlockGroup(lockUuid.getUuid());
                 receiver.send(null);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
@@ -1274,13 +1250,13 @@ public class CsipSetCoordinatorService extends ProfileService {
                 Objects.requireNonNull(source, "source cannot be null");
                 Objects.requireNonNull(receiver, "receiver cannot be null");
 
+                List<Integer> defaultValue = new ArrayList<Integer>();
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.getAllGroupIds(uuid);
                 }
-                enforceBluetoothPrivilegedPermission(service);
-                List<Integer> result = service.getAllGroupIds(uuid);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1290,15 +1266,13 @@ public class CsipSetCoordinatorService extends ProfileService {
         public void getGroupUuidMapByDevice(BluetoothDevice device,
                 AttributionSource source, SynchronousResultReceiver receiver) {
             try {
+                Map<Integer, ParcelUuid> defaultValue = null;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.getGroupUuidMapByDevice(device);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                Map<Integer, ParcelUuid> result = service.getGroupUuidMapByDevice(device);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }
@@ -1308,15 +1282,13 @@ public class CsipSetCoordinatorService extends ProfileService {
         public void getDesiredGroupSize(int groupId, AttributionSource source,
                 SynchronousResultReceiver receiver) {
             try {
+                int defaultValue = IBluetoothCsipSetCoordinator.CSIS_GROUP_SIZE_UNKNOWN;
                 CsipSetCoordinatorService service = getService();
-                if (service == null) {
-                    throw new IllegalStateException("service is null");
+                if (service != null) {
+                    enforceBluetoothPrivilegedPermission(service);
+                    defaultValue = service.getDesiredGroupSize(groupId);
                 }
-
-                enforceBluetoothPrivilegedPermission(service);
-
-                int result = service.getDesiredGroupSize(groupId);
-                receiver.send(result);
+                receiver.send(defaultValue);
             } catch (RuntimeException e) {
                 receiver.propagateException(e);
             }

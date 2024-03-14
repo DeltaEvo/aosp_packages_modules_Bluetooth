@@ -18,6 +18,8 @@
 
 #include <gmock/gmock.h>
 
+#include <vector>
+
 #include "codec_manager.h"
 
 class MockCodecManager {
@@ -32,7 +34,7 @@ class MockCodecManager {
 
   MOCK_METHOD((bluetooth::le_audio::types::CodecLocation), GetCodecLocation, (),
               (const));
-  MOCK_METHOD((bool), IsOffloadDualBiDirSwbSupported, (), (const));
+  MOCK_METHOD((bool), IsDualBiDirSwbSupported, (), (const));
   MOCK_METHOD(
       (void), UpdateActiveAudioConfig,
       (const bluetooth::le_audio::types::BidirectionalPair<
@@ -42,11 +44,31 @@ class MockCodecManager {
                           uint8_t direction)>
            update_receiver));
   MOCK_METHOD(
-      (bluetooth::le_audio::set_configurations::AudioSetConfigurations*),
-      GetOffloadCodecConfig,
-      (bluetooth::le_audio::types::LeAudioContextType ctx_type), (const));
-  MOCK_METHOD((bluetooth::le_audio::broadcast_offload_config*),
-              GetBroadcastOffloadConfig, (uint8_t preferred_quality), (const));
+      (std::unique_ptr<
+          bluetooth::le_audio::set_configurations::AudioSetConfiguration>),
+      GetCodecConfig,
+      (bluetooth::le_audio::types::LeAudioContextType ctx_type,
+       std::function<
+           const bluetooth::le_audio::set_configurations::
+               AudioSetConfiguration*(
+                   bluetooth::le_audio::types::LeAudioContextType context_type,
+                   const bluetooth::le_audio::set_configurations::
+                       AudioSetConfigurations* confs)>
+           non_vendor_config_matcher),
+      (const));
+  MOCK_METHOD(
+      (bool), CheckCodecConfigIsBiDirSwb,
+      (const bluetooth::le_audio::set_configurations::AudioSetConfiguration&),
+      (const));
+  MOCK_METHOD(
+      (std::unique_ptr<
+          bluetooth::le_audio::broadcaster::BroadcastConfiguration>),
+      GetBroadcastConfig,
+      ((const std::vector<std::pair<
+            bluetooth::le_audio::types::LeAudioContextType, uint8_t>>&),
+       (const std::optional<
+           const bluetooth::le_audio::types::PublishedAudioCapabilities*>)),
+      (const));
   MOCK_METHOD((std::vector<bluetooth::le_audio::btle_audio_codec_config_t>),
               GetLocalAudioOutputCodecCapa, ());
   MOCK_METHOD((std::vector<bluetooth::le_audio::btle_audio_codec_config_t>),

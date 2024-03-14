@@ -45,16 +45,11 @@ using types::LeAudioCoreCodecConfig;
 
 static uint8_t min_req_devices_cnt(
     const AudioSetConfiguration* audio_set_conf) {
-  std::pair<uint8_t /* sink */, uint8_t /* source */> snk_src_pair(0, 0);
-
-  for (auto ent : (*audio_set_conf).confs) {
-    if (ent.direction == kLeAudioDirectionSink)
-      snk_src_pair.first += ent.device_cnt;
-    if (ent.direction == kLeAudioDirectionSource)
-      snk_src_pair.second += ent.device_cnt;
-  }
-
-  return std::max(snk_src_pair.first, snk_src_pair.second);
+  ASSERT_LOG(
+      audio_set_conf->topology_info.has_value(),
+      "No topology info, which is required to properly configure the ASEs");
+  return std::max(audio_set_conf->topology_info->device_count.sink,
+                  audio_set_conf->topology_info->device_count.source);
 }
 
 static uint8_t min_req_devices_cnt(
@@ -298,12 +293,36 @@ const std::map<uint8_t, uint32_t> LeAudioCoreCodecConfig::sampling_freq_map = {
     {codec_spec_conf::kLeAudioSamplingFreq48000Hz,
      LeAudioCodecConfiguration::kSampleRate48000}};
 
+/* Helper map for matching various frequency notations */
+const std::map<uint32_t, uint8_t> LeAudioCoreCodecConfig::sample_rate_map = {
+    {LeAudioCodecConfiguration::kSampleRate8000,
+     codec_spec_conf::kLeAudioSamplingFreq8000Hz},
+    {LeAudioCodecConfiguration::kSampleRate16000,
+     codec_spec_conf::kLeAudioSamplingFreq16000Hz},
+    {LeAudioCodecConfiguration::kSampleRate24000,
+     codec_spec_conf::kLeAudioSamplingFreq24000Hz},
+    {LeAudioCodecConfiguration::kSampleRate32000,
+     codec_spec_conf::kLeAudioSamplingFreq32000Hz},
+    {LeAudioCodecConfiguration::kSampleRate44100,
+     codec_spec_conf::kLeAudioSamplingFreq44100Hz},
+    {LeAudioCodecConfiguration::kSampleRate48000,
+     codec_spec_conf::kLeAudioSamplingFreq48000Hz},
+};
+
 /* Helper map for matching various frame durations notations */
 const std::map<uint8_t, uint32_t> LeAudioCoreCodecConfig::frame_duration_map = {
     {codec_spec_conf::kLeAudioCodecFrameDur7500us,
      LeAudioCodecConfiguration::kInterval7500Us},
     {codec_spec_conf::kLeAudioCodecFrameDur10000us,
      LeAudioCodecConfiguration::kInterval10000Us}};
+
+/* Helper map for matching various frame durations notations */
+const std::map<uint32_t, uint8_t> LeAudioCoreCodecConfig::data_interval_map = {
+    {LeAudioCodecConfiguration::kInterval7500Us,
+     codec_spec_conf::kLeAudioCodecFrameDur7500us},
+    {LeAudioCodecConfiguration::kInterval10000Us,
+     codec_spec_conf::kLeAudioCodecFrameDur10000us},
+};
 
 std::string CapabilityTypeToStr(const uint8_t& type) {
   switch (type) {
@@ -843,15 +862,39 @@ AudioLocations get_bidirectional(BidirectionalPair<AudioLocations> bidir) {
   return bidir.sink | bidir.source;
 }
 
+std::ostream& operator<<(
+    std::ostream& os, const le_audio::types::IsoDataPathConfiguration& config) {
+  os << "IsoDataPathCfg={codecId=" << config.codecId
+     << ", isTransparent=" << config.isTransparent
+     << ", controllerDelayUs=" << config.controllerDelayUs
+     << ", configuration.size()=" << config.configuration.size() << "}";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const le_audio::types::DataPathConfiguration& config) {
+  os << "DataPathCfg={datapathId=" << +config.dataPathId
+     << ", dataPathCfg.size()=" << +config.dataPathConfig.size()
+     << ", isoDataPathCfg=" << config.isoDataPathConfig << "}";
+  return os;
+}
+
 template struct BidirectionalPair<AudioContexts>;
 template struct BidirectionalPair<AudioLocations>;
 template struct BidirectionalPair<CisType>;
+template struct BidirectionalPair<LeAudioConfigurationStrategy>;
 template struct BidirectionalPair<ase*>;
 template struct BidirectionalPair<std::string>;
 template struct BidirectionalPair<std::vector<uint8_t>>;
 template struct BidirectionalPair<stream_configuration>;
 template struct BidirectionalPair<stream_parameters>;
 template struct BidirectionalPair<uint16_t>;
+template struct BidirectionalPair<uint8_t>;
+template struct BidirectionalPair<bool>;
+template struct BidirectionalPair<int>;
+template struct BidirectionalPair<
+    std::vector<set_configurations::AseConfiguration>>;
+template struct BidirectionalPair<set_configurations::QosConfigSetting>;
 
 }  // namespace types
 }  // namespace bluetooth::le_audio

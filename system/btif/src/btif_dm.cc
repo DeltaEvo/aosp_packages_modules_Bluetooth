@@ -145,7 +145,7 @@ const Uuid UUID_A2DP_SINK = Uuid::FromString("110B");
 #define PROPERTY_PRODUCT_MODEL "ro.product.model"
 #endif
 #define DEFAULT_LOCAL_NAME_MAX 31
-#if (DEFAULT_LOCAL_NAME_MAX > BTM_MAX_LOC_BD_NAME_LEN)
+#if (DEFAULT_LOCAL_NAME_MAX > BD_NAME_LEN)
 #error "default btif local name size exceeds stack supported length"
 #endif
 
@@ -1111,7 +1111,7 @@ static void btif_dm_ssp_cfm_req_evt(tBTA_DM_SP_CFM_REQ* p_ssp_cfm_req) {
                                 (tBT_DEVICE_TYPE)dev_type);
 
   RawAddress bd_addr = p_ssp_cfm_req->bd_addr;
-  memcpy(bd_name.name, p_ssp_cfm_req->bd_name, BD_NAME_LEN);
+  bd_name_copy(bd_name.name, p_ssp_cfm_req->bd_name);
 
   if (pairing_cb.state == BT_BOND_STATE_BONDING &&
       bd_addr != pairing_cb.bd_addr) {
@@ -1190,8 +1190,7 @@ static void btif_dm_ssp_key_notif_evt(tBTA_DM_SP_KEY_NOTIF* p_ssp_key_notif) {
       p_ssp_key_notif->dev_class, (tBT_DEVICE_TYPE)dev_type);
 
   RawAddress bd_addr = p_ssp_key_notif->bd_addr;
-  memcpy(bd_name.name, p_ssp_key_notif->bd_name, BD_NAME_LEN);
-  bd_name.name[BD_NAME_LEN] = '\0';
+  bd_name_copy(bd_name.name, p_ssp_key_notif->bd_name);
 
   bond_state_changed(BT_STATUS_SUCCESS, bd_addr, BT_BOND_STATE_BONDING);
   pairing_cb.is_ssp = true;

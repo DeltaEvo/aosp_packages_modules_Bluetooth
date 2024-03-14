@@ -83,8 +83,7 @@ static void bta_dm_inq_results_cb(tBTM_INQ_RESULTS* p_inq, const uint8_t* p_eir,
 static void bta_dm_inq_cmpl(uint8_t num);
 static void bta_dm_inq_cmpl_cb(void* p_result);
 static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
-                                                DEV_CLASS dc,
-                                                tBTM_BD_NAME bd_name);
+                                                DEV_CLASS dc, BD_NAME bd_name);
 static void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p);
 static void bta_dm_find_services(const RawAddress& bd_addr);
 static void bta_dm_discover_next_device(void);
@@ -660,8 +659,7 @@ static void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
           // send all result back to app
           tBTA_DM_SEARCH result;
           result.disc_ble_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
-          strlcpy((char*)result.disc_ble_res.bd_name, bta_dm_get_remname(),
-                  BD_NAME_LEN + 1);
+          bd_name_copy(result.disc_ble_res.bd_name, bta_dm_get_remname());
 
           result.disc_ble_res.services = &gatt_uuids;
           bta_dm_search_cb.p_search_cback(BTA_DM_GATT_OVER_SDP_RES_EVT,
@@ -797,8 +795,8 @@ static void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
                      bta_dm_search_cb.peer_scn);
       }
       p_msg->disc_result.result.disc_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
-      strlcpy((char*)p_msg->disc_result.result.disc_res.bd_name,
-              bta_dm_get_remname(), BD_NAME_LEN + 1);
+      bd_name_copy(p_msg->disc_result.result.disc_res.bd_name,
+                   bta_dm_get_remname());
 
       bta_sys_sendmsg(p_msg);
     }
@@ -823,8 +821,8 @@ static void bta_dm_sdp_result(tBTA_DM_MSG* p_data) {
     p_msg->disc_result.result.disc_res.services =
         bta_dm_search_cb.services_found;
     p_msg->disc_result.result.disc_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
-    strlcpy((char*)p_msg->disc_result.result.disc_res.bd_name,
-            bta_dm_get_remname(), BD_NAME_LEN + 1);
+    bd_name_copy(p_msg->disc_result.result.disc_res.bd_name,
+                 bta_dm_get_remname());
 
     bta_sys_sendmsg(p_msg);
   }
@@ -868,8 +866,7 @@ static void bta_dm_search_cmpl() {
   std::vector<Uuid> gatt_services;
   result.disc_ble_res.services = &gatt_services;
   result.disc_ble_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
-  strlcpy((char*)result.disc_ble_res.bd_name, bta_dm_get_remname(),
-          BD_NAME_LEN + 1);
+  bd_name_copy(result.disc_ble_res.bd_name, bta_dm_get_remname());
 
   bool send_gatt_results =
       bluetooth::common::init_flags::
@@ -1238,8 +1235,8 @@ static void bta_dm_find_services(const RawAddress& bd_addr) {
     p_msg->disc_result.result.disc_res.services =
         bta_dm_search_cb.services_found;
     p_msg->disc_result.result.disc_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
-    strlcpy((char*)p_msg->disc_result.result.disc_res.bd_name,
-            bta_dm_get_remname(), BD_NAME_LEN + 1);
+    bd_name_copy(p_msg->disc_result.result.disc_res.bd_name,
+                 bta_dm_get_remname());
 
     bta_sys_sendmsg(p_msg);
   }
@@ -1444,8 +1441,8 @@ static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
   p_msg->disc_result.result.disc_res.result = BTA_SUCCESS;
   p_msg->disc_result.result.disc_res.services = bta_dm_search_cb.services_found;
   p_msg->disc_result.result.disc_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
-  strlcpy((char*)p_msg->disc_result.result.disc_res.bd_name,
-          bta_dm_get_remname(), BD_NAME_LEN + 1);
+  bd_name_copy(p_msg->disc_result.result.disc_res.bd_name,
+               bta_dm_get_remname());
 
   bta_sys_sendmsg(p_msg);
 }
@@ -1554,7 +1551,7 @@ static void bta_dm_inq_cmpl_cb(void* p_result) {
  ******************************************************************************/
 static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
                                                 UNUSED_ATTR DEV_CLASS dc,
-                                                tBTM_BD_NAME bd_name) {
+                                                BD_NAME bd_name) {
   tBTM_REMOTE_DEV_NAME rem_name = {};
   tBTM_STATUS btm_status;
 
@@ -1563,8 +1560,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
   /* if this is what we are looking for */
   if (bta_dm_search_cb.peer_bdaddr == bd_addr) {
     rem_name.bd_addr = bd_addr;
-    rem_name.length = strlcpy((char*)rem_name.remote_bd_name, (char*)bd_name,
-                              BD_NAME_LEN + 1);
+    rem_name.length = bd_name_copy(rem_name.remote_bd_name, bd_name);
     if (rem_name.length > BD_NAME_LEN) {
       rem_name.length = BD_NAME_LEN;
     }
@@ -1640,8 +1636,7 @@ static void bta_dm_remname_cback(const tBTM_REMOTE_DEV_NAME* p_remote_name) {
 
   /* remote name discovery is done but it could be failed */
   bta_dm_search_cb.name_discover_done = true;
-  strlcpy((char*)bta_dm_search_cb.peer_name,
-          (char*)p_remote_name->remote_bd_name, BD_NAME_LEN + 1);
+  bd_name_copy(bta_dm_search_cb.peer_name, p_remote_name->remote_bd_name);
 
   if (bta_dm_search_cb.transport == BT_TRANSPORT_LE) {
     GAP_BleReadPeerPrefConnParams(bta_dm_search_cb.peer_bdaddr);
@@ -1944,8 +1939,8 @@ static void bta_dm_gatt_disc_complete(uint16_t conn_id, tGATT_STATUS status) {
   p_msg->disc_result.result.disc_res.num_uuids = 0;
   p_msg->disc_result.result.disc_res.p_uuid_list = NULL;
   p_msg->disc_result.result.disc_res.bd_addr = bta_dm_search_cb.peer_bdaddr;
-  strlcpy((char*)p_msg->disc_result.result.disc_res.bd_name,
-          bta_dm_get_remname(), BD_NAME_LEN + 1);
+  bd_name_copy(p_msg->disc_result.result.disc_res.bd_name,
+               bta_dm_get_remname());
 
   p_msg->disc_result.result.disc_res.device_type |= BT_DEVICE_TYPE_BLE;
 
@@ -2506,7 +2501,7 @@ void bta_dm_search_timer_cback(void* data) {
 }
 
 void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
-                                         DEV_CLASS dc, tBTM_BD_NAME bd_name) {
+                                         DEV_CLASS dc, BD_NAME bd_name) {
   ::bta_dm_service_search_remname_cback(bd_addr, dc, bd_name);
 }
 

@@ -92,7 +92,7 @@ static void BTM_BT_Quality_Report_VSE_CBack(uint8_t length,
  ******************************************************************************/
 void btm_dev_init() {
   /* Initialize nonzero defaults */
-  memset(btm_sec_cb.cfg.bd_name, 0, sizeof(tBTM_LOC_BD_NAME));
+  memset(btm_sec_cb.cfg.bd_name, 0, sizeof(BD_NAME));
 
   btm_cb.devcb.read_local_name_timer = alarm_new("btm.read_local_name_timer");
   btm_cb.devcb.read_rssi_timer = alarm_new("btm.read_rssi_timer");
@@ -331,8 +331,7 @@ tBTM_STATUS BTM_SetLocalDeviceName(const char* p_name) {
   if (!controller_get_interface()->get_is_ready()) return (BTM_DEV_RESET);
   /* Save the device name if local storage is enabled */
   p = (uint8_t*)btm_sec_cb.cfg.bd_name;
-  if (p != (uint8_t*)p_name)
-    strlcpy((char*)btm_sec_cb.cfg.bd_name, p_name, BTM_MAX_LOC_BD_NAME_LEN + 1);
+  if (p != (uint8_t*)p_name) bd_name_copy(btm_sec_cb.cfg.bd_name, p_name);
 
   btsnd_hcic_change_name(p);
   return (BTM_CMD_STARTED);
